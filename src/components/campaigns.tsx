@@ -2020,6 +2020,7 @@ function BusinessCampaigns({
               <EditAudienceDialog
                 campaignId={audienceEdit.id}
                 campaignName={audienceEdit.name ?? `${business.name} — ${audienceEdit.objective}`}
+                running={audienceEdit.status === "active"}
                 onClose={() => setAudienceEdit(null)}
                 onSaved={(message) => { setCardNotice({ id: audienceEdit.id, message }); setAudienceEdit(null); }}
               />
@@ -2150,7 +2151,7 @@ function BusinessCampaigns({
                                 </a>
                               </DropdownMenuItem>
                             )}
-                            {c.meta_campaign_id && c.status === "paused" && reviewableCampaign(c) && (
+                            {c.meta_campaign_id && (c.status === "paused" || c.status === "active") && reviewableCampaign(c) && (
                               <DropdownMenuItem data-product-event="campaign.edit_audience" onSelect={() => setAudienceEdit(c)}>
                                 <Users className="h-4 w-4" aria-hidden="true" /> Edit audience
                               </DropdownMenuItem>

@@ -204,17 +204,25 @@ describe("core: edit a launched ad set's audience (#773)", () => {
     expect(tape.sent.filter(call => call.method !== "GET")).toEqual([]);
   });
 
-  it("refuses an ad set that isn't PAUSED, and empty or out-of-range changes, before any write", async () => {
-    const running = (patchTape as Exchange[]).map(exchange => /fields=id%2Ccampaign_id%2Cstatus/.test(exchange.path)
-      ? { ...exchange, body: { ...(exchange.body as object), status: "ACTIVE" } } : exchange);
-    const tape = replay(running);
-    const { campaignId, adSetId } = ids(patchTape);
+  it("refuses a running ad set that needs a rebuild, an archived one, and empty or out-of-range changes, before any write", async () => {
+    const status = (recorded: unknown[], value: string) => (recorded as Exchange[]).map(exchange => /fields=id%2Ccampaign_id%2Cstatus/.test(exchange.path)
+      ? { ...exchange, body: { ...(exchange.body as object), status: value } } : exchange);
     const meta = new MetaClient(creds);
+    // #765: a running ad set is only changed in place; rebuilding it would leave the old one delivering.
+    const rebuilding = replay(status(rebuildTape, "ACTIVE"));
+    const rebuildIds = ids(rebuildTape);
+    await expect(meta.editAdSetTargeting(rebuildIds.campaignId, { adSetId: rebuildIds.adSetId, adIds: ["a"], changes })).rejects.toThrow("Pause the ad set before changing its audience.");
+    expect(rebuilding.sent.filter(call => call.method !== "GET")).toEqual([]);
+    vi.restoreAllMocks();
+
+    const tape = replay(status(patchTape, "ARCHIVED"));
+    const { campaignId, adSetId } = ids(patchTape);
     await expect(meta.editAdSetTargeting(campaignId, { adSetId, adIds: ["a"], changes })).rejects.toBeInstanceOf(CampaignDeliveryError);
     await expect(meta.editAdSetTargeting(campaignId, { adSetId, adIds: ["a"], changes: {} })).rejects.toThrow("Invalid audience change.");
     await expect(meta.editAdSetTargeting(campaignId, { adSetId, adIds: ["a"], changes: { age: { min: 40, max: 30 } } })).rejects.toThrow("Invalid audience change.");
     expect(tape.sent.filter(call => call.method !== "GET")).toEqual([]);
   });
+
   describe("language (#773)", () => {
     const languages = { languages: [1001, 46] };
 

@@ -87,9 +87,9 @@ describe("EditAudienceDialog", () => {
     fireEvent.change(screen.getByLabelText("Who sees the ads"), { target: { value: "men" } });
     expect(screen.queryByRole("button", { name: /Save change/ })).toBeNull();
 
-    fetchMock.mockResolvedValueOnce(Response.json({ error: "Pause the campaign first; editing a running campaign comes next." }, { status: 409 }));
+    fetchMock.mockResolvedValueOnce(Response.json({ error: "Part of this campaign is still running in Meta. Pause the campaign, then edit the audience." }, { status: 409 }));
     fireEvent.click(screen.getByRole("button", { name: /Check with Meta/ }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("Pause the campaign first");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Pause the campaign, then edit the audience");
     expect(sent(1).idempotencyKey).not.toBe(sent(0).idempotencyKey);
     expect(screen.queryByRole("button", { name: /Save change/ })).toBeNull();
   });
@@ -107,6 +107,16 @@ describe("EditAudienceDialog", () => {
     fireEvent.click(screen.getByRole("button", { name: /Check with Meta/ }));
     await screen.findByRole("status");
     expect(sent(0)).toMatchObject({ change: { areaExclusions: true }, preview: true });
+  });
+
+  it("says a running campaign keeps running after the save", async () => {
+    const onSaved = vi.fn();
+    render(<EditAudienceDialog campaignId="c-1" campaignName="Rooftop solar" running onClose={vi.fn()} onSaved={onSaved} />);
+    fireEvent.change(screen.getByLabelText("Who sees the ads"), { target: { value: "women" } });
+    fireEvent.click(screen.getByRole("button", { name: /Check with Meta/ }));
+    await screen.findByRole("status");
+    fireEvent.click(screen.getByRole("button", { name: /Save change/ }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith(`Audience changed. The campaign keeps running. ${RESTARTS}`));
   });
 
   it("limits the ads to the languages ticked", async () => {
