@@ -212,7 +212,7 @@ try {
       assert.equal(unexpected.length, 0, `Preflight blocked: ${unexpected[0]}`);
       assert.equal(review.selected?.currency, "INR", "No INR Meta ad account selected");
       const result = page.getByRole("region", { name: "Campaign review result" });
-      await result.getByText(`Account: ${review.selected.accountName}`, { exact: false }).waitFor({ state: "visible" });
+      await result.getByText(`Meta account: ${review.selected.accountName}`, { exact: false }).waitFor({ state: "visible" });
       const send = result.getByRole("button", { name: "Send to Meta (paused)" });
       if (blockers.length) assert.equal(await send.count(), 0, "Send to Meta is offered despite a blocker");
       else await send.waitFor({ state: "visible" });
