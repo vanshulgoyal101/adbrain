@@ -25,6 +25,10 @@ const schema = z.object({
   NEXT_PUBLIC_SITE_URL: z.string().url().default("http://localhost:3000"),
   // #796: the owner's business WhatsApp for in-app help (public number; empty hides the link).
   SUPPORT_WHATSAPP: z.string().optional().default(""),
+  // #701: AdBrain's own WhatsApp number that sends owner alerts and receives START/STOP (empty hides alerts).
+  ALERTS_WHATSAPP: z.string().optional().default(""),
+  // #701: the token Meta echoes when subscribing the alerts webhook (hub.verify_token).
+  WHATSAPP_WEBHOOK_VERIFY_TOKEN: z.string().optional().default(""),
 
   // Dev-only auth bypass (NEVER enable in production)
   NEXT_PUBLIC_DEV_AUTH_BYPASS: z.string().optional().default(""),

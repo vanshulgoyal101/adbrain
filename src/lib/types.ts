@@ -78,6 +78,18 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["preference_settings"]["Insert"]>;
         Relationships: [];
       };
+      owner_alert_prefs: {
+        Row: OwnerAlertPrefsRow;
+        Insert: Partial<OwnerAlertPrefsRow> & { business_id: string; owner_id: string };
+        Update: Partial<OwnerAlertPrefsRow>;
+        Relationships: [];
+      };
+      owner_alert_consent_events: {
+        Row: { id: number; business_id: string; event: "preferences" | "verified" | "opted_out"; method: "settings" | "whatsapp_start" | "whatsapp_stop"; detail: Json; occurred_at: string };
+        Insert: { business_id: string; event: "preferences" | "verified" | "opted_out"; method: "settings" | "whatsapp_start" | "whatsapp_stop"; detail?: Json; occurred_at?: string };
+        Update: never;
+        Relationships: [];
+      };
       declared_preferences: {
         Row: { business_id: string; owner_id: string; category: string; value: string; version: number; updated_at: string };
         Insert: { business_id: string; owner_id: string; category: string; value: string; version?: number; updated_at?: string };
@@ -657,6 +669,13 @@ export interface Database {
     };
     Views: Record<string, never>;
     Functions: {
+      owner_alert_prefs_set: {
+        Args: { p_business_id: string; p_lead_alerts: boolean; p_daily_results: boolean; p_language: "en" | "hi" };
+        Returns: OwnerAlertPrefsRow;
+      };
+      owner_alert_start_verification: { Args: { p_business_id: string }; Returns: string };
+      owner_alert_confirm: { Args: { p_code: string; p_phone: string }; Returns: string | null };
+      owner_alert_stop: { Args: { p_phone: string }; Returns: number };
       change_declared_preferences: {
         Args: { p_business_id: string; p_operation: "enable" | "pause" | "save" | "forget" | "clear";
           p_expected_epoch: number; p_category?: string | null; p_value?: string | null };
@@ -1137,3 +1156,10 @@ export type BusinessUpdate =
   Database["public"]["Tables"]["businesses"]["Update"];
 export type CreativeInsert =
   Database["public"]["Tables"]["creatives"]["Insert"];
+
+/** #701: one business's WhatsApp alert opt-in (`owner_alert_prefs`). */
+export type OwnerAlertPrefsRow = {
+  business_id: string; owner_id: string; lead_alerts: boolean; daily_results: boolean; language: "en" | "hi";
+  phone_e164: string | null; verified_at: string | null; verify_code: string | null; verify_expires_at: string | null;
+  opted_out_at: string | null; created_at: string; updated_at: string;
+};
