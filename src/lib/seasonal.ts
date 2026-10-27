@@ -1,21 +1,24 @@
 /**
- * Timely campaign ideas for the Indian calendar. Turns "today" into a couple of
- * seasonal ad prompts (festivals, national days, shopping seasons) plus a few
- * evergreen ones, so a non-technical owner can one-tap a relevant campaign.
+ * Timely occasion ideas for the Indian calendar (#700). Turns "today" in IST into
+ * up to two one-tap Create chips (festivals, national days, seasons).
  *
- * Pure and industry-agnostic — the label is the chip, the prompt seeds the goal.
- * Variable-date festivals use sensible windows rather than exact lunar dates so
- * this needs no yearly maintenance and never shows a stale suggestion.
+ * Variable-date festivals use generous windows rather than exact lunar dates, so
+ * this needs no yearly maintenance. The prompt becomes the campaign goal, which the
+ * claim check treats as a source fact, so it never asserts a sale, discount or
+ * deadline: the ads may only use offers the owner saved on Brand.
  */
 
 export interface Suggestion {
+  id: string;
   label: string;
   prompt: string;
 }
 
 interface Occasion {
+  id: string;
   label: string;
-  prompt: string;
+  /** The occasion as it reads inside a sentence. */
+  name: string;
   /** Inclusive window as month*100+day (wraps across year-end when start > end). */
   startMd: number;
   endMd: number;
@@ -25,8 +28,7 @@ const md = (month: number, day: number) => month * 100 + day;
 
 /**
  * Month/day of an instant in India (Asia/Kolkata), independent of the host
- * timezone. This keeps the result identical on a UTC server and an IST client,
- * so the rendered suggestions never mismatch during hydration.
+ * timezone, so a UTC server and an IST owner agree on the day.
  */
 function istMonthDay(now: Date): { month: number; day: number } {
   const parts = new Intl.DateTimeFormat("en-US", {
@@ -34,30 +36,24 @@ function istMonthDay(now: Date): { month: number; day: number } {
     month: "numeric",
     day: "numeric",
   }).formatToParts(now);
-  const get = (t: string) =>
-    Number(parts.find((p) => p.type === t)?.value ?? "1");
+  const get = (t: string) => Number(parts.find((p) => p.type === t)?.value ?? "1");
   return { month: get("month"), day: get("day") };
 }
 
-/** Timely occasions, ordered by the calendar. */
-const OCCASIONS: Occasion[] = [
-  { label: "New Year offer", prompt: "A New Year offer for my business", startMd: md(12, 26), endMd: md(1, 5) },
-  { label: "Sankranti / Pongal offer", prompt: "A Makar Sankranti / Pongal offer ad", startMd: md(1, 8), endMd: md(1, 16) },
-  { label: "Republic Day sale", prompt: "A Republic Day sale ad", startMd: md(1, 20), endMd: md(1, 26) },
-  { label: "Valentine's offer", prompt: "A Valentine's Day offer ad", startMd: md(2, 7), endMd: md(2, 14) },
-  { label: "Holi offer", prompt: "A Holi festival offer ad", startMd: md(3, 1), endMd: md(3, 20) },
-  { label: "Summer sale", prompt: "A summer sale ad for my business", startMd: md(4, 15), endMd: md(6, 15) },
-  { label: "Monsoon offer", prompt: "A monsoon-season offer ad", startMd: md(6, 20), endMd: md(8, 5) },
-  { label: "Independence Day sale", prompt: "An Independence Day sale ad", startMd: md(8, 8), endMd: md(8, 15) },
-  { label: "Festive-season (Diwali) offer", prompt: "A festive-season Diwali offer for my business", startMd: md(9, 25), endMd: md(11, 15) },
-  { label: "Wedding-season offer", prompt: "A wedding-season offer ad", startMd: md(11, 16), endMd: md(2, 6) },
-  { label: "Year-end clearance", prompt: "A year-end clearance sale ad", startMd: md(12, 15), endMd: md(12, 31) },
-];
-
-const EVERGREEN: Suggestion[] = [
-  { label: "Weekend discount", prompt: "A weekend discount offer for my business" },
-  { label: "New-customer offer", prompt: "A first-time customer offer ad" },
-  { label: "Limited-time deal", prompt: "A limited-time offer ad to drive urgency" },
+/** Ordered by the calendar; the first in-window occasions win. */
+export const OCCASIONS: readonly Occasion[] = [
+  { id: "new-year", label: "New Year", name: "the New Year", startMd: md(12, 26), endMd: md(1, 5) },
+  { id: "sankranti", label: "Makar Sankranti / Pongal / Lohri", name: "Makar Sankranti, Pongal and Lohri", startMd: md(1, 6), endMd: md(1, 16) },
+  { id: "republic-day", label: "Republic Day", name: "Republic Day", startMd: md(1, 18), endMd: md(1, 26) },
+  { id: "valentines", label: "Valentine's Day", name: "Valentine's Day", startMd: md(2, 5), endMd: md(2, 14) },
+  { id: "holi", label: "Holi", name: "Holi", startMd: md(2, 25), endMd: md(3, 22) },
+  { id: "summer", label: "Summer season", name: "the summer season", startMd: md(4, 15), endMd: md(5, 24) },
+  { id: "back-to-school", label: "Back to school", name: "the back-to-school season", startMd: md(5, 25), endMd: md(6, 20) },
+  { id: "monsoon", label: "Monsoon season", name: "the monsoon season", startMd: md(6, 21), endMd: md(8, 5) },
+  { id: "independence-day", label: "Independence Day", name: "Independence Day", startMd: md(8, 8), endMd: md(8, 15) },
+  { id: "festive", label: "Diwali festive season", name: "the Diwali festive season", startMd: md(9, 25), endMd: md(11, 15) },
+  { id: "wedding", label: "Wedding season", name: "the wedding season", startMd: md(11, 16), endMd: md(2, 6) },
+  { id: "christmas", label: "Christmas", name: "Christmas", startMd: md(12, 15), endMd: md(12, 25) },
 ];
 
 function inWindow(todayMd: number, startMd: number, endMd: number): boolean {
@@ -66,24 +62,16 @@ function inWindow(todayMd: number, startMd: number, endMd: number): boolean {
     : todayMd >= startMd || todayMd <= endMd; // wraps across year-end
 }
 
-/**
- * Up to `max` suggestions: any in-season occasions first (calendar order),
- * topped up with evergreen ideas. Labels are unique.
- */
-export function seasonalSuggestions(now: Date = new Date(), max = 3): Suggestion[] {
+/** Up to `max` occasions in season today (IST), as one-tap goals for `brandName`. */
+export function occasionIdeas(brandName: string, now: Date = new Date(), max = 2): Suggestion[] {
   const { month, day } = istMonthDay(now);
   const today = md(month, day);
-  const timely: Suggestion[] = OCCASIONS.filter((o) =>
-    inWindow(today, o.startMd, o.endMd),
-  ).map(({ label, prompt }) => ({ label, prompt }));
-
-  const out: Suggestion[] = [];
-  const seen = new Set<string>();
-  for (const s of [...timely, ...EVERGREEN]) {
-    if (seen.has(s.label)) continue;
-    seen.add(s.label);
-    out.push(s);
-    if (out.length >= max) break;
-  }
-  return out;
+  const brand = brandName.trim().slice(0, 120) || "my business";
+  return OCCASIONS.filter((o) => inWindow(today, o.startMd, o.endMd))
+    .slice(0, max)
+    .map((o) => ({
+      id: `occasion-${o.id}`,
+      label: o.label,
+      prompt: `An ad for ${o.name} from ${brand}. Use only our saved offers and prices; if none fits ${o.name}, invite enquiries and add no discount, sale or deadline.`,
+    }));
 }

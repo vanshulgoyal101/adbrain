@@ -87,7 +87,7 @@ import { parsePhone } from "@/lib/brand/countries";
 import type { LeadForm } from "@/lib/meta/client";
 import { maskWhatsAppNumber, maskedWhatsAppNumberPattern, parseWhatsAppStatus, type WhatsAppStatus } from "@/lib/meta/whatsapp-status-shared";
 import type { ConnectIntent, ConnectionDTO } from "@/lib/meta/connect-contracts";
-import type { Business, Campaign, CampaignResult, Creative } from "@/lib/types";
+import type { Business, Campaign, CampaignResult, Creative, Json } from "@/lib/types";
 import {
   BUDGET_PRESETS,
   campaignNarrative,
@@ -1937,11 +1937,14 @@ function BusinessCampaigns({
             </div>
           )}
         </div>
-        {!(showComposer && destination === "whatsapp") && campaigns.some((c) => campaignDestination(c, results[c.id]) === "whatsapp") && (
-          <div className="mb-4"><WhatsAppReadyChecklist businessId={business.id} /></div>
-        )}
-        {(campaigns.length > 0 || campaignQuery || statusFilter !== "all") && <div className="mb-5 flex flex-wrap gap-3">
-          <div className="flex min-w-0 flex-1 basis-56 items-center gap-2 rounded-md border border-slate-300 px-3"><Search size={16} className="shrink-0 text-slate-400" aria-hidden="true" /><input type="search" aria-label="Search campaigns" placeholder="Search campaigns" value={campaignQuery} onChange={event => setCampaignQuery(event.target.value)} className="h-10 w-full min-w-0 bg-transparent text-sm outline-none" /></div>
+        {(() => {
+          const ready = !(showComposer && destination === "whatsapp") && campaigns.some((c) => campaignDestination(c, results[c.id]) === "whatsapp");
+          // #794: once a WhatsApp campaign is out, point to WhatsApp's own AI reply; #847: as a line under "WhatsApp ready?".
+          const ai = campaigns.some(campaign => campaign.meta_campaign_id && campaignDestination(campaign) === "whatsapp");
+          return (ready || ai) && <div className="mb-4">{ready && <WhatsAppReadyChecklist businessId={business.id} />}{ai && <WhatsAppAiCard businessId={business.id} />}</div>;
+        })()}
+        {(campaigns.length > 0 || campaignQuery || statusFilter !== "all") && <div className="mb-5 flex flex-wrap gap-2">
+          <div className="flex min-w-0 flex-1 basis-40 items-center gap-2 rounded-md border border-slate-300 px-3"><Search size={16} className="shrink-0 text-slate-400" aria-hidden="true" /><input type="search" aria-label="Search campaigns" placeholder="Search campaigns" value={campaignQuery} onChange={event => setCampaignQuery(event.target.value)} className="h-10 w-full min-w-0 bg-transparent text-sm outline-none" /></div>
           <select aria-label="Campaign status" value={statusFilter} onChange={event => setStatusFilter(event.target.value)} className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm"><option value="all">All statuses</option><option value="active">{OWNER_WORDS.running}</option><option value="paused">Paused</option><option value="draft">Draft</option><option value="completed">Completed</option></select>
         </div>}
         {campaigns.length === 0 && !campaignQuery && statusFilter === "all" ? (
@@ -1958,8 +1961,6 @@ function BusinessCampaigns({
           </Card>
         ) : visibleCampaigns.length === 0 ? <div className="flex flex-col items-center gap-3 border-y border-slate-200 py-12"><Search aria-hidden="true" className="text-slate-400" /><h3 className="font-semibold">No matching campaigns</h3><Button variant="outline" onClick={() => { setCampaignQuery(""); setStatusFilter("all"); }}>Clear filters</Button></div> : (
           <div className="flex flex-col border-t border-slate-200">
-            {/* #794: once a WhatsApp campaign is out, point to WhatsApp's own AI reply. */}
-            {campaigns.some(campaign => campaign.meta_campaign_id && campaignDestination(campaign) === "whatsapp") && <div className="pt-3"><WhatsAppAiCard businessId={business.id} /></div>}
             {/* #847: said once for the list, not on every row. */}
             {(() => { const waiting = visibleCampaigns.filter((item) => !results[item.id]).length; return waiting ? <p className="pt-3 text-sm text-slate-500">No results yet for {waiting === visibleCampaigns.length ? (waiting === 1 ? "this campaign" : "these campaigns") : `${waiting} of these campaigns`}. Refresh a campaign to get Meta&apos;s latest numbers.</p> : null; })()}
             {audienceEdit && (
@@ -1990,7 +1991,18 @@ function BusinessCampaigns({
                 campaignName={adEdit.name ?? `${business.name} — ${adEdit.objective}`}
                 creatives={approved}
                 onClose={() => setAdEdit(null)}
-                onSaved={(message) => { setCardNotice({ id: adEdit.id, message }); setAdEdit(null); }}
+                onSaved={(message, { adId, change }) => {
+                  // Mirror the server's raw.adWords, so reopening the editor shows the new words.
+                  setCampaigns((list) => list.map((item) => {
+                    if (item.id !== adEdit.id) return item;
+                    const raw = (item.raw && typeof item.raw === "object" && !Array.isArray(item.raw) ? item.raw : {}) as Record<string, Json>;
+                    const words = (raw.adWords && typeof raw.adWords === "object" && !Array.isArray(raw.adWords) ? raw.adWords : {}) as Record<string, Json>;
+                    const previous = (words[adId] && typeof words[adId] === "object" ? words[adId] : {}) as Record<string, Json>;
+                    return { ...item, raw: { ...raw, adWords: { ...words, [adId]: { ...previous, ...change } } } };
+                  }));
+                  setCardNotice({ id: adEdit.id, message });
+                  setAdEdit(null);
+                }}
               />
             )}
             {visibleCampaigns.map((c) => {

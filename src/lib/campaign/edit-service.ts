@@ -7,6 +7,7 @@ import { saveCampaignChildren } from "@/lib/campaign/trusted-write";
 import { CampaignDeliveryError, MetaError, friendlyMetaError, needsRebuild, type AudienceChanges, type AudienceEdit, type GeoTargeting } from "@/lib/meta/client";
 import { ConnectionAccessError, withMetaConnection, type AuthorizedBusiness } from "@/lib/meta/connection-access";
 import { mergeExclusions, TargetingExclusionsMissingError } from "@/lib/meta/service-area";
+import { AD_LANGUAGE_KEYS } from "@/lib/meta/locales";
 import { recordProductEvent } from "@/lib/observability/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -30,7 +31,9 @@ export const audienceChangeSchema = z.object({
   excludedLocation: geoSchema.optional(),
   age: z.object({ min: z.number().int().min(18).max(65), max: z.number().int().min(18).max(65) }).strict().refine(age => age.min <= age.max, "Minimum age is above maximum.").optional(),
   gender: z.enum(["all", "men", "women"]).optional(),
-}).strict().refine(change => Boolean(change.location || change.excludedLocation || change.age || change.gender), "Change something about the audience.");
+  languages: z.array(z.number().int().refine(key => AD_LANGUAGE_KEYS.has(key), "Pick a listed language."))
+    .max(AD_LANGUAGE_KEYS.size).refine(keys => new Set(keys).size === keys.length, "Each language once.").optional(),
+}).strict().refine(change => Boolean(change.location || change.excludedLocation || change.age || change.gender || change.languages), "Change something about the audience.");
 export type AudienceChange = z.infer<typeof audienceChangeSchema>;
 
 export type AudienceEditResult = {
@@ -64,12 +67,12 @@ export const audienceChangeDigest = (change: AudienceChange) => sha256(JSON.stri
 function audienceOf(targeting: unknown): Json {
   const value = (targeting && typeof targeting === "object" ? targeting : {}) as Record<string, Json | undefined>;
   const pick: Record<string, Json> = {};
-  for (const key of ["geo_locations", "excluded_geo_locations", "age_min", "age_max", "age_range", "genders"]) if (value[key] !== undefined) pick[key] = value[key]!;
+  for (const key of ["geo_locations", "excluded_geo_locations", "age_min", "age_max", "age_range", "genders", "locales"]) if (value[key] !== undefined) pick[key] = value[key]!;
   return pick;
 }
 
 function describeChange(change: AudienceChange): string {
-  const parts = [change.location && "area", change.age && "age", change.gender && "gender", change.excludedLocation && "excluded places"].filter(Boolean);
+  const parts = [change.location && "area", change.age && "age", change.gender && "gender", change.languages && "language", change.excludedLocation && "excluded places"].filter(Boolean);
   return parts.join(", ");
 }
 
@@ -184,7 +187,7 @@ export async function editCampaignAudience(context: AuthorizedBusiness, campaign
       if (targets.some(target => !target.adIds.length)) throw new CampaignDeliveryError("An ad set has no ads. Reconcile the campaign in Meta first.");
 
       // Exclusions only grow: the new area's #741 exclusions are added to the owner's own and the ad set's existing ones.
-      const changes: AudienceChanges = { ...change.age ? { age: change.age } : {}, ...change.gender ? { gender: change.gender } : {} };
+      const changes: AudienceChanges = { ...change.age ? { age: change.age } : {}, ...change.gender ? { gender: change.gender } : {}, ...change.languages ? { languages: change.languages } : {} };
       if (change.location) {
         const area = await meta.serviceAreaExclusionsFor(change.location as GeoTargeting);
         changes.location = change.location as GeoTargeting;

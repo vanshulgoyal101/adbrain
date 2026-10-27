@@ -70,8 +70,10 @@ describe("EditBudgetDialog", () => {
 
     const wait = screen.getByRole("button", { name: /Meta needs a moment/ });
     expect(wait).toBeDisabled();
-    await act(async () => { vi.setSystemTime(NOW + META_WAIT_MS); vi.advanceTimersByTime(META_WAIT_MS); });
-    const confirm = screen.getByRole("button", { name: "Confirm ₹250 a day" });
+    // Let the countdown's effect start its interval first: under load findByRole can return before it runs.
+    await act(async () => {});
+    await act(async () => { vi.setSystemTime(NOW + META_WAIT_MS); vi.advanceTimersByTime(1000); });
+    const confirm = await screen.findByRole("button", { name: "Confirm ₹250 a day" });
     fireEvent.click(confirm);
     await vi.waitFor(() => expect(onSaved).toHaveBeenCalled());
     expect(sent(1)).toEqual({ change: { dailyRupees: 250 }, idempotencyKey: sent(0).idempotencyKey, confirmationDigest: "d".repeat(64) });

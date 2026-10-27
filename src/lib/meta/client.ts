@@ -4,12 +4,13 @@ import { fetchPublicUrl } from "@/lib/security/ssrf";
 import { readBoundedResponse } from "@/lib/imageGen/raster";
 import { destinationFromAdSets, type CampaignDestination } from "@/lib/campaign/outcomes";
 import type { CampaignSkipReason } from "@/lib/campaign/sync-skips";
-import { decodeCampaignInsights, decodeLifetimeSpendPaise, type CampaignInsights } from "./insights";
+import { decodeAdResults, decodeCampaignInsights, decodeLifetimeSpendPaise, type AdResult, type CampaignInsights } from "./insights";
 import { maskWhatsAppNumber, maskedWhatsAppNumberPattern } from "./whatsapp-status-shared";
 import { graphEndpoint, graphEntity, graphErrorCode, graphOutcome } from "./graph-event";
 import { recordProductEvent } from "@/lib/observability/logger";
 import { EXCLUDABLE_CITIES, INDIA_REGION_KEYS, mergeExclusions, serviceAreaExclusions, TargetingExclusionsMissingError, type IncludedPlace } from "./service-area";
-export type { CampaignInsights } from "./insights";
+import { AD_LANGUAGE_KEYS, storedLocales } from "./locales";
+export type { AdResult, CampaignInsights } from "./insights";
 
 const GRAPH = "https://graph.facebook.com/v21.0";
 
@@ -168,6 +169,8 @@ export type AudienceChanges = {
   excludedLocation?: GeoTargeting;
   age?: { min: number; max: number };
   gender?: "all" | "men" | "women";
+  /** Meta ad locale keys; an empty list removes the language limit. */
+  languages?: number[];
 };
 export type AudienceEdit = { mode: "patch" | "rebuild"; validated: boolean; adSetId: string; adIds: string[]; retiredAdSetId: string | null };
 /** #774: an ad set's budget as Meta reports it, in paise. A capped run has a lifetime budget and an end time. */
@@ -248,6 +251,9 @@ function editedTargeting(source: Record<string, unknown>, changes: AudienceChang
   if (changes.gender) {
     if (changes.gender === "all") delete next.genders; else next.genders = [changes.gender === "men" ? 1 : 2];
   }
+  if (changes.languages) {
+    if (changes.languages.length) next.locales = [...changes.languages]; else delete next.locales;
+  }
   return next;
 }
 
@@ -264,6 +270,8 @@ function excludesIncludedPlace(targeting: Record<string, unknown>): boolean {
   });
 }
 
+const numbers = (value: unknown): number[] => Array.isArray(value) ? value.map(Number).filter(Number.isInteger) : [];
+
 /** Meta echoed the changed audience back (it may add defaults, so only what changed is compared). */
 function sameAudience(targeting: Record<string, unknown> | undefined, sent: Record<string, unknown>, changes: AudienceChanges): boolean {
   if (!targeting) return false;
@@ -271,7 +279,8 @@ function sameAudience(targeting: Record<string, unknown> | undefined, sent: Reco
   return (!changes.location || targeting.geo_locations !== undefined)
     && (!changes.excludedLocation || sent.excluded_geo_locations === undefined || targeting.excluded_geo_locations !== undefined)
     && (!changes.age || ["age_min", "age_max", "age_range"].every(key => norm(targeting[key]) === norm(sent[key])))
-    && (!changes.gender || norm(targeting.genders) === norm(sent.genders));
+    && (!changes.gender || norm(targeting.genders) === norm(sent.genders))
+    && (!changes.languages || norm(storedLocales(numbers(targeting.locales))) === norm(storedLocales(numbers(sent.locales))));
 }
 
 export class MetaError extends Error {
@@ -572,6 +581,9 @@ export function adSetTargeting(params: {
     targeting_automation: { advantage_audience: ADVANTAGE_AUDIENCE ? 1 : 0 },
   };
 }
+
+/** #783: every ad status Meta will list for a campaign's ads; DELETED can't be requested (1815001). */
+const LISTED_AD_STATUSES = ["ACTIVE", "PAUSED", "ARCHIVED", "CAMPAIGN_PAUSED", "ADSET_PAUSED", "IN_PROCESS", "WITH_ISSUES", "PENDING_REVIEW", "DISAPPROVED", "PREAPPROVED", "PENDING_BILLING_INFO"];
 
 /** #906: a WhatsApp ad set's targeting names its platforms without Audience Network. */
 export function withoutAudienceNetwork(targeting: Record<string, unknown>): Record<string, unknown> {
@@ -1603,6 +1615,18 @@ export class MetaClient {
     return decodeCampaignInsights(data, destination, { requireSpend: options?.weekly });
   }
 
+  /** #783: each ad's lifetime results; ads Meta hasn't delivered are listed with zeros (#789). Read-only. */
+  async getAdResults(campaignId: string): Promise<AdResult[]> {
+    const destination = await this.verifyCampaignBinding(campaignId);
+    const node = encodeURIComponent(campaignId);
+    const [ads, insights] = await Promise.all([
+      // Meta's default listing leaves out ARCHIVED ads (an audience rebuild archives them) and refuses DELETED (1815001).
+      this.graph<unknown>(`${node}/ads?fields=id,name,effective_status,creative{id}&limit=100&effective_status=${encodeURIComponent(JSON.stringify(LISTED_AD_STATUSES))}`),
+      this.graph<unknown>(`${node}/insights?level=ad&fields=ad_id,impressions,clicks,spend,actions&date_preset=maximum&limit=100`),
+    ]);
+    return decodeAdResults(ads, insights, destination);
+  }
+
   /** Read-only lifetime spend (account currency, exact paise) for customer cost evidence (#216). */
   async readLifetimeSpendPaise(campaignId: string): Promise<number> {
     const node = encodeURIComponent(campaignId);
@@ -1870,7 +1894,9 @@ export class MetaClient {
     const { adSetId, adIds, changes } = input;
     const validAge = !changes.age || (Number.isInteger(changes.age.min) && Number.isInteger(changes.age.max)
       && changes.age.min >= 18 && changes.age.max <= 65 && changes.age.min <= changes.age.max);
-    if (!(changes.location || changes.excludedLocation || changes.age || changes.gender) || !validAge
+    const validLanguages = !changes.languages || (changes.languages.length <= AD_LANGUAGE_KEYS.size
+      && new Set(changes.languages).size === changes.languages.length && changes.languages.every(key => AD_LANGUAGE_KEYS.has(key)));
+    if (!(changes.location || changes.excludedLocation || changes.age || changes.gender || changes.languages) || !validAge || !validLanguages
       || !adIds.length || new Set(adIds).size !== adIds.length) {
       throw new MetaError("Invalid audience change.");
     }

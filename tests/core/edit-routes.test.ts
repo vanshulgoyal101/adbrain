@@ -3,6 +3,7 @@ import rebuildTape from "./fixtures/meta/edit-audience-rebuild.json";
 import patchTape from "./fixtures/meta/edit-audience-patch.json";
 import rateLimitedTape from "./fixtures/meta/edit-audience-patch-rate-limited.json";
 import whatsappTape from "./fixtures/meta/edit-audience-whatsapp.json";
+import languageTape from "./fixtures/meta/edit-audience-language.json";
 
 // #773 2/3: POST /api/campaigns/[id]/audience through the real route, connection access, edit service,
 // MetaClient, trusted write and audit, on a token sealed by the real token store. Only Supabase (an
@@ -113,6 +114,7 @@ const rebuild = () => {
 };
 const patch = () => scenario(patchTape as Exchange[], "120253709953000526", 4);
 const limited = () => scenario(rateLimitedTape as Exchange[], "120253709671200526", 4);
+const language = () => scenario(languageTape as Exchange[], "120253724289410526", 4);
 
 async function connect() {
   const { encryptMetaToken, toPostgresBytea } = await import("@/lib/meta/token-store");
@@ -253,6 +255,18 @@ describe("core: edit a launched campaign's audience (#773)", () => {
     expect(operations()).toMatchObject([{ state: "succeeded", transmitted: true }]);
   });
 
+  it("changes only the language through the route, patched in place and audited", async () => {
+    const scene = language();
+    stored(scene);
+    replay(scene.tape);
+    const { status, body } = await edit({ change: { languages: [1001, 46] } });
+    expect(status).toBe(200);
+    expect(body).toMatchObject({ result: { count: 1, consequence: null, adSets: [{ adSetId: scene.adSetId, mode: "patch" }] } });
+    expect(operations()).toMatchObject([{ state: "succeeded", transmitted: true, change: { languages: [1001, 46] } }]);
+    expect(JSON.stringify(audit)).toContain("(language)");
+    expect(graph.pending).toEqual([]);
+  });
+
   it("turns Meta's 613 on the patch into a retryable failure before any write, leaving the mirror alone", async () => {
     const scene = limited();
     stored(scene);
@@ -296,6 +310,8 @@ describe("core: edit a launched campaign's audience (#773)", () => {
     stored(scene);
     replay([]);
     expect((await edit({ change: {} })).status).toBe(400);
+    expect((await edit({ change: { languages: [9999] } })).status).toBe(400);
+    expect((await edit({ change: { languages: [46, 46] } })).status).toBe(400);
     store.state.user = null;
     expect((await edit()).status).toBe(401);
     store.state.user = { id: OWNER };

@@ -54,4 +54,28 @@ describe("policyFindings (#738)", () => {
     expect(rules("Rated Austin's #1 chiropractor", "chiropractic clinic", ["Voted #1 chiropractor in Austin 2025"])).toEqual([]);
     expect(rules("What works best for your roof", "solar energy")).toEqual([]);
   });
+
+  // #941 rule 8 (Analyst): promises still running in the Ad Library that Meta treats as misleading.
+  it("blocks zero-cost, result-or-refund and timed-result promises no fact states", () => {
+    expect(rules("Rooftop solar with zero investment.", "solar energy")).toEqual(["exaggerated-result"]);
+    expect(rules("₹0 down payment on your 3 kW system.", "solar energy")).toEqual(["exaggerated-result"]);
+    expect(rules("Zero cost installation.", "solar energy")).toEqual(["exaggerated-result"]);
+    expect(rules("₹0 down payment on your 3 kW system.", "solar energy", ["₹0 down payment with bank EMI"])).toEqual([]);
+    expect(rules("No band, no fee. Join our IELTS batch.", "IELTS coaching")).toEqual(["exaggerated-result"]);
+    expect(rules("Money-back promise on every repair.", "AC repair")).toEqual(["exaggerated-result"]);
+    expect(rules("No band no fee.", "IELTS coaching", ["No band, no fee"])).toEqual([]);
+    expect(rules("New teeth in days at our Kothrud clinic.", "Dental clinic")).toEqual(["exaggerated-result"]);
+    expect(rules("See results in 7 days.", "Dental clinic", ["See results in 7 days"])).toEqual(["exaggerated-result"]);
+    expect(rules("Speak fluently in 30 days.", "spoken English coaching")).toEqual(["exaggerated-result"]);
+    expect(rules("Fluency in 30 days with daily practice.", "spoken English coaching")).toEqual(["exaggerated-result"]);
+    expect(rules("Fluency in 30 days with daily practice.", "spoken English coaching", ["Fluency course: 30 days"])).toEqual([]);
+  });
+
+  it("passes everyday copy near the rule-8 words", () => {
+    expect(rules("Installation in 3 days after the site survey.", "solar energy")).toEqual([]);
+    expect(rules("Book a free site survey; no cost to visit.", "solar energy")).toEqual([]);
+    expect(rules("Results you can see in your monthly bill.", "solar energy")).toEqual([]);
+    expect(rules("Our 0-investment model is explained on the call.", "solar energy", ["0 investment RESCO model"])).toEqual([]);
+    expect(rules("Same-day appointments for new patients.")).toEqual([]);
+  });
 });

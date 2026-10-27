@@ -19,7 +19,8 @@ function PhoneIntro({ onClose }: { onClose: () => void }) {
     return () => hidden.forEach((el) => { el.inert = false; });
   }, []);
   useEffect(() => {
-    skipRef.current?.focus();
+    // #847: focus lands on Skip for keyboard and screen-reader users, without a ring that reads as an error on touch.
+    skipRef.current?.focus({ focusVisible: false } as FocusOptions);
     const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);

@@ -128,7 +128,10 @@ repairing once like any other rule: `personal-attribute` (in health verticals, a
 vertical, a question about the reader's money trouble such as debt or a bill that "feels heavy"),
 `unsupported-superlative` (#1, top-rated, leading, "Austin's best" unless a supplied fact says it)
 and `exaggerated-result` ("up to N%": refused in health verticals even when a fact states it;
-elsewhere allowed when a supplied fact states the same figure, refused when uncited). Health verticals also ban implied
+elsewhere allowed when a supplied fact states the same figure, refused when uncited; also, #941, a zero-cost
+claim ("zero investment", "₹0 down payment"), a result-or-refund promise ("no band, no fee", "money-back") and a
+timed result ("new teeth in days", "fluency in 30 days"), each refused unless a supplied fact states it, and a timed
+result always refused in health verticals). Health verticals also ban implied
 outcomes (lasting relief, eliminate, fix your, feel better…) and any guarantee, cited or not. Owner-typed
 copy only gets these as warnings.
 
@@ -181,9 +184,12 @@ feedback to assess unnecessary questions, abandonment and time to a useful draft
    - A quote that differs from a fact only in case is stored as the fact's exact text.
    - A quote that only adds a leading "the", "a" or "an" to a fact (20+ characters after it) is
      stored as the fact's own words (#713).
-   - Primary text written as one paragraph over 125 characters is split into
-     sentence lines (words unchanged), because Meta shows about 125 characters on
-     mobile before "See more" (#194).
+   - A quote that matches no fact is dropped when at least one other quote does;
+     claims are then checked against the remaining quotes, and a concept with no
+     verbatim quote is still refused (#713).
+   - Any primary-text line over 125 characters is split into sentence lines
+     (words unchanged), because Meta shows about 125 characters on mobile before
+     "See more" (#194, #713).
 
    Headline and primary text are never clipped, and every claim check still runs.
    In `visual.direction`, layout notes such as "55% of the frame height", "45%
@@ -204,6 +210,13 @@ feedback to assess unnecessary questions, abandonment and time to a useful draft
    rupaye per kW") counts like the same amount in ₹. `all-caps` ignores acronyms
    joined by "/" or "-" ("IIT/PEC", "नॉन-DCR") and capitals the owner's own facts use
    (a brand written "SOLARIDE") (#418).
+   A price the Brand facts give only as a rate ("10,000 rupees per kilowatt") must keep
+   that unit in the ad (`price-unit`; kW, kilowatt and किलोवाट count as one); a flat
+   Brand price may be worded freely (#418 rule 3).
+   Once a concept passes, the offer goes on the picture (#418 rule 2): when the copy
+   states a cited offer that neither the headline nor `supportingText` carries,
+   `supportingText` becomes the one Brand offer fact (up to 64 characters) that states
+   it. No repair and no new words; Hindi and Punjabi copy keeps its own picture line.
 4. Generate an image from the validated concept and up to three reference images.
    When the business has uploaded product photos (Brand assets), the first ad
    uses the newest one as its image instead (#195): no image call or image cost,

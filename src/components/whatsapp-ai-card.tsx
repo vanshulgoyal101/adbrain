@@ -8,10 +8,11 @@ import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } fr
 type Language = "en" | "hinglish";
 
 // #794: the CPO's guide, from Meta's own pages (read Oct 26, 2026). "Free" stays out until a pilot verifies it.
-const GUIDE: Record<Language, { lead: string; intro: string; steps: React.ReactNode[]; note: string }> = {
+const GUIDE: Record<Language, { lead: string; intro: string; app: string; steps: React.ReactNode[]; note: string }> = {
   en: {
     lead: "Reply to every ad enquiry in seconds, even when you're busy.",
     intro: "WhatsApp's own AI can answer people who message you from your ad.",
+    app: "Using normal WhatsApp? This is only in the free WhatsApp Business app.",
     steps: [
       <>Open <strong>WhatsApp Business → Tools → Business AI</strong> (it may be called &quot;Meta Business Agent&quot;). Tap <strong>Confirm</strong>.</>,
       <>Let it learn from your past chats. Add your <strong>price list or catalog</strong> and your <strong>website</strong> if you have one.</>,
@@ -22,6 +23,7 @@ const GUIDE: Record<Language, { lead: string; intro: string; steps: React.ReactN
   hinglish: {
     lead: "Ad se aane wale har message ka jawab seconds mein, jab aap busy ho tab bhi.",
     intro: "WhatsApp ka apna AI aapke ad se aaye logon ko jawab de sakta hai.",
+    app: "Normal WhatsApp hai? Ye sirf free WhatsApp Business app mein hai.",
     steps: [
       <><strong>WhatsApp Business → Tools → Business AI</strong> kholiye (naam &quot;Meta Business Agent&quot; bhi ho sakta hai). <strong>Confirm</strong> dabaiye.</>,
       <>Use purani chats se seekhne dijiye. Apni <strong>price list ya catalog</strong> aur <strong>website</strong> (agar hai) jodiye.</>,
@@ -35,8 +37,14 @@ const storageKey = (businessId: string) => `whatsapp-ai:${businessId}`;
 
 const ANSWERED = "whatsapp-ai-answered";
 
-function readAnswer(businessId: string): string | null {
-  try { return localStorage.getItem(storageKey(businessId)); } catch { return null; }
+const LATER_MS = 7 * 86_400_000;
+
+/** The stored answer; "Not now" (`later:<ms>`) counts only for 7 days. */
+function readAnswer(businessId: string, now = Date.now()): string | null {
+  let value: string | null;
+  try { value = localStorage.getItem(storageKey(businessId)); } catch { return null; }
+  if (value?.startsWith("later:")) return now - Number(value.slice(6)) < LATER_MS ? value : null;
+  return value;
 }
 
 function subscribe(onChange: () => void) {
@@ -57,8 +65,8 @@ export function WhatsAppAiCard({ businessId }: { businessId: string }) {
   const [open, setOpen] = React.useState(false);
   const [language, setLanguage] = React.useState<Language>("en");
 
-  const answer = (value: "done" | "unavailable") => {
-    try { localStorage.setItem(storageKey(businessId), value); } catch { /* hidden for this visit only */ }
+  const answer = (value: "done" | "unavailable" | "later") => {
+    try { localStorage.setItem(storageKey(businessId), value === "later" ? `later:${Date.now()}` : value); } catch { /* hidden for this visit only */ }
     setDismissed(true);
     setOpen(false);
     window.dispatchEvent(new Event(ANSWERED));
@@ -67,18 +75,20 @@ export function WhatsAppAiCard({ businessId }: { businessId: string }) {
   const guide = GUIDE[language];
 
   return (
-    <section aria-labelledby="whatsapp-ai-title" className="flex flex-col gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-4 sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex min-w-0 gap-3">
-        <MessageCircle className="mt-0.5 h-5 w-5 shrink-0 text-emerald-700" aria-hidden="true" />
-        <div className="min-w-0">
+    // #847: a quiet line beside "WhatsApp ready?", not a green panel with a second primary.
+    <section aria-labelledby="whatsapp-ai-title" className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-slate-200 py-2 first:border-t">
+      <div className="flex min-w-0 flex-1 basis-60 gap-2">
+        <MessageCircle className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" aria-hidden="true" />
+        <div className="min-w-0 text-sm">
           <h3 id="whatsapp-ai-title" className="font-medium text-slate-900">Reply faster with WhatsApp&apos;s AI?</h3>
-          <p className="text-sm text-slate-700">It can answer people who message you from your ad, in your language, while you&apos;re busy.</p>
+          <p className="text-slate-600">It answers people from your ad while you&apos;re busy.</p>
         </div>
       </div>
-      <div className="flex flex-wrap gap-2">
-        <Button className="h-11" data-product-event="whatsapp_ai.guide" onClick={() => setOpen(true)}>Show me how</Button>
-        <Button variant="outline" className="h-11" data-product-event="whatsapp_ai.done" onClick={() => answer("done")}>Done</Button>
-        <Button variant="outline" className="h-11" data-product-event="whatsapp_ai.unavailable" onClick={() => answer("unavailable")}>Not available for me</Button>
+      <div className="-mx-3 flex flex-wrap items-center">
+        <Button variant="ghost" className="h-11 font-medium text-blue-700" data-product-event="whatsapp_ai.guide" onClick={() => setOpen(true)}>Show me how</Button>
+        <Button variant="ghost" className="h-11" data-product-event="whatsapp_ai.done" onClick={() => answer("done")}>Already on</Button>
+        <Button variant="ghost" className="h-11" data-product-event="whatsapp_ai.unavailable" onClick={() => answer("unavailable")}>Not available for me</Button>
+        <Button variant="ghost" className="h-11" data-product-event="whatsapp_ai.later" onClick={() => answer("later")}>Not now</Button>
       </div>
 
       {open && (
@@ -98,6 +108,7 @@ export function WhatsAppAiCard({ businessId }: { businessId: string }) {
                 ))}
               </div>
               <p className="text-sm text-slate-700">{guide.intro}</p>
+              <p className="text-sm font-medium text-slate-800">{guide.app}</p>
               <ol className="list-decimal space-y-2 pl-5 text-sm text-slate-800">
                 {guide.steps.map((step, index) => <li key={index}>{step}</li>)}
               </ol>

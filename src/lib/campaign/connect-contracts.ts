@@ -6,6 +6,7 @@ import {
   type SelectedAssets,
 } from "@/lib/meta/connect-contracts";
 import { maskedWhatsAppNumberPattern } from "@/lib/meta/whatsapp-status-shared";
+import { whatsappTemplateSchema } from "@/lib/campaign/whatsapp-template";
 
 const uuid = z.string().uuid();
 const isoDate = z.string().datetime({ offset: true });
@@ -65,6 +66,8 @@ export const draftInputSchema = z
     whatsappNumber: z.union([z.string().regex(/^\+[1-9]\d{6,14}$/), z.string().regex(maskedWhatsAppNumberPattern)]).optional(),
     /** #493: the language of the WhatsApp message the customer sends; "ad" (default) follows the ads. */
     whatsappLanguage: z.enum(["ad", "en", "hi", "hinglish", "pa"]).optional(),
+    /** #840: this campaign's own WhatsApp message ("Edit for this campaign"); it wins over the saved one. */
+    whatsappMessage: whatsappTemplateSchema.optional(),
     targeting: targetingInputSchema,
     abTest: z.boolean(),
   })
@@ -122,6 +125,15 @@ export const reviewDtoSchema = z.object({
     excludedCities: z.array(boundedText(100)).max(50),
     keptStates: z.array(boundedText(100)).max(36),
     excludedStateCount: z.number().int().nonnegative().max(36),
+  }).optional(),
+  /** #840: what the WhatsApp ad will send, as launch sends it. Edited and saved messages are in the plan hash. */
+  whatsappMessage: z.object({
+    source: z.enum(["edited", "saved", "suggested"]),
+    greeting: z.string().max(1_000),
+    autofill: z.string().max(1_000),
+    callButton: z.boolean().optional(),
+    iceBreakers: z.array(z.string().max(100)).max(3).optional(),
+    language: z.enum(["en", "hi", "hinglish", "pa"]).nullable(),
   }).optional(),
   /** #419 2(b): non-blocking notes from Meta's new-advertiser guidance; never part of the plan hash. */
   planWarnings: z.array(boundedText(200)).max(5).optional(),
