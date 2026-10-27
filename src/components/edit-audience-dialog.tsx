@@ -10,10 +10,15 @@ import { LocationPicker } from "@/components/targeting-controls";
 import { audienceChangeFromForm, emptyAudienceEdit, type AudienceEditForm } from "@/lib/campaign/editor-targeting";
 import { AD_LANGUAGES } from "@/lib/meta/locales";
 
-type Preview = { adSets: Array<{ mode: "patch" | "rebuild" }>; consequence: string | null };
+type Preview = { adSets: Array<{ mode: "patch" | "rebuild" | "copy" }>; consequence: string | null };
+
+/** #765 (b): the CPO's words when Meta can't change a running ad set in place. */
+export const MAKE_COPY_WORDS = "Meta doesn't allow this change on a running campaign. We'll make a fresh copy with your change (paused, back to review, learning restarts) and stop the old one when you turn the new one on.";
+const needsCopy = (preview: Preview) => preview.adSets.some(adSet => adSet.mode === "copy");
 
 /** What the owner reads before saving: which ad sets change and what that costs them. */
 function previewWords(preview: Preview): string {
+  if (needsCopy(preview)) return MAKE_COPY_WORDS;
   const count = preview.adSets.length;
   const sets = count === 1 ? "1 ad set" : `${count} ad sets`;
   return preview.consequence
@@ -44,7 +49,8 @@ export function EditAudienceDialog({ campaignId, campaignName, running = false, 
   /** #765: a running campaign keeps running; only ad sets Meta can change in place are edited. */
   running?: boolean;
   onClose: () => void;
-  onSaved: (message: string) => void;
+  /** `waitingOperationId`: a paused copy now waits on the card for the owner to turn it on (#765 b). */
+  onSaved: (message: string, waitingOperationId?: string) => void;
 }) {
   const [form, setForm] = React.useState<AudienceEditForm>(emptyAudienceEdit);
   const [preview, setPreview] = React.useState<Preview | null>(null);
@@ -79,10 +85,15 @@ export function EditAudienceDialog({ campaignId, campaignName, running = false, 
     if ("error" in built || !key.current) return;
     setBusy("save");
     setError(null);
-    const outcome = await send(campaignId, { change: built.change, idempotencyKey: key.current });
+    const copy = preview && needsCopy(preview);
+    const outcome = await send(campaignId, { change: built.change, idempotencyKey: key.current, ...copy ? { copy: true } : {} });
     setBusy(null);
     if (!outcome.ok) { setError(outcome.message); return; }
-    const result = outcome.data.result as { consequence?: string | null } | undefined;
+    const result = outcome.data.result as { consequence?: string | null; awaitingSwitch?: { operationId: string } } | undefined;
+    if (result?.awaitingSwitch) {
+      onSaved("New audience ready on this campaign. Your current audience keeps running until you turn the new one on.", result.awaitingSwitch.operationId);
+      return;
+    }
     onSaved(`Audience changed. The campaign ${running ? "keeps running" : "stays paused"}.${result?.consequence ? ` ${result.consequence}` : ""}`);
   };
 
@@ -196,7 +207,7 @@ export function EditAudienceDialog({ campaignId, campaignName, running = false, 
           <Button variant="outline" className="h-11" onClick={onClose} disabled={!!busy}>Cancel</Button>
           {preview ? (
             <Button className="h-11" onClick={() => void save()} disabled={!!busy}>
-              {busy === "save" && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />} Save change
+              {busy === "save" && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />} {needsCopy(preview) ? "Make the copy" : "Save change"}
             </Button>
           ) : (
             <Button className="h-11" onClick={() => void check()} disabled={!!busy}>
