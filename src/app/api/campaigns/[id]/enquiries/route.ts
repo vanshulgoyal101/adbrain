@@ -6,7 +6,17 @@ import { rateLimitResponse } from "@/lib/security/rate-limit";
 import { createClient } from "@/lib/supabase/server";
 
 const optionalText = (max: number) => z.string().trim().max(max).optional();
-const enquirySchema = z.strictObject({ name: optionalText(200), phone: optionalText(40), note: optionalText(2000) });
+// #798: `customer: true` logs a chat that became a customer in one tap (no details needed).
+const enquirySchema = z.strictObject({ name: optionalText(200), phone: optionalText(40), note: optionalText(2000), customer: z.literal(true).optional() });
+
+/** The campaign's logged WhatsApp enquiries and its customers (any source), after a change. */
+async function counts(database: Awaited<ReturnType<typeof createClient>>, campaignId: string) {
+  const [enquiries, customers] = await Promise.all([
+    database.from("leads").select("id", { count: "exact", head: true }).eq("campaign_id", campaignId).eq("source", "whatsapp_manual"),
+    database.from("leads").select("id", { count: "exact", head: true }).eq("campaign_id", campaignId).eq("workflow_status", "customer"),
+  ]);
+  return { enquiries: enquiries.count ?? null, customers: customers.count ?? null };
+}
 
 /**
  * #335: the owner logs a real enquiry from a WhatsApp ad's chats. It goes into Enquiries with the
@@ -34,7 +44,7 @@ export const POST = observeRoute("/api/campaigns/[id]/enquiries", "POST", async 
   if (campaignDestination(campaign) !== "whatsapp") {
     return NextResponse.json({ error: "Real enquiries can be logged on WhatsApp campaigns only." }, { status: 400 });
   }
-  const { error } = await database.from("leads").insert({
+  const { data: saved, error } = await database.from("leads").insert({
     business_id: campaign.business_id,
     campaign_id: campaign.id,
     source: "whatsapp_manual",
@@ -42,9 +52,34 @@ export const POST = observeRoute("/api/campaigns/[id]/enquiries", "POST", async 
     phone: input.phone || null,
     follow_up_note: input.note ?? "",
     created_time: new Date().toISOString(),
+    ...(input.customer ? { workflow_status: "customer" as const } : {}),
   }).select("id").single();
-  if (error) return NextResponse.json({ error: "The enquiry could not be saved. Try again." }, { status: 503 });
-  const { count } = await database.from("leads").select("id", { count: "exact", head: true })
-    .eq("campaign_id", campaign.id).eq("source", "whatsapp_manual");
-  return NextResponse.json({ enquiries: count ?? null }, { status: 201, headers: { "Cache-Control": "private, no-store" } });
+  if (error || !saved) return NextResponse.json({ error: "The enquiry could not be saved. Try again." }, { status: 503 });
+  return NextResponse.json({ id: saved.id, ...await counts(database, campaign.id) }, { status: 201, headers: { "Cache-Control": "private, no-store" } });
+});
+
+/**
+ * #798: Undo for a logged enquiry (`?lead=<id>`): removes only a WhatsApp enquiry the owner logged on this
+ * campaign; Meta form enquiries are never deleted here. RLS scopes the delete to the owner's rows.
+ */
+export const DELETE = observeRoute("/api/campaigns/[id]/enquiries", "DELETE", async (
+  request: Request, context: { params: Promise<{ id: string }> },
+) => {
+  const database = await createClient();
+  const { data: { user } } = await database.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Sign in required." }, { status: 401 });
+  let id: string, lead: string;
+  try {
+    id = z.uuid().parse((await context.params).id);
+    lead = z.uuid().parse(new URL(request.url).searchParams.get("lead"));
+  } catch {
+    return NextResponse.json({ error: "Invalid enquiry." }, { status: 400 });
+  }
+  const limited = await rateLimitResponse(`manual-enquiry:${user.id}`, { limit: 30, windowMs: 5 * 60_000 });
+  if (limited) return limited;
+  const { data: removed, error } = await database.from("leads").delete()
+    .eq("id", lead).eq("campaign_id", id).eq("source", "whatsapp_manual").select("id");
+  if (error) return NextResponse.json({ error: "The enquiry could not be removed. Try again." }, { status: 503 });
+  if (!removed?.length) return NextResponse.json({ error: "Enquiry not found." }, { status: 404 });
+  return NextResponse.json(await counts(database, id), { headers: { "Cache-Control": "private, no-store" } });
 });
