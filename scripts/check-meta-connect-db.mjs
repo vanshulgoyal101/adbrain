@@ -34,6 +34,7 @@ const editOperationsMigration = await readFile(join(root, "db/migrations/2026102
 const editAdCreativeMigration = await readFile(join(root, "db/migrations/20261026_campaign_edit_operations_ad_creative.sql"), "utf8");
 const adResultsMigration = await readFile(join(root, "db/migrations/20261026_campaign_ads_ad_results.sql"), "utf8");
 const ownerAlertsMigration = await readFile(join(root, "db/migrations/20261027_owner_whatsapp_alerts.sql"), "utf8");
+const ownerAlertSendsMigration = await readFile(join(root, "db/migrations/20261027_owner_whatsapp_alerts_sends.sql"), "utf8");
 const leadCustomerMigration = await readFile(join(root, "db/migrations/20261026_lead_customer_status.sql"), "utf8");
 const tokenSearchPathMigration = await readFile(join(root, "db/migrations/20261026_meta_token_search_path.sql"), "utf8");
 const whatsappTemplateMigration = await readFile(join(root, "db/migrations/20261026_business_whatsapp_template.sql"), "utf8");
@@ -1438,6 +1439,73 @@ async function verifyEditAdCreativeKind(db, database) {
   });
 }
 
+async function verifyOwnerAlertSends(db, database) {
+  const owner = randomUUID(), other = randomUUID(), business = randomUUID();
+  await db.query("insert into auth.users(id) values ($1),($2)", [owner, other]);
+  await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Sends')", [business, owner]);
+  await db.query("insert into public.owner_alert_prefs(business_id,owner_id,lead_alerts,daily_results,phone_e164,verified_at) values ($1,$2,true,false,'+919800000009',now())", [business, owner]);
+  const as = async (role, user, run) => {
+    const session = client(database);
+    await session.connect();
+    try {
+      await session.query("begin");
+      await session.query(`set local role ${role}`);
+      if (user) await session.query("select set_config('request.jwt.claim.sub',$1,true)", [user]);
+      const result = await run(session);
+      await session.query("commit");
+      return result;
+    } catch (error) { await session.query("rollback").catch(() => {}); throw error; } finally { await session.end(); }
+  };
+  const claim = (key, { kind = "lead", template = "lead_alert_en", cap = 100 } = {}) => as("service_role", null, async (session) =>
+    (await session.query("select public.owner_alert_claim($1,$2,$3,$4,$5) as r", [business, kind, key, template, cap])).rows[0].r);
+  const settle = (id, state, counts = false, code = null) => as("service_role", null, (session) =>
+    session.query("select public.owner_alert_settle($1,$2,$3,$4,$5)", [id, state, code, state === "sent" ? "wamid.X" : null, counts]));
+  const prefs = async () => (await db.query("select send_failures, paused_at is not null as paused from public.owner_alert_prefs where business_id=$1", [business])).rows[0];
+  await check(`${database}: WhatsApp alert sends: one alert per lead, retry and unknown, owners read only their own (#701)`, async () => {
+    const first = await claim("lead-1");
+    assert.deepEqual({ ...first, sendId: typeof first.sendId }, { claimed: true, sendId: "number", phone: "+919800000009", language: "en" });
+    assert.deepEqual(await claim("lead-1"), { claimed: false, reason: "duplicate" });
+    await settle(first.sendId, "sent");
+    const retry = await claim("lead-2");
+    await settle(retry.sendId, "retry");
+    assert.equal((await claim("lead-2")).claimed, true);
+    assert.equal((await db.query("select attempts from public.owner_alert_sends where id=$1", [retry.sendId])).rows[0].attempts, 2);
+    const unknown = await claim("lead-3");
+    await settle(unknown.sendId, "unknown");
+    assert.deepEqual(await claim("lead-3"), { claimed: false, reason: "duplicate" });
+    assert.deepEqual(await claim("2026-10-27", { kind: "daily" }), { claimed: false, reason: "off" });
+    await as("authenticated", owner, async (session) => {
+      assert.equal((await session.query("select count(*)::int as n from public.owner_alert_sends")).rows[0].n, 3);
+      await session.query("savepoint s");
+      await assert.rejects(session.query("select public.owner_alert_claim($1,'lead','x','t',9)", [business]), { code: "42501" });
+      await session.query("rollback to savepoint s");
+      await assert.rejects(session.query("insert into public.owner_alert_sends(business_id,kind,dedupe_key,template) values ($1,'lead','y','t')", [business]), { code: "42501" });
+    });
+    await as("authenticated", other, async (session) => {
+      assert.equal((await session.query("select count(*)::int as n from public.owner_alert_sends")).rows[0].n, 0);
+    });
+    await as("anon", null, async (session) => {
+      await assert.rejects(session.query("select 1 from public.owner_alert_sends"), { code: "42501" });
+    });
+  });
+  await check(`${database}: WhatsApp alert sends: 3 counted failures pause until a new START; cap, blocked template and STOP refuse (#701)`, async () => {
+    for (const key of ["f-1", "f-2"]) { const c = await claim(key); await settle(c.sendId, "failed", true, "131026"); }
+    const notCounted = await claim("f-x"); await settle(notCounted.sendId, "failed", false, "132018");
+    assert.deepEqual(await prefs(), { send_failures: 2, paused: false });
+    const third = await claim("f-3"); await settle(third.sendId, "failed", true, "131026");
+    assert.deepEqual(await prefs(), { send_failures: 3, paused: true });
+    assert.deepEqual(await claim("f-4"), { claimed: false, reason: "paused" });
+    await db.query("update public.owner_alert_prefs set verified_at = now() + interval '1 second' where business_id=$1", [business]);
+    assert.deepEqual(await prefs(), { send_failures: 0, paused: false });
+    const used = (await db.query("select count(*)::int as n from public.owner_alert_sends where business_id=$1 and state in ('pending','sent','unknown')", [business])).rows[0].n;
+    assert.deepEqual(await claim("cap-1", { cap: used }), { claimed: false, reason: "cap" });
+    await as("service_role", null, (session) => session.query("select public.owner_alert_template_block('lead_alert_en','MARKETING')"));
+    assert.deepEqual(await claim("blocked-1"), { claimed: false, reason: "template_blocked" });
+    await as("service_role", null, (session) => session.query("select public.owner_alert_stop('+919800000009')"));
+    assert.deepEqual(await claim("stop-1", { template: "lead_alert_hi" }), { claimed: false, reason: "opted_out" });
+  });
+}
+
 async function verifyOwnerWhatsAppAlerts(db, database) {
   const owner = randomUUID(), other = randomUUID(), business = randomUUID(), otherBusiness = randomUUID();
   await db.query("insert into auth.users(id) values ($1),($2)", [owner, other]);
@@ -2429,6 +2497,9 @@ async function verify(database, source, integrityMigration, customerOnly = false
       await db.query(ownerAlertsMigration);
       await db.query(ownerAlertsMigration);
       await verifyOwnerWhatsAppAlerts(db,database);
+      await db.query(ownerAlertSendsMigration);
+      await db.query(ownerAlertSendsMigration);
+      await verifyOwnerAlertSends(db,database);
       await db.query(leadCustomerMigration);
       await db.query(leadCustomerMigration);
       if ((await db.query("select exists(select 1 from information_schema.columns where table_schema='public' and table_name='leads' and column_name='workflow_status') as installed")).rows[0].installed) {
