@@ -197,6 +197,13 @@ An `unknown` capability is not permission to proceed. Expired/revoked credential
 require reconnect; other blockers may require action in Meta. Details are in
 [Meta Connection](META_CONNECT.md).
 
+Behind `META_SETUP_CHECKLIST` (#1016, #795 slice 1), Settings shows "Ready to launch on Meta"
+under an owner's own connection: business portfolio, ad account in rupees (active), Facebook Page,
+WhatsApp on the Page (the Page's number or one on the portfolio's WhatsApp Business account) and a
+payment method (`funding_source_details`). Each row is a tick or one Meta link with an English and a
+Hindi line. GET reads only (`MetaClient.setupReads`), recorded by
+`scripts/record-meta-setup-checklist.ts`; never shown for AdBrain-managed accounts.
+
 Disconnect revokes the app's stored binding; **it does not stop remote delivery**.
 Pause intended campaigns before disconnecting, or manage them in Meta afterward.
 
