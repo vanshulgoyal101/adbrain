@@ -121,6 +121,11 @@ export const REVIEW_WARNINGS = {
   budget: "Budget is below what Meta needs to learn (about 50 results a week); results may be slow",
 } as const;
 
+/** #418 rule 7: an ad's last line asks customers to send other words than WhatsApp pre-types. */
+export function askMismatchWarning(ask: string, prefill: string): string {
+  return `An ad asks customers to send “${ask.slice(0, 80)}”, but WhatsApp pre-types “${prefill.slice(0, 80)}”. Edit the WhatsApp message so they match`;
+}
+
 /**
  * The Review warnings for a planned campaign. A 9:16 is made for WhatsApp and lead-form ads with a saved
  * design (#333). The budget warning needs the business's own cost per result; without one it says
