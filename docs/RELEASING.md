@@ -200,6 +200,11 @@ The Supabase free plan keeps no backups (owner, Oct 27: no Pro), so we keep our 
   files (ad images, brand uploads) aren't in the dump: ad images can be regenerated, and uploads
   are #884 item 4.
 
+**Weekly drill:** `node scripts/restore-drill.mjs --post` downloads the newest backup, decrypts it with
+the keychain key, restores it into a throwaway local Postgres 17 (Supabase's roles and `extensions`
+schema stubbed), checks every table's row count against the dump and posts PASS/FAIL on #884. It
+deletes everything afterwards. DevOps runs it every Monday.
+
 **Restore** (into a new Supabase project, never over production without the CEO):
 1. `gh run download <run id> -R vanshulgoyal101/adbrain` (latest:
    `gh run list -w db-backup.yml --status success -L 1`).
