@@ -84,11 +84,19 @@ describe("<AdAssistant> skips the brief review when the Brand has the facts (#85
     const fetchMock = mockApi(() => ({ ready: true, brief: BRIEF }));
     render(<AdAssistant business={complete} />);
     fireEvent.change(await screen.findByLabelText("Campaign goal"), { target: { value: "Rooftop solar for homes, weekend visits" } });
-    expect(screen.getByText("For Mohali · offer: Free site survey")).toBeInTheDocument();
+    expect(screen.getByText("Your 3 ads will use: Mohali · offer: Free site survey")).toBeInTheDocument();
+    expect(screen.getByText("About 2 minutes. Nothing is published.")).toBeInTheDocument();
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Make 3 ads" })); });
     await waitFor(() => expect(generatePosts(fetchMock)).toHaveLength(1));
     expect(screen.queryByRole("region", { name: "Review creative brief" })).not.toBeInTheDocument();
     expect(screen.getByText("What I'll write about · Edit")).toBeInTheDocument();
+  });
+
+  it("#1004 (CPO): a proof point is labelled as proof, never as an offer, and long facts are cut at 40 characters", () => {
+    render(<AdAssistant business={{ ...complete, offers: [], usps: ["Over 1,200 rooftops installed across Punjab since 2015"], locations: ["Mohali", "Kharar", "Zirakpur"] } as Business} />);
+    fireEvent.change(screen.getByLabelText("Campaign goal"), { target: { value: "Rooftop solar" } });
+    expect(screen.getByText("Your 3 ads will use: Mohali, Kharar · proof: Over 1,200 rooftops installed across Pu…")).toBeInTheDocument();
+    expect(screen.queryByText(/offer:/)).not.toBeInTheDocument();
   });
 
   it("#1004: an edited chip skips the review too, and 'Edit brief' keeps it", async () => {
