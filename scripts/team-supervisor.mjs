@@ -178,8 +178,8 @@ export function restartPrompt(role) {
   ].join("\n");
 }
 
-/** GitHub runs scheduled-jobs.yml every 2–5 h instead of every 15 min (#692): dispatch when its latest run started over `staleMin` ago and none is waiting or running. */
-export function scheduledJobsDue(latest, now = Date.now(), staleMin = 14) {
+/** GitHub runs scheduled-jobs.yml every 2–5 h instead of every 15 min (#692): dispatch when its latest run started over `staleMin` minutes ago (9: every 10-minute tick) and none is waiting or running. */
+export function scheduledJobsDue(latest, now = Date.now(), staleMin = 9) {
   if (!latest) return true;
   if (latest.status && latest.status !== "completed") return false;
   const started = Date.parse(latest.createdAt);
