@@ -181,9 +181,12 @@ feedback to assess unnecessary questions, abandonment and time to a useful draft
    - A quote that differs from a fact only in case is stored as the fact's exact text.
    - A quote that only adds a leading "the", "a" or "an" to a fact (20+ characters after it) is
      stored as the fact's own words (#713).
-   - Primary text written as one paragraph over 125 characters is split into
-     sentence lines (words unchanged), because Meta shows about 125 characters on
-     mobile before "See more" (#194).
+   - A quote that matches no fact is dropped when at least one other quote does;
+     claims are then checked against the remaining quotes, and a concept with no
+     verbatim quote is still refused (#713).
+   - Any primary-text line over 125 characters is split into sentence lines
+     (words unchanged), because Meta shows about 125 characters on mobile before
+     "See more" (#194, #713).
 
    Headline and primary text are never clipped, and every claim check still runs.
    In `visual.direction`, layout notes such as "55% of the frame height", "45%

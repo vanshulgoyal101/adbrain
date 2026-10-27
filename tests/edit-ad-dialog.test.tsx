@@ -48,9 +48,16 @@ describe("edit a launched ad's words (#775)", () => {
     expect(screen.getByLabelText("Headline")).toHaveValue("Find Out Before You Commit");
     fireEvent.change(screen.getByLabelText("Ad text"), { target: { value: "Not sure your rooftop can take solar? Ask us on WhatsApp." } });
     fireEvent.click(screen.getByRole("button", { name: "Save and send to review" }));
-    await waitFor(() => expect(onSaved).toHaveBeenCalledWith(`New words saved. ${BACK_TO_REVIEW}`));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith(`New words saved. ${BACK_TO_REVIEW}`, { adId: "live-2", change: { message: "Not sure your rooftop can take solar? Ask us on WhatsApp." } }));
     expect(fetcher).toHaveBeenCalledWith("/api/campaigns/camp-1/ads/live-2", expect.objectContaining({ method: "PATCH" }));
     expect(JSON.parse(fetcher.mock.calls[0][1].body)).toEqual({ change: { message: "Not sure your rooftop can take solar? Ask us on WhatsApp." }, idempotencyKey: "11111111-2222-4333-8444-555555555555" });
+  });
+
+  it("after an edit, it opens on the ad's current words, not the original creative's", () => {
+    const edited = row(["src-set", "cap-set"], ["src-1", "src-2", "live-1", "live-2"], { cappedAdSetIds: ["cap-set"], cap: { adSetId: "cap-set" }, adWords: { "live-1": { headline: "Is your roof solar-ready?" } } });
+    render(<EditAdDialog campaign={edited} campaignName="Solaride" creatives={creatives} onClose={vi.fn()} onSaved={vi.fn()} />);
+    expect(screen.getByLabelText("Headline")).toHaveValue("Is your roof solar-ready?");
+    expect(screen.getByLabelText("Ad text")).toHaveValue("Book your free solar site survey today.");
   });
 
   it("lists every A/B ad by ad set, so editing one arm is a visible choice", () => {

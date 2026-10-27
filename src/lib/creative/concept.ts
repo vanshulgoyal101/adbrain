@@ -170,15 +170,19 @@ function placement(value: unknown): unknown {
 const ctaKey = (value: string) => value.toLowerCase().replace(/[^a-z]/g, "");
 
 // One paragraph becomes sentence lines of at most FOLD_CHARACTERS, without changing a word.
+// #713: a line over the fold is rewrapped at its sentence ends, even when the text has other line breaks.
 function shortLines(value: unknown): unknown {
-  if (typeof value !== "string" || value.includes("\n") || value.trim().length <= FOLD_CHARACTERS) return value;
-  const lines: string[] = [];
-  for (const sentence of value.trim().split(/(?<=[.!?])\s+(?=\S)/u)) {
-    const last = lines.length - 1;
-    if (last >= 0 && lines[last].length + 1 + sentence.length <= FOLD_CHARACTERS) lines[last] += ` ${sentence}`;
-    else lines.push(sentence);
-  }
-  return lines.join("\n");
+  if (typeof value !== "string" || !value.split("\n").some((line) => line.trim().length > FOLD_CHARACTERS)) return value;
+  return value.trim().split("\n").map((paragraph) => {
+    if (paragraph.trim().length <= FOLD_CHARACTERS) return paragraph;
+    const lines: string[] = [];
+    for (const sentence of paragraph.trim().split(/(?<=[.!?])\s+(?=\S)/u)) {
+      const last = lines.length - 1;
+      if (last >= 0 && lines[last].length + 1 + sentence.length <= FOLD_CHARACTERS) lines[last] += ` ${sentence}`;
+      else lines.push(sentence);
+    }
+    return lines.join("\n");
+  }).join("\n");
 }
 
 // Fix cosmetic slips once; headline and primary text are never clipped, so they still fail when too long.
@@ -401,14 +405,15 @@ export function validateConcept(
     input.instructions ?? "",
     ...(input.sourceFacts ?? []),
   ].filter((value): value is string => typeof value === "string");
-  const quoteIssues: string[] = [];
+  const quotes = parsed.data.sourceQuotes.map((quote) => ({ quote, verbatim: verbatimQuote(quote, sources) }));
+  const verbatimQuotes = quotes.flatMap(({ verbatim }) => (verbatim === null ? [] : [verbatim]));
+  // #713: a stray quote beside verbatim ones is dropped, not repaired; claims are still checked against the rest.
+  const quoteIssues = verbatimQuotes.length
+    ? []
+    : quotes.map(({ quote }) => `sourceQuotes: quote not present in supplied facts: ${quote}`);
   const concept = {
     ...parsed.data,
-    sourceQuotes: parsed.data.sourceQuotes.map((quote) => {
-      const verbatim = verbatimQuote(quote, sources);
-      if (verbatim === null) quoteIssues.push(`sourceQuotes: quote not present in supplied facts: ${quote}`);
-      return verbatim ?? quote;
-    }),
+    sourceQuotes: verbatimQuotes.length ? verbatimQuotes : parsed.data.sourceQuotes,
   };
   const normalizeCopy = (text: string) => text.toLocaleLowerCase().replace(/[^\p{L}\p{M}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
   const opening = (text: string) => normalizeCopy(text).split(" ").slice(0, 8).join(" ");

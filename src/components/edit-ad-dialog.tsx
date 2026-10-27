@@ -16,17 +16,29 @@ type Words = { headline: string; message: string; description: string };
  * #775: change the words on a launched ad. Saving makes a new version on Meta and the ad goes back
  * to review; the picture, audience and budget don't change.
  */
+/** Words an earlier edit put on each ad (`raw.adWords`, #775); they win over the creative's. */
+function adWordsOf(campaign: Pick<Campaign, "raw">): Record<string, Partial<Words>> {
+  const raw = campaign.raw as { adWords?: unknown } | null;
+  const words = raw?.adWords;
+  if (!words || typeof words !== "object" || Array.isArray(words)) return {};
+  return Object.fromEntries(Object.entries(words as Record<string, unknown>).map(([adId, value]) => [adId,
+    value && typeof value === "object" ? Object.fromEntries((["headline", "message", "description"] as const)
+      .flatMap((field) => typeof (value as Record<string, unknown>)[field] === "string" ? [[field, (value as Record<string, string>)[field]]] : [])) : {}]));
+}
+
 export function EditAdDialog({ campaign, campaignName, creatives, onClose, onSaved }: {
   campaign: Pick<Campaign, "id" | "meta_campaign_id" | "meta_adset_id" | "meta_ad_ids" | "raw" | "creative_ids">;
   campaignName: string;
   creatives: Creative[];
   onClose: () => void;
-  onSaved: (message: string) => void;
+  /** `change` is what the ad now says differently, for the caller's copy of the campaign. */
+  onSaved: (message: string, saved: { adId: string; change: Partial<Words> }) => void;
 }) {
   const campaignId = campaign.id;
   const ads = React.useMemo(() => editableAds(campaign, campaign.creative_ids ?? []).map((ad) => {
     const creative = creatives.find((item) => item.id === ad.creativeId);
-    const words: Words = { headline: creative?.headline ?? "", message: creative?.primary_text ?? "", description: savedCreativeDescription(creative?.generation) ?? "" };
+    const edited = adWordsOf(campaign)[ad.adId] ?? {};
+    const words: Words = { headline: creative?.headline ?? "", message: creative?.primary_text ?? "", description: savedCreativeDescription(creative?.generation) ?? "", ...edited };
     return { ...ad, label: `${ad.label}${words.headline ? `: ${words.headline}` : ""}`, words };
   }), [campaign, creatives]);
   const [adId, setAdId] = React.useState(ads[0]?.adId ?? "");
@@ -59,7 +71,7 @@ export function EditAdDialog({ campaign, campaignName, creatives, onClose, onSav
       });
       const data = await res.json().catch(() => ({})) as { error?: string };
       if (!res.ok) { setError(data.error ?? "Couldn't change the ad. Nothing changed."); return; }
-      onSaved(`New words saved. ${BACK_TO_REVIEW}`);
+      onSaved(`New words saved. ${BACK_TO_REVIEW}`, { adId, change });
     } catch {
       setError("No connection. Nothing changed; try again.");
     } finally {

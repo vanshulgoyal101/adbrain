@@ -7,6 +7,7 @@ import Link from "next/link";
 import {
   ArrowRight,
   Bot,
+  CalendarDays,
   CheckCircle2,
   Loader2,
   Pencil,
@@ -30,6 +31,7 @@ import { isWriteYourOwnOption } from "@/lib/creative/interview-options";
 import { creativeFollowUps, creativeRecommendations, hasCreateFacts } from "@/lib/creative/recommendations";
 import { CREATE_LANGUAGES, defaultAdLanguage, type CreateLanguageId } from "@/lib/languages";
 import type { OpeningLine } from "@/lib/campaign/result-evidence";
+import type { Suggestion } from "@/lib/seasonal";
 import type { Business, Creative } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { z } from "zod";
@@ -124,9 +126,11 @@ function clearDraft(businessId: string): void {
   }
 }
 
-export function AdAssistant({ business, opening = null, onFlowStep }: {
+export function AdAssistant({ business, opening = null, occasions = [], onFlowStep }: {
   business: Business;
   opening?: OpeningLine | null;
+  /** #700: today's festivals and seasons (IST), worked out on the server. */
+  occasions?: Suggestion[];
   /** #760: "Brief" while the owner answers, "Create" once ads are being or have been made. */
   onFlowStep?: (step: "Brief" | "Create") => void;
 }) {
@@ -610,6 +614,18 @@ export function AdAssistant({ business, opening = null, onFlowStep }: {
                     New angle
                   </Button>
                 </div>
+              </div>
+            )}
+            {occasions.length > 0 && (
+              <div role="group" aria-labelledby="assistant-occasions" className="flex flex-wrap items-center gap-2">
+                <span id="assistant-occasions" className="flex items-center gap-1.5 text-sm text-slate-600">
+                  <CalendarDays size={15} aria-hidden="true" /> Coming up
+                </span>
+                {occasions.map((o) => (
+                  <Button key={o.id} size="sm" variant="outline" className="min-h-11" onClick={() => { setGoal(o.prompt); setChipGoal(o.prompt); setReferenceBrief(undefined); }}>
+                    {o.label}
+                  </Button>
+                ))}
               </div>
             )}
             <div className="min-w-0">

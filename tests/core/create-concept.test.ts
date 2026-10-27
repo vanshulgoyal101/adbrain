@@ -136,9 +136,10 @@ describe("core: Create claim checks on recorded Groq drafts", () => {
     }
   });
 
-  // Rejected on main only for textPlacement "left" or a quote's capital letter.
+  // Rejected on main only for textPlacement "left" or a quote's capital letter. The fourth also had quotes
+  // stitched from Brand facts beside verbatim ones; since #713 those are dropped instead of repaired.
   it("saves drafts with a left text area or a quote differing only in case", () => {
-    expect(groqFields.drafts.filter((draft) => draft.rules.length === 0)).toHaveLength(3);
+    expect(groqFields.drafts.filter((draft) => draft.rules.length === 0)).toHaveLength(4);
     for (const draft of groqFields.drafts) {
       expect(draft.rulesOnMain).not.toEqual(draft.rules);
       expect(draftRules(draft.angle, draft.concept)).toEqual(expectedRules(draft));
@@ -149,7 +150,7 @@ describe("core: Create claim checks on recorded Groq drafts", () => {
     expect(saved.success && saved.concept.visual.textPlacement).toBe("center");
   });
 
-  it("stores the Brand's exact quote and still rejects a quote with different words", () => {
+  it("stores the Brand's exact quote and never stores a quote with different words", () => {
     const [cased] = groqFields.drafts.filter((draft) => draft.concept.sourceQuotes.includes("Transparent cash pricing"));
     const angle = AD_ANGLES.find((candidate) => candidate.id === cased.angle)!;
     const check = (sourceQuotes: string[]) =>
@@ -158,8 +159,11 @@ describe("core: Create claim checks on recorded Groq drafts", () => {
     expect(saved.success && saved.concept.sourceQuotes).toContain("transparent cash pricing");
     const others = cased.concept.sourceQuotes.filter((quote) => quote !== "Transparent cash pricing");
     for (const quote of ["Transparent card pricing", "Transparent cash pricing guaranteed"]) {
+      // #713: beside verbatim quotes it is dropped (claims are checked against the rest); alone it is refused.
       const result = check([...others, quote]);
-      expect(result.success ? [] : conceptValidationRules(result.issues), quote).toEqual(["sourceQuotes"]);
+      expect(result.success && result.concept.sourceQuotes, quote).toEqual(others);
+      const alone = check([quote]);
+      expect(alone.success ? [] : conceptValidationRules(alone.issues), quote).toContain("sourceQuotes");
     }
   });
 });
