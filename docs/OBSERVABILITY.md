@@ -82,7 +82,9 @@ The stream includes:
 - Allowlisted `ui.action` intent for generation, inspection, approval/unapproval,
   regeneration/export, campaign create/review/activate/pause/sync, Brand save,
   upload/delete, follow-up save, payment quote/checkout, Meta connect controls and
-  `meta.access_request` (a new owner asking for Facebook access before App Review).
+  `meta.access_request` (a new owner asking for Facebook access before App Review),
+  the audience edit (`campaign.edit_audience`), and the owner's answer to the WhatsApp
+  AI reply card (`whatsapp_ai.guide` / `.done` / `.unavailable` / `.later`, #794).
 - `page.engagement` foreground-visible time, flushed on hide, navigation or exit,
   excluding background time. Each segment is 1 second to 1 hour; it measures visible
   time, not attention, billable usage or proof of activity. Coarse viewport categories

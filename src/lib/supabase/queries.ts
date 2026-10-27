@@ -215,7 +215,8 @@ export async function getLatestResults(
 }
 
 /**
- * Latest results plus each WhatsApp campaign's real enquiries the owner logged (#335). A failed
+ * Latest results plus each WhatsApp campaign's real enquiries the owner logged (#335) and each campaign's
+ * enquiries that became customers (#798). A failed
  * count read leaves the results as they are, so Campaigns still loads.
  */
 export async function getLatestResultsWithEnquiries(campaignIds: string[]): Promise<Record<string, CampaignResult>> {
@@ -223,8 +224,9 @@ export async function getLatestResultsWithEnquiries(campaignIds: string[]): Prom
   const ids = Object.keys(results);
   if (!ids.length) return results;
   const supabase = await createClient();
-  const { data, error } = await supabase.from("leads").select("campaign_id")
-    .in("campaign_id", ids).eq("source", "whatsapp_manual").limit(10_000);
+  // #798: one read for logged WhatsApp enquiries and enquiries (any source) that became customers.
+  const { data, error } = await supabase.from("leads").select("campaign_id, source, workflow_status")
+    .in("campaign_id", ids).or("source.eq.whatsapp_manual,workflow_status.eq.customer").limit(10_000);
   return error || !data ? results : attachRealEnquiries(results, data);
 }
 

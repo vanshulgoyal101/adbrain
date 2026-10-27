@@ -219,6 +219,8 @@ export class CreativeImageError extends Error {
     cause: unknown,
     public usage: GeneratedVariant["llmUsage"],
     public imageAttempts: ImageAttempt[] = [],
+    /** The validated concept whose image failed; the eval still scores its copy. */
+    public concept?: CreativeConcept,
   ) {
     super(cause instanceof Error ? cause.message : "Image generation failed.", {
       cause,
@@ -376,7 +378,7 @@ async function renderVariant(
       signal,
       onAttempt: (entry) => imageAttempts.push(entry),
     }).catch((error) => {
-      throw new CreativeImageError(error, usage, imageAttempts);
+      throw new CreativeImageError(error, usage, imageAttempts, concept);
     });
 
   return {

@@ -1,6 +1,6 @@
 /**
- * Meta ad-policy rules for generated copy (#738): personal attributes, unsupported superlatives and
- * "up to N%" results. Pure and deterministic. `validateConcept` repairs on them; owner-typed copy
+ * Meta ad-policy rules for generated copy (#738): personal attributes, unsupported superlatives,
+ * "up to N%" results, and (#941) zero-cost, result-or-refund and timed-result promises. Pure and deterministic. `validateConcept` repairs on them; owner-typed copy
  * only gets a warning (`copyClaimWarnings`).
  */
 import { HEALTH_VERTICAL } from "./slopScan";
@@ -32,6 +32,12 @@ const SUFFERING = /\b(?:suffer(?:ing|s)?\s+(?:from|with)|struggl(?:e|ing)\s+with
 
 const SUPERLATIVE = /(?:#\s?1|\bno\.?\s?1\b|\bnumber\s+one\b|\btop[- ]rated\b|\bbest[- ]rated\b|\baward[- ]winning\b|\b(?:the|our|[\p{L}]+['’]s)\s+leading\b|\bleading\s+(?:clinic|dentist|doctor|provider|company|brand|installer|\w+ist)s?\b|\bmost trusted\b|\bunbeatable\b|\b(?:the|our|[\p{L}]+['’]s)\s+(?:very\s+)?best\b)/iu;
 const UP_TO_RESULT = /\bup\s*to\s+\d+(?:\.\d+)?\s*%|\d+(?:\.\d+)?\s*%\s*तक/iu;
+
+// #941 rule 8: promises long-running Indian ads still make that Meta treats as exaggerated or misleading.
+const ZERO_COST = /(?<![\p{L}\p{N}])(?:zero|0|₹\s?0|rs\.?\s?0)[- ]?(?:investment|cost|down[- ]?payment|upfront)(?![\p{L}\p{N}])|शून्य\s*(?:निवेश|लागत)|\bzero\s+(?:nivesh|laagat|lagat)\b/iu;
+const NO_RESULT_NO_FEE = /\bno\s+(?:results?|band|success|selection|admission|cure|improvement|savings?)\s*[,-]?\s*(?:then\s+)?no\s+(?:fees?|charges?|pay(?:ment)?)\b|\bmoney[- ]back\b/iu;
+const FAST_OUTCOME = /\b(?:results?|new teeth|new smile|relief|cure[ds]?|fluen(?:t|tly|cy)|hair regrowth|glowing skin|weight loss|lose\s+\d+\s*kg)\b[^.!?\n]{0,30}?\b(?:in|within)\s+(?:just\s+|only\s+)?(?:\d+\s*|a few\s+|few\s+)?(?:days?|weeks?|hours?)\b/iu;
+const squash = (text: string) => text.toLocaleLowerCase().replace(/[\s,-]+/g, "");
 
 function sentences(text: string): string[] {
   return text.split(/(?<=[?!.।])\s+|\n+/u).map((sentence) => sentence.trim()).filter(Boolean);
@@ -75,6 +81,25 @@ export function policyFindings(text: string, options: { vertical?: string | null
       fix: health
         ? "remove the \"up to\" percentage; Meta refuses best-case health results even when a fact states them"
         : "remove the \"up to\" percentage; no supplied fact states it" });
+  }
+  const stated = (phrase: string) => squash(facts).includes(squash(phrase));
+  const zero = ZERO_COST.exec(text)?.[0];
+  if (zero && !stated(zero)) {
+    findings.push({ rule: "exaggerated-result", detail: zero,
+      fix: "remove the zero-cost claim; no supplied fact says it, and Meta treats it as misleading" });
+  }
+  const noFee = NO_RESULT_NO_FEE.exec(text)?.[0];
+  if (noFee && !stated(noFee)) {
+    findings.push({ rule: "exaggerated-result", detail: noFee,
+      fix: "remove the result-or-refund promise; no supplied fact says it" });
+  }
+  const fast = FAST_OUTCOME.exec(text)?.[0];
+  const span = fast?.match(/(?:\d+\s*|a few\s+|few\s+)?(?:days?|weeks?|hours?)$/i)?.[0];
+  if (fast && (health || !span || !stated(span))) {
+    findings.push({ rule: "exaggerated-result", detail: fast,
+      fix: health
+        ? "remove the timed result; Meta refuses health outcomes promised by a date"
+        : "remove the timed result; no supplied fact says it" });
   }
   return findings;
 }

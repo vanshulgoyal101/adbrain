@@ -170,15 +170,19 @@ function placement(value: unknown): unknown {
 const ctaKey = (value: string) => value.toLowerCase().replace(/[^a-z]/g, "");
 
 // One paragraph becomes sentence lines of at most FOLD_CHARACTERS, without changing a word.
+// #713: a line over the fold is rewrapped at its sentence ends, even when the text has other line breaks.
 function shortLines(value: unknown): unknown {
-  if (typeof value !== "string" || value.includes("\n") || value.trim().length <= FOLD_CHARACTERS) return value;
-  const lines: string[] = [];
-  for (const sentence of value.trim().split(/(?<=[.!?])\s+(?=\S)/u)) {
-    const last = lines.length - 1;
-    if (last >= 0 && lines[last].length + 1 + sentence.length <= FOLD_CHARACTERS) lines[last] += ` ${sentence}`;
-    else lines.push(sentence);
-  }
-  return lines.join("\n");
+  if (typeof value !== "string" || !value.split("\n").some((line) => line.trim().length > FOLD_CHARACTERS)) return value;
+  return value.trim().split("\n").map((paragraph) => {
+    if (paragraph.trim().length <= FOLD_CHARACTERS) return paragraph;
+    const lines: string[] = [];
+    for (const sentence of paragraph.trim().split(/(?<=[.!?])\s+(?=\S)/u)) {
+      const last = lines.length - 1;
+      if (last >= 0 && lines[last].length + 1 + sentence.length <= FOLD_CHARACTERS) lines[last] += ` ${sentence}`;
+      else lines.push(sentence);
+    }
+    return lines.join("\n");
+  }).join("\n");
 }
 
 // Fix cosmetic slips once; headline and primary text are never clipped, so they still fail when too long.
@@ -401,14 +405,15 @@ export function validateConcept(
     input.instructions ?? "",
     ...(input.sourceFacts ?? []),
   ].filter((value): value is string => typeof value === "string");
-  const quoteIssues: string[] = [];
+  const quotes = parsed.data.sourceQuotes.map((quote) => ({ quote, verbatim: verbatimQuote(quote, sources) }));
+  const verbatimQuotes = quotes.flatMap(({ verbatim }) => (verbatim === null ? [] : [verbatim]));
+  // #713: a stray quote beside verbatim ones is dropped, not repaired; claims are still checked against the rest.
+  const quoteIssues = verbatimQuotes.length
+    ? []
+    : quotes.map(({ quote }) => `sourceQuotes: quote not present in supplied facts: ${quote}`);
   const concept = {
     ...parsed.data,
-    sourceQuotes: parsed.data.sourceQuotes.map((quote) => {
-      const verbatim = verbatimQuote(quote, sources);
-      if (verbatim === null) quoteIssues.push(`sourceQuotes: quote not present in supplied facts: ${quote}`);
-      return verbatim ?? quote;
-    }),
+    sourceQuotes: verbatimQuotes.length ? verbatimQuotes : parsed.data.sourceQuotes,
   };
   const normalizeCopy = (text: string) => text.toLocaleLowerCase().replace(/[^\p{L}\p{M}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
   const opening = (text: string) => normalizeCopy(text).split(" ").slice(0, 8).join(" ");
@@ -499,9 +504,28 @@ export function validateConcept(
   if (offer && offer.index >= FOLD_CHARACTERS && !(spelled >= 0 && spelled < FOLD_CHARACTERS)) {
     issues.push(`offer-below-fold: "${offer[0]}" starts at character ${offer.index + 1}; mobile readers only see the first ${FOLD_CHARACTERS}, so move the offer into the first line`);
   }
-  return issues.length
-    ? { success: false, issues, ...(claims.size ? { claims: [...claims] } : {}) }
-    : { success: true, concept };
+  if (issues.length) return { success: false, issues, ...(claims.size ? { claims: [...claims] } : {}) };
+  const pictureOffer = offerOnPicture(concept, input.brand.offers ?? []);
+  return { success: true, concept: pictureOffer ? { ...concept, supportingText: pictureOffer } : concept };
+}
+
+/**
+ * #418 rule 2 (Analyst, #941): the offer the copy states also goes on the picture. When neither the
+ * headline nor the picture line carries it, the picture line becomes the owner's own offer fact, so
+ * it costs no repair and invents nothing. Indic-script copy keeps its own line: an English fact on a
+ * Hindi or Punjabi picture would mix scripts, and those replies already put the offer there.
+ */
+function offerOnPicture(concept: CreativeConcept, offers: string[]): string | null {
+  const copy = concept.primary_text.normalize("NFC");
+  if (/[\u0900-\u0DFF]/u.test(copy)) return null;
+  const shown = [concept.headline, concept.supportingText ?? ""].join("\n").normalize("NFC");
+  const facts = [...new Set(offers.map((offer) => offer.normalize("NFC").trim()))];
+  for (const term of claimedTerms(copy)) {
+    if (citesTerm(shown, term)) return null;
+    const matches = facts.filter((fact) => fact.length <= 64 && citesTerm(fact, term) && sameOffer(copy, term, fact));
+    if (matches.length === 1) return matches[0];
+  }
+  return null;
 }
 
 export function conceptImagePrompt(
