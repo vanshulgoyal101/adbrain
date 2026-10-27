@@ -6,6 +6,7 @@ import whatsappTape from "./fixtures/meta/edit-audience-whatsapp.json";
 import legacyWhatsAppTape from "./fixtures/meta/edit-audience-whatsapp-legacy.json";
 import languageTape from "./fixtures/meta/edit-audience-language.json";
 import whatsappLanguageTape from "./fixtures/meta/edit-audience-whatsapp-language.json";
+import runningTape from "./fixtures/meta/edit-audience-running.json";
 import { CampaignDeliveryError, MetaClient, MetaError } from "@/lib/meta/client";
 import { TargetingExclusionsMissingError } from "@/lib/meta/service-area";
 
@@ -135,6 +136,21 @@ describe("core: edit a launched ad set's audience (#773)", () => {
     expect(posts.map(call => call.path)).toEqual([adSetId, adSetId]);
     expect(posts.map(call => Boolean(call.form.execution_options))).toEqual([true, false]);
     expect(tape.sent.some(call => call.path.includes("/adsets") && call.method === "POST")).toBe(false);
+    expect(tape.pending).toEqual([]);
+  });
+
+  // #765: recorded on an ACTIVE ad set under a PAUSED test campaign. Meta patches it in place and it stays ACTIVE.
+  it("patches a running ad set in place and keeps it running: no status write, read back ACTIVE", async () => {
+    const tape = replay(runningTape);
+    const { campaignId, adSetId } = ids(runningTape);
+    const meta = new MetaClient(creds);
+    const input = { adSetId, adIds: ["ad"], changes };
+    expect((await meta.editAdSetTargeting(campaignId, input, { validateOnly: true })).validated).toBe(true);
+    expect(await meta.editAdSetTargeting(campaignId, input)).toEqual({ mode: "patch", validated: false, adSetId, adIds: input.adIds, retiredAdSetId: null });
+    const posts = tape.sent.filter(call => call.method === "POST");
+    expect(posts.map(call => call.path)).toEqual([adSetId, adSetId]);
+    expect(posts.some(call => "status" in call.form)).toBe(false);
+    expect(((runningTape as Exchange[]).at(-1)!.body as { status: string }).status).toBe("ACTIVE");
     expect(tape.pending).toEqual([]);
   });
 

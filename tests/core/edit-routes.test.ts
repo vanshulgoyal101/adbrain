@@ -5,6 +5,7 @@ import rateLimitedTape from "./fixtures/meta/edit-audience-patch-rate-limited.js
 import whatsappTape from "./fixtures/meta/edit-audience-whatsapp.json";
 import languageTape from "./fixtures/meta/edit-audience-language.json";
 import areaTape from "./fixtures/meta/edit-audience-area-exclusions.json";
+import runningTape from "./fixtures/meta/edit-audience-running.json";
 import { lacksAreaExclusions } from "@/lib/meta/service-area";
 
 // #773 2/3: POST /api/campaigns/[id]/audience through the real route, connection access, edit service,
@@ -119,6 +120,8 @@ const rebuild = () => {
 const patch = () => scenario(patchTape as Exchange[], "120253709953000526", 4);
 const limited = () => scenario(rateLimitedTape as Exchange[], "120253709671200526", 4);
 const language = () => scenario(languageTape as Exchange[], "120253724289410526", 4);
+// #765: recorded on an ACTIVE ad set under a PAUSED test campaign (CEO-approved, deleted after).
+const running = () => scenario(runningTape as Exchange[], "120253729144520526", 4);
 // The area tape starts with the #741 area lookup the service makes from the ad set's current area.
 const area = (tape = areaTape as Exchange[]) => {
   const scene = scenario(tape.slice(1), "120253724507960526", 4);
@@ -324,8 +327,8 @@ describe("core: edit a launched campaign's audience (#773)", () => {
     expect(mirror()).toEqual(before);
   });
 
-  // #765: a running campaign. The tree reads and the patch tape's ad set reads are the recorded bodies with
-  // status ACTIVE (synthesised until the ACTIVE ad set recording is approved).
+  // #765: a running campaign. The tree reads are synthesised with status ACTIVE; the running tape's ad set reads,
+  // patch and read-back are Meta's real answers for an ACTIVE ad set.
   const live = (tape: Exchange[], scope: "tree" | "all" = "all", campaignToo = true) => structuredClone(tape).map((exchange, index) => {
     const body = exchange.body as { status?: string; effective_status?: string; data?: Array<{ status?: string; effective_status?: string }> };
     if (index === 0 && campaignToo) Object.assign(body, { status: "ACTIVE", effective_status: "ACTIVE" });
@@ -335,9 +338,11 @@ describe("core: edit a launched campaign's audience (#773)", () => {
   });
 
   it("patches a running lead-form campaign in place: it keeps running and learning restarts", async () => {
-    const scene = patch();
+    const scene = running();
+    expect(((runningTape as Exchange[])[6].body as { status: string }).status).toBe("ACTIVE");
+    expect(((runningTape as Exchange[]).at(-1)!.body as { status: string }).status).toBe("ACTIVE");
     stored(scene, { status: "active" });
-    replay(live(scene.tape));
+    replay(live(scene.tape, "tree"));
     const { status, body } = await edit();
     expect(status).toBe(200);
     expect(body).toMatchObject({ result: { count: 1, consequence: "This restarts Meta's learning; results may be slower for 2–3 days.", adSets: [{ adSetId: scene.adSetId, mode: "patch", previousAdSetId: null }] } });
