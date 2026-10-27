@@ -130,12 +130,23 @@ describe("core: Stories and Reels get a 9:16 image (#333)", () => {
     }
   });
 
-  it("keeps today's single-image creative when there is no 9:16, the upload fails, or it's a lead-form ad", async () => {
+  it("#680: a lead-form ad gets the same placement images, naming its form", async () => {
+    const { creative, uploads, fallbacks } = await create({ destination: "instant_form", storyImage: new Uint8Array([9]) });
+    expect(fallbacks).toEqual([]);
+    expect(uploads).toBe(2);
+    const feed = JSON.parse(creative.asset_feed_spec);
+    expect(feed.images.map((image: { hash: string }) => image.hash)).toEqual([inputs.feedHash, inputs.storyHash]);
+    expect(feed.call_to_actions).toEqual([{ type: "LEARN_MORE", value: { lead_gen_form_id: "form-1" } }]);
+    expect(feed.link_urls).toEqual([{ website_url: "https://solaride.in" }]);
+    expect(feed).not.toHaveProperty("additional_data");
+  });
+
+  it("keeps today's single-image creative when there is no 9:16 or the upload fails", async () => {
     for (const run of [
       await create({ destination: "whatsapp", storyImage: Promise.resolve(null) }),
       await create({ destination: "whatsapp", storyImage: null }),
       await create({ destination: "whatsapp", storyImage: new Uint8Array([9]), failStoryUpload: true }),
-      await create({ destination: "instant_form", storyImage: new Uint8Array([9]) }),
+      await create({ destination: "instant_form", storyImage: null }),
     ]) {
       expect(run.creative.asset_feed_spec).toBeUndefined();
       expect(JSON.parse(run.creative.object_story_spec).link_data.image_hash).toBe(inputs.feedHash);

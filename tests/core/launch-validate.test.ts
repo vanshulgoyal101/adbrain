@@ -94,11 +94,13 @@ describe("core: launch payloads Meta accepted with validate_only (#419)", () => 
   });
 
   // #906: WhatsApp ads run on Facebook, Instagram and Messenger only (Audience Network taps were mostly accidental on #157).
-  it("a WhatsApp ad set leaves Audience Network out, as Meta accepted it; a lead-form one keeps automatic placements", async () => {
+  // #680: lead-form ads too, so a WhatsApp vs lead-form A/B differs only in destination.
+  it("WhatsApp and lead-form ad sets leave Audience Network out, as Meta accepted them", async () => {
     const adSet = (destination: AdDestination) => JSON.parse(tape.find((e) => e.destination === destination && e.kind === "adsets")!.form.targeting);
-    expect(adSet("whatsapp").publisher_platforms).toEqual(["facebook", "instagram", "messenger"]);
-    expect(JSON.stringify(adSet("whatsapp"))).not.toContain("audience_network");
-    expect(adSet("instant_form")).not.toHaveProperty("publisher_platforms");
+    for (const destination of ["whatsapp", "instant_form"] as const) {
+      expect(adSet(destination).publisher_platforms).toEqual(["facebook", "instagram", "messenger"]);
+      expect(JSON.stringify(adSet(destination))).not.toContain("audience_network");
+    }
     let planned: Omit<PlannedCampaign, "costPerResultRupees"> | undefined;
     await launch("whatsapp", (plan) => { planned = plan; });
     expect(checkPlan(planned!).find((finding) => finding.rule === "Advantage+ placements")?.detail).toContain("Audience Network is left out");
