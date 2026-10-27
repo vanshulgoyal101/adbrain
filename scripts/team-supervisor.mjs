@@ -96,13 +96,26 @@ export function liveRoles(dir = SESSIONS, idleMin = 20, now = Date.now()) {
   return live;
 }
 
-/** The one role to wake this tick: first in order with work, no waiter and no live chat. */
-export function pickRole(statuses, live, roles = ORDER) {
-  for (const role of roles) {
-    const s = statuses[role];
-    if (s?.state === "has-work" && !live.has(role)) return { role, items: s.items };
-  }
-  return null;
+/** When each role was last woken, from the state log. */
+export function lastWakes(state) {
+  const last = {};
+  for (const r of state.runs ?? []) if (!last[r.role] || r.start > last[r.role]) last[r.role] = r.start;
+  return last;
+}
+
+/**
+ * The one role to wake this tick, among roles with work, no waiter and no live chat (#573).
+ * A role not woken for `overdueMin` goes first (longest wait first, up to two windows, then in order), so the fixed order can't starve the
+ * later roles and every role with queued work gets a wake at least hourly, even past the daily cap.
+ * Otherwise, under the cap, the first in order.
+ */
+export function pickRole(statuses, live, roles = ORDER, { last = {}, now = Date.now(), capped = false, overdueMin = 60 } = {}) {
+  const ready = roles.filter((role) => statuses[role]?.state === "has-work" && !live.has(role));
+  // Waits are capped at two windows, so long-starved roles tie and the bottleneck-first order decides (stable sort).
+  const since = (role) => Math.min(last[role] ? now - Date.parse(last[role]) : Infinity, 2 * overdueMin * 60_000);
+  const overdue = ready.filter((role) => since(role) >= overdueMin * 60_000).sort((a, b) => since(b) - since(a));
+  const role = overdue[0] ?? (capped ? undefined : ready[0]);
+  return role ? { role, items: statuses[role].items, overdue: overdue[0] === role } : null;
 }
 
 /** The run's final words (the CLI prints its last message), so the log shows what a short run decided (#573). */
@@ -112,10 +125,31 @@ export function lastWords(output, max = 220) {
   return last ? last.slice(0, max) : "(no output)";
 }
 
-/** Runs today, from the state log; the daily cap bounds cost. */
-export function runsToday(state, now = new Date()) {
+/** Runs today, from the state log. By default only runs that did work count toward the daily cap (#573); `all` counts every run. */
+export function runsToday(state, now = new Date(), { all = false } = {}) {
   const day = now.toISOString().slice(0, 10);
-  return (state.runs ?? []).filter((r) => String(r.start).startsWith(day)).length;
+  return (state.runs ?? []).filter((r) => String(r.start).startsWith(day) && (all || r.worked !== false)).length;
+}
+
+/** A run did work if it left a signed "<Role> (headless):" comment, review or PR on GitHub. */
+export function didWork(bodies, role) {
+  const sig = `${NAMES[role]} (headless):`;
+  return bodies.some((b) => String(b ?? "").includes(sig));
+}
+
+/** GitHub text written since `start`: issue/PR comments, PR reviews and PR bodies (a gh failure counts as work, to stay safe on cost). */
+function workSince(role, start) {
+  try {
+    const gh = (path) => JSON.parse(execFileSync("gh", ["api", path], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], maxBuffer: 16 * 1024 * 1024 }));
+    const bodies = gh(`repos/${REPO}/issues/comments?since=${start}&per_page=100`).map((c) => c.body);
+    for (const pr of gh(`repos/${REPO}/pulls?state=all&sort=updated&direction=desc&per_page=30`).filter((p) => p.updated_at >= start)) {
+      if (pr.created_at >= start) bodies.push(pr.body);
+      for (const r of gh(`repos/${REPO}/pulls/${pr.number}/reviews?per_page=100`)) if ((r.submitted_at ?? "") >= start) bodies.push(r.body);
+    }
+    return didWork(bodies, role);
+  } catch {
+    return true;
+  }
 }
 
 export function prompt(role, items, runMin) {
@@ -282,6 +316,8 @@ async function main() {
       "idle-min": { type: "string", default: "20" },
       "run-min": { type: "string", default: "40" },
       "max-runs-day": { type: "string", default: "8" },
+      "max-runs-hard": { type: "string", default: "30" },
+      "overdue-min": { type: "string", default: "60" },
       credits: { type: "string", default: "150" },
     },
   });
@@ -314,18 +350,20 @@ async function main() {
   if (!values["dry-run"]) refresh();
   nightlyExport(values["dry-run"]);
   const state = readState();
-  if (runsToday(state) >= Number(values["max-runs-day"])) return log(`tick skipped: daily cap ${values["max-runs-day"]} reached`);
+  // The hard ceiling bounds cost whatever the runs did; the daily cap counts only runs that did work.
+  if (runsToday(state, new Date(), { all: true }) >= Number(values["max-runs-hard"])) return log(`tick skipped: hard ceiling ${values["max-runs-hard"]} runs reached`);
+  const capped = runsToday(state) >= Number(values["max-runs-day"]);
 
   const live = liveRoles(SESSIONS, Number(values["idle-min"]));
   const statuses = {};
   for (const role of roles) if (!live.has(role)) statuses[role] = probe(role);
-  const pick = pickRole(statuses, live, roles);
+  const pick = pickRole(statuses, live, roles, { last: lastWakes(state), capped, overdueMin: Number(values["overdue-min"]) });
   const summary = roles.map((r) => `${r}:${live.has(r) ? "live" : statuses[r]?.state}`).join(" ");
-  if (!pick) return log(`tick: nothing to wake (${summary})`);
-  if (values["dry-run"]) return console.log(`would wake ${NAMES[pick.role]} on: ${pick.items[0]}\n(${summary})`);
+  if (!pick) return log(capped ? `tick: daily cap ${values["max-runs-day"]} reached, nobody overdue (${summary})` : `tick: nothing to wake (${summary})`);
+  if (values["dry-run"]) return console.log(`would wake ${NAMES[pick.role]}${pick.overdue ? " (overdue)" : ""} on: ${pick.items[0]}\n(${summary})`);
 
   const run = { role: pick.role, item: pick.items[0]?.slice(0, 160), start: new Date().toISOString() };
-  log(`waking ${pick.role}: ${run.item} (${summary})`);
+  log(`waking ${pick.role}${pick.overdue ? " (overdue)" : ""}${capped ? " past the daily cap" : ""}: ${run.item} (${summary})`);
   state.runs = [...(state.runs ?? []), run];
   writeState(state);
   const runLog = join(STATE_DIR, `run-${pick.role}.log`);
@@ -333,8 +371,9 @@ async function main() {
   run.result = await runCli(agentArgs(prompt(pick.role, pick.items, runMin), values.credits), runMin, runLog);
   run.summary = lastWords(readFileSync(runLog, "utf8"));
   run.end = new Date().toISOString();
+  run.worked = workSince(pick.role, run.start);
   writeState(state);
-  log(`run ${pick.role} ended: ${run.result} · ${run.summary}`);
+  log(`run ${pick.role} ended: ${run.result}${run.worked ? "" : " (no signed GitHub work: not counted)"} · ${run.summary}`);
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) await main();
