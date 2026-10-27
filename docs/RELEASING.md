@@ -197,7 +197,7 @@ The Supabase free plan keeps no backups (owner, Oct 27: no Pro), so we keep our 
 - **Second copy:** the supervisor's nightly JSON export into `~/.adbrain-backups`
   ([Operations](OPERATIONS.md#data-safety-and-recovery)).
 - **Storage:** the same run mirrors the owners' uploads (`brand-assets`: logos, product photos;
-  names from the database, files from their public URLs) into `<name>.uploads.tar.gz.cms`, encrypted
+  names from the database, files from their public URLs) into a separate `<name>-uploads` artifact, encrypted
   the same way. Generated ad images (`creatives`, ~830 MB) are left out because they can be
   regenerated.
 - **How much can be lost:** up to 24 h between nightly dumps, about 0 around migrations.
