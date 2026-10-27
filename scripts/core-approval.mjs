@@ -14,6 +14,8 @@ const repo = process.env.GITHUB_REPOSITORY ?? "vanshulgoyal101/adbrain";
 export const CONTEXT = "core-approval";
 
 /** Launch, Meta and money code plus migrations: the paths where an unreviewed change hurts customers (#914). */
+const MIGRATION = /^db\/migrations\//;
+
 export const corePath = /^(src\/lib\/meta\/|src\/lib\/campaign\/|src\/app\/api\/(meta|campaigns|managed|payments|spend-limits)\/|db\/migrations\/)/;
 
 export function coreFiles(files) {
@@ -36,11 +38,19 @@ export function coreApproval({ files, head, headRef, labels = [], title = "", co
   const reviewer = reviews.filter((r) => samePatch(r.sha)).at(-1);
   const qa = qaApproval(comments, head, samePatch);
   const short = head.slice(0, 7);
+  const list = core.length > 2 ? `${core.slice(0, 2).join(", ")} +${core.length - 2}` : core.join(", ");
+  // A QA verdict on this head that isn't an approval ("changes requested") holds the PR, whoever else approved.
+  if (qa.latest && !qa.approved) return { state: "pending", description: `QA requested changes at ${short}`, url: qa.latest.url };
+  const who = reviewer?.approved ? reviewer.body.split(" ")[0].replace(/[*_]/g, "") : "QA";
+  // Money and migrations need QA and the CTO or Reviewer (AGENTS, ORCHESTRATION item 5); #1083 merged on one.
+  if (files.some((f) => moneyPath.test(f) || MIGRATION.test(f))) {
+    if (qa.approved && reviewer?.approved) return { state: "success", description: `QA and ${who} approved ${short} (money/migration)`, url: reviewer.url };
+    const missing = [qa.approved ? null : "QA", reviewer?.approved ? null : "CTO/Reviewer"].filter(Boolean).join(" and ");
+    return { state: "pending", description: `Money/migration: needs ${missing} approval of ${short}: ${list}`.slice(0, 140) };
+  }
   if (reviewer?.approved || qa.approved) {
-    const who = reviewer?.approved ? reviewer.body.split(" ")[0].replace(/[*_]/g, "") : "QA";
     return { state: "success", description: `${who} approved ${short}`, url: reviewer?.approved ? reviewer.url : qa.latest?.url };
   }
-  const list = core.length > 2 ? `${core.slice(0, 2).join(", ")} +${core.length - 2}` : core.join(", ");
   return { state: "pending", description: `Needs QA/Reviewer/CTO approval of ${short}: ${list}`.slice(0, 140) };
 }
 
