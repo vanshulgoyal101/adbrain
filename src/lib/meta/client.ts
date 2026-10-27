@@ -2042,6 +2042,8 @@ export class MetaClient {
    * copy's activation (validate_only), then the old ad set is paused, a capped copy's total is cut to what the
    * old one has left, the copy's ads and then the copy go ACTIVE, and both are read back. If anything fails
    * after the pause, the copy is paused again and the old ad set resumed. The old ad set is archived last.
+   * When the owner paused the campaign meanwhile (both ad sets PAUSED), nothing is turned on: the copy takes
+   * the old ad set's place and stays paused.
    */
   async switchAdSet(campaignId: string, input: { fromAdSetId: string; toAdSetId: string; toAdIds: string[] }): Promise<AdSetSwitch> {
     const { fromAdSetId, toAdSetId, toAdIds } = input;
@@ -2055,8 +2057,21 @@ export class MetaClient {
     if (from.id !== fromAdSetId || from.campaign_id !== campaignId || to.id !== toAdSetId || to.campaign_id !== campaignId || !sameAds(ads)) {
       throw new CampaignDeliveryError("The new audience's ad set could not be verified. Nothing changed.");
     }
-    if (from.status !== "ACTIVE" || to.status !== "PAUSED") throw new CampaignDeliveryError("The old ad set isn't running or the new one isn't paused. Nothing changed.");
+    if ((from.status !== "ACTIVE" && from.status !== "PAUSED") || to.status !== "PAUSED") throw new CampaignDeliveryError("The old ad set isn't running or paused, or the new one isn't paused. Nothing changed.");
     const capped = Number(from.lifetime_budget ?? 0) > 0;
+    const cutCap = async () => {
+      // The old ad set kept spending while the copy waited; the copy may spend only what is left now.
+      const left = await read(fromAdSetId);
+      if (left.status !== "PAUSED" || !/^[1-9]\d*$/.test(left.budget_remaining ?? "")) throw new CampaignDeliveryError("This capped run has spent its total. Start a new run instead.");
+      await this.graph(encodeURIComponent(toAdSetId), { method: "POST", form: { lifetime_budget: left.budget_remaining! } });
+      const cut = await read(toAdSetId);
+      if (cut.lifetime_budget !== left.budget_remaining) throw new CampaignDeliveryError("Meta did not confirm the new ad set's total.");
+    };
+    if (from.status === "PAUSED") {
+      if (capped) await cutCap();
+      await this.writeStatus(fromAdSetId, "ARCHIVED");
+      return { fromAdSetId, adSetId: toAdSetId, adIds: toAdIds };
+    }
     const activation = await this.graph<{ success?: boolean }>(encodeURIComponent(toAdSetId), {
       method: "POST", form: { status: "ACTIVE", execution_options: JSON.stringify(["validate_only"]) },
     });
@@ -2064,14 +2079,7 @@ export class MetaClient {
 
     await this.writeStatus(fromAdSetId, "PAUSED");
     try {
-      if (capped) {
-        // The old ad set kept spending while the copy waited; the copy may spend only what is left now.
-        const left = await read(fromAdSetId);
-        if (left.status !== "PAUSED" || !/^[1-9]\d*$/.test(left.budget_remaining ?? "")) throw new CampaignDeliveryError("This capped run has spent its total. Start a new run instead.");
-        await this.graph(encodeURIComponent(toAdSetId), { method: "POST", form: { lifetime_budget: left.budget_remaining! } });
-        const cut = await read(toAdSetId);
-        if (cut.lifetime_budget !== left.budget_remaining) throw new CampaignDeliveryError("Meta did not confirm the new ad set's total.");
-      }
+      if (capped) await cutCap();
       for (const adId of toAdIds) await this.writeStatus(adId, "ACTIVE");
       await this.writeStatus(toAdSetId, "ACTIVE");
       const [oldAfter, newAfter, adsAfter] = await Promise.all([read(fromAdSetId), read(toAdSetId), readAds(toAdSetId)]);
@@ -2093,6 +2101,8 @@ export class MetaClient {
   async deleteAdSetCopy(campaignId: string, adSetId: string): Promise<void> {
     const node = encodeURIComponent(adSetId);
     const copy = await this.graph<{ id?: string; campaign_id?: string; status?: string }>(`${node}?fields=id,campaign_id,status`);
+    // A retry after Meta already deleted it.
+    if (copy.id === adSetId && copy.campaign_id === campaignId && copy.status === "DELETED") return;
     if (copy.id !== adSetId || copy.campaign_id !== campaignId || copy.status !== "PAUSED") {
       throw new CampaignDeliveryError("The new audience's ad set isn't a paused copy in this campaign. Nothing was deleted.");
     }

@@ -100,9 +100,28 @@ describe("core: switch a running ad set to its new-audience copy (#765 b)", () =
     expect(meta.nodes.get(OLD)!.status).toBe("ACTIVE");
   });
 
+  // The owner paused the campaign while the copy waited: nothing is turned on, the copy just takes the old one's place.
+  it("on a paused campaign, retires the old ad set without turning anything on", async () => {
+    const meta = graph();
+    meta.nodes.get(OLD)!.status = "PAUSED";
+    await new MetaClient(creds).switchAdSet(CAMPAIGN, switchInput);
+    expect(meta.writes).toEqual([{ id: OLD, form: { status: "ARCHIVED" } }]);
+    expect(meta.nodes.get(NEW)!.status).toBe("PAUSED");
+  });
+
+  it("cancel is safe to retry once Meta has deleted the copy", async () => {
+    const meta = graph();
+    meta.nodes.get(NEW)!.status = "DELETED";
+    await new MetaClient(creds).deleteAdSetCopy(CAMPAIGN, NEW);
+    expect(meta.writes).toEqual([]);
+  });
+
   it("refuses before any write when the copy isn't paused or the old ad set isn't running", async () => {
     const meta = graph();
     meta.nodes.get(NEW)!.status = "ACTIVE";
+    await expect(new MetaClient(creds).switchAdSet(CAMPAIGN, switchInput)).rejects.toThrow("Nothing changed.");
+    meta.nodes.get(NEW)!.status = "PAUSED";
+    meta.nodes.get(OLD)!.status = "ARCHIVED";
     await expect(new MetaClient(creds).switchAdSet(CAMPAIGN, switchInput)).rejects.toThrow("Nothing changed.");
     expect(meta.writes).toEqual([]);
   });

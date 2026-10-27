@@ -391,14 +391,51 @@ describe("core: edit a launched campaign's audience (#773)", () => {
     expect(mirror()).toMatchObject({ status: "active", meta_adset_id: scene.adSetId, meta_ad_ids: [scene.adId] });
   });
 
-  it("refuses to rebuild a running WhatsApp or interest-based ad set, before any write", async () => {
+  it("asks before copying a running WhatsApp or interest-based ad set, and writes nothing without the OK", async () => {
     const scene = rebuild();
     stored(scene, { status: "active" });
     replay(live(scene.tape, "tree"));
     const { status, body } = await edit();
     expect(status).toBe(409);
-    expect(body.error).toBe("Meta doesn't allow this change on a running WhatsApp or interest-based campaign. Pause it first, then edit the audience.");
+    expect(body).toMatchObject({ code: "needs_copy", error: "Meta doesn't allow this change on a running campaign. We'll make a fresh copy with your change (paused, back to review, learning restarts) and stop the old one when you turn the new one on." });
     expect(writes()).toEqual([]);
+  });
+
+  // #765 (b): Check with Meta on a running rebuild reports a copy (validated) instead of refusing.
+  it("previews a running rebuild as a copy, validated by Meta, with nothing written", async () => {
+    const scene = rebuild();
+    stored(scene, { status: "active" });
+    replay(live(scene.tape, "tree"));
+    const { status, body } = await edit({ preview: true });
+    expect(status).toBe(200);
+    expect(body.preview).toMatchObject({ adSets: [{ adSetId: scene.adSetId, mode: "copy", validated: true }] });
+    expect(writes().every(call => graph.forms[graph.sent.filter(sent => sent.method === "POST").indexOf(call)]?.execution_options)).toBe(true);
+  });
+
+  it("with the owner's OK, builds a PAUSED copy, keeps the old ad set running and the mirror unchanged, and waits", async () => {
+    const scene = rebuild();
+    stored(scene, { status: "active" });
+    replay(live(scene.tape, "tree"));
+    const before = structuredClone(mirror());
+    const { status, body } = await edit({ copy: true });
+    expect(status).toBe(200);
+    const result = body.result as { adSets: unknown[]; awaitingSwitch: { operationId: string; pending: Array<{ from: { adSetId: string }; to: { adSetId: string; adIds: string[] } }> } };
+    expect(result.adSets).toEqual([{ adSetId: scene.newAdSetId, previousAdSetId: scene.adSetId, mode: "copy" }]);
+    expect(result.awaitingSwitch.pending).toEqual([{ from: { adSetId: scene.adSetId, adIds: [scene.adId] }, to: { adSetId: scene.newAdSetId, adIds: [scene.newAdId] } }]);
+    // The old ad set is never paused or archived by the copy.
+    expect(graph.forms.some(form => form.status === "ARCHIVED" || form.status === "PAUSED" && !form.name)).toBe(false);
+    expect(mirror()).toEqual(before);
+    expect(operations()).toMatchObject([{ id: result.awaitingSwitch.operationId, state: "awaiting_switch", phase: "copy", transmitted: true }]);
+    expect(JSON.stringify(audit)).toContain("waiting to be turned on");
+
+    // A retry with the same key replays the waiting copy instead of building a second one.
+    const calls = graph.sent.length;
+    expect((await edit({ copy: true })).body).toMatchObject({ result: { awaitingSwitch: { operationId: result.awaitingSwitch.operationId }, replay: true } });
+    expect(graph.sent).toHaveLength(calls);
+    // Any other edit waits for the switch or cancel, before calling Meta.
+    const other = await edit({ change: { age: { min: 25, max: 40 } }, idempotencyKey: "edit-key-0002" });
+    expect(other).toMatchObject({ status: 409, body: { code: "switch_pending", error: "A new audience is waiting for this campaign. Turn it on or cancel it first." } });
+    expect(graph.sent).toHaveLength(calls);
   });
 
   it("asks to pause first when a paused campaign still has a live ad set in Meta", async () => {
@@ -464,5 +501,112 @@ describe("core: the mirror keeps intendedCampaignChildren valid after an edit (#
     const campaign = { meta_campaign_id: "100", meta_adset_id: "1", meta_ad_ids: ["11"], raw: { source: "campaign_operation", metaResult: { campaignId: "100", adSetIds: ["1"], adIds: ["11"] } } } as never;
     expect(mirroredChildren(campaign, [{ from: { adSetId: "1", adIds: ["11"] }, to: { mode: "patch", validated: false, adSetId: "1", adIds: ["11"], retiredAdSetId: null } }]))
       .toMatchObject({ meta_adset_id: "1", meta_ad_ids: ["11"], raw: { metaResult: { adSetIds: ["1"], adIds: ["11"] } } });
+  });
+});
+
+// #765 (b): turning a waiting copy on, or cancelling it. A scripted Graph until the switch recording lands.
+describe("core: switch to or cancel a waiting new audience (#765 b)", () => {
+  const NEW_AD_SET = "900000000000000006", NEW_AD = "900000000000000007";
+  type Node = { id: string; campaign_id: string; status: string; lifetime_budget?: string; budget_remaining?: string };
+  function scripted(scene: { campaignId: string; adSetId: string; adId: string }, options: { refuseActivation?: boolean } = {}) {
+    const nodes = new Map<string, Node>([
+      [scene.adSetId, { id: scene.adSetId, campaign_id: scene.campaignId, status: "ACTIVE", lifetime_budget: "0" }],
+      [NEW_AD_SET, { id: NEW_AD_SET, campaign_id: scene.campaignId, status: "PAUSED", lifetime_budget: "0" }],
+      [NEW_AD, { id: NEW_AD, campaign_id: scene.campaignId, status: "PAUSED" }],
+    ]);
+    const writes: Array<{ id: string; form: Record<string, string>; method: string }> = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = new URL(String(input));
+      const [id, edge] = url.pathname.split("/").slice(2);
+      const method = init?.method ?? "GET";
+      if (method === "GET") {
+        if (edge === "ads") return Response.json({ data: [{ id: NEW_AD, status: nodes.get(NEW_AD)!.status, adset_id: NEW_AD_SET }] });
+        return nodes.has(id) ? Response.json(nodes.get(id)) : Response.json({ error: { message: "Unknown node", code: 100 } }, { status: 400 });
+      }
+      const form = init?.body instanceof URLSearchParams ? Object.fromEntries([...init.body].filter(([key]) => key !== "access_token")) : {};
+      writes.push({ id, form, method });
+      if (options.refuseActivation && id === NEW_AD_SET && form.status === "ACTIVE" && !form.execution_options) return Response.json({ error: { message: "Ad set refused", code: 100 } }, { status: 400 });
+      if (method === "DELETE") nodes.delete(id);
+      else if (!form.execution_options && form.status) nodes.get(id)!.status = form.status;
+      return Response.json({ success: true });
+    });
+    return { nodes, writes };
+  }
+  function waiting(scene: { adSetId: string; adId: string }) {
+    const pending = [{ from: { adSetId: scene.adSetId, adIds: [scene.adId] }, to: { adSetId: NEW_AD_SET, adIds: [NEW_AD] } }];
+    const id = "00000000-0000-4000-9000-00000000a765";
+    store.state.tables.campaign_edit_operations = [{
+      id, business_id: BUSINESS, campaign_id: STORED, kind: "audience", idempotency_key: "edit-key-0001", request_hash: "a".repeat(64),
+      state: "awaiting_switch", phase: "copy", transmitted: true,
+      result: { adSets: [{ adSetId: NEW_AD_SET, previousAdSetId: scene.adSetId, mode: "copy" }], count: 1, consequence: null, awaitingSwitch: { operationId: id, pending } },
+    }];
+    return id;
+  }
+  async function act(operationId: string, action: "switch" | "cancel") {
+    const { POST } = await import("@/app/api/campaigns/[id]/audience/switch/route");
+    const response = await POST(new Request(`http://localhost/api/campaigns/${STORED}/audience/switch`, { method: "POST", body: JSON.stringify({ operationId, action }) }), { params: Promise.resolve({ id: STORED }) });
+    return { status: response.status, body: await response.json() as Row };
+  }
+
+  it("switches: the old ad set is paused before the copy goes ACTIVE, then retired; the mirror moves to the copy", async () => {
+    const scene = rebuild();
+    stored(scene, { status: "active" });
+    const meta = scripted(scene);
+    const operationId = waiting(scene);
+    const { status, body } = await act(operationId, "switch");
+    expect(status).toBe(200);
+    expect(body.result).toMatchObject({ action: "switch", adSets: [{ adSetId: NEW_AD_SET, previousAdSetId: scene.adSetId }] });
+    expect(meta.writes.map(write => `${write.id}:${write.form.status}${write.form.execution_options ? ":validate" : ""}`)).toEqual([
+      `${NEW_AD_SET}:ACTIVE:validate`, `${scene.adSetId}:PAUSED`, `${NEW_AD}:ACTIVE`, `${NEW_AD_SET}:ACTIVE`, `${scene.adSetId}:ARCHIVED`,
+    ]);
+    expect(mirror()).toMatchObject({ meta_adset_id: NEW_AD_SET, meta_ad_ids: [NEW_AD], raw: { metaResult: { adSetIds: [NEW_AD_SET], adIds: [NEW_AD] } } });
+    expect(operations()).toMatchObject([{ state: "succeeded", phase: "complete" }]);
+    // Replays by operation, without calling Meta again.
+    const calls = meta.writes.length;
+    expect((await act(operationId, "switch")).body).toMatchObject({ result: { replay: true } });
+    expect(meta.writes).toHaveLength(calls);
+  });
+
+  it("keeps waiting (retryable) when Meta refuses the copy after the pause, with the old ad set running again", async () => {
+    const scene = rebuild();
+    stored(scene, { status: "active" });
+    const before = structuredClone(mirror());
+    const meta = scripted(scene, { refuseActivation: true });
+    const operationId = waiting(scene);
+    const { status, body } = await act(operationId, "switch");
+    expect(status).toBe(409);
+    expect(body).toMatchObject({ retryable: true });
+    expect(String(body.error)).toContain("The old audience is running again.");
+    expect(meta.nodes.get(scene.adSetId)!.status).toBe("ACTIVE");
+    expect(meta.nodes.get(NEW_AD_SET)!.status).toBe("PAUSED");
+    expect(mirror()).toEqual(before);
+    expect(operations()).toMatchObject([{ state: "awaiting_switch", phase: "copy" }]);
+  });
+
+  it("cancels: deletes only the copy, never writes the running ad set, and the campaign can be edited again", async () => {
+    const scene = rebuild();
+    stored(scene, { status: "active" });
+    const before = structuredClone(mirror());
+    const meta = scripted(scene);
+    const operationId = waiting(scene);
+    const { status, body } = await act(operationId, "cancel");
+    expect(status).toBe(200);
+    expect(body.result).toMatchObject({ action: "cancel", adSets: [{ adSetId: NEW_AD_SET, previousAdSetId: scene.adSetId }] });
+    expect(meta.writes).toEqual([{ id: NEW_AD_SET, form: {}, method: "DELETE" }]);
+    expect(meta.nodes.get(scene.adSetId)!.status).toBe("ACTIVE");
+    expect(mirror()).toEqual(before);
+    expect(operations()).toMatchObject([{ state: "cancelled" }]);
+    expect((await act(operationId, "switch")).status).toBe(409);
+  });
+
+  it("answers 404 for another campaign's operation and 400 for a bad action", async () => {
+    const scene = rebuild();
+    stored(scene, { status: "active" });
+    scripted(scene);
+    waiting(scene);
+    expect((await act("00000000-0000-4000-9000-0000000000ff", "switch")).status).toBe(404);
+    const { POST } = await import("@/app/api/campaigns/[id]/audience/switch/route");
+    const bad = await POST(new Request(`http://localhost/api/campaigns/${STORED}/audience/switch`, { method: "POST", body: JSON.stringify({ operationId: "x", action: "go" }) }), { params: Promise.resolve({ id: STORED }) });
+    expect(bad.status).toBe(400);
   });
 });
