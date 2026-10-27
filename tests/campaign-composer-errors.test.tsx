@@ -50,9 +50,13 @@ describe("launch composer defaults and plain words (#761)", () => {
     view();
     expect(await screen.findByLabelText("Daily budget (₹)")).toHaveValue(300);
     expect(screen.getByRole("button", { name: "₹300 a day" })).toBeInTheDocument();
-    expect(screen.getByText(/What to expect: .*WhatsApp chat has cost about ₹150–180\. Meta reviews new ads first/)).toBeInTheDocument();
+    // #1038: the default destination is Instant form, so no WhatsApp chat cost; WhatsApp chat shows it.
+    expect(screen.getByText(/What to expect: AdBrain hasn't run enough instant-form campaigns yet to quote a cost per enquiry\. Meta reviews new ads first/)).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain("WhatsApp chat has cost");
     expect(screen.getByRole("button", { name: "Check my campaign (nothing spends)" })).toBeInTheDocument();
     expect(document.body.textContent).not.toContain("pending");
+    fireEvent.click(screen.getByRole("radio", { name: "WhatsApp chat" }));
+    expect(await screen.findByText(/What to expect: in AdBrain's runs so far, a WhatsApp chat has cost about ₹150–180\. Meta reviews new ads first/)).toBeInTheDocument();
   });
 });
 

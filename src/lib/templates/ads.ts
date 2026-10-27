@@ -49,6 +49,8 @@ export interface BrandExtraction {
   usps?: string[];
   offers?: string[];
   languages?: string[];
+  /** #1037: up to 5 places the business serves, as written on the site; kept only when the page names them. */
+  locations?: string[];
   vertical?: string;
   /** Read from the page's tel: link, not from the model. */
   phone?: string;
@@ -278,7 +280,8 @@ Extract what you can into strict JSON with these optional keys (omit a key if un
   "target_audience": string,
   "usps": string[],                 // unique selling points / differentiators
   "offers": string[],               // any promotions/offers mentioned
-  "languages": string[]             // languages the site uses
+  "languages": string[],            // languages the site uses
+  "locations": string[]             // up to 5 cities, towns or areas the business is based in or serves, exactly as written on the site (address, footer, "areas we serve"); omit if none
 }`,
     },
   ];

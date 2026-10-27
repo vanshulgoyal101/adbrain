@@ -2,7 +2,8 @@ import { currentRequestId, observeRoute, recordProductEvent } from "@/lib/observ
 import { observeIdentity } from "@/lib/observability/context";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { BRAND_EXTRACTION, extractPhone, extractWebsiteText } from "@/lib/brand/autofill";
+import { BRAND_EXTRACTION, extractPhone, extractWebsiteText, verifiedAreas } from "@/lib/brand/autofill";
+import { metaClientForBusiness } from "@/lib/meta/credentials";
 import { completeJSON, NoLLMKeysError } from "@/lib/llm";
 import { persistLLMUsage } from "@/lib/llm/persist";
 import type { CompletionResult, ProviderAttempt } from "@/lib/llm/types";
@@ -118,7 +119,8 @@ async function handlePOST(req: Request) {
       { ...BRAND_EXTRACTION, cache: true, onAttempt: (attempt) => attempts.push(attempt) },
     );
     await logUsage((extraction as { __completion?: CompletionResult }).__completion);
-    return NextResponse.json({ extraction: { ...extraction, phone: extractPhone(html) } });
+    const locations = await resolvableAreas(verifiedAreas(extraction.locations, text), owned);
+    return NextResponse.json({ extraction: { ...extraction, locations: locations.length ? locations : undefined, phone: extractPhone(html) } });
   } catch (err) {
     await logUsage();
     if (err instanceof NoLLMKeysError) {
@@ -128,5 +130,22 @@ async function handlePOST(req: Request) {
       { error: "Could not extract business details. Try again later or enter them manually." },
       { status: 502 },
     );
+  }
+}
+
+/**
+ * #1037: with a Meta connection, keep only areas Meta's location resolver can place (the same one
+ * campaigns use); without one (first setup) the page-verified names stay, and Review resolves them.
+ */
+async function resolvableAreas(areas: string[], businessId: string | null): Promise<string[]> {
+  if (!areas.length || !businessId) return areas;
+  const meta = await metaClientForBusiness(businessId).catch(() => null);
+  if (!meta) return areas;
+  try {
+    const { unresolved } = await meta.resolveGeoTargeting(areas);
+    const missing = new Set(unresolved.map((name) => name.toLowerCase()));
+    return areas.filter((area) => !missing.has(area.toLowerCase()));
+  } catch {
+    return areas;
   }
 }

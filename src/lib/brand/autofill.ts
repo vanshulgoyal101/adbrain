@@ -29,6 +29,32 @@ export function extractPhone(html: string): string | undefined {
   }
 }
 
+// A whole country or a compass region ("North India") is not a place Meta can target as an area.
+const COUNTRY_WIDE = /^(?:india|bharat|all india|pan[- ]india|nationwide|worldwide|global|(?:north|south|east|west|central|northern|southern|eastern|western|north[- ]?east|north[- ]?west)(?:ern)?\s+india)$/i;
+
+/**
+ * #1037: the service areas autofill proposes: at most 5, each written on the page itself (whole word,
+ * any case), never a whole country. The owner confirms them as chips before anything is saved.
+ */
+export function verifiedAreas(areas: unknown, websiteText: string): string[] {
+  if (!Array.isArray(areas)) return [];
+  const text = websiteText.normalize("NFC");
+  const seen = new Set<string>();
+  const kept: string[] = [];
+  for (const raw of areas) {
+    if (typeof raw !== "string") continue;
+    const area = raw.normalize("NFC").replace(/\s+/g, " ").trim();
+    const key = area.toLowerCase();
+    if (!area || area.length > 60 || COUNTRY_WIDE.test(area) || seen.has(key)) continue;
+    const escaped = area.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/ /g, "\\s+");
+    if (!new RegExp(`(?<![\\p{L}\\p{N}])${escaped}(?![\\p{L}\\p{N}])`, "iu").test(text)) continue;
+    seen.add(key);
+    kept.push(area);
+    if (kept.length === 5) break;
+  }
+  return kept;
+}
+
 /** The extraction call's settings, shared by the route and its fixture recorder (#650). */
 export const BRAND_EXTRACTION = {
   routing: "budget",

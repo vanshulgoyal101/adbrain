@@ -90,7 +90,8 @@ failed saves leave the draft available for retry. There is no autosave.
 
 Website autofill fetches a public website and proposes extracted facts. On a Brand with
 nothing filled in yet it runs by itself when the owner leaves the Website field (once per
-address, #1025); otherwise the "Autofill from website" button runs it. It does
+address, #1025); otherwise the "Autofill from website" button runs it. It proposes up to 5
+service areas the site names (#1037) as Locations chips the owner checks before saving. It does
 not prove those claims are true or authorize scraping private pages. The UI
 preserves fields edited during extraction, discards a response when the website
 changes, and prevents save while extraction is pending. Review suggestions before

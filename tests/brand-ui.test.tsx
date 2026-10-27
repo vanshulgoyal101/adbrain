@@ -610,3 +610,16 @@ describe("<BrandForm> autofill on leaving the website field (#1025)", () => {
     unmount();
   });
 });
+
+describe("<BrandForm> autofill proposes service areas (#1037)", () => {
+  it("puts the proposed areas in Locations served only when the owner hasn't typed any, and saves nothing by itself", async () => {
+    (global.fetch as unknown as { mockResolvedValue: (value: unknown) => void }).mockResolvedValue({ ok: true, json: async () => ({ extraction: { locations: ["Mohali", "Hisar"] } }) });
+    const { container } = render(<BrandForm business={null} />);
+    const website = screen.getByPlaceholderText("example.com");
+    fireEvent.change(website, { target: { value: "solaride.in" } });
+    fireEvent.blur(website);
+    await waitFor(() => expect((container.querySelector('input[name="locations"]') as HTMLInputElement).value).toBe("Mohali\nHisar"));
+    expect(await screen.findByText(/service areas \(check them\)/)).toBeInTheDocument();
+    expect(saveBusiness).not.toHaveBeenCalled();
+  });
+});
