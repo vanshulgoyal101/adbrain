@@ -216,6 +216,7 @@ lower cost.
 | `ALERTS_WHATSAPP_PHONE_ID` | empty | The Cloud API phone number id (digits) of AdBrain's alerts number (#701). Not a secret |
 | `ALERTS_WHATSAPP_TOKEN` | empty, **secret** | System-user token with `whatsapp_business_messaging` on AdBrain's alerts WABA (#701). Vercel production only (Sensitive) |
 | `ALERTS_LEAD_TEMPLATE`, `ALERTS_DAILY_TEMPLATE` | `adbrain_lead_alert`, `adbrain_daily_results` | Approved utility template names for the lead alert and the daily line (#701), each in `en` and `hi` |
+| `META_SETUP_CHECKLIST` | off | Meta setup checklist (#1016): exactly `true` shows "Ready to launch on Meta" in Settings for an owner's own Meta connection (portfolio, rupee ad account, Page, WhatsApp, payment method; GET reads only). No secret |
 | `META_PARENT_BUSINESS_ID` | `1158100643072508` | The 2-Tier parent business (Solaride) |
 | `META_PARENT_SYSTEM_TOKEN` | Empty | Privileged secret (Vercel Sensitive): the parent's 'AdBrain provisioning' system-user token. Checked read-only after each deploy (`/api/cron/meta-parent-health`); rotation in OPERATIONS |
 | `META_CONNECT_ROLLOUT` | Unset | `disabled`, `pilot`, `enabled`; unset allows nonproduction only |

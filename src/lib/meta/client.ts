@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { WHATSAPP_PUBLISHER_PLATFORMS } from "@/lib/meta/placements";
+import type { SetupReads } from "@/lib/meta/setup-checklist";
 import { fetchPublicUrl } from "@/lib/security/ssrf";
 import { readBoundedResponse } from "@/lib/imageGen/raster";
 import { destinationFromAdSets, type CampaignDestination } from "@/lib/campaign/outcomes";
@@ -949,6 +950,28 @@ export class MetaClient {
   }
 
   /** WhatsApp numbers usable for this Page's ads: the Page's own, and those on the ad account business's WABAs (#235). */
+  /**
+   * #1016: the read-only reads behind Settings' setup checklist: the ad account's portfolio, currency,
+   * status and payment method; whether this login lists the Page; whether ads have a WhatsApp number.
+   */
+  async setupReads(): Promise<SetupReads> {
+    const [account, pages, whatsapp] = await Promise.all([
+      this.graph<{ account_status?: number; currency?: string; business?: { id?: string; name?: string }; funding_source_details?: { id?: string } | null }>(
+        `${this.creds.adAccountId}?fields=account_status,currency,business{id,name},funding_source_details`,
+      ),
+      this.graph<{ data?: { id?: string }[] }>("me/accounts?fields=id&limit=200"),
+      this.whatsappNumbers(),
+    ]);
+    return {
+      portfolio: account.business?.id ? { id: account.business.id, name: account.business.name ?? null } : null,
+      accountActive: account.account_status === 1,
+      currency: account.currency ?? null,
+      paymentMethod: Boolean(account.funding_source_details?.id),
+      pageListed: Boolean(pages.data?.some((page) => page.id === this.creds.pageId)),
+      whatsapp: Boolean(whatsapp.page || whatsapp.business.length),
+    };
+  }
+
   async whatsappNumbers(): Promise<{ page: string | null; business: string[] }> {
     const [page, business] = await Promise.all([this.pageWhatsAppNumber(), this.businessWhatsAppNumbers()]);
     return { page, business: business.filter((number) => number !== page) };
@@ -1622,14 +1645,19 @@ export class MetaClient {
     return decodeCampaignInsights(data, destination, { requireSpend: options?.weekly });
   }
 
-  /** #783: each ad's lifetime results; ads Meta hasn't delivered are listed with zeros (#789). Read-only. */
-  async getAdResults(campaignId: string): Promise<AdResult[]> {
+  /**
+   * #783: each ad's lifetime results; ads Meta hasn't delivered are listed with zeros (#789). Read-only.
+   * #1022: `day` (YYYY-MM-DD, the ad account's own calendar day) reads that one day instead.
+   */
+  async getAdResults(campaignId: string, options?: { day?: string }): Promise<AdResult[]> {
+    if (options?.day !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(options.day)) throw new MetaError("Invalid results day.");
     const destination = await this.verifyCampaignBinding(campaignId);
     const node = encodeURIComponent(campaignId);
+    const period = options?.day ? `time_range=${encodeURIComponent(JSON.stringify({ since: options.day, until: options.day }))}` : "date_preset=maximum";
     const [ads, insights] = await Promise.all([
       // Meta's default listing leaves out ARCHIVED ads (an audience rebuild archives them) and refuses DELETED (1815001).
       this.graph<unknown>(`${node}/ads?fields=id,name,effective_status,creative{id}&limit=100&effective_status=${encodeURIComponent(JSON.stringify(LISTED_AD_STATUSES))}`),
-      this.graph<unknown>(`${node}/insights?level=ad&fields=ad_id,impressions,clicks,spend,actions&date_preset=maximum&limit=100`),
+      this.graph<unknown>(`${node}/insights?level=ad&fields=ad_id,impressions,clicks,spend,actions&${period}&limit=100`),
     ]);
     return decodeAdResults(ads, insights, destination);
   }

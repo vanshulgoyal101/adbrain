@@ -18,6 +18,7 @@ import type { Campaign, Json } from "@/lib/types";
 export const RESTARTS_LEARNING = "This restarts Meta's learning; results may be slower for 2–3 days.";
 export const PAUSE_FIRST = "Pause the campaign first; editing a running campaign comes next.";
 export const NO_AREA_EXCLUSIONS = "This campaign covers a whole country, so there are no out-of-area places to leave out.";
+export const ALREADY_EXCLUDED = "Every ad set already leaves out the places outside its area. Nothing to change.";
 export const RATE_LIMITED = "Meta needs 30 seconds between audience changes. Try again in a moment.";
 
 const metaKey = z.string().regex(/^\d{1,20}$/);
@@ -87,6 +88,16 @@ function currentArea(targeting: unknown): GeoTargeting | undefined {
     ...geo.regions?.length ? { regions: geo.regions.map(region => ({ key: String(region.key) })) } : {},
     ...geo.cities?.length ? { cities: geo.cities.map(city => ({ key: String(city.key), ...city.radius !== undefined ? { radius: city.radius, distance_unit: city.distance_unit ?? "kilometer" } : {} })) } : {},
   };
+}
+
+/** True when the ad set's own exclusions already hold every region and city of `area`. */
+function excludesAll(targeting: unknown, area: GeoTargeting): boolean {
+  const excluded = (targeting && typeof targeting === "object" ? (targeting as { excluded_geo_locations?: unknown }).excluded_geo_locations : undefined) as {
+    regions?: Array<{ key: string | number }>; cities?: Array<{ key: string | number }>;
+  } | undefined;
+  const has = (list: Array<{ key: string | number }> | undefined) => new Set((list ?? []).map(item => String(item.key)));
+  const regions = has(excluded?.regions), cities = has(excluded?.cities);
+  return (area.regions ?? []).every(region => regions.has(String(region.key))) && (area.cities ?? []).every(city => cities.has(String(city.key)));
 }
 
 function describeChange(change: AudienceChange): string {
@@ -198,11 +209,11 @@ export async function editCampaignAudience(context: AuthorizedBusiness, campaign
         dailyBudgetRupees: review.dailyBudgetRupees, status: "paused", adSetIds: review.children.adSetIds, adIds: review.children.adIds, cappedAdSetIds: review.children.cappedAdSetIds,
       });
       if (tree.adSets.some(adSet => adSet.status !== "PAUSED")) throw new CampaignEditError(PAUSE_FIRST, 409);
-      const targets = tree.adSets.map(adSet => ({
+      const treeTargets = tree.adSets.map(adSet => ({
         adSetId: adSet.id, adIds: tree.ads.filter(ad => ad.adSetId === adSet.id).map(ad => ad.id),
         mode: needsRebuild({ targeting: adSet.targeting, destination_type: adSet.destinationType }) ? "rebuild" as const : "patch" as const, targeting: adSet.targeting,
       }));
-      if (targets.some(target => !target.adIds.length)) throw new CampaignDeliveryError("An ad set has no ads. Reconcile the campaign in Meta first.");
+      if (treeTargets.some(target => !target.adIds.length)) throw new CampaignDeliveryError("An ad set has no ads. Reconcile the campaign in Meta first.");
 
       // Exclusions only grow: the new area's #741 exclusions are added to the owner's own and the ad set's existing ones.
       const changes: AudienceChanges = { ...change.age ? { age: change.age } : {}, ...change.gender ? { gender: change.gender } : {}, ...change.languages ? { languages: change.languages } : {} };
@@ -212,13 +223,18 @@ export async function editCampaignAudience(context: AuthorizedBusiness, campaign
         changes.excludedLocation = mergeExclusions(change.excludedLocation as GeoTargeting | undefined, area) ?? {};
       } else if (change.excludedLocation) changes.excludedLocation = change.excludedLocation as GeoTargeting;
       // #746: each ad set gets the exclusions of its own current area, as launch would have built them.
+      // An ad set that already has them is left alone: rebuilding it would send its ads back to review for nothing.
+      const onlyAreaExclusions = change.areaExclusions && !change.age && !change.gender && !change.languages && !change.excludedLocation;
       const changesFor = new Map<string, AudienceChanges>();
-      for (const target of targets) {
+      for (const target of treeTargets) {
         if (!change.areaExclusions) { changesFor.set(target.adSetId, changes); continue; }
         const area = await meta.serviceAreaExclusionsFor(currentArea(target.targeting));
         if (!area) throw new CampaignEditError(NO_AREA_EXCLUSIONS, 409);
+        if (onlyAreaExclusions && excludesAll(target.targeting, area)) continue;
         changesFor.set(target.adSetId, { ...changes, excludedLocation: mergeExclusions(changes.excludedLocation, area) });
       }
+      const targets = treeTargets.filter(target => changesFor.has(target.adSetId));
+      if (!targets.length) throw new CampaignEditError(ALREADY_EXCLUDED, 409);
       const changesOf = (adSetId: string) => changesFor.get(adSetId)!;
 
       const validated = new Map<string, boolean>();

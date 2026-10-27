@@ -7,6 +7,8 @@ import { z } from "zod";
 import { saveCampaign } from "@/lib/campaign/trusted-write";
 import { storedCappedAdSetIds } from "@/lib/campaign/activation";
 import type { SkippedCampaign } from "@/lib/campaign/sync-skips";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { campaignsOwnedElsewhere, type CampaignClaim } from "@/lib/campaign/sync-ownership";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -36,9 +38,16 @@ async function handlePOST(request?: Request) {
       const page = await meta.listCampaignsPage(cursor.data ?? undefined);
       const rows = [];
       const skippedCampaigns: SkippedCampaign[] = [];
+      // #1057: other businesses' rows are hidden by RLS, so ownership is read with the service role (ids only).
+      const ids = page.campaigns.map(campaign => campaign.id);
+      const claims = ids.length ? await createAdminClient().from("campaigns")
+        .select("meta_campaign_id,business_id,created_at,source:raw->>source").in("meta_campaign_id", ids) : { data: [], error: null };
+      if (claims.error || !claims.data) throw new Error("Campaign storage unavailable.");
+      const elsewhere = campaignsOwnedElsewhere(claims.data as unknown as CampaignClaim[], context.businessId);
       for (let offset = 0; offset < page.campaigns.length; offset += 5) {
         const batch = await Promise.all(page.campaigns.slice(offset, offset + 5).map(async (campaign) => {
           if (campaign.status !== "ACTIVE" && campaign.status !== "PAUSED") return { campaign, binding: { skip: "not_running" as const } };
+          if (elsewhere.has(campaign.id)) return { campaign, binding: { skip: "other_business" as const } };
           const { data: stored, error } = await supabase.from("campaigns").select("raw")
             .eq("business_id", context.businessId).eq("meta_campaign_id", campaign.id).maybeSingle();
           if (error) throw new Error("Campaign storage unavailable.");

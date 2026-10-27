@@ -197,6 +197,13 @@ An `unknown` capability is not permission to proceed. Expired/revoked credential
 require reconnect; other blockers may require action in Meta. Details are in
 [Meta Connection](META_CONNECT.md).
 
+Behind `META_SETUP_CHECKLIST` (#1016, #795 slice 1), Settings shows "Ready to launch on Meta"
+under an owner's own connection: business portfolio, ad account in rupees (active), Facebook Page,
+WhatsApp on the Page (the Page's number or one on the portfolio's WhatsApp Business account) and a
+payment method (`funding_source_details`). Each row is a tick or one Meta link with an English and a
+Hindi line. GET reads only (`MetaClient.setupReads`), recorded by
+`scripts/record-meta-setup-checklist.ts`; never shown for AdBrain-managed accounts.
+
 Disconnect revokes the app's stored binding; **it does not stop remote delivery**.
 Pause intended campaigns before disconnecting, or manage them in Meta afterward.
 
@@ -297,6 +304,11 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
   first one), "Best" only at ≥ 5 enquiries and ≥ 30% cheaper than the next ad, otherwise "Early: too few
   enquiries to pick a winner". Ads Meta hasn't shown say so; ads replaced by an audience edit are marked;
   more than 3 sit behind "All ads". Refreshes store the numbers (`ad_results`).
+- **Daily results on WhatsApp** (#1022, dark behind `OWNER_ALERTS_ENABLED`): from 09:00 IST, each opted-in
+  owner gets one `adbrain_daily_results` line for yesterday (IST): ₹ spent, enquiries (form leads plus
+  WhatsApp chats, the same per-ad numbers as "Which ad worked"), ₹ each or "none yet", and the ad to name
+  (#783's best, else the most enquiries, else the most WhatsApp taps). No line on a day with no spend and
+  no enquiry; at the monthly cap only this line pauses.
 - WhatsApp and new lead-form ad sets run on Facebook, Instagram and Messenger only (#906, #680), so a
   WhatsApp vs lead-form A/B differs only in destination: `publisher_platforms`
   leaves Audience Network out (on #157 most of its WhatsApp taps were accidental); positions stay
@@ -371,6 +383,9 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
   book'), AdBrain's suggested pre-typed message is exactly those words (`quotedAsk`). When an ad
   quotes other words than the message WhatsApp will pre-type (a saved or edited one), Review warns
   (never blocks): "An ad asks customers to send “…”, but WhatsApp pre-types “…”".
+  #418 rule 5: when the Brand has proof (years in business, jobs done, a named credential or a
+  warranty; `src/lib/creative/proof-line.ts`) and none of the chosen ads cites it, Review warns
+  (never blocks) and names one ("None of these ads has a proof line from your Brand…").
 - Every Indian ad set also excludes everything outside the service area (#741):
   every state/UT with no included place (Tricity: all but Chandigarh, Punjab and
   Haryana), plus the larger cities in the kept states that lie further than the

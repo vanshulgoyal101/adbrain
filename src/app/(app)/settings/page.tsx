@@ -14,6 +14,9 @@ import { PrivacyRequests } from "@/components/privacy-requests";
 import { WhatsAppAlerts } from "@/components/whatsapp-alerts";
 import { readAlertSettings } from "@/lib/alerts/settings-read";
 import { WhatsAppStatusSection } from "@/components/whatsapp-status-section";
+import { MetaSetupChecklist } from "@/components/meta-setup-checklist";
+import { setupChecklistEnabled } from "@/lib/meta/setup-checklist";
+import { readSetupChecklist } from "@/lib/meta/setup-status";
 import { getMetaConnection } from "@/lib/meta/credentials";
 import { metaOAuthConfigured } from "@/lib/meta/oauth";
 import { getPrimaryBusiness, getSpendEvaluation } from "@/lib/supabase/queries";
@@ -165,11 +168,22 @@ async function ConnectionSettings({ businessId, searchParams, whatsapp }: {
           <Link href="/settings" className="ml-1 font-medium underline">Try again</Link>
         </Alert>
       )}
+      {/* #1016: behind META_SETUP_CHECKLIST; only for the owner's own Meta account, after Connect. */}
+      {setupChecklistEnabled() && mode !== "managed" && result.connection?.source === "oauth" && result.connection.ready && (
+        <Suspense fallback={<SettingsLoading label="Ready to launch on Meta" />}>
+          <SetupChecklistSection businessId={businessId} />
+        </Suspense>
+      )}
       {whatsapp}
       <BillingSection mode={mode} connection={result.connection} testBusinessId={isRazorpayTestEnabled() ? businessId : undefined}
         liveBusinessId={isProductionPaymentConfigured() ? businessId : undefined} initialBalance={initialBalance} />
     </>
   );
+}
+
+async function SetupChecklistSection({ businessId }: { businessId: string }) {
+  const rows = await readSetupChecklist(businessId).catch(() => null);
+  return <MetaSetupChecklist rows={rows} />;
 }
 
 async function SpendSettings({ businessId }: { businessId: string }) {
