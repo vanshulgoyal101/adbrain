@@ -1,0 +1,126 @@
+{
+  "recordedAt": "2026-10-27T12:54:29.231Z",
+  "adAccountId": "act_2398686420592052",
+  "pageId": "885223068001054",
+  "reads": {
+    "portfolio": {
+      "id": "1158100643072508",
+      "name": "Solaride"
+    },
+    "accountActive": true,
+    "currency": "INR",
+    "paymentMethod": true,
+    "pageListed": true,
+    "whatsapp": true
+  },
+  "tape": [
+    {
+      "path": "act_2398686420592052?fields=id,business{id}",
+      "status": 200,
+      "body": {
+        "id": "act_2398686420592052",
+        "business": {
+          "id": "1158100643072508"
+        }
+      }
+    },
+    {
+      "path": "act_2398686420592052?fields=account_status,currency,business{id,name},funding_source_details",
+      "status": 200,
+      "body": {
+        "account_status": 1,
+        "currency": "INR",
+        "business": {
+          "id": "1158100643072508",
+          "name": "Solaride"
+        },
+        "funding_source_details": {
+          "id": "25335898686093971",
+          "display_string": "मौजूदा बैलेंस (₹722.68 INR)",
+          "type": 20
+        },
+        "id": "act_2398686420592052"
+      }
+    },
+    {
+      "path": "me/accounts?fields=id&limit=200",
+      "status": 200,
+      "body": {
+        "data": [
+          {
+            "id": "885223068001054"
+          }
+        ],
+        "paging": {
+          "cursors": {
+            "before": "QVFIVDN0WVI5SHctTFl2bGliY2FXV0lSQWFweF9TZA0I3OU1Ba0x3VnRpVUV0aUVlMVBCM0l3MDJEbjlEcEE5VU05X3hzbHNNTmlrc1otcWc4dUhxaUs3ZATRB",
+            "after": "QVFIVDN0WVI5SHctTFl2bGliY2FXV0lSQWFweF9TZA0I3OU1Ba0x3VnRpVUV0aUVlMVBCM0l3MDJEbjlEcEE5VU05X3hzbHNNTmlrc1otcWc4dUhxaUs3ZATRB"
+          }
+        }
+      }
+    },
+    {
+      "path": "885223068001054?fields=access_token",
+      "status": 200,
+      "body": {
+        "access_token": "page-token",
+        "id": "885223068001054"
+      }
+    },
+    {
+      "path": "885223068001054?fields=id,has_whatsapp_business_number,whatsapp_number",
+      "status": 200,
+      "body": {
+        "id": "885223068001054"
+      }
+    },
+    {
+      "path": "1158100643072508/owned_whatsapp_business_accounts?fields=phone_numbers{display_phone_number}&limit=100",
+      "status": 200,
+      "body": {
+        "data": [
+          {
+            "phone_numbers": {
+              "data": [
+                {
+                  "display_phone_number": "+91 99999 94842",
+                  "id": "1113229925200671"
+                }
+              ],
+              "paging": {
+                "cursors": {
+                  "before": "QVFIVGtkSDFKVS1heUlCUlhxUjFfVHIwWVZA2bmowSDdseldGZAm1TMEVIX0FSMnZAuZAzNwWEtHZAmxUdEhkZAFZAmcmpBc1gZD",
+                  "after": "QVFIVGtkSDFKVS1heUlCUlhxUjFfVHIwWVZA2bmowSDdseldGZAm1TMEVIX0FSMnZAuZAzNwWEtHZAmxUdEhkZAFZAmcmpBc1gZD"
+                }
+              }
+            },
+            "id": "2432489707209566"
+          },
+          {
+            "phone_numbers": {
+              "data": [
+                {
+                  "display_phone_number": "+91 99999 90874",
+                  "id": "878048368721389"
+                }
+              ],
+              "paging": {
+                "cursors": {
+                  "before": "QVFIVDc4MWpMdVlMZADlfLXpiUVNBeU1fSkI0cHlrdDJkX2FuZAjFROVpqd1JQakJ0UU9ZAZATVHRlFkTGFMYnJScktSSXkZD",
+                  "after": "QVFIVDc4MWpMdVlMZADlfLXpiUVNBeU1fSkI0cHlrdDJkX2FuZAjFROVpqd1JQakJ0UU9ZAZATVHRlFkTGFMYnJScktSSXkZD"
+                }
+              }
+            },
+            "id": "1994253934763683"
+          }
+        ],
+        "paging": {
+          "cursors": {
+            "before": "QVFIVENCbi03VFhMUXBsYTJnSDBadHF0SUY2XzRXc2ZAwWkxVTExrTkRPQVN3TXAtNGx2WTFTTGFiVjgwYlBnY1RxdVp5SkZAkMGFQdmdzV0tHTU1uU2hNSDdR",
+            "after": "QVFIVDRRYkhPM3REMkMtWTZAncTlKdXpBdkNQMVg5cHlvUWVOZAURraGxMT1h2U0syM3JSX181XzNCOW5zS2NiaG1WS3VzeThpMm03bGhWRDVjZAUZALZA0ZANM0lB"
+          }
+        }
+      }
+    }
+  ]
+}
