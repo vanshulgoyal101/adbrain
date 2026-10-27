@@ -69,4 +69,20 @@ describe("<Campaigns> real enquiries on results (#335)", () => {
     expect(panels).toHaveLength(1);
     expect(within(panels[0]).getByText("₹140")).toBeInTheDocument();
   });
+
+  // #798: ₹ per customer shows once an enquiry became a customer, on any destination.
+  it("shows customers and the cost per customer only after the first one", () => {
+    localStorage.setItem(`campaign-sync:${business.owner_id}:${business.id}:act_1`, String(Date.now()));
+    const form = campaign("40000000-0000-4000-8000-000000000003", "instant_form");
+    const none = campaign("40000000-0000-4000-8000-000000000004", "instant_form");
+    render(<Campaigns business={business} approved={[]} initialCampaigns={[form, none]}
+      initialResults={{ [form.id]: result(form.id, { spend: 900, leads: 3, cpl: 300, customers: 2 }), [none.id]: result(none.id, { leads: 1, cpl: 140, customers: 0 }) }}
+      leadForms={[]} leadFormError={null} metaReady adAccountId="act_1" />);
+    const panels = screen.getAllByLabelText("Customers");
+    expect(panels).toHaveLength(1);
+    expect(within(panels[0]).getByText("Per customer")).toBeInTheDocument();
+    expect(within(panels[0]).getByText("From customers you marked in Enquiries.")).toBeInTheDocument();
+    expect(within(panels[0]).getByText("₹450")).toBeInTheDocument();
+    expect(within(panels[0]).getByText("2")).toBeInTheDocument();
+  });
 });

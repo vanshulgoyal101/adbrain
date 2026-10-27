@@ -497,9 +497,12 @@ leads, not a broken campaign. WhatsApp conversations are not imported.
 
 The inbox searches, filters (follow-up status, contact details), sorts and pages
 saved enquiries on the server, with matching totals. Owners can record a
-follow-up status (`new`, `contacted`, `qualified`, `booked`, `closed`) and a
+follow-up status (`new`, `contacted`, `qualified`, `booked`, `customer`, `closed`) and a
 note up to 2000 characters; a failed save keeps the edits for retry. Follow-up is
-local record-keeping only and sends nothing.
+local record-keeping only and sends nothing. Each row also has a one-tap **Became a
+customer** button with Undo (#798). A campaign card then shows its customers and
+**Per customer** (Meta spend ÷ enquiries marked as customers, any source) once
+there is at least one.
 
 The copy-ready digest summarizes the last seven days of the currently loaded
 enquiries with at most ten contacts, including email where available. It is not
