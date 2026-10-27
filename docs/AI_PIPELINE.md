@@ -210,6 +210,9 @@ feedback to assess unnecessary questions, abandonment and time to a useful draft
    rupaye per kW") counts like the same amount in ₹. `all-caps` ignores acronyms
    joined by "/" or "-" ("IIT/PEC", "नॉन-DCR") and capitals the owner's own facts use
    (a brand written "SOLARIDE") (#418).
+   A price the Brand facts give only as a rate ("10,000 rupees per kilowatt") must keep
+   that unit in the ad (`price-unit`; kW, kilowatt and किलोवाट count as one); a flat
+   Brand price may be worded freely (#418 rule 3).
    Once a concept passes, the offer goes on the picture (#418 rule 2): when the copy
    states a cited offer that neither the headline nor `supportingText` carries,
    `supportingText` becomes the one Brand offer fact (up to 64 characters) that states

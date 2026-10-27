@@ -16,6 +16,38 @@ export const CONCEPT_VERSION = "creative-concept-v3";
 // Primary text Meta shows on mobile before "See more" (#194).
 const FOLD_CHARACTERS = 125;
 
+// #418 rule 3 (Analyst, #941): a price the Brand states as a rate ("10,000 rupees per kilowatt") keeps its unit.
+const PRICE_AMOUNT = /(?:[$£€₹]\s?|\brs\.?\s?)(\d[\d,]*(?:\.\d+)?)|(\d[\d,]*(?:\.\d+)?)\s?(?:rupees?|rupaye|रुपये|रुपए)/giu;
+const RATE_UNIT = /^\s*(?:(?:rupees?|rupaye|रुपये|रुपए)\s*)?(?:\/|\bper\s+|प्रति\s+)\s*([\p{L}\p{M}]+)/iu;
+
+function priceRates(text: string): { amount: string; unit: string | null; shown: string }[] {
+  const value = text.normalize("NFC");
+  return [...value.matchAll(PRICE_AMOUNT)].map((match) => {
+    const unit = RATE_UNIT.exec(value.slice(match.index + match[0].length))?.[1].toLowerCase() ?? null;
+    return {
+      amount: (match[1] ?? match[2]).replace(/,/g, ""),
+      unit: unit && (/^(?:kw|kilowatts?|किलोवाट)$/u.test(unit) ? "kw" : unit.replace(/s$/, "")),
+      shown: match[0].trim(),
+    };
+  });
+}
+
+/** Amounts every supplied fact gives only as a rate, mapped to that unit; an ad stating one must keep it. */
+function rateDropIssues(output: string, facts: string[]): string[] {
+  const rates = new Map<string, Set<string | null>>();
+  for (const fact of facts) {
+    for (const { amount, unit } of priceRates(fact)) rates.set(amount, (rates.get(amount) ?? new Set()).add(unit));
+  }
+  const issues = new Set<string>();
+  for (const { amount, unit, shown } of priceRates(output)) {
+    const units = rates.get(amount);
+    if (!units || units.has(null) || (unit && units.has(unit))) continue;
+    const factUnit = [...units][0];
+    issues.add(`price-unit: "${shown}" is per ${factUnit === "kw" ? "kW" : factUnit} in the Brand facts; keep "per ${factUnit === "kw" ? "kW" : factUnit}" next to it, never as a flat price`);
+  }
+  return [...issues];
+}
+
 export const creativeConceptSchema = z.object({
   headline: z.string().trim().min(1).max(40),
   primary_text: z.string().trim().min(1).max(900),
@@ -132,7 +164,7 @@ export function conceptValidationRules(issues: string[]): string[] {
   const allowedRules = new Set([
     "sourceQuotes", "unsupported-commercial-claim", "repeated-headline", "repeated-opening",
     "cliche", "em-dash-overuse", "exclamation-spam", "all-caps", "too-long", "banned-claim",
-    "hook-length", "offer-below-fold", "personal-attribute", "unsupported-superlative", "exaggerated-result", "no-subject",
+    "hook-length", "offer-below-fold", "price-unit", "personal-attribute", "unsupported-superlative", "exaggerated-result", "no-subject",
   ]);
   return [...new Set(issues.map((issue) => {
     if (issue.startsWith("schema:")) return issue.slice(0, issue.indexOf(": "));
@@ -497,6 +529,7 @@ export function validateConcept(
       claims.add(`claim:${claimClass(term)}:${cited ? "negated-quote" : "uncited"}`);
     }
   }
+  issues.push(...rateDropIssues([concept.headline, concept.primary_text, concept.supportingText, concept.description].filter(Boolean).join("\n"), facts));
   const primaryText = concept.primary_text.normalize("NFC");
   const offer = new RegExp(commercialTerms.source, "iu").exec(primaryText);
   // "10,000 rupaye per kW" leading the first line is the same amount as "₹10,000/kW" (#418).
