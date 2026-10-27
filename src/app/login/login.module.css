@@ -3,8 +3,8 @@
 .skipLink { position: absolute; top: -100px; left: 16px; z-index: 20; padding: 12px; background: #fff; }
 .skipLink:focus { top: 8px; }
 .header { display: flex; align-items: center; justify-content: space-between; gap: 16px; height: 80px; padding: 0 48px; border-bottom: 1px solid var(--line); }
-.logo { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; font-size: 23px; font-weight: 700; }
-.home { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; font-size: 14px; color: var(--subtle); }
+.logo { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; font-size: 17px; font-weight: 600; }
+.home { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; font-size: 15px; color: var(--subtle); }
 .home:hover { color: var(--ink); }
 .main { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 .formColumn { display: flex; justify-content: center; padding: 64px 48px; }
@@ -25,9 +25,9 @@
 .promises li:first-child { padding-top: 0; }
 .promises li:last-child { border-bottom: 0; }
 .promises svg { flex-shrink: 0; margin-top: 2px; color: var(--moss); }
-.promises h2 { margin: 0; font-size: 16px; line-height: 1.35; }
-.promises p { margin: 6px 0 0; font-size: 14px; line-height: 1.6; color: var(--subtle); }
-.footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 32px; padding: 12px 48px; border-top: 1px solid var(--line); font-size: 12px; color: var(--subtle); }
+.promises h2 { margin: 0; font-size: 15px; font-weight: 600; line-height: 1.4; }
+.promises p { margin: 4px 0 0; font-size: 13px; line-height: 1.5; color: var(--subtle); }
+.footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 32px; padding: 12px 48px; border-top: 1px solid var(--line); font-size: 13px; color: var(--subtle); }
 .footer nav { display: flex; flex-wrap: wrap; gap: 20px; }
 .footer nav a { display: inline-flex; align-items: center; min-height: 44px; }
 .footer nav a:hover { color: var(--ink); }
