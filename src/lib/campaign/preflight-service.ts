@@ -24,6 +24,8 @@ export type PreflightLoaders = {
   findWhatsAppMessage?: (actor: PreflightActor, draft: DraftInput) => Promise<{ message: ResolvedWhatsAppMessage; problem: string | null } | null>;
   /** The business's industry, for the health claim rules on the ad wording (#739). */
   findVertical?: (actor: PreflightActor) => Promise<string | null>;
+  /** #418 rule 5: the Brand's facts (USPs, description), for the proof-line warning only. */
+  findBrandFacts?: (actor: PreflightActor) => Promise<string[]>;
   /** #419 2(b): the business's own cost per result for this kind of campaign, or null. */
   findCostPerResult?: (actor: PreflightActor, destination: "instant_form" | "whatsapp") => Promise<number | null>;
   getConnection: (actor: PreflightActor) => Promise<PreflightConnection | null>;
@@ -56,7 +58,7 @@ export async function prepareCampaignReview(
     return { kind: "stale", draftVersion: draft.version };
   }
 
-  const [connection, creatives, form, geo, whatsappNumber, website, costPerResultRupees, vertical, whatsappMessage] = await Promise.all([
+  const [connection, creatives, form, geo, whatsappNumber, website, costPerResultRupees, vertical, whatsappMessage, brandFacts] = await Promise.all([
     loaders.getConnection(input.actor),
     loaders.findCreatives(input.actor.businessId, draft.input.creativeIds),
     draft.input.destination !== "whatsapp" && draft.input.leadFormId
@@ -69,6 +71,8 @@ export async function prepareCampaignReview(
     loaders.findCostPerResult?.(input.actor, draft.input.destination ?? "instant_form").catch(() => null) ?? Promise.resolve(null),
     loaders.findVertical?.(input.actor) ?? Promise.resolve(null),
     draft.input.destination === "whatsapp" ? loaders.findWhatsAppMessage?.(input.actor, draft.input) ?? Promise.resolve(null) : Promise.resolve(null),
+    // Only a warning depends on it, like the cost per result.
+    loaders.findBrandFacts?.(input.actor).catch(() => []) ?? Promise.resolve([]),
   ]);
 
   return {
@@ -85,6 +89,7 @@ export async function prepareCampaignReview(
       whatsappMessageProblem: whatsappMessage?.problem ?? null,
       website,
       vertical,
+      brandFacts,
       geo,
       hash: loaders.hash,
       costPerResultRupees,

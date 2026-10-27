@@ -7,6 +7,7 @@ import type { ReviewBlockerReason, SelectedAssets } from "@/lib/meta/connect-con
 import { normalizeWebsite } from "@/lib/brand/validation";
 import { askMismatchWarning, reviewWarnings } from "@/lib/campaign/plan-check";
 import { quotedAsk, sameWords } from "@/lib/campaign/whatsapp-greeting";
+import { batchProofWarning } from "@/lib/creative/proof-line";
 import type { ResolvedWhatsAppMessage } from "@/lib/campaign/whatsapp-template";
 
 export interface PreflightCreative {
@@ -59,6 +60,8 @@ export interface PreflightInput {
   whatsappMessageProblem?: string | null;
   /** The business's industry, for the health claim rules (#739). */
   vertical?: string | null;
+  /** #418 rule 5: the Brand's facts, for the proof-line warning; none means no warning. */
+  brandFacts?: string[];
   /** Business website; undefined when the caller does not check it. */
   website?: string | null;
   geo: PreflightGeo;
@@ -283,6 +286,9 @@ export function runPreflight(input: PreflightInput): ReviewDTO {
   const prefill = draft.destination === "whatsapp" ? input.whatsappMessage?.opening.autofill?.trim() : "";
   const mismatch = prefill ? input.creatives.map((creative) => quotedAsk(creative.primaryText)).find((ask) => ask && !sameWords(ask, prefill)) : null;
   if (mismatch) planWarnings.push(askMismatchWarning(mismatch, prefill!));
+  // #418 rule 5: the Brand has proof (years, jobs, a credential, a warranty) but no chosen ad cites it.
+  const proof = batchProofWarning(input.creatives.map((creative) => [creative.headline, creative.primaryText].filter(Boolean).join("\n")), input.brandFacts ?? []);
+  if (proof) planWarnings.push(proof);
 
   return {
     draftId: input.draftId,
