@@ -6,8 +6,9 @@
  *   - whatsapp: a click-to-WhatsApp ad set (Meta refuses any in-place targeting update there too, #912)
  *   - language: an ad set without interests, patched to English (All) + Hindi only (`locales`)
  *   - whatsapp-language: the same language change on a click-to-WhatsApp ad set (rebuilt)
+ *   - area-exclusions: an ad set stripped of its exclusions (as built before #741), given its area's exclusions back
  *
- *   npx tsx --env-file=<path to .env.local> scripts/record-meta-edit-audience.ts <imageUrl> [rebuild|patch|whatsapp|language|whatsapp-language] [campaignId]
+ *   npx tsx --env-file=<path to .env.local> scripts/record-meta-edit-audience.ts <imageUrl> [rebuild|patch|whatsapp|language|whatsapp-language|area-exclusions] [campaignId]
  * With a campaignId, the PAUSED test campaign already exists (e.g. launched by older code, #912) and is
  * edited and archived instead of launched.
  *
@@ -108,7 +109,7 @@ async function main() {
   const created: string[] = [];
   try {
     const only = process.argv[3];
-    for (const [path, interests] of [["rebuild", audience.interests], ["patch", []], ["whatsapp", []], ["language", []], ["whatsapp-language", []]] as const) {
+    for (const [path, interests] of [["rebuild", audience.interests], ["patch", []], ["whatsapp", []], ["language", []], ["whatsapp-language", []], ["area-exclusions", []]] as const) {
       if (only && only !== path) continue;
       const whatsapp = path.startsWith("whatsapp");
       if (whatsapp && !whatsappNumber) throw new Error("No WhatsApp number on the Page or the business.");
@@ -123,8 +124,20 @@ async function main() {
       created.push(launch.campaignId);
       // Meta's campaign → ad sets edge can list nothing for a few seconds after a launch.
       if (!existing) await new Promise(resolve => setTimeout(resolve, 15_000));
+      if (path === "area-exclusions") {
+        // Not taped: make the tree look like one launched before #741, then wait out Meta's 30 s limit.
+        const token = process.env.META_SYSTEM_USER_TOKEN!;
+        const read = await (await realFetch(`${GRAPH}${launch.adSetIds[0]}?fields=targeting&access_token=${token}`)).json() as { targeting: Record<string, unknown> };
+        const old = { ...read.targeting };
+        delete old.excluded_geo_locations;
+        const stripped = await (await realFetch(`${GRAPH}${launch.adSetIds[0]}`, { method: "POST", body: new URLSearchParams({ targeting: JSON.stringify(old), access_token: token }) })).json();
+        if ((stripped as { success?: boolean }).success !== true) throw new Error(`Could not strip the exclusions: ${JSON.stringify(stripped)}`);
+        await new Promise(resolve => setTimeout(resolve, 31_000));
+      }
       tape = [];
-      const input = { adSetId: launch.adSetIds[0], adIds: launch.adIds, changes: path.endsWith("language") ? { languages: [1001, 46] } : changes };
+      // As the edit service does: the area's exclusions come from the ad set's own current area.
+      const areaChanges = path === "area-exclusions" ? { excludedLocation: (await meta.serviceAreaExclusionsFor(before.targeting))! } : null;
+      const input = { adSetId: launch.adSetIds[0], adIds: launch.adIds, changes: areaChanges ?? (path.endsWith("language") ? { languages: [1001, 46] } : changes) };
       const validated = await meta.editAdSetTargeting(launch.campaignId, input, { validateOnly: true });
       // Meta allows one targeting update per ad set per 30 s (#613), validate_only included.
       await new Promise(resolve => setTimeout(resolve, 31_000));

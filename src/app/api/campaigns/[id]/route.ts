@@ -207,7 +207,7 @@ async function handlePATCH(
             });
           // #741: a tree built before the out-of-area rule must be rebuilt, never activated.
           if (delivery.adSets.some(adSet => lacksAreaExclusions(adSet.targeting))) {
-            throw new CampaignDeliveryError("This campaign was built without out-of-area exclusions, so Meta could show it far outside your area. Create it again, then activate the new one.");
+            throw new CampaignDeliveryError("This campaign was built without out-of-area exclusions, so Meta could show it far outside your area. Add them first: More → Edit audience → Leave out places outside the area. Then turn it on.");
           }
           if (capDays && (delivery.adSets.some(adSet => adSet.status !== "PAUSED") || delivery.ads.some(ad => ad.status !== "PAUSED"))) {
             throw new CampaignDeliveryError("Pause the reviewed ad sets and ads in Meta first. AdBrain turns on only the capped copy.");

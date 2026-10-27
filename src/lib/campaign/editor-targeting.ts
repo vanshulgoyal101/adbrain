@@ -80,6 +80,8 @@ export interface AudienceEditForm {
   /** "keep" leaves the ad set's languages; "any" removes the limit; "only" targets `languages`. */
   languageMode: "keep" | "any" | "only";
   languages: number[];
+  /** Add #741's out-of-area exclusions to the current area (campaigns built before the rule). */
+  areaExclusions: boolean;
 }
 
 type GeoSpec = {
@@ -95,9 +97,10 @@ export type AudienceChangeBody = {
   age?: { min: number; max: number };
   gender?: "all" | "men" | "women";
   languages?: number[];
+  areaExclusions?: true;
 };
 
-export const emptyAudienceEdit: AudienceEditForm = { included: [], excluded: [], cityScope: "radius", radiusKm: 25, ageMin: null, ageMax: null, gender: "keep", languageMode: "keep", languages: [] };
+export const emptyAudienceEdit: AudienceEditForm = { included: [], excluded: [], cityScope: "radius", radiusKm: 25, ageMin: null, ageMax: null, gender: "keep", languageMode: "keep", languages: [], areaExclusions: false };
 
 function geoSpec(places: GeoPick[], form: AudienceEditForm): GeoSpec | undefined {
   const radius = Math.min(80, Math.max(1, Math.round(form.radiusKm)));
@@ -127,6 +130,8 @@ export function audienceChangeFromForm(form: AudienceEditForm): { change: Audien
     change.age = { min, max };
   }
   if (form.gender !== "keep") change.gender = form.gender;
+  // A new area brings its own exclusions.
+  if (form.areaExclusions && !location) change.areaExclusions = true;
   if (form.languageMode === "any") change.languages = [];
   if (form.languageMode === "only") {
     if (!form.languages.length) return { error: "Pick at least one language, or choose Any language." };
