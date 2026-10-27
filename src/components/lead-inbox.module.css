@@ -34,7 +34,7 @@
 .table th:nth-child(6) { width: 14%; }
 .table td { padding: 17px 12px; border-bottom: 1px solid var(--color-slate-200); vertical-align: top; overflow-wrap: anywhere; line-height: 1.6; }
 .person { font-weight: 600; }
-.contact a { min-height: 26px; }
+.contact > a { min-height: 26px; }
 .mobileLabel { display: none; }
 .empty { padding: 44px 24px; border-block: 1px solid var(--color-slate-200); display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; }
 .empty svg { color: var(--color-slate-400); }
@@ -51,7 +51,7 @@
   .table .person, .table .contact { grid-column: 1 / -1; }
   .table .person { font-size: 15px; }
   .contact { display: flex !important; flex-wrap: wrap; gap: 8px 20px; }
-  .contact a { display: flex; min-height: 36px; align-items: center; }
+  .contact > a { display: flex; min-height: 36px; align-items: center; }
   .mobileLabel { display: block; font-size: 13px; color: var(--color-slate-500); margin-bottom: 3px; }
   .toolbar select { flex: 1; min-width: 0; }
 }
