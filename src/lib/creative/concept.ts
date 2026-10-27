@@ -504,9 +504,28 @@ export function validateConcept(
   if (offer && offer.index >= FOLD_CHARACTERS && !(spelled >= 0 && spelled < FOLD_CHARACTERS)) {
     issues.push(`offer-below-fold: "${offer[0]}" starts at character ${offer.index + 1}; mobile readers only see the first ${FOLD_CHARACTERS}, so move the offer into the first line`);
   }
-  return issues.length
-    ? { success: false, issues, ...(claims.size ? { claims: [...claims] } : {}) }
-    : { success: true, concept };
+  if (issues.length) return { success: false, issues, ...(claims.size ? { claims: [...claims] } : {}) };
+  const pictureOffer = offerOnPicture(concept, input.brand.offers ?? []);
+  return { success: true, concept: pictureOffer ? { ...concept, supportingText: pictureOffer } : concept };
+}
+
+/**
+ * #418 rule 2 (Analyst, #941): the offer the copy states also goes on the picture. When neither the
+ * headline nor the picture line carries it, the picture line becomes the owner's own offer fact, so
+ * it costs no repair and invents nothing. Indic-script copy keeps its own line: an English fact on a
+ * Hindi or Punjabi picture would mix scripts, and those replies already put the offer there.
+ */
+function offerOnPicture(concept: CreativeConcept, offers: string[]): string | null {
+  const copy = concept.primary_text.normalize("NFC");
+  if (/[\u0900-\u0DFF]/u.test(copy)) return null;
+  const shown = [concept.headline, concept.supportingText ?? ""].join("\n").normalize("NFC");
+  const facts = [...new Set(offers.map((offer) => offer.normalize("NFC").trim()))];
+  for (const term of claimedTerms(copy)) {
+    if (citesTerm(shown, term)) return null;
+    const matches = facts.filter((fact) => fact.length <= 64 && citesTerm(fact, term) && sameOffer(copy, term, fact));
+    if (matches.length === 1) return matches[0];
+  }
+  return null;
 }
 
 export function conceptImagePrompt(
