@@ -87,6 +87,10 @@ export function buildCampaignPreflightLoaders(
       const { data } = await supabase.from("businesses").select("website").eq("id", actor.businessId).maybeSingle();
       return data?.website ?? null;
     },
+    findBrandFacts: async (actor) => {
+      const { data } = await supabase.from("businesses").select("usps, description").eq("id", actor.businessId).maybeSingle();
+      return [...(data?.usps ?? []), data?.description ?? ""].filter((fact): fact is string => typeof fact === "string" && fact.trim() !== "");
+    },
     findVertical: async (actor) => {
       const { data } = await supabase.from("businesses").select("vertical").eq("id", actor.businessId).maybeSingle();
       return data?.vertical ?? null;
