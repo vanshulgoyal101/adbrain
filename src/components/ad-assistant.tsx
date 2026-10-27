@@ -126,12 +126,15 @@ function clearDraft(businessId: string): void {
   }
 }
 
-/** #1004: one line of the Brand facts the ads will use (area and offer), shown above 'Make 3 ads'. */
+/** #1004 (CPO wording): the Brand facts the 3 ads will use (areas, then the offer or else a proof point), above 'Make 3 ads'. */
 function createFactsLine(business: Pick<Business, "locations" | "offers" | "usps">): string {
   const first = (values?: string[] | null) => (values ?? []).map((value) => value.trim()).filter(Boolean);
+  const cut = (value: string) => (value.length > 40 ? `${value.slice(0, 39).trimEnd()}…` : value);
   const places = first(business.locations).slice(0, 2).join(", ");
-  const offer = first(business.offers)[0] ?? first(business.usps)[0];
-  return [places && `For ${places}`, offer && `offer: ${offer}`].filter(Boolean).join(" · ");
+  const offer = first(business.offers)[0];
+  const proof = offer ? undefined : first(business.usps)[0];
+  const facts = [places, offer && `offer: ${cut(offer)}`, proof && `proof: ${cut(proof)}`].filter(Boolean).join(" · ");
+  return `Your 3 ads will use: ${facts}`;
 }
 
 export function AdAssistant({ business, opening = null, occasions = [], onFlowStep }: {
@@ -673,10 +676,13 @@ export function AdAssistant({ business, opening = null, occasions = [], onFlowSt
                     <button type="button" onClick={() => start(true)} disabled={loading} className="min-h-11 font-medium text-blue-700 hover:underline">Edit brief</button>
                   </p>
                 ) : <span aria-hidden="true" />}
-                <Button onClick={() => start()} disabled={!goal.trim()} className="self-end sm:self-auto">
-                  {/* #858: this tap starts the 3 ads straight away, so it says so. */}
-                  {quick ? "Make 3 ads" : "Start creating"}
-                </Button>
+                <div className="flex flex-col items-end gap-1 self-end sm:self-auto">
+                  <Button onClick={() => start()} disabled={!goal.trim()}>
+                    {/* #858: this tap starts the 3 ads straight away, so it says so. */}
+                    {quick ? "Make 3 ads" : "Start creating"}
+                  </Button>
+                  {quick && <p className="text-xs text-slate-500">About 2 minutes. Nothing is published.</p>}
+                </div>
               </div>
             </div>
           </div>
