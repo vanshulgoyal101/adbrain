@@ -307,7 +307,9 @@ verification. `extraction.phone` comes only from the page's first `tel:` link in
 international `+` format (never from the model). Website fetch deadline is 10 seconds; route duration setting is 30.
 Every provider attempt (and a response-cache hit, as a zero-token row) is logged as usage with
 route `brand.autofill` on `businessId` when the owner's session can read that business; on
-first Brand setup there is no business yet, so only the `ai.completion` product event is kept (#650).
+first Brand setup there is no business yet, so only the `ai.completion` product event is kept (#650). Each
+autofill the owner waited for (not 400/401/429) also records a `brand.autofill` workflow event with its
+outcome and whole-request duration, which the #681 scoreboard Brand row counts (calls, failed, p90; #1025).
 
 ### Interview
 

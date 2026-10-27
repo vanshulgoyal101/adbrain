@@ -4,6 +4,8 @@ import { POST } from "@/app/api/brand/autofill/route";
 const { getUser, rateLimitResponse, completeJSON, fetchPublicUrlText } = vi.hoisted(() => ({
   getUser: vi.fn(), rateLimitResponse: vi.fn(), completeJSON: vi.fn(), fetchPublicUrlText: vi.fn(),
 }));
+const recordProductEvent = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/observability/logger", () => ({ observeRoute: (_route: string, _method: string, handler: unknown) => handler, currentRequestId: () => "req-1", recordProductEvent }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ auth: { getUser } }) }));
 vi.mock("@/lib/security/rate-limit", () => ({ rateLimitResponse }));
 vi.mock("@/lib/llm", () => ({ completeJSON, NoLLMKeysError: class extends Error {} }));
@@ -71,5 +73,19 @@ describe("brand autofill boundary", () => {
     const response = await POST(request({ url: "example.com" }));
     expect(response.status).toBe(502);
     expect(await response.text()).not.toContain("private upstream details");
+  });
+});
+describe("brand autofill event for the scoreboard (#1025)", () => {
+  const recorded = () => recordProductEvent.mock.calls.map(([event]) => event).filter((event) => event.name === "brand.autofill");
+
+  it("records each autofill the owner waited for, with its outcome and duration, and nothing for refused input", async () => {
+    await POST(request({ url: "example.com" }));
+    fetchPublicUrlText.mockRejectedValueOnce(new Error("down"));
+    await POST(request({ url: "example.com" }));
+    await POST(request({ url: "" }));
+    getUser.mockResolvedValue({ data: { user: null } });
+    await POST(request({ url: "example.com" }));
+    expect(recorded().map((event) => [event.outcome, event.attributes?.errorCode ?? null])).toEqual([["success", null], ["failed", "http.502"]]);
+    expect(recorded().every((event) => event.kind === "workflow" && typeof event.durationMs === "number")).toBe(true);
   });
 });
