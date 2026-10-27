@@ -12,7 +12,7 @@ import type { Json } from "@/lib/types";
 import { CampaignEditError } from "./edit-service";
 
 export type AdPauseAction = "pause" | "undo";
-export type AdPauseResult = { adId: string; status: string | null; effectiveStatus: string | null };
+export type AdPauseResult = { adId: string; status: string | null; effectiveStatus: string | null; changed: boolean };
 
 function adPauses(raw: unknown): AdPauseEntry[] {
   const entries = (raw as { adPauses?: unknown } | null)?.adPauses;
@@ -49,7 +49,7 @@ export async function setAdDelivery(context: AuthorizedBusiness, campaignId: str
       expectedGeneration: review.generation,
     }, async (meta) => {
       const read = await meta.setAdStatus(campaign.meta_campaign_id!, adId, status);
-      return { adId: read.id, status: read.status, effectiveStatus: read.effectiveStatus };
+      return { adId: read.id, status: read.status, effectiveStatus: read.effectiveStatus, changed: read.changed };
     });
   } catch (error) {
     recordProductEvent({ kind: "workflow", name: `campaign.ad_${action}`, outcome: "failed", businessId: context.businessId, attributes: { errorCode: metaErrorCode(error) } });
@@ -57,6 +57,8 @@ export async function setAdDelivery(context: AuthorizedBusiness, campaignId: str
     throw new CampaignEditError(friendlyMetaError(error, "Meta didn't change the ad. Nothing changed."), 502, true);
   }
   if (result.status !== status) throw new CampaignEditError("Meta didn't confirm the change. Refresh the campaign before trying again.", 502, true);
+  // Reviewer on #1048: an ad that already had this status wasn't changed by AdBrain, so nothing is recorded.
+  if (!result.changed) return result;
 
   const entry: AdPauseEntry = { adId, action: action === "pause" ? "paused" : "resumed", at: new Date().toISOString(), ...(reason ? { reason: reason.slice(0, 200) } : {}) };
   const database = createAdminClient() as unknown as SupabaseClient;

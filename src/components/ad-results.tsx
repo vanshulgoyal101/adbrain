@@ -41,7 +41,7 @@ const named = (name: string | null) => `“${name ?? "Ad"}”`;
 export function PauseOffer({ campaignId, suggestion }: { campaignId: string; suggestion: PauseSuggestion }) {
   const { ad, reference } = suggestion;
   // Rendered only after the card's client-side load, so localStorage is there on first render.
-  const [state, setState] = useState<"offer" | "busy" | "paused" | "resumed" | "kept" | { error: string }>(
+  const [state, setState] = useState<"offer" | "busy" | "paused" | "resumed" | "already" | "kept" | { error: string }>(
     () => Number(window.localStorage.getItem(keepKey(campaignId, ad.adId)) ?? 0) > Date.now() ? "kept" : "offer",
   );
 
@@ -52,8 +52,9 @@ export function PauseOffer({ campaignId, suggestion }: { campaignId: string; sug
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action, ...(action === "pause" ? { reason: suggestion.reason } : {}) }),
       });
-      const data = await response.json().catch(() => ({})) as { error?: string };
+      const data = await response.json().catch(() => ({})) as { error?: string; result?: { changed?: boolean } };
       if (!response.ok) { setState({ error: data.error ?? "Couldn't change the ad. Nothing changed." }); return; }
+      if (action === "pause" && data.result?.changed === false) { setState("already"); return; }
       setState(action === "pause" ? "paused" : "resumed");
     } catch {
       setState({ error: "Couldn't reach AdBrain. Nothing changed." });
@@ -63,6 +64,7 @@ export function PauseOffer({ campaignId, suggestion }: { campaignId: string; sug
   if (state === "kept") return null;
   const busy = state === "busy";
   if (state === "paused") return <p role="status" className="py-2 text-xs text-slate-700">Paused {named(ad.name)}. The other ads keep running. <button type="button" className="min-h-11 font-medium text-blue-700 underline" onClick={() => void send("undo")}>Undo</button></p>;
+  if (state === "already") return <p role="status" className="py-2 text-xs text-slate-700">{named(ad.name)} is already paused in Meta. AdBrain didn&apos;t change it.</p>;
   if (state === "resumed") return <p role="status" className="py-2 text-xs text-slate-700">{named(ad.name)} is running again.</p>;
   const line = suggestion.reason === "no_enquiries"
     ? <>{named(ad.name)} has spent {formatMoney(ad.spend)} with no enquiries; {named(reference.name)} gets them at {formatMoney(reference.costPerResult ?? 0)} each. Pause it?</>

@@ -32,15 +32,27 @@ describe("core: pause one ad (#1045)", () => {
   it("Meta accepts PAUSED on a live ad (validate_only), and AdBrain writes nothing else", async () => {
     const calls = replay("validate-pause-live-ad");
     const status = await new MetaClient(creds).setAdStatus(recorded.campaignId, recorded.liveAdId, "PAUSED", { validateOnly: true });
-    expect(status).toEqual({ id: recorded.liveAdId, status: "ACTIVE", effectiveStatus: "ACTIVE" });
+    expect(status).toEqual({ id: recorded.liveAdId, status: "ACTIVE", effectiveStatus: "ACTIVE", changed: false });
     const writes = calls.filter((call) => call.method === "POST");
     expect(writes).toEqual([{ method: "POST", path: recorded.liveAdId, form: { status: "PAUSED", execution_options: "[\"validate_only\"]" } }]);
   });
 
-  it("pauses the one ad and reads it back PAUSED; the only write is that ad's status", async () => {
+  it("writes nothing for an ad that is already PAUSED (the owner may have paused it in Meta), so it's never recorded", async () => {
     const calls = replay("pause-paused-ad");
     const status = await new MetaClient(creds).setAdStatus(recorded.campaignId, recorded.pausedAdId, "PAUSED");
-    expect(status.status).toBe("PAUSED");
+    expect(status).toMatchObject({ status: "PAUSED", changed: false });
+    expect(calls.some((call) => call.method === "POST")).toBe(false);
+  });
+
+  it("pauses a running ad and reads it back PAUSED; the only write is that ad's status", async () => {
+    // The recorded write and read-back, with the ad's first read marked ACTIVE (as it is before a real pause).
+    let first = true;
+    const calls = replay("pause-paused-ad", (exchange) => {
+      if (first && exchange.method === "GET" && exchange.path.startsWith(`${recorded.pausedAdId}?`)) { first = false; return { ...exchange, body: { ...(exchange.body as object), status: "ACTIVE", effective_status: "ACTIVE" } }; }
+      return exchange;
+    });
+    const status = await new MetaClient(creds).setAdStatus(recorded.campaignId, recorded.pausedAdId, "PAUSED");
+    expect(status).toMatchObject({ status: "PAUSED", changed: true });
     expect(calls.filter((call) => call.method === "POST")).toEqual([{ method: "POST", path: recorded.pausedAdId, form: { status: "PAUSED" } }]);
   });
 

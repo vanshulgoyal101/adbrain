@@ -91,6 +91,13 @@ describe("<AdResults> pause offer (#1045)", () => {
     expect(until - Date.now()).toBeGreaterThan(3 * 24 * 3600 * 1000 - 5000);
   });
 
+  it("says so, and offers no Undo, when the ad was already paused in Meta", async () => {
+    openWith([Response.json({ ok: true, result: { adId: "2", status: "PAUSED", changed: false } })]);
+    fireEvent.click(await screen.findByRole("button", { name: "Pause this ad" }));
+    expect(await screen.findByText("“Ad 2” is already paused in Meta. AdBrain didn't change it.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Undo" })).not.toBeInTheDocument();
+  });
+
   it("shows Meta's refusal and keeps the offer", async () => {
     openWith([Response.json({ error: "Meta didn't change the ad. Nothing changed." }, { status: 502 })]);
     fireEvent.click(await screen.findByRole("button", { name: "Pause this ad" }));

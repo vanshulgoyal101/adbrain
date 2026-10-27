@@ -35,15 +35,22 @@ beforeEach(() => {
   m.campaign = { id: "c1", name: "Run", status: "active", meta_campaign_id: "100", meta_ad_ids: ["11"], raw: {} };
   m.listed = [{ meta_ad_id: "22" }];
   m.saved = []; m.purposes = [];
-  m.setAdStatus.mockReset().mockImplementation(async (_campaign: string, adId: string, status: string) => ({ id: adId, status, effectiveStatus: status }));
+  m.setAdStatus.mockReset().mockImplementation(async (_campaign: string, adId: string, status: string) => ({ id: adId, status, effectiveStatus: status, changed: true }));
 });
 
 describe("setAdDelivery (#1045)", () => {
   it("pauses a card ad (a capped copy from the stored results) and records it on the campaign", async () => {
-    expect(await setAdDelivery(context, "c1", "22", "pause", "expensive")).toEqual({ adId: "22", status: "PAUSED", effectiveStatus: "PAUSED" });
+    expect(await setAdDelivery(context, "c1", "22", "pause", "expensive")).toEqual({ adId: "22", status: "PAUSED", effectiveStatus: "PAUSED", changed: true });
     expect(m.setAdStatus).toHaveBeenCalledWith("100", "22", "PAUSED");
     expect(m.purposes).toEqual(["pause"]);
     expect(m.saved).toEqual([{ raw: { adPauses: [expect.objectContaining({ adId: "22", action: "paused", reason: "expensive" })] } }]);
+  });
+
+  it("records nothing when the ad was already paused in Meta, so a later Undo can't turn it on (Reviewer, #1048)", async () => {
+    m.setAdStatus.mockResolvedValue({ id: "22", status: "PAUSED", effectiveStatus: "PAUSED", changed: false });
+    expect((await setAdDelivery(context, "c1", "22", "pause")).changed).toBe(false);
+    expect(m.saved).toEqual([]);
+    await expect(setAdDelivery(context, "c1", "22", "undo")).rejects.toThrow("AdBrain didn't pause this ad");
   });
 
   it("undoes only an ad AdBrain paused, as an activation", async () => {
@@ -59,7 +66,7 @@ describe("setAdDelivery (#1045)", () => {
     m.campaign!.status = "paused";
     await expect(setAdDelivery(context, "c1", "22", "pause")).rejects.toThrow("Only a running campaign's ads can be paused here.");
     m.campaign!.status = "active";
-    m.setAdStatus.mockResolvedValue({ id: "22", status: "ACTIVE", effectiveStatus: "ACTIVE" });
+    m.setAdStatus.mockResolvedValue({ id: "22", status: "ACTIVE", effectiveStatus: "ACTIVE", changed: true });
     await expect(setAdDelivery(context, "c1", "22", "pause")).rejects.toThrow("Meta didn't confirm the change.");
     expect(m.saved).toEqual([]);
   });
