@@ -4,13 +4,13 @@ import { fetchPublicUrl } from "@/lib/security/ssrf";
 import { readBoundedResponse } from "@/lib/imageGen/raster";
 import { destinationFromAdSets, type CampaignDestination } from "@/lib/campaign/outcomes";
 import type { CampaignSkipReason } from "@/lib/campaign/sync-skips";
-import { decodeCampaignInsights, decodeLifetimeSpendPaise, type CampaignInsights } from "./insights";
+import { decodeAdResults, decodeCampaignInsights, decodeLifetimeSpendPaise, type AdResult, type CampaignInsights } from "./insights";
 import { maskWhatsAppNumber, maskedWhatsAppNumberPattern } from "./whatsapp-status-shared";
 import { graphEndpoint, graphEntity, graphErrorCode, graphOutcome } from "./graph-event";
 import { recordProductEvent } from "@/lib/observability/logger";
 import { EXCLUDABLE_CITIES, INDIA_REGION_KEYS, mergeExclusions, serviceAreaExclusions, TargetingExclusionsMissingError, type IncludedPlace } from "./service-area";
 import { AD_LANGUAGE_KEYS, storedLocales } from "./locales";
-export type { CampaignInsights } from "./insights";
+export type { AdResult, CampaignInsights } from "./insights";
 
 const GRAPH = "https://graph.facebook.com/v21.0";
 
@@ -431,6 +431,11 @@ export function friendlyMetaError(
 /** Where leads land: an in-ad instant form, a WhatsApp chat, or a phone call. */
 export type AdDestination = "instant_form" | "whatsapp" | "call";
 
+/** #680: WhatsApp and lead-form ads get the 9:16 placement creative and leave Audience Network out, so an A/B differs only in destination. */
+export function hasPlacementCreative(destination: AdDestination): boolean {
+  return destination === "whatsapp" || destination === "instant_form";
+}
+
 export interface DestinationPlan {
   optimizationGoal: string;
   destinationType: string;
@@ -582,7 +587,10 @@ export function adSetTargeting(params: {
   };
 }
 
-/** #906: a WhatsApp ad set's targeting names its platforms without Audience Network. */
+/** #783: every ad status Meta will list for a campaign's ads; DELETED can't be requested (1815001). */
+const LISTED_AD_STATUSES = ["ACTIVE", "PAUSED", "ARCHIVED", "CAMPAIGN_PAUSED", "ADSET_PAUSED", "IN_PROCESS", "WITH_ISSUES", "PENDING_REVIEW", "DISAPPROVED", "PREAPPROVED", "PENDING_BILLING_INFO"];
+
+/** #906/#680: a WhatsApp or lead-form ad set's targeting names its platforms without Audience Network. */
 export function withoutAudienceNetwork(targeting: Record<string, unknown>): Record<string, unknown> {
   const platforms = Array.isArray(targeting.publisher_platforms) ? (targeting.publisher_platforms as unknown[]).filter(item => item !== "audience_network") : [];
   const { audience_network_positions: _dropped, ...rest } = targeting;
@@ -613,7 +621,7 @@ const STORY_PLACEMENTS = {
   instagram_positions: ["story", "reels", "profile_reels"],
   messenger_positions: ["story"],
 };
-// The placement creative is WhatsApp-only, whose ad sets leave Audience Network out (#906).
+// Placement creatives go to WhatsApp and lead-form ads, whose ad sets leave Audience Network out (#906, #680).
 const FEED_PLACEMENTS = {
   publisher_platforms: ["facebook", "instagram", "messenger"],
   facebook_positions: ["feed", "right_hand_column", "marketplace", "video_feeds", "search", "instream_video", "facebook_reels_overlay", "profile_feed", "notification", "biz_disco_feed"],
@@ -652,6 +660,8 @@ export function placementCreativeSpec(p: {
       ...(p.description?.trim() ? { descriptions: [{ text: p.description.trim() }] } : {}),
       link_urls: [{ website_url: p.link }],
       call_to_action_types: [cta.type],
+      // #680: a lead ad names its form here; with only the type Meta refuses (3390001).
+      ...(p.destination === "instant_form" && p.leadFormId ? { call_to_actions: [{ type: cta.type, value: { lead_gen_form_id: p.leadFormId } }] } : {}),
       ...(p.destination === "whatsapp" && p.whatsappGreeting ? { additional_data: { page_welcome_message: whatsappWelcomeMessage(p.whatsappGreeting) } } : {}),
       ad_formats: ["SINGLE_IMAGE"],
       optimization_type: "PLACEMENT",
@@ -1303,7 +1313,7 @@ export class MetaClient {
     // Placement creatives must name the Page's Instagram account; without one, skip the 9:16 (#333).
     let instagramUserId: string | null = null;
     try {
-      if (params.destination === "whatsapp" && params.creatives.some((creative) => creative.storyImage)) {
+      if (hasPlacementCreative(requested) && params.creatives.some((creative) => creative.storyImage)) {
         instagramUserId = await this.getPageInstagramId().catch((error: unknown) => {
           params.onStoryFallback?.("instagram", metaErrorCode(error));
           return null;
@@ -1318,7 +1328,7 @@ export class MetaClient {
           externalId: imageHash,
           creativeIndex,
         });
-        // Placement images are proven for WhatsApp ads that name the Page's Instagram (story-validate.json).
+        // Placement images are proven for WhatsApp and lead-form ads that name the Page's Instagram (story-validate.json, leadform-placements-validate.json).
         let storyHash: string | null = null;
         const storyImage = instagramUserId ? await c.storyImage : null;
         if (storyImage) {
@@ -1350,7 +1360,7 @@ export class MetaClient {
         ];
 
     // Ages are validated above, so both bounds are set here.
-    const targetingFor = (v: AdSetVariant, dest: AdDestination) => JSON.stringify((dest === "whatsapp" ? withoutAudienceNetwork : (t: Record<string, unknown>) => t)(adSetTargeting({
+    const targetingFor = (v: AdSetVariant, dest: AdDestination) => JSON.stringify((hasPlacementCreative(dest) ? withoutAudienceNetwork : (t: Record<string, unknown>) => t)(adSetTargeting({
       location: v.location ?? params.location,
       excludedLocation: mergeExclusions(v.excludedLocation ?? params.excludedLocation, areaExclusions.get(v.location ?? params.location) ?? null),
       ageMin: (v.ageMin ?? params.ageMin)!,
@@ -1410,11 +1420,11 @@ export class MetaClient {
 
       for (let creativeIndex = 0; creativeIndex < prepared.length; creativeIndex++) {
         const { input: c, imageHash, storyHash } = prepared[creativeIndex];
-        const placement = storyHash && instagramUserId && destination === "whatsapp"
+        const placement = storyHash && instagramUserId && hasPlacementCreative(destination)
           ? placementCreativeSpec({
             pageId: this.creds.pageId, instagramUserId, feedHash: imageHash, storyHash, headline: c.headline, message: c.message,
-            description: c.description ?? undefined, link: `https://wa.me/${params.whatsappNumber!.slice(1)}`,
-            destination, whatsappNumber: params.whatsappNumber, whatsappGreeting: params.whatsappGreeting,
+            description: c.description ?? undefined, link: destination === "whatsapp" ? `https://wa.me/${params.whatsappNumber!.slice(1)}` : params.link,
+            destination, whatsappNumber: params.whatsappNumber, whatsappGreeting: params.whatsappGreeting, leadFormId: params.leadFormId,
           })
           : null;
         const singleImageForm = {
@@ -1610,6 +1620,18 @@ export class MetaClient {
     // #404: without a preset Meta reads last_30d, which leaves out today, so a new campaign read ₹0. Results are lifetime.
     const data = await this.graph<unknown>(`${encodeURIComponent(campaignId)}/insights?fields=impressions,clicks,spend,actions,date_start,date_stop&date_preset=${options?.weekly ? "this_week_mon_today" : "maximum"}`);
     return decodeCampaignInsights(data, destination, { requireSpend: options?.weekly });
+  }
+
+  /** #783: each ad's lifetime results; ads Meta hasn't delivered are listed with zeros (#789). Read-only. */
+  async getAdResults(campaignId: string): Promise<AdResult[]> {
+    const destination = await this.verifyCampaignBinding(campaignId);
+    const node = encodeURIComponent(campaignId);
+    const [ads, insights] = await Promise.all([
+      // Meta's default listing leaves out ARCHIVED ads (an audience rebuild archives them) and refuses DELETED (1815001).
+      this.graph<unknown>(`${node}/ads?fields=id,name,effective_status,creative{id}&limit=100&effective_status=${encodeURIComponent(JSON.stringify(LISTED_AD_STATUSES))}`),
+      this.graph<unknown>(`${node}/insights?level=ad&fields=ad_id,impressions,clicks,spend,actions&date_preset=maximum&limit=100`),
+    ]);
+    return decodeAdResults(ads, insights, destination);
   }
 
   /** Read-only lifetime spend (account currency, exact paise) for customer cost evidence (#216). */

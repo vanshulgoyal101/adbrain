@@ -48,6 +48,7 @@ import {
   type TargetingValue,
 } from "@/components/targeting-controls";
 import { CampaignChat } from "@/components/campaign-chat";
+import { AdResults } from "@/components/ad-results";
 import { WhatsAppAiCard } from "@/components/whatsapp-ai-card";
 import { EditAudienceDialog } from "@/components/edit-audience-dialog";
 import { EditBudgetDialog } from "@/components/edit-budget-dialog";
@@ -178,6 +179,8 @@ type CampaignsProps = {
   adAccountId: string;
   /** Opened from Review: start a new campaign with these ads (non-approved IDs are ignored). */
   newCampaign?: { creativeIds: string[] };
+  /** #783: show "Which ad worked" on launched campaign cards (`AD_RESULTS_ENABLED`). */
+  adResults?: boolean;
 };
 
 
@@ -248,6 +251,7 @@ function BusinessCampaigns({
   metaReady,
   adAccountId,
   newCampaign,
+  adResults = false,
   scope,
   initialSetup,
   onSetupChange,
@@ -1412,7 +1416,7 @@ function BusinessCampaigns({
                 Destination: {prepareReview.draft.input.destination === "whatsapp" ? `WhatsApp chat ${prepareReview.review.whatsappNumber ?? "(number not verified)"}` : "Instant lead form"}
                 <br />
                 {/* #906: WhatsApp ads leave Audience Network out. */}
-                {prepareReview.draft.input.destination === "whatsapp" && <>Shown on Facebook, Instagram and Messenger<br /></>}
+                {(prepareReview.draft.input.destination === "whatsapp" || prepareReview.draft.input.destination === "instant_form") && <>Shown on Facebook, Instagram and Messenger<br /></>}
                 Geography: {prepareReview.review.resolvedAreaLabel ?? "Needs review"} · Per ad set: {formatMoney(prepareReview.review.perAdSetDailyBudgetRupees)} · Effective daily total: {formatMoney(prepareReview.review.totalDailyBudgetRupees)}
                 <br />
                 {prepareReview.review.serviceArea && <>{serviceAreaLine(prepareReview.review.serviceArea)}<br /></>}
@@ -2138,6 +2142,7 @@ function BusinessCampaigns({
                         />
                       </div>
                     )}
+                    {adResults && r && c.meta_campaign_id && <AdResults campaignId={c.id} />}
                     {r && outcome === "whatsapp" && r.whatsapp_opens != null && r.conversations != null && (
                       // #493: people reach WhatsApp and leave; show the drop-off plainly.
                       <p className="text-sm text-slate-700">
@@ -2148,13 +2153,14 @@ function BusinessCampaigns({
                       // #798: what a real customer cost, beside the per-enquiry figures.
                       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4" aria-label="Customers">
                         <Stat label={r.customers === 1 ? "Customer" : "Customers"} value={formatNumber(r.customers ?? 0)} />
-                        <Stat label="Per customer" value={formatMoney(costPerCustomer(r.spend, r.customers ?? 0) ?? 0)} />
+                        <Stat label="Per customer" value={(() => { const cost = costPerCustomer(r.spend, r.customers ?? 0); return cost === null ? "—" : formatMoney(cost); })()} />
                         <p className="col-span-2 -mt-2 text-xs text-slate-500 sm:col-span-4">From customers you marked in Enquiries.</p>
                       </div>
                     )}
                     {r && outcome === "whatsapp" && (
                       <WhatsAppEnquiries campaignId={c.id} spend={r.spend} enquiries={r.real_enquiries ?? 0}
-                        onLogged={(count) => setResults((p) => (p[c.id] ? { ...p, [c.id]: { ...p[c.id], real_enquiries: count } } : p))} />
+                        onLogged={(count) => setResults((p) => (p[c.id] ? { ...p, [c.id]: { ...p[c.id], real_enquiries: count } } : p))}
+                        onCustomers={(customers, count) => setResults((p) => (p[c.id] ? { ...p, [c.id]: { ...p[c.id], customers, real_enquiries: count } } : p))} />
                     )}
                     {r && outcome === "instant_form" && !(r.spend > 0) && (
                       <p className="text-sm text-slate-600">

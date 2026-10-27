@@ -277,7 +277,7 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
   as the ad (default: the ads' saved language, else Devanagari → Hindi, Gurmukhi →
   Punjabi, else English), English, Hindi, Hinglish or Punjabi. The choice is part
   of the reviewed plan.
-- Stories and Reels get a 9:16 version of each WhatsApp ad (#333): Prepare lays out
+- Stories and Reels get a 9:16 version of each WhatsApp and lead-form ad (#333, #680): Prepare lays out
   the saved design and photo at 1080×1920 (no AI call; text kept out of the
   Stories safe zones) and sends both images through `asset_feed_spec` placement
   rules: Facebook/Instagram/Messenger stories and reels get the 9:16, every other
@@ -285,18 +285,26 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
   The creative names the Page's Instagram account (`instagram_user_id`), without
   which Meta refuses the ad. A Page without Instagram, a render over 6 s, a failed
   upload, or a creative or ad Meta refuses fall back to the single 4:5 image and
-  log `campaign.story_fallback`. Lead-form ads keep the single image. Meta's real
-  answers are recorded by `scripts/record-meta-story-fixtures.ts`.
-- WhatsApp ad sets run on Facebook, Instagram and Messenger only (#906): `publisher_platforms`
+  log `campaign.story_fallback`. A lead-form ad names its form in
+  `asset_feed_spec.call_to_actions` (Meta refuses it without, 3390001). Meta's real
+  answers are recorded by `scripts/record-meta-story-fixtures.ts` and
+  `scripts/record-meta-leadform-placements.ts`.
+- **Which ad worked** (#783, behind `AD_RESULTS_ENABLED`): a launched campaign card has a collapsed
+  section that loads each ad's stored results on first open: enquiries and ₹ per enquiry ("—" before the
+  first one), "Best" only at ≥ 5 enquiries and ≥ 30% cheaper than the next ad, otherwise "Early: too few
+  enquiries to pick a winner". Ads Meta hasn't shown say so; ads replaced by an audience edit are marked;
+  more than 3 sit behind "All ads". Refreshes store the numbers (`ad_results`).
+- WhatsApp and new lead-form ad sets run on Facebook, Instagram and Messenger only (#906, #680), so a
+  WhatsApp vs lead-form A/B differs only in destination: `publisher_platforms`
   leaves Audience Network out (on #157 most of its WhatsApp taps were accidental); positions stay
   automatic within those. Review says "Shown on Facebook, Instagram and Messenger", the plan check
   passes it, and the #588 ledger records `placements: "advantage:facebook,instagram,messenger"`.
-  An audience edit to a WhatsApp ad set applies the same rule. Lead-form ads keep automatic placements.
+  An audience edit to a WhatsApp ad set applies the same rule; an edit to an older lead-form ad set keeps
+  its placements.
 - Every launch checks the payloads it sent against Meta's new-advertiser guidance
   (Advantage+ audience and placements, one ad set, budget vs learning, 4:5 and 9:16
   images) and logs `campaign.plan_check` (#419). Review shows two plain, non-blocking warnings
-  when they apply (#419 2b): "No 9:16 ad" when no ad will get one (lead-form ads, or WhatsApp ads
-  without a saved design), and "Budget is below what Meta needs to learn" when the per-ad-set budget
+  when they apply (#419 2b): "No 9:16 ad" when no ad will get one (an ad without a saved design), and "Budget is below what Meta needs to learn" when the per-ad-set budget
   buys under ~50 results a week at the business's own cost per result over its last 60 days of
   stored results (no history, no budget warning). Neither changes the reviewed plan or the send.
   The activation review notes the edits AdBrain makes that restart Meta's learning (#419 item 2),
@@ -348,6 +356,11 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
   prefill per campaign as before. Review returns the exact message (`whatsappMessage`) and
   launch sends that one; an edited or saved message is part of the plan hash. The ledger
   records the button and whether it was edited, saved or suggested.
+  Choosing "Quick questions" on Brand fills the empty boxes with 3 suggestions from the Brand
+  (`src/lib/campaign/whatsapp-questions.ts`, #905): the first offer in the owner's words (a long
+  one keeps the part after its label, never cut mid-claim; a free offer is never asked as a cost),
+  "What's the price?" and "Call me back", per language. They are only suggestions: nothing is sent
+  until the owner saves, and saving runs the claim check.
 - Every Indian ad set also excludes everything outside the service area (#741):
   every state/UT with no included place (Tricity: all but Chandigarh, Punjab and
   Haryana), plus the larger cities in the kept states that lie further than the

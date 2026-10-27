@@ -80,7 +80,7 @@ export async function executeReviewedCampaign(input: {
           const storyFallback = (stage: "render" | "instagram" | "upload" | "creative" | "ad", errorCode: string) => recordProductEvent({
             kind: "workflow", name: "campaign.story_fallback", outcome: "partial", businessId: actor.businessId, attributes: { errorCode: `${stage}:${errorCode}` },
           });
-          const storyImages = draft.input.destination === "whatsapp"
+          const storyImages = draft.input.destination === "whatsapp" || draft.input.destination === "instant_form"
             ? renderStoriesWithin(creativeInputs.map(creative => creative.generation), STORY_RENDER_BUDGET_MS, code => storyFallback("render", code))
             : creativeInputs.map(() => null);
           let storyRendered = false;

@@ -314,7 +314,7 @@ export function LeadInbox({
             ? `${leadName(customerNotice.lead) ?? "This enquiry"} is back to ${STATUS_LABEL[customerNotice.previous].toLowerCase()}.`
             : `${leadName(customerNotice.lead) ?? "This enquiry"} became a customer.`}
           {!customerNotice.undone && (
-            <button type="button" className="min-h-10 font-semibold text-blue-700 underline" disabled={!!marking}
+            <button type="button" className="min-h-11 font-medium text-blue-700" disabled={!!marking}
               onClick={() => void setCustomer(customerNotice.lead, customerNotice.previous, customerNotice.previous)}>Undo</button>
           )}
         </p>
@@ -420,7 +420,7 @@ export function LeadInbox({
                         <Pencil size={14} aria-hidden="true" />{statusOf(l) === "customer" ? <Status tone="live">Customer</Status> : STATUS_LABEL[statusOf(l)]}
                       </button>
                       {statusOf(l) !== "customer" && !isMetaTestLead(l) && (
-                        <Button type="button" size="sm" variant="outline" data-product-event="lead.customer" disabled={!!marking || saving}
+                        <Button type="button" size="sm" variant="outline" className="min-h-11" data-product-event="lead.customer" disabled={!!marking || saving}
                           aria-label={`${leadName(l) ?? "This enquiry"} became a customer`} onClick={() => void setCustomer(l, "customer", statusOf(l))}>
                           {marking === l.id ? <Loader2 size={14} className="animate-spin" aria-hidden="true" /> : <UserCheck size={14} aria-hidden="true" />}Became a customer
                         </Button>

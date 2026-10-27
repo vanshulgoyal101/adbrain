@@ -30,6 +30,19 @@ export type ScoreAiCall = {
 /** One launch attempt (`campaign_operations`): the create itself, not the reads that share its Meta purpose. */
 export type ScoreLaunch = { business_id: string; state: string; created_at: string };
 
+/** An active, Meta-bound campaign and its newest `campaign_results.fetched_at` in the window (null: none). */
+export type ScoreActiveResult = { business_id: string; fetched_at: string | null };
+
+/** Newest result per active campaign, from `campaign_results` rows read for the window. */
+export function newestResults(campaigns: Array<{ id: string; business_id: string }>, results: Array<{ campaign_id: string; fetched_at: string }>): ScoreActiveResult[] {
+  const newest = new Map<string, string>();
+  for (const row of results) {
+    const seen = newest.get(row.campaign_id);
+    if (!seen || Date.parse(row.fetched_at) > Date.parse(seen)) newest.set(row.campaign_id, row.fetched_at);
+  }
+  return campaigns.map((campaign) => ({ business_id: campaign.business_id, fetched_at: newest.get(campaign.id) ?? null }));
+}
+
 export type ScoreRow = { step: string; now: string; target: string; met: boolean | null };
 
 export type Scoreboard = {
@@ -89,10 +102,14 @@ function requestOutcomes(calls: ScoreAiCall[]) {
   return [...requests.values()];
 }
 
+const hoursOf = (input: { since: Date; until: Date }) => Math.round((input.until.getTime() - input.since.getTime()) / 3_600_000);
+
 export function buildScoreboard(input: {
   events: ScoreEvent[];
   aiCalls: ScoreAiCall[];
   launches: ScoreLaunch[];
+  /** Active campaigns now (#992): Manage scores how old their newest results are, not when someone last read them. */
+  activeResults: ScoreActiveResult[];
   /** Users whose ads use free images (`freeImagesOnly`): internal accounts not exempt. */
   freeImageUserIds: string[];
   excludedUserIds: string[];
@@ -209,17 +226,23 @@ export function buildScoreboard(input: {
     const refreshes = named("campaign.refresh");
     const reads = named("meta.read_insights");
     const failed = [...refreshes, ...reads].filter((event) => event.outcome !== "success").length;
-    const lastRead = Math.max(...reads.filter((event) => event.outcome === "success").map((event) => Date.parse(event.created_at)));
-    const age = Number.isFinite(lastRead) ? Math.floor((input.until.getTime() - lastRead) / 60_000) : null;
+    // #992: the age of the data on screen (newest `fetched_at` per active campaign), the oldest one scored.
+    const live = input.activeResults.filter((campaign) => !businesses.has(campaign.business_id));
+    const missing = live.filter((campaign) => campaign.fetched_at === null).length;
+    const oldest = Math.max(0, ...live.filter((campaign) => campaign.fetched_at !== null)
+      .map((campaign) => Math.floor((input.until.getTime() - Date.parse(campaign.fetched_at as string)) / 60_000)));
+    const age = !live.length ? "no active campaigns"
+      : missing ? `${plural(live.length, "active campaign")}: ${missing} with no results in ${hoursOf(input)} h`
+        : `${plural(live.length, "active campaign")}: oldest results ${oldest} min old`;
     rows.push({
       step: "Manage",
-      now: `${plural(refreshes.length, "sync")}, ${plural(reads.length, "results read")} (${failed} failed); last results read ${age === null ? "none" : `${age} min ago`}`,
+      now: `${age}; ${plural(refreshes.length, "sync")}, ${plural(reads.length, "results read")} (${failed} failed)`,
       target: "results ≤ 15 min old, always say when",
-      met: age === null ? null : failed === 0 && age <= 15,
+      met: live.length ? missing === 0 && oldest <= 15 : null,
     });
   }
 
-  const hours = Math.round((input.until.getTime() - input.since.getTime()) / 3_600_000);
+  const hours = hoursOf(input);
   const excluded = { events: input.events.length - events.length, aiCalls: input.aiCalls.length - aiCalls.length };
   const mark = (met: boolean | null) => (met === null ? "—" : met ? "✅" : "❌");
   const measured = rows.filter((row) => row.met !== null);
