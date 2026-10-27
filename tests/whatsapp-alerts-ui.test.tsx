@@ -18,7 +18,16 @@ describe("Settings → WhatsApp alerts (#701)", () => {
     fireEvent.change(screen.getByLabelText("Language"), { target: { value: "hi" } });
     fireEvent.click(screen.getByRole("button", { name: "Save alerts" }));
     await waitFor(() => expect(actions.saveAlertSettings).toHaveBeenCalledWith({ businessId: "b1", leadAlerts: true, dailyResults: false, language: "hi" }));
-    expect(await screen.findByText("Saved. Confirm your WhatsApp number below to start getting them.")).toBeInTheDocument();
+    expect(await screen.findByText("Saved. Confirm your WhatsApp number above to start getting them.")).toBeInTheDocument();
+  });
+
+  it("puts the number step first until it's confirmed, then last (#847)", () => {
+    const { unmount } = render(<WhatsAppAlerts businessId="b1" initial={off} />);
+    const confirm = screen.getByRole("button", { name: "Confirm my WhatsApp number" });
+    expect(confirm.compareDocumentPosition(screen.getByLabelText(/Every new enquiry/)) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    unmount();
+    render(<WhatsAppAlerts businessId="b1" initial={{ ...off, leadAlerts: true, number: "+91 ••••• 2222" }} />);
+    expect(screen.getByRole("button", { name: "Use another number" }).compareDocumentPosition(screen.getByLabelText(/Every new enquiry/)) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
   });
 
   it("opens WhatsApp with START ready to send, from the number that should get alerts", async () => {
