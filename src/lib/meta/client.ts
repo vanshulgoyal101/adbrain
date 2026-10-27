@@ -2080,9 +2080,9 @@ export class MetaClient {
       }
     } catch (error) {
       const restored = await this.writeStatus(toAdSetId, "PAUSED").then(() => this.writeStatus(fromAdSetId, "ACTIVE")).then(() => true, () => false);
-      const message = error instanceof CampaignDeliveryError ? error.message : "Meta refused the switch.";
+      const message = error instanceof MetaError ? error.message.replace(/\.?$/, ".") : "Meta refused the switch.";
       if (!restored) throw new AdSetSwitchStuckError(`${message} The old audience could not be turned back on. Check the campaign in Meta.`);
-      throw error instanceof MetaError && !(error instanceof CampaignDeliveryError) ? error : new CampaignDeliveryError(`${message} The old audience is running again.`);
+      throw new CampaignDeliveryError(`${message} The old audience is running again.`);
     }
     // Delivery has moved; a failed archive only leaves a PAUSED ad set behind.
     await this.writeStatus(fromAdSetId, "ARCHIVED").catch(() => undefined);
