@@ -4,13 +4,14 @@
  * lead-form arm differs from the WhatsApp arm only in its destination. Records the answers for
  * test:core. Any POST without execution_options=["validate_only"] and status PAUSED is refused here.
  * Controls: Audience Network alone (Meta must read publisher_platforms) and a placement creative with
- * no form id (Meta must read the form).
+ * no form id (Meta must read the form). The tape is scrubbed (scripts/lib/scrub-meta.ts) before it is written.
  *
  *   npx tsx --env-file=<.env.local> scripts/record-meta-leadform-placements.ts <leadCampaignId> <leadAdSetId> <targetingSourceAdSetId> <formId> <feedHash> <storyHash>
  */
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { placementCreativeSpec, withoutAudienceNetwork } from "@/lib/meta/client";
+import { metaScrubber } from "./lib/scrub-meta";
 
 const GRAPH = "https://graph.facebook.com/v21.0/";
 const VALIDATE = JSON.stringify(["validate_only"]);
@@ -67,7 +68,9 @@ async function main() {
   const adForm = (creative: unknown) => ({ name: "AdBrain #680 validate", adset_id: adSetId, status: "PAUSED", execution_options: VALIDATE, creative: JSON.stringify(creative) });
   await validate("control-story-leadform-without-form", "ads", adForm(noForm));
   await validate("story-leadform", "ads", adForm(spec));
-  writeFileSync(join(process.cwd(), "tests/core/fixtures/meta/leadform-placements-validate.json"), `${JSON.stringify({ recordedAt: new Date().toISOString(), inputs: { ...inputs, targetingSource: "live English run ad set (Tricity, #741 exclusions)" }, tape }, null, 2)}\n`);
+  // Real ids, hashes and numbers never reach the repo (Meta QA rule; Reviewer on #1024).
+  const recordedTape = { recordedAt: new Date().toISOString(), inputs: { ...inputs, targetingSource: "live English run ad set (Tricity, #741 exclusions)" }, tape };
+  writeFileSync(join(process.cwd(), "tests/core/fixtures/meta/leadform-placements-validate.json"), `${JSON.stringify(JSON.parse(metaScrubber().scrub(JSON.stringify(recordedTape))), null, 2)}\n`);
 }
 
 main().catch((error) => { console.error(error); process.exit(1); });
