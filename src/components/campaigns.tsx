@@ -193,6 +193,8 @@ type CampaignsProps = {
   initialCampaigns: Campaign[];
   initialNextCursor?: string | null;
   initialResults: Record<string, CampaignResult>;
+  /** #1003: one id per server render, so a replayed page (browser back) refetches its list. */
+  renderId?: string;
   leadForms: LeadForm[];
   leadFormError: string | null;
   metaReady: boolean;
@@ -267,6 +269,7 @@ function BusinessCampaigns({
   initialCampaigns,
   initialNextCursor = null,
   initialResults,
+  renderId,
   leadForms,
   leadFormError,
   metaReady,
@@ -361,7 +364,7 @@ function BusinessCampaigns({
   const [askConfirm, confirmDialog] = useConfirm();
   const { campaigns, setCampaigns, results, setResults, campaignQuery, setCampaignQuery, statusFilter, setStatusFilter,
     nextListCursor, listLoading, loadCampaignPage, replaceCampaignPage } = useCampaignList({
-    ownerId: business.owner_id, businessId: business.id, initialCampaigns, initialResults, initialNextCursor, onError: setError,
+    ownerId: business.owner_id, businessId: business.id, initialCampaigns, initialResults, initialNextCursor, renderId, onError: setError,
   });
   const [showComposer, setShowComposer] = useState(initialSetup?.showComposer ?? (fromReview || initialCampaigns.length === 0));
   const [creationMode, setCreationMode] = useState(initialSetup?.creationMode ?? "manual");
