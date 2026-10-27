@@ -125,7 +125,9 @@ Each tick:
    (`wait-for-work --probe`) and isn't live, it starts **one** headless Copilot CLI run: the
    role card, the first queue item, the hard limits (no money, Meta writes, secrets,
    production settings or force-push), signed "<Role> (headless):". One run at a time,
-   40 min cap, 150 AI credits per run, 8 runs a day (CEO sets the caps).
+   40 min cap, 150 AI credits per run, 8 runs a day that did work (a run with no signed
+   "(headless):" comment, review or PR doesn't count), 30 runs a day hard ceiling (CEO sets the caps).
+   A role with queued work not woken for an hour goes first, longest wait first, even past the daily cap.
 3. Log: `~/.adbrain-supervisor/supervisor.log`; stop it with `touch ~/.adbrain-supervisor/OFF`;
    `--dry-run` shows who it would wake; `--install`/`--uninstall` manage the LaunchAgent.
 

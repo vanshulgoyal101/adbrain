@@ -4,8 +4,10 @@
  *   - rebuild: an ad set with interests (Meta refuses an in-place targeting update, 100/1359202)
  *   - patch:   an ad set without interests
  *   - whatsapp: a click-to-WhatsApp ad set (Meta refuses any in-place targeting update there too, #912)
+ *   - language: an ad set without interests, patched to English (All) + Hindi only (`locales`)
+ *   - whatsapp-language: the same language change on a click-to-WhatsApp ad set (rebuilt)
  *
- *   npx tsx --env-file=<path to .env.local> scripts/record-meta-edit-audience.ts <imageUrl> [rebuild|patch|whatsapp] [campaignId]
+ *   npx tsx --env-file=<path to .env.local> scripts/record-meta-edit-audience.ts <imageUrl> [rebuild|patch|whatsapp|language|whatsapp-language] [campaignId]
  * With a campaignId, the PAUSED test campaign already exists (e.g. launched by older code, #912) and is
  * edited and archived instead of launched.
  *
@@ -106,9 +108,9 @@ async function main() {
   const created: string[] = [];
   try {
     const only = process.argv[3];
-    for (const [path, interests] of [["rebuild", audience.interests], ["patch", []], ["whatsapp", []]] as const) {
+    for (const [path, interests] of [["rebuild", audience.interests], ["patch", []], ["whatsapp", []], ["language", []], ["whatsapp-language", []]] as const) {
       if (only && only !== path) continue;
-      const whatsapp = path === "whatsapp";
+      const whatsapp = path.startsWith("whatsapp");
       if (whatsapp && !whatsappNumber) throw new Error("No WhatsApp number on the Page or the business.");
       const existing = process.argv[4];
       const launch = existing ? await existingCampaign(existing) : await meta.createLeadCampaign({
@@ -119,8 +121,10 @@ async function main() {
         ...whatsapp ? { destination: "whatsapp" as const, whatsappNumber: whatsappNumber!, boundWhatsAppNumbers: [whatsappNumber!], link: `https://wa.me/${whatsappNumber!.slice(1)}` } : { destination: "instant_form" as const },
       });
       created.push(launch.campaignId);
+      // Meta's campaign → ad sets edge can list nothing for a few seconds after a launch.
+      if (!existing) await new Promise(resolve => setTimeout(resolve, 15_000));
       tape = [];
-      const input = { adSetId: launch.adSetIds[0], adIds: launch.adIds, changes };
+      const input = { adSetId: launch.adSetIds[0], adIds: launch.adIds, changes: path.endsWith("language") ? { languages: [1001, 46] } : changes };
       const validated = await meta.editAdSetTargeting(launch.campaignId, input, { validateOnly: true });
       // Meta allows one targeting update per ad set per 30 s (#613), validate_only included.
       await new Promise(resolve => setTimeout(resolve, 31_000));
