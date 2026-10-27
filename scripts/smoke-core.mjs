@@ -16,6 +16,23 @@ if (modes.has("--help")) {
 }
 assert.ok(!(modes.has("--create") && modes.has("--campaign")), "Run only one mutating mode at a time.");
 
+async function readCreateResponse(response) {
+  const contentType = await response.headerValue("content-type");
+  if (!contentType?.includes("application/x-ndjson")) {
+    return { status: response.status(), data: await response.json().catch(() => ({})) };
+  }
+  const text = await response.text();
+  let result;
+  for (const rawLine of text.split("\n")) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    const event = JSON.parse(line);
+    if (event.type === "result") result = event;
+  }
+  assert.ok(result, "Create stream ended without a result.");
+  return { status: result.status, data: result.body };
+}
+
 const { SMOKE_EMAIL: email, SMOKE_PASSWORD: password } = process.env.SMOKE_EMAIL
   ? process.env
   : parseEnv(await readFile(envPath, "utf8"));
@@ -236,7 +253,7 @@ try {
       assert.equal(process.exitCode ?? 0, 0, "Read-only views failed; paid run was not started");
       await page.goto(`${origin}/create`);
       await page.getByRole("textbox", { name: "Campaign goal" }).fill("Introduce our team to local customers using only verified Brand Brain facts. Avoid unsupported claims.");
-      await page.getByRole("button", { name: "Start creating" }).click();
+      await page.getByRole("button", { name: /^(Start creating|Edit brief)$/ }).click(); // #1004: a complete Brand offers "Edit brief" to keep the brief review
       // Answer the assistant's questions until the brief is ready; it can also skip straight to it.
       const generate = page.getByRole("button", { name: "Generate 3 ads", exact: true });
       // Answer buttons only: not the conversation's own navigation (#284).
@@ -256,13 +273,13 @@ try {
       const result = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/creatives/generate" && response.request().method() === "POST", { timeout: 300_000 });
       await generate.click();
       const response = await result;
-      const data = await response.json();
-      savedCount = Array.isArray(data.creatives) ? data.creatives.length : null;
-      if (response.status() !== 200 || savedCount !== 3) {
+      const create = await readCreateResponse(response);
+      savedCount = Array.isArray(create.data?.creatives) ? create.data.creatives.length : null;
+      if (create.status !== 200 || savedCount !== 3) {
         savedCount = await recoverSavedCount();
       }
       assert.equal(generationCount, 1, "Paid Create request was blocked");
-      assert.equal(response.status(), 200, `Create returned HTTP ${response.status()}`);
+      assert.equal(create.status, 200, `Create returned HTTP ${create.status}`);
       assert.equal(savedCount, 3, `Create saved ${savedCount}/3 ads; do not retry before checking saved work`);
       await page.getByRole("button", { name: "Review ads" }).waitFor({ state: "visible" });
       assert.equal(errors.length, 0, errors[0] ?? "Browser error after Create");

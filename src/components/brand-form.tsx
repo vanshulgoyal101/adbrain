@@ -85,6 +85,7 @@ const AUTOFILL_LABELS: Partial<Record<keyof FieldsState, string>> = {
   usps: "selling points",
   offers: "offers",
   languages: "languages",
+  locations: "service areas (check them)",
   phone: "phone number",
 };
 // Facts Create may only state when the Brand has them; a website rarely gives all of them.
@@ -138,6 +139,7 @@ export function BrandForm({ business, photoCount = 0 }: { business: Business | n
   const [autofillError, setAutofillError] = useState<string | null>(null);
   const [autofillNote, setAutofillNote] = useState<string | null>(null);
   const websiteRevision = useRef(0);
+  const autoTried = useRef<string | null>(null);
   const [savedLogo, setSavedLogo] = useState(business?.logo_url ?? "");
   const incomingLogo = business?.logo_url ?? "";
   if (savedLogo !== incomingLogo) {
@@ -189,6 +191,23 @@ export function BrandForm({ business, photoCount = 0 }: { business: Business | n
     setFields((f) => ({ ...f, [key]: value }));
   }
 
+  const hasContent = Boolean(
+    fields.description ||
+      fields.brand_voice ||
+      fields.target_audience ||
+      fields.usps ||
+      fields.offers,
+  );
+
+  /** #1025: leaving the Website field of an empty Brand runs autofill once for that address. */
+  function autofillOnBlur() {
+    const url = fields.website.trim();
+    if (hasContent || autofilling || pending || !/^(https?:\/\/)?[\w-]+(\.[\w-]+)+(\/\S*)?$/i.test(url)) return;
+    if (autoTried.current === url.toLowerCase()) return;
+    autoTried.current = url.toLowerCase();
+    void autofill();
+  }
+
   async function autofill() {
     setAutofillError(null);
     setAutofillNote(null);
@@ -196,13 +215,6 @@ export function BrandForm({ business, photoCount = 0 }: { business: Business | n
       setAutofillError("Enter your website URL first.");
       return;
     }
-    const hasContent = Boolean(
-      fields.description ||
-        fields.brand_voice ||
-        fields.target_audience ||
-        fields.usps ||
-        fields.offers,
-    );
     if (
       hasContent &&
       !(await confirm({ title: "Replace what you've filled in?", description: "Autofill replaces some fields you've already filled with what it finds on your website.", confirmLabel: "Autofill" }))
@@ -242,6 +254,8 @@ export function BrandForm({ business, photoCount = 0 }: { business: Business | n
         usps: e.usps?.length ? e.usps.join("\n") : undefined,
         offers: e.offers?.length ? e.offers.join("\n") : undefined,
         languages: e.languages?.length ? e.languages.join("\n") : undefined,
+        // #1037: proposed as removable chips; nothing is saved until the owner taps Save.
+        locations: e.locations?.length ? e.locations.join("\n") : undefined,
         phone: e.phone,
       };
       setFields((current) => {
@@ -295,6 +309,7 @@ export function BrandForm({ business, photoCount = 0 }: { business: Business | n
               name="website"
               value={fields.website}
               onChange={(e) => set("website", e.target.value)}
+              onBlur={autofillOnBlur}
               placeholder="example.com"
               aria-invalid={errors.website ? true : undefined}
             />

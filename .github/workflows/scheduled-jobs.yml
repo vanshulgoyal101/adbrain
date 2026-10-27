@@ -196,6 +196,15 @@ jobs:
           [ "$code" = 200 ] || { echo "::warning::core-scoreboard HTTP $code"; exit 0; }
           { printf '<!-- core-scoreboard -->\nDevOps (scheduled): '; jq -r '.markdown' board.json; } > board.md
           gh issue comment "$ISSUE" -R "$GITHUB_REPOSITORY" --body-file board.md
+      - name: Owner daily results on WhatsApp (#1022)
+        if: always()
+        run: |
+          [ -n "$CRON_SECRET" ] || { echo "::error::CRON_SECRET is not set"; exit 1; }
+          code=$(curl -sS --max-time 60 -o daily.json -w '%{http_code}' -H "Authorization: Bearer $CRON_SECRET" "$BASE/api/cron/owner-daily-results") || code=000
+          [ "$code" = 404 ] && { echo "owner-daily-results not deployed yet"; exit 0; }
+          echo "HTTP $code $(jq -c '{ok, skipped, day, sent, results: ([.outcomes[]?.result] | group_by(.) | map({(.[0]): length}) | add)}' daily.json 2>/dev/null || echo '{\"ok\":false}')"
+          # Advisory: dark behind OWNER_ALERTS_ENABLED; one owner's failure never fails the scheduler.
+          exit 0
       - name: OpenRouter credit (#449)
         if: always()
         env:

@@ -6,7 +6,7 @@ import whatsappTape from "./fixtures/meta/edit-audience-whatsapp.json";
 import legacyWhatsAppTape from "./fixtures/meta/edit-audience-whatsapp-legacy.json";
 import languageTape from "./fixtures/meta/edit-audience-language.json";
 import whatsappLanguageTape from "./fixtures/meta/edit-audience-whatsapp-language.json";
-import runningTape from "./fixtures/meta/edit-audience-running.json";
+import scrubbedRunningTape from "./fixtures/meta/edit-audience-running.json";
 import { CampaignDeliveryError, MetaClient, MetaError } from "@/lib/meta/client";
 import { TargetingExclusionsMissingError } from "@/lib/meta/service-area";
 
@@ -23,6 +23,8 @@ type Exchange = { method: string; path: string; form?: Record<string, string>; s
 type Sent = { method: string; path: string; form: Record<string, string> };
 
 const creds = { adAccountId: "act_2398686420592052", pageId: "885223068001054", accessToken: "test-token" };
+// metaScrubber() fakes (#1040) for the account and Page, rebound to these creds.
+const runningTape = JSON.parse(JSON.stringify(scrubbedRunningTape).replaceAll("9000000000000001", creds.adAccountId.slice(4)).replaceAll("900000000000002", creds.pageId)) as unknown[];
 const mohali = { cities: [{ key: "1029599", name: "Mohali", radius: 25, distance_unit: "kilometer" }] };
 // A new area always arrives with its #741 out-of-area exclusions (the edit service computes them).
 const changes = { location: mohali as never, excludedLocation: { regions: [{ key: "1723" }] } as never, age: { min: 30, max: 60 } };

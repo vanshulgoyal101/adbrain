@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { managementMigrationSql, migrationChecksum } from "../scripts/database-migrations.mjs";
-import { changedLines, ctoApproval, ctoReviews, failingChecks, moneyPath, qaApproval, releaseMigrations, reviewVerdicts, smokeCounts, supersededBy, backupFresh } from "../scripts/release.mjs";
+import { changedLines, ctoApproval, ctoReviews, failingChecks, moneyPath, qaApproval, releaseMigrations, reviewVerdicts, smokeCounts, supersededBy, backupFresh, commitStatuses } from "../scripts/release.mjs";
 
 const head = "c30aabaf55338d92d4f0ac9ca01eac027190aceb";
 const comment = (body: string, createdAt: string) => ({ body, createdAt, url: `https://example.test/${createdAt}` });
@@ -223,5 +223,18 @@ describe("fresh backup before a migration (#884)", () => {
     expect(backupFresh({ status: "completed", conclusion: "failure", updatedAt: "2026-10-27T10:55:00Z" }, now)).toBe(false);
     expect(backupFresh({ status: "in_progress", conclusion: "", updatedAt: "2026-10-27T10:59:00Z" }, now)).toBe(false);
     expect(backupFresh(undefined, now)).toBe(false);
+  });
+});
+
+describe("required commit statuses (#926 core-approval)", () => {
+  it("counts the newest status per context like a check run", () => {
+    const statuses = commitStatuses([
+      { context: "core-approval", state: "success", created_at: "2026-10-27T11:48:57Z" },
+      { context: "core-approval", state: "pending", created_at: "2026-10-27T11:11:04Z" },
+    ]);
+    const runs = [{ name: "build", status: "completed", conclusion: "success", completedAt: "2026-10-27T11:00:00Z" }];
+    expect(failingChecks(["build", "core-approval"], [...runs, ...statuses])).toEqual([]);
+    expect(failingChecks(["core-approval"], commitStatuses([{ context: "core-approval", state: "pending", created_at: "2026-10-27T12:00:00Z" }]))).toEqual(["core-approval"]);
+    expect(failingChecks(["core-approval"], runs)).toEqual(["core-approval"]);
   });
 });

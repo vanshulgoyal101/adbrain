@@ -110,7 +110,7 @@ describe("<AdAssistant> next step after Create", () => {
     expect(screen.getByRole("link", { name: /review ads/i })).toHaveAttribute("href", "/studio");
 
     await user.click(screen.getAllByRole("button", { name: "Use this ad" })[2]);
-    expect(await screen.findByRole("link", { name: "Create campaign" })).toHaveAttribute("href", "/campaigns?new=1&creatives=ad-3");
+    expect(await screen.findByRole("link", { name: "Review campaign" })).toHaveAttribute("href", "/campaigns?new=1&creatives=ad-3&review=1");
     expect(screen.getByRole("link", { name: /review ads/i })).toBeInTheDocument();
   });
 

@@ -7,6 +7,8 @@ import { describeAuditEvent, isBackgroundAuditAction } from "@/lib/audit-labels"
 import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
 import { formatDate, formatMoney, formatPerDay } from "@/lib/format";
 import { homeResults } from "@/lib/campaign/home-results";
+import { staleCampaignIds } from "@/lib/campaign/results-freshness";
+import { StaleResultsRefresher } from "@/components/stale-results-refresher";
 import { timeAgo } from "@/lib/utils";
 import type { SpendEvaluation } from "@/lib/campaign/spend";
 import type { AuditLog, Business, Campaign, CampaignResult, CreativePreview } from "@/lib/types";
@@ -45,6 +47,7 @@ export function WorkspaceHome({
   now,
 }: WorkspaceHomeProps) {
   const summary = business ? homeResults(campaigns, results) : null;
+  const stale = business ? staleCampaignIds(campaigns, results, now) : [];
   const [next, ...later] = buildWorkQueue({ business, creatives, campaigns, metaReady });
   const places = business?.locations.length ? business.locations.join(", ") : null;
 
@@ -65,6 +68,7 @@ export function WorkspaceHome({
         <SpendStatusBanner evaluation={spend} />
       ))}
 
+      {stale.length > 0 && <StaleResultsRefresher campaignIds={stale} />}
       {summary && (
         <section aria-labelledby="results-title">
           <h2 id="results-title" className="sr-only">Results so far</h2>

@@ -53,6 +53,10 @@ jobs:
                 --body "Automatic: brings migrations and hotfixes on main into next before the next train (#461).")
               sync=${sync##*/}
             fi
+            # Like the train PR (#1002): no workflow runs on this GITHUB_TOKEN PR, and main's commits already
+            # passed core-approval to get there (#1020).
+            gh api -X POST "repos/$repo/statuses/$msha" -f state=success -f context=core-approval \
+              -f description="Train sync: main's commits were gated into main" >/dev/null
             merged=""
             for i in $(seq 1 20); do
               if gh pr merge "$sync" -R "$repo" --merge --match-head-commit "$msha"; then merged=1; break; fi

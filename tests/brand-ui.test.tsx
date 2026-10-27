@@ -578,3 +578,48 @@ describe("<Instructions>", () => {
     expect(deleteInstruction).not.toHaveBeenCalled();
   });
 });
+
+describe("<BrandForm> autofill on leaving the website field (#1025)", () => {
+  const autofillCalls = () => (global.fetch as unknown as { mock: { calls: [string][] } }).mock.calls.filter(([url]) => url === "/api/brand/autofill");
+
+  it("runs once for a new, empty Brand when the owner leaves a website address, and fills what it finds", async () => {
+    (global.fetch as unknown as { mockResolvedValue: (value: unknown) => void }).mockResolvedValue({ ok: true, json: async () => ({ extraction: { offers: ["Free solar site survey"], phone: "+91 73802 80874" } }) });
+    render(<BrandForm business={null} />);
+    const website = screen.getByPlaceholderText("example.com");
+    fireEvent.change(website, { target: { value: "solaride.in" } });
+    fireEvent.blur(website);
+    await waitFor(() => expect(autofillCalls()).toHaveLength(1));
+    expect(JSON.parse(String((global.fetch as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls[0][1].body))).toEqual({ url: "solaride.in" });
+    expect(window.confirm).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.getByDisplayValue("+91 73802 80874")).toBeInTheDocument());
+    fireEvent.blur(website);
+    expect(autofillCalls()).toHaveLength(1);
+  });
+
+  it("doesn't run over the owner's own words or for something that isn't an address", async () => {
+    render(<BrandForm business={business({ website: "" })} />);
+    const website = screen.getByPlaceholderText("example.com");
+    fireEvent.change(website, { target: { value: "solaride.in" } });
+    fireEvent.blur(website);
+    const { unmount } = render(<BrandForm business={null} />);
+    const empty = screen.getAllByPlaceholderText("example.com")[1];
+    fireEvent.change(empty, { target: { value: "my shop" } });
+    fireEvent.blur(empty);
+    await act(async () => {});
+    expect(autofillCalls()).toHaveLength(0);
+    unmount();
+  });
+});
+
+describe("<BrandForm> autofill proposes service areas (#1037)", () => {
+  it("puts the proposed areas in Locations served only when the owner hasn't typed any, and saves nothing by itself", async () => {
+    (global.fetch as unknown as { mockResolvedValue: (value: unknown) => void }).mockResolvedValue({ ok: true, json: async () => ({ extraction: { locations: ["Mohali", "Hisar"] } }) });
+    const { container } = render(<BrandForm business={null} />);
+    const website = screen.getByPlaceholderText("example.com");
+    fireEvent.change(website, { target: { value: "solaride.in" } });
+    fireEvent.blur(website);
+    await waitFor(() => expect((container.querySelector('input[name="locations"]') as HTMLInputElement).value).toBe("Mohali\nHisar"));
+    expect(await screen.findByText(/service areas \(check them\)/)).toBeInTheDocument();
+    expect(saveBusiness).not.toHaveBeenCalled();
+  });
+});

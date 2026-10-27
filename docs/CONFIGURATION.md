@@ -42,6 +42,8 @@ settings, credentials and encryption keys are DevOps-owned changes; see the
 | `NEXT_PUBLIC_SITE_URL` | `http://localhost:3000`, URL | Canonical origin and OAuth callbacks |
 | `SUPPORT_WHATSAPP` | empty, phone number | The owner's business WhatsApp for the in-app **Help on WhatsApp** link (#796), pre-typed with the business name. Public number, not a secret; empty hides the link |
 | `NEXT_PUBLIC_SUPPORT_WHATSAPP` | Empty; phone number with country code | Homepage "Questions? WhatsApp us" link (`wa.me`); hidden while empty. Needs a rebuild |
+| `ALERTS_WHATSAPP` | empty, phone number | AdBrain's own WhatsApp Business number for owner alerts (#701). Owners confirm their number by sending it "START <code>"; empty hides Settings → WhatsApp alerts. Public number, not a secret |
+| `WHATSAPP_WEBHOOK_VERIFY_TOKEN` | empty, random string | The `hub.verify_token` for subscribing `/api/whatsapp/webhook` to that number's WABA in Meta (#701). POSTs are checked with `META_APP_SECRET` |
 | `FONTCONFIG_FILE` | Set at runtime by the ad renderer; don't configure | Points fontconfig at `src/lib/creative/fonts` only, so Hindi/Punjabi shaping is identical on every server (#300) |
 | `NEXT_PUBLIC_DEV_AUTH_BYPASS` | Empty; exact `true` outside production | UI identity fallback, not general API authentication |
 | `DEV_LOGIN_EMAIL`, `DEV_LOGIN_PASSWORD` | Empty | Development login credentials |
@@ -210,6 +212,11 @@ lower cost.
 | `META_TOKEN_ENCRYPTION_KEY` | Empty | Base64 32-byte encryption key for token store |
 | `MANAGED_ACCOUNTS_ENABLED` | `false` | 2-Tier managed accounts (#518): `true`/`1` turns on provisioning child businesses under the parent. Off until provisioning ships. While off, internal accounts (`internal-accounts.json`, #379) still get the managed screens and routes (`/onboarding`, `/api/managed/*`, `/api/meta/managed/*`) for QA walks and concierge pilots (#523); background work (credential routing, spend caps, crons) follows the flag only |
 | `AD_RESULTS_ENABLED` | off | Results per ad (#783): exactly `true` makes each campaign refresh (manual and cron) also read Meta's per-ad results into `ad_results` (best effort; a failure keeps the last rows) and turns on `GET /api/campaigns/[id]/ads`. Turn on only after the `20261026_campaign_ads_ad_results.sql` migration is in production |
+| `OWNER_ALERTS_ENABLED` | off | Owner WhatsApp alerts (#701 slice 2): exactly `true`, with `ALERTS_WHATSAPP_PHONE_ID` and `ALERTS_WHATSAPP_TOKEN` set, lets the sender send approved utility templates from AdBrain's alerts number. Turn on only after the `20261027_owner_whatsapp_alerts_sends.sql` migration and template approval |
+| `ALERTS_WHATSAPP_PHONE_ID` | empty | The Cloud API phone number id (digits) of AdBrain's alerts number (#701). Not a secret |
+| `ALERTS_WHATSAPP_TOKEN` | empty, **secret** | System-user token with `whatsapp_business_messaging` on AdBrain's alerts WABA (#701). Vercel production only (Sensitive) |
+| `ALERTS_LEAD_TEMPLATE`, `ALERTS_DAILY_TEMPLATE` | `adbrain_lead_alert`, `adbrain_daily_results` | Approved utility template names for the lead alert and the daily line (#701), each in `en` and `hi` |
+| `META_SETUP_CHECKLIST` | off | Meta setup checklist (#1016): exactly `true` shows "Ready to launch on Meta" in Settings for an owner's own Meta connection (portfolio, rupee ad account, Page, WhatsApp, payment method; GET reads only). No secret |
 | `META_PARENT_BUSINESS_ID` | `1158100643072508` | The 2-Tier parent business (Solaride) |
 | `META_PARENT_SYSTEM_TOKEN` | Empty | Privileged secret (Vercel Sensitive): the parent's 'AdBrain provisioning' system-user token. Checked read-only after each deploy (`/api/cron/meta-parent-health`); rotation in OPERATIONS |
 | `META_CONNECT_ROLLOUT` | Unset | `disabled`, `pilot`, `enabled`; unset allows nonproduction only |

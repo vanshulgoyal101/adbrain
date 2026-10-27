@@ -5,7 +5,7 @@ import rateLimitedTape from "./fixtures/meta/edit-audience-patch-rate-limited.js
 import whatsappTape from "./fixtures/meta/edit-audience-whatsapp.json";
 import languageTape from "./fixtures/meta/edit-audience-language.json";
 import areaTape from "./fixtures/meta/edit-audience-area-exclusions.json";
-import runningTape from "./fixtures/meta/edit-audience-running.json";
+import scrubbedRunningTape from "./fixtures/meta/edit-audience-running.json";
 import { lacksAreaExclusions } from "@/lib/meta/service-area";
 
 // #773 2/3: POST /api/campaigns/[id]/audience through the real route, connection access, edit service,
@@ -120,8 +120,10 @@ const rebuild = () => {
 const patch = () => scenario(patchTape as Exchange[], "120253709953000526", 4);
 const limited = () => scenario(rateLimitedTape as Exchange[], "120253709671200526", 4);
 const language = () => scenario(languageTape as Exchange[], "120253724289410526", 4);
-// #765: recorded on an ACTIVE ad set under a PAUSED test campaign (CEO-approved, deleted after).
-const running = () => scenario(runningTape as Exchange[], "120253729144520526", 4);
+// #765: recorded on an ACTIVE ad set under a PAUSED test campaign (CEO-approved, deleted after). Its ids are
+// metaScrubber() fakes (#1040); the fake account and Page are rebound to this test's connection.
+const runningTape = JSON.parse(JSON.stringify(scrubbedRunningTape).replaceAll("9000000000000001", ACCOUNT.slice(4)).replaceAll("900000000000002", PAGE)) as Exchange[];
+const running = () => scenario(runningTape, "900000000000000005", 4);
 // The area tape starts with the #741 area lookup the service makes from the ad set's current area.
 const area = (tape = areaTape as Exchange[]) => {
   const scene = scenario(tape.slice(1), "120253724507960526", 4);
@@ -313,6 +315,45 @@ describe("core: edit a launched campaign's audience (#773)", () => {
     expect(status).toBe(409);
     expect(body.error).toBe("This campaign covers a whole country, so there are no out-of-area places to leave out.");
     expect(writes()).toEqual([]);
+  });
+
+  // The recorded read-back is the ad set after the one-click: it already leaves out every out-of-area place.
+  const covered = () => ((areaTape as Exchange[]).at(-1)!.body as { targeting: { excluded_geo_locations: unknown } }).targeting.excluded_geo_locations;
+
+  it("refuses the one-click before any write when the ad set already has every out-of-area exclusion", async () => {
+    const tape = structuredClone(areaTape) as Exchange[];
+    (tape[3].body as { targeting: Row }).targeting.excluded_geo_locations = covered();
+    const scene = area(tape);
+    stored(scene);
+    replay(scene.tape);
+    const { status, body } = await edit({ change: { areaExclusions: true } });
+    expect(status).toBe(409);
+    expect(body.error).toBe("Every ad set already leaves out the places outside its area. Nothing to change.");
+    expect(writes()).toEqual([]);
+  });
+
+  // #157's tree: one ad set built before #741, its sibling after. Only the bare one is changed (no needless review).
+  it("leaves an ad set that already has the exclusions alone and changes only the one that lacks them", async () => {
+    const scene = area();
+    const sibling = { id: "120253724506000999", adId: "120253724507960999" };
+    const [campaignRead, adSetsRead, adsRead, ...rest] = scene.tape;
+    const bare = (adSetsRead.body as { data: Array<Row & { targeting: Row }> }).data[0];
+    const tree = [
+      campaignRead,
+      { ...adSetsRead, body: { data: [bare, { ...bare, id: sibling.id, targeting: { ...bare.targeting, excluded_geo_locations: covered() } }] } },
+      { ...adsRead, body: { data: [...(adsRead.body as { data: Row[] }).data, { id: sibling.adId, status: "PAUSED", effective_status: "PAUSED", adset_id: sibling.id, creative: { id: "1148404661464451" } }] } },
+      ...rest, rest.at(-1)!,
+    ];
+    stored(scene, {
+      meta_ad_ids: [scene.adId, sibling.adId],
+      raw: { source: "campaign_operation", metaResult: { campaignId: scene.campaignId, adSetIds: [scene.adSetId, sibling.id], adIds: [scene.adId, sibling.adId] } },
+    });
+    replay(tree);
+    const { status, body } = await edit({ change: { areaExclusions: true } });
+    expect(status).toBe(200);
+    expect(body).toMatchObject({ result: { count: 1, adSets: [{ adSetId: scene.adSetId, mode: "patch" }] } });
+    expect(writes().map(call => call.path.split("?")[0])).toEqual([scene.adSetId]);
+    expect(graph.sent.some(call => call.path.startsWith(sibling.id))).toBe(false);
   });
 
   it("turns Meta's 613 on the patch into a retryable failure before any write, leaving the mirror alone", async () => {

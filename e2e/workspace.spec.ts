@@ -69,7 +69,7 @@ for (const width of [1440, 390, 320]) {
     await page.goto("/create");
     await page.getByRole("textbox", { name: "Campaign goal" }).fill("Introduce our team to new customers");
     await checkLayout("goal");
-    await page.getByRole("button", { name: "Start creating" }).click();
+    await page.getByRole("button", { name: /^(Start creating|Edit brief)$/ }).click(); // #1004: a complete Brand offers "Edit brief" to keep the brief review
     await expect(page.getByRole("button", { name: "Team at work", exact: true })).toBeVisible();
     await checkLayout("question");
     await page.getByRole("button", { name: "Team at work", exact: true }).click();
@@ -107,7 +107,7 @@ for (const width of [1440, 390, 320]) {
     expect(await page.locator('img[src="/solar-example.jpg"]').evaluate((image) => (image as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
     await checkLayout("result");
     await page.getByRole("button", { name: "Explore another scene" }).click();
-    await page.getByRole("button", { name: "Start creating" }).click();
+    await page.getByRole("button", { name: /^(Start creating|Edit brief)$/ }).click(); // #1004: a complete Brand offers "Edit brief" to keep the brief review
     await expect(brief).toBeVisible();
     expect(interviewBodies.at(-1)?.referenceBrief).toBe(edited);
     expect(generationBodies).toHaveLength(1);

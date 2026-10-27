@@ -1,7 +1,9 @@
-import { currentRequestId, observeRoute } from "@/lib/observability/logger";
+import { currentRequestId, observeRoute, recordProductEvent } from "@/lib/observability/logger";
+import { observeIdentity } from "@/lib/observability/context";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { BRAND_EXTRACTION, extractPhone, extractWebsiteText } from "@/lib/brand/autofill";
+import { BRAND_EXTRACTION, extractPhone, extractWebsiteText, verifiedAreas } from "@/lib/brand/autofill";
+import { metaClientForBusiness } from "@/lib/meta/credentials";
 import { completeJSON, NoLLMKeysError } from "@/lib/llm";
 import { persistLLMUsage } from "@/lib/llm/persist";
 import type { CompletionResult, ProviderAttempt } from "@/lib/llm/types";
@@ -16,7 +18,19 @@ import {
 export const runtime = "nodejs";
 export const maxDuration = 30;
 
-export const POST = observeRoute("/api/brand/autofill", "POST", handlePOST);
+export const POST = observeRoute("/api/brand/autofill", "POST", async (req: Request) => {
+  const started = Date.now();
+  const response = await handlePOST(req);
+  // #1025: one event per autofill the owner waited for (not refused input), with how long it took,
+  // for the scoreboard's Brand row. First setup has no business yet, so usage rows can't count it.
+  if (![400, 401, 429].includes(response.status)) {
+    recordProductEvent({
+      kind: "workflow", name: "brand.autofill", outcome: response.ok ? "success" : "failed", durationMs: Date.now() - started,
+      ...(response.ok ? {} : { attributes: { errorCode: `http.${response.status}` } }),
+    });
+  }
+  return response;
+});
 
 async function handlePOST(req: Request) {
   const supabase = await createClient();
@@ -26,6 +40,7 @@ async function handlePOST(req: Request) {
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  observeIdentity(user.id);
 
   const limited = await rateLimitResponse(`autofill:${user.id}`, {
     limit: 15,
@@ -104,7 +119,8 @@ async function handlePOST(req: Request) {
       { ...BRAND_EXTRACTION, cache: true, onAttempt: (attempt) => attempts.push(attempt) },
     );
     await logUsage((extraction as { __completion?: CompletionResult }).__completion);
-    return NextResponse.json({ extraction: { ...extraction, phone: extractPhone(html) } });
+    const locations = await resolvableAreas(verifiedAreas(extraction.locations, text), owned);
+    return NextResponse.json({ extraction: { ...extraction, locations: locations.length ? locations : undefined, phone: extractPhone(html) } });
   } catch (err) {
     await logUsage();
     if (err instanceof NoLLMKeysError) {
@@ -114,5 +130,22 @@ async function handlePOST(req: Request) {
       { error: "Could not extract business details. Try again later or enter them manually." },
       { status: 502 },
     );
+  }
+}
+
+/**
+ * #1037: with a Meta connection, keep only areas Meta's location resolver can place (the same one
+ * campaigns use); without one (first setup) the page-verified names stay, and Review resolves them.
+ */
+async function resolvableAreas(areas: string[], businessId: string | null): Promise<string[]> {
+  if (!areas.length || !businessId) return areas;
+  const meta = await metaClientForBusiness(businessId).catch(() => null);
+  if (!meta) return areas;
+  try {
+    const { unresolved } = await meta.resolveGeoTargeting(areas);
+    const missing = new Set(unresolved.map((name) => name.toLowerCase()));
+    return areas.filter((area) => !missing.has(area.toLowerCase()));
+  } catch {
+    return areas;
   }
 }

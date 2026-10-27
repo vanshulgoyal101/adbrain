@@ -37,10 +37,10 @@ ID are different identifiers. Never infer one from another.
 | --- | --- | --- |
 | `/dashboard` | Results so far first (enquiries, spent, per enquiry, oldest update; same latest results as the campaign cards, #764), next action, onboarding progress, activity | Uses stored state; not proof of live provider health |
 | `/brand` | Profile, assets, Markdown instructions | Saved business facts ground AI output |
-| `/create` | Guided creative interview and brief review | Reviewing a brief is distinct from paid generation; the Brand context panel names missing offers, service areas and phone before a run. An unedited suggestion on a Brand with an offer or proof point, an area and a phone skips the review when the interview needs no question, and shows the brief as a collapsed 'What I'll write about · Edit' line instead (#858). Up to two 'Coming up' occasion chips (festivals and seasons for today's date in IST, `src/lib/seasonal.ts`) fill the goal in one tap; their wording asks for saved offers only and never asserts a sale, discount or deadline (#700) |
+| `/create` | Guided creative interview and brief review | Reviewing a brief is distinct from paid generation; the Brand context panel names missing offers, service areas and phone before a run. Any goal, typed or from a suggestion, on a Brand with an offer or proof point, an area and a phone skips the review when the interview needs no question. The start screen says what the ads will use ('Your 3 ads will use: Mohali · offer: Free site survey'; a proof point is labelled 'proof:', facts cut at 40 characters) above 'Make 3 ads', with 'About 2 minutes. Nothing is published.' under it and 'Edit brief' to keep the review; afterwards the brief shows as a collapsed 'What I'll write about · Edit' line (#858, #1004). After 'Use this ad', 'Review campaign' opens `/campaigns?…&review=1`, which prepares Review on its own (#1004) Up to two 'Coming up' occasion chips (festivals and seasons for today's date in IST, `src/lib/seasonal.ts`) fill the goal in one tap; their wording asks for saved offers only and never asserts a sale, discount or deadline (#700) |
 | `/studio` | Generate, inspect, approve, edit (ad text, words on picture, background), regenerate (asks first), delete, export, share approved ads (phone share sheet; desktop downloads and copies the text); "Create campaign (N)" links approved ads to Campaigns | Approval and sharing do not publish an ad on Meta |
 | `/assets` | Browse/reuse/download saved images | Download/clipboard failures are surfaced |
-| `/campaigns` | Draft, review, create paused, activate/pause, sync, report; `?new=1&creatives=<ids>` opens the composer with those approved ads selected | Live Meta writes require verified binding and capability |
+| `/campaigns` | Draft, review, create paused, activate/pause, sync, report; `?new=1&creatives=<ids>` opens the composer with those approved ads selected; `&review=1` (#1004, from Create) then prepares Review on its own once Meta is connected, the WhatsApp check has run and a form campaign has its lead form (the same prepare as the Review button; nothing is sent to Meta). The lead form used for the last Review is preselected while the Page still has it; with several forms and none chosen, the field says choosing one opens Review | Live Meta writes require verified binding and capability |
 | `/leads` | WhatsApp chats per campaign with **Add enquiry** (#764), then sync, search, and inspect enquiries; copy digest | No automated outreach is sent |
 | `/settings` | Meta connection, spend guardrails, declared preferences | Disconnect does not pause running ads; preferences cannot authorize spend |
 
@@ -88,7 +88,10 @@ copy, image prompts, and campaign audience suggestions.
 Later edits, including edits made while a save is pending, require another save;
 failed saves leave the draft available for retry. There is no autosave.
 
-Website autofill fetches a public website and proposes extracted facts. It does
+Website autofill fetches a public website and proposes extracted facts. On a Brand with
+nothing filled in yet it runs by itself when the owner leaves the Website field (once per
+address, #1025); otherwise the "Autofill from website" button runs it. It proposes up to 5
+service areas the site names (#1037) as Locations chips the owner checks before saving. It does
 not prove those claims are true or authorize scraping private pages. The UI
 preserves fields edited during extraction, discards a response when the website
 changes, and prevents save while extraction is pending. Review suggestions before
@@ -194,6 +197,13 @@ An `unknown` capability is not permission to proceed. Expired/revoked credential
 require reconnect; other blockers may require action in Meta. Details are in
 [Meta Connection](META_CONNECT.md).
 
+Behind `META_SETUP_CHECKLIST` (#1016, #795 slice 1), Settings shows "Ready to launch on Meta"
+under an owner's own connection: business portfolio, ad account in rupees (active), Facebook Page,
+WhatsApp on the Page (the Page's number or one on the portfolio's WhatsApp Business account) and a
+payment method (`funding_source_details`). Each row is a tick or one Meta link with an English and a
+Hindi line. GET reads only (`MetaClient.setupReads`), recorded by
+`scripts/record-meta-setup-checklist.ts`; never shown for AdBrain-managed accounts.
+
 Disconnect revokes the app's stored binding; **it does not stop remote delivery**.
 Pause intended campaigns before disconnecting, or manage them in Meta afterward.
 
@@ -294,6 +304,11 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
   first one), "Best" only at ≥ 5 enquiries and ≥ 30% cheaper than the next ad, otherwise "Early: too few
   enquiries to pick a winner". Ads Meta hasn't shown say so; ads replaced by an audience edit are marked;
   more than 3 sit behind "All ads". Refreshes store the numbers (`ad_results`).
+- **Daily results on WhatsApp** (#1022, dark behind `OWNER_ALERTS_ENABLED`): from 09:00 IST, each opted-in
+  owner gets one `adbrain_daily_results` line for yesterday (IST): ₹ spent, enquiries (form leads plus
+  WhatsApp chats, the same per-ad numbers as "Which ad worked"), ₹ each or "none yet", and the ad to name
+  (#783's best, else the most enquiries, else the most WhatsApp taps). No line on a day with no spend and
+  no enquiry; at the monthly cap only this line pauses.
 - WhatsApp and new lead-form ad sets run on Facebook, Instagram and Messenger only (#906, #680), so a
   WhatsApp vs lead-form A/B differs only in destination: `publisher_platforms`
   leaves Audience Network out (on #157 most of its WhatsApp taps were accidental); positions stay
@@ -364,6 +379,13 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
   one keeps the part after its label, never cut mid-claim; a free offer is never asked as a cost),
   "What's the price?" and "Call me back", per language. They are only suggestions: nothing is sent
   until the owner saves, and saving runs the claim check.
+  #418 rule 7: when every ad's last line quotes the words to send ('WhatsApp “Free site survey” to
+  book'), AdBrain's suggested pre-typed message is exactly those words (`quotedAsk`). When an ad
+  quotes other words than the message WhatsApp will pre-type (a saved or edited one), Review warns
+  (never blocks): "An ad asks customers to send “…”, but WhatsApp pre-types “…”".
+  #418 rule 5: when the Brand has proof (years in business, jobs done, a named credential or a
+  warranty; `src/lib/creative/proof-line.ts`) and none of the chosen ads cites it, Review warns
+  (never blocks) and names one ("None of these ads has a proof line from your Brand…").
 - Every Indian ad set also excludes everything outside the service area (#741):
   every state/UT with no included place (Tricity: all but Chandigarh, Punjab and
   Haryana), plus the larger cities in the kept states that lie further than the
@@ -499,7 +521,11 @@ Results refresh fetches insights and saves a snapshot before producing a
 plain-language summary or checking spend-limit auto-pause. Failed persistence
 returns 503 before summary and auto-pause; resolve storage availability before an
 explicit retry. A successful refresh can pause delivery, so it is not a
-read-only diagnostic. Reports
+read-only diagnostic. Every card with results says how old they are ("Updated
+4m ago"). When Campaigns or Home opens, a running campaign whose results are over
+10 minutes old (or missing) refreshes quietly, one campaign at a time and once per
+visit; under 10 minutes no Meta call is made. The 15-minute scheduled refresh
+stays the floor (#1003, #992). Reports
 are Markdown exports of stored performance, not a live refresh. They escape
 campaign names (including pipes/newlines), count impressions/clicks as delivery,
 and do not declare a lead winner when nobody has leads.

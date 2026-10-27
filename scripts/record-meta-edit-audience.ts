@@ -15,11 +15,13 @@
  * With a campaignId, the PAUSED test campaign already exists (e.g. launched by older code, #912) and is
  * edited and archived instead of launched.
  *
- * Uses META_SYSTEM_USER_TOKEN / META_AD_ACCOUNT_ID / META_PAGE_ID. Tokens are stripped from the fixtures.
+ * Uses META_SYSTEM_USER_TOKEN / META_AD_ACCOUNT_ID / META_PAGE_ID. Tokens are stripped and every Meta id, hash
+ * and phone number is replaced with a stable fake by metaScrubber() (#1040); tests rebind the fake account and Page.
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { metaClientFromEnv } from "./lib/meta-env";
+import { metaScrubber } from "./lib/scrub-meta";
 
 type Exchange = { method: string; path: string; form?: Record<string, string>; status: number; body: unknown };
 
@@ -71,6 +73,10 @@ let phone: string | null = null;
 function save(name: string) {
   let text = JSON.stringify(tape, null, 2);
   if (phone) text = text.split(phone).join(PLACEHOLDER_PHONE).split(phone.slice(1)).join(PLACEHOLDER_PHONE.slice(1));
+  const { scrub, fakeId } = metaScrubber();
+  // The account and the Page get the first fakes, so every tape names them the same way.
+  for (const id of [process.env.META_AD_ACCOUNT_ID, process.env.META_PAGE_ID]) if (id) fakeId(id.replace(/^act_/, ""));
+  text = scrub(text);
   writeFileSync(join(OUT, `${name}.json`), `${text}\n`);
   console.log(`${name}: ${tape.length} exchanges`);
   tape = [];

@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   CheckCircle2,
+  ChevronRight,
   ExternalLink,
   FileText,
   Link2,
@@ -42,8 +43,6 @@ import {
   Badge,
   Card,
   CardContent,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import { Input, Label, Textarea } from "@/components/ui/input";
 import {
@@ -110,6 +109,8 @@ import type { AccountFunding, AdReview, CampaignDeliverySnapshot } from "@/lib/m
 import { readCampaignRecovery, recoveryStorageKey, writeCampaignRecovery, type CampaignRecovery } from "@/lib/meta-connect-ui/recovery";
 import { HelpOnWhatsApp } from "@/components/support-link";
 import { cn, timeAgo } from "@/lib/utils";
+import { useMounted } from "@/lib/use-mounted";
+import { refreshIfStale, staleCampaignIds } from "@/lib/campaign/results-freshness";
 import { formatMoney, formatNumber, formatPerDay } from "@/lib/format";
 
 const exactRupees = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" });
@@ -140,6 +141,16 @@ function readCampaignSyncTime(key: string): number {
 
 function saveCampaignSyncTime(key: string, completedAt: number) {
   try { localStorage.setItem(key, String(completedAt)); } catch { return; }
+}
+
+/** #1004: the lead form this owner last prepared a Review with, preselected while the Page still has it. */
+function readLeadFormMemory(key: string): string {
+  try { return localStorage.getItem(key) ?? ""; } catch { return ""; }
+}
+
+function saveLeadFormMemory(key: string, formId: string | null | undefined) {
+  if (!formId) return;
+  try { localStorage.setItem(key, formId); } catch { return; }
 }
 
 type PrepareReviewState =
@@ -183,8 +194,8 @@ type CampaignsProps = {
   leadFormError: string | null;
   metaReady: boolean;
   adAccountId: string;
-  /** Opened from Review: start a new campaign with these ads (non-approved IDs are ignored). */
-  newCampaign?: { creativeIds: string[] };
+  /** Opened from Review: start a new campaign with these ads (non-approved IDs are ignored); with `review` (#1004, from Create) Review opens on its own once the composer has settled. */
+  newCampaign?: { creativeIds: string[]; review?: boolean };
   /** #783: show "Which ad worked" on launched campaign cards (`AD_RESULTS_ENABLED`). */
   adResults?: boolean;
 };
@@ -209,9 +220,10 @@ async function fetchAudiencePlan(input: DraftInput, signal: AbortSignal): Promis
 
 type AudiencePlanInput = Pick<DraftInput, "goal" | "creativeIds" | "targeting" | "destination">;
 
-/** Keep the chosen lead form while the Page still has it; with exactly one form, choose it (#667). */
-function keptLeadForm(current: string, forms: { id: string }[]): string {
+/** Keep the chosen lead form while the Page still has it; else the last one used (#1004); with exactly one form, choose it (#667). */
+function keptLeadForm(current: string, forms: { id: string }[], lastUsed = ""): string {
   if (forms.some(form => form.id === current)) return current;
+  if (lastUsed && forms.some(form => form.id === lastUsed)) return lastUsed;
   return forms.length === 1 ? forms[0].id : "";
 }
 
@@ -291,6 +303,7 @@ function BusinessCampaigns({
   })) as Suggested;
   const chosenWhatsAppNumber = whatsappOptions.some(({ masked }) => masked === whatsappNumber) ? whatsappNumber : whatsappOptions[0]?.masked ?? whatsappNumber;
   const [leadFormId, setLeadFormId] = useState(initialSetup?.leadFormId ?? leadForms[0]?.id ?? "");
+  const leadFormMemoryKey = `campaign-lead-form:${business.owner_id}:${business.id}`;
   const [availableForms, setAvailableForms] = useState(leadForms);
   const [formsLoading, setFormsLoading] = useState(false);
   const [formsError, setFormsError] = useState(leadFormError);
@@ -434,6 +447,25 @@ function BusinessCampaigns({
   const totalDailyBudget = effectiveDailyBudget(budget, abTest ? 2 : 1);
   const [summaries, setSummaries] = useState<Record<string, string>>({});
   const [refreshingId, setRefreshingId] = useState<string | null>(null);
+  // #1003: stale live results refresh quietly on open, once per campaign per visit, one at a time.
+  const [updatingIds, setUpdatingIds] = useState<string[]>([]);
+  const backgroundTried = useRef(new Set<string>());
+  const mounted = useMounted();
+  useEffect(() => {
+    const ids = staleCampaignIds(campaigns, results).filter((id) => !backgroundTried.current.has(id));
+    if (!ids.length) return;
+    for (const id of ids) backgroundTried.current.add(id);
+    void (async () => {
+      for (const id of ids) {
+        setUpdatingIds((list) => [...list, id]);
+        const data = await refreshIfStale(id);
+        if (data?.result) setResults((previous) => ({ ...previous, [id]: data.result! }));
+        if (data?.summary) setSummaries((previous) => ({ ...previous, [id]: data.summary! }));
+        if (data?.gone && data.campaign) setCampaigns((list) => list.map((item) => (item.id === id ? data.campaign! : item)));
+        setUpdatingIds((list) => list.filter((item) => item !== id));
+      }
+    })();
+  }, [campaigns, results, setCampaigns, setResults]);
   const [syncing, setSyncing] = useState(false);
   const [lastSynced, setLastSynced] = useState<Date | null>(null);
   const syncStorageKey = `campaign-sync:${scope}:${adAccountId}`;
@@ -478,7 +510,7 @@ function BusinessCampaigns({
     const forms = await fetchDraftForms(signal);
     if (signal?.aborted) return;
     setAvailableForms(forms);
-    setLeadFormId(current => keptLeadForm(current, forms));
+    setLeadFormId(current => keptLeadForm(current, forms, readLeadFormMemory(leadFormMemoryKey)));
   }
 
   useEffect(() => {
@@ -494,14 +526,14 @@ function BusinessCampaigns({
       if (controller.signal.aborted) return;
       formsFreshnessRef.current = { ownerId: business.owner_id, businessId: business.id, retry: formsRetry, fetchedAt: Date.now() };
       setAvailableForms(forms);
-      setLeadFormId(current => keptLeadForm(current, forms));
+      setLeadFormId(current => keptLeadForm(current, forms, readLeadFormMemory(leadFormMemoryKey)));
     }).catch(() => {
       if (!controller.signal.aborted) setFormsError("Page forms are temporarily unavailable.");
     }).finally(() => {
       if (!controller.signal.aborted) setFormsLoading(false);
     });
     return () => controller.abort();
-  }, [showComposer, connectedForDraft, business.id, business.owner_id, formsRetry, destination]);
+  }, [showComposer, connectedForDraft, business.id, business.owner_id, formsRetry, destination, leadFormMemoryKey]);
 
   useEffect(() => {
     if (!showComposer || !connectedForDraft) return;
@@ -948,6 +980,7 @@ function BusinessCampaigns({
         : await client.saveDraft(input, signal);
       signal.throwIfAborted();
       saveRecovery({ draft, request: null, operationId: null });
+      if (reviewAfterSave && input.destination !== "whatsapp") saveLeadFormMemory(leadFormMemoryKey, input.leadFormId);
       setOperation(null);
       operationRef.current = null;
       setRecoveryPending(false);
@@ -970,6 +1003,23 @@ function BusinessCampaigns({
       finishPreparation(signal);
     }
   }
+
+  // #1004: from Create's 'Review this ad', the same prepare as the Review button runs once, after the
+  // WhatsApp check has picked the destination and (for a form) a lead form is chosen or its error shown.
+  const autoReviewRef = useRef(Boolean(newCampaign?.review) && !initialSetup);
+  const [autoReviewPending, setAutoReviewPending] = useState(Boolean(newCampaign?.review) && !initialSetup);
+  const autoReview = useEffectEvent(() => {
+    if (!autoReviewRef.current || recoveryPending || unresolvedRecovery() || isPreparing()) return;
+    if (selected.size === 0 || (destination === "instant_form" && !leadFormId && !formsError)) return;
+    autoReviewRef.current = false;
+    setAutoReviewPending(false);
+    void prepareManualCampaign();
+  });
+  useEffect(() => {
+    if (!showComposer || !connectedForDraft || whatsappStatus === null) return;
+    const timer = window.setTimeout(autoReview, 0);
+    return () => window.clearTimeout(timer);
+  }, [showComposer, connectedForDraft, whatsappStatus, recoveryPending, selected, destination, leadFormId, formsError]);
 
   function stableIdempotencyKey(review: ReviewDTO): string {
     const next = stableOperationKey(operationRef.current, review, () => crypto.randomUUID());
@@ -1529,9 +1579,14 @@ function BusinessCampaigns({
         }}
       />
 
-      {savedDrafts.length > 0 && <section aria-label="Saved drafts" className="border-y border-slate-200 py-4">
-        <h2 className="text-sm font-semibold text-slate-900">Saved drafts</h2>
-        <ul className="mt-2 divide-y divide-slate-100">
+      {/* #847 T6: while a setup is open, saved drafts fold to one line so the setup starts in the first screen. */}
+      {savedDrafts.length > 0 && <details key={showComposer ? "composing" : "list"} open={!showComposer} aria-label="Saved drafts" className="group border-y border-slate-200 py-3">
+        <summary className="flex min-h-10 cursor-pointer list-none items-center gap-2 text-sm font-semibold text-slate-900 [&::-webkit-details-marker]:hidden">
+          <ChevronRight className="h-4 w-4 text-slate-500 transition-transform group-open:rotate-90" aria-hidden="true" />
+          <h2>Saved drafts</h2>
+          <span className="font-normal text-slate-500">({savedDrafts.length})</span>
+        </summary>
+        <ul className="mt-1 divide-y divide-slate-100">
           {savedDrafts.map((draft) => <li key={draft.draftId} className="flex min-w-0 items-center justify-between gap-3 py-2">
             <button type="button" disabled={draftBusy !== null || creating || operationChecking} onClick={() => void reopenDraft(draft.draftId)} className="min-w-0 flex-1 text-left text-sm font-medium text-slate-800 hover:text-blue-700 disabled:opacity-50">
               <span className="block wrap-break-word">{draft.input.name}</span>
@@ -1540,11 +1595,17 @@ function BusinessCampaigns({
             <Button variant="ghost" size="sm" title={`Remove ${draft.input.name}`} aria-label={`Remove ${draft.input.name}`} disabled={draftBusy !== null || creating} onClick={() => void removeDraft(draft)}><Trash2 className="h-4 w-4" aria-hidden="true" /></Button>
           </li>)}
         </ul>
-      </section>}
+      </details>}
       <div id="campaign-composer" hidden={!showComposer}>
       {(
         <>
-          <section
+          <h2 className="mb-1 text-[17px] font-semibold text-slate-950">New campaign</h2>
+          {approved.length > 0 && connectedForDraft ? (
+            <p aria-label="Launch preflight" className="flex items-start gap-2 pb-1 text-sm text-slate-600">
+              <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-emerald-600" aria-hidden="true" />
+              <span>{approved.length} approved {approved.length === 1 ? "ad" : "ads"}, Meta connected. Created paused: nothing spends until you activate.</span>
+            </p>
+          ) : <section
             aria-label="Launch preflight"
             className="grid gap-3 border-y border-slate-200 py-4 sm:grid-cols-3"
           >
@@ -1561,16 +1622,18 @@ function BusinessCampaigns({
                 </div>
               </div>
             ))}
-          </section>
+          </section>}
           {!connectedForDraft && <p className="-mt-1 mb-2"><HelpOnWhatsApp label="Stuck connecting Meta? Help on WhatsApp" /></p>}
-          <fieldset disabled={preparing || creating} className="my-5 flex flex-wrap gap-2">
+          <div className="my-4 flex flex-col gap-4 sm:flex-row sm:gap-8">
+          <fieldset disabled={preparing || creating} className="flex flex-wrap gap-2">
             <legend className="mb-2 text-xs font-medium text-slate-500">Campaign setup</legend>
             {[["manual", "Choose settings"], ["guided", "Plan with AdBrain"]].map(([value, label]) => <label key={value} className={cn("flex min-h-10 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm", creationMode === value ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200")}><input ref={value === "guided" ? guidedModeRef : undefined} type="radio" name="creation-mode" value={value} checked={creationMode === value} onChange={() => setCreationMode(value)} className="accent-blue-600" />{label}</label>)}
           </fieldset>
-          <fieldset disabled={preparing || creating || destinationRecoveryLocked} aria-describedby={showDestinationLock ? "destination-lock-reason" : undefined} className="mb-4 flex flex-wrap gap-2">
+          <fieldset disabled={preparing || creating || destinationRecoveryLocked} aria-describedby={showDestinationLock ? "destination-lock-reason" : undefined} className="flex flex-wrap gap-2">
             <legend className="mb-2 text-xs font-medium text-slate-500">Destination</legend>
             {([ ["instant_form", "Instant form"], ["whatsapp", "WhatsApp chat"] ] as const).map(([value, label]) => <label key={value} className={cn("flex min-h-10 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm", destination === value ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200")}><input id={`destination-${value}`} type="radio" name="campaign-destination" value={value} checked={destination === value} onChange={() => { if (!unresolvedRecovery()) { destinationChosenRef.current = true; setDestination(value); setPrepareReview(null); } }} className="accent-blue-600" />{label}</label>)}
           </fieldset>
+          </div>
           {showDestinationLock && <p id="destination-lock-reason" role="status" className="mb-4 text-sm text-amber-800">Destination is locked until the previous campaign request is resolved.</p>}
           {showComposer && destination === "whatsapp" && <div className="mb-4"><WhatsAppReadyChecklist businessId={business.id} /></div>}
           {showComposer && creationMode === "guided" && <CampaignChat
@@ -1591,16 +1654,7 @@ function BusinessCampaigns({
 
       {(
         <Card hidden={creationMode !== "manual"} className="min-w-0 rounded-none border-0 bg-white" onChange={() => { if (!unresolvedRecovery()) setPrepareReview(null); }}>
-          <CardHeader className="border-b border-slate-200/80 bg-white/60">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <CardTitle>New campaign</CardTitle>
-                <p className="mt-1 text-sm text-slate-500">Choose the approved work, audience, and budget to prepare a paused campaign.</p>
-              </div>
-              <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">Paused by default</span>
-            </div>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-5">
+          <CardContent className="flex flex-col gap-5 px-0 pt-0">
             <fieldset disabled={preparing || creating} className="flex min-w-0 flex-col gap-5">
             {approved.length === 0 ? (
               <div className="flex flex-col items-start gap-3 py-2">
@@ -1626,7 +1680,7 @@ function BusinessCampaigns({
                       const isSel = selected.has(c.id);
                       return (
                         // #305: on a phone, ads after the first two rows wait behind "Show all" unless selected.
-                        <div key={c.id} className={cn("flex min-w-0 flex-col gap-1.5", !showAllAds && index >= PHONE_PICKER_ADS && !isSel && "max-sm:hidden")}>
+                        <div key={c.id} className={cn("relative flex min-w-0 flex-col gap-1.5", !showAllAds && index >= PHONE_PICKER_ADS && !isSel && "max-sm:hidden")}>
                         <button
                           type="button"
                           onClick={() => toggle(c.id)}
@@ -1677,15 +1731,16 @@ function BusinessCampaigns({
                             setAdEditNotes(null);
                             setEditingAdId(c.id);
                           }}
-                          className="h-8 w-full sm:h-9"
+                          className="h-9 w-full max-sm:absolute max-sm:bottom-1.5 max-sm:left-1.5 max-sm:h-9 max-sm:w-9 max-sm:rounded-full max-sm:bg-white/95 max-sm:p-0"
                         >
-                          <Pencil className="h-3.5 w-3.5" /> Edit
+                          {/* #847 T6: on a phone, Edit is a corner icon so a row of ads isn't followed by a row of buttons. */}
+                          <Pencil className="h-3.5 w-3.5" aria-hidden="true" /><span className="max-sm:sr-only">Edit</span>
                         </Button>
                         </div>
                       );
                     })}
                   </div>
-                  {!showAllAds && pickerAds.length > PHONE_PICKER_ADS && (
+                  {!showAllAds && pickerAds.some((c, index) => index >= PHONE_PICKER_ADS && !selected.has(c.id)) && (
                     <Button type="button" size="sm" variant="ghost" onClick={() => setShowAllAds(true)} className="mt-2 w-full sm:hidden">
                       Show all {pickerAds.length} ads
                     </Button>
@@ -1762,6 +1817,8 @@ function BusinessCampaigns({
                       ))}
                     </select>
                     {placedError?.at === "leadform" && <p id="leadform-error" role="alert" className="text-sm font-medium text-red-800">{placedError.message}</p>}
+                    {/* #1004: from Create, choosing the form is the last step before Review opens. */}
+                    {autoReviewPending && !leadFormId && !formsLoading && availableForms.length > 1 && <p role="status" className="text-sm text-slate-600">Choose the form for these enquiries, and Review opens.</p>}
                   </div>}
                   {destination === "whatsapp" && <div className="flex min-w-0 flex-col gap-1.5">
                     {whatsappOptions.length ? <>
@@ -1847,9 +1904,11 @@ function BusinessCampaigns({
                     Total: {formatPerDay(totalDailyBudget)}{abTest ? " across 2 ad sets" : ""}
                   </span>
                 </div>
-                {/* #761: what to expect, from AdBrain's own runs (#588 ledger). */}
+                {/* #761: what to expect, from AdBrain's own runs (#588 ledger). #1038: no lead-form figure until AdBrain has run lead forms. */}
                 <p className="-mt-2 text-xs text-slate-500">
-                  What to expect: in AdBrain&apos;s runs so far, a WhatsApp chat has cost about ₹150–180. Meta reviews new ads first, usually within 24 hours, and nothing spends until you activate.
+                  What to expect: {destination === "whatsapp"
+                    ? <>in AdBrain&apos;s runs so far, a WhatsApp chat has cost about ₹150–180.</>
+                    : <>AdBrain hasn&apos;t run enough instant-form campaigns yet to quote a cost per enquiry.</>} Meta reviews new ads first, usually within 24 hours, and nothing spends until you activate.
                 </p>
 
                 {destination === "instant_form" && formsLoading && <p role="status" className="text-sm text-slate-500">Loading lead forms...</p>}
@@ -2118,9 +2177,9 @@ function BusinessCampaigns({
                           variant="outline"
                           onClick={() => refresh(c.id)}
                           aria-label="Refresh results"
-                          disabled={refreshingId === c.id}
+                          disabled={refreshingId === c.id || updatingIds.includes(c.id)}
                         >
-                          {refreshingId === c.id ? (
+                          {refreshingId === c.id || updatingIds.includes(c.id) ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
                           ) : (
                             <RefreshCw className="h-4 w-4" />
@@ -2191,6 +2250,10 @@ function BusinessCampaigns({
                           value={outcome === "whatsapp" ? (r.conversations != null && r.cost_per_conversation != null ? formatMoney(r.cost_per_conversation) : "—") : outcome === "instant_form" && r.cpl != null ? formatMoney(r.cpl) : "—"}
                         />
                       </div>
+                    )}
+                    {r && mounted && (
+                      // #1003: always say how old the numbers are.
+                      <p className="text-xs text-slate-500">{updatingIds.includes(c.id) ? "Updating results…" : `Updated ${timeAgo(new Date(r.fetched_at))}`}</p>
                     )}
                     {adResults && r && c.meta_campaign_id && <AdResults campaignId={c.id} />}
                     {r && outcome === "whatsapp" && r.whatsapp_opens != null && r.conversations != null && (

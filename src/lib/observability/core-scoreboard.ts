@@ -56,6 +56,7 @@ export type Scoreboard = {
 
 export const SCOREBOARD_EVENT_NAMES = [
   "business.create",
+  "brand.autofill",
   "campaign.plan",
   "creative.batch",
   "campaign.review",
@@ -129,11 +130,13 @@ export function buildScoreboard(input: {
 
   {
     const created = named("business.create").length;
-    const autofill = ai("brand.autofill");
-    const failed = autofill.filter((call) => call.status !== "success").length;
+    // #1025: the route's own event counts first-setup autofills (no business yet, so no usage row).
+    const autofill = named("brand.autofill");
+    const failed = autofill.filter((event) => event.outcome !== "success").length;
+    const slowest = p90(autofill.filter((event) => event.outcome === "success" && typeof event.duration_ms === "number").map((event) => event.duration_ms!));
     rows.push({
       step: "Brand",
-      now: `${plural(created, "new business", "new businesses")}; autofill ${plural(autofill.length, "call")} (${failed} failed)`,
+      now: `${plural(created, "new business", "new businesses")}; autofill ${plural(autofill.length, "call")} (${failed} failed${slowest === null ? "" : `, p90 ${(slowest / 1000).toFixed(1)} s`})`,
       target: "new business filled in < 2 min on a phone (walk)",
       met: null,
     });
