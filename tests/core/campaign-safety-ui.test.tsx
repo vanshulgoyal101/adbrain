@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import reviewAccountExamples from "./fixtures/meta/safety/review-account-examples.json";
 import reviewNewAd from "./fixtures/meta/safety/review-new-ad.json";
@@ -82,6 +82,8 @@ describe("Campaigns: a campaign with no spend says so once (#173)", () => {
       : Response.json({ campaigns: [campaign], results: { c1: result }, nextCursor: null })));
     render(<Campaigns business={business} approved={[]} initialCampaigns={[campaign]} initialResults={{}}
       leadForms={[]} leadFormError={null} metaReady={false} adAccountId="act_2398686420592052" />);
+    // #1003: a running card first refreshes itself quietly; the owner's tap comes once that read is back.
+    await waitFor(() => expect(screen.getByRole("button", { name: /Refresh results/ })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: /Refresh results/ }));
     expect(await screen.findByText(message)).toBeTruthy();
     expect(screen.queryAllByText(/spen[dt]|deliver|Next step/i)).toHaveLength(1);

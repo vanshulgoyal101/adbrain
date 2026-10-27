@@ -110,6 +110,8 @@ import type { AccountFunding, AdReview, CampaignDeliverySnapshot } from "@/lib/m
 import { readCampaignRecovery, recoveryStorageKey, writeCampaignRecovery, type CampaignRecovery } from "@/lib/meta-connect-ui/recovery";
 import { HelpOnWhatsApp } from "@/components/support-link";
 import { cn, timeAgo } from "@/lib/utils";
+import { useMounted } from "@/lib/use-mounted";
+import { refreshIfStale, staleCampaignIds } from "@/lib/campaign/results-freshness";
 import { formatMoney, formatNumber, formatPerDay } from "@/lib/format";
 
 const exactRupees = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" });
@@ -434,6 +436,25 @@ function BusinessCampaigns({
   const totalDailyBudget = effectiveDailyBudget(budget, abTest ? 2 : 1);
   const [summaries, setSummaries] = useState<Record<string, string>>({});
   const [refreshingId, setRefreshingId] = useState<string | null>(null);
+  // #1003: stale live results refresh quietly on open, once per campaign per visit, one at a time.
+  const [updatingIds, setUpdatingIds] = useState<string[]>([]);
+  const backgroundTried = useRef(new Set<string>());
+  const mounted = useMounted();
+  useEffect(() => {
+    const ids = staleCampaignIds(campaigns, results).filter((id) => !backgroundTried.current.has(id));
+    if (!ids.length) return;
+    for (const id of ids) backgroundTried.current.add(id);
+    void (async () => {
+      for (const id of ids) {
+        setUpdatingIds((list) => [...list, id]);
+        const data = await refreshIfStale(id);
+        if (data?.result) setResults((previous) => ({ ...previous, [id]: data.result! }));
+        if (data?.summary) setSummaries((previous) => ({ ...previous, [id]: data.summary! }));
+        if (data?.gone && data.campaign) setCampaigns((list) => list.map((item) => (item.id === id ? data.campaign! : item)));
+        setUpdatingIds((list) => list.filter((item) => item !== id));
+      }
+    })();
+  }, [campaigns, results, setCampaigns, setResults]);
   const [syncing, setSyncing] = useState(false);
   const [lastSynced, setLastSynced] = useState<Date | null>(null);
   const syncStorageKey = `campaign-sync:${scope}:${adAccountId}`;
@@ -2117,9 +2138,9 @@ function BusinessCampaigns({
                           variant="outline"
                           onClick={() => refresh(c.id)}
                           aria-label="Refresh results"
-                          disabled={refreshingId === c.id}
+                          disabled={refreshingId === c.id || updatingIds.includes(c.id)}
                         >
-                          {refreshingId === c.id ? (
+                          {refreshingId === c.id || updatingIds.includes(c.id) ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
                           ) : (
                             <RefreshCw className="h-4 w-4" />
@@ -2190,6 +2211,10 @@ function BusinessCampaigns({
                           value={outcome === "whatsapp" ? (r.conversations != null && r.cost_per_conversation != null ? formatMoney(r.cost_per_conversation) : "—") : outcome === "instant_form" && r.cpl != null ? formatMoney(r.cpl) : "—"}
                         />
                       </div>
+                    )}
+                    {r && mounted && (
+                      // #1003: always say how old the numbers are.
+                      <p className="text-xs text-slate-500">{updatingIds.includes(c.id) ? "Updating results…" : `Updated ${timeAgo(new Date(r.fetched_at))}`}</p>
                     )}
                     {adResults && r && c.meta_campaign_id && <AdResults campaignId={c.id} />}
                     {r && outcome === "whatsapp" && r.whatsapp_opens != null && r.conversations != null && (
