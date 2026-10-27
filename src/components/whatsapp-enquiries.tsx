@@ -103,7 +103,7 @@ export function WhatsAppEnquiries({ campaignId, spend, enquiries, onLogged, onCu
             <Plus className="h-4 w-4" aria-hidden="true" /> Add enquiry
           </Button>
           <Button type="button" size="sm" variant="outline" data-product-event="lead.customer" disabled={customerBusy}
-            aria-label="Got a customer from this ad? Add 1 customer" onClick={() => void addCustomer()}>
+            aria-label="Got a customer? +1 (adds 1 customer from this ad)" onClick={() => void addCustomer()}>
             {customerBusy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <UserCheck className="h-4 w-4" aria-hidden="true" />} Got a customer? +1
           </Button>
           {customer && (
