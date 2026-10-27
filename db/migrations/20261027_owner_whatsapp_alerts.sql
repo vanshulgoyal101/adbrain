@@ -54,7 +54,8 @@ drop policy if exists "owner alert consent: read own" on public.owner_alert_cons
 create policy "owner alert consent: read own" on public.owner_alert_consent_events
   for select to authenticated using (public.owns_business(business_id));
 
--- The owner's switches and language. Turning a switch on after STOP is a new opt-in (logged).
+-- The owner's switches and language (logged). They never lift a STOP: only the number's holder can,
+-- with a fresh START <code> (owner_alert_confirm). The sender also needs verified_at and no opted_out_at.
 create or replace function public.owner_alert_prefs_set(p_business_id uuid, p_lead_alerts boolean, p_daily_results boolean, p_language text)
 returns public.owner_alert_prefs language plpgsql security definer set search_path = '' as $$
 declare saved public.owner_alert_prefs;
@@ -68,9 +69,7 @@ begin
   insert into public.owner_alert_prefs as prefs(business_id, owner_id, lead_alerts, daily_results, language)
   values (p_business_id, auth.uid(), p_lead_alerts, p_daily_results, p_language)
   on conflict (business_id) do update set lead_alerts = excluded.lead_alerts, daily_results = excluded.daily_results,
-    language = excluded.language, owner_id = excluded.owner_id,
-    opted_out_at = case when excluded.lead_alerts or excluded.daily_results then null else prefs.opted_out_at end,
-    updated_at = now()
+    language = excluded.language, owner_id = excluded.owner_id, updated_at = now()
   returning * into saved;
   insert into public.owner_alert_consent_events(business_id, event, method, detail)
   values (p_business_id, 'preferences', 'settings', jsonb_build_object('lead_alerts', p_lead_alerts, 'daily_results', p_daily_results, 'language', p_language));

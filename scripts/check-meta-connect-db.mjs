@@ -1480,7 +1480,7 @@ async function verifyOwnerWhatsAppAlerts(db, database) {
     assert.deepEqual((await db.query("select event, method, detail from public.owner_alert_consent_events where business_id=$1", [business])).rows,
       [{ event: "preferences", method: "settings", detail: { lead_alerts: true, daily_results: false, language: "hi" } }]);
   });
-  await check(`${database}: WhatsApp alerts: START <code> binds the sender's number once, an expired code binds nothing, STOP turns both off (#701)`, async () => {
+  await check(`${database}: WhatsApp alerts: START <code> binds the sender's number once, an expired code binds nothing, STOP turns both off and only a new START lifts it (#701)`, async () => {
     const code = await as("authenticated", owner, async (session) => (await session.query("select public.owner_alert_start_verification($1) as code", [business])).rows[0].code);
     assert.match(code, /^[A-F0-9]{10}$/);
     await as("service_role", null, async (session) => {
@@ -1501,8 +1501,14 @@ async function verifyOwnerWhatsAppAlerts(db, database) {
       [{ lead_alerts: false, daily_results: false, phone_e164: "+919800000001", out: true }]);
     assert.deepEqual((await db.query("select event, method, detail from public.owner_alert_consent_events where business_id=$1 order by id", [business])).rows.map((row) => [row.event, row.method, row.detail.phone_last4 ?? null]),
       [["preferences", "settings", null], ["verified", "whatsapp_start", "0001"], ["opted_out", "whatsapp_stop", "0001"]]);
-    // Opting in again from Settings is a new, logged consent.
+    // Settings can't lift a STOP: only a fresh START <code> from the phone does.
     await as("authenticated", owner, async (session) => session.query("select public.owner_alert_prefs_set($1,true,true,'en')", [business]));
+    assert.deepEqual((await db.query("select lead_alerts, daily_results, opted_out_at is not null as out from public.owner_alert_prefs where business_id=$1", [business])).rows,
+      [{ lead_alerts: true, daily_results: true, out: true }]);
+    const again = await as("authenticated", owner, async (session) => (await session.query("select public.owner_alert_start_verification($1) as code", [business])).rows[0].code);
+    await as("service_role", null, async (session) => {
+      assert.equal((await session.query("select public.owner_alert_confirm($1,'+919800000001') as id", [again])).rows[0].id, business);
+    });
     assert.equal((await db.query("select opted_out_at from public.owner_alert_prefs where business_id=$1", [business])).rows[0].opted_out_at, null);
   });
 }
