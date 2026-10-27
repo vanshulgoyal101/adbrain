@@ -509,6 +509,7 @@ describe("core: switch to or cancel a waiting new audience (#765 b)", () => {
   const NEW_AD_SET = "900000000000000006", NEW_AD = "900000000000000007";
   type Node = { id: string; campaign_id: string; status: string; lifetime_budget?: string; budget_remaining?: string };
   function scripted(scene: { campaignId: string; adSetId: string; adId: string }, options: { refuseActivation?: boolean } = {}) {
+    // `options` is read on every call, so a test can lift a refusal before a retry.
     const nodes = new Map<string, Node>([
       [scene.adSetId, { id: scene.adSetId, campaign_id: scene.campaignId, status: "ACTIVE", lifetime_budget: "0" }],
       [NEW_AD_SET, { id: NEW_AD_SET, campaign_id: scene.campaignId, status: "PAUSED", lifetime_budget: "0" }],
@@ -580,6 +581,47 @@ describe("core: switch to or cancel a waiting new audience (#765 b)", () => {
     expect(meta.nodes.get(scene.adSetId)!.status).toBe("ACTIVE");
     expect(meta.nodes.get(NEW_AD_SET)!.status).toBe("PAUSED");
     expect(mirror()).toEqual(before);
+    expect(operations()).toMatchObject([{ state: "awaiting_switch", phase: "copy" }]);
+  });
+
+  it("a retry after a refused switch succeeds, and the last error waits on the row for the card meanwhile", async () => {
+    const scene = rebuild();
+    stored(scene, { status: "active" });
+    const options = { refuseActivation: true };
+    const meta = scripted(scene, options);
+    const operationId = waiting(scene);
+    expect((await act(operationId, "switch")).status).toBe(409);
+    expect(operations()).toMatchObject([{ state: "awaiting_switch", phase: "copy", sanitized_error: expect.stringContaining("The old audience is running again.") }]);
+    options.refuseActivation = false;
+    expect((await act(operationId, "switch")).status).toBe(200);
+    expect(meta.nodes.get(NEW_AD_SET)!.status).toBe("ACTIVE");
+    expect(operations()).toMatchObject([{ state: "succeeded", sanitized_error: null }]);
+  });
+
+  it("holds the row: a second switch or cancel while one runs gets 409 without calling Meta; a holder cut off past the lease can be retried", async () => {
+    const scene = rebuild();
+    stored(scene, { status: "active" });
+    const meta = scripted(scene);
+    const operationId = waiting(scene);
+    Object.assign(operations()[0], { phase: "switch", updated_at: new Date().toISOString() });
+    for (const action of ["switch", "cancel"] as const) {
+      expect(await act(operationId, action)).toMatchObject({ status: 409, body: { error: "This new audience is already being switched. Try again in a minute.", retryable: true } });
+    }
+    expect(meta.writes).toEqual([]);
+    Object.assign(operations()[0], { updated_at: new Date(Date.now() - 5 * 60_000).toISOString() });
+    expect((await act(operationId, "switch")).status).toBe(200);
+  });
+
+  it("won't cancel when a cut-off switch left the running campaign's old ad set paused (nothing would deliver)", async () => {
+    const scene = rebuild();
+    stored(scene, { status: "active" });
+    const meta = scripted(scene);
+    meta.nodes.get(scene.adSetId)!.status = "PAUSED";
+    const operationId = waiting(scene);
+    const { status, body } = await act(operationId, "cancel");
+    expect(status).toBe(409);
+    expect(body).toMatchObject({ retryable: true, error: "The current audience isn't running, so the new one can't be cancelled. Turn the new audience on to finish." });
+    expect(meta.writes).toEqual([]);
     expect(operations()).toMatchObject([{ state: "awaiting_switch", phase: "copy" }]);
   });
 

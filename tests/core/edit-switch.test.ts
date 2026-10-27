@@ -40,7 +40,7 @@ function graph(options: { capped?: { lifetime: string; remaining: string; remain
   function active() { return [...nodes.values()].filter(node => (node.id === OLD || node.id === NEW) && node.status === "ACTIVE").map(node => node.id); }
   return { nodes, writes, activeAfterEachWrite };
 }
-const switchInput = { fromAdSetId: OLD, toAdSetId: NEW, toAdIds: ADS };
+const switchInput = { fromAdSetId: OLD, toAdSetId: NEW, toAdIds: ADS, running: true };
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -104,9 +104,42 @@ describe("core: switch a running ad set to its new-audience copy (#765 b)", () =
   it("on a paused campaign, retires the old ad set without turning anything on", async () => {
     const meta = graph();
     meta.nodes.get(OLD)!.status = "PAUSED";
-    await new MetaClient(creds).switchAdSet(CAMPAIGN, switchInput);
+    await new MetaClient(creds).switchAdSet(CAMPAIGN, { ...switchInput, running: false });
     expect(meta.writes).toEqual([{ id: OLD, form: { status: "ARCHIVED" } }]);
     expect(meta.nodes.get(NEW)!.status).toBe("PAUSED");
+  });
+
+  // Review of the first draft: a retry after a cut-off switch must never archive the old ad set and leave nothing running.
+  it("carries on a switch cut off after the pause on a running campaign: the copy goes ACTIVE, never the paused-campaign path", async () => {
+    const meta = graph();
+    meta.nodes.get(OLD)!.status = "PAUSED";
+    await new MetaClient(creds).switchAdSet(CAMPAIGN, switchInput);
+    expect(meta.nodes.get(NEW)!.status).toBe("ACTIVE");
+    expect(meta.nodes.get(OLD)!.status).toBe("ARCHIVED");
+    expect(meta.writes.map(write => `${write.id}:${write.form.status}${write.form.execution_options ? ":validate" : ""}`)).toEqual([
+      `${NEW}:ACTIVE:validate`, `${ADS[0]}:ACTIVE`, `${ADS[1]}:ACTIVE`, `${NEW}:ACTIVE`, `${OLD}:ARCHIVED`,
+    ]);
+  });
+
+  it("finishes a switch Meta already made (the request died before AdBrain recorded it) without turning anything else on", async () => {
+    const meta = graph();
+    for (const id of [NEW, ...ADS]) meta.nodes.get(id)!.status = "ACTIVE";
+    meta.nodes.get(OLD)!.status = "ARCHIVED";
+    expect(await new MetaClient(creds).switchAdSet(CAMPAIGN, switchInput)).toEqual({ fromAdSetId: OLD, adSetId: NEW, adIds: ADS });
+    expect(meta.writes).toEqual([]);
+    meta.nodes.get(OLD)!.status = "PAUSED";
+    await new MetaClient(creds).switchAdSet(CAMPAIGN, switchInput);
+    expect(meta.writes).toEqual([{ id: OLD, form: { status: "ARCHIVED" } }]);
+  });
+
+  it("cancel refuses, writing nothing, when a cut-off switch left the running campaign's old ad set paused", async () => {
+    const meta = graph();
+    meta.nodes.get(OLD)!.status = "PAUSED";
+    await expect(new MetaClient(creds).deleteAdSetCopy(CAMPAIGN, NEW, { runningAdSetId: OLD })).rejects.toThrow("Turn the new audience on to finish.");
+    expect(meta.writes).toEqual([]);
+    meta.nodes.get(OLD)!.status = "ACTIVE";
+    await new MetaClient(creds).deleteAdSetCopy(CAMPAIGN, NEW, { runningAdSetId: OLD });
+    expect(meta.writes).toEqual([{ id: NEW, form: {} }]);
   });
 
   it("cancel is safe to retry once Meta has deleted the copy", async () => {
@@ -119,10 +152,9 @@ describe("core: switch a running ad set to its new-audience copy (#765 b)", () =
   it("refuses before any write when the copy isn't paused or the old ad set isn't running", async () => {
     const meta = graph();
     meta.nodes.get(NEW)!.status = "ACTIVE";
-    await expect(new MetaClient(creds).switchAdSet(CAMPAIGN, switchInput)).rejects.toThrow("Nothing changed.");
-    meta.nodes.get(NEW)!.status = "PAUSED";
-    meta.nodes.get(OLD)!.status = "ARCHIVED";
-    await expect(new MetaClient(creds).switchAdSet(CAMPAIGN, switchInput)).rejects.toThrow("Nothing changed.");
+    await expect(new MetaClient(creds).switchAdSet(CAMPAIGN, switchInput)).rejects.toThrow("Nothing changed");
+    meta.nodes.get(NEW)!.status = "DELETED";
+    await expect(new MetaClient(creds).switchAdSet(CAMPAIGN, switchInput)).rejects.toThrow("Nothing changed");
     expect(meta.writes).toEqual([]);
   });
 

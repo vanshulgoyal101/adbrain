@@ -8,14 +8,16 @@ import { Button } from "@/components/ui/button";
  * #765 (b): a running campaign's new audience waits as a paused copy. The owner turns it on (the current audience
  * stops at the same moment, never both) or cancels it (only the copy goes; the current audience keeps running).
  */
-export function AudienceSwitchStrip({ campaignId, operationId, running, onDone }: {
+export function AudienceSwitchStrip({ campaignId, operationId, running, lastError = null, onDone }: {
   campaignId: string;
   operationId: string;
   running: boolean;
+  /** The last try's failure, kept on the edit row, so a stuck switch shows after a reload with its retry. */
+  lastError?: string | null;
   onDone: (message: string) => void;
 }) {
   const [busy, setBusy] = React.useState<"switch" | "cancel" | null>(null);
-  const [error, setError] = React.useState<string | null>(null);
+  const [error, setError] = React.useState<string | null>(lastError ? `Last try: ${lastError}` : null);
 
   const act = async (action: "switch" | "cancel") => {
     setBusy(action);

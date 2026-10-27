@@ -1198,14 +1198,19 @@ function BusinessCampaigns({
   const [audienceEdit, setAudienceEdit] = useState<Campaign | null>(null);
   // #765 (b): campaign id → the edit whose paused copy waits for the owner to turn it on or cancel it.
   const [waitingSwitch, setWaitingSwitch] = useState<Record<string, string>>({});
+  const [waitingError, setWaitingError] = useState<Record<string, string>>({});
   useEffect(() => {
     let live = true;
     // Owners read their own edit rows (RLS). If this read fails, the strip just doesn't show; the server still refuses
     // other edits while a copy waits.
     try {
-      void createBrowserClient().from("campaign_edit_operations").select("id,campaign_id").eq("state", "awaiting_switch")
-        .then(({ data }) => { if (live && data) setWaitingSwitch(Object.fromEntries((data as Array<{ id: string; campaign_id: string }>).map(row => [row.campaign_id, row.id]))); },
-          () => undefined);
+      void createBrowserClient().from("campaign_edit_operations").select("id,campaign_id,sanitized_error").eq("state", "awaiting_switch")
+        .then(({ data }) => {
+          if (!live || !data) return;
+          const rows = data as Array<{ id: string; campaign_id: string; sanitized_error: string | null }>;
+          setWaitingSwitch(Object.fromEntries(rows.map(row => [row.campaign_id, row.id])));
+          setWaitingError(Object.fromEntries(rows.filter(row => row.sanitized_error).map(row => [row.campaign_id, row.sanitized_error!])));
+        }, () => undefined);
     } catch { /* no browser Supabase config (tests) */ }
     return () => { live = false; };
   }, []);
@@ -2258,7 +2263,7 @@ function BusinessCampaigns({
                       {cardError.adsManager ? <> <a href={adsLink(c)} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center gap-1 underline underline-offset-4"><ExternalLink className="h-4 w-4" aria-hidden="true" />Open in Ads Manager</a></> : null}
                     </p> : null}
                     {waitingSwitch[c.id] && (c.status === "active" || c.status === "paused") ? (
-                      <AudienceSwitchStrip campaignId={c.id} operationId={waitingSwitch[c.id]} running={c.status === "active"}
+                      <AudienceSwitchStrip campaignId={c.id} operationId={waitingSwitch[c.id]} running={c.status === "active"} lastError={waitingError[c.id] ?? null}
                         onDone={(message) => {
                           setWaitingSwitch(current => Object.fromEntries(Object.entries(current).filter(([id]) => id !== c.id)));
                           setCardNotice({ id: c.id, message });

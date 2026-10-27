@@ -352,10 +352,15 @@ async function removeCopies(context: AuthorizedBusiness, review: Review, copies:
 
 export type AudienceSwitchResult = { action: "switch" | "cancel"; adSets: Array<{ adSetId: string; previousAdSetId: string }>; replay: boolean };
 
+/** A switch or cancel holds the row this long; one cut off (route timeout) can be retried after it. */
+const SWITCH_LEASE_MS = 120_000;
+export const SWITCH_IN_PROGRESS = "This new audience is already being switched. Try again in a minute.";
+
 /**
  * #765 (b): the owner turns a waiting copy on (the old ad set is paused first and then retired; the mirror moves to
- * the copy) or cancels it (only the copy is deleted). A failed switch that restored the old ad set stays waiting,
- * so it can be retried; one that couldn't restore it needs reconciliation in Meta.
+ * the copy) or cancels it (only the copy is deleted). One request at a time holds the row (compare-and-set with a
+ * lease). Any Meta failure leaves the row waiting with its last error, so the card keeps a retry: switchAdSet
+ * finishes a switch Meta already made and carries on one that was cut off.
  */
 export async function switchCampaignAudience(context: AuthorizedBusiness, campaignId: string, operationId: string, action: "switch" | "cancel"): Promise<AudienceSwitchResult> {
   const database = createAdminClient() as unknown as SupabaseClient;
@@ -364,30 +369,46 @@ export async function switchCampaignAudience(context: AuthorizedBusiness, campai
   const { data, error } = await database.from("campaign_edit_operations").select("*")
     .eq("id", operationId).eq("business_id", context.businessId).eq("campaign_id", campaignId).eq("kind", "audience").maybeSingle();
   if (error) throw new CampaignEditError("Campaign edits are unavailable. Try again.", 503, true);
-  const row = data as (Row & { id: string }) | null;
+  const row = data as (Row & { id: string; updated_at?: string }) | null;
   if (!row) throw new CampaignEditError("This new audience was not found.", 404);
   const stored = row.result as unknown as (AudienceEditResult & { switch?: AudienceSwitchResult }) | null;
   const finished = action === "switch" ? "succeeded" : "cancelled";
   if (row.state === finished && stored?.switch) return { ...stored.switch, replay: true };
-  if (row.state !== "awaiting_switch" || !stored?.awaitingSwitch?.pending.length) {
-    throw new CampaignEditError(row.state === "needs_reconciliation" ? "An earlier switch may have partly changed Meta. Check the campaign in Meta." : "This new audience is no longer waiting.", 409);
-  }
+  if (row.state !== "awaiting_switch" || !stored?.awaitingSwitch?.pending.length) throw new CampaignEditError("This new audience is no longer waiting.", 409);
   const pending = stored.awaitingSwitch.pending;
   const status = String(campaign.status).toLowerCase();
   if (status !== "paused" && status !== "active") throw new CampaignEditError("Only a paused or running campaign can be switched.", 409);
   const review = reviewableCampaign(campaign);
   if (!review) throw new CampaignEditError("AdBrain can only edit campaigns it launched.", 409);
+
+  // Hold the row: only from "copy" (waiting), or from a "switch" whose holder was cut off past the lease.
+  const stale = row.phase === "switch" && Date.parse(row.updated_at ?? "") < Date.now() - SWITCH_LEASE_MS;
+  if (row.phase !== "copy" && !stale) throw new CampaignEditError(SWITCH_IN_PROGRESS, 409, true);
+  let claim = database.from("campaign_edit_operations").update({ phase: "switch", sanitized_error: null, updated_at: new Date().toISOString() })
+    .eq("id", row.id).eq("state", "awaiting_switch").eq("phase", row.phase);
+  if (row.updated_at) claim = claim.eq("updated_at", row.updated_at);
+  const claimed = await claim.select("id");
+  if (claimed.error) throw new CampaignEditError("Campaign edits are unavailable. Try again.", 503, true);
+  if (claimed.data?.length !== 1) throw new CampaignEditError(SWITCH_IN_PROGRESS, 409, true);
   const touch = async (values: Record<string, unknown>) => {
     const { error: updateError } = await database.from("campaign_edit_operations").update({ ...values, updated_at: new Date().toISOString() }).eq("id", row.id);
     if (updateError) throw new CampaignEditError("Campaign edit could not be recorded.", 503, true);
   };
+  /** Back to waiting with the reason, so the card shows it with a retry and other edits stay blocked. */
+  const release = (message: string) => touch({ phase: "copy", sanitized_error: message.slice(0, 500) }).catch(() => undefined);
   const binding = { adAccountId: review.adAccountId, pageId: review.pageId };
 
   if (action === "cancel") {
     try {
-      await removeCopies(context, review, pending);
+      await withMetaConnection(context, { purpose: "delete", binding, expectedGeneration: review.generation }, async meta => {
+        for (const copy of pending) {
+          await meta.deleteAdSetCopy(review.metaCampaignId, copy.to.adSetId, status === "active" ? { runningAdSetId: copy.from.adSetId } : {});
+        }
+      });
     } catch (cause) {
-      throw toEditError(cause);
+      const mapped = toEditError(cause);
+      await release(mapped.message);
+      throw new CampaignEditError(mapped.message, mapped.status, true);
     }
     const result = { action, adSets: pending.map(copy => ({ adSetId: copy.to.adSetId, previousAdSetId: copy.from.adSetId })), replay: false } satisfies AudienceSwitchResult;
     await touch({ state: "cancelled", phase: "complete", result: { ...stored, switch: result } as unknown as Json });
@@ -397,39 +418,35 @@ export async function switchCampaignAudience(context: AuthorizedBusiness, campai
   }
 
   const switched: Array<{ from: { adSetId: string; adIds: string[] }; to: AudienceEdit }> = [];
-  await touch({ phase: "switch", sanitized_error: null });
   try {
     // Turning the copy on starts delivery, so a running campaign needs the activation capability.
     await withMetaConnection(context, { purpose: status === "active" ? "activate" : "create_paused", binding, expectedGeneration: review.generation }, async meta => {
       for (const copy of pending) {
-        const done = await meta.switchAdSet(review.metaCampaignId, { fromAdSetId: copy.from.adSetId, toAdSetId: copy.to.adSetId, toAdIds: copy.to.adIds });
+        const done = await meta.switchAdSet(review.metaCampaignId, { fromAdSetId: copy.from.adSetId, toAdSetId: copy.to.adSetId, toAdIds: copy.to.adIds, running: status === "active" });
         switched.push({ from: copy.from, to: { mode: "rebuild", validated: false, adSetId: done.adSetId, adIds: done.adIds, retiredAdSetId: copy.from.adSetId } });
       }
     });
   } catch (cause) {
     const mapped = toEditError(cause);
-    // Restored (nothing switched): still waiting, retry allowed. Stuck or partly switched: reconcile in Meta.
-    const stuck = cause instanceof AdSetSwitchStuckError || switched.length > 0;
-    if (!stuck) {
-      await touch({ phase: "copy", sanitized_error: mapped.message.slice(0, 500) }).catch(() => undefined);
-      throw new CampaignEditError(mapped.message, mapped.status === 409 ? 409 : mapped.status, true);
+    if (cause instanceof AdSetSwitchStuckError) {
+      recordProductEvent({ kind: "workflow", name: "campaign.edit", outcome: "failed", businessId: context.businessId, attributes: { entityType: "campaign", count: switched.length, errorCode: "EDIT_SWITCH_STUCK" } });
     }
-    await touch({ state: "needs_reconciliation", sanitized_error: mapped.message.slice(0, 500) }).catch(() => undefined);
+    // Ad sets already switched are mirrored now; the retry finishes the rest (switchAdSet completes a done switch).
     if (switched.length) await saveCampaignChildren({ businessId: context.businessId, userId: context.userId }, campaignId, current => mirroredChildren(current, switched)).catch(() => undefined);
-    recordProductEvent({ kind: "workflow", name: "campaign.edit", outcome: "failed", businessId: context.businessId, attributes: { entityType: "campaign", count: switched.length, errorCode: "EDIT_SWITCH_STUCK" } });
-    throw mapped;
+    await release(mapped.message);
+    throw new CampaignEditError(mapped.message, mapped.status, true);
   }
 
-  await touch({ phase: "mirror" });
   try {
     const { error: mirrorError } = await saveCampaignChildren({ businessId: context.businessId, userId: context.userId }, campaignId, current => mirroredChildren(current, switched));
     if (mirrorError) throw mirrorError;
   } catch {
-    await touch({ state: "needs_reconciliation", sanitized_error: "Meta switched the audience but AdBrain could not record it." }).catch(() => undefined);
-    throw new CampaignEditError("Meta switched the audience but AdBrain could not record it. Check the campaign before editing again.", 502);
+    const message = "Meta switched the audience but AdBrain could not record it. Try again to finish.";
+    await release(message);
+    throw new CampaignEditError(message, 502, true);
   }
   const result = { action, adSets: switched.map(edit => ({ adSetId: edit.to.adSetId, previousAdSetId: edit.from.adSetId })), replay: false } satisfies AudienceSwitchResult;
-  await touch({ state: "succeeded", phase: "complete", result: { ...stored, switch: result } as unknown as Json });
+  await touch({ state: "succeeded", phase: "complete", sanitized_error: null, result: { ...stored, switch: result } as unknown as Json });
   await logEvent({ businessId: context.businessId, action: "campaign.edit", entityType: "campaign", entityId: campaignId, metaObjectId: campaign.meta_campaign_id,
     reason: `Turned on the new audience for "${campaign.name ?? campaignId}"; the old one is stopped`, details: { ad_sets: result.adSets } });
   return result;

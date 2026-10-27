@@ -184,6 +184,8 @@ async function main() {
         await assertCampaignPaused(launch.campaignId);
         await meta.enforceCampaignSpendCap(launch.campaignId, MIN_CAMPAIGN_CAP_RUPEES * 100);
         await raw(launch.adSetIds[0], { end_time: new Date(Date.now() + 86_400_000).toISOString() });
+        // Meta allows one write per ad set per 30 s on some accounts (613).
+        await new Promise(resolve => setTimeout(resolve, 31_000));
         await raw(launch.adSetIds[0], { status: "ACTIVE" });
         await assertCampaignPaused(launch.campaignId);
         console.log(`ad set before: ${JSON.stringify(await raw(`${launch.adSetIds[0]}?fields=status,effective_status,end_time`))}`);
@@ -233,7 +235,7 @@ async function recordSwitch(meta: NonNullable<ReturnType<typeof metaClientFromEn
   await new Promise(resolve => setTimeout(resolve, 31_000));
 
   tape = [];
-  const switched = await meta.switchAdSet(campaignId, { fromAdSetId: adSetId, toAdSetId: copy.adSetId, toAdIds: copy.adIds });
+  const switched = await meta.switchAdSet(campaignId, { fromAdSetId: adSetId, toAdSetId: copy.adSetId, toAdIds: copy.adIds, running: true });
   save("edit-audience-switch");
   await assertCampaignPaused(campaignId);
   console.log(`switch: ${JSON.stringify(switched)} old: ${JSON.stringify(await raw(`${adSetId}?fields=status,effective_status`))} new: ${JSON.stringify(await raw(`${copy.adSetId}?fields=status,effective_status`))}`);

@@ -2042,11 +2042,12 @@ export class MetaClient {
    * copy's activation (validate_only), then the old ad set is paused, a capped copy's total is cut to what the
    * old one has left, the copy's ads and then the copy go ACTIVE, and both are read back. If anything fails
    * after the pause, the copy is paused again and the old ad set resumed. The old ad set is archived last.
-   * When the owner paused the campaign meanwhile (both ad sets PAUSED), nothing is turned on: the copy takes
-   * the old ad set's place and stays paused.
+   * `running` is the campaign's intended state: on a paused campaign nothing is turned on, the copy just takes
+   * the old ad set's place. Safe to retry: a switch Meta already finished is completed, and one cut off after
+   * the pause carries on from where it stopped.
    */
-  async switchAdSet(campaignId: string, input: { fromAdSetId: string; toAdSetId: string; toAdIds: string[] }): Promise<AdSetSwitch> {
-    const { fromAdSetId, toAdSetId, toAdIds } = input;
+  async switchAdSet(campaignId: string, input: { fromAdSetId: string; toAdSetId: string; toAdIds: string[]; running: boolean }): Promise<AdSetSwitch> {
+    const { fromAdSetId, toAdSetId, toAdIds, running } = input;
     if (fromAdSetId === toAdSetId || !toAdIds.length || new Set(toAdIds).size !== toAdIds.length) throw new MetaError("Invalid ad set switch.");
     type AdSetRead = { id?: string; campaign_id?: string; status?: string; lifetime_budget?: string; budget_remaining?: string };
     const read = (id: string) => this.graph<AdSetRead>(`${encodeURIComponent(id)}?fields=id,campaign_id,status,lifetime_budget,budget_remaining`);
@@ -2057,49 +2058,72 @@ export class MetaClient {
     if (from.id !== fromAdSetId || from.campaign_id !== campaignId || to.id !== toAdSetId || to.campaign_id !== campaignId || !sameAds(ads)) {
       throw new CampaignDeliveryError("The new audience's ad set could not be verified. Nothing changed.");
     }
-    if ((from.status !== "ACTIVE" && from.status !== "PAUSED") || to.status !== "PAUSED") throw new CampaignDeliveryError("The old ad set isn't running or paused, or the new one isn't paused. Nothing changed.");
+    const done = { fromAdSetId, adSetId: toAdSetId, adIds: toAdIds };
+    const oldStopped = from.status === "PAUSED" || from.status === "ARCHIVED";
+    // A retry after Meta finished: the copy delivers (or, on a paused campaign, has taken the old one's place).
+    if (running && to.status === "ACTIVE" && ads.data!.every(ad => ad.status === "ACTIVE") && oldStopped) {
+      if (from.status === "PAUSED") await this.writeStatus(fromAdSetId, "ARCHIVED").catch(() => undefined);
+      return done;
+    }
+    if (!running && to.status === "PAUSED" && from.status === "ARCHIVED") return done;
+    if (to.status !== "PAUSED" || !["ACTIVE", "PAUSED", "ARCHIVED"].includes(from.status ?? "")) {
+      throw new CampaignDeliveryError("The old ad set or the new one is in an unexpected state. Nothing changed; check the campaign in Meta.");
+    }
     const capped = Number(from.lifetime_budget ?? 0) > 0;
     const cutCap = async () => {
       // The old ad set kept spending while the copy waited; the copy may spend only what is left now.
       const left = await read(fromAdSetId);
-      if (left.status !== "PAUSED" || !/^[1-9]\d*$/.test(left.budget_remaining ?? "")) throw new CampaignDeliveryError("This capped run has spent its total. Start a new run instead.");
+      if (left.status === "ACTIVE" || !/^[1-9]\d*$/.test(left.budget_remaining ?? "")) throw new CampaignDeliveryError("This capped run has spent its total. Start a new run instead.");
+      if (to.lifetime_budget === left.budget_remaining) return;
       await this.graph(encodeURIComponent(toAdSetId), { method: "POST", form: { lifetime_budget: left.budget_remaining! } });
       const cut = await read(toAdSetId);
       if (cut.lifetime_budget !== left.budget_remaining) throw new CampaignDeliveryError("Meta did not confirm the new ad set's total.");
     };
-    if (from.status === "PAUSED") {
+    if (!running) {
+      if (from.status === "ACTIVE") await this.writeStatus(fromAdSetId, "PAUSED");
       if (capped) await cutCap();
       await this.writeStatus(fromAdSetId, "ARCHIVED");
-      return { fromAdSetId, adSetId: toAdSetId, adIds: toAdIds };
+      return done;
     }
     const activation = await this.graph<{ success?: boolean }>(encodeURIComponent(toAdSetId), {
       method: "POST", form: { status: "ACTIVE", execution_options: JSON.stringify(["validate_only"]) },
     });
     if (activation.success !== true) throw new CampaignDeliveryError("Meta would not turn the new audience on. Nothing changed.");
 
-    await this.writeStatus(fromAdSetId, "PAUSED");
+    // An attempt cut off after the pause (old PAUSED) or after the archive carries on from here.
+    if (from.status === "ACTIVE") await this.writeStatus(fromAdSetId, "PAUSED");
     try {
       if (capped) await cutCap();
       for (const adId of toAdIds) await this.writeStatus(adId, "ACTIVE");
       await this.writeStatus(toAdSetId, "ACTIVE");
       const [oldAfter, newAfter, adsAfter] = await Promise.all([read(fromAdSetId), read(toAdSetId), readAds(toAdSetId)]);
-      if (oldAfter.status !== "PAUSED" || newAfter.status !== "ACTIVE" || !sameAds(adsAfter) || adsAfter.data!.some(ad => ad.status !== "ACTIVE")) {
+      if (oldAfter.status === "ACTIVE" || newAfter.status !== "ACTIVE" || !sameAds(adsAfter) || adsAfter.data!.some(ad => ad.status !== "ACTIVE")) {
         throw new CampaignDeliveryError("Meta did not confirm the switch.");
       }
     } catch (error) {
-      const restored = await this.writeStatus(toAdSetId, "PAUSED").then(() => this.writeStatus(fromAdSetId, "ACTIVE")).then(() => true, () => false);
       const message = error instanceof MetaError ? error.message.replace(/\.?$/, ".") : "Meta refused the switch.";
-      if (!restored) throw new AdSetSwitchStuckError(`${message} The old audience could not be turned back on. Check the campaign in Meta.`);
+      const restored = await this.writeStatus(toAdSetId, "PAUSED")
+        .then(() => from.status === "ARCHIVED" ? false : this.writeStatus(fromAdSetId, "ACTIVE").then(() => true))
+        .catch(() => false);
+      if (!restored) throw new AdSetSwitchStuckError(`${message} The old audience could not be turned back on. Try again, or check the campaign in Meta.`);
       throw new CampaignDeliveryError(`${message} The old audience is running again.`);
     }
-    // Delivery has moved; a failed archive only leaves a PAUSED ad set behind.
-    await this.writeStatus(fromAdSetId, "ARCHIVED").catch(() => undefined);
-    return { fromAdSetId, adSetId: toAdSetId, adIds: toAdIds };
+    // Delivery has moved; a failed archive only leaves a PAUSED ad set behind, finished on a retry.
+    if (from.status !== "ARCHIVED") await this.writeStatus(fromAdSetId, "ARCHIVED").catch(() => undefined);
+    return done;
   }
 
-  /** #765 (b): deletes a PAUSED copy that was never switched on. Only that ad set: the running one is not read or written. */
-  async deleteAdSetCopy(campaignId: string, adSetId: string): Promise<void> {
+  /** #765 (b): deletes a PAUSED copy that was never switched on. Only that ad set is written. */
+  async deleteAdSetCopy(campaignId: string, adSetId: string, options: { runningAdSetId?: string } = {}): Promise<void> {
     const node = encodeURIComponent(adSetId);
+    // On a running campaign, a switch cut off after its pause leaves the old ad set paused: deleting the copy then
+    // would leave nothing delivering. That ad set is only read here, never written.
+    if (options.runningAdSetId) {
+      const running = await this.graph<{ id?: string; campaign_id?: string; status?: string }>(`${encodeURIComponent(options.runningAdSetId)}?fields=id,campaign_id,status`);
+      if (running.id !== options.runningAdSetId || running.campaign_id !== campaignId || running.status !== "ACTIVE") {
+        throw new CampaignDeliveryError("The current audience isn't running, so the new one can't be cancelled. Turn the new audience on to finish.");
+      }
+    }
     const copy = await this.graph<{ id?: string; campaign_id?: string; status?: string }>(`${node}?fields=id,campaign_id,status`);
     // A retry after Meta already deleted it.
     if (copy.id === adSetId && copy.campaign_id === campaignId && copy.status === "DELETED") return;

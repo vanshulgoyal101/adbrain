@@ -39,6 +39,12 @@ describe("AudienceSwitchStrip", () => {
     await waitFor(() => expect(onDone).toHaveBeenCalledWith("New audience is in place. The campaign stays paused until you resume it."));
   });
 
+  it("shows the last try's failure after a reload, with the retry", () => {
+    render(<AudienceSwitchStrip campaignId="c-1" operationId="op-1" running lastError="The old audience could not be turned back on. Try again, or check the campaign in Meta." onDone={vi.fn()} />);
+    expect(screen.getByRole("alert")).toHaveTextContent("Last try: The old audience could not be turned back on.");
+    expect(screen.getByRole("button", { name: "Turn it on" })).toBeEnabled();
+  });
+
   it("shows Meta's refusal and keeps the strip so the owner can retry", async () => {
     fetchMock.mockResolvedValueOnce(Response.json({ error: "Ad set refused. The old audience is running again.", retryable: true }, { status: 409 }));
     const onDone = vi.fn();
