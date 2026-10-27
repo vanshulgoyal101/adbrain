@@ -14,6 +14,7 @@ permissions:
   checks: read
   issues: write
   actions: write # dispatches the drift check; a GITHUB_TOKEN merge triggers no workflows
+  statuses: write # core-approval on the train PR (#1002)
 
 concurrency:
   # A newer push replaces a waiting run, so one promotion carries everything merged meanwhile.
@@ -107,6 +108,10 @@ jobs:
               --body "Automatic promotion of \`next\` (${sha::7}) to production (#461). Merged PRs: see the commits.")
             pr=${pr##*/}
           fi
+          # core-approval.yml never runs for this PR (a GITHUB_TOKEN-opened PR triggers no workflows), and
+          # its rule passes every next → main PR anyway: each PR was gated into next (#1002). Set it here.
+          gh api -X POST "repos/$repo/statuses/$sha" -f state=success -f context=core-approval \
+            -f description="Deploy train: its PRs were gated into next" >/dev/null
           # A merge commit keeps next's history, so the next train needs no rebase.
           # A just-created PR can briefly report its green checks as "expected" (#608). Its pull_request CI can
           # also fail with 0 jobs when the merge ref isn't ready yet (#878): that's GitHub, not a red build, so
