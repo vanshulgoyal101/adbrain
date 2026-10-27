@@ -54,6 +54,8 @@ import { CampaignChat } from "@/components/campaign-chat";
 import { AdResults } from "@/components/ad-results";
 import { WhatsAppAiCard } from "@/components/whatsapp-ai-card";
 import { EditAudienceDialog } from "@/components/edit-audience-dialog";
+import { AudienceSwitchStrip } from "@/components/audience-switch-strip";
+import { createClient as createBrowserClient } from "@/lib/supabase/client";
 import { EditBudgetDialog } from "@/components/edit-budget-dialog";
 import { applyBudget, budgetFormStart } from "@/lib/campaign/budget-edit-form";
 import { EditAdDialog } from "@/components/edit-ad-dialog";
@@ -1194,6 +1196,19 @@ function BusinessCampaigns({
   const [deletingId, setDeletingId] = useState<string | null>(null);
   // #773: the paused campaign whose audience is being edited.
   const [audienceEdit, setAudienceEdit] = useState<Campaign | null>(null);
+  // #765 (b): campaign id → the edit whose paused copy waits for the owner to turn it on or cancel it.
+  const [waitingSwitch, setWaitingSwitch] = useState<Record<string, string>>({});
+  useEffect(() => {
+    let live = true;
+    // Owners read their own edit rows (RLS). If this read fails, the strip just doesn't show; the server still refuses
+    // other edits while a copy waits.
+    try {
+      void createBrowserClient().from("campaign_edit_operations").select("id,campaign_id").eq("state", "awaiting_switch")
+        .then(({ data }) => { if (live && data) setWaitingSwitch(Object.fromEntries((data as Array<{ id: string; campaign_id: string }>).map(row => [row.campaign_id, row.id]))); },
+          () => undefined);
+    } catch { /* no browser Supabase config (tests) */ }
+    return () => { live = false; };
+  }, []);
   const [budgetEdit, setBudgetEdit] = useState<{ campaign: Campaign; start: NonNullable<ReturnType<typeof budgetFormStart>> } | null>(null);
   const [adEdit, setAdEdit] = useState<Campaign | null>(null);
   const [statusChangingId, setStatusChangingId] = useState<string | null>(null);
@@ -2081,7 +2096,11 @@ function BusinessCampaigns({
                 campaignName={audienceEdit.name ?? `${business.name} — ${audienceEdit.objective}`}
                 running={audienceEdit.status === "active"}
                 onClose={() => setAudienceEdit(null)}
-                onSaved={(message) => { setCardNotice({ id: audienceEdit.id, message }); setAudienceEdit(null); }}
+                onSaved={(message, waitingOperationId) => {
+                  setCardNotice({ id: audienceEdit.id, message });
+                  if (waitingOperationId) setWaitingSwitch(current => ({ ...current, [audienceEdit.id]: waitingOperationId }));
+                  setAudienceEdit(null);
+                }}
               />
             )}
             {budgetEdit && (
@@ -2210,17 +2229,17 @@ function BusinessCampaigns({
                                 </a>
                               </DropdownMenuItem>
                             )}
-                            {c.meta_campaign_id && (c.status === "paused" || c.status === "active") && reviewableCampaign(c) && (
+                            {c.meta_campaign_id && (c.status === "paused" || c.status === "active") && reviewableCampaign(c) && !waitingSwitch[c.id] && (
                               <DropdownMenuItem data-product-event="campaign.edit_audience" onSelect={() => setAudienceEdit(c)}>
                                 <Users className="h-4 w-4" aria-hidden="true" /> Edit audience
                               </DropdownMenuItem>
                             )}
-                            {c.meta_campaign_id && (c.status === "paused" || (c.status === "active" && budgetFormStart(c)?.capped)) && reviewableCampaign(c) && budgetFormStart(c) && (
+                            {c.meta_campaign_id && (c.status === "paused" || (c.status === "active" && budgetFormStart(c)?.capped)) && reviewableCampaign(c) && budgetFormStart(c) && !waitingSwitch[c.id] && (
                               <DropdownMenuItem data-product-event="campaign.edit_budget" onSelect={() => setBudgetEdit({ campaign: c, start: budgetFormStart(c)! })}>
                                 <IndianRupee className="h-4 w-4" aria-hidden="true" /> Edit budget
                               </DropdownMenuItem>
                             )}
-                            {c.meta_campaign_id && (c.status === "paused" || c.status === "active") && reviewableCampaign(c) && (c.meta_ad_ids?.length ?? 0) > 0 && (
+                            {c.meta_campaign_id && (c.status === "paused" || c.status === "active") && reviewableCampaign(c) && (c.meta_ad_ids?.length ?? 0) > 0 && !waitingSwitch[c.id] && (
                               <DropdownMenuItem data-product-event="campaign.edit_ad" onSelect={() => setAdEdit(c)}>
                                 <Pencil className="h-4 w-4" aria-hidden="true" /> Edit ad words
                               </DropdownMenuItem>
@@ -2238,6 +2257,14 @@ function BusinessCampaigns({
                       {cardError.message}
                       {cardError.adsManager ? <> <a href={adsLink(c)} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center gap-1 underline underline-offset-4"><ExternalLink className="h-4 w-4" aria-hidden="true" />Open in Ads Manager</a></> : null}
                     </p> : null}
+                    {waitingSwitch[c.id] && (c.status === "active" || c.status === "paused") ? (
+                      <AudienceSwitchStrip campaignId={c.id} operationId={waitingSwitch[c.id]} running={c.status === "active"}
+                        onDone={(message) => {
+                          setWaitingSwitch(current => Object.fromEntries(Object.entries(current).filter(([id]) => id !== c.id)));
+                          setCardNotice({ id: c.id, message });
+                          void refresh(c.id);
+                        }} />
+                    ) : null}
                     {cardNotice?.id === c.id && cardError?.id !== c.id ? <p role="status" className="text-sm text-slate-600">{cardNotice.message}</p> : null}
 
                     {r && (

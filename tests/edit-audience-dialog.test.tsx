@@ -119,6 +119,27 @@ describe("EditAudienceDialog", () => {
     await waitFor(() => expect(onSaved).toHaveBeenCalledWith(`Audience changed. The campaign keeps running. ${RESTARTS}`));
   });
 
+  // #765 (b): Meta can't change a running WhatsApp/interest ad set in place; the owner confirms a paused copy.
+  it("offers to make a copy on a running campaign, sends copy:true with the same key, and hands the waiting copy to the card", async () => {
+    fetchMock.mockImplementation(async (_url: string, init: RequestInit) => {
+      const body = JSON.parse(String(init.body));
+      return Response.json(body.preview
+        ? { ok: true, preview: { adSets: [{ adSetId: "s1", mode: "copy", validated: true }], consequence: RESTARTS } }
+        : { ok: true, result: { adSets: [{ adSetId: "s2", previousAdSetId: "s1", mode: "copy" }], count: 1, consequence: RESTARTS, awaitingSwitch: { operationId: "op-1", pending: [] } } });
+    });
+    const onSaved = vi.fn();
+    render(<EditAudienceDialog campaignId="c-1" campaignName="Rooftop solar" running onClose={vi.fn()} onSaved={onSaved} />);
+    fireEvent.change(screen.getByLabelText("Who sees the ads"), { target: { value: "women" } });
+    fireEvent.click(screen.getByRole("button", { name: /Check with Meta/ }));
+    expect(await screen.findByRole("status")).toHaveTextContent("We'll make a fresh copy with your change (paused, back to review, learning restarts) and stop the old one when you turn the new one on.");
+    expect(screen.queryByRole("button", { name: /Save change/ })).toBeNull();
+    const make = screen.getByRole("button", { name: /Make the copy/ });
+    expect(make.className).toMatch(/\bh-11\b/);
+    fireEvent.click(make);
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith("New audience ready on this campaign. Your current audience keeps running until you turn the new one on.", "op-1"));
+    expect(sent(1)).toEqual({ change: { gender: "women" }, idempotencyKey: sent(0).idempotencyKey, copy: true });
+  });
+
   it("limits the ads to the languages ticked", async () => {
     open();
     fireEvent.change(screen.getByLabelText("Language"), { target: { value: "only" } });

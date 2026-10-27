@@ -1,0 +1,62 @@
+"use client";
+
+import * as React from "react";
+import { Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+
+/**
+ * #765 (b): a running campaign's new audience waits as a paused copy. The owner turns it on (the current audience
+ * stops at the same moment, never both) or cancels it (only the copy goes; the current audience keeps running).
+ */
+export function AudienceSwitchStrip({ campaignId, operationId, running, onDone }: {
+  campaignId: string;
+  operationId: string;
+  running: boolean;
+  onDone: (message: string) => void;
+}) {
+  const [busy, setBusy] = React.useState<"switch" | "cancel" | null>(null);
+  const [error, setError] = React.useState<string | null>(null);
+
+  const act = async (action: "switch" | "cancel") => {
+    setBusy(action);
+    setError(null);
+    try {
+      const res = await fetch(`/api/campaigns/${campaignId}/audience/switch`, {
+        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ operationId, action }),
+      });
+      const data = await res.json().catch(() => ({})) as { error?: unknown };
+      if (!res.ok) { setError(typeof data.error === "string" ? data.error : "Couldn't reach Meta. Nothing changed; try again."); return; }
+      onDone(action === "switch"
+        ? running
+          ? "New audience is on and the old one is stopped. Meta reviews the ads again and learning restarts."
+          : "New audience is in place. The campaign stays paused until you resume it."
+        : "New audience cancelled. The current one keeps running.");
+    } catch {
+      setError("No connection. Nothing changed; try again.");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-3 rounded-md border border-amber-200 bg-amber-50 p-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="min-w-0 text-sm text-amber-950">
+        <p className="font-medium">New audience ready</p>
+        <p className="text-amber-900">
+          {running
+            ? "Your current audience keeps running until you turn the new one on."
+            : "It takes the current audience's place when you use it; nothing starts running."}
+        </p>
+        {error && <p role="alert" className="mt-1 font-medium text-red-800">{error}</p>}
+      </div>
+      <div className="flex shrink-0 flex-col-reverse gap-2 sm:flex-row">
+        <Button variant="outline" className="h-11" onClick={() => void act("cancel")} disabled={!!busy}>
+          {busy === "cancel" && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />} Cancel new audience
+        </Button>
+        <Button className="h-11" onClick={() => void act("switch")} disabled={!!busy}>
+          {busy === "switch" && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />} {running ? "Turn it on" : "Use the new audience"}
+        </Button>
+      </div>
+    </div>
+  );
+}
