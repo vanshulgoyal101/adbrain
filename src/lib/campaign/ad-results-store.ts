@@ -40,6 +40,8 @@ export type StoredAdResult = {
 
 export type AdResultView = {
   adId: string; name: string | null; delivered: boolean; replaced: boolean; best: boolean;
+  /** Meta's effective status at the last refresh (#1045: only a running ad is offered for pausing). */
+  status: string | null;
   impressions: number; results: number; spend: number; costPerResult: number | null;
 };
 
@@ -59,7 +61,7 @@ export function adResultViews(rows: StoredAdResult[], whatsapp: boolean): { ads:
   return {
     syncedAt,
     ads: ads
-      .map(ad => ({ adId: ad.adId, name: ad.name, delivered: ad.delivered, replaced: ad.replaced, best: ad === best, impressions: ad.impressions, results: ad.results, spend: ad.spend, costPerResult: ad.costPerResult }))
+      .map(ad => ({ adId: ad.adId, name: ad.name, delivered: ad.delivered, replaced: ad.replaced, best: ad === best, status: ad.effectiveStatus, impressions: ad.impressions, results: ad.results, spend: ad.spend, costPerResult: ad.costPerResult }))
       .sort((left, right) => Number(right.best) - Number(left.best) || Number(left.replaced) - Number(right.replaced) || right.results - left.results || right.spend - left.spend),
   };
 }

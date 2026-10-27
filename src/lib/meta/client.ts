@@ -131,6 +131,9 @@ export interface MatchedGeo {
   label: string;
 }
 
+/** #1045: one ad's status as Meta reads it back; `changed` is false when it already had that status (no write). */
+export type AdStatus = { id: string; status: string | null; effectiveStatus: string | null; changed: boolean };
+
 export interface ResolvedGeo {
   targeting: GeoTargeting;
   matched: MatchedGeo[];
@@ -2122,6 +2125,29 @@ export class MetaClient {
     const paused = (id: string) => objects.some(object => object.id === id && object.status === "PAUSED");
     const confirmed = campaign.id === campaignId && [campaignId, ...children.adSetIds, ...children.adIds].every(paused);
     return { confirmed, objects };
+  }
+
+  /**
+   * #1045: turns one ad of a verified campaign off (or back on, to undo AdBrain's own pause) and reads
+   * it back. Nothing else changes: no ad set, budget or campaign write. `validateOnly` asks Meta to
+   * check the write without making it.
+   */
+  async setAdStatus(campaignId: string, adId: string, status: "PAUSED" | "ACTIVE", options: { validateOnly?: boolean } = {}): Promise<AdStatus> {
+    await this.verifyCampaignBinding(campaignId);
+    type AdNode = { id?: string; campaign_id?: string; status?: string; effective_status?: string };
+    const read = () => this.graph<AdNode>(`${encodeURIComponent(adId)}?fields=id,campaign_id,status,effective_status`);
+    const before = await read();
+    if (before.id !== adId || before.campaign_id !== campaignId) throw new MetaError("That ad isn't part of this campaign.");
+    // Already so (e.g. the owner paused it in Meta after the last refresh): write nothing, so AdBrain
+    // never records a pause it didn't make and can't later "undo" the owner's own decision.
+    if (before.status === status) return { id: adId, status, effectiveStatus: before.effective_status ?? null, changed: false };
+    if (options.validateOnly) {
+      await this.graph(encodeURIComponent(adId), { method: "POST", form: { status, execution_options: JSON.stringify(["validate_only"]) } });
+      return { id: adId, status: before.status ?? null, effectiveStatus: before.effective_status ?? null, changed: false };
+    }
+    await this.writeStatus(adId, status);
+    const after = await read();
+    return { id: adId, status: after.status ?? null, effectiveStatus: after.effective_status ?? null, changed: true };
   }
 
   /** Status write with one retry after Meta's 613 (one status change per object per 30 s). */

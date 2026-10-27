@@ -2255,7 +2255,7 @@ function BusinessCampaigns({
                       // #1003: always say how old the numbers are.
                       <p className="text-xs text-slate-500">{updatingIds.includes(c.id) ? "Updating results…" : `Updated ${timeAgo(new Date(r.fetched_at))}`}</p>
                     )}
-                    {adResults && r && c.meta_campaign_id && <AdResults campaignId={c.id} />}
+                    {adResults && r && c.meta_campaign_id && <AdResults campaignId={c.id} whatsapp={outcome === "whatsapp"} />}
                     {r && outcome === "whatsapp" && r.whatsapp_opens != null && r.conversations != null && (
                       // #493: people reach WhatsApp and leave; show the drop-off plainly.
                       <p className="text-sm text-slate-700">
