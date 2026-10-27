@@ -4,6 +4,7 @@ export type CampaignSkipReason =
   | "other_account"
   | "other_page"
   | "other_connection"
+  | "other_business"
   | "lifetime_budget"
   | "capped"
   | "unsupported";
@@ -15,6 +16,7 @@ export const SKIP_REASON_TEXT: Record<CampaignSkipReason, string> = {
   other_account: "it belongs to a different ad account",
   other_page: "it advertises a different Facebook Page",
   other_connection: "it was launched from a different ad account or Page",
+  other_business: "it's managed in another AdBrain business on this ad account",
   lifetime_budget: "it uses a lifetime budget set in Meta, which AdBrain doesn't manage",
   capped: "it runs on a spend cap AdBrain manages, so sync leaves it as is",
   unsupported: "its ad sets or budget aren't a setup AdBrain can manage",
