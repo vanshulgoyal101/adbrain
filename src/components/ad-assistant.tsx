@@ -786,8 +786,9 @@ export function AdAssistant({ business, opening = null, occasions = [], onFlowSt
           // #847: one primary for the whole result, pinned where a phone's thumb is.
           <div className="sticky bottom-3 z-20 flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white/95 p-3 shadow-[0_10px_30px_rgba(16,24,40,0.12)] backdrop-blur">
             <span className="text-sm text-slate-700">{selectedIds.length} selected</span>
-            <Link href={`/campaigns?new=1&creatives=${selectedIds.join(",")}`} className="inline-flex min-h-11 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary-hover">
-              Create campaign
+            {/* #1004: straight to Review; the composer prepares it once it has settled. */}
+            <Link href={`/campaigns?new=1&creatives=${selectedIds.join(",")}&review=1`} className="inline-flex min-h-11 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary-hover">
+              Review campaign
             </Link>
           </div>
         )}
