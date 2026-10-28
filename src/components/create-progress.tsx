@@ -104,10 +104,12 @@ function elapsed(ms: number): string {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
-export function CreateProgress({ ads, makingMore = 0, renderReady, onUseSaved }: {
+export function CreateProgress({ ads, makingMore = 0, makingMorePictures = false, renderReady, onUseSaved }: {
   ads: LiveAd[];
   /** #1123: ads the route is remaking in the same request after the first pass came up short. */
   makingMore?: number;
+  /** #1547: only their pictures are being tried again (the words already passed). */
+  makingMorePictures?: boolean;
   renderReady: (creative: Creative) => ReactNode;
   /** #760: move on with the saved ads while the rest keep going on the server. */
   onUseSaved?: () => void;
@@ -154,7 +156,9 @@ export function CreateProgress({ ads, makingMore = 0, renderReady, onUseSaved }:
         )}
         {makingMore > 0 && (
           <p role="status" className="text-sm text-slate-600">
-            {makingMore} didn&apos;t pass our checks. Making {makingMore} more…
+            {makingMorePictures
+              ? `${makingMore === 1 ? "1 picture" : `${makingMore} pictures`} didn't come through. Trying again…`
+              : <>{makingMore} didn&apos;t pass our checks. Making {makingMore} more…</>}
           </p>
         )}
         <p aria-live="polite" className="sr-only">

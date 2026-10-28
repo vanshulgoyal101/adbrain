@@ -20,6 +20,16 @@ describe("Create's time promise", () => {
     expect(screen.queryByText(/usually under/)).not.toBeInTheDocument();
   });
 
+  // #1547: a sales visit's lost pictures are tried again with the same words; say that, not "didn't pass our checks".
+  it("says pictures are being tried again for a picture retry", () => {
+    const { rerender } = render(<CreateProgress ads={[{ stage: "ready" }, { stage: "image" }, { stage: "image" }]} makingMore={2} makingMorePictures renderReady={() => null} />);
+    expect(screen.getByRole("status")).toHaveTextContent("2 pictures didn't come through. Trying again…");
+    rerender(<CreateProgress ads={[{ stage: "ready" }, { stage: "ready" }, { stage: "image" }]} makingMore={1} makingMorePictures renderReady={() => null} />);
+    expect(screen.getByRole("status")).toHaveTextContent("1 picture didn't come through. Trying again…");
+    rerender(<CreateProgress ads={[{ stage: "ready" }, { stage: "ready" }, { stage: "writing" }]} makingMore={1} renderReady={() => null} />);
+    expect(screen.getByRole("status")).toHaveTextContent("1 didn't pass our checks. Making 1 more…");
+  });
+
   // #1542: while the paid picture key is out, pictures come from the slower free provider; say so, don't wait silently.
   it("says pictures are slower today once the stream reports a free-picture fallback, until those ads finish", () => {
     let ads: LiveAd[] = [{ stage: "starting" }, { stage: "starting" }, { stage: "starting" }];
