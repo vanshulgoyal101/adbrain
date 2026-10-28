@@ -1026,7 +1026,7 @@ function BusinessCampaigns({
     const background = reuseBackground ? takeBackgroundPlan(input, signal) : null;
     const { response, data } = (background && await background) || await fetchAudiencePlan(input, signal);
     signal.throwIfAborted();
-    if (!response.ok || !data.ready) throw new Error(data.error ?? data.handoff?.message ?? (data.questions?.map((question) => question.question).join(" ") || "Could not recommend an audience."));
+    if (!response.ok || !data.ready) throw new Error(data.error ?? data.handoff?.message ?? (data.questions?.map((question) => question.question).join(" ") || "We couldn't suggest who should see your ads. Try again, or choose the area yourself."));
     const recommended = { ...targetingInputSchema.parse(data.targeting), gender: input.targeting.gender ?? "all" as const };
     if (data.fallback && recommended.audience) setNotice(recommended.audience.rationale);
     else if (!recommended.audience?.interestNames.length) throw new Error("The detailed targeting recommendation is incomplete. Try again.");
@@ -1056,7 +1056,7 @@ function BusinessCampaigns({
       }
       await recommendAudience(input, signal);
     } catch (reason) {
-      if (!signal.aborted) failAt("composer", reason instanceof Error ? reason.message : "Could not recommend an audience.");
+      if (!signal.aborted) failAt("composer", reason instanceof Error ? reason.message : "We couldn't suggest who should see your ads. Try again, or choose the area yourself.");
     } finally {
       finishPreparation(signal);
     }
