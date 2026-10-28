@@ -93,6 +93,20 @@ jobs:
           [ "$code" = 200 ] && exit 0
           echo "FAIL 2-Tier parent token: HTTP $code $summary" | tee -a smoke.txt
           exit 1
+      # #1439: the WS1 first-timer path at 360 px over slow 4G, read-only on Meta. Report-only until it has run green
+      # twice in the guard; then DevOps can make it gating. Skipped while the WS1_* secrets are unset.
+      - name: WS1 first-timer walk (#1439)
+        if: steps.smoke.outcome == 'success'
+        continue-on-error: true
+        env:
+          WS1_EMAIL: ${{ secrets.WS1_EMAIL }}
+          WS1_PASSWORD: ${{ secrets.WS1_PASSWORD }}
+        run: |
+          [ -n "$WS1_EMAIL" ] || { echo "WS1_EMAIL not set; WS1 walk skipped"; exit 0; }
+          set -o pipefail
+          rc=0; timeout -k 30s 9m npx tsx scripts/ws1-walk.mts | tee ws1.txt || rc=$?
+          { echo '### WS1 walk'; echo '```'; cat ws1.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          exit "$rc"
       - name: Roll production back
         if: failure() && steps.smoke.outcome == 'failure' && steps.install.outputs.deps != 'missing' && (github.event_name == 'deployment_status' || inputs.drill) && env.VERCEL_TOKEN != ''
         run: node scripts/production-guard.mjs rollback "$SHA" 2>&1 | tee rollback.txt
