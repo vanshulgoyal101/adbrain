@@ -44,7 +44,10 @@ describe("core: Create follows the long-running local ad rules (#418 rules 1, 4,
     expect(system).toMatch(/first\s+line says what and where in at most 60 characters: the service and lead\.place/);
     expect(system).toMatch(/person giving or getting the service/);
     expect(system).toMatch(/one proof from the Brand facts/);
-    expect(system).toMatch(/last line\s+tells people exactly what to send by quoting it word for word/);
+    expect(system).toMatch(/last line\s+asks for it by quoting it word for word in “ ”, without naming a channel/);
+    // The destination is chosen later (WhatsApp or a form), so the example ask names none (Reviewer, #1064).
+    expect(system).not.toMatch(/WhatsApp “/);
+    expect(system).not.toMatch(/or the finished real work/);
     // The fold rule the validator enforces (hook-length) is unchanged, so no new repair.
     expect(system).toMatch(/never pass 125 characters/);
     expect(system).not.toMatch(/Do not default to stock people/);
@@ -60,6 +63,11 @@ describe("core: Create follows the long-running local ad rules (#418 rules 1, 4,
     }
     expect(personSubjectLine("Rows of solar panels on a factory roof at dusk, with no people or vehicles."))
       .toMatch(/^Main subject \(this overrides any "no people" note above\): a person from the business doing the work/);
+    // The owner's own words win: "no people" or "just the shop" in the instructions or brief keeps the picture empty.
+    const panels = "Rows of solar panels on a factory roof at dusk.";
+    expect(personSubjectLine(panels, ["Use only our product photos style, no people please"])).toBeNull();
+    expect(personSubjectLine(panels, [null, "Show just the shop front at night"])).toBeNull();
+    expect(personSubjectLine(panels, ["Hindi copy, keep it short", "Factory owners before 31 December"])).not.toBeNull();
     // The owner's own background request ("just the panels, no people") goes through conceptImagePrompt and keeps its word.
     const input = { brand: cedar.brand as BrandContext, brief: cedar.brief, angle: AD_ANGLES[0] };
     expect(conceptImagePrompt({ visual: { medium: "photography", direction: "Just the panels at sunset, no people.", textPlacement: "bottom" } } as CreativeConcept, input))
@@ -96,7 +104,7 @@ describe("core: Create follows the long-running local ad rules (#418 rules 1, 4,
     expect(batchAsk(["Diwali offer: 10% off rooftop solar installation", "PM Surya Ghar subsidy help"])).toBe("10% off rooftop solar installation");
     expect(batchAsk(["Check-up and cleaning for ₹499"])).toBe("Check-up and cleaning for ₹499");
     expect(batchAsk([])).toBeNull();
-    const ads = ["Free solar site survey in Mohali.\nWhatsApp “Free site survey” to book.", "Factory solar in Chandigarh?\nWhatsApp “Free site survey” to book."];
+    const ads = ["Free solar site survey in Mohali.\nBook your “Free site survey” today.", "Factory solar in Chandigarh?\nAsk for your “Free site survey” now."];
     expect(whatsappGreeting(solaride.brand, ads, [], [], "ad", ads.map(quotedAsk)).autofill).toBe("Free site survey");
     // Recorded before: no ad on the paid baseline quotes an ask, so the prefill never matched an ad's words.
     expect(recordedRuns.flatMap((item) => item.ads).filter((ad) => quotedAsk(ad.primaryText)).length).toBe(0);

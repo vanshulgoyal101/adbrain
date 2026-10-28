@@ -373,7 +373,7 @@ async function renderVariant(
       latencyMs: undefined, fallbackFrom: undefined, providerRequestId: undefined, providerFinalStatus: undefined }
     : await generateImage({
       // #418 rule 4: a generated ad shows a person; an owner's own background request (background.ts) is left alone.
-      prompt: [conceptImagePrompt(concept, input), personSubjectLine(concept.visual.direction)].filter(Boolean).join("\n"),
+      prompt: [conceptImagePrompt(concept, input), personSubjectLine(concept.visual.direction, [input.instructions, input.brief, input.advisoryPreferences])].filter(Boolean).join("\n"),
       width: dims.width,
       height: dims.height,
       referenceImages: referenceImages?.slice(0, 3),

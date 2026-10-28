@@ -134,9 +134,9 @@ in business, jobs done), a named credential or a warranty length, cited in sourc
 "trusted" or "experienced" is not proof. Do not repeat the full credentials, service-area list and
 savings claim in every ad. Avoid generic slogan triplets, forced metaphors, and references to
 incidental objects in the picture. End with a plain next step. When lead.ask is given, the last line
-tells people exactly what to send by quoting it word for word in “ ” (for example: WhatsApp “Free site
-survey” to book); every ad of the batch quotes the same words, which become the customer's WhatsApp
-message.
+asks for it by quoting it word for word in “ ”, without naming a channel, because the ad may run
+to WhatsApp or a form (for example: Book your “Free site survey” today). Every ad of the batch quotes
+the same words; on WhatsApp they become the message the customer sends.
 Recent copy is supplied only to avoid repetition, not as evidence for claims. Change the opening,
 sentence structure and persuasion angle, not just synonyms. Do not reuse a recent headline or hook.
 Write a concise Meta link description that complements the headline with a supported detail or
@@ -156,7 +156,8 @@ The brief may be AI-derived: it is direction, not claim evidence. Source quotes
 must come from Brand facts, active instructions or explicitly supplied user facts.
 Choose an appropriate visual medium (photography, illustration, product still life, graphic art,
 or another deliberate treatment). The subject is a person giving or getting the service (an installer
-with a homeowner, a stylist with a client) or the finished real work, not an empty product shot.
+with a homeowner, a stylist with a client, a family beside their finished job), not an empty product
+shot, unless the owner's instructions or brief rule people out.
 Avoid stock poses and generic luxury adjectives.
 References are available to the image model, not visible to you; do not claim to have inspected them.
 Without references, do not pretend an invented person, facility or product is a documented real one.

@@ -221,7 +221,7 @@ feedback to assess unnecessary questions, abandonment and time to a useful draft
    of at most 60 characters naming the service and one Brand place; a person giving or
    getting the service, not an empty product shot; one proof from the Brand (years, jobs
    done, a named credential or a warranty, as `proof-line.ts` reads them); and a last line
-   that quotes `lead.ask` in “ ”, the Brand's first free offer (`batchAsk`), the same in
+   that quotes `lead.ask` in “ ” without naming a channel, the Brand's first free offer (`batchAsk`), the same in
    every ad, so the WhatsApp pre-typed message becomes those words (`quotedAsk`, #1027).
    None is a validator rule, so none adds a repair (#713); the eval reports each. Each
    angle also gets its own `lead.place` and `lead.opening` (a different Brand place, and:
@@ -232,7 +232,9 @@ feedback to assess unnecessary questions, abandonment and time to a useful draft
 4. Generate an image from the validated concept and up to three reference images.
    When the concept's visual direction has no person in it, the image prompt adds one
    (a person from the business at work, or a customer getting the service; #418 rule 4),
-   with no repair. An owner's own background request (`background.ts`) is left as typed.
+   with no repair. The owner's own words win: instructions, a brief or preferences that rule
+   people out ("no people", "just the shop") keep the picture as directed, and an owner's own
+   background request (`background.ts`) is left as typed.
    When the business has uploaded product photos (Brand assets), the first ad
    uses the newest one as its image instead (#195): no image call or image cost,
    its concept is told the image is the owner's unseen photo, and the receipt

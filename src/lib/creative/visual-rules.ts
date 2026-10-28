@@ -29,12 +29,15 @@ export function personInScene(direction: string): boolean {
     .some((sentence) => PERSON.test(sentence));
 }
 
+const NO_PEOPLE_WANTED = /\b(?:no|without|avoid|don'?t (?:show|use|add)|never (?:show|use))\s+(?:any\s+)?(?:people|persons?|humans?|faces?|models?|staff|customers?)\b|\b(?:just|only)\s+(?:the\s+|our\s+)?(?:shop|store|product|products|panels?|building|premises|food|dish(?:es)?)\b|\bproduct[- ]only\b/i;
+
 /**
  * #418 rule 4 (Analyst, #941): long-running local ads show a person or real work, not an empty product
  * shot. When the concept's picture has no one in it, the image prompt adds one, at $0 and with no repair.
  */
-export function personSubjectLine(direction: string): string | null {
-  return personInScene(direction)
+export function personSubjectLine(direction: string, ownerWords: (string | null | undefined)[] = []): string | null {
+  // The owner's own "no people" / "just the product" wins (Reviewer, #1064).
+  return personInScene(direction) || ownerWords.some((words) => words && NO_PEOPLE_WANTED.test(words))
     ? null
     : "Main subject (this overrides any \"no people\" note above): a person from the business doing the work, or a customer getting or using it, shown naturally and mid-task, not posed; no product-only or empty shot.";
 }
