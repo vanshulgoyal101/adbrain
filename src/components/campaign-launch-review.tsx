@@ -6,7 +6,7 @@ export function CampaignLaunchReview({
   selectedCount,
   budget,
   leadFormName,
-  destination = "instant_form",
+  destination = "whatsapp",
   whatsappNumber,
   audience,
 }: {

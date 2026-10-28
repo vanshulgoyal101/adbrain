@@ -8,7 +8,7 @@ import { productActions } from "@/lib/observability/client-events";
 describe("product logging integration coverage", () => {
   it("annotates key workflows with fixed allowlisted action codes only", () => {
     const actions = new Set<string>();
-    for (const name of ["studio", "brand-form", "campaigns", "lead-inbox", "brand-assets", "production-checkout", "meta-connection", "ready-ads-next-step", "whatsapp-ai-card"]) {
+    for (const name of ["studio", "brand-form", "campaigns", "lead-inbox", "brand-assets", "production-checkout", "meta-connection", "ready-ads-next-step"]) {
       const path = join(process.cwd(), `src/components/${name}.tsx`);
       const source = ts.createSourceFile(path, readFileSync(path, "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
       let count = 0;

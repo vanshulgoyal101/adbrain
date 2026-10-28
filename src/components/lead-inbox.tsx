@@ -382,10 +382,10 @@ export function LeadInbox({
         <Card>
           <CardContent className="flex flex-col items-center gap-1 py-12 text-center">
             <Inbox className="h-6 w-6 text-slate-300" />
-            <p className="font-medium text-slate-600">No leads yet</p>
+            <p className="font-medium text-slate-600">No enquiries yet</p>
             <p className="max-w-sm text-sm text-slate-400">
-              When people fill your Meta lead forms, they’ll show up here. Launch
-              a campaign, then hit “Sync leads”.
+              People who tap your ad message you on WhatsApp. Add each real one
+              here. Form enquiries arrive by themselves.
             </p>
           </CardContent>
         </Card>

@@ -270,10 +270,13 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
   "Not linked yet") with a short linking guide and a Check again button (#235).
 - In manual setup, the campaign form lists those numbers (masked; full numbers never
   reach the browser before review) as **WhatsApp button number** and saves the chosen
-  mask in the draft; preflight resolves it to the full number. A new campaign for an
-  India-based business (Brand phone +91, or no country code) opens on WhatsApp chat once
-  a number is ready; an explicit destination choice or a restored draft keeps its
-  destination, and the lead form stays available. A guided draft uses the Page's own
+  mask in the draft; preflight resolves it to the full number. A new campaign, and a plan
+  from AdBrain, opens on **WhatsApp chat (recommended)**, listed first; without a ready
+  number the setup says how to link one, with a one-tap "Use an
+  Instant form for now", and Create's "Review this ad" waits instead of preparing a blocked
+  review (#1171). Instant form is the second choice and still fully supported; a restored
+  draft keeps its destination.
+  The Brand's Website reads "needed only for instant forms" and isn't in the readiness count. A guided draft uses the Page's own
   number until it is prepared again from manual setup.
 - Review displays and hashes the verified number. Creation rechecks it before
   any mutation. WhatsApp never silently falls back to a form.
@@ -287,9 +290,8 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
   WhatsApp campaign, a folded checklist for the owner's WhatsApp Business app: profile photo
   and name, greeting message, away message, reply within 5 minutes. They're optional tips, so
   the line shows a count only once one is ticked ("2 of 4 done"). AdBrain can't read these, so
-  the owner ticks them; ticks are kept on that device per business. Below it, once a WhatsApp
-  campaign is out, one dismissible line points to WhatsApp's AI reply (#794): "Show me how"
-  opens the guide, which records "It's on" or "Not available for me"; × is "Not now" (7 days).
+  the owner ticks them; ticks are kept on that device per business. There is no nudge toward
+  WhatsApp's AI reply (#1171; tag `removed/whatsapp-ai-card`).
 - With no setup open, Campaigns lists the campaigns first; Saved drafts follow the list
   (#1154) and fold to one line above the setup while one is open.
 - Each WhatsApp creative carries a `page_welcome_message` built from Brand facts

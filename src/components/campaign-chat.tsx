@@ -59,10 +59,10 @@ type CampaignChatProps = {
 };
 
 export function CampaignChat(props: CampaignChatProps) {
-  return <CampaignChatSession key={`${props.businessId}:${props.destination ?? "instant_form"}`} {...props} />;
+  return <CampaignChatSession key={`${props.businessId}:${props.destination ?? "whatsapp"}`} {...props} />;
 }
 
-function CampaignChatSession({ businessId, destination = "instant_form", whatsappNumber, onStarted, onCreated, onDraftReady, onEditManually }: CampaignChatProps) {
+function CampaignChatSession({ businessId, destination = "whatsapp", whatsappNumber, onStarted, onCreated, onDraftReady, onEditManually }: CampaignChatProps) {
   const sessionKey = `adbrain:campaign-chat:${businessId}${destination === "whatsapp" ? ":whatsapp" : ""}`;
   // Keeps the interview alive across tab changes; a finished one is discarded.
   const [session, setSession, clearSession] = useSessionDraft<ChatSession>(

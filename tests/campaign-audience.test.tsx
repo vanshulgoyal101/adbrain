@@ -38,6 +38,13 @@ function view(metaReady = false) {
   return render(<Campaigns business={business} approved={[creative]} initialCampaigns={[]} initialResults={{}} leadForms={[{ id: "form-1", name: "Enquiries", status: "ACTIVE" }]} leadFormError={null} metaReady={metaReady} adAccountId="" />);
 }
 
+// #1171: WhatsApp chat is the default; lead-form flows choose Instant form.
+function viewInstantForm(metaReady = false) {
+  const result = view(metaReady);
+  fireEvent.click(screen.getByRole("radio", { name: "Instant form" }));
+  return result;
+}
+
 beforeEach(() => {
   vi.resetAllMocks();
   sessionStorage.clear();
@@ -243,7 +250,7 @@ describe("campaign audience workflow", () => {
       selected, destination: "whatsapp", whatsappNumber: null,
     }));
     view();
-    fireEvent.click(screen.getByRole("radio", { name: "WhatsApp chat" }));
+    fireEvent.click(screen.getByRole("radio", { name: "WhatsApp chat (recommended)" }));
     fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
     fireEvent.click(screen.getByRole("button", { name: "Check my campaign (nothing spends)" }));
     expect(await screen.findByText("Connect a WhatsApp Business number to the selected Facebook Page and verify access before reviewing.")).toBeVisible();
@@ -355,7 +362,7 @@ describe("campaign audience workflow", () => {
   });
 
   it("re-decides age using the new mode while retaining chosen locations and campaign settings", async () => {
-    view();
+    viewInstantForm();
     fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
     chooseAreas();
     fireEvent.change(screen.getByLabelText("Planned areas"), { target: { value: "Austin, Texas\nRound Rock, Texas" } });
@@ -443,7 +450,7 @@ describe("campaign audience workflow", () => {
   });
 
   it("requires a lead form before starting AI work for a connected campaign", async () => {
-    view(true);
+    viewInstantForm(true);
     await waitFor(() => expect(screen.queryByText("Loading lead forms...")).not.toBeInTheDocument());
     fireEvent.change(screen.getByRole("combobox", { name: "Lead form" }), { target: { value: "" } });
     fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
@@ -505,14 +512,14 @@ describe("campaign audience workflow", () => {
     }
   });
 
-  // #1151: drafts named after their first ad, and one draft per ad selection.
+  // #1151: drafts named after their first ad, and one draft per ad selection (#1171: WhatsApp is the default channel).
   it("names a new campaign after its first ad until the owner types a name", async () => {
     view();
     await act(async () => {});
     const field = screen.getByLabelText("Campaign name");
-    expect(field).toHaveValue(`Solar installer · Lead form · ${campaignNameDate(new Date())}`);
+    expect(field).toHaveValue(`Solar installer · WhatsApp · ${campaignNameDate(new Date())}`);
     fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
-    expect(field).toHaveValue(`Lower electricity bills · Lead form · ${campaignNameDate(new Date())}`);
+    expect(field).toHaveValue(`Lower electricity bills · WhatsApp · ${campaignNameDate(new Date())}`);
     fireEvent.change(field, { target: { value: "Diwali push" } });
     fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
     expect(field).toHaveValue("Diwali push");
@@ -542,7 +549,7 @@ describe("campaign audience workflow", () => {
       await act(async () => { vi.advanceTimersByTime(60_000); });
       expect(signal.aborted).toBe(true);
       expect(screen.getByText(/Campaign preparation timed out/)).toBeInTheDocument();
-      expect(screen.getByLabelText("Campaign name")).toHaveValue(`Lower electricity bills · Lead form · ${campaignNameDate(new Date())}`);
+      expect(screen.getByLabelText("Campaign name")).toHaveValue(`Lower electricity bills · WhatsApp · ${campaignNameDate(new Date())}`);
       expect(screen.getByRole("button", { name: "Check my campaign (nothing spends)" })).toBeEnabled();
       expect(mocks.saveDraft).not.toHaveBeenCalled();
     } finally { vi.useRealTimers(); }
@@ -559,7 +566,7 @@ describe("campaign audience workflow", () => {
   });
 
   it("plans once before review and preserves the AI audience through reopen and edit", async () => {
-    const first = view();
+    const first = viewInstantForm();
     fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
     fireEvent.click(screen.getByRole("button", { name: "Check my campaign (nothing spends)" }));
     await screen.findByText("Campaign review");
@@ -657,7 +664,7 @@ describe("campaign review walkthrough dead ends (#158)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Check my campaign (nothing spends)" }));
     fireEvent.click(await screen.findByRole("button", { name: "Send to Meta (paused)" }));
     expect(await screen.findByRole("button", { name: "Sending to Meta…" })).toBeDisabled();
-    expect(screen.getByRole("radio", { name: "WhatsApp chat" })).toBeDisabled();
+    expect(screen.getByRole("radio", { name: "WhatsApp chat (recommended)" })).toBeDisabled();
     expect(screen.queryByText("Destination is locked until the previous campaign request is resolved.")).toBeNull();
     expect(screen.queryByText("The previous campaign request has not been confirmed.")).toBeNull();
     await act(async () => { finish({ operationId: "44444444-4444-4444-8444-444444444444", state: "succeeded", checkpoints: [], externalIds: {}, error: null }); });

@@ -31,6 +31,13 @@ function view() {
   return render(<Campaigns business={business} approved={[creative]} initialCampaigns={[]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady adAccountId="" />);
 }
 
+// #1171: WhatsApp chat is the default; lead-form behaviour needs Instant form chosen.
+async function viewInstantForm() {
+  const result = view();
+  fireEvent.click(await screen.findByRole("radio", { name: "Instant form" }));
+  return result;
+}
+
 beforeEach(() => {
   vi.resetAllMocks();
   sessionStorage.clear();
@@ -50,13 +57,14 @@ describe("launch composer defaults and plain words (#761)", () => {
     view();
     expect(await screen.findByLabelText("Daily budget (₹)")).toHaveValue(300);
     expect(screen.getByRole("button", { name: "₹300 a day" })).toBeInTheDocument();
-    // #1038: the default destination is Instant form, so no WhatsApp chat cost; WhatsApp chat shows it.
-    expect(screen.getByText(/What to expect: AdBrain hasn't run enough instant-form campaigns yet to quote a cost per enquiry\. Meta reviews new ads first/)).toBeInTheDocument();
-    expect(document.body.textContent).not.toContain("WhatsApp chat has cost");
-    expect(screen.getByRole("button", { name: "Check my campaign (nothing spends)" })).toBeInTheDocument();
-    expect(document.body.textContent).not.toContain("pending");
-    fireEvent.click(screen.getByRole("radio", { name: "WhatsApp chat" }));
+    // #1038, #1171: the default destination is WhatsApp chat, so its cost shows; Instant form has none yet.
     expect(await screen.findByText(/What to expect: in AdBrain's runs so far, a WhatsApp chat has cost about ₹150–180\. Meta reviews new ads first/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Check my campaign (nothing spends)" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("radio", { name: "Instant form" }));
+    expect(await screen.findByText(/What to expect: AdBrain hasn't run enough instant-form campaigns yet to quote a cost per enquiry\. Meta reviews new ads first/)).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain("WhatsApp chat has cost");
+    // The WhatsApp line may say its number's verification is pending; the age never does.
+    expect(document.body.textContent).not.toContain("pending");
   });
 });
 
@@ -70,7 +78,7 @@ describe("help where owners get stuck (#796)", () => {
 
 describe("composer errors sit next to the control (#667)", () => {
   it("Prepare with no lead form chosen focuses the Lead form field and says why beside it", async () => {
-    view();
+    await viewInstantForm();
     const leadForm = screen.getByLabelText("Lead form");
     await within(leadForm).findByRole("option", { name: "Callbacks" });
     expect(leadForm).toHaveValue("");
@@ -93,7 +101,7 @@ describe("composer errors sit next to the control (#667)", () => {
 
   it("a failed draft save shows beside Prepare and scrolls there", async () => {
     mocks.saveDraft.mockRejectedValue(new Error("Could not save the campaign draft."));
-    view();
+    await viewInstantForm();
     const leadForm = screen.getByLabelText("Lead form");
     await within(leadForm).findByRole("option", { name: "Callbacks" });
     fireEvent.change(leadForm, { target: { value: "form-1" } });
@@ -114,7 +122,7 @@ describe("composer errors sit next to the control (#667)", () => {
       resolvedAreaLabel: "Jaipur", selected, audienceInterests: [{ id: "1", name: "Solar energy" }],
     });
     mocks.createCampaign.mockRejectedValue(new Error("Campaign creation could not be started."));
-    view();
+    await viewInstantForm();
     const leadForm = screen.getByLabelText("Lead form");
     await within(leadForm).findByRole("option", { name: "Callbacks" });
     fireEvent.change(leadForm, { target: { value: "form-1" } });
@@ -130,7 +138,7 @@ describe("composer errors sit next to the control (#667)", () => {
 
   it("preselects the lead form when the Page has exactly one", async () => {
     forms = [{ id: "form-1", name: "Enquiries", status: "ACTIVE" }];
-    view();
+    await viewInstantForm();
     const leadForm = screen.getByLabelText("Lead form");
     await within(leadForm).findByRole("option", { name: "Enquiries" });
     await waitFor(() => expect(leadForm).toHaveValue("form-1"));

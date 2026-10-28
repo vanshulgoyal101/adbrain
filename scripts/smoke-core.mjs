@@ -192,6 +192,8 @@ try {
       await creative.click();
       await page.getByRole("textbox", { name: "Campaign name", exact: true }).fill(name);
       await page.locator("#budget").fill("350");
+      // #1171: WhatsApp is the default destination; the smoke checks the (still supported) lead-form path.
+      await page.locator("#destination-instant_form").check();
       const form = page.locator("#leadform");
       const leadForm = await form.locator('option:not([value=""])').first().getAttribute("value", { timeout: 30_000 }).catch(() => null);
       assert.ok(leadForm, `No lead form loaded (${(await form.locator("option").first().innerText().catch(() => "no lead form field")).trim()})`);
@@ -310,6 +312,7 @@ try {
       await creative.click();
       await page.getByRole("textbox", { name: "Campaign name", exact: true }).fill(name);
       await page.locator("#budget").fill("350");
+      await page.locator("#destination-instant_form").check();
       const form = page.locator("#leadform");
       const solarideForm = await form.locator("option").filter({ hasText: /solaride/i }).first().getAttribute("value");
       assert.ok(solarideForm, "No Solaride lead form; nothing created");

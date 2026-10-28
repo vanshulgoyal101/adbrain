@@ -175,12 +175,6 @@ export function BrandForm({ business, photoCount = 0 }: { business: Business | n
     },
     { label: "Audience and area", ready: Boolean(firstLine(fields.locations)), href: "#brand-creative" },
     { label: "Offer or proof point", ready: Boolean(firstLine(fields.usps) || firstLine(fields.offers)), href: "#brand-creative" },
-    {
-      // Prepare blocks lead-form campaigns without the advertiser's own website.
-      label: "Website for lead ads",
-      ready: Boolean(fields.website.trim()),
-      href: "#brand-identity",
-    },
     { label: "Logo", ready: Boolean(fields.logo_url.trim()), href: business ? "#brand-assets" : undefined },
     { label: "Real photos", ready: photoCount > 0, href: business ? "#brand-assets" : undefined },
   ];
@@ -304,7 +298,7 @@ export function BrandForm({ business, photoCount = 0 }: { business: Business | n
               placeholder="Your business name"
             />
           </Field>
-          <Field label="Website" error={errors.website}>
+          <Field label="Website (needed only for instant forms)" error={errors.website}>
             <Input
               name="website"
               value={fields.website}
