@@ -34,8 +34,8 @@ describe("core: suggested WhatsApp questions send a welcome Meta accepted (#905)
 
   it("asks Solaride's two offers as a customer would (#1114), keeps Cedar's $49 exam in the owner's words, never as a cost", () => {
     expect(suggestedQuestions(solaride.brand)).toEqual(["Can I book a free site survey?", "Can I get PM Surya Ghar subsidy help?", "What's the price?"]);
-    // The smoke Brand: the exam question would pass 40 characters, so it stays in the owner's words.
-    expect(suggestedQuestions(cedar.brand)).toEqual(["$49 new-patient exam and consultation", "Can I book a free 15-minute spine check?", "What's the price?"]);
+    // The smoke Brand (Designer's #1135 walk): the whole exam question passes 40 characters, so it asks for the priced first item.
+    expect(suggestedQuestions(cedar.brand)).toEqual(["Can I get the $49 new-patient exam?", "Can I book a free 15-minute spine check?", "What's the price?"]);
     for (const language of languages) {
       expect(suggestedQuestions(solaride.brand, language).join(" ")).not.toMatch(/cost|कितन|kitna/i);
     }
