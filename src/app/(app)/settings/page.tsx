@@ -12,6 +12,9 @@ import { SpendGuardrails } from "@/components/spend-guardrails";
 import { PreferenceSettings } from "@/components/preference-settings";
 import { PrivacyRequests } from "@/components/privacy-requests";
 import { WhatsAppAlerts } from "@/components/whatsapp-alerts";
+import { AppLanguage } from "@/components/app-language";
+import { translator } from "@/i18n/locale";
+import { requestLocale } from "@/i18n/request-locale";
 import { readAlertSettings } from "@/lib/alerts/settings-read";
 import { WhatsAppStatusSection } from "@/components/whatsapp-status-section";
 import { MetaSetupChecklist } from "@/components/meta-setup-checklist";
@@ -119,13 +122,17 @@ export default async function SettingsPage({
 
 // #238: read once in the server render; the panels refetch only after the owner acts.
 async function PreferenceAndPrivacySettings({ businessId }: { businessId: string }) {
-  const [preferences, requests, operator, alerts] = await Promise.all([
+  const [locale, preferences, requests, operator, alerts] = await Promise.all([
+    requestLocale(),
     readPreferenceState(businessId).catch(() => null),
     listOwnPrivacyRequests().catch(() => null),
     privacyOperatorAllowed().catch(() => false),
     readAlertSettings(businessId).catch(() => null),
   ]);
+  const t = translator(locale, "settings");
   return <>
+    {/* #1438: Home follows this choice; other screens follow screen by screen. */}
+    <AppLanguage key={locale} initial={locale} labels={{ language: t("language"), hint: t("languageHint"), saveFailed: t("saveFailed") }} />
     {/* #701: shown once AdBrain's alerts number is set (ALERTS_WHATSAPP). */}
     {alerts && <WhatsAppAlerts businessId={businessId} initial={alerts} />}
     <PreferenceSettings key={businessId} businessId={businessId} initialState={preferences} />
