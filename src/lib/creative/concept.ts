@@ -93,7 +93,8 @@ export interface ConceptInput {
 // Each angle gets its own place and its own way in.
 const OPENINGS: Record<string, string> = {
   value: "with the service and the place",
-  problem: "with the customer's problem, as a short question",
+  // Never a question about the reader's body or traits: Meta's personal-attribute rule (eval, Oct 28: "Stiff neck from long hours?").
+  problem: "with the problem the service fixes, stated as a fact about the situation (a rising bill, a deadline, a broken AC), never a question about the reader",
   offer: "with the offer",
   trust: "with the proof",
 };

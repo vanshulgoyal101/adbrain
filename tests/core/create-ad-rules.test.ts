@@ -78,6 +78,8 @@ describe("core: Create follows the long-running local ad rules (#418 rules 1, 4,
     const leads = AD_ANGLES.slice(0, 3).map((angle) => JSON.parse(buildConceptMessages({ brand: solaride.brand as BrandContext, brief: solaride.brief, angle })[1].content as string).lead);
     expect(leads.map((lead) => lead.place)).toEqual(["Chandigarh", "Panchkula", "Mohali"]);
     expect(new Set(leads.map((lead) => lead.opening)).size).toBe(3);
+    // The problem angle states the situation; asking about the reader's condition is refused by personal-attribute.
+    expect(leads[1].opening).toMatch(/never a question about the reader/);
     const pune = caseById("dental-clinic-en");
     expect(JSON.parse(buildConceptMessages({ brand: pune.brand as BrandContext, brief: pune.brief, angle: AD_ANGLES[2] })[1].content as string).lead)
       .toEqual({ place: "Pune", opening: "with the offer", ask: "Check-up and cleaning for ₹499" });
