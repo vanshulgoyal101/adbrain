@@ -235,8 +235,9 @@ feedback to assess unnecessary questions, abandonment and time to a useful draft
    `supportingText` becomes the one Brand offer fact (up to 64 characters) that states
    it. No repair and no new words; Hindi and Punjabi copy keeps its own picture line.
 4. Generate an image from the validated concept and up to three reference images.
-   When the business has uploaded product photos (Brand assets), the first ad
-   uses the newest one as its image instead (#195): no image call or image cost,
+   When the business has uploaded product photos (Brand assets), ads 1 to
+   min(k, 3) each use a different one, newest first (#195, #1901); a retried ad keeps
+   its own photo. The rest get generated images. An owner-photo ad makes no image call and has no image cost,
    its concept is told the image is the owner's unseen photo, and the receipt
    records `ownerPhoto`. If that photo can't be downloaded or validated, the ad
    gets a generated image as usual.
