@@ -118,6 +118,8 @@ export async function generateVariants(params: {
   onVariant?: (variant: GeneratedVariant) => Promise<void>;
   onFailure?: (angle: AdAngle, error: unknown) => Promise<void>;
   onProgress?: (event: CreateProgressEvent) => void;
+  /** Stops the run early (#1123's top-up budget); the 270 s ceiling always applies. */
+  signal?: AbortSignal;
 }): Promise<GeneratedVariant[]> {
   const {
     brand: rawBrand,
@@ -133,7 +135,7 @@ export async function generateVariants(params: {
   const advisoryPreferences = params.advisoryPreferences?.slice(0, 1_200);
   const sourceFacts = params.sourceFacts?.slice(0, 12).map((fact) => fact.slice(0, 2_000)) ?? [];
   const count = Math.min(Math.max(params.count ?? 3, 1), AD_ANGLES.length);
-  const signal = AbortSignal.timeout(270_000);
+  const signal = params.signal ? AbortSignal.any([AbortSignal.timeout(270_000), params.signal]) : AbortSignal.timeout(270_000);
 
   const angles: AdAngle[] = (
     params.angleIds?.length

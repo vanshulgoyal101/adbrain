@@ -82,6 +82,26 @@ describe("<AdAssistant> live Create progress", () => {
     expect(line).not.toHaveClass("top-0");
   });
 
+  // #1123: the route remakes a failed ad in the same request; its slot goes back to work.
+  it("says 'Making 1 more…' and puts the failed slot back in progress during a top-up", async () => {
+    const { send } = streamedCreate();
+    await startGenerating();
+    await send(
+      progress("proof", "Customer proof", "queued"),
+      progress("value", "Clear value", "queued"),
+      progress("story", "Founder story", "queued"),
+      progress("value", "Clear value", "failed"),
+    );
+    expect(await screen.findByLabelText("Clear value: could not be finished")).toBeInTheDocument();
+    expect(screen.queryByText(/Making .* more/)).not.toBeInTheDocument();
+
+    await send({ type: "topUp", missing: 1 }, progress("value", "Clear value", "queued"), progress("value", "Clear value", "writing"));
+    expect(await screen.findByRole("status")).toHaveTextContent("1 didn't pass our checks. Making 1 more…");
+    expect(screen.getByLabelText("Clear value: in progress")).toBeInTheDocument();
+    // The remade ad reuses its slot: still three ads, no fourth.
+    expect(screen.getAllByLabelText(/^(Customer proof|Clear value|Founder story): /)).toHaveLength(3);
+  });
+
   it("shows each ad's stage as the stream arrives and ends on the final result", async () => {
     const { send, close } = streamedCreate();
     await startGenerating();

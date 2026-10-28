@@ -24,6 +24,8 @@ export const productEventSchema = z.object({
     entityType: z.enum(["business", "creative", "campaign", "adset", "ad", "instruction", "asset", "lead"]).optional(),
     count: z.number().int().nonnegative().max(1_000_000).optional(),
     failedCount: z.number().int().nonnegative().max(1_000_000).optional(),
+    /** #1123: ads the Create top-up round retried. */
+    topUp: z.number().int().nonnegative().max(6).optional(),
     errorCode: label.optional(),
     provider: label.optional(),
     model: label.optional(),

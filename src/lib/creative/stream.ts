@@ -6,3 +6,11 @@ export const CREATE_HEARTBEAT_MS = 15_000;
 export const CREATE_IDLE_MS = 60_000;
 /** Silence the page accepts from a stream with no heartbeat yet: past the route's 300 s maxDuration. */
 export const CREATE_IDLE_NO_HEARTBEAT_MS = 330_000;
+
+/**
+ * #1123: when the first pass saves fewer ads than asked, one top-up round retries the missing ones.
+ * It starts only if the first pass ended within this time (paid partial batches end at ~40 s)...
+ */
+export const CREATE_TOP_UP_START_MS = 60_000;
+/** ...and is cut off after this long: one concept, one repair and one image (paid batches take ~43 s). */
+export const CREATE_TOP_UP_BUDGET_MS = 45_000;
