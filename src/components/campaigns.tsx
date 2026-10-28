@@ -1389,6 +1389,12 @@ function BusinessCampaigns({
     setCardError(null);
     if (next === "active" && !confirmed) {
       setConnectionIntent({ kind: "review_activation", campaignId: c.id });
+      // #1333: a healthy connection goes straight to the activation review; the dialog is only for something to fix.
+      const connection = await createMetaConnectClient().status(business.id).catch(() => null);
+      if (connection?.authorization === "connected" && connection.selected && connection.capabilities?.canActivate?.state === "available") {
+        await openActivationReview(c, connection);
+        return;
+      }
       setConnectOpen(true);
       return;
     }
