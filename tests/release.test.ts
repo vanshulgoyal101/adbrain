@@ -119,6 +119,10 @@ describe("release inputs", () => {
       "smoke\tRead-only core smoke\t2026-10-23T13:43:16.78Z PASS Dashboard",
     ].join("\n");
     expect(smokeCounts(log)).toEqual({ pass: 2, fail: 0 });
+    const retried = ["2026-10-28T21:17:00.1Z PASS Sign in", "2026-10-28T21:18:44.1Z FAIL Prepare preflight: Sign in required",
+      "2026-10-28T21:19:46.1Z PASS Sign in", "2026-10-28T21:20:06.1Z PASS Prepare preflight", "2026-10-28T21:20:38.1Z PASS Step 1"].join("\n");
+    expect(smokeCounts(retried)).toEqual({ pass: 3, fail: 0 });
+    expect(smokeCounts(`${retried}\n2026-10-28T21:21:00.1Z FAIL Step 2 LCP`)).toEqual({ pass: 3, fail: 1 });
     expect(supersededBy("2026-10-23T13:02:08.45Z Superseded: production serves newer d34d32d; skipping smoke for 4202350")).toBe("d34d32d");
     expect(supersededBy(log)).toBeNull();
   });
