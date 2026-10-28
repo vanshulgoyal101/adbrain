@@ -1464,14 +1464,12 @@ async function verifyMediaAssets(db, database) {
   await check(`${database}: media library: owners read only their own photos, only the server writes, one live row per file (#1209)`, async () => {
     await as("service_role", null, async (session) => {
       await session.query("insert into public.media_assets(business_id,path,sha256,bytes,mime,width,height,status) values ($1::uuid,$1::text||'/a.jpg',$3,1000,'image/jpeg',1080,1350,'ready'),($2::uuid,$2::text||'/b.jpg',$3,1000,'image/jpeg',1080,1080,'ready')", [business, otherBusiness, sha(1)]);
-      await session.query("insert into public.media_consents(business_id,user_id,terms_version,people_consent) values ($1,$2,'v1',true)", [business, owner]);
       await session.query("insert into storage.objects(bucket_id,name) values ('media',$1::text||'/a.jpg'),('media',$2::text||'/b.jpg')", [business, otherBusiness]);
       for (const [sql, params, code] of [
         ["insert into public.media_assets(business_id,path,sha256) values ($1::uuid,$2::text||'/c.jpg',$3)", [business, otherBusiness, sha(2)], "23514"],
         ["insert into public.media_assets(business_id,path,sha256) values ($1::uuid,$1::text||'/d.jpg','not-a-hash')", [business], "23514"],
         ["insert into public.media_assets(business_id,path,sha256,mime) values ($1::uuid,$1::text||'/e.heic',$2,'image/heic')", [business, sha(3)], "23514"],
         ["insert into public.media_assets(business_id,path,sha256) values ($1::uuid,$1::text||'/f.jpg',$2)", [business, sha(1)], "23505"],
-        ["update public.media_consents set people_consent=false where business_id=$1", [business], "42501"],
       ]) {
         await session.query("savepoint s");
         await assert.rejects(session.query(sql, params), { code }, sql);
@@ -1484,13 +1482,11 @@ async function verifyMediaAssets(db, database) {
       await session.query("select set_config('request.jwt.claim.sub',$1,true)", [owner]);
       await session.query("set local role authenticated");
       assert.deepEqual((await session.query("select path from public.media_assets order by path")).rows.map(row => row.path), [`${business}/a.jpg`]);
-      assert.equal((await session.query("select count(*)::int as n from public.media_consents")).rows[0].n, 1);
       assert.deepEqual((await session.query("select name from storage.objects where bucket_id='media'")).rows.map(row => row.name), [`${business}/a.jpg`]);
       for (const [sql, params] of [
         ["insert into public.media_assets(business_id,path,sha256) values ($1::uuid,$1::text||'/x.jpg',$2)", [business, sha(4)]],
         ["update public.media_assets set name='mine' where business_id=$1", [business]],
         ["delete from public.media_assets where business_id=$1", [business]],
-        ["insert into public.media_consents(business_id,user_id,terms_version) values ($1,$2,'v1')", [business, owner]],
       ]) {
         await session.query("savepoint s");
         await assert.rejects(session.query(sql, params), { code: "42501" }, sql);

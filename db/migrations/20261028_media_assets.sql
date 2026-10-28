@@ -3,8 +3,8 @@ set local lock_timeout = '5s';
 set local statement_timeout = '30s';
 
 -- #1209 (#744 phase 1, slice A; #748, #778, #784): owners upload their own photos into a private bucket and see
--- them in a media library. Additive: two new tables, one nullable column on creatives, one FK on campaign_ads,
--- one private bucket. Nothing existing changes.
+-- them in a media library. Additive: one new table, one nullable column on creatives, one FK on campaign_ads,
+-- one private bucket. Nothing existing changes. The rights confirmation (media_consents) is #1248's (#784).
 --
 -- media_assets: one row per uploaded file. The browser uploads straight to Storage with a signed upload URL the
 -- server minted (bytes never pass through Vercel), so a row starts 'pending' and the server sets 'ready' after it
@@ -45,32 +45,13 @@ create index if not exists media_assets_business_created_idx on public.media_ass
 create index if not exists media_assets_pending_idx on public.media_assets(status, created_at) where status = 'pending';
 create index if not exists media_assets_creative_idx on public.media_assets(creative_id) where creative_id is not null;
 
--- media_consents (#784, #790): the owner's rights confirmation before the first upload. Append-only: a new
--- confirmation adds a row; nothing updates or deletes one.
-create table if not exists public.media_consents (
-  id uuid primary key default gen_random_uuid(),
-  business_id uuid not null references public.businesses(id) on delete cascade,
-  user_id uuid not null references auth.users(id) on delete cascade,
-  terms_version text not null check (terms_version ~ '^[a-z0-9._-]{1,40}$'),
-  people_consent boolean not null default false,
-  user_agent_hash text check (user_agent_hash ~ '^[0-9a-f]{64}$'),
-  confirmed_at timestamptz not null default now()
-);
-create index if not exists media_consents_business_idx on public.media_consents(business_id, confirmed_at desc);
-create index if not exists media_consents_user_idx on public.media_consents(user_id);
-
 alter table public.media_assets enable row level security;
-alter table public.media_consents enable row level security;
-revoke all on public.media_assets, public.media_consents from public, anon, authenticated, service_role;
-grant select on public.media_assets, public.media_consents to authenticated;
+revoke all on public.media_assets from public, anon, authenticated, service_role;
+grant select on public.media_assets to authenticated;
 grant select, insert, update, delete on public.media_assets to service_role;
-grant select, insert on public.media_consents to service_role;
 
 drop policy if exists "media assets: read own" on public.media_assets;
 create policy "media assets: read own" on public.media_assets
-  for select to authenticated using (public.owns_business(business_id));
-drop policy if exists "media consents: read own" on public.media_consents;
-create policy "media consents: read own" on public.media_consents
   for select to authenticated using (public.owns_business(business_id));
 
 -- The ad made from an uploaded photo points back at it (#748, #752); deleting the photo keeps the ad.
