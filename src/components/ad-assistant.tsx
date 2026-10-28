@@ -157,7 +157,7 @@ export function AdAssistant({ business, opening = null, occasions = [], onFlowSt
   const [prepared, setPrepared] = useState<PreparedBrief | undefined>();
   const [recentGoals, setRecentGoals] = useState<string[]>([]);
   const [referenceBrief, setReferenceBrief] = useState<string | undefined>();
-  const [language, setLanguage] = useState<CreateLanguageId>(() => defaultAdLanguage(business.languages));
+  const [language, setLanguage] = useState<CreateLanguageId>(() => defaultAdLanguage(business.languages, business.vertical));
   // An explicit pick wins over the language the interview suggests.
   const [languagePicked, setLanguagePicked] = useState(false);
   const [error, setError] = useState<string | null>(null);
