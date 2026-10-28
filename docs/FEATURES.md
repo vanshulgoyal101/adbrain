@@ -276,7 +276,7 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
   Instant form for now", and Create's "Review this ad" waits instead of preparing a blocked
   review (#1171). Instant form is the second choice and still fully supported; a restored
   draft keeps its destination.
-  The Brand's Website reads "needed only for instant forms" and isn't in the readiness count. A guided draft uses the Page's own
+  The Brand's Website reads "optional: lets AdBrain fill this page for you" (#1238) and isn't in the readiness count. A guided draft uses the Page's own
   number until it is prepared again from manual setup.
 - Review displays and hashes the verified number. Creation rechecks it before
   any mutation. WhatsApp never silently falls back to a form.

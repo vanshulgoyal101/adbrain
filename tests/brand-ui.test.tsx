@@ -202,12 +202,12 @@ describe("<BrandForm> prefill", () => {
     }
   });
 
-  // #1171: WhatsApp is the default destination; the website is needed only for instant forms.
-  it("does not count a website towards readiness and says it is needed only for instant forms", () => {
+  // #1171: WhatsApp is the default destination. #1238: the label says what a website is for (autofill), not 'only for instant forms'.
+  it("does not count a website towards readiness and says it's optional, for autofill", () => {
     render(<BrandForm business={business({ website: null, phone: "+91 98765 43210" })} />);
     const preview = screen.getByRole("region", { name: "Preview" });
     expect(preview).toHaveTextContent("3 of 5 ready");
-    expect(screen.getByLabelText("Website (needed only for instant forms)")).toBe(screen.getByPlaceholderText("example.com"));
+    expect(screen.getByLabelText("Website (optional: lets AdBrain fill this page for you)")).toBe(screen.getByPlaceholderText("example.com"));
 
     fireEvent.change(screen.getByPlaceholderText("example.com"), {
       target: { value: "https://example.com" },
