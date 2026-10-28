@@ -752,8 +752,10 @@ function BusinessCampaigns({
       setIncludedNames((prefill.targeting?.location?.includedNames ?? []).join("\n"));
       setExcludedNames((prefill.targeting?.location?.excludedNames ?? []).join("\n"));
       setLeadFormId(prefill.leadFormId ?? "");
-      if (prefill.destination) setDestination(prefill.destination);
-      destinationChosenRef.current = Boolean(prefill.destination);
+      // #1216: a copy with a lead form is a form campaign, whatever the composer's default.
+      const copiedDestination = prefill.destination ?? (prefill.leadFormId ? "instant_form" : undefined);
+      if (copiedDestination) setDestination(copiedDestination);
+      destinationChosenRef.current = Boolean(copiedDestination);
       setWhatsAppNumber(!prefill.whatsappNumber || maskedWhatsAppNumberPattern.test(prefill.whatsappNumber) ? prefill.whatsappNumber ?? "" : maskWhatsAppNumber(prefill.whatsappNumber));
       setWhatsAppLanguage(prefill.whatsappLanguage ?? "ad");
       setWhatsAppMessage(prefill.whatsappMessage ?? null);
