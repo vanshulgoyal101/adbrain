@@ -288,7 +288,8 @@ try {
       if (create) assert.equal(create.status, 200, `Create returned HTTP ${create.status}`);
       else console.log("NOTE Create stream body was not kept by the browser; counted the saved ads instead");
       assert.equal(savedCount, 3, `Create saved ${savedCount}/3 ads; do not retry before checking saved work`);
-      await page.getByRole("button", { name: "Review ads" }).waitFor({ state: "visible" });
+      // #904 made "Review ads" a link, not a button (QA on #1227).
+      await page.getByRole("link", { name: "Review ads", exact: true }).waitFor({ state: "visible" });
       assert.equal(errors.length, 0, errors[0] ?? "Browser error after Create");
       console.log(`PASS Create: ${savedCount}/3 saved (one paid run; record in #88)`);
     } catch (error) {
