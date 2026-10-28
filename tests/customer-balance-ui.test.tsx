@@ -20,6 +20,10 @@ it("distinguishes verified payments, media, tax and unavailable customer funds",
   expect(screen.queryByRole("button", { name: /pay|activate/i })).not.toBeInTheDocument();
   // #1235 (owner): AdBrain's split or margin is never shown to customers.
   expect(view.container.textContent).not.toMatch(/\b(80|20)\s?%|service (fee|allocation)|allocation|margin/i);
+  // Paid beside the ad budget would show the margin by subtraction, so the default view has no Paid row.
+  expect(screen.getByText("Ad budget, incl. Meta's GST").nextSibling).toHaveTextContent("₹8,000");
+  expect(screen.queryByText("Paid")).not.toBeInTheDocument();
+  expect(view.container.textContent).not.toContain("₹10,000");
   view.rerender(<CustomerBalance businessId="33333333-3333-4333-8333-333333333333" />);
   expect(screen.queryByText("Spent on ads, incl. Meta's GST")).not.toBeInTheDocument();
   expect(screen.getByRole("status")).toHaveTextContent("Checking ad budget");
