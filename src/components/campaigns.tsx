@@ -1070,12 +1070,14 @@ function BusinessCampaigns({
   }
 
   // #1004: from Create's 'Review this ad', the same prepare as the Review button runs once, after the
-  // WhatsApp check has picked the destination and (for a form) a lead form is chosen or its error shown.
+  // WhatsApp check, once WhatsApp has a ready number (#1171: else its checklist shows first) or, for a form,
+  // a lead form is chosen or its error shown.
   const autoReviewRef = useRef(Boolean(newCampaign?.review) && !initialSetup);
   const [autoReviewPending, setAutoReviewPending] = useState(Boolean(newCampaign?.review) && !initialSetup);
   const autoReview = useEffectEvent(() => {
     if (!autoReviewRef.current || recoveryPending || unresolvedRecovery() || isPreparing()) return;
     if (selected.size === 0 || (destination === "instant_form" && !leadFormId && !formsError)) return;
+    if (destination === "whatsapp" && whatsappStatus?.state !== "ready") return;
     autoReviewRef.current = false;
     setAutoReviewPending(false);
     void prepareManualCampaign();
@@ -1743,7 +1745,10 @@ function BusinessCampaigns({
           </fieldset>
           </div>
           {showDestinationLock && <p id="destination-lock-reason" role="status" className="mb-4 text-sm text-amber-800">Destination is locked until the previous campaign request is resolved.</p>}
-          {showComposer && destination === "whatsapp" && <div className="mb-4"><WhatsAppReadyChecklist businessId={business.id} /></div>}
+          {showComposer && destination === "whatsapp" && <div className="mb-4"><WhatsAppReadyChecklist businessId={business.id} />
+            {/* #1171 (QA): WhatsApp stays the default; an owner without a linked number can still run ads today. */}
+            {whatsappStatus?.state !== "ready" && <Button type="button" variant="ghost" className="mt-1 h-11 px-0 text-blue-700" disabled={preparing || creating || destinationRecoveryLocked} onClick={() => switchDestination("instant_form")}>No WhatsApp number yet? Use an Instant form for now</Button>}
+          </div>}
           {showComposer && creationMode === "guided" && <CampaignChat
             businessId={business.id}
             destination={destination}

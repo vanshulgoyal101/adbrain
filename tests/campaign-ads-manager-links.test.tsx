@@ -29,6 +29,13 @@ function view(metaReady = false) {
   return render(<Campaigns business={business} approved={[creative]} initialCampaigns={[]} initialResults={{}} leadForms={[{ id: "form-1", name: "Enquiries", status: "ACTIVE" }]} leadFormError={null} metaReady={metaReady} adAccountId="" />);
 }
 
+// #1171: WhatsApp chat is the default; these flows start on the lead form and switch to WhatsApp.
+function viewInstantForm() {
+  const result = view();
+  fireEvent.click(screen.getByRole("radio", { name: "Instant form" }));
+  return result;
+}
+
 beforeEach(() => {
   vi.resetAllMocks();
   sessionStorage.clear();
@@ -97,7 +104,7 @@ describe("campaign Ads Manager links", () => {
 
   it.each(["validation", "save", "reconnect"])("preserves resolved recovery when new preparation fails at %s", async (failure) => {
     mocks.createCampaign.mockResolvedValue({ operationId: "44444444-4444-4444-8444-444444444444", state: "failed", checkpoints: [], externalIds: {}, error: null });
-    view();
+    viewInstantForm();
     fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
     fireEvent.click(screen.getByRole("button", { name: "Check my campaign (nothing spends)" }));
     fireEvent.click(await screen.findByRole("button", { name: "Send to Meta (paused)" }));
@@ -116,7 +123,7 @@ describe("campaign Ads Manager links", () => {
       fireEvent.click(screen.getByRole("button", { name: "Check my campaign (nothing spends)" }));
       await screen.findByText("Choose a lead form before preparing campaign review.");
     }
-    const destination = screen.getByRole("radio", { name: "WhatsApp chat" });
+    const destination = screen.getByRole("radio", { name: "WhatsApp chat (recommended)" });
     fireEvent.click(destination);
     expect(destination).toBeChecked();
     expect(screen.queryByRole("button", { name: "Send to Meta (paused)" })).toBeNull();
@@ -125,7 +132,7 @@ describe("campaign Ads Manager links", () => {
 
   it.each(["succeeded", "failed", "pending", "running", "needs_reconciliation", "missing", "unavailable"])("uses recovered %s operation state to control destination selection", async (state) => {
     mocks.createCampaign.mockRejectedValue(new Error("Request interrupted"));
-    const first = view();
+    const first = viewInstantForm();
     fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
     fireEvent.click(screen.getByRole("button", { name: "Check my campaign (nothing spends)" }));
     fireEvent.click(await screen.findByRole("button", { name: "Send to Meta (paused)" }, { timeout: 5000 }));
@@ -144,10 +151,12 @@ describe("campaign Ads Manager links", () => {
       expect(sessionStorage.length).toBe(0);
       fireEvent.click(screen.getByRole("button", { name: "New campaign" }));
     }
-    const destination = screen.getByRole("radio", { name: "WhatsApp chat" });
+    const destination = screen.getByRole("radio", { name: "WhatsApp chat (recommended)" });
     if (state === "succeeded" || state === "failed") {
       expect(destination).toBeEnabled();
       fireEvent.click(screen.getByRole("radio", { name: "Plan with AdBrain" }));
+      // A new campaign after success opens on WhatsApp; leave it first so the switch back is a real change.
+      if (state === "succeeded") fireEvent.click(screen.getByRole("radio", { name: "Instant form" }));
       fireEvent.click(destination);
       expect(destination).toBeChecked();
       expect(screen.queryByRole("region", { name: "Campaign review result" })).toBeNull();
@@ -160,12 +169,12 @@ describe("campaign Ads Manager links", () => {
 
   it("allows switching to WhatsApp after a confirmed failed creation", async () => {
     mocks.createCampaign.mockResolvedValue({ operationId: "44444444-4444-4444-8444-444444444444", state: "failed", checkpoints: [], externalIds: {}, error: null });
-    view();
+    viewInstantForm();
     fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
     fireEvent.click(screen.getByRole("button", { name: "Check my campaign (nothing spends)" }));
     fireEvent.click(await screen.findByRole("button", { name: "Send to Meta (paused)" }));
     await waitFor(() => expect(mocks.createCampaign).toHaveBeenCalledTimes(1));
-    const destination = screen.getByRole("radio", { name: "WhatsApp chat" });
+    const destination = screen.getByRole("radio", { name: "WhatsApp chat (recommended)" });
     await waitFor(() => expect(destination).toBeEnabled());
     fireEvent.click(screen.getByRole("radio", { name: "Plan with AdBrain" }));
     fireEvent.click(destination);
@@ -201,7 +210,7 @@ describe("campaign Ads Manager links", () => {
       resolvedAreaLabel: "Jaipur", selected, destination: "whatsapp", whatsappNumber: "+919876543210",
     }));
     const first = view();
-    fireEvent.click(screen.getByRole("radio", { name: "WhatsApp chat" }));
+    fireEvent.click(screen.getByRole("radio", { name: "WhatsApp chat (recommended)" }));
     const language = screen.getByLabelText("Message language");
     expect(language).toHaveValue("ad");
     fireEvent.change(language, { target: { value: "en" } });
@@ -222,7 +231,7 @@ describe("campaign Ads Manager links", () => {
       resolvedAreaLabel: "Jaipur", selected, destination: "whatsapp", whatsappNumber: "+919876543210",
     }));
     const first = view();
-    fireEvent.click(screen.getByRole("radio", { name: "WhatsApp chat" }));
+    fireEvent.click(screen.getByRole("radio", { name: "WhatsApp chat (recommended)" }));
     fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
     expect(screen.queryByLabelText("Lead form")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Check my campaign (nothing spends)" }));
@@ -231,7 +240,7 @@ describe("campaign Ads Manager links", () => {
     expect(vi.mocked(fetch).mock.calls.some(([url]) => url === "/api/campaigns/lead-forms")).toBe(false);
     first.unmount();
     view();
-    await waitFor(() => expect(screen.getByRole("radio", { name: "WhatsApp chat" })).toBeChecked());
+    await waitFor(() => expect(screen.getByRole("radio", { name: "WhatsApp chat (recommended)" })).toBeChecked());
     expect(screen.queryByLabelText("Lead form")).not.toBeInTheDocument();
     expect(mocks.createCampaign).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Check my campaign (nothing spends)" }));

@@ -89,6 +89,12 @@ describe("Review to campaign (#134)", () => {
     let forms: Array<{ id: string; name: string; status: string }> = [];
     const open = (review: boolean) => render(<Campaigns business={business} approved={[approvedA, approvedB]} initialCampaigns={[existing]} initialResults={{}}
       leadForms={[]} leadFormError={null} metaReady adAccountId="act_1" newCampaign={{ creativeIds: [approvedB.id], review }} />);
+    // #1171: WhatsApp chat is the default; the lead-form path starts once the owner picks Instant form.
+    const openInstantForm = (review: boolean) => {
+      const result = open(review);
+      fireEvent.click(screen.getByRole("radio", { name: "Instant form" }));
+      return result;
+    };
     beforeEach(() => {
       forms = [{ id: FORM, name: "Enquiries", status: "ACTIVE" }];
       mocks.status.mockResolvedValue({ authorization: "connected", generation: 1 });
@@ -103,7 +109,7 @@ describe("Review to campaign (#134)", () => {
     });
 
     it("prepares Review once with exactly the chosen ad, after the lead form has loaded", async () => {
-      open(true);
+      openInstantForm(true);
       await waitFor(() => expect(mocks.saveDraft).toHaveBeenCalledTimes(1));
       expect(mocks.saveDraft.mock.calls[0][0]).toMatchObject({ creativeIds: [approvedB.id], leadFormId: FORM, dailyBudgetRupees: 300 });
       await new Promise((resolve) => setTimeout(resolve, 20));
@@ -112,7 +118,7 @@ describe("Review to campaign (#134)", () => {
 
     it("waits on the composer, without saving anything, while a form campaign has no lead form", async () => {
       forms = [];
-      open(true);
+      openInstantForm(true);
       await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).startsWith("/api/meta/whatsapp"))).toBe(true));
       await new Promise((resolve) => setTimeout(resolve, 50));
       expect(mocks.saveDraft).not.toHaveBeenCalled();
@@ -122,7 +128,7 @@ describe("Review to campaign (#134)", () => {
     // QA 2 on #1004: several forms and none chosen left the owner on the composer with no hint.
     it("with several forms, says choosing one opens Review, and choosing it does (no Check tap); the choice is remembered", async () => {
       forms = [{ id: FORM, name: "Enquiries", status: "ACTIVE" }, { id: "1732372914636574", name: "Callbacks", status: "ACTIVE" }];
-      open(true);
+      openInstantForm(true);
       expect(await screen.findByText("Choose the form for these enquiries, and Review opens.")).toBeTruthy();
       expect(mocks.saveDraft).not.toHaveBeenCalled();
       fireEvent.change(screen.getByLabelText("Lead form"), { target: { value: "1732372914636574" } });
@@ -135,9 +141,21 @@ describe("Review to campaign (#134)", () => {
     it("preselects the lead form used last time when the Page still has it, so Review opens by itself", async () => {
       forms = [{ id: FORM, name: "Enquiries", status: "ACTIVE" }, { id: "1732372914636574", name: "Callbacks", status: "ACTIVE" }];
       localStorage.setItem(`campaign-lead-form:${business.owner_id}:${business.id}`, "1732372914636574");
-      open(true);
+      openInstantForm(true);
       await waitFor(() => expect(mocks.saveDraft).toHaveBeenCalledTimes(1));
       expect(mocks.saveDraft.mock.calls[0][0]).toMatchObject({ leadFormId: "1732372914636574" });
+    });
+
+    // #1171: on the WhatsApp default, Review waits for a ready number; the WhatsApp checklist shows meanwhile.
+    it("on WhatsApp without a ready number, prepares nothing and shows the WhatsApp ready checklist", async () => {
+      open(true);
+      expect(screen.getByRole("radio", { name: "WhatsApp chat (recommended)" })).toBeChecked();
+      await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).startsWith("/api/meta/whatsapp"))).toBe(true));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(mocks.saveDraft).not.toHaveBeenCalled();
+      expect(mocks.preflight).not.toHaveBeenCalled();
+      expect(document.getElementById("campaign-composer")!.hidden).toBe(false);
+      expect(screen.getByRole("region", { name: "WhatsApp ready?" })).toBeInTheDocument();
     });
 
     it("never prepares on its own without the flag", async () => {

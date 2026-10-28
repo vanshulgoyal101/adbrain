@@ -91,6 +91,8 @@ const scrollIntoView = vi.fn();
 async function prepareBlockedOn(reason: ReviewBlockerReason) {
   mocks.preflight.mockResolvedValue(reviewBlockedOn(reason));
   render(<Campaigns business={business} approved={[creative]} initialCampaigns={[]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady adAccountId="" />);
+  // #1171: WhatsApp chat is the default; this draft is the production lead-form one.
+  fireEvent.click(screen.getByRole("radio", { name: "Instant form" }));
   const leadForm = screen.getByLabelText("Lead form");
   await within(leadForm).findByRole("option", { name: "Enquiries" });
   fireEvent.change(leadForm, { target: { value: "1732372914636573" } });
@@ -177,7 +179,7 @@ describe("core: every Review blocker has a one-tap fix (#723)", () => {
 
     const region = await prepareBlockedOn("REVIEW_NO_WEBSITE");
     fireEvent.click(within(region).getByRole("button", { name: reviewBlockerAlternative("REVIEW_NO_WEBSITE")!.label }));
-    const whatsapp = screen.getByRole("radio", { name: "WhatsApp chat" });
+    const whatsapp = screen.getByRole("radio", { name: "WhatsApp chat (recommended)" });
     expect(whatsapp).toBeChecked();
     expect(whatsapp).toHaveFocus();
   });
@@ -202,6 +204,8 @@ describe("core: every Review blocker has a one-tap fix (#723)", () => {
   // #772: Prepare was silently disabled until an ad and a budget were set; a tap did nothing.
   async function openComposer() {
     render(<Campaigns business={business} approved={[creative]} initialCampaigns={[]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady adAccountId="" />);
+    // #1171: WhatsApp chat is the default; this draft is the production lead-form one.
+    fireEvent.click(screen.getByRole("radio", { name: "Instant form" }));
     const leadForm = screen.getByLabelText("Lead form");
     await within(leadForm).findByRole("option", { name: "Enquiries" });
     fireEvent.change(leadForm, { target: { value: "1732372914636573" } });
@@ -240,6 +244,8 @@ describe("core: every Review blocker has a one-tap fix (#723)", () => {
     const reviewed = { ...runPreflight(productionInput()), serviceArea: { excludedCities: ["Ludhiana", "Amritsar"], keptStates: ["Punjab"], excludedStateCount: 33 } };
     mocks.preflight.mockResolvedValue(reviewed);
     render(<Campaigns business={business} approved={[creative]} initialCampaigns={[]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady adAccountId="" />);
+    // #1171: WhatsApp chat is the default; this draft is the production lead-form one.
+    fireEvent.click(screen.getByRole("radio", { name: "Instant form" }));
     const leadForm = screen.getByLabelText("Lead form");
     await within(leadForm).findByRole("option", { name: "Enquiries" });
     fireEvent.change(leadForm, { target: { value: "1732372914636573" } });

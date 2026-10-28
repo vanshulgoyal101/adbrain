@@ -264,8 +264,10 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
   reach the browser before review) as **WhatsApp button number** and saves the chosen
   mask in the draft; preflight resolves it to the full number. A new campaign, and a plan
   from AdBrain, opens on **WhatsApp chat (recommended)**, listed first; without a ready
-  number the "WhatsApp ready?" checklist shows how to link one (#1171). Instant form is
-  the second choice and still fully supported; a restored draft keeps its destination.
+  number the "WhatsApp ready?" checklist shows how to link one, with a one-tap "Use an
+  Instant form for now", and Create's "Review this ad" waits instead of preparing a blocked
+  review (#1171). Instant form is the second choice and still fully supported; a restored
+  draft keeps its destination.
   The Brand's Website reads "needed only for instant forms" and isn't in the readiness count.
   There is no nudge toward WhatsApp's AI reply (owner rule: no extra automated messages). A guided draft uses the Page's own
   number until it is prepared again from manual setup.

@@ -9,6 +9,7 @@ describe("<CampaignLaunchReview>", () => {
       <CampaignLaunchReview
         selectedCount={0}
         budget={0}
+        destination="instant_form"
         audience="AdBrain decides from your business details"
       />,
     );
@@ -22,6 +23,7 @@ describe("<CampaignLaunchReview>", () => {
       <CampaignLaunchReview
         selectedCount={2}
         budget={500}
+        destination="instant_form"
         leadFormName="Book a consultation"
         audience="Austin, Texas"
       />,
@@ -37,6 +39,7 @@ describe("<CampaignLaunchReview>", () => {
       <CampaignLaunchReview
         selectedCount={1}
         budget={200}
+        destination="instant_form"
         leadFormName="Lead form"
         audience="Jaipur"
       />,
@@ -50,6 +53,7 @@ describe("<CampaignLaunchReview>", () => {
       <CampaignLaunchReview
         selectedCount={2}
         budget={500}
+        destination="instant_form"
         leadFormName="Book a consultation"
         audience="Jaipur"
       />,
@@ -77,7 +81,7 @@ describe("<CampaignLaunchReview>", () => {
 
 describe("Advantage+ audience note (#334)", () => {
   it("tells the owner Meta may widen age and interests but never the area", () => {
-    render(<CampaignLaunchReview selectedCount={1} budget={280} leadFormName="Enquiries" audience="Tricity, ages 25–55" />);
+    render(<CampaignLaunchReview selectedCount={1} budget={280} destination="instant_form" leadFormName="Enquiries" audience="Tricity, ages 25–55" />);
     expect(screen.getByText("Meta may reach people beyond your age range and interests; never outside your area.")).toBeInTheDocument();
   });
 });
