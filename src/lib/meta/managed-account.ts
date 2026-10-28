@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { isInternalUser, type AccountIdentity } from "@/lib/internal-accounts";
+import { isInternalUser, type AccountIdentity, isProspectAccount } from "@/lib/internal-accounts";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { MetaCredentials } from "./client";
 import { decryptMetaToken, fromPostgresBytea } from "./token-store";
@@ -53,7 +53,8 @@ export function managedAccountsEnabled(): boolean {
  * still follows the global flag.
  */
 export function managedAccountsEnabledFor(user: AccountIdentity): boolean {
-  return managedAccountsEnabled() || isInternalUser(user);
+  // #1694: sales prospects (#1317) are internal accounts but must never provision a real child business pre-launch.
+  return managedAccountsEnabled() || (isInternalUser(user) && !isProspectAccount(user));
 }
 
 /** The business's own managed account, or null when managed accounts are off or it has none. */
