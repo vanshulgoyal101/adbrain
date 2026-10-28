@@ -91,14 +91,13 @@ describe("CTO queue watch", () => {
       issue("owner:dev3"), issue("owner:dev3"), issue("owner:dev3", "decision"),
       issue("owner:qa", "owner:dev"), issue("owner:qa"),
     ]);
-    expect(low).toEqual([{ role: "dev2", count: 1 }, { role: "dev3", count: 2 }, { role: "dev4", count: 0 }, { role: "qa", count: 2 }, { role: "qa2", count: 0 }]);
-    // The CPO self-sources from walks and #703, like the Analyst and Designer (#364).
-    expect(low.map((l) => l.role)).not.toContain("cpo");
+    expect(low).toEqual([{ role: "dev2", count: 1 }, { role: "dev3", count: 2 }, { role: "dev4", count: 0 }, { role: "qa", count: 2 }, { role: "qa2", count: 0 },
+      { role: "reviewer", count: 0 }, { role: "devops", count: 0 }, { role: "cpo", count: 0 }, { role: "analyst", count: 0 }, { role: "designer", count: 0 }]);
   });
 
   it("counts the worker's lane pool as supply, so a reactive Reviewer with pool audits isn't low", () => {
     const pool = (lane: string) => ({ labels: [{ name: "core" }, { name: "ready" }, { name: `lane:${lane}` }] });
-    const low = lowQueues([issue("owner:reviewer"), pool("review"), pool("dev")]).map((l) => l.role);
+    const low = lowQueues([issue("owner:reviewer"), pool("review"), pool("review"), pool("dev")]).map((l) => l.role);
     expect(low).not.toContain("reviewer");
     expect(low).toContain("dev4");
     expect(low).toContain("qa");
@@ -170,7 +169,7 @@ describe("Reviewer and QA 2 roles (#575)", () => {
   it("counts their queues", () => {
     const low = lowQueues([{ labels: [{ name: "owner:qa2" }] }, { labels: [{ name: "owner:reviewer" }] }]).map((x) => x.role);
     expect(low).toContain("qa2");
-    expect(low).not.toContain("reviewer"); // self-sourcing (#573)
+    expect(low).toContain("reviewer"); // every role keeps ≥ 3 (CEO, #364)
   });
 });
 
