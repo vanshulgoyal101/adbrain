@@ -15,9 +15,9 @@ export const SETUP_STEPS = [
 ] as const;
 export type SetupStep = (typeof SETUP_STEPS)[number]["step"];
 
-/** A first-timer has no campaign that ever went live (`launched_at` is the first confirmed activation). */
-export function firstTimer(campaigns: { launched_at: string | null }[]): boolean {
-  return !campaigns.some((campaign) => campaign.launched_at);
+/** A first-timer has no campaign that ever went live (`launched_at` is the first confirmed activation) or is on now (imported from Meta). */
+export function firstTimer(campaigns: { launched_at: string | null; status?: string }[]): boolean {
+  return !campaigns.some((campaign) => campaign.launched_at || campaign.status === "active");
 }
 
 type Primary = { label: string; disabled?: boolean } & ({ href: string; onClick?: never } | { onClick: () => void; href?: never });
@@ -29,7 +29,7 @@ type Primary = { label: string; disabled?: boolean } & ({ href: string; onClick?
  */
 export function SetupSpine({ step, saved = null, beforeLeave, primary, children }: {
   step: SetupStep;
-  saved?: "saving" | "saved" | null;
+  saved?: "saving" | "saved" | "failed" | null;
   beforeLeave?: () => Promise<void>;
   primary: Primary;
   children: ReactNode;
@@ -76,7 +76,7 @@ export function SetupSpine({ step, saved = null, beforeLeave, primary, children 
       <div role="group" aria-label={`Step ${step} of 3: ${current.label}`} className="mt-2">
         <div className="flex items-baseline justify-between gap-3 text-sm">
           <p className="text-slate-600"><span className="font-semibold text-slate-900">Step {step} of 3</span> <span aria-hidden="true">·</span> <span>{current.label}</span></p>
-          <p role="status" className="text-xs text-slate-500">{saved === "saving" ? "Saving…" : saved === "saved" ? "Saved" : ""}</p>
+          <p role="status" className={cn("text-xs", saved === "failed" ? "font-medium text-red-800" : "text-slate-500")}>{saved === "saving" ? "Saving…" : saved === "saved" ? "Saved" : saved === "failed" ? "Not saved. Check your connection." : ""}</p>
         </div>
         <div className="mt-2 grid grid-cols-3 gap-1.5" aria-hidden="true">
           {SETUP_STEPS.map((item) => (
