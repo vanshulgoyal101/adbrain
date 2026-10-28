@@ -229,6 +229,9 @@ scope the smoke to the changed workflow and its meaningful dependencies:
 - Expected production security headers and CSP behavior with real origins.
 - Real authentication and owner-scoped reads; no development bypass.
 - Correct schema/RPC access, public asset rendering and existing saved content.
+- A changed stylesheet or script is actually served: `supportsImmutableAssets: false`
+  (#1346) keeps assets on per-deployment `?dpl=` URLs, because Vercel's immutable
+  asset names once reused a changed CSS chunk and served the year-cached old file.
 - Exact affected workflow with approved fixtures and side-effect limits.
 - Job configuration and logs, without manually invoking mutating enforcement
   merely to get HTTP 200.

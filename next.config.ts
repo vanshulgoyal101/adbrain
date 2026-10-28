@@ -17,6 +17,10 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: __dirname,
   },
+  // #1346: Vercel's immutable static assets reused a CSS chunk name (…/immutable/chunks/0topcl4nf4k_5.css)
+  // after #1323 changed its content, so production kept serving the old, year-cached file. Opt out:
+  // assets go back to per-deployment URLs (?dpl=), so every deploy ships its own CSS/JS.
+  supportsImmutableAssets: false,
   outputFileTracingIncludes: {
     "/api/creatives/**/*": [
       "./node_modules/sharp/**/*",
