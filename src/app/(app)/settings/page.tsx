@@ -22,7 +22,12 @@ import { setupChecklistEnabled } from "@/lib/meta/setup-checklist";
 import { readSetupChecklist } from "@/lib/meta/setup-status";
 import { getMetaConnection } from "@/lib/meta/credentials";
 import { metaOAuthConfigured } from "@/lib/meta/oauth";
-import { getPrimaryBusiness, getSpendEvaluation } from "@/lib/supabase/queries";
+import { createClient } from "@/lib/supabase/server";
+import { getApprovedCreatives, getPrimaryBusiness, getSpendEvaluation } from "@/lib/supabase/queries";
+import { ProspectHandOver } from "@/components/prospect-hand-over";
+import { isProspectAccount } from "@/lib/internal-accounts";
+import { transferChecks } from "@/lib/prospect/transfer";
+import { repTransferState } from "@/lib/prospect/transfer-server";
 import { isRazorpayTestEnabled } from "@/lib/payments/razorpay-test";
 import { isProductionPaymentConfigured } from "@/lib/payments/production-config";
 import { getCustomerBalance } from "@/lib/payments/customer-balance";
@@ -96,6 +101,10 @@ export default async function SettingsPage({
         title="Settings"
         description="Your Meta connection, spending limits and data."
       />
+      {/* #1670: a sales prospect account hands its prepared business to the owner; nothing renders for owners. */}
+      <Suspense fallback={null}>
+        <ProspectHandOverSection businessId={business.id} businessName={business.name} />
+      </Suspense>
       <div className="space-y-6 xl:grid xl:grid-cols-2 xl:items-start xl:gap-6 xl:space-y-0">
         <div className="min-w-0 space-y-6">
           <Suspense fallback={<SettingsLoading label="Meta connection" />}>
@@ -118,6 +127,14 @@ export default async function SettingsPage({
       </div>
     </div>
   );
+}
+
+async function ProspectHandOverSection({ businessId, businessName }: { businessId: string; businessName: string }) {
+  const user = await createClient().then((supabase) => supabase.auth.getUser()).then(({ data }) => data.user, () => null);
+  if (!isProspectAccount(user)) return null;
+  const [state, approved] = await Promise.all([repTransferState(businessId).catch(() => null), getApprovedCreatives(businessId).catch(() => [])]);
+  if (!state) return <Alert variant="error">The hand-over couldn&apos;t be loaded. Refresh to try again.</Alert>;
+  return <ProspectHandOver businessId={businessId} businessName={businessName} ads={approved.length} checks={transferChecks(state.blocker)} latest={state.latest} />;
 }
 
 // #238: read once in the server render; the panels refetch only after the owner acts.
