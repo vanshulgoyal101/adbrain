@@ -14,6 +14,10 @@ const LIVE_EDITS: Record<string, string> = {
   editAdSetBudget: "tests/core/edit-budget.test.ts", // budget
   replaceAdCreative: "tests/core/ad-edit-route.test.ts", // ad copy
   setAdStatus: "tests/ad-pause-service.test.ts", // pausing or resuming one ad
+  // Turning a campaign on builds a capped copy of the original ad set, which would run beside a waiting copy (CTO).
+  enforceCampaignSpendCap: "tests/core/manage-routes.test.ts",
+  createCappedAdSet: "tests/core/manage-routes.test.ts",
+  activateCappedTree: "tests/core/manage-routes.test.ts",
 };
 
 /** Other writers, each with why the guard does not apply. */
@@ -26,10 +30,8 @@ const OTHER_WRITERS: Record<string, string> = {
   deleteAdSetCopy: "cancels or cleans up the waiting copy",
   setAccountSpendCap: "stopping spend must always work (account limit)",
   pauseCampaignTree: "stopping spend must always work",
-  updateCampaignStatus: "stopping spend must always work; turning on is activation",
-  enforceCampaignSpendCap: "activation (Go live / turn on), not an edit",
-  createCappedAdSet: "activation (Go live / turn on), not an edit",
-  activateCappedTree: "activation (Go live / turn on), not an edit",
+  // Its turn-on call sits behind the activation guard above; its pause calls (spend enforcement) must never wait.
+  updateCampaignStatus: "stopping spend must always work",
 };
 
 const READS = new Set([

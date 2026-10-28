@@ -1,13 +1,14 @@
 /**
  * #1414: why a sign-in callback failed, in a word the login page can explain with one action.
  * - `link_expired`: an email link opened late or twice (Supabase `otp_expired`).
- * - `other_browser`: the sign-in finished in a different browser than it started in (PKCE verifier missing). Email links
- *   come back with a `code` too, so this is usually a link opened inside Gmail or another app (QA 2, #1414).
+ * - `other_browser`: Google finished in a different browser than it started in (PKCE verifier missing).
+ * - `link_other_browser`: the same for an email link, which comes back with a `code` too: usually one opened
+ *   inside Gmail's in-app browser (#1562). The callback tells them apart by `via=email|google`.
  * - `cancelled`: the owner backed out of Google.
  */
-export type CallbackErrorReason = "link_expired" | "other_browser" | "cancelled" | "auth";
+export type CallbackErrorReason = "link_expired" | "other_browser" | "link_other_browser" | "cancelled" | "auth";
 
-export function callbackErrorReason(code: string | null | undefined): CallbackErrorReason {
+export function callbackErrorReason(code: string | null | undefined, via: "email" | "google" = "google"): CallbackErrorReason {
   switch (code) {
     case "otp_expired":
       return "link_expired";
@@ -15,7 +16,7 @@ export function callbackErrorReason(code: string | null | undefined): CallbackEr
     case "bad_code_verifier":
     case "flow_state_not_found":
     case "flow_state_expired":
-      return "other_browser";
+      return via === "email" ? "link_other_browser" : "other_browser";
     case "access_denied":
       return "cancelled";
     default:
@@ -39,6 +40,12 @@ export const CALLBACK_ERRORS: Record<CallbackErrorReason, {
     title: "Google sign-in didn't finish here",
     text: "This happens when Google opens in a different app or tab. Try again in this browser, or get an email link.",
     primary: { action: "google", label: "Try Google again" }, secondary: { action: "email", label: "Email me a link instead" },
+  },
+  // #1562 (QA's words; → CPO to confirm).
+  link_other_browser: {
+    title: "This link opened in a different browser",
+    text: "Open it in the browser where you asked for it, or get a new link here.",
+    primary: { action: "new_link", label: "Send a new link" }, secondary: { action: "google", label: "Use Google instead" },
   },
   cancelled: {
     title: "Google sign-in was cancelled",

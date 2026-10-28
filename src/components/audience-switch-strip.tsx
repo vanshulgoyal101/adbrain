@@ -47,7 +47,7 @@ export function AudienceSwitchStrip({ campaignId, operationId, running, lastErro
         <p className="text-amber-900">
           {running
             ? "Your current audience keeps running until you turn the new one on."
-            : "It takes the current audience's place when you use it; nothing starts running."}
+            : "It takes the current audience's place when you use it; nothing starts running. Use or cancel it before you resume the campaign."}
         </p>
         {error && <p role="alert" className="mt-1 font-medium text-red-800">{error}</p>}
       </div>

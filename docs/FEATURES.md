@@ -145,7 +145,7 @@ saved ads instead of starting again; the step waits through "processing" and
 "partial" and treats "unresolved" as finished short, and on arrival it checks the
 newest batch (#1407). The tab that gets a batch's ads publishes them in localStorage
 (`setup-generation-result:{businessId}`, 15 minutes), so other waiting tabs show them
-at once; a 429 from the shared status budget waits out Retry-After (#1534). Missing ads show "N ads couldn't be made. Make another", and a
+at once; a 429 from the shared status budget waits out Retry-After (#1534). Opened mid-batch, the step says "Making your ads…" and Continue waits ("N more on the way…") until the rest lands or the batch ends short (#1564). Missing ads show "N ads couldn't be made. Make another", and a
 top-up shows beside its batch (`setupBatch`). Only ads made from today's step 1
 count (`madeForSetup`: the receipt's source fact is today's `setupGoal`, #1432):
 after the owner changes what they sell, where or their offer, step 2 makes new
@@ -716,6 +716,14 @@ example local businesses, labelled as examples, made by `scripts/make-idea-ads.t
 with the production Create pipeline (no phone numbers, evergreen offers). "Make one
 like this" saves the idea's goal in localStorage and opens Create, which starts from
 it after sign-in; the login page keeps the create-account view while it's pending.
+
+`/for/solar`, `/for/ielts` and `/for/interiors` (#1565, #1315) are static leave-behind
+landings for the pilot segments (`src/lib/segments.ts`): the segment's headline, a
+WhatsApp chat showing what a customer sends, the pilot kit's offer (free first
+campaign, the owner pays Meta from their own ad account, then ₹999 a month with the
+first month free) and trust lines, with "Start my free campaign" → `/login`. The
+"Message us on WhatsApp" button appears when `SUPPORT_WHATSAPP` (or
+`NEXT_PUBLIC_SUPPORT_WHATSAPP`) is set at build time (#796). No margin, no promised results.
 
 Owner activity records, AI usage events, and structured product telemetry serve
 different purposes. See [Observability](OBSERVABILITY.md) for privacy, access, and

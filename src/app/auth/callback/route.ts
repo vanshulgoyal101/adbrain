@@ -20,15 +20,18 @@ async function handleGET(request: Request) {
   const tokenHash = searchParams.get("token_hash");
   const type = searchParams.get("type") as EmailOtpType | null;
   const next = safeAuthRedirect(searchParams.get("redirect"));
+  // #1562: email links come back with a `code` too; the login form says which sign-in started this.
+  const via = searchParams.get("via") === "email" ? "email" : "google";
+  const codeMethod: AuthMethod = via === "email" ? "email_link" : "google";
 
   const supabase = await createClient();
   let failure: string | null | undefined;
 
   if (code) {
     const { data, error } = await supabase.auth.exchangeCodeForSession(code);
-    if (!error) return signedIn("google", data?.user, `${origin}${next}`);
+    if (!error) return signedIn(codeMethod, data?.user, `${origin}${next}`);
     failure = error.code;
-    recordFailure("auth.sign_in.google", failure);
+    recordFailure(`auth.sign_in.${codeMethod}`, failure);
   } else if (tokenHash && type) {
     const { data, error } = await supabase.auth.verifyOtp({
       type,
@@ -45,7 +48,7 @@ async function handleGET(request: Request) {
 
   // #1414: the login page says what happened (expired link, other browser, cancelled) with one action.
   const back = next === "/dashboard" ? "" : `&redirect=${encodeURIComponent(next)}`;
-  return NextResponse.redirect(`${origin}/login?error=${callbackErrorReason(failure)}${back}`);
+  return NextResponse.redirect(`${origin}/login?error=${callbackErrorReason(failure, code ? via : "google")}${back}`);
 }
 
 type CallbackUser = { id: string; email?: string | null; email_confirmed_at?: string | null; last_sign_in_at?: string | null } | null | undefined;

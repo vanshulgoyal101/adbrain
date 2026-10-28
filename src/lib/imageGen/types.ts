@@ -7,6 +7,8 @@ export interface ImageRequest {
   seed?: number;
   /** Public brand/product images used by capable providers as visual references. */
   referenceImages?: string[];
+  /** #1542: the paid picture is unavailable, so this one comes from the slower free provider. Advisory. */
+  onFallback?: () => void;
 }
 
 export interface ImageAttempt {

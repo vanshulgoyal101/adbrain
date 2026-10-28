@@ -48,6 +48,26 @@ describe("<Nav>", () => {
     expect(navigation.queryByText("2")).toBeNull();
   });
 
+  it("stops polling the badge once signed out (401), and backs off on 429 (#1214, #1541)", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: false });
+    const statuses = [429, 401];
+    const fetcher = vi.fn(async () => new Response(null, { status: statuses.shift() ?? 200, headers: { "Retry-After": "300" } }));
+    vi.stubGlobal("fetch", fetcher);
+    try {
+      render(<WorkspaceShell email={null} businessName="Fixture" ownerId="owner" businessId="business"><p>Workspace</p></WorkspaceShell>);
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      expect(fetcher).toHaveBeenCalledTimes(1);
+      await act(async () => { await vi.advanceTimersByTimeAsync(299_000); });
+      expect(fetcher).toHaveBeenCalledTimes(1);
+      await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
+      expect(fetcher).toHaveBeenCalledTimes(2);
+      await act(async () => { fireEvent.focus(window); await vi.advanceTimersByTimeAsync(60 * 60_000); });
+      expect(fetcher).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("polls the unseen count only while visible, at most every 2 minutes, plus once on focus (#270)", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: false });
     let visibility: DocumentVisibilityState = "hidden";
