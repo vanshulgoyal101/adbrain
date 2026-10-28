@@ -103,7 +103,8 @@ export function verdict(input: VerdictInput): Verdict {
       return { state: "no_results", label: input.destination === "whatsapp" ? "No chats yet" : "No enquiries yet",
         sentence: `${rupees(input.spend)} spent, ${noChats} yet.${opens}`, action: input.destination === "whatsapp" ? "edit_message" : null };
     }
-    if (input.impressions === 0) {
+    // Only a running campaign is waiting on Meta; a paused one that never showed says so on its card (#173).
+    if (input.impressions === 0 && input.status === "active") {
       const since = input.liveSince ? Date.parse(input.liveSince) : Number.NaN;
       if (Number.isFinite(since) && input.now - since >= DAY_MS) {
         return { state: "not_showing_day", label: "Not showing yet", sentence: "Your ads haven't started showing after a day. Check what Meta says.", action: "meta_status" };
