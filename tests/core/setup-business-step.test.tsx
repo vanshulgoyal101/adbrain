@@ -174,7 +174,7 @@ describe("core: <SetupBusinessStep> (#1269)", () => {
   });
 
   it("Fill it from my website fills only the empty fields", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ extraction: { vertical: "Solar panels", locations: ["Jaipur"], offers: ["Free survey"], phone: "9876543210" } })));
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ extraction: { vertical: "Solar panels", locations: ["Jaipur"], offers: ["Free survey"], phone: "9876543210", name: "SunPeak Solar" } })));
     await step();
     type("Your offer", "My own offer");
     type("Your website (optional)", "sunpeak.in");
@@ -183,6 +183,7 @@ describe("core: <SetupBusinessStep> (#1269)", () => {
     expect(screen.getByLabelText("What you sell")).toHaveValue("Solar panels");
     expect(screen.getByLabelText("Your offer")).toHaveValue("My own offer");
     expect(screen.getByLabelText("WhatsApp number")).toHaveValue("9876543210");
+    expect(screen.getByLabelText("Business name")).toHaveValue("SunPeak Solar");
   });
 
   it("a website it can't read says so plainly", async () => {

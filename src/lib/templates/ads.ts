@@ -54,6 +54,8 @@ export interface BrandExtraction {
   vertical?: string;
   /** Read from the page's tel: link, not from the model. */
   phone?: string;
+  /** #1379: read from the page's site name/title or the pasted text's first words, not from the model. */
+  name?: string;
 }
 
 /** Meta's supported call-to-action buttons for Leads/Traffic objectives. */
