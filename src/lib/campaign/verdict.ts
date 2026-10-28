@@ -9,14 +9,23 @@ import type { PauseSuggestion } from "@/lib/campaign/ad-pause";
 export const EVIDENCE_MIN_RESULTS = 5;
 export const EVIDENCE_MIN_SPEND = 500;
 export const NO_RESULTS_MIN_SPEND = 300;
-export const ABOUT_AVERAGE_RATIO = 1.25;
+/** The Analyst's gates (#1255, Oct 28): compare only with ≥ 20 results behind the typical cost; quote a range from 30. */
+export const COMPARE_MIN_RESULTS = 20;
+export const RANGE_MIN_RESULTS = 30;
+/** Bands around the typical cost, wide because n = 20 is only ±40–55%. */
+export const COSTLY_RATIO = 1.5;
+export const CHEAPER_RATIO = 0.67;
 export const OPENS_WORTH_MENTIONING = 10;
 const DAY_MS = 86_400_000;
 
-/** What a campaign's ₹ per result is compared with: AdBrain's own runs in the category (#588), or the owner's last campaign. */
+/**
+ * What a campaign's ₹ per result is compared with: AdBrain's own runs in the same category and destination (#588 ledger,
+ * pooled; `typical` is their median ₹/result, `low`–`high` the interquartile range of the runs' ₹/result), or the owner's
+ * last campaign. Either counts only with enough results behind it (COMPARE_MIN_RESULTS).
+ */
 export type Comparison =
-  | { kind: "category"; category: string; low: number; high: number }
-  | { kind: "own"; last: number };
+  | { kind: "category"; category: string; results: number; typical: number; low?: number; high?: number }
+  | { kind: "own"; results: number; typical: number };
 
 export type VerdictInput = {
   destination: "whatsapp" | "instant_form";
@@ -38,8 +47,8 @@ export type VerdictInput = {
 };
 
 export type VerdictState =
-  | "weak_ad" | "no_results" | "not_showing" | "not_showing_day" | "early" | "costly" | "about_average" | "working"
-  | "ended_worked" | "ended_costly" | "ended_too_few";
+  | "weak_ad" | "no_results" | "not_showing" | "not_showing_day" | "early" | "costly" | "about_average" | "working" | "measured"
+  | "ended_worked" | "ended_costly" | "ended_measured" | "ended_too_few";
 export type VerdictAction = "reply" | "pause_ad" | "edit_message" | "meta_status" | "new_ads" | "run_again";
 
 export type Verdict = {
@@ -61,16 +70,22 @@ export function verdict(input: VerdictInput): Verdict {
   const cost = input.results > 0 ? input.spend / input.results : null;
   const number: Verdict["number"] = cost === null ? { kind: "count", value: input.results } : { kind: "cost", value: Math.round(cost) };
   const evidence = input.results >= EVIDENCE_MIN_RESULTS && input.spend >= EVIDENCE_MIN_SPEND;
-  const upper = input.comparison ? (input.comparison.kind === "category" ? input.comparison.high : input.comparison.last) : null;
-  const against = (word: "less than" | "about the same as" | "more than") => !input.comparison ? ""
-    : input.comparison.kind === "category"
-      ? `, ${word} most ${input.comparison.category} ads AdBrain has run (${rupees(input.comparison.low)}–${Math.round(input.comparison.high).toLocaleString("en-IN")})`
-      : `, ${word} your last campaign (${rupees(input.comparison.last)})`;
+  const comparison = input.comparison && input.comparison.results >= COMPARE_MIN_RESULTS && input.comparison.typical > 0 ? input.comparison : null;
+  const typical = comparison?.typical ?? null;
+  const band = cost === null || typical === null ? null : cost > COSTLY_RATIO * typical ? "more than" : cost < CHEAPER_RATIO * typical ? "less than" : "about the same as";
+  const against = (word: "less than" | "about the same as" | "more than") => !comparison ? ""
+    : comparison.kind === "own" ? `, ${word} your last campaign (${rupees(comparison.typical)} each)`
+      : comparison.results >= RANGE_MIN_RESULTS && comparison.low !== undefined && comparison.high !== undefined
+        ? `, ${word} usual for ${comparison.category} ads AdBrain has run (${rupees(comparison.low)}–${Math.round(comparison.high).toLocaleString("en-IN")})`
+        : `, ${word} usual for ${comparison.category} ads AdBrain has run (about ${rupees(comparison.typical)} each)`;
 
   const base = ((): Omit<Verdict, "number"> => {
     if (input.status === "completed") {
-      if (!evidence) return { state: "ended_too_few", label: "Ended", sentence: `It ended with ${chats(input.results)}, too few to judge.`, action: null };
-      if (upper === null || cost! <= upper) {
+      if (!evidence) return { state: "ended_too_few", label: "Ended", sentence: `It ended with ${chats(input.results)}, too few to judge.`, action: "new_ads" };
+      if (band === null) {
+        return { state: "ended_measured", label: "Ended", sentence: `It ended with ${chats(input.results)} at ${rupees(cost!)} each.`, action: "run_again" };
+      }
+      if (band !== "more than") {
         return { state: "ended_worked", label: "Ended", sentence: `It worked: ${chats(input.results)} at ${rupees(cost!)} each. Run it again with the best ad first?`, action: "run_again" };
       }
       return { state: "ended_costly", label: "Ended", sentence: `It didn't bring ${input.destination === "whatsapp" ? "chats" : "enquiries"} at a good price. Try new ads?`, action: "new_ads" };
@@ -82,7 +97,7 @@ export function verdict(input: VerdictInput): Verdict {
         : `One ad has spent ${rupees(ad.spend)} with ${noChats} while your others bring them. Pausing it leaves more of your budget for the ones that work.`;
       return { state: "weak_ad", label: "Costly", sentence, action: "pause_ad" };
     }
-    if (input.results === 0 && input.spend >= Math.max(NO_RESULTS_MIN_SPEND, 1.5 * (upper ?? 0))) {
+    if (input.results === 0 && input.spend >= Math.max(NO_RESULTS_MIN_SPEND, COSTLY_RATIO * (typical ?? 0))) {
       const opens = input.destination === "whatsapp" && (input.opens ?? 0) >= OPENS_WORTH_MENTIONING
         ? ` ${input.opens} people opened WhatsApp but didn't send the message.` : "";
       return { state: "no_results", label: input.destination === "whatsapp" ? "No chats yet" : "No enquiries yet",
@@ -100,13 +115,10 @@ export function verdict(input: VerdictInput): Verdict {
         ? `Early days: ${chats(input.results)} so far. AdBrain will tell you if it's working after ${EVIDENCE_MIN_RESULTS}.`
         : `Early days: ${noChats} yet.` };
     }
-    if (upper === null || cost! <= upper) {
-      return { state: "working", label: "Working", action: null,
-        sentence: input.comparison ? `Working: each ${chat} costs ${rupees(cost!)}${against("less than")}.` : `Each ${chat} costs ${rupees(cost!)}.` };
-    }
-    if (cost! <= ABOUT_AVERAGE_RATIO * upper) {
-      return { state: "about_average", label: "About average", action: null, sentence: `Each ${chat} costs ${rupees(cost!)}${against("about the same as")}.` };
-    }
+    // No comparison with enough results behind it: the number only, and no word on whether that's good (#1255 gates).
+    if (band === null) return { state: "measured", label: "Live", action: null, sentence: `Each ${chat} costs ${rupees(cost!)}.` };
+    if (band === "less than") return { state: "working", label: "Working", action: null, sentence: `Working: each ${chat} costs ${rupees(cost!)}${against("less than")}.` };
+    if (band === "about the same as") return { state: "about_average", label: "About average", action: null, sentence: `Each ${chat} costs ${rupees(cost!)}${against("about the same as")}.` };
     return { state: "costly", label: "Costly", action: "new_ads", sentence: `Each ${chat} costs ${rupees(cost!)}${against("more than")}.` };
   })();
 
