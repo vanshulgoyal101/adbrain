@@ -9,6 +9,7 @@ import { revokeMetaGrant } from "@/lib/meta/revoke-grant";
 import { z } from "zod";
 
 export const runtime = "nodejs";
+const REVOKE_WAIT_MS = 5_000;
 
 /** Remove a business's stored Meta (OAuth) connection. */
 export const POST = observeRoute("/api/meta/disconnect", "POST", handlePOST);
@@ -43,7 +44,13 @@ async function handlePOST(request?: Request) {
       ? await requireOwnedBusiness(businessId)
       : { businessId };
     // #1649: best effort, and only where it can't cut off anyone else; never blocks the disconnect.
-    await revokeMetaGrant(business.businessId);
+    // Waits at most 5 s; a slow revoke keeps running and logs its own outcome.
+    let bound: ReturnType<typeof setTimeout> | undefined;
+    await Promise.race([
+      revokeMetaGrant(business.businessId),
+      new Promise((resolve) => { bound = setTimeout(resolve, REVOKE_WAIT_MS); }),
+    ]);
+    clearTimeout(bound);
     const admin = createAdminClient();
     const { data: disconnected, error } = await admin.rpc("meta_disconnect", {
       p_business_id: business.businessId,

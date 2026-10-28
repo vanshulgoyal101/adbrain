@@ -63,4 +63,20 @@ describe("Meta disconnect target validation", () => {
     expect((await POST(request())).status).toBe(200);
     expect(mocks.rpc).toHaveBeenLastCalledWith("meta_disconnect", { p_business_id: businessId, p_user_id: "owner" });
   });
+  it("disconnects within about 5 s when Meta's revoke hangs (#1649)", async () => {
+    vi.useFakeTimers();
+    try {
+      mocks.revoke.mockImplementation(() => new Promise(() => {}));
+      const { POST } = await import("@/app/api/meta/disconnect/route");
+      const businessId = "11111111-1111-4111-8111-111111111111";
+      const pending = POST(new Request("https://app.test/api/meta/disconnect", { method: "POST", body: JSON.stringify({ businessId }) }));
+      await vi.advanceTimersByTimeAsync(4_900);
+      expect(mocks.rpc).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(200);
+      expect((await pending).status).toBe(200);
+      expect(mocks.rpc).toHaveBeenCalledWith("meta_disconnect", { p_business_id: businessId, p_user_id: "owner" });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
