@@ -126,6 +126,17 @@ details in prompts. See [Data Model](DATA_MODEL.md) and [AI Pipeline](AI_PIPELIN
 
 ## Create and Review Creatives
 
+Until a business has a campaign that went live (or is on now), `/create` is setup
+step 2 of 3 (#1251 WS1, #1270). With no saved batch it runs the existing interview
+(answering "Let the AI decide" to any question, up to 3) and one 3-ad Create run,
+showing one line of progress at a time. Then it shows the newest batch
+(`variant_group`) with 2 pre-picked by a fixed rule (`setupPicks`: fewest text
+repairs, then no image fallback, then the order made). "Continue" approves the picks
+and opens `/campaigns?new=1&creatives=…`. The generation id is kept in
+sessionStorage, so coming back mid-run reads the saved ads instead of starting
+again; missing ads show "N ads couldn't be made. Make another". `/create?all=1`
+opens the full Create below.
+
 1. When the business's campaigns have results, Create opens on one line such as "Your
    “Roof ready?” ad got 1 chat at ₹10.69 (early: based on 1 chat). Make 3 more like it, or
    try a new angle?" **More like this** fills the goal and uses that ad's brief, without
