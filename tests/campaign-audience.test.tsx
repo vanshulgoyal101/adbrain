@@ -5,6 +5,7 @@ import { StrictMode } from "react";
 import { QueryClient, focusManager, onlineManager } from "@tanstack/react-query";
 import { Campaigns } from "@/components/campaigns";
 import { campaignNameDate } from "@/lib/campaign/draft-name";
+import { QUOTED_ASK_WITH_QUESTIONS } from "@/lib/campaign/plan-check";
 import { useCampaignList } from "@/lib/meta-connect-ui/use-campaign-list";
 import type { DraftDTO, DraftInput } from "@/lib/campaign/connect-contracts";
 import type { Business, Campaign, CampaignResult, Creative } from "@/lib/types";
@@ -12,10 +13,12 @@ import type { ConnectionDTO } from "@/lib/meta/connect-contracts";
 import { recoveryStorageKey, writeCampaignRecovery } from "@/lib/meta-connect-ui/recovery";
 
 const mocks = vi.hoisted(() => ({
+  updateCreativeCopy: vi.fn(),
   drafts: vi.fn(), draft: vi.fn(), saveDraft: vi.fn(), updateDraft: vi.fn(), status: vi.fn(), preflight: vi.fn(), createCampaign: vi.fn(), operationForRequest: vi.fn(),
   dialog: { current: null as null | { onConnected: (connection: ConnectionDTO) => void; onBeforeStart?: () => Promise<unknown> } },
 }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
+vi.mock("@/app/(app)/studio/actions", () => ({ updateCreativeCopy: mocks.updateCreativeCopy }));
 vi.mock("@/components/meta-connect/meta-connect-dialog", () => ({ MetaConnectDialog: (props: { onConnected: (connection: ConnectionDTO) => void; onBeforeStart?: () => Promise<unknown> }) => { mocks.dialog.current = props; return null; } }));
 vi.mock("@/components/campaign-chat", () => ({ CampaignChat: () => <div data-testid="guided-campaign-chat" /> }));
 vi.mock("@/lib/meta-connect-ui/client", () => ({ createMetaConnectClient: () => mocks, MetaConnectClientError: class extends Error {} }));
@@ -337,6 +340,23 @@ describe("campaign audience workflow", () => {
     expect(screen.getAllByText(rationale).length).toBeGreaterThan(0);
     expect(saved.input.targeting.audience).toEqual({ interestNames: [], rationale });
     expect(mocks.createCampaign).not.toHaveBeenCalled();
+  });
+
+  // #1198: Quick questions show no ready message; one tap rewrites the quoting ad's last line, then Review runs again.
+  it("rewrites a quoted ask's last line in one tap and checks the campaign again", async () => {
+    const quoting = { ...creative, primary_text: "Cut your power bill.\nWhatsApp “Free site survey” to book.", cta: "Learn More" } as Creative;
+    const fixed = "Cut your power bill.\nTap, then pick a question to send.";
+    const first = mocks.preflight.getMockImplementation()!;
+    mocks.preflight.mockImplementationOnce(async (...args: unknown[]) => ({ ...(await first(...args)), planWarnings: [QUOTED_ASK_WITH_QUESTIONS] }));
+    mocks.updateCreativeCopy.mockResolvedValue({ ok: true, creative: { headline: quoting.headline, primary_text: fixed, cta: "Learn More", generation: null } });
+    render(<Campaigns business={business} approved={[quoting]} initialCampaigns={[]} initialResults={{}} leadForms={[{ id: "form-1", name: "Enquiries", status: "ACTIVE" }]} leadFormError={null} metaReady={false} adAccountId="" />);
+    fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
+    fireEvent.click(screen.getByRole("button", { name: "Check my campaign (nothing spends)" }));
+    expect(await screen.findByText(QUOTED_ASK_WITH_QUESTIONS)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Change the last line" }));
+    await waitFor(() => expect(mocks.updateCreativeCopy).toHaveBeenCalledWith(quoting.id, expect.objectContaining({ headline: quoting.headline, primary_text: fixed, cta: "Learn More" })));
+    await waitFor(() => expect(mocks.preflight).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByText(QUOTED_ASK_WITH_QUESTIONS)).not.toBeInTheDocument());
   });
 
   it("surfaces failed eligibility checks without offering a Meta submission", async () => {

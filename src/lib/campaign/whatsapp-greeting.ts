@@ -26,6 +26,15 @@ export function quotedAsk(primaryText: string | null | undefined): string | null
   return words && /[\p{L}\p{N}]/u.test(words) ? words : null;
 }
 
+/** #1198: the last line for a Quick questions campaign, which has no ready message to quote. */
+export const QUESTIONS_LAST_LINE = "Tap, then pick a question to send.";
+
+/** The ad's copy with its last line replaced by QUESTIONS_LAST_LINE (Review's one-tap fix, #1198). */
+export function withQuestionsLastLine(primaryText: string): string {
+  const lines = primaryText.replace(/\s+$/u, "").split("\n");
+  return [...lines.slice(0, -1), QUESTIONS_LAST_LINE].join("\n");
+}
+
 /** Same words, ignoring case, spacing and end punctuation. */
 export function sameWords(left: string, right: string): boolean {
   const norm = (text: string) => text.toLowerCase().replace(/[\s]+/g, " ").replace(/[.!?।]+$/u, "").trim();
