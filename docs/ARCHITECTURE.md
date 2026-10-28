@@ -311,8 +311,8 @@ and leads paths. Nothing enforces module boundaries in CI (ESLint has no import 
 
 ### Decision
 
-1. **Channel-neutral domain.** Business, Brand, Creative, Campaign (goal, budget, cap, schedule, audience
-   intent), Lead, Result and Connection are plain types and rules with no I/O and no channel words.
+1. **Channel-neutral domain.** Business, Brand, Creative, MediaAsset (owner uploads and consents, #744), Campaign
+   (goal, budget, cap, schedule, audience intent), Lead, Result and Connection are plain types and rules with no I/O and no channel words.
 2. **One adapter per channel** behind `ChannelAdapter`. Meta is adapter #1. A channel's object tree (Meta's
    campaign → ad set → ad), ids, statuses and error codes stay inside its adapter; the domain holds only
    opaque `ExternalRef`s.
@@ -415,6 +415,8 @@ forms → `syncLeads` and `validate`; geo and interest resolution → `validate`
 `switchAdSet`, `createCappedAdSet` and `deleteAdSetCopy` → inside `editAudience`/`activate`/`cleanup`;
 `setAccountSpendCap` and `enforceCampaignSpendCap` → `enforceSpendCap`; WhatsApp number discovery and
 managed provisioning → `connect` (Meta-only steps). Nothing needs a Meta word in the interface.
+Owner media (#744): the library and consents are core; uploading to a channel (`adimages`/`advideos`) and its
+spec checks happen inside `validate`/`launch`, driven by `capabilities.formats`.
 
 ### Data plan (Phase 3, DevOps)
 
