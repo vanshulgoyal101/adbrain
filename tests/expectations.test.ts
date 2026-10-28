@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { whatsappExpectation } from "@/lib/campaign/expectations";
-import { poolLedger } from "@/lib/campaign/ledger";
+import { excludedFromLedger, poolLedger, type LedgerRun } from "@/lib/campaign/ledger";
+import internal from "@/lib/internal-accounts.json";
 
 // #1307: Review states the ledger's facts with n, and quotes no typical cost under 20 pooled chats.
 describe("whatsappExpectation (#1307)", () => {
@@ -17,21 +18,36 @@ describe("whatsappExpectation (#1307)", () => {
 // #1307 "Next": the line reads the #588 ledger live. Production rows read 2026-10-28 (read-only): Diwali (#157) and
 // Free Survey (#499) paused, Lever 2 still running.
 describe("poolLedger (#1307)", () => {
-  it("pools stopped AdBrain runs per destination; a running one waits until it stops", () => {
-    const pooled = poolLedger([
-      { destination: "whatsapp", status: "paused", spend: "820.04", conversations: 5, leads: 0 },
-      { destination: "whatsapp", status: "paused", spend: "374.76", conversations: 1, leads: 0 },
-      { destination: "whatsapp", status: "active", spend: "145.15", conversations: 0, leads: 0 },
-      { destination: "instant_form", status: "completed", spend: 0, conversations: null, leads: 0 },
-    ]);
-    expect(pooled.whatsapp).toEqual({ results: 6, spendRupees: 1194.8, runs: 2 });
-    expect(pooled.instant_form).toEqual({ results: 0, spendRupees: 0, runs: 0 });
-    expect(whatsappExpectation({ chats: pooled.whatsapp.results, spendRupees: pooled.whatsapp.spendRupees })).toBe(whatsappExpectation());
+  const run = (businessId: string, extra: Partial<LedgerRun> = {}): LedgerRun =>
+    ({ businessId, destination: "whatsapp", status: "paused", spend: 200, conversations: 1, leads: 0, ...extra });
+
+  it("pools stopped AdBrain runs per destination; a running or unspent one isn't counted", () => {
+    const pooled = poolLedger([run("a", { spend: "820.04", conversations: 5 }), run("b", { spend: "374.76" }), run("c"), run("d"), run("e"),
+      run("f", { status: "active", spend: "145.15", conversations: 0 }), run("g", { spend: 0 })]);
+    expect(pooled.whatsapp).toEqual({ results: 9, spendRupees: 1794.8, runs: 5 });
+    expect(pooled.instant_form).toBeNull();
   });
+
+  // Reviewer on #1400: until the pool is big enough, the 'pooled' line is one or two other customers' results.
+  it("says nothing until 5 runs from 3 different businesses", () => {
+    expect(poolLedger(["a", "b", "c", "d"].map((id) => run(id))).whatsapp).toBeNull();
+    expect(poolLedger(["a", "a", "a", "b", "b"].map((id) => run(id))).whatsapp).toBeNull();
+    expect(poolLedger(["a", "a", "a", "b", "c"].map((id) => run(id))).whatsapp).toEqual({ results: 5, spendRupees: 1000, runs: 5 });
+  });
+
   it("counts leads for forms and ignores other destinations", () => {
-    expect(poolLedger([
-      { destination: "instant_form", status: "paused", spend: 300, conversations: null, leads: 2 },
-      { destination: "call", status: "paused", spend: 100, conversations: null, leads: 0 },
-    ]).instant_form).toEqual({ results: 2, spendRupees: 300, runs: 1 });
+    const forms = ["a", "b", "c", "d", "e"].map((id) => run(id, { destination: "instant_form", spend: 300, conversations: null, leads: 2 }));
+    expect(poolLedger([...forms, run("x", { destination: "call" })]).instant_form).toEqual({ results: 10, spendRupees: 1500, runs: 5 });
+  });
+});
+
+describe("excludedFromLedger (#1307)", () => {
+  it("leaves out the team, smoke, the demo workspace and sales prospects; keeps customers", () => {
+    const confirmed = "2026-10-01T00:00:00Z";
+    expect(excludedFromLedger({ id: "u", email: "owner@gmail.com", email_confirmed_at: confirmed }, "demo@example.com")).toBe(false);
+    expect(excludedFromLedger({ id: "u", email: "demo@example.com", email_confirmed_at: confirmed }, "demo@example.com")).toBe(true);
+    expect(excludedFromLedger({ id: "u", email: `qa@${internal.domains[0]}`, email_confirmed_at: confirmed }, null)).toBe(true);
+    expect(excludedFromLedger({ id: "u", email: `sales+prospect-x@${internal.domains[0]}`, email_confirmed_at: confirmed }, null)).toBe(true);
+    if (internal.smokeUserIds[0]) expect(excludedFromLedger({ id: internal.smokeUserIds[0], email: "x@gmail.com", email_confirmed_at: confirmed }, null)).toBe(true);
   });
 });

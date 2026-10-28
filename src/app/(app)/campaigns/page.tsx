@@ -146,7 +146,7 @@ export default async function CampaignsPage({
           leadFormError={null}
           metaReady={metaReady}
           adResults={adResultsEnabled()}
-          whatsappLedger={ledger ? { chats: ledger.whatsapp.results, spendRupees: ledger.whatsapp.spendRupees } : null}
+          whatsappLedger={ledger?.whatsapp ? { chats: ledger.whatsapp.results, spendRupees: ledger.whatsapp.spendRupees } : null}
           adAccountId={connection.adAccountId ?? ""}
           weeklyCap={weeklyCap}
           newCampaign={params.new === "1" ? { creativeIds: requested, review: params.review === "1", budget: chosenBudget } : undefined}
