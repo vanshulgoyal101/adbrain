@@ -295,6 +295,30 @@ AdBrain (the #157 run) is adopted after the mark with
 tree back exactly, prints the campaign row (dry run), and `--apply` saves it through
 `saveCampaign` so Pause, sync and results manage the run.
 
+### Pilot setup call (#1279; dry run on the demo business, Oct 28)
+
+Run these in order on the call; each has a read-back. Nothing here spends or
+activates anything.
+
+1. **Operator grant is live** (the mark needs it):
+   `select expires_at > now() from private.production_payment_operators where user_id='<owner id>' and revoked_at is null;`
+   It must be `true`. If not, stop: renewing the grant is the owner's step (CEO asks).
+2. **Mark the business operator-funded** with the command above (`true`, reason
+   `Pilot <n>: owner funds directly on Meta (#…)`). Read back:
+   `select public.operator_funded('<business id>');` gives `true`, and
+   `private.operator_funding_audit` has the new row.
+3. **Weekly cap, by the owner in Settings → Spend guardrails:** Weekly cap (₹),
+   Warn at 80%, tick **Auto-pause at the cap**, **Save guardrails** → "Saved.".
+   Read back: `select weekly_cap_rupees, alert_pct, auto_pause from spend_limits where business_id='<business id>';`.
+4. **Meta spending limit (read-only):**
+   `GET /act_<id>?fields=currency,spend_cap,amount_spent,is_prepay_account,account_status`.
+   Room = `spend_cap − amount_spent` (paise). The first run's total must fit in the
+   room; a `spend_cap` of 0 means no account limit, so the owner sets one in Meta
+   Billing before launch. On Oct 28 the operator account read INR, ₹1,822.04 limit,
+   ₹1,350.63 spent, **₹471.41 room**, prepaid, status 1.
+5. **Undo** (pilot ends or a mistake): `operator_funding_set(…, false, '<reason>')`;
+   clear the cap in Settings (empty cap, auto-pause off, Save).
+
 Insight ingestion validates the aggregate response before saving it: missing
 `data`, multiple rows, pagination, invalid numbers/dates, or duplicate selected
 outcome actions fail refresh instead of replacing stored evidence with zeroes.

@@ -50,6 +50,12 @@ type StudioGeneration = z.infer<typeof studioGenerationSchema>;
 type CreateBatch = { key: string; made: number | null; items: Creative[] };
 
 /** #762: ads in their Create batch (`variant_group`), newest batch first, each in its given order. */
+/** #1261: batches this recent are checked for ads still coming or missing. */
+const RECENT_BATCH_MS = 2 * 60 * 60 * 1000;
+/** The generate route's own ceiling (maxDuration 300 s). */
+const BATCH_DEADLINE_MS = 5 * 60 * 1000;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function createBatches(list: Creative[]): CreateBatch[] {
   const batches = new Map<string, CreateBatch>();
   for (const item of list) {
@@ -83,6 +89,8 @@ export function Studio({
   initialCreativeId?: string | null;
 }) {
   const [items, setItems] = useState<Creative[]>(initialCreatives);
+  // #1261: the newest batch may still be coming in, or may have ended short, after the owner left Create.
+  const [shortfall, setShortfall] = useState<{ brief: string; missing: number; expected: number; ended: boolean } | null>(null);
   // Survives a tab change so a long brief isn't retyped. Kept after generating,
   // since tweaking the brief and regenerating is the normal flow.
   const [brief, setBrief] = useSessionDraft<string>(
@@ -133,6 +141,31 @@ export function Studio({
   );
   const batches = createBatches(visibleItems.filter((item) => !setAside(item)));
   const setAsideItems = visibleItems.filter(setAside);
+  const newest = createBatches(items)[0];
+  const newestKey = newest && newest.made !== null && now - newest.made < RECENT_BATCH_MS && UUID.test(newest.key) ? newest.key : null;
+  useEffect(() => {
+    if (!newestKey || generating) return;
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const check = async () => {
+      const response = await fetch(`/api/creatives/generate?businessId=${encodeURIComponent(business.id)}&generationId=${encodeURIComponent(newestKey)}`, {
+        cache: "no-store", signal: AbortSignal.timeout(10_000),
+      }).catch(() => null);
+      if (stopped || !response?.ok) return;
+      const result = await response.json().catch(() => null) as { status?: string; creatives?: Creative[]; expectedCount?: number } | null;
+      const saved = result?.creatives ?? [];
+      if (stopped || !result?.expectedCount || !saved.length) return;
+      setItems((previous) => [...new Map([...previous, ...saved].map((creative) => [creative.id, creative])).values()]);
+      if (saved.length >= result.expectedCount) { setShortfall(null); return; }
+      // The route stops by 300 s; a batch whose first ad is older than that has ended, whatever its status says.
+      const first = Math.min(...saved.map((creative) => Date.parse(creative.created_at ?? "") || Date.now()));
+      const ended = result.status !== "processing" && result.status !== "partial" || Date.now() - first > BATCH_DEADLINE_MS;
+      setShortfall({ brief: saved[0].brief ?? "", missing: result.expectedCount - saved.length, expected: result.expectedCount, ended });
+      if (!ended) timer = setTimeout(() => void check(), 15_000);
+    };
+    void check();
+    return () => { stopped = true; clearTimeout(timer); };
+  }, [business.id, newestKey, generating]);
   // #360: on a phone the selected ad's picture is the largest paint; board tiles wait for it.
   const [boardImages, setBoardImages] = useState(false);
   useEffect(() => {
@@ -218,9 +251,11 @@ export function Studio({
     return () => { generationMounted.current = false; };
   }, [generationKey]);
 
-  async function generate(e: React.FormEvent) {
-    e.preventDefault();
+  async function generate(e?: React.FormEvent, more?: { brief: string; count: number }) {
+    e?.preventDefault();
     if (generationInFlight.current) return;
+    const runBrief = more?.brief ?? brief;
+    const runCount = more?.count ?? count;
     generationInFlight.current = true;
     setError(null);
     let intent: StudioGeneration | null = pendingGeneration;
@@ -283,11 +318,11 @@ export function Studio({
         const stored = localStorage.getItem(generationKey);
         if (stored) intent = studioGenerationSchema.parse(JSON.parse(stored));
         if (!intent) {
-          if (!brief.trim()) {
+          if (!runBrief.trim()) {
             setError("Describe what you want to advertise.");
             return;
           }
-          intent = { generationId: crypto.randomUUID(), count };
+          intent = { generationId: crypto.randomUUID(), count: runCount };
           localStorage.setItem(generationKey, JSON.stringify(intent));
         } else {
           setPendingGeneration(intent);
@@ -306,9 +341,9 @@ export function Studio({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           businessId: business.id,
-          brief,
-          sourceFacts: [brief.trim()],
-          count,
+          brief: runBrief,
+          sourceFacts: [runBrief.trim()],
+          count: runCount,
           generationId: intent.generationId,
           language,
           format,
@@ -403,7 +438,7 @@ export function Studio({
                   id="count"
                   value={count}
                   onChange={(e) => setCount(Number(e.target.value))}
-                  className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none"
+                  className="h-11 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none"
                 >
                   {[1, 2, 3, 4, 5, 6].map((n) => (
                     <option key={n} value={n}>
@@ -418,7 +453,7 @@ export function Studio({
                   id="language"
                   value={language}
                   onChange={(e) => setLanguage(e.target.value)}
-                  className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none"
+                  className="h-11 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none"
                 >
                   {AD_LANGUAGES.map((l) => (
                     <option key={l.id} value={l.id}>
@@ -429,7 +464,7 @@ export function Studio({
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="format">Placement</Label>
-                <select id="format" value={format} onChange={(event) => setFormat(event.target.value)} className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none">
+                <select id="format" value={format} onChange={(event) => setFormat(event.target.value)} className="h-11 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none">
                   <option value="portrait">Feed 4:5</option>
                   <option value="square">Square 1:1</option>
                   <option value="story">Story 9:16</option>
@@ -531,6 +566,25 @@ export function Studio({
         </div>
       )}
 
+      {shortfall && !generating && (
+        <div role="status" className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
+          {shortfall.ended ? (
+            <>
+              <span>{shortfall.missing} of {shortfall.expected} ads couldn&apos;t be made this time.</span>
+              {shortfall.brief.trim() && (
+                <Button size="sm" variant="outline" onClick={() => { const more = { brief: shortfall.brief, count: shortfall.missing }; setShortfall(null); void generate(undefined, more); }}>
+                  Make {shortfall.missing} more
+                </Button>
+              )}
+            </>
+          ) : (
+            <span>
+              {shortfall.missing === 1 ? "1 more ad is still being made. It appears here when it's ready." : `${shortfall.missing} more ads are still being made. They appear here when they're ready.`}
+            </span>
+          )}
+        </div>
+      )}
+
       {items.length === 0 ? (
         <Card className="border-dashed border-slate-300 bg-white/60">
           <CardContent className="flex flex-col items-center gap-1 px-5 py-12 text-center">
@@ -568,13 +622,13 @@ export function Studio({
               return index === 0
                 ? <div key={batch.key}><p className="px-1 pb-1 text-xs font-medium text-slate-500">{label}</p>{list}</div>
                 : <details key={batch.key} open={batch.items.some((item) => item.id === selectedCreative.id) || undefined} className="border-t border-slate-200 pt-2">
-                    <summary className="flex min-h-10 cursor-pointer items-center px-1 text-sm font-medium text-slate-700">{label}</summary>
+                    <summary className="flex min-h-11 cursor-pointer items-center px-1 text-sm font-medium text-slate-700">{label}</summary>
                     {list}
                   </details>;
             })}
             {setAsideItems.length > 0 && (
               <details open={setAsideItems.some((item) => item.id === selectedCreative.id) || undefined} className="border-t border-slate-200 pt-2">
-                <summary className="flex min-h-10 cursor-pointer items-center px-1 text-sm font-medium text-slate-700">Set aside ({setAsideItems.length}): not picked, or unreviewed after 7 days</summary>
+                <summary className="flex min-h-11 cursor-pointer items-center px-1 text-sm font-medium text-slate-700">Set aside ({setAsideItems.length}): not picked, or unreviewed after 7 days</summary>
                 {adList(setAsideItems)}
               </details>
             )}

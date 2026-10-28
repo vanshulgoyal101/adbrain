@@ -10,7 +10,7 @@ export function WhatsAppChats({ rows }: { rows: WhatsAppChatRow[] }) {
   const [logged, setLogged] = useState<Record<string, number>>({});
   if (!rows.length) return null;
   return (
-    <section aria-labelledby="whatsapp-chats-title" className="mt-8 flex flex-col gap-3">
+    <section aria-labelledby="whatsapp-chats-title" className="flex flex-col gap-3">
       <h2 id="whatsapp-chats-title" className="text-lg font-semibold text-slate-900">WhatsApp chats</h2>
       <div className="grid gap-3 lg:grid-cols-2">
         {rows.map((row) => (
