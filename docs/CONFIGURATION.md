@@ -190,16 +190,17 @@ dollar budget, or image-cost cap**. See [AI Pipeline](AI_PIPELINE.md).
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `IMAGE_PROVIDER` | `pollinations` | Implemented names: `pollinations`, `openrouter` |
+| `IMAGE_PROVIDER` | `pollinations` | Implemented names: `pollinations`, `cloudflare`, `openrouter` |
 | `IMAGE_PROVIDER_FALLBACK` | `none` | `none`/empty disables fallback; otherwise implemented provider name |
 | `POLLINATIONS_MODEL` | `flux` | Pollinations model |
+| `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_AI_TOKEN` | Empty | #1476: Workers AI (FLUX-1-schnell) for free pictures, tried before Pollinations for internal accounts and the credit-exhausted fallback; skipped unless both are set. The token needs Workers AI only (Sensitive in Vercel) |
 | `OPENROUTER_IMAGE_MODEL` | `openai/gpt-image-2.5-flare` | OpenRouter image model; requires OpenRouter keys |
 | `AD_DESIGN_OVERLAY` | `true` | Exact `false` or `0` disables; other strings enable |
 | `FALAI_API_KEY`, `OPENAI_API_KEY` | Empty | Reserved fields, not implemented image-provider selectors |
 
 The [provider switch](../src/lib/imageGen/index.ts) rejects unknown names.
 `IMAGE_PROVIDER=openai` or `falai` does not activate an adapter. Fallback must be
-explicit; timeout/cancellation does not trigger fallback. Pollinations rejects
+explicit; timeout/cancellation does not trigger fallback. Pollinations and Cloudflare reject
 product-reference requests. Do not assume a fallback has equivalent fidelity or
 lower cost.
 

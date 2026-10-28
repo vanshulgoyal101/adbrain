@@ -71,6 +71,9 @@ const schema = z.object({
   IMAGE_PROVIDER: z.string().optional().default("pollinations"),
   IMAGE_PROVIDER_FALLBACK: z.string().optional().default("none"),
   POLLINATIONS_MODEL: z.string().optional().default("flux"),
+  // #1476: Cloudflare Workers AI FLUX-1-schnell, the free picture; skipped unless both are set.
+  CLOUDFLARE_ACCOUNT_ID: z.string().optional().default(""),
+  CLOUDFLARE_AI_TOKEN: z.string().optional().default(""),
   OPENROUTER_IMAGE_MODEL: z.string().optional().default("openai/gpt-image-2.5-flare"),
   FALAI_API_KEY: z.string().optional().default(""),
   OPENAI_API_KEY: z.string().optional().default(""),
