@@ -30,19 +30,24 @@ The smallest measurable sequence is:
 1. **Ice breakers (W1, #905):** three tap-to-send customer questions built from
    Brand facts (each 40 characters or fewer, approved by the CEO for the pilot).
    Ice-breaker mode replaces the prefill and Call button for that run. Live
-   since #995; suggestions that read as real customer questions are #1114. Pass:
-   open-to-message rate of at least 20% (pilot baseline about 8%) in the next
-   controlled run (#680).
-2. **Offer up front (W2, ad only):** the Brand's offer, stated as the headline,
-   the first line of the text and on the picture, and the ad asks for a
-   WhatsApp message instead of a call (#1147). The WhatsApp opening stays
-   exactly the owner's saved template. Pass: more ad taps that open WhatsApp
-   and a higher open-to-message rate, at similar spend. Review's
-   open-to-message rate is live (#1087).
+   since #995; suggestions that read as real customer questions are #1114. Runs
+   first in the next controlled run (#680).
+2. **Ad-only handoff levers (#1174), one per run after W1:** L1 says what
+   happens after the tap (the ad's last line quotes the pre-typed message); L2
+   puts the offer up front (headline, first line and picture; the ad asks for
+   a WhatsApp message instead of a call, #1147); L3 uses the owner's real
+   install photos. The WhatsApp opening stays exactly the owner's saved
+   template. Review's open-to-message rate is live (#1087).
 3. **Reply speed (#1049, live):** reply or call from the enquiry card in one tap;
    `contacted at` and the median time to first reply show on Home.
 4. **Owner alerts (#701):** deliver new enquiries and a daily results line to
    the owner's WhatsApp, subject to the CEO's rate-card and spend-cap decision.
+
+**Decision rule for each run (#1366):** judge open-to-message (messages ÷
+WhatsApp opens) once a run has at least 30 opens. Pass at 6 or more messages
+out of about 35 opens; fail at 3 or fewer; with 4 or 5, run the same lever
+once more and pass at 11 or more out of about 70. The pooled baseline is
+about 5% (6 of 125). A pass means "keep it", not proof.
 
 **Rule (owner, October 28, 2026):** AdBrain never sends customers automated
 WhatsApp messages beyond the owner's saved template. Quick questions (W1) are

@@ -5,7 +5,11 @@ import type { Business } from "@/lib/types";
 
 const getPrimaryBusiness = vi.hoisted(() => vi.fn());
 const getBrandAssets = vi.hoisted(() => vi.fn(async () => [] as { type: string }[]));
-vi.mock("@/lib/supabase/queries", () => ({ getPrimaryBusiness, getBrandAssets }));
+// An owner whose campaign has gone live sees the full Create; a first-timer gets the setup step (#1270).
+const hasLaunchedCampaign = vi.hoisted(() => vi.fn(async () => true));
+const getLatestCreativeBatch = vi.hoisted(() => vi.fn(async () => []));
+vi.mock("@/lib/supabase/queries", () => ({ getPrimaryBusiness, getBrandAssets, hasLaunchedCampaign, getLatestCreativeBatch }));
+vi.mock("@/components/setup-ads-step", () => ({ SetupAdsStep: () => <div>Setup step 2</div> }));
 vi.mock("@/components/ad-assistant", () => ({ AdAssistant: () => <div>Assistant</div> }));
 
 const sparse = {
@@ -57,5 +61,35 @@ describe("Create page business details (#169)", () => {
     getBrandAssets.mockResolvedValue([{ type: "product_photo" }]);
     render(await CreatePage());
     expect(screen.queryByRole("link", { name: "Add photos" })).not.toBeInTheDocument();
+  });
+});
+
+describe("Create page for a first-timer (#1270)", () => {
+  const usable = { ...sparse, vertical: "Bakery", locations: ["Jaipur"], offers: ["Free cake"], phone: "9876543210" } as unknown as Business;
+
+  it("is setup step 2 until a campaign has gone live; ?all=1 opens the full Create", async () => {
+    getPrimaryBusiness.mockResolvedValue(usable);
+    hasLaunchedCampaign.mockResolvedValue(false);
+    const { default: CreatePage } = await import("@/app/(app)/create/page");
+    const { unmount } = render(await CreatePage({ searchParams: Promise.resolve({}) }));
+    expect(screen.getByText("Setup step 2")).toBeInTheDocument();
+    unmount();
+    render(await CreatePage({ searchParams: Promise.resolve({ all: "1" }) }));
+    expect(screen.queryByText("Setup step 2")).toBeNull();
+  });
+
+  it("shows the full Create when the check fails", async () => {
+    getPrimaryBusiness.mockResolvedValue(sparse);
+    hasLaunchedCampaign.mockRejectedValue(new Error("down"));
+    const { default: CreatePage } = await import("@/app/(app)/create/page");
+    render(await CreatePage({ searchParams: Promise.resolve({}) }));
+    expect(screen.queryByText("Setup step 2")).toBeNull();
+  });
+
+  it("+ lands here; a first-timer without the five facts resumes at step 1 (#1272)", async () => {
+    getPrimaryBusiness.mockResolvedValue(sparse);
+    hasLaunchedCampaign.mockResolvedValue(false);
+    const { default: CreatePage } = await import("@/app/(app)/create/page");
+    await expect(CreatePage({ searchParams: Promise.resolve({}) })).rejects.toThrow("NEXT_REDIRECT");
   });
 });

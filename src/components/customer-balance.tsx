@@ -1,12 +1,13 @@
 "use client";
 
+import { formatMoneyExact } from "@/lib/format";
 import { useEffect, useEffectEvent, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
-import { customerBalanceSchema, type CustomerBalance as Balance } from "@/lib/payments/customer-balance-contracts";
+import { customerBalanceViewSchema, type CustomerBalanceView as Balance } from "@/lib/payments/customer-balance-contracts";
 
-const money = (paise: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(paise / 100);
+const money = (paise: number) => formatMoneyExact(paise / 100);
 
 export function CustomerBalance({ businessId, initialBalance = null }: { businessId: string; initialBalance?: Balance | null }) {
   const [storedBalance, setBalance] = useState<Balance | null>(initialBalance?.businessId === businessId ? initialBalance : null);
@@ -19,7 +20,7 @@ export function CustomerBalance({ businessId, initialBalance = null }: { busines
       const response = await fetch(`/api/payments/customer-balance?businessId=${encodeURIComponent(businessId)}`, { cache: "no-store", signal: AbortSignal.any([signal, AbortSignal.timeout(8000)]) });
       if (!response.ok) throw new Error();
       const payload = await response.json();
-      const next = customerBalanceSchema.parse(payload.balance);
+      const next = customerBalanceViewSchema.parse(payload.balance);
       if (next.businessId !== businessId) throw new Error();
       if (!signal.aborted) { setBalance(next); setError(null); }
     } catch {
@@ -40,14 +41,18 @@ export function CustomerBalance({ businessId, initialBalance = null }: { busines
     </div>
     {error ? <Alert variant="error">Ad budget is unavailable.</Alert> : !balance ? <p role="status">Checking ad budget</p> : <>
       {balance.held && <Alert>{balance.reason ?? "Funds are held for reconciliation."}</Alert>}
-      <dl className="grid gap-3 text-sm sm:grid-cols-2">
-        {([
-          // #1235 (owner): no Paid row; next to the ad budget it would reveal AdBrain's margin by subtraction.
-          ["Refunded", balance.refundedPaise],
-          ["Ad budget, incl. Meta's GST", balance.advertisingAllocationPaise],
-          ["Spent on ads, incl. Meta's GST", balance.mediaCostPaise + balance.taxCostPaise],
-          ["Held for running campaigns", balance.reservedPaise], ["Available ad budget", balance.remainingPaise],
-        ] as const).filter(([label, amount]) => amount !== 0 || label === "Available ad budget").map(([label, amount]) => <div key={label} className="min-w-0"><dt className="text-slate-500">{label}</dt><dd className="font-medium tabular-nums text-slate-900">{money(amount)}</dd></div>)}
+      {/* #1235 (CEO, CPO row 4): Available leads; no Paid and no total budget, which beside a payment would show AdBrain's margin. */}
+      <dl className="space-y-3 text-sm">
+        <div className="min-w-0"><dt className="text-slate-500">Available ad budget</dt>
+          <dd className="text-2xl font-semibold tabular-nums text-slate-900">{money(balance.remainingPaise)}</dd>
+          <dd className="text-slate-600">What your ads can still spend, including Meta&apos;s GST.</dd></div>
+        <div className="grid gap-3 sm:grid-cols-3">
+          {([
+            ["Spent on ads, incl. Meta's GST", balance.mediaCostPaise + balance.taxCostPaise],
+            ["Held for running campaigns", balance.reservedPaise],
+            ["Refunded", balance.refundedPaise],
+          ] as const).filter(([, amount]) => amount !== 0).map(([label, amount]) => <div key={label} className="min-w-0"><dt className="text-slate-500">{label}</dt><dd className="font-medium tabular-nums text-slate-900">{money(amount)}</dd></div>)}
+        </div>
       </dl>
     </>}
   </section>;

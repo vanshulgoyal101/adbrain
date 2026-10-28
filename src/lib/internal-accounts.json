@@ -1,5 +1,5 @@
 {
-  "$comment": "Internal (team, owner, test) accounts (#379, #398): left out of reported numbers and exempt from the monthly AI limit. Add a domain or an auth user id, never an email: this repo is public. They use only free AI providers (#449) unless listed in exemptFromFreeProviders with a reason (#466).",
+  "$comment": "Internal (team, owner, test) accounts (#379, #398): left out of reported numbers and exempt from the monthly AI limit. Add a domain or an auth user id, never an email: this repo is public. They use only free AI providers (#449) unless listed in exemptFromFreeProviders with a reason (#466). Businesses owned by a smoke user may only read, validate and pause on Meta unless their ad account is in testAdAccountIds (#1324).",
   "domains": [
     "adbrain.vanshul.com",
     "adbrain.local"
@@ -10,6 +10,7 @@
   "smokeUserIds": [
     "144e4745-7e6d-4fb9-a1fd-7edec31a335f"
   ],
+  "testAdAccountIds": [],
   "exemptFromFreeProviders": [
     {
       "userId": "0dc149e7-2b7a-459c-82e5-04aa9915e342",

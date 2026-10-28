@@ -3,6 +3,11 @@
  * ✓ or one action with a Meta link and a Hindi/English line. Read-only; nothing here changes Meta.
  * Client-safe: the Settings section renders it, `MetaClient.setupReads()` supplies the reads.
  */
+/** Meta Business Suite's WhatsApp accounts page, where a number is linked to the Page (#1016, #1301). */
+export const WHATSAPP_LINK_URL = "https://business.facebook.com/latest/settings/whatsapp_account";
+/** #1301: Review's next step when Meta doesn't confirm the Page's WhatsApp number. */
+export const WHATSAPP_UNVERIFIED_STEP = "Meta hasn't confirmed a WhatsApp Business number on your Page. Link it in Meta Business Suite, then check again.";
+
 export type SetupReads = {
   /** The ad account's business portfolio, or null when the account isn't in one. */
   portfolio: { id: string; name: string | null } | null;
@@ -56,7 +61,7 @@ export function setupChecklist(reads: SetupReads, ids: { adAccountId: string }):
     {
       key: "whatsapp", label: "WhatsApp on the Page", done: reads.whatsapp,
       action: reads.whatsapp ? undefined : {
-        label: "Link WhatsApp", href: "https://business.facebook.com/latest/settings/whatsapp_account",
+        label: "Link WhatsApp", href: WHATSAPP_LINK_URL,
         en: "Link your WhatsApp Business number to your Page so customers can message you from the ad.",
         hi: "अपना WhatsApp Business नंबर पेज से जोड़िए, ताकि ग्राहक विज्ञापन से सीधे मैसेज कर सकें।",
       },
