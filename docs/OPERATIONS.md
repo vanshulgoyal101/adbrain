@@ -388,14 +388,28 @@ in issues.
    shows their address, a confirmation timestamp, and no usable password. Read back:
    `select count(*) from auth.sessions where user_id='<user id>';` and
    `select count(*) from auth.one_time_tokens where user_id='<user id>';` — both are `0`.
-4. The owner signs in with a one-time code sent to that email. Receiving the code is their
-   confirmation. The account is no longer internal, so the normal owner rules (paid images,
+4. The owner signs in with the sign-in link emailed to that address (or *Continue with Google* for
+   a Gmail address). Opening the link is their confirmation. The account is no longer internal, so the normal owner rules (paid images,
    allowance) apply from here. Do not connect Meta until the session/token counts above are
    zero, the owner has confirmed the new address, **and at least 1 hour has passed since
    step 2** (staff access tokens expired). Auth **Confirm email** must be on in production
    (dashboard → Authentication → Sign In / Providers → Email); check it once per hand-over.
 5. Post 'handed over' with the date on the issue (no names); the owner connects Meta on the
    20-minute onboarding call (#1279).
+6. Send the CPO's hand-over message (#1473) from our WhatsApp, or as an email with the subject
+   *Your AdBrain account is ready*. Fill in `{name}`, `{email}` and `{day, time}`; change nothing else.
+   > Hi {name}, your AdBrain account is ready, and it's yours now. Your business details and the 3 ads we made are inside.
+   > 1. Sign in at adbrain.vanshul.com/login with **{email}**: tap *Continue with Google* (if it's a Gmail address) or *Email me a sign-in link*.
+   > 2. What's changed: the 'Sample' mark is off your ads. Nothing runs until you tap *Go live*.
+   > 3. Next: connect your Facebook Page (step 3). We'll do it together on **{day, time}**; it takes about 20 minutes.
+   > Your first campaign is set up free. You pay Meta directly from your own account, only for ads you approve. After that, AdBrain is ₹999 a month, first month free, no auto-debit.
+
+   Hinglish:
+   > Hi {name}, aapka AdBrain account ready hai, ab yeh aapka hai. Aapke business ki details aur humare banaye 3 ads isme hain.
+   > 1. adbrain.vanshul.com/login pe **{email}** se sign in karein: *Continue with Google* (Gmail ho to) ya *Email me a sign-in link*.
+   > 2. Ab ads pe 'Sample' nahi likha. Jab tak aap *Go live* nahi dabate, kuch nahi chalta.
+   > 3. Agla step: apna Facebook Page connect karna (step 3). **{day, time}** ko saath mein karenge, lagbhag 20 minute.
+   > Pehla campaign free set hoga. Ad ka paisa aap seedha Meta ko dete hain, sirf un ads ka jo aap approve karein. Uske baad ₹999 mahina, pehla mahina free, koi auto-debit nahi.
 
 ### Scheduled Jobs
 
