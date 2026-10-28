@@ -54,7 +54,6 @@ import {
 } from "@/components/targeting-controls";
 import { CampaignChat } from "@/components/campaign-chat";
 import { AdResults } from "@/components/ad-results";
-import { WhatsAppAiCard } from "@/components/whatsapp-ai-card";
 import { EditAudienceDialog } from "@/components/edit-audience-dialog";
 import { AudienceSwitchStrip } from "@/components/audience-switch-strip";
 import { createClient as createBrowserClient } from "@/lib/supabase/client";
@@ -92,7 +91,6 @@ import { reviewBlockerAlternative, reviewBlockerFix } from "@/lib/campaign/revie
 import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
 import { useCampaignPreparation } from "@/lib/meta-connect-ui/use-campaign-preparation";
 import { targetingFromEditor, targetingToEditor } from "@/lib/campaign/editor-targeting";
-import { parsePhone } from "@/lib/brand/countries";
 import type { LeadForm } from "@/lib/meta/client";
 import { maskWhatsAppNumber, maskedWhatsAppNumberPattern, parseWhatsAppStatus, type WhatsAppStatus } from "@/lib/meta/whatsapp-status-shared";
 import type { ConnectIntent, ConnectionDTO } from "@/lib/meta/connect-contracts";
@@ -294,7 +292,7 @@ function BusinessCampaigns({
   ));
   // #761: ₹300 a day is the core run (#334); less rarely gets Meta out of learning.
   const [budget, setBudget] = useState(initialSetup?.budget ?? 300);
-  const [destination, setDestination] = useState<"instant_form" | "whatsapp">(initialSetup?.destination ?? "instant_form");
+  const [destination, setDestination] = useState<"instant_form" | "whatsapp">(initialSetup?.destination ?? "whatsapp");
   const [whatsappNumber, setWhatsAppNumber] = useState(initialSetup?.whatsappNumber ?? "");
   const [whatsappLanguage, setWhatsAppLanguage] = useState<WhatsAppLanguage>(initialSetup?.whatsappLanguage ?? "ad");
   const [whatsappMessage, setWhatsAppMessage] = useState<WhatsAppTemplate | null>(initialSetup?.whatsappMessage ?? null);
@@ -303,7 +301,6 @@ function BusinessCampaigns({
   const [whatsappStatus, setWhatsAppStatus] = useState<WhatsAppStatus | null>(null);
   // #235: an India-based business starts new campaigns on WhatsApp once a number is ready; a choice or a restored draft wins.
   const destinationChosenRef = useRef(Boolean(initialSetup));
-  const indiaBased = parsePhone(business.phone).countryCode === "IN";
   const whatsappOptions = whatsappStatus?.state === "ready" ? whatsappStatus.numbers : [];
   // #840: the chosen ads' words and stored language, as launch reads them for the WhatsApp message.
   const adsFor = (ids: Iterable<string>) => { const wanted = new Set(ids); return approved.filter((creative) => wanted.has(creative.id)); };
@@ -560,10 +557,9 @@ function BusinessCampaigns({
       .then((status) => {
         if (controller.signal.aborted) return;
         setWhatsAppStatus(status);
-        if (status.state === "ready" && indiaBased && !destinationChosenRef.current) setDestination("whatsapp");
       });
     return () => controller.abort();
-  }, [showComposer, connectedForDraft, business.id, indiaBased]);
+  }, [showComposer, connectedForDraft, business.id]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -697,7 +693,8 @@ function BusinessCampaigns({
     setIncludedNames("");
     setExcludedNames("");
     setLeadFormId("");
-    setDestination(indiaBased && whatsappOptions.length ? "whatsapp" : "instant_form");
+    // #1171: WhatsApp is the channel (#680); an instant form only when the owner picks it.
+    setDestination("whatsapp");
     setWhatsAppNumber("");
     setWhatsAppLanguage("ad");
     destinationChosenRef.current = false;
@@ -764,7 +761,7 @@ function BusinessCampaigns({
     setPrepareReview(null);
     setShowComposer(true);
     setFormsRetry(current => current + 1);
-    setNotice(destination === "whatsapp" ? "Meta connected. Review the linked WhatsApp number before continuing." : "Meta connected. Review your lead form before continuing.");
+    setNotice(destination === "whatsapp" ? "Meta connected. Check your WhatsApp number before continuing." : "Meta connected. Review your lead form before continuing.");
   }
 
   function acceptOperation(next: OperationDTO) {
@@ -1742,7 +1739,7 @@ function BusinessCampaigns({
           </fieldset>
           <fieldset disabled={preparing || creating || destinationRecoveryLocked} aria-describedby={showDestinationLock ? "destination-lock-reason" : undefined} className="flex flex-wrap gap-2">
             <legend className="mb-2 text-xs font-medium text-slate-500">Destination</legend>
-            {([ ["instant_form", "Instant form"], ["whatsapp", "WhatsApp chat"] ] as const).map(([value, label]) => <label key={value} className={cn("flex min-h-11 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm", destination === value ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200")}><input id={`destination-${value}`} type="radio" name="campaign-destination" value={value} checked={destination === value} onChange={() => { if (!unresolvedRecovery()) { destinationChosenRef.current = true; setDestination(value); setPrepareReview(null); } }} className="accent-blue-600" />{label}</label>)}
+            {([ ["whatsapp", "WhatsApp chat (recommended)"], ["instant_form", "Instant form"] ] as const).map(([value, label]) => <label key={value} className={cn("flex min-h-11 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm", destination === value ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200")}><input id={`destination-${value}`} type="radio" name="campaign-destination" value={value} checked={destination === value} onChange={() => { if (!unresolvedRecovery()) { destinationChosenRef.current = true; setDestination(value); setPrepareReview(null); } }} className="accent-blue-600" />{label}</label>)}
           </fieldset>
           </div>
           {showDestinationLock && <p id="destination-lock-reason" role="status" className="mb-4 text-sm text-amber-800">Destination is locked until the previous campaign request is resolved.</p>}
@@ -2163,9 +2160,7 @@ function BusinessCampaigns({
         </div>
         {(() => {
           const ready = !(showComposer && destination === "whatsapp") && campaigns.some((c) => campaignDestination(c, results[c.id]) === "whatsapp");
-          // #794: once a WhatsApp campaign is out, point to WhatsApp's own AI reply; #847: as a line under "WhatsApp ready?".
-          const ai = campaigns.some(campaign => campaign.meta_campaign_id && campaignDestination(campaign) === "whatsapp");
-          return (ready || ai) && <div className="mb-4">{ready && <WhatsAppReadyChecklist businessId={business.id} />}{ai && <WhatsAppAiCard businessId={business.id} />}</div>;
+          return ready && <div className="mb-4"><WhatsAppReadyChecklist businessId={business.id} /></div>;
         })()}
         {(campaigns.length > 0 || campaignQuery || statusFilter !== "all") && <div className="mb-5 flex flex-wrap gap-2">
           <div className="flex min-w-0 flex-1 basis-40 items-center gap-2 rounded-md border border-slate-300 px-3"><Search size={16} className="shrink-0 text-slate-400" aria-hidden="true" /><input type="search" aria-label="Search campaigns" placeholder="Search campaigns" value={campaignQuery} onChange={event => setCampaignQuery(event.target.value)} className="h-[42px] w-full min-w-0 bg-transparent text-sm outline-none" /></div>
