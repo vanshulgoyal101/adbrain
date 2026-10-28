@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import story from "./fixtures/meta/story-validate.json";
+import hindiRun from "./fixtures/create/solaride-hindi.json";
 import { runPreflight } from "@/lib/campaign/preflight";
 import { askMismatchWarning, QUOTED_ASK_WITH_QUESTIONS } from "@/lib/campaign/plan-check";
 import { campaignWhatsAppMessage } from "@/lib/campaign/campaign-whatsapp-message";
@@ -80,10 +81,24 @@ describe("core: an ad quoting a message, on a Quick questions campaign (#1198)",
 
   it("the one-tap fix rewrites only the last line, which then quotes nothing", () => {
     const fixed = withQuestionsLastLine(quoting);
-    expect(fixed.split("\n").at(-1)).toBe(QUESTIONS_LAST_LINE);
+    expect(fixed.split("\n").at(-1)).toBe(QUESTIONS_LAST_LINE.en);
     expect(fixed.split("\n").slice(0, -1)).toEqual(quoting.split("\n").slice(0, -1));
     expect(quotedAsk(fixed)).toBeNull();
     expect(review(fixed, questions).planWarnings ?? []).toEqual([]);
-    expect(withQuestionsLastLine("One line “Hi”\n\n")).toBe(QUESTIONS_LAST_LINE);
+    expect(withQuestionsLastLine("One line “Hi”\n\n")).toBe(QUESTIONS_LAST_LINE.en);
+  });
+
+  it("writes the new last line in the ad's own language, on a recorded Hindi Solaride ad (Reviewer)", () => {
+    const reply = hindiRun.replies.find((item) => item.language === "hi" && item.content.includes("primary_text"))!;
+    const recordedHindi = (JSON.parse(reply.content.replace(/^```json\n|\n?```$/g, "")) as { primary_text: string }).primary_text;
+    const quotingHindi = `${recordedHindi.split("\n").slice(0, -1).join("\n")}\n“फ्री साइट सर्वे” भेजें`;
+    expect(quotedAsk(quotingHindi)).toBe("फ्री साइट सर्वे");
+    expect(review(quotingHindi, questions).planWarnings).toEqual([QUOTED_ASK_WITH_QUESTIONS]);
+    const fixed = withQuestionsLastLine(quotingHindi);
+    expect(fixed.split("\n").at(-1)).toBe(QUESTIONS_LAST_LINE.hi);
+    expect(review(fixed, questions).planWarnings ?? []).toEqual([]);
+    // A stored language wins over the script; romanised Hindi gets Hinglish.
+    expect(withQuestionsLastLine("Free survey.\nWhatsApp “Survey”", "Punjabi (Gurmukhi)").split("\n").at(-1)).toBe(QUESTIONS_LAST_LINE.pa);
+    expect(withQuestionsLastLine("Bijli ka bill kam karein.\nAbhi “survey” bhejiye", "Hinglish").split("\n").at(-1)).toBe(QUESTIONS_LAST_LINE.hinglish);
   });
 });

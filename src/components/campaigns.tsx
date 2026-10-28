@@ -1026,7 +1026,7 @@ function BusinessCampaigns({
     setRewritingAsks(true);
     try {
       for (const ad of savedPickerAds.filter((item) => creativeIds.includes(item.id) && quotedAsk(item.primary_text))) {
-        const primaryText = withQuestionsLastLine(ad.primary_text ?? "");
+        const primaryText = withQuestionsLastLine(ad.primary_text ?? "", adLanguages([ad])[0]);
         const text = savedAdText(ad);
         const result = await updateCreativeCopy(ad.id, { ...text, cta: text.cta as EditableCopy["cta"], primary_text: primaryText });
         if (!result.ok) { failAt("review", result.error ?? "The ad couldn't be changed. Edit its last line, then check again."); return; }

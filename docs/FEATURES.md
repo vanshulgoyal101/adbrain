@@ -414,7 +414,7 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
   (never blocks): "An ad asks customers to send “…”, but WhatsApp pre-types “…”".
   With Quick questions on there is no pre-typed message, so an ad that quotes one gets one warning
   instead (#1198): "Your ad promises a ready message, but customers will see quick questions…", with
-  **Change the last line**: one tap rewrites each quoting ad's last line to "Tap, then pick a question
+  **Change the last line**: one tap rewrites each quoting ad's last line, in the ad's own language, to "Tap, then pick a question
   to send." (approval unchanged) and checks the campaign again.
   #418 rule 5: when the Brand has proof (years in business, jobs done, a named credential or a
   warranty; `src/lib/creative/proof-line.ts`) and none of the chosen ads cites it, Review warns

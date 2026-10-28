@@ -26,14 +26,6 @@ export function quotedAsk(primaryText: string | null | undefined): string | null
   return words && /[\p{L}\p{N}]/u.test(words) ? words : null;
 }
 
-/** #1198: the last line for a Quick questions campaign, which has no ready message to quote. */
-export const QUESTIONS_LAST_LINE = "Tap, then pick a question to send.";
-
-/** The ad's copy with its last line replaced by QUESTIONS_LAST_LINE (Review's one-tap fix, #1198). */
-export function withQuestionsLastLine(primaryText: string): string {
-  const lines = primaryText.replace(/\s+$/u, "").split("\n");
-  return [...lines.slice(0, -1), QUESTIONS_LAST_LINE].join("\n");
-}
 
 /** Same words, ignoring case, spacing and end punctuation. */
 export function sameWords(left: string, right: string): boolean {
@@ -137,6 +129,20 @@ export function whatsappLanguageFor(adCopy: string[], adLanguages: (string | nul
   const script = scriptOf(copy);
   return languageFrom(adLanguages, copy)
     ?? (script === "devanagari" ? "hi" : script === "gurmukhi" ? "pa" : isRomanHindi(copy) ? "hinglish" : "en");
+}
+
+/** #1198: the last line for a Quick questions campaign, which has no ready message to quote, in the ad's language. */
+export const QUESTIONS_LAST_LINE: Record<Language, string> = {
+  en: "Tap, then pick a question to send.",
+  hi: "टैप करें, फिर भेजने के लिए कोई सवाल चुनें।",
+  hinglish: "Tap karein, phir bhejne ke liye koi sawaal chunein.",
+  pa: "ਟੈਪ ਕਰੋ, ਫਿਰ ਭੇਜਣ ਲਈ ਕੋਈ ਸਵਾਲ ਚੁਣੋ।",
+};
+
+/** The ad's copy with its last line replaced by QUESTIONS_LAST_LINE in the ad's own language (Review's one-tap fix, #1198). */
+export function withQuestionsLastLine(primaryText: string, storedLanguage?: string | null): string {
+  const lines = primaryText.replace(/\s+$/u, "").split("\n");
+  return [...lines.slice(0, -1), QUESTIONS_LAST_LINE[whatsappLanguageFor([primaryText], [storedLanguage])]].join("\n");
 }
 
 /**
