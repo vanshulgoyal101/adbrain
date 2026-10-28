@@ -41,3 +41,40 @@ export function AppLanguage({ initial, labels }: { initial: AppLocale; labels: {
     {failed && <p role="alert" className="text-sm text-danger">{labels.saveFailed}</p>}
   </section>;
 }
+
+const HI_NOTE = "अभी सिर्फ़ होम हिंदी में है; बाकी स्क्रीन एक-एक करके जुड़ेंगी।";
+
+/**
+ * #1641 (CPO #1621): WS1 step 1's chooser, shown only until a language is chosen. Labelled in both scripts and
+ * nothing pre-picked; one tap saves it (Settings keeps the full switch). English stays the default; never from the browser.
+ */
+export function CompactAppLanguage() {
+  const [chosen, setChosen] = useState<AppLocale | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [pending, startTransition] = useTransition();
+
+  function choose(next: AppLocale) {
+    setFailed(false);
+    startTransition(async () => {
+      const result = await setAppLanguage(next).catch(() => ({ ok: false as const }));
+      if (result.ok) setChosen(next);
+      else setFailed(true);
+    });
+  }
+
+  if (chosen === "hi") return <p lang="hi" className="text-sm text-slate-600">{HI_NOTE}</p>;
+  if (chosen) return null;
+  return <div className="flex flex-col items-end gap-1">
+    <div role="group" aria-labelledby="setup-language-label" className="flex flex-wrap items-center justify-end gap-2">
+      <span id="setup-language-label" className="text-sm text-slate-600">Language / <span lang="hi">भाषा</span></span>
+      {CHOICES.map((choice) => (
+        <button key={choice.locale} type="button" lang={choice.locale} aria-pressed={false} disabled={pending}
+          onClick={() => choose(choice.locale)}
+          className="inline-flex min-h-11 items-center rounded-full border border-slate-300 px-4 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60">
+          {choice.name}
+        </button>
+      ))}
+    </div>
+    {failed && <p role="alert" className="text-sm text-danger">Couldn&apos;t save. Try again. / <span lang="hi">सेव नहीं हुआ। फिर से चुनें।</span></p>}
+  </div>;
+}

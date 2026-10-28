@@ -56,6 +56,9 @@ adds the term's class, never the term: `unsupported-commercial-claim:free`, `:pe
 `:currency` or `:guarantee` (#613). A Brand fact supports a term unless that term itself
 is negated or withdrawn ("no free survey", "isn't free", "don't offer free", "Free survey no longer
 offered"); a negation about something else ("Free survey, no obligation") doesn't count.
+A subsidy line (`subsidy`, `PM Surya Ghar`, `सब्सिडी`, `ਸਬਸਿਡੀ`; class `:subsidy`, #1676) needs a Brand
+fact that states it with no negated mention ("Not a subsidy vendor" refuses it); any such fact counts, quoted
+or not. It is a claim, not an offer, so the above-the-fold offer rule ignores it.
 
 ### Campaign Interview
 

@@ -1,4 +1,5 @@
 import { OWNER_WORDS } from "@/lib/copy/owner-words";
+import { localeChosen } from "@/i18n/request-locale";
 import { BrandAssets } from "@/components/brand-assets";
 import { BrandForm } from "@/components/brand-form";
 import { SetupBusinessStep } from "@/components/setup-business-step";
@@ -23,7 +24,7 @@ export default async function BrandPage({ searchParams }: { searchParams: Promis
   // #1269 (#1251 WS1 step 1): until a first campaign has gone live, Your business is the five-field setup step;
   // `?all=1` opens the full page. If the check fails, the full page shows as before.
   const setup = params.all !== "1" && (!business || !(await hasLaunchedCampaign(business.id).catch(() => true)));
-  if (setup) return <SetupBusinessStep business={business} />;
+  if (setup) return <SetupBusinessStep business={business} chooseLanguage={!(await localeChosen())} />;
   const [assets, instructions, connection] = business
     ? await Promise.all([
         getBrandAssets(business.id),

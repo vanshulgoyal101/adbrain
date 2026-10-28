@@ -109,6 +109,11 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 	branches. Before deleting any branch or worktree, `git cherry origin/main <branch>`
 	shows no `+` lines (or the work is in an open PR or #1258), and uncommitted edits
 	are pushed to a branch first. Removed product features go in #1173.
+- **Two env files only** (owner, Oct 29: neat repo). Secrets go in `.env.local`, every
+	test login in `.env.smoke` (in the owner's checkout), and the committed template is
+	`.env.example`. Never create another `.env.*` file or leave files in the owner's
+	checkout root. Evidence, screenshots, recordings and one-time sign-in links go in the
+	issue or PR (private data in vbrain-private), never in a file in the repo folder.
 
 ## Execution speed
 

@@ -174,21 +174,24 @@ describe("campaignAttention", () => {
       const { status, body } = await call();
       expect(status).toBe(200);
       expect(body).toMatchObject({ ok: true, refreshed: 1, failed: 0, ended: [await key("gone")], failures: [] });
+      // #1600: one 'ended' alert for the workflow, by opaque key.
+      expect(body.alerts).toEqual([{ kind: "ended", key: await key("gone") }]);
       expect(mocks.saveCampaign).toHaveBeenCalledWith({ businessId: "business-1", userId: "owner-1" },
-        { status: "completed", raw: { cap: { days: 2 }, metaStatus: "DELETED" } }, "gone");
+        { status: "completed", raw: { cap: { days: 2 }, metaStatus: "DELETED", metaGoneAt: expect.any(String) } }, "gone");
     });
 
-    it("Meta's recorded 'object does not exist' (100/33) is ended as MISSING", async () => {
+    it("#1678: Meta's recorded 100/33 ('does not exist, or missing permissions') never ends a campaign: listed as unbound", async () => {
       const tape = (await import("./core/fixtures/meta/create-cleanup-refusals.json")).default as unknown as Array<{ status: number; body?: { error?: { message: string; code: number; error_subcode: number } } }>;
       const graph = tape.map((entry) => entry.body?.error).find((error) => error?.code === 100 && error.error_subcode === 33)!;
+      expect(graph.message).toMatch(/does not exist, cannot be loaded due to missing permissions/);
       const { MetaError } = await import("@/lib/meta/client");
       mocks.campaigns = [bound("missing", "m-missing")];
       mocks.insights.mockRejectedValue(new MetaError(graph.message, 400, graph.code, graph.error_subcode));
-      mocks.saveCampaign.mockResolvedValue({ data: {}, error: null });
       const { status, body } = await call();
       expect(status).toBe(200);
-      expect(body).toMatchObject({ ok: true, failed: 0, ended: [await key("missing")] });
-      expect(mocks.saveCampaign.mock.calls[0][1]).toMatchObject({ status: "completed", raw: { metaStatus: "MISSING" } });
+      expect(body).toMatchObject({ ok: true, failed: 0, ended: [], unbound: [await key("missing")], alerts: [] });
+      // It stays active, so enforce-spend keeps guarding it.
+      expect(mocks.saveCampaign).not.toHaveBeenCalled();
     });
 
     it("assets that no longer match the connection (CONFLICT) are listed, not failed", async () => {
