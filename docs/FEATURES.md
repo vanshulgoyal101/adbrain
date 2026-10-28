@@ -283,10 +283,15 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
 - A WhatsApp campaign's results say how many opened WhatsApp and how many messaged
   ("12 opened WhatsApp, 1 messaged you": Meta `link_click` vs
   `messaging_conversation_started_7d`, #493).
-- **WhatsApp ready?** (#493): on Campaigns, when setting up or running a WhatsApp
-  campaign, a checklist for the owner's WhatsApp Business app: profile photo and
-  name, greeting message, away message, reply within 5 minutes. AdBrain can't read
-  these, so the owner ticks them; ticks are kept on that device per business.
+- **4 tips to get more replies** (#493, #1154): on Campaigns, when setting up or running a
+  WhatsApp campaign, a folded checklist for the owner's WhatsApp Business app: profile photo
+  and name, greeting message, away message, reply within 5 minutes. They're optional tips, so
+  the line shows a count only once one is ticked ("2 of 4 done"). AdBrain can't read these, so
+  the owner ticks them; ticks are kept on that device per business. Below it, once a WhatsApp
+  campaign is out, one dismissible line points to WhatsApp's AI reply (#794): "Show me how"
+  opens the guide, which records "It's on" or "Not available for me"; × is "Not now" (7 days).
+- With no setup open, Campaigns lists the campaigns first; Saved drafts follow the list
+  (#1154) and fold to one line above the setup while one is open.
 - Each WhatsApp creative carries a `page_welcome_message` built from Brand facts
   (#209, #493): a short greeting asking the customer to send, and one short
   pre-typed ask ("Hi! I'd like a free site survey.") naming one offer the ads

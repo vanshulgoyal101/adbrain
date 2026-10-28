@@ -1425,6 +1425,25 @@ function BusinessCampaigns({
     }
   }
 
+  const savedDraftsBlock = savedDrafts.length > 0 && (
+    <details aria-label="Saved drafts" className="group border-y border-slate-200 py-3">
+      <summary className="flex min-h-10 cursor-pointer list-none items-center gap-2 text-sm font-semibold text-slate-900 [&::-webkit-details-marker]:hidden">
+        <ChevronRight className="h-4 w-4 text-slate-500 transition-transform group-open:rotate-90" aria-hidden="true" />
+        <h2>Saved drafts</h2>
+        <span className="font-normal text-slate-500">({savedDrafts.length})</span>
+      </summary>
+      <ul className="mt-1 divide-y divide-slate-100">
+        {savedDrafts.map((draft) => <li key={draft.draftId} className="flex min-w-0 items-center justify-between gap-3 py-2">
+          <button type="button" disabled={draftBusy !== null || creating || operationChecking} onClick={() => void reopenDraft(draft.draftId)} className="min-w-0 flex-1 text-left text-sm font-medium text-slate-800 hover:text-blue-700 disabled:opacity-50">
+            <span className="block wrap-break-word">{draft.input.name}</span>
+            <span className="mt-0.5 block text-xs font-normal text-slate-500">{formatMoney(draft.input.dailyBudgetRupees)} per ad set</span>
+          </button>
+          <Button variant="ghost" size="sm" className="h-11 w-11 p-0" title={`Remove ${draft.input.name}`} aria-label={`Remove ${draft.input.name}`} disabled={draftBusy !== null || creating} onClick={() => void removeDraft(draft)}><Trash2 className="h-4 w-4" aria-hidden="true" /></Button>
+        </li>)}
+      </ul>
+    </details>
+  );
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-4">
@@ -1713,23 +1732,8 @@ function BusinessCampaigns({
         }}
       />
 
-      {/* #847 T6: while a setup is open, saved drafts fold to one line so the setup starts in the first screen. */}
-      {savedDrafts.length > 0 && <details key={showComposer ? "composing" : "list"} open={!showComposer} aria-label="Saved drafts" className="group border-y border-slate-200 py-3">
-        <summary className="flex min-h-10 cursor-pointer list-none items-center gap-2 text-sm font-semibold text-slate-900 [&::-webkit-details-marker]:hidden">
-          <ChevronRight className="h-4 w-4 text-slate-500 transition-transform group-open:rotate-90" aria-hidden="true" />
-          <h2>Saved drafts</h2>
-          <span className="font-normal text-slate-500">({savedDrafts.length})</span>
-        </summary>
-        <ul className="mt-1 divide-y divide-slate-100">
-          {savedDrafts.map((draft) => <li key={draft.draftId} className="flex min-w-0 items-center justify-between gap-3 py-2">
-            <button type="button" disabled={draftBusy !== null || creating || operationChecking} onClick={() => void reopenDraft(draft.draftId)} className="min-w-0 flex-1 text-left text-sm font-medium text-slate-800 hover:text-blue-700 disabled:opacity-50">
-              <span className="block wrap-break-word">{draft.input.name}</span>
-              <span className="mt-0.5 block text-xs font-normal text-slate-500">{formatMoney(draft.input.dailyBudgetRupees)} per ad set</span>
-            </button>
-            <Button variant="ghost" size="sm" className="h-11 w-11 p-0" title={`Remove ${draft.input.name}`} aria-label={`Remove ${draft.input.name}`} disabled={draftBusy !== null || creating} onClick={() => void removeDraft(draft)}><Trash2 className="h-4 w-4" aria-hidden="true" /></Button>
-          </li>)}
-        </ul>
-      </details>}
+      {/* #847 T6: while a setup is open, saved drafts fold to one line above it; #1154: otherwise they follow the campaigns. */}
+      {showComposer && savedDraftsBlock}
       <div id="campaign-composer" hidden={!showComposer}>
       {(
         <>
@@ -2198,7 +2202,7 @@ function BusinessCampaigns({
         </div>
         {(() => {
           const ready = !(showComposer && destination === "whatsapp") && campaigns.some((c) => campaignDestination(c, results[c.id]) === "whatsapp");
-          // #794: once a WhatsApp campaign is out, point to WhatsApp's own AI reply; #847: as a line under "WhatsApp ready?".
+          // #794: once a WhatsApp campaign is out, point to WhatsApp's own AI reply; #847/#1154: one line under the tips.
           const ai = campaigns.some(campaign => campaign.meta_campaign_id && campaignDestination(campaign) === "whatsapp");
           return (ready || ai) && <div className="mb-4">{ready && <WhatsAppReadyChecklist businessId={business.id} />}{ai && <WhatsAppAiCard businessId={business.id} />}</div>;
         })()}
@@ -2484,6 +2488,7 @@ function BusinessCampaigns({
             {listLoading ? "Loading campaigns..." : "Load more campaigns"}
           </Button>
         </div>}
+        {!showComposer && savedDraftsBlock && <div className="mt-6">{savedDraftsBlock}</div>}
       </div>
     </div>
   );
