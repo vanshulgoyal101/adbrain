@@ -27,7 +27,7 @@ const queries = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/supabase/queries", () => queries);
 vi.mock("@/lib/llm/persist", () => ({ businessLLMUsageSummary: queries.businessLLMUsageSummary }));
-vi.mock("@/lib/env", () => ({ getEnv: () => ({ DEMO_USER_EMAIL: "demo@example.test" }) }));
+vi.mock("@/lib/env", () => ({ getEnv: () => ({ DEMO_USER_EMAIL: "demo@example.test", NEXT_PUBLIC_SUPABASE_URL: "https://project.supabase.co" }) }));
 const operator = vi.hoisted(() => ({ allowed: true }));
 vi.mock("@/lib/privacy-requests", () => ({ privacyOperatorAllowed: async () => operator.allowed }));
 vi.mock("@/components/studio", () => ({ Studio: () => <div>Studio loaded</div> }));
@@ -88,6 +88,14 @@ describe("Home workspace", () => {
     expect(within(list).queryByRole("link", { name: /Run old/ })).toBeNull();
     expect(within(list).getByText("Running")).toBeInTheDocument();
     expect(within(list).getByRole("link", { name: "See all 3" })).toBeInTheDocument();
+  });
+
+  it("#1393: the workspace shell opens the Storage connection before the page streams in", async () => {
+    queries.getUser.mockReturnValue(new Promise(() => {}));
+    const { default: AppLayout } = await import("@/app/(app)/layout");
+    const html = renderToString(<AppLayout><span>Private workspace</span></AppLayout>);
+    expect(html).toContain('<link rel="preconnect" href="https://project.supabase.co"/>');
+    expect(html).toContain("Loading workspace");
   });
 
   it("shows workspace loading while auth is pending and gates the shell on user and business", async () => {
