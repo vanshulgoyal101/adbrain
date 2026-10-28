@@ -2423,7 +2423,8 @@ function BusinessCampaigns({
                             Resume in Ads Manager
                           </a>
                         ) : c.meta_campaign_id &&
-                          (c.status === "active" || c.status === "paused") && (
+                          // #1560: while a new audience waits, the strip's Use/Cancel are the way on; Pause always stays.
+                          (c.status === "active" || (c.status === "paused" && !waitingSwitch[c.id])) && (
                             <Button
                               variant="outline"
                               data-product-event={c.status === "active" ? "campaign.pause" : "campaign.review"}
@@ -2556,7 +2557,7 @@ function BusinessCampaigns({
                     )}
                     {r && outcome === "instant_form" && !(r.spend > 0) && (
                       <p className="text-sm text-slate-600">
-                        {c.status === "paused" ? `Paused — nothing has spent.${resumeElsewhere ? "" : " Resume when you're ready."}`
+                        {c.status === "paused" ? `Paused — nothing has spent.${resumeElsewhere || waitingSwitch[c.id] ? "" : " Resume when you're ready."}`
                           : c.status === "active" ? "Waiting for Meta to start delivery."
                           : "Nothing has spent yet."}
                       </p>
