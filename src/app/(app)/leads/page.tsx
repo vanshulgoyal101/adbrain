@@ -7,7 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { getMetaConnection } from "@/lib/meta/credentials";
 import { getCampaigns, getLatestResultsWithEnquiries, getPrimaryBusiness } from "@/lib/supabase/queries";
-import { WhatsAppChats } from "@/components/whatsapp-chats";
+import { EnquiriesSections } from "@/components/enquiries-sections";
 import { whatsappChatRows, type WhatsAppChatRow } from "@/lib/campaign/real-enquiries";
 import { getLeadPage } from "@/lib/leads/queries";
 
@@ -56,18 +56,20 @@ export default async function LeadsPage() {
         description="People who responded to your ads."
       />
       <div className="mt-6 max-sm:mt-4">
-        <LeadInbox
-          key={`${business.owner_id}:${business.id}`}
-          businessName={business.name}
-          offer={business.offers?.[0] ?? null}
-          language={replyLanguage(business.languages)}
-          initialLeads={page.leads}
-          initialTotal={page.total}
-          initialNextCursor={page.nextCursor}
-          metaReady={metaConnection.ready}
-          syncScope={`${business.owner_id}:${business.id}:${metaConnection.adAccountId ?? ""}:${metaConnection.pageId ?? ""}`}
-        />
-        <WhatsAppChats rows={chatRows} />
+        <EnquiriesSections chatRows={chatRows} formTotal={page.total}>
+          <LeadInbox
+            key={`${business.owner_id}:${business.id}`}
+            businessName={business.name}
+            offer={business.offers?.[0] ?? null}
+            language={replyLanguage(business.languages)}
+            initialLeads={page.leads}
+            initialTotal={page.total}
+            initialNextCursor={page.nextCursor}
+            metaReady={metaConnection.ready}
+            syncScope={`${business.owner_id}:${business.id}:${metaConnection.adAccountId ?? ""}:${metaConnection.pageId ?? ""}`}
+            title={chatRows.length ? "Form enquiries" : "Enquiries"}
+          />
+        </EnquiriesSections>
       </div>
     </div>
   );
