@@ -20,6 +20,7 @@ const webhookHealthMigration = await readFile(join(root, "db/migrations/20261022
 const cappedBoundMigration = await readFile(join(root, "db/migrations/20261023_capped_reservation_bound.sql"), "utf8");
 const customAmountMigration = await readFile(join(root, "db/migrations/20261023_custom_payment_amount.sql"), "utf8");
 const paymentTermsV2Migration = await readFile(join(root, "db/migrations/20261028_payment_terms_v2.sql"), "utf8");
+const paymentReviewAlertMigration = await readFile(join(root, "db/migrations/20261029_payment_review_alert.sql"), "utf8");
 const metaCostMigration = await readFile(join(root, "db/migrations/20261023_meta_cost_observation.sql"), "utf8");
 const metaSettleMigration = await readFile(join(root, "db/migrations/20261023_meta_cost_settle.sql"), "utf8");
 const operatorFundedMigration = await readFile(join(root, "db/migrations/20261023_operator_funded_businesses.sql"), "utf8");
@@ -595,6 +596,28 @@ async function verifyConfigurablePayments(db, database) {
     assert.equal(after.events7d,1,'a duplicate delivery is stored once');
     assert.equal(after.unprocessed,0,'unprocessed counts only events older than an hour');
     assert.equal((await service("select public.production_payment_webhook_health('acc_other') as result")).events7d,0);
+  });
+  await check(`${database}: webhook health counts captured orders held for review until they're refunded (#1684)`, async () => {
+    const health = () => service("select public.production_payment_webhook_health('acc_pricing') as result");
+    const before = await health();
+    const order = (await db.query("select id,key_id from private.production_payment_orders where account_id='acc_pricing' and captured_paise>0 and not review_required and refunded_paise=0 limit 1")).rows[0];
+    assert.ok(order,'a clean captured order to flag');
+    await service("select public.production_payment_order_review($1,'acc_pricing',$2) as result",[order.id,order.key_id]);
+    assert.equal((await health()).reviewRequired,before.reviewRequired+1,'a captured order sent to review alerts');
+    // The operator resolves it by refunding the customer; review_required stays set, but the money is no longer held.
+    await db.query("update private.production_payment_orders set refunded_paise=amount_paise,provider_refunded_paise=amount_paise where id=$1",[order.id]);
+    assert.equal((await health()).reviewRequired,before.reviewRequired,'a refunded order stops alerting');
+    // The headline case (Reviewer on #1710): Razorpay captured a payment that doesn't match the quote, so it never
+    // verifies and captured_paise stays 0, yet the customer's money is held.
+    const pending = (await db.query("select id,key_id,provider_order_id from private.production_payment_orders where account_id='acc_pricing' and captured_paise=0 and provider_order_id is not null and not review_required limit 1")).rows[0];
+    assert.ok(pending,'an unpaid order to receive a mismatched capture');
+    await service("select public.production_payment_event_receive('acc_pricing',$1,$2,$3,$4,'pay_mismatch',$5,null,'capture') as result",[pending.key_id,randomUUID(),'evt_mismatch','b'.repeat(64),pending.provider_order_id]);
+    const observed = await service("select public.production_payment_observe($1,'acc_pricing',$2,'pay_mismatch',false,0,true,$3) as result",[pending.id,pending.key_id,'c'.repeat(64)]);
+    assert.equal(observed.state,'review_required');
+    assert.equal(observed.captured_paise,0,'a mismatched capture is never credited');
+    assert.equal((await health()).reviewRequired,before.reviewRequired+1,'money held on a mismatched capture alerts');
+    await db.query("update private.production_payment_orders set provider_refunded_paise=amount_paise where id=$1",[pending.id]);
+    assert.equal((await health()).reviewRequired,before.reviewRequired,'a full provider refund stops alerting');
   });
   await check(`${database}: pricing objects remain inaccessible to browser roles`, async () => {
     for (const role of ['anon','authenticated']) {
@@ -2485,6 +2508,12 @@ async function verify(database, source, integrityMigration, customerOnly = false
         await check(`${database}: payment terms v2 migration applies once and skips replay (#1235)`,async () => {
           assert.equal(await applyMigration(db,"20261028_payment_terms_v2.sql",paymentTermsV2Migration),'applied');
           assert.equal(await applyMigration(db,"20261028_payment_terms_v2.sql",paymentTermsV2Migration),'already_applied');
+        });
+      }
+      if (!(await db.query("select pg_get_functiondef('public.production_payment_webhook_health(text)'::regprocedure) like '%reviewRequired%' as installed")).rows[0].installed) {
+        await check(`${database}: payment review alert migration applies once and skips replay (#1684)`,async () => {
+          assert.equal(await applyMigration(db,"20261029_payment_review_alert.sql",paymentReviewAlertMigration),'applied');
+          assert.equal(await applyMigration(db,"20261029_payment_review_alert.sql",paymentReviewAlertMigration),'already_applied');
         });
       }
       await verifyConfigurablePayments(db,database);

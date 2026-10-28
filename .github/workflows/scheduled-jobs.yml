@@ -67,7 +67,7 @@ jobs:
         run: |
           [ -n "$CRON_SECRET" ] || { echo "::error::CRON_SECRET is not set"; exit 1; }
           code=$(curl -sS --max-time 30 -o payments.json -w '%{http_code}' -H "Authorization: Bearer $CRON_SECRET" "$BASE/api/cron/payment-health") || code=000
-          echo "HTTP $code $(jq -c '{ok, payments, events7d, unprocessed, capturedWithoutEvent, error}' payments.json 2>/dev/null || echo '{"ok":false,"error":"no JSON body"}')"
+          echo "HTTP $code $(jq -c '{ok, payments, events7d, unprocessed, capturedWithoutEvent, reviewRequired, error}' payments.json 2>/dev/null || echo '{"ok":false,"error":"no JSON body"}')"
           [ "$code" = 200 ]
           # A capture without its webhook event, or an event stuck unprocessed: open one issue, keep the job green.
           [ "$(jq -r '.ok' payments.json)" = false ] || exit 0
@@ -75,7 +75,7 @@ jobs:
           open=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search "in:title \"$title\"" --json number --jq length)
           [ "$open" = 0 ] || exit 0
           gh issue create -R "$GITHUB_REPOSITORY" -l core -l bug -l owner:devops -t "$title" \
-            -b "$(printf 'Payment health: %s\n\nA captured payment has no capture webhook event after 30 minutes, or an event is unprocessed after an hour. Check the Razorpay webhook settings and reconcile the order (no charges).\n\nRun: %s/%s/actions/runs/%s\nRunbook: docs/OPERATIONS.md#scheduled-jobs\n' "$(jq -c '{events7d, unprocessed, capturedWithoutEvent}' payments.json)" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+            -b "$(printf 'Payment health: %s\n\nA captured payment has no capture webhook event after 30 minutes, or an event is unprocessed after an hour, or a captured order is held for review (reviewRequired: check it in Razorpay and refund or credit it). Check the Razorpay webhook settings and reconcile the order (no charges).\n\nRun: %s/%s/actions/runs/%s\nRunbook: docs/OPERATIONS.md#scheduled-jobs\n' "$(jq -c '{events7d, unprocessed, capturedWithoutEvent, reviewRequired}' payments.json)" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
       - name: Campaign results and health
         if: always()
         env:

@@ -11,6 +11,8 @@ const healthSchema = z.object({
   events7d: z.number().int().min(0),
   unprocessed: z.number().int().min(0),
   capturedWithoutEvent: z.number().int().min(0),
+  // #1684: captured orders held for review (no ad budget, money with Razorpay). 0 until the migration is applied.
+  reviewRequired: z.number().int().min(0).default(0),
 });
 
 /**
@@ -40,5 +42,5 @@ async function handleGET(request: Request) {
   if (error || !health.success) {
     return NextResponse.json({ ok: false, error: "Payment health is unavailable." }, { status: 503 });
   }
-  return NextResponse.json({ ok: health.data.capturedWithoutEvent === 0 && health.data.unprocessed === 0, payments: "live", ...health.data });
+  return NextResponse.json({ ok: health.data.capturedWithoutEvent === 0 && health.data.unprocessed === 0 && health.data.reviewRequired === 0, payments: "live", ...health.data });
 }
