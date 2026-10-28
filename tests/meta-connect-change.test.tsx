@@ -29,7 +29,7 @@ describe("Connect Meta: popup fallback and Change (#474)", () => {
   it("offers 'Continue in this tab' when the popup stays silent, and leaves the popup for this tab", async () => {
     const popup = { location: { href: "" }, close: vi.fn() };
     vi.spyOn(window, "open").mockReturnValue(popup as unknown as Window);
-    const authorizationUrl = "https://www.facebook.com/v23.0/dialog/oauth?state=s";
+    const authorizationUrl = "https://www.facebook.com/v21.0/dialog/oauth?state=s";
     const pending = { ...connectedAttemptForActivation, state: "authorizing" as const, connection: null, retryAfterMs: 1000 };
     const client = {
       status: vi.fn().mockResolvedValue(disconnectedUnknown),

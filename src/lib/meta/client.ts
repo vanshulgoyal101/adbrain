@@ -1,3 +1,4 @@
+import { GRAPH } from "@/lib/meta/graph-version";
 import { z } from "zod";
 import { WHATSAPP_PUBLISHER_PLATFORMS } from "@/lib/meta/placements";
 import type { SetupReads } from "@/lib/meta/setup-checklist";
@@ -13,7 +14,6 @@ import { EXCLUDABLE_CITIES, INDIA_REGION_KEYS, mergeExclusions, serviceAreaExclu
 import { AD_LANGUAGE_KEYS, storedLocales } from "./locales";
 export type { AdResult, CampaignInsights } from "./insights";
 
-const GRAPH = "https://graph.facebook.com/v21.0";
 
 export interface MetaCredentials {
   adAccountId: string;
@@ -817,7 +817,7 @@ export function hasGeo(geo: GeoTargeting | undefined): boolean {
 }
 
 /**
- * Meta Marketing API wrapper (Graph v21). Creates Advantage+ lead campaigns in
+ * Meta Marketing API wrapper (Graph, version in graph-version.ts). Creates Advantage+ lead campaigns in
  * PAUSED state (no spend until activated) and reads insights. Validated against
  * a live ad account.
  */
