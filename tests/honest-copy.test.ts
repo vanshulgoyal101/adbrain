@@ -60,6 +60,19 @@ export function findings(file: string, source: string): string[] {
   }));
 }
 
+// #1235 (owner): a screen that shows both what the customer paid and the ad budget it bought reveals AdBrain's margin
+// by subtraction, even with no split word. Each component file is one screen part, so the two labels may not share a file.
+const PAID_LABEL = /^(you pay|you paid|paid|amount paid|total paid)$/i;
+const AD_BUDGET_LABEL = /^(available |remaining |your )?ad budget(,| for| incl|$)/i;
+
+export function marginBySubtraction(file: string, source: string): string[] {
+  if (!/pa(y|id)/i.test(source) || !/ad budget/i.test(source)) return [];
+  const labels = texts(file, source).map(({ line, text }) => ({ line, text: text.trim() }));
+  const paid = labels.find(({ text }) => PAID_LABEL.test(text));
+  const budget = labels.find(({ text }) => AD_BUDGET_LABEL.test(text));
+  return paid && budget ? [`${file}:${paid.line}+${budget.line} margin by subtraction: "${paid.text}" with "${budget.text}"`] : [];
+}
+
 function sourceFiles(path: string): string[] {
   return statSync(path).isDirectory() ? readdirSync(path).flatMap((name) => sourceFiles(join(path, name))) : /\.tsx?$/.test(path) ? [path] : [];
 }
@@ -69,6 +82,20 @@ describe("honest copy in UI strings (#1291)", () => {
     const files = ROOTS.flatMap(sourceFiles).filter((file) => !ALLOWED_FILES.some((allowed) => allowed.test(file)));
     expect(files.length).toBeGreaterThan(100);
     expect(files.flatMap((file) => findings(file, readFileSync(file, "utf8")))).toEqual([]);
+  });
+
+  it("no screen shows a paid total next to an ad-budget amount (#1235)", () => {
+    const files = ROOTS.flatMap(sourceFiles).filter((file) => !ALLOWED_FILES.some((allowed) => allowed.test(file)));
+    expect(files.flatMap((file) => marginBySubtraction(file, readFileSync(file, "utf8")))).toEqual([]);
+  });
+
+  it("fails on a planted paid total beside an ad budget, and keeps one amount with the plain sentence", () => {
+    const checkout = `export const a = <dl><dt>You pay</dt><dd>{x}</dd><dt>Ad budget for your campaigns, incl. Meta&apos;s GST</dt><dd>{y}</dd></dl>;`;
+    expect(marginBySubtraction("src/components/x.tsx", checkout)).toHaveLength(1);
+    const balance = `const rows = [["Paid", a], ["Refunded", b], ["Available ad budget", c]];`;
+    expect(marginBySubtraction("src/components/x.tsx", balance)).toHaveLength(1);
+    const fine = `export const b = <><p>It becomes your ad budget, including Meta's GST, and AdBrain makes and runs your ads.</p><dt>You pay</dt><dd>{x}</dd></>;`;
+    expect(marginBySubtraction("src/components/y.tsx", fine)).toEqual([]);
   });
 
   it("each pending allowance still matches its text, so it is removed when its fix lands", () => {
