@@ -2,7 +2,7 @@
 
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { Check, Copy, Inbox, Loader2, MessageCircle, Phone, RefreshCw, Search, X, Save, Pencil, ChevronDown, SlidersHorizontal, UserCheck } from "lucide-react";
+import { Check, Copy, Inbox, Loader2, MessageCircle, Phone, RefreshCw, Search, X, Save, Pencil, ChevronDown, SlidersHorizontal, UserCheck, MoreHorizontal } from "lucide-react";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -35,6 +35,19 @@ const STATUS_LABEL: Record<WorkflowStatus, string> = {
 
 function leadName(lead: Pick<Lead, "full_name">): string | null {
   return isMetaTestLead(lead) ? "Test enquiry from Meta" : lead.full_name;
+}
+
+function initials(name: string | null): string {
+  const words = (name ?? "").trim().split(/\s+/).filter(Boolean);
+  return words.length ? (words[0][0] + (words.length > 1 ? words.at(-1)![0] : "")).toUpperCase() : "?";
+}
+
+/** #1260 (CPO words): 'Contacted' is the owner's first tap on WhatsApp them/Call, not a confirmed reply. */
+function contactedLabel(minutes: number): string {
+  if (!Number.isFinite(minutes) || minutes < 0) return "Contacted";
+  if (minutes < 24 * 60) return `Contacted in ${formatReplyTime(minutes)}`;
+  const days = Math.floor(minutes / (24 * 60));
+  return `Contacted after ${days} ${days === 1 ? "day" : "days"}`;
 }
 
 export function LeadInbox({
@@ -82,10 +95,10 @@ export function LeadInbox({
   const [saved, setSaved] = useState(false);
   const [syncId, setSyncId] = useState<string | null>(null);
   const [marking, setMarking] = useState<string | null>(null);
-  const [customerNotice, setCustomerNotice] = useState<{ lead: Lead; previous: WorkflowStatus; undone?: boolean } | null>(null);
+  const [customerNotice, setCustomerNotice] = useState<{ lead: Lead; previous: WorkflowStatus; status: WorkflowStatus; undone?: boolean } | null>(null);
   const syncStorageKey = syncScope ? `lead-sync:${syncScope}` : null;
   const editorField = useRef<HTMLSelectElement>(null);
-  const editorTrigger = useRef<HTMLButtonElement>(null);
+  const editorTrigger = useRef<HTMLElement>(null);
   const searchField = useRef<HTMLInputElement>(null);
   useEffect(() => { editorField.current?.focus(); }, [selected?.id]);
   const page = useLeadList({ leads: initialLeads, total: initialTotal, nextCursor: initialNextCursor }, {
@@ -119,7 +132,7 @@ export function LeadInbox({
     }
   }
 
-  function editLead(lead: Lead, trigger: HTMLButtonElement) {
+  function editLead(lead: Lead, trigger: HTMLElement) {
     if (selected?.id === lead.id) { editorField.current?.focus(); return; }
     rememberDraft();
     editorTrigger.current = trigger;
@@ -188,8 +201,8 @@ export function LeadInbox({
     }).catch(() => undefined);
   }
 
-  /** #798: one tap marks an enquiry as a customer (and Undo puts the old status back); notes are kept. */
-  async function setCustomer(lead: Lead, status: WorkflowStatus, previous: WorkflowStatus) {
+  /** #798: one tap marks an enquiry as a customer, or (#1260) not interested; Undo puts the old status back; notes are kept. */
+  async function setCustomer(lead: Lead, status: WorkflowStatus, previous: WorkflowStatus, undo = false) {
     if (marking) return;
     setMarking(lead.id);
     try {
@@ -201,7 +214,7 @@ export function LeadInbox({
       const savedRow = { status: data.lead.workflow_status ?? status, note: data.lead.follow_up_note ?? "" };
       setConfirmed(current => ({ ...current, [draftKey(lead)]: savedRow }));
       if (selected?.id === lead.id) { setSelected(data.lead); setDraftStatus(savedRow.status); }
-      setCustomerNotice({ lead, previous, undone: status !== "customer" });
+      setCustomerNotice({ lead, previous, status, undone: undo });
       page.refresh();
     } catch {
       setError("Couldn't save that. Check your connection and try again.");
@@ -333,10 +346,11 @@ export function LeadInbox({
         <p role="status" className="flex flex-wrap items-center gap-2 text-sm text-slate-700">
           {customerNotice.undone
             ? `${leadName(customerNotice.lead) ?? "This enquiry"} is back to ${STATUS_LABEL[customerNotice.previous].toLowerCase()}.`
-            : `${leadName(customerNotice.lead) ?? "This enquiry"} became a customer.`}
+            : customerNotice.status === "closed" ? `${leadName(customerNotice.lead) ?? "This enquiry"} is marked not interested.`
+              : `${leadName(customerNotice.lead) ?? "This enquiry"} became a customer.`}
           {!customerNotice.undone && (
             <button type="button" className="min-h-11 font-medium text-blue-700" disabled={!!marking}
-              onClick={() => void setCustomer(customerNotice.lead, customerNotice.previous, customerNotice.previous)}>Undo</button>
+              onClick={() => void setCustomer(customerNotice.lead, customerNotice.previous, customerNotice.previous, true)}>Undo</button>
           )}
         </p>
       )}
@@ -408,32 +422,44 @@ export function LeadInbox({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {leads.map((l) => (
-                <tr role="row" key={l.id} className="hover:bg-slate-50">
+              {leads.map((l) => {
+                const first = firstContact(l);
+                const contactMinutes = first ? (Date.parse(first) - Date.parse(l.created_time ?? l.created_at)) / 60_000 : NaN;
+                const current = statusOf(l);
+                // #1260: one state word per row on phones: New → Contacted in {m} → Customer.
+                const state = current === "customer" ? "customer" : current === "closed" ? "closed" : first ? "contacted" : current === "new" ? "new" : "other";
+                const stateLabel = state === "new" ? "New" : state === "contacted" ? contactedLabel(contactMinutes) : state === "closed" ? "Not interested" : STATUS_LABEL[current];
+                const city = isMetaTestLead(l) ? null : l.city;
+                const meta = [l.created_time ? whenLabel(l.created_time) : null, l.source === "whatsapp_manual" ? "WhatsApp chat" : null, city].filter(Boolean).join(" · ");
+                const name = leadName(l) ?? "this enquiry";
+                return (
+                <tr role="row" key={l.id} className="hover:bg-slate-50" data-state={state}>
                   <td role="cell" className={styles.person}>
-                    {leadName(l) ?? "—"}
+                    <span className={styles.avatar} aria-hidden="true">{initials(leadName(l))}</span>
+                    <span className={styles.name}>{leadName(l) ?? "—"}</span>
+                    <span className={styles.rowState} data-state={state}>{stateLabel}</span>
+                    {meta && <span className={styles.rowMeta}>{meta}</span>}
                   </td>
                   <td role="cell" className={styles.contact}>
                     {!isMetaTestLead(l) && l.phone && (
                       <a
                         href={`tel:${l.phone}`}
-                        className="block text-blue-700 hover:underline"
+                        className={`${styles.phoneNumber} block text-blue-700 hover:underline`}
                       >
                         {l.phone}
                       </a>
                     )}
                     {!isMetaTestLead(l) && l.phone && (() => {
                       const whatsapp = whatsappReplyLink(l.phone, firstReplyText({ leadName: leadName(l), businessName, offer, language }));
-                      const first = firstContact(l);
-                      const replied = first ? Date.parse(first) - Date.parse(l.created_time ?? l.created_at) : NaN;
-                      return <div className="mt-1 flex flex-wrap items-center gap-2">
+                      const replied = contactMinutes * 60_000;
+                      return <div className={`${styles.replyActions} mt-1 flex flex-wrap items-center gap-2`}>
                         {whatsapp && <a href={whatsapp} target="_blank" rel="noopener noreferrer" onClick={() => markContacted(l)}
                           className="inline-flex min-h-11 items-center gap-1 rounded-md bg-emerald-600 px-3 text-xs font-medium text-white hover:bg-emerald-700">
                           <MessageCircle size={14} aria-hidden="true" />WhatsApp them</a>}
                         <a href={`tel:${l.phone}`} onClick={() => markContacted(l)}
                           className="inline-flex min-h-11 items-center gap-1 rounded-md border border-slate-300 px-3 text-xs font-medium text-slate-800 hover:bg-slate-50">
                           <Phone size={14} aria-hidden="true" />Call</a>
-                        {first && <span className="block w-full text-xs text-slate-500">
+                        {first && <span className={`${styles.repliedLine} block w-full text-xs text-slate-500`}>
                           {Number.isFinite(replied) && replied >= 0 ? `Replied ${formatReplyTime(replied / 60_000)} after the enquiry` : "Replied"}
                         </span>}
                       </div>;
@@ -445,13 +471,13 @@ export function LeadInbox({
                     )}
                     {(isMetaTestLead(l) || (!l.phone && !l.email)) && <span className={styles.blank}>—</span>}
                   </td>
-                  <td role="cell"><span className={styles.mobileLabel} aria-hidden="true">City</span>{(isMetaTestLead(l) ? null : l.city) ?? <span className={styles.blank}>—</span>}</td>
-                  <td role="cell"><span className={styles.mobileLabel} aria-hidden="true">Form</span>{leadSource(l)}</td>
-                  <td role="cell" className="text-slate-500">
+                  <td role="cell" className={styles.desktopOnly}><span className={styles.mobileLabel} aria-hidden="true">City</span>{(isMetaTestLead(l) ? null : l.city) ?? <span className={styles.blank}>—</span>}</td>
+                  <td role="cell" className={styles.desktopOnly}><span className={styles.mobileLabel} aria-hidden="true">Form</span>{leadSource(l)}</td>
+                  <td role="cell" className={`${styles.desktopOnly} text-slate-500`}>
                     <span className={styles.mobileLabel} aria-hidden="true">Received</span>
                     {whenLabel(l.created_time) || <span className={styles.blank}>—</span>}
                   </td>
-                  <td role="cell"><span className={styles.mobileLabel} aria-hidden="true">Follow-up</span>
+                  <td role="cell" className={styles.followUp}><span className={styles.mobileLabel} aria-hidden="true">Follow-up</span>
                     <div className={styles.followUpCell}>
                       <button type="button" className={styles.followUpButton} title={`Follow up ${leadName(l) ?? "enquiry"}`} aria-label={`Follow up ${leadName(l) ?? "enquiry"}, status ${STATUS_LABEL[statusOf(l)]}`} disabled={saving} onClick={event => editLead(l, event.currentTarget)}>
                         <Pencil size={14} aria-hidden="true" />{statusOf(l) === "customer" ? <Status tone="live">Customer</Status> : STATUS_LABEL[statusOf(l)]}
@@ -462,10 +488,20 @@ export function LeadInbox({
                           {marking === l.id ? <Loader2 size={14} className="animate-spin" aria-hidden="true" /> : <UserCheck size={14} aria-hidden="true" />}Became a customer
                         </Button>
                       )}
+                      {/* #1260: on phones the status editor moves into ⋯ (Not interested, Edit). */}
+                      <details className={styles.more}>
+                        <summary aria-label={`More for ${name}`} title="More"><MoreHorizontal size={18} aria-hidden="true" /></summary>
+                        <div className={styles.moreMenu}>
+                          {current !== "closed" && current !== "customer" && !isMetaTestLead(l) && <button type="button" disabled={!!marking || saving}
+                            onClick={event => { event.currentTarget.closest("details")?.removeAttribute("open"); void setCustomer(l, "closed", current); }}>Not interested</button>}
+                          <button type="button" disabled={saving} onClick={event => { const menu = event.currentTarget.closest("details"); menu?.removeAttribute("open"); editLead(l, menu?.querySelector("summary") ?? event.currentTarget); }}>Edit</button>
+                        </div>
+                      </details>
                     </div>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
