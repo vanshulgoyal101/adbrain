@@ -17,8 +17,8 @@ configuration; check [Data Model](DATA_MODEL.md#migration-map) and
 | WhatsApp conversation results | WhatsApp reporting migration |
 | Declared preferences, customer allowance | Their additive migrations |
 | Worker campaign creation | `CAMPAIGN_EXECUTION_MODE=worker`, worker migration and a running worker; default is inline |
-| Live checkout | Live payment flags on a production `main` deployment; see [API Reference](API_REFERENCE.md#configurable-live-payments) |
-| Test checkout | Local only: `PAYMENTS_TEST_ENABLED=true`, loopback Supabase, no Vercel environment; see [test payments](API_REFERENCE.md#local-test-payments) |
+| Live checkout | Live payment flags on a production `main` deployment; see [API Reference](api/payments.md#configurable-live-payments) |
+| Test checkout | Local only: `PAYMENTS_TEST_ENABLED=true`, loopback Supabase, no Vercel environment; see [test payments](api/payments.md#local-test-payments) |
 | Scheduled jobs | `vercel.json` schedules only the keepalive and the daily spend-enforcement sweep |
 
 No checkout path, test or live, makes money spendable or activates ads. Mocked
@@ -618,7 +618,7 @@ IDs. Poll it after ambiguity; do not submit a new key to escape a pending or
 does not fall back to inline execution when the queue is unavailable. A created campaign is paused. Activation requires a
 fresh confirmation digest, connection recheck, provider verification, and spend
 guardrail check. Creation idempotency does not extend to activation or paid
-generation. See [API Reference](API_REFERENCE.md) for payloads and states.
+generation. See [API Reference](api/README.md) for payloads and states.
 
 Pause and delete verify account/Page binding too. Missing legacy binding requires
 reconciliation, not guessing. Meta writes and local mirrors are not atomic: a
