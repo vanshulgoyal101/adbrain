@@ -203,6 +203,12 @@ describe("ready pool (#573)", () => {
     expect(readyPool(pool, "devops")).toEqual([]);
     expect(readyPool(pool, "cto")).toEqual([]);
   });
+  it("gives the Designer, CPO and Analyst their own lanes (#364)", () => {
+    const lanes = [issue(20, "ready", "lane:design"), issue(21, "ready", "lane:product"), issue(22, "ready", "lane:research")];
+    expect(readyPool(lanes, "designer").map((i) => i.number)).toEqual([20]);
+    expect(readyPool(lanes, "cpo").map((i) => i.number)).toEqual([21]);
+    expect(readyPool(lanes, "analyst").map((i) => i.number)).toEqual([22]);
+  });
 });
 
 describe("Dev 4 role", () => {
