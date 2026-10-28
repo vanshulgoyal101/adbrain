@@ -150,7 +150,7 @@ describe("core: <SetupAdsStep> (#1270)", () => {
     await act(async () => fireEvent.click(bar().getByRole("button", { name: "Make 3 ads" })));
     await waitFor(() => expect(generate).toHaveBeenCalledTimes(1));
     expect(generate.mock.calls[0][0]).toMatchObject({ language: "hi" });
-    expect(screen.queryByRole("group", { name: "Ads in" })).toBeNull();
+    expect(screen.queryByRole("group", { name: "Your ads will be in" })).toBeNull();
   });
 
   it("#1475: earlier ads but a batch already running (another tab) resumes it, still never a new one", async () => {

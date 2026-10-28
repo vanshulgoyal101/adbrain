@@ -68,6 +68,16 @@ describe("core: Create concept validation on a recorded production concept", () 
     expect(rules(line("Modular kitchens in Mohali, free consultation."))).not.toContain("work-claim");
   });
 
+  // #1822 (Reviewer): a pasted bio's third-party number and link are refused (the repair rewrites them); the
+  // business's own phone is allowed.
+  it("refuses a third-party phone and link copied from a pasted bio, allows the business's own phone", () => {
+    const line = (text: string) => ({ ...recorded.concept, primary_text: `${recorded.concept.primary_text.split("\n")[0]}\n${text}` });
+    expect(rules(line("Call 98765 43210 or book at otherclinic.in."))).toContain("contact-in-copy");
+    const withPhone: ConceptInput = { ...input, brand: { ...recorded.brand, phone: "+91 98290 12345" } };
+    const result = validateConcept(line("Call 98290 12345 to book."), withPhone);
+    expect(result.success ? [] : conceptValidationRules(result.issues)).not.toContain("contact-in-copy");
+  });
+
   it("clips an over-long link description instead of discarding the concept", () => {
     const long = `${recorded.concept.description} with flexible evening and weekend appointments for busy adults`;
     expect(long.length).toBeGreaterThan(100);

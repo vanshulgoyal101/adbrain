@@ -421,7 +421,7 @@ describe("Home workspace", () => {
     const page = await DashboardPage();
     const feed = page.props.activity.props.children;
     render(await feed.type(feed.props));
-    expect(screen.getByRole("alert")).toHaveTextContent("Recent activity could not be loaded.");
+    expect(screen.getByRole("alert")).toHaveTextContent("We couldn't load your recent activity. Reload the page.");
     expect(screen.queryByText("Private audit detail")).not.toBeInTheDocument();
   });
 

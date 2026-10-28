@@ -52,6 +52,11 @@ These controls are split between [.github/workflows/ci.yml](../.github/workflows
 deployments are not blocked by Git branch protection; never use `vercel --prod` to
 skip review.
 
+**Action updates (#1772):** [dependabot.yml](../.github/dependabot.yml) opens one grouped `github-actions`
+PR into `next` every Monday; [dependabot-automerge.yml](../.github/workflows/dependabot-automerge.yml) enables
+auto-merge only when Dependabot is the author and every changed file is under `.github/workflows/`. Required
+checks still gate the merge. Anything else Dependabot opens waits for a person.
+
 **The corrected checked-in wildcard disables slash-containing Git branches.** Earlier
 single-star configurations did not.
 Before pushing a feature or release branch, inspect effective remote deployment

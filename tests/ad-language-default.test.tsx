@@ -21,7 +21,7 @@ describe("<AdLanguageChips> (#1681)", () => {
     const onChange = vi.fn();
     const { AdLanguageChips } = await import("@/components/ad-language-chips");
     render(<AdLanguageChips value="hinglish" onChange={onChange} />);
-    const group = screen.getByRole("group", { name: "Ads in" });
+    const group = screen.getByRole("group", { name: "Your ads will be in" });
     expect(group).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Hinglish" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: "हिंदी" })).toHaveAttribute("lang", "hi");

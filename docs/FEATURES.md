@@ -141,7 +141,7 @@ Until a business has a campaign that went live (or is on now), `/create` is setu
 step 2 of 3 (#1251 WS1, #1270). With no saved batch it runs the existing interview
 (answering "Let the AI decide" to any question, up to 3) and one 3-ad Create run
 in the Brand's first language, else the segment default (solar → Hinglish, others
-English; #1681). Step 1 (and step 2 before a tapped "Make 3 ads") shows "Ads in:
+English; #1681). Step 1 (and step 2 before a tapped "Make 3 ads") shows "Your ads will be in:
 English · Hinglish · हिंदी · ਪੰਜਾਬੀ"; a pick is saved first in Brand `languages`,
 showing one line of progress at a time. Then it shows the newest batch
 (`variant_group`) with 2 pre-picked by a fixed rule (`setupPicks`: fewest text

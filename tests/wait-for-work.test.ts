@@ -92,7 +92,15 @@ describe("CTO queue watch", () => {
       issue("owner:qa", "owner:dev"), issue("owner:qa"),
     ]);
     expect(low).toEqual([{ role: "dev2", count: 1 }, { role: "dev3", count: 2 }, { role: "dev4", count: 0 }, { role: "qa", count: 2 }, { role: "qa2", count: 0 },
-      { role: "reviewer", count: 0 }, { role: "devops", count: 0 }, { role: "cpo", count: 0 }, { role: "analyst", count: 0 }, { role: "designer", count: 0 }]);
+      { role: "reviewer", count: 0 }, { role: "devops", count: 0 }, { role: "cpo", count: 0 }, { role: "analyst", count: 0 }, { role: "designer", count: 0 }, { role: "docs", count: 0 }]);
+  });
+
+  it("knows the Docs role (owner, Oct 29): handoffs wake it, and it isn't confused with docs/ paths", () => {
+    const docs = matchers("docs");
+    expect(waitingOnMe("CEO: → Docs: split API_REFERENCE into docs/api/.", docs)).toBe(true);
+    expect(waitingOnMe("Docs: reorganised docs/product/. → CTO: check the ADR link.", docs)).toBe(false);
+    expect(docs.addressedToMe("Updated docs/OPERATIONS.md in this PR.")).toBe(false);
+    expect(lowQueues([issue("owner:docs", "core")]).find((l) => l.role === "docs")).toEqual({ role: "docs", count: 1 });
   });
 
   it("counts the worker's lane pool as supply, so a reactive Reviewer with pool audits isn't low", () => {
