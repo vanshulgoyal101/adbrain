@@ -58,3 +58,37 @@ describe("core: <SetupResumeCard> (#1272)", () => {
     expect(screen.getByRole("link", { name: "Continue" })).toHaveAttribute("href", href);
   });
 });
+
+// #1712 (CPO, #1687): a handed-over account lands at step 3 with ads already made; Home shows them and the next step.
+describe("core: Home's step 3 card shows the ready ads (#1712)", () => {
+  const ad = (id: string) => ({ id, headline: `Ad ${id}`, image_url: `https://example.supabase.co/storage/v1/object/public/creatives/${id}.png` });
+
+  it("names how many are ready, shows them, and leads to Go live", () => {
+    render(<SetupResumeCard step={3} ready={[ad("a"), ad("b")]} />);
+    expect(screen.getByRole("heading", { name: "Your 2 ads are ready" })).toBeInTheDocument();
+    expect(screen.getAllByRole("img")).toHaveLength(2);
+    expect(screen.getByText("Next: connect your Facebook Page and go live. It takes about 10 minutes, and nothing spends until you tap Go live.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Connect and go live" })).toHaveAttribute("href", "/campaigns");
+    for (const link of screen.getAllByRole("link")) expect(link).toHaveAttribute("href", "/campaigns");
+    expect(screen.queryByText(/budget|area|₹/i)).toBeNull();
+  });
+
+  it("shows at most 3 pictures, and says 1 ad for one", () => {
+    const { unmount } = render(<SetupResumeCard step={3} ready={["a", "b", "c", "d"].map(ad)} />);
+    expect(screen.getByRole("heading", { name: "Your 4 ads are ready" })).toBeInTheDocument();
+    expect(screen.getAllByRole("img")).toHaveLength(3);
+    unmount();
+    render(<SetupResumeCard step={3} ready={[ad("a")]} />);
+    expect(screen.getByRole("heading", { name: "Your ad is ready" })).toBeInTheDocument();
+  });
+
+  it("steps 1 and 2, and step 3 with no ready ads, are unchanged", () => {
+    for (const step of [1, 2, 3] as const) {
+      const { unmount } = render(<SetupResumeCard step={step} ready={[]} />);
+      expect(screen.getByRole("heading", { name: "Your first ad" })).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "Continue" })).toBeInTheDocument();
+      expect(screen.queryByRole("img")).toBeNull();
+      unmount();
+    }
+  });
+});

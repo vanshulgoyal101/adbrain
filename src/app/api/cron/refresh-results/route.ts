@@ -61,6 +61,7 @@ async function handleGET(request: Request) {
   let refreshed = 0, pausedReads = 0, skipped = 0, failed = 0, hasMore = false;
   // #1592: which campaigns didn't refresh, by opaque key only (public workflow logs), and why.
   const failures: { key: string; code: string }[] = [], ended: string[] = [], unbound: string[] = [];
+  const goneAlerts: { kind: "ended"; key: string }[] = [];
   const opaque = (id: string) => createHash("sha256").update(`refresh:${id}`).digest("hex").slice(0, 12);
   const reauth = new Map<string, ReauthEntry>();
   const health = new Map<string, CampaignHealth | null>(campaigns.filter(campaign => campaign.status === "active")
@@ -118,16 +119,23 @@ async function handleGET(request: Request) {
       refreshed++;
     } catch (error) {
       // #1592: deleted in Meta (or no longer there at all): end it as the manual refresh does (#721); not a failure.
-      const gone = error instanceof CampaignGoneError ? error.metaStatus
-        : error instanceof MetaError && error.code === 100 && error.subcode === 33 ? "MISSING" : null;
+      // #1678: only Meta's own DELETED/ARCHIVED status ends a campaign; a bare 100/33 can also mean "no permission".
+      const gone = error instanceof CampaignGoneError ? error.metaStatus : null;
       if (gone && context) {
         const raw = campaign.raw && typeof campaign.raw === "object" && !Array.isArray(campaign.raw) ? campaign.raw : {};
-        const { error: endError } = await saveCampaign(context, { status: "completed", raw: { ...raw, metaStatus: gone } }, campaign.id)
+        const { error: endError } = await saveCampaign(context, { status: "completed", raw: { ...raw, metaStatus: gone, metaGoneAt: new Date().toISOString() } }, campaign.id)
           .catch(() => ({ error: true }));
-        if (!endError) { ended.push(opaque(campaign.id)); continue; }
+        if (!endError) {
+          ended.push(opaque(campaign.id));
+          // #1600: one 'ended' alert (the workflow opens one issue per key, once).
+          goneAlerts.push({ kind: "ended", key: opaque(campaign.id) });
+          continue;
+        }
       }
-      // The campaign's ad account or Page is no longer the business's connection: nothing a retry can fix.
-      if (error instanceof ConnectionAccessError && error.code === "CONFLICT") { unbound.push(opaque(campaign.id)); continue; }
+      // The campaign's ad account or Page is no longer the business's connection, or Meta won't load it (100/33: gone or
+      // no permission). Listed, never ended: it stays active, so enforce-spend keeps guarding it.
+      if ((error instanceof ConnectionAccessError && error.code === "CONFLICT")
+        || (error instanceof MetaError && error.code === 100 && error.subcode === 33)) { unbound.push(opaque(campaign.id)); continue; }
       const dead = isTokenFailure(error) ? await reauthEntry(campaign.business_id, [error],
         campaigns.filter(({ business_id }) => business_id === campaign.business_id).length) : null;
       if (dead) reauth.set(campaign.business_id, dead);
@@ -140,7 +148,8 @@ async function handleGET(request: Request) {
 
   const alerts = [...health.values()].flatMap(current => current?.flags ?? [])
     .filter(flag => Date.now() - Date.parse(flag.since) <= ALERT_WINDOW_MS)
-    .map(({ kind, key }) => ({ kind, key }));
+    .map(({ kind, key }) => ({ kind, key }))
+    .concat(goneAlerts.map(({ kind, key }) => ({ kind, key })));
   return NextResponse.json({ ok: failed === 0, refreshed, pausedReads, skipped, failed, hasMore, alerts, reauth: [...reauth.values()],
     failures, ended, unbound }, { status: failed ? 503 : 200 });
 }

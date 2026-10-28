@@ -42,7 +42,7 @@ ID are different identifiers. Never infer one from another.
 | `/assets` | Browse/reuse/download saved images | Download/clipboard failures are surfaced |
 | `/campaigns` | Draft, review, create paused, activate/pause, sync, report; `?new=1&creatives=<ids>` opens the composer with those approved ads selected; `&review=1` (#1004, from Create) then prepares Review on its own once Meta is connected, the WhatsApp check has run and a form campaign has its lead form (the same prepare as the Review button; nothing is sent to Meta). The lead form used for the last Review is preselected while the Page still has it; with several forms and none chosen, the field says choosing one opens Review | Live Meta writes require verified binding and capability |
 | `/leads` | WhatsApp chats per campaign with **Add enquiry** (#764) first; the form table follows as "Form enquiries (n)", folded when there are none (#1223); then sync, search, and inspect enquiries; copy digest. Each enquiry with a phone has **WhatsApp them** (wa.me with a first reply in the business's first language, en/hi/Hinglish, naming the business and its first offer) and **Call**; the first tap records `first_contacted_at` ("Replied 12 min after the enquiry", #1049) | No automated outreach is sent: the owner sends the reply |
-| `/settings` | Meta connection, spend guardrails, declared preferences, **App language** (English · हिंदी, kept in the `adbrain_lang` cookie for a year; Home follows it, other screens follow screen by screen, #1438; strings in `messages/{en,hi}.json`) | Disconnect does not pause running ads; preferences cannot authorize spend |
+| `/settings` | Meta connection, spend guardrails, declared preferences, **App language** (English · हिंदी, kept in the `adbrain_lang` cookie for a year; Home follows it, other screens follow screen by screen, #1438; strings in `messages/{en,hi}.json`; WS1 step 1 offers English / हिंदी until the cookie is set, English by default and never from the browser, #1641) | Disconnect does not pause running ads; preferences cannot authorize spend |
 | `/settings/verdicts` | Internal only (#1255): one example of each campaign-card state for team walks | Fixed examples; reads and writes nothing; 404 for owners |
 
 ## Workspace Responsiveness
@@ -98,7 +98,10 @@ checks all five, then goes to `/create`. `/brand?all=1` opens the full page.
 
 Until then Home (`/dashboard`) is one resume card, "Your first ad · Step N of 3 ·
 {step} · Continue" (#1272, `setupResumeStep`): step 1 until the five facts make a
-usable Brand, step 2 until an ad is picked (approved), then step 3. The + button
+usable Brand, step 2 until an ad is picked (approved), then step 3. At step 3 with ads made
+from today's step 1 (`madeForSetup`, e.g. a handed-over prospect account), the card says
+"Your N ads are ready", shows up to 3 of them and leads with **Connect and go live** (#1712);
+budget, area and payment stay on step 3. The + button
 reads "Continue your first ad" and `/create` sends a first-timer without the five
 facts to `/brand`. A campaign counts as having gone live once it has `launched_at`
 or is active or completed.
