@@ -96,6 +96,7 @@ import { reviewBlockerAlternative, reviewBlockerFix } from "@/lib/campaign/revie
 import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
 import { useCampaignPreparation } from "@/lib/meta-connect-ui/use-campaign-preparation";
 import { targetingFromEditor, targetingToEditor } from "@/lib/campaign/editor-targeting";
+import { buildManualDraftInput, pickWhatsAppNumber } from "@/lib/campaign/manual-draft-input";
 import type { LeadForm } from "@/lib/meta/client";
 import { maskWhatsAppNumber, maskedWhatsAppNumberPattern, parseWhatsAppStatus, type WhatsAppStatus } from "@/lib/meta/whatsapp-status-shared";
 import type { ConnectIntent, ConnectionDTO } from "@/lib/meta/connect-contracts";
@@ -325,7 +326,7 @@ function BusinessCampaigns({
     const text = whatsappGreeting(business, adWords(ads), [], adLanguages(ads), language);
     return [language, { greeting: text.greeting, prefill: text.autofill }];
   })) as Suggested;
-  const chosenWhatsAppNumber = whatsappOptions.some(({ masked }) => masked === whatsappNumber) ? whatsappNumber : whatsappOptions[0]?.masked ?? whatsappNumber;
+  const chosenWhatsAppNumber = pickWhatsAppNumber(whatsappOptions, whatsappNumber);
   const [leadFormId, setLeadFormId] = useState(initialSetup?.leadFormId ?? leadForms[0]?.id ?? "");
   const leadFormMemoryKey = `campaign-lead-form:${business.owner_id}:${business.id}`;
   const [availableForms, setAvailableForms] = useState(leadForms);
@@ -936,21 +937,21 @@ function BusinessCampaigns({
   function manualDraftInput(requireComplete = true): DraftInput {
     if (requireComplete && selected.size === 0) throw new Error("Select at least one creative.");
     if (requireComplete && budget <= 0) throw new Error("Enter a daily budget.");
-    return {
+    return buildManualDraftInput({
       businessId: business.id,
       name,
       goal: draftGoal || name,
       mode: preparedDraftRef.current?.input.mode === "guided" || creationMode === "guided" ? "guided" : "manual",
       creativeIds: [...selected],
-      dailyBudgetRupees: Math.max(0, budget),
-      leadFormId: destination === "whatsapp" ? null : leadFormId || null,
+      dailyBudgetRupees: budget,
+      leadFormId,
       destination,
-      ...(destination === "whatsapp" && chosenWhatsAppNumber ? { whatsappNumber: chosenWhatsAppNumber } : {}),
-      ...(destination === "whatsapp" && whatsappLanguage !== "ad" ? { whatsappLanguage } : {}),
-      ...(destination === "whatsapp" && whatsappMessage ? { whatsappMessage } : {}),
+      whatsappNumber: chosenWhatsAppNumber,
+      whatsappLanguage,
+      whatsappMessage,
       targeting: targetingFromEditor(targeting, plannedAreas, plannedExclusions),
       abTest,
-    };
+    });
   }
 
   // #366: plan the audience in the background once ads are chosen, so Prepare usually doesn't wait for the AI.
