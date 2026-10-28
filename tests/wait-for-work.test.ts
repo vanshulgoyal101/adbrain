@@ -84,21 +84,20 @@ describe("CTO on-track check", () => {
 describe("CTO queue watch", () => {
   const issue = (...labels: string[]) => ({ labels: labels.map((name) => ({ name })) });
 
-  it("flags workers with fewer than 2 actionable items, ignoring parked ones", () => {
+  it("flags workers with fewer than 3 actionable items (owner, Oct 28), ignoring parked ones", () => {
     const low = lowQueues([
       issue("core", "owner:dev"), issue("owner:dev"),
       issue("owner:dev2"), issue("owner:dev2", "waiting-owner"),
       issue("owner:dev3"), issue("owner:dev3"), issue("owner:dev3", "decision"),
       issue("owner:qa", "owner:dev"), issue("owner:qa"),
     ]);
-    expect(low).toEqual([{ role: "dev2", count: 1 }, { role: "dev4", count: 0 }, { role: "qa2", count: 0 }]);
-    // The CPO self-sources from walks and #703, like the Analyst and Designer (#364).
-    expect(low.map((l) => l.role)).not.toContain("cpo");
+    expect(low).toEqual([{ role: "dev2", count: 1 }, { role: "dev3", count: 2 }, { role: "dev4", count: 0 }, { role: "qa", count: 2 }, { role: "qa2", count: 0 },
+      { role: "reviewer", count: 0 }, { role: "devops", count: 0 }, { role: "cpo", count: 0 }, { role: "analyst", count: 0 }, { role: "designer", count: 0 }]);
   });
 
   it("counts the worker's lane pool as supply, so a reactive Reviewer with pool audits isn't low", () => {
     const pool = (lane: string) => ({ labels: [{ name: "core" }, { name: "ready" }, { name: `lane:${lane}` }] });
-    const low = lowQueues([issue("owner:reviewer"), pool("review"), pool("dev")]).map((l) => l.role);
+    const low = lowQueues([issue("owner:reviewer"), pool("review"), pool("review"), pool("dev")]).map((l) => l.role);
     expect(low).not.toContain("reviewer");
     expect(low).toContain("dev4");
     expect(low).toContain("qa");
@@ -170,7 +169,7 @@ describe("Reviewer and QA 2 roles (#575)", () => {
   it("counts their queues", () => {
     const low = lowQueues([{ labels: [{ name: "owner:qa2" }] }, { labels: [{ name: "owner:reviewer" }] }]).map((x) => x.role);
     expect(low).toContain("qa2");
-    expect(low).not.toContain("reviewer"); // self-sourcing (#573)
+    expect(low).toContain("reviewer"); // every role keeps ≥ 3 (CEO, #364)
   });
 });
 
@@ -247,6 +246,8 @@ describe("next item (#364: idle with a full queue)", () => {
     expect(nextItem(items, pulls)?.number).toBe(25);
     expect(nextItem(items, pulls, new Set([25]))?.number).toBe(30);
     expect(nextItem([issue(12, "parked")], [])).toBeNull();
+    // Standing channels and umbrellas (#364, #418) are never "your next item".
+    expect(nextItem([issue(364, "standing"), issue(400, "core")], [])?.number).toBe(400);
   });
   it("parked items don't count toward a queue", () => {
     expect(lowQueues([issue(1, "owner:dev"), issue(2, "owner:dev", "parked")]).map((l) => l.role)).toContain("dev");

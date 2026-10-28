@@ -132,6 +132,19 @@ describe("core scoreboard (#681)", () => {
     expect(row(board([]), "Brand")).toMatchObject({ now: "0 new businesses; autofill 0 calls (0 failed)", met: null });
   });
 
+  it("Brand starts a new owner's clock at sign-up and leaves the team's accounts out (#1136)", () => {
+    const create = (business_id: string, user_id: string, minAgo: number) => ev("business.create", "success", { business_id, user_id, created_at: at(minAgo), attributes: { brandUsable: true } });
+    const events = [create("new", "new-owner", 100), create("old", "old-owner", 90), create("team", "qa", 80), create("late", "late-owner", 70)];
+    const b = buildScoreboard({ events, aiCalls: [], launches: [], activeResults: [], freeImageUserIds: [], excludedUserIds: [SMOKE], excludedBusinessIds: [], since, until,
+      brandOwners: [
+        { id: "new-owner", signedUpAt: at(103), internal: false }, // signed up 3 min before the usable create
+        { id: "old-owner", signedUpAt: at(60 * 24 * 30), internal: false }, // an older account: the clock starts at create
+        { id: "qa", signedUpAt: at(81), internal: true },
+        { id: "late-owner", signedUpAt: at(60), internal: false }, // sign-up after create (clock skew): create starts it
+      ] });
+    expect(row(b, "Brand")).toMatchObject({ now: "3 new businesses (1 team left out): 100% usable, p90 3.0 min; autofill 0 calls (0 failed)", met: false });
+  });
+
   it("Launch scores settled launches, not the reads that share the create_paused purpose (#615)", () => {
     const reads = [ev("meta.create_paused"), ev("meta.create_paused", "failed", { attributes: { errorCode: "META_OPERATION_FAILED" } })];
     expect(row(board(reads), "Launch")).toMatchObject({
@@ -268,5 +281,21 @@ describe("north-star rows (#1242, #1284)", () => {
       e("creative.batch", OWNER, 0), tap(2), tap(3), tap(4), e("campaign.resume", OWNER, 5), tap(6), e("creative.batch", "stuck", 0), e("ui.tap", "stuck", 1)]);
     expect(rowOf(rows, "Taps")).toMatchObject({ now: "1 owner reached live: median 5 taps", met: true });
     expect(rowOf(rowsOf({}, [e("creative.batch", OWNER, 0)]), "Taps")).toMatchObject({ now: expect.stringContaining("not measured yet"), met: null });
+  });
+});
+
+// #1467: sales prospects (#1317), the demo workspace and the smoke aren't customers; every row leaves them out.
+describe("isScoreboardExcluded (#1467)", () => {
+  it("leaves out smoke, demo and +prospect accounts, and keeps owners and the team's own walks", async () => {
+    const { isScoreboardExcluded } = await import("@/lib/internal-accounts");
+    const internal = (await import("@/lib/internal-accounts.json")).default;
+    const domain = internal.domains[0];
+    const confirmed = "2026-10-28T00:00:00Z";
+    expect(isScoreboardExcluded({ id: "p", email: `sales+prospect-sunpeak@${domain}`, email_confirmed_at: confirmed })).toBe(true);
+    expect(isScoreboardExcluded({ id: "d", email: "Demo@AdBrain.vanshul.com", email_confirmed_at: confirmed }, "demo@adbrain.vanshul.com")).toBe(true);
+    if (internal.smokeUserIds[0]) expect(isScoreboardExcluded({ id: internal.smokeUserIds[0] })).toBe(true);
+    expect(isScoreboardExcluded({ id: "o", email: "owner@gmail.com", email_confirmed_at: confirmed })).toBe(false);
+    expect(isScoreboardExcluded({ id: "q", email: `qa2+ws1@${domain}`, email_confirmed_at: confirmed })).toBe(false);
+    expect(isScoreboardExcluded(null)).toBe(false);
   });
 });

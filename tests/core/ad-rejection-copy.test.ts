@@ -38,7 +38,7 @@ describe("core: rejected ads in plain words (#1305)", () => {
     const copy = rejectionCopy(rejected.feedback)!;
     expect(copy).toMatchObject({ row: "other", actions: ["edit_words", "change_picture", "ask_meta_review"], more: 0 });
     expect(copy.sentence).toBe(`Meta didn't say exactly why. Here's their message: "${rejected.feedback[0].message}"`);
-    expect(rejectedAdsSentence(1, copy, 0)).toMatch(/^Meta didn't approve 1 ad: Meta didn't say exactly why\..* Nothing was spent\.$/);
+    expect(rejectedAdsSentence(copy, { rejected: 1, spent: 0 })).toMatch(/^Meta didn't approve your ad\. Meta didn't say exactly why\..* Nothing was spent\.$/);
   });
 
   it.each([
@@ -61,7 +61,12 @@ describe("core: rejected ads in plain words (#1305)", () => {
     expect(rejectionCopy([{ policy: "Something new", message: "We guarantee 100% savings" }])?.row).toBe("misleading");
     const two = rejectionCopy([{ policy: "Lead Ads", message: "Generic." }, { policy: "Adult Content", message: "Suggestive." }])!;
     expect(two).toMatchObject({ row: "adult", more: 1 });
-    expect(rejectedAdsSentence(3, two, 120)).toBe("Meta didn't approve 3 ads: Meta thinks the picture shows too much skin. (+1 more)");
+    expect(rejectedAdsSentence(two, { rejected: 3, spent: 120 })).toBe("Meta didn't approve your 3 ads. Meta thinks the picture shows too much skin. (+1 more)");
+    // CPO on #1255: a full stop before the reason sentence; the others' state after it.
+    const one = rejectionCopy([{ policy: "Adult Content", message: "Suggestive." }])!;
+    expect(rejectedAdsSentence(one, { rejected: 1, total: 3, spent: 0, running: true })).toBe("Meta didn't approve 1 ad. Meta thinks the picture shows too much skin. Your other 2 ads are running.");
+    expect(rejectedAdsSentence(one, { rejected: 3, total: 3, spent: 0 })).toBe("Meta didn't approve your 3 ads. Meta thinks the picture shows too much skin. Nothing was spent.");
+    expect(rejectedAdsSentence(one, { rejected: 1, total: 2, spent: 0 })).toBe("Meta didn't approve 1 ad. Meta thinks the picture shows too much skin. Nothing was spent.");
     expect(rejectionCopy([])).toBeNull();
   });
 

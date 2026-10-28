@@ -9,7 +9,8 @@ const getBrandAssets = vi.hoisted(() => vi.fn(async () => [] as { type: string }
 const hasLaunchedCampaign = vi.hoisted(() => vi.fn(async () => true));
 const getLatestCreativeBatch = vi.hoisted(() => vi.fn(async () => []));
 vi.mock("@/lib/supabase/queries", () => ({ getPrimaryBusiness, getBrandAssets, hasLaunchedCampaign, getLatestCreativeBatch }));
-vi.mock("@/components/setup-ads-step", () => ({ SetupAdsStep: () => <div>Setup step 2</div> }));
+const setupProps = vi.hoisted(() => vi.fn());
+vi.mock("@/components/setup-ads-step", () => ({ SetupAdsStep: (props: unknown) => { setupProps(props); return <div>Setup step 2</div>; } }));
 vi.mock("@/components/ad-assistant", () => ({ AdAssistant: () => <div>Assistant</div> }));
 
 const sparse = {
@@ -76,6 +77,21 @@ describe("Create page for a first-timer (#1270)", () => {
     unmount();
     render(await CreatePage({ searchParams: Promise.resolve({ all: "1" }) }));
     expect(screen.queryByText("Setup step 2")).toBeNull();
+  });
+
+  it("#1432: step 2 offers only ads made from today's step 1; older ones get new ads made", async () => {
+    getPrimaryBusiness.mockResolvedValue(usable);
+    hasLaunchedCampaign.mockResolvedValue(false);
+    const { setupGoal } = await import("@/lib/creative/setup-picks");
+    const made = (id: string, goal: string) => ({ id, headline: id, generation: { sourceFacts: [goal] } });
+    const { default: CreatePage } = await import("@/app/(app)/create/page");
+    getLatestCreativeBatch.mockResolvedValue([made("solar", "Get WhatsApp enquiries for rooftop solar in Mohali, leading with: Free site survey")] as never);
+    const { unmount } = render(await CreatePage({ searchParams: Promise.resolve({}) }));
+    expect(setupProps.mock.lastCall?.[0]).toMatchObject({ initialAds: [] });
+    unmount();
+    getLatestCreativeBatch.mockResolvedValue([made("today", setupGoal(usable))] as never);
+    render(await CreatePage({ searchParams: Promise.resolve({}) }));
+    expect(setupProps.mock.lastCall?.[0].initialAds).toEqual([expect.objectContaining({ id: "today" })]);
   });
 
   it("shows the full Create when the check fails", async () => {

@@ -35,7 +35,7 @@ ID are different identifiers. Never infer one from another.
 
 | Page | Job | Important boundary |
 | --- | --- | --- |
-| `/dashboard` | The newest enquiry from the last 24 h still waiting for a first reply ("Rohit tapped your ad at 9:40 am. Reply now; …", #1292), then results so far (enquiries, spent, per enquiry, oldest update; same latest results as the campaign cards, #764; the median time to first reply over 30 days, #1049), next action, onboarding progress, activity | Uses stored state; not proof of live provider health |
+| `/dashboard` | The newest enquiry from the last 24 h still waiting for a first reply ("Rohit tapped your ad at 9:40 am. Reply now; …", #1292), then results so far (enquiries, spent, per enquiry, oldest update; same latest results as the campaign cards, #764; the median time to the first WhatsApp/Call tap over 30 days, "You usually contact people within …", #1049/#1443), next action, onboarding progress, activity | Uses stored state; not proof of live provider health |
 | `/brand` | Setup step 1 for first-timers; profile, assets, Markdown instructions (`?all=1`) | Saved business facts ground AI output |
 | `/create` | Guided creative interview and brief review | Reviewing a brief is distinct from paid generation; the Brand context panel names missing offers, service areas and phone before a run. Any goal, typed or from a suggestion, on a Brand with an offer or proof point, an area and a phone skips the review when the interview needs no question. The start screen says what the ads will use ('Your 3 ads will use: Mohali · offer: Free site survey'; every Brand area Create sends, the first 3 then '+N more' (#1034); a proof point is labelled 'proof:', facts cut at 40 characters) above 'Make 3 ads', with 'About 2 minutes. Nothing is published.' under it and 'Edit brief' to keep the review; afterwards the brief shows as a collapsed 'What I'll write about · Edit' line (#858, #1004). After 'Use this ad', the one primary step 'Next: set up campaign' opens `/campaigns?…&review=1`, which prepares Review on its own (#1004, #1152); 'Review ads' and 'Make another' stay in the quieter row above. Up to two 'Coming up' occasion chips (festivals and seasons for today's date in IST, `src/lib/seasonal.ts`; November adds Chhath Puja, Guru Nanak Jayanti and the winter season, and a festival comes before a long season, #1210) fill the goal in one tap with plain words ('An ad for Chhath Puja from <Business>.'); they never assert a sale, discount or deadline, and the concept prompt and claim check allow only saved offers (#700, #1153) |
 | `/studio` | Generate, inspect, approve, edit (ad text, words on picture, background), regenerate (asks first), delete, export, share approved ads (phone share sheet; desktop downloads and copies the text); "Create campaign (N)" links approved ads to Campaigns | Approval and sharing do not publish an ad on Meta |
@@ -141,8 +141,11 @@ showing one line of progress at a time. Then it shows the newest batch
 repairs, then no image fallback, then the order made). "Continue" approves the picks
 and opens `/campaigns?new=1&creatives=…`. The generation id is kept in
 sessionStorage, so coming back mid-run reads the saved ads instead of starting
-again; missing ads show "N ads couldn't be made. Make another". `/create?all=1`
-opens the full Create below.
+again; missing ads show "N ads couldn't be made. Make another". Only ads made from
+today's step 1 count (`madeForSetup`: the receipt's source fact is today's `setupGoal`,
+#1432): after the owner changes what they sell, where or their offer, step 2 makes new
+ads, and step 3 sends back to step 2 rather than offering older approved ads.
+`/create?all=1` opens the full Create below.
 
 1. When the business's campaigns have results, Create opens on one line such as "Your
    “Roof ready?” ad got 1 chat at ₹10.69 (early: based on 1 chat). Make 3 more like it, or

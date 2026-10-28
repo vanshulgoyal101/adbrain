@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import internal from "@/lib/internal-accounts.json";
 import { getEnv } from "@/lib/env";
-import { isExemptFromFreeProviders, isInternalUser } from "@/lib/internal-accounts";
+import { isExemptFromFreeProviders, isInternalUser, isScoreboardExcluded } from "@/lib/internal-accounts";
 import {
   buildScoreboard,
   newestResults,
@@ -141,13 +141,21 @@ async function handleGET(request: Request) {
       internalUserIds,
       now: until,
     };
+    // #1136: the Brand row's owners: sign-up time, and team accounts left out (from the same account list).
+    const creators = new Set(events.filter((event) => event.name === "business.create" && event.user_id && !smokeUsers.includes(event.user_id))
+      .map((event) => event.user_id as string));
+    if ([...creators].some((id) => !known.has(id))) throw new Unavailable();
+    const brandOwners = identities.filter((user) => creators.has(user.id))
+      .map((user) => ({ id: user.id, signedUpAt: user.created_at ?? null, internal: isInternalUser(user) }));
     const board = buildScoreboard({
       events: [...events, ...planRequests],
       aiCalls,
       launches,
       activeResults: newestResults(active, results),
       freeImageUserIds,
-      excludedUserIds: smokeUsers,
+      // #1467: smoke, the demo workspace and sales prospects are left out of every row.
+      excludedUserIds: [...smokeUsers, ...identities.filter((user) => isScoreboardExcluded(user, getEnv().DEMO_USER_EMAIL)).map((user) => user.id)],
+      brandOwners,
       excludedBusinessIds: (owned as Array<{ id: string }>).map((row) => row.id),
       northStar,
       since: new Date(since),

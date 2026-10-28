@@ -62,9 +62,18 @@ export function rejectionCopy(feedback: AdReviewFeedback[]): RejectionCopy | nul
   };
 }
 
-/** #1255's sentence for a campaign with rejected ads: "Meta didn't approve 1 ad: … Nothing was spent." */
-export function rejectedAdsSentence(count: number, copy: RejectionCopy, spent: number): string {
-  const ads = `${count} ${count === 1 ? "ad" : "ads"}`;
+/**
+ * #1255's sentence for a campaign with rejected ads (CPO words check on #1255: the reasons are full sentences, so
+ * they follow a full stop): "Meta didn't approve 1 ad. {reason} Your other 2 ads are running." or
+ * "Meta didn't approve your 3 ads. {reason} Nothing was spent."
+ */
+export function rejectedAdsSentence(copy: RejectionCopy, { rejected, total = rejected, spent, running = false }: {
+  rejected: number; total?: number; spent: number; running?: boolean;
+}): string {
+  const ads = (n: number) => `${n} ${n === 1 ? "ad" : "ads"}`;
+  const head = rejected >= total ? (total === 1 ? "Meta didn't approve your ad." : `Meta didn't approve your ${ads(total)}.`) : `Meta didn't approve ${ads(rejected)}.`;
   const more = copy.more > 0 ? ` (+${copy.more} more)` : "";
-  return `Meta didn't approve ${ads}: ${copy.sentence}${more}${spent > 0 ? "" : " Nothing was spent."}`;
+  const others = total - rejected;
+  const tail = others > 0 && running ? (others === 1 ? " Your other ad is running." : ` Your other ${ads(others)} are running.`) : spent > 0 ? "" : " Nothing was spent.";
+  return `${head} ${copy.sentence}${more}${tail}`;
 }

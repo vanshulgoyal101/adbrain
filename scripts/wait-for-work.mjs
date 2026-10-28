@@ -11,7 +11,7 @@
 // Work is: an item newly labelled for you; a comment on your item, addressed to you, or on an open PR
 // whose title names your issue (#309 "#274 …"); and, at start and before giving up, any item you own
 // where someone else spoke last and didn't address another role (so handoffs made while you were busy
-// are never lost). For the CTO it also reports any worker with fewer than 2 actionable items and,
+// are never lost). For the CTO it also reports any worker with fewer than 3 actionable items and,
 // at the end of each wait, workers gone quiet for 90 min and PRs untouched for 60 min.
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -76,14 +76,14 @@ export function waitingOnMe(lastBody, m, labels = [], now = Date.now()) {
 
 /**
  * #364: the oldest owned item you can act on now, even when your last word on it was a handoff:
- * not parked, blocked, waiting on the owner, `later` or a CEO `decision`, no open PR naming it,
+ * not parked, blocked, waiting on the owner, `later`, `standing` (channels, umbrellas) or a CEO `decision`, no open PR naming it,
  * and not in `skip` (items snoozed by a future "Next check"). Null when there is none.
  * @param {Array<{ number: number, title?: string, pull_request?: unknown, labels?: Array<string | { name: string }> }>} items
  * @param {Array<{ title?: string }>} openPulls
  * @param {Set<number>} [skip]
  */
 export function nextItem(items, openPulls, skip = new Set()) {
-  const hold = new Set([...PARKED, "later", "decision"]);
+  const hold = new Set([...PARKED, "later", "decision", "standing"]);
   const withPr = new Set(openPulls.flatMap((pr) => linkedIssues(pr.title)));
   const names = (i) => (i.labels ?? []).map((l) => (typeof l === "string" ? l : l.name));
   return items
@@ -115,7 +115,7 @@ export function readyPool(issues, role, max = 3) {
 }
 
 export const WORKERS = ["dev", "dev2", "dev3", "dev4", "qa", "qa2", "reviewer", "devops", "cpo", "analyst", "designer"];
-export const MIN_QUEUE = 2;
+export const MIN_QUEUE = 3;
 
 /** Workers with fewer than MIN_QUEUE actionable open items (not parked or waiting on the CEO). The CTO refills these. */
 export function queueCounts(issues) {
@@ -129,12 +129,11 @@ export function queueCounts(issues) {
 }
 
 /** Ready-pool items in a worker's lane count as supply: the waiter offers them, so the queue isn't dry (#573). */
-/** Roles that pick their own work when nothing is queued (Reviewer audits, Analyst research, Designer slices, DevOps ops hygiene), so the CTO doesn't refill them. */
-export const SELF_SOURCING = new Set(["reviewer", "analyst", "designer", "devops", "cpo"]);
 
 export function lowQueues(issues) {
   const counts = queueCounts(issues);
-  return WORKERS.filter((r) => !SELF_SOURCING.has(r) && counts[r] + readyPool(issues, r, MIN_QUEUE).length < MIN_QUEUE).map((r) => ({ role: r, count: counts[r] }));
+  // Every role keeps ≥ MIN_QUEUE, the self-sourcing ones too (CEO, Oct 28: their queues drained in minutes, #364).
+  return WORKERS.filter((r) => counts[r] + readyPool(issues, r, MIN_QUEUE).length < MIN_QUEUE).map((r) => ({ role: r, count: counts[r] }));
 }
 
 export const QUIET_MIN = 90;

@@ -89,7 +89,18 @@ describe("core: saveSetupBusiness writes only the five fields (#1269)", () => {
     mocks.written.mockResolvedValue({ data: { id: "b1", name: "Saved", vertical: "local business", phone: null, locations: [], offers: [] }, error: null });
     const { saveSetupBusiness } = await import("@/app/(app)/brand/actions");
     await expect(saveSetupBusiness("b1", { name: "", vertical: "", locations: "", offer: "", phone: "98765" })).resolves.toMatchObject({ ok: true, usable: false });
-    expect(mocks.update).toHaveBeenCalledWith({ locations: [], offers: [] });
+    expect(mocks.update).toHaveBeenCalledWith({ locations: [] });
+  });
+
+  it("a blank offer box leaves every saved offer untouched (#1401)", async () => {
+    mocks.current.mockResolvedValue({ data: { offers: ["Free survey", "10% off"] }, error: null });
+    mocks.written.mockResolvedValue({ data: { id: "b1", name: complete.name, vertical: complete.vertical, phone: complete.phone, locations: ["Jaipur"], offers: ["Free survey", "10% off"] }, error: null });
+    const { saveSetupBusiness } = await import("@/app/(app)/brand/actions");
+    await saveSetupBusiness("b1", { ...complete, offer: "  " });
+    await saveSetupBusiness("b1", { ...complete, offer: "" });
+    for (const [payload] of mocks.update.mock.calls) expect(payload).not.toHaveProperty("offers");
+    await saveSetupBusiness("b1", { ...complete, offer: "Free visit" });
+    expect(mocks.update.mock.calls.at(-1)![0].offers).toEqual(["Free visit", "10% off"]);
   });
 
   it("creates the business on the first save with a name; not before", async () => {

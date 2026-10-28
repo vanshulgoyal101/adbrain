@@ -124,7 +124,8 @@ export function WorkspaceHome({
             ))}
           </dl>
           {replyMinutes !== null && <p className="mt-3 text-sm text-slate-700">
-            You reply to an enquiry in <strong className="font-medium">{formatReplyTime(replyMinutes)}</strong> (median, last 30 days).{" "}
+            {/* #1443: the number is the owner's first WhatsApp/Call tap, not a reply AdBrain can see. */}
+            You usually contact people within <strong className="font-medium">{formatReplyTime(replyMinutes)}</strong> (last 30 days).{" "}
             <Link href="/leads" className={linkClass}>See enquiries</Link>
           </p>}
           <p className="mt-3 text-xs text-slate-500">

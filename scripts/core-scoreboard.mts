@@ -5,7 +5,7 @@
 import { execFileSync } from "node:child_process";
 import { parseArgs } from "node:util";
 import internal from "../src/lib/internal-accounts.json" with { type: "json" };
-import { isExemptFromFreeProviders, isInternalUser } from "../src/lib/internal-accounts";
+import { isExemptFromFreeProviders, isInternalUser, isScoreboardExcluded } from "../src/lib/internal-accounts";
 import {
   buildScoreboard,
   lastIstWeek,
@@ -82,6 +82,11 @@ const northStar: NorthStarData = {
   internalUserIds: [...internalUserIds, ...smoke],
   now: until,
 };
+// #1136: the Brand row's owners (who created a business in the window): sign-up time, and whether they're the team.
+const createUserIds = new Set((events as ScoreEvent[]).filter((event) => event.name === "business.create" && event.user_id)
+  .map((event) => event.user_id as string));
+const brandOwners = identities.filter((user) => createUserIds.has(user.id))
+  .map((owner) => ({ id: owner.id, signedUpAt: owner.created_at, internal: isInternalUser(owner) }));
 
 const board = buildScoreboard({
   events: events as ScoreEvent[],
@@ -89,7 +94,9 @@ const board = buildScoreboard({
   launches: launches as ScoreLaunch[],
   activeResults: active as ScoreActiveResult[],
   freeImageUserIds: identities.filter((user) => isInternalUser(user) && !isExemptFromFreeProviders(user)).map((user) => user.id),
-  excludedUserIds: smoke,
+  // #1467: smoke, the demo workspace and sales prospects are left out of every row.
+  excludedUserIds: [...smoke, ...identities.filter((user) => isScoreboardExcluded(user, process.env.DEMO_USER_EMAIL ?? "demo@adbrain.vanshul.com")).map((user) => user.id)],
+  brandOwners,
   excludedBusinessIds: (owned as Array<{ id: string }>).map((row) => row.id),
   northStar,
   since,

@@ -86,9 +86,17 @@ async function handleGET(req: Request) {
   if (error) return NextResponse.json({ error: "Generation status is unavailable." }, { status: 503 });
 
   const saved = (creatives ?? []) as Creative[];
+  let status: string = intent.status === "complete" && saved.length < expectedCount ? "unresolved" :
+    intent.status === "processing" && saved.length ? "partial" : intent.status;
+  // #1407: a batch that ended short keeps the intent's 'partial' until it times out (5 min), so Studio said 'still being
+  // made' while step 2 said 'couldn't be made'. The batch's closing audit row (written after any top-up) settles it.
+  if ((status === "partial" || status === "processing") && saved.length < expectedCount) {
+    const { data: closed } = await supabase.from("audit_log").select("id").eq("business_id", businessId)
+      .eq("action", "creatives.generate").eq("details->>variantGroup", generationId).limit(1);
+    if (closed?.length) status = "ended";
+  }
   return NextResponse.json({
-    status: intent.status === "complete" && saved.length < expectedCount ? "unresolved" :
-      intent.status === "processing" && saved.length ? "partial" : intent.status,
+    status,
     creatives: saved,
     count: saved.length,
     expectedCount,
