@@ -250,6 +250,12 @@ payment method (`funding_source_details`). Each row is a tick or one Meta link w
 Hindi line. GET reads only (`MetaClient.setupReads`), recorded by
 `scripts/record-meta-setup-checklist.ts`; never shown for AdBrain-managed accounts.
 
+An ad account that isn't active (#1943) gets one plain line and action, from Meta's `account_status`
+(`src/lib/meta/account-status.ts`), on the checklist row, the Connect account picker and Review's blockers:
+2 disabled → Ask Meta to review (Account quality); 3/8/9 unpaid → Pay in Meta; 7 new account in review →
+nothing to do yet; 100/101 closed → Connect another account; anything else → Open Account quality.
+Every status but 1 blocks Go live. The words never say risk, policy violation or flagged.
+
 Disconnect revokes the app's stored binding; **it does not stop remote delivery**.
 Pause intended campaigns before disconnecting, or manage them in Meta afterward.
 

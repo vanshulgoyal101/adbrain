@@ -1069,6 +1069,7 @@ export class MetaClient {
     return {
       portfolio: account.business?.id ? { id: account.business.id, name: account.business.name ?? null } : null,
       accountActive: account.account_status === 1,
+      accountStatus: account.account_status ?? null,
       currency: account.currency ?? null,
       paymentMethod: Boolean(account.funding_source_details?.id),
       pageListed: Boolean(pages.data?.some((page) => page.id === this.creds.pageId)),
