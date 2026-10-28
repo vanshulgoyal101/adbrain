@@ -66,6 +66,7 @@ export function LeadInbox({
   title = "Enquiries",
   summary = null,
   allTotal,
+  offerAlerts = false,
 }: {
   businessName: string;
   /** #1049: the business's first offer and language, for the pre-filled first WhatsApp reply. */
@@ -82,6 +83,8 @@ export function LeadInbox({
   summary?: { waiting: number | null; replyMinutes: number | null } | null;
   /** #1260: every enquiry, for the heading while Waiting or Customers is shown (the first page may be New only). */
   allTotal?: number;
+  /** #1260: WhatsApp alerts (#701) can be turned on here and aren't yet, so the empty state offers them. */
+  offerAlerts?: boolean;
 }) {
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -426,13 +429,19 @@ export function LeadInbox({
         <div className={styles.empty}><h3>No customers yet.</h3><p className="text-sm text-slate-500">Tap Became a customer on an enquiry when they buy.</p></div>
       ) : leads.length === 0 && !hasFilters ? (
         <Card>
-          <CardContent className="flex flex-col items-center gap-1 py-12 text-center">
-            <Inbox className="h-6 w-6 text-slate-300" />
-            <p className="font-medium text-slate-600">No enquiries yet</p>
-            <p className="max-w-sm text-sm text-slate-400">
-              People who tap your ad message you on WhatsApp. Add each real one
-              here. Form enquiries arrive by themselves.
+          <CardContent className="flex flex-col items-center gap-2 py-12 text-center">
+            <Inbox className="h-6 w-6 text-slate-300" aria-hidden="true" />
+            <p className="max-w-sm font-medium text-slate-700">
+              No enquiries yet. When someone fills your form or messages you on WhatsApp from an ad, they&apos;ll show up here.
             </p>
+            <p className="max-w-sm text-sm text-slate-500">Reply fast: people often go with the first business that answers.</p>
+            {/* #1260 (Designer): one action, and never one the owner can't take. */}
+            <Link href={offerAlerts ? "/settings#whatsapp-alerts-title" : "/campaigns"}
+              className={offerAlerts
+                ? "mt-2 inline-flex min-h-11 items-center gap-2 rounded-md bg-[var(--primary)] px-4 text-sm font-medium text-white"
+                : "mt-2 inline-flex min-h-11 items-center gap-2 rounded-md border border-slate-300 px-4 text-sm font-medium text-slate-800 hover:bg-slate-50"}>
+              {offerAlerts ? <><MessageCircle size={16} aria-hidden="true" />Get a WhatsApp alert for each enquiry</> : "See your campaigns"}
+            </Link>
           </CardContent>
         </Card>
       ) : leads.length === 0 ? (
