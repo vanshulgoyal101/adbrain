@@ -141,10 +141,10 @@ describe("core: <SetupBusinessStep> (#1269)", () => {
   it("#1641: offers English / हिंदी only until a language is chosen", async () => {
     vi.doMock("@/app/(app)/settings/language-actions", () => ({ setAppLanguage: vi.fn(async () => ({ ok: true })) }));
     await step(business, true);
-    expect(screen.getByRole("group", { name: "Language / भाषा" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "App language / ऐप की भाषा" })).toBeInTheDocument();
     cleanup();
     await step(business, false);
-    expect(screen.queryByRole("group", { name: "Language / भाषा" })).toBeNull();
+    expect(screen.queryByRole("group", { name: "App language / ऐप की भाषा" })).toBeNull();
   });
 
   it("#1681: 'Ads in' follows what they sell (solar → Hinglish); a picked language is saved before step 2", async () => {
