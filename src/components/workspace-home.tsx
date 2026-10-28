@@ -19,6 +19,7 @@ import { campaignAttention } from "@/lib/campaign/health";
 import { formatReplyTime } from "@/lib/leads/first-reply";
 import { campaignStatus, Status } from "@/components/ui/status";
 import { goneInMeta } from "@/lib/campaign/gone-in-meta";
+import type { HomeAdReview } from "@/lib/campaign/home-ad-review";
 import { translator, type AppLocale } from "@/i18n/locale";
 
 export interface WorkspaceHomeProps {
@@ -38,6 +39,10 @@ export interface WorkspaceHomeProps {
   waiting?: number;
   /** #1292: the newest enquiry from the last 24 hours still waiting for a first reply. */
   firstEnquiry?: { name: string | null; at: string } | null;
+  /** #1469: the newest live campaign is waiting on Meta's review, or Meta disapproved one of its ads. */
+  adReview?: HomeAdReview | null;
+  /** #1469: the streamed rejected-ads section, shown when `adReview` is "rejected". */
+  rejectedAds?: ReactNode;
   now?: number;
   /** #1438: the owner's app language (Settings); English by default. */
   locale?: AppLocale;
@@ -61,6 +66,8 @@ export function WorkspaceHome({
   replyMinutes = null,
   waiting = 0,
   firstEnquiry = null,
+  adReview = null,
+  rejectedAds,
   now,
   locale = "en",
 }: WorkspaceHomeProps) {
@@ -101,6 +108,12 @@ export function WorkspaceHome({
           <Link href="/leads" className={`${linkClass} shrink-0`}>{t("openEnquiries")}</Link>
         </section>
       )}
+
+      {/* #1469: the results verdict already says "Meta is checking" once a result row exists; this covers the time before it. */}
+      {adReview?.kind === "checking" && !verdicts?.lead?.verdict.state.startsWith("not_showing") && (
+        <p role="status" aria-label={t("metaReview")} className="text-sm text-slate-900">{t("metaChecking")}</p>
+      )}
+      {adReview?.kind === "rejected" && rejectedAds}
 
       {stale.length > 0 && <StaleResultsRefresher campaignIds={stale} />}
       {summary && (

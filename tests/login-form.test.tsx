@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { LoginForm } from "@/components/login-form";
 import LoginPage from "@/app/login/page";
@@ -303,6 +303,28 @@ describe("sign-in callback errors (#1414)", () => {
     expect(screen.getByRole("heading", { name: "Check your email" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open email app" })).toHaveAttribute("href", "mailto:");
     expect(screen.getByRole("button", { name: /Send again in \d+ s/ })).toBeDisabled();
+  });
+
+  // #1562 (QA): an email link opened in Gmail's in-app browser isn't a Google failure.
+  it("#1562: an email link opened in another browser says so, and Send a new link leads", () => {
+    mocks.error = "link_other_browser";
+    render(<LoginForm newVisitor />);
+    expect(screen.getByRole("heading", { name: "This link opened in a different browser" })).toBeInTheDocument();
+    expect(screen.getByText("Open it in the browser where you asked for it, or get a new link here.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Try Google again" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Send a new link" }));
+    expect(screen.getByLabelText("Email")).toBeInTheDocument();
+  });
+
+  it("#1562: each sign-in tells the callback how it started", async () => {
+    fillLogin();
+    fireEvent.click(screen.getByRole("button", { name: "Send magic link" }));
+    await screen.findByText("Check your email");
+    expect(new URL(mocks.signInWithOtp.mock.calls[0][0].options.emailRedirectTo).searchParams.get("via")).toBe("email");
+    cleanup();
+    render(<LoginForm />);
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Continue with Google" })));
+    expect(new URL(mocks.signInWithOAuth.mock.calls[0][0].options.redirectTo).searchParams.get("via")).toBe("google");
   });
 
   it("Use Google instead starts Google", async () => {

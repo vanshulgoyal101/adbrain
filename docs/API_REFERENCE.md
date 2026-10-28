@@ -94,7 +94,7 @@ same identity; do not change a key or clear local recovery data to force progres
 | POST | `/api/creatives/[id]/regenerate` | No body -> `{creative}` | Paid work, overwrite, reset approval |
 | POST | `/api/creatives/[id]/picture` | `{headline,subhead,phone,ctaLabel,showCta?}` -> `{creative,liveNotice?}` | Re-renders the overlay, no AI; new `image_url`, status kept. `showCta` paints the button on the picture (off for new ads, #760); omitted keeps it as is |
 | POST | `/api/creatives/[id]/background` | `{instruction}` (3-300) or `{photoUrl}` -> `{creative,liveNotice?}` | Paid image (like Regenerate) or the owner's Brand photo (free), same claim; keeps copy, overlay words and status |
-| POST | `/api/creatives/export` | IDs -> ZIP; a sales prospect's account (internal `+prospect` address, #1317) gets every picture with a 'Sample: not live' band and a SAMPLE note atop copy.txt; a picture that can't be marked is left out (`X-Images-Skipped`) | Downloads selected media |
+| POST | `/api/creatives/export` | IDs -> ZIP; a sales prospect's account (internal `+prospect` address, #1317) gets every picture with a 'Sample: not live' band and a SAMPLE note atop copy.txt, which ends with the WhatsApp follow-up and `/for/<segment>` link when the Brand category is solar, IELTS/study-abroad or interiors (#1582); a picture that can't be marked is left out (`X-Images-Skipped`) | Downloads selected media |
 | GET | `/api/campaign-drafts` | `businessId` -> envelope draft array | Owner-scoped read |
 | POST | `/api/campaign-drafts` | DraftInput -> envelope draft | DB write, no model or Meta creation |
 | GET | `/api/campaign-drafts/[id]` | Path ID -> envelope draft | Read |
@@ -179,7 +179,7 @@ same identity; do not change a key or clear local recovery data to force progres
 | GET | `/api/cron/access-requests` | Cron Bearer auth | Read-only (#692, #725): outside owners who asked for Facebook access in the last 7 days (the `meta.access_request` audit record, plus the older `ui.action` beacon), listed team ids excluded; at most 10 account lookups a run, newest first: `{ok, requests:[{key, hours}], more}` (`more` = outside requests left for the next run); one opaque 12-hex key per user (sha256 of the user id), no IDs |
 | POST | `/api/meta/access-request` | Signed-in owner | **Ask for Facebook access** (#725): `{businessId}` → writes a `meta.access_request` audit record (owner checked by `append_verified_audit_event`), once per user per UTC day → `{ok:true}`; the page says "Request sent" only after this; 400 bad body, 401, 404 not your business, 503 not recorded (retry) |
 | GET | `/api/cron/core-scoreboard` | Cron Bearer auth | Read-only daily core scoreboard (#681): `?hours=` 1–168 (default 24) -> `{ok, hours, since, until, excluded:{events, aiCalls}, rows:[{step, now, target, met}], markdown}`; smoke left out by `smokeUserIds` in `src/lib/internal-accounts.json` (user first, the businesses it owns for background rows); aggregates only, no IDs; 400 bad window, 503 without details |
-| GET | `/api/cron/llm-credit` | Cron Bearer auth | Read-only OpenRouter credit (#449): `{ok, keys:[{index, limitUsd, remainingUsd, error?}], minRemainingUsd, thresholdUsd:1, low}`; never returns keys; 503 when OpenRouter refuses a key |
+| GET | `/api/cron/llm-credit` | Cron Bearer auth | Read-only OpenRouter credit (#449): `{ok, keys:[{index, limitUsd, remainingUsd, error?}], minRemainingUsd, thresholdUsd:1, low, health:[{name, provider, status, detail}], dead:[name]}` (#1569: every configured AI key probed on a free endpoint, by env name); never returns keys; 503 when OpenRouter refuses a key |
 | POST | `/api/internal/meta-traffic` | Bounded runner options | Allowlisted diagnostic reads; creation mode disabled |
 
 **One owner per Meta campaign (#1138).** The routes above that can write to Meta (`[id]` PATCH, `refresh`, `audience`, `audience/switch`, `budget`, `ads/[adId]` and `ads/[adId]/status`) answer **409** `{error, code:"owned_elsewhere"}` before any Meta call when the row's Meta campaign belongs to another AdBrain business (the sync rule above, read with the service role), and **503** when that can't be read.
@@ -298,7 +298,7 @@ These sit outside `/api` and return redirects rather than the API envelope:
 
 | Method | Path | Input / result | Effect |
 | --- | --- | --- | --- |
-| GET | `/auth/callback` | `code` or `token_hash` + `type`; optional `redirect` | Exchanges/validates Supabase credentials, then redirects to safe local destination; failure -> `/login?error=auth` |
+| GET | `/auth/callback` | `code` or `token_hash` + `type`; optional `redirect`; `via=email\|google` (which sign-in started it, #1562) | Exchanges/validates Supabase credentials, then redirects to safe local destination; failure -> `/login?error=<reason>` (`link_expired`, `other_browser`, `link_other_browser` for an email link opened in another browser, `cancelled`, `auth`; #1414) |
 | GET | `/auth/dev-login` | No body | Disabled -> login; enabled development tries configured real login, otherwise a seven-day offline development cookie |
 | GET | `/auth/dev-logout` | No body | Clears offline development cookie and redirects to login; not a general Supabase sign-out API |
 

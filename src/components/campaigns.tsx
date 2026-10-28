@@ -1348,22 +1348,25 @@ function BusinessCampaigns({
   const [waitingError, setWaitingError] = useState<Record<string, string>>({});
   // Only a launched, running or paused AdBrain campaign can have a waiting copy; skip the read otherwise.
   const switchable = campaigns.some(c => !!c.meta_campaign_id && (c.status === "active" || c.status === "paused") && !!reviewableCampaign(c));
-  useEffect(() => {
-    if (!switchable) return;
-    let live = true;
-    // Owners read their own edit rows (RLS). If this read fails, the strip just doesn't show; the server still refuses
-    // other edits while a copy waits.
+  // Owners read their own edit rows (RLS). If this read fails, the strip just doesn't show; the server still refuses
+  // other edits while a copy waits. #1576: read again when the server says a copy waits (made in another tab or device).
+  const loadWaiting = useCallback((isLive: () => boolean = () => true) => {
     try {
       void createBrowserClient().from("campaign_edit_operations").select("id,campaign_id,sanitized_error").eq("state", "awaiting_switch")
         .then(({ data }) => {
-          if (!live || !Array.isArray(data)) return;
+          if (!isLive() || !Array.isArray(data)) return;
           const rows = data as Array<{ id: string; campaign_id: string; sanitized_error: string | null }>;
           setWaitingSwitch(Object.fromEntries(rows.map(row => [row.campaign_id, row.id])));
           setWaitingError(Object.fromEntries(rows.filter(row => row.sanitized_error).map(row => [row.campaign_id, row.sanitized_error!])));
         }, () => undefined);
     } catch { /* no browser Supabase config (tests) */ }
+  }, [setWaitingSwitch, setWaitingError]);
+  useEffect(() => {
+    if (!switchable) return;
+    let live = true;
+    loadWaiting(() => live);
     return () => { live = false; };
-  }, [switchable]);
+  }, [switchable, loadWaiting]);
   // #1274: enquiries waiting for a reply by the inbox's rule (#1260), per running campaign (owners read their own leads).
   const [waitingReplies, setWaitingReplies] = useState<Record<string, number>>({});
   // #1274 slice 2c: cards whose sentence already offers the pause; their "Which ad worked" doesn't repeat it.
@@ -1490,6 +1493,7 @@ function BusinessCampaigns({
       } else {
         const data = (await res.json()) as { error?: string; code?: string };
         fail(data.error ?? "Couldn't update the campaign.", data.code === "META_REAUTH" && Boolean(c.meta_campaign_id));
+        if (data.code === "switch_pending") loadWaiting();
       }
     } catch {
       fail("Couldn't update the campaign — check your connection.");
@@ -2345,7 +2349,7 @@ function BusinessCampaigns({
                 campaignId={audienceEdit.id}
                 campaignName={audienceEdit.name ?? `${business.name} — ${audienceEdit.objective}`}
                 running={audienceEdit.status === "active"}
-                onClose={() => setAudienceEdit(null)}
+                onClose={() => { setAudienceEdit(null); loadWaiting(); }}
                 onSaved={(message, waitingOperationId) => {
                   setCardNotice({ id: audienceEdit.id, message });
                   if (waitingOperationId) setWaitingSwitch(current => ({ ...current, [audienceEdit.id]: waitingOperationId }));
@@ -2358,7 +2362,7 @@ function BusinessCampaigns({
                 campaignId={budgetEdit.campaign.id}
                 campaignName={budgetEdit.campaign.name ?? `${business.name} — ${budgetEdit.campaign.objective}`}
                 start={budgetEdit.start}
-                onClose={() => setBudgetEdit(null)}
+                onClose={() => { setBudgetEdit(null); loadWaiting(); }}
                 onSaved={(message, after) => {
                   const id = budgetEdit.campaign.id;
                   setCampaigns((list) => list.map((item) => (item.id === id ? applyBudget(item, after) : item)));
@@ -2373,7 +2377,7 @@ function BusinessCampaigns({
                 campaignName={adEdit.name ?? `${business.name} — ${adEdit.objective}`}
                 creatives={approved}
                 hint={adEditHint}
-                onClose={() => { setAdEdit(null); setAdEditHint(undefined); }}
+                onClose={() => { setAdEdit(null); setAdEditHint(undefined); loadWaiting(); }}
                 onSaved={(message, { adId, change }) => {
                   // Mirror the server's raw.adWords, so reopening the editor shows the new words.
                   setCampaigns((list) => list.map((item) => {
