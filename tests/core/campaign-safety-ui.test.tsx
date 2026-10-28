@@ -45,7 +45,7 @@ beforeEach(() => {
 describe("core: Campaigns shows Meta's ad review status (#157)", () => {
   it("a new ad shows as in Meta review", async () => {
     showAfterRefresh((reviewNewAd[0].body as { data: Ad[] }).data);
-    expect(await screen.findByText("In Meta review")).toBeTruthy();
+    expect(await screen.findByText("In Meta's review")).toBeTruthy();
   });
 
   it("a rejected ad shows as rejected with Meta's own reason", async () => {
@@ -55,7 +55,7 @@ describe("core: Campaigns shows Meta's ad review status (#157)", () => {
     showAfterRefresh([rejected, ads.find(ad => ad.effective_status === "PAUSED")!]);
     expect(await screen.findByText("Rejected by Meta (1 of 2 ads)")).toBeTruthy();
     // #1274: the owner's sentence leads; Meta's own reason stays on the card under Details.
-    expect(screen.getByText(/^Meta didn't approve 1 ad: /)).toBeTruthy();
+    expect(screen.getByText(/^Meta didn't approve 1 ad\. /)).toBeTruthy();
     expect(screen.getByText(`Meta's message: “${reason}”`)).toBeTruthy();
   });
 

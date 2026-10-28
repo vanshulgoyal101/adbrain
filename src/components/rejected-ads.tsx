@@ -14,9 +14,11 @@ const link = "inline-flex h-9 items-center justify-center gap-2 rounded-md borde
  * #1274 (CTO, #1305): a campaign with ads Meta didn't approve says why in one owner sentence, with the fix as the
  * row's actions and Meta's own message under Details. Null when no ad is rejected or Meta gave no reason.
  */
-export function RejectedAds({ reviews, spend, onEditAd, adsManagerUrl, className }: {
+export function RejectedAds({ reviews, spend, running = false, onEditAd, adsManagerUrl, className }: {
   reviews: AdReview[];
   spend: number;
+  /** The campaign is on, so the approved ads are showing ("Your other 2 ads are running."). */
+  running?: boolean;
   /** Opens the ad's words editor (#765); left out where the words can't be edited. */
   onEditAd?: () => void;
   adsManagerUrl?: string;
@@ -43,7 +45,7 @@ export function RejectedAds({ reviews, spend, onEditAd, adsManagerUrl, className
   };
   return (
     <section aria-label="Ads Meta didn't approve" className={cn("flex flex-col gap-2 rounded-md bg-red-50 p-3", className)}>
-      <p className="text-sm leading-snug text-slate-900">{rejectedAdsSentence(rejected.length, copy, spend)}</p>
+      <p className="text-sm leading-snug text-slate-900">{rejectedAdsSentence(copy, { rejected: rejected.length, total: reviews.length, spent: spend, running })}</p>
       <div className="flex flex-wrap gap-2">{copy.actions.map(action)}</div>
       <details className="text-sm">
         <summary className="inline-flex min-h-11 cursor-pointer items-center font-medium text-slate-700 [&::-webkit-details-marker]:hidden">Details</summary>

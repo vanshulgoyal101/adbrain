@@ -2480,7 +2480,7 @@ function BusinessCampaigns({
                     {cardNotice?.id === c.id && cardError?.id !== c.id ? <p role="status" className="text-sm text-slate-600">{cardNotice.message}</p> : null}
 
                     {reviews[c.id]?.length ? (
-                      <RejectedAds reviews={reviews[c.id]} spend={r?.spend ?? 0} adsManagerUrl={c.meta_campaign_id ? adsLink(c) : undefined}
+                      <RejectedAds reviews={reviews[c.id]} spend={r?.spend ?? 0} running={c.status === "active"} adsManagerUrl={c.meta_campaign_id ? adsLink(c) : undefined}
                         onEditAd={c.meta_campaign_id && (c.status === "paused" || c.status === "active") && reviewableCampaign(c) && (c.meta_ad_ids?.length ?? 0) > 0 && !waitingSwitch[c.id]
                           ? () => { setAdEditHint(undefined); setAdEdit(c); } : undefined} />
                     ) : null}
@@ -2622,7 +2622,7 @@ function Stat({ label, value }: { label: string; value: string }) {
 const REVIEW_LABELS: Record<AdReview["state"], { label: string; style: string }> = {
   rejected: { label: "Rejected by Meta", style: "bg-red-50 text-red-700" },
   issues: { label: "Meta flagged issues", style: "bg-red-50 text-red-700" },
-  in_review: { label: "In Meta review", style: "bg-slate-100 text-slate-700" },
+  in_review: { label: "In Meta's review", style: "bg-slate-100 text-slate-700" },
   unknown: { label: "Review status unknown", style: "bg-slate-100 text-slate-600" },
   approved: { label: "Approved by Meta", style: "bg-emerald-50 text-emerald-700" },
 };

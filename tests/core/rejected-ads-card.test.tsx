@@ -19,7 +19,7 @@ describe("core: the card's rejected-ads line (#1274, #1305)", () => {
   it("recorded 'Lead Ads' rejection: Meta's words quoted, the three fallback fixes, Meta's message under Details", () => {
     const onEditAd = vi.fn();
     render(<RejectedAds reviews={recordedReviews} spend={0} onEditAd={onEditAd} adsManagerUrl="https://adsmanager.facebook.com/x" />);
-    expect(region().getByText(/^Meta didn't approve 1 ad: Meta didn't say exactly why\. Here's their message: "It looks like your ad contains content/)).toHaveTextContent(/Nothing was spent\.$/);
+    expect(region().getByText(/^Meta didn't approve your ad\. Meta didn't say exactly why\. Here's their message: "It looks like your ad contains content/)).toHaveTextContent(/Nothing was spent\.$/);
     fireEvent.click(region().getByRole("button", { name: "Edit the words" }));
     expect(onEditAd).toHaveBeenCalledTimes(1);
     expect(region().getByRole("link", { name: "Make a new picture" })).toHaveAttribute("href", "/create");
@@ -32,8 +32,8 @@ describe("core: the card's rejected-ads line (#1274, #1305)", () => {
       adReviewState({ id: "1", effective_status: "DISAPPROVED", ad_review_feedback: { global: { "Personal Attributes": "Ads must not assert personal attributes." } } }),
       adReviewState({ id: "2", effective_status: "ACTIVE" }),
     ];
-    render(<SupportLinkProvider url="https://wa.me/910000000000"><RejectedAds reviews={reviews} spend={120} /></SupportLinkProvider>);
-    expect(region().getByText("Meta didn't approve 1 ad: The ad talks about the reader's own health or problem (\"Are you…?\"). Meta doesn't allow that.")).toBeInTheDocument();
+    render(<SupportLinkProvider url="https://wa.me/910000000000"><RejectedAds reviews={reviews} spend={120} running /></SupportLinkProvider>);
+    expect(region().getByText("Meta didn't approve 1 ad. The ad talks about the reader's own health or problem (\"Are you…?\"). Meta doesn't allow that. Your other ad is running.")).toBeInTheDocument();
     // Edit the words needs an editable ad; without one there's no dead button.
     expect(region().queryByRole("button")).not.toBeInTheDocument();
   });
