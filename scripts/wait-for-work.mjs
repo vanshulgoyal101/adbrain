@@ -76,7 +76,13 @@ export function waitingOnMe(lastBody, m, labels = [], now = Date.now()) {
   return !m.handedToOther(lastBody);
 }
 
-/** #1478: comments created since the wait began; `?since=` filters on updated_at, so edits looked new. */
+/**
+ * #1478: comments created since the wait began; `?since=` filters on updated_at, so edits looked new.
+ * @template {{ created_at?: string }} T
+ * @param {T[]} comments
+ * @param {string} since
+ * @returns {T[]}
+ */
 export function freshComments(comments, since) {
   return comments.filter((c) => (c.created_at ?? "") >= since);
 }
