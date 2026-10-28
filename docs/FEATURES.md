@@ -532,8 +532,19 @@ the WhatsApp chat, and the weekly cap line (#1342; over the cap, Go live can't b
 tapped). The checklist shows the Facebook Page, the money row (AdBrain ad money →
 Settings, or payment on the owner's own Meta account) and the "Stops at" total.
 The one primary connects the Page first (MetaConnectDialog), then "Go live · ₹{d} a
-day" opens the campaign review below (`?all=1&new=1&review=1&budget=d&creatives=…`).
-Nothing is created or spent from Go live until the one-tap path (#1271 4b) ships.
+day" is one tap (#1271 4b, `src/lib/campaign/setup-go-live-flow.ts`) through the
+same routes the Campaigns page uses: connection status (not connected → the Meta
+dialog), save the composer's default draft (the picked ads, ₹d a day, WhatsApp to
+Meta's first ready number, default targeting, no A/B), preflight, create it PAUSED
+(operation polled), then `GET /api/campaigns/{id}` and `PATCH` it active as a
+2-day capped run (`capDays: 2`, so Meta's total limit is ₹d×2; the server also
+checks the weekly cap and funding). One progress line per step. Review blockers
+are shown in their own words with "Fix in campaign review"
+(`?all=1&new=1&review=1&budget=d&creatives=…`) and nothing is created; a refused
+activation is shown verbatim and the campaign stays paused with nothing spent.
+The create request (idempotency key) is kept in sessionStorage per business, ads
+and budget, so a second tap or a reload resumes its operation
+(`operationForRequest`) instead of creating another campaign.
 
 Closing New campaign retains its unsaved brief, creatives, audience, destination
 and budget in memory for the current business; returning to a business in the
