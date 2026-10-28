@@ -10,6 +10,11 @@
 .followUpButton { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; color: var(--color-blue-700); }
 .followUpCell { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .inbox :is(button, a, summary):focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+/* #1260: the inbox sentence and its three views. */
+.summary { font-size: 17px; font-weight: 500; color: var(--color-slate-900); }
+.views { display: inline-flex; align-self: flex-start; gap: 4px; padding: 4px; border-radius: 8px; background: var(--color-slate-100); }
+.views button { min-height: 40px; padding: 0 16px; border-radius: 6px; font-size: 14px; font-weight: 500; color: var(--color-slate-600); }
+.views button[aria-pressed="true"] { background: white; color: var(--color-slate-900); box-shadow: 0 1px 2px rgb(15 23 42 / 0.08); }
 .toolbar { display: flex; flex-wrap: wrap; gap: 10px; }
 .filterToggle { display: inline-flex; align-items: center; gap: 6px; height: 44px; padding: 0 12px; border: 1px solid var(--color-slate-300); border-radius: 6px; background: white; font-size: 13px; font-weight: 500; }
 /* #847: the three selects sit behind one Filter button at every width (#376 started on phones). */
@@ -17,7 +22,8 @@
 .filters[data-open] { display: flex; flex-wrap: wrap; gap: 8px; flex-basis: 100%; }
 .filterCount { display: inline-grid; place-items: center; min-width: 18px; height: 18px; border-radius: 9px; background: var(--primary); color: white; font-size: 11px; }
 .search { display: flex; flex: 1 1 250px; align-items: center; gap: 10px; padding: 0 12px; min-width: 0; height: 44px; border: 1px solid var(--color-slate-300); border-radius: 6px; background: white; color: var(--color-slate-500); }
-.search input { min-width: 0; width: 100%; height: 100%; font-size: 15px; background: transparent; outline: none; }
+/* #1287: the input itself is 44 px; it overlaps the box's 1 px borders so the whole box is the target. */
+.search input { min-width: 0; width: 100%; height: 44px; margin-block: -1px; font-size: 15px; background: transparent; outline: none; }
 .search button { display: grid; place-items: center; flex-shrink: 0; width: 28px; height: 28px; }
 .toolbar select { border: 1px solid var(--color-slate-300); border-radius: 6px; background: white; height: 42px; padding: 0 28px 0 10px; font-size: 13px; max-width: 100%; }
 .resultCount { display: flex; align-items: center; gap: 12px; min-height: 36px; font-size: 13px; color: var(--color-slate-500); }
@@ -37,6 +43,14 @@
 .person { font-weight: 600; }
 .contact > a { min-height: 26px; }
 .mobileLabel { display: none; }
+/* #1260: phone-row parts; the desktop table stays as it was. */
+.avatar, .rowState, .rowMeta, .more { display: none; }
+.more summary { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 6px; color: var(--color-slate-600); cursor: pointer; list-style: none; }
+.more summary::-webkit-details-marker { display: none; }
+.more { position: relative; }
+.moreMenu { position: absolute; right: 0; top: 46px; z-index: 10; display: grid; min-width: 160px; padding: 4px; border: 1px solid var(--color-slate-200); border-radius: 8px; background: white; box-shadow: 0 8px 24px rgb(15 23 42 / 0.12); }
+.moreMenu button { min-height: 44px; padding: 0 12px; text-align: left; font-size: 15px; border-radius: 6px; }
+.moreMenu button:hover { background: var(--color-slate-50); }
 .empty { padding: 44px 24px; border-block: 1px solid var(--color-slate-200); display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; }
 .empty svg { color: var(--color-slate-400); }
 .empty h3 { font-size: 17px; font-weight: 600; }
@@ -53,8 +67,27 @@
   .table .person { font-size: 15px; }
   .contact { display: flex !important; flex-wrap: wrap; gap: 8px 20px; }
   .contact > a { display: flex; min-height: 36px; align-items: center; }
-  .mobileLabel { display: block; font-size: 13px; color: var(--color-slate-500); margin-bottom: 3px; }
   .toolbar select { flex: 1; min-width: 0; }
+  /* #1260: one row per person: initials, name and state word, then when · city, then the actions. No labels. */
+  .table tbody tr { grid-template-columns: 40px minmax(0, 1fr); gap: 10px 12px; }
+  .table td { grid-column: 2; }
+  .table .person { grid-column: 1 / -1; display: grid !important; grid-template-columns: 40px minmax(0, 1fr) auto; column-gap: 12px; align-items: center; font-size: 15px; }
+  .avatar { display: grid; place-items: center; grid-row: span 2; width: 40px; height: 40px; border-radius: 50%; background: var(--color-slate-100); color: var(--color-slate-700); font-size: 14px; font-weight: 600; }
+  .name { min-width: 0; overflow-wrap: anywhere; }
+  .rowState { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; color: var(--color-slate-600); white-space: nowrap; }
+  .rowState[data-state="new"] { color: var(--color-blue-700); }
+  .rowState[data-state="new"]::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+  .rowState[data-state="customer"] { color: var(--color-emerald-700); }
+  .rowMeta { display: block; grid-column: 2 / -1; font-size: 13px; font-weight: 400; color: var(--color-slate-500); overflow-wrap: anywhere; }
+  .desktopOnly, .phoneNumber, .repliedLine, .followUpButton { display: none !important; }
+  .contact { gap: 8px; }
+  .replyActions { margin-top: 0; }
+  .followUp { display: flex !important; align-items: center; }
+  .followUpCell { flex: 1; }
+  .more { display: block; margin-left: auto; }
+  /* Waiting: WhatsApp them + Call. Customers: the word 'Customer' and ⋯ only. */
+  tr[data-state="new"] .followUpCell > button:not(.followUpButton) { display: none; }
+  tr[data-state="customer"] .contact { display: none !important; }
 }
 @media (max-width: 600px) {
   /* #376: no dead space on a phone. */

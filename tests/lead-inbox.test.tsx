@@ -47,10 +47,19 @@ beforeEach(() => {
 });
 
 describe("<LeadInbox> empty state", () => {
-  it("explains what will appear and how", () => {
+  // #1260 (CPO words, Designer): one action, and never one the owner can't take.
+  it("explains what will appear and offers See your campaigns while alerts can't be turned on", () => {
     render(<LeadInbox businessName="Solaride" initialLeads={[]} metaReady />);
-    expect(screen.getByText("No enquiries yet")).toBeInTheDocument();
-    expect(screen.getByText(/message you on WhatsApp/i)).toBeInTheDocument();
+    expect(screen.getByText("No enquiries yet. When someone fills your form or messages you on WhatsApp from an ad, they'll show up here.")).toBeInTheDocument();
+    expect(screen.getByText("Reply fast: people often go with the first business that answers.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "See your campaigns" })).toHaveAttribute("href", "/campaigns");
+    expect(screen.queryByRole("link", { name: /WhatsApp alert/ })).toBeNull();
+  });
+
+  it("offers a WhatsApp alert for each enquiry when alerts can be turned on", () => {
+    render(<LeadInbox businessName="Solaride" initialLeads={[]} metaReady offerAlerts />);
+    expect(screen.getByRole("link", { name: "Get a WhatsApp alert for each enquiry" })).toHaveAttribute("href", "/settings#whatsapp-alerts-title");
+    expect(screen.queryByRole("link", { name: "See your campaigns" })).toBeNull();
   });
 
   it("hides the digest card when there is nothing to share", () => {
@@ -109,10 +118,10 @@ describe("<LeadInbox> table", () => {
   });
 
   it("keeps the full digest collapsed until requested", () => {
-    const { container } = render(<LeadInbox businessName="Form Studio" initialLeads={[lead()]} metaReady />);
-    expect(container.querySelector("details")).not.toHaveAttribute("open");
+    render(<LeadInbox businessName="Form Studio" initialLeads={[lead()]} metaReady />);
+    expect(screen.getByText("WhatsApp digest").closest("details")).not.toHaveAttribute("open");
     fireEvent.click(screen.getByText("WhatsApp digest"));
-    expect(container.querySelector("details")).toHaveAttribute("open");
+    expect(screen.getByText("WhatsApp digest").closest("details")).toHaveAttribute("open");
   });
 
   it("shows Meta's test lead as a test, not as placeholder text (#403)", () => {
@@ -620,7 +629,7 @@ describe("<LeadInbox> on a phone (#376)", () => {
   it("marks empty fields so the phone layout can hide them instead of showing a lone dash", () => {
     render(<LeadInbox businessName="Solaride" initialLeads={[lead({ phone: null, email: null, city: null })]} metaReady />);
     const row = screen.getAllByRole("row").at(-1)!;
-    const blanks = row.querySelectorAll("td > span:not([aria-hidden])");
+    const blanks = row.querySelectorAll("td:not(:first-child) > span:not([aria-hidden])");
     expect([...blanks].map((el) => el.textContent)).toEqual(["—", "—"]);
   });
 
@@ -648,9 +657,111 @@ describe("<LeadInbox> on a phone (#376)", () => {
     expect(screen.getByRole("button", { name: /^Follow up Asha Verma, status Contacted$/ })).toBeInTheDocument();
   });
 
+  // #1260: on phones each row says one state word and keeps when · city on one line; ⋯ holds Not interested and Edit.
+  it("gives each row one state word and a when · city line", () => {
+    render(<LeadInbox businessName="Fixture" initialLeads={[
+      lead({ id: "a", meta_lead_id: "ma", full_name: "Asha Verma", city: "Jaipur" }),
+      lead({ id: "b", meta_lead_id: "mb", full_name: "Ravi Kumar", created_time: "2026-08-20T10:00:00.000Z", first_contacted_at: "2026-08-20T10:04:00.000Z" }),
+      lead({ id: "c", meta_lead_id: "mc", full_name: "Meena", created_time: "2026-08-20T10:00:00.000Z", first_contacted_at: "2026-08-22T11:00:00.000Z" }),
+      lead({ id: "d", meta_lead_id: "md", full_name: "Kiran Shah", workflow_status: "customer" }),
+    ]} metaReady={false} />);
+    const rows = screen.getAllByRole("row").slice(1);
+    const state = (index: number) => rows[index].querySelector("td:first-child > span:nth-child(3)")!.textContent;
+    expect([state(0), state(1), state(2), state(3)]).toEqual(["New", "Contacted in 4 min", "Contacted after 2 days", "Customer"]);
+    expect(rows[0].querySelector("td:first-child > span:first-child")).toHaveTextContent("AV");
+    expect(rows[2].querySelector("td:first-child > span:first-child")).toHaveTextContent("M");
+    expect(rows[0].querySelector("td:first-child > span:last-child")!.textContent).toMatch(/ · Jaipur$/);
+  });
+
+  it("marks an enquiry not interested from ⋯ and undoes it", async () => {
+    const asha = lead({ workflow_status: "contacted" });
+    const sent: unknown[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (_url: string, options?: RequestInit) => {
+      if (options?.method === "PATCH") {
+        const body = JSON.parse(String(options.body)) as { workflow_status: string };
+        sent.push(body);
+        return Response.json({ lead: { ...asha, workflow_status: body.workflow_status } });
+      }
+      return Response.json({ leads: [asha], total: 1, nextCursor: null });
+    }));
+    render(<LeadInbox businessName="Fixture" initialLeads={[asha]} metaReady={false} />);
+    fireEvent.click(screen.getByLabelText("More for Asha Verma"));
+    fireEvent.click(screen.getByRole("button", { name: "Not interested" }));
+    expect(await screen.findByText("Asha Verma is marked not interested.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Not interested" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    expect(await screen.findByText("Asha Verma is back to contacted.")).toBeInTheDocument();
+    expect(sent).toEqual([{ workflow_status: "closed" }, { workflow_status: "contacted" }]);
+  });
+
+  it("opens the follow-up editor from ⋯ Edit", () => {
+    render(<LeadInbox businessName="Fixture" initialLeads={[lead()]} metaReady={false} />);
+    fireEvent.click(screen.getByLabelText("More for Asha Verma"));
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    expect(screen.getByRole("form", { name: "Enquiry follow-up" })).toBeInTheDocument();
+  });
+
   it("offers no customer button for Meta's test lead", () => {
     render(<LeadInbox businessName="Fixture" initialLeads={[lead({ full_name: "<test lead: dummy data for full_name>" })]} metaReady={false} />);
     expect(screen.queryByRole("button", { name: /became a customer/ })).not.toBeInTheDocument();
+  });
+});
+
+describe("<LeadInbox> Waiting · All · Customers (#1260)", () => {
+  const fresh = new Date(Date.now() - 60 * 60_000).toISOString();
+  const waitingRows = [
+    lead({ id: "w1", meta_lead_id: "w1", full_name: "Asha Verma", created_time: fresh, created_at: fresh }),
+    lead({ id: "w2", meta_lead_id: "w2", full_name: "Ravi Kumar", created_time: fresh, created_at: fresh }),
+    lead({ id: "old", meta_lead_id: "old", full_name: "Old Lead", workflow_status: "new" }),
+  ];
+
+  it("opens on Waiting with the sentence, lists only people waiting, and hides search there", () => {
+    render(<LeadInbox businessName="Fixture" initialLeads={waitingRows} allTotal={12} summary={{ waiting: 2, replyMinutes: 9 }} metaReady={false} />);
+    expect(screen.getByText("2 people are waiting for you. You usually contact people within 9 min.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Waiting" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText("Asha Verma")).toBeInTheDocument();
+    expect(screen.getByText("Ravi Kumar")).toBeInTheDocument();
+    expect(screen.queryByText("Old Lead")).not.toBeInTheDocument();
+    expect(screen.queryByRole("searchbox", { name: "Search enquiries" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2 })).toHaveTextContent("(12)");
+  });
+
+  it("says nobody is waiting, leaves out the median under 3 contacts, and opens on All", () => {
+    render(<LeadInbox businessName="Fixture" initialLeads={[lead()]} summary={{ waiting: 0, replyMinutes: null }} metaReady={false} />);
+    expect(screen.getByText("Nobody is waiting.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "All" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("searchbox", { name: "Search enquiries" })).toBeInTheDocument();
+  });
+
+  it("says one person, and loads All and Customers from the server", async () => {
+    const urls: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => { urls.push(url); return Response.json({ leads: [], total: 0, nextCursor: null }); }));
+    render(<LeadInbox businessName="Fixture" initialLeads={waitingRows.slice(0, 1)} summary={{ waiting: 1, replyMinutes: 125 }} metaReady={false} />);
+    expect(screen.getByText("1 person is waiting for you. You usually contact people within 2 h 5 min.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Customers" }));
+    expect(await screen.findByText("No customers yet.")).toBeInTheDocument();
+    expect(new URL(urls.at(-1)!, "http://x").searchParams.get("status")).toBe("customer");
+    fireEvent.click(screen.getByRole("button", { name: "All" }));
+    await waitFor(() => expect(new URL(urls.at(-1)!, "http://x").searchParams.get("status")).toBe("all"));
+    expect(screen.getByRole("searchbox", { name: "Search enquiries" })).toBeInTheDocument();
+  });
+
+  it("keeps a just-contacted person on Waiting with their contact time and counts one fewer", () => {
+    global.fetch = vi.fn(async () => ({ ok: true, json: async () => ({}) })) as unknown as typeof fetch;
+    render(<LeadInbox businessName="Fixture" initialLeads={waitingRows} summary={{ waiting: 2, replyMinutes: null }} metaReady={false} />);
+    const call = screen.getAllByRole("link", { name: "Call" })[0];
+    call.addEventListener("click", (event) => event.preventDefault());
+    fireEvent.click(call);
+    expect(screen.getByText("1 person is waiting for you.")).toBeInTheDocument();
+    expect(screen.getByText("Asha Verma")).toBeInTheDocument();
+    expect(screen.getByText(/^Contacted in /)).toBeInTheDocument();
+  });
+
+  it("offers All when nobody is left on Waiting", () => {
+    render(<LeadInbox businessName="Fixture" initialLeads={[lead()]} summary={{ waiting: 1, replyMinutes: null }} metaReady={false} />);
+    expect(screen.getByRole("heading", { name: "Nobody is waiting." })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "See all enquiries" }));
+    expect(screen.getByRole("button", { name: "All" })).toHaveAttribute("aria-pressed", "true");
   });
 });
 
