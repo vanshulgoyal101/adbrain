@@ -56,6 +56,18 @@ describe("core: Create concept validation on a recorded production concept", () 
     expect(adPolicyHits([{ id: "c1", headline: promise.headline, primaryText: promise.primary_text }], "solar energy")).toEqual([]);
   });
 
+  // #1617 (CPO, #1501): a generated picture can't be called the business's own work; the owner's photo can.
+  it("refuses 'Kitchens we finished' under a generated picture, allows it on the owner's photo", () => {
+    const line = (text: string) => ({ ...recorded.concept, primary_text: `${recorded.concept.primary_text.split("\n")[0]}\n${text}` });
+    expect(rules(line("Kitchens we finished in Mohali last month."))).toContain("work-claim");
+    expect(rules(line("See our work in Austin."))).toContain("work-claim");
+    expect(conceptValidationRules((() => {
+      const result = validateConcept(line("Kitchens we finished in Mohali last month."), { ...input, ownerPhoto: "https://core-test.supabase.co/brand/kitchen.jpg" });
+      return result.success ? [] : result.issues;
+    })())).not.toContain("work-claim");
+    expect(rules(line("Modular kitchens in Mohali, free consultation."))).not.toContain("work-claim");
+  });
+
   it("clips an over-long link description instead of discarding the concept", () => {
     const long = `${recorded.concept.description} with flexible evening and weekend appointments for busy adults`;
     expect(long.length).toBeGreaterThan(100);
