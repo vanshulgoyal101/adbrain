@@ -10,13 +10,14 @@
  *
  * Uses META_SYSTEM_USER_TOKEN / META_AD_ACCOUNT_ID / META_PAGE_ID. Tokens are stripped from the fixtures.
  */
+import "./lib/meta-write-gate";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { metaClientFromEnv } from "./lib/meta-env";
 
 type Exchange = { method: string; path: string; form?: Record<string, string>; status: number; body: unknown };
 
-const GRAPH = "https://graph.facebook.com/v21.0/";
+const GRAPH = "https://graph.facebook.com/v26.0/";
 const OUT = join(process.cwd(), "tests/core/fixtures/meta");
 let tape: Exchange[] = [];
 const realFetch = globalThis.fetch;
@@ -41,7 +42,7 @@ globalThis.fetch = async (input, init) => {
   if (init?.body instanceof URLSearchParams) {
     form = Object.fromEntries([...init.body].filter(([key]) => key !== "access_token").map(([key, value]) => [key, key === "bytes" ? "<image bytes>" : value]));
   }
-  tape.push({ method: init?.method ?? "GET", path: parsed.pathname.replace("/v21.0/", "") + parsed.search, ...(form ? { form } : {}), status: response.status, body: scrub(body) });
+  tape.push({ method: init?.method ?? "GET", path: parsed.pathname.replace("/v26.0/", "") + parsed.search, ...(form ? { form } : {}), status: response.status, body: scrub(body) });
   return response;
 };
 

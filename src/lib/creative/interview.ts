@@ -194,8 +194,10 @@ function unsupportedTerms(result: InterviewResult, input: InterviewInput): strin
     ...(input.brand.offers ?? []),
     ...(input.brand.usps ?? []),
   ];
-  const terms = [...output.matchAll(/(?<![\p{L}-])free\b|\bno[- ]cost\b|\bguaranteed?\b|\d+(?:\.\d+)?\s*%|[$\u00a3\u20ac\u20b9]\s*\d[\d,.]*/giu)]
-    .filter((match) => !negatedTerm(output, match.index, match[0])).map((match) => match[0]);
+  // #1415: an amount stops at its last digit ("$49." is $49), as in concept.ts.
+  const terms = [...output.matchAll(/(?<![\p{L}-])free\b|\bno[- ]cost\b|\bguaranteed?\b|\d+(?:\.\d+)?\s*%|[$\u00a3\u20ac\u20b9]\s*\d+(?:[.,]\d+)*/giu)]
+    .filter((match) => !negatedTerm(output, match.index, match[0]) && !wholeOfAFact(output, match.index + match[0].length, match[0], sources))
+    .map((match) => match[0]);
   // "No-cost" is the same offer as "free" (#378).
   const free = (term: string) => /^(?:free|no[- ]cost)$/i.test(term);
   return [...new Set(terms)].filter((term) => !sources.some((source) => {
@@ -205,6 +207,18 @@ function unsupportedTerms(result: InterviewResult, input: InterviewInput): strin
     return [...source.matchAll(pattern)].some((match) => affirmedInFact(source, match.index, match[0]))
       || (spelledCurrency(term, source) && !/\b(no|not|never|without|avoid)\b/i.test(source));
   }));
+}
+
+/**
+ * #1415: "100% eggless" restates a Brand fact ("eggless cakes"), not a discount: a 100% is supported when
+ * the word after it is affirmed in a fact. "100% refund" or "100% satisfaction" still need their own fact.
+ */
+function wholeOfAFact(output: string, end: number, term: string, sources: string[]): boolean {
+  if (!/^100\s*%$/.test(term)) return false;
+  const next = /^[\s-]*([\p{L}]{3,})/u.exec(output.slice(end))?.[1]?.toLowerCase();
+  if (!next) return false;
+  const pattern = new RegExp(`(?<![\\p{L}])${next}(?![\\p{L}])`, "giu");
+  return sources.some((source) => [...source.matchAll(pattern)].some((match) => affirmedInFact(source, match.index, match[0])));
 }
 
 /** The term's class for logs (#613), never the term itself. */

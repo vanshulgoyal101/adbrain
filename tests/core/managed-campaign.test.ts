@@ -64,7 +64,7 @@ function replay(...tapes: unknown[][]) {
     tokens.add(url.searchParams.get("access_token") ?? body?.get("access_token") ?? String(multipart?.get("access_token") ?? "none"));
     url.searchParams.delete("access_token");
     const method = init?.method ?? "GET";
-    const path = url.pathname.replace("/v21.0/", "") + url.search;
+    const path = url.pathname.replace("/v26.0/", "") + url.search;
     if (method === "POST") posts.push(path);
     const index = pending.findIndex((exchange) => exchange.method === method && exchange.path === path);
     if (index < 0) throw new Error(`Unrecorded Graph call: ${method} ${path}`);

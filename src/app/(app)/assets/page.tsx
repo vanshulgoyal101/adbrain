@@ -9,6 +9,7 @@ import {
   getCreativePreviews,
   getPrimaryBusiness,
 } from "@/lib/supabase/queries";
+import { isProspectSession } from "@/lib/prospect-session";
 
 export const metadata = { title: "Assets" };
 
@@ -37,9 +38,10 @@ export default async function AssetsPage() {
     );
   }
 
-  const [creatives, brandAssets] = await Promise.all([
+  const [creatives, brandAssets, sample] = await Promise.all([
     getCreativePreviews(business.id),
     getBrandAssets(business.id),
+    isProspectSession(),
   ]);
 
   return (
@@ -47,11 +49,11 @@ export default async function AssetsPage() {
       <PageHeader
         title="Assets"
         description={
-          <p>Every ad and upload for {business.name}, ready to download or share.</p>
+          <p>Every ad and upload for {business.name}, {sample ? "kept here until the account is handed over (sample ads can\u2019t be downloaded)." : "ready to download or share."}</p>
         }
       />
       <div className="mt-6">
-        <AssetsLibrary creatives={creatives} brandAssets={brandAssets} />
+        <AssetsLibrary creatives={creatives} brandAssets={brandAssets} sample={sample} />
       </div>
     </div>
   );

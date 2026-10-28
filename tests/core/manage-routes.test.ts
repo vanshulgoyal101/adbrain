@@ -33,7 +33,7 @@ const store = vi.hoisted(() => {
     tables: {} as Record<string, Row[]>, user: null as { id: string } | null, log: [] as string[], unknown: [] as string[],
     rpc: {} as Record<string, (args: Row) => { data: unknown; error: unknown }>, inserted: 0,
   };
-  const known = ["audit_log", "businesses", "campaigns", "campaign_results", "meta_connections", "spend_limits"];
+  const known = ["audit_log", "businesses", "campaign_edit_operations", "campaigns", "campaign_results", "meta_connections", "spend_limits"];
   const fail = (call: string): never => {
     state.unknown.push(call);
     throw new Error(`Unstubbed Supabase call: ${call}`);
@@ -159,7 +159,7 @@ function replay(...recorded: Exchange[][]) {
     url.searchParams.delete("access_token");
     body.delete("access_token");
     const method = init?.method ?? "GET";
-    const path = url.pathname.replace("/v21.0/", "") + url.search;
+    const path = url.pathname.replace("/v26.0/", "") + url.search;
     graph.sent.push({ method, path, form: Object.fromEntries(body), access });
     const index = graph.pending.findIndex(exchange => exchange.method === method && exchange.path === path);
     if (index < 0) {
@@ -479,6 +479,39 @@ describe("core: manage routes against recorded Graph responses (#649)", () => {
     expect(audits()).toEqual([]);
   });
 
+  // #1217: one Meta 5xx during the capability re-check used to be saved as 'unknown' and read as a permissions problem.
+  it("#1217 activate: Meta not answering the re-check returns a retryable 503, stores nothing and makes no Meta write", async () => {
+    const campaign = reviewedCampaign();
+    replay(tapes.delivery, tapes.funding);
+    const { delivery } = await (await review()).json();
+    const stored = structuredClone(store.state.tables.meta_connections[0].capabilities);
+    const { ConnectionAccessError } = await import("@/lib/meta/connection-access-error");
+    capabilities.verify.mockRejectedValueOnce(new ConnectionAccessError("UNAVAILABLE", "Meta didn't answer. Try again.", { retryable: true }));
+    replay(tapes.delivery);
+    const response = await activate({ confirmationDigest: await digest(campaign, delivery, 3), connectionGeneration: GENERATION, capDays: 3 });
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({ error: "Meta didn't answer. Try again." });
+    expect(store.state.tables.meta_connections[0].capabilities).toEqual(stored);
+    expect(writes()).toEqual([]);
+    expect(store.state.tables.campaigns[0].status).toBe("paused");
+  });
+
+  it("#1217 activate: 'unknown' access is a retryable 503 ('Check again'); 'blocked' gives Meta's reason", async () => {
+    const campaign = reviewedCampaign();
+    replay(tapes.delivery, tapes.funding);
+    const { delivery } = await (await review()).json();
+    const available = { state: "available", blockers: [] };
+    const unknown = { state: "unknown", blockers: [{ code: "MISSING_PERMISSION", message: "Meta access could not be verified. Check again.", action: { kind: "retry_check" } }] };
+    const billing = { state: "blocked", blockers: [{ code: "BILLING_REQUIRED", message: "Meta billing must be verified before activation.", action: null }] };
+    for (const [canActivate, status, error] of [[unknown, 503, "Meta access could not be verified. Check again."], [billing, 400, "Meta billing must be verified before activation."]] as const) {
+      capabilities.verify.mockResolvedValueOnce({ canReadInsights: available, canReadLeads: available, canCreatePaused: available, canActivate });
+      replay(tapes.delivery);
+      const response = await activate({ confirmationDigest: await digest(campaign, delivery, 3), connectionGeneration: GENERATION, capDays: 3 });
+      expect({ status: response.status, body: await response.json() }).toMatchObject({ status, body: { error } });
+      expect(writes()).toEqual([]);
+    }
+  });
+
   it("activate: a connectionGeneration other than the stored binding is refused before any Meta call", async () => {
     const campaign = reviewedCampaign();
     replay(tapes.delivery, tapes.funding);
@@ -490,6 +523,22 @@ describe("core: manage routes against recorded Graph responses (#649)", () => {
     expect(await response.json()).toMatchObject({ error: "Meta connection changed; review the campaign again." });
     expect(globalThis.fetch).not.toHaveBeenCalled();
     expect(capabilities.verify).not.toHaveBeenCalled();
+    expect(store.state.tables.campaigns[0].status).toBe("paused");
+  });
+
+  // #1518 (CTO): a paused campaign can still have a new-audience copy waiting (made while it ran). Turning it on would
+  // build a capped copy of the old ad set beside the waiting one, and both could spend.
+  it("activate: refuses while a new audience waits to be switched on, before any Meta write or reservation", async () => {
+    const campaign = reviewedCampaign();
+    replay(tapes.delivery, tapes.funding);
+    const confirmationDigest = await digest(campaign, (await (await review()).json()).delivery, 3);
+    store.state.tables.campaign_edit_operations = [{ id: "op-waiting", campaign_id: STORED, kind: "audience", state: "awaiting_switch", phase: "copy" }];
+    replay(tapes.delivery, tapes.funding);
+    const response = await activate({ confirmationDigest, connectionGeneration: GENERATION, capDays: 3 });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ code: "switch_pending", error: "A new audience is waiting for this campaign. Turn it on or cancel it first." });
+    expect(writes()).toEqual([]);
+    expect(store.state.inserted).toBe(0);
     expect(store.state.tables.campaigns[0].status).toBe("paused");
   });
 
@@ -517,7 +566,7 @@ describe("core: manage routes against recorded Graph responses (#649)", () => {
     const response = await activate({ confirmationDigest: await digest(campaign, delivery, 5), connectionGeneration: GENERATION, capDays: 5 });
     expect(response.status).toBe(409);
     expect(await response.json()).toMatchObject({
-      error: "Meta has ₹134.87 left under the ad account's spending limit after ₹450.00 for your 1 other live run; this run needs ₹1,000.00. Add funds on Meta or choose fewer days.",
+      error: "Meta has ₹134.87 left under the ad account's spending limit after ₹450 for your 1 other live run; this run needs ₹1,000. Add funds on Meta or choose fewer days.",
     });
     expect(graph.sent.map(call => `${call.method} ${call.path}`).sort()).toEqual([...deliveryReads, ...tapes.funding.map(exchange => `GET ${exchange.path}`)].sort());
     expect(writes()).toEqual([]);

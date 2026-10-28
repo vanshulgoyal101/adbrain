@@ -76,7 +76,7 @@ function replay(overrides: { createCreative?: Answer; swap?: Answer; validateCre
     const url = new URL(String(input));
     url.searchParams.delete("access_token");
     const method = init?.method ?? "GET";
-    const path = decodeURIComponent(url.pathname.replace("/v21.0/", "") + url.search);
+    const path = decodeURIComponent(url.pathname.replace("/v26.0/", "") + url.search);
     const form = init?.body instanceof URLSearchParams ? Object.fromEntries([...init.body].filter(([key]) => key !== "access_token")) : {};
     graph.sent.push({ method, path, form });
     const validateOnly = form.execution_options === JSON.stringify(["validate_only"]);
@@ -189,6 +189,17 @@ describe("core: edit a launched ad's words through the route (#775)", () => {
     expect(result.status).toBe(422);
     expect(graph.sent).toEqual([]);
     expect(store.state.tables.campaign_edit_operations ?? []).toEqual([]);
+  });
+
+  // #1146 (QA): a waiting new-audience copy has its own copy of this ad's words; the switch would undo the edit.
+  it("refuses while a new audience waits to be switched on, before any Meta call", async () => {
+    store.state.tables.campaign_edit_operations = [{ id: "op-waiting", business_id: BUSINESS, campaign_id: CAMPAIGN, kind: "audience", state: "awaiting_switch", phase: "copy" }];
+    replay();
+    const result = await patchAd(recorded.edit);
+    expect(result.status).toBe(409);
+    expect(result.body).toMatchObject({ error: "A new audience is waiting for this campaign. Turn it on or cancel it first." });
+    expect(graph.sent).toEqual([]);
+    expect(store.state.tables.campaign_edit_operations).toHaveLength(1);
   });
 
   it("refuses an ad that isn't part of the campaign", async () => {

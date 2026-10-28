@@ -2,12 +2,14 @@ import { affirmedInFact, negatedTerm } from "./claim-support";
 import { z } from "zod";
 import type { ChatMessage } from "@/lib/llm";
 import {
+  AD_ANGLES,
   META_CTAS,
   type AdAngle,
   type BrandContext,
 } from "@/lib/templates/ads";
-import { formatDimensions, type AdFormat } from "@/lib/creative/design";
-import { bannedClaimsForVertical, capitalWords, scanAdCopy } from "@/lib/creative/slopScan";
+import { contactChannel, formatDimensions, whatsappContactLabel, type AdFormat } from "@/lib/creative/design";
+import { quotedAsk } from "@/lib/campaign/whatsapp-greeting";
+import { bannedClaimsForVertical, capitalWords, HEALTH_VERTICAL, MEDICAL_BANNED_CLAIMS, scanAdCopy } from "@/lib/creative/slopScan";
 import { policyFindings } from "@/lib/creative/policy-rules";
 import { emptyScene } from "@/lib/creative/visual-rules";
 import { spelledAmountIndex, spelledCurrency } from "./currency";
@@ -86,8 +88,28 @@ export interface ConceptInput {
   sourceFacts?: string[];
 }
 
+// #1035/#713: parallel concepts can't see each other, and "Rooftop solar for your home in Chandigarh,
+// Mohali & Panchkula" opened all three (Oct 27 14:00Z), so two were lost to repeated-opening even after
+// the repair. Each angle gets its own place and its own way in.
+// Written as instructions: a bare "with the offer" was copied into the ad itself (Qwen, free eval Oct 28).
+const OPENINGS: Record<string, string> = {
+  value: "Open by naming the service and the place.",
+  // Never a question about the reader's body or traits (personal-attribute; free eval Oct 28).
+  problem: "Open by stating the problem the service fixes as a fact about the situation (a rising bill, a deadline, a broken AC). Never ask the reader about themselves.",
+  offer: "Open by stating the offer.",
+  trust: "Open by stating the proof.",
+};
+
+export function conceptLead(input: Pick<ConceptInput, "brand" | "angle">): { place: string | null; opening: string } {
+  const index = Math.max(0, AD_ANGLES.findIndex((angle) => angle.id === input.angle.id));
+  const places = (input.brand.locations ?? []).map((place) => place.trim()).filter(Boolean);
+  return { place: places.length ? places[index % places.length] : null, opening: OPENINGS[input.angle.id] ?? OPENINGS.value };
+}
+
 export function buildConceptMessages(input: ConceptInput): ChatMessage[] {
   const format = input.format ?? "portrait";
+  // Same rule as the poster's contact bar (#1167): an India-based phone or a saved WhatsApp message.
+  const whatsapp = contactChannel(input.brand) === "whatsapp";
   return [
     {
       role: "system",
@@ -96,11 +118,15 @@ Design ONE coherent ad concept: its message, copy and visual execution must serv
 Write a distinct hook and argument for this brief and angle, not a summary of the brand profile.
 Choose one relevant benefit and one supporting fact; do not repeat the full credentials,
 service-area list and savings claim in every ad. Avoid generic slogan triplets, forced metaphors,
-and references to incidental objects in the picture. End with a plain, relevant next step.
+and references to incidental objects in the picture. End with a plain, relevant next step. When contact
+is "whatsapp", the ad's button opens a WhatsApp chat: the last line asks people to message on WhatsApp,
+and the ad never asks them to call, phone or email (and never picks "Call Now").
 Recent copy is supplied only to avoid repetition, not as evidence for claims. Change the opening,
 sentence structure and persuasion angle, not just synonyms. Do not reuse a recent headline or hook.
 Write a concise Meta link description that complements the headline with a supported detail or
 next step. It is separate from on-image supportingText and must not merely repeat the headline.
+Follow lead.opening (an instruction; never copy its words into the ad) and name lead.place when given
+(one place, never the list): the ads of one batch are written at the same time, so each must open differently.
 Meta shows only about the first 125 characters of primary_text on mobile before "See more". Put the
 hook, and the supplied offer when the brief is about one, in the first line (at most 125 characters).
 Write primary_text as 2-3 short lines separated by \n, about 220 characters in total, never one paragraph.
@@ -133,12 +159,15 @@ matter, but never override factual constraints. Use the requested language for a
     {
       role: "user",
       content: JSON.stringify({
-        brand: input.brand,
+        // #1147: a WhatsApp business's ads open a chat, so the model gets no number or email to ask people to use.
+        brand: whatsapp ? { ...input.brand, phone: undefined, email: undefined } : input.brand,
+        contact: whatsapp ? "whatsapp" : "any",
         brief: input.brief,
         instructions: input.instructions ?? "",
         language:
           input.language || input.brand.languages?.join(" and ") || "English",
         angle: { name: input.angle.name, intent: input.angle.description },
+        lead: conceptLead(input),
         placement: { format, ...formatDimensions(format) },
         referenceImageCount: input.referenceImages?.slice(0, 3).length ?? 0,
         imageSource: input.ownerPhoto ? "owner_photo" : "generated",
@@ -157,14 +186,49 @@ matter, but never override factual constraints. Use the requested language for a
 function claimClass(term: string): string {
   if (/^(?:free|no[- ]cost)$/i.test(term)) return "free";
   if (/^guaranteed?$/i.test(term)) return "guarantee";
+  if (SUBSIDY_WORD.test(term)) return "subsidy";
   return term.includes("%") ? "percent" : "currency";
 }
+
+/**
+ * #1617 (CPO, #1501): first-person work claims ("our work", "kitchens we finished") say the picture shows the business's
+ * own work. Under a generated picture that is misleading (Meta's deceptive-practices policy); the owner's photo may say it.
+ */
+const WORK_CLAIM = /(?<![\p{L}\p{M}])(?:our (?:work|projects?|installs?|installations?)|we (?:built|finished|completed|installed|designed))(?![\p{L}\p{M}])|हमारा काम|हमने बनाया/giu;
+
+export function workClaims(text: string): string[] {
+  return [...new Set((text.normalize("NFC").match(WORK_CLAIM) ?? []).map((claim) => claim.toLowerCase()))];
+}
+
+/**
+ * #1822 (Reviewer, #1816): Brand text and pasted bios feed the prompt as facts and quotes are copied verbatim, so a
+ * third party's number or link could ship in the ad's words. Links, domains, wa.me and 8+ digit numbers are refused
+ * unless they are the business's own website or phone. (The ad's click destination never comes from the copy.)
+ */
+const LINK_IN_COPY = /\b(?:https?:\/\/|www\.)[^\s,)]+|\bwa\.me\/[^\s,)]*|\b[a-z0-9][a-z0-9-]{1,62}\.(?:co\.in|com|in|net|org|io|biz|info|shop|store|online|site|app|me|co)\b(?:\/[^\s,)]*)?/giu;
+const PHONE_IN_COPY = /\+?\d[\d\s-]{6,}\d/g;
+
+const hostOf = (link: string) => link.toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").split(/[/?#]/)[0];
+const lastTenDigits = (text: string) => text.replace(/\D/g, "").slice(-10);
+
+export function contactsInCopy(text: string, own: { website?: string | null; phone?: string | null }): string[] {
+  const ownHost = own.website ? hostOf(own.website.trim()) : null;
+  const ownPhone = own.phone ? lastTenDigits(own.phone) : null;
+  const links = (text.match(LINK_IN_COPY) ?? []).filter((link) => !ownHost || (hostOf(link) !== ownHost && !hostOf(link).endsWith(`.${ownHost}`)));
+  // A number inside a link (wa.me/91…) is that link's, not a separate phone.
+  const phones = (text.replace(LINK_IN_COPY, " ").match(PHONE_IN_COPY) ?? []).map((phone) => phone.trim())
+    .filter((phone) => phone.replace(/\D/g, "").length >= 8 && (!ownPhone || ownPhone.length < 8 || lastTenDigits(phone) !== ownPhone));
+  return [...new Set([...links, ...phones])];
+}
+
+export const WORK_CLAIM_WARNING = "This picture wasn't taken by you. Say what you offer, not 'our work', or use your own photo.";
 
 export function conceptValidationRules(issues: string[]): string[] {
   const allowedRules = new Set([
     "sourceQuotes", "unsupported-commercial-claim", "repeated-headline", "repeated-opening",
     "cliche", "em-dash-overuse", "exclamation-spam", "all-caps", "too-long", "banned-claim",
     "hook-length", "offer-below-fold", "price-unit", "personal-attribute", "unsupported-superlative", "exaggerated-result", "no-subject",
+    "work-claim", "contact-in-copy",
   ]);
   return [...new Set(issues.map((issue) => {
     if (issue.startsWith("schema:")) return issue.slice(0, issue.indexOf(": "));
@@ -189,6 +253,22 @@ function clipField(value: unknown, max: number | null): unknown {
   return text.length > max ? clipAtWord(text, max) : text;
 }
 
+/**
+ * #1544: a link description over its limit is cut back to its last full sentence, else its last clause (keeping at
+ * least half the limit), never mid-thought ('…Ask for a quote on'). With neither, it stays too long, so validation
+ * fails and the one repair rewrites it.
+ */
+export function clipToThought(value: unknown, max: number | null): unknown {
+  if (typeof value !== "string" || max === null) return value;
+  const text = value.trim();
+  if (text.length <= max) return text;
+  let sentence = -1;
+  for (const match of text.matchAll(/(?<!\b(?:rs|dr|mr|mrs|ms|st|no|sr|jr|ph|vs|etc|approx|govt|pvt|ltd|co|inc))[.!?।](?=\s|$)/giu)) if (match.index < max) sentence = match.index;
+  if (sentence >= 0) return text.slice(0, sentence + 1);
+  const clause = Math.max(...[...text.slice(0, max).matchAll(/\s*[,;:—–]\s/gu)].map((match) => match.index));
+  return clause >= max / 2 ? text.slice(0, clause) : text;
+}
+
 // The "center" layout is a left-side text panel, so "left" (Groq, Oct 21) maps there; "right" has no layout.
 function placement(value: unknown): unknown {
   if (typeof value !== "string") return value;
@@ -208,7 +288,7 @@ function shortLines(value: unknown): unknown {
   return value.trim().split("\n").map((paragraph) => {
     if (paragraph.trim().length <= FOLD_CHARACTERS) return paragraph;
     const lines: string[] = [];
-    for (const sentence of paragraph.trim().split(/(?<=[.!?])\s+(?=\S)/u)) {
+    for (const sentence of paragraph.trim().split(/(?<=[.!?।])\s+(?=\S)/u)) {
       const last = lines.length - 1;
       if (last >= 0 && lines[last].length + 1 + sentence.length <= FOLD_CHARACTERS) lines[last] += ` ${sentence}`;
       else lines.push(sentence);
@@ -238,7 +318,7 @@ function normalizeDraft(value: unknown): unknown {
   return {
     ...value,
     primary_text: shortLines(value.primary_text),
-    description: clipField(value.description, shape.description.maxLength),
+    description: clipToThought(value.description, shape.description.maxLength),
     rationale: clipField(value.rationale, shape.rationale.maxLength),
     cta,
     visual,
@@ -278,10 +358,14 @@ const GUARANTEE_WORD = /(?<![\p{L}\p{M}])(?:गारंटी|ਗਾਰੰਟ�
 const NEGATION = /\b(?:no|not|never|without|avoid)\b|(?<![\p{L}\p{M}])(?:नहीं|बिना|ਨਹੀਂ|ਬਿਨਾਂ)(?![\p{L}\p{M}])/iu;
 
 // "text-free" is the visual the prompt asks for, not a free offer. Match on NFC text.
-const COMMERCIAL_TERMS = new RegExp(
-  `(?<!\\btext-)\\bfree\\b|\\bno[- ]cost\\b|\\bguaranteed?\\b|\\d+(?:\\.\\d+)?\\s*%|[$\\u00a3\\u20ac\\u20b9]\\s*\\d+(?:[.,]\\d+)*|${FREE_WORD.source}|${GUARANTEE_WORD.source}`,
-  "giu",
-);
+const OFFER_TERMS_SOURCE =
+  `(?<!\\btext-)\\bfree\\b|\\bno[- ]cost\\b|\\bguaranteed?\\b|\\d+(?:\\.\\d+)?\\s*%|[$\\u00a3\\u20ac\\u20b9]\\s*\\d+(?:[.,]\\d+)*|${FREE_WORD.source}|${GUARANTEE_WORD.source}`;
+/**
+ * #1676 (Analyst #1514): a PM Surya Ghar subsidy line needs a Brand fact (a registered vendor says so), like "free".
+ * It's a claim, not an offer, so the above-the-fold offer rule ignores it.
+ */
+const SUBSIDY_WORD = /\bsubsid(?:y|ies|ised|ized)\b|\bPM Surya Ghar\b|(?<![\p{L}\p{M}])(?:सब्सिडी|ਸਬਸਿਡੀ)(?![\p{L}\p{M}])/iu;
+const COMMERCIAL_TERMS = new RegExp(`${OFFER_TERMS_SOURCE}|${SUBSIDY_WORD.source}`, "giu");
 
 /** The commercial terms text states, skipping negated ones. */
 function claimedTerms(text: string): string[] {
@@ -300,6 +384,7 @@ function citesTerm(quote: string, term: string): boolean {
   // "No-cost" is the same offer as "free" (#378).
   if (/^(?:free|no[- ]cost)$/i.test(term) || FREE_WORD.test(term)) return /free|no[- ]cost/i.test(quote) || FREE_WORD.test(quote);
   if (GUARANTEE_WORD.test(term)) return quote.toLowerCase().includes("guarantee") || GUARANTEE_WORD.test(quote);
+  if (SUBSIDY_WORD.test(term)) return SUBSIDY_WORD.test(quote);
   if (!/\d/.test(term)) return quote.toLowerCase().includes(term.toLowerCase()) || (/^guarantee/i.test(term) && GUARANTEE_WORD.test(quote));
   const amount = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   return new RegExp(`(?<![\\d.,])${amount}(?![\\d]|[.,]\\d)`, "i").test(quote) || spelledCurrency(term, quote);
@@ -313,9 +398,12 @@ function citesTerm(quote: string, term: string): boolean {
 function affirmedCitation(quote: string, term: string, negation: RegExp): boolean {
   const pattern = /^(?:free|no[- ]cost)$/i.test(term) ? /free|no[- ]cost/gi
     : /^guarantee/i.test(term) ? /guarantee/gi
+      : SUBSIDY_WORD.test(term) ? new RegExp(SUBSIDY_WORD.source, "giu")
       : new RegExp(`(?<![\\d.,])${term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\d]|[.,]\\d)`, "gi");
   const matches = [...quote.matchAll(pattern)];
   if (!matches.length) return !negation.test(quote);
+  // #1676: "not a PM Surya Ghar subsidy vendor" negates the whole fact, so every subsidy mention must be affirmed.
+  if (SUBSIDY_WORD.test(term)) return matches.every((match) => affirmedInFact(quote, match.index, match[0]));
   return matches.some((match) => affirmedInFact(quote, match.index, match[0]));
 }
 
@@ -382,6 +470,8 @@ export function copyClaimWarnings(
   copy: Pick<EditableCopy, "headline" | "primary_text" | "description">,
   facts: (string | null | undefined)[],
   vertical?: string | null,
+  /** #1617: false when the ad's picture is generated, not the owner's photo. */
+  options: { ownPicture?: boolean } = {},
 ): string[] {
   const sources = facts.filter((fact): fact is string => typeof fact === "string" && fact.trim() !== "").map((fact) => fact.normalize("NFC"));
   const text = [copy.headline, copy.primary_text, copy.description].join(" ").normalize("NFC");
@@ -397,9 +487,12 @@ export function copyClaimWarnings(
   }
   for (const finding of scanAdCopy(text, { bannedClaims: bannedClaimsForVertical(vertical) })) {
     if (finding.rule === "banned-claim") {
-      warnings.push(`"${finding.detail}" is a health claim Meta often rejects. Consider rewording it.`);
+      // #1609: education terms ("guaranteed") are promises, not health claims.
+      const kind = HEALTH_VERTICAL.test(vertical ?? "") && (MEDICAL_BANNED_CLAIMS as readonly string[]).includes(finding.detail) ? "a health claim" : "a promise";
+      warnings.push(`"${finding.detail}" is ${kind} Meta often rejects. Consider rewording it.`);
     }
   }
+  if (options.ownPicture === false && workClaims(text).length) warnings.push(WORK_CLAIM_WARNING);
   for (const finding of policyFindings([copy.headline, copy.primary_text, copy.description].join("\n"), { vertical, facts: sources })) {
     warnings.push(`"${finding.detail}": Meta often rejects this. ${finding.fix[0].toUpperCase()}${finding.fix.slice(1)}.`);
   }
@@ -422,7 +515,8 @@ export function validateConcept(
         const field = path.replace(/\.\d+/g, ".*") || "root";
         // The repair is told how long the text is, so it knows how much to cut (#281).
         const text = issue.path.reduce<unknown>((node, key) => (isRecord(node) || Array.isArray(node) ? (node as Record<PropertyKey, unknown>)[key as PropertyKey] : undefined), draft);
-        const length = (issue.code === "too_big" || issue.code === "too_small") && typeof text === "string" ? `; it is ${text.trim().length} characters` : "";
+        const length = (issue.code === "too_big" || issue.code === "too_small") && typeof text === "string" ? `; it is ${text.trim().length} characters`
+          : issue.code === "invalid_value" && typeof text === "string" ? `; it is "${text.slice(0, 40)}"` : "";
         return `schema:${field}:${issue.code}: ${path}: ${issue.message}${length}`;
       }),
     };
@@ -462,10 +556,11 @@ export function validateConcept(
   ).map((finding) => `${finding.rule}: ${finding.detail}`);
   for (const previous of input.recentCopy ?? []) {
     if (normalizeCopy(concept.headline) === normalizeCopy(previous.headline)) {
-      issues.push("repeated-headline: write a different headline from recent ads");
+      issues.push(`repeated-headline: "${previous.headline.slice(0, 60)}" is a recent ad's headline; write a different one`);
     }
     if (opening(concept.primary_text) === opening(previous.primary_text)) {
-      issues.push("repeated-opening: write a different primary-text hook from recent ads");
+      // #1035: quoting the opening lets the one repair avoid it; "write a different hook" alone repeated it (Oct 27).
+      issues.push(`repeated-opening: a recent ad opens "${previous.primary_text.split(/\s+/).slice(0, 8).join(" ")}"; start primary_text with different words`);
     }
   }
   issues.push(...scanAdCopy(concept.description, {
@@ -478,6 +573,17 @@ export function validateConcept(
     [concept.headline, concept.primary_text, concept.supportingText, concept.description].filter(Boolean).join("\n"),
     { vertical: input.brand.vertical, facts: sources },
   ).map((finding) => `${finding.rule}: "${finding.detail}"; ${finding.fix}`));
+  // #1617: the generated picture isn't the business's own work; the first ad may use the owner's photo.
+  if (!input.ownerPhoto) {
+    for (const claim of workClaims([concept.headline, concept.primary_text, concept.supportingText, concept.description].filter(Boolean).join("\n"))) {
+      issues.push(`work-claim: "${claim}" says the picture is the business's own work, but the picture is generated; say what the business offers instead`);
+    }
+  }
+  // #1822: no link or phone number the brand didn't give as its own; the ad's button already reaches the business.
+  for (const contact of contactsInCopy([concept.headline, concept.primary_text, concept.supportingText, concept.description].filter(Boolean).join("\n"),
+    { website: input.brand.website, phone: input.brand.phone })) {
+    issues.push(`contact-in-copy: "${contact.slice(0, 60)}" is a link or phone number the brand didn't give as its own; remove it (the ad's button already reaches the business)`);
+  }
   const empty = emptyScene(concept.visual.direction);
   if (empty) {
     issues.push(`no-subject: visual.direction shows an "${empty}" scene; give the image a clear subject (the people the business serves, its team at work, or its product), not an empty space`);
@@ -486,7 +592,6 @@ export function validateConcept(
   if (firstLine.length > FOLD_CHARACTERS) {
     issues.push(`hook-length: the first line of primary_text is ${firstLine.length} characters; keep the hook and offer within ${FOLD_CHARACTERS} and move the rest to short lines after \n`);
   }
-  const commercialTerms = COMMERCIAL_TERMS;
   const cites = citesTerm;
   const negation = NEGATION;
   const visualClaims = concept.visual.direction
@@ -504,10 +609,10 @@ export function validateConcept(
     concept.rationale,
     visualClaims,
   ].join(" ").normalize("NFC");
-  const supported = (term: string) => concept.sourceQuotes.some((quote) => {
-    const text = quote.normalize("NFC");
-    return cites(text, term) && affirmedCitation(text, term, negation);
-  });
+  const affirms = (text: string, term: string) => cites(text, term) && affirmedCitation(text, term, negation);
+  // #1676: a subsidy line stands when any Brand fact states it affirmatively (a registered vendor), quoted or not.
+  const supported = (term: string) => concept.sourceQuotes.some((quote) => affirms(quote.normalize("NFC"), term))
+    || (SUBSIDY_WORD.test(term) && sources.some((fact) => affirms(fact.normalize("NFC"), term)));
   // #281 (CTO): an offer the copy states without citing it is cited with the one supplied fact that
   // contains it. None or several matching facts leave it uncited; nothing is invented.
   const facts = [...new Set(sources.map((source) => source.normalize("NFC").trim()).filter(Boolean))];
@@ -531,7 +636,7 @@ export function validateConcept(
   }
   issues.push(...rateDropIssues([concept.headline, concept.primary_text, concept.supportingText, concept.description].filter(Boolean).join("\n"), facts));
   const primaryText = concept.primary_text.normalize("NFC");
-  const offer = new RegExp(commercialTerms.source, "iu").exec(primaryText);
+  const offer = new RegExp(OFFER_TERMS_SOURCE, "iu").exec(primaryText);
   // "10,000 rupaye per kW" leading the first line is the same amount as "₹10,000/kW" (#418).
   const spelled = spelledAmountIndex(primaryText);
   if (offer && offer.index >= FOLD_CHARACTERS && !(spelled >= 0 && spelled < FOLD_CHARACTERS)) {
@@ -539,7 +644,31 @@ export function validateConcept(
   }
   if (issues.length) return { success: false, issues, ...(claims.size ? { claims: [...claims] } : {}) };
   const pictureOffer = offerOnPicture(concept, input.brand.offers ?? []);
-  return { success: true, concept: pictureOffer ? { ...concept, supportingText: pictureOffer } : concept };
+  // #1364: a WhatsApp business's button opens a chat, so a stored "Call Now" (previews, 'Button on picture') reads "Contact Us".
+  const whatsappFirst = contactChannel(input.brand) === "whatsapp";
+  const asked = { ...concept, primary_text: withWhatsAppAsk(concept, input), cta: whatsappFirst && concept.cta === "Call Now" ? "Contact Us" as const : concept.cta };
+  return { success: true, concept: pictureOffer ? { ...asked, supportingText: pictureOffer } : asked };
+}
+
+const NAMES_WHATSAPP = /whats\s?app|व्हाट्सऐप|व्हाट्सएप|ਵਟਸਐਪ/i;
+
+/**
+ * #1147: a WhatsApp business's ad ends by asking for a WhatsApp message. When the model's last line doesn't
+ * (Qwen on the free run, Oct 28: "Book a free survey by Nov 10."), the poster's own words are added as a
+ * last line, in the ad's language. $0 and no repair; others' copy is unchanged.
+ */
+function withWhatsAppAsk(concept: CreativeConcept, input: ConceptInput): string {
+  if (contactChannel(input.brand) !== "whatsapp") return concept.primary_text;
+  const lines = concept.primary_text.split("\n").map((line) => line.trim()).filter(Boolean);
+  if (NAMES_WHATSAPP.test(lines.at(-1) ?? "")) return concept.primary_text;
+  const label = whatsappContactLabel([concept.headline, concept.primary_text], input.language);
+  const line = `${label}${/[\u0900-\u097F\u0A00-\u0A7F]/u.test(label) ? "।" : "."}`;
+  // #1364: a last line that quotes what to send (#1027's pre-typed message) stays last; the WhatsApp line goes before it.
+  const parts = concept.primary_text.trimEnd().split("\n");
+  const asked = quotedAsk(concept.primary_text)
+    ? [...parts.slice(0, -1), line, parts.at(-1)!].join("\n")
+    : `${concept.primary_text.trimEnd()}\n${line}`;
+  return asked.length <= (creativeConceptSchema.shape.primary_text.maxLength ?? 900) ? asked : concept.primary_text;
 }
 
 /**

@@ -65,7 +65,8 @@ The stream includes:
 - Authorized Meta operation purpose, duration, outcome and safe error category. When Meta refused
   the call (#615), the `meta.<purpose>` event also carries `status`, `metaCode`, `metaSubcode`,
   `metaUserTitle`, `fbtraceId` and `metaPath` (the endpoint template), never tokens or bodies.
-  `meta.create_paused` covers every pre-launch read too (lead forms, interests, WhatsApp numbers).
+  `meta.create_paused` covers the pre-launch reads too (lead forms, interests), except the Settings/Brand
+  WhatsApp-number status read, which is gated the same way but logged as `meta.whatsapp_numbers` (#1540).
 - Every Meta Graph call (#451 L2): `meta.graph`, `kind=system`, with the endpoint as a template
   (`act_[id]/adsets`, `[id]/insights`, `search`; no IDs, query values or token), method, HTTP
   status, entity type, latency and, on failure, `META_<code>_<subcode>` (or `META_HTTP_<status>`,
@@ -83,7 +84,10 @@ The stream includes:
   regeneration/export, campaign create/review/activate/pause/sync, Brand save,
   upload/delete, follow-up save, payment quote/checkout, Meta connect controls and
   `meta.access_request` (a new owner asking for Facebook access before App Review),
-  and the audience edit (`campaign.edit_audience`).
+  the audience edit (`campaign.edit_audience`), and Help on WhatsApp (`help.whatsapp`, #1284).
+- `ui.tap` (#1242): one per tap on an enabled control (button, link, tab, checkbox, select) on the
+  launch path (`/create`, `/studio`, `/campaigns`), page only, never which control or what was typed;
+  it counts #1226's "taps from Create to live". Same switch, Do Not Track and 45-a-minute cap.
 - `page.engagement` foreground-visible time, flushed on hide, navigation or exit,
   excluding background time. Each segment is 1 second to 1 hour; it measures visible
   time, not attention, billable usage or proof of activity. Coarse viewport categories
@@ -384,7 +388,9 @@ group by 1, 2 order by failures desc;
 ```
 
 `business.create` and `business.update` carry `brandUsable` (#1136): whether the saved Brand has
-what Prepare needs (name, category, area, phone, offer). The core scoreboard's Brand row uses it.
+what Prepare needs (name, category, area, phone, offer). The core scoreboard's Brand row uses it: minutes
+from the owner's sign-up (if within 24 h before the create, since setup collects the Brand first) or else the
+create, to the first usable save; team accounts (`isInternalUser`) are left out.
 
 A rejected `campaign.review` event carries `blockerCodes`, the stable reason of every
 Review blocker (#688; `errorCode` is the first). Rank them, then leave out internal accounts

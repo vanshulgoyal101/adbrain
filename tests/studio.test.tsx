@@ -97,7 +97,7 @@ describe("<Studio> generation", () => {
       render(<Studio business={business} initialCreatives={[]} />);
       fireEvent.change(screen.getByLabelText(/what are we advertising/i), { target: { value: "Solar installation" } });
       fireEvent.click(screen.getByRole("button", { name: /generate ads/i }));
-      expect(await screen.findByRole("alert")).toHaveTextContent("No generation was started");
+      expect(await screen.findByRole("alert")).toHaveTextContent("so no ads were started");
       expect(global.fetch).not.toHaveBeenCalled();
     } finally { storage.mockRestore(); }
   });
@@ -909,15 +909,31 @@ describe("<Studio> export", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: /export approved/i }));
 
-    expect(await screen.findByText("Export failed.")).toBeInTheDocument();
+    expect(await screen.findByText("The ad pack didn't download. Check your connection and tap Download again.")).toBeInTheDocument();
     expect(h.downloadBlob).not.toHaveBeenCalled();
   });
 });
 
 describe("<Studio> empty state", () => {
-  it("nudges the owner to generate their first batch", () => {
+  it("#1598: no ads is one block (title, line, one solid Make ads); no stepper, header, tabs or Create campaign (0)", () => {
     render(<Studio business={business} initialCreatives={[]} />);
-    expect(screen.getByText(/generate your first batch/i)).toBeInTheDocument();
+    const block = screen.getByRole("region", { name: "No ads yet" });
+    expect(within(block).getByText("AdBrain makes 3 ads from your business details in about a minute.")).toBeInTheDocument();
+    expect(within(block).getByRole("link", { name: "Make ads" })).toHaveAttribute("href", "/create");
+    expect(screen.queryByRole("button", { name: /Create campaign/ })).toBeNull();
+    expect(screen.queryByRole("link", { name: /Create campaign/ })).toBeNull();
+    expect(screen.queryByRole("searchbox", { name: "Search ads" })).toBeNull();
+    expect(screen.queryByText(/Ads\s*\(0\)/)).toBeNull();
+    // Writing a brief here still works, behind the closed 'Make more ads'.
+    expect(screen.getByText("Make more ads").closest("details")).not.toHaveAttribute("open");
+  });
+
+  it("#1598: with ads, Create campaign is the one solid primary; the card's Share is outline", () => {
+    render(<Studio business={business} initialCreatives={[creative({ status: "approved" })]} />);
+    expect(screen.getByRole("link", { name: /Create campaign \(1\)/ }).className).toContain("bg-primary");
+    const share = screen.getByRole("button", { name: "Share to WhatsApp or Instagram" });
+    expect(share.className).not.toMatch(/(^|\s)bg-primary(\s|$)/);
+    expect(screen.queryByRole("region", { name: "No ads yet" })).toBeNull();
   });
 });
 
@@ -1149,8 +1165,8 @@ describe("<Studio> review board batches (#762)", () => {
       at("2026-10-14T05:00:00Z", "stale", "g-stale"),
     ]} />);
     const board = within(screen.getByRole("region", { name: "Ads" }));
-    expect(board.getByText(/26 Oct, 3:00\s?pm · 1 ad/i)).toBeVisible();
-    expect(board.getByText(/26 Oct, 10:30\s?am · 1 ad/i)).toBeInTheDocument();
+    expect(board.getByText(/today, 3:00\s?pm · 1 ad/i)).toBeVisible();
+    expect(board.getByText(/today, 10:30\s?am · 1 ad/i)).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /^Ads \(2\)/ })).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "All (2)" })).toBeInTheDocument();
   });
@@ -1169,5 +1185,49 @@ describe("<Studio> review board batches (#762)", () => {
     render(<Studio business={business} initialCreatives={[made("picked", "g1", 0, { status: "approved" }), made("other1", "g1", 0), made("other2", "g1", 0), made("fresh", "g2", 0)]} />);
     expect(screen.getByRole("radio", { name: "Needs review (1)" })).toBeInTheDocument();
     expect(within(screen.getByRole("region", { name: "Ads" })).getByText(/Set aside \(2\)/)).toBeVisible();
+  });
+});
+
+// #1261: an owner who left Create mid-batch sees on return whether ads are still coming, or how many couldn't be made.
+describe("<Studio> the newest batch on return (#1261)", () => {
+  const GEN = "3a4f5333-877d-420b-8375-cafd4c742441";
+  const ago = (seconds: number) => new Date(Date.now() - seconds * 1000).toISOString();
+  const made = (id: string, seconds: number) => creative({ id, headline: `Ad ${id}`, brief: "AC service bookings in Mohali", variant_group: GEN, created_at: ago(seconds) } as Partial<Creative>);
+  const statusCalls = () => vi.mocked(global.fetch).mock.calls.filter(([url]) => String(url).startsWith(`/api/creatives/generate?businessId=b1&generationId=${GEN}`));
+
+  it("says how many couldn't be made and makes them again with the batch's own brief in one tap", async () => {
+    const saved = [made("a", 600), made("b", 560)];
+    vi.mocked(global.fetch).mockImplementation(async (url, init) => (String(url).startsWith("/api/creatives/generate?")
+      ? okJson({ status: "partial", creatives: saved, count: 2, expectedCount: 3 })
+      : init?.method === "POST" ? okJson({ creatives: [made("c", 0)] }) : okJson({ creatives: [] })) as unknown as Response);
+    render(<Studio business={business} initialCreatives={saved} />);
+    expect(await screen.findByText("1 of 3 ads couldn't be made this time.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Make 1 more" }));
+    await waitFor(() => expect(vi.mocked(global.fetch).mock.calls.some(([, init]) => init?.method === "POST")).toBe(true));
+    const [, post] = vi.mocked(global.fetch).mock.calls.find(([, init]) => init?.method === "POST")!;
+    expect(JSON.parse(String(post!.body))).toMatchObject({ businessId: "b1", brief: "AC service bookings in Mohali", count: 1 });
+  });
+
+  it("says more are still being made, re-checks, and adds the late ad when it lands", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const first = [made("a", 40)];
+      let answer = { status: "partial", creatives: first, count: 1, expectedCount: 3 };
+      vi.mocked(global.fetch).mockImplementation(async () => okJson(answer) as unknown as Response);
+      render(<Studio business={business} initialCreatives={first} />);
+      await act(async () => {});
+      expect(screen.getByText("2 more ads are still being made. They appear here when they're ready.")).toBeInTheDocument();
+      answer = { status: "complete", creatives: [...first, made("b", 10), made("c", 1)], count: 3, expectedCount: 3 };
+      await act(async () => { await vi.advanceTimersByTimeAsync(15_000); });
+      expect(statusCalls()).toHaveLength(2);
+      expect(screen.queryByText(/still being made/)).not.toBeInTheDocument();
+      expect(screen.getAllByRole("button", { name: /Ad c/ }).length).toBeGreaterThan(0);
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("leaves batches older than 2 hours alone", async () => {
+    render(<Studio business={business} initialCreatives={[made("a", 3 * 3600)]} />);
+    await act(async () => {});
+    expect(statusCalls()).toHaveLength(0);
   });
 });

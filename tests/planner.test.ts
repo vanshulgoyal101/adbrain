@@ -19,6 +19,11 @@ describe("planner response validation", () => {
     expect(onCompletion).toHaveBeenCalledExactlyOnceWith({ text: "", provider: "google", model: "gemini-3.6-flash", usage }, false, 1);
     expect(complete).toHaveBeenCalledTimes(1);
   });
+  it("asks Groq for at most 1,000 output tokens and other models for 3,000 (#1200)", async () => {
+    vi.mocked(complete).mockResolvedValue({ text: JSON.stringify({ ready: false, questions: [question] }), provider: "groq", model: "qwen" });
+    await runPlanner(input, {});
+    expect(vi.mocked(complete).mock.calls[0][1]).toMatchObject({ maxTokens: 3000, providerMaxTokens: { groq: 1000 } });
+  });
   it("reports each provider that failed before the fallback answered (#378)", async () => {
     const rateLimited = { provider: "groq", model: "qwen", status: "error" as const, failure: "HTTP_429" as const, latencyMs: 900, providerFinalStatus: "unknown" as const };
     const slow = { provider: "google", model: "gemini-3.6-flash", status: "error" as const, failure: "TIMEOUT" as const, latencyMs: 5000, providerFinalStatus: "unknown" as const };

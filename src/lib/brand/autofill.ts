@@ -16,6 +16,37 @@ export function extractWebsiteText(html: string): string {
   return `${title}\n${metaDesc}\n${body}`.replace(/\s+/g, " ").trim();
 }
 
+const GENERIC_TITLE = /^(?:home(?:\s*page)?|welcome|index|official (?:site|website)|untitled)$/i;
+const tidyName = (raw: string) => raw.normalize("NFC").replace(/[\p{Extended_Pictographic}\uFE0F\u200D]/gu, " ").replace(/\s+/g, " ").trim();
+const nameLike = (name: string) => name.length >= 2 && name.length <= 60 && name.split(" ").length <= 6 && /\p{L}/u.test(name);
+
+/**
+ * #1379: the business name from the page itself, not the model: `og:site_name`, then `application-name`, then the
+ * first part of the title that isn't a generic word ("Home | Solaride" → "Solaride"). Undefined when none fits.
+ */
+export function extractSiteName(html: string): string | undefined {
+  const root = parse(html);
+  const candidates = [
+    root.querySelector('meta[property="og:site_name"]')?.getAttribute("content"),
+    root.querySelector('meta[name="application-name"]')?.getAttribute("content"),
+    ...(root.querySelector("title")?.text ?? "").split(/\s+[|\u2013\u2014\u00b7:-]\s+|\s*[|\u00b7]\s*/),
+  ];
+  for (const raw of candidates) {
+    const name = tidyName(raw ?? "");
+    if (nameLike(name) && !GENERIC_TITLE.test(name)) return name;
+  }
+}
+
+/**
+ * #1379: the name a pasted bio or listing starts with, up to the first emoji, bar, bullet, comma, colon or line break
+ * ("Sweet Crumbs Bakery 🍰 Mohali Phase 7 | Eggless cakes" → "Sweet Crumbs Bakery"). Undefined when it doesn't read like a name.
+ */
+export function nameInText(text: string): string | undefined {
+  const lead = text.normalize("NFC").trim().split(/[\p{Extended_Pictographic}|\u00b7\u2022,:\n]|\s[\u2013\u2014-]\s/u)[0] ?? "";
+  const name = tidyName(lead);
+  return nameLike(name) && !GENERIC_TITLE.test(name) ? name : undefined;
+}
+
 /** First international-format tel: link; national numbers are skipped because the country is unknown. */
 export function extractPhone(html: string): string | undefined {
   for (const link of parse(html).querySelectorAll('a[href^="tel:"]')) {
@@ -63,3 +94,28 @@ export const BRAND_EXTRACTION = {
   maxTokens: 1_200,
   reasoningEffort: "minimal",
 } as const satisfies CompletionOptions;
+
+/** #1317: what a prospect without a website pastes (an Instagram bio, a Google listing, a catalogue blurb). */
+export const PASTED_TEXT_MAX = 6000;
+const PASTED_MIN_LETTERS = 30;
+
+/** Pasted text as autofill reads it: whitespace collapsed, at most PASTED_TEXT_MAX characters, or null when too short to describe a business. */
+export function pastedBrandText(raw: string): string | null {
+  const text = raw.normalize("NFC").replace(/[\t ]+/g, " ").replace(/\s*\n\s*/g, "\n").trim().slice(0, PASTED_TEXT_MAX);
+  return (text.match(/[\p{L}\p{M}]/gu)?.length ?? 0) >= PASTED_MIN_LETTERS ? text : null;
+}
+
+/** A phone number written in pasted text ("+91 98765 43210", "98765-43210", "wa.me/919876543210"), as +<country><number>. */
+export function phoneInText(text: string): string | undefined {
+  for (const match of text.matchAll(/(?:wa\.me\/|\+)?\d[\d\s-]{8,16}\d/g)) {
+    let digits = match[0].replace(/^wa\.me\//, "+").replace(/[\s-]/g, "");
+    if (!digits.startsWith("+")) {
+      const local = digits.replace(/^0/, "");
+      if (/^[6-9]\d{9}$/.test(local)) digits = `+91${local}`;
+      else if (/^91[6-9]\d{9}$/.test(digits)) digits = `+${digits}`;
+      else continue;
+    }
+    if (isValidPhone(digits)) return digits;
+  }
+  return undefined;
+}

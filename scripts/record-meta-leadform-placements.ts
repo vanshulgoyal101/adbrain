@@ -8,12 +8,13 @@
  *
  *   npx tsx --env-file=<.env.local> scripts/record-meta-leadform-placements.ts <leadCampaignId> <leadAdSetId> <targetingSourceAdSetId> <formId> <feedHash> <storyHash>
  */
+import "./lib/meta-write-gate";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { placementCreativeSpec, withoutAudienceNetwork } from "@/lib/meta/client";
 import { metaScrubber } from "./lib/scrub-meta";
 
-const GRAPH = "https://graph.facebook.com/v21.0/";
+const GRAPH = "https://graph.facebook.com/v26.0/";
 const VALIDATE = JSON.stringify(["validate_only"]);
 const [campaignId, adSetId, sourceAdSetId, formId, feedHash, storyHash] = process.argv.slice(2);
 if (!storyHash) throw new Error("Pass the lead campaign, lead ad set, targeting source ad set, form id, feed and story hashes.");

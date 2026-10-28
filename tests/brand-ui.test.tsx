@@ -108,6 +108,34 @@ describe("<BrandForm> prefill", () => {
     expect(h.storageFrom).not.toHaveBeenCalled();
   });
 
+  // #1317: a prospect with no website fills Brand from a pasted bio or listing, through the same autofill.
+  it("fills a new Brand from a pasted bio when there's no website", async () => {
+    vi.mocked(global.fetch).mockResolvedValue({ ok: true, json: async () => ({ extraction: { description: "Rooftop solar for homes", phone: "+919829012345", name: "SunPeak Solar" } }) } as unknown as Response);
+    render(<BrandForm business={null} />);
+    fireEvent.click(screen.getByRole("button", { name: "No website? Paste a bio or listing" }));
+    const fill = screen.getByRole("button", { name: "Fill from this text" });
+    expect(fill).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Instagram bio, Google listing or catalogue text"), { target: { value: "SunPeak Solar: rooftop solar for homes in Jaipur. Call 98290 12345" } });
+    fireEvent.click(fill);
+    await waitFor(() => expect(screen.getByPlaceholderText("What your business does, in a sentence or two.")).toHaveValue("Rooftop solar for homes"));
+    const [url, init] = vi.mocked(global.fetch).mock.calls[0];
+    expect(url).toBe("/api/brand/autofill");
+    expect(JSON.parse(String(init!.body))).toEqual({ text: "SunPeak Solar: rooftop solar for homes in Jaipur. Call 98290 12345" });
+    // #1379: the required name is filled too, and the note says where it came from.
+    expect(screen.getByPlaceholderText("Your business name")).toHaveValue("SunPeak Solar");
+    expect(screen.getByText(/^Filled from your text: name, description, phone number\./)).toBeInTheDocument();
+  });
+
+  it("#1379: autofill never replaces a name the owner typed", async () => {
+    vi.mocked(global.fetch).mockResolvedValue({ ok: true, json: async () => ({ extraction: { description: "Rooftop solar for homes", name: "Solaride" } }) } as unknown as Response);
+    render(<BrandForm business={null} />);
+    fireEvent.change(screen.getByPlaceholderText("Your business name"), { target: { value: "SunPeak" } });
+    fireEvent.change(document.querySelector('input[name="website"]')!, { target: { value: "solaride.in" } });
+    fireEvent.click(screen.getByRole("button", { name: /autofill/i }));
+    await waitFor(() => expect(screen.getByPlaceholderText("What your business does, in a sentence or two.")).toHaveValue("Rooftop solar for homes"));
+    expect(screen.getByPlaceholderText("Your business name")).toHaveValue("SunPeak");
+  });
+
   it("starts empty for a brand new business", () => {
     render(<BrandForm business={null} />);
     expect(screen.getByPlaceholderText("Your business name")).toHaveValue("");
@@ -202,12 +230,12 @@ describe("<BrandForm> prefill", () => {
     }
   });
 
-  // #1171: WhatsApp is the default destination; the website is needed only for instant forms.
-  it("does not count a website towards readiness and says it is needed only for instant forms", () => {
+  // #1171: WhatsApp is the default destination. #1238: the label says what a website is for (autofill), not 'only for instant forms'.
+  it("does not count a website towards readiness and says it's optional, for autofill", () => {
     render(<BrandForm business={business({ website: null, phone: "+91 98765 43210" })} />);
     const preview = screen.getByRole("region", { name: "Preview" });
     expect(preview).toHaveTextContent("3 of 5 ready");
-    expect(screen.getByLabelText("Website (needed only for instant forms)")).toBe(screen.getByPlaceholderText("example.com"));
+    expect(screen.getByLabelText("Website (optional: lets AdBrain fill this page for you)")).toBe(screen.getByPlaceholderText("example.com"));
 
     fireEvent.change(screen.getByPlaceholderText("example.com"), {
       target: { value: "https://example.com" },
@@ -285,6 +313,21 @@ describe("<BrandForm> prefill", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save your business" }));
     expect(await screen.findByText("Saved")).toBeInTheDocument();
     expect((saveBusiness.mock.calls[1][1] as FormData).get("description")).toBe("Draft description");
+  });
+
+  it("announces Saved and a failed save in a status region that is there before the save (#1262)", async () => {
+    saveBusiness.mockResolvedValueOnce({ ok: false, error: "Synthetic save failed" });
+    render(<BrandForm business={business()} />);
+    const statuses = () => screen.getAllByRole("status").map((node) => node.textContent ?? "");
+    const before = screen.getAllByRole("status").length;
+    expect(before).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: "Save your business" }));
+    await screen.findByText("Synthetic save failed");
+    expect(screen.getAllByRole("status")).toHaveLength(before);
+    expect(statuses()).toContain("Synthetic save failed");
+    fireEvent.click(screen.getByRole("button", { name: "Save your business" }));
+    await screen.findByText("Saved");
+    expect(statuses().map((text) => text.trim())).toContain("Saved");
   });
 });
 
@@ -426,7 +469,7 @@ describe("<BrandForm> autofill", () => {
   it("insists on a website first", async () => {
     render(<BrandForm business={business({ website: null })} />);
     fireEvent.click(screen.getByRole("button", { name: /autofill/i }));
-    expect(await screen.findByText("Enter your website URL first.")).toBeInTheDocument();
+    expect(await screen.findByText("Enter your website URL first, or paste a bio or listing.")).toBeInTheDocument();
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
@@ -499,7 +542,7 @@ describe("<BrandForm> autofill", () => {
     global.fetch = vi.fn().mockRejectedValue(new Error("offline")) as unknown as typeof fetch;
     render(<BrandForm business={business()} />);
     fireEvent.click(screen.getByRole("button", { name: /autofill/i }));
-    expect(await screen.findByText(/could not reach the site/i)).toBeInTheDocument();
+    expect(await screen.findByText(/We couldn't read that page/i)).toBeInTheDocument();
   });
 });
 

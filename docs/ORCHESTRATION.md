@@ -101,10 +101,10 @@ Routine steps never wait for the CEO or the CTO.
    deploys to `main`, lead time to production, change-failure rate and time to
    restore from the production guard's smoke; active hours per role, PR lead time,
    handoff latency, idle gaps, workflow failures) on #364 and fixes the worst number.
-   **Queues never run dry:** every worker keeps at least 2
-   actionable items (not `waiting-owner`, `blocked` or `decision`), each traceable
+   **Queues never run dry:** every worker (every role, CEO Oct 28) keeps at least 3
+   actionable items (owner, Oct 28; not `waiting-owner`, `blocked`, `parked` or `decision`), each traceable
    to a line in the CEO priorities below; `wait-for-work --me cto` reports any
-   worker that drops below 2, and the CTO refills that row the same hour. At the
+   worker that drops below 3, and the CTO refills that row the same hour. At the
    end of every wait it also reports workers with queued work but no signed comment
    in 90 minutes and PRs untouched for 60 minutes; the CTO checks and unblocks them.
    **CI failures are the CTO's without being asked** (owner, Oct 27): the waiter reports
@@ -134,7 +134,14 @@ Each tick:
    40 min cap, 150 AI credits per run, 8 runs a day that did work (a run with no signed
    "(headless):" comment, review or PR doesn't count), 30 runs a day hard ceiling (CEO sets the caps).
    A role with queued work not woken for an hour goes first, longest wait first, even past the daily cap.
-3. Log: `~/.adbrain-supervisor/supervisor.log`; stop it with `touch ~/.adbrain-supervisor/OFF`;
+   **Enforced in code, not only the prompt (#1513):** runs get `ADBRAIN_HEADLESS=1`, so `release.mjs`,
+   `migrate-db --apply` and Meta recorder writes refuse; the CLI denies `launchctl`, `vercel`, `supabase`,
+   `gh auth`, `gh secret` and `gh variable`, and file access stays inside the supervisor worktree (no
+   `--allow-all-paths`). If a run leaves edits in that worktree, no further role runs start until it's clean.
+   **Load guard (#1495):** no run starts while the 1-min load is over 1.5 per core or under 2 GB of memory is
+   available (macOS memory-pressure level, not `os.freemem()`); the tick logs why. Override with
+   `ADBRAIN_SUPERVISOR_MAX_LOAD` / `ADBRAIN_SUPERVISOR_MIN_FREE_GB`. Scheduled jobs and the nightly backup still run.
+3. Log: `~/.adbrain-supervisor/supervisor.log`; stop role runs with `touch ~/.adbrain-supervisor/OFF` (scheduled-job dispatch and the nightly backup keep running, #1525);
    `--dry-run` shows who it would wake; `--install`/`--uninstall` manage the LaunchAgent.
 
 **After a VS Code restart** the old chats can't be messaged. The CEO (CTO as backup) starts one
@@ -149,7 +156,7 @@ or `error`.
 The CTO keeps 3+ briefed issues per lane labelled `ready` + `lane:<dev|qa|devops|review|design|product|research>`
 (why with evidence, do, done-when, files). Anyone in the lane with nothing actionable claims
 the oldest core one (`--add-label owner:<you> --remove-label ready`); `wait-for-work` offers
-it. QA's walks and the Reviewer's audits file their findings straight into the pool.
+it. Not for you? Add `declined:<you>` and it isn't offered to you again. QA's walks and the Reviewer's audits file their findings straight into the pool.
 
 ### Standing rules
 

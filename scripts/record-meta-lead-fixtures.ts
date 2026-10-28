@@ -8,13 +8,14 @@
  * stripped and every lead field value is replaced with Meta's test-lead
  * placeholder, so no personal data reaches the repository.
  */
+import "./lib/meta-write-gate";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { metaClientFromEnv } from "./lib/meta-env";
 
 type Exchange = { method: string; path: string; status: number; body: unknown };
 
-const GRAPH = "https://graph.facebook.com/v21.0/";
+const GRAPH = "https://graph.facebook.com/v26.0/";
 const tape: Exchange[] = [];
 const realFetch = globalThis.fetch;
 
@@ -42,7 +43,7 @@ globalThis.fetch = async (input, init) => {
   const body = await response.clone().json().catch(() => null);
   const parsed = new URL(url);
   parsed.searchParams.delete("access_token");
-  tape.push({ method: "GET", path: parsed.pathname.replace("/v21.0/", "") + parsed.search, status: response.status, body: scrub(body) });
+  tape.push({ method: "GET", path: parsed.pathname.replace("/v26.0/", "") + parsed.search, status: response.status, body: scrub(body) });
   return response;
 };
 

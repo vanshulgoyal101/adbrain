@@ -6,11 +6,12 @@
  *
  *   npx tsx --env-file=<.env.local> scripts/record-meta-whatsapp-openings.ts <paused placement ad id>
  */
+import "./lib/meta-write-gate";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { whatsappWelcomeMessage, type WhatsAppOpening } from "@/lib/meta/client";
 
-const GRAPH = "https://graph.facebook.com/v21.0/";
+const GRAPH = "https://graph.facebook.com/v26.0/";
 const token = process.env.META_SYSTEM_USER_TOKEN!;
 const account = `act_${process.env.META_AD_ACCOUNT_ID!.replace(/^act_/, "")}`;
 const adId = process.argv[2];

@@ -33,7 +33,7 @@ async function launch(destination: AdDestination, onPlanned?: (plan: Omit<Planne
       // #741: the service-area read, answered with Meta's recorded reply.
       if (url.searchParams.get("type") === "adgeolocationmeta") {
         url.searchParams.delete("access_token");
-        expect(url.pathname.replace("/v21.0/", "") + url.search).toBe(recorded.geoMeta.path);
+        expect(url.pathname.replace("/v26.0/", "") + url.search).toBe(recorded.geoMeta.path);
         return Response.json(recorded.geoMeta.body, { status: recorded.geoMeta.status });
       }
       throw new Error(`Unexpected Graph read during launch: ${url.pathname}?fields=${fields}`);

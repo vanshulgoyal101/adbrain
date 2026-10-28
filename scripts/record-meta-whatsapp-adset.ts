@@ -5,11 +5,12 @@
  *
  *   npx tsx --env-file=<.env.local> scripts/record-meta-whatsapp-adset.ts <businessId>
  */
+import "./lib/meta-write-gate";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { destinationPlan } from "@/lib/meta/client";
 
-const GRAPH = "https://graph.facebook.com/v21.0/";
+const GRAPH = "https://graph.facebook.com/v26.0/";
 const VALIDATE = JSON.stringify(["validate_only"]);
 const token = process.env.META_SYSTEM_USER_TOKEN!;
 const account = `act_${process.env.META_AD_ACCOUNT_ID!.replace(/^act_/, "")}`;

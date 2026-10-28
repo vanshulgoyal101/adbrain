@@ -6,6 +6,7 @@ import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { saveAlertSettings, startAlertVerification } from "@/app/(app)/settings/whatsapp-alerts-actions";
 import type { AlertSettings } from "@/lib/alerts/alert-settings";
+import { translator, type AppLocale } from "@/i18n/locale";
 
 const FAILED = "Couldn't save your alert settings. Try again.";
 
@@ -13,9 +14,13 @@ const FAILED = "Couldn't save your alert settings. Try again.";
  * #701: Settings → WhatsApp alerts. Each new enquiry within a minute and one daily results line,
  * on the owner's own WhatsApp, only after they confirm the number by sending START. STOP ends both.
  */
-export function WhatsAppAlerts({ businessId, initial }: { businessId: string; initial: AlertSettings }) {
+export function WhatsAppAlerts({ businessId, initial, locale = "en" }: { businessId: string; initial: AlertSettings; locale?: AppLocale }) {
+  const t = translator(locale, "settings");
   const [settings, setSettings] = useState(initial);
-  const [draft, setDraft] = useState({ leadAlerts: initial.leadAlerts, dailyResults: initial.dailyResults, language: initial.language });
+  // #1720 (CPO): before the first save, both on and in the app's language; nothing sends until the number sends START.
+  const [draft, setDraft] = useState(initial.saved === false
+    ? { leadAlerts: true, dailyResults: true, language: locale === "hi" ? "hi" as const : "en" as const }
+    : { leadAlerts: initial.leadAlerts, dailyResults: initial.dailyResults, language: initial.language });
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [link, setLink] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -52,16 +57,17 @@ export function WhatsAppAlerts({ businessId, initial }: { businessId: string; in
 
   return <section aria-labelledby="whatsapp-alerts-title" className="rounded-lg border border-slate-200 bg-white p-6">
     <h2 id="whatsapp-alerts-title" className="flex items-center gap-2 font-semibold text-slate-900"><MessageCircle className="h-4 w-4" aria-hidden="true" />WhatsApp alerts</h2>
-    <p className="mt-1 text-sm text-slate-600">Get each new enquiry on WhatsApp within a minute, so you can call back while they&apos;re still interested.</p>
+    <p className="mt-1 text-sm text-slate-600">{t("alertsIntro")}</p>
     {!confirmed && numberStep}
     <div className="mt-4 grid gap-3">
-      <label className="flex items-start gap-3 text-sm text-slate-800">
-        <input type="checkbox" checked={draft.leadAlerts} onChange={(event) => { setDraft({ ...draft, leadAlerts: event.target.checked }); setMessage(null); }} className="mt-0.5 h-4 w-4 accent-blue-600" />
-        <span><span className="font-medium">Every new enquiry</span><span className="block text-xs text-slate-500">Name, phone, their answers and which ad, with a tap to call.</span></span>
-      </label>
+      {/* #1720: the daily line is what a WhatsApp-ads pilot gets; form enquiries come only from form ads. */}
       <label className="flex items-start gap-3 text-sm text-slate-800">
         <input type="checkbox" checked={draft.dailyResults} onChange={(event) => { setDraft({ ...draft, dailyResults: event.target.checked }); setMessage(null); }} className="mt-0.5 h-4 w-4 accent-blue-600" />
-        <span><span className="font-medium">Yesterday&apos;s results, 9 am</span><span className="block text-xs text-slate-500">One line: spend, enquiries and cost per enquiry.</span></span>
+        <span><span className="font-medium">{t("alertsDaily")}</span><span className="block text-xs text-slate-500">{t("alertsDailyDetail")}</span></span>
+      </label>
+      <label className="flex items-start gap-3 text-sm text-slate-800">
+        <input type="checkbox" checked={draft.leadAlerts} onChange={(event) => { setDraft({ ...draft, leadAlerts: event.target.checked }); setMessage(null); }} className="mt-0.5 h-4 w-4 accent-blue-600" />
+        <span><span className="font-medium">{t("alertsForm")}</span><span className="block text-xs text-slate-500">{t("alertsFormDetail")}</span></span>
       </label>
       <label className="grid max-w-xs gap-1 text-sm font-medium text-slate-800">Language
         <select value={draft.language} onChange={(event) => { setDraft({ ...draft, language: event.target.value as "en" | "hi" }); setMessage(null); }} className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm font-normal">

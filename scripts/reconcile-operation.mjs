@@ -12,7 +12,7 @@ import { pathToFileURL } from "node:url";
 import { parseArgs, parseEnv } from "node:util";
 import { readOnlyQuery } from "./lib/prod-query.mjs";
 
-const GRAPH = "https://graph.facebook.com/v21.0";
+const GRAPH = "https://graph.facebook.com/v26.0";
 const GONE = new Set(["DELETED", "ARCHIVED"]);
 const SPENDING_TYPES = new Set(["campaign", "adset", "ad"]);
 const ENV_PATH = "/Users/vanshulgoyal/Development/copilot/adbrain/.env.local";

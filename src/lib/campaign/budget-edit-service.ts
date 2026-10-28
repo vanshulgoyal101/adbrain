@@ -17,7 +17,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getCampaignSpend, getSpendLimits } from "@/lib/supabase/queries";
 import { createClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/types";
-import { CampaignEditError } from "./edit-service";
+import { CampaignEditError, refuseWhileSwitchPending } from "./edit-service";
 
 /**
  * #774: edit a launched campaign's daily budget, total cap or end date, in the same `campaign_edit_operations`
@@ -142,6 +142,8 @@ export async function editCampaignBudget(context: AuthorizedBusiness, campaignId
   if (status !== "active" && status !== "paused") throw new CampaignEditError("Only a running or paused campaign's budget can be changed.", 409);
   const review = reviewableCampaign(campaign);
   if (!review) throw new CampaignEditError("AdBrain can only edit campaigns it launched.", 409);
+  // #1146: a waiting new-audience copy holds a snapshot of the budget; switch or cancel it first.
+  await refuseWhileSwitchPending(database, campaignId);
   const cap = storedCap(campaign.raw);
   if (cap && cappedRunEnded(campaign.raw)) throw new CampaignEditError("This run has ended. Start a new run instead.", 409);
   const capped = Boolean(cap && review.children.cappedAdSetIds.includes(cap.adSetId));

@@ -1,4 +1,7 @@
 import { cookies } from "next/headers";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { setupBatch } from "@/lib/creative/setup-picks";
+import { wentLive, type LiveSignals } from "@/lib/setup/steps";
 import { attachRealEnquiries } from "@/lib/campaign/real-enquiries";
 import { cache } from "react";
 import { z } from "zod";
@@ -138,6 +141,19 @@ export async function getCreatives(businessId: string): Promise<Creative[]> {
   return data ?? [];
 }
 
+/**
+ * #1270/#1402 (WS1 step 2): the ads setup made, oldest first: the newest batch (one `variant_group`), plus earlier
+ * batches from the last 2 hours while there are fewer than 3 ads, so a "Make another" top-up shows beside its batch.
+ * `newest` says when that batch started, so a short one can be checked before anything new is made.
+ */
+export async function getSetupCreativeBatch(businessId: string): Promise<ReturnType<typeof setupBatch<Creative>>> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("creatives").select("*")
+    .eq("business_id", businessId).order("created_at", { ascending: false }).limit(12);
+  if (error) throw new Error("Ads could not be loaded.");
+  return setupBatch(data ?? []);
+}
+
 /** Brand assets for a business, newest first. */
 export async function getBrandAssets(
   businessId: string,
@@ -175,6 +191,17 @@ export const getCampaigns = cache(async function getCampaigns(businessId: string
   }, "Campaigns could not be loaded.");
   return campaigns.sort((left, right) => (right.created_at ?? "").localeCompare(left.created_at ?? ""));
 });
+
+/** #1469: Meta's stored effective status of each ad in a campaign (lifetime rows from the last refresh, RLS read). */
+export async function getAdStatuses(campaignId: string): Promise<(string | null)[]> {
+  const supabase = await createClient();
+  // `ad_results` isn't in the generated types yet (same cast as GET /api/campaigns/[id]/ads).
+  const { data, error } = await (supabase as unknown as SupabaseClient).from("ad_results").select("effective_status")
+    .eq("campaign_id", campaignId).is("period_start", null).is("period_end", null).limit(100)
+    .returns<{ effective_status: string | null }[]>();
+  if (error) throw new Error("Ad statuses could not be loaded.");
+  return (data ?? []).map((row) => row.effective_status);
+}
 
 /** Latest result row per campaign, keyed by campaign id. */
 export async function getLatestResults(
@@ -235,6 +262,25 @@ export async function getSpendLimits(businessId: string): Promise<SpendLimits> {
     autoPause: data.auto_pause,
   };
 }
+
+/** #1342: the business's live campaigns, in the shape the weekly-cap check needs (no results read). */
+export async function getActiveCampaignBudgets(businessId: string): Promise<CampaignSpend[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("campaigns").select("id, status, daily_budget")
+    .eq("business_id", businessId).eq("status", "active").limit(QUERY_BATCH_SIZE);
+  if (error || !data || data.length >= QUERY_BATCH_SIZE) throw new Error("Campaign budgets could not be loaded.");
+  return data.map((c) => ({ id: c.id, status: c.status, dailyBudget: c.daily_budget, spend: 0 }));
+}
+
+/** #1251 WS1: whether any campaign of the business went live (`wentLive`, #1403); the setup spine shows until one has. */
+// #1393: the layout and the page both ask; one read per request.
+export const hasLaunchedCampaign = cache(async function hasLaunchedCampaign(businessId: string): Promise<boolean> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("campaigns").select("launched_at, status, meta_campaign_id, source:raw->>source")
+    .eq("business_id", businessId).or("launched_at.not.is.null,meta_campaign_id.not.is.null,status.in.(active,completed)").limit(QUERY_BATCH_SIZE);
+  if (error || !data) throw new Error("Campaigns could not be loaded.");
+  return data.some((campaign) => wentLive(campaign as LiveSignals));
+});
 
 /** Campaigns mapped to the minimal shape the spend guardrails need. */
 export async function getCampaignSpend(

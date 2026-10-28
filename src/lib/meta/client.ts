@@ -1,3 +1,4 @@
+import { GRAPH } from "@/lib/meta/graph-version";
 import { z } from "zod";
 import { WHATSAPP_PUBLISHER_PLATFORMS } from "@/lib/meta/placements";
 import type { SetupReads } from "@/lib/meta/setup-checklist";
@@ -9,11 +10,12 @@ import { decodeAdResults, decodeCampaignInsights, decodeLifetimeSpendPaise, type
 import { maskWhatsAppNumber, maskedWhatsAppNumberPattern } from "./whatsapp-status-shared";
 import { graphEndpoint, graphEntity, graphErrorCode, graphOutcome } from "./graph-event";
 import { recordProductEvent } from "@/lib/observability/logger";
+import { ConnectionAccessError } from "./connection-access-error";
 import { EXCLUDABLE_CITIES, INDIA_REGION_KEYS, mergeExclusions, serviceAreaExclusions, TargetingExclusionsMissingError, type IncludedPlace } from "./service-area";
 import { AD_LANGUAGE_KEYS, storedLocales } from "./locales";
+import { expandPlaceAliases } from "./geo-aliases";
 export type { AdResult, CampaignInsights } from "./insights";
 
-const GRAPH = "https://graph.facebook.com/v21.0";
 
 export interface MetaCredentials {
   adAccountId: string;
@@ -378,26 +380,33 @@ export type CappedActivation = {
 };
 
 export type AdReviewState = "in_review" | "approved" | "rejected" | "issues" | "unknown";
-export type AdReview = { adId: string; state: AdReviewState; effectiveStatus: string | null; reasons: string[] };
+/** #1305: Meta's policy key (e.g. "Personal Attributes") with its message; null policy for `issues_info`. */
+export type AdReviewFeedback = { policy: string | null; message: string };
+export type AdReview = { adId: string; state: AdReviewState; effectiveStatus: string | null; reasons: string[]; feedback: AdReviewFeedback[] };
 
 /** Meta's review outcome for one ad, from `effective_status`, `ad_review_feedback` and `issues_info`. */
 export function adReviewState(ad: { id: string; effective_status?: string; ad_review_feedback?: unknown; issues_info?: unknown }): AdReview {
   const status = ad.effective_status ?? null;
-  const feedback = ad.ad_review_feedback && typeof ad.ad_review_feedback === "object"
-    ? Object.values(ad.ad_review_feedback as Record<string, unknown>).flatMap(group =>
-      group && typeof group === "object" ? Object.values(group as Record<string, unknown>) : [group])
-      .filter((reason): reason is string => typeof reason === "string").map(reason => reason.trim()).filter(Boolean)
+  // `{ global: { "Personal Attributes": "…" }, placement_specific: {…} }`: the inner keys are the policies (#1305).
+  const feedback: AdReviewFeedback[] = ad.ad_review_feedback && typeof ad.ad_review_feedback === "object"
+    ? Object.values(ad.ad_review_feedback as Record<string, unknown>).flatMap((group): AdReviewFeedback[] =>
+      group && typeof group === "object"
+        ? Object.entries(group as Record<string, unknown>).map(([policy, message]) => ({ policy: policy.trim() || null, message: typeof message === "string" ? message.trim() : "" }))
+        : [{ policy: null, message: typeof group === "string" ? group.trim() : "" }])
+      .filter((item) => item.message)
     : [];
-  const issues = Array.isArray(ad.issues_info)
+  const issues: AdReviewFeedback[] = Array.isArray(ad.issues_info)
     ? ad.issues_info.map(issue => (issue as { error_message?: unknown }).error_message)
       .filter((reason): reason is string => typeof reason === "string" && reason.trim() !== "")
+      .map((message) => ({ policy: null, message: message.trim() }))
     : [];
   const state: AdReviewState = status === "DISAPPROVED" ? "rejected"
     : status === "WITH_ISSUES" ? "issues"
     : status === "IN_PROCESS" || status === "PENDING_REVIEW" ? "in_review"
     : status && ["ACTIVE", "PAUSED", "CAMPAIGN_PAUSED", "ADSET_PAUSED", "PREAPPROVED"].includes(status) ? "approved"
     : "unknown";
-  return { adId: ad.id, state, effectiveStatus: status, reasons: [...feedback, ...issues] };
+  const all = [...feedback, ...issues];
+  return { adId: ad.id, state, effectiveStatus: status, reasons: all.map((item) => item.message), feedback: all };
 }
 
 /** Graph allows about one status write per object per 30 s (error 613). */
@@ -617,6 +626,14 @@ export function metaErrorCode(error: unknown): string {
   return error instanceof Error && error.name === "TimeoutError" ? "timeout" : "unknown";
 }
 
+const GET_RETRY_DELAY_MS = 500;
+
+/** #1199: a failure a repeat of the same read can cure: our 15 s timeout, a dropped connection, or a Meta 5xx. */
+function transientReadFailure(error: unknown): boolean {
+  if (error instanceof MetaError) return error.status !== undefined && error.status >= 500;
+  return error instanceof TypeError || (error instanceof Error && error.name === "TimeoutError");
+}
+
 /**
  * Meta answered and refused the request (a 4xx with a Meta subcode, e.g. 100/1772103). Timeouts,
  * transport errors and 5xx are not refusals: the object may exist, so retrying could duplicate it.
@@ -724,26 +741,27 @@ function clampRadiusKm(km: number): number {
  * Pick the best adgeolocation match for a typed place name. Meta returns
  * Exact names and qualified city/region labels take precedence. Otherwise keep
  * Meta's relevance order within the requested country and preferred place type.
+ * #1555: with a country, a place abroad counts only when the owner typed its
+ * qualified label ("Austin, Texas"); a bare namesake ('Tricity' → Tri-City,
+ * Oregon) is no match, so it comes back unresolved instead of spending abroad.
  */
 export function pickBestGeoMatch(
   matches: GeoSearchResult[],
   query: string,
   preferCountry = "",
 ): GeoSearchResult | null {
-  if (!matches.length) return null;
   const normalizedQuery = query.trim().toLowerCase();
-  const exact = matches.filter((match) => [match.name, geoLabel(match)]
-    .some((label) => label.trim().toLowerCase() === normalizedQuery));
-  const candidates = exact.length ? exact : matches;
-  const inCountry = preferCountry
-    ? candidates.filter((m) => !m.country_code || m.country_code === preferCountry)
-    : candidates;
-  const pool = inCountry.length ? inCountry : candidates;
-  for (const type of ["city", "region", "country"]) {
-    const hit = pool.find((m) => m.type === type);
-    if (hit) return hit;
-  }
-  return pool[0] ?? null;
+  const qualified = (match: GeoSearchResult) => Boolean(match.region) && geoLabel(match).trim().toLowerCase() === normalizedQuery;
+  const exact = matches.filter((match) => match.name.trim().toLowerCase() === normalizedQuery || qualified(match));
+  const byType = (pool: GeoSearchResult[]) => ["city", "region", "country"]
+    .map((type) => pool.find((m) => m.type === type)).find(Boolean) ?? pool[0] ?? null;
+  if (!preferCountry) return byType(exact.length ? exact : matches);
+  const home = (match: GeoSearchResult) => !match.country_code || match.country_code === preferCountry;
+  const homeExact = exact.filter(home);
+  if (homeExact.length) return byType(homeExact);
+  const namedAbroad = exact.filter(qualified);
+  if (namedAbroad.length) return byType(namedAbroad);
+  return byType(matches.filter(home));
 }
 
 /**
@@ -817,14 +835,25 @@ export function hasGeo(geo: GeoTargeting | undefined): boolean {
 }
 
 /**
- * Meta Marketing API wrapper (Graph v21). Creates Advantage+ lead campaigns in
+ * Meta Marketing API wrapper (Graph, version in graph-version.ts). Creates Advantage+ lead campaigns in
  * PAUSED state (no spend until activated) and reads insights. Validated against
  * a live ad account.
  */
+/** #1324: a validate_only check or a plain pause; the only writes a smoke-owned business may send. */
+function readOnlyOrPause(form: Record<string, string> | undefined): boolean {
+  if (!form) return false;
+  if (/"validate_only"/.test(form.execution_options ?? "")) return true;
+  return Object.keys(form).length === 1 && form.status === "PAUSED";
+}
+
 export class MetaClient {
   private pageAccessToken: Promise<string> | null = null;
 
-  constructor(private readonly creds: MetaCredentials, private readonly executionSignal?: AbortSignal) {}
+  constructor(
+    private readonly creds: MetaCredentials,
+    private readonly executionSignal?: AbortSignal,
+    private readonly writes: "all" | "pause-only" = "all",
+  ) {}
 
   private async graph<T>(
     path: string,
@@ -836,6 +865,26 @@ export class MetaClient {
     } = {},
   ): Promise<T> {
     const method = opts.method ?? "GET";
+    try {
+      return await this.graphOnce<T>(path, method, opts);
+    } catch (error) {
+      // #1199: a read is safe to repeat, so one failed GET (network, 5xx) gets one more try. Writes never repeat
+      // (they may have been done), nor does a call the caller or the route's budget stopped. A timeout already
+      // spent 15 s, so it repeats only under a job deadline (the launch worker); a 60 s route without one could be
+      // killed mid-write (Reviewer on #1204).
+      const stopped = Boolean(opts.signal?.aborted || this.executionSignal?.aborted);
+      const timedOut = error instanceof Error && error.name === "TimeoutError";
+      if (method !== "GET" || stopped || !transientReadFailure(error) || (timedOut && !this.executionSignal)) throw error;
+      await new Promise((resolve) => setTimeout(resolve, GET_RETRY_DELAY_MS));
+      return this.graphOnce<T>(path, method, opts);
+    }
+  }
+
+  private async graphOnce<T>(
+    path: string,
+    method: string,
+    opts: { token?: string; form?: Record<string, string>; signal?: AbortSignal },
+  ): Promise<T> {
     const token = opts.token ?? this.creds.accessToken;
     const signal = AbortSignal.any([
       AbortSignal.timeout(15_000),
@@ -843,6 +892,10 @@ export class MetaClient {
       ...(this.executionSignal ? [this.executionSignal] : []),
     ]);
     signal.throwIfAborted();
+
+    if (this.writes === "pause-only" && method !== "GET" && !readOnlyOrPause(opts.form)) {
+      throw new ConnectionAccessError("FORBIDDEN", "The test account can only check and pause on this Meta ad account.");
+    }
 
     const started = performance.now();
     let reply: { status: number; body: unknown };
@@ -1134,7 +1187,7 @@ export class MetaClient {
     const unresolved: string[] = [];
     const seen = new Set<string>();
     // #271: independent searches run together; results are applied in the given order.
-    const searches = await Promise.all(names.map(async raw => {
+    const searches = await Promise.all(expandPlaceAliases(names).map(async raw => {
       const name = (raw ?? "").trim();
       if (!name) return null;
       return { name, results: await this.searchGeoLocations(name).catch(() => null) };
@@ -2069,18 +2122,25 @@ export class MetaClient {
 
   /**
    * #765 (b): turns a running ad set's PAUSED copy on in its place. Never two ACTIVE: Meta first checks the
-   * copy's activation (validate_only), then the old ad set is paused, a capped copy's total is cut to what the
-   * old one has left, the copy's ads and then the copy go ACTIVE, and both are read back. If anything fails
+   * copy's activation (validate_only), then the old ad set is paused, the copy takes the old one's budget as it is
+   * now (a capped copy only what is left; its end date too), the copy's ads (except ones the owner paused, #1146)
+   * and then the copy go ACTIVE, and both are read back. If anything fails
    * after the pause, the copy is paused again and the old ad set resumed. The old ad set is archived last.
    * `running` is the campaign's intended state: on a paused campaign nothing is turned on, the copy just takes
    * the old ad set's place. Safe to retry: a switch Meta already finished is completed, and one cut off after
    * the pause carries on from where it stopped.
    */
-  async switchAdSet(campaignId: string, input: { fromAdSetId: string; toAdSetId: string; toAdIds: string[]; running: boolean }): Promise<AdSetSwitch> {
+  async switchAdSet(campaignId: string, input: { fromAdSetId: string; toAdSetId: string; toAdIds: string[]; running: boolean; keepPausedAdIds?: string[] }): Promise<AdSetSwitch> {
     const { fromAdSetId, toAdSetId, toAdIds, running } = input;
     if (fromAdSetId === toAdSetId || !toAdIds.length || new Set(toAdIds).size !== toAdIds.length) throw new MetaError("Invalid ad set switch.");
-    type AdSetRead = { id?: string; campaign_id?: string; status?: string; lifetime_budget?: string; budget_remaining?: string };
-    const read = (id: string) => this.graph<AdSetRead>(`${encodeURIComponent(id)}?fields=id,campaign_id,status,lifetime_budget,budget_remaining`);
+    // #1146: copies of ads the owner paused from the card stay PAUSED; the rest go ACTIVE.
+    const keptPaused = new Set(input.keepPausedAdIds ?? []);
+    if ([...keptPaused].some(adId => !toAdIds.includes(adId))) throw new MetaError("Invalid ad set switch.");
+    const turnOn = toAdIds.filter(adId => !keptPaused.has(adId));
+    if (running && !turnOn.length) throw new CampaignDeliveryError("Every ad in this audience is paused. Turn one on before switching. Nothing changed.");
+    const expected = (ad: { id: string; status?: string }) => ad.status === (keptPaused.has(ad.id) ? "PAUSED" : "ACTIVE");
+    type AdSetRead = { id?: string; campaign_id?: string; status?: string; lifetime_budget?: string; budget_remaining?: string; daily_budget?: string; end_time?: string };
+    const read = (id: string) => this.graph<AdSetRead>(`${encodeURIComponent(id)}?fields=id,campaign_id,status,lifetime_budget,budget_remaining,daily_budget,end_time`);
     const readAds = (id: string) => this.graph<{ data?: Array<{ id: string; status?: string; adset_id?: string }>; paging?: { next?: string } }>(`${encodeURIComponent(id)}/ads?fields=id,status,adset_id&limit=100`);
     const [from, to, ads] = await Promise.all([read(fromAdSetId), read(toAdSetId), readAds(toAdSetId)]);
     const sameAds = (list: typeof ads) => Array.isArray(list.data) && !list.paging?.next && list.data.length === toAdIds.length
@@ -2091,7 +2151,7 @@ export class MetaClient {
     const done = { fromAdSetId, adSetId: toAdSetId, adIds: toAdIds };
     const oldStopped = from.status === "PAUSED" || from.status === "ARCHIVED";
     // A retry after Meta finished: the copy delivers (or, on a paused campaign, has taken the old one's place).
-    if (running && to.status === "ACTIVE" && ads.data!.every(ad => ad.status === "ACTIVE") && oldStopped) {
+    if (running && to.status === "ACTIVE" && ads.data!.every(expected) && oldStopped) {
       if (from.status === "PAUSED") await this.writeStatus(fromAdSetId, "ARCHIVED").catch(() => undefined);
       return done;
     }
@@ -2100,18 +2160,28 @@ export class MetaClient {
       throw new CampaignDeliveryError("The old ad set or the new one is in an unexpected state. Nothing changed; check the campaign in Meta.");
     }
     const capped = Number(from.lifetime_budget ?? 0) > 0;
-    const cutCap = async () => {
-      // The old ad set kept spending while the copy waited; the copy may spend only what is left now.
-      const left = await read(fromAdSetId);
-      if (left.status === "ACTIVE" || !/^[1-9]\d*$/.test(left.budget_remaining ?? "")) throw new CampaignDeliveryError("This capped run has spent its total. Start a new run instead.");
-      if (to.lifetime_budget === left.budget_remaining) return;
-      await this.graph(encodeURIComponent(toAdSetId), { method: "POST", form: { lifetime_budget: left.budget_remaining! } });
-      const cut = await read(toAdSetId);
-      if (cut.lifetime_budget !== left.budget_remaining) throw new CampaignDeliveryError("Meta did not confirm the new ad set's total.");
+    /**
+     * The copy takes the old ad set's money as it is now (#1146): a capped run only what is left of its total
+     * (the old one kept spending while the copy waited), an uncapped one its current daily budget, and either
+     * its current end date, so a budget or end change made while the copy waited isn't lost.
+     */
+    const matchOld = async () => {
+      const left = capped ? await read(fromAdSetId) : from;
+      if (capped && (left.status === "ACTIVE" || !/^[1-9]\d*$/.test(left.budget_remaining ?? ""))) throw new CampaignDeliveryError("This capped run has spent its total. Start a new run instead.");
+      const form: Record<string, string> = {};
+      if (capped && to.lifetime_budget !== left.budget_remaining) form.lifetime_budget = left.budget_remaining!;
+      if (!capped && /^[1-9]\d*$/.test(left.daily_budget ?? "") && to.daily_budget !== left.daily_budget) form.daily_budget = left.daily_budget!;
+      if (left.end_time && to.end_time !== left.end_time) form.end_time = left.end_time;
+      if (!Object.keys(form).length) return;
+      await this.graph(encodeURIComponent(toAdSetId), { method: "POST", form });
+      const after = await read(toAdSetId);
+      if (Object.entries(form).some(([key, value]) => key === "end_time" ? Date.parse(after.end_time ?? "") !== Date.parse(value) : after[key as keyof AdSetRead] !== value)) {
+        throw new CampaignDeliveryError("Meta did not confirm the new ad set's budget.");
+      }
     };
     if (!running) {
       if (from.status === "ACTIVE") await this.writeStatus(fromAdSetId, "PAUSED");
-      if (capped) await cutCap();
+      await matchOld();
       await this.writeStatus(fromAdSetId, "ARCHIVED");
       return done;
     }
@@ -2123,11 +2193,11 @@ export class MetaClient {
     // An attempt cut off after the pause (old PAUSED) or after the archive carries on from here.
     if (from.status === "ACTIVE") await this.writeStatus(fromAdSetId, "PAUSED");
     try {
-      if (capped) await cutCap();
-      for (const adId of toAdIds) await this.writeStatus(adId, "ACTIVE");
+      await matchOld();
+      for (const adId of turnOn) await this.writeStatus(adId, "ACTIVE");
       await this.writeStatus(toAdSetId, "ACTIVE");
       const [oldAfter, newAfter, adsAfter] = await Promise.all([read(fromAdSetId), read(toAdSetId), readAds(toAdSetId)]);
-      if (oldAfter.status === "ACTIVE" || newAfter.status !== "ACTIVE" || !sameAds(adsAfter) || adsAfter.data!.some(ad => ad.status !== "ACTIVE")) {
+      if (oldAfter.status === "ACTIVE" || newAfter.status !== "ACTIVE" || !sameAds(adsAfter) || !adsAfter.data!.every(expected)) {
         throw new CampaignDeliveryError("Meta did not confirm the switch.");
       }
     } catch (error) {

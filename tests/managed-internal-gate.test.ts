@@ -39,6 +39,16 @@ describe("managed accounts for internal accounts only, until the flag is on (#52
     expect(managedAccountsEnabledFor(customer)).toBe(true);
   });
 
+  // #1694 (Reviewer): a sales prospect (+prospect, #1317) is internal, but must not provision a real child business
+  // while the flag is off; once 2-Tier opens it's treated like any customer.
+  it("keeps sales prospects out while the flag is off", async () => {
+    const { managedAccountsEnabledFor } = await import("@/lib/meta/managed-account");
+    const prospect = { ...team, id: "c0ffee00-0000-4000-8000-000000000003", email: "sales+prospect-solar@adbrain.vanshul.com" };
+    expect(managedAccountsEnabledFor(prospect)).toBe(false);
+    vi.stubEnv("MANAGED_ACCOUNTS_ENABLED", "true");
+    expect(managedAccountsEnabledFor(prospect)).toBe(true);
+  });
+
   it("/onboarding is a 404 for a customer and opens for an internal account", async () => {
     const { default: OnboardingPage } = await import("@/app/(app)/onboarding/page");
     m.user = customer;

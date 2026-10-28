@@ -120,9 +120,9 @@ available for the normal annual package, other users, expired or completed tests
 If the quote update fails, payment stays disabled until the amount is restored or
 a valid updated quote is received and accepted.
 
-The normal default preserves the original quote and policy. Other totals produce
-a versioned quote and matching service/refund terms, requiring fresh hash-bound
-consent. Nondefault pricing or enabled verification cannot be combined with an
+Every total, the default included, produces a versioned quote and matching
+`operator-managed-priced-v2` service/refund terms (#1235: no split shown), requiring
+fresh hash-bound consent. Orders accepted under v1 keep their v1 terms. Nondefault pricing or enabled verification cannot be combined with an
 explicit `PAYMENTS_LIVE_POLICY_JSON` override. Stored amounts, quotes, consent and
 identities are immutable. A changed configuration never reprices an old order;
 only a customer's own new amount replaces an unpaid order (see below).
@@ -190,16 +190,17 @@ dollar budget, or image-cost cap**. See [AI Pipeline](AI_PIPELINE.md).
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `IMAGE_PROVIDER` | `pollinations` | Implemented names: `pollinations`, `openrouter` |
+| `IMAGE_PROVIDER` | `pollinations` | Implemented names: `pollinations`, `cloudflare`, `openrouter` |
 | `IMAGE_PROVIDER_FALLBACK` | `none` | `none`/empty disables fallback; otherwise implemented provider name |
 | `POLLINATIONS_MODEL` | `flux` | Pollinations model |
+| `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_AI_TOKEN` | Empty | #1476: Workers AI (FLUX-1-schnell) for free pictures, tried before Pollinations for internal accounts and the credit-exhausted fallback; skipped unless both are set. The token needs Workers AI only (Sensitive in Vercel) |
 | `OPENROUTER_IMAGE_MODEL` | `openai/gpt-image-2.5-flare` | OpenRouter image model; requires OpenRouter keys |
 | `AD_DESIGN_OVERLAY` | `true` | Exact `false` or `0` disables; other strings enable |
 | `FALAI_API_KEY`, `OPENAI_API_KEY` | Empty | Reserved fields, not implemented image-provider selectors |
 
 The [provider switch](../src/lib/imageGen/index.ts) rejects unknown names.
 `IMAGE_PROVIDER=openai` or `falai` does not activate an adapter. Fallback must be
-explicit; timeout/cancellation does not trigger fallback. Pollinations rejects
+explicit; timeout/cancellation does not trigger fallback. Pollinations and Cloudflare reject
 product-reference requests. Do not assume a fallback has equivalent fidelity or
 lower cost.
 
@@ -298,7 +299,7 @@ exported in your shell are still inherited; this is not a network sandbox.
 | `dev` | `npm run dev` on port 3939 |
 | `build`, `oauth-check`, `workspace`, `connect`, `e2e`, `recovery`, `draft-connect`, `draft-lifecycle`, `connection-recovery` | Runs the mapped build, check script or Playwright spec against the local project |
 | `oauth-dev` | Copies the real `META_APP_ID`/`META_APP_SECRET`/`META_LOGIN_CONFIG_ID` from `.env.local` and redacts them from output; real Meta consent work |
-| `payments-dev` | Reads Razorpay test credentials from `.env`, enables test checkout and the dev auth bypass, derives a webhook secret if absent, disables product logging and binds 127.0.0.1:3939 |
+| `payments-dev` | Reads Razorpay test credentials from `.env.local` (the `RAZORPAY_TEST_*` pair, or a standard pair only if it is `rzp_test_`; live keys are refused), enables test checkout and the dev auth bypass, derives a webhook secret if absent, disables product logging and binds 127.0.0.1:3939 |
 
 Each mode runs immediately; none is an environment inspector. Stop only the
 servers and fixtures you started.

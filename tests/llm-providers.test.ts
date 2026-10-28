@@ -63,6 +63,26 @@ describe("openai-compatible provider", () => {
     ).rejects.toMatchObject({ status: 429, retryable: true });
   });
 
+  // #1200: Groq's 429 says which org limit was hit; keep only the type and numbers (never the org id or text).
+  it("#1200: reads which Groq limit a 429 hit (type, limit, used, requested)", async () => {
+    mockFetch({ ok: false, status: 429, headers: { "retry-after": "6" }, json: { error: {
+      message: "Rate limit reached for model `qwen/qwen3.8-27b` in organization `org_01abc` service tier `on_demand` on tokens per minute (TPM): Limit 6000, Used 3120, Requested 5612. Please try again in 6.2s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing",
+      type: "tokens", code: "rate_limit_exceeded" } } });
+    const provider = createOpenAICompatibleProvider({ name: "groq", baseUrl: "https://x", defaultModel: "m" });
+    const error = await provider.complete([{ role: "user", content: "hi" }], {}, { apiKey: "k", model: "m" }).catch((caught: unknown) => caught);
+    expect(error).toMatchObject({ status: 429, code: "HTTP_429", retryable: true, retryAfterMs: 6000,
+      rateLimit: { type: "TPM", limit: 6000, used: 3120, requested: 5612 } });
+    expect(JSON.stringify(error)).not.toContain("org_01abc");
+  });
+
+  it("#1200: a 429 that names no limit has no rateLimit", async () => {
+    mockFetch({ ok: false, status: 429, text: "rate limited" });
+    const provider = createOpenAICompatibleProvider({ name: "groq", baseUrl: "https://x", defaultModel: "m" });
+    const error = await provider.complete([{ role: "user", content: "hi" }], {}, { apiKey: "k", model: "m" }).catch((caught: unknown) => caught);
+    expect(error).toMatchObject({ status: 429 });
+    expect((error as { rateLimit?: unknown }).rateLimit).toBeUndefined();
+  });
+
   it("names the task and budget route when output is truncated", async () => {
     mockFetch({
       ok: true,

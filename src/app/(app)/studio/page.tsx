@@ -6,6 +6,7 @@ import { DemoLlmUsage } from "@/components/demo-llm-usage";
 import { Card, CardContent } from "@/components/ui/card";
 import { getCreatives, getPrimaryBusiness } from "@/lib/supabase/queries";
 import { getUser } from "@/lib/supabase/queries";
+import { isProspectSession } from "@/lib/prospect-session";
 import { businessLLMUsageSummary } from "@/lib/llm/persist";
 import { privacyOperatorAllowed } from "@/lib/privacy-requests";
 import { clientCreative } from "@/lib/creative/client-receipt";
@@ -76,6 +77,7 @@ export default async function StudioPage({
           initialFilter={filter}
           initialCreativeId={params.creative ?? null}
           showInternals={operator}
+          sample={await isProspectSession()}
         />
         {usage && <Suspense fallback={null}><StudioUsage usage={usage} /></Suspense>}
       </div>

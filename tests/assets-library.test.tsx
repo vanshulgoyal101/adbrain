@@ -30,6 +30,14 @@ const asset = (over: Partial<BrandAsset>): BrandAsset =>
   }) as unknown as BrandAsset;
 
 describe("<AssetsLibrary>", () => {
+  it("#1317: a prospect's sample ads have no Download, Copy link or Open; the owner's own uploads keep them", () => {
+    render(<AssetsLibrary creatives={[creative({})]} brandAssets={[asset({})]} sample />);
+    expect(screen.getAllByRole("button", { name: "Download" })).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: "Copy link" })).toHaveLength(1);
+    expect(screen.getAllByRole("link", { name: "Open" })).toHaveLength(1);
+    expect(screen.getByRole("img", { name: "Slash your power bill" })).toBeInTheDocument();
+  });
+
   it("shows clipboard failures without claiming the link was copied", async () => {
     Object.assign(navigator, { clipboard: { writeText: vi.fn().mockRejectedValue(new Error("denied")) } });
     render(<AssetsLibrary creatives={[creative({})]} brandAssets={[]} />);

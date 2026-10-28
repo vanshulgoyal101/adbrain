@@ -1,6 +1,7 @@
 import type { z } from "zod";
 import type { accountFundingSchema } from "@/lib/campaign/activation";
 import type { FundingMode } from "@/lib/payments/operator-funding";
+import { formatMoneyExact } from "@/lib/format";
 
 export type AccountFunding = z.infer<typeof accountFundingSchema>;
 
@@ -10,13 +11,12 @@ export type FundingShortfall =
   | { kind: "allowance"; allowancePaise: number; neededPaise: number }
   | { kind: "unverified" };
 
-const exactRupees = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" });
 
 /**
  * #1058/#1094: " after ₹500.00 for your 2 other live runs", plus what uncapped ad sets spend a day (named, never
  * subtracted: they have no total), or "" with neither.
  */
-export function committedWords(committed: AccountFunding["committed"], money: (rupees: number) => string = rupees => exactRupees.format(rupees)): string {
+export function committedWords(committed: AccountFunding["committed"], money: (rupees: number) => string = formatMoneyExact): string {
   const runs = committed?.runs ? ` after ${money(committed.remainingPaise / 100)} for your ${committed.runs} other live ${committed.runs === 1 ? "run" : "runs"}` : "";
   const uncapped = committed?.uncapped?.adSets
     ? `${money(committed.uncapped.dailyPaise / 100)} a day also runs on ${committed.uncapped.adSets} uncapped ad ${committed.uncapped.adSets === 1 ? "set" : "sets"}`

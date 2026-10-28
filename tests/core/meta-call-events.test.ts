@@ -95,7 +95,9 @@ describe("core: Meta call events (#451 L2)", () => {
     vi.spyOn(globalThis, "fetch").mockRejectedValue(new TypeError("fetch failed"));
     const meta = new MetaClient({ adAccountId: "act_ACCOUNT", pageId: "PAGE", accessToken: "secret-token" });
     await expect(meta.searchGeoLocations("Jaipur")).rejects.toThrow();
-    expect(events).toEqual([expect.objectContaining({ name: "meta.graph", outcome: "failed", attributes: expect.objectContaining({ route: "search", method: "GET", errorCode: "META_NETWORK" }) })]);
+    // #1199: a failed GET is tried once more, and each attempt is its own event.
+    const failed = expect.objectContaining({ name: "meta.graph", outcome: "failed", attributes: expect.objectContaining({ route: "search", method: "GET", errorCode: "META_NETWORK" }) });
+    expect(events).toEqual([failed, failed]);
     expect(events[0].attributes).not.toHaveProperty("status");
   });
 });

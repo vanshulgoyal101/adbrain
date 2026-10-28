@@ -88,6 +88,8 @@ export async function updateCreativeCopy(
         ...quotes,
       ],
       business.vertical,
+      // #1617: an AI picture can't be called "our work"; the owner's own photo can.
+      { ownPicture: Boolean(generation.ownerPhoto) },
     );
 
     const nextGeneration = {
