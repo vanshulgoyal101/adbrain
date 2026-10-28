@@ -5,6 +5,7 @@
  *
  *   npx tsx --env-file=.env.local scripts/record-meta-cleanup-fixtures.ts
  */
+import "./lib/meta-write-gate";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { metaClientFromEnv } from "./lib/meta-env";

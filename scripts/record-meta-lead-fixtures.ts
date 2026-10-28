@@ -8,6 +8,7 @@
  * stripped and every lead field value is replaced with Meta's test-lead
  * placeholder, so no personal data reaches the repository.
  */
+import "./lib/meta-write-gate";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { metaClientFromEnv } from "./lib/meta-env";

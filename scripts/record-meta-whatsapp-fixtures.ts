@@ -5,6 +5,7 @@
  *
  *   npx tsx --env-file=<.env.local> scripts/record-meta-whatsapp-fixtures.ts <adSetBudgetCampaignId> <whatsappAdSetId> <imageHash>
  */
+import "./lib/meta-write-gate";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { destinationCTA, destinationPlan, whatsappWelcomeMessage } from "@/lib/meta/client";

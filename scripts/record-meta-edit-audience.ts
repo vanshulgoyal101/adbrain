@@ -20,6 +20,7 @@
  * Uses META_SYSTEM_USER_TOKEN / META_AD_ACCOUNT_ID / META_PAGE_ID. Tokens are stripped and every Meta id, hash
  * and phone number is replaced with a stable fake by metaScrubber() (#1040); tests rebind the fake account and Page.
  */
+import "./lib/meta-write-gate";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { metaClientFromEnv } from "./lib/meta-env";

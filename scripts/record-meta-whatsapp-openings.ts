@@ -6,6 +6,7 @@
  *
  *   npx tsx --env-file=<.env.local> scripts/record-meta-whatsapp-openings.ts <paused placement ad id>
  */
+import "./lib/meta-write-gate";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { whatsappWelcomeMessage, type WhatsAppOpening } from "@/lib/meta/client";
