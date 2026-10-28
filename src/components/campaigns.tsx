@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 import { WhatsAppReadyChecklist } from "@/components/whatsapp-ready";
 import { whatsappGreeting, whatsappLanguageFor, type WhatsAppLanguage } from "@/lib/campaign/whatsapp-greeting";
+import { suggestedQuestions } from "@/lib/campaign/whatsapp-questions";
 import { whatsappTemplateSchema, type WhatsAppTemplate } from "@/lib/campaign/whatsapp-template";
 import { CampaignWhatsAppMessageDialog } from "@/components/campaign-whatsapp-message-dialog";
 import { WhenTheyTap } from "@/components/when-they-tap";
@@ -1965,6 +1966,7 @@ function BusinessCampaigns({
                       const current = whatsappMessage ?? savedWhatsAppMessage;
                       return <CampaignWhatsAppMessageDialog businessId={business.id} businessName={business.name} firstOffer={business.offers?.[0]}
                         initial={current ? draftFromTemplate(current) : draftFromSuggestion(suggested, language)} suggested={suggested}
+                        suggestedQuestions={(chosen) => suggestedQuestions(business, chosen === "auto" ? language : chosen)}
                         followsSuggestion={!current} edited={Boolean(whatsappMessage)} onClose={() => setMessageEditorOpen(false)}
                         onUse={(template, saved) => {
                           setWhatsAppMessage(template);
