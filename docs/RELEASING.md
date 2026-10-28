@@ -247,6 +247,14 @@ anyone watching (owner-approved automatic rollback, #111):
   `core` `bug` issue with the failing step.
 - **Daily at 03:30 UTC** it runs the same smoke and opens an issue on failure
   (no rollback).
+- **WS1 first-timer walk (#1439), report-only:** after a green smoke it runs
+  `scripts/ws1-walk.mts` as `WS1_EMAIL`/`WS1_PASSWORD` (a confirmed internal account whose
+  business has never gone live) on a 360 px phone over slow 4G: step 1's five fields (filled
+  from a pasted bio where empty), step 2's two picked ads, and step 3's cap, Connect/payment
+  and trust lines, each with LCP ≤ 2.5 s, CLS ≤ 0.1 and the honest-copy rules
+  (`src/lib/copy/honest-copy-rules.ts`). Every Meta write is blocked. The result lands in the
+  run summary; a FAIL neither rolls back nor opens an issue. Skipped while the secrets are
+  unset. `--plant` must make it FAIL (a planted promise and a slowed load).
 - **After each push to `main`, and every 15 minutes if GitHub fires the schedule**
   [`production-drift.yml`](../.github/workflows/production-drift.yml) waits until
   15 minutes after main HEAD landed, then fails and opens one
