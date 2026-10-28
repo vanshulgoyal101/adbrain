@@ -38,6 +38,8 @@ const COOLDOWN_MS = 60_000;
 // beats falling through to a model that needs 60-90s.
 const RATE_LIMIT_WAIT_MS = 20_000;
 const cooldownUntil = new Map<string, number>();
+/** #1808: the Cerebras model, exported so the scheduled model check reads the same id. */
+export const CEREBRAS_MODEL = "llama-3.3-70b";
 // #449: a key out of credit stays parked long enough not to slow every Create; the free models answer meanwhile.
 const CREDIT_COOLDOWN_MS = 15 * 60_000;
 // #1568: a daily limit parks the provider until its own retry-after, up to this long.
@@ -90,10 +92,10 @@ function buildRegistry(routing: "standard" | "budget" | "creative" = "standard",
           provider: createOpenAICompatibleProvider({
             name: "cerebras",
             baseUrl: "https://api.cerebras.ai/v1/chat/completions",
-            defaultModel: "llama-3.3-70b",
+            defaultModel: CEREBRAS_MODEL,
           }),
           keys: env.CEREBRAS_API_KEYS,
-          model: "llama-3.3-70b",
+          model: CEREBRAS_MODEL,
         }
       : null,
   };
