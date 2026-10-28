@@ -1,11 +1,13 @@
 "use client";
 
-import Link from "next/link";
-import { useState } from "react";
+import { useCallback, useState } from "react";
+import { ImagePlus } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Status } from "@/components/ui/status";
 import { AssetTile, slugify } from "@/components/assets-library";
+import { MediaUploadSheet, useMediaUploads } from "@/components/media-upload";
 import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
+import type { Codec, UploadDeps } from "@/lib/media/client-upload";
 import type { MediaView } from "@/lib/media/store";
 import type { BrandAsset, CreativePreview } from "@/lib/types";
 
@@ -28,14 +30,32 @@ function Grid({ children }: { children: React.ReactNode }) {
  * #778 slice 3a (#744 phase 1): "Photos & videos", the owner's own uploads beside the ads AdBrain made. Shown when
  * MEDIA_UPLOADS_ENABLED is on; the older Assets page stays otherwise. Words are the CPO's (#1868 on #744).
  */
-export function MediaLibrary({ media, creatives, brandAssets, sample = false }: {
+export function MediaLibrary({ business, media: initialMedia, creatives, brandAssets, sample = false, consented = false, startOpen = false, deps, codec }: {
+  business: { id: string; vertical: string | null };
   media: MediaView[];
   creatives: CreativePreview[];
   brandAssets: BrandAsset[];
   /** #1317: a prospect's sample ads have no Download, Copy link or Open; the owner's own photos keep theirs. */
   sample?: boolean;
+  /** The business has confirmed the current rights terms (#784); otherwise the sheet shows the tick. */
+  consented?: boolean;
+  /** `/assets?add=1` (the empty state's action from elsewhere) opens the sheet. */
+  startOpen?: boolean;
+  deps?: UploadDeps;
+  codec?: Codec;
 }) {
   const [tab, setTab] = useState<Tab>("all");
+  const [media, setMedia] = useState(initialMedia);
+  const [sheetOpen, setSheetOpen] = useState(startOpen);
+  const [rightsDone, setRightsDone] = useState(consented);
+  const onAdded = useCallback((asset: MediaView) => setMedia((current) => [asset, ...current.filter((item) => item.id !== asset.id)]), []);
+  const uploads = useMediaUploads({ businessId: business.id, onAdded, deps, codec });
+  const addButton = (
+    <button type="button" onClick={() => setSheetOpen(true)}
+      className="inline-flex min-h-11 items-center gap-2 rounded-md bg-blue-600 px-4 text-sm font-medium text-white hover:bg-blue-700">
+      <ImagePlus className="h-4 w-4" aria-hidden="true" /> Add photos & videos
+    </button>
+  );
   const [shown, setShown] = useState(PAGE);
   const made = creatives.filter((c) => c.image_url);
   const ownCount = media.length + brandAssets.length;
@@ -44,9 +64,7 @@ export function MediaLibrary({ media, creatives, brandAssets, sample = false }: 
     <Card>
       <CardContent className="flex flex-col items-start gap-4 p-6 text-sm text-slate-600">
         <p>No photos or videos yet. Add your own work: finished jobs, your shop, your team.</p>
-        <Link href="/assets?add=1" className="inline-flex min-h-11 items-center rounded-md bg-blue-600 px-4 font-medium text-white hover:bg-blue-700">
-          Add photos & videos
-        </Link>
+        {addButton}
       </CardContent>
     </Card>
   ) : (
@@ -87,6 +105,12 @@ export function MediaLibrary({ media, creatives, brandAssets, sample = false }: 
 
   return (
     <div className="flex flex-col gap-6">
+      {ownCount > 0 && <div>{addButton}</div>}
+      {uploads.progress && !sheetOpen && (
+        <p role="status" className="text-sm text-slate-700">{uploads.progress} <span className="text-slate-500">You can keep going; uploads finish in the background.</span></p>
+      )}
+      <MediaUploadSheet open={sheetOpen} onOpenChange={setSheetOpen} uploads={uploads} businessId={business.id} vertical={business.vertical}
+        consented={rightsDone} onConsented={() => setRightsDone(true)} />
       <div role="tablist" aria-label="Show" className="flex gap-1 overflow-x-auto border-b border-slate-200">
         {TABS.map((t) => (
           <button key={t.id} type="button" role="tab" id={`media-tab-${t.id}`} aria-selected={tab === t.id} aria-controls="media-panel"
