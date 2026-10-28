@@ -14,6 +14,7 @@ import { weeklyCapNotice, type CampaignSpend } from "@/lib/campaign/spend";
 import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
 import { formatMoney } from "@/lib/format";
 import { createMetaConnectClient } from "@/lib/meta-connect-ui/client";
+import { connectTrustLine } from "@/lib/trust-lines";
 import type { Business, Creative } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -159,6 +160,8 @@ export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNum
         <Row done title={`Stops at ${formatMoney(total)}`} status={`${SETUP_RUN_DAYS} days at ${formatMoney(daily)} a day, including Meta's GST`} />
       </ul>
       <p className="mt-4 text-sm text-slate-600">Meta checks your ads first, usually within a day. Spending starts only after that and stops at {formatMoney(total)}, including Meta&apos;s GST.</p>
+      {/* #1292: the Connect moment's trust line, next to the Connect Facebook Page primary. */}
+      {!pageConnected && funding && <p className="mt-3 text-sm font-medium text-slate-800">{connectTrustLine(funding)}</p>}
 
       {step && <p role="status" className="mt-4 text-sm font-medium text-slate-950">{stepWords[step]}</p>}
       {result?.kind === "live" && (
