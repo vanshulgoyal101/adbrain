@@ -437,7 +437,9 @@ Recovery uses `GET /api/creatives/generate?businessId=...&generationId=...&expec
 provided, must match the claimed count (409 otherwise). The source candidate
 returns `{status, creatives, count, expectedCount}` based on the persisted
 intent and saved rows. Status may be `processing`, `partial`, `complete`,
-`failed` or `unresolved` (including stale processing after five minutes).
+`failed`, `unresolved` (including stale processing after five minutes) or `ended`
+(#1407: the batch finished short, as its closing `creatives.generate` audit row shows;
+no more ads are coming).
 Unknown/foreign ID returns 404; unavailable status or row lookup returns 503.
 An owner lookup returning 404 permanently fences that UUID with a zero-quota
 no-spend record; a delayed original POST cannot start generation afterward.

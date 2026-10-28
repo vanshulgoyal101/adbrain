@@ -487,7 +487,7 @@ export function AdAssistant({ business, opening = null, occasions = [], onFlowSt
         }
         if (res.ok) {
           const data = (await res.json()) as {
-            status?: "processing" | "partial" | "complete" | "failed" | "unresolved";
+            status?: "processing" | "partial" | "complete" | "failed" | "unresolved" | "ended";
             creatives?: Creative[];
           };
           if (data.creatives?.length) {
