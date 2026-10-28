@@ -329,6 +329,9 @@ function BusinessCampaigns({
   const [includedNames, setIncludedNames] = useState(initialSetup?.includedNames ?? "");
   const [excludedNames, setExcludedNames] = useState(initialSetup?.excludedNames ?? "");
   const [abTest, setAbTest] = useState(initialSetup?.abTest ?? false);
+  // #1155: who sees the ads folds under one line; it starts open only for a setup that already changed it.
+  const [whoOpen, setWhoOpen] = useState(() => abTest || targeting.locationMode === "manual" || targeting.ageMode === "manual"
+    || targeting.gender !== "all" || targeting.cityScope !== "city_only" || Boolean(targeting.audience) || Boolean(initialSetup?.excludedNames || initialSetup?.includedNames));
   const [creating, setCreating] = useState(false);
   const [sendingNew, setSendingNew] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -353,6 +356,7 @@ function BusinessCampaigns({
   function jumpToFix(targets: string[]) {
     flushSync(() => setShowComposer(true));
     const target = targets.map((id) => document.getElementById(id)).find((element) => element !== null);
+    if (target?.closest("details#who-sees-it") && !whoOpen) flushSync(() => setWhoOpen(true));
     const control = target?.matches("button, input, select, textarea") ? target : target?.querySelector<HTMLElement>("button, input, select, textarea");
     control?.scrollIntoView?.({ block: "center" });
     control?.focus();
@@ -1416,7 +1420,6 @@ function BusinessCampaigns({
       {confirmDialog}
         <p className="text-sm text-slate-500">{campaigns.filter(campaign => campaign.status === "active").length} {OWNER_WORDS.running.toLowerCase()} <span className="mx-2 text-slate-300">/</span> {campaigns.filter(campaign => campaign.status === "paused").length} paused</p>
         <div className="flex flex-wrap items-center gap-2">
-          {showComposer && <Button variant="ghost" onClick={startNewCampaign}><Trash2 className="h-4 w-4" aria-hidden="true" />Discard and start new</Button>}
           <Button variant={showComposer ? "outline" : "primary"} onClick={toggleComposer} aria-expanded={showComposer} aria-controls="campaign-composer">{showComposer ? <X className="h-4 w-4" aria-hidden="true" /> : <Plus className="h-4 w-4" aria-hidden="true" />}{showComposer ? "Close campaign setup" : "New campaign"}</Button>
         </div>
       </div>
@@ -1710,7 +1713,11 @@ function BusinessCampaigns({
       <div id="campaign-composer" hidden={!showComposer}>
       {(
         <>
-          <h2 className="mb-1 text-[17px] font-semibold text-slate-950">New campaign</h2>
+          {/* #1164: one exit above the page (Close); starting over lives with the setup it discards. */}
+          <div className="mb-1 flex flex-wrap items-center justify-between gap-x-3">
+            <h2 className="text-[17px] font-semibold text-slate-950">New campaign</h2>
+            {showComposer && <Button variant="ghost" size="sm" onClick={startNewCampaign}><Trash2 className="h-4 w-4" aria-hidden="true" />Discard and start new</Button>}
+          </div>
           {approved.length > 0 && connectedForDraft ? (
             <p aria-label="Launch preflight" className="flex items-start gap-2 pb-1 text-sm text-slate-600">
               <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-emerald-600" aria-hidden="true" />
@@ -1908,6 +1915,25 @@ function BusinessCampaigns({
                       aria-invalid={placedError?.at === "budget" || undefined}
                       aria-describedby={placedError?.at === "budget" ? "budget-error" : undefined}
                     />
+                    {/* #1163: the quick amounts sit with the budget they set. */}
+                    <div className="flex flex-wrap items-center gap-2">
+                      {BUDGET_PRESETS.map((amount) => (
+                        <button
+                          key={amount}
+                          type="button"
+                          onClick={() => { setBudget(amount); if (!unresolvedRecovery()) setPrepareReview(null); }}
+                          className={cn(
+                            "min-h-11 rounded-full border px-3 text-sm font-medium transition-colors sm:min-h-8 sm:text-xs",
+                            budget === amount
+                              ? "border-blue-500 bg-blue-50 text-blue-700"
+                              : "border-slate-200 text-slate-600 hover:border-slate-300",
+                          )}
+                        >
+                          {formatPerDay(amount)}
+                        </button>
+                      ))}
+                      {abTest && <span className="basis-full text-xs font-medium text-slate-600">Total: {formatPerDay(totalDailyBudget)} across 2 ad sets</span>}
+                    </div>
                     {placedError?.at === "budget" && <p id="budget-error" role="alert" className="text-sm font-medium text-red-800">{placedError.message}</p>}
                   </div>
                   {destination === "instant_form" && <div className="flex min-w-0 flex-col gap-1.5">
@@ -1995,26 +2021,6 @@ function BusinessCampaigns({
                   </div>}
                 </div>
 
-                <div className="-mt-2 flex flex-wrap items-center gap-2">
-                  {BUDGET_PRESETS.map((amount) => (
-                    <button
-                      key={amount}
-                      type="button"
-                      onClick={() => { setBudget(amount); if (!unresolvedRecovery()) setPrepareReview(null); }}
-                      className={cn(
-                        "min-h-11 rounded-full border px-3 text-sm font-medium transition-colors sm:min-h-8 sm:text-xs",
-                        budget === amount
-                          ? "border-blue-500 bg-blue-50 text-blue-700"
-                          : "border-slate-200 text-slate-600 hover:border-slate-300",
-                      )}
-                    >
-                      {formatPerDay(amount)}
-                    </button>
-                  ))}
-                  <span className="ml-auto text-xs font-medium text-slate-600">
-                    Total: {formatPerDay(totalDailyBudget)}{abTest ? " across 2 ad sets" : ""}
-                  </span>
-                </div>
                 {/* #761: what to expect, from AdBrain's own runs (#588 ledger). #1038: no lead-form figure until AdBrain has run lead forms. */}
                 <p className="-mt-2 text-xs text-slate-500">
                   What to expect: {destination === "whatsapp"
@@ -2032,6 +2038,13 @@ function BusinessCampaigns({
                   </Alert>
                 )}
 
+                <details id="who-sees-it" open={whoOpen} onToggle={(event) => setWhoOpen(event.currentTarget.open)} className="group border-y border-slate-200">
+                  <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 py-2 [&::-webkit-details-marker]:hidden">
+                    <ChevronRight className="h-4 w-4 shrink-0 text-slate-500 transition-transform group-open:rotate-90" aria-hidden="true" />
+                    <span className="text-sm font-medium text-slate-900">Change who sees it</span>
+                    <span className="min-w-0 truncate text-xs text-slate-500 max-sm:hidden">Goal, places, age, gender, A/B test</span>
+                  </summary>
+                <div className="flex flex-col gap-4 pb-4 pt-2">
                 <div className="flex flex-col gap-2">
                   <div><Label htmlFor="campaign-goal">Campaign goal</Label><Input id="campaign-goal" value={draftGoal} onChange={(event) => setDraftGoal(event.target.value)} placeholder="Qualified enquiries for the current offer" /></div>
                   <Label className="mt-4">Audience &amp; location</Label>
@@ -2075,6 +2088,8 @@ function BusinessCampaigns({
                     </span>
                   </span>
                 </label>
+                </div>
+                </details>
 
                 <div className="border-t border-slate-200 pt-5">
                   <CampaignLaunchReview
