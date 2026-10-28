@@ -217,6 +217,8 @@ type CampaignsProps = {
   newCampaign?: { creativeIds: string[]; review?: boolean; /** #1271: the daily budget chosen on Go live. */ budget?: number };
   /** #783: show "Which ad worked" on launched campaign cards (`AD_RESULTS_ENABLED`). */
   adResults?: boolean;
+  /** #1307: AdBrain's pooled WhatsApp runs (#588 ledger) for Review's "What to expect"; null keeps the recorded figures. */
+  whatsappLedger?: { chats: number; spendRupees: number } | null;
   /** #1342: the Settings weekly cap and the live campaigns' budgets (read on the server); null when they couldn't be read. */
   weeklyCap?: { capRupees: number | null; active: CampaignSpend[] } | null;
 };
@@ -296,6 +298,7 @@ function BusinessCampaigns({
   adAccountId,
   newCampaign,
   adResults = false,
+  whatsappLedger = null,
   weeklyCap = null,
   scope,
   initialSetup,
@@ -2165,7 +2168,7 @@ function BusinessCampaigns({
                 {/* #761: what to expect, from AdBrain's own runs (#588 ledger; #1307: facts with n until 20 results). #1038: no lead-form figure until AdBrain has run lead forms. */}
                 <p className="-mt-2 text-xs text-slate-500">
                   What to expect: {destination === "whatsapp"
-                    ? whatsappExpectation()
+                    ? whatsappExpectation(whatsappLedger ?? undefined)
                     : <>AdBrain hasn&apos;t run enough instant-form campaigns yet to quote a cost per enquiry.</>} {REVIEW_AND_SPEND}
                 </p>
 

@@ -11,6 +11,7 @@ import { maskWhatsAppNumber } from "@/lib/meta/whatsapp-status-shared";
 import { fundingMode } from "@/lib/payments/operator-funding";
 import { canUseMetaConnect } from "@/lib/meta/pilot-access";
 import { adResultsEnabled } from "@/lib/campaign/ad-results-store";
+import { ledgerTotals } from "@/lib/campaign/ledger";
 import { draftDtoSchema, type DraftDTO } from "@/lib/campaign/connect-contracts";
 import { listEditableDrafts } from "@/lib/campaign/draft-repository";
 import { requireOwnedBusiness } from "@/lib/meta/connection-access";
@@ -82,12 +83,14 @@ export default async function CampaignsPage({
     .then(() => Promise.all([getSpendLimits(business.id), getActiveCampaignBudgets(business.id)]))
     .then(([limits, active]) => ({ capRupees: limits.weeklyCapRupees, active }))
     .catch(() => null);
-  const [approved, page, connection, drafts, weeklyCap] = await Promise.all([
+  const [approved, page, connection, drafts, weeklyCap, ledger] = await Promise.all([
     getApprovedCreatives(business.id).then((rows) => rows.map(clientCreative)),
     campaignData,
     getMetaConnection(business.id),
     savedDrafts(business.id),
     spendCap,
+    // #1307: Review's "What to expect" quotes AdBrain's pooled runs; unreadable keeps the recorded figures.
+    ledgerTotals(),
   ]);
   const metaReady = connection.ready;
   const reconnectBy = connection.source === "oauth" && !connection.expired ? reconnectByLabel(connection.tokenExpiresAt) : null;
@@ -137,6 +140,7 @@ export default async function CampaignsPage({
           leadFormError={null}
           metaReady={metaReady}
           adResults={adResultsEnabled()}
+          whatsappLedger={ledger ? { chats: ledger.whatsapp.results, spendRupees: ledger.whatsapp.spendRupees } : null}
           adAccountId={connection.adAccountId ?? ""}
           weeklyCap={weeklyCap}
           newCampaign={params.new === "1" ? { creativeIds: requested, review: params.review === "1", budget: chosenBudget } : undefined}
