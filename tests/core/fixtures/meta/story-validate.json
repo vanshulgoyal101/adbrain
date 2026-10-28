@@ -1,7 +1,7 @@
 {
   "recordedAt": "2026-10-26T15:13:34.945Z",
   "inputs": {
-    "pageId": "885223068001054",
+    "pageId": "900000000000002",
     "instagramUserId": "17841476237284383",
     "feedHash": "b45afed7625f7a5ff07051f78d96a79a",
     "storyHash": "4b8b2752b7a73dcda28b2ab02b5150e0",
@@ -19,13 +19,13 @@
   "tape": [
     {
       "name": "control-malformed-welcome",
-      "path": "act_2398686420592052/ads",
+      "path": "act_9000000000000001/ads",
       "form": {
         "name": "AdBrain #333 validate",
         "adset_id": "120240969992670526",
         "status": "PAUSED",
         "execution_options": "[\"validate_only\"]",
-        "creative": "{\"object_story_spec\":{\"page_id\":\"885223068001054\",\"instagram_user_id\":\"17841476237284383\"},\"asset_feed_spec\":{\"images\":[{\"hash\":\"98c998c9dfe80c40619ce866714283bf\",\"adlabels\":[{\"name\":\"adbrain_feed\"}]},{\"hash\":\"6463c75c3cc2f33693b5ec0fe4ce791a\",\"adlabels\":[{\"name\":\"adbrain_story\"}]}],\"bodies\":[{\"text\":\"Unsure if your roof can take solar? Free site survey first, plus PM Surya Ghar subsidy help from our team.\\nMessage Solaride on WhatsApp to book your free site survey.\"}],\"titles\":[{\"text\":\"Wondering Whether Your Roof Is Ready?\"}],\"descriptions\":[{\"text\":\"Solaride checks your roof before any work starts.\"}],\"link_urls\":[{\"website_url\":\"https://wa.me/91XXXXXX0874\"}],\"call_to_action_types\":[\"WHATSAPP_MESSAGE\"],\"additional_data\":{\"page_welcome_message\":\"{not json\"},\"ad_formats\":[\"SINGLE_IMAGE\"],\"optimization_type\":\"PLACEMENT\",\"asset_customization_rules\":[{\"customization_spec\":{\"publisher_platforms\":[\"facebook\",\"instagram\",\"messenger\"],\"facebook_positions\":[\"story\",\"facebook_reels\"],\"instagram_positions\":[\"story\",\"reels\",\"profile_reels\"],\"messenger_positions\":[\"story\"]},\"image_label\":{\"name\":\"adbrain_story\"},\"priority\":1},{\"customization_spec\":{\"publisher_platforms\":[\"facebook\",\"instagram\",\"messenger\",\"audience_network\"],\"facebook_positions\":[\"feed\",\"right_hand_column\",\"marketplace\",\"video_feeds\",\"search\",\"instream_video\",\"facebook_reels_overlay\",\"profile_feed\",\"notification\",\"biz_disco_feed\"],\"instagram_positions\":[\"stream\",\"explore\",\"explore_home\",\"profile_feed\",\"ig_search\"],\"messenger_positions\":[\"messenger_home\",\"sponsored_messages\"],\"audience_network_positions\":[\"classic\",\"instream_video\",\"rewarded_video\"]},\"image_label\":{\"name\":\"adbrain_feed\"},\"priority\":2}]}}"
+        "creative": "{\"object_story_spec\":{\"page_id\":\"900000000000002\",\"instagram_user_id\":\"17841476237284383\"},\"asset_feed_spec\":{\"images\":[{\"hash\":\"98c998c9dfe80c40619ce866714283bf\",\"adlabels\":[{\"name\":\"adbrain_feed\"}]},{\"hash\":\"6463c75c3cc2f33693b5ec0fe4ce791a\",\"adlabels\":[{\"name\":\"adbrain_story\"}]}],\"bodies\":[{\"text\":\"Unsure if your roof can take solar? Free site survey first, plus PM Surya Ghar subsidy help from our team.\\nMessage Solaride on WhatsApp to book your free site survey.\"}],\"titles\":[{\"text\":\"Wondering Whether Your Roof Is Ready?\"}],\"descriptions\":[{\"text\":\"Solaride checks your roof before any work starts.\"}],\"link_urls\":[{\"website_url\":\"https://wa.me/91XXXXXX0874\"}],\"call_to_action_types\":[\"WHATSAPP_MESSAGE\"],\"additional_data\":{\"page_welcome_message\":\"{not json\"},\"ad_formats\":[\"SINGLE_IMAGE\"],\"optimization_type\":\"PLACEMENT\",\"asset_customization_rules\":[{\"customization_spec\":{\"publisher_platforms\":[\"facebook\",\"instagram\",\"messenger\"],\"facebook_positions\":[\"story\",\"facebook_reels\"],\"instagram_positions\":[\"story\",\"reels\",\"profile_reels\"],\"messenger_positions\":[\"story\"]},\"image_label\":{\"name\":\"adbrain_story\"},\"priority\":1},{\"customization_spec\":{\"publisher_platforms\":[\"facebook\",\"instagram\",\"messenger\",\"audience_network\"],\"facebook_positions\":[\"feed\",\"right_hand_column\",\"marketplace\",\"video_feeds\",\"search\",\"instream_video\",\"facebook_reels_overlay\",\"profile_feed\",\"notification\",\"biz_disco_feed\"],\"instagram_positions\":[\"stream\",\"explore\",\"explore_home\",\"profile_feed\",\"ig_search\"],\"messenger_positions\":[\"messenger_home\",\"sponsored_messages\"],\"audience_network_positions\":[\"classic\",\"instream_video\",\"rewarded_video\"]},\"image_label\":{\"name\":\"adbrain_feed\"},\"priority\":2}]}}"
       },
       "status": 500,
       "body": {
@@ -40,13 +40,13 @@
     },
     {
       "name": "story-whatsapp",
-      "path": "act_2398686420592052/ads",
+      "path": "act_9000000000000001/ads",
       "form": {
         "name": "AdBrain #333 validate",
         "adset_id": "120253713408820526",
         "status": "PAUSED",
         "execution_options": "[\"validate_only\"]",
-        "creative": "{\"object_story_spec\":{\"page_id\":\"885223068001054\",\"instagram_user_id\":\"17841476237284383\"},\"asset_feed_spec\":{\"images\":[{\"hash\":\"b45afed7625f7a5ff07051f78d96a79a\",\"adlabels\":[{\"name\":\"adbrain_feed\"}]},{\"hash\":\"4b8b2752b7a73dcda28b2ab02b5150e0\",\"adlabels\":[{\"name\":\"adbrain_story\"}]}],\"bodies\":[{\"text\":\"Unsure if your roof can take solar? Free site survey first, plus PM Surya Ghar subsidy help from our team.\\nMessage Solaride on WhatsApp to book your free site survey.\"}],\"titles\":[{\"text\":\"Wondering Whether Your Roof Is Ready?\"}],\"descriptions\":[{\"text\":\"Solaride checks your roof before any work starts.\"}],\"link_urls\":[{\"website_url\":\"https://wa.me/91XXXXXX0874\"}],\"call_to_action_types\":[\"WHATSAPP_MESSAGE\"],\"additional_data\":{\"page_welcome_message\":\"{\\\"type\\\":\\\"VISUAL_EDITOR\\\",\\\"version\\\":2,\\\"landing_screen_type\\\":\\\"welcome_message\\\",\\\"media_type\\\":\\\"text\\\",\\\"text_format\\\":{\\\"customer_action_type\\\":\\\"autofill_message\\\",\\\"message\\\":{\\\"autofill_message\\\":{\\\"content\\\":\\\"Hi! I'd like a free site survey.\\\"},\\\"text\\\":\\\"Hi! Thanks for messaging Solaride. Send this message and we'll reply here.\\\"}}}\"},\"ad_formats\":[\"SINGLE_IMAGE\"],\"optimization_type\":\"PLACEMENT\",\"asset_customization_rules\":[{\"customization_spec\":{\"publisher_platforms\":[\"facebook\",\"instagram\",\"messenger\"],\"facebook_positions\":[\"story\",\"facebook_reels\"],\"instagram_positions\":[\"story\",\"reels\",\"profile_reels\"],\"messenger_positions\":[\"story\"]},\"image_label\":{\"name\":\"adbrain_story\"},\"priority\":1},{\"customization_spec\":{\"publisher_platforms\":[\"facebook\",\"instagram\",\"messenger\"],\"facebook_positions\":[\"feed\",\"right_hand_column\",\"marketplace\",\"video_feeds\",\"search\",\"instream_video\",\"facebook_reels_overlay\",\"profile_feed\",\"notification\",\"biz_disco_feed\"],\"instagram_positions\":[\"stream\",\"explore\",\"explore_home\",\"profile_feed\",\"ig_search\"],\"messenger_positions\":[\"messenger_home\",\"sponsored_messages\"]},\"image_label\":{\"name\":\"adbrain_feed\"},\"priority\":2}]}}"
+        "creative": "{\"object_story_spec\":{\"page_id\":\"900000000000002\",\"instagram_user_id\":\"17841476237284383\"},\"asset_feed_spec\":{\"images\":[{\"hash\":\"b45afed7625f7a5ff07051f78d96a79a\",\"adlabels\":[{\"name\":\"adbrain_feed\"}]},{\"hash\":\"4b8b2752b7a73dcda28b2ab02b5150e0\",\"adlabels\":[{\"name\":\"adbrain_story\"}]}],\"bodies\":[{\"text\":\"Unsure if your roof can take solar? Free site survey first, plus PM Surya Ghar subsidy help from our team.\\nMessage Solaride on WhatsApp to book your free site survey.\"}],\"titles\":[{\"text\":\"Wondering Whether Your Roof Is Ready?\"}],\"descriptions\":[{\"text\":\"Solaride checks your roof before any work starts.\"}],\"link_urls\":[{\"website_url\":\"https://wa.me/91XXXXXX0874\"}],\"call_to_action_types\":[\"WHATSAPP_MESSAGE\"],\"additional_data\":{\"page_welcome_message\":\"{\\\"type\\\":\\\"VISUAL_EDITOR\\\",\\\"version\\\":2,\\\"landing_screen_type\\\":\\\"welcome_message\\\",\\\"media_type\\\":\\\"text\\\",\\\"text_format\\\":{\\\"customer_action_type\\\":\\\"autofill_message\\\",\\\"message\\\":{\\\"autofill_message\\\":{\\\"content\\\":\\\"Hi! I'd like a free site survey.\\\"},\\\"text\\\":\\\"Hi! Thanks for messaging Solaride. Send this message and we'll reply here.\\\"}}}\"},\"ad_formats\":[\"SINGLE_IMAGE\"],\"optimization_type\":\"PLACEMENT\",\"asset_customization_rules\":[{\"customization_spec\":{\"publisher_platforms\":[\"facebook\",\"instagram\",\"messenger\"],\"facebook_positions\":[\"story\",\"facebook_reels\"],\"instagram_positions\":[\"story\",\"reels\",\"profile_reels\"],\"messenger_positions\":[\"story\"]},\"image_label\":{\"name\":\"adbrain_story\"},\"priority\":1},{\"customization_spec\":{\"publisher_platforms\":[\"facebook\",\"instagram\",\"messenger\"],\"facebook_positions\":[\"feed\",\"right_hand_column\",\"marketplace\",\"video_feeds\",\"search\",\"instream_video\",\"facebook_reels_overlay\",\"profile_feed\",\"notification\",\"biz_disco_feed\"],\"instagram_positions\":[\"stream\",\"explore\",\"explore_home\",\"profile_feed\",\"ig_search\"],\"messenger_positions\":[\"messenger_home\",\"sponsored_messages\"]},\"image_label\":{\"name\":\"adbrain_feed\"},\"priority\":2}]}}"
       },
       "status": 200,
       "body": {
@@ -55,10 +55,10 @@
     },
     {
       "name": "creative-with-instagram",
-      "path": "act_2398686420592052/adcreatives",
+      "path": "act_9000000000000001/adcreatives",
       "form": {
         "name": "AdBrain #333 recorder (unused)",
-        "object_story_spec": "{\"page_id\":\"885223068001054\",\"instagram_user_id\":\"17841476237284383\"}",
+        "object_story_spec": "{\"page_id\":\"900000000000002\",\"instagram_user_id\":\"17841476237284383\"}",
         "asset_feed_spec": "{\"images\":[{\"hash\":\"b45afed7625f7a5ff07051f78d96a79a\",\"adlabels\":[{\"name\":\"adbrain_feed\"}]},{\"hash\":\"4b8b2752b7a73dcda28b2ab02b5150e0\",\"adlabels\":[{\"name\":\"adbrain_story\"}]}],\"bodies\":[{\"text\":\"Unsure if your roof can take solar? Free site survey first, plus PM Surya Ghar subsidy help from our team.\\nMessage Solaride on WhatsApp to book your free site survey.\"}],\"titles\":[{\"text\":\"Wondering Whether Your Roof Is Ready?\"}],\"descriptions\":[{\"text\":\"Solaride checks your roof before any work starts.\"}],\"link_urls\":[{\"website_url\":\"https://wa.me/91XXXXXX0874\"}],\"call_to_action_types\":[\"WHATSAPP_MESSAGE\"],\"additional_data\":{\"page_welcome_message\":\"{\\\"type\\\":\\\"VISUAL_EDITOR\\\",\\\"version\\\":2,\\\"landing_screen_type\\\":\\\"welcome_message\\\",\\\"media_type\\\":\\\"text\\\",\\\"text_format\\\":{\\\"customer_action_type\\\":\\\"autofill_message\\\",\\\"message\\\":{\\\"autofill_message\\\":{\\\"content\\\":\\\"Hi! I'd like a free site survey.\\\"},\\\"text\\\":\\\"Hi! Thanks for messaging Solaride. Send this message and we'll reply here.\\\"}}}\"},\"ad_formats\":[\"SINGLE_IMAGE\"],\"optimization_type\":\"PLACEMENT\",\"asset_customization_rules\":[{\"customization_spec\":{\"publisher_platforms\":[\"facebook\",\"instagram\",\"messenger\"],\"facebook_positions\":[\"story\",\"facebook_reels\"],\"instagram_positions\":[\"story\",\"reels\",\"profile_reels\"],\"messenger_positions\":[\"story\"]},\"image_label\":{\"name\":\"adbrain_story\"},\"priority\":1},{\"customization_spec\":{\"publisher_platforms\":[\"facebook\",\"instagram\",\"messenger\"],\"facebook_positions\":[\"feed\",\"right_hand_column\",\"marketplace\",\"video_feeds\",\"search\",\"instream_video\",\"facebook_reels_overlay\",\"profile_feed\",\"notification\",\"biz_disco_feed\"],\"instagram_positions\":[\"stream\",\"explore\",\"explore_home\",\"profile_feed\",\"ig_search\"],\"messenger_positions\":[\"messenger_home\",\"sponsored_messages\"]},\"image_label\":{\"name\":\"adbrain_feed\"},\"priority\":2}]}"
       },
       "status": 200,
@@ -68,7 +68,7 @@
     },
     {
       "name": "ad-with-instagram",
-      "path": "act_2398686420592052/ads",
+      "path": "act_9000000000000001/ads",
       "form": {
         "name": "AdBrain #333 validate",
         "adset_id": "120253713408820526",
@@ -83,10 +83,10 @@
     },
     {
       "name": "control-creative-without-instagram",
-      "path": "act_2398686420592052/adcreatives",
+      "path": "act_9000000000000001/adcreatives",
       "form": {
         "name": "AdBrain #333 recorder (unused)",
-        "object_story_spec": "{\"page_id\":\"885223068001054\"}",
+        "object_story_spec": "{\"page_id\":\"900000000000002\"}",
         "asset_feed_spec": "{\"images\":[{\"hash\":\"b45afed7625f7a5ff07051f78d96a79a\",\"adlabels\":[{\"name\":\"adbrain_feed\"}]},{\"hash\":\"4b8b2752b7a73dcda28b2ab02b5150e0\",\"adlabels\":[{\"name\":\"adbrain_story\"}]}],\"bodies\":[{\"text\":\"Unsure if your roof can take solar? Free site survey first, plus PM Surya Ghar subsidy help from our team.\\nMessage Solaride on WhatsApp to book your free site survey.\"}],\"titles\":[{\"text\":\"Wondering Whether Your Roof Is Ready?\"}],\"descriptions\":[{\"text\":\"Solaride checks your roof before any work starts.\"}],\"link_urls\":[{\"website_url\":\"https://wa.me/91XXXXXX0874\"}],\"call_to_action_types\":[\"WHATSAPP_MESSAGE\"],\"additional_data\":{\"page_welcome_message\":\"{\\\"type\\\":\\\"VISUAL_EDITOR\\\",\\\"version\\\":2,\\\"landing_screen_type\\\":\\\"welcome_message\\\",\\\"media_type\\\":\\\"text\\\",\\\"text_format\\\":{\\\"customer_action_type\\\":\\\"autofill_message\\\",\\\"message\\\":{\\\"autofill_message\\\":{\\\"content\\\":\\\"Hi! I'd like a free site survey.\\\"},\\\"text\\\":\\\"Hi! Thanks for messaging Solaride. Send this message and we'll reply here.\\\"}}}\"},\"ad_formats\":[\"SINGLE_IMAGE\"],\"optimization_type\":\"PLACEMENT\",\"asset_customization_rules\":[{\"customization_spec\":{\"publisher_platforms\":[\"facebook\",\"instagram\",\"messenger\"],\"facebook_positions\":[\"story\",\"facebook_reels\"],\"instagram_positions\":[\"story\",\"reels\",\"profile_reels\"],\"messenger_positions\":[\"story\"]},\"image_label\":{\"name\":\"adbrain_story\"},\"priority\":1},{\"customization_spec\":{\"publisher_platforms\":[\"facebook\",\"instagram\",\"messenger\"],\"facebook_positions\":[\"feed\",\"right_hand_column\",\"marketplace\",\"video_feeds\",\"search\",\"instream_video\",\"facebook_reels_overlay\",\"profile_feed\",\"notification\",\"biz_disco_feed\"],\"instagram_positions\":[\"stream\",\"explore\",\"explore_home\",\"profile_feed\",\"ig_search\"],\"messenger_positions\":[\"messenger_home\",\"sponsored_messages\"]},\"image_label\":{\"name\":\"adbrain_feed\"},\"priority\":2}]}"
       },
       "status": 200,
@@ -96,7 +96,7 @@
     },
     {
       "name": "control-ad-without-instagram",
-      "path": "act_2398686420592052/ads",
+      "path": "act_9000000000000001/ads",
       "form": {
         "name": "AdBrain #333 validate",
         "adset_id": "120253713408820526",

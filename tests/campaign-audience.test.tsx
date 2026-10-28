@@ -542,7 +542,7 @@ describe("campaign audience workflow", () => {
     expect(mocks.saveDraft).toHaveBeenCalledWith(expect.objectContaining({
       creativeIds: [creative.id], dailyBudgetRupees: 300, leadFormId: "form-1", targeting: { ...recommended, gender: "all" },
     }), expect.any(AbortSignal));
-    expect(screen.getByText(/Ages: 30-65\+/)).toHaveTextContent("Interests: Solar energy");
+    expect(screen.getByText(/Ages 30–65\+/)).toHaveTextContent("interested in Solar energy");
     expect(mocks.createCampaign).not.toHaveBeenCalled();
     first.unmount();
     view();
@@ -618,8 +618,8 @@ describe("campaign review walkthrough dead ends (#158)", () => {
     const review = screen.getByRole("region", { name: "Campaign review result" });
     expect(within(review).getByText("Fix 1 item before sending to Meta")).toBeInTheDocument();
     expect(within(review).queryByText("Campaign review")).toBeNull();
-    expect(review.firstElementChild).toHaveClass("bg-amber-50");
-    expect(review.firstElementChild).not.toHaveClass("bg-blue-50");
+    expect(review.firstElementChild).toHaveClass("border-amber-300");
+    expect(within(review).getByRole("heading", { name: "Fix 1 item before sending to Meta" }).querySelector("svg")).toHaveClass("text-amber-700");
     expect(within(review).getByText(/Send to Meta \(paused\) appears once this is fixed/)).toBeInTheDocument();
   });
 

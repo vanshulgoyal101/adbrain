@@ -16,8 +16,20 @@ export const PATCH = observeRoute("/api/leads/[id]", "PATCH", async (
     const update = leadUpdateSchema.parse(await request.json());
     const business = await getPrimaryBusiness();
     if (!business) return NextResponse.json({ error: "Business not found." }, { status: 404 });
-    const { data, error } = await database.from("leads").update(update)
-      .eq("id", id).eq("business_id", business.id).select("*").maybeSingle();
+    const { contacted, ...fields } = update;
+    if (contacted) {
+      // #1049: the first tap only; later taps keep the first time. A new enquiry becomes "contacted".
+      const now = new Date().toISOString();
+      const first = await database.from("leads").update({ first_contacted_at: now })
+        .eq("id", id).eq("business_id", business.id).is("first_contacted_at", null);
+      const status = await database.from("leads").update({ workflow_status: "contacted" })
+        .eq("id", id).eq("business_id", business.id).eq("workflow_status", "new");
+      if (first.error || status.error) throw new Error("Save failed");
+    }
+    const query = Object.keys(fields).length
+      ? database.from("leads").update(fields).eq("id", id).eq("business_id", business.id).select("*").maybeSingle()
+      : database.from("leads").select("*").eq("id", id).eq("business_id", business.id).maybeSingle();
+    const { data, error } = await query;
     if (error) throw new Error("Save failed");
     if (!data) return NextResponse.json({ error: "Enquiry not found." }, { status: 404 });
     return NextResponse.json({ lead: data }, { headers: { "Cache-Control": "private, no-store" } });

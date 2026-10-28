@@ -210,6 +210,9 @@ Those keys isolate presentation state; the list route still authorizes every rea
 - The query function passes its `AbortSignal` to fetch and checks it after JSON
   parsing. Old exact keys are removed on scope/filter changes; unmount clears the
   client. Pages deduplicate by campaign ID and merge stored result snapshots.
+- Browser back/forward replays a page's earlier server render (#1003). The page
+  stamps each render with a `renderId`; a view that mounts with an id this tab
+  already showed refetches its list once, so a pause or edit made since shows.
 - Nonempty search settles after 250 ms; changing status settles the current search
   immediately. Freshness is 30 seconds and cache GC is 60 seconds. Retries,
   mount/focus/reconnect refetch and polling are disabled explicitly.

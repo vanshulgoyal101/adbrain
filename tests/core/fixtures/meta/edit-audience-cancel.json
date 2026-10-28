@@ -1,0 +1,927 @@
+[
+  {
+    "method": "GET",
+    "path": "900000000000000003?fields=id%2Caccount_id",
+    "status": 200,
+    "body": {
+      "id": "900000000000000003",
+      "account_id": "9000000000000001"
+    }
+  },
+  {
+    "method": "GET",
+    "path": "900000000000000003/adsets?fields=promoted_object%2Cdestination_type&limit=100",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "promoted_object": {
+            "page_id": "900000000000002",
+            "smart_pse_enabled": false,
+            "whats_app_business_phone_number_id": "9000000000000004",
+            "whatsapp_phone_number":"+91XXXXXX0000"
+          },
+          "destination_type": "WHATSAPP",
+          "id": "900000000000000007"
+        }
+      ],
+      "paging": {
+        "cursors": {
+          "before":"CURSOR",
+          "after":"CURSOR"
+        }
+      }
+    }
+  },
+  {
+    "method": "GET",
+    "path": "900000000000000007?fields=id%2Ccampaign_id%2Cstatus%2Cbilling_event%2Coptimization_goal%2Cbid_strategy%2Cdestination_type%2Cpromoted_object%2Ctargeting%2Cdaily_budget%2Clifetime_budget%2Cbudget_remaining%2Cend_time",
+    "status": 200,
+    "body": {
+      "id": "900000000000000007",
+      "campaign_id": "900000000000000003",
+      "status": "ACTIVE",
+      "billing_event": "IMPRESSIONS",
+      "optimization_goal": "CONVERSATIONS",
+      "bid_strategy": "LOWEST_COST_WITHOUT_CAP",
+      "destination_type": "WHATSAPP",
+      "promoted_object": {
+        "page_id": "900000000000002",
+        "smart_pse_enabled": false,
+        "whats_app_business_phone_number_id": "9000000000000004",
+        "whatsapp_phone_number":"+91XXXXXX0000"
+      },
+      "targeting": {
+        "age_max": 65,
+        "age_min": 25,
+        "age_range": [
+          30,
+          60
+        ],
+        "excluded_geo_locations": {
+          "cities": [
+            {
+              "country": "IN",
+              "distance_unit": "mile",
+              "key": "1015543",
+              "name": "Abohar",
+              "region": "Punjab region",
+              "region_id": "1742"
+            },
+            {
+              "country": "IN",
+              "distance_unit": "mile",
+              "key": "1016294",
+              "name": "Amritsar",
+              "region": "Punjab region",
+              "region_id": "1742"
+            },
+            {
+              "country": "IN",
+              "distance_unit": "mile",
+              "key": "1018444",
+              "name": "Barnala",
+              "region": "Punjab region",
+              "region_id": "1742"
+            },
+            {
+              "country": "IN",
+              "distance_unit": "mile",
+              "key": "1018671",
+              "name": "Batala",
+              "region": "Punjab region",
+              "region_id": "1742"
+            },
+            {
+              "country": "IN",
+              "distance_unit": "mile",
+              "key": "1024628",
+              "name": "Faridkot",
+              "region": "Punjab region",
+              "region_id": "1742"
+            },
+            {
+              "country": "IN",
+              "distance_unit": "mile",
+              "key": "1024700",
+              "name": "Fazilka",
+              "region": "Punjab region",
+              "region_id": "1742"
+            },
+            {
+              "country": "IN",
+              "distance_unit": "mile",
+              "key": "1024719",
+              "name": "Firozpur",
+              "region": "Punjab region",
+              "region_id": "1742"
+            },
+            {
+              "country": "IN",
+              "distance_unit": "mile",
+              "key": "1026295",
+              "name": "Gurdaspur",
+              "region": "Punjab region",
+              "region_id": "1742"
+            },
+            {
+              "country": "IN",
+              "distance_unit": "mile",
+              "key": "1027125",
+              "name": "Hoshiarpur",
+              "region": "Punjab region",
+              "region_id": "1742"
+            },
+            {
+              "country": "IN",
+              "distance_unit": "mile",
+              "key": "1027716",
+              "name": "Jalandhar",
+              "region": "Punjab region",
+              "region_id": "1742"
+            },
+            {
+              "country": "IN",
+              "distance_unit": "mile",
+              "key": "1029615",
+              "name": "Kapurthala",
+              "region": "Punjab region",
+              "region_id": "1742"
+            },
+            {
+              "country": "IN",
+              "distance_unit": "mile",
+              "key": "1033379",
+              "name": "Ludhiana",
+              "region": "Punjab region",
+              "region_id": "1742"
+            },
+            {
+              "country": "IN",
+              "distance_unit": "mile",
+              "key": "1034076",
+              "name": "Malerkotla",
+              "region": "Punjab region",
+              "region_id": "1742"
+            },
+            {
+              "country": "IN",
+              "distance_unit": "mile",
+              "key": "1034654",
+              "name": "Mansa",
+              "region": "Punjab region",
+              "region_id": "1742"
+            },
+            {
+              "country": "IN",
+              "distance_unit": "mile",
+              "key": "1035456",
+              "name": "Moga",
+              "region": "Punjab region",
+              "region_id": "1742"
+            },
+            {
+              "country": "IN",
+              "distance_unit": "mile",
+              "key": "1035873",
+              "name": "Muktsar",
+              "region": "Punjab region",
+              "region_id": "1742"
+            },
+            {
+              "country": "IN",
+              "distance_unit": "mile",
+              "key": "1036173",
+              "name": "Nabha",
+              "region": "Punjab region",
+              "region_id": "1742"
+            },
+            {
+              "country": "IN",
+              "distance_unit": "mile",
+              "key": "1038824",
+              "name": "Pathankot",
+              "region": "Punjab region",
+              "region_id": "1742"
+            },
+            {
+              "country": "IN",
+              "distance_unit": "mile",
+              "key": "1038870",
+              "name": "Patiala",
+              "region": "Punjab region",
+              "region_id": "1742"
+            },
+            {
+              "country": "IN",
+              "distance_unit": "mile",
+              "key": "1039228",
+              "name": "Phagwara",
+              "region": "Punjab region",
+              "region_id": "1742"
+            },
+            {
+              "country": "IN",
+              "distance_unit": "mile",
+              "key": "1042093",
+              "name": "Sangrur",
+              "region": "Punjab region",
+              "region_id": "1742"
+            },
+            {
+              "country": "IN",
+              "distance_unit": "mile",
+              "key": "2674292",
+              "name": "Bathinda",
+              "region": "Punjab region",
+              "region_id": "1742"
+            }
+          ],
+          "regions": [
+            {
+              "key": "1723",
+              "name": "Andaman and Nicobar Islands",
+              "country": "IN"
+            },
+            {
+              "key": "1724",
+              "name": "Andhra Pradesh",
+              "country": "IN"
+            },
+            {
+              "key": "1725",
+              "name": "Assam",
+              "country": "IN"
+            },
+            {
+              "key": "1726",
+              "name": "Chandigarh",
+              "country": "IN"
+            },
+            {
+              "key": "1727",
+              "name": "Dadra and Nagar Haveli",
+              "country": "IN"
+            },
+            {
+              "key": "1728",
+              "name": "Delhi",
+              "country": "IN"
+            },
+            {
+              "key": "1729",
+              "name": "Gujarat",
+              "country": "IN"
+            },
+            {
+              "key": "1730",
+              "name": "Haryana",
+              "country": "IN"
+            },
+            {
+              "key": "1731",
+              "name": "Himachal Pradesh",
+              "country": "IN"
+            },
+            {
+              "key": "1732",
+              "name": "Jammu and Kashmir",
+              "country": "IN"
+            },
+            {
+              "key": "1733",
+              "name": "Kerala",
+              "country": "IN"
+            },
+            {
+              "key": "1734",
+              "name": "Lakshadweep",
+              "country": "IN"
+            },
+            {
+              "key": "1735",
+              "name": "Maharashtra",
+              "country": "IN"
+            },
+            {
+              "key": "1736",
+              "name": "Manipur",
+              "country": "IN"
+            },
+            {
+              "key": "1737",
+              "name": "Meghalaya",
+              "country": "IN"
+            },
+            {
+              "key": "1738",
+              "name": "Karnataka",
+              "country": "IN"
+            },
+            {
+              "key": "1739",
+              "name": "Nagaland",
+              "country": "IN"
+            },
+            {
+              "key": "1740",
+              "name": "Odisha",
+              "country": "IN"
+            },
+            {
+              "key": "1741",
+              "name": "Puducherry",
+              "country": "IN"
+            },
+            {
+              "key": "1743",
+              "name": "Rajasthan",
+              "country": "IN"
+            },
+            {
+              "key": "1744",
+              "name": "Tamil Nadu",
+              "country": "IN"
+            },
+            {
+              "key": "1745",
+              "name": "Tripura",
+              "country": "IN"
+            },
+            {
+              "key": "1746",
+              "name": "West Bengal",
+              "country": "IN"
+            },
+            {
+              "key": "1747",
+              "name": "Sikkim",
+              "country": "IN"
+            },
+            {
+              "key": "1748",
+              "name": "Arunachal Pradesh",
+              "country": "IN"
+            },
+            {
+              "key": "1749",
+              "name": "Mizoram",
+              "country": "IN"
+            },
+            {
+              "key": "1750",
+              "name": "Daman and Diu",
+              "country": "IN"
+            },
+            {
+              "key": "1751",
+              "name": "Goa",
+              "country": "IN"
+            },
+            {
+              "key": "1752",
+              "name": "Bihar",
+              "country": "IN"
+            },
+            {
+              "key": "1753",
+              "name": "Madhya Pradesh",
+              "country": "IN"
+            },
+            {
+              "key": "1754",
+              "name": "Uttar Pradesh",
+              "country": "IN"
+            },
+            {
+              "key": "1755",
+              "name": "Chhattisgarh",
+              "country": "IN"
+            },
+            {
+              "key": "1756",
+              "name": "Jharkhand",
+              "country": "IN"
+            },
+            {
+              "key": "1757",
+              "name": "Uttarakhand",
+              "country": "IN"
+            },
+            {
+              "key": "4100",
+              "name": "Telangana",
+              "country": "IN"
+            }
+          ],
+          "location_types": [
+            "home",
+            "recent"
+          ]
+        },
+        "geo_locations": {
+          "cities": [
+            {
+              "country": "IN",
+              "distance_unit": "mile",
+              "key": "1035473",
+              "name": "Mohali",
+              "region": "Punjab region",
+              "region_id": "1742"
+            }
+          ],
+          "location_types": [
+            "frequently_in",
+            "home",
+            "recent"
+          ]
+        },
+        "targeting_automation": {
+          "advantage_audience": 1
+        },
+        "publisher_platforms": [
+          "facebook",
+          "instagram",
+          "messenger"
+        ]
+      },
+      "daily_budget": "10000",
+      "lifetime_budget": "0",
+      "budget_remaining": "351"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "act_9000000000000001/adsets",
+    "form": {
+      "name": "AdBrain audience 2026-10-27",
+      "campaign_id": "900000000000000003",
+      "status": "PAUSED",
+      "daily_budget": "10000",
+      "billing_event": "IMPRESSIONS",
+      "optimization_goal": "CONVERSATIONS",
+      "bid_strategy": "LOWEST_COST_WITHOUT_CAP",
+      "destination_type": "WHATSAPP",
+      "promoted_object": "{\"page_id\":\"900000000000002\",\"smart_pse_enabled\":false,\"whats_app_business_phone_number_id\":\"9000000000000004\",\"whatsapp_phone_number\":\"900000000006\"}",
+      "targeting": "{\"age_max\":65,\"age_min\":25,\"age_range\":[35,60],\"excluded_geo_locations\":{\"cities\":[{\"country\":\"IN\",\"distance_unit\":\"mile\",\"key\":\"1015543\",\"name\":\"Abohar\",\"region\":\"Punjab region\",\"region_id\":\"1742\"},{\"country\":\"IN\",\"distance_unit\":\"mile\",\"key\":\"1016294\",\"name\":\"Amritsar\",\"region\":\"Punjab region\",\"region_id\":\"1742\"},{\"country\":\"IN\",\"distance_unit\":\"mile\",\"key\":\"1018444\",\"name\":\"Barnala\",\"region\":\"Punjab region\",\"region_id\":\"1742\"},{\"country\":\"IN\",\"distance_unit\":\"mile\",\"key\":\"1018671\",\"name\":\"Batala\",\"region\":\"Punjab region\",\"region_id\":\"1742\"},{\"country\":\"IN\",\"distance_unit\":\"mile\",\"key\":\"1024628\",\"name\":\"Faridkot\",\"region\":\"Punjab region\",\"region_id\":\"1742\"},{\"country\":\"IN\",\"distance_unit\":\"mile\",\"key\":\"1024700\",\"name\":\"Fazilka\",\"region\":\"Punjab region\",\"region_id\":\"1742\"},{\"country\":\"IN\",\"distance_unit\":\"mile\",\"key\":\"1024719\",\"name\":\"Firozpur\",\"region\":\"Punjab region\",\"region_id\":\"1742\"},{\"country\":\"IN\",\"distance_unit\":\"mile\",\"key\":\"1026295\",\"name\":\"Gurdaspur\",\"region\":\"Punjab region\",\"region_id\":\"1742\"},{\"country\":\"IN\",\"distance_unit\":\"mile\",\"key\":\"1027125\",\"name\":\"Hoshiarpur\",\"region\":\"Punjab region\",\"region_id\":\"1742\"},{\"country\":\"IN\",\"distance_unit\":\"mile\",\"key\":\"1027716\",\"name\":\"Jalandhar\",\"region\":\"Punjab region\",\"region_id\":\"1742\"},{\"country\":\"IN\",\"distance_unit\":\"mile\",\"key\":\"1029615\",\"name\":\"Kapurthala\",\"region\":\"Punjab region\",\"region_id\":\"1742\"},{\"country\":\"IN\",\"distance_unit\":\"mile\",\"key\":\"1033379\",\"name\":\"Ludhiana\",\"region\":\"Punjab region\",\"region_id\":\"1742\"},{\"country\":\"IN\",\"distance_unit\":\"mile\",\"key\":\"1034076\",\"name\":\"Malerkotla\",\"region\":\"Punjab region\",\"region_id\":\"1742\"},{\"country\":\"IN\",\"distance_unit\":\"mile\",\"key\":\"1034654\",\"name\":\"Mansa\",\"region\":\"Punjab region\",\"region_id\":\"1742\"},{\"country\":\"IN\",\"distance_unit\":\"mile\",\"key\":\"1035456\",\"name\":\"Moga\",\"region\":\"Punjab region\",\"region_id\":\"1742\"},{\"country\":\"IN\",\"distance_unit\":\"mile\",\"key\":\"1035873\",\"name\":\"Muktsar\",\"region\":\"Punjab region\",\"region_id\":\"1742\"},{\"country\":\"IN\",\"distance_unit\":\"mile\",\"key\":\"1036173\",\"name\":\"Nabha\",\"region\":\"Punjab region\",\"region_id\":\"1742\"},{\"country\":\"IN\",\"distance_unit\":\"mile\",\"key\":\"1038824\",\"name\":\"Pathankot\",\"region\":\"Punjab region\",\"region_id\":\"1742\"},{\"country\":\"IN\",\"distance_unit\":\"mile\",\"key\":\"1038870\",\"name\":\"Patiala\",\"region\":\"Punjab region\",\"region_id\":\"1742\"},{\"country\":\"IN\",\"distance_unit\":\"mile\",\"key\":\"1039228\",\"name\":\"Phagwara\",\"region\":\"Punjab region\",\"region_id\":\"1742\"},{\"country\":\"IN\",\"distance_unit\":\"mile\",\"key\":\"1042093\",\"name\":\"Sangrur\",\"region\":\"Punjab region\",\"region_id\":\"1742\"},{\"country\":\"IN\",\"distance_unit\":\"mile\",\"key\":\"2674292\",\"name\":\"Bathinda\",\"region\":\"Punjab region\",\"region_id\":\"1742\"}],\"regions\":[{\"key\":\"1723\",\"name\":\"Andaman and Nicobar Islands\",\"country\":\"IN\"},{\"key\":\"1724\",\"name\":\"Andhra Pradesh\",\"country\":\"IN\"},{\"key\":\"1725\",\"name\":\"Assam\",\"country\":\"IN\"},{\"key\":\"1726\",\"name\":\"Chandigarh\",\"country\":\"IN\"},{\"key\":\"1727\",\"name\":\"Dadra and Nagar Haveli\",\"country\":\"IN\"},{\"key\":\"1728\",\"name\":\"Delhi\",\"country\":\"IN\"},{\"key\":\"1729\",\"name\":\"Gujarat\",\"country\":\"IN\"},{\"key\":\"1730\",\"name\":\"Haryana\",\"country\":\"IN\"},{\"key\":\"1731\",\"name\":\"Himachal Pradesh\",\"country\":\"IN\"},{\"key\":\"1732\",\"name\":\"Jammu and Kashmir\",\"country\":\"IN\"},{\"key\":\"1733\",\"name\":\"Kerala\",\"country\":\"IN\"},{\"key\":\"1734\",\"name\":\"Lakshadweep\",\"country\":\"IN\"},{\"key\":\"1735\",\"name\":\"Maharashtra\",\"country\":\"IN\"},{\"key\":\"1736\",\"name\":\"Manipur\",\"country\":\"IN\"},{\"key\":\"1737\",\"name\":\"Meghalaya\",\"country\":\"IN\"},{\"key\":\"1738\",\"name\":\"Karnataka\",\"country\":\"IN\"},{\"key\":\"1739\",\"name\":\"Nagaland\",\"country\":\"IN\"},{\"key\":\"1740\",\"name\":\"Odisha\",\"country\":\"IN\"},{\"key\":\"1741\",\"name\":\"Puducherry\",\"country\":\"IN\"},{\"key\":\"1743\",\"name\":\"Rajasthan\",\"country\":\"IN\"},{\"key\":\"1744\",\"name\":\"Tamil Nadu\",\"country\":\"IN\"},{\"key\":\"1745\",\"name\":\"Tripura\",\"country\":\"IN\"},{\"key\":\"1746\",\"name\":\"West Bengal\",\"country\":\"IN\"},{\"key\":\"1747\",\"name\":\"Sikkim\",\"country\":\"IN\"},{\"key\":\"1748\",\"name\":\"Arunachal Pradesh\",\"country\":\"IN\"},{\"key\":\"1749\",\"name\":\"Mizoram\",\"country\":\"IN\"},{\"key\":\"1750\",\"name\":\"Daman and Diu\",\"country\":\"IN\"},{\"key\":\"1751\",\"name\":\"Goa\",\"country\":\"IN\"},{\"key\":\"1752\",\"name\":\"Bihar\",\"country\":\"IN\"},{\"key\":\"1753\",\"name\":\"Madhya Pradesh\",\"country\":\"IN\"},{\"key\":\"1754\",\"name\":\"Uttar Pradesh\",\"country\":\"IN\"},{\"key\":\"1755\",\"name\":\"Chhattisgarh\",\"country\":\"IN\"},{\"key\":\"1756\",\"name\":\"Jharkhand\",\"country\":\"IN\"},{\"key\":\"1757\",\"name\":\"Uttarakhand\",\"country\":\"IN\"},{\"key\":\"4100\",\"name\":\"Telangana\",\"country\":\"IN\"}],\"location_types\":[\"home\",\"recent\"]},\"geo_locations\":{\"cities\":[{\"country\":\"IN\",\"distance_unit\":\"mile\",\"key\":\"1035473\",\"name\":\"Mohali\",\"region\":\"Punjab region\",\"region_id\":\"1742\"}],\"location_types\":[\"frequently_in\",\"home\",\"recent\"]},\"targeting_automation\":{\"advantage_audience\":1},\"publisher_platforms\":[\"facebook\",\"instagram\",\"messenger\"]}"
+    },
+    "status": 200,
+    "body": {
+      "id": "900000000000000010"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "900000000000000009/copies",
+    "form": {
+      "adset_id": "900000000000000010",
+      "status_option": "PAUSED"
+    },
+    "status": 200,
+    "body": {
+      "copied_ad_id": "900000000000000011"
+    }
+  },
+  {
+    "method": "GET",
+    "path": "900000000000000010/ads?fields=id%2Cstatus%2Cadset_id&limit=100",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "id": "900000000000000011",
+          "status": "PAUSED",
+          "adset_id": "900000000000000010"
+        }
+      ],
+      "paging": {
+        "cursors": {
+          "before":"CURSOR",
+          "after":"CURSOR"
+        }
+      }
+    }
+  },
+  {
+    "method": "GET",
+    "path": "900000000000000010?fields=id%2Ccampaign_id%2Cstatus%2Ctargeting",
+    "status": 200,
+    "body": {
+      "id": "900000000000000010",
+      "campaign_id": "900000000000000003",
+      "status": "PAUSED",
+      "targeting": {
+        "age_max": 65,
+        "age_min": 25,
+        "age_range": [
+          35,
+          60
+        ],
+        "excluded_geo_locations": {
+          "cities": [
+            {
+              "country": "IN",
+              "distance_unit": "mile",
+              "key": "1015543",
+              "name": "Abohar",
+              "region": "Punjab region",
+              "region_id": "1742"
+            },
+            {
+              "country": "IN",
+              "distance_unit": "mile",
+              "key": "1016294",
+              "name": "Amritsar",
+              "region": "Punjab region",
+              "region_id": "1742"
+            },
+            {
+              "country": "IN",
+              "distance_unit": "mile",
+              "key": "1018444",
+              "name": "Barnala",
+              "region": "Punjab region",
+              "region_id": "1742"
+            },
+            {
+              "country": "IN",
+              "distance_unit": "mile",
+              "key": "1018671",
+              "name": "Batala",
+              "region": "Punjab region",
+              "region_id": "1742"
+            },
+            {
+              "country": "IN",
+              "distance_unit": "mile",
+              "key": "1024628",
+              "name": "Faridkot",
+              "region": "Punjab region",
+              "region_id": "1742"
+            },
+            {
+              "country": "IN",
+              "distance_unit": "mile",
+              "key": "1024700",
+              "name": "Fazilka",
+              "region": "Punjab region",
+              "region_id": "1742"
+            },
+            {
+              "country": "IN",
+              "distance_unit": "mile",
+              "key": "1024719",
+              "name": "Firozpur",
+              "region": "Punjab region",
+              "region_id": "1742"
+            },
+            {
+              "country": "IN",
+              "distance_unit": "mile",
+              "key": "1026295",
+              "name": "Gurdaspur",
+              "region": "Punjab region",
+              "region_id": "1742"
+            },
+            {
+              "country": "IN",
+              "distance_unit": "mile",
+              "key": "1027125",
+              "name": "Hoshiarpur",
+              "region": "Punjab region",
+              "region_id": "1742"
+            },
+            {
+              "country": "IN",
+              "distance_unit": "mile",
+              "key": "1027716",
+              "name": "Jalandhar",
+              "region": "Punjab region",
+              "region_id": "1742"
+            },
+            {
+              "country": "IN",
+              "distance_unit": "mile",
+              "key": "1029615",
+              "name": "Kapurthala",
+              "region": "Punjab region",
+              "region_id": "1742"
+            },
+            {
+              "country": "IN",
+              "distance_unit": "mile",
+              "key": "1033379",
+              "name": "Ludhiana",
+              "region": "Punjab region",
+              "region_id": "1742"
+            },
+            {
+              "country": "IN",
+              "distance_unit": "mile",
+              "key": "1034076",
+              "name": "Malerkotla",
+              "region": "Punjab region",
+              "region_id": "1742"
+            },
+            {
+              "country": "IN",
+              "distance_unit": "mile",
+              "key": "1034654",
+              "name": "Mansa",
+              "region": "Punjab region",
+              "region_id": "1742"
+            },
+            {
+              "country": "IN",
+              "distance_unit": "mile",
+              "key": "1035456",
+              "name": "Moga",
+              "region": "Punjab region",
+              "region_id": "1742"
+            },
+            {
+              "country": "IN",
+              "distance_unit": "mile",
+              "key": "1035873",
+              "name": "Muktsar",
+              "region": "Punjab region",
+              "region_id": "1742"
+            },
+            {
+              "country": "IN",
+              "distance_unit": "mile",
+              "key": "1036173",
+              "name": "Nabha",
+              "region": "Punjab region",
+              "region_id": "1742"
+            },
+            {
+              "country": "IN",
+              "distance_unit": "mile",
+              "key": "1038824",
+              "name": "Pathankot",
+              "region": "Punjab region",
+              "region_id": "1742"
+            },
+            {
+              "country": "IN",
+              "distance_unit": "mile",
+              "key": "1038870",
+              "name": "Patiala",
+              "region": "Punjab region",
+              "region_id": "1742"
+            },
+            {
+              "country": "IN",
+              "distance_unit": "mile",
+              "key": "1039228",
+              "name": "Phagwara",
+              "region": "Punjab region",
+              "region_id": "1742"
+            },
+            {
+              "country": "IN",
+              "distance_unit": "mile",
+              "key": "1042093",
+              "name": "Sangrur",
+              "region": "Punjab region",
+              "region_id": "1742"
+            },
+            {
+              "country": "IN",
+              "distance_unit": "mile",
+              "key": "2674292",
+              "name": "Bathinda",
+              "region": "Punjab region",
+              "region_id": "1742"
+            }
+          ],
+          "regions": [
+            {
+              "key": "1723",
+              "name": "Andaman and Nicobar Islands",
+              "country": "IN"
+            },
+            {
+              "key": "1724",
+              "name": "Andhra Pradesh",
+              "country": "IN"
+            },
+            {
+              "key": "1725",
+              "name": "Assam",
+              "country": "IN"
+            },
+            {
+              "key": "1726",
+              "name": "Chandigarh",
+              "country": "IN"
+            },
+            {
+              "key": "1727",
+              "name": "Dadra and Nagar Haveli",
+              "country": "IN"
+            },
+            {
+              "key": "1728",
+              "name": "Delhi",
+              "country": "IN"
+            },
+            {
+              "key": "1729",
+              "name": "Gujarat",
+              "country": "IN"
+            },
+            {
+              "key": "1730",
+              "name": "Haryana",
+              "country": "IN"
+            },
+            {
+              "key": "1731",
+              "name": "Himachal Pradesh",
+              "country": "IN"
+            },
+            {
+              "key": "1732",
+              "name": "Jammu and Kashmir",
+              "country": "IN"
+            },
+            {
+              "key": "1733",
+              "name": "Kerala",
+              "country": "IN"
+            },
+            {
+              "key": "1734",
+              "name": "Lakshadweep",
+              "country": "IN"
+            },
+            {
+              "key": "1735",
+              "name": "Maharashtra",
+              "country": "IN"
+            },
+            {
+              "key": "1736",
+              "name": "Manipur",
+              "country": "IN"
+            },
+            {
+              "key": "1737",
+              "name": "Meghalaya",
+              "country": "IN"
+            },
+            {
+              "key": "1738",
+              "name": "Karnataka",
+              "country": "IN"
+            },
+            {
+              "key": "1739",
+              "name": "Nagaland",
+              "country": "IN"
+            },
+            {
+              "key": "1740",
+              "name": "Odisha",
+              "country": "IN"
+            },
+            {
+              "key": "1741",
+              "name": "Puducherry",
+              "country": "IN"
+            },
+            {
+              "key": "1743",
+              "name": "Rajasthan",
+              "country": "IN"
+            },
+            {
+              "key": "1744",
+              "name": "Tamil Nadu",
+              "country": "IN"
+            },
+            {
+              "key": "1745",
+              "name": "Tripura",
+              "country": "IN"
+            },
+            {
+              "key": "1746",
+              "name": "West Bengal",
+              "country": "IN"
+            },
+            {
+              "key": "1747",
+              "name": "Sikkim",
+              "country": "IN"
+            },
+            {
+              "key": "1748",
+              "name": "Arunachal Pradesh",
+              "country": "IN"
+            },
+            {
+              "key": "1749",
+              "name": "Mizoram",
+              "country": "IN"
+            },
+            {
+              "key": "1750",
+              "name": "Daman and Diu",
+              "country": "IN"
+            },
+            {
+              "key": "1751",
+              "name": "Goa",
+              "country": "IN"
+            },
+            {
+              "key": "1752",
+              "name": "Bihar",
+              "country": "IN"
+            },
+            {
+              "key": "1753",
+              "name": "Madhya Pradesh",
+              "country": "IN"
+            },
+            {
+              "key": "1754",
+              "name": "Uttar Pradesh",
+              "country": "IN"
+            },
+            {
+              "key": "1755",
+              "name": "Chhattisgarh",
+              "country": "IN"
+            },
+            {
+              "key": "1756",
+              "name": "Jharkhand",
+              "country": "IN"
+            },
+            {
+              "key": "1757",
+              "name": "Uttarakhand",
+              "country": "IN"
+            },
+            {
+              "key": "4100",
+              "name": "Telangana",
+              "country": "IN"
+            }
+          ],
+          "location_types": [
+            "home",
+            "recent"
+          ]
+        },
+        "geo_locations": {
+          "cities": [
+            {
+              "country": "IN",
+              "distance_unit": "mile",
+              "key": "1035473",
+              "name": "Mohali",
+              "region": "Punjab region",
+              "region_id": "1742"
+            }
+          ],
+          "location_types": [
+            "frequently_in",
+            "home",
+            "recent"
+          ]
+        },
+        "targeting_automation": {
+          "advantage_audience": 1
+        },
+        "publisher_platforms": [
+          "facebook",
+          "instagram",
+          "messenger"
+        ]
+      }
+    }
+  },
+  {
+    "method": "GET",
+    "path": "900000000000000010?fields=id%2Ccampaign_id%2Cstatus",
+    "status": 200,
+    "body": {
+      "id": "900000000000000010",
+      "campaign_id": "900000000000000003",
+      "status": "PAUSED"
+    }
+  },
+  {
+    "method": "DELETE",
+    "path": "900000000000000010",
+    "status": 200,
+    "body": {
+      "success": true
+    }
+  }
+]

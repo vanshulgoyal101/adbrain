@@ -646,3 +646,28 @@ describe("<LeadInbox> on a phone (#376)", () => {
     expect(screen.queryByRole("button", { name: /became a customer/ })).not.toBeInTheDocument();
   });
 });
+
+describe("<LeadInbox> reply in one tap (#1049)", () => {
+  it("offers WhatsApp them with a pre-filled first reply and Call, records the first tap once, and shows the reply time", async () => {
+    const calls: [string, RequestInit | undefined][] = [];
+    global.fetch = vi.fn(async (url: string, init?: RequestInit) => { calls.push([url, init]); return { ok: true, json: async () => ({}) }; }) as unknown as typeof fetch;
+    render(<LeadInbox businessName="Solaride" offer="Free solar site survey" language="hinglish" initialLeads={[lead({ phone: "98765 43210" })]} metaReady />);
+    const whatsapp = screen.getByRole("link", { name: "WhatsApp them" });
+    expect(whatsapp).toHaveAttribute("href", `https://wa.me/919876543210?text=${encodeURIComponent("Namaste Asha ji, Solaride ki taraf se dhanyavaad! Aapne free solar site survey ke baare mein poocha tha. Aapse baat karne ka sahi time kab hai?")}`);
+    expect(screen.getByRole("link", { name: "Call" })).toHaveAttribute("href", "tel:98765 43210");
+    whatsapp.addEventListener("click", (event) => event.preventDefault());
+    fireEvent.click(whatsapp);
+    fireEvent.click(screen.getByRole("link", { name: "Call" }));
+    const marks = calls.filter(([url]) => url === "/api/leads/l1");
+    expect(marks).toHaveLength(1);
+    expect(marks[0][1]).toMatchObject({ method: "PATCH", body: JSON.stringify({ contacted: true }), keepalive: true });
+    expect(await screen.findByText(/^Replied .* after the enquiry$/)).toBeInTheDocument();
+  });
+
+  it("shows the saved reply time and no WhatsApp button for a number it can't use", () => {
+    render(<LeadInbox businessName="Solaride" initialLeads={[lead({ id: "l2", meta_lead_id: "m2", phone: "12345", first_contacted_at: "2026-08-20T10:12:00.000Z" })]} metaReady />);
+    expect(screen.queryByRole("link", { name: "WhatsApp them" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Call" })).toBeInTheDocument();
+    expect(screen.getByText("Replied 12 min after the enquiry")).toBeInTheDocument();
+  });
+});

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Campaigns } from "@/components/campaigns";
 import type { DraftDTO, DraftInput } from "@/lib/campaign/connect-contracts";
@@ -207,7 +207,7 @@ describe("campaign Ads Manager links", () => {
     fireEvent.change(language, { target: { value: "en" } });
     fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
     fireEvent.click(screen.getByRole("button", { name: "Check my campaign (nothing spends)" }));
-    await screen.findByText(/Destination: WhatsApp chat/);
+    within(await screen.findByRole("region", { name: "Campaign review result" })).getByText(/^WhatsApp chat/);
     expect(saved.input).toMatchObject({ destination: "whatsapp", whatsappLanguage: "en" });
     first.unmount();
     view();
@@ -226,7 +226,7 @@ describe("campaign Ads Manager links", () => {
     fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
     expect(screen.queryByLabelText("Lead form")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Check my campaign (nothing spends)" }));
-    await screen.findByText(/Destination: WhatsApp chat \+919876543210/);
+    await screen.findByText("WhatsApp chat +919876543210");
     expect(saved.input).toMatchObject({ destination: "whatsapp", leadFormId: null });
     expect(vi.mocked(fetch).mock.calls.some(([url]) => url === "/api/campaigns/lead-forms")).toBe(false);
     first.unmount();
@@ -240,8 +240,8 @@ describe("campaign Ads Manager links", () => {
   });
 
   it.each([
-    ["act_2398686420592052", "act_999", "2398686420592052"],
-    ["2398686420592052", "act_999", "2398686420592052"],
+    ["act_9000000000000001", "act_999", "9000000000000001"],
+    ["9000000000000001", "act_999", "9000000000000001"],
     [null, "act_999", "999"],
     [null, "", null],
     ["invalid", "act_999", null],

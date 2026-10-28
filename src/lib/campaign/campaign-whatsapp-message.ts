@@ -1,7 +1,7 @@
 import { savedGenerationSettings } from "@/lib/creative/receipt";
 import type { DraftInput } from "./connect-contracts";
 import { draftAreaNames } from "./draft-targeting";
-import { quotedAsk, whatsappGreeting } from "./whatsapp-greeting";
+import { questionsWelcome, quotedAsk, whatsappGreeting } from "./whatsapp-greeting";
 import { resolveWhatsAppMessage, type ResolvedWhatsAppMessage } from "./whatsapp-template";
 
 export type WhatsAppMessageBusiness = { name: string; offers?: string[] | null; locations?: string[] | null; whatsapp_template?: unknown };
@@ -14,7 +14,7 @@ export type WhatsAppMessageCreative = { headline?: string | null; primary_text?:
  */
 export function campaignWhatsAppMessage(input: { draft: DraftInput; business: WhatsAppMessageBusiness; creatives: WhatsAppMessageCreative[] }): ResolvedWhatsAppMessage {
   const { draft, business, creatives } = input;
-  return resolveWhatsAppMessage({
+  const resolved = resolveWhatsAppMessage({
     edited: draft.whatsappMessage,
     saved: business.whatsapp_template,
     suggest: () => whatsappGreeting(
@@ -26,4 +26,7 @@ export function campaignWhatsAppMessage(input: { draft: DraftInput; business: Wh
       creatives.map(creative => quotedAsk(creative.primary_text)),
     ),
   });
+  // #1121: ice breakers have no pre-typed message, so AdBrain's own "Send this message" welcome points to the questions.
+  const { opening } = resolved;
+  return opening.iceBreakers?.length ? { ...resolved, opening: { ...opening, greeting: questionsWelcome(opening.greeting) } } : resolved;
 }

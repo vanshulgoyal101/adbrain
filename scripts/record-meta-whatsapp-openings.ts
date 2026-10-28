@@ -21,6 +21,9 @@ export const OPENINGS: Record<string, WhatsAppOpening> = {
   prefill: { greeting: "Hi! Thanks for messaging Solaride. Send this message and we'll reply here.", autofill: "Hi! I'd like a free solar site survey." },
   call: { greeting: "Hi! Thanks for messaging Solaride. This is your first step in getting free electricity.", autofill: "Can I get more info on this", callButton: true },
   ice_breakers: { greeting: "Hi! Thanks for messaging Solaride.", autofill: "", iceBreakers: ["Free site survey", "Price for my home", "Call me back"] },
+  // #1121: AdBrain's suggested welcome with ice breakers points to the questions (en, and hi as the longest script).
+  questions_en: { greeting: "Hi! Thanks for messaging Solaride. Tap a question below and we'll reply here.", autofill: "", iceBreakers: ["Free site survey", "Price for my home", "Call me back"] },
+  questions_hi: { greeting: "नमस्ते! Solaride को मैसेज करने के लिए धन्यवाद। नीचे कोई सवाल चुनिए, हम यहीं जवाब देंगे।", autofill: "", iceBreakers: ["फ्री साइट सर्वे", "मेरे घर के लिए कीमत", "मुझे वापस कॉल करें"] },
 };
 
 async function call(method: "GET" | "POST", path: string, form?: Record<string, string>) {

@@ -69,7 +69,7 @@ async function main() {
     const expected = dumpRowCounts(sql);
 
     sh(join(BIN, "initdb"), ["-D", cluster, "--auth=trust", "--encoding=UTF8", "--locale=C"]);
-    sh(join(BIN, "pg_ctl"), ["-D", cluster, "-l", join(work, "pg.log"), "-o", `-k ${socket} -p 5497 -c listen_addresses=''`, "-w", "start"]);
+    sh(join(BIN, "pg_ctl"), ["-D", cluster, "-l", join(work, "pg.log"), "-o", `-k ${socket} -p 5497 -c listen_addresses=''`, "-w", "start"], { env: { ...process.env, LC_ALL: "C" } });
     running = true;
     const psql = ["-h", socket, "-p", "5497", "-d", "postgres", "-q", "-X"];
     sh(join(BIN, "psql"), [...psql, "-c", BOOTSTRAP]);

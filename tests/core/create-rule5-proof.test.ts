@@ -54,7 +54,7 @@ describe("core: a proof line from the Brand (#418 rule 5)", () => {
       draft: { businessId: "b1", name: "Lever 2", goal: "Enquiries", mode: "manual" as const, destination: "whatsapp" as const, creativeIds: ["c1"], dailyBudgetRupees: 450, abTest: false,
         targeting: { location: { mode: "manual" as const, includedNames: ["Mohali"] }, age: { mode: "manual" as const, min: 25, max: 55 }, audience: { interestNames: ["Solar energy"], rationale: "Homeowners." } } } as never,
       draftId: "90d1d2bb-466c-4889-9af2-edb533e82531", draftVersion: 1, form: null,
-      connection: { generation: 1, canCreatePaused: true, selected: { metaBusinessId: null, adAccountId: "act_2398686420592052", accountName: "Solaride 101", pageId: "885223068001054", pageName: "Solaride Energy", currency: "INR", timezoneName: "Asia/Kolkata" } },
+      connection: { generation: 1, canCreatePaused: true, selected: { metaBusinessId: null, adAccountId: "act_9000000000000001", accountName: "Solaride 101", pageId: "900000000000002", pageName: "Solaride Energy", currency: "INR", timezoneName: "Asia/Kolkata" } },
       creatives: [{ id: "c1", businessId: "b1", approved: true, imageUrl: "https://example.com/ad.png", headline: "Free solar site survey", primaryText: recorded.find((text) => !citedProofs(text, proofFacts(facts)).length), storyReady: true }],
       whatsappNumber: "+919999994842",
       geo: { resolvedAreaLabel: "Mohali", unresolvedNames: [], explicitlyNationwide: false, audienceInterests: [{ id: "6003384248805", name: "Solar energy" }] },

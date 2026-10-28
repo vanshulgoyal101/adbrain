@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { whatsappGreeting } from "@/lib/campaign/whatsapp-greeting";
+import { prefillWelcome, questionsWelcome, whatsappGreeting } from "@/lib/campaign/whatsapp-greeting";
 
 // Solaride's Brand offers and Create run 21's saved Special offer ad (8df360e7, Oct 23).
 const solaride = {
@@ -58,6 +58,27 @@ describe("whatsappGreeting (#209, #493)", () => {
     expect(whatsappGreeting(solaride, ["छत पर सोलर"], [], ["English"]).autofill).toBe("Hi! I'd like to know more about Solaride.");
   });
 
+  // #1081 (W2): the ask and the welcome follow the ad's language even when Create didn't store it precisely.
+  it("writes the ask and the welcome in the ad's language: en, hi, Hinglish, pa", () => {
+    const romanHindi = ["Bijli ka bill aadha karo", "Free site survey ke liye abhi WhatsApp karo"];
+    const hinglish = whatsappGreeting(solaride, romanHindi, ["Mohali"]);
+    expect(hinglish).toEqual({
+      autofill: "Namaste, mujhe Mohali mein Free site survey ke baare mein jaankari chahiye.",
+      greeting: "Namaste! Solaride ko message karne ke liye dhanyavaad. Yeh message bhejiye, hum yahin jawab denge.",
+    });
+    // Brand's plain "Hindi"/"Punjabi" follows the ad's script.
+    expect(whatsappGreeting(solaride, romanHindi, ["Mohali"], ["Hindi"])).toEqual(hinglish);
+    expect(whatsappGreeting(solaride, ["छत पर सोलर, Free site survey के साथ"], [], ["Hindi"]).greeting).toBe("नमस्ते! Solaride को मैसेज करने के लिए धन्यवाद। यह मैसेज भेजिए, हम यहीं जवाब देंगे।");
+    expect(whatsappGreeting(solaride, ["ਛੱਤ 'ਤੇ ਸੋਲਰ, Free site survey ਨਾਲ"], [], ["Punjabi"])).toEqual({
+      autofill: "ਸਤ ਸ੍ਰੀ ਅਕਾਲ, ਮੈਨੂੰ Free site survey ਬਾਰੇ ਜਾਣਕਾਰੀ ਚਾਹੀਦੀ ਹੈ।",
+      greeting: "ਸਤ ਸ੍ਰੀ ਅਕਾਲ! Solaride ਨੂੰ ਸੁਨੇਹਾ ਭੇਜਣ ਲਈ ਧੰਨਵਾਦ। ਇਹ ਸੁਨੇਹਾ ਭੇਜੋ, ਅਸੀਂ ਇੱਥੇ ਹੀ ਜਵਾਬ ਦੇਵਾਂਗੇ।",
+    });
+    // English copy stays English: one Hindi-looking word isn't enough, and a stored "English" wins.
+    expect(whatsappGreeting(solaride, run21Offer).greeting).toBe("Hi! Thanks for messaging Solaride. Send this message and we'll reply here.");
+    expect(whatsappGreeting(solaride, ["Solar hai the answer for Mohali homes"]).autofill).toBe("Hi! I'd like to know more about Solaride.");
+    expect(whatsappGreeting(solaride, romanHindi, [], ["English"]).autofill).toBe("Hi! I'd like a Free site survey.");
+  });
+
   it("matches offers as whole words and ignores an empty label (QA, PR #218)", () => {
     const brand = { name: "Acme", offers: ["EMI", "Diwali offer:", ":"] };
     expect(whatsappGreeting(brand, ["Premium panels."]).autofill).toBe("Hi! I'd like to know more about Acme.");
@@ -76,5 +97,25 @@ describe("whatsappGreeting (#209, #493)", () => {
     expect(whatsappGreeting(solaride, ["घर की छत पर सोलर, Free site survey के साथ"], ["Mohali"], [], "en").autofill).toBe("Hi! I'd like a Free site survey in Mohali.");
     expect(whatsappGreeting(solaride, run21Offer, [], ["English"], "hinglish").autofill).toBe("Namaste, mujhe free site survey ke baare mein jaankari chahiye.");
     expect(whatsappGreeting(solaride, run21Offer, [], [], "ad").autofill).toBe("Hi! I'd like a free site survey.");
+  });
+
+  // #1121: ice breakers get a welcome that points to the questions; only AdBrain's own wording is swapped.
+  it("swaps AdBrain's welcome to the questions wording in every language, and back", () => {
+    const expected = {
+      en: "Hi! Thanks for messaging Cedar Ridge. Tap a question below and we'll reply here.",
+      hi: "नमस्ते! Cedar Ridge को मैसेज करने के लिए धन्यवाद। नीचे कोई सवाल चुनिए, हम यहीं जवाब देंगे।",
+      hinglish: "Namaste! Cedar Ridge ko message karne ke liye dhanyavaad. Neeche koi sawaal chuniye, hum yahin jawab denge.",
+      pa: "ਸਤ ਸ੍ਰੀ ਅਕਾਲ! Cedar Ridge ਨੂੰ ਸੁਨੇਹਾ ਭੇਜਣ ਲਈ ਧੰਨਵਾਦ। ਹੇਠਾਂ ਕੋਈ ਸਵਾਲ ਚੁਣੋ, ਅਸੀਂ ਇੱਥੇ ਹੀ ਜਵਾਬ ਦੇਵਾਂਗੇ।",
+    };
+    for (const [language, questions] of Object.entries(expected) as [keyof typeof expected, string][]) {
+      const greeting = whatsappGreeting({ name: "Cedar Ridge" }, ["x"], [], [], language).greeting;
+      expect(questionsWelcome(greeting), language).toBe(questions);
+      expect(prefillWelcome(questions), language).toBe(greeting);
+      expect(questionsWelcome(questions)).toBe(questions);
+    }
+    for (const own of ["Hi! Thanks for messaging Solaride.", "Welcome! Send this message and we'll reply here.", ""]) {
+      expect(questionsWelcome(own)).toBe(own);
+      expect(prefillWelcome(own)).toBe(own);
+    }
   });
 });

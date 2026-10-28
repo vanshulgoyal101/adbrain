@@ -8,7 +8,7 @@
       "status": 200,
       "body": {
         "id": "120253709994100526",
-        "account_id": "2398686420592052"
+        "account_id": "9000000000000001"
       }
     },
     {
@@ -19,7 +19,7 @@
         "data": [
           {
             "promoted_object": {
-              "page_id": "885223068001054",
+              "page_id": "900000000000002",
               "smart_pse_enabled": false,
               "whats_app_business_phone_number_id": "1113229925200671",
               "whatsapp_phone_number": "910000000000"
@@ -29,7 +29,7 @@
           },
           {
             "promoted_object": {
-              "page_id": "885223068001054",
+              "page_id": "900000000000002",
               "smart_pse_enabled": false,
               "whats_app_business_phone_number_id": "1113229925200671",
               "whatsapp_phone_number": "910000000000"
@@ -222,7 +222,7 @@
       "status": 200,
       "body": {
         "id": "120253709994100526",
-        "account_id": "2398686420592052"
+        "account_id": "9000000000000001"
       }
     },
     {
@@ -233,7 +233,7 @@
         "data": [
           {
             "promoted_object": {
-              "page_id": "885223068001054",
+              "page_id": "900000000000002",
               "smart_pse_enabled": false,
               "whats_app_business_phone_number_id": "1113229925200671",
               "whatsapp_phone_number": "910000000000"
@@ -243,7 +243,7 @@
           },
           {
             "promoted_object": {
-              "page_id": "885223068001054",
+              "page_id": "900000000000002",
               "smart_pse_enabled": false,
               "whats_app_business_phone_number_id": "1113229925200671",
               "whatsapp_phone_number": "910000000000"

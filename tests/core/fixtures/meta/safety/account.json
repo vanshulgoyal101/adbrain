@@ -1,10 +1,10 @@
 [
   {
     "method": "GET",
-    "path": "act_2398686420592052?fields=id%2Ccurrency%2Cmin_campaign_group_spend_cap%2Cmin_daily_budget%2Cspend_cap%2Camount_spent",
+    "path": "act_9000000000000001?fields=id%2Ccurrency%2Cmin_campaign_group_spend_cap%2Cmin_daily_budget%2Cspend_cap%2Camount_spent",
     "status": 200,
     "body": {
-      "id": "act_2398686420592052",
+      "id": "act_9000000000000001",
       "currency": "INR",
       "min_campaign_group_spend_cap": "500000",
       "min_daily_budget": 9546,

@@ -1,7 +1,7 @@
 [
   {
     "method": "GET",
-    "path": "act_2398686420592052/ads?fields=id%2Cstatus%2Ceffective_status%2Cad_review_feedback%2Cissues_info&limit=100",
+    "path": "act_9000000000000001/ads?fields=id%2Cstatus%2Ceffective_status%2Cad_review_feedback%2Cissues_info&limit=100",
     "status": 200,
     "body": {
       "data": [

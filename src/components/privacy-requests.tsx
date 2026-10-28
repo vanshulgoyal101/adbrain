@@ -62,7 +62,7 @@ export function PrivacyRequests({ initialRequests = null, initialOperatorAvailab
     {error && <Alert variant="error">{error}</Alert>}
     {notice && <Alert variant="success">{notice}</Alert>}
     <div className="flex flex-wrap gap-3">
-      <Button type="button" disabled={busy || !requests || requests.some(row => row.kind === "export" && ["received", "in_review"].includes(row.status))} onClick={() => submit("export")}>Request export</Button>
+      <Button type="button" variant="outline" disabled={busy || !requests || requests.some(row => row.kind === "export" && ["received", "in_review"].includes(row.status))} onClick={() => submit("export")}>Request export</Button>
       <Button type="button" variant="outline" disabled={busy || !requests || requests.some(row => row.kind === "delete" && ["received", "in_review"].includes(row.status))} onClick={() => submit("delete")}>Request deletion</Button>
     </div>
     {!requests && !error && <p role="status" className="text-sm text-slate-600">Loading requests</p>}

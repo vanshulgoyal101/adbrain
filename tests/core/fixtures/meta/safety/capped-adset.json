@@ -5,7 +5,7 @@
     "status": 200,
     "body": {
       "id": "120253655093920526",
-      "account_id": "2398686420592052"
+      "account_id": "9000000000000001"
     }
   },
   {
@@ -16,7 +16,7 @@
       "data": [
         {
           "promoted_object": {
-            "page_id": "885223068001054",
+            "page_id": "900000000000002",
             "smart_pse_enabled": false
           },
           "destination_type": "ON_AD",
@@ -43,7 +43,7 @@
       "bid_strategy": "LOWEST_COST_WITHOUT_CAP",
       "destination_type": "ON_AD",
       "promoted_object": {
-        "page_id": "885223068001054",
+        "page_id": "900000000000002",
         "smart_pse_enabled": false
       },
       "targeting": {
@@ -73,7 +73,7 @@
   },
   {
     "method": "POST",
-    "path": "act_2398686420592052/adsets",
+    "path": "act_9000000000000001/adsets",
     "form": {
       "name": "AdBrain capped 600.00 until 2026-10-25",
       "campaign_id": "120253655093920526",
@@ -84,7 +84,7 @@
       "optimization_goal": "LEAD_GENERATION",
       "bid_strategy": "LOWEST_COST_WITHOUT_CAP",
       "destination_type": "ON_AD",
-      "promoted_object": "{\"page_id\":\"885223068001054\",\"smart_pse_enabled\":false}",
+      "promoted_object": "{\"page_id\":\"900000000000002\",\"smart_pse_enabled\":false}",
       "targeting": "{\"age_max\":55,\"age_min\":25,\"geo_locations\":{\"cities\":[{\"country\":\"US\",\"distance_unit\":\"mile\",\"key\":\"2525495\",\"name\":\"Austin\",\"region\":\"Texas\",\"region_id\":\"3886\"}],\"location_types\":[\"home\",\"recent\"]},\"targeting_automation\":{\"advantage_audience\":0}}"
     },
     "status": 200,

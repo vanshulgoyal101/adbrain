@@ -1,5 +1,5 @@
 {
-  "recordedAt": "2026-10-26T11:51:14.329Z",
+  "recordedAt": "2026-10-28T07:03:33.582Z",
   "openings": {
     "prefill": {
       "greeting": "Hi! Thanks for messaging Solaride. Send this message and we'll reply here.",
@@ -17,6 +17,24 @@
         "Free site survey",
         "Price for my home",
         "Call me back"
+      ]
+    },
+    "questions_en": {
+      "greeting": "Hi! Thanks for messaging Solaride. Tap a question below and we'll reply here.",
+      "autofill": "",
+      "iceBreakers": [
+        "Free site survey",
+        "Price for my home",
+        "Call me back"
+      ]
+    },
+    "questions_hi": {
+      "greeting": "नमस्ते! Solaride को मैसेज करने के लिए धन्यवाद। नीचे कोई सवाल चुनिए, हम यहीं जवाब देंगे।",
+      "autofill": "",
+      "iceBreakers": [
+        "फ्री साइट सर्वे",
+        "मेरे घर के लिए कीमत",
+        "मुझे वापस कॉल करें"
       ]
     }
   },
@@ -70,6 +88,42 @@
       "opening": "ice_breakers",
       "shape": "single",
       "welcome": "{\"type\":\"VISUAL_EDITOR\",\"version\":2,\"landing_screen_type\":\"welcome_message\",\"media_type\":\"text\",\"text_format\":{\"customer_action_type\":\"ice_breakers\",\"message\":{\"text\":\"Hi! Thanks for messaging Solaride.\",\"ice_breakers\":[{\"title\":\"Free site survey\"},{\"title\":\"Price for my home\"},{\"title\":\"Call me back\"}]}}}",
+      "status": 200,
+      "body": {
+        "success": true
+      }
+    },
+    {
+      "opening": "questions_en",
+      "shape": "placement",
+      "welcome": "{\"type\":\"VISUAL_EDITOR\",\"version\":2,\"landing_screen_type\":\"welcome_message\",\"media_type\":\"text\",\"text_format\":{\"customer_action_type\":\"ice_breakers\",\"message\":{\"text\":\"Hi! Thanks for messaging Solaride. Tap a question below and we'll reply here.\",\"ice_breakers\":[{\"title\":\"Free site survey\"},{\"title\":\"Price for my home\"},{\"title\":\"Call me back\"}]}}}",
+      "status": 200,
+      "body": {
+        "success": true
+      }
+    },
+    {
+      "opening": "questions_en",
+      "shape": "single",
+      "welcome": "{\"type\":\"VISUAL_EDITOR\",\"version\":2,\"landing_screen_type\":\"welcome_message\",\"media_type\":\"text\",\"text_format\":{\"customer_action_type\":\"ice_breakers\",\"message\":{\"text\":\"Hi! Thanks for messaging Solaride. Tap a question below and we'll reply here.\",\"ice_breakers\":[{\"title\":\"Free site survey\"},{\"title\":\"Price for my home\"},{\"title\":\"Call me back\"}]}}}",
+      "status": 200,
+      "body": {
+        "success": true
+      }
+    },
+    {
+      "opening": "questions_hi",
+      "shape": "placement",
+      "welcome": "{\"type\":\"VISUAL_EDITOR\",\"version\":2,\"landing_screen_type\":\"welcome_message\",\"media_type\":\"text\",\"text_format\":{\"customer_action_type\":\"ice_breakers\",\"message\":{\"text\":\"नमस्ते! Solaride को मैसेज करने के लिए धन्यवाद। नीचे कोई सवाल चुनिए, हम यहीं जवाब देंगे।\",\"ice_breakers\":[{\"title\":\"फ्री साइट सर्वे\"},{\"title\":\"मेरे घर के लिए कीमत\"},{\"title\":\"मुझे वापस कॉल करें\"}]}}}",
+      "status": 200,
+      "body": {
+        "success": true
+      }
+    },
+    {
+      "opening": "questions_hi",
+      "shape": "single",
+      "welcome": "{\"type\":\"VISUAL_EDITOR\",\"version\":2,\"landing_screen_type\":\"welcome_message\",\"media_type\":\"text\",\"text_format\":{\"customer_action_type\":\"ice_breakers\",\"message\":{\"text\":\"नमस्ते! Solaride को मैसेज करने के लिए धन्यवाद। नीचे कोई सवाल चुनिए, हम यहीं जवाब देंगे।\",\"ice_breakers\":[{\"title\":\"फ्री साइट सर्वे\"},{\"title\":\"मेरे घर के लिए कीमत\"},{\"title\":\"मुझे वापस कॉल करें\"}]}}}",
       "status": 200,
       "body": {
         "success": true

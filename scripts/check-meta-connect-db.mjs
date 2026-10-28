@@ -36,6 +36,7 @@ const adResultsMigration = await readFile(join(root, "db/migrations/20261026_cam
 const ownerAlertsMigration = await readFile(join(root, "db/migrations/20261027_owner_whatsapp_alerts.sql"), "utf8");
 const ownerAlertSendsMigration = await readFile(join(root, "db/migrations/20261027_owner_whatsapp_alerts_sends.sql"), "utf8");
 const leadCustomerMigration = await readFile(join(root, "db/migrations/20261026_lead_customer_status.sql"), "utf8");
+const leadFirstContactedMigration = await readFile(join(root, "db/migrations/20261027_lead_first_contacted.sql"), "utf8");
 const tokenSearchPathMigration = await readFile(join(root, "db/migrations/20261026_meta_token_search_path.sql"), "utf8");
 const whatsappTemplateMigration = await readFile(join(root, "db/migrations/20261026_business_whatsapp_template.sql"), "utf8");
 const metaDeletionMigration = await readFile(join(root, "db/migrations/20261026_meta_deletion_requests.sql"), "utf8");
@@ -1365,6 +1366,35 @@ async function verifyLeadCustomerStatus(db, database) {
   });
 }
 
+async function verifyLeadFirstContacted(db, database) {
+  const owner = randomUUID(), other = randomUUID(), business = randomUUID(), lead = randomUUID();
+  await db.query("insert into auth.users(id) values ($1),($2)", [owner, other]);
+  await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Replies')", [business, owner]);
+  await db.query("insert into public.leads(id,business_id,meta_lead_id,full_name) values ($1,$2,'reply-1049','Ravi')", [lead, business]);
+  await check(`${database}: an owner records the first reply time on their own enquiry; the enquiry page returns it; nobody else can (#1049)`, async () => {
+    const as = async (user, run) => {
+      const session = client(database);
+      await session.connect();
+      try {
+        await session.query("begin");
+        await session.query("set local role authenticated");
+        await session.query("select set_config('request.jwt.claim.sub',$1,true)", [user]);
+        return await run(session);
+      } finally { await session.query("rollback").catch(() => {}); await session.end(); }
+    };
+    await as(owner, async (session) => {
+      const updated = await session.query("update public.leads set first_contacted_at=now() where id=$1 and first_contacted_at is null returning first_contacted_at", [lead]);
+      assert.equal(updated.rowCount, 1);
+      const page = await session.query("select public.get_lead_page($1) as page", [business]);
+      assert.ok(page.rows[0].page.leads[0].first_contacted_at);
+    });
+    await as(other, async (session) => {
+      assert.equal((await session.query("update public.leads set first_contacted_at=now() where id=$1", [lead])).rowCount, 0);
+    });
+    assert.equal((await db.query("select count(*)::int as n from pg_indexes where indexname='leads_business_first_contacted_idx'")).rows[0].n, 1);
+  });
+}
+
 async function verifyCampaignAdsAndResults(db, database) {
   const owner = randomUUID(), other = randomUUID(), business = randomUUID(), otherBusiness = randomUUID(), campaign = randomUUID(), otherCampaign = randomUUID();
   await db.query("insert into auth.users(id) values ($1),($2)", [owner, other]);
@@ -2508,6 +2538,9 @@ async function verify(database, source, integrityMigration, customerOnly = false
       await db.query(leadCustomerMigration);
       if ((await db.query("select exists(select 1 from information_schema.columns where table_schema='public' and table_name='leads' and column_name='workflow_status') as installed")).rows[0].installed) {
         await verifyLeadCustomerStatus(db,database);
+        await db.query(leadFirstContactedMigration);
+        await db.query(leadFirstContactedMigration);
+        await verifyLeadFirstContacted(db,database);
       }
       await db.query(tokenSearchPathMigration);
       await db.query(tokenSearchPathMigration);
@@ -3624,7 +3657,7 @@ async function verify(database, source, integrityMigration, customerOnly = false
 
 try {
   execFileSync(join(bin, "initdb"), ["-D", cluster, "--auth=trust", "--encoding=UTF8", "--locale=C"], { stdio: "pipe" });
-  execFileSync(join(bin, "pg_ctl"), ["-D", cluster, "-l", join(directory, "postgres.log"), "-o", `-k ${directory} -c listen_addresses=''`, "-w", "start"], { stdio: "pipe" });
+  execFileSync(join(bin, "pg_ctl"), ["-D", cluster, "-l", join(directory, "postgres.log"), "-o", `-k ${directory} -c listen_addresses=''`, "-w", "start"], { stdio: "pipe", env: { ...process.env, LC_ALL: "C" } });
   started = true;
   const admin = client();
   await admin.connect();

@@ -25,8 +25,8 @@ vi.mock("@/lib/meta-connect-ui/client", () => ({ createMetaConnectClient: () => 
 const businessId = "816aaafb-7ebc-4ad7-bbda-001beff172f8";
 const creativeId = "e3d165a9-bbf8-47f7-8c61-e69dbb8ee3d1";
 const selected = {
-  metaBusinessId: null, adAccountId: "act_2398686420592052", accountName: "Solaride 101",
-  pageId: "885223068001054", pageName: "Solaride Energy", currency: "INR", timezoneName: "Asia/Kolkata",
+  metaBusinessId: null, adAccountId: "act_9000000000000001", accountName: "Solaride 101",
+  pageId: "900000000000002", pageName: "Solaride Energy", currency: "INR", timezoneName: "Asia/Kolkata",
 };
 const productionDraft = {
   businessId, name: "TEST AdBrain core loop - delete", goal: "Book new-patient exams", mode: "manual" as const,

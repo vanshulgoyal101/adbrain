@@ -1,0 +1,172 @@
+{
+  "recordedAt": "2026-10-27T15:06:01.642Z",
+  "campaignId": "900000000000000001",
+  "liveAdId": "900000000000000002",
+  "pausedAdId": "900000000000000003",
+  "creds": {
+    "adAccountId": "act_9000000000000004",
+    "pageId": "900000000000005"
+  },
+  "tape": [
+    {
+      "name": "validate-pause-live-ad",
+      "method": "GET",
+      "path": "900000000000000001?fields=id%2Caccount_id",
+      "form": null,
+      "status": 200,
+      "body": {
+        "id": "900000000000000001",
+        "account_id": "9000000000000004"
+      }
+    },
+    {
+      "name": "validate-pause-live-ad",
+      "method": "GET",
+      "path": "900000000000000001/adsets?fields=promoted_object%2Cdestination_type&limit=100",
+      "form": null,
+      "status": 200,
+      "body": {
+        "data": [
+          {
+            "promoted_object": {
+              "page_id": "900000000000005",
+              "smart_pse_enabled": false,
+              "whats_app_business_phone_number_id": "9000000000000006",
+              "whatsapp_phone_number": "+91XXXXXX4842"
+            },
+            "destination_type": "WHATSAPP",
+            "id": "900000000000000007"
+          },
+          {
+            "promoted_object": {
+              "page_id": "900000000000005",
+              "smart_pse_enabled": false,
+              "whats_app_business_phone_number_id": "9000000000000006",
+              "whatsapp_phone_number": "+91XXXXXX4842"
+            },
+            "destination_type": "WHATSAPP",
+            "id": "900000000000000008"
+          }
+        ],
+        "paging": {
+          "cursors": {
+            "before": "CURSOR",
+            "after": "CURSOR"
+          }
+        }
+      }
+    },
+    {
+      "name": "validate-pause-live-ad",
+      "method": "GET",
+      "path": "900000000000000002?fields=id%2Ccampaign_id%2Cstatus%2Ceffective_status",
+      "form": null,
+      "status": 200,
+      "body": {
+        "id": "900000000000000002",
+        "campaign_id": "900000000000000001",
+        "status": "ACTIVE",
+        "effective_status": "ACTIVE"
+      }
+    },
+    {
+      "name": "validate-pause-live-ad",
+      "method": "POST",
+      "path": "900000000000000002",
+      "form": {
+        "status": "PAUSED",
+        "execution_options": "[\"validate_only\"]"
+      },
+      "status": 200,
+      "body": {
+        "success": true
+      }
+    },
+    {
+      "name": "pause-paused-ad",
+      "method": "GET",
+      "path": "900000000000000001?fields=id%2Caccount_id",
+      "form": null,
+      "status": 200,
+      "body": {
+        "id": "900000000000000001",
+        "account_id": "9000000000000004"
+      }
+    },
+    {
+      "name": "pause-paused-ad",
+      "method": "GET",
+      "path": "900000000000000001/adsets?fields=promoted_object%2Cdestination_type&limit=100",
+      "form": null,
+      "status": 200,
+      "body": {
+        "data": [
+          {
+            "promoted_object": {
+              "page_id": "900000000000005",
+              "smart_pse_enabled": false,
+              "whats_app_business_phone_number_id": "9000000000000006",
+              "whatsapp_phone_number": "+91XXXXXX4842"
+            },
+            "destination_type": "WHATSAPP",
+            "id": "900000000000000007"
+          },
+          {
+            "promoted_object": {
+              "page_id": "900000000000005",
+              "smart_pse_enabled": false,
+              "whats_app_business_phone_number_id": "9000000000000006",
+              "whatsapp_phone_number": "+91XXXXXX4842"
+            },
+            "destination_type": "WHATSAPP",
+            "id": "900000000000000008"
+          }
+        ],
+        "paging": {
+          "cursors": {
+            "before": "CURSOR",
+            "after": "CURSOR"
+          }
+        }
+      }
+    },
+    {
+      "name": "pause-paused-ad",
+      "method": "GET",
+      "path": "900000000000000003?fields=id%2Ccampaign_id%2Cstatus%2Ceffective_status",
+      "form": null,
+      "status": 200,
+      "body": {
+        "id": "900000000000000003",
+        "campaign_id": "900000000000000001",
+        "status": "PAUSED",
+        "effective_status": "PAUSED"
+      }
+    },
+    {
+      "name": "pause-paused-ad",
+      "method": "POST",
+      "path": "900000000000000003",
+      "form": {
+        "status": "PAUSED"
+      },
+      "status": 200,
+      "body": {
+        "success": true
+      }
+    },
+    {
+      "name": "pause-paused-ad",
+      "method": "GET",
+      "path": "900000000000000003?fields=id%2Ccampaign_id%2Cstatus%2Ceffective_status",
+      "form": null,
+      "status": 200,
+      "body": {
+        "id": "900000000000000003",
+        "campaign_id": "900000000000000001",
+        "status": "PAUSED",
+        "effective_status": "IN_PROCESS"
+      }
+    }
+  ]
+}

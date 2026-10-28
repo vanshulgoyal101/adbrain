@@ -7,6 +7,9 @@ import { requireScheduledBusiness, withMetaConnection } from "@/lib/meta/connect
 import { isTokenFailure, reauthEntry, recordMetaErrors, type ReauthEntry } from "@/lib/meta/reauth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { readAllByCursor } from "@/lib/supabase/queries";
+import { ownerAlertsConfig } from "@/lib/alerts/sender";
+import { supabaseAlertStore } from "@/lib/alerts/alert-store";
+import { sendNewLeadAlerts, type LeadAlertRun } from "@/lib/alerts/lead-alerts";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -17,6 +20,7 @@ type Outcome = {
   sync?: { id: string; state: "complete" | "partial"; hasMore: boolean };
   failedForms: number;
   error?: string;
+  alerts?: LeadAlertRun;
 };
 
 /**
@@ -24,6 +28,8 @@ type Outcome = {
  * resumes (or starts) the same bounded lead sync as `/api/leads/sync`: at most
  * 24 Graph reads per business per run, deduplicated by Meta lead id. A business
  * whose owner must reconnect Meta is listed in `reauth` and does not fail the run (#758).
+ * With `OWNER_ALERTS_ENABLED`, each opted-in owner then gets one WhatsApp alert per new lead under
+ * 24 h old (#701 v1); an alert failure is reported under `alerts` and never fails the sync.
  *
  * Called every 15 minutes by `.github/workflows/scheduled-jobs.yml` with
  * `Authorization: Bearer $CRON_SECRET`.
@@ -51,6 +57,8 @@ async function handleGET(request: Request) {
     return NextResponse.json({ ok: false, error: "Meta connections could not be loaded." }, { status: 503 });
   }
 
+  const alertConfig = ownerAlertsConfig();
+  const alertStore = supabaseAlertStore(admin as unknown as Parameters<typeof supabaseAlertStore>[0]);
   const businesses: Outcome[] = [];
   const reauth: ReauthEntry[] = [];
   for (const { business_id: businessId } of connections) {
@@ -78,6 +86,17 @@ async function handleGET(request: Request) {
         businessId, imported: 0, failedForms: 0,
         error: error instanceof LeadSyncError ? error.message : friendlyMetaError(error, "Could not sync leads."),
       };
+    }
+    if (alertConfig && !deadline.aborted) {
+      try {
+        const alerts = await sendNewLeadAlerts(
+          { db: admin as unknown as Parameters<typeof sendNewLeadAlerts>[0]["db"], store: alertStore, config: alertConfig, signal: deadline },
+          businessId,
+        );
+        if (alerts) outcome.alerts = alerts;
+      } catch {
+        outcome.alerts = { error: "alerts" };
+      }
     }
     const dead = outcome.error && metaErrors.some(isTokenFailure) ? await reauthEntry(businessId, metaErrors) : null;
     if (dead) reauth.push(dead);

@@ -118,7 +118,13 @@ refused as `no-subject` before any image is paid for, and repaired once ([visual
 batch's wall time (`durationMs`, from the request to the saved batch) and its image
 path (`provider`: `pollinations` for internal accounts, `paid` for customers), so
 Create speed is timed per path; usage rows are written when the batch ends and
-can't time it (#681). A refused commercial claim in Create adds a
+can't time it (#681). When the first pass saves fewer ads than asked, one top-up
+round remakes the angles whose concept or image failed (never "no provider" or every
+provider down), in parallel and in the same request, through the same validators and
+repair. It starts only if the first pass ended within 60 s and is cut off after 45 s
+(`CREATE_TOP_UP_*` in [stream.ts](../src/lib/creative/stream.ts)); the stream sends
+`{ type: "topUp", missing }`, the page says "Making N more…", and `creative.batch`
+records `topUp`, the number of ads retried (#1123). A refused commercial claim in Create adds a
 `claim:<class>:<reason>` validation rule to its usage row (class `free`/`percent`/
 `currency`/`guarantee`; reason `uncited`, or `negated-quote` when a quote cited it but a
 negation elsewhere in that quote refused it), never the term or the copy (#687).

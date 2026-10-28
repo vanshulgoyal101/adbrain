@@ -12,6 +12,7 @@ import { CampaignDeliveryError, MetaError, friendlyMetaError, type AdSetBudget, 
 import { ConnectionAccessError, withMetaConnection, type AuthorizedBusiness } from "@/lib/meta/connection-access";
 import { recordProductEvent } from "@/lib/observability/logger";
 import { fundingMode, type FundingMode } from "@/lib/payments/operator-funding";
+import { readFunding } from "@/lib/campaign/funding-check";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCampaignSpend, getSpendLimits } from "@/lib/supabase/queries";
 import { createClient } from "@/lib/supabase/server";
@@ -210,7 +211,8 @@ export async function editCampaignBudget(context: AuthorizedBusiness, campaignId
         throw new CampaignDeliveryError("The budget changed in Meta. Refresh the campaign, then try again.");
       }
       before = stateOf(budgets, capped, review.dailyBudgetRupees);
-      const account = raisesCap ? await meta.readAccountFunding().catch(() => null) : null;
+      // #1094: the room left after the account's other live runs; this run's own ad set is the one being raised.
+      const account = raisesCap ? await readFunding(meta, targets).catch(() => null) : null;
       const check = checkBudgetEdit({
         current: { status, ...before },
         approved: { dailyRupees: review.dailyBudgetRupees, capRupees: cap ? cap.lifetimeBudgetPaise / 100 : null, capDays: cap?.days ?? null },

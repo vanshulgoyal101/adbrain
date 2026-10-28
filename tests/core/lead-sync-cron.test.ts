@@ -9,7 +9,7 @@ type SyncRun = { id: string; version: number; state: "partial" | "complete"; pro
 
 const SECRET = "cron-secret-value";
 const businessId = "816aaafb-7ebc-4ad7-bbda-001beff172f8";
-const creds = { adAccountId: "act_2398686420592052", pageId: "885223068001054", accessToken: "test-token" };
+const creds = { adAccountId: "act_9000000000000001", pageId: "900000000000002", accessToken: "test-token" };
 const testLead = "1751001369523985";
 
 const db = vi.hoisted(() => ({
@@ -17,12 +17,52 @@ const db = vi.hoisted(() => ({
   leads: new Map<string, Record<string, unknown>>(),
   connections: [] as { business_id: string }[],
   runCount: 0,
+  // #701: the owner's alert prefs and send log (owner_alert_prefs / owner_alert_sends).
+  prefs: null as null | { lead_alerts: true },
+  sends: [] as { id: number; dedupe_key: string; state: string; wa_message_id: string | null }[],
+  failAlertReads: false,
 }));
+
+function alertTable(table: string) {
+  const filters: { op: string; args: unknown[] }[] = [];
+  const rows = (): unknown[] => {
+    if (table === "owner_alert_prefs") return db.prefs ? [db.prefs] : [];
+    if (table === "businesses") return [{ name: "Solaride" }];
+    if (table === "campaigns") return [];
+    if (table === "owner_alert_sends") {
+      const keys = filters.find(f => f.op === "in")?.args[1] as string[];
+      return db.sends.filter(send => send.state !== "retry" && keys.includes(send.dedupe_key));
+    }
+    expect(table).toBe("leads");
+    const since = Date.parse(filters.find(f => f.op === "gte")?.args[1] as string);
+    return [...db.leads.values()].map((row, index): Record<string, unknown> => ({ id: `lead-row-${index}`, source: "meta_form", campaign_id: null, ...row }))
+      .filter(row => Date.parse(String(row.created_time).replace("+0000", "Z")) >= since);
+  };
+  const result = () => db.failAlertReads ? { data: null, error: { message: "down" } } : { data: rows(), error: null };
+  const query: Record<string, unknown> = {
+    then: (resolve: (value: unknown) => unknown) => resolve(result()),
+    maybeSingle: async () => { const r = result(); return { ...r, data: (r.data as unknown[] | null)?.[0] ?? null }; },
+  };
+  for (const op of ["select", "eq", "not", "is", "gte", "order", "limit", "neq", "in"]) query[op] = (...args: unknown[]) => { filters.push({ op, args }); return query; };
+  return query;
+}
+
+function alertRpc(name: string, args: Record<string, unknown>) {
+  if (name === "owner_alert_claim") {
+    if (db.sends.some(send => send.dedupe_key === args.p_key && send.state !== "retry")) return { data: { claimed: false, reason: "duplicate" }, error: null };
+    db.sends.push({ id: db.sends.length + 1, dedupe_key: String(args.p_key), state: "pending", wa_message_id: null });
+    return { data: { claimed: true, sendId: db.sends.length, phone: "+919999999001", language: "en" }, error: null };
+  }
+  expect(name).toBe("owner_alert_settle");
+  const send = db.sends.find(row => row.id === args.p_send_id)!;
+  Object.assign(send, { state: args.p_state, wa_message_id: args.p_wa_message_id });
+  return { data: null, error: null };
+}
 
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
     from: (table: string) => {
-      expect(table).toBe("meta_connections");
+      if (table !== "meta_connections") return alertTable(table);
       let after = false;
       const query = {
         select: () => query, eq: () => query, not: () => query, order: () => query, limit: () => query,
@@ -31,7 +71,7 @@ vi.mock("@/lib/supabase/admin", () => ({
       };
       return query;
     },
-    rpc: (name: string, args: { p_business_id: string; p_sync_id: string | null; p_version: number; p_rows: Record<string, unknown>[]; p_progress: Progress }) => ({
+    rpc: (name: string, args: { p_business_id: string; p_sync_id: string | null; p_version: number; p_rows: Record<string, unknown>[]; p_progress: Progress }) => name.startsWith("owner_alert_") ? Promise.resolve(alertRpc(name, args)) : ({
       abortSignal: async () => {
         let run = db.runs.get(args.p_business_id);
         if (name === "lead_sync_start") {
@@ -80,10 +120,17 @@ vi.mock("@/lib/meta/connection-access", async () => {
   };
 });
 
-function replay(fail?: (path: string) => boolean, edit?: (path: string, body: unknown) => unknown) {
+// Cloud API's documented answer to a template send (#701); recorded once AdBrain's WABA exists.
+const CLOUD_ACCEPTED = { messaging_product: "whatsapp", contacts: [{ input: "919999999001", wa_id: "919999999001" }], messages: [{ id: "wamid.HBgMOTE5OTk5OTk5MDAxFQIAERgSQUJDREVGMDEyMzQ1Njc4OQA=" }] };
+
+function replay(fail?: (path: string) => boolean, edit?: (path: string, body: unknown) => unknown, whatsapp: unknown[] = []) {
   const sent: string[] = [];
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = new URL(String(input));
+    if (init?.method === "POST" && url.pathname === "/v21.0/106540352242922/messages") {
+      whatsapp.push(JSON.parse(String(init.body)));
+      return Response.json(CLOUD_ACCEPTED);
+    }
     expect(url.origin + url.pathname.slice(0, 7)).toBe("https://graph.facebook.com/v21.0/");
     if (url.searchParams.get("access_token") === "dead-token") return Response.json(graph190, { status: 400 });
     expect(init?.method ?? "GET").toBe("GET");
@@ -112,11 +159,15 @@ beforeEach(() => {
   db.leads.clear();
   db.runCount = 0;
   db.connections = [{ business_id: businessId }];
+  db.prefs = null;
+  db.sends = [];
+  db.failAlertReads = false;
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://test.supabase.co");
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "anon");
   vi.stubEnv("CRON_SECRET", SECRET);
 });
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllEnvs();
 });
@@ -195,5 +246,63 @@ describe("core: scheduled lead sync against recorded Graph pages (#165)", () => 
     const retried = await run();
     expect(retried.body).toMatchObject({ ok: true, imported: 1 });
     expect(db.leads.size).toBe(1);
+  });
+
+  describe("#701 v1: the owner's WhatsApp lead alert after the import", () => {
+    beforeEach(() => {
+      // The recorded test lead arrived at 05:39:35Z; the run is 20 minutes later.
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date("2026-10-22T06:00:00Z"));
+      vi.stubEnv("OWNER_ALERTS_ENABLED", "true");
+      vi.stubEnv("ALERTS_WHATSAPP_PHONE_ID", "106540352242922");
+      vi.stubEnv("ALERTS_WHATSAPP_TOKEN", "alerts-token");
+      db.prefs = { lead_alerts: true };
+    });
+
+    it("alerts once for the new lead, and a re-sync sends nothing", async () => {
+      const whatsapp: unknown[] = [];
+      replay(undefined, undefined, whatsapp);
+      const first = await run();
+      expect(first.status).toBe(200);
+      expect(first.body).toMatchObject({ ok: true, imported: 1, businesses: [{ businessId, imported: 1, alerts: { sent: 1, skipped: {} } }] });
+      expect(whatsapp).toEqual([{
+        messaging_product: "whatsapp", recipient_type: "individual", to: "919999999001", type: "template",
+        template: { name: "adbrain_lead_alert", language: { code: "en" }, components: [{ type: "body", parameters: [
+          { type: "text", text: "Solaride" },
+          { type: "text", text: "<test lead: dummy data for full_name>" },
+          { type: "text", text: expect.stringMatching(/^(\+91 \d{5} \d{5}|\+?\d+|not given)$/) },
+          { type: "text", text: expect.any(String) },
+          { type: "text", text: expect.any(String) },
+        ] }] },
+      }]);
+      expect(db.sends).toEqual([{ id: 1, dedupe_key: testLead, state: "sent", wa_message_id: CLOUD_ACCEPTED.messages[0].id }]);
+
+      const second = await run();
+      expect(second.body).toMatchObject({ ok: true, imported: 0, businesses: [{ alerts: { sent: 0 } }] });
+      expect(whatsapp).toHaveLength(1);
+    });
+
+    it("sends nothing for a lead older than 24 h, or when the owner's lead alerts are off", async () => {
+      const whatsapp: unknown[] = [];
+      vi.setSystemTime(new Date("2026-10-23T05:40:00Z"));
+      replay(undefined, undefined, whatsapp);
+      expect((await run()).body).toMatchObject({ ok: true, imported: 1, businesses: [{ alerts: { sent: 0 } }] });
+      db.leads.clear(); db.runs.clear();
+      vi.setSystemTime(new Date("2026-10-22T06:00:00Z"));
+      db.prefs = null;
+      const off = await run();
+      expect(off.body).toMatchObject({ ok: true, imported: 1 });
+      expect(off.body.businesses[0].alerts).toBeUndefined();
+      expect(whatsapp).toEqual([]);
+    });
+
+    it("an alert failure is reported but never fails the sync", async () => {
+      db.failAlertReads = true;
+      replay();
+      const result = await run();
+      expect(result.status).toBe(200);
+      expect(result.body).toMatchObject({ ok: true, imported: 1, businesses: [{ imported: 1, alerts: { error: "prefs" } }] });
+      expect(db.sends).toEqual([]);
+    });
   });
 });

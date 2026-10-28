@@ -21,6 +21,36 @@ completed feature candidates while documentation is rebuilt; do not reopen their
 unchanged tests. Ready payment work does not wait for unrelated documentation or
 bank-to-Meta automation. Follow the current standing rollout authority and financial limits.
 
+### WhatsApp-first product ranking (CEO decision, October 27, 2026)
+
+The CEO chose WhatsApp as the primary enquiry channel after repeated pilot
+experience. Lead-form experiments are now later work, not the next build target.
+The smallest measurable sequence is:
+
+1. **Ice breakers (W1, #905):** three tap-to-send customer questions built from
+   Brand facts (each 40 characters or fewer, approved by the CEO for the pilot).
+   Ice-breaker mode replaces the prefill and Call button for that run. Live
+   since #995; suggestions that read as real customer questions are #1114. Pass:
+   open-to-message rate of at least 20% (pilot baseline about 8%) in the next
+   controlled run (#680).
+2. **Reason to send (W2, #1081):** one concrete promise in the ad, prefill and
+   greeting (for example a subsidy estimate within minutes), stated as a Brand
+   offer so claim checks accept it. It runs only after the owner commits to
+   reply that fast. Language and Review's open-to-message rate are live
+   (#1085, #1087). Pass: open-to-message up and median first reply of 5 minutes
+   or less.
+3. **Reply speed (#1049, live):** reply or call from the enquiry card in one tap;
+   `contacted at` and the median time to first reply show on Home.
+4. **Owner alerts (#701):** deliver new enquiries and a daily results line to
+   the owner's WhatsApp, subject to the CEO's rate-card and spend-cap decision.
+
+Manage work that supports this loop: per-ad results and the Best rule (#783,
+live), Run this again (#1050) and editing a launched campaign (#765).
+
+This ranking is tracked in [#703](https://github.com/vanshulgoyal101/adbrain/issues/703).
+Each experiment must use the existing ledger and a recorded core acceptance; no
+live ad or Meta object is changed by the ranking itself.
+
 ## Delivered Baseline
 
 Enquiries shipped through PR47, customer allowance and follow-up retention through

@@ -38,6 +38,8 @@ describe("owner WhatsApp alert sender (#701 slice 2)", () => {
     const fetchImpl = vi.fn<typeof fetch>(async () => ACCEPTED());
     expect(await deliverOwnerAlert({ store: s, config, fetchImpl }, alert)).toEqual({ delivered: true, reason: "sent" });
     expect(claim).toHaveBeenCalledWith({ businessId: "b1", kind: "lead", key: "lead-1", template: "adbrain_lead_alert", monthCap: ALERT_MONTH_CAP });
+    // QA on #1065: the SQL cap counts every business's sends, so it is the platform guard (CPO §1), not per owner.
+    expect(ALERT_MONTH_CAP).toBe(4000);
     const [url, init] = fetchImpl.mock.calls[0];
     expect(url).toBe("https://graph.facebook.com/v21.0/106540352242922/messages");
     expect(JSON.parse(String(init!.body))).toEqual({

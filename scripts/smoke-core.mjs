@@ -212,7 +212,9 @@ try {
       assert.equal(unexpected.length, 0, `Preflight blocked: ${unexpected[0]}`);
       assert.equal(review.selected?.currency, "INR", "No INR Meta ad account selected");
       const result = page.getByRole("region", { name: "Campaign review result" });
-      await result.getByText(`Account: ${review.selected.accountName}`, { exact: false }).waitFor({ state: "visible" });
+      // #1080 renders the facts as <dt>Meta account</dt><dd>Name, Page …</dd>: match the value, not "label: value".
+      // While a blocker holds Send, the facts sit in a closed "What you're sending" <details>, so they are attached, not visible.
+      await result.locator("dd").filter({ hasText: review.selected.accountName }).first().waitFor({ state: blockers.length ? "attached" : "visible" });
       const send = result.getByRole("button", { name: "Send to Meta (paused)" });
       if (blockers.length) assert.equal(await send.count(), 0, "Send to Meta is offered despite a blocker");
       else await send.waitFor({ state: "visible" });
@@ -313,7 +315,7 @@ try {
       await page.getByRole("button", { name: "Check my campaign (nothing spends)" }).click();
       const review = page.getByRole("region", { name: "Campaign review result" });
       await review.getByRole("button", { name: "Send to Meta (paused)" }).waitFor({ state: "visible", timeout: 120_000 });
-      assert.match(await review.innerText(), /Account: Solaride\b/i, "Meta account is not Solaride; no campaign created");
+      assert.match(await review.innerText(), /(Meta )?account:?\s+Solaride\b/i, "Meta account is not Solaride; no campaign created");
       assert.match(await review.innerText(), /Destination: Instant lead form/i, "Unexpected destination; no campaign created");
       console.log("PASS Prepare (Solaride account and lead form)");
       campaignReviewed = true;

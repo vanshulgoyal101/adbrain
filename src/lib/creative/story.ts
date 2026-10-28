@@ -1,10 +1,22 @@
 import sharp from "sharp";
-import { AD_FORMATS, type AdDesignSpec } from "./design";
+import { AD_FORMATS, STORY_SAFE, type AdDesignSpec } from "./design";
 import { downloadImage } from "@/lib/imageGen";
 import { renderCompositeAd } from "./render";
 import { hasStoryDesign, storedPictureDesign } from "./picture-words";
 
-export { hasStoryDesign };
+export { hasStoryDesign, STORY_SAFE };
+
+/**
+ * Where the 4:5 photo sits in the 9:16 canvas (#1077). Words on top: the photo starts at the top safe line, so the
+ * words cover the same part of it as in the feed picture the generator composed for (the subject below them), and
+ * far less of it is under the reply bar than when it sat on the bottom edge. Words at the bottom: the photo starts
+ * at the top. Centred words: centred.
+ */
+export function storyPhotoTop(layout: AdDesignSpec["layout"], fittedHeight: number, height: number): number {
+  const spare = Math.max(0, height - fittedHeight);
+  if (layout === "top") return Math.min(spare, Math.round(height * STORY_SAFE.top));
+  return layout === "bottom" ? 0 : Math.round(spare / 2);
+}
 
 /**
  * The same ad laid out at 9:16 for Stories and Reels (#333): the saved design and photo, no AI call.
@@ -20,9 +32,8 @@ export async function renderStoryAd(generation: unknown): Promise<Uint8Array | n
   const backdrop = await sharp(photo).resize(width, height, { fit: "cover" }).blur(36).modulate({ brightness: 0.55 }).toBuffer();
   const fitted = await sharp(photo).resize({ width, height, fit: "inside" }).toBuffer();
   const { height: fittedHeight = height } = await sharp(fitted).metadata();
-  // Keep the photo clear of the words: text on top puts the photo at the bottom, and the reverse.
-  const spare = height - fittedHeight;
-  const top = design.layout === "top" ? spare : design.layout === "bottom" ? 0 : Math.round(spare / 2);
+  // Keep the photo's subject clear of the words and of the Stories/Reels UI (#1077).
+  const top = storyPhotoTop(design.layout, fittedHeight, height);
   // JPEG: a tenth of the PNG's size, so the composite decodes it about a third faster (#499).
   const background = await sharp(backdrop).composite([{ input: fitted, left: 0, top }]).jpeg({ quality: 90 }).toBuffer();
   const spec: AdDesignSpec = { ...design, format: "story", width, height, backgroundUrl: `data:image/jpeg;base64,${background.toString("base64")}` };

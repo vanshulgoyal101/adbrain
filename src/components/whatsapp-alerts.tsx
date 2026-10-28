@@ -26,7 +26,7 @@ export function WhatsAppAlerts({ businessId, initial }: { businessId: string; in
     if (!result.ok) { setMessage({ ok: false, text: result.error }); return; }
     setSettings(result.settings);
     setMessage({ ok: true, text: draft.leadAlerts || draft.dailyResults
-      ? result.settings.number ? "Saved. Alerts go to your WhatsApp." : "Saved. Confirm your WhatsApp number below to start getting them."
+      ? result.settings.number ? "Saved. Alerts go to your WhatsApp." : "Saved. Confirm your WhatsApp number above to start getting them."
       : "Saved. Alerts are off." });
   });
   const confirm = () => startTransition(async () => {
@@ -36,9 +36,24 @@ export function WhatsAppAlerts({ businessId, initial }: { businessId: string; in
     setLink(result.link);
   });
 
+  const confirmed = Boolean(settings.number && !settings.optedOut);
+  // #847: the number is the gate, so until it's confirmed that step comes first; afterwards it's a footnote.
+  const numberStep = <div className={confirmed ? "mt-5 border-t border-slate-100 pt-4 text-sm text-slate-700" : "mt-4 border-b border-slate-100 pb-4 text-sm text-slate-700"}>
+    {confirmed
+      ? <p>Alerts go to <span className="whitespace-nowrap font-medium">{settings.number}</span>. Reply STOP on WhatsApp anytime to turn them off.</p>
+      : <p>{settings.optedOut ? "You replied STOP, so alerts are off. Send START from your WhatsApp to turn them back on." : "First, confirm the WhatsApp number that should get alerts: send one message from it."}</p>}
+    <div className="mt-3 flex flex-wrap items-center gap-2">
+      {link
+        ? <a href={link} target="_blank" rel="noopener noreferrer" className="inline-flex h-11 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary-hover">Open WhatsApp and send START</a>
+        : <Button type="button" variant="outline" disabled={pending} onClick={confirm}>{settings.number ? "Use another number" : "Confirm my WhatsApp number"}</Button>}
+      {link && <span className="text-xs text-slate-500">The message is ready to send. The link works for 15 minutes.</span>}
+    </div>
+  </div>;
+
   return <section aria-labelledby="whatsapp-alerts-title" className="rounded-lg border border-slate-200 bg-white p-6">
     <h2 id="whatsapp-alerts-title" className="flex items-center gap-2 font-semibold text-slate-900"><MessageCircle className="h-4 w-4" aria-hidden="true" />WhatsApp alerts</h2>
     <p className="mt-1 text-sm text-slate-600">Get each new enquiry on WhatsApp within a minute, so you can call back while they&apos;re still interested.</p>
+    {!confirmed && numberStep}
     <div className="mt-4 grid gap-3">
       <label className="flex items-start gap-3 text-sm text-slate-800">
         <input type="checkbox" checked={draft.leadAlerts} onChange={(event) => { setDraft({ ...draft, leadAlerts: event.target.checked }); setMessage(null); }} className="mt-0.5 h-4 w-4 accent-blue-600" />
@@ -54,19 +69,12 @@ export function WhatsAppAlerts({ businessId, initial }: { businessId: string; in
           <option value="hi">हिंदी (Hindi)</option>
         </select>
       </label>
-      <div><Button type="button" variant="outline" disabled={pending || !changed} onClick={save}>Save alerts</Button></div>
-    </div>
-    <div className="mt-5 border-t border-slate-100 pt-4 text-sm text-slate-700">
-      {settings.number && !settings.optedOut
-        ? <p>Alerts go to <span className="whitespace-nowrap font-medium">{settings.number}</span>. Reply STOP on WhatsApp anytime to turn them off.</p>
-        : <p>{settings.optedOut ? "You replied STOP, so alerts are off. Send START from your WhatsApp to turn them back on." : "Confirm the WhatsApp number that should get alerts: send one message from it."}</p>}
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        {link
-          ? <a href={link} target="_blank" rel="noopener noreferrer" className="inline-flex h-10 items-center rounded-md bg-emerald-600 px-4 text-sm font-medium text-white hover:bg-emerald-700">Open WhatsApp and send START</a>
-          : <Button type="button" variant="outline" disabled={pending} onClick={confirm}>{settings.number ? "Use another number" : "Confirm my WhatsApp number"}</Button>}
-        {link && <span className="text-xs text-slate-500">The message is ready to send. The link works for 15 minutes.</span>}
+      <div className="flex flex-wrap items-center gap-3">
+        <Button type="button" variant="outline" disabled={pending || !changed} onClick={save}>Save alerts</Button>
+        {message?.ok && <p role="status" className="text-sm text-slate-600">{message.text}</p>}
       </div>
     </div>
-    {message && <div className="mt-4"><Alert variant={message.ok ? undefined : "error"}>{message.text}</Alert></div>}
+    {confirmed && numberStep}
+    {message && !message.ok && <div className="mt-4"><Alert variant="error">{message.text}</Alert></div>}
   </section>;
 }

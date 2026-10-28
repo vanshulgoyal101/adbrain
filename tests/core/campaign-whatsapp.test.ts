@@ -11,7 +11,7 @@ vi.mock("@/lib/security/ssrf", () => ({
 import { MetaClient } from "@/lib/meta/client";
 import { whatsappGreeting } from "@/lib/campaign/whatsapp-greeting";
 
-const creds = { adAccountId: "act_2398686420592052", pageId: "885223068001054", accessToken: "test-token" };
+const creds = { adAccountId: "act_9000000000000001", pageId: "900000000000002", accessToken: "test-token" };
 const exchange = (name: string) => recorded.tape.find((entry) => entry.name === name)!;
 const linkData = (name: string) => JSON.parse(exchange(name).form.creative!).object_story_spec.link_data;
 const approved = {
@@ -72,6 +72,17 @@ describe("core: WhatsApp Prepare payload against Meta's recorded validate_only a
       expect(exchange(`ad-wa-me-${label}`), label).toMatchObject({ status: 200, body: { success: true } });
       const welcome = JSON.parse(linkData(`ad-wa-me-${label}`).page_welcome_message);
       expect(welcome.text_format.message.autofill_message.content).toBe(today[label].autofill);
+    }
+  });
+
+  // #1081 (W2): a Hinglish ad Create stored as plain "Hindi", or not at all, gets the Hinglish ask Meta accepted.
+  it("a Roman-script Hindi ad sends the recorded Hinglish ask and welcome, not English", () => {
+    const romanHindi = ["Bijli ka bill aadha karo", "Ghar par free site survey ke liye abhi WhatsApp karo"];
+    const accepted = JSON.parse(linkData("ad-wa-me-hinglish").page_welcome_message);
+    for (const stored of [[], ["Hindi"]]) {
+      const today = whatsappGreeting(solaride, romanHindi, ["Mohali"], stored);
+      expect(today).toEqual(recorded.variants.hinglish);
+      expect(accepted.text_format.message.autofill_message.content).toBe(today.autofill);
     }
   });
 

@@ -64,6 +64,7 @@ export async function readCreateResponse(
 
 /** Applies one stream line to the ad slots; the first event for an angle claims the next free slot. */
 export function applyCreateLine(ads: LiveAd[], line: Exclude<CreateStreamLine, { type: "result" }>): LiveAd[] {
+  if (line.type === "topUp") return ads;
   let index = ads.findIndex((ad) => ad.angleId === line.angleId);
   if (index < 0) index = ads.findIndex((ad) => !ad.angleId);
   if (index < 0) return ads;
@@ -100,8 +101,10 @@ function elapsed(ms: number): string {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
-export function CreateProgress({ ads, renderReady, onUseSaved }: {
+export function CreateProgress({ ads, makingMore = 0, renderReady, onUseSaved }: {
   ads: LiveAd[];
+  /** #1123: ads the route is remaking in the same request after the first pass came up short. */
+  makingMore?: number;
   renderReady: (creative: Creative) => ReactNode;
   /** #760: move on with the saved ads while the rest keep going on the server. */
   onUseSaved?: () => void;
@@ -138,6 +141,11 @@ export function CreateProgress({ ads, renderReady, onUseSaved }: {
         >
           <div className="h-full rounded-full bg-blue-600 motion-safe:transition-[width] motion-safe:duration-500" style={{ width: `${(done / (ads.length * 4)) * 100}%` }} />
         </div>
+        {makingMore > 0 && (
+          <p role="status" className="text-sm text-slate-600">
+            {makingMore} didn&apos;t pass our checks. Making {makingMore} more…
+          </p>
+        )}
         <p aria-live="polite" className="sr-only">
           {ready ? `${ready} of ${ads.length} ads ready.` : ""}{failed ? ` ${failed} could not be finished.` : ""}
         </p>

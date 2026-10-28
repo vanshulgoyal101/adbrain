@@ -337,6 +337,99 @@ describe("core: Create route on recorded run 4", () => {
     expect(mocks.progress.at(-1)).toMatchObject({ p_complete: true, p_uncertain: false, p_failed: false });
   });
 
+  // #1123: a batch that saves fewer than asked remakes the missing ads once, in the same request.
+  const rejected = (angle: Angle) => JSON.stringify({ ...angle.concept, primary_text: `${angle.concept.primary_text} Results guaranteed.` });
+  const batchEvent = (info: { mock: { calls: unknown[][] } }) =>
+    JSON.parse(info.mock.calls.map(([entry]) => String(entry)).find((entry) => entry.includes('"name":"creative.batch"'))!);
+  const valueCalls = () => textCalls("openrouter").filter(({ body }) => body.includes("Save money / value"));
+
+  it("tops up the two ads the first pass missed and saves 3/3 in the same streamed request (#1123)", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    // Value and problem fail their concept and its one repair; their top-up concepts pass.
+    stubProviders({ text: (angle, attempt) => angle.angleId !== "offer" && attempt <= 2 ? rejected(angle) : recorded(angle) });
+    const { POST } = await import("@/app/api/creatives/generate/route");
+    const response = await POST(new Request("http://localhost/api/creatives/generate", {
+      method: "POST", headers: { Accept: "application/x-ndjson" },
+      body: JSON.stringify({ businessId: run4.brand.id, brief: run4.brief, count: 3, generationId: "6d0e7324-171e-45df-894a-28ef6c910196" }),
+    }));
+    const lines = (await response.text()).split("\n").filter((line) => line.trim()).map((line) => JSON.parse(line));
+    const topUp = lines.findIndex((line) => line.type === "topUp");
+    expect(lines.filter((line) => line.type === "topUp")).toEqual([{ type: "topUp", missing: 2 }]);
+    // Announced after both first attempts failed, before the remade ads arrive.
+    for (const id of ["value", "problem"]) {
+      expect(lines.findIndex((line) => line.angleId === id && line.stage === "failed")).toBeLessThan(topUp);
+      expect(lines.findIndex((line) => line.angleId === id && line.type === "creative")).toBeGreaterThan(topUp);
+    }
+    const result = lines.at(-1);
+    expect(result).toMatchObject({ type: "result", status: 200, body: { failures: [] } });
+    expect(result.body.creatives).toHaveLength(3);
+    expect(mocks.inserts.map((row) => row.headline).sort()).toEqual(run4.angles.map((angle) => angle.concept.headline).sort());
+    // Offer 1 call; value and problem 2 each in the first pass and 1 each in the top-up.
+    expect(textCalls("openrouter")).toHaveLength(7);
+    expect(calls.filter(({ url }) => url === "https://openrouter.ai/api/v1/images")).toHaveLength(3);
+    expect(mocks.progress.at(-1)).toMatchObject({ p_complete: true, p_uncertain: false });
+    expect(batchEvent(info)).toMatchObject({ outcome: "success", attributes: { count: 3, failedCount: 0, topUp: 2 } });
+  });
+
+  it("says 2 of 3 honestly when the top-up also fails (#1123)", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    stubProviders({ text: (angle) => angle.angleId === "value" ? rejected(angle) : recorded(angle) });
+    const response = await (await postCreate())();
+    const body = await response.json();
+    expect(response.status, JSON.stringify(body)).toBe(200);
+    expect(body.creatives).toHaveLength(2);
+    expect(body.failures).toEqual([{ angle: "Save money / value", error: expect.any(String) }]);
+    // One concept and one repair per round, and only one top-up round.
+    expect(valueCalls()).toHaveLength(4);
+    expect(mocks.inserts).toHaveLength(2);
+    expect(batchEvent(info)).toMatchObject({ outcome: "partial", attributes: { count: 2, failedCount: 1, topUp: 1 } });
+  });
+
+  it("does not top up when every provider is down (#1123)", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    stubProviders({ down: { openrouter: 503, google: 503, groq: 503 } });
+    const response = await (await postCreate())();
+    expect(response.status).toBe(502);
+    expect(textCalls("openrouter")).toHaveLength(3);
+    expect(batchEvent(info)).toMatchObject({ outcome: "failed", attributes: { count: 0, failedCount: 3, topUp: 0 } });
+  });
+
+  it("cuts the top-up off at its 45 s budget and returns what was saved (#1123)", async () => {
+    mocks.fastRaster = true;
+    const post = await postCreate();
+    const clock = useVirtualDeadlines();
+    stubProviders({
+      down: { google: 503, groq: 503 },
+      text: (angle) => angle.angleId === "value" ? rejected(angle) : recorded(angle),
+      // The first pass answers in 1 s; the top-up's value concept would take 50 s.
+      textLatency: () => valueCalls().length >= 3 ? 50_000 : 1_000,
+    });
+    const response = await settleInVirtualTime(post());
+    const elapsed = Date.now() - clock.startedAt;
+    const body = await response.json();
+    expect(response.status, JSON.stringify(body)).toBe(200);
+    expect(body.creatives).toHaveLength(2);
+    expect(body.failures).toHaveLength(1);
+    expect(valueCalls()).toHaveLength(3);
+    // The first pass takes 3 s (each concept starts once the one before answers), then the 45 s budget.
+    expect(elapsed).toBe(3_000 + 45_000);
+  });
+
+  it("does not start a top-up once the first pass ran past 60 s (#1123)", async () => {
+    mocks.fastRaster = true;
+    const post = await postCreate();
+    useVirtualDeadlines();
+    stubProviders({
+      down: { google: 503, groq: 503 },
+      text: (angle) => angle.angleId === "value" ? rejected(angle) : recorded(angle),
+      textLatency: () => 31_000,
+    });
+    const response = await settleInVirtualTime(post());
+    const body = await response.json();
+    expect(body.creatives).toHaveLength(2);
+    expect(valueCalls()).toHaveLength(2);
+  });
+
   it("uses the business's own photo as one ad's image, with no image call or image charge for it (#195)", async () => {
     mocks.ownerPhotos = [OWNER_PHOTO];
     stubProviders();

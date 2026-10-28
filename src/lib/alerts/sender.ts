@@ -7,8 +7,11 @@
  */
 const GRAPH = "https://graph.facebook.com/v21.0";
 
-/** Sends per business per IST month. At Meta's ₹0.115 utility rate this caps an owner at about ₹35. */
-export const ALERT_MONTH_CAP = 300;
+/**
+ * Platform-wide sends per IST month (CPO §1 on #701: ≈ ₹540 with GST at ₹0.115). `owner_alert_claim`
+ * counts every business's sends, lead alerts included, and refuses only the daily line at the cap.
+ */
+export const ALERT_MONTH_CAP = 4000;
 /** Characters of the answers line in a lead alert (one template parameter, one line). */
 export const ANSWERS_LIMIT = 300;
 
