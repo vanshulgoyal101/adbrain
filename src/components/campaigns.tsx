@@ -109,7 +109,7 @@ import { accountFundingSchema, activationConfirmationPayload, campaignDeliverySn
 import { activationWarnings, QUOTED_ASK_WITH_QUESTIONS, WHATSAPP_PICTURE_ON_FORM } from "@/lib/campaign/plan-check";
 import { cardVerdictInput, lastCampaignComparison } from "@/lib/campaign/card-verdict";
 import { verdict, type Comparison } from "@/lib/campaign/verdict";
-import { isMetaTestLead } from "@/lib/leads/test-lead";
+import { WAITING_COLUMNS, WAITING_WINDOW_MS, waitingByCampaign, type WaitingLeadRow } from "@/lib/leads/waiting";
 import { CampaignVerdict } from "@/components/campaign-verdict";
 import { campaignAttention } from "@/lib/campaign/health";
 import { campaignWhatsAppSummary } from "@/lib/campaign/results-summary";
@@ -1341,15 +1341,12 @@ function BusinessCampaigns({
     if (!liveIds) return;
     let live = true;
     try {
-      void createBrowserClient().from("leads").select("campaign_id, full_name").in("campaign_id", liveIds.split(","))
-        .is("first_contacted_at", null).gte("created_at", new Date(Date.now() - 24 * 3_600_000).toISOString()).limit(500)
+      void createBrowserClient().from("leads").select(WAITING_COLUMNS).in("campaign_id", liveIds.split(","))
+        .eq("workflow_status", "new").is("first_contacted_at", null)
+        .gte("created_at", new Date(Date.now() - WAITING_WINDOW_MS).toISOString()).limit(500)
         .then(({ data }) => {
           if (!live || !Array.isArray(data)) return;
-          const counts: Record<string, number> = {};
-          for (const lead of data as Array<{ campaign_id: string | null; full_name: string | null }>) {
-            if (lead.campaign_id && !isMetaTestLead(lead)) counts[lead.campaign_id] = (counts[lead.campaign_id] ?? 0) + 1;
-          }
-          setWaitingReplies(counts);
+          setWaitingReplies(waitingByCampaign(data as WaitingLeadRow[]));
         }, () => undefined);
     } catch { /* no browser Supabase config (tests) */ }
     return () => { live = false; };
