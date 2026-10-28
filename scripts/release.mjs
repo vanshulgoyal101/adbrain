@@ -86,8 +86,11 @@ export function supersededBy(log) {
   return log.match(/Superseded: production serves newer ([0-9a-f]{7,40})/)?.[1] ?? null;
 }
 
+/** The smoke retries once: count from its last attempt (the last "Sign in" line), so a flake it recovered from doesn't stop a release. */
 export function smokeCounts(log) {
-  return { pass: (log.match(/\dZ PASS /g) ?? []).length, fail: (log.match(/\dZ FAIL /g) ?? []).length };
+  const starts = [...log.matchAll(/\dZ (?:PASS|FAIL) Sign in\b/g)];
+  const last = starts.length ? log.slice(starts.at(-1).index) : log;
+  return { pass: (last.match(/\dZ PASS /g) ?? []).length, fail: (last.match(/\dZ FAIL /g) ?? []).length };
 }
 
 /** #884: a migration needs a database backup that finished less than an hour ago. */
