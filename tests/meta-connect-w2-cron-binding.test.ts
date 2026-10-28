@@ -64,13 +64,16 @@ function configureAdmin(campaigns: Record<string, unknown>[], limits: Record<str
     let orderKey = "id";
     let pageSize = 100;
     const filters = new Map<string, unknown>();
+    const lists = new Map<string, unknown[]>();
     const query = {
       eq: (key: string, value: unknown) => { filters.set(key, value); return query; },
+      in: (key: string, values: unknown[]) => { lists.set(key, values); return query; },
       gt: (key: string, value: string | number) => { if (key === orderKey) after = String(value); return query; },
       order: (key: string) => { orderKey = key; return query; },
       limit: (value: number) => { pageSize = value; return query; },
       then: (resolve: (value: unknown) => unknown) => resolve({
         data: rows.filter(row => [...filters].every(([key, value]) => row[key] === value)
+          && [...lists].every(([key, values]) => values.includes(row[key]))
           && (after === null || String(row[orderKey]) > after)).slice(0, pageSize),
         error: mocks.failedTable === table || (mocks.failedPageAfter && after === mocks.failedPageAfter)
           ? { message: "private database failure" } : null,
