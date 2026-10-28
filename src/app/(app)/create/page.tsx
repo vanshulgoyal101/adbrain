@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { redirect } from "next/navigation";
 import { SetupAdsStep } from "@/components/setup-ads-step";
+import { isProspectSession } from "@/lib/prospect-session";
 import { setupFieldsFrom } from "@/lib/brand/setup-fields";
 import { brandUsable } from "@/lib/brand/usable";
 import { clientCreative } from "@/lib/creative/client-receipt";
@@ -53,7 +54,7 @@ export default async function CreatePage({ searchParams }: { searchParams?: Prom
       .then(([launched, batch]) => launched ? null : batch.map(clientCreative)).catch(() => null);
     // #1272: the + button lands here; a first-timer without the five facts resumes at step 1.
     if (setup && !brandUsable({ ...business, vertical: setupFieldsFrom(business).vertical })) redirect("/brand");
-    if (setup) return <SetupAdsStep business={business} initialAds={setup} />;
+    if (setup) return <SetupAdsStep business={business} initialAds={setup} sample={await isProspectSession()} />;
   }
 
   const missing = [
