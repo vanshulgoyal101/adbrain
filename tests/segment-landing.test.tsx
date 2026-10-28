@@ -25,6 +25,25 @@ describe("/for/[segment] (#1565)", () => {
     expect(text).not.toMatch(/guarantee|\b20\s?%|\b80\s?%|service fee|100%/i);
   });
 
+  it("#1944: IELTS and interiors invite the first 3; solar shows no Solaride numbers until the CEO OKs naming it (#1937)", async () => {
+    const { default: SegmentPage } = await import("@/app/for/[segment]/page");
+    for (const slug of ["ielts", "interiors"]) {
+      const { unmount } = render(await SegmentPage({ params: Promise.resolve({ segment: slug }) }));
+      expect(screen.getByText(/^Be one of the first 3 .* in Tricity to try it\. We'll share your results with you, and with others only if you say yes\.$/)).toBeInTheDocument();
+      unmount();
+    }
+    const { container } = render(await SegmentPage({ params: Promise.resolve({ segment: "solar" }) }));
+    expect(container.textContent).not.toMatch(/Solaride|6 WhatsApp chats|₹1,200/);
+    expect(screen.queryByText(/first 3/)).toBeNull();
+  });
+
+  it("#1944: the solar proof copy is exactly as measured, with no per-chat price and no promise", () => {
+    const proof = SEGMENTS.find((segment) => segment.slug === "solar")!.proof!;
+    expect(proof.body).toContain("6 WhatsApp chats for about ₹1,200 across two short runs");
+    expect(proof.body).toContain("it isn't a promise");
+    expect(`${proof.heading} ${proof.body} ${proof.hinglish}`).not.toMatch(/per chat|₹\d+ (?:a|per) chat|guarantee/i);
+  });
+
   it("the WhatsApp button opens the owner's chat pre-typed for the segment; no number, no button", () => {
     const solar = SEGMENTS[0];
     expect(segmentWhatsAppHref(solar, "+91 98765 43210")).toBe(`https://wa.me/919876543210?text=${encodeURIComponent(solar.whatsappText)}`);

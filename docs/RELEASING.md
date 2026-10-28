@@ -189,7 +189,7 @@ The Supabase free plan keeps no backups (owner, Oct 27: no Pro), so we keep our 
 - **Nightly encrypted dump:** [db-backup.yml](../.github/workflows/db-backup.yml) runs `pg_dump`
   of the `public`, `private` and `auth` schemas (data and schema; `private` holds the encrypted Meta tokens, payment orders and the migration ledger) as the read-only role `backup_reader`
   (`BYPASSRLS`, `default_transaction_read_only`). It connects through the session pooler using the
-  Actions secret `BACKUP_DATABASE_URL` (the only place its password lives). The dump is gzipped
+  `BACKUP_DATABASE_URL` secret of the `production-secrets` environment (`main` only, #1893; the only place its password lives; rotate with a SCRAM verifier, `alter role backup_reader password 'SCRAM-SHA-256$…'`, and allow ~2 min for the pooler's cache). The dump is gzipped
   and encrypted (openssl CMS, AES-256) to the public certificate
   [.github/backup/backup-cert.crt](../.github/backup/backup-cert.crt), then kept as a 14-day
   workflow artifact. Only the private key decrypts it; it lives in DevOps's keychain

@@ -1,4 +1,5 @@
 import { reconnectByLabel } from "@/lib/meta/token-expiry";
+import { requestLocale } from "@/i18n/request-locale";
 import { Alert } from "@/components/ui/alert";
 import { clientCreative } from "@/lib/creative/client-receipt";
 import { madeForSetup } from "@/lib/creative/setup-picks";
@@ -120,7 +121,7 @@ export default async function CampaignsPage({
       try { return setupWelcome(business, ads.flatMap((ad) => approvedRows.filter((row) => row.id === ad.id))); } catch { return null; }
     })();
     return <SetupGoLive business={business} ads={ads} pageConnected={metaReady} funding={funding}
-      whatsappNumber={masked ? maskWhatsAppNumber(`+91${masked}`) : null} weeklyCap={weeklyCap} welcome={welcome} />;
+      whatsappNumber={masked ? maskWhatsAppNumber(`+91${masked}`) : null} weeklyCap={weeklyCap} welcome={welcome} locale={await requestLocale()} />;
   }
 
   return (
