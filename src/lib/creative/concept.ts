@@ -8,6 +8,7 @@ import {
   type BrandContext,
 } from "@/lib/templates/ads";
 import { contactChannel, formatDimensions, whatsappContactLabel, type AdFormat } from "@/lib/creative/design";
+import { quotedAsk } from "@/lib/campaign/whatsapp-greeting";
 import { bannedClaimsForVertical, capitalWords, scanAdCopy } from "@/lib/creative/slopScan";
 import { policyFindings } from "@/lib/creative/policy-rules";
 import { emptyScene } from "@/lib/creative/visual-rules";
@@ -119,7 +120,7 @@ Choose one relevant benefit and one supporting fact; do not repeat the full cred
 service-area list and savings claim in every ad. Avoid generic slogan triplets, forced metaphors,
 and references to incidental objects in the picture. End with a plain, relevant next step. When contact
 is "whatsapp", the ad's button opens a WhatsApp chat: the last line asks people to message on WhatsApp,
-and the ad never asks them to call, phone or email.
+and the ad never asks them to call, phone or email (and never picks "Call Now").
 Recent copy is supplied only to avoid repetition, not as evidence for claims. Change the opening,
 sentence structure and persuasion angle, not just synonyms. Do not reuse a recent headline or hook.
 Write a concise Meta link description that complements the headline with a supported detail or
@@ -569,7 +570,9 @@ export function validateConcept(
   }
   if (issues.length) return { success: false, issues, ...(claims.size ? { claims: [...claims] } : {}) };
   const pictureOffer = offerOnPicture(concept, input.brand.offers ?? []);
-  const asked = { ...concept, primary_text: withWhatsAppAsk(concept, input) };
+  // #1364: a WhatsApp business's button opens a chat, so a stored "Call Now" (previews, 'Button on picture') reads "Contact Us".
+  const whatsappFirst = contactChannel(input.brand) === "whatsapp";
+  const asked = { ...concept, primary_text: withWhatsAppAsk(concept, input), cta: whatsappFirst && concept.cta === "Call Now" ? "Contact Us" as const : concept.cta };
   return { success: true, concept: pictureOffer ? { ...asked, supportingText: pictureOffer } : asked };
 }
 
@@ -585,7 +588,12 @@ function withWhatsAppAsk(concept: CreativeConcept, input: ConceptInput): string 
   const lines = concept.primary_text.split("\n").map((line) => line.trim()).filter(Boolean);
   if (NAMES_WHATSAPP.test(lines.at(-1) ?? "")) return concept.primary_text;
   const label = whatsappContactLabel([concept.headline, concept.primary_text], input.language);
-  const asked = `${concept.primary_text.trimEnd()}\n${label}${/[\u0900-\u097F\u0A00-\u0A7F]/u.test(label) ? "।" : "."}`;
+  const line = `${label}${/[\u0900-\u097F\u0A00-\u0A7F]/u.test(label) ? "।" : "."}`;
+  // #1364: a last line that quotes what to send (#1027's pre-typed message) stays last; the WhatsApp line goes before it.
+  const parts = concept.primary_text.trimEnd().split("\n");
+  const asked = quotedAsk(concept.primary_text)
+    ? [...parts.slice(0, -1), line, parts.at(-1)!].join("\n")
+    : `${concept.primary_text.trimEnd()}\n${line}`;
   return asked.length <= (creativeConceptSchema.shape.primary_text.maxLength ?? 900) ? asked : concept.primary_text;
 }
 

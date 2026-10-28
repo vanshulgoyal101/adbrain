@@ -11,6 +11,13 @@ export const customerBalanceSchema = z.object({
   reservations: z.array(z.object({ campaignId: z.uuid(), reservationId: z.uuid(), state: z.enum(["uncertain", "active", "paused", "closed"]) })).default([]),
 });
 export type CustomerBalance = z.infer<typeof customerBalanceSchema>;
+// #1235 (owner): what reaches the browser. Paid, the service share, the ad-budget total and the ad-share refund would let a customer work out
+// AdBrain's margin by subtraction (devtools or page source), so they stay server-side. Zod drops the omitted keys.
+export const customerBalanceViewSchema = customerBalanceSchema.omit({
+  capturedPaise: true, serviceAllocationPaise: true, advertisingAllocationPaise: true, advertisingRefundedPaise: true,
+});
+export type CustomerBalanceView = z.infer<typeof customerBalanceViewSchema>;
+export const toCustomerBalanceView = (balance: CustomerBalance): CustomerBalanceView => customerBalanceViewSchema.parse(balance);
 
 export const customerCostEvidenceSchema = z.strictObject({
   campaignId: z.uuid(), adAccountId: z.string().regex(/^act_[0-9]+$/), connectionGeneration: z.number().int().positive(),

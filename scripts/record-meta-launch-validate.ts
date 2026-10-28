@@ -10,6 +10,7 @@
  *
  *   npx tsx --env-file=<.env.local> scripts/record-meta-launch-validate.ts
  */
+import "./lib/meta-write-gate";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { MetaClient, type AdDestination } from "@/lib/meta/client";

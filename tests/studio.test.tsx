@@ -1149,8 +1149,8 @@ describe("<Studio> review board batches (#762)", () => {
       at("2026-10-14T05:00:00Z", "stale", "g-stale"),
     ]} />);
     const board = within(screen.getByRole("region", { name: "Ads" }));
-    expect(board.getByText(/26 Oct, 3:00\s?pm · 1 ad/i)).toBeVisible();
-    expect(board.getByText(/26 Oct, 10:30\s?am · 1 ad/i)).toBeInTheDocument();
+    expect(board.getByText(/today, 3:00\s?pm · 1 ad/i)).toBeVisible();
+    expect(board.getByText(/today, 10:30\s?am · 1 ad/i)).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /^Ads \(2\)/ })).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "All (2)" })).toBeInTheDocument();
   });

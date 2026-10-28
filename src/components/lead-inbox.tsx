@@ -496,7 +496,7 @@ export function LeadInbox({
             </thead>
             <tbody className="divide-y divide-slate-100">
               {leads.map((l) => {
-                const { first, contactMinutes, current, state, stateLabel, meta, name } = rowInfo(l);
+                const { first, contactMinutes, current, state, stateLabel, meta, name, whatsapp } = rowInfo(l);
                 return (
                 <tr role="row" key={l.id} className="hover:bg-slate-50" data-state={state} data-selected={selectedLead?.id === l.id || undefined}>
                   <td role="cell" className={styles.person}>
@@ -516,11 +516,10 @@ export function LeadInbox({
                       </a>
                     )}
                     {!isMetaTestLead(l) && l.phone && (() => {
-                      const { whatsapp } = rowInfo(l);
                       const replied = contactMinutes * 60_000;
                       return <div className={`${styles.replyActions} mt-1 flex flex-wrap items-center gap-2`}>
                         {whatsapp && <a href={whatsapp} target="_blank" rel="noopener noreferrer" onClick={() => markContacted(l)}
-                          className="inline-flex min-h-11 items-center gap-1 rounded-md bg-emerald-600 px-3 text-xs font-medium text-white hover:bg-emerald-700">
+                          className="inline-flex min-h-11 items-center gap-1 rounded-md bg-primary px-3 text-xs font-medium text-white hover:bg-primary-hover">
                           <MessageCircle size={14} aria-hidden="true" />WhatsApp them</a>}
                         <a href={`tel:${l.phone}`} onClick={() => markContacted(l)}
                           className="inline-flex min-h-11 items-center gap-1 rounded-md border border-slate-300 px-3 text-xs font-medium text-slate-800 hover:bg-slate-50">
@@ -558,6 +557,12 @@ export function LeadInbox({
                       <details className={styles.more}>
                         <summary aria-label={`More for ${name}`} title="More"><MoreHorizontal size={18} aria-hidden="true" /></summary>
                         <div className={styles.moreMenu}>
+                          {/* #1260: once someone isn't waiting, their row shows only Became a customer · ⋯, so the replies live here. */}
+                          {state !== "new" && !isMetaTestLead(l) && <>
+                            {whatsapp && l.phone && <a href={whatsapp} target="_blank" rel="noopener noreferrer" onClick={() => markContacted(l)}>WhatsApp them</a>}
+                            {l.phone && <a href={`tel:${l.phone}`} onClick={() => markContacted(l)}>Call</a>}
+                            {l.email && <a href={`mailto:${l.email}`}>Email</a>}
+                          </>}
                           {current !== "closed" && current !== "customer" && !isMetaTestLead(l) && <button type="button" disabled={!!marking || saving}
                             onClick={event => { event.currentTarget.closest("details")?.removeAttribute("open"); void setCustomer(l, "closed", current); }}>Not interested</button>}
                           <button type="button" disabled={saving} onClick={event => { const menu = event.currentTarget.closest("details"); menu?.removeAttribute("open"); editLead(l, menu?.querySelector("summary") ?? event.currentTarget); }}>Edit</button>
@@ -582,7 +587,7 @@ export function LeadInbox({
             </div>
             {!isMetaTestLead(selectedLead) && detail.state !== "customer" && <div className="flex flex-wrap gap-2">
               {detail.whatsapp && <a href={detail.whatsapp} target="_blank" rel="noopener noreferrer" onClick={() => markContacted(selectedLead)}
-                className="inline-flex min-h-11 items-center gap-2 rounded-md bg-emerald-600 px-4 text-sm font-medium text-white hover:bg-emerald-700">
+                className="inline-flex min-h-11 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-white hover:bg-primary-hover">
                 <MessageCircle size={16} aria-hidden="true" />WhatsApp them</a>}
               {selectedLead.phone && <a href={`tel:${selectedLead.phone}`} onClick={() => markContacted(selectedLead)}
                 className="inline-flex min-h-11 items-center gap-2 rounded-md border border-slate-300 px-4 text-sm font-medium text-slate-800 hover:bg-slate-50">

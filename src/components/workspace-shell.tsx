@@ -27,7 +27,9 @@ function saveViewedAt(key: string, time: string) {
 
 const UNSEEN_POLL_MS = 120_000;
 
-export function WorkspaceShell({ children, email, ownerId, businessId, businessName, supportUrl = null }: {
+export function WorkspaceShell({ children, email, ownerId, businessId, businessName, supportUrl = null, firstAd = false }: {
+  /** #1272: no campaign has gone live yet, so + continues the setup (/create resumes the saved step). */
+  firstAd?: boolean;
   children: ReactNode;
   email: string | null;
   ownerId: string;
@@ -101,7 +103,7 @@ export function WorkspaceShell({ children, email, ownerId, businessId, businessN
         <button className={styles.menu} type="button" title="Open navigation" aria-label="Open navigation" aria-haspopup="dialog" onClick={() => drawer.current?.showModal()}><Menu size={21} aria-hidden="true" /></button>
         {/* #847: phones only. On wider screens the sidebar holds Create ads and the H1 names the page. */}
         <div className={styles.breadcrumb}><strong>{section}</strong></div>
-        {!pathname.startsWith("/create") && <Link className={styles.create} href="/create" aria-label="Create ads" title="Create ads"><Plus size={20} aria-hidden="true" /></Link>}
+        {!pathname.startsWith("/create") && <Link className={styles.create} href="/create" aria-label={firstAd ? "Continue your first ad" : "Create ads"} title={firstAd ? "Continue your first ad" : "Create ads"}><Plus size={20} aria-hidden="true" /></Link>}
       </header>
       <main id="workspace-main" tabIndex={-1} className={styles.main}>{children}</main>
     </div>

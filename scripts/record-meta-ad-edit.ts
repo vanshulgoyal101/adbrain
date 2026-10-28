@@ -5,6 +5,7 @@
  *
  *   npx tsx --env-file=<.env.local> scripts/record-meta-ad-edit.ts <paused ad id>
  */
+import "./lib/meta-write-gate";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { editedCreativeForm } from "@/lib/meta/client";

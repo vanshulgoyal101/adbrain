@@ -78,6 +78,7 @@ function fromBusiness(b: Business | null): FieldsState {
 }
 
 const AUTOFILL_LABELS: Partial<Record<keyof FieldsState, string>> = {
+  name: "name",
   description: "description",
   vertical: "category",
   brand_voice: "voice",
@@ -97,12 +98,13 @@ const KEY_FACTS: [keyof FieldsState, string][] = [
 ];
 
 /** Plain words for what autofill filled and which key facts the owner still has to add. */
-function autofillSummary(extracted: Partial<FieldsState>, before: FieldsState): string {
+function autofillSummary(extracted: Partial<FieldsState>, before: FieldsState, pasted = false): string {
   const filled = (Object.keys(AUTOFILL_LABELS) as (keyof FieldsState)[])
     .filter((key) => extracted[key]?.trim())
     .map((key) => AUTOFILL_LABELS[key]!);
   const missing = KEY_FACTS.filter(([key]) => !(extracted[key] ?? before[key]).trim()).map(([, label]) => label);
-  const found = filled.length ? `Filled from your website: ${filled.join(", ")}.` : "Your website didn't give us any Brand details.";
+  const from = pasted ? "your text" : "your website";
+  const found = filled.length ? `Filled from ${from}: ${filled.join(", ")}.` : `${pasted ? "Your text" : "Your website"} didn't give us any Brand details.`;
   return missing.length
     ? `${found} Still missing: ${missing.join(", ")}. Add them below; ads only state facts your Brand has.`
     : `${found} Check the fields below, then save.`;
@@ -254,6 +256,8 @@ export function BrandForm({ business, photoCount = 0 }: { business: Business | n
         // #1037: proposed as removable chips; nothing is saved until the owner taps Save.
         locations: e.locations?.length ? e.locations.join("\n") : undefined,
         phone: e.phone,
+        // #1379: a name the owner already typed stays.
+        name: fields.name.trim() ? undefined : e.name,
       };
       setFields((current) => {
         const merged = { ...current };
@@ -263,7 +267,7 @@ export function BrandForm({ business, photoCount = 0 }: { business: Business | n
         }
         return merged;
       });
-      setAutofillNote(autofillSummary(extracted, fields));
+      setAutofillNote(autofillSummary(extracted, fields, pasted !== undefined));
     } catch {
       setAutofillError(pasted === undefined ? "Autofill failed — could not reach the site." : "Autofill failed. Try again in a moment.");
     } finally {

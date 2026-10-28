@@ -49,7 +49,7 @@ describe("core: activation funding counts the account's other live capped runs (
     expect(freeRoomPaise(account)).toBe(13_487);
     const short = fundingShortfall({ mode: "operator", neededPaise: 25_000, account });
     expect(short).toEqual({ kind: "short", roomPaise: 13_487, neededPaise: 25_000, committed: { runs: 1, remainingPaise: 45_000, uncapped: { adSets: 0, dailyPaise: 0 } } });
-    expect(committedWords(short?.kind === "short" ? short.committed : undefined)).toBe(" after ₹450.00 for your 1 other live run");
+    expect(committedWords(short?.kind === "short" ? short.committed : undefined)).toBe(" after ₹450 for your 1 other live run");
     // Before #1058 the same reads passed: ₹584.87 ≥ ₹250.
     expect(fundingShortfall({ mode: "operator", neededPaise: 25_000, account: { ...account, committed: undefined } })).toBeNull();
   });
@@ -59,7 +59,7 @@ describe("core: activation funding counts the account's other live capped runs (
     const account = await read({ ...adSetsBody, data: [{ ...whatsapp, budget_remaining: "4000" }, { id: "900000000000000003", effective_status: "ACTIVE", lifetime_budget: "25000", budget_remaining: "25000", daily_budget: "0" }] });
     expect(account.committed).toEqual({ runs: 2, remainingPaise: 29_000, uncapped: { adSets: 0, dailyPaise: 0 } });
     expect(fundingShortfall({ mode: "own", neededPaise: 25_000, account })).toBeNull();
-    expect(committedWords(account.committed)).toBe(" after ₹290.00 for your 2 other live runs");
+    expect(committedWords(account.committed)).toBe(" after ₹290 for your 2 other live runs");
   });
 
   // #1094: raising this run's own cap leaves its ad set out; its unspent cap is part of what the raise needs.
@@ -84,7 +84,7 @@ describe("core: activation funding counts the account's other live capped runs (
     const account = await read({ ...adSetsBody, data: [{ id: "1", effective_status: "ACTIVE", lifetime_budget: "0", budget_remaining: "0", daily_budget: "20000" }, { id: "2", effective_status: "ACTIVE" }] });
     expect(account.committed).toEqual({ runs: 0, remainingPaise: 0, uncapped: { adSets: 1, dailyPaise: 20_000 } });
     expect(freeRoomPaise(account)).toBe(58_487);
-    expect(committedWords(account.committed)).toBe(" (₹200.00 a day also runs on 1 uncapped ad set)");
+    expect(committedWords(account.committed)).toBe(" (₹200 a day also runs on 1 uncapped ad set)");
     expect(committedWords({ runs: 0, remainingPaise: 0, uncapped: { adSets: 0, dailyPaise: 0 } })).toBe("");
   });
 
