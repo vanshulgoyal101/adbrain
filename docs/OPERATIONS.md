@@ -354,16 +354,33 @@ in issues.
 1. Read-only checks, all must hold:
    `select authorization_status from public.meta_connections where business_id='<business id>';`
    returns no row or `disconnected`;
-   `select count(*) from public.campaigns where business_id='<business id>';` is `0`.
-   If either fails, stop and ask on the issue.
-2. With the owner present, change the account's email to theirs (Supabase dashboard →
-   Authentication → the user → change email, or `auth.admin.updateUserById(<user id>, { email })`).
-3. The owner signs in with a one-time code sent to that email. Receiving the code is their
-   confirmation. Read back:
-   `select email, email_confirmed_at from auth.users where id='<user id>';` shows their address.
-   The account is no longer internal, so the normal owner rules (paid images, allowance) apply
-   from here.
-4. Post 'handed over' with the date on the issue (no names); the owner connects Meta on the
+   `select count(*) from public.campaigns where business_id='<business id>';` is `0`;
+   `select count(*) from private.meta_tokens where business_id='<business id>';` is `0`;
+   `select count(*) from private.meta_connection_attempts where business_id='<business id>';` is `0`;
+   `select count(*) from public.managed_meta_accounts where business_id='<business id>';` is `0`;
+   `select count(*) from public.owner_alert_prefs where business_id='<business id>';` is `0`.
+   If any fails, stop and ask on the issue. Do not connect Meta, provision a managed
+   account, or enable WhatsApp/lead alerts during preparation.
+2. With the owner present, first clear the prospect's password and revoke every existing
+   session and pending sign-in token in Supabase Auth. In the SQL editor, run the
+   service-role-only cleanup:
+   `update auth.users set encrypted_password = '' where id='<user id>';`
+   `delete from auth.sessions where user_id='<user id>';`
+   `delete from auth.one_time_tokens where user_id='<user id>';`
+   Then use the dashboard's **Invalidate sessions** action to clear recovery,
+   confirmation, and email-change token fields on that `auth.users` row. Never run these
+   statements with an application client or paste credentials into an issue.
+3. Change the account's email to theirs (Supabase dashboard → Authentication → the user →
+   change email, or `auth.admin.updateUserById(<user id>, { email })`). Read back:
+   `select email, email_confirmed_at, encrypted_password from auth.users where id='<user id>';`
+   shows their address, a confirmation timestamp, and no usable password. Read back:
+   `select count(*) from auth.sessions where user_id='<user id>';` and
+   `select count(*) from auth.one_time_tokens where user_id='<user id>';` — both are `0`.
+4. The owner signs in with a one-time code sent to that email. Receiving the code is their
+   confirmation. The account is no longer internal, so the normal owner rules (paid images,
+   allowance) apply from here. Do not connect Meta until the session/token counts above are
+   zero and the owner has confirmed the new address.
+5. Post 'handed over' with the date on the issue (no names); the owner connects Meta on the
    20-minute onboarding call (#1279).
 
 ### Scheduled Jobs
