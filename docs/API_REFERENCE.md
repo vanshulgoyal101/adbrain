@@ -12,7 +12,8 @@ replace them only in an authorized isolated environment. Source: [route handlers
 business context come from the server. The strict payload always includes a known
 workspace `page` and optionally `viewport` (`compact`, `medium`, `wide`). Existing
 names `page.view`, `client.error` and `client.rejection` remain supported.
-`ui.action` additionally requires an allowlisted `action`; `page.engagement`
+`ui.action` additionally requires an allowlisted `action`; `ui.tap` (#1242) carries only a
+launch-path `page` (`/create`, `/studio`, `/campaigns`); `page.engagement`
 requires integer `durationMs` between 1000 and 3600000. Unknown fields, arbitrary
 labels and client identity overrides are rejected. No request/field content is
 captured. DNT/GPC, 2 KiB body limits, rate limiting and 204 responses are preserved.
