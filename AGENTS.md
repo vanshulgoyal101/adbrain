@@ -214,6 +214,38 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 	issue. Every removal PR tags the last commit that still has it
 	(`removed/<name>`), adds its row to the pinned log #1173, and never drops a
 	column or table.
+- **Build it properly, from the ground up (owner, Oct 29: no makeshift updates).**
+	Speed comes from small slices, not from shortcuts. Every feature or fix:
+	1. **Design first** when it touches more than one layer: a short plan on the issue
+		(data model, API, service, UI, tests, docs, rollout) before code. It must fit the
+		target architecture (#1792): core domain stays channel-neutral, platform calls only
+		in that channel's adapter.
+	2. **Change every layer it needs**, in the right place: types, DB migration,
+		service, API route, UI, words, tests and the matching doc. No patching a
+		symptom in the UI when the cause is in the service, no copy-pasted logic, and no
+		special cases bolted on with `if (businessId === …)`.
+	3. **Leave the code better than you found it:** reuse or extend the existing
+		module instead of adding a parallel one; split a file you grow past ~400 lines;
+		delete what your change makes dead.
+	4. **No temporary hacks without an owner and date.** A shortcut that must ship
+		needs a `TODO(#issue)` and a follow-up issue in the same PR; otherwise do it
+		properly.
+	5. **Tests at the right level:** a unit test for the rule, a core test with
+		recorded real responses for core paths, and an e2e check for user flows.
+	Reviewers block PRs that skip a layer, duplicate logic or add a hack without
+	an issue.
+- **Refactor continuously, without slowing anyone down (owner, Oct 29).**
+	- Small refactors (rename, extract a function, split a file you're touching)
+		ride along in the feature PR. Anything bigger is its **own** small PR
+		(≤ ~400 changed lines), behaviour-unchanged and proven by existing tests, so
+		it reviews in minutes and auto-merges on green CI.
+	- Never hold a feature, fix or release for a refactor, and never mix a
+		refactor with a money or migration change in one PR.
+	- When you hit messy code, log it on #1792 (one line: file, problem, fix) and
+		keep going; the CTO slots it into a phase.
+	- Speed is measured, not guessed: the CTO watches PR cycle time, CI duration,
+		release frequency and the waiter (idle time) weekly, and posts any slowdown
+		on #364 with its fix.
 
 ## Branches and deployments
 
