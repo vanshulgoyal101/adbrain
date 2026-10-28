@@ -3,7 +3,7 @@ import { creativeFailureMessage } from "@/lib/creative/failure-message";
 import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { logEvent } from "@/lib/audit";
-import { CreativeImageError, CreativeValidationError, generateVariants, type CreateProgressEvent } from "@/lib/creative/generate";
+import { CreativeImageError, CreativeValidationError, generateVariants, type CreateProgressEvent, type GeneratedVariant } from "@/lib/creative/generate";
 import {
   persistCreativeImage,
   renderAndPersistDesign,
@@ -27,7 +27,8 @@ import {
 } from "@/lib/creative/receipt";
 import type { Creative, Database } from "@/lib/types";
 import { creativeAssets, recentCreativeCopy } from "@/lib/creative/references";
-import { CREATE_HEARTBEAT_MS } from "@/lib/creative/stream";
+import { CREATE_HEARTBEAT_MS, CREATE_TOP_UP_BUDGET_MS, CREATE_TOP_UP_START_MS } from "@/lib/creative/stream";
+import { AD_ANGLES, type AdAngle } from "@/lib/templates/ads";
 import { freeImagesOnly } from "@/lib/llm/spend-policy";
 import { preferenceContext } from "@/lib/preferences/store";
 
@@ -100,12 +101,15 @@ export const POST = observeRoute("/api/creatives/generate", "POST", handlePOST);
 export type CreateStreamLine =
   | ({ type: "progress" } & CreateProgressEvent)
   | { type: "creative"; angleId: string; creative: Creative }
+  /** #1123: the first pass came up short; this many more are being made in the same request. */
+  | { type: "topUp"; missing: number }
   | { type: "result"; status: number; body: unknown };
 
 interface LiveCreate {
   onAdmitted: () => void;
   onProgress: (event: CreateProgressEvent) => void;
   onCreative: (angleId: string, creative: Creative) => void;
+  onTopUp: (missing: number) => void;
 }
 
 async function handlePOST(req: Request): Promise<Response> {
@@ -122,6 +126,7 @@ async function handlePOST(req: Request): Promise<Response> {
     onAdmitted: admitted,
     onProgress: (event) => write({ type: "progress", ...event }),
     onCreative: (angleId, creative) => write({ type: "creative", angleId, creative }),
+    onTopUp: (missing) => write({ type: "topUp", missing }),
   });
   // Rejections before admission (auth, limits, quota) keep their normal status and JSON body.
   const early = await Promise.race([started, result]);
@@ -234,7 +239,10 @@ async function generate(req: Request, live?: LiveCreate) {
   const userId = user.id;
   const variantGroup = body.generationId ?? crypto.randomUUID();
   const inserted: Creative[] = [];
-  const failures: { angle: string; error: string }[] = [];
+  // Keyed by angle: a top-up that saves the angle clears its failure; one that fails replaces it.
+  const failed = new Map<string, { angle: AdAngle; error: unknown; message: string }>();
+  let failures: { angle: string; error: string }[] = [];
+  let topUp = 0;
   let noProviderFailures = 0;
   // Usage is unknown only when recording it failed or an unexpected error hid provider calls (#138).
   let usageUnknown = false;
@@ -276,20 +284,17 @@ async function generate(req: Request, live?: LiveCreate) {
     admitted = true;
     live?.onAdmitted();
     const advisoryPreferences = await preferenceContext(businessId, "creative", [brief, instructions].filter(Boolean).join("\n")).catch(() => "");
-    await generateVariants({
+    const run = {
       brand: business,
       brief,
-      count,
       instructions,
       language,
       format: body.format,
       referenceImages,
-      ownerPhotos,
-      recentCopy,
       advisoryPreferences,
       sourceFacts,
       onProgress: live?.onProgress,
-      onVariant: async (variant) => {
+      onVariant: async (variant: GeneratedVariant) => {
         const events = variantUsageEvents(variant, {
             businessId,
             userId: user.id,
@@ -338,10 +343,11 @@ async function generate(req: Request, live?: LiveCreate) {
             "Could not save the creative. Check the generation schema migration.",
           );
         inserted.push(data);
+        failed.delete(variant.angleId);
         live?.onCreative(variant.angleId, data);
         await progress();
       },
-      onFailure: async (angle, error) => {
+      onFailure: async (angle: AdAngle, error: unknown) => {
         const events = failedVariantUsage(error, {
             businessId,
             userId: user.id,
@@ -355,12 +361,32 @@ async function generate(req: Request, live?: LiveCreate) {
           || error instanceof NoLLMKeysError || recordedAngles.has(angle.id));
         if (unknown) usageUnknown = true;
         await progress(recorded ? events.reduce((total, event) => total + event.usage.totalTokens, 0) : 0, false, unknown);
-        failures.push({
-          angle: angle.name,
-          error: creativeFailureMessage(error),
-        });
+        failed.set(angle.id, { angle, error, message: creativeFailureMessage(error) });
       },
-    });
+    };
+    await generateVariants({ ...run, count, ownerPhotos, recentCopy });
+    // #1123: one top-up round, in parallel, for the ads the first pass missed. Only failures a fresh
+    // concept can fix are retried (not "no provider" or every provider down), never beyond `count`.
+    const firstPass = AD_ANGLES.slice(0, count);
+    const retry = [...failed.values()]
+      .filter(({ error }) => error instanceof CreativeImageError || (error instanceof CreativeValidationError && error.stage !== "provider"))
+      .map(({ angle }) => angle)
+      .sort((a, b) => firstPass.indexOf(a) - firstPass.indexOf(b))
+      .slice(0, count - inserted.length);
+    if (retry.length && Date.now() - startedAt <= CREATE_TOP_UP_START_MS) {
+      topUp = retry.length;
+      live?.onTopUp(topUp);
+      await generateVariants({
+        ...run,
+        angleIds: retry.map((angle) => angle.id),
+        count: retry.length,
+        // The business's photo belongs to the first ad only, so it is reused only when that ad is retried.
+        ownerPhotos: retry[0].id === firstPass[0]?.id ? ownerPhotos : undefined,
+        recentCopy: [...inserted.map((creative) => ({ headline: creative.headline ?? "", primary_text: creative.primary_text ?? "" })), ...recentCopy].slice(0, 12),
+        signal: AbortSignal.timeout(CREATE_TOP_UP_BUDGET_MS),
+      });
+    }
+    failures = [...failed.values()].map(({ angle, message }) => ({ angle: angle.name, error: message }));
     const noProvider = !inserted.length && failures.length === count && noProviderFailures === count;
     await progress(0, true, usageUnknown || inserted.length + failures.length < count, !inserted.length);
     if (noProvider) return NextResponse.json({ error: new NoLLMKeysError().message, code: "NO_LLM_KEYS" }, { status: 400 });
@@ -383,7 +409,7 @@ async function generate(req: Request, live?: LiveCreate) {
   // Internal accounts make free Pollinations images; customers wait on the paid path.
   recordProductEvent({ kind: "workflow", name: "creative.batch", businessId, durationMs: Date.now() - startedAt,
     outcome: !inserted.length ? "failed" : failures.length ? "partial" : "success",
-    attributes: { count: inserted.length, failedCount: failures.length, provider: freeImagesOnly() ? "pollinations" : "paid" } });
+    attributes: { count: inserted.length, failedCount: failures.length, topUp, provider: freeImagesOnly() ? "pollinations" : "paid" } });
   if (!inserted.length)
     return NextResponse.json(
       { error: failures[0]?.error ?? "No creatives were generated.", failures },
