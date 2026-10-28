@@ -2,7 +2,8 @@ import sharp from "sharp";
 import { createHash } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { MEDIA_MONTHLY_UPLOADS, MEDIA_TERMS_VERSION, mediaFit } from "@/lib/media/rules";
+import { MEDIA_MONTHLY_UPLOADS, mediaFit } from "@/lib/media/rules";
+const CONFIRMED = "2026-10-28T10:00:00.000Z";
 import { deleteMedia, finalizeUpload, listMedia, monthStartIst, signUpload, type MediaRow } from "@/lib/media/store";
 
 vi.mock("@/lib/env", () => ({ getEnv: () => ({ MEDIA_UPLOADS_ENABLED: true }) }));
@@ -22,7 +23,7 @@ function fakeSupabase() {
     const run = () => {
       const rows = tables[table];
       if (action.kind === "insert") {
-        const row = { id: crypto.randomUUID(), tags: [], checks: {}, status: "pending", deleted_at: null, source: "upload", created_at: new Date().toISOString(), confirmed_at: new Date().toISOString(), ...action.row };
+        const row: Row = { id: crypto.randomUUID(), tags: [], checks: {}, status: "pending", deleted_at: null, source: "upload", created_at: new Date().toISOString(), confirmed_at: new Date().toISOString(), ...action.row };
         if (table === "media_assets" && rows.some((other) => other.business_id === row.business_id && other.sha256 === row.sha256 && !other.deleted_at)) {
           return { data: null, error: { code: "23505", message: "duplicate" } };
         }
@@ -79,7 +80,7 @@ let db: ReturnType<typeof fakeSupabase>;
 beforeEach(() => { db = fakeSupabase(); });
 
 async function signed(bytes: Uint8Array, extra: Partial<Parameters<typeof signUpload>[1]> = {}) {
-  return signUpload(db.client, { businessId: BUSINESS, userId: USER, mime: "image/jpeg", bytes: bytes.length, sha256: sha(bytes), width: 1080, height: 1350, rightsConfirmed: true, ...extra });
+  return signUpload(db.client, { businessId: BUSINESS, userId: USER, mime: "image/jpeg", bytes: bytes.length, sha256: sha(bytes), width: 1080, height: 1350, rightsConfirmedAt: CONFIRMED, ...extra });
 }
 
 describe("media rules (#1209, #751)", () => {
@@ -98,17 +99,15 @@ describe("media rules (#1209, #751)", () => {
 });
 
 describe("signUpload (#1209)", () => {
-  it("asks for the rights confirmation once, then records it and signs a path under the business", async () => {
+  // #784: the route checks the owner's confirmation (#1248's hasCurrentMediaConsent); the row records when.
+  it("signs a path under the business and records when the rights were confirmed; never writes consent itself", async () => {
     const bytes = await photo(1080, 1350);
-    await expect(signed(bytes, { rightsConfirmed: false })).rejects.toMatchObject({ status: 409, code: "MEDIA_RIGHTS_REQUIRED" });
     const result = await signed(bytes);
     expect(result).toMatchObject({ duplicate: false, fit: { level: "ready" } });
     if (result.duplicate) throw new Error("unexpected duplicate");
     expect(result.path).toMatch(new RegExp(`^${BUSINESS}/[0-9a-f-]{36}\\.jpg$`));
-    expect(db.tables.media_consents).toEqual([expect.objectContaining({ business_id: BUSINESS, user_id: USER, terms_version: MEDIA_TERMS_VERSION })]);
-    expect(db.tables.media_assets).toEqual([expect.objectContaining({ status: "pending", sha256: sha(bytes) })]);
-    // Confirmed once: the next photo doesn't ask again.
-    await expect(signed(await photo(1080, 1920), { rightsConfirmed: false, height: 1920 })).resolves.toMatchObject({ duplicate: false });
+    expect(db.tables.media_assets).toEqual([expect.objectContaining({ status: "pending", sha256: sha(bytes), rights_confirmed_at: CONFIRMED })]);
+    expect(db.tables.media_consents ?? []).toEqual([]);
   });
 
   it("refuses other types, oversize and too-small photos before anything is stored", async () => {

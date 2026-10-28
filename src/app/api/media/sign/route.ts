@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { apiError } from "@/lib/api";
-import { mediaErrorResponse, mediaSession, ownsBusiness } from "@/lib/media/route-helpers";
+import { hasCurrentMediaConsent } from "@/lib/media/consent";
+import { mediaErrorResponse, mediaSession, ownedBusiness } from "@/lib/media/route-helpers";
 import { signUpload } from "@/lib/media/store";
 import { observeRoute } from "@/lib/observability/logger";
 import { rateLimitResponse } from "@/lib/security/rate-limit";
@@ -18,7 +19,6 @@ const body = z.object({
   width: z.number().int().positive().max(20_000),
   height: z.number().int().positive().max(20_000),
   name: z.string().max(200).optional(),
-  rightsConfirmed: z.boolean().optional(),
 }).strict();
 
 /** #1209: a one-time upload URL for one photo into the private `media` bucket (the bytes go browser → Storage). */
@@ -29,10 +29,15 @@ export const POST = observeRoute("/api/media/sign", "POST", async (req: Request)
   if (limited) return limited;
   const parsed = body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return apiError("Choose a photo to add.", 400);
-  if (!await ownsBusiness(session.client, parsed.data.businessId)) return apiError("Business not found", 404);
+  const business = await ownedBusiness(session.client, parsed.data.businessId);
+  if (!business) return apiError("Business not found", 404);
   try {
+    // #784: the owner confirms their rights first (#1248's screen and record); nothing is signed until then.
+    if (!await hasCurrentMediaConsent(session.client, business)) {
+      return NextResponse.json({ error: "Confirm you own these photos or have permission to use them.", code: "MEDIA_RIGHTS_REQUIRED" }, { status: 409 });
+    }
     const result = await signUpload(createAdminClient() as unknown as SupabaseClient, {
-      ...parsed.data, userId: session.user.id, userAgent: req.headers.get("user-agent"),
+      ...parsed.data, userId: session.user.id, rightsConfirmedAt: new Date().toISOString(),
     });
     return NextResponse.json({ ok: true, ...result });
   } catch (error) {

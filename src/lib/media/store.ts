@@ -4,7 +4,7 @@ import sharp from "sharp";
 import { getEnv } from "@/lib/env";
 import {
   isMediaMime, MEDIA_BUCKET, MEDIA_EXTENSION, MEDIA_MAX_BYTES, MEDIA_MAX_LONG_SIDE,
-  MEDIA_MONTHLY_UPLOADS, MEDIA_TERMS_VERSION, mediaFit, type MediaFit, type MediaMime,
+  MEDIA_MONTHLY_UPLOADS, mediaFit, type MediaFit, type MediaMime,
 } from "@/lib/media/rules";
 
 /**
@@ -49,7 +49,8 @@ export async function monthlyUploads(admin: SupabaseClient, businessId: string, 
   return count ?? 0;
 }
 
-export type SignInput = { businessId: string; userId: string; mime: string; bytes: number; sha256: string; width: number; height: number; name?: string; rightsConfirmed?: boolean; userAgent?: string | null };
+/** `rightsConfirmedAt`: when the route found the owner's current rights confirmation (#784, #1248's `hasCurrentMediaConsent`). */
+export type SignInput = { businessId: string; userId: string; mime: string; bytes: number; sha256: string; width: number; height: number; name?: string; rightsConfirmedAt: string };
 export type SignResult =
   | { duplicate: true; asset: MediaView }
   | { duplicate: false; id: string; path: string; token: string; fit: MediaFit };
@@ -59,20 +60,6 @@ export async function signUpload(admin: SupabaseClient, input: SignInput): Promi
   if (input.bytes > MEDIA_MAX_BYTES) throw new MediaError(413, "MEDIA_TOO_LARGE", "This photo is over 8 MB after resizing. Choose a smaller one.");
   const fit = mediaFit(input.width, input.height);
   if (fit.level === "too_small") throw new MediaError(422, "MEDIA_TOO_SMALL", fit.message);
-
-  const { data: consent, error: consentError } = await admin.from("media_consents").select("confirmed_at")
-    .eq("business_id", input.businessId).eq("terms_version", MEDIA_TERMS_VERSION).order("confirmed_at", { ascending: false }).limit(1).maybeSingle();
-  if (consentError) throw new MediaError(503, "MEDIA_UNAVAILABLE", "Couldn't check your photo rights. Try again.");
-  let confirmedAt = (consent as { confirmed_at: string } | null)?.confirmed_at ?? null;
-  if (!confirmedAt) {
-    if (!input.rightsConfirmed) throw new MediaError(409, "MEDIA_RIGHTS_REQUIRED", "Confirm you own these photos or have permission to use them.");
-    const { data: saved, error } = await admin.from("media_consents").insert({
-      business_id: input.businessId, user_id: input.userId, terms_version: MEDIA_TERMS_VERSION,
-      user_agent_hash: input.userAgent ? createHash("sha256").update(input.userAgent).digest("hex") : null,
-    }).select("confirmed_at").single();
-    if (error || !saved) throw new MediaError(503, "MEDIA_UNAVAILABLE", "Couldn't save your confirmation. Try again.");
-    confirmedAt = (saved as { confirmed_at: string }).confirmed_at;
-  }
 
   const existing = await liveBySha(admin, input.businessId, input.sha256);
   if (existing?.status === "ready") return { duplicate: true, asset: (await mediaViews(admin, [existing]))[0] };
@@ -86,7 +73,7 @@ export async function signUpload(admin: SupabaseClient, input: SignInput): Promi
     const path = `${input.businessId}/${randomUUID()}.${MEDIA_EXTENSION[input.mime as MediaMime]}`;
     const { data, error } = await admin.from("media_assets").insert({
       business_id: input.businessId, path, sha256: input.sha256, mime: input.mime, bytes: input.bytes,
-      width: input.width, height: input.height, name: input.name?.trim().slice(0, 120) || null, rights_confirmed_at: confirmedAt,
+      width: input.width, height: input.height, name: input.name?.trim().slice(0, 120) || null, rights_confirmed_at: input.rightsConfirmedAt,
     }).select(COLUMNS).single();
     if (error?.code === "23505") {
       const raced = await liveBySha(admin, input.businessId, input.sha256);

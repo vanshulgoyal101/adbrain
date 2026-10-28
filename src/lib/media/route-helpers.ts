@@ -18,6 +18,12 @@ export function mediaErrorResponse(error: unknown): NextResponse {
   return NextResponse.json({ error: "Couldn't save the photo. Try again.", code: "MEDIA_UNAVAILABLE" }, { status: 503 });
 }
 
+/** The owner's business with its category (the rights check needs it, #784); null when it isn't theirs (RLS read). */
+export async function ownedBusiness(client: SupabaseClient, businessId: string): Promise<{ id: string; vertical: string | null } | null> {
+  const { data } = await client.from("businesses").select("id, vertical").eq("id", businessId).maybeSingle();
+  return (data as { id: string; vertical: string | null } | null) ?? null;
+}
+
 /** The business is the owner's (RLS read). */
 export async function ownsBusiness(client: SupabaseClient, businessId: string): Promise<boolean> {
   const { data } = await client.from("businesses").select("id").eq("id", businessId).maybeSingle();
