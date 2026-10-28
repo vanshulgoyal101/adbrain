@@ -6,6 +6,21 @@ export const ANNUAL_PAYMENT_VERSION = "inr-annual-total-v1";
 
 export const DEFAULT_ANNUAL_PAYMENT_PAISE = 1_000_000;
 
+export const MIN_ANNUAL_PAYMENT_PAISE = 50_000;
+
+/**
+ * #1251: the whole-rupee payment that funds a capped run of `days` × `dailyRupees` plus Meta's GST, after what is
+ * already available. It mirrors activation's reserve check (ceil(cap × (10000 + GST bps) / 10000) ≤ available) and the
+ * quote's ad share (total − floor(total / 5)). 0 when the balance already covers it; never below the ₹500 minimum.
+ */
+export function paymentToCoverPaise(input: { dailyRupees: number; days: number; availablePaise: number; taxRateBps?: number }): number {
+  const capPaise = Math.round(input.dailyRupees * 100) * input.days;
+  const neededPaise = Math.ceil(capPaise * (10_000 + (input.taxRateBps ?? 1_800)) / 10_000);
+  const shortPaise = neededPaise - Math.max(input.availablePaise, 0);
+  if (shortPaise <= 0) return 0;
+  return Math.max(Math.ceil(shortPaise * 5 / 400) * 100, MIN_ANNUAL_PAYMENT_PAISE);
+}
+
 export function createAnnualPaymentQuote(totalPaise: number = DEFAULT_ANNUAL_PAYMENT_PAISE) {
   requirePaise(totalPaise, "totalPaise", 100);
   if (totalPaise > DEFAULT_ANNUAL_PAYMENT_PAISE) {
