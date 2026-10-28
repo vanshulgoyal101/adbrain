@@ -70,8 +70,9 @@ export function LoginForm({ newVisitor = false, onSucceeded, onCallbackDismiss }
     rememberReturningVisitor();
   }
 
-  function callbackUrl() {
-    return `${window.location.origin}/auth/callback?redirect=${encodeURIComponent(redirect)}`;
+  /** #1562: `via` lets the callback word a failure for the sign-in the owner actually used. */
+  function callbackUrl(via: "email" | "google") {
+    return `${window.location.origin}/auth/callback?redirect=${encodeURIComponent(redirect)}&via=${via}`;
   }
 
   async function sendMagicLink(address = email) {
@@ -84,7 +85,7 @@ export function LoginForm({ newVisitor = false, onSucceeded, onCallbackDismiss }
       const supabase = createClient();
       const { error } = await supabase.auth.signInWithOtp({
         email: address,
-        options: { emailRedirectTo: callbackUrl() },
+        options: { emailRedirectTo: callbackUrl("email") },
       });
       if (error) {
         reportAuthOutcome({ method: "email_link", outcome: "failed", code: authCode(error) });
@@ -112,7 +113,7 @@ export function LoginForm({ newVisitor = false, onSucceeded, onCallbackDismiss }
       const supabase = createClient();
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
-        options: { redirectTo: callbackUrl() },
+        options: { redirectTo: callbackUrl("google") },
       });
       if (error) {
         reportAuthOutcome({ method: "google", outcome: "failed", code: authCode(error) });

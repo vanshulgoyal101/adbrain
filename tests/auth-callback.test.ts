@@ -92,6 +92,19 @@ describe("auth callback destinations", () => {
     expect(response.headers.get("location")).toBe(`https://adbrain.example/login?error=${reason}`);
   });
 
+  // #1562: email links are PKCE too; one opened in Gmail's in-app browser has no verifier here.
+  it("#1562: an email link opened in another browser says so, and is counted as an email link", async () => {
+    exchangeCodeForSession.mockResolvedValue({ data: { user: null }, error: { message: "verifier", code: "pkce_code_verifier_not_found" } });
+    const response = await GET(new Request("https://adbrain.example/auth/callback?code=c1&via=email"));
+    expect(response.headers.get("location")).toBe("https://adbrain.example/login?error=link_other_browser");
+    expect(events()).toEqual([["auth.sign_in.email_link", "failed", "AUTH_CALLBACK:pkce_code_verifier_not_found"]]);
+  });
+
+  it("#1562: an email link's code that works is an email-link sign-in", async () => {
+    await GET(new Request("https://adbrain.example/auth/callback?code=c1&via=email"));
+    expect(events()).toEqual([["auth.sign_in.email_link", "success", null]]);
+  });
+
   it("#1414: an expired email link keeps where the owner was going", async () => {
     verifyOtp.mockResolvedValue({ data: { user: null }, error: { message: "expired", code: "otp_expired" } });
     const query = new URLSearchParams({ token_hash: "h", type: "email", redirect: "/studio" });

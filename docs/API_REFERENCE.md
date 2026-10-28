@@ -298,7 +298,7 @@ These sit outside `/api` and return redirects rather than the API envelope:
 
 | Method | Path | Input / result | Effect |
 | --- | --- | --- | --- |
-| GET | `/auth/callback` | `code` or `token_hash` + `type`; optional `redirect` | Exchanges/validates Supabase credentials, then redirects to safe local destination; failure -> `/login?error=auth` |
+| GET | `/auth/callback` | `code` or `token_hash` + `type`; optional `redirect`; `via=email\|google` (which sign-in started it, #1562) | Exchanges/validates Supabase credentials, then redirects to safe local destination; failure -> `/login?error=<reason>` (`link_expired`, `other_browser`, `link_other_browser` for an email link opened in another browser, `cancelled`, `auth`; #1414) |
 | GET | `/auth/dev-login` | No body | Disabled -> login; enabled development tries configured real login, otherwise a seven-day offline development cookie |
 | GET | `/auth/dev-logout` | No body | Clears offline development cookie and redirects to login; not a general Supabase sign-out API |
 
