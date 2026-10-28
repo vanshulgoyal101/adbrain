@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { clipToThought, conceptValidationRules, validateConcept, type ConceptInput } from "@/lib/creative/concept";
 import { AD_ANGLES } from "@/lib/templates/ads";
+import { adPolicyHits } from "@/lib/campaign/ad-policy";
 import recorded from "./fixtures/create/cedar-ridge-concept.json";
 import groq from "./fixtures/create/cedar-ridge-groq-drafts.json";
 import groqFields from "./fixtures/create/cedar-ridge-groq-fields.json";
@@ -40,6 +41,19 @@ describe("core: Create concept validation on a recorded production concept", () 
       expect(lines.every((line) => line.length <= 125)).toBe(true);
       expect(lines.join(" ")).toBe(hindi);
     }
+  });
+
+  // #1609 (CPO, #1500): an IELTS business's ad that promises a band is repaired in Create and blocked in Review.
+  it("an IELTS brand's 'guaranteed band' is refused for repair and blocked at Review", () => {
+    const ielts: ConceptInput = { ...input, brand: { ...recorded.brand, vertical: "IELTS coaching" } };
+    const promise = { ...recorded.concept, primary_text: `${recorded.concept.primary_text.split("\n")[0]}\nGuaranteed band 7 in 30 days.` };
+    const result = validateConcept(promise, ielts);
+    expect(result.success).toBe(false);
+    expect(result.success ? [] : conceptValidationRules(result.issues).join(" ")).toMatch(/banned-claim/);
+    expect(adPolicyHits([{ id: "c1", headline: promise.headline, primaryText: promise.primary_text }], "IELTS coaching").map((hit) => hit.term))
+      .toEqual(expect.arrayContaining(["guaranteed", "guaranteed band"]));
+    // The same words pass for a business outside education and health.
+    expect(adPolicyHits([{ id: "c1", headline: promise.headline, primaryText: promise.primary_text }], "solar energy")).toEqual([]);
   });
 
   it("clips an over-long link description instead of discarding the concept", () => {
