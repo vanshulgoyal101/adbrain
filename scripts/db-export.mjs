@@ -74,7 +74,7 @@ async function restoreAll(dir) {
   let db = null;
   try {
     execFileSync(join(bin, "initdb"), ["-D", cluster, "--auth=trust", "--encoding=UTF8", "--locale=C"], { stdio: "pipe" });
-    execFileSync(join(bin, "pg_ctl"), ["-D", cluster, "-l", join(work, "postgres.log"), "-o", `-k ${work} -c listen_addresses=''`, "-w", "start"], { stdio: "pipe" });
+    execFileSync(join(bin, "pg_ctl"), ["-D", cluster, "-l", join(work, "postgres.log"), "-o", `-k ${work} -c listen_addresses=''`, "-w", "start"], { stdio: "pipe", env: { ...process.env, LC_ALL: "C" } });
     running = true;
     db = new pg.Client({ host: work, port: 5432, database: "postgres", user: userInfo().username });
     db.on("error", () => {});
