@@ -42,7 +42,9 @@ vi.mock("@/lib/supabase/admin", () => ({
         // #1242: the sign-up query matches by prefix; the others never see sign-ups.
         const like = query.ops.find(([op]) => op === "like")?.[1] as [string, string] | undefined;
         const name = (r: unknown) => (r as { name: string }).name;
-        const selected = table !== "product_events" ? rows
+        const ownerIn = query.ops.find(([op, args]) => op === "in" && args[0] === "owner_id")?.[1] as [string, string[]] | undefined;
+        const owned = (r: unknown) => !ownerIn || ownerIn[1].includes((r as { owner_id?: string }).owner_id ?? "");
+        const selected = table !== "product_events" ? rows.filter(owned)
           : named ? rows.filter((r) => name(r) === named[1])
           : like ? rows.filter((r) => name(r).startsWith(like[1].replace(/%$/, "")))
             : rows.filter((r) => !name(r).startsWith("auth.sign_up.") && name(r) !== "scoreboard.manage" && (name(r) === "http.request") === isPlanRoute);
@@ -66,7 +68,7 @@ beforeEach(() => {
   mocks.queries = [];
   mocks.recorded = [];
   mocks.tables = {
-    businesses: [{ id: "smoke-business" }],
+    businesses: [{ id: "smoke-business", owner_id: "smoke-user" }],
     product_events: [
       { name: "meta.create_paused", outcome: "success", user_id: "real-user", business_id: "b1", duration_ms: 900, attributes: {}, created_at: now },
       { name: "meta.create_paused", outcome: "failed", user_id: null, business_id: "smoke-business", duration_ms: 900, attributes: {}, created_at: now },
@@ -132,6 +134,19 @@ describe("GET /api/cron/core-scoreboard (#681)", () => {
     const history = mocks.queries.find((q) => q.ops.some(([op, args]) => op === "eq" && args[1] === "scoreboard.manage"))!;
     expect(history.ops).toContainEqual(["gte", ["created_at", expect.any(String)]]);
     expect(body.rows.find((r: { step: string }) => r.step === "Manage, 7 days").now).toMatch(/29 min ❌$/);
+  });
+
+  it("#1697: counts the pilot funnel from prospect ownership, hand-over events and Go lives (no names)", async () => {
+    mocks.users["prospect-user"] = { id: "prospect-user", email: "sales+prospect-solar@team.example", email_confirmed_at: now };
+    mocks.users["pilot-owner"] = { id: "pilot-owner", email: "owner@solar.example", email_confirmed_at: now };
+    mocks.tables.businesses.push({ id: "p-prepared", owner_id: "prospect-user" }, { id: "p-live", owner_id: "pilot-owner" });
+    mocks.tables.creatives = [{ business_id: "p-prepared" }];
+    mocks.tables.product_events.push({ name: "prospect.handed_over", outcome: "success", user_id: null, business_id: "p-live", duration_ms: null, attributes: {}, created_at: now });
+    mocks.tables.campaigns.push({ id: "c-pilot", business_id: "p-live", launched_at: new Date(Date.now() - 8 * 86_400_000).toISOString() });
+    const { body } = await call();
+    const row = body.rows.find((r: { step: string }) => r.step === "Pilots");
+    expect(row.now).toBe("2 prepared → 1 handed over → 1 live → 1 at Day 7 (answers: yes 0, maybe 0, no 0)");
+    expect(JSON.stringify(body)).not.toMatch(/p-prepared|p-live|prospect-user|solar\.example/);
   });
 
   it("pages past 1,000 rows", async () => {
