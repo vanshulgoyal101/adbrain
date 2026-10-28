@@ -329,7 +329,7 @@ and leads paths. Nothing enforces module boundaries in CI (ESLint has no import 
 | Folder | Holds | May import |
 | --- | --- | --- |
 | `src/domain/` | Types and pure rules (`campaign.ts`, `results.ts`, `leads.ts`, `channel.ts` with the adapter interface) | Nothing app-specific (zod, std only) |
-| `src/channels/<name>/` | Adapter, transport, mapping to and from domain types, channel-only stores (e.g. `meta/tokens`, `meta/managed`) | `domain`, `lib/security`, `lib/observability`, `lib/supabase` (own tables only) |
+| `src/channels/<name>/` | Adapter, transport, mapping to and from domain types, channel-only stores (e.g. `meta/tokens`, `meta/managed`) | `domain`, `lib/security`, `lib/observability`, `lib/supabase` for the channel's **own private tables only** (tokens, attempts); never `public.*` business tables, which go through services and RLS |
 | `src/channels/registry.ts` | `adapterFor(channel)`, the only place that names concrete adapters | `channels/*` |
 | `src/services/` | Orchestration with DB access: `launch`, `manage`, `results`, `leads`, `connect` | `domain`, `channels/registry`, `lib/*` |
 | `src/app/`, `src/components/` | Routes and UI (unchanged locations; components split by feature in Phase 4) | `services`, `domain`, `lib/*`; **never** `channels/*` |
@@ -353,9 +353,13 @@ export interface ChannelCapabilities {
   minDailyBudgetMinor: Record<string, number>; // per currency
 }
 
-export interface ChannelContext {
-  businessId: string; connection: ConnectionBinding; // includes the generation that guards every write
-  idempotencyKey?: string; signal?: AbortSignal; writeMode: "full" | "pause_only";
+export interface ChannelContext {               // reads
+  businessId: string; connection: ConnectionBinding; signal?: AbortSignal;
+}
+export interface WriteContext extends ChannelContext { // every write method takes this; the registry refuses one without
+  connection: ConnectionBinding & { generation: number; account: string }; // bound account + generation, required
+  idempotencyKey: string;                              // persisted by the service *before* the call
+  writeMode: "full" | "pause_only";
 }
 
 export type WriteOutcome<T> =
@@ -382,6 +386,25 @@ export interface ChannelAdapter {
 }
 ```
 
+Every write method above takes a `WriteContext` (the `ctx` of `launch`, `activate`, `pause`, `editBudget`,
+`editAudience`, `editCreative`, `enforceSpendCap`, `cleanup`, `revoke`).
+
+**Contracts every adapter must pass** (a shared contract test suite, Meta's recorded tapes first):
+- **Capped activation:** `activate` writes the channel's hard cap, **reads it back** (cap, end time, no
+  uncapped daily budget), and only then turns delivery on; any other path returns `uncertain`. A channel
+  with `spendCapPerCampaign: false` is refused activation **by the service**.
+- **Idempotency:** the same `idempotencyKey` never creates a second object.
+- **Generation:** a write whose generation no longer matches the stored connection is refused before transport.
+- **Disconnect:** `revoke` revokes the grant at the provider (best effort); the service then purges the
+  credential (deleted, not only marked revoked: #1648, #1734).
+
+**Tenancy:** the business always comes from the service's context, never from channel data. `syncLeads` and
+`fetchResults` return external refs; the service maps each ref to a business through its **own** stored refs
+and drops anything unmatched (#1775's bug: one Page's leads landing in every business bound to it).
+
+**Inbound callbacks** (deauthorize, data deletion, webhooks) live in `src/app/api/<channel>/…`, verify the
+channel's signature on the raw body **before** parsing, then hand verified data to a service.
+
 **Errors:** adapters throw `ChannelError { code: "auth" | "rate_limited" | "policy" | "not_found" |
 "invalid" | "transient" | "uncertain", retryable, channelCode }`. Plain owner words come from the domain
 (the #1690 rejection copy becomes a per-channel map), never from provider text (#451).
@@ -404,6 +427,11 @@ managed provisioning → `connect` (Meta-only steps). Nothing needs a Meta word 
 | New `channel_connections` | `(business_id, channel)` primary key, `external_account_id`, `status`, `generation`, `capabilities` | Backfilled from `meta_connections`, which becomes Meta-private |
 | Credentials stay per channel | `private.meta_tokens` stays; each new channel gets its own private token table | Credential shapes differ; one generic table would hide risk |
 
+`channel_connections.generation` carries the **same counter** Meta writes check today (backfilled from
+`meta_connections.generation`, never reset), so in-flight operations can't pass a stale check. The new
+uniques and `channel_connections` ship with RLS (owner select via `owns_business`, service-only writes) and
+metadb tests in the same migration.
+
 All RPCs keep their names. New RPCs are channel-neutral (`channel_connection_status`). RLS and the metadb
 tests cover every new column and table before release.
 
@@ -422,6 +450,11 @@ or the card. If the interface needs a Meta word or a Google special case in a se
 before more slices land.
 
 ### Rules for every slice
+
+- **Money gates stay in services:** funding mode, customer reservation and allowance, the managed spend-cap
+  gate (`connection-access.ts`), `planGate` and `enforce-spend`'s weekly cap. Adapters only execute. Slices
+  2(d) and 2(e) must show these calls unchanged.
+- **#1775 (lead tenancy) is fixed before slice 2(b).**
 
 - Pilot and P0 work comes first; each role keeps at least one product item while slices run.
 - One path per PR, at most ~400 changed lines; move code and switch callers in the same PR, so there is
