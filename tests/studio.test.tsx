@@ -97,7 +97,7 @@ describe("<Studio> generation", () => {
       render(<Studio business={business} initialCreatives={[]} />);
       fireEvent.change(screen.getByLabelText(/what are we advertising/i), { target: { value: "Solar installation" } });
       fireEvent.click(screen.getByRole("button", { name: /generate ads/i }));
-      expect(await screen.findByRole("alert")).toHaveTextContent("No generation was started");
+      expect(await screen.findByRole("alert")).toHaveTextContent("so no ads were started");
       expect(global.fetch).not.toHaveBeenCalled();
     } finally { storage.mockRestore(); }
   });
@@ -909,7 +909,7 @@ describe("<Studio> export", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: /export approved/i }));
 
-    expect(await screen.findByText("Export failed.")).toBeInTheDocument();
+    expect(await screen.findByText("The ad pack didn't download. Check your connection and tap Download again.")).toBeInTheDocument();
     expect(h.downloadBlob).not.toHaveBeenCalled();
   });
 });
