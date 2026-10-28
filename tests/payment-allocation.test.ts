@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  paymentToCoverPaise,
   createAnnualPaymentQuote,
   createVerificationPaymentQuote,
   productionPaymentQuoteSchema,
@@ -152,5 +153,25 @@ describe("payment allocation", () => {
 
   it("rejects a missing policy object when explicitly supplied as null", () => {
     expect(() => createPaymentQuote(100, 0, null as unknown as PaymentAllocationPolicy)).toThrow(RangeError);
+  });
+});
+describe("paymentToCoverPaise (#1251 Go live 'Add ₹{pay}')", () => {
+  it("covers 2 days at ₹300/500/1,000 a day plus 18% GST from an empty balance, in whole rupees", () => {
+    expect([300, 500, 1_000].map((dailyRupees) => paymentToCoverPaise({ dailyRupees, days: 2, availablePaise: 0 }))).toEqual([88_500, 147_500, 295_000]);
+  });
+
+  it("buys at least the reserve activation checks, and one rupee less would not", () => {
+    for (const dailyRupees of [300, 333, 500, 777, 1_000]) {
+      const pay = paymentToCoverPaise({ dailyRupees, days: 2, availablePaise: 0 });
+      const needed = Math.ceil(dailyRupees * 100 * 2 * 11_800 / 10_000);
+      expect(createAnnualPaymentQuote(pay).metaAllocationPaise).toBeGreaterThanOrEqual(needed);
+      if (pay > 50_000) expect(createAnnualPaymentQuote(pay - 100).metaAllocationPaise).toBeLessThan(needed);
+    }
+  });
+
+  it("subtracts what is available, returns 0 when covered and never asks below ₹500", () => {
+    expect(paymentToCoverPaise({ dailyRupees: 300, days: 2, availablePaise: 70_800 })).toBe(0);
+    expect(paymentToCoverPaise({ dailyRupees: 300, days: 2, availablePaise: 70_000 })).toBe(50_000);
+    expect(paymentToCoverPaise({ dailyRupees: 1_000, days: 2, availablePaise: 100_000 })).toBe(170_000);
   });
 });
