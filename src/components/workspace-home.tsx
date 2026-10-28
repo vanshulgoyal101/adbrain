@@ -19,6 +19,7 @@ import { campaignAttention } from "@/lib/campaign/health";
 import { formatReplyTime } from "@/lib/leads/first-reply";
 import { campaignStatus, Status } from "@/components/ui/status";
 import { goneInMeta } from "@/lib/campaign/gone-in-meta";
+import { translator, type AppLocale } from "@/i18n/locale";
 
 export interface WorkspaceHomeProps {
   business: Business | null;
@@ -38,6 +39,8 @@ export interface WorkspaceHomeProps {
   /** #1292: the newest enquiry from the last 24 hours still waiting for a first reply. */
   firstEnquiry?: { name: string | null; at: string } | null;
   now?: number;
+  /** #1438: the owner's app language (Settings); English by default. */
+  locale?: AppLocale;
 }
 
 const primaryClass =
@@ -59,28 +62,30 @@ export function WorkspaceHome({
   waiting = 0,
   firstEnquiry = null,
   now,
+  locale = "en",
 }: WorkspaceHomeProps) {
+  const t = translator(locale, "home");
   const liveCampaigns = campaigns.filter((campaign) => !goneInMeta(campaign));
   const summary = business ? homeResults(campaigns, results) : null;
   // #1292's line already names the newest person waiting, so the verdict doesn't say it twice.
   const verdicts = business ? homeVerdicts(campaigns, results, { now, waiting: firstEnquiry ? 0 : waiting }) : null;
   const leadCampaign = verdicts?.lead ? campaigns.find((campaign) => campaign.id === verdicts.lead?.campaignId) : null;
   const stale = business ? staleCampaignIds(campaigns, results, now) : [];
-  const [next, ...later] = buildWorkQueue({ business, creatives, campaigns, metaReady, now });
+  const [next, ...later] = buildWorkQueue({ business, creatives, campaigns, metaReady, now, locale });
   const setAside = setAsideIds(creatives, now);
-  const reviewLabel = (creative: CreativePreview) => creative.status === "approved" ? "Approved" : setAside.has(creative.id) ? "Set aside" : "Needs review";
+  const reviewLabel = (creative: CreativePreview) => creative.status === "approved" ? t("approved") : setAside.has(creative.id) ? t("setAside") : t("needsReview");
   const places = business?.locations.length ? business.locations.join(", ") : null;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8" lang={locale === "en" ? undefined : locale}>
       <header className="min-w-0">
         <h1 className="break-words text-2xl font-semibold tracking-[-0.01em] text-slate-950">
-          {business?.name ?? "Welcome to AdBrain"}
+          {business?.name ?? t("welcome")}
         </h1>
         <p className="mt-1 text-xs text-slate-500">
           {business
-            ? [business.vertical || "Local business", places].filter(Boolean).join(" · ")
-            : "Start with the business behind your ads."}
+            ? [business.vertical || t("localBusiness"), places].filter(Boolean).join(" · ")
+            : t("startWithBusiness")}
         </p>
       </header>
 
@@ -89,48 +94,48 @@ export function WorkspaceHome({
       ))}
 
       {firstEnquiry && (
-        <section aria-label="Newest enquiry" className="flex flex-col gap-3 rounded-lg border border-blue-200 bg-blue-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+        <section aria-label={t("newestEnquiry")} className="flex flex-col gap-3 rounded-lg border border-blue-200 bg-blue-50 p-4 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-slate-900">
             {firstEnquiryLine(firstEnquiry.name, formatClock(firstEnquiry.at, now === undefined ? undefined : new Date(now)))}
           </p>
-          <Link href="/leads" className={`${linkClass} shrink-0`}>Open Enquiries</Link>
+          <Link href="/leads" className={`${linkClass} shrink-0`}>{t("openEnquiries")}</Link>
         </section>
       )}
 
       {stale.length > 0 && <StaleResultsRefresher campaignIds={stale} />}
       {summary && (
         <section aria-labelledby="results-title">
-          <h2 id="results-title" className="sr-only">Results so far</h2>
+          <h2 id="results-title" className="sr-only">{t("resultsSoFar")}</h2>
           {verdicts?.lead && leadCampaign && (
             <p className="mb-4 max-w-2xl text-[17px] leading-snug text-slate-900">
               {verdicts.lead.verdict.sentence}{" "}
               <Link href="/campaigns" className="text-sm font-medium text-blue-700 hover:underline">
-                {leadCampaign.name || "Untitled campaign"}
+                {leadCampaign.name || t("untitledCampaign")}
               </Link>
             </p>
           )}
           <dl className="grid grid-cols-3 gap-4 sm:flex sm:gap-16">
             {[
-              { label: "Enquiries", value: String(summary.enquiries) },
-              { label: "Spent", value: formatMoney(summary.spend) },
-              { label: "Per enquiry", value: summary.perEnquiry === null ? null : formatMoney(summary.perEnquiry) },
+              { label: t("enquiries"), value: String(summary.enquiries) },
+              { label: t("spent"), value: formatMoney(summary.spend) },
+              { label: t("perEnquiry"), value: summary.perEnquiry === null ? null : formatMoney(summary.perEnquiry) },
             ].map((metric) => (
               <div key={metric.label} className="flex min-w-0 flex-col-reverse">
                 <dt className="mt-1 text-xs text-slate-600">{metric.label}</dt>
                 <dd className="break-words text-4xl font-medium tracking-[-0.02em] text-slate-950">
-                  {metric.value ?? <span className="text-slate-400" aria-label="Not yet">—</span>}
+                  {metric.value ?? <span className="text-slate-400" aria-label={t("notYet")}>—</span>}
                 </dd>
               </div>
             ))}
           </dl>
           {replyMinutes !== null && <p className="mt-3 text-sm text-slate-700">
             {/* #1443: the number is the owner's first WhatsApp/Call tap, not a reply AdBrain can see. */}
-            You usually contact people within <strong className="font-medium">{formatReplyTime(replyMinutes)}</strong> (last 30 days).{" "}
-            <Link href="/leads" className={linkClass}>See enquiries</Link>
+            {t.rich("contactTime", { time: formatReplyTime(replyMinutes), strong: (chunks) => <strong className="font-medium">{chunks}</strong> })}{" "}
+            <Link href="/leads" className={linkClass}>{t("seeEnquiries")}</Link>
           </p>}
           <p className="mt-3 text-xs text-slate-500">
             Updated {timeAgo(new Date(summary.oldestFetchedAt), now === undefined ? undefined : new Date(now))} ·{" "}
-            <Link href="/campaigns" className={linkClass}>See campaigns</Link>
+            <Link href="/campaigns" className={linkClass}>{t("seeCampaigns")}</Link>
           </p>
         </section>
       )}
@@ -138,7 +143,7 @@ export function WorkspaceHome({
       <div className={business ? "grid gap-x-12 gap-y-8 xl:grid-cols-[minmax(0,1fr)_360px]" : undefined}>
         <div className="min-w-0 space-y-8">
           <section aria-labelledby="work-title">
-            <h2 id="work-title" className="sr-only">Next step</h2>
+            <h2 id="work-title" className="sr-only">{t("nextStep")}</h2>
             {next ? (
               <>
                 <div className="flex flex-col gap-4 rounded-lg border border-slate-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between sm:p-6">
@@ -148,7 +153,7 @@ export function WorkspaceHome({
                   </div>
                   <Link href={next.href} className={primaryClass}>
                     {next.href === "/brand" && !business && <Building2 size={17} aria-hidden="true" />}
-                    {business ? next.action : "Set up your business"}
+                    {business ? next.action : next.title}
                   </Link>
                 </div>
                 {later.length > 0 && (
@@ -166,9 +171,9 @@ export function WorkspaceHome({
               <div className="flex items-start gap-3 rounded-lg border border-slate-200 p-4 sm:p-6">
                 <CheckCircle2 size={20} className="mt-0.5 shrink-0 text-blue-700" aria-hidden="true" />
                 <div>
-                  <h3 className="text-lg font-semibold text-slate-950">You&apos;re up to date</h3>
+                  <h3 className="text-lg font-semibold text-slate-950">{t("upToDate")}</h3>
                   <p className="mt-1 text-sm text-slate-600">
-                    Nothing is waiting for you. <Link href="/leads" className={linkClass}>See enquiries</Link>
+                    {t("nothingWaiting")} <Link href="/leads" className={linkClass}>{t("seeEnquiries")}</Link>
                   </p>
                 </div>
               </div>
@@ -178,10 +183,10 @@ export function WorkspaceHome({
           {business && (
             <section aria-labelledby="campaigns-title" className="min-w-0">
               <div className="flex items-center justify-between gap-3">
-                <h2 id="campaigns-title" className="text-lg font-semibold text-slate-950">Campaigns</h2>
+                <h2 id="campaigns-title" className="text-lg font-semibold text-slate-950">{t("campaigns")}</h2>
                 {campaigns.length > 0 && (
                   <Link href="/campaigns" className={linkClass}>
-                    See all {campaigns.length}
+                    {t("seeAll", { count: campaigns.length })}
                   </Link>
                 )}
               </div>
@@ -196,7 +201,7 @@ export function WorkspaceHome({
                       <li key={campaign.id} className="py-3 sm:flex sm:items-center sm:justify-between sm:gap-6">
                         <div className="min-w-0">
                           <Link href="/campaigns" className="-my-3 block truncate py-3 text-sm font-medium text-slate-950 hover:text-blue-700">
-                            {campaign.name || "Untitled campaign"}
+                            {campaign.name || t("untitledCampaign")}
                           </Link>
                           {attention && <p className="mt-1 text-xs font-medium text-danger">Needs attention: {attention}</p>}
                         </div>
@@ -211,7 +216,7 @@ export function WorkspaceHome({
                 </ul>
               ) : (
                 <p className="mt-2 text-sm text-slate-600">
-                  {campaigns.length ? "No running or paused campaigns." : "No campaigns yet. Approved ads become a paused campaign you check before anything spends."}
+                  {campaigns.length ? t("noLiveCampaigns") : t("noCampaigns")}
                 </p>
               )}
             </section>
@@ -221,8 +226,8 @@ export function WorkspaceHome({
         {creatives.length > 0 && (
           <section aria-labelledby="creatives-title" className="min-w-0">
             <div className="flex items-center justify-between gap-3">
-              <h2 id="creatives-title" className="text-lg font-semibold text-slate-950">Latest ads</h2>
-              <Link href="/studio" className={linkClass}>Review all</Link>
+              <h2 id="creatives-title" className="text-lg font-semibold text-slate-950">{t("latestAds")}</h2>
+              <Link href="/studio" className={linkClass}>{t("reviewAll")}</Link>
             </div>
             <ul className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-2">
               {creatives.slice(0, 4).map((creative) => (
@@ -251,19 +256,19 @@ export function WorkspaceHome({
         )}
       </div>
 
-      {activity ?? <RecentActivity audit={audit} />}
+      {activity ?? <RecentActivity audit={audit} locale={locale} />}
     </div>
   );
 }
 
-export function RecentActivity({ audit: all }: { audit: AuditLog[] }) {
+export function RecentActivity({ audit: all, locale = "en" }: { audit: AuditLog[]; locale?: AppLocale }) {
   const audit = all.filter((event) => !isBackgroundAuditAction(event.action));
   if (!audit.length) return null;
   return (
     <details className="group border-t border-slate-200 pt-2">
       <summary className="inline-flex min-h-11 cursor-pointer list-none items-center gap-1 text-sm font-medium text-slate-600 hover:text-slate-950 [&::-webkit-details-marker]:hidden">
         <ChevronRight size={16} aria-hidden="true" className="transition-transform group-open:rotate-90" />
-        <span id="activity-title">Recent activity</span>
+        <span id="activity-title">{translator(locale, "home")("recentActivity")}</span>
       </summary>
       <ul aria-labelledby="activity-title" className="divide-y divide-slate-200">
         {audit.map((event) => (

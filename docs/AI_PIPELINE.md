@@ -116,7 +116,8 @@ interest counts, never the names (#686); `durationMs` is Prepare's end-to-end ti
 (an empty or bare space, a reception or waiting room) with no person, team or product is
 refused as `no-subject` before any image is paid for, and repaired once ([visual-rules.ts](../src/lib/creative/visual-rules.ts), #760). The `creative.batch` event carries the
 batch's wall time (`durationMs`, from the request to the saved batch) and its image
-path (`provider`: `pollinations` for internal accounts, `paid` for customers), so
+path (`provider`: `cloudflare` or `pollinations` for internal accounts, `paid` for customers) and its
+estimated AI cost (`costUsd`, `textCostUsd`, `imageCostUsd`; the scoreboard shows the median, #1468), so
 Create speed is timed per path; usage rows are written when the batch ends and
 can't time it (#681). When the first pass saves fewer ads than asked, one top-up
 round remakes the angles whose concept or image failed (never "no provider" or every
@@ -184,7 +185,9 @@ feedback to assess unnecessary questions, abandonment and time to a useful draft
    failed check, with the actual length when text is too long (#281). Max output and
    reasoning effort are configured. Failed validation stops the variant.
    Before validation, cosmetic slips are normalized once:
-   - Over-long link description, `visual.medium`, `visual.direction` and rationale are clipped at a word.
+   - Over-long `visual.medium`, `visual.direction` and rationale are clipped at a word. An over-long link
+     description is cut back to its last full sentence ('Rs.', 'Dr.' and similar don't count), else its last clause
+     if that keeps half the limit; with neither it fails and the repair rewrites it, never mid-thought (#1544).
    - Case and spacing variants of a CTA or `textPlacement` are mapped, and `left` becomes `center`.
    - An empty or over-long `supportingText` becomes null, and empty quotes are dropped.
    - A quote that differs from a fact only in case is stored as the fact's exact text.
@@ -362,8 +365,14 @@ terminal local errors do not mean trying every key indefinitely.
 
 Internal accounts (team, owner, test; [internal-accounts.json](../src/lib/internal-accounts.json))
 write on the same models as customers (Haiku text is about $0.006 a Create, and the free text
-tiers allow 20 Gemini requests a day) but make their images on free Pollinations, without
-reference images and never falling back to the paid image model (#449, #466). Pollinations answers
+tiers allow 20 Gemini requests a day) but make their images free, without reference images and
+never falling back to the paid image model (#449, #466). When `CLOUDFLARE_ACCOUNT_ID` and
+`CLOUDFLARE_AI_TOKEN` are set, the free picture comes from Cloudflare Workers AI FLUX-1-schnell
+([cloudflare.ts](../src/lib/imageGen/providers/cloudflare.ts), #1476): 4 steps, prompt capped at
+2048 characters, $0 within the daily free allowance. It returns a square JPEG (no size option); the
+poster covers its frame, so a 4:5 ad crops the sides. A 429, 5xx or error 4006 (daily allowance
+used) is recorded as `IMAGE_FREE_BUSY`, any other failure as `IMAGE_PROVIDER`, and the picture falls
+to Pollinations, which stays last. Pollinations answers
 402/429/503 past its free limit of one image per 45 s per address, while its Retry-After says 1 s;
 from production it also answered a fast 404 in the same spot (#634). So free images run one at a
 time per server instance, treat 402/404/429/503 as busy, wait the longer of Retry-After and 15 s,
@@ -432,7 +441,7 @@ There are no new migrations, environment variables, accounts, or credentials.
 
 ## Images and Fallback
 
-Supported selectors are `openrouter` and `pollinations`. Unknown names fail;
+Supported selectors are `openrouter`, `cloudflare` and `pollinations`. Unknown names fail;
 reserved OpenAI/fal.ai environment fields do not imply adapters exist. The default
 parser value is Pollinations; an environment can select a paid OpenRouter model.
 Do not infer the deployed provider from defaults.
@@ -509,12 +518,13 @@ limit is spent. AdBrain treats either as `CREDIT_EXHAUSTED`, not as a generic re
   (Gemini, Groq) even when the routing order (for example Create's `CREATIVE_PROVIDER_ORDER`) lists
   only OpenRouter. Free providers are added only after a credit failure; other failures behave as
   before. Usage events record `LLM_CREDIT_EXHAUSTED`.
-- **Images:** a credit-exhausted OpenRouter image falls back to free Pollinations even when
-  `IMAGE_PROVIDER_FALLBACK` is `none`. Pollinations can't take product reference photos, so that
+- **Images:** a credit-exhausted OpenRouter image falls back to the free picture (Cloudflare when
+  configured, then Pollinations, #1476) even when `IMAGE_PROVIDER_FALLBACK` is `none`. Neither can
+  take product reference photos, so that
   picture is made without them; the receipt records `fallbackFrom`. Only the credit refusal counts
   as not charged (`providerFinalStatus: failed`); any other image failure stays `unknown`.
   The exhausted image provider is then parked for 15 minutes per server (#1422), so the rest of
-  the batch and the next Creates go straight to Pollinations. That fallback picture joins the
+  the batch and the next Creates go straight to the free picture. A Pollinations fallback joins the
   one-at-a-time free queue and waits out one busy answer (402/404/429/503, at least 15 s) before
   that ad fails.
 - **Owner message:** if the free models can't help either, Create says plainly that AdBrain's paid

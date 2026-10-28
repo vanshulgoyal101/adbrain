@@ -134,7 +134,10 @@ Each tick:
    40 min cap, 150 AI credits per run, 8 runs a day that did work (a run with no signed
    "(headless):" comment, review or PR doesn't count), 30 runs a day hard ceiling (CEO sets the caps).
    A role with queued work not woken for an hour goes first, longest wait first, even past the daily cap.
-3. Log: `~/.adbrain-supervisor/supervisor.log`; stop it with `touch ~/.adbrain-supervisor/OFF`;
+   **Load guard (#1495):** no run starts while the 1-min load is over 1.5 per core or under 2 GB of memory is
+   available (macOS memory-pressure level, not `os.freemem()`); the tick logs why. Override with
+   `ADBRAIN_SUPERVISOR_MAX_LOAD` / `ADBRAIN_SUPERVISOR_MIN_FREE_GB`. Scheduled jobs and the nightly backup still run.
+3. Log: `~/.adbrain-supervisor/supervisor.log`; stop role runs with `touch ~/.adbrain-supervisor/OFF` (scheduled-job dispatch and the nightly backup keep running, #1525);
    `--dry-run` shows who it would wake; `--install`/`--uninstall` manage the LaunchAgent.
 
 **After a VS Code restart** the old chats can't be messaged. The CEO (CTO as backup) starts one

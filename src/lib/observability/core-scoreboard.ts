@@ -2,7 +2,7 @@
  * Daily core scoreboard (#681): one row per core step with the current number and its Nov 2 target,
  * from `product_events` and `llm_usage_events`, with the production smoke left out (by its auth user
  * id and the businesses it owns). Pure: the cron route fetches the rows, this turns them into numbers.
- * Create is split by image path: internal accounts make free Pollinations images (spend-policy.ts),
+ * Create is split by image path: internal accounts make free images (Cloudflare, then Pollinations) (spend-policy.ts),
  * customers the paid route, and only the customer path is held to the target.
  * Output is aggregate only (counts, rates, seconds, error codes) because it is posted publicly.
  */
@@ -225,7 +225,7 @@ export function buildScoreboard(input: {
       now: batches.length
         ? `${plural(batches.length, "batch", "batches")}: ${fmtPct(rate)} gave 3 ads; AI calls ${failedCalls}/${calls.length} failed; p90 ${seconds === null ? "n/a" : `${Math.round(seconds)} s`}${cost}`
         : "no batches",
-      target: freePath ? "not a target: free Pollinations images, internal only" : "≥ 95% of batches give 3 usable ads, p90 < 30 s",
+      target: freePath ? "not a target: free images, internal only" : "≥ 95% of batches give 3 usable ads, p90 < 30 s",
       met: freePath || !batches.length ? null : rate >= 95 && seconds !== null && seconds < 30,
     });
   }

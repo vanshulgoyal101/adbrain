@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Alert } from "@/components/ui/alert";
 import { SpendStatusBanner } from "@/components/spend-status";
 import { RecentActivity, WorkspaceHome } from "@/components/workspace-home";
+import { requestLocale } from "@/i18n/request-locale";
 import { SetupResumeCard } from "@/components/setup-resume-card";
 import { setupResumeStep } from "@/lib/setup/resume";
 import { getMetaConnection } from "@/lib/meta/credentials";
@@ -19,14 +20,14 @@ import {
 export const metadata = { title: "Dashboard" };
 
 export default async function DashboardPage() {
-  const business = await getPrimaryBusiness();
+  const [business, locale] = await Promise.all([getPrimaryBusiness(), requestLocale()]);
   const spendStatus = business ? getSpendEvaluation(business.id).then<ReactNode, ReactNode>(
     ({ evaluation }) => evaluation.status === "approaching" || evaluation.status === "over"
       ? <SpendStatusBanner evaluation={evaluation} /> : null,
     () => <Alert variant="error">Spend status could not be loaded. Check your saved limits in <Link href="/settings" className="font-medium underline">Settings</Link>.</Alert>,
   ) : null;
   const activity = business ? getAuditLog(business.id, 8).then<ReactNode, ReactNode>(
-    (audit) => <RecentActivity audit={audit} />,
+    (audit) => <RecentActivity audit={audit} locale={locale} />,
     () => <Alert variant="error">Recent activity could not be loaded.</Alert>,
   ) : null;
   const [creatives, campaigns, metaConnection] = business
@@ -60,6 +61,7 @@ export default async function DashboardPage() {
       replyMinutes={replyMinutes}
       waiting={waiting}
       firstEnquiry={firstEnquiry}
+      locale={locale}
       audit={[]}
       spend={null}
       spendStatus={spendStatus && (

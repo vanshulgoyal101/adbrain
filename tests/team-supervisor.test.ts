@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { activeRun, didWork, firstPrompt, lastWakes, lastWords, liveRoles, pickRole, prompt, restartPrompt, roleFromPrompt, runsToday, scheduledJobsDue, exportDue, exportsToPrune } from "../scripts/team-supervisor.mjs";
+import { activeRun, didWork, firstPrompt, lastWakes, lastWords, liveRoles, pickRole, prompt, restartPrompt, roleFromPrompt, runsToday, scheduledJobsDue, exportDue, exportsToPrune, loadSkip, machineLoad } from "../scripts/team-supervisor.mjs";
 
 const dir = mkdtempSync(join(tmpdir(), "supervisor-"));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
@@ -150,5 +150,15 @@ describe("detached runs (#766)", () => {
     expect(activeRun({ runs }, (pid: number) => pid === 22)?.role).toBe("dev");
     expect(activeRun({ runs }, () => false)).toBeNull();
     expect(activeRun({ runs: [{ role: "qa", start: "a" }] }, () => true)).toBeNull();
+  });
+  it("holds a headless run while the Mac is overloaded (#1495)", () => {
+    const GB = 2 ** 30;
+    expect(loadSkip({ load1: 7.7, cores: 8, availableBytes: 3.4 * GB })).toBeNull();
+    expect(loadSkip({ load1: 13, cores: 8, availableBytes: 4 * GB })).toMatch(/1\.63\/core > 1\.5/);
+    expect(loadSkip({ load1: 2, cores: 8, availableBytes: 1.5 * GB })).toMatch(/1\.5 GB memory available \(< 2 GB\)/);
+    expect(loadSkip({ load1: 13, cores: 8, availableBytes: 4 * GB }, { maxLoadPerCore: 2, minFreeGb: 1 })).toBeNull();
+    const now = machineLoad();
+    expect(now.cores).toBeGreaterThan(0);
+    expect(now.availableBytes).toBeGreaterThan(0);
   });
 });

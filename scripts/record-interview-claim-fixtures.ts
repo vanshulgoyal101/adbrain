@@ -4,6 +4,8 @@
  * providers); reads the Brand read-only; writes no data. Stops once it has `want` rejected replies.
  *
  *   npx tsx --env-file=<.env.local> scripts/record-interview-claim-fixtures.ts <business-id> [want] [maxRuns]
+ *
+ * #1415: GOAL overrides the goal and OUT the fixture name (under tests/core/fixtures/create/).
  */
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -28,16 +30,16 @@ async function main() {
   const replies: { run: number; attempt: number; valid: boolean; rules: string[]; provider: string; model: string; content: string }[] = [];
   const want = Number(wantArg ?? 2);
   for (let run = 0; run < Number(runsArg ?? 8) && replies.filter((reply) => reply.rules.some((rule) => rule.startsWith("unsupported-commercial-claim"))).length < want; run++) {
-    const result = await runInterview({ brand: brand as BrandContext, goal: CLAIM_GOAL, answers: [] }, {
+    const result = await runInterview({ brand: brand as BrandContext, goal: process.env.GOAL ?? CLAIM_GOAL, answers: [] }, {
       onAttempt: async (completion, attempt, valid, rules = []) => {
         replies.push({ run, attempt, valid, rules, provider: completion.provider, model: completion.model, content: completion.text });
       },
     }).catch((err: unknown) => ({ failed: err instanceof Error ? err.name : String(err) }));
     console.log(`${run}: ${JSON.stringify(result).slice(0, 200)}`);
   }
-  writeFileSync(join(process.cwd(), "tests/core/fixtures/create/interview-claims.json"), `${JSON.stringify({
+  writeFileSync(join(process.cwd(), "tests/core/fixtures/create", process.env.OUT ?? "interview-claims.json"), `${JSON.stringify({
     recordedAt: new Date().toISOString(), note: "#613: real interview replies for a Brand with no offers (free providers, budget routing).",
-    brand, goal: CLAIM_GOAL, replies,
+    brand, goal: process.env.GOAL ?? CLAIM_GOAL, replies,
   }, null, 2)}\n`);
   console.log(`replies ${replies.length}, rejected for claims ${replies.filter((reply) => reply.rules.some((rule) => rule.startsWith("unsupported-commercial-claim"))).length}`);
 }

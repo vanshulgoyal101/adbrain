@@ -23,6 +23,13 @@ export const SETUP_RUN_DAYS = 2;
 
 export type SetupFunding = "operator" | "managed" | "own";
 
+/**
+ * #1251 CEO (owner's margin rule): row 2b ('Ad money', pay AdBrain) stays off until pricing is the flat
+ * ₹999/month with pass-through ad money; 'Add ₹{pay}' next to 'Stops at ₹{total}' would show our share.
+ * Until then every owner sees row 2a: pay Meta on their own ad account.
+ */
+const SHOW_ADBRAIN_AD_MONEY = false;
+
 function Row({ done, title, status, action }: { done: boolean; title: string; status: string; action?: React.ReactNode }) {
   return (
     <li className="flex items-start gap-3 py-3">
@@ -70,6 +77,7 @@ export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNum
   const areas = (business.locations ?? []).filter((place) => place.trim()).join(", ");
   const ids = ads.map((ad) => ad.id).join(",");
   const ownAccount = funding === "own";
+  const payMetaRow = ownAccount || !SHOW_ADBRAIN_AD_MONEY;
   const reviewHref = `/campaigns?all=1&new=1&review=1&budget=${daily}&creatives=${ids}`;
   const stepWords: Record<GoLiveStep, string> = {
     check: "Checking your campaign…",
@@ -149,7 +157,7 @@ export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNum
 
       <ul aria-label="Before you go live" className="mt-4 divide-y divide-slate-200 border-y border-slate-200">
         <Row done={pageConnected} title="Facebook Page" status={pageConnected ? "Connected" : "Not connected"} />
-        {ownAccount ? (
+        {payMetaRow ? (
           <Row done={false} title="Payment on Meta" status="Add a card or UPI in Meta"
             action={<a href="https://business.facebook.com/billing_hub/payment_settings" target="_blank" rel="noopener noreferrer"
               className="inline-flex min-h-11 items-center text-sm font-medium text-primary underline underline-offset-4">Add payment in Meta</a>} />
