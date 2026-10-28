@@ -25,6 +25,12 @@ describe("<ReadyAdsNextStep>", () => {
     expect(screen.getByRole("link", { name: "Connect Facebook" })).toHaveAttribute("href", "/settings");
   });
 
+  it("#1317: a prospect's sample ads have no Share; Download all stays (the export marks each picture)", () => {
+    render(<ReadyAdsNextStep approved={[ad("new")]} phone={null} businessId={BUSINESS} sample />);
+    expect(screen.queryByRole("button", { name: "Share new" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Download your ad" })).toBeInTheDocument();
+  });
+
   it("downloads every approved ad as one pack", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(new Blob(["zip"])));
     render(<ReadyAdsNextStep approved={[ad("a"), ad("b")]} phone={null} businessId={BUSINESS} />);

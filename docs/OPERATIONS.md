@@ -341,6 +341,9 @@ in issues.
    Instagram bio, Google listing or catalogue text, pasted by hand (no scraping or unofficial
    APIs). Confirm each proposed field and area chip, then Save.
 3. Create: make 3 ads, approve them, download. Don't connect Meta, start a campaign or add funds.
+   Downloads go through the export, which marks every picture 'Sample: not live'; Share and the
+   Assets tile's Download, Copy link and Open are hidden on a `+prospect` account, so no clean
+   picture leaves before hand-over. After hand-over they come back on their own.
 
 **Hand over (DevOps executes, QA reviews; a tenant step):**
 1. Read-only checks, all must hold:
