@@ -1,6 +1,6 @@
 "use client";
 
-import { startTransition, useEffect, useEffectEvent, useReducer, useRef, useState } from "react";
+import { startTransition, useEffect, useEffectEvent, useReducer, useRef, useState, useSyncExternalStore } from "react";
 import type { ReactNode } from "react";
 import { flushSync } from "react-dom";
 import { useConfirm } from "@/components/ui/confirm-dialog";
@@ -85,6 +85,7 @@ import type {
   ReviewDTO,
 } from "@/lib/campaign/connect-contracts";
 import { targetingInputSchema } from "@/lib/campaign/connect-contracts";
+import { campaignNameDate, defaultCampaignName, draftForSelection } from "@/lib/campaign/draft-name";
 import { campaignDestination } from "@/lib/campaign/outcomes";
 import { handoffRate } from "@/lib/campaign/whatsapp-handoff";
 import { reviewBlockerAlternative, reviewBlockerFix } from "@/lib/campaign/review-fix";
@@ -122,6 +123,8 @@ import { formatMoney, formatNumber, formatPerDay } from "@/lib/format";
 const exactRupees = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" });
 
 /** #721: Meta deleted or archived it; Refresh ended the row and kept why in `raw.metaStatus`. */
+const subscribeNever = () => () => {};
+
 function goneInMeta(campaign: Campaign): string | null {
   const status = campaign.raw && typeof campaign.raw === "object" && !Array.isArray(campaign.raw) ? (campaign.raw as { metaStatus?: unknown }).metaStatus : null;
   return status === "DELETED" ? "Deleted in Meta" : status === "ARCHIVED" ? "Archived in Meta" : null;
@@ -180,7 +183,8 @@ type ComposerSetup = {
   /** #840: this campaign's own WhatsApp message ("Edit for this campaign"). */
   whatsappMessage?: WhatsAppTemplate | null;
   leadFormId: string;
-  name: string;
+  /** The name the owner typed; null keeps the #1151 default. */
+  name: string | null;
   targeting: TargetingValue;
   draftGoal: string;
   includedNames: string;
@@ -322,7 +326,13 @@ function BusinessCampaigns({
   const [formsRetry, setFormsRetry] = useState(0);
   const formsFreshnessRef = useRef<{ ownerId: string; businessId: string; retry: number; fetchedAt: number } | null>(null);
   const [connectedForDraft, setConnectedForDraft] = useState(metaReady);
-  const [name, setName] = useState(initialSetup?.name ?? `${business.name} — leads`);
+  const [customName, setName] = useState<string | null>(initialSetup?.name ?? null);
+  // #1151: client-only, so the server render (UTC) and the owner's browser never disagree on the day.
+  const nameDate = useSyncExternalStore(subscribeNever, () => campaignNameDate(new Date()), () => null);
+  const firstSelected = selected.values().next().value;
+  const name = customName ?? defaultCampaignName({
+    headline: approved.find((creative) => creative.id === firstSelected)?.headline, businessName: business.name, destination, date: nameDate,
+  });
   const [targeting, setTargeting] = useState<TargetingValue>(initialSetup?.targeting ?? defaultTargeting);
   const [draftGoal, setDraftGoal] = useState(initialSetup?.draftGoal ?? "");
   const [includedNames, setIncludedNames] = useState(initialSetup?.includedNames ?? "");
@@ -453,8 +463,8 @@ function BusinessCampaigns({
   const [draftBusy, setDraftBusy] = useState<string | null>(null);
   const [retryAllowed, setRetryAllowed] = useState(false);
   useEffect(() => {
-    onSetupChange([scope, { selected, budget, destination, whatsappNumber, whatsappLanguage, whatsappMessage, leadFormId, name, targeting, draftGoal, includedNames, excludedNames, abTest, creationMode, showComposer }]);
-  }, [selected, budget, destination, whatsappNumber, whatsappLanguage, whatsappMessage, leadFormId, name, targeting, draftGoal, includedNames, excludedNames, abTest, creationMode, showComposer, scope, onSetupChange]);
+    onSetupChange([scope, { selected, budget, destination, whatsappNumber, whatsappLanguage, whatsappMessage, leadFormId, name: customName, targeting, draftGoal, includedNames, excludedNames, abTest, creationMode, showComposer }]);
+  }, [selected, budget, destination, whatsappNumber, whatsappLanguage, whatsappMessage, leadFormId, customName, targeting, draftGoal, includedNames, excludedNames, abTest, creationMode, showComposer, scope, onSetupChange]);
   const visibleCampaigns = campaigns.filter(campaign =>
     (statusFilter === "all" || campaign.status === statusFilter) &&
     (campaign.name ?? business.name).toLocaleLowerCase().includes(campaignQuery.trim().toLocaleLowerCase()),
@@ -687,7 +697,7 @@ function BusinessCampaigns({
     setRecoveryPending(false);
     setPrepareReview(null);
     setCreationMode("manual");
-    setName(`${business.name} - leads`);
+    setName(null);
     setDraftGoal("");
     setSelected(new Set());
     setBudget(200);
@@ -1041,7 +1051,8 @@ function BusinessCampaigns({
       }
       signal.throwIfAborted();
       setPreparationStage(signal, "Saving draft...");
-      const previous = preparedDraftRef.current;
+      // #1151: the same ads prepared again update their saved draft instead of adding another.
+      const previous = preparedDraftRef.current ?? draftForSelection(savedDrafts, input.creativeIds);
       const draft = previous && !recoveryRef.current?.request
         ? await client.updateDraft(previous.draftId, previous.version, input, signal)
         : await client.saveDraft(input, signal);
@@ -1662,8 +1673,8 @@ function BusinessCampaigns({
               if (unresolvedRecovery()) throw new Error("Check the existing operation before connecting again.");
               setPrepareReview(null);
               const client = createMetaConnectClient();
-              const previous = preparedDraftRef.current;
               const input = manualDraftInput(false);
+              const previous = preparedDraftRef.current ?? draftForSelection(savedDrafts, input.creativeIds);
               const draft = previous && !recoveryRef.current?.request
                 ? await client.updateDraft(previous.draftId, previous.version, input)
                 : await client.saveDraft(input);
