@@ -95,6 +95,13 @@ from my website", which fills only empty fields. It autosaves only those columns
 (`saveSetupBusiness`; other offers and Brand fields are kept) and "Make my ads"
 checks all five, then goes to `/create`. `/brand?all=1` opens the full page.
 
+Until then Home (`/dashboard`) is one resume card, "Your first ad · Step N of 3 ·
+{step} · Continue" (#1272, `setupResumeStep`): step 1 until the five facts make a
+usable Brand, step 2 until an ad is picked (approved), then step 3. The + button
+reads "Continue your first ad" and `/create` sends a first-timer without the five
+facts to `/brand`. A campaign counts as having gone live once it has `launched_at`
+or is active or completed.
+
 Website autofill fetches a public website and proposes extracted facts. On a Brand with
 nothing filled in yet it runs by itself when the owner leaves the Website field (once per
 address, #1025); otherwise the "Autofill from website" button runs it. It proposes up to 5
