@@ -712,10 +712,9 @@ function BusinessCampaigns({
   }
 
   // #1588: with no campaigns the header button goes away on close, so focus moves to the empty state's New campaign.
-  const emptyNewRef = useRef<HTMLButtonElement>(null);
   const focusEmptyRef = useRef(false);
   useEffect(() => {
-    if (!showComposer && focusEmptyRef.current) { focusEmptyRef.current = false; emptyNewRef.current?.focus(); }
+    if (!showComposer && focusEmptyRef.current) { focusEmptyRef.current = false; document.getElementById("campaigns-empty-new")?.focus(); }
   }, [showComposer]);
   function toggleComposer() {
     if (preparing || creating) return;
@@ -2348,7 +2347,7 @@ function BusinessCampaigns({
           <div className="flex flex-col items-center gap-3 border-y border-slate-200 py-12 text-center">
             <h3 className="font-semibold text-slate-900">No campaigns yet</h3>
             <p className="max-w-sm text-sm text-slate-600">Pick your approved ads and a daily budget. Nothing spends until you go live.</p>
-            {!showComposer && <Button ref={emptyNewRef} onClick={toggleComposer} aria-controls="campaign-composer"><Plus className="h-4 w-4" aria-hidden="true" />New campaign</Button>}
+            {!showComposer && <Button id="campaigns-empty-new" onClick={toggleComposer} aria-controls="campaign-composer"><Plus className="h-4 w-4" aria-hidden="true" />New campaign</Button>}
           </div>
         ) : visibleCampaigns.length === 0 ? <div className="flex flex-col items-center gap-3 border-y border-slate-200 py-12"><Search aria-hidden="true" className="text-slate-400" /><h3 className="font-semibold">No matching campaigns</h3><Button variant="outline" onClick={() => { setCampaignQuery(""); setStatusFilter("all"); }}>Clear filters</Button></div> : (
           <div className="flex flex-col border-t border-slate-200">
