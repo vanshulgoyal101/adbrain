@@ -249,6 +249,16 @@ export function encryptExport(dir, run = spawnSync) {
 
 const folderTime = (name) => `${name.slice(0, 13)}:${name.slice(14, 16)}:00Z`;
 
+/** #1857: once a UTC day, warn 90 days before the Meta API version we call is retired (scripts/graph-sunset.mjs). */
+function dailyGraphSunsetCheck(dry) {
+  const stamp = join(STATE_DIR, `graph-sunset-${new Date().toISOString().slice(0, 10)}`);
+  if (existsSync(stamp)) return;
+  if (dry) return console.log("would check the Meta API version's retirement date");
+  const result = spawnSync(process.execPath, ["scripts/graph-sunset.mjs"], { cwd: WT, encoding: "utf8", timeout: 60_000 });
+  log(`graph sunset: ${`${result.stdout ?? ""}${result.stderr ?? ""}`.trim().split("\n").join(" | ").slice(0, 240)}`);
+  if (result.status === 0) writeFileSync(stamp, "");
+}
+
 /** Nightly free-plan backup (#884): export, restore-drill it, prune, and open one issue when it fails. */
 function nightlyExport(dry) {
   mkdirSync(BACKUP_DIR, { recursive: true, mode: 0o700 });
@@ -439,6 +449,7 @@ async function main() {
   // OFF stops only the headless role runs (#1525): production's scheduled jobs and the nightly backup depend on these dispatches.
   dispatchScheduledJobs(values["dry-run"]);
   dispatchBackup(values["dry-run"]);
+  dailyGraphSunsetCheck(values["dry-run"]);
   const fresh = values["dry-run"] ? true : refresh();
   nightlyExport(values["dry-run"]);
   // A detached run (#766) finishes the run it was given and records it; the tick that started it has long returned.

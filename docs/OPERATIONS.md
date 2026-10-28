@@ -556,6 +556,9 @@ so Supabase can't restore anything (paid backups are a CEO call, #884). Our own 
   `node scripts/db-export.mjs restore <folder>`.
   A failure opens one `Nightly production export failed` `core` bug for DevOps; its log line is in
   `~/.adbrain-supervisor/supervisor.log`. If the Mac sleeps through 20:00Z, the export runs at the first tick after it wakes.
+- **Meta API version (#1857):** once a UTC day the supervisor runs `scripts/graph-sunset.mjs`, which reads Meta's Graph and
+  Marketing API version tables and opens one `Meta API version retires soon` issue (→ CTO) 90 days before our
+  `GRAPH_VERSION` (src/lib/meta/graph-version.ts) is retired, or if the table can't be read.
 - **Lost even with an export:** Auth passwords and sessions, Storage file bytes (ad images
   and brand uploads; regenerate or re-upload), and everything since the export ran.
 - Known drift, harmless: production still has the empty legacy tables `meta_credentials`,
