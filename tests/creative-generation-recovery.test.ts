@@ -6,14 +6,21 @@ const mocks = vi.hoisted(() => ({
   eq: vi.fn(),
   intent: vi.fn(),
   rateLimit: vi.fn(),
+  audit: vi.fn(),
+  auditFilters: [] as [string, string][],
 }));
+// #1407: the batch's closing audit row, read only when a batch looks unfinished.
+function auditChain() {
+  const chain = { select: () => chain, eq: (column: string, value: string) => { mocks.auditFilters.push([column, value]); return chain; }, limit: () => mocks.audit() };
+  return chain;
+}
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ rpc: mocks.intent }) }));
 vi.mock("@/lib/security/rate-limit", () => ({ rateLimitResponse: mocks.rateLimit }));
 
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
     auth: { getUser: mocks.getUser },
-    from: () => ({
+    from: (table: string) => table === "audit_log" ? auditChain() : ({
       select: () => ({
         eq: (column: string, value: string) => {
           mocks.eq(column, value);
@@ -31,6 +38,8 @@ vi.mock("@/lib/supabase/server", () => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.auditFilters = [];
+  mocks.audit.mockResolvedValue({ data: [], error: null });
   mocks.rateLimit.mockResolvedValue(null);
   mocks.getUser.mockResolvedValue({ data: { user: { id: "owner" } } });
   mocks.intent.mockResolvedValue({ data: { status: "processing", expectedCount: 3 }, error: null });
@@ -41,6 +50,16 @@ beforeEach(() => {
 });
 
 describe("creative generation recovery", () => {
+  // #1407 (QA): a batch that finished 2 of 3 read 'partial' for 5 more minutes, so Studio said 'still being made'.
+  it("#1407: a short batch whose closing audit row exists is 'ended', not 'partial'", async () => {
+    mocks.intent.mockResolvedValue({ data: { status: "partial", expectedCount: 3 }, error: null });
+    mocks.audit.mockResolvedValue({ data: [{ id: "a1" }], error: null });
+    const { GET } = await import("@/app/api/creatives/generate/route");
+    const response = await GET(new Request("http://localhost/api/creatives/generate?businessId=business&generationId=11111111-1111-4111-8111-111111111111"));
+    await expect(response.json()).resolves.toMatchObject({ status: "ended", count: 1, expectedCount: 3 });
+    expect(mocks.auditFilters).toEqual([["business_id", "business"], ["action", "creatives.generate"], ["details->>variantGroup", "11111111-1111-4111-8111-111111111111"]]);
+  });
+
   it("returns persisted partial work without starting a second generation", async () => {
     const { GET } = await import("@/app/api/creatives/generate/route");
     const response = await GET(new Request("http://localhost/api/creatives/generate?businessId=business&generationId=11111111-1111-4111-8111-111111111111&expectedCount=3"));
