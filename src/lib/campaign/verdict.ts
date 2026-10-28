@@ -81,9 +81,9 @@ export function verdict(input: VerdictInput): Verdict {
 
   const base = ((): Omit<Verdict, "number"> => {
     if (input.status === "completed") {
-      if (!evidence) return { state: "ended_too_few", label: "Ended", sentence: `It ended with ${chats(input.results)}, too few to judge.`, action: null };
+      if (!evidence) return { state: "ended_too_few", label: "Ended", sentence: `It ended with ${chats(input.results)}, too few to judge.`, action: "new_ads" };
       if (band === null) {
-        return { state: "ended_measured", label: "Ended", sentence: `It ended with ${chats(input.results)} at ${rupees(cost!)} each. Run it again with the best ad first?`, action: "run_again" };
+        return { state: "ended_measured", label: "Ended", sentence: `It ended with ${chats(input.results)} at ${rupees(cost!)} each.`, action: "run_again" };
       }
       if (band !== "more than") {
         return { state: "ended_worked", label: "Ended", sentence: `It worked: ${chats(input.results)} at ${rupees(cost!)} each. Run it again with the best ad first?`, action: "run_again" };

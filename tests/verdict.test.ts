@@ -70,8 +70,9 @@ describe("verdict (#1255)", () => {
   it("ended: worked, costly, measured without a comparison, or too few to judge", () => {
     expect(v({ status: "completed", results: 14, spend: 1344 })).toMatchObject({ state: "ended_worked", label: "Ended", action: "run_again", sentence: "It worked: 14 chats at ₹96 each. Run it again with the best ad first?" });
     expect(v({ status: "completed", results: 10, spend: 3010 })).toMatchObject({ state: "ended_costly", action: "new_ads", sentence: "It didn't bring chats at a good price. Try new ads?" });
-    expect(v({ status: "completed", results: 14, spend: 1344, comparison: null })).toMatchObject({ state: "ended_measured", action: "run_again", sentence: "It ended with 14 chats at ₹96 each. Run it again with the best ad first?" });
-    expect(v({ status: "completed", results: 1, spend: 33 })).toMatchObject({ state: "ended_too_few", action: null, sentence: "It ended with 1 chat, too few to judge." });
+    // CPO: no comparison, no judgement; Run this again once there are 5+ chats (#1050 picks the best ad).
+    expect(v({ status: "completed", results: 14, spend: 1344, comparison: null })).toMatchObject({ state: "ended_measured", action: "run_again", sentence: "It ended with 14 chats at ₹96 each." });
+    expect(v({ status: "completed", results: 1, spend: 33 })).toMatchObject({ state: "ended_too_few", action: "new_ads", sentence: "It ended with 1 chat, too few to judge." });
   });
 
   it("people waiting prefix any live state, and Reply is the action only where the state has none", () => {
