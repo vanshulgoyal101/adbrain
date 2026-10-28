@@ -213,6 +213,8 @@ try {
       assert.equal(review.selected?.currency, "INR", "No INR Meta ad account selected");
       const result = page.getByRole("region", { name: "Campaign review result" });
       // #1080 renders the facts as <dt>Meta account</dt><dd>Name, Page …</dd>: match the value, not "label: value".
+      // While a blocker holds Send, the facts sit in a closed "What you're sending" disclosure: open it like a user.
+      if (!review.canCreatePaused) await result.getByText("What you're sending", { exact: true }).click();
       await result.locator("dd").filter({ hasText: review.selected.accountName }).first().waitFor({ state: "visible" });
       const send = result.getByRole("button", { name: "Send to Meta (paused)" });
       if (blockers.length) assert.equal(await send.count(), 0, "Send to Meta is offered despite a blocker");
