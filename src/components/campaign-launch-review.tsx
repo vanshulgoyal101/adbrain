@@ -1,10 +1,11 @@
 import { LockKeyhole, MapPin } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { formatPerDay } from "@/lib/format";
+import { formatMoney, formatPerDay } from "@/lib/format";
 
 export function CampaignLaunchReview({
   selectedCount,
   budget,
+  weeklyCap,
   leadFormName,
   destination = "whatsapp",
   whatsappNumber,
@@ -12,6 +13,7 @@ export function CampaignLaunchReview({
 }: {
   selectedCount: number;
   budget: number;
+  weeklyCap?: { capRupees: number; projectedWeeklyRupees: number; exceeds: boolean };
   leadFormName?: string;
   destination?: "instant_form" | "whatsapp";
   /** The chosen WhatsApp button number, masked as the owner sees it. */
@@ -52,6 +54,11 @@ export function CampaignLaunchReview({
           <dd className={cn("mt-1 font-medium", budget > 0 ? "text-slate-900" : "text-amber-700")}>
             {budget > 0 ? formatPerDay(budget) : "Enter a budget"}
           </dd>
+          {weeklyCap && (
+            <dd className={cn("mt-1 text-xs", weeklyCap.exceeds ? "font-medium text-red-800" : "text-slate-500")}>
+              Weekly cap: {formatMoney(weeklyCap.capRupees)} · projected this week: {formatMoney(weeklyCap.projectedWeeklyRupees)}
+            </dd>
+          )}
         </div>
         <div>
           <dt className="text-xs text-slate-500">Lead destination</dt>

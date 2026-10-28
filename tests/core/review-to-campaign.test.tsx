@@ -22,9 +22,13 @@ const approvedB = ad("33333333-3333-4333-8333-333333333333", "approved", "Back p
 const draft = ad("44444444-4444-4444-8444-444444444444", "draft", "Still in review");
 const existing = { id: "c1", business_id: business.id, name: "Running campaign", status: "paused" } as Campaign;
 
-function campaigns(creativeIds: string[] | undefined) {
-  return render(<Campaigns business={business} approved={[approvedA, approvedB]} initialCampaigns={[existing]} initialResults={{}}
-    leadForms={[]} leadFormError={null} metaReady={false} adAccountId="" newCampaign={creativeIds ? { creativeIds } : undefined} />);
+function campaigns(creativeIds: string[] | undefined, options: { spendLimits?: { weeklyCapRupees: number; alertPct: number; autoPause: boolean }; activeDailyBudget?: number } = {}) {
+  const initialCampaigns = options.activeDailyBudget
+    ? [{ ...existing, status: "active", daily_budget: options.activeDailyBudget } as Campaign]
+    : [existing];
+  return render(<Campaigns business={business} approved={[approvedA, approvedB]} initialResults={{}}
+    leadForms={[]} leadFormError={null} metaReady={false} adAccountId="" spendLimits={options.spendLimits}
+    initialCampaigns={initialCampaigns} newCampaign={creativeIds ? { creativeIds } : undefined} />);
 }
 
 const pressed = (headline: string) => screen.getByRole("button", { name: headline, hidden: true }).getAttribute("aria-pressed");
@@ -68,6 +72,14 @@ describe("Review to campaign (#134)", () => {
     campaigns(undefined);
     expect(document.getElementById("campaign-composer")!.hidden).toBe(true);
     expect(pressed("Back pain relief")).toBe("false");
+  });
+
+  it("shows the weekly cap at Review and refuses an over-cap budget before preparation", () => {
+    campaigns([approvedB.id], { spendLimits: { weeklyCapRupees: 7000, alertPct: 80, autoPause: false }, activeDailyBudget: 900 });
+    expect(screen.getByText("Weekly cap: ₹7,000 · projected this week: ₹8,400")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("over your ₹7,000 weekly cap");
+    expect((screen.getByRole("button", { name: /Check my campaign/ }) as HTMLButtonElement).getAttribute("aria-disabled")).toBe("true");
+    expect(mocks.saveDraft).not.toHaveBeenCalled();
   });
 
   it("does not let a stale saved draft replace the ads chosen on Review", async () => {

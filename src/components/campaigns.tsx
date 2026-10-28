@@ -105,7 +105,7 @@ import {
   campaignNextAction,
   spendHealth,
 } from "@/lib/campaign/budget";
-import { effectiveDailyBudget } from "@/lib/campaign/spend";
+import { effectiveDailyBudget, wouldExceedCap, type SpendLimits } from "@/lib/campaign/spend";
 import { accountFundingSchema, activationConfirmationPayload, campaignDeliverySnapshotSchema, RESUME_IN_ADS_MANAGER, reviewableCampaign } from "@/lib/campaign/activation";
 import { activationWarnings, QUOTED_ASK_WITH_QUESTIONS, WHATSAPP_PICTURE_ON_FORM } from "@/lib/campaign/plan-check";
 import { campaignAttention } from "@/lib/campaign/health";
@@ -210,6 +210,8 @@ type CampaignsProps = {
   newCampaign?: { creativeIds: string[]; review?: boolean };
   /** #783: show "Which ad worked" on launched campaign cards (`AD_RESULTS_ENABLED`). */
   adResults?: boolean;
+  /** Saved weekly spend guardrail used before a new campaign is prepared. */
+  spendLimits?: SpendLimits;
 };
 
 
@@ -284,6 +286,7 @@ function BusinessCampaigns({
   adAccountId,
   newCampaign,
   adResults = false,
+  spendLimits,
   scope,
   initialSetup,
   onSetupChange,
@@ -419,6 +422,18 @@ function BusinessCampaigns({
   const activationCapped = !!activationDelivery && deliveryChildren(activationDelivery).every(child => child.status === "PAUSED");
   const activationReady = !!activationDelivery && (activationCapped || deliveryChildren(activationDelivery).every(child => child.status === "ACTIVE" || keptPaused.includes(child.id)));
   const activationCapPaise = Math.round((activationReview?.daily_budget ?? 0) * 100) * capDays;
+  const activationWeeklyProjection = activationReview
+    ? wouldExceedCap(
+      campaigns.filter(campaign => campaign.status === "active" && campaign.id !== activationReview.id).map(campaign => ({
+        id: campaign.id,
+        status: campaign.status,
+        dailyBudget: campaign.daily_budget,
+        spend: 0,
+      })),
+      activationReview.daily_budget ?? 0,
+      spendLimits?.weeklyCapRupees ?? null,
+    )
+    : null;
   // #245/#759: a business funded on Meta runs only capped, within the account's spending limit when it has one.
   const activationFunded = !activationFunding
     || (activationCapped && (activationFunding.spendCapPaise > 0 ? freeRoomPaise(activationFunding) >= activationCapPaise : !spendLimitRequired));
@@ -480,6 +495,23 @@ function BusinessCampaigns({
   const liveCampaigns = visibleCampaigns.filter(campaign => !folded(campaign));
   const goneCampaigns = visibleCampaigns.filter(folded);
   const totalDailyBudget = effectiveDailyBudget(budget, abTest ? 2 : 1);
+  const budgetProjection = wouldExceedCap(
+    campaigns.map(campaign => ({
+      id: campaign.id,
+      status: campaign.status,
+      dailyBudget: campaign.daily_budget,
+      spend: 0,
+    })),
+    totalDailyBudget,
+    spendLimits?.weeklyCapRupees ?? null,
+  );
+  const budgetCapError = spendLimits?.weeklyCapRupees !== null && spendLimits?.weeklyCapRupees !== undefined
+    ? budgetProjection.verified && budgetProjection.exceeds
+      ? `This budget would commit about ${formatMoney(Math.round(budgetProjection.projectedAfter))} a week, over your ${formatMoney(Math.round(spendLimits.weeklyCapRupees))} weekly cap. Lower it or raise the cap in Settings.`
+      : !budgetProjection.verified
+        ? "The weekly cap could not be verified. Sync campaigns or review spend settings before continuing."
+        : null
+    : null;
   const [summaries, setSummaries] = useState<Record<string, string>>({});
   const [refreshingId, setRefreshingId] = useState<string | null>(null);
   // #1003: stale live results refresh quietly on open, once per campaign per visit, one at a time.
@@ -1065,6 +1097,10 @@ function BusinessCampaigns({
       failAt("budget", "Set a daily budget above ₹0.");
       return;
     }
+    if (reviewAfterSave && budgetCapError) {
+      failAt("budget", budgetCapError);
+      return;
+    }
     let input: DraftInput;
     try {
       input = manualDraftInput(reviewAfterSave);
@@ -1519,6 +1555,13 @@ function BusinessCampaigns({
               Account: {reviewConnection.selected.accountName} ({reviewConnection.selected.adAccountId}) · Page: {reviewConnection.selected.pageName} · Currency: {reviewConnection.selected.currency} · Timezone: {reviewConnection.selected.timezoneName}
               <br />
               Effective daily total: {activationReview.daily_budget == null ? "Unavailable" : formatMoney(activationReview.daily_budget)}
+              {spendLimits?.weeklyCapRupees != null && activationWeeklyProjection?.verified && (
+                <>
+                  <br />
+                  Weekly ad-spend cap: {formatMoney(spendLimits.weeklyCapRupees)} · projected with this campaign: {formatMoney(Math.round(activationWeeklyProjection.projectedAfter))}
+                  {activationWeeklyProjection.exceeds ? " (over cap)" : ""}
+                </>
+              )}
             </span>
           )}
           {activationDelivery && <div className="mt-3 text-sm font-normal text-amber-900">
@@ -1980,9 +2023,12 @@ function BusinessCampaigns({
                       type="number"
                       min={50}
                       value={budget}
-                      onChange={(e) => { setBudget(Number(e.target.value)); if (placedError?.at === "budget") setPlacedError(null); }}
-                      aria-invalid={placedError?.at === "budget" || undefined}
-                      aria-describedby={placedError?.at === "budget" ? "budget-error" : undefined}
+                      onChange={(e) => {
+                        setBudget(Number(e.target.value));
+                        if (placedError?.at === "budget") setPlacedError(null);
+                      }}
+                      aria-invalid={placedError?.at === "budget" || Boolean(budgetCapError) || undefined}
+                      aria-describedby={placedError?.at === "budget" || budgetCapError ? "budget-error" : undefined}
                     />
                     {/* #1163: the quick amounts sit with the budget they set. */}
                     <div className="flex flex-wrap items-center gap-2">
@@ -2004,6 +2050,7 @@ function BusinessCampaigns({
                       {abTest && <span className="basis-full text-xs font-medium text-slate-600">Total: {formatPerDay(totalDailyBudget)} across 2 ad sets</span>}
                     </div>
                     {placedError?.at === "budget" && <p id="budget-error" role="alert" className="text-sm font-medium text-red-800">{placedError.message}</p>}
+                    {budgetCapError && placedError?.at !== "budget" && <p id="budget-error" role="alert" className="text-sm font-medium text-red-800">{budgetCapError}</p>}
                   </div>
                   {destination === "instant_form" && <div className="flex min-w-0 flex-col gap-1.5">
                     <Label htmlFor="leadform">Lead form</Label>
@@ -2164,6 +2211,11 @@ function BusinessCampaigns({
                   <CampaignLaunchReview
                     selectedCount={selected.size}
                     budget={totalDailyBudget}
+                    weeklyCap={spendLimits?.weeklyCapRupees != null ? {
+                      capRupees: spendLimits.weeklyCapRupees,
+                      projectedWeeklyRupees: budgetProjection.projectedAfter ?? 0,
+                      exceeds: Boolean(budgetCapError),
+                    } : undefined}
                     leadFormName={selectedLeadForm?.name}
                     destination={destination}
                     whatsappNumber={destination === "whatsapp" && chosenWhatsAppNumber ? chosenWhatsAppNumber : undefined}
@@ -2177,7 +2229,7 @@ function BusinessCampaigns({
                     <Save className="h-4 w-4" aria-hidden="true" /> Save draft
                   </Button>
                   {/* #772: incomplete stays tappable (aria-disabled, so telemetry skips it) and says what's missing beside the control. */}
-                  <Button data-product-event="campaign.review" onClick={() => void prepareManualCampaign()} disabled={preparing} aria-disabled={selected.size === 0 || budget <= 0 || undefined}>
+                  <Button data-product-event="campaign.review" onClick={() => void prepareManualCampaign()} disabled={preparing} aria-disabled={selected.size === 0 || budget <= 0 || Boolean(budgetCapError) || undefined}>
                     {preparing ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
