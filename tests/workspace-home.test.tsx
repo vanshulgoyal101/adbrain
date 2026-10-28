@@ -417,6 +417,15 @@ describe("Home results row (#764)", () => {
     expect(screen.queryByText(/You reply to an enquiry in/)).not.toBeInTheDocument();
   });
 
+  it("#1292: names the newest unanswered enquiry and when they tapped the ad (CPO's words)", () => {
+    const { rerender } = render(<WorkspaceHome {...empty} business={business} firstEnquiry={{ name: "Rohit", at: "2026-10-26T04:10:00Z" }} now={now} />);
+    const line = screen.getByRole("region", { name: "Newest enquiry" });
+    expect(line).toHaveTextContent("Rohit tapped your ad at 9:40 am. Reply now; people often go with the first business that answers.");
+    expect(within(line).getByRole("link", { name: "Open Enquiries" })).toHaveAttribute("href", "/leads");
+    rerender(<WorkspaceHome {...empty} business={business} firstEnquiry={null} now={now} />);
+    expect(screen.queryByRole("region", { name: "Newest enquiry" })).not.toBeInTheDocument();
+  });
+
   it("shows no results row before any campaign has results", () => {
     render(<WorkspaceHome {...empty} business={business} campaigns={[chats]} results={{}} now={now} />);
     expect(screen.queryByRole("region", { name: "Results so far" })).not.toBeInTheDocument();

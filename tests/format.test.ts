@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { formatDate, formatDay, formatMoney, formatMoneyExact, formatMoneyShort, formatNumber, formatPerDay } from "@/lib/format";
+import { formatClock, formatDate, formatDay, formatMoney, formatMoneyExact, formatMoneyShort, formatNumber, formatPerDay } from "@/lib/format";
 
 describe("formats (#403 S2)", () => {
   it.each([
@@ -21,6 +21,15 @@ describe("formats (#403 S2)", () => {
     expect(formatDate("2026-01-02T03:30:00Z", now)).toBe("2 Jan, 9:00 am");
     expect(formatDate("2025-10-24T11:00:00Z", now)).toBe("24 Oct 2025");
     expect(formatDate("not a date", now)).toBe("");
+  });
+
+  it("#1292: the time someone tapped an ad, in India time", () => {
+    const now = new Date("2026-10-24T12:00:00Z");
+    expect(formatClock("2026-10-24T04:10:00Z", now)).toBe("9:40 am");
+    expect(formatClock("2026-10-23T19:00:00Z", now)).toBe("12:30 am");
+    expect(formatClock("2026-10-23T15:00:00Z", now)).toBe("8:30 pm yesterday");
+    expect(formatClock("2026-10-22T11:00:00Z", now)).toBe("22 Oct, 4:30 pm");
+    expect(formatClock("not a date", now)).toBe("");
   });
 
   it("groups counts the Indian way", () => {
