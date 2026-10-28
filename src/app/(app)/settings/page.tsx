@@ -23,6 +23,7 @@ import { getPrimaryBusiness, getSpendEvaluation } from "@/lib/supabase/queries";
 import { isRazorpayTestEnabled } from "@/lib/payments/razorpay-test";
 import { isProductionPaymentConfigured } from "@/lib/payments/production-config";
 import { getCustomerBalance } from "@/lib/payments/customer-balance";
+import { toCustomerBalanceView } from "@/lib/payments/customer-balance-contracts";
 import { requireOwnedBusiness } from "@/lib/meta/connection-access";
 import { readPreferenceState } from "@/lib/preferences/store";
 import { listOwnPrivacyRequests, privacyOperatorAllowed } from "@/lib/privacy-requests";
@@ -154,7 +155,7 @@ async function ConnectionSettings({ businessId, searchParams, whatsapp }: {
     getMetaConnection(businessId).then(connection => ({ connection })).catch(() => ({ connection: null })),
     searchParams,
     mode === "managed" && isProductionPaymentConfigured()
-      ? requireOwnedBusiness(businessId).then(getCustomerBalance).catch(() => null)
+      ? requireOwnedBusiness(businessId).then(getCustomerBalance).then(toCustomerBalanceView).catch(() => null)
       : Promise.resolve(null),
   ]);
   return (
