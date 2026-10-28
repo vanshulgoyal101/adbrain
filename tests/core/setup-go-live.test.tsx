@@ -38,7 +38,7 @@ describe("core: <SetupGoLive> (#1271)", () => {
   });
 
   it("#1934: returning, payment shows done for the last campaign, the budget starts at the last amount, no first-month line", () => {
-    render(<SetupGoLive business={business} ads={ads} pageConnected funding="own_account" returning initialDaily={500}
+    render(<SetupGoLive business={business} ads={ads} pageConnected funding="own" returning initialDaily={500}
       whatsappNumber="+91 ••••• 3210" weeklyCap={{ capRupees: null, active: [] }} />);
     expect(screen.getByText("Set up for your last campaign")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Add payment in Meta" })).toBeNull();
