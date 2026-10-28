@@ -42,6 +42,8 @@ export async function shapeIndicText(spec: AdDesignSpec, logoRatio = 1): Promise
       ? (({ size, weight, color, maxWidth }) => ({ size, weight, color, maxWidth }))(offerStripStyle(spec))
       : { size: m.subheadSize, weight: 400, color: "#e2e8f0", maxWidth: m.contentWidth }],
     ...spec.benefits.map((benefit, i): Field => [`benefit:${i}`, benefit, { size: m.benefitSize, weight: 600, color: "#ffffff", maxWidth: m.contentWidth - Math.round(90 * m.s) }]),
+    // #1177: a Hindi or Punjabi WhatsApp ask is shaped like the other on-image words.
+    ["contactAsk", spec.contact === "whatsapp" ? spec.contactLabel : null, { size: m.phoneSize, weight: 800, color: "#ffffff", maxWidth: m.contentWidth - Math.round(m.phoneSize * 1.1 + 14 * m.s) }],
     ["contact", spec.contactLine, { size: m.contactSize, weight: 400, color: "#cbd5e1", maxWidth: Math.round(m.contentWidth * 0.6) }],
   ];
   const entries = await Promise.all(fields.filter(([, text]) => text && INDIC_SCRIPT.test(text)).map(async ([key, text, style]) => [key, await shapeText(text!, style)] as const));

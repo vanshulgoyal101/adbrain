@@ -231,10 +231,12 @@ feedback to assess unnecessary questions, abandonment and time to a useful draft
    gets a generated image as usual.
 5. Download and validate the raster, persist the source image, render the designed
    poster when enabled, persist the final image, then insert a draft creative row.
-   The poster's contact bar asks for a WhatsApp message ("Message us on WhatsApp", chat icon,
-   no number) for a business whose campaigns open WhatsApp: an India-based phone (#235) or a saved
-   WhatsApp message (`contactChannel`, #1147). Others show their phone number, as do designs saved
-   before #1147.
+   The poster's contact bar asks for a WhatsApp message (chat icon, no number) for a business whose
+   campaigns open WhatsApp: an India-based phone (#235) or a saved WhatsApp message (`contactChannel`,
+   #1147). The ask is in the ad's language ("Message us on WhatsApp", "WhatsApp पर मैसेज करें",
+   "WhatsApp par message karein", "WhatsApp ਤੇ ਮੈਸੇਜ ਕਰੋ"; Indic words shaped like the rest, #1177).
+   Others show their phone number, as do designs saved before #1147. Review warns, without
+   blocking, when such a picture goes to a form campaign, and offers "Switch to WhatsApp".
 6. Save usage receipts and report partial failures independently of successful rows.
 
 Variants run concurrently using `Promise.allSettled` with a shared 240-second

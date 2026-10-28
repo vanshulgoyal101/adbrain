@@ -5,7 +5,7 @@ import { effectiveDailyBudget } from "@/lib/campaign/spend";
 import type { DraftInput, ReviewDTO } from "@/lib/campaign/connect-contracts";
 import type { ReviewBlockerReason, SelectedAssets } from "@/lib/meta/connect-contracts";
 import { normalizeWebsite } from "@/lib/brand/validation";
-import { askMismatchWarning, reviewWarnings } from "@/lib/campaign/plan-check";
+import { askMismatchWarning, reviewWarnings, WHATSAPP_PICTURE_ON_FORM } from "@/lib/campaign/plan-check";
 import { quotedAsk, sameWords } from "@/lib/campaign/whatsapp-greeting";
 import { batchProofWarning } from "@/lib/creative/proof-line";
 import type { ResolvedWhatsAppMessage } from "@/lib/campaign/whatsapp-template";
@@ -21,6 +21,8 @@ export interface PreflightCreative {
   cta?: string | null;
   /** Its saved design can be laid out at 9:16 for Stories and Reels (#333). */
   storyReady?: boolean;
+  /** Its picture asks for a WhatsApp message (#1147's contact bar), so a form campaign contradicts it (#1177). */
+  asksWhatsApp?: boolean;
 }
 
 export interface PreflightForm {
@@ -289,6 +291,8 @@ export function runPreflight(input: PreflightInput): ReviewDTO {
   // #418 rule 5: the Brand has proof (years, jobs, a credential, a warranty) but no chosen ad cites it.
   const proof = batchProofWarning(input.creatives.map((creative) => [creative.headline, creative.primaryText].filter(Boolean).join("\n")), input.brandFacts ?? []);
   if (proof) planWarnings.push(proof);
+  // #1177: the picture says "Message us on WhatsApp" but the button opens a form. Never a blocker.
+  if ((draft.destination ?? "instant_form") !== "whatsapp" && input.creatives.some((creative) => creative.asksWhatsApp)) planWarnings.push(WHATSAPP_PICTURE_ON_FORM);
 
   return {
     draftId: input.draftId,
