@@ -1356,6 +1356,8 @@ function BusinessCampaigns({
   }, [liveIds]);
   const [budgetEdit, setBudgetEdit] = useState<{ campaign: Campaign; start: NonNullable<ReturnType<typeof budgetFormStart>> } | null>(null);
   const [adEdit, setAdEdit] = useState<Campaign | null>(null);
+  // #1274: the card's "Edit the ad" (no chats yet) opens the same editor with a hint about the last line.
+  const [adEditHint, setAdEditHint] = useState<string | undefined>(undefined);
   const [statusChangingId, setStatusChangingId] = useState<string | null>(null);
   const [reviews, setReviews] = useState<Record<string, AdReview[]>>({});
 
@@ -2318,7 +2320,8 @@ function BusinessCampaigns({
                 campaign={adEdit}
                 campaignName={adEdit.name ?? `${business.name} — ${adEdit.objective}`}
                 creatives={approved}
-                onClose={() => setAdEdit(null)}
+                hint={adEditHint}
+                onClose={() => { setAdEdit(null); setAdEditHint(undefined); }}
                 onSaved={(message, { adId, change }) => {
                   // Mirror the server's raw.adWords, so reopening the editor shows the new words.
                   setCampaigns((list) => list.map((item) => {
@@ -2330,6 +2333,7 @@ function BusinessCampaigns({
                   }));
                   setCardNotice({ id: adEdit.id, message });
                   setAdEdit(null);
+                  setAdEditHint(undefined);
                 }}
               />
             )}
@@ -2468,6 +2472,8 @@ function BusinessCampaigns({
                       // #1274 (#1255): one sentence, one number, one action; the figures stay under Details.
                       <CardResults campaign={c} result={r} outcome={outcome} comparison={lastCampaignComparison(c, campaigns, results)}
                         waiting={waitingReplies[c.id] ?? 0} onRunAgain={() => void runAgain(c)} runAgainBusy={rerunBusy === c.id}
+                        onEditAd={c.meta_campaign_id && (c.status === "paused" || c.status === "active") && reviewableCampaign(c) && (c.meta_ad_ids?.length ?? 0) > 0 && !waitingSwitch[c.id]
+                          ? () => { setAdEditHint(EDIT_AD_HINT); setAdEdit(c); } : undefined}
                         adsManagerUrl={c.meta_campaign_id ? adsLink(c) : undefined} />
                     )}
                     {r && mounted && (
@@ -2557,9 +2563,11 @@ function madeOutsideAdBrain(campaign: Campaign): boolean {
 }
 
 /** A launched campaign's numbers: #1255's verdict for WhatsApp and form campaigns, with the figures under Details. */
-function CardResults({ campaign, result: r, outcome, comparison, waiting, onRunAgain, runAgainBusy, adsManagerUrl }: {
+const EDIT_AD_HINT = "Tell people what happens after the tap, e.g. 'Tap, then press Send'.";
+
+function CardResults({ campaign, result: r, outcome, comparison, waiting, onRunAgain, runAgainBusy, adsManagerUrl, onEditAd }: {
   campaign: Campaign; result: CampaignResult; outcome: ReturnType<typeof campaignDestination>; comparison: Comparison | null;
-  waiting: number; onRunAgain: () => void; runAgainBusy: boolean; adsManagerUrl?: string;
+  waiting: number; onRunAgain: () => void; runAgainBusy: boolean; adsManagerUrl?: string; onEditAd?: () => void;
 }) {
   const [now] = useState(() => Date.now());
   const figures = <>
@@ -2583,7 +2591,7 @@ function CardResults({ campaign, result: r, outcome, comparison, waiting, onRunA
   // A paused card that never showed keeps its one "nothing has spent" line (#173), with no verdict beside it.
   if (!input || (campaign.status !== "active" && campaign.status !== "completed" && !r.impressions)) return figures;
   return <CampaignVerdict verdict={verdict(input)} whatsapp={input.destination === "whatsapp"} results={input.results} spend={input.spend}
-    details={figures} onRunAgain={onRunAgain} runAgainBusy={runAgainBusy} adsManagerUrl={adsManagerUrl} />;
+    details={figures} onRunAgain={onRunAgain} runAgainBusy={runAgainBusy} adsManagerUrl={adsManagerUrl} onEditAd={onEditAd} />;
 }
 
 function Stat({ label, value }: { label: string; value: string }) {

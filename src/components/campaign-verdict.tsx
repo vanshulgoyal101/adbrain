@@ -15,7 +15,7 @@ const outline = cn(link, "border border-slate-300 bg-white text-slate-900 hover:
  * #1274 (#1255 slice 2): a campaign card answers "Is it working? What should I do?" with one sentence, one number and
  * at most one action. The figures it replaces stay one tap away under Details.
  */
-export function CampaignVerdict({ verdict, whatsapp, results, spend, details, onRunAgain, runAgainBusy = false, adsManagerUrl }: {
+export function CampaignVerdict({ verdict, whatsapp, results, spend, details, onRunAgain, runAgainBusy = false, adsManagerUrl, onEditAd }: {
   verdict: Verdict;
   whatsapp: boolean;
   results: number;
@@ -24,6 +24,8 @@ export function CampaignVerdict({ verdict, whatsapp, results, spend, details, on
   onRunAgain?: () => void;
   runAgainBusy?: boolean;
   adsManagerUrl?: string;
+  /** #1274 (CPO): state 3's action opens the ad's copy editor (#765); editing a running campaign's message is later. */
+  onEditAd?: () => void;
 }) {
   const noun = (n: number) => whatsapp ? (n === 1 ? "chat" : "chats") : (n === 1 ? "enquiry" : "enquiries");
   const action = (() => {
@@ -42,7 +44,9 @@ export function CampaignVerdict({ verdict, whatsapp, results, spend, details, on
         return adsManagerUrl ? (
           <a href={adsManagerUrl} target="_blank" rel="noopener noreferrer" className={outline}><ExternalLink className="h-4 w-4" aria-hidden="true" />See Meta&apos;s status</a>
         ) : null;
-      // "Pause this ad" lives on the ad's own row (#1045, Which ad worked); a running campaign's message has no editor yet.
+      case "edit_message":
+        return onEditAd ? <Button size="sm" variant="outline" onClick={onEditAd}>Edit the ad</Button> : null;
+      // "Pause this ad" lives on the ad's own row (#1045, Which ad worked).
       default:
         return null;
     }

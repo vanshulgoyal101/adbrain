@@ -61,16 +61,21 @@ describe("<CampaignVerdict> (#1274)", () => {
     expect(region().getByRole("link", { name: "See Meta's status" })).toHaveAttribute("href", "https://adsmanager.facebook.com/x");
   });
 
-  it("ended: Run this again calls back; spent with no chats shows no action (no editor for a running message yet)", () => {
+  it("ended: Run this again calls back", () => {
     const onRunAgain = vi.fn();
     card({ status: "completed", results: 14, spend: 1344 }, { onRunAgain });
     fireEvent.click(region().getByRole("button", { name: "Run this again" }));
     expect(onRunAgain).toHaveBeenCalledTimes(1);
   });
 
-  it("spent, no chats: the sentence names the opens, with no button", () => {
-    card({ results: 0, spend: 450, opens: 38 });
+  it("spent, no chats: the sentence names the opens; Edit the ad opens the ad's editor (CPO), none where it can't be edited", () => {
+    const onEditAd = vi.fn();
+    const view = card({ results: 0, spend: 450, opens: 38 }, { onEditAd });
     expect(region().getByText("₹450 spent, no chats yet. 38 people opened WhatsApp but didn't send the message.")).toBeInTheDocument();
+    fireEvent.click(region().getByRole("button", { name: "Edit the ad" }));
+    expect(onEditAd).toHaveBeenCalledTimes(1);
+    view.unmount();
+    card({ results: 0, spend: 450, opens: 38 });
     expect(region().queryByRole("button")).not.toBeInTheDocument();
   });
 });
