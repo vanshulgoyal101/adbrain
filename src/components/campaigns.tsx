@@ -112,6 +112,7 @@ import { campaignWhatsAppSummary } from "@/lib/campaign/results-summary";
 import { costPerCustomer } from "@/lib/campaign/real-enquiries";
 import { describeSkippedCampaigns, type SkippedCampaign } from "@/lib/campaign/sync-skips";
 import type { RerunPrefill } from "@/lib/campaign/rerun";
+import { activateTrustLine } from "@/lib/trust-lines";
 import type { AdReview, CampaignDeliverySnapshot } from "@/lib/meta/client";
 import { committedWords, freeRoomPaise, type AccountFunding } from "@/lib/campaign/funding-check";
 import { readCampaignRecovery, recoveryStorageKey, writeCampaignRecovery, type CampaignRecovery } from "@/lib/meta-connect-ui/recovery";
@@ -1542,6 +1543,8 @@ function BusinessCampaigns({
                       ? "Funded on Meta: set a spending limit on the Meta ad account first."
                       : "Funded on your Meta ad account: no spending limit set; Meta stops at the total limit above."}
                 </p>}
+                {/* #1292: the trust line beside the money decision. */}
+                <p className="mt-1 font-medium">{activateTrustLine(activationReview.daily_budget ?? 0, (activationReview.daily_budget ?? 0) * capDays)}</p>
                 <p className="mt-1">The ad sets and ads listed above stay paused. Meta reviews the copied ads before they deliver.</p>
                 {keptPaused.length > 0 && <p className="mt-1">{keptPaused.length === 1 ? "1 ad you paused from the card stays paused" : `${keptPaused.length} ads you paused from the card stay paused`}: AdBrain doesn&apos;t copy it back in.</p>}
               </div>
