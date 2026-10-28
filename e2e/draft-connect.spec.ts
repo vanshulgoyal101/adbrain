@@ -64,6 +64,8 @@ for (const width of [1440, 390]) {
     await page.getByRole("button", { name: "Connection journey fixture" }).click();
     await page.getByRole("textbox", { name: "Campaign name", exact: true }).fill("Weekend rooftop consultations");
     await page.locator("#budget").fill("350");
+    // #1171: WhatsApp is the default destination; this journey is the lead-form one.
+    await page.locator("#destination-instant_form").check();
     await page.getByRole("checkbox", { name: /A\/B test the audience/ }).check();
     await expect(page.getByRole("button", { name: "Check my campaign (nothing spends)" })).toBeEnabled();
     await page.getByRole("button", { name: "Check my campaign (nothing spends)" }).click();

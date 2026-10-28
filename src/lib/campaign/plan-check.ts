@@ -125,6 +125,9 @@ export const REVIEW_WARNINGS = {
 /** #1177: Review shows "Switch to WhatsApp" beside this warning. */
 export const WHATSAPP_PICTURE_ON_FORM = "An ad's picture asks people to message you on WhatsApp, but this campaign opens a form. Switch to WhatsApp, or choose ads made for forms";
 
+/** #1198: the ad quotes what to send, but a Quick questions campaign shows questions, not a ready message. */
+export const QUOTED_ASK_WITH_QUESTIONS = "Your ad promises a ready message, but customers will see quick questions. Change the last line to “Tap, then pick a question to send”?";
+
 export function askMismatchWarning(ask: string, prefill: string): string {
   return `An ad asks customers to send “${ask.slice(0, 80)}”, but WhatsApp pre-types “${prefill.slice(0, 80)}”. Edit the WhatsApp message so they match`;
 }

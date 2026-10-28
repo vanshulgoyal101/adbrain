@@ -40,14 +40,11 @@ beforeEach(() => {
 });
 
 describe("Campaigns rows (#403 S5)", () => {
-  // #794: the WhatsApp AI reply card appears only once a WhatsApp campaign is out.
-  it("shows the WhatsApp AI card only with a launched WhatsApp campaign", async () => {
-    const { unmount } = view();
-    await screen.findByRole("heading", { name: "Rooftop solar" });
-    expect(screen.queryByRole("region", { name: /WhatsApp's AI/ })).toBeNull();
-    unmount();
+  // #1171: no nudge toward WhatsApp's AI reply (owner rule: no extra automated WhatsApp messages to customers).
+  it("never shows a WhatsApp AI reply nudge, even with a launched WhatsApp campaign", async () => {
     render(<Campaigns business={business} approved={[]} initialCampaigns={[{ ...paused, destination: "whatsapp" } as Campaign]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady={false} adAccountId="act_999" />);
-    expect(await screen.findByRole("region", { name: "Reply faster with WhatsApp's AI?" })).toBeInTheDocument();
+    await screen.findByRole("heading", { name: paused.name! });
+    expect(screen.queryByText(/WhatsApp's AI|Business AI/)).toBeNull();
   });
 
   // #773: a paused AdBrain campaign's audience is edited from its More menu; a running one is paused first.
@@ -110,6 +107,11 @@ describe("Campaigns rows (#403 S5)", () => {
     render(<Campaigns business={business} approved={[]} initialCampaigns={[paused]} initialResults={{}} initialDrafts={[draft] as never}
       leadForms={[]} leadFormError={null} metaReady={false} adAccountId="act_999" />);
     expect(screen.getByText("Diwali leads")).toBeInTheDocument();
+    // #1154: with no setup open, the campaigns come first and the drafts follow them, folded.
+    const drafts = screen.getByRole("group", { name: "Saved drafts" });
+    expect(drafts).not.toHaveAttribute("open");
+    const firstCampaign = screen.getByRole("heading", { name: "Rooftop solar" });
+    expect(firstCampaign.compareDocumentPosition(drafts) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("says when a row has no results yet, and shows them when it has", async () => {

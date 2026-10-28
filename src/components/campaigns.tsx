@@ -32,7 +32,9 @@ import {
   X,
 } from "lucide-react";
 import { WhatsAppReadyChecklist } from "@/components/whatsapp-ready";
-import { whatsappGreeting, whatsappLanguageFor, type WhatsAppLanguage } from "@/lib/campaign/whatsapp-greeting";
+import { quotedAsk, whatsappGreeting, whatsappLanguageFor, withQuestionsLastLine, type WhatsAppLanguage } from "@/lib/campaign/whatsapp-greeting";
+import { updateCreativeCopy } from "@/app/(app)/studio/actions";
+import type { EditableCopy } from "@/lib/creative/concept";
 import { suggestedQuestions } from "@/lib/campaign/whatsapp-questions";
 import { whatsappTemplateSchema, type WhatsAppTemplate } from "@/lib/campaign/whatsapp-template";
 import { CampaignWhatsAppMessageDialog } from "@/components/campaign-whatsapp-message-dialog";
@@ -54,7 +56,6 @@ import {
 } from "@/components/targeting-controls";
 import { CampaignChat } from "@/components/campaign-chat";
 import { AdResults } from "@/components/ad-results";
-import { WhatsAppAiCard } from "@/components/whatsapp-ai-card";
 import { EditAudienceDialog } from "@/components/edit-audience-dialog";
 import { AudienceSwitchStrip } from "@/components/audience-switch-strip";
 import { createClient as createBrowserClient } from "@/lib/supabase/client";
@@ -93,7 +94,6 @@ import { reviewBlockerAlternative, reviewBlockerFix } from "@/lib/campaign/revie
 import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
 import { useCampaignPreparation } from "@/lib/meta-connect-ui/use-campaign-preparation";
 import { targetingFromEditor, targetingToEditor } from "@/lib/campaign/editor-targeting";
-import { parsePhone } from "@/lib/brand/countries";
 import type { LeadForm } from "@/lib/meta/client";
 import { maskWhatsAppNumber, maskedWhatsAppNumberPattern, parseWhatsAppStatus, type WhatsAppStatus } from "@/lib/meta/whatsapp-status-shared";
 import type { ConnectIntent, ConnectionDTO } from "@/lib/meta/connect-contracts";
@@ -106,7 +106,7 @@ import {
 } from "@/lib/campaign/budget";
 import { effectiveDailyBudget } from "@/lib/campaign/spend";
 import { accountFundingSchema, activationConfirmationPayload, campaignDeliverySnapshotSchema, RESUME_IN_ADS_MANAGER, reviewableCampaign } from "@/lib/campaign/activation";
-import { activationWarnings, WHATSAPP_PICTURE_ON_FORM } from "@/lib/campaign/plan-check";
+import { activationWarnings, QUOTED_ASK_WITH_QUESTIONS, WHATSAPP_PICTURE_ON_FORM } from "@/lib/campaign/plan-check";
 import { campaignAttention } from "@/lib/campaign/health";
 import { campaignWhatsAppSummary } from "@/lib/campaign/results-summary";
 import { costPerCustomer } from "@/lib/campaign/real-enquiries";
@@ -298,7 +298,7 @@ function BusinessCampaigns({
   ));
   // #761: ₹300 a day is the core run (#334); less rarely gets Meta out of learning.
   const [budget, setBudget] = useState(initialSetup?.budget ?? 300);
-  const [destination, setDestination] = useState<"instant_form" | "whatsapp">(initialSetup?.destination ?? "instant_form");
+  const [destination, setDestination] = useState<"instant_form" | "whatsapp">(initialSetup?.destination ?? "whatsapp");
   const [whatsappNumber, setWhatsAppNumber] = useState(initialSetup?.whatsappNumber ?? "");
   const [whatsappLanguage, setWhatsAppLanguage] = useState<WhatsAppLanguage>(initialSetup?.whatsappLanguage ?? "ad");
   const [whatsappMessage, setWhatsAppMessage] = useState<WhatsAppTemplate | null>(initialSetup?.whatsappMessage ?? null);
@@ -307,7 +307,6 @@ function BusinessCampaigns({
   const [whatsappStatus, setWhatsAppStatus] = useState<WhatsAppStatus | null>(null);
   // #235: an India-based business starts new campaigns on WhatsApp once a number is ready; a choice or a restored draft wins.
   const destinationChosenRef = useRef(Boolean(initialSetup));
-  const indiaBased = parsePhone(business.phone).countryCode === "IN";
   const whatsappOptions = whatsappStatus?.state === "ready" ? whatsappStatus.numbers : [];
   // #840: the chosen ads' words and stored language, as launch reads them for the WhatsApp message.
   const adsFor = (ids: Iterable<string>) => { const wanted = new Set(ids); return approved.filter((creative) => wanted.has(creative.id)); };
@@ -431,6 +430,7 @@ function BusinessCampaigns({
   const [prepareReview, setPrepareReview] = useState<PrepareReviewState | null>(null);
   // Ads edited from the picker (#280); the server reads the saved copy at launch.
   const [editedAds, setEditedAds] = useState<Record<string, Creative>>({});
+  const [rewritingAsks, setRewritingAsks] = useState(false);
   const [editingAdId, setEditingAdId] = useState<string | null>(null);
   const [adEditNotes, setAdEditNotes] = useState<{ id: string; notes: CopyEditNotes } | null>(null);
   const [showAllAds, setShowAllAds] = useState(false);
@@ -574,10 +574,9 @@ function BusinessCampaigns({
       .then((status) => {
         if (controller.signal.aborted) return;
         setWhatsAppStatus(status);
-        if (status.state === "ready" && indiaBased && !destinationChosenRef.current) setDestination("whatsapp");
       });
     return () => controller.abort();
-  }, [showComposer, connectedForDraft, business.id, indiaBased]);
+  }, [showComposer, connectedForDraft, business.id]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -711,7 +710,8 @@ function BusinessCampaigns({
     setIncludedNames("");
     setExcludedNames("");
     setLeadFormId("");
-    setDestination(indiaBased && whatsappOptions.length ? "whatsapp" : "instant_form");
+    // #1171: WhatsApp is the channel (#680); an instant form only when the owner picks it.
+    setDestination("whatsapp");
     setWhatsAppNumber("");
     setWhatsAppLanguage("ad");
     destinationChosenRef.current = false;
@@ -778,7 +778,7 @@ function BusinessCampaigns({
     setPrepareReview(null);
     setShowComposer(true);
     setFormsRetry(current => current + 1);
-    setNotice(destination === "whatsapp" ? "Meta connected. Review the linked WhatsApp number before continuing." : "Meta connected. Review your lead form before continuing.");
+    setNotice(destination === "whatsapp" ? "Meta connected. Check your WhatsApp number before continuing." : "Meta connected. Review your lead form before continuing.");
   }
 
   function acceptOperation(next: OperationDTO) {
@@ -1017,6 +1017,26 @@ function BusinessCampaigns({
     }
   }
 
+  /** #1198: Quick questions show no ready message, so the chosen ads stop quoting one; then Review runs again. */
+  async function rewriteQuotedAsks(creativeIds: string[]) {
+    if (rewritingAsks || unresolvedRecovery()) return;
+    setRewritingAsks(true);
+    try {
+      for (const ad of savedPickerAds.filter((item) => creativeIds.includes(item.id) && quotedAsk(item.primary_text))) {
+        const primaryText = withQuestionsLastLine(ad.primary_text ?? "", adLanguages([ad])[0]);
+        const text = savedAdText(ad);
+        const result = await updateCreativeCopy(ad.id, { ...text, cta: text.cta as EditableCopy["cta"], primary_text: primaryText });
+        if (!result.ok) { failAt("review", result.error ?? "The ad couldn't be changed. Edit its last line, then check again."); return; }
+        setEditedAds((current) => ({ ...current, [ad.id]: { ...ad, ...result.creative, primary_text: result.creative?.primary_text ?? primaryText } }));
+      }
+      await prepareManualCampaign();
+    } catch {
+      failAt("review", "The ad couldn't be changed. Edit its last line, then check again.");
+    } finally {
+      setRewritingAsks(false);
+    }
+  }
+
   async function prepareManualCampaign(reviewAfterSave = true) {
     if (isPreparing()) return;
     if (unresolvedRecovery()) {
@@ -1088,12 +1108,14 @@ function BusinessCampaigns({
   }
 
   // #1004: from Create's 'Review this ad', the same prepare as the Review button runs once, after the
-  // WhatsApp check has picked the destination and (for a form) a lead form is chosen or its error shown.
+  // WhatsApp check, once WhatsApp has a ready number (#1171: else its checklist shows first) or, for a form,
+  // a lead form is chosen or its error shown.
   const autoReviewRef = useRef(Boolean(newCampaign?.review) && !initialSetup);
   const [autoReviewPending, setAutoReviewPending] = useState(Boolean(newCampaign?.review) && !initialSetup);
   const autoReview = useEffectEvent(() => {
     if (!autoReviewRef.current || recoveryPending || unresolvedRecovery() || isPreparing()) return;
     if (selected.size === 0 || (destination === "instant_form" && !leadFormId && !formsError)) return;
+    if (destination === "whatsapp" && whatsappStatus?.state !== "ready") return;
     autoReviewRef.current = false;
     setAutoReviewPending(false);
     void prepareManualCampaign();
@@ -1425,6 +1447,25 @@ function BusinessCampaigns({
     }
   }
 
+  const savedDraftsBlock = savedDrafts.length > 0 && (
+    <details aria-label="Saved drafts" className="group border-y border-slate-200 py-3">
+      <summary className="flex min-h-10 cursor-pointer list-none items-center gap-2 text-sm font-semibold text-slate-900 [&::-webkit-details-marker]:hidden">
+        <ChevronRight className="h-4 w-4 text-slate-500 transition-transform group-open:rotate-90" aria-hidden="true" />
+        <h2>Saved drafts</h2>
+        <span className="font-normal text-slate-500">({savedDrafts.length})</span>
+      </summary>
+      <ul className="mt-1 divide-y divide-slate-100">
+        {savedDrafts.map((draft) => <li key={draft.draftId} className="flex min-w-0 items-center justify-between gap-3 py-2">
+          <button type="button" disabled={draftBusy !== null || creating || operationChecking} onClick={() => void reopenDraft(draft.draftId)} className="min-w-0 flex-1 text-left text-sm font-medium text-slate-800 hover:text-blue-700 disabled:opacity-50">
+            <span className="block wrap-break-word">{draft.input.name}</span>
+            <span className="mt-0.5 block text-xs font-normal text-slate-500">{formatMoney(draft.input.dailyBudgetRupees)} per ad set</span>
+          </button>
+          <Button variant="ghost" size="sm" className="h-11 w-11 p-0" title={`Remove ${draft.input.name}`} aria-label={`Remove ${draft.input.name}`} disabled={draftBusy !== null || creating} onClick={() => void removeDraft(draft)}><Trash2 className="h-4 w-4" aria-hidden="true" /></Button>
+        </li>)}
+      </ul>
+    </details>
+  );
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-4">
@@ -1641,6 +1682,12 @@ function BusinessCampaigns({
                             Switch to WhatsApp
                           </button>
                         )}
+                        {warning === QUOTED_ASK_WITH_QUESTIONS && (
+                          <button type="button" className="ml-1 min-h-11 font-medium text-blue-700 underline disabled:opacity-50" disabled={rewritingAsks || preparing}
+                            onClick={() => void rewriteQuotedAsks(prepareReview.draft.input.creativeIds)}>
+                            {rewritingAsks ? "Changing the last line…" : "Change the last line"}
+                          </button>
+                        )}
                       </span>
                     </li>
                   ))}
@@ -1713,23 +1760,8 @@ function BusinessCampaigns({
         }}
       />
 
-      {/* #847 T6: while a setup is open, saved drafts fold to one line so the setup starts in the first screen. */}
-      {savedDrafts.length > 0 && <details key={showComposer ? "composing" : "list"} open={!showComposer} aria-label="Saved drafts" className="group border-y border-slate-200 py-3">
-        <summary className="flex min-h-10 cursor-pointer list-none items-center gap-2 text-sm font-semibold text-slate-900 [&::-webkit-details-marker]:hidden">
-          <ChevronRight className="h-4 w-4 text-slate-500 transition-transform group-open:rotate-90" aria-hidden="true" />
-          <h2>Saved drafts</h2>
-          <span className="font-normal text-slate-500">({savedDrafts.length})</span>
-        </summary>
-        <ul className="mt-1 divide-y divide-slate-100">
-          {savedDrafts.map((draft) => <li key={draft.draftId} className="flex min-w-0 items-center justify-between gap-3 py-2">
-            <button type="button" disabled={draftBusy !== null || creating || operationChecking} onClick={() => void reopenDraft(draft.draftId)} className="min-w-0 flex-1 text-left text-sm font-medium text-slate-800 hover:text-blue-700 disabled:opacity-50">
-              <span className="block wrap-break-word">{draft.input.name}</span>
-              <span className="mt-0.5 block text-xs font-normal text-slate-500">{formatMoney(draft.input.dailyBudgetRupees)} per ad set</span>
-            </button>
-            <Button variant="ghost" size="sm" className="h-11 w-11 p-0" title={`Remove ${draft.input.name}`} aria-label={`Remove ${draft.input.name}`} disabled={draftBusy !== null || creating} onClick={() => void removeDraft(draft)}><Trash2 className="h-4 w-4" aria-hidden="true" /></Button>
-          </li>)}
-        </ul>
-      </details>}
+      {/* #847 T6: while a setup is open, saved drafts fold to one line above it; #1154: otherwise they follow the campaigns. */}
+      {showComposer && savedDraftsBlock}
       <div id="campaign-composer" hidden={!showComposer}>
       {(
         <>
@@ -1769,11 +1801,14 @@ function BusinessCampaigns({
           </fieldset>
           <fieldset disabled={preparing || creating || destinationRecoveryLocked} aria-describedby={showDestinationLock ? "destination-lock-reason" : undefined} className="flex flex-wrap gap-2">
             <legend className="mb-2 text-xs font-medium text-slate-500">Destination</legend>
-            {([ ["instant_form", "Instant form"], ["whatsapp", "WhatsApp chat"] ] as const).map(([value, label]) => <label key={value} className={cn("flex min-h-11 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm", destination === value ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200")}><input id={`destination-${value}`} type="radio" name="campaign-destination" value={value} checked={destination === value} onChange={() => { if (!unresolvedRecovery()) { destinationChosenRef.current = true; setDestination(value); setPrepareReview(null); } }} className="accent-blue-600" />{label}</label>)}
+            {([ ["whatsapp", "WhatsApp chat (recommended)"], ["instant_form", "Instant form"] ] as const).map(([value, label]) => <label key={value} className={cn("flex min-h-11 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm", destination === value ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200")}><input id={`destination-${value}`} type="radio" name="campaign-destination" value={value} checked={destination === value} onChange={() => { if (!unresolvedRecovery()) { destinationChosenRef.current = true; setDestination(value); setPrepareReview(null); } }} className="accent-blue-600" />{label}</label>)}
           </fieldset>
           </div>
           {showDestinationLock && <p id="destination-lock-reason" role="status" className="mb-4 text-sm text-amber-800">Destination is locked until the previous campaign request is resolved.</p>}
-          {showComposer && destination === "whatsapp" && <div className="mb-4"><WhatsAppReadyChecklist businessId={business.id} /></div>}
+          {showComposer && destination === "whatsapp" && <div className="mb-4"><WhatsAppReadyChecklist businessId={business.id} />
+            {/* #1171 (QA): WhatsApp stays the default; an owner without a linked number can still run ads today. */}
+            {whatsappStatus?.state !== "ready" && <Button type="button" variant="ghost" className="mt-1 h-11 px-0 text-blue-700" disabled={preparing || creating || destinationRecoveryLocked} onClick={() => switchDestination("instant_form")}>No WhatsApp number yet? Use an Instant form for now</Button>}
+          </div>}
           {showComposer && creationMode === "guided" && <CampaignChat
             businessId={business.id}
             destination={destination}
@@ -2198,9 +2233,7 @@ function BusinessCampaigns({
         </div>
         {(() => {
           const ready = !(showComposer && destination === "whatsapp") && campaigns.some((c) => campaignDestination(c, results[c.id]) === "whatsapp");
-          // #794: once a WhatsApp campaign is out, point to WhatsApp's own AI reply; #847: as a line under "WhatsApp ready?".
-          const ai = campaigns.some(campaign => campaign.meta_campaign_id && campaignDestination(campaign) === "whatsapp");
-          return (ready || ai) && <div className="mb-4">{ready && <WhatsAppReadyChecklist businessId={business.id} />}{ai && <WhatsAppAiCard businessId={business.id} />}</div>;
+          return ready && <div className="mb-4"><WhatsAppReadyChecklist businessId={business.id} /></div>;
         })()}
         {(campaigns.length > 0 || campaignQuery || statusFilter !== "all") && <div className="mb-5 flex flex-wrap gap-2">
           <div className="flex min-w-0 flex-1 basis-40 items-center gap-2 rounded-md border border-slate-300 px-3"><Search size={16} className="shrink-0 text-slate-400" aria-hidden="true" /><input type="search" aria-label="Search campaigns" placeholder="Search campaigns" value={campaignQuery} onChange={event => setCampaignQuery(event.target.value)} className="h-[42px] w-full min-w-0 bg-transparent text-sm outline-none" /></div>
@@ -2484,6 +2517,7 @@ function BusinessCampaigns({
             {listLoading ? "Loading campaigns..." : "Load more campaigns"}
           </Button>
         </div>}
+        {!showComposer && savedDraftsBlock && <div className="mt-6">{savedDraftsBlock}</div>}
       </div>
     </div>
   );

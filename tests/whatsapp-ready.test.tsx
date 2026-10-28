@@ -30,7 +30,7 @@ beforeEach(() => {
 describe("WhatsApp ready? checklist (#493)", () => {
   it("lists the four things that make people send, and remembers the owner's ticks", async () => {
     const first = view([whatsapp]);
-    const list = await screen.findByRole("region", { name: "WhatsApp ready?" });
+    const list = await screen.findByRole("region", { name: "4 tips to get more replies" });
     const items = within(list).getAllByRole("checkbox");
     expect(items.map((item) => item.getAttribute("aria-label") ?? (item.closest("label")?.textContent ?? ""))).toEqual([
       expect.stringMatching(/profile photo and business name/i),
@@ -38,28 +38,29 @@ describe("WhatsApp ready? checklist (#493)", () => {
       expect.stringMatching(/away message/i),
       expect.stringMatching(/reply within 5 minutes/i),
     ]);
-    expect(within(list).getByText("0 of 4 ready")).toBeInTheDocument();
+    expect(within(list).queryByText(/of 4/)).toBeNull();
     fireEvent.click(items[0]);
     fireEvent.click(items[3]);
-    expect(within(list).getByText("2 of 4 ready")).toBeInTheDocument();
+    expect(within(list).getByText("2 of 4 done")).toBeInTheDocument();
     first.unmount();
     view([whatsapp]);
-    const again = await screen.findByRole("region", { name: "WhatsApp ready?" });
-    expect(within(again).getByText("2 of 4 ready")).toBeInTheDocument();
+    const again = await screen.findByRole("region", { name: "4 tips to get more replies" });
+    expect(within(again).getByText("2 of 4 done")).toBeInTheDocument();
     expect(within(again).getAllByRole("checkbox")[3]).toBeChecked();
   });
 
   it("is not shown when no campaign uses WhatsApp", async () => {
     view([leadForm]);
     await screen.findByRole("heading", { name: "Solar form" });
-    expect(screen.queryByRole("region", { name: "WhatsApp ready?" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "4 tips to get more replies" })).toBeNull();
   });
 
   it("shows once in campaign setup when WhatsApp chat is chosen", async () => {
     view([whatsapp]);
     const newCampaign = screen.queryByRole("button", { name: "New campaign" });
     if (newCampaign) fireEvent.click(newCampaign);
-    fireEvent.click(await screen.findByRole("radio", { name: "WhatsApp chat" }));
-    expect(screen.getAllByRole("region", { name: "WhatsApp ready?" })).toHaveLength(1);
+    fireEvent.click(await screen.findByRole("radio", { name: "Instant form" }));
+    fireEvent.click(screen.getByRole("radio", { name: "WhatsApp chat (recommended)" }));
+    expect(screen.getAllByRole("region", { name: "4 tips to get more replies" })).toHaveLength(1);
   });
 });

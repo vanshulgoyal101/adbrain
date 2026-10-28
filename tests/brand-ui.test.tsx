@@ -158,21 +158,22 @@ describe("<BrandForm> prefill", () => {
   it("updates brand readiness as missing context is supplied", () => {
     render(<BrandForm business={business({ offers: [], usps: [] })} />);
     const preview = screen.getByRole("region", { name: "Preview" });
-    expect(preview).toHaveTextContent("3 of 6 ready");
+    expect(preview).toHaveTextContent("2 of 5 ready");
 
     fireEvent.change(screen.getByLabelText(/^Offers/), {
       target: { value: "Free survey" },
     });
 
-    expect(preview).toHaveTextContent("4 of 6 ready");
+    expect(preview).toHaveTextContent("3 of 5 ready");
   });
 
   // #681 (Dev 2's 390 px walk): a no-website owner who filled every essential read "1 of 6 ready".
   it("counts what ads need: name, area and an offer, without brand voice or audience text", () => {
     render(<BrandForm business={business({ website: null, brand_voice: null, target_audience: null, usps: [], languages: [] })} />);
     const preview = screen.getByRole("region", { name: "Preview" });
-    expect(preview).toHaveTextContent("3 of 6 ready");
-    expect(screen.getByRole("link", { name: "Add website for lead ads" })).toHaveAttribute("href", "#brand-identity");
+    expect(preview).toHaveTextContent("3 of 5 ready");
+    // #1171: WhatsApp is the default, so a website is only asked for instant forms, not counted.
+    expect(screen.queryByRole("link", { name: /website/i })).not.toBeInTheDocument();
   });
 
   it("links each missing item to the section that fills it", () => {
@@ -201,16 +202,18 @@ describe("<BrandForm> prefill", () => {
     }
   });
 
-  it("is not ready for lead ads without a website, even with a phone number", () => {
+  // #1171: WhatsApp is the default destination; the website is needed only for instant forms.
+  it("does not count a website towards readiness and says it is needed only for instant forms", () => {
     render(<BrandForm business={business({ website: null, phone: "+91 98765 43210" })} />);
     const preview = screen.getByRole("region", { name: "Preview" });
-    expect(preview).toHaveTextContent("3 of 6 ready");
+    expect(preview).toHaveTextContent("3 of 5 ready");
+    expect(screen.getByLabelText("Website (needed only for instant forms)")).toBe(screen.getByPlaceholderText("example.com"));
 
     fireEvent.change(screen.getByPlaceholderText("example.com"), {
       target: { value: "https://example.com" },
     });
 
-    expect(preview).toHaveTextContent("4 of 6 ready");
+    expect(preview).toHaveTextContent("3 of 5 ready");
   });
 
   it("asks for a logo and real photos, linking to the asset section (#195)", () => {

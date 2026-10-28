@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import story from "./fixtures/meta/story-validate.json";
+import hindiRun from "./fixtures/create/solaride-hindi.json";
 import { runPreflight } from "@/lib/campaign/preflight";
-import { askMismatchWarning } from "@/lib/campaign/plan-check";
+import { askMismatchWarning, QUOTED_ASK_WITH_QUESTIONS } from "@/lib/campaign/plan-check";
 import { campaignWhatsAppMessage } from "@/lib/campaign/campaign-whatsapp-message";
-import { quotedAsk } from "@/lib/campaign/whatsapp-greeting";
+import { QUESTIONS_LAST_LINE, quotedAsk, withQuestionsLastLine } from "@/lib/campaign/whatsapp-greeting";
 
 // #418 rule 7 ("say exactly what to send; the last line matches the button"). The recorded copy is
 // Solaride's approved ad (story-validate.json): its last line asks to message on WhatsApp but quotes
@@ -55,5 +56,49 @@ describe("core: the ad's last line and the WhatsApp message use the same words (
     expect(quotedAsk("Free survey.\nWhatsApp \"SURVEY\" now")).toBe("SURVEY");
     expect(quotedAsk("मुफ़्त सर्वे।\nWhatsApp पर “सर्वे” भेजें")).toBe("सर्वे");
     expect(quotedAsk(null)).toBeNull();
+  });
+});
+
+// #1198: with Quick questions on, the customer sees questions, not the quoted words, so rule 7's prefill
+// compare can't apply. Review warns instead, never blocks, and offers to rewrite the ad's last line.
+describe("core: an ad quoting a message, on a Quick questions campaign (#1198)", () => {
+  const questions = { greeting: "Hi! Thanks for messaging Solaride.", opening: { kind: "ice_breakers", questions: ["How much does it cost?", "Book a free site survey"] }, language: "en" };
+
+  it("warns, never blocks, when an ad quotes a message but customers will see quick questions", () => {
+    expect(message(quoting, questions).opening.iceBreakers).toEqual(["How much does it cost?", "Book a free site survey"]);
+    const result = review(quoting, questions);
+    expect(result.planWarnings).toEqual([QUOTED_ASK_WITH_QUESTIONS]);
+    expect(result.blockers).toEqual([]);
+    expect(result.canCreatePaused).toBe(true);
+    expect(result.planHash).toBe(review(recorded, questions).planHash);
+  });
+
+  it("says nothing when the ad quotes nothing, or a pre-typed message matches the quote", () => {
+    expect(review(recorded, questions).planWarnings ?? []).toEqual([]);
+    const matching = { ...owners, opening: { kind: "prefill", prefill: "Free site survey", callButton: false } };
+    expect(review(quoting, matching).planWarnings ?? []).toEqual([]);
+  });
+
+  it("the one-tap fix rewrites only the last line, which then quotes nothing", () => {
+    const fixed = withQuestionsLastLine(quoting);
+    expect(fixed.split("\n").at(-1)).toBe(QUESTIONS_LAST_LINE.en);
+    expect(fixed.split("\n").slice(0, -1)).toEqual(quoting.split("\n").slice(0, -1));
+    expect(quotedAsk(fixed)).toBeNull();
+    expect(review(fixed, questions).planWarnings ?? []).toEqual([]);
+    expect(withQuestionsLastLine("One line “Hi”\n\n")).toBe(QUESTIONS_LAST_LINE.en);
+  });
+
+  it("writes the new last line in the ad's own language, on a recorded Hindi Solaride ad (Reviewer)", () => {
+    const reply = hindiRun.replies.find((item) => item.language === "hi" && item.content.includes("primary_text"))!;
+    const recordedHindi = (JSON.parse(reply.content.replace(/^```json\n|\n?```$/g, "")) as { primary_text: string }).primary_text;
+    const quotingHindi = `${recordedHindi.split("\n").slice(0, -1).join("\n")}\n“फ्री साइट सर्वे” भेजें`;
+    expect(quotedAsk(quotingHindi)).toBe("फ्री साइट सर्वे");
+    expect(review(quotingHindi, questions).planWarnings).toEqual([QUOTED_ASK_WITH_QUESTIONS]);
+    const fixed = withQuestionsLastLine(quotingHindi);
+    expect(fixed.split("\n").at(-1)).toBe(QUESTIONS_LAST_LINE.hi);
+    expect(review(fixed, questions).planWarnings ?? []).toEqual([]);
+    // A stored language wins over the script; romanised Hindi gets Hinglish.
+    expect(withQuestionsLastLine("Free survey.\nWhatsApp “Survey”", "Punjabi (Gurmukhi)").split("\n").at(-1)).toBe(QUESTIONS_LAST_LINE.pa);
+    expect(withQuestionsLastLine("Bijli ka bill kam karein.\nAbhi “survey” bhejiye", "Hinglish").split("\n").at(-1)).toBe(QUESTIONS_LAST_LINE.hinglish);
   });
 });
