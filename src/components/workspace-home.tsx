@@ -43,6 +43,8 @@ export interface WorkspaceHomeProps {
   adReview?: HomeAdReview | null;
   /** #1469: the streamed rejected-ads section, shown when `adReview` is "rejected". */
   rejectedAds?: ReactNode;
+  /** #1668: the streamed Monday "last week" card. */
+  weekSummary?: ReactNode;
   now?: number;
   /** #1438: the owner's app language (Settings); English by default. */
   locale?: AppLocale;
@@ -68,6 +70,7 @@ export function WorkspaceHome({
   firstEnquiry = null,
   adReview = null,
   rejectedAds,
+  weekSummary,
   now,
   locale = "en",
 }: WorkspaceHomeProps) {
@@ -114,6 +117,7 @@ export function WorkspaceHome({
         <p role="status" aria-label={t("metaReview")} className="text-sm text-slate-900">{t("metaChecking")}</p>
       )}
       {adReview?.kind === "rejected" && rejectedAds}
+      {weekSummary}
 
       {stale.length > 0 && <StaleResultsRefresher campaignIds={stale} />}
       {summary && (

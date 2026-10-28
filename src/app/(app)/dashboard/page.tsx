@@ -8,6 +8,8 @@ import { SetupResumeCard } from "@/components/setup-resume-card";
 import { setupResumeStep } from "@/lib/setup/resume";
 import { getMetaConnection } from "@/lib/meta/credentials";
 import { HomeRejectedAds } from "@/components/home-rejected-ads";
+import { HomeWeekCard } from "@/components/home-week-card";
+import { loadWeekSummary } from "@/lib/home/week-summary-load";
 import { adResultsEnabled } from "@/lib/campaign/ad-results-store";
 import { homeAdReview, newestLiveCampaign } from "@/lib/campaign/home-ad-review";
 import { inboxSummary, newestWaitingEnquiry, recentReplyMinutes } from "@/lib/leads/reply-time";
@@ -47,7 +49,7 @@ export default async function DashboardPage() {
   // #764: the Home results row; an unreadable result leaves the row out, never the page.
   const launched = campaigns.filter((campaign) => campaign.meta_campaign_id).map((campaign) => campaign.id);
   const newest = newestLiveCampaign(campaigns);
-  const [results, replyMinutes, waiting, firstEnquiry, newestAdStatuses] = await Promise.all([
+  const [results, replyMinutes, waiting, firstEnquiry, newestAdStatuses, week] = await Promise.all([
     launched.length ? getLatestResults(launched).catch(() => ({})) : {},
     // #1049: an unreadable reply time leaves the line out, never the page.
     business ? recentReplyMinutes(business.id).catch(() => null) : null,
@@ -57,6 +59,11 @@ export default async function DashboardPage() {
     business ? newestWaitingEnquiry(business.id).catch(() => null) : null,
     // #1469: the stored per-ad statuses (no Meta call); unreadable means no review line.
     newest && adResultsEnabled() ? getAdStatuses(newest.id).catch(() => null) : [],
+    // #1668: last week's card, read beside the rest; unreadable, empty or slower than 600 ms leaves it out, never the page.
+    business && launched.length ? Promise.race([
+      loadWeekSummary(business.id, campaigns).catch(() => null),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 600)),
+    ]) : null,
   ]);
   const adReview = newest && newestAdStatuses ? homeAdReview([newest], { [newest.id]: newestAdStatuses }, results) : null;
 
@@ -75,6 +82,7 @@ export default async function DashboardPage() {
           <HomeRejectedAds campaign={newest} vertical={business?.vertical} spend={(results as Record<string, { spend?: number }>)[newest.id]?.spend ?? 0} />
         </Suspense>
       )}
+      weekSummary={week && <HomeWeekCard summary={week} locale={locale} />}
       locale={locale}
       audit={[]}
       spend={null}

@@ -27,6 +27,8 @@ const queries = vi.hoisted(() => ({
   businessLLMUsageSummary: vi.fn(),
 }));
 vi.mock("@/lib/supabase/queries", () => queries);
+// #1668: the "last week" card has its own tests; here it reads nothing.
+vi.mock("@/lib/home/week-summary-load", () => ({ loadWeekSummary: async () => null }));
 vi.mock("@/lib/llm/persist", () => ({ businessLLMUsageSummary: queries.businessLLMUsageSummary }));
 vi.mock("@/lib/env", () => ({ getEnv: () => ({ DEMO_USER_EMAIL: "demo@example.test", NEXT_PUBLIC_SUPABASE_URL: "https://project.supabase.co" }) }));
 const operator = vi.hoisted(() => ({ allowed: true }));

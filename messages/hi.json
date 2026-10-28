@@ -28,7 +28,16 @@
     "approved": "मंज़ूर",
     "setAside": "अलग रखा",
     "metaChecking": "Meta आपके विज्ञापन जांच रहा है। आमतौर पर एक दिन में दिखने लगते हैं।",
-    "metaReview": "Meta जांच"
+    "metaReview": "Meta जांच",
+    "weekTitle": "पिछला हफ़्ता: {chats} चैट, {enquiries} असली पूछताछ, ₹{spend} खर्च",
+    "weekBest": "अब तक का सबसे अच्छा विज्ञापन: ''{name}''।",
+    "weekQuickQuestions": "WhatsApp खोलने वालों में से कम लोग मैसेज भेजते हैं। अगली बार क्विक सवाल आज़माएँ।",
+    "weekAddEnquiries": "बताइए कौन-सी चैट असली पूछताछ थीं, ताकि हर पूछताछ का खर्च दिखे।",
+    "weekRunAgain": "अभी कुछ नहीं चल रहा। अपना सबसे अच्छा विज्ञापन फिर से चलाएँ?",
+    "weekOpenCampaigns": "कैंपेन खोलें",
+    "weekAddEnquiriesAction": "पूछताछ जोड़ें",
+    "weekRunAgainAction": "फिर से चलाएँ",
+    "weekDismiss": "पिछले हफ़्ते का सार छिपाएँ"
   },
   "workQueue": {
     "brandTitle": "अपना बिज़नेस सेट करें",
