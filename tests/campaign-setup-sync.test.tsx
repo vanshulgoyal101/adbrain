@@ -747,6 +747,19 @@ describe("campaign sync feedback", () => {
     expect(screen.queryByText(/left unchanged/)).not.toBeInTheDocument();
   });
 
+  // #1286: a sync that fails reports beside Sync from Meta in a line that's always there, so nothing above the list moves.
+  it("reports a failed automatic sync in the sync line under 'Your campaigns', not as a banner above the page", async () => {
+    localStorage.clear();
+    vi.stubGlobal("fetch", vi.fn((url: string) => url.startsWith("/api/campaigns/sync") ? Promise.reject(new Error("offline")) : Promise.resolve(Response.json({ forms: [] }))));
+    view(true);
+    const message = await screen.findByText("Couldn't reach Meta. Check your connection, then try Sync from Meta again.");
+    const line = message.closest("[data-sync-status]");
+    expect(line).not.toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+    const heading = screen.getByRole("heading", { name: /Your campaigns/ });
+    expect(heading.compareDocumentPosition(line!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it("reports a malformed success response and retries the same page", async () => {
     const sync = vi.fn()
       .mockResolvedValueOnce(Response.json({ campaigns: [], nextCursor: "next-page" }))
