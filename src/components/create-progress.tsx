@@ -13,6 +13,8 @@ export interface LiveAd {
   angleName?: string;
   stage: CreateProgressStage | "starting";
   creative?: Creative;
+  /** #1542: its picture is coming from the slower free provider. */
+  slowPictures?: boolean;
 }
 
 /**
@@ -71,7 +73,8 @@ export function applyCreateLine(ads: LiveAd[], line: Exclude<CreateStreamLine, {
   const next = [...ads];
   next[index] = line.type === "creative"
     ? { ...next[index], angleId: line.angleId, creative: line.creative }
-    : { ...next[index], angleId: line.angleId, angleName: line.angleName, stage: line.stage };
+    : { ...next[index], angleId: line.angleId, angleName: line.angleName, stage: line.stage,
+      ...(line.slowPictures || next[index].slowPictures ? { slowPictures: true } : {}) };
   return next;
 }
 
@@ -119,6 +122,9 @@ export function CreateProgress({ ads, makingMore = 0, renderReady, onUseSaved }:
   const failed = ads.filter((ad) => ad.stage === "failed").length;
   const done = ads.reduce((total, ad) => total + (ad.stage === "failed" ? 4 : RANK[ad.stage]), 0);
   const saved = ads.filter((ad) => ad.creative).length;
+  // #1542: say why the wait is long instead of a silent one; only while those ads are still coming.
+  const coming = ads.filter((ad) => ad.stage !== "ready" && ad.stage !== "failed").length;
+  const slow = coming > 0 && ads.some((ad) => ad.slowPictures && ad.stage !== "ready" && ad.stage !== "failed");
 
   return (
     <section aria-label="Ads being created" className="flex min-w-0 flex-col gap-3">
@@ -128,7 +134,7 @@ export function CreateProgress({ ads, makingMore = 0, renderReady, onUseSaved }:
           <span className="font-medium text-slate-900">Creating {ads.length} ads</span>
           <span className="tabular-nums text-slate-500">
             {elapsed(now - startedAt)} elapsed ·{" "}
-            {now - startedAt < CREATE_PROMISE_MS ? "usually under 1½ minutes" : "taking longer than usual, still going"}
+            {slow ? "still going" : now - startedAt < CREATE_PROMISE_MS ? "usually under 1½ minutes" : "taking longer than usual, still going"}
           </span>
         </p>
         <div
@@ -141,6 +147,11 @@ export function CreateProgress({ ads, makingMore = 0, renderReady, onUseSaved }:
         >
           <div className="h-full rounded-full bg-blue-600 motion-safe:transition-[width] motion-safe:duration-500" style={{ width: `${(done / (ads.length * 4)) * 100}%` }} />
         </div>
+        {slow && (
+          <p role="status" className="text-sm text-slate-600">
+            Pictures are taking longer today. {coming === 1 ? "Your last ad is still coming." : `Your ${coming} ads are still coming.`}
+          </p>
+        )}
         {makingMore > 0 && (
           <p role="status" className="text-sm text-slate-600">
             {makingMore} didn&apos;t pass our checks. Making {makingMore} more…

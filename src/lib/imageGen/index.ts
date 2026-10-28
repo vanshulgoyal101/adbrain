@@ -151,6 +151,11 @@ export async function generateImage(
 }
 
 async function fallbackImage(fallback: ImageProvider, from: ImageProvider, req: ImageRequest, startedAt: number): Promise<GeneratedImage> {
+  try {
+    req.onFallback?.();
+  } catch {
+    // Advisory: a broken listener must not cost the picture.
+  }
   const fallbackReq = fallback.name === "pollinations" ? { ...req, referenceImages: undefined } : req;
   // #1422: Pollinations answers 404/busy right after another free picture; wait that out once, one picture at a time.
   // #1476: the free fallback tries Cloudflare first when it is configured.

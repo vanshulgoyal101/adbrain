@@ -77,6 +77,8 @@ export interface CreateProgressEvent {
   angleName: string;
   stage: CreateProgressStage;
   at: number;
+  /** #1542: this ad's picture fell back to the slower free provider (the paid key is out). */
+  slowPictures?: true;
 }
 
 const MAX_BRIEF_CHARS = 2_000;
@@ -145,9 +147,9 @@ export async function generateVariants(params: {
       : AD_ANGLES
   ).slice(0, count);
 
-  const progress = (angle: AdAngle, stage: CreateProgressStage) => {
+  const progress = (angle: AdAngle, stage: CreateProgressStage, extra?: Pick<CreateProgressEvent, "slowPictures">) => {
     try {
-      params.onProgress?.({ angleId: angle.id, angleName: angle.name, stage, at: Date.now() });
+      params.onProgress?.({ angleId: angle.id, angleName: angle.name, stage, at: Date.now(), ...extra });
     } catch {
       // Progress is advisory; a broken listener must not cost a paid concept.
     }
@@ -182,7 +184,7 @@ export async function generateVariants(params: {
         void planning.then(notifyNext);
         const concept = await planned;
         progress(angle, "image");
-        const variant = await renderVariant(input, signal, concept);
+        const variant = await renderVariant(input, signal, concept, () => progress(angle, "image", { slowPictures: true }));
         await params.onVariant?.(variant);
         progress(angle, "ready");
         return variant;
@@ -359,6 +361,7 @@ async function renderVariant(
   input: ConceptInput,
   signal: AbortSignal,
   planned: { concept: CreativeConcept; usage: GeneratedVariant["llmUsage"] },
+  onFallback?: () => void,
 ): Promise<GeneratedVariant> {
   const { brand, angle, format, referenceImages } = input;
   const dims = formatDimensions(format ?? "portrait");
@@ -379,6 +382,7 @@ async function renderVariant(
       referenceImages: referenceImages?.slice(0, 3),
       signal,
       onAttempt: (entry) => imageAttempts.push(entry),
+      onFallback,
     }).catch((error) => {
       throw new CreativeImageError(error, usage, imageAttempts, concept);
     });
