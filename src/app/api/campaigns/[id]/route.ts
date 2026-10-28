@@ -26,6 +26,7 @@ import { getActivationLearning } from "@/lib/campaign/activation-learning";
 import { recordLaunchCap } from "@/lib/campaign/learnings";
 import { lacksAreaExclusions } from "@/lib/meta/service-area";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { campaignOwnedElsewhere, ownerRefusal } from "@/lib/campaign/campaign-owner";
 
 const exactRupees = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" });
 
@@ -105,6 +106,8 @@ async function handlePATCH(
     .eq("id", id)
     .maybeSingle();
   if (!campaign) return apiError("Campaign not found", 404);
+  const refused = await ownerRefusal(campaign.business_id, campaign.meta_campaign_id);
+  if (refused) return refused;
 
   let context: Awaited<ReturnType<typeof requireOwnedBusiness>>;
   try {
@@ -391,45 +394,51 @@ async function handleDELETE(
     return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
   }
 
-  const storedBinding = readStoredCampaignBinding(campaign);
-  if (
-    !storedBinding.metaAdAccountId ||
-    !storedBinding.metaPageId ||
-    storedBinding.metaConnectionGeneration === null
-  ) {
-    return NextResponse.json(
-      { error: "This campaign needs account reconciliation before it can be deleted." },
-      { status: 409 },
-    );
-  }
+  // #1138: a duplicate of another business's Meta campaign is removed from AdBrain only.
+  const elsewhere = await campaignOwnedElsewhere(campaign.business_id, campaign.meta_campaign_id).catch(() => null);
+  if (elsewhere === null) return NextResponse.json({ error: "Campaign storage unavailable. Try again." }, { status: 503 });
 
-  // Remove it from Meta first (best-effort — it may already be gone there).
   let metaDeleted = false;
-  try {
-    const context = await requireOwnedBusiness(campaign.business_id);
-    await withMetaConnection(
-      context,
-      {
-        purpose: "delete",
-        binding: {
-          adAccountId: storedBinding.metaAdAccountId,
-          pageId: storedBinding.metaPageId,
-        },
-        expectedGeneration: storedBinding.metaConnectionGeneration,
-      },
-      async (meta) => {
-        if (campaign.meta_campaign_id) await meta.deleteObject(campaign.meta_campaign_id);
-      },
-    );
-    metaDeleted = Boolean(campaign.meta_campaign_id);
-  } catch (err) {
-    if (err instanceof ConnectionAccessError) {
-      return NextResponse.json({ error: err.message }, { status: err.code === "CONFLICT" ? 409 : 400 });
+  if (!elsewhere) {
+    const storedBinding = readStoredCampaignBinding(campaign);
+    if (
+      !storedBinding.metaAdAccountId ||
+      !storedBinding.metaPageId ||
+      storedBinding.metaConnectionGeneration === null
+    ) {
+      return NextResponse.json(
+        { error: "This campaign needs account reconciliation before it can be deleted." },
+        { status: 409 },
+      );
     }
-    return NextResponse.json(
-      { error: "Meta deletion could not be confirmed. The campaign remains in AdBrain so you can check its status." },
-      { status: 502 },
-    );
+
+    // Remove it from Meta first (best-effort — it may already be gone there).
+    try {
+      const context = await requireOwnedBusiness(campaign.business_id);
+      await withMetaConnection(
+        context,
+        {
+          purpose: "delete",
+          binding: {
+            adAccountId: storedBinding.metaAdAccountId,
+            pageId: storedBinding.metaPageId,
+          },
+          expectedGeneration: storedBinding.metaConnectionGeneration,
+        },
+        async (meta) => {
+          if (campaign.meta_campaign_id) await meta.deleteObject(campaign.meta_campaign_id);
+        },
+      );
+      metaDeleted = Boolean(campaign.meta_campaign_id);
+    } catch (err) {
+      if (err instanceof ConnectionAccessError) {
+        return NextResponse.json({ error: err.message }, { status: err.code === "CONFLICT" ? 409 : 400 });
+      }
+      return NextResponse.json(
+        { error: "Meta deletion could not be confirmed. The campaign remains in AdBrain so you can check its status." },
+        { status: 502 },
+      );
+    }
   }
 
   const { error } = await deleteVerifiedCampaign({ businessId: campaign.business_id, userId: user.id }, id)
@@ -444,8 +453,8 @@ async function handleDELETE(
     entityType: "campaign",
     entityId: id,
     metaObjectId: campaign.meta_campaign_id,
-    reason: `Deleted campaign "${campaign.name ?? id}"`,
-    details: { metaDeleted },
+    reason: elsewhere ? `Removed duplicate of another business's campaign "${campaign.name ?? id}"` : `Deleted campaign "${campaign.name ?? id}"`,
+    details: { metaDeleted, ...elsewhere ? { ownedElsewhere: true } : {} },
   });
 
   return NextResponse.json({ ok: true, metaDeleted });

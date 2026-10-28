@@ -107,7 +107,8 @@ vi.mock("@/lib/payments/operator-funding", () => ({
 }));
 vi.mock("@/lib/campaign/activation-learning", () => ({ getActivationLearning: mocks.getActivationLearning }));
 vi.mock("@/lib/campaign/learnings", () => ({ recordLaunchCap: mocks.recordLaunchCap }));
-vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({}) }));
+// #1138's ownership read sees no other business's row.
+vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: () => ({ select: () => ({ eq: async () => ({ data: [], error: null }) }) }) }) }));
 
 function patch(body: unknown): Request {
   return new Request("http://localhost/api/campaigns/campaign-1", {

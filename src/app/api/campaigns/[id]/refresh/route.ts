@@ -13,6 +13,7 @@ import {
   withMetaConnection,
 } from "@/lib/meta/connection-access";
 import { readStoredCampaignBinding } from "@/lib/campaign/binding";
+import { ownerRefusal } from "@/lib/campaign/campaign-owner";
 import { resultsStale } from "@/lib/campaign/results-freshness";
 import { createClient } from "@/lib/supabase/server";
 import { saveCampaign, saveCampaignResult } from "@/lib/campaign/trusted-write";
@@ -49,6 +50,9 @@ async function handlePOST(
       { status: 400 },
     );
   }
+  // #1138: a refresh can auto-pause on Meta (spend enforcement), so a duplicate row never reaches it.
+  const refused = await ownerRefusal(campaign.business_id, campaign.meta_campaign_id);
+  if (refused) return refused;
 
   const storedBinding = readStoredCampaignBinding(campaign);
   if (
