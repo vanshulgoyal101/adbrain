@@ -18,6 +18,27 @@ type QueueBusiness = Pick<
 
 type BrandField = "description" | "voice" | "audience" | "areas";
 
+/**
+ * #1630 (CPO, #1604): the ₹999 plan's status, as #1442's `readPlan` returns it, or null while PLAN_BILLING_ENABLED is
+ * off or the business isn't on the plan. Home is where a pilot owner lives, so the free month's end shows there.
+ */
+export type QueuePlan =
+  | { state: "exempt" }
+  | { state: "trial_not_started" }
+  | { state: "free" | "paid"; until: string; dueSoon: boolean }
+  | { state: "unpaid"; since: string };
+
+function planItem(plan: QueuePlan | null | undefined, locale: AppLocale): WorkItem | null {
+  const t = translator(locale, "workQueue");
+  if (plan?.state === "unpaid")
+    return { id: "plan", title: t("planDueTitle"), detail: t("planDueDetail"), href: "/settings#plan-title", action: t("planPayAction"), tone: "attention" };
+  if (plan?.state === "free" && plan.dueSoon) {
+    const date = new Intl.DateTimeFormat(locale === "hi" ? "hi-IN" : "en-IN", { day: "numeric", month: "long", timeZone: "Asia/Kolkata" }).format(new Date(plan.until));
+    return { id: "plan", title: t("planFreeEndsTitle", { date }), detail: t("planFreeEndsDetail"), href: "/settings#plan-title", action: t("planPayAction"), tone: "work" };
+  }
+  return null;
+}
+
 function missingFields(business: QueueBusiness): BrandField[] {
   return ([
     !business.description?.trim() && "description",
@@ -39,6 +60,7 @@ export function buildWorkQueue({
   metaReady,
   now = Date.now(),
   locale = "en",
+  plan = null,
 }: {
   business: QueueBusiness | null;
   creatives: (Pick<Creative, "id" | "status"> & Partial<Pick<Creative, "created_at" | "variant_group">>)[];
@@ -47,6 +69,8 @@ export function buildWorkQueue({
   now?: number;
   /** #1438: the owner's app language. */
   locale?: AppLocale;
+  /** #1630: the ₹999 plan, when billing is on (see `QueuePlan`). */
+  plan?: QueuePlan | null;
 }): WorkItem[] {
   const t = translator(locale, "workQueue");
   if (!business)
@@ -157,5 +181,8 @@ export function buildWorkQueue({
       action: t("campaignsAction"),
       tone: "work",
     });
+  // #1630: the plan comes first; an unpaid plan stops new ads and campaigns.
+  const due = planItem(plan, locale);
+  if (due) queue.unshift(due);
   return queue;
 }
