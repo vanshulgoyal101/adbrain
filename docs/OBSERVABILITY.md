@@ -383,6 +383,9 @@ where name = 'ai.completion' and outcome = 'failed' and created_at >= now() - in
 group by 1, 2 order by failures desc;
 ```
 
+`business.create` and `business.update` carry `brandUsable` (#1136): whether the saved Brand has
+what Prepare needs (name, category, area, phone, offer). The core scoreboard's Brand row uses it.
+
 A rejected `campaign.review` event carries `blockerCodes`, the stable reason of every
 Review blocker (#688; `errorCode` is the first). Rank them, then leave out internal accounts
 (`scripts/lib/internal-accounts.mjs`): the production smoke is rejected on `REVIEW_NO_WEBSITE` by design.

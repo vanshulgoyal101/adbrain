@@ -21,7 +21,8 @@ const COMMON_FIRST = /^(?:free|complimentary|flat|special|first|new|home|same-da
 
 /** #1114: an offer as a question a customer would send, in the run's language; the offer keeps the owner's words. */
 const ASK: Record<Language, { free: (offer: string) => string; other: (offer: string) => string }> = {
-  en: { free: (offer) => `Can I book a ${offer}?`, other: (offer) => `Can I get ${offer}?` },
+  // A priced item takes "the": "Can I get the $49 new-patient exam?".
+  en: { free: (offer) => `Can I book a ${offer}?`, other: (offer) => `Can I get ${/^[$₹€£]|^rs\.?\s?\d/i.test(offer) ? "the " : ""}${offer}?` },
   hinglish: { free: (offer) => `${offer} book ho sakta hai?`, other: (offer) => `${offer} kaise milega?` },
   hi: { free: (offer) => `${offer} बुक हो सकता है?`, other: (offer) => `${offer} कैसे मिलेगा?` },
   pa: { free: (offer) => `${offer} ਬੁੱਕ ਹੋ ਸਕਦਾ ਹੈ?`, other: (offer) => `${offer} ਕਿਵੇਂ ਮਿਲੇਗਾ?` },
@@ -37,8 +38,10 @@ function asked(offer: string, language: Language): string {
 /**
  * Up to two offers as tap-to-send questions, in the owner's own words so the claim check accepts them.
  * A long offer keeps only what follows its label ("Diwali offer: 10% off rooftop solar installation" →
- * "10% off rooftop solar installation"). When the question doesn't fit, the offer's own words are sent as
- * they are; one that still doesn't fit is skipped, never cut mid-claim.
+ * "10% off rooftop solar installation"). When the question doesn't fit, it asks for the first item of the
+ * offer, ending at a joining word ("$49 new-patient exam and consultation" → "Can I get the $49
+ * new-patient exam?"; only when the price stays with it), else the offer itself as a question
+ * ("Check-up and cleaning for ₹499?"); one that still doesn't fit is skipped, never cut (Designer, #1114).
  */
 function offerQuestions(offers: string[], language: Language): string[] {
   const questions: string[] = [];
@@ -46,10 +49,15 @@ function offerQuestions(offers: string[], language: Language): string[] {
     const offer = raw.trim().replace(/[.!]+$/, "");
     if (!offer || LINK_OR_PHONE.test(offer)) continue;
     const afterLabel = offer.split(/:\s+/).slice(1).join(": ").trim();
-    // The question if it fits, else the offer's own words as today (#905): never cut mid-claim.
-    // A label reads badly in a question ("Can I get Diwali offer: …?"), so the words after it come first.
-    const words = [afterLabel, offer].filter(Boolean);
-    const question = words.map((text) => asked(text, language)).find(fits) ?? words.find(fits);
+    // A label reads badly in a question ("Can I get Diwali offer: …?"), so the words after it come first;
+    // then the first item before "and", "with", "+" or "&", which keeps a price with what it buys.
+    const whole = [afterLabel, offer].filter(Boolean);
+    const priced = (text: string) => /[$₹€£%]|\d/.test(text);
+    const firstItems = whole.map((text) => text.split(/\s+(?:and|with|plus|\+|&)\s+/i)[0].trim())
+      .filter((text, index) => text !== whole[index] && text.split(/\s+/).length >= 2 && priced(text) === priced(whole[index]));
+    // Last resort, still a question and never cut: the offer itself ("Check-up and cleaning for ₹499?").
+    const question = [...whole, ...firstItems].map((text) => asked(text, language)).find(fits)
+      ?? whole.map((text) => `${text}?`).find(fits);
     if (question && !questions.includes(question)) questions.push(question);
     if (questions.length === 2) break;
   }

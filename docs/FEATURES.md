@@ -37,7 +37,7 @@ ID are different identifiers. Never infer one from another.
 | --- | --- | --- |
 | `/dashboard` | Results so far first (enquiries, spent, per enquiry, oldest update; same latest results as the campaign cards, #764; the median time to first reply over 30 days, #1049), next action, onboarding progress, activity | Uses stored state; not proof of live provider health |
 | `/brand` | Profile, assets, Markdown instructions | Saved business facts ground AI output |
-| `/create` | Guided creative interview and brief review | Reviewing a brief is distinct from paid generation; the Brand context panel names missing offers, service areas and phone before a run. Any goal, typed or from a suggestion, on a Brand with an offer or proof point, an area and a phone skips the review when the interview needs no question. The start screen says what the ads will use ('Your 3 ads will use: Mohali · offer: Free site survey'; every Brand area Create sends, the first 3 then '+N more' (#1034); a proof point is labelled 'proof:', facts cut at 40 characters) above 'Make 3 ads', with 'About 2 minutes. Nothing is published.' under it and 'Edit brief' to keep the review; afterwards the brief shows as a collapsed 'What I'll write about · Edit' line (#858, #1004). After 'Use this ad', 'Review campaign' opens `/campaigns?…&review=1`, which prepares Review on its own (#1004) Up to two 'Coming up' occasion chips (festivals and seasons for today's date in IST, `src/lib/seasonal.ts`) fill the goal in one tap; their wording asks for saved offers only and never asserts a sale, discount or deadline (#700) |
+| `/create` | Guided creative interview and brief review | Reviewing a brief is distinct from paid generation; the Brand context panel names missing offers, service areas and phone before a run. Any goal, typed or from a suggestion, on a Brand with an offer or proof point, an area and a phone skips the review when the interview needs no question. The start screen says what the ads will use ('Your 3 ads will use: Mohali · offer: Free site survey'; every Brand area Create sends, the first 3 then '+N more' (#1034); a proof point is labelled 'proof:', facts cut at 40 characters) above 'Make 3 ads', with 'About 2 minutes. Nothing is published.' under it and 'Edit brief' to keep the review; afterwards the brief shows as a collapsed 'What I'll write about · Edit' line (#858, #1004). After 'Use this ad', the one primary step 'Next: set up campaign' opens `/campaigns?…&review=1`, which prepares Review on its own (#1004, #1152); 'Review ads' and 'Make another' stay in the quieter row above. Up to two 'Coming up' occasion chips (festivals and seasons for today's date in IST, `src/lib/seasonal.ts`) fill the goal in one tap; their wording asks for saved offers only and never asserts a sale, discount or deadline (#700) |
 | `/studio` | Generate, inspect, approve, edit (ad text, words on picture, background), regenerate (asks first), delete, export, share approved ads (phone share sheet; desktop downloads and copies the text); "Create campaign (N)" links approved ads to Campaigns | Approval and sharing do not publish an ad on Meta |
 | `/assets` | Browse/reuse/download saved images | Download/clipboard failures are surfaced |
 | `/campaigns` | Draft, review, create paused, activate/pause, sync, report; `?new=1&creatives=<ids>` opens the composer with those approved ads selected; `&review=1` (#1004, from Create) then prepares Review on its own once Meta is connected, the WhatsApp check has run and a form campaign has its lead form (the same prepare as the Review button; nothing is sent to Meta). The lead form used for the last Review is preselected while the Page still has it; with several forms and none chosen, the field says choosing one opens Review | Live Meta writes require verified binding and capability |
@@ -147,9 +147,12 @@ paid request. Browser recovery metadata is scoped to user/business in session
 storage; it is not cross-device durable generation idempotency.
 
 The Review board groups ads by Create batch (`variant_group`), newest batch first
-and open, older batches folded (#762). Unreviewed ads older than 7 days sit in a
-folded "Older unreviewed ads" section and leave the Needs review count; this is
-view-only, so approving one brings it back.
+and open, older batches folded (#762). Unreviewed ads older than 7 days, and the
+ads not picked from a batch once one of them is approved (#1148), sit in a folded
+"Set aside" section and leave the Needs review count (Home's too); this is
+view-only, so approving one brings it back. With approved ads and no campaign
+running, paused or drafted, Home's next step is "Launch a campaign with your
+approved ads", ahead of any review.
 
 Newly saved creatives use a smaller WebP for Review board and generated Assets
 tiles when the derivative is smaller and its upload succeeds. Inspect, Open,
@@ -222,6 +225,11 @@ tab produce a conflict rather than a silent overwrite. Updates do not extend the
 original expiry. Drafts tied to a creation operation have additional edit/delete
 restrictions.
 
+A new campaign is named after its first chosen ad until the owner types a name:
+headline · WhatsApp or Lead form · day, e.g. "Free 15-minute spine check · WhatsApp ·
+Oct 28" (the day appears once the browser has loaded). Preparing exactly the same ads
+again updates their saved draft instead of adding another (#1151).
+
 Starting a replacement review invalidates the old send action immediately.
 A failed validation, save, or reconnect does not erase a confirmed operation's
 status; recovery is replaced only after the new draft is saved.
@@ -264,12 +272,11 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
   reach the browser before review) as **WhatsApp button number** and saves the chosen
   mask in the draft; preflight resolves it to the full number. A new campaign, and a plan
   from AdBrain, opens on **WhatsApp chat (recommended)**, listed first; without a ready
-  number the "WhatsApp ready?" checklist shows how to link one, with a one-tap "Use an
+  number the setup says how to link one, with a one-tap "Use an
   Instant form for now", and Create's "Review this ad" waits instead of preparing a blocked
   review (#1171). Instant form is the second choice and still fully supported; a restored
   draft keeps its destination.
-  The Brand's Website reads "needed only for instant forms" and isn't in the readiness count.
-  There is no nudge toward WhatsApp's AI reply (owner rule: no extra automated messages). A guided draft uses the Page's own
+  The Brand's Website reads "needed only for instant forms" and isn't in the readiness count. A guided draft uses the Page's own
   number until it is prepared again from manual setup.
 - Review displays and hashes the verified number. Creation rechecks it before
   any mutation. WhatsApp never silently falls back to a form.
@@ -279,10 +286,14 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
 - A WhatsApp campaign's results say how many opened WhatsApp and how many messaged
   ("12 opened WhatsApp, 1 messaged you": Meta `link_click` vs
   `messaging_conversation_started_7d`, #493).
-- **WhatsApp ready?** (#493): on Campaigns, when setting up or running a WhatsApp
-  campaign, a checklist for the owner's WhatsApp Business app: profile photo and
-  name, greeting message, away message, reply within 5 minutes. AdBrain can't read
-  these, so the owner ticks them; ticks are kept on that device per business.
+- **4 tips to get more replies** (#493, #1154): on Campaigns, when setting up or running a
+  WhatsApp campaign, a folded checklist for the owner's WhatsApp Business app: profile photo
+  and name, greeting message, away message, reply within 5 minutes. They're optional tips, so
+  the line shows a count only once one is ticked ("2 of 4 done"). AdBrain can't read these, so
+  the owner ticks them; ticks are kept on that device per business. There is no nudge toward
+  WhatsApp's AI reply (#1171; tag `removed/whatsapp-ai-card`).
+- With no setup open, Campaigns lists the campaigns first; Saved drafts follow the list
+  (#1154) and fold to one line above the setup while one is open.
 - Each WhatsApp creative carries a `page_welcome_message` built from Brand facts
   (#209, #493): a short greeting asking the customer to send, and one short
   pre-typed ask ("Hi! I'd like a free site survey.") naming one offer the ads
@@ -399,8 +410,9 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
   up to 2 offers asked as a customer would, in the owner's words ("Can I book a free site survey?",
   "Can I get PM Surya Ghar subsidy help?"; Hinglish "… book ho sakta hai?" / "… kaise milega?",
   Hindi and Punjabi alike), then "What's the price?" or "Call me back". A labelled offer is asked by
-  the words after its label; when the question would pass 40 characters the offer goes in its own
-  words, and one that still doesn't fit is skipped, never cut mid-claim. A free offer is booked,
+  the words after its label; when the question would pass 40 characters it asks for the offer's first
+  item with its price ("Can I get the $49 new-patient exam?"), else the offer itself as a question
+  ("Check-up and cleaning for ₹499?"); one that still doesn't fit is skipped, never cut mid-claim. A free offer is booked,
   never asked as a cost. They are only suggestions: nothing is sent until the owner saves (or uses
   them for the campaign), and saving runs the claim check.
   #418 rule 7: when every ad's last line quotes the words to send ('WhatsApp “Free site survey” to

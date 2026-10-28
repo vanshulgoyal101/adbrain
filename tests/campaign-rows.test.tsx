@@ -107,6 +107,11 @@ describe("Campaigns rows (#403 S5)", () => {
     render(<Campaigns business={business} approved={[]} initialCampaigns={[paused]} initialResults={{}} initialDrafts={[draft] as never}
       leadForms={[]} leadFormError={null} metaReady={false} adAccountId="act_999" />);
     expect(screen.getByText("Diwali leads")).toBeInTheDocument();
+    // #1154: with no setup open, the campaigns come first and the drafts follow them, folded.
+    const drafts = screen.getByRole("group", { name: "Saved drafts" });
+    expect(drafts).not.toHaveAttribute("open");
+    const firstCampaign = screen.getByRole("heading", { name: "Rooftop solar" });
+    expect(firstCampaign.compareDocumentPosition(drafts) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("says when a row has no results yet, and shows them when it has", async () => {

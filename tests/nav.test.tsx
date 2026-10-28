@@ -211,4 +211,11 @@ describe("Help on WhatsApp (#796)", () => {
     view.rerender(<WorkspaceShell email={null} businessName="Fixture" ownerId="owner" businessId="business"><p>Workspace</p></WorkspaceShell>);
     expect(screen.queryByRole("link", { name: "Help on WhatsApp", hidden: true })).toBeNull();
   });
+
+  it("#1166: the first screen after sign-up names itself 'Get started', not 'Workspace'", () => {
+    pathname.mockReturnValue("/onboarding");
+    render(<WorkspaceShell email={null} businessName="Fixture" ownerId="owner" businessId="business"><p>Onboarding</p></WorkspaceShell>);
+    expect(screen.getByText("Get started", { selector: "strong" })).toBeInTheDocument();
+    expect(screen.queryByText("Workspace", { selector: "strong" })).toBeNull();
+  });
 });

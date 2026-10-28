@@ -21,7 +21,7 @@ import { CampaignEditError } from "./edit-service";
 
 export { BACK_TO_REVIEW } from "./ad-edit-copy";
 import { BACK_TO_REVIEW } from "./ad-edit-copy";
-export const AD_RATE_LIMITED = "Meta needs 30 seconds between ad changes. Try again in a moment.";
+const AD_RATE_LIMITED = "Meta needs 30 seconds between ad changes. Try again in a moment.";
 
 const words = (max: number) => z.string().trim().min(1).max(max);
 export const adCopyEditSchema = z.object({

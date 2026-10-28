@@ -152,6 +152,19 @@ describe("core: every Review blocker has a one-tap fix (#723)", () => {
     fireEvent.click(within(region).getByRole("button", { name: reviewBlockerFix(reason)!.label }));
     expect(control()).toHaveFocus();
     expect(scrollIntoView.mock.contexts).toContain(control());
+    // #1155: a fix inside the folded "Change who sees it" opens it first.
+    const fold = control().closest("details");
+    if (fold?.id === "who-sees-it") expect(fold.open).toBe(true);
+  });
+
+  it("folds goal, audience and the A/B test under 'Change who sees it', closed for a default setup (#1155)", async () => {
+    render(<Campaigns business={business} approved={[creative]} initialCampaigns={[]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady adAccountId="" />);
+    const fold = screen.getByText("Change who sees it").closest("details")!;
+    expect(fold.open).toBe(false);
+    expect(within(fold).getByLabelText("Campaign goal")).toBeInTheDocument();
+    expect(within(fold).getByText("A/B test the audience by age")).toBeInTheDocument();
+    expect(fold.contains(screen.getByLabelText("Daily budget (₹)"))).toBe(false);
+    expect(fold.contains(screen.getByRole("button", { name: "Check my campaign (nothing spends)" }))).toBe(false);
   });
 
   // With areas chosen by hand: Meta's own city picks go through the search; typed names (#740) sit in Planned areas.

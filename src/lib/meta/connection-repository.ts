@@ -16,9 +16,9 @@ import {
 } from "./token-store";
 import { buildAttemptBlockers } from "./attempt-recovery";
 
-export const META_ATTEMPT_TTL_MS = 10 * 60_000;
+const META_ATTEMPT_TTL_MS = 10 * 60_000;
 
-export function hashConnectionSecret(value: string): string {
+function hashConnectionSecret(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
 }
 

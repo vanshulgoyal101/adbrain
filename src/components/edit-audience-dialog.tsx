@@ -13,7 +13,7 @@ import { AD_LANGUAGES } from "@/lib/meta/locales";
 type Preview = { adSets: Array<{ mode: "patch" | "rebuild" | "copy" }>; consequence: string | null };
 
 /** #765 (b): the CPO's words when Meta can't change a running ad set in place. */
-export const MAKE_COPY_WORDS = "Meta doesn't allow this change on a running campaign. We'll make a fresh copy with your change (paused, back to review, learning restarts) and stop the old one when you turn the new one on.";
+const MAKE_COPY_WORDS = "Meta doesn't allow this change on a running campaign. We'll make a fresh copy with your change (paused, back to review, learning restarts) and stop the old one when you turn the new one on.";
 const needsCopy = (preview: Preview) => preview.adSets.some(adSet => adSet.mode === "copy");
 
 /** What the owner reads before saving: which ad sets change and what that costs them. */

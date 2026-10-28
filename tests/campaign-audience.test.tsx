@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { StrictMode } from "react";
 import { QueryClient, focusManager, onlineManager } from "@tanstack/react-query";
 import { Campaigns } from "@/components/campaigns";
+import { campaignNameDate } from "@/lib/campaign/draft-name";
 import { useCampaignList } from "@/lib/meta-connect-ui/use-campaign-list";
 import type { DraftDTO, DraftInput } from "@/lib/campaign/connect-contracts";
 import type { Business, Campaign, CampaignResult, Creative } from "@/lib/types";
@@ -511,6 +512,31 @@ describe("campaign audience workflow", () => {
     }
   });
 
+  // #1151: drafts named after their first ad, and one draft per ad selection (#1171: WhatsApp is the default channel).
+  it("names a new campaign after its first ad until the owner types a name", async () => {
+    view();
+    await act(async () => {});
+    const field = screen.getByLabelText("Campaign name");
+    expect(field).toHaveValue(`Solar installer · WhatsApp · ${campaignNameDate(new Date())}`);
+    fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
+    expect(field).toHaveValue(`Lower electricity bills · WhatsApp · ${campaignNameDate(new Date())}`);
+    fireEvent.change(field, { target: { value: "Diwali push" } });
+    fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
+    expect(field).toHaveValue("Diwali push");
+  });
+
+  it("updates the saved draft for the same ads instead of adding another", async () => {
+    const existing = { draftId: "44444444-4444-4444-8444-444444444444", version: 3, expiresAt: "2099-01-01T00:00:00.000Z",
+      input: { businessId: business.id, name: "Lower electricity bills · Lead form · Oct 27", goal: "", mode: "manual", creativeIds: [creative.id], dailyBudgetRupees: 300, leadFormId: "form-1", destination: "instant_form", targeting: recommended, abTest: false } } as DraftDTO;
+    mocks.drafts.mockResolvedValue([existing]);
+    view();
+    await screen.findByText("Saved drafts");
+    fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
+    fireEvent.click(screen.getByRole("button", { name: "Check my campaign (nothing spends)" }));
+    await waitFor(() => expect(mocks.updateDraft).toHaveBeenCalledWith(existing.draftId, 3, expect.objectContaining({ creativeIds: [creative.id] }), expect.anything()));
+    expect(mocks.saveDraft).not.toHaveBeenCalled();
+  });
+
   it("times out a stalled preparation and preserves editable inputs", async () => {
     vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
     view();
@@ -523,7 +549,7 @@ describe("campaign audience workflow", () => {
       await act(async () => { vi.advanceTimersByTime(60_000); });
       expect(signal.aborted).toBe(true);
       expect(screen.getByText(/Campaign preparation timed out/)).toBeInTheDocument();
-      expect(screen.getByLabelText("Campaign name")).toHaveValue("Solar installer — leads");
+      expect(screen.getByLabelText("Campaign name")).toHaveValue(`Lower electricity bills · WhatsApp · ${campaignNameDate(new Date())}`);
       expect(screen.getByRole("button", { name: "Check my campaign (nothing spends)" })).toBeEnabled();
       expect(mocks.saveDraft).not.toHaveBeenCalled();
     } finally { vi.useRealTimers(); }

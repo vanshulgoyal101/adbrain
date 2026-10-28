@@ -188,6 +188,15 @@ describe("contextual creative recommendations", () => {
     expect(creativeRecommendations({ name: "New business" }).some((item) => item.id.startsWith("offer"))).toBe(false);
   });
 
+  it("fills the goal box with the owner's plain words, never instructions for the model (#1153)", () => {
+    const full = { name: "Solaride", offers: ["Free site survey", "Diwali offer: 10% off rooftop solar installation"], usps: ["Local teams in Mohali"], target_audience: "Homeowners in Punjab", locations: ["Mohali", "Chandigarh"] };
+    const goals = [...creativeRecommendations(full), ...creativeRecommendations(full, "Promote our Free site survey."), ...creativeRecommendations({ name: "Solaride" }), ...creativeFollowUps()].map((item) => item.prompt);
+    expect(goals).toContain("Promote our Free site survey.");
+    for (const goal of goals) {
+      expect(goal).not.toMatch(/Do not add|saved (?:offer|business|brand|service)|Brand Brain|unsupported|invented|without adding claims|Build the hook|Preserve all|confirmed (?:message|offer)|Explore a different/i);
+    }
+  });
+
   it("does not repeat a fact already in the query and diversifies recent directions", () => {
     const input = { name: "Cedar", offers: ["Consultation"], usps: ["Evening appointments"], locations: ["Austin"] };
     expect(creativeRecommendations(input, "Promote Consultation").some((item) => item.label === "Feature: Consultation")).toBe(false);

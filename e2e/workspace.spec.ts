@@ -122,6 +122,24 @@ for (const width of [1440, 390, 320]) {
     await expect(page.getByRole("button", { name: "Explore another scene" })).toBeVisible();
     expect(recoveryIds).toEqual([identity]);
     expect(generationBodies).toHaveLength(1);
+    // #1152: after "Use this ad" there is one primary step, and its first tap navigates.
+    await page.evaluate(() => {
+      const key = Object.keys(sessionStorage).find((key) => key.startsWith("adbrain:assistant:"))!;
+      const draft = JSON.parse(sessionStorage.getItem(key)!);
+      draft.turns = draft.turns.map((turn: { role: string; creatives?: { status: string }[] }) => turn.role === "result"
+        ? { ...turn, creatives: turn.creatives!.map((creative) => ({ ...creative, status: "approved" })) } : turn);
+      sessionStorage.setItem(key, JSON.stringify(draft));
+    });
+    await page.reload();
+    const next = page.getByRole("link", { name: "Next: set up campaign" });
+    await expect(next).toBeVisible();
+    await expect(page.getByRole("link", { name: "Review campaign" })).toHaveCount(0);
+    await expect(page.locator("#workspace-main").getByRole("link", { name: /review/i })).toHaveText(["Review ads"]);
+    await checkLayout("selected");
+    await next.click();
+    await expect(page).toHaveURL(/\/campaigns\?new=1&creatives=creative-harness-fixture&review=1$/);
+    await page.goBack();
+    await expect(next).toBeVisible();
     // #1034: on a phone the finished batch's "Make another" must take a real tap (nothing may sit over it).
     await page.getByRole("button", { name: "Make another" }).click();
     await expect(page.getByRole("textbox", { name: "Campaign goal" })).toBeVisible();

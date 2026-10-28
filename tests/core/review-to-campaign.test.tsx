@@ -155,7 +155,7 @@ describe("Review to campaign (#134)", () => {
       expect(mocks.saveDraft).not.toHaveBeenCalled();
       expect(mocks.preflight).not.toHaveBeenCalled();
       expect(document.getElementById("campaign-composer")!.hidden).toBe(false);
-      expect(screen.getByRole("region", { name: "WhatsApp ready?" })).toBeInTheDocument();
+      expect(screen.getByRole("region", { name: "4 tips to get more replies" })).toBeInTheDocument();
     });
 
     it("never prepares on its own without the flag", async () => {

@@ -58,7 +58,11 @@ vi.mock("@/lib/meta/credentials", () => ({ metaClientForBusiness: mocks.metaClie
 vi.mock("@/lib/creative/summary", () => ({ summarizeInsights: mocks.summarizeInsights }));
 vi.mock("@/lib/campaign/spend-enforce", () => ({ enforceAutoPauseWithStatus: mocks.enforceAutoPauseWithStatus }));
 vi.mock("@/lib/audit", () => ({ logEvent: mocks.logEvent }));
-vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: (table: string) => ({ upsert: (rows: unknown, options: unknown) => mocks.upsert(table, rows, options) }) }) }));
+// #1138's ownership read sees no other business's row.
+vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: (table: string) => ({
+  upsert: (rows: unknown, options: unknown) => mocks.upsert(table, rows, options),
+  select: () => ({ in: async () => ({ data: [], error: null }) }),
+}) }) }));
 
 function request(): Request {
   return new Request("http://localhost/api/campaigns/campaign-1/refresh", { method: "POST" });
