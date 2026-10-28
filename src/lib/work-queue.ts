@@ -39,6 +39,7 @@ export function buildWorkQueue({
   metaReady,
   now = Date.now(),
   locale = "en",
+  unloggedChats = 0,
 }: {
   business: QueueBusiness | null;
   creatives: (Pick<Creative, "id" | "status"> & Partial<Pick<Creative, "created_at" | "variant_group">>)[];
@@ -47,6 +48,8 @@ export function buildWorkQueue({
   now?: number;
   /** #1438: the owner's app language. */
   locale?: AppLocale;
+  /** #1624: WhatsApp chats with no real enquiry or customer logged yet (`unloggedChats`). */
+  unloggedChats?: number;
 }): WorkItem[] {
   const t = translator(locale, "workQueue");
   if (!business)
@@ -90,6 +93,15 @@ export function buildWorkQueue({
       detail: t("reviewDetail"),
       href: "/studio?status=draft",
       action: t("reviewAction"),
+      tone: "work",
+    });
+  if (unloggedChats > 0)
+    queue.push({
+      id: "chats",
+      title: t("chatsTitle", { n: unloggedChats }),
+      detail: t("chatsDetail"),
+      href: "/leads",
+      action: t("chatsAction"),
       tone: "work",
     });
   if (missing.length)

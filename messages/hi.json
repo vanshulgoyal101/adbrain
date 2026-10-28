@@ -28,7 +28,9 @@
     "approved": "मंज़ूर",
     "setAside": "अलग रखा",
     "metaChecking": "Meta आपके विज्ञापन जांच रहा है। आमतौर पर एक दिन में दिखने लगते हैं।",
-    "metaReview": "Meta जांच"
+    "metaReview": "Meta जांच",
+    "chats": "चैट",
+    "perChat": "हर चैट"
   },
   "workQueue": {
     "brandTitle": "अपना बिज़नेस सेट करें",
@@ -64,7 +66,10 @@
     "exportAction": "विज्ञापन डाउनलोड करें",
     "campaignsTitle": "चालू करने से पहले कैंपेन जाँचें",
     "campaignsDetail": "{paused} रुके हुए, {draft} ड्राफ़्ट। विज्ञापन, ग्राहक और बजट जाँचें; तैयार होने तक रुका रहने दें।",
-    "campaignsAction": "कैंपेन जाँचें"
+    "campaignsAction": "कैंपेन जाँचें",
+    "chatsTitle": "आपकी {n} चैट में से कौन-सी असली पूछताछ थीं?",
+    "chatsDetail": "हर असली पूछताछ जोड़ें, ताकि पता चले एक पूछताछ कितने की पड़ी।",
+    "chatsAction": "पूछताछ जोड़ें"
   },
   "settings": {
     "language": "ऐप की भाषा",

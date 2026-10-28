@@ -28,7 +28,9 @@
     "approved": "Approved",
     "setAside": "Set aside",
     "metaChecking": "Meta is checking your ads. They usually start showing within a day.",
-    "metaReview": "Meta review"
+    "metaReview": "Meta review",
+    "chats": "Chats",
+    "perChat": "Per chat"
   },
   "workQueue": {
     "brandTitle": "Set up your business",
@@ -64,7 +66,10 @@
     "exportAction": "Export ads",
     "campaignsTitle": "Review campaigns before activation",
     "campaignsDetail": "{paused} paused, {draft} draft. Check the creative, audience, and budget; leave paused until you are ready.",
-    "campaignsAction": "Review campaigns"
+    "campaignsAction": "Review campaigns",
+    "chatsTitle": "Which of your {n} chats were real enquiries?",
+    "chatsDetail": "Add each real one so you can see what an enquiry costs you.",
+    "chatsAction": "Add enquiries"
   },
   "settings": {
     "language": "App language",

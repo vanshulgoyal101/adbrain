@@ -365,7 +365,7 @@ describe("Home workspace", () => {
     queries.getMetaConnection.mockResolvedValue({ ready: true });
     queries.getSpendEvaluation.mockResolvedValue({ evaluation: { status: "healthy" } });
     queries.getAuditLog.mockResolvedValue([]);
-    queries.getLatestResults.mockResolvedValue({});
+    queries.getLatestResultsWithEnquiries.mockResolvedValue({});
     queries.getAdStatuses.mockResolvedValue(["PENDING_REVIEW", "IN_PROCESS"]);
     const { default: DashboardPage } = await import("@/app/(app)/dashboard/page");
     render(await DashboardPage());
@@ -506,12 +506,12 @@ describe("Home results row (#764)", () => {
     queries.getCreativePreviews.mockResolvedValue([]);
     queries.getAuditLog.mockResolvedValue([]);
     queries.getCampaigns.mockResolvedValue([chats, forms, { ...forms, id: "c-draft", meta_campaign_id: null }]);
-    queries.getLatestResults.mockResolvedValue(results);
+    queries.getLatestResultsWithEnquiries.mockResolvedValue(results);
     queries.getSpendEvaluation.mockResolvedValue({ limits: {}, evaluation: { status: "healthy" } });
     queries.getMetaConnection.mockResolvedValue({ ready: true });
     const { default: DashboardPage } = await import("@/app/(app)/dashboard/page");
     render(await DashboardPage());
-    expect(queries.getLatestResults).toHaveBeenCalledWith(["c-wa", "c-form"]);
+    expect(queries.getLatestResultsWithEnquiries).toHaveBeenCalledWith(["c-wa", "c-form"]);
     expect(screen.getByRole("region", { name: "Results so far" })).toBeInTheDocument();
   });
 });
