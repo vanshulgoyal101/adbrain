@@ -347,7 +347,7 @@ in issues.
    (it saves as you go), then **Make my ads**.
 3. Step 2, "Your ads": all 3 are picked; **Download sample pack (3)** approves them and downloads the
    marked pack (no Review, no Go live). Don't connect Meta, start a campaign or add funds.
-   Downloads go through the export, which marks every picture 'Sample: not live'; Share and the
+   Downloads go through the export, which marks every picture with a 'Sample ad: not live yet' pill (bottom-left) and puts a note card (`00-sample-note.png`) first; Share and the
    Assets tile's Download, Copy link and Open are hidden on a `+prospect` account, so no clean
    picture leaves before hand-over. After hand-over they come back on their own.
 
