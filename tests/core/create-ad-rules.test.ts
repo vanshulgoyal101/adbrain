@@ -93,10 +93,11 @@ describe("core: Create follows the long-running local ad rules (#418 rules 1, 4,
     expect(leads.map((lead) => lead.place)).toEqual(["Chandigarh", "Panchkula", "Mohali"]);
     expect(new Set(leads.map((lead) => lead.opening)).size).toBe(3);
     // The problem angle states the situation; asking about the reader's condition is refused by personal-attribute.
-    expect(leads[1].opening).toMatch(/never a question about the reader/);
+    expect(leads[1].opening).toMatch(/Never ask the reader about themselves/);
+    for (const lead of leads) expect(lead.opening).toMatch(/^Open by /);
     const pune = caseById("dental-clinic-en");
     expect(JSON.parse(buildConceptMessages({ brand: pune.brand as BrandContext, brief: pune.brief, angle: AD_ANGLES[2] })[1].content as string).lead)
-      .toEqual({ place: "Pune", opening: "with the offer", ask: "Check-up and cleaning for ₹499" });
+      .toEqual({ place: "Pune", opening: "Open by stating the offer.", ask: "Check-up and cleaning for ₹499" });
     // Recorded Oct 27 14:00Z (generation b285b76f): all three opened like this and two ads were lost after the repair.
     const sibling = { headline: "Lower bills, starting with a free survey", primary_text: "Rooftop solar for your home in Chandigarh, Mohali & Panchkula. Start with a free site survey to see what you could save." };
     const reply = { ...JSON.parse(solarideReplies[0]), primary_text: `${sibling.primary_text}\nBook your free site survey.` };

@@ -91,12 +91,13 @@ export interface ConceptInput {
 // #418 rule 1 + #713: parallel concepts can't see each other, and "Rooftop solar for your home in
 // Chandigarh, Mohali & Panchkula" opened all three (Oct 27), so two were lost to repeated-opening.
 // Each angle gets its own place and its own way in.
+// Written as instructions: a bare "with the offer" was copied into the ad itself (Qwen, free eval Oct 28).
 const OPENINGS: Record<string, string> = {
-  value: "with the service and the place",
-  // Never a question about the reader's body or traits: Meta's personal-attribute rule (eval, Oct 28: "Stiff neck from long hours?").
-  problem: "with the problem the service fixes, stated as a fact about the situation (a rising bill, a deadline, a broken AC), never a question about the reader",
-  offer: "with the offer",
-  trust: "with the proof",
+  value: "Open by naming the service and the place.",
+  // Never a question about the reader's body or traits (personal-attribute; free eval Oct 28).
+  problem: "Open by stating the problem the service fixes as a fact about the situation (a rising bill, a deadline, a broken AC). Never ask the reader about themselves.",
+  offer: "Open by stating the offer.",
+  trust: "Open by stating the proof.",
 };
 
 /**
@@ -145,7 +146,7 @@ Write a concise Meta link description that complements the headline with a suppo
 next step. It is separate from on-image supportingText and must not merely repeat the headline.
 Meta shows only about the first 125 characters of primary_text on mobile before "See more". The
 first line says what and where in at most 60 characters: the service and lead.place (one place,
-never the list), with the offer in lead.ask when given. Start it the way lead.opening says,
+never the list), with the offer in lead.ask when given. Follow lead.opening (an instruction; never copy its words),
 so the ads of one batch, written at the same time, open differently. It must never pass 125 characters.
 Write primary_text as 2-3 short lines separated by \n, about 220 characters in total, never one paragraph.
 Use only supplied facts for commercial claims. Do not invent prices, offers, reviews, deadlines,
