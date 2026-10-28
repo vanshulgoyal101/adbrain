@@ -49,7 +49,7 @@ policies. Route instrumentation therefore is not a complete mutation ledger.
 | --- | --- |
 | [app](../src/app/) | Public pages, authenticated `(app)` pages, auth completion, API handlers |
 | [components](../src/components/) | Interactive workspace and shared UI primitives |
-| [proxy](../src/proxy.ts) | Session refresh/request guard entry point |
+| [proxy](../src/proxy.ts) | Session refresh/request guard entry point; sends signed-in owners from the static homepage to `/dashboard` (#1376) |
 | [Supabase](../src/lib/supabase/) | Session/admin clients, query ownership and aggregation |
 | [creative](../src/lib/creative/) | Interview, guarded generation, design, raster persistence, receipts |
 | [LLM](../src/lib/llm/) | Application facade owns routing/key cooldown/cache/accounting; AI SDK adapters own text transport and schema output |

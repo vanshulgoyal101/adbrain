@@ -68,5 +68,12 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(redirectUrl);
   }
 
+  // #1376: the homepage is static (CDN-cached) for prospects; a signed-in owner goes to the dashboard from here.
+  if (path === "/" && (signedIn || devAuthed)) {
+    const home = NextResponse.redirect(new URL("/dashboard", request.url));
+    response.cookies.getAll().forEach((cookie) => home.cookies.set(cookie));
+    return home;
+  }
+
   return response;
 }
