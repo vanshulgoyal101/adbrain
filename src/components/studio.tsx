@@ -403,7 +403,7 @@ export function Studio({
                   id="count"
                   value={count}
                   onChange={(e) => setCount(Number(e.target.value))}
-                  className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none"
+                  className="h-11 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none"
                 >
                   {[1, 2, 3, 4, 5, 6].map((n) => (
                     <option key={n} value={n}>
@@ -418,7 +418,7 @@ export function Studio({
                   id="language"
                   value={language}
                   onChange={(e) => setLanguage(e.target.value)}
-                  className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none"
+                  className="h-11 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none"
                 >
                   {AD_LANGUAGES.map((l) => (
                     <option key={l.id} value={l.id}>
@@ -429,7 +429,7 @@ export function Studio({
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="format">Placement</Label>
-                <select id="format" value={format} onChange={(event) => setFormat(event.target.value)} className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none">
+                <select id="format" value={format} onChange={(event) => setFormat(event.target.value)} className="h-11 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none">
                   <option value="portrait">Feed 4:5</option>
                   <option value="square">Square 1:1</option>
                   <option value="story">Story 9:16</option>
@@ -568,13 +568,13 @@ export function Studio({
               return index === 0
                 ? <div key={batch.key}><p className="px-1 pb-1 text-xs font-medium text-slate-500">{label}</p>{list}</div>
                 : <details key={batch.key} open={batch.items.some((item) => item.id === selectedCreative.id) || undefined} className="border-t border-slate-200 pt-2">
-                    <summary className="flex min-h-10 cursor-pointer items-center px-1 text-sm font-medium text-slate-700">{label}</summary>
+                    <summary className="flex min-h-11 cursor-pointer items-center px-1 text-sm font-medium text-slate-700">{label}</summary>
                     {list}
                   </details>;
             })}
             {setAsideItems.length > 0 && (
               <details open={setAsideItems.some((item) => item.id === selectedCreative.id) || undefined} className="border-t border-slate-200 pt-2">
-                <summary className="flex min-h-10 cursor-pointer items-center px-1 text-sm font-medium text-slate-700">Set aside ({setAsideItems.length}): not picked, or unreviewed after 7 days</summary>
+                <summary className="flex min-h-11 cursor-pointer items-center px-1 text-sm font-medium text-slate-700">Set aside ({setAsideItems.length}): not picked, or unreviewed after 7 days</summary>
                 {adList(setAsideItems)}
               </details>
             )}
