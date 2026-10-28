@@ -179,6 +179,29 @@ describe("core scoreboard (#681)", () => {
       .toMatchObject({ now: "no active campaigns; 0 syncs, 0 results reads (0 failed)", met: null });
   });
 
+  // #1543: Manage reads the current state, so each scheduled run keeps a snapshot and the trend reads past days from them.
+  it("#1543: returns the Manage snapshot (active, missing, worst and p90 age) to record", () => {
+    const live = (minAgo: number | null): ScoreActiveResult => ({ business_id: "real-business", fetched_at: minAgo === null ? null : at(minAgo) });
+    expect(board([], [], [], [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(live)).manage).toEqual({ count: 10, failedCount: 0, worstMinutes: 10, p90Minutes: 9 });
+    expect(board([], [], [], [live(4), live(null)]).manage).toEqual({ count: 2, failedCount: 1, worstMinutes: 4, p90Minutes: 4 });
+    expect(board([], [], [], []).manage).toEqual({ count: 0, failedCount: 0, worstMinutes: 0, p90Minutes: 0 });
+  });
+
+  it("#1543: the 7-day Manage row reads past days from the stored snapshots, each IST day's worst", () => {
+    const snap = (iso: string, worstMinutes: number, count = 1, failedCount = 0) => ({ created_at: iso, attributes: { count, failedCount, worstMinutes, p90Minutes: worstMinutes } });
+    const manageHistory = [
+      snap("2026-10-23T22:00:00Z", 12), // Oct 24 IST
+      snap("2026-10-24T03:30:00Z", 29), // Oct 24 IST, worse
+      snap("2026-10-25T03:30:00Z", 9, 2, 1), // Oct 25: one campaign with no results
+      snap("2026-10-26T03:30:00Z", 0, 0), // Oct 26: none active
+    ];
+    const history = buildScoreboard({ events: [], aiCalls: [], launches: [], activeResults: [], freeImageUserIds: [], excludedUserIds: [], excludedBusinessIds: [], since, until, manageHistory });
+    expect(row(history, "Manage, 7 days")).toMatchObject({ now: "Oct 24 29 min ❌ · Oct 25 1 with no results ❌ · Oct 26 none active", met: false });
+    const good = buildScoreboard({ events: [], aiCalls: [], launches: [], activeResults: [], freeImageUserIds: [], excludedUserIds: [], excludedBusinessIds: [], since, until, manageHistory: [snap("2026-10-25T03:30:00Z", 14)] });
+    expect(row(good, "Manage, 7 days")).toMatchObject({ now: "Oct 25 14 min ✅", met: true });
+    expect(board([]).rows.find((r) => r.step === "Manage, 7 days")).toBeUndefined();
+  });
+
   it("newestResults keeps the newest fetched_at per active campaign", () => {
     expect(newestResults(
       [{ id: "c1", business_id: "b1" }, { id: "c2", business_id: "b2" }],
