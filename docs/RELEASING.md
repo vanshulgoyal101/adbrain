@@ -278,9 +278,13 @@ The rollback drill input `drill` forces the same FAIL, then really rolls
 production back and opens a `[DRILL]` core bug; restore with the recovery steps
 below.
 
-**Without `VERCEL_TOKEN` (CEO, Oct 24, #413):** the guard waits 3 minutes after each
-production deploy, runs the read-only smoke and only reports (one tracker issue); there
-is no automatic rollback and the drift check is skipped. Roll back by hand from a
+**Without `VERCEL_TOKEN` (CEO, Oct 24, #413):** after each production deploy the guard
+waits until the domain's `X-AdBrain-Release` header (the build's commit, #1457) is that
+commit, then runs the read-only smoke and only reports (one tracker issue). A newer commit
+counts as superseded (its own run smokes it). If the domain never serves the commit within
+6 minutes (a pinned domain after a hand rollback, #1347), the guard **fails** with `FAIL
+Domain serves …` instead of smoking an old build. There is no automatic rollback and the
+drift check is skipped. Roll back by hand from a
 logged-in CLI: `npx --yes vercel@60.1.3 promote <previous-deployment-url> --scope vanshul-goyals-projects`.
 Revisit if a bad deploy ever stays live longer than an hour.
 
@@ -289,5 +293,10 @@ last good deployment (#390), so Vercel keeps auto-promoting later deploys; each 
 deploy gets its own guard. Fix forward or revert through a PR; when the fix is live
 and its guard passes, close the issue. While one `Production smoke failed` issue is
 open, further failures comment on it instead of opening more. A rollback done by
-hand with `vercel rollback` (or the dashboard) does turn auto-promotion off: undo it
-with `npx --yes vercel@60.1.3 promote <deployment-url> --scope vanshul-goyals-projects`.
+hand with `vercel rollback` (or the dashboard) does turn auto-promotion off. **Never end
+an incident there (#1457):** once the fix is merged, promote the deployment of **main
+HEAD** (not the one you rolled back from; find it with
+`gh api "repos/vanshulgoyal101/adbrain/deployments?environment=Production&per_page=1"`)
+with `npx --yes vercel@60.1.3 promote <deployment-url> --scope vanshul-goyals-projects`,
+then confirm `curl -sI https://adbrain.vanshul.com/ | grep -i x-adbrain-release` shows
+main HEAD. The next deploy's guard fails if the domain is still pinned.

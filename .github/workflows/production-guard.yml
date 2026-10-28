@@ -56,14 +56,17 @@ jobs:
         id: wait
         if: github.event_name == 'deployment_status' && env.VERCEL_TOKEN != ''
         run: node scripts/production-guard.mjs wait "$SHA"
-      # No token (CEO, #413): fix forward. Give the deploy ~3 min to go live, then smoke production;
-      # no rollback, and an issue only when the smoke itself fails.
-      - name: Wait for the deploy to go live (no token)
+      # No token (CEO, #413): fix forward, no rollback. #1457: wait until the domain's X-AdBrain-Release is this commit
+      # (or a newer one, whose own run smokes it); fail if it never is, so a pinned domain can't pass a smoke of an old build.
+      - name: Wait until the domain serves this commit (no token)
+        id: served
         if: github.event_name == 'deployment_status' && env.VERCEL_TOKEN == ''
-        run: sleep 180
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/production-guard.mjs served "$SHA" | tee smoke.txt
       - name: Read-only core smoke (one retry)
         id: smoke
-        if: steps.wait.outputs.superseded != 'true'
+        if: steps.wait.outputs.superseded != 'true' && steps.served.outputs.superseded != 'true'
         env:
           SMOKE_EMAIL: ${{ secrets.SMOKE_EMAIL }}
           SMOKE_PASSWORD: ${{ secrets.SMOKE_PASSWORD }}
