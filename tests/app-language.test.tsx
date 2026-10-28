@@ -3,8 +3,10 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const jar = vi.hoisted(() => ({ set: vi.fn() }));
+const jar = vi.hoisted(() => ({ set: vi.fn(), get: () => undefined, getAll: () => [] }));
 vi.mock("next/headers", () => ({ cookies: async () => jar }));
+// The action's logging writes through Supabase in CI; this test is about the cookie only.
+vi.mock("@/lib/observability/logger", () => ({ observeAction: (_name: string, handler: () => Promise<unknown>) => handler() }));
 const action = vi.hoisted(() => ({ setAppLanguage: vi.fn<(value: string) => Promise<{ ok: boolean }>>(async () => ({ ok: true })) }));
 
 describe("setAppLanguage", () => {
