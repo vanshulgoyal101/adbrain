@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           sparse-checkout: .github/backup
           persist-credentials: false
@@ -42,7 +42,7 @@ jobs:
           rm -f dump.sql.gz
           sha256sum "$name.sql.gz.cms"
       # Saved before the uploads mirror, so a bad upload can't cost the night's database backup.
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ${{ env.NAME }}
           path: ${{ env.NAME }}.sql.gz.cms
@@ -73,7 +73,7 @@ jobs:
           tar -czf uploads.tar.gz uploads uploads.txt
           openssl cms -encrypt -binary -aes256 -outform DER -in uploads.tar.gz -out "$NAME.uploads.tar.gz.cms" .github/backup/backup-cert.crt
           rm -rf uploads uploads.txt uploads.tar.gz
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ${{ env.NAME }}-uploads
           path: ${{ env.NAME }}.uploads.tar.gz.cms
