@@ -128,6 +128,27 @@ export function wouldExceedCap(
   return { verified: true, exceeds: capRupees !== null && projectedAfter > capRupees, projectedAfter };
 }
 
+/** #1342: what the owner sees about the weekly cap before activating, from the same projection Activate refuses on. */
+export type WeeklyCapNotice = {
+  capRupees: number;
+  /** Weekly commitment after this campaign runs (live ones + this × 7); null when it can't be worked out. */
+  projectedWeekly: number | null;
+  exceeds: boolean;
+};
+
+/** Null when no cap is set. `otherActive` must leave out the campaign being priced. */
+export function weeklyCapNotice(
+  otherActive: CampaignSpend[],
+  dailyBudgetRupees: number,
+  capRupees: number | null,
+): WeeklyCapNotice | null {
+  if (capRupees === null || !Number.isFinite(capRupees) || capRupees <= 0) return null;
+  const projection = wouldExceedCap(otherActive, dailyBudgetRupees, capRupees);
+  return projection.verified
+    ? { capRupees, projectedWeekly: projection.projectedAfter, exceeds: projection.exceeds }
+    : { capRupees, projectedWeekly: null, exceeds: false };
+}
+
 /**
  * A campaign's true daily spend ceiling. Meta ad-set budgets are per ad set,
  * not shared across the campaign, so an A/B campaign with N ad sets spends

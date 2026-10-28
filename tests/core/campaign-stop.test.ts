@@ -19,7 +19,7 @@ function replay(edit: (exchange: Exchange) => Exchange = exchange => exchange) {
     const url = new URL(String(input));
     url.searchParams.delete("access_token");
     const method = init?.method ?? "GET";
-    const path = url.pathname.replace("/v21.0/", "") + url.search;
+    const path = url.pathname.replace("/v26.0/", "") + url.search;
     sent.push(`${method} ${path}`);
     const index = pending.findIndex(exchange => exchange.method === method && exchange.path === path);
     if (index < 0) throw new Error(`Unrecorded Graph call: ${method} ${path}`);

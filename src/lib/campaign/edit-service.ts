@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { logEvent } from "@/lib/audit";
 import { intendedCampaignChildren, reviewableCampaign } from "@/lib/campaign/activation";
+import { pausedAdIds } from "@/lib/campaign/ad-pause";
 import { saveCampaignChildren } from "@/lib/campaign/trusted-write";
 import { AdSetSwitchStuckError, CampaignDeliveryError, MetaError, friendlyMetaError, needsRebuild, type AudienceChanges, type AudienceEdit, type GeoTargeting } from "@/lib/meta/client";
 import { ConnectionAccessError, withMetaConnection, type AuthorizedBusiness } from "@/lib/meta/connection-access";
@@ -138,6 +139,9 @@ export function mirroredChildren(
   if (Array.isArray(raw.cappedAdSetIds)) next.cappedAdSetIds = (raw.cappedAdSetIds as string[]).map(adSet);
   const cap = raw.cap;
   if (cap && typeof cap === "object" && !Array.isArray(cap) && typeof cap.adSetId === "string") next.cap = { ...cap, adSetId: adSet(cap.adSetId) };
+  // #1146: an ad paused from the card stays paused under its copy's id, so Resume (#1055) and the card's Undo keep track.
+  const carried = pausedAdIds(raw).flatMap(adId => adMap.has(adId) ? [{ adId: adMap.get(adId)!, action: "paused" as const, at: new Date().toISOString(), reason: "Kept paused on the new audience" }] : []);
+  if (carried.length) next.adPauses = [...(Array.isArray(raw.adPauses) ? raw.adPauses : []), ...carried].slice(-50) as Json;
   const mirrored = { meta_adset_id: adSet(campaign.meta_adset_id ?? children.adSetIds[0]), meta_ad_ids: campaign.meta_ad_ids.map(ad), raw: next as Json };
   if (!intendedCampaignChildren({ meta_campaign_id: campaign.meta_campaign_id, ...mirrored })) throw new Error("The edited campaign children would not validate.");
   return mirrored;
@@ -336,8 +340,14 @@ export async function editCampaignAudience(context: AuthorizedBusiness, campaign
 
 type Review = NonNullable<ReturnType<typeof reviewableCampaign>>;
 
+/** #1146: the copies of ads the owner paused from the card, which stay paused on the new audience (copies keep the ads' order). */
+export function keptPausedCopies(copy: PendingCopy, raw: unknown): string[] {
+  const paused = new Set(pausedAdIds(raw));
+  return copy.from.adIds.flatMap((adId, index) => paused.has(adId) && copy.to.adIds[index] ? [copy.to.adIds[index]] : []);
+}
+
 /** #765 (b): while a copy waits, the Meta tree has an extra ad set; other edits wait until it is switched or cancelled. */
-async function refuseWhileSwitchPending(database: SupabaseClient, campaignId: string) {
+export async function refuseWhileSwitchPending(database: Pick<SupabaseClient, "from">, campaignId: string) {
   const { data, error } = await database.from("campaign_edit_operations").select("id").eq("campaign_id", campaignId).eq("state", "awaiting_switch").limit(1);
   if (error) throw new CampaignEditError("Campaign edits are unavailable. Try again.", 503, true);
   if (data?.length) throw new CampaignEditError(SWITCH_PENDING, 409, false, "switch_pending");
@@ -422,7 +432,8 @@ export async function switchCampaignAudience(context: AuthorizedBusiness, campai
     // Turning the copy on starts delivery, so a running campaign needs the activation capability.
     await withMetaConnection(context, { purpose: status === "active" ? "activate" : "create_paused", binding, expectedGeneration: review.generation }, async meta => {
       for (const copy of pending) {
-        const done = await meta.switchAdSet(review.metaCampaignId, { fromAdSetId: copy.from.adSetId, toAdSetId: copy.to.adSetId, toAdIds: copy.to.adIds, running: status === "active" });
+        const keepPausedAdIds = keptPausedCopies(copy, campaign.raw);
+        const done = await meta.switchAdSet(review.metaCampaignId, { fromAdSetId: copy.from.adSetId, toAdSetId: copy.to.adSetId, toAdIds: copy.to.adIds, running: status === "active", keepPausedAdIds });
         switched.push({ from: copy.from, to: { mode: "rebuild", validated: false, adSetId: done.adSetId, adIds: done.adIds, retiredAdSetId: copy.from.adSetId } });
       }
     });

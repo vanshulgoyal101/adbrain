@@ -167,6 +167,23 @@ describe("core: internal accounts write on Haiku and make free images (#449, #46
     expect(calls).toEqual(["image.pollinations.ai/prompt"]);
   });
 
+  // #1547: a sales visit's lost picture is tried again with the words that already passed: one Pollinations call, no text call.
+  it("makes only the picture again for a reused concept, with no concept call", async () => {
+    const { calls } = network();
+    const { generateVariants } = await import("@/lib/creative/generate");
+    const { AD_ANGLES } = await import("@/lib/templates/ads");
+    const stages: string[] = [];
+    const variants = await settleInVirtualTime(asUser(INTERNAL, () => generateVariants({
+      brand: recorded.brand as never, brief: "Invite adults near Austin to enquire about a new-patient visit.", sourceFacts: recorded.sourceFacts,
+      angleIds: [AD_ANGLES[1].id], count: 1, concepts: { [AD_ANGLES[1].id]: recorded.concept as never },
+      onProgress: (event) => stages.push(event.stage),
+    })));
+    expect(variants).toHaveLength(1);
+    expect(variants[0]).toMatchObject({ angleId: AD_ANGLES[1].id, headline: recorded.concept.headline, llmUsage: [] });
+    expect(calls).toEqual(["image.pollinations.ai/prompt"]);
+    expect(stages).toEqual(["queued", "image", "ready"]);
+  });
+
   it("gives an internal interview the same paid fallback as a customer when the free tiers are busy", async () => {
     for (const user of [INTERNAL, CUSTOMER]) {
       const { calls } = network({ freeBusy: true });

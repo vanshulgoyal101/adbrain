@@ -1,6 +1,8 @@
 import { LockKeyhole, MapPin } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatPerDay } from "@/lib/format";
+import type { WeeklyCapNotice } from "@/lib/campaign/spend";
+import { WeeklyCapLine } from "@/components/weekly-cap-line";
 
 export function CampaignLaunchReview({
   selectedCount,
@@ -9,6 +11,7 @@ export function CampaignLaunchReview({
   destination = "whatsapp",
   whatsappNumber,
   audience,
+  weeklyCap = null,
 }: {
   selectedCount: number;
   budget: number;
@@ -17,6 +20,8 @@ export function CampaignLaunchReview({
   /** The chosen WhatsApp button number, masked as the owner sees it. */
   whatsappNumber?: string;
   audience: string;
+  /** #1342: the Settings cap against this campaign's weekly commitment. */
+  weeklyCap?: WeeklyCapNotice | null;
 }) {
   const destinationReady = destination === "whatsapp" ? !!whatsappNumber : !!leadFormName;
   const isReady =
@@ -24,7 +29,8 @@ export function CampaignLaunchReview({
     budget > 0 &&
     destinationReady &&
     audience.trim().length > 0 &&
-    audience !== "Choose an area";
+    audience !== "Choose an area" &&
+    !weeklyCap?.exceeds;
 
   return (
     <section aria-labelledby="launch-review-title" className="flex min-w-0 flex-col gap-4">
@@ -75,6 +81,7 @@ export function CampaignLaunchReview({
           </dd>
         </div>
       </dl>
+      <WeeklyCapLine notice={weeklyCap} announce={false} />
     </section>
   );
 }

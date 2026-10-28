@@ -65,9 +65,10 @@ export function TokenField({
                 type="button"
                 aria-label={`Remove ${token}`}
                 onClick={() => remove(token)}
-                className="relative -mr-1.5 grid h-6 w-6 place-items-center rounded-full opacity-60 before:absolute before:-inset-2.5 before:content-[''] hover:opacity-100"
+                // #1156: the button itself is 44 px; negative margins keep the chip its size, and the circle stays small.
+                className="group/remove -my-2.5 -ml-2 -mr-3 grid h-11 w-11 shrink-0 place-items-center rounded-full"
               >
-                <X className="h-3 w-3" />
+                <span className="grid h-5 w-5 place-items-center rounded-full opacity-60 group-hover/remove:bg-black/5 group-hover/remove:opacity-100"><X className="h-3 w-3" /></span>
               </button>
             </span>
           ))}

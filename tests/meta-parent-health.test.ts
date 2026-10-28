@@ -29,8 +29,8 @@ describe("2-Tier parent token check (#520)", () => {
     const { checkParentAccess } = await import("@/lib/meta/parent");
     expect(await checkParentAccess(fetchImpl)).toEqual({ configured: true, enabled: false, ok: true, businessVerified: true });
     const [[meUrl, meInit], [bizUrl]] = fetchImpl.mock.calls;
-    expect(meUrl).toBe("https://graph.facebook.com/v21.0/me?fields=id");
-    expect(bizUrl).toBe("https://graph.facebook.com/v21.0/1158100643072508?fields=id,verification_status");
+    expect(meUrl).toBe("https://graph.facebook.com/v26.0/me?fields=id");
+    expect(bizUrl).toBe("https://graph.facebook.com/v26.0/1158100643072508?fields=id,verification_status");
     expect(meInit.headers.Authorization).toBe(`Bearer ${TOKEN}`);
     for (const [url] of fetchImpl.mock.calls) expect(url).not.toContain(TOKEN);
   });

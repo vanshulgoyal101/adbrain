@@ -1,15 +1,26 @@
 import { reconnectByLabel } from "@/lib/meta/token-expiry";
 import { Alert } from "@/components/ui/alert";
 import { clientCreative } from "@/lib/creative/client-receipt";
+import { madeForSetup } from "@/lib/creative/setup-picks";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Building2 } from "lucide-react";
 import { Campaigns } from "@/components/campaigns";
+import { SetupGoLive } from "@/components/setup-go-live";
+import { setupWelcome } from "@/lib/campaign/setup-welcome";
+import { BUDGET_PRESETS } from "@/lib/campaign/budget";
+import { setupPhone } from "@/lib/brand/setup-fields";
+import { maskWhatsAppNumber } from "@/lib/meta/whatsapp-status-shared";
+import { fundingMode } from "@/lib/payments/operator-funding";
+import { canUseMetaConnect } from "@/lib/meta/pilot-access";
 import { adResultsEnabled } from "@/lib/campaign/ad-results-store";
+import { ledgerTotals } from "@/lib/campaign/ledger";
 import { draftDtoSchema, type DraftDTO } from "@/lib/campaign/connect-contracts";
 import { listEditableDrafts } from "@/lib/campaign/draft-repository";
 import { requireOwnedBusiness } from "@/lib/meta/connection-access";
 import { createClient } from "@/lib/supabase/server";
 import { ReadyAdsNextStep } from "@/components/ready-ads-next-step";
+import { isProspectSession } from "@/lib/prospect-session";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
@@ -17,10 +28,12 @@ import {
   getMetaConnection,
 } from "@/lib/meta/credentials";
 import {
+  getActiveCampaignBudgets,
   getApprovedCreatives,
   getCampaignPage,
   getLatestResultsWithEnquiries,
   getPrimaryBusiness,
+  getSpendLimits,
 } from "@/lib/supabase/queries";
 
 export const metadata = { title: "Campaigns" };
@@ -68,16 +81,47 @@ export default async function CampaignsPage({
     ...page,
     results: await getLatestResultsWithEnquiries(page.campaigns.map((campaign) => campaign.id)),
   }));
-  const [approved, page, connection, drafts] = await Promise.all([
-    getApprovedCreatives(business.id).then((rows) => rows.map(clientCreative)),
+  // #1342: the Settings cap and the live budgets, for the cap line; on error the line is left out and Activate still refuses.
+  const spendCap = Promise.resolve()
+    .then(() => Promise.all([getSpendLimits(business.id), getActiveCampaignBudgets(business.id)]))
+    .then(([limits, active]) => ({ capRupees: limits.weeklyCapRupees, active }))
+    .catch(() => null);
+  const [approvedRows, page, connection, drafts, weeklyCap, ledger] = await Promise.all([
+    getApprovedCreatives(business.id),
     campaignData,
     getMetaConnection(business.id),
     savedDrafts(business.id),
+    spendCap,
+    // #1307: Review's "What to expect" quotes AdBrain's pooled runs; unreadable keeps the recorded figures.
+    ledgerTotals(),
   ]);
+  const approved = approvedRows.map(clientCreative);
   const metaReady = connection.ready;
   const reconnectBy = connection.source === "oauth" && !connection.expired ? reconnectByLabel(connection.tokenExpiresAt) : null;
   const campaigns = page.campaigns;
   const requested = typeof params.creatives === "string" ? params.creatives.split(",") : [];
+  // #1271: Go live's chip; only the offered amounts are taken from the address.
+  const chosenBudget = BUDGET_PRESETS.find((amount) => String(amount) === params.budget);
+
+  // #1271 (#1251 WS1 step 3): a first-timer with ready ads and no campaign yet gets Go live; `?all=1` opens this page.
+  // Before App Review an owner who can't connect still gets ReadyAdsNextStep below (#336).
+  const canConnect = async () => metaReady || await createClient().then((supabase) => supabase.auth.getUser())
+    .then(({ data }) => Boolean(data.user && canUseMetaConnect(data.user.id))).catch(() => false);
+  if (params.all !== "1" && !campaigns.length && approved.length && await canConnect()) {
+    // #1432: only ads made from today's step 1; with none, step 2 makes them.
+    const current = approvedRows.filter((creative) => madeForSetup(creative, business)).map(clientCreative);
+    if (!current.length) redirect("/create");
+    const picked = current.filter((creative) => requested.includes(creative.id));
+    const ads = (picked.length ? picked : current).slice(0, 3);
+    const funding = await fundingMode(business.id).catch(() => null);
+    const masked = business.phone ? setupPhone(business.phone) : null;
+    // #1529: the welcome Go live sends, from the same ad rows Review reads.
+    const welcome = (() => {
+      try { return setupWelcome(business, ads.flatMap((ad) => approvedRows.filter((row) => row.id === ad.id))); } catch { return null; }
+    })();
+    return <SetupGoLive business={business} ads={ads} pageConnected={metaReady} funding={funding}
+      whatsappNumber={masked ? maskWhatsAppNumber(`+91${masked}`) : null} weeklyCap={weeklyCap} welcome={welcome} />;
+  }
 
   return (
     <div>
@@ -94,7 +138,7 @@ export default async function CampaignsPage({
       <div className="mt-6">
         {/* Before Meta's App Review a new owner can't connect, so the setup form would be a dead end (#336). */}
         {!metaReady && !campaigns.length && approved.length ? (
-          <ReadyAdsNextStep approved={approved} phone={business.phone ?? null} businessId={business.id} />
+          <ReadyAdsNextStep approved={approved} phone={business.phone ?? null} businessId={business.id} sample={await isProspectSession()} />
         ) : <Campaigns
           business={business}
           approved={approved}
@@ -107,8 +151,10 @@ export default async function CampaignsPage({
           leadFormError={null}
           metaReady={metaReady}
           adResults={adResultsEnabled()}
+          whatsappLedger={ledger?.whatsapp ? { chats: ledger.whatsapp.results, spendRupees: ledger.whatsapp.spendRupees } : null}
           adAccountId={connection.adAccountId ?? ""}
-          newCampaign={params.new === "1" ? { creativeIds: requested, review: params.review === "1" } : undefined}
+          weeklyCap={weeklyCap}
+          newCampaign={params.new === "1" ? { creativeIds: requested, review: params.review === "1", budget: chosenBudget } : undefined}
         />}
       </div>
     </div>

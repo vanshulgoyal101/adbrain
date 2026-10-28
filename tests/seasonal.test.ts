@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { OCCASIONS, occasionIdeas } from "@/lib/seasonal";
+import { OCCASIONS, occasionIdeas, occasionsFor } from "@/lib/seasonal";
 
 const at = (iso: string) => occasionIdeas("Sharma Dental", new Date(iso));
 const labels = (iso: string) => at(iso).map((s) => s.label);
@@ -15,9 +15,13 @@ describe("occasionIdeas (#700)", () => {
     ["2027-06-10T06:00:00Z", ["Back to school"]],
     ["2027-07-15T06:00:00Z", ["Monsoon season"]],
     ["2026-08-15T06:00:00Z", ["Independence Day"]],
-    ["2026-10-26T06:00:00Z", ["Diwali festive season"]],
-    ["2026-11-20T06:00:00Z", ["Wedding season"]],
-    ["2026-12-20T06:00:00Z", ["Wedding season", "Christmas"]],
+    ["2026-10-26T06:00:00Z", ["Diwali festive season", "Chhath Puja"]],
+    // #1210: November's festivals come before the long seasons.
+    ["2026-11-10T06:00:00Z", ["Diwali festive season", "Chhath Puja"]],
+    ["2026-11-17T06:00:00Z", ["Chhath Puja", "Guru Nanak Jayanti"]],
+    ["2026-11-20T06:00:00Z", ["Guru Nanak Jayanti", "Wedding season"]],
+    ["2026-12-01T06:00:00Z", ["Wedding season", "Winter season"]],
+    ["2026-12-20T06:00:00Z", ["Christmas", "Wedding season"]],
   ])("on %s shows %j", (iso, expected) => {
     expect(labels(iso)).toEqual(expected);
   });
@@ -44,13 +48,11 @@ describe("occasionIdeas (#700)", () => {
     expect(labels("2026-08-15T19:00:00Z")).not.toContain("Independence Day");
   });
 
-  it("never asserts a sale, discount or deadline, so the claim check can't accept an invented offer", () => {
+  it("fills the goal in the owner's plain words and never asserts a sale, discount or deadline (#1153, #1210)", () => {
     for (let d = 0; d < 366; d++) {
       for (const idea of occasionIdeas("Sharma Dental", new Date(Date.UTC(2028, 0, 1, 6) + d * 86_400_000))) {
-        expect(idea.prompt).toContain("Sharma Dental");
-        expect(idea.prompt).toMatch(/only our saved offers/);
-        const asserted = idea.prompt.replace(/add no discount, sale or deadline/, "");
-        expect(asserted).not.toMatch(/\b(sale|discount|deadline|off|limited|clearance|free)\b/i);
+        expect(idea.prompt).toBe(`An ad for ${OCCASIONS.find((o) => idea.id === `occasion-${o.id}`)!.name} from Sharma Dental.`);
+        expect(idea.prompt).not.toMatch(/\b(sale|discount|deadline|off|limited|clearance|free|saved offers|add no)\b/i);
         expect(`${idea.label} ${idea.prompt}`.length).toBeLessThanOrEqual(500);
       }
     }
@@ -59,5 +61,14 @@ describe("occasionIdeas (#700)", () => {
   it("respects max and falls back to a generic brand name", () => {
     expect(occasionIdeas("Shop", new Date("2026-12-20T06:00:00Z"), 1)).toHaveLength(1);
     expect(occasionIdeas("  ", new Date("2026-10-26T06:00:00Z"))[0].prompt).toContain("from my business");
+  });
+});
+
+describe("occasionsFor (#679)", () => {
+  const diwali = new Date("2026-10-26T06:00:00Z");
+  it("offers Indian occasions to an Indian business or one without a phone, and none abroad", () => {
+    expect(occasionsFor({ name: "Solaride", phone: "+91 73802 80874" }, diwali).map((idea) => idea.label)).toEqual(["Diwali festive season", "Chhath Puja"]);
+    expect(occasionsFor({ name: "Solaride", phone: null }, diwali)).toHaveLength(2);
+    expect(occasionsFor({ name: "Cedar Ridge", phone: "+1 512 555 0142" }, diwali)).toEqual([]);
   });
 });

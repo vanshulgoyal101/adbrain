@@ -122,6 +122,29 @@ describe("composer: WhatsApp message (#840 3c)", () => {
   });
 });
 
+describe("Review: a WhatsApp number Meta doesn't confirm (#1301)", () => {
+  it("says what to do, links WhatsApp settings and re-checks with the same preflight read", async () => {
+    let verified = false;
+    mocks.preflight.mockImplementation(async () => ({
+      draftId: saved.draftId, draftVersion: saved.version, connectionGeneration: 1, canCreatePaused: true, blockers: [], planHash: "a".repeat(64), currency: "INR",
+      perAdSetDailyBudgetRupees: 300, totalDailyBudgetRupees: 300, adSetCount: 1, resolvedAreaLabel: "Chandigarh", selected,
+      destination: "whatsapp", whatsappNumber: verified ? "+919800000874" : null, whatsappMessage: reviewedMessage,
+    }));
+    view();
+    await screen.findByLabelText("WhatsApp button number");
+    await review();
+    expect(await screen.findByText(/WhatsApp chat \(number not verified\)/)).toBeInTheDocument();
+    expect(screen.getByText(/Meta hasn't confirmed a WhatsApp Business number on your Page\. Link it in Meta Business Suite, then check again\./)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open WhatsApp settings" })).toHaveAttribute("href", "https://business.facebook.com/latest/settings/whatsapp_account");
+    const calls = mocks.preflight.mock.calls.length;
+    verified = true;
+    fireEvent.click(screen.getByRole("button", { name: "Check again" }));
+    await waitFor(() => expect(mocks.preflight.mock.calls.length).toBe(calls + 1));
+    expect(await screen.findByText(/WhatsApp chat \+919800000874/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Check again" })).toBeNull();
+  });
+});
+
 describe("Review blocker on this campaign's message (#840)", () => {
   it("'Edit the WhatsApp message' lands on Edit for this campaign", async () => {
     mocks.preflight.mockImplementation(async () => ({

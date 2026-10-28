@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Campaigns } from "@/components/campaigns";
@@ -40,6 +40,22 @@ beforeEach(() => {
 });
 
 describe("Campaigns rows (#403 S5)", () => {
+  // #1150: campaigns deleted in Meta fold under "Deleted (n)" after the live list, with one status word.
+  it("folds campaigns deleted in Meta under Deleted (n) after the live one", async () => {
+    const deleted = (id: string, metaStatus: string) => ({ ...paused, id, name: "Rooftop solar old", status: "completed", raw: { ...paused.raw as object, metaStatus } }) as unknown as Campaign;
+    render(<Campaigns business={business} approved={[]} initialCampaigns={[deleted("campaign-8", "DELETED"), deleted("campaign-9", "ARCHIVED"), active]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady={false} adAccountId="act_999" />);
+    const live = await screen.findByRole("heading", { name: "Solar EMI" });
+    expect(screen.getByRole("heading", { name: /Your campaigns/ })).toHaveTextContent("(1)");
+    const fold = screen.getByText("Deleted (2)").closest("details")!;
+    expect(fold).not.toHaveAttribute("open");
+    expect(within(fold).getAllByRole("heading", { name: "Rooftop solar old" })).toHaveLength(2);
+    expect(within(fold).getByText("Deleted in Meta")).toBeInTheDocument();
+    expect(within(fold).getByText("Archived in Meta")).toBeInTheDocument();
+    expect(fold.contains(live)).toBe(false);
+    expect(live.compareDocumentPosition(fold) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(live.closest("article")!).getByText("Running")).toBeInTheDocument();
+  });
+
   // #1171: no nudge toward WhatsApp's AI reply (owner rule: no extra automated WhatsApp messages to customers).
   it("never shows a WhatsApp AI reply nudge, even with a launched WhatsApp campaign", async () => {
     render(<Campaigns business={business} approved={[]} initialCampaigns={[{ ...paused, destination: "whatsapp" } as Campaign]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady={false} adAccountId="act_999" />);
@@ -114,17 +130,41 @@ describe("Campaigns rows (#403 S5)", () => {
     expect(firstCampaign.compareDocumentPosition(drafts) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it("says when a row has no results yet, and shows them when it has", async () => {
+  it("says when a row has no results yet inside that card, and shows them when it has (#1588)", async () => {
     view({ [active.id]: result });
     const pausedRow = (await screen.findByRole("heading", { name: "Rooftop solar" })).closest("article") as HTMLElement;
     const activeRow = screen.getByRole("heading", { name: "Solar EMI" }).closest("article") as HTMLElement;
-    // #847: one line for the list instead of a sentence on each row.
-    expect(within(pausedRow).queryByText(/No results yet/)).toBeNull();
-    expect(screen.getAllByText(/No results yet for 1 of these campaigns/)).toHaveLength(1);
-    // #847 CLS: the note follows the cards, so results arriving never push them down.
-    expect(activeRow.compareDocumentPosition(screen.getByText(/No results yet for 1 of these campaigns/)) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // Designer (#1588): the line belongs to its card, not under the list or 'Deleted (n)'.
+    expect(within(pausedRow).getByText("No results yet. Refresh to get Meta's latest numbers.")).toBeInTheDocument();
+    expect(screen.queryByText(/No results yet for/)).toBeNull();
     expect(within(activeRow).queryByText(/No results yet/)).toBeNull();
     expect(within(activeRow).getByText("1,200")).toBeInTheDocument();
+  });
+
+  // #1588 (Designer, 390): for a short list the cards come first; search and filter appear at 6+ campaigns and the
+  // list's Export sits in its ⋯ menu.
+  it("hides search and the status filter below 6 campaigns, and keeps Export in the list's menu", async () => {
+    const { unmount } = render(<Campaigns business={business} approved={[]} initialCampaigns={[paused, active]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady adAccountId="act_999" />);
+    await screen.findByRole("heading", { name: "Rooftop solar" });
+    expect(screen.queryByRole("searchbox", { name: "Search campaigns" })).toBeNull();
+    expect(screen.queryByRole("combobox", { name: "Campaign status" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Export report" })).toBeNull();
+    expect(screen.getByRole("button", { name: "More list actions" })).toBeInTheDocument();
+    unmount();
+    const many = Array.from({ length: 6 }, (_, index) => ({ ...paused, id: `campaign-${index}`, name: `Campaign ${index}` }) as Campaign);
+    render(<Campaigns business={business} approved={[]} initialCampaigns={many} initialResults={{}} leadForms={[]} leadFormError={null} metaReady adAccountId="act_999" />);
+    expect(await screen.findByRole("searchbox", { name: "Search campaigns" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Campaign status" })).toBeInTheDocument();
+  });
+
+  it("shows the empty pattern with one New campaign when there are no campaigns (#1588, #1463)", async () => {
+    render(<Campaigns business={business} approved={[]} initialCampaigns={[]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady={false} adAccountId="act_999" />);
+    fireEvent.click(screen.getByRole("button", { name: "Close campaign setup" }));
+    expect(screen.getByRole("heading", { name: "No campaigns yet" })).toBeInTheDocument();
+    expect(screen.getByText("Pick your approved ads and a daily budget. Nothing spends until you go live.")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "New campaign" })).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "New campaign" }));
+    expect(screen.getByRole("button", { name: "Close campaign setup" })).toBeInTheDocument();
   });
 
   it("shows how many opened WhatsApp and how many messaged (#493)", async () => {

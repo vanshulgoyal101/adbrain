@@ -33,6 +33,12 @@ describe("core: Run this again (#1050)", () => {
     expect(rerunPrefill({ campaign, draft: { ...draft, name: "x".repeat(120) }, approvedIds: [A], bestCreativeId: null })).toMatchObject({ name: expect.stringMatching(/^x{112} \(again\)$/) });
   });
 
+  it("copies an old lead-form draft saved before destinations existed as a form campaign (#1216)", () => {
+    const old = { ...draft, destination: undefined, leadFormId: "900000000000216", whatsappMessage: undefined, whatsappLanguage: undefined };
+    expect(rerunPrefill({ campaign: { ...campaign, destination: "instant_form" }, draft: old, approvedIds: [A], bestCreativeId: null }))
+      .toMatchObject({ destination: "instant_form", leadFormId: "900000000000216", source: "draft" });
+  });
+
   it("leaves out ads that are no longer approved, and says how many", () => {
     expect(rerunPrefill({ campaign, draft, approvedIds: [A, C], bestCreativeId: B })).toMatchObject({ creativeIds: [A, C], dropped: 1 });
     expect(rerunPrefill({ campaign, draft, approvedIds: [], bestCreativeId: A })).toEqual({ error: expect.stringMatching(/None of this campaign's ads is approved anymore/) });

@@ -56,8 +56,8 @@ describe("owner WhatsApp alerts: opt-in commands (#701)", () => {
   it("shows the number masked, and only once confirmed", () => {
     const row = { lead_alerts: true, daily_results: false, language: "hi" as const, phone_e164: "+919811112222", verified_at: null, opted_out_at: null };
     expect(alertSettingsFrom(row).number).toBeNull();
-    expect(alertSettingsFrom({ ...row, verified_at: "2026-10-27T10:00:00Z" })).toEqual({ leadAlerts: true, dailyResults: false, language: "hi", number: "+91 ••••• 2222", optedOut: false });
-    expect(alertSettingsFrom(null)).toEqual({ leadAlerts: false, dailyResults: false, language: "en", number: null, optedOut: false });
+    expect(alertSettingsFrom({ ...row, verified_at: "2026-10-27T10:00:00Z" })).toEqual({ leadAlerts: true, dailyResults: false, language: "hi", number: "+91 ••••• 2222", optedOut: false, saved: true });
+    expect(alertSettingsFrom(null)).toEqual({ leadAlerts: false, dailyResults: false, language: "en", number: null, optedOut: false, saved: false });
   });
 });
 

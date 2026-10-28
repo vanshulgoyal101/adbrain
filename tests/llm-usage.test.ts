@@ -133,6 +133,21 @@ describe("persistent quota accounting", () => {
     }));
   });
 
+  it("#1200: records which provider limit a 429 hit, as attributes the event schema accepts", async () => {
+    adminFrom.mockReturnValue({ insert });
+    insert.mockReturnValue({ abortSignal });
+    abortSignal.mockResolvedValue({ error: null });
+    await persistLLMUsage([{
+      businessId: "owned-business", userId: "owner", route: "campaigns.plan", provider: "groq",
+      model: "qwen/qwen3.8-27b", usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 }, requestId: "request",
+      status: "error", failure: "HTTP_429", errorCode: "LLM_HTTP_429", rateLimit: { type: "TPM", limit: 6000, used: 3120, requested: 5612 },
+    }]);
+    const event = vi.mocked(recordProductEvent).mock.calls.at(-1)![0];
+    expect(event.attributes).toMatchObject({ errorCode: "LLM_HTTP_429", rateLimitType: "TPM", rateLimitLimit: 6000, rateLimitUsed: 3120, rateLimitRequested: 5612 });
+    const { productEventSchema } = await import("@/lib/observability/events");
+    expect(productEventSchema.shape.attributes.safeParse(event.attributes).success).toBe(true);
+  });
+
   it("puts a rejected attempt's rule names on its ai.completion event (#378)", async () => {
     adminFrom.mockReturnValue({ insert });
     insert.mockReturnValue({ abortSignal });

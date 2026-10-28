@@ -38,8 +38,12 @@ const COOLDOWN_MS = 60_000;
 // beats falling through to a model that needs 60-90s.
 const RATE_LIMIT_WAIT_MS = 20_000;
 const cooldownUntil = new Map<string, number>();
+/** #1808: the Cerebras model, exported so the scheduled model check reads the same id. */
+export const CEREBRAS_MODEL = "llama-3.3-70b";
 // #449: a key out of credit stays parked long enough not to slow every Create; the free models answer meanwhile.
 const CREDIT_COOLDOWN_MS = 15 * 60_000;
+// #1568: a daily limit parks the provider until its own retry-after, up to this long.
+const DAILY_PARK_MAX_MS = 6 * 3_600_000;
 const FREE_PROVIDERS = ["google", "groq"];
 // Round-robin cursor per provider so load spreads across a key pool.
 const rrCursor = new Map<string, number>();
@@ -88,10 +92,10 @@ function buildRegistry(routing: "standard" | "budget" | "creative" = "standard",
           provider: createOpenAICompatibleProvider({
             name: "cerebras",
             baseUrl: "https://api.cerebras.ai/v1/chat/completions",
-            defaultModel: "llama-3.3-70b",
+            defaultModel: CEREBRAS_MODEL,
           }),
           keys: env.CEREBRAS_API_KEYS,
-          model: "llama-3.3-70b",
+          model: CEREBRAS_MODEL,
         }
       : null,
   };
@@ -176,7 +180,8 @@ async function callProviders(
         const attemptStart = Date.now();
         try {
           const attemptTimeoutMs = options.providerAttemptTimeoutMs?.[provider.name] ?? options.attemptTimeoutMs;
-          const { text, usage, providerRequestId, providerFinalStatus } = await provider.complete(messages, { ...options, attemptTimeoutMs }, {
+          const maxTokens = options.providerMaxTokens?.[provider.name] ?? options.maxTokens;
+          const { text, usage, providerRequestId, providerFinalStatus } = await provider.complete(messages, { ...options, attemptTimeoutMs, maxTokens }, {
             apiKey: keys[idx],
             model,
           });
@@ -191,7 +196,8 @@ async function callProviders(
             usage: err instanceof LLMError ? err.usage : undefined,
             providerRequestId: err instanceof LLMError ? err.providerRequestId : undefined,
             providerFinalStatus: err instanceof LLMError ? err.providerFinalStatus ?? "unknown" : "unknown",
-            status: "error", failure, latencyMs: Date.now() - attemptStart });
+            status: "error", failure, latencyMs: Date.now() - attemptStart,
+            ...(err instanceof LLMError && err.rateLimit ? { rateLimit: err.rateLimit } : {}) });
           if (err instanceof LLMError && err.usage) {
             recordUsage({ text: "", provider: provider.name, model, usage: err.usage });
           }
@@ -207,7 +213,12 @@ async function callProviders(
               : err.status && err.status >= 500 ? "PROVIDER_SERVER"
                 : err.status ? "PROVIDER_CLIENT" : "TRANSPORT" : "UNKNOWN");
           if (err instanceof LLMError && err.status === 429) {
-            cooldownUntil.set(coolKey, Date.now() + Math.min(err.retryAfterMs ?? COOLDOWN_MS, COOLDOWN_MS));
+            // #1200/#1568: a daily limit doesn't lift in a minute; park until the provider's retry-after (≤ 6 h).
+            const daily = err.rateLimit?.type === "TPD" || err.rateLimit?.type === "RPD";
+            const until = Date.now() + Math.min(err.retryAfterMs ?? (daily ? CREDIT_COOLDOWN_MS : COOLDOWN_MS), daily ? DAILY_PARK_MAX_MS : COOLDOWN_MS);
+            // #1568: a limit the provider names (Groq's TPD, OTPM…) is the organization's, shared by every key.
+            const parked = err.rateLimit ? keys.map((_, k) => `${provider.name}:${k}`) : [coolKey];
+            for (const key of parked) cooldownUntil.set(key, Math.max(cooldownUntil.get(key) ?? 0, until));
           }
           // Another key on the same model would time out or truncate the same way; try the next model.
           if (err instanceof LLMError && !err.retryable && err.status === undefined) {

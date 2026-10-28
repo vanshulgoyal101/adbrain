@@ -47,6 +47,11 @@ describe("Share an approved ad (#337)", () => {
     expect(shareText(ad({ headline: null }))).toBe("Rooftop solar for Jaipur homes.\nFree site visit.");
   });
 
+  it("#1317: isn't offered on a prospect's sample ads, so no clean picture leaves AdBrain", () => {
+    render(<Studio business={business} initialCreatives={[ad()]} sample />);
+    expect(screen.queryByRole("button", { name: /Share to WhatsApp or Instagram/ })).not.toBeInTheDocument();
+  });
+
   it("is offered only on approved ads", () => {
     render(<Studio business={business} initialCreatives={[ad({ status: "draft" })]} />);
     expect(screen.queryByRole("button", { name: "Share to WhatsApp or Instagram" })).toBeNull();

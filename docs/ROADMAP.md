@@ -1,25 +1,25 @@
 # Roadmap
 
-This guide describes priorities and unfinished outcomes, not delivery promises.
-The [current dispatch](https://github.com/vanshulgoyal101/adbrain/blob/dev/docs/ORCHESTRATION.md#current-dispatch) owns assignments;
-[Features](FEATURES.md) describes source behavior. Deployment and provider claims
-require dated evidence. The next customer milestone was agreed on September 27,
-2026; dated earlier release snapshots below remain historical context.
+What AdBrain works on next and why: outcomes, not delivery promises. The
+ranked list and its evidence live on
+[#703](https://github.com/vanshulgoyal101/adbrain/issues/703); who does what is in the
+[current dispatch](ORCHESTRATION.md#current-dispatch); what the product does today is in
+[Features](FEATURES.md). This page holds current truth only; git keeps the history.
+
+**The core loop comes first:** Brand → Create → Review → Launch on Meta → Manage
+and results. Every item below must help a local business get more real enquiries
+for less money, faster and more easily, and must not break that loop
+([AGENTS.md](../AGENTS.md)).
 
 ## Current Priorities
 
-| Outcome | State | Next acceptance boundary |
-| --- | --- | --- |
-| Documentation a new developer can trust | [#39](https://github.com/vanshulgoyal101/adbrain/issues/39), with four assigned worker packets | Current core guides, preserved history, accurate examples and independent documentation QA |
-| Complete enquiry import and practical follow-up | Released through [PR47](https://github.com/vanshulgoyal101/adbrain/pull/47) at f639cc3; authenticated save/reload/filter smoke passed | Preserve accepted behavior; do not replay the completed release |
-| Verify operator-managed customer collection | [#48 technical activation](https://github.com/vanshulgoyal101/adbrain/issues/48#issuecomment-5850364461) is complete; non-charge checks passed | Separately approved real payment, signed webhook processing, correct customer allocation and eventual bank settlement; none is proved by enabled flags |
-| Guard each customer's advertising allocation | [#49](https://github.com/vanshulgoyal101/adbrain/issues/49), Dev | Customer-specific verified balance, atomic reservation, reconciled costs and refund holds before any managed campaign activates |
-| Reliable delivery within approved exposure | Earlier QA documents unresolved activation, spend and recovery cases | Accepted fixes against the actual candidate; no timeout, stale snapshot or parent status may substitute for financial/provider evidence |
-
-Work in the current dispatch takes precedence over old pilot task queues. Preserve
-completed feature candidates while documentation is rebuilt; do not reopen their
-unchanged tests. Ready payment work does not wait for unrelated documentation or
-bank-to-Meta automation. Follow the current standing rollout authority and financial limits.
+| # | Outcome | Tracked in | Done when |
+| --- | --- | --- | --- |
+| 1 | **First outside pilots live**: rooftop solar, IELTS/study-abroad, interior designers and modular kitchens in the Tricity area (clinics paused, [#1427](https://github.com/vanshulgoyal101/adbrain/issues/1427)) | [#679](https://github.com/vanshulgoyal101/adbrain/issues/679), [#1315](https://github.com/vanshulgoyal101/adbrain/issues/1315) | 3 outside businesses meet the 'pilot live' definition on #1315 (their own account, the owner switched it on, delivering) within 2 weeks of October 28; the first case study reaches 'Proven' by week 4 |
+| 2 | **More WhatsApp chats per ₹** | [#680](https://github.com/vanshulgoyal101/adbrain/issues/680), [#1174](https://github.com/vanshulgoyal101/adbrain/issues/1174) | One lever per run, judged with the decision rule below; results in the [#588](https://github.com/vanshulgoyal101/adbrain/issues/588) ledger |
+| 3 | **A reliable, fast core loop** | [#681](https://github.com/vanshulgoyal101/adbrain/issues/681) | Every step meets its target on the daily core scoreboard for 3 days running |
+| 4 | **Effortless on a phone** | [#1226](https://github.com/vanshulgoyal101/adbrain/issues/1226) | Sign-up to live in ≤ 10 minutes and ≤ 12 taps; results understood in 3 seconds (WS1–WS3 first) |
+| 5 | **Never show AdBrain's margin** | [#1235](https://github.com/vanshulgoyal101/adbrain/issues/1235) | No screen, receipt or message shows a split, a fee share or a pair of figures that subtracts to one |
 
 ### WhatsApp-first product ranking (CEO decision, October 27, 2026)
 
@@ -30,19 +30,24 @@ The smallest measurable sequence is:
 1. **Ice breakers (W1, #905):** three tap-to-send customer questions built from
    Brand facts (each 40 characters or fewer, approved by the CEO for the pilot).
    Ice-breaker mode replaces the prefill and Call button for that run. Live
-   since #995; suggestions that read as real customer questions are #1114. Pass:
-   open-to-message rate of at least 20% (pilot baseline about 8%) in the next
-   controlled run (#680).
-2. **Offer up front (W2, ad only):** the Brand's offer, stated as the headline,
-   the first line of the text and on the picture, and the ad asks for a
-   WhatsApp message instead of a call (#1147). The WhatsApp opening stays
-   exactly the owner's saved template. Pass: more ad taps that open WhatsApp
-   and a higher open-to-message rate, at similar spend. Review's
-   open-to-message rate is live (#1087).
+   since #995; suggestions that read as real customer questions are #1114. Runs
+   first in the next controlled run (#680).
+2. **Ad-only handoff levers (#1174), one per run after W1:** L1 says what
+   happens after the tap (the ad's last line quotes the pre-typed message); L2
+   puts the offer up front (headline, first line and picture; the ad asks for
+   a WhatsApp message instead of a call, #1147); L3 uses the owner's real
+   install photos. The WhatsApp opening stays exactly the owner's saved
+   template. Review's open-to-message rate is live (#1087).
 3. **Reply speed (#1049, live):** reply or call from the enquiry card in one tap;
    `contacted at` and the median time to first reply show on Home.
 4. **Owner alerts (#701):** deliver new enquiries and a daily results line to
    the owner's WhatsApp, subject to the CEO's rate-card and spend-cap decision.
+
+**Decision rule for each run (#1366):** judge open-to-message (messages ÷
+WhatsApp opens) once a run has at least 30 opens. Pass at 6 or more messages
+out of about 35 opens; fail at 3 or fewer; with 4 or 5, run the same lever
+once more and pass at 11 or more out of about 70. The pooled baseline is
+about 5% (6 of 125). A pass means "keep it", not proof.
 
 **Rule (owner, October 28, 2026):** AdBrain never sends customers automated
 WhatsApp messages beyond the owner's saved template. Quick questions (W1) are
@@ -57,135 +62,23 @@ This ranking is tracked in [#703](https://github.com/vanshulgoyal101/adbrain/iss
 Each experiment must use the existing ledger and a recorded core acceptance; no
 live ad or Meta object is changed by the ranking itself.
 
-## Delivered Baseline
+## Pilots and Money
 
-Enquiries shipped through PR47, customer allowance and follow-up retention through
-PR61, and focus/delivery-state corrections through PR62. #48 collection was enabled
-on main a8ec89d with non-charge evidence linked above. Subsequent release work is
-tracked in the current dispatch; the snapshots below describe earlier baselines.
+- Pilot businesses use **their own** Meta ad account and Page and pay Meta directly. AdBrain sets up the first campaign free. **Price (CEO, [#718](https://github.com/vanshulgoyal101/adbrain/issues/718)):** ₹999 a month, first month free, no auto-debit; the first 10 customers use the own-ad-account path only.
+- Go live's first run is 2 days today (₹300 a day, stops at ₹708 including Meta's GST). Whether pilots get a 7-day choice is a CEO decision ([#1530](https://github.com/vanshulgoyal101/adbrain/issues/1530)).
+- Until Meta's App Review ([#156](https://github.com/vanshulgoyal101/adbrain/issues/156)) is approved, each pilot owner connects as an app Tester.
+- AdBrain's own checkout and per-customer ad balances exist in source behind flags ([Payments plan](PAYMENTS-PLAN.md)). Whether they go live or are removed is a CEO decision due November 11, 2026 ([#1171](https://github.com/vanshulgoyal101/adbrain/issues/1171)).
+- Numbers shown to owners come from AdBrain's own ledger with the sample size, never from industry benchmarks. A comparison sentence needs at least 20 pooled results for that kind of business ([#1255](https://github.com/vanshulgoyal101/adbrain/issues/1255)).
 
-The SDK/query release (PR #36)
-recorded production `6291dc2d2691bfc8a235b2aa1b103f119b26b83e` through PR36,
-including AI SDK provider integration and TanStack Query campaign reads. Earlier
-releases delivered instruction-read failure handling and Studio browser recovery.
+## Next, Once the Pilots Run
 
-The shared dev history `672eb132ad57bb3ba31f118afaffddaa878b4923` was the code-only
-baseline and was superseded by later releases. Do not use its exclusions to describe
-current production: PR46 was a payment integration checkpoint, not the later
-production deployment and technical activation recorded under #48.
-The nested-branch deployment-policy incident [#33](https://github.com/vanshulgoyal101/adbrain/issues/33)
-is closed; new work still follows [RELEASING](RELEASING.md).
+- **Google Search and Business Profile** as the next channel for businesses people search for (repairs, B2B). Start: the developer-token application (no build) ([#1241](https://github.com/vanshulgoyal101/adbrain/issues/1241), [#510](https://github.com/vanshulgoyal101/adbrain/issues/510)).
+- **The app in Hindi**, one screen per slice from the CPO's tables, then Punjabi for the 3 most-used screens ([#1438](https://github.com/vanshulgoyal101/adbrain/issues/1438)). Home is live behind Settings › App language.
+- **Fill the Brand from the owner's Facebook Page** ([#1238](https://github.com/vanshulgoyal101/adbrain/issues/1238)), and a daily 'what I'd change' line that never raises spend on its own ([#799](https://github.com/vanshulgoyal101/adbrain/issues/799)).
 
-## Current Focus: One Verified Managed Customer
+## Not Now
 
-The intended journey is offer -> approved creative -> one customer payment ->
-funded, reviewed delivery -> useful enquiries -> follow-up and reconciled costs.
-The [payment plan](PAYMENTS-PLAN.md) owns commercial decisions and money-flow gates.
-
-The owner agreed on September 27 that this is the next milestone after the
-current release and assigned reliability/UX work. Do not interrupt those packets
-or add a speculative feature batch before observing the pilot's actual blockers.
-
-### Pilot Completion
-
-Selected September 27: Solaride in the owner-specified AdBrain account. Verify
-the login/workspace privately before inspection; do not publish its login email.
-This is an internal workflow pilot, not evidence of an external paying customer.
-Begin with read-only readiness; the selection does not authorize money movement,
-paid generation, campaign creation or activation.
-
-1. Select one owner-approved pilot business and responsible operator. Verify the
-  supported onboarding, business brief and reviewed creatives using the existing
-  workflow; do not treat the internal Solaride setup as customer consent.
-2. With explicit transaction authorization, verify one real payment's capture,
-  signed webhook processing, receipt and correct service/ad allocation. Track
-  eventual bank settlement separately. Keep the approved commercial offer;
-  do not invent a discounted test charge or silently modify the quote.
-3. Before any delivery, verify actual Meta spend-cap compatibility with the
-  INR 8,000 tax-inclusive allocation, intended child states, required access
-  and specific spending approval. A captured payment cannot activate ads.
-4. Confirm a monitored support/privacy channel and an executable unused-budget
-  refund/reconciliation process. Refund execution needs its own authorization;
-  working code or published policy does not prove operational fulfillment.
-5. Track delivered service, generation cost, media/tax costs, qualified enquiries,
-  follow-up response and remaining customer allowance. Record actual results and
-  a continue/change/stop decision, without promising conversions or profit.
-
-This is approval of the next objective, not a payment, refund, paid-generation
-or ad-spend authorization. Customer identity, transaction details and spending
-limits must be established before those operations. Reuse the existing runbook,
-issue evidence and reporting; fix demonstrated pilot blockers rather than build
-a new dashboard, monitoring system or broader channel integration.
-
-Current operator: Vanshul Goyal's unregistered business. Solaride remains an
-internal pilot and a proposed future operating arrangement, not the established
-operator or proof of repeatable customer onboarding. The saved pilot campaign,
-ad set and ad were OFF when verified. A configured daily budget is not spending
-permission, a hard daily cap or a year-long delivery plan.
-
-Razorpay account access, active settlements and the AdBrain website are verified.
-Do not ask the owner to repeat onboarding because an earlier plan said no account
-existed. Live collection, bank reconciliation and refunds are separate from
-account-status checks. The owner now handles Meta payment outside the application.
-
-## Release and Customer Gates
-
-| Gate | Required evidence |
-| --- | --- |
-| Software and schema | Exact dependency-complete source, independent acceptance, required CI, compatible schema and rollout/rollback plan |
-| Customer access | Actual consent, correct Page/account selection and capabilities; administrator repair and mocked consent are not substitutes |
-| Commercial service | Approved operator, scope, invoice/tax/refund terms and measured cost assumptions |
-| Payment collection | Exact production order schema/config/webhook, approved customer terms, verified capture/refund recovery and enabled live flags |
-| Customer spending | Per-business verified allocations, attributed costs, concurrent reservations and bounded campaign authorization; operator pays Meta externally |
-| Customer value | Qualified enquiries, acknowledged follow-up, actual media/tax/service costs and a continue/change/stop decision |
-
-Use the current dispatch's standing production authority for scoped software,
-configuration and migration work. A document or passing test alone is not that
-authority, and no arbitrary bank mandate, test charge or ad activation is implied.
-
-## Reliability and Workflow
-
-Prioritize these open risks within existing customer workflows:
-
-- Durable generation intent and atomic quota admission; browser recovery does
-  not guarantee exactly-once paid execution across requests or devices.
-- Activation reservations and uncertain-outcome reconciliation; provider success
-  followed by a failed local save must not invite blind duplicate mutation.
-- Complete, fresh spend observations and protective pause/recovery behavior;
-  missing observations are not zero liability.
-- Preserve the released enquiry import/paging/follow-up behavior; extend tests only
-  for actual changes or newly observed failures.
-- Public-media lifecycle, deletion/support operations, alert ownership and
-  recoverability demonstrated with safe, attributable evidence.
-
-Earlier failures are recorded in their issues, not asserted to have been reproduced
-on every later release. Close them with exact-candidate evidence, not a renamed
-helper, schema agreement or unrelated green suite.
-
-## Commercial and Growth
-
-Measure useful outcomes before expanding channels or automation. The owner now
-explicitly chooses one customer payment to AdBrain and operator-managed Meta
-payment outside the app. No outbound funding adapter or evidence gate is needed.
-Do not promise profit, conversion rates or a year of continuous ads from an annual
-service price. Keep account ownership, access and offboarding explicit.
-
-Google Ads, video, team/agency administration, automated outreach and autonomous
-optimization are deferred. Accessibility, privacy and reliability improvements
-within the existing journey remain in scope when they resolve a demonstrated need.
-
-## Already Implemented, Still Bounded
-
-Brand profiles, creative review/export, draft/preflight workflows, paused campaign
-creation, encrypted business-bound Meta access and reporting exist in source.
-Their limits belong in [Features](FEATURES.md), [Architecture](ARCHITECTURE.md)
-and the [API reference](API_REFERENCE.md), not duplicated capability tables here.
-
-## Sequencing
-
-Finish the current accepted release and assigned reliability/UX work, preserving
-candidate handoffs and required checks. Then complete the managed pilot above.
-DevOps remains the release/production executor, QA independently verifies changed
-behavior, and developers address demonstrated workflow blockers. Non-blocking
-documentation or unrelated polish must not delay a complete customer outcome.
-Real financial execution waits for its concrete verified route and authority.
+- Lead-form work beyond keeping it working (WhatsApp is the channel).
+- Any automated WhatsApp message to customers beyond the owner's saved template.
+- TikTok (no lawful path for an Indian business), video ads, agency or team accounts, and paid ads for AdBrain itself before 3 case studies.
+- The 2-Tier managed-account code: frozen, and removed by November 30, 2026 if no customer uses it ([#1171](https://github.com/vanshulgoyal101/adbrain/issues/1171)).

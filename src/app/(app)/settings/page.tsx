@@ -12,6 +12,9 @@ import { SpendGuardrails } from "@/components/spend-guardrails";
 import { PreferenceSettings } from "@/components/preference-settings";
 import { PrivacyRequests } from "@/components/privacy-requests";
 import { WhatsAppAlerts } from "@/components/whatsapp-alerts";
+import { AppLanguage } from "@/components/app-language";
+import { translator } from "@/i18n/locale";
+import { requestLocale } from "@/i18n/request-locale";
 import { readAlertSettings } from "@/lib/alerts/settings-read";
 import { WhatsAppStatusSection } from "@/components/whatsapp-status-section";
 import { MetaSetupChecklist } from "@/components/meta-setup-checklist";
@@ -23,6 +26,7 @@ import { getPrimaryBusiness, getSpendEvaluation } from "@/lib/supabase/queries";
 import { isRazorpayTestEnabled } from "@/lib/payments/razorpay-test";
 import { isProductionPaymentConfigured } from "@/lib/payments/production-config";
 import { getCustomerBalance } from "@/lib/payments/customer-balance";
+import { toCustomerBalanceView } from "@/lib/payments/customer-balance-contracts";
 import { requireOwnedBusiness } from "@/lib/meta/connection-access";
 import { readPreferenceState } from "@/lib/preferences/store";
 import { listOwnPrivacyRequests, privacyOperatorAllowed } from "@/lib/privacy-requests";
@@ -118,15 +122,19 @@ export default async function SettingsPage({
 
 // #238: read once in the server render; the panels refetch only after the owner acts.
 async function PreferenceAndPrivacySettings({ businessId }: { businessId: string }) {
-  const [preferences, requests, operator, alerts] = await Promise.all([
+  const [locale, preferences, requests, operator, alerts] = await Promise.all([
+    requestLocale(),
     readPreferenceState(businessId).catch(() => null),
     listOwnPrivacyRequests().catch(() => null),
     privacyOperatorAllowed().catch(() => false),
     readAlertSettings(businessId).catch(() => null),
   ]);
+  const t = translator(locale, "settings");
   return <>
+    {/* #1438: Home follows this choice; other screens follow screen by screen. */}
+    <AppLanguage key={locale} initial={locale} labels={{ language: t("language"), hint: t("languageHint"), saveFailed: t("saveFailed") }} />
     {/* #701: shown once AdBrain's alerts number is set (ALERTS_WHATSAPP). */}
-    {alerts && <WhatsAppAlerts businessId={businessId} initial={alerts} />}
+    {alerts && <WhatsAppAlerts businessId={businessId} initial={alerts} locale={locale} />}
     <PreferenceSettings key={businessId} businessId={businessId} initialState={preferences} />
     <PrivacyRequests initialRequests={requests} initialOperatorAvailable={operator} />
   </>;
@@ -154,14 +162,14 @@ async function ConnectionSettings({ businessId, searchParams, whatsapp }: {
     getMetaConnection(businessId).then(connection => ({ connection })).catch(() => ({ connection: null })),
     searchParams,
     mode === "managed" && isProductionPaymentConfigured()
-      ? requireOwnedBusiness(businessId).then(getCustomerBalance).catch(() => null)
+      ? requireOwnedBusiness(businessId).then(getCustomerBalance).then(toCustomerBalanceView).catch(() => null)
       : Promise.resolve(null),
   ]);
   return (
     <>
       {result.connection ? (
         <MetaConnectionPanel businessId={businessId} connection={result.connection}
-          oauthConfigured={metaOAuthConfigured()} notice={noticeFrom(params)} />
+          oauthConfigured={metaOAuthConfigured()} notice={noticeFrom(params)} fundingMode={mode} />
       ) : (
         <Alert variant="error">
           Meta connection status is temporarily unavailable. Your campaign draft is preserved.
@@ -176,7 +184,8 @@ async function ConnectionSettings({ businessId, searchParams, whatsapp }: {
       )}
       {whatsapp}
       <BillingSection mode={mode} connection={result.connection} testBusinessId={isRazorpayTestEnabled() ? businessId : undefined}
-        liveBusinessId={isProductionPaymentConfigured() ? businessId : undefined} initialBalance={initialBalance} />
+        liveBusinessId={isProductionPaymentConfigured() ? businessId : undefined} initialBalance={initialBalance}
+        billingTab={typeof params.billing === "string" ? params.billing : null} />
     </>
   );
 }

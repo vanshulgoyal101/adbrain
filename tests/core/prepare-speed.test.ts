@@ -21,7 +21,7 @@ function replay(tape: Exchange[]) {
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = new URL(String(input));
     url.searchParams.delete("access_token");
-    const call = `${init?.method ?? "GET"} ${url.pathname.replace("/v21.0/", "")}${url.search}`;
+    const call = `${init?.method ?? "GET"} ${url.pathname.replace("/v26.0/", "")}${url.search}`;
     sent.push(call);
     const exchange = tape.find(entry => `${entry.method} ${entry.path}` === call);
     if (!exchange) throw new Error(`Unrecorded Graph call: ${call}`);

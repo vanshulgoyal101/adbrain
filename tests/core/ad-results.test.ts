@@ -17,7 +17,7 @@ function replay() {
     url.searchParams.delete("access_token");
     const method = init?.method ?? "GET";
     if (method !== "GET") throw new Error(`Per-ad results are read-only; got ${method} ${url.pathname}`);
-    const path = url.pathname.replace("/v21.0/", "") + url.search;
+    const path = url.pathname.replace("/v26.0/", "") + url.search;
     const index = pending.findIndex(exchange => exchange.path === path);
     if (index < 0) throw new Error(`Unrecorded Graph call: ${path}`);
     const [exchange] = pending.splice(index, 1);

@@ -19,6 +19,24 @@ beforeEach(() => {
 });
 
 describe("<ManagedOnboardingLive> (#526)", () => {
+  it("polls progress through the shared rule: waits out a 429 and stops once signed out (#1541)", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: false });
+    const statuses = [429, 401];
+    const fetcher = vi.fn(async () => new Response(null, { status: statuses.shift() ?? 200, headers: { "Retry-After": "60" } }));
+    vi.stubGlobal("fetch", fetcher);
+    try {
+      render(<ManagedOnboardingLive businessId={businessId} initialAttemptId={null} />);
+      await act(async () => { await vi.advanceTimersByTimeAsync(59_000); });
+      expect(fetcher).toHaveBeenCalledTimes(1);
+      await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
+      expect(fetcher).toHaveBeenCalledTimes(2);
+      await act(async () => { await vi.advanceTimersByTimeAsync(30 * 60_000); });
+      expect(fetcher).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("starts Facebook sign-in for the Page step and mounts the Page step with the attempt it returns", async () => {
     const popup = { location: { href: "" }, close: vi.fn() } as unknown as Window;
     vi.spyOn(window, "open").mockReturnValue(popup);
