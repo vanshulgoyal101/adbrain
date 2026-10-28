@@ -39,6 +39,7 @@
     "smoke:core": "node scripts/smoke-core.mjs",
     "stats": "node scripts/stats.mjs",
     "core-scoreboard": "tsx scripts/core-scoreboard.mts",
+    "ux-scoreboard": "tsx scripts/ux-scoreboard.mts",
     "learnings": "node --env-file-if-exists=.env.local scripts/learnings.mjs",
     "perf:pages": "node scripts/perf-pages.mjs"
   },
