@@ -550,7 +550,7 @@ describe("core: manage routes against recorded Graph responses (#649)", () => {
     const response = await activate({ confirmationDigest: await digest(campaign, delivery, 5), connectionGeneration: GENERATION, capDays: 5 });
     expect(response.status).toBe(409);
     expect(await response.json()).toMatchObject({
-      error: "Meta has ₹134.87 left under the ad account's spending limit after ₹450.00 for your 1 other live run; this run needs ₹1,000.00. Add funds on Meta or choose fewer days.",
+      error: "Meta has ₹134.87 left under the ad account's spending limit after ₹450 for your 1 other live run; this run needs ₹1,000. Add funds on Meta or choose fewer days.",
     });
     expect(graph.sent.map(call => `${call.method} ${call.path}`).sort()).toEqual([...deliveryReads, ...tapes.funding.map(exchange => `GET ${exchange.path}`)].sort());
     expect(writes()).toEqual([]);

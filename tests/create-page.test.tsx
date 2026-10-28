@@ -65,8 +65,10 @@ describe("Create page business details (#169)", () => {
 });
 
 describe("Create page for a first-timer (#1270)", () => {
+  const usable = { ...sparse, vertical: "Bakery", locations: ["Jaipur"], offers: ["Free cake"], phone: "9876543210" } as unknown as Business;
+
   it("is setup step 2 until a campaign has gone live; ?all=1 opens the full Create", async () => {
-    getPrimaryBusiness.mockResolvedValue(sparse);
+    getPrimaryBusiness.mockResolvedValue(usable);
     hasLaunchedCampaign.mockResolvedValue(false);
     const { default: CreatePage } = await import("@/app/(app)/create/page");
     const { unmount } = render(await CreatePage({ searchParams: Promise.resolve({}) }));
@@ -82,5 +84,12 @@ describe("Create page for a first-timer (#1270)", () => {
     const { default: CreatePage } = await import("@/app/(app)/create/page");
     render(await CreatePage({ searchParams: Promise.resolve({}) }));
     expect(screen.queryByText("Setup step 2")).toBeNull();
+  });
+
+  it("+ lands here; a first-timer without the five facts resumes at step 1 (#1272)", async () => {
+    getPrimaryBusiness.mockResolvedValue(sparse);
+    hasLaunchedCampaign.mockResolvedValue(false);
+    const { default: CreatePage } = await import("@/app/(app)/create/page");
+    await expect(CreatePage({ searchParams: Promise.resolve({}) })).rejects.toThrow("NEXT_REDIRECT");
   });
 });

@@ -1,4 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
+import { metaWriteMode } from "@/lib/internal-accounts";
 import { getEnv } from "@/lib/env";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -156,7 +157,9 @@ async function runMetaConnection<Result>(
 ): Promise<Result> {
   const started = performance.now();
   try {
-    const result = await withConnectionCredentials(context, options, (credentials, connection) => execute(new MetaClient(credentials, options.signal), connection));
+    // #1324: a smoke-owned business may only read, validate and pause on a real ad account.
+    const result = await withConnectionCredentials(context, options, (credentials, connection) =>
+      execute(new MetaClient(credentials, options.signal, metaWriteMode(context.userId, credentials.adAccountId)), connection));
     recordProductEvent({ kind: "workflow", name: `meta.${options.purpose}`, outcome: "success", businessId: context.businessId,
       durationMs: Math.round(performance.now() - started), attributes: { provider: "meta" } });
     return result;

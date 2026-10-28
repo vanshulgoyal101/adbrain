@@ -86,7 +86,7 @@ same identity; do not change a key or clear local recovery data to force progres
 
 | Method | Path | Input / result | Effect |
 | --- | --- | --- | --- |
-| POST | `/api/brand/autofill` | `{url}` or (#1317) `{text}`: an Instagram bio, Google listing or catalogue text pasted by hand (30+ letters, ≤ 6000 chars; nothing fetched, phone read from the text). URL -> plain extraction | Website fetch + model call, no brand save |
+| POST | `/api/brand/autofill` | `{url}` or (#1317) `{text}`: an Instagram bio, Google listing or catalogue text pasted by hand (30+ letters, ≤ 6000 chars; nothing fetched, phone read from the text). URL -> plain extraction; `name` (#1379) comes from the page's `og:site_name`/title or the text's first words, never the model | Website fetch + model call, no brand save |
 | POST | `/api/creatives/assistant` | Interview -> question/brief | Model call |
 | POST | `/api/creatives/generate` | Generation input -> saved variants/failures | Paid work + Storage/DB |
 | GET | `/api/creatives/generate` | Business/group/count -> saved status | DB lookup/unknown-ID fence, no generation |
@@ -262,8 +262,8 @@ credit. Owners can review their balance with `GET /api/payments/customer-balance
 using `businessId` and optional `campaignId`. With `campaignId`, optional
 `capDays` (integer 1–7) reviews a capped run at `daily × capDays` + GST instead
 of 7 × daily; the activation PATCH still enforces the days the owner approves.
-The GET response is the customer view: no `capturedPaise`, `serviceAllocationPaise`
-or `advertisingRefundedPaise`, so AdBrain's margin never reaches the browser (#1235).
+The GET response is the customer view: no `capturedPaise`, `serviceAllocationPaise`,
+`advertisingAllocationPaise` or `advertisingRefundedPaise`, so AdBrain's margin never reaches the browser (#1235).
 Financial operators can submit
 strict `costs` or `refund-allocation` actions with
 `POST /api/payments/customer-balance`; authority is rechecked in SQL. See the

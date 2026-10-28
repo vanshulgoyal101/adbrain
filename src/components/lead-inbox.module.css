@@ -71,8 +71,8 @@ button.name:hover { text-decoration: underline; }
 .more summary::-webkit-details-marker { display: none; }
 .more { position: relative; }
 .moreMenu { position: absolute; right: 0; top: 46px; z-index: 10; display: grid; min-width: 160px; padding: 4px; border: 1px solid var(--color-slate-200); border-radius: 8px; background: white; box-shadow: 0 8px 24px rgb(15 23 42 / 0.12); }
-.moreMenu button { min-height: 44px; padding: 0 12px; text-align: left; font-size: 15px; border-radius: 6px; }
-.moreMenu button:hover { background: var(--color-slate-50); }
+.moreMenu button, .moreMenu a { display: flex; align-items: center; min-height: 44px; padding: 0 12px; text-align: left; font-size: 15px; border-radius: 6px; }
+.moreMenu button:hover, .moreMenu a:hover { background: var(--color-slate-50); }
 .empty { padding: 44px 24px; border-block: 1px solid var(--color-slate-200); display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; }
 .empty svg { color: var(--color-slate-400); }
 .empty h3 { font-size: 17px; font-weight: 600; }
@@ -91,7 +91,7 @@ button.name:hover { text-decoration: underline; }
   .contact { display: flex !important; flex-wrap: wrap; gap: 8px 20px; }
   .contact > a { display: flex; min-height: 36px; align-items: center; }
   /* #1260: one row per person: initials, name and state word, then when · city, then the actions. No labels. */
-  .table tbody tr { grid-template-columns: 40px minmax(0, 1fr); gap: 10px 12px; }
+  .table tbody tr { grid-template-columns: 40px minmax(0, 1fr) auto; gap: 10px 12px; }
   .table td { grid-column: 2; }
   .table .person { grid-column: 1 / -1; display: grid !important; grid-template-columns: 40px minmax(0, 1fr) auto; column-gap: 12px; align-items: center; font-size: 15px; }
   .avatar { display: grid; place-items: center; grid-row: span 2; width: 40px; height: 40px; border-radius: 50%; background: var(--color-slate-100); color: var(--color-slate-700); font-size: 14px; font-weight: 600; }
@@ -107,9 +107,12 @@ button.name:hover { text-decoration: underline; }
   .followUp { display: flex !important; align-items: center; }
   .followUpCell { flex: 1; }
   .more { display: block; margin-left: auto; }
-  /* Waiting: WhatsApp them + Call. Customers: the word 'Customer' and ⋯ only. */
+  /* One action line per person (Designer, #1260). Waiting: WhatsApp them · Call · ⋯. Contacted: Became a customer · ⋯
+     (WhatsApp and Call move into ⋯ and the detail pane). Customers: ⋯ only. */
   tr[data-state="new"] .followUpCell > button:not(.followUpButton) { display: none; }
-  tr[data-state="customer"] .contact { display: none !important; }
+  tr[data-state="new"] .followUp { grid-column: 3; }
+  tr:not([data-state="new"]) .followUp { grid-column: 2 / -1; }
+  tr:not([data-state="new"]) .contact { display: none !important; }
 }
 /* #1260 slice 4: the left pane at 1280+ uses the same rows as a phone. */
 @media (min-width: 1280px) {
@@ -122,7 +125,7 @@ button.name:hover { text-decoration: underline; }
   .panes .contact { display: flex !important; flex-wrap: wrap; gap: 8px 20px; }
   .panes .contact > a { display: flex; min-height: 36px; align-items: center; }
   /* #1260: one row per person: initials, name and state word, then when · city, then the actions. No labels. */
-  .panes .table tbody tr { grid-template-columns: 40px minmax(0, 1fr); gap: 10px 12px; }
+  .panes .table tbody tr { grid-template-columns: 40px minmax(0, 1fr) auto; gap: 10px 12px; }
   .panes .table td { grid-column: 2; }
   .panes .table .person { grid-column: 1 / -1; display: grid !important; grid-template-columns: 40px minmax(0, 1fr) auto; column-gap: 12px; align-items: center; font-size: 15px; }
   .panes .avatar { display: grid; place-items: center; grid-row: span 2; width: 40px; height: 40px; border-radius: 50%; background: var(--color-slate-100); color: var(--color-slate-700); font-size: 14px; font-weight: 600; }
@@ -138,9 +141,12 @@ button.name:hover { text-decoration: underline; }
   .panes .followUp { display: flex !important; align-items: center; }
   .panes .followUpCell { flex: 1; }
   .panes .more { display: block; margin-left: auto; }
-  /* Waiting: WhatsApp them + Call. Customers: the word 'Customer' and ⋯ only. */
+  /* One action line per person (Designer, #1260). Waiting: WhatsApp them · Call · ⋯. Contacted: Became a customer · ⋯
+     (WhatsApp and Call move into ⋯ and the detail pane). Customers: ⋯ only. */
   .panes tr[data-state="new"] .followUpCell > button:not(.followUpButton) { display: none; }
-  .panes tr[data-state="customer"] .contact { display: none !important; }
+  .panes tr[data-state="new"] .followUp { grid-column: 3; }
+  .panes tr:not([data-state="new"]) .followUp { grid-column: 2 / -1; }
+  .panes tr:not([data-state="new"]) .contact { display: none !important; }
 }
 @media (max-width: 600px) {
   /* #376: no dead space on a phone. */

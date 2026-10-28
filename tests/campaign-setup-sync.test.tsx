@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { formatDate } from "@/lib/format";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Campaigns } from "@/components/campaigns";
@@ -344,10 +345,10 @@ describe("campaign sync feedback", () => {
     render(<Campaigns business={business} approved={[creative]} initialCampaigns={[campaign]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady={false} adAccountId="act_1" />);
     fireEvent.click(screen.getByRole("button", { name: "Resume" }));
     await act(async () => { mocks.dialog.current!.onConnected({ authorization: "connected", selected, generation: 1 } as ConnectionDTO); });
-    expect(await screen.findByText("Funded on Meta: ₹2,000.00 room for a ₹1,500.00 cap.")).toBeInTheDocument();
+    expect(await screen.findByText("Funded on Meta: ₹2,000 room for a ₹1,500 cap.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Approve total and activate" })).toBeEnabled();
     fireEvent.change(screen.getByLabelText("Run for"), { target: { value: "5" } });
-    expect(screen.getByText("Funded on Meta: ₹2,000.00 room for a ₹2,500.00 cap. Add funds on Meta or choose fewer days.")).toBeInTheDocument();
+    expect(screen.getByText("Funded on Meta: ₹2,000 room for a ₹2,500 cap. Add funds on Meta or choose fewer days.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Approve total and activate" })).toBeDisabled();
     expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).startsWith("/api/payments/customer-balance"))).toBe(false);
   });
@@ -368,11 +369,11 @@ describe("campaign sync feedback", () => {
     render(<Campaigns business={business} approved={[creative]} initialCampaigns={[campaign]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady={false} adAccountId="act_1" />);
     fireEvent.click(screen.getByRole("button", { name: "Resume" }));
     await act(async () => { mocks.dialog.current!.onConnected({ authorization: "connected", selected, generation: 1 } as ConnectionDTO); });
-    expect(await screen.findByText("Funded on Meta: ₹1,500.00 room for a ₹1,500.00 cap after ₹500.00 for your 1 other live run.")).toBeInTheDocument();
+    expect(await screen.findByText("Funded on Meta: ₹1,500 room for a ₹1,500 cap after ₹500 for your 1 other live run.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Approve total and activate" })).toBeEnabled();
     // ₹2,000 fits Meta's ₹2,000 room but not the ₹1,500 left after the other run.
     fireEvent.change(screen.getByLabelText("Run for"), { target: { value: "4" } });
-    expect(screen.getByText("Funded on Meta: ₹1,500.00 room for a ₹2,000.00 cap after ₹500.00 for your 1 other live run. Add funds on Meta or choose fewer days.")).toBeInTheDocument();
+    expect(screen.getByText("Funded on Meta: ₹1,500 room for a ₹2,000 cap after ₹500 for your 1 other live run. Add funds on Meta or choose fewer days.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Approve total and activate" })).toBeDisabled();
   });
 
@@ -521,7 +522,9 @@ describe("campaign sync feedback", () => {
     render(<Campaigns business={business} approved={[creative]} initialCampaigns={[campaign]} initialResults={{ "campaign-1": before } as never} leadForms={[]} leadFormError={null} metaReady={false} adAccountId="act_1" />);
     const card = within(screen.getByRole("heading", { name: "Saved campaign" }).closest("article")!);
     fireEvent.click(card.getByRole("button", { name: "Refresh results" }));
-    const since = new Date(before.fetched_at).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
+    // #1290: India time whatever the server's zone (03:35 UTC is 9:05 am IST).
+    const since = formatDate(before.fetched_at);
+    expect(since).toMatch(/9:05 am$/);
     expect(await card.findByRole("status")).toHaveTextContent(`Checked just now: no new results since ${since}.`);
     next = { ...next, id: "r3", impressions: 300, fetched_at: "2026-10-26T06:00:00.000Z" };
     fireEvent.click(card.getByRole("button", { name: "Refresh results" }));
