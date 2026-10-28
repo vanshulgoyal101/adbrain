@@ -92,6 +92,23 @@ describe("Campaigns rows (#403 S5)", () => {
     expect(within(dialog).getByRole("note")).toHaveTextContent("goes back to Meta review");
   });
 
+  // #1761 (DPDP erasure): delete every enquiry a campaign brought in, from its More menu, after a confirm.
+  it("deletes a campaign's enquiries from its More menu after confirming", async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => init?.method === "DELETE" ? Response.json({ ok: true, deleted: 3 }) : Response.json({ campaigns: [], nextCursor: null }));
+    vi.stubGlobal("fetch", fetchMock);
+    view();
+    const card = within((await screen.findByRole("heading", { name: "Solar EMI" })).closest("article") as HTMLElement);
+    card.getByRole("button", { name: "More actions for Solar EMI" }).focus();
+    await user.keyboard("{Enter}");
+    // This file's confirm is window.confirm (mocked above), so the sheet's words reach it as one string.
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    await user.click(within(await screen.findByRole("menu")).getByRole("menuitem", { name: /Delete its enquiries/ }));
+    expect(confirm).toHaveBeenCalledWith(expect.stringMatching(/^Delete this campaign's enquiries\? .*Your ads aren't affected\.$/));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/leads?campaignId=campaign-2", expect.objectContaining({ method: "DELETE" })));
+    expect(await screen.findByText("Deleted 3 enquiries from this campaign.")).toBeInTheDocument();
+  });
+
   it("keeps Pause/Resume and Refresh visible at 44 px and folds the rest into one More menu", async () => {
     const user = userEvent.setup();
     view();

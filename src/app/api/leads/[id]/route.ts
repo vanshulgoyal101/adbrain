@@ -4,6 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import { getPrimaryBusiness } from "@/lib/supabase/queries";
 import { leadUpdateSchema } from "@/lib/leads/filters";
 import { observeRoute } from "@/lib/observability/logger";
+import { logEvent } from "@/lib/audit";
+import { rateLimitResponse } from "@/lib/security/rate-limit";
 
 export const PATCH = observeRoute("/api/leads/[id]", "PATCH", async (
   request: Request, context: { params: Promise<{ id: string }> },
@@ -39,3 +41,27 @@ export const PATCH = observeRoute("/api/leads/[id]", "PATCH", async (
     return NextResponse.json({ error: invalid ? "Invalid follow-up." : "Follow-up could not be saved." }, { status: invalid ? 400 : 503 });
   }
 });
+
+/**
+ * #1761 (DPDP erasure, #1758): the owner deletes one enquiry for good. `leads_erase` runs under RLS (their own
+ * business only) and leaves a hashed tombstone so lead sync never brings it back. The audit row holds ids only.
+ */
+export const DELETE = observeRoute("/api/leads/[id]", "DELETE", async (
+  _request: Request, context: { params: Promise<{ id: string }> },
+) => {
+  const database = await createClient();
+  const { data: { user } } = await database.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Sign in required." }, { status: 401 });
+  const id = z.uuid().safeParse((await context.params).id);
+  if (!id.success) return NextResponse.json({ error: "Invalid enquiry." }, { status: 400 });
+  const limited = await rateLimitResponse(`lead-erase:${user.id}`, { limit: 60, windowMs: 5 * 60_000 });
+  if (limited) return limited;
+  const business = await getPrimaryBusiness();
+  if (!business) return NextResponse.json({ error: "Business not found." }, { status: 404 });
+  const { data, error } = await database.rpc("leads_erase", { p_business_id: business.id, p_lead_id: id.data });
+  if (error) return NextResponse.json({ error: "The enquiry couldn't be deleted. Try again." }, { status: 503 });
+  if (!data) return NextResponse.json({ error: "Enquiry not found." }, { status: 404 });
+  await logEvent({ businessId: business.id, action: "lead.deleted", entityType: "lead", entityId: id.data, details: { count: data } });
+  return NextResponse.json({ ok: true, deleted: data });
+});
+

@@ -1505,6 +1505,25 @@ function BusinessCampaigns({
     }
   }
 
+  // #1761 (DPDP erasure): every enquiry this campaign brought in (form leads and logged chats) goes for good.
+  async function deleteEnquiries(c: Campaign) {
+    if (!(await askConfirm({
+      title: "Delete this campaign's enquiries?",
+      description: `Every enquiry from "${c.name ?? "this campaign"}" is removed from AdBrain for good, including chats you added. Meta keeps its own copy in your Page's leads. Your ads aren't affected.`,
+      confirmLabel: "Delete enquiries", tone: "danger",
+    }))) return;
+    setCardError(null);
+    try {
+      const response = await fetch(`/api/leads?campaignId=${encodeURIComponent(c.id)}`, { method: "DELETE" });
+      const data = (await response.json().catch(() => ({}))) as { deleted?: number; error?: string };
+      if (!response.ok) { setCardError({ id: c.id, message: data.error ?? "Couldn't delete the enquiries. Try again." }); return; }
+      const n = data.deleted ?? 0;
+      setCardNotice({ id: c.id, message: n ? `Deleted ${n} ${n === 1 ? "enquiry" : "enquiries"} from this campaign.` : "This campaign had no enquiries to delete." });
+    } catch {
+      setCardError({ id: c.id, message: "Couldn't delete the enquiries — check your connection." });
+    }
+  }
+
   async function deleteCampaign(c: Campaign) {
     if (!(await askConfirm({ title: `Delete "${c.name ?? "this campaign"}"?`, description: "This removes it from Meta and can't be undone.", confirmLabel: "Delete campaign", tone: "danger" }))) {
       return;
@@ -2506,6 +2525,9 @@ function BusinessCampaigns({
                               </DropdownMenuItem>
                             )}
                             {c.meta_campaign_id && <DropdownMenuSeparator />}
+                            {c.status !== "draft" && <DropdownMenuItem variant="danger" onSelect={() => void deleteEnquiries(c)}>
+                              <Trash2 className="h-4 w-4" aria-hidden="true" /> Delete its enquiries
+                            </DropdownMenuItem>}
                             <DropdownMenuItem variant="danger" onSelect={() => void deleteCampaign(c)}>
                               <Trash2 className="h-4 w-4" aria-hidden="true" /> Delete campaign
                             </DropdownMenuItem>
