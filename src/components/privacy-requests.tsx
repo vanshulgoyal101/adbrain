@@ -57,7 +57,7 @@ export function PrivacyRequests({ initialRequests = null, initialOperatorAvailab
       {confirmDialog}
     <div>
       <h2 id="privacy-requests-title" className="text-lg font-semibold text-slate-900">Privacy and data requests</h2>
-      <p className="text-sm text-slate-600">Requests are reviewed by an operator; no full-account export or deletion happens automatically. <a href="/data-deletion" className="font-medium text-blue-700 underline">Data request details</a></p>
+      <p className="text-sm text-slate-600">Requests are reviewed by an operator; no full-account export or deletion happens automatically. <a href="/data-deletion" className="inline-flex min-h-11 items-center font-medium text-blue-700 underline">Data request details</a></p>
     </div>
     {error && <Alert variant="error">{error}</Alert>}
     {notice && <Alert variant="success">{notice}</Alert>}
@@ -73,7 +73,7 @@ export function PrivacyRequests({ initialRequests = null, initialOperatorAvailab
           <span className="text-slate-700">{statusLabel[row.status]}</span>
         </li>)}</ul>}
     </div>}
-    {operatorAvailable && <Link href="/settings/privacy-requests" className="inline-block text-sm font-medium text-blue-700 underline underline-offset-4">Operator request queue</Link>}
+    {operatorAvailable && <Link href="/settings/privacy-requests" className="inline-flex min-h-11 items-center text-sm font-medium text-blue-700 underline underline-offset-4">Operator request queue</Link>}
   </section>;
 }
 
