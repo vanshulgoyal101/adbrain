@@ -38,6 +38,10 @@ const COOLDOWN_MS = 60_000;
 // beats falling through to a model that needs 60-90s.
 const RATE_LIMIT_WAIT_MS = 20_000;
 const cooldownUntil = new Map<string, number>();
+// #1568: a provider that hit a named rate limit in this process is probed by one call at a time after its park;
+// calls made while that probe is out go to the next provider instead of piling onto a limit that may still hold.
+const rateLimited = new Set<string>();
+const probing = new Set<string>();
 /** #1808: the Cerebras model, exported so the scheduled model check reads the same id. */
 export const CEREBRAS_MODEL = "llama-3.3-70b";
 // #449: a key out of credit stays parked long enough not to slow every Create; the free models answer meanwhile.
@@ -176,6 +180,9 @@ async function callProviders(
         const idx = (start + i) % keys.length;
         const coolKey = `${provider.name}:${idx}`;
         if ((cooldownUntil.get(coolKey) ?? 0) > Date.now()) continue;
+        if (rateLimited.has(provider.name) && probing.has(provider.name)) break;
+        const probe = rateLimited.has(provider.name);
+        if (probe) probing.add(provider.name);
 
         const attemptStart = Date.now();
         try {
@@ -187,8 +194,11 @@ async function callProviders(
           });
           options.onAttempt?.({ provider: provider.name, model, usage, providerRequestId,
             providerFinalStatus: providerFinalStatus ?? "unknown", status: "success", latencyMs: Date.now() - attemptStart });
+          rateLimited.delete(provider.name);
+          if (probe) probing.delete(provider.name);
           return { text, provider: provider.name, model, usage, providerRequestId, providerFinalStatus };
         } catch (err) {
+          if (probe) probing.delete(provider.name);
           const failure: LLMFailureCode = options.signal?.aborted
             ? (options.signal.reason as { name?: string } | undefined)?.name === "TimeoutError" ? "DEADLINE" : "ABORTED"
             : err instanceof LLMError ? err.code ?? "UNKNOWN" : "UNKNOWN";
@@ -219,6 +229,7 @@ async function callProviders(
             // #1568: a limit the provider names (Groq's TPD, OTPM…) is the organization's, shared by every key.
             const parked = err.rateLimit ? keys.map((_, k) => `${provider.name}:${k}`) : [coolKey];
             for (const key of parked) cooldownUntil.set(key, Math.max(cooldownUntil.get(key) ?? 0, until));
+            if (err.rateLimit) rateLimited.add(provider.name);
           }
           // Another key on the same model would time out or truncate the same way; try the next model.
           if (err instanceof LLMError && !err.retryable && err.status === undefined) {
