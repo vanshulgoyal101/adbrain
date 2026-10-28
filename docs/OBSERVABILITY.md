@@ -65,7 +65,8 @@ The stream includes:
 - Authorized Meta operation purpose, duration, outcome and safe error category. When Meta refused
   the call (#615), the `meta.<purpose>` event also carries `status`, `metaCode`, `metaSubcode`,
   `metaUserTitle`, `fbtraceId` and `metaPath` (the endpoint template), never tokens or bodies.
-  `meta.create_paused` covers every pre-launch read too (lead forms, interests, WhatsApp numbers).
+  `meta.create_paused` covers the pre-launch reads too (lead forms, interests), except the Settings/Brand
+  WhatsApp-number status read, which is gated the same way but logged as `meta.whatsapp_numbers` (#1540).
 - Every Meta Graph call (#451 L2): `meta.graph`, `kind=system`, with the endpoint as a template
   (`act_[id]/adsets`, `[id]/insights`, `search`; no IDs, query values or token), method, HTTP
   status, entity type, latency and, on failure, `META_<code>_<subcode>` (or `META_HTTP_<status>`,
