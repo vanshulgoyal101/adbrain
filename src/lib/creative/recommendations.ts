@@ -10,6 +10,11 @@ function words(value: string): Set<string> {
   return new Set(value.toLocaleLowerCase().match(/[\p{L}\p{N}]{3,}/gu) ?? []);
 }
 
+/**
+ * Starting goals the owner taps into their goal box, in their own plain words (#1153: not instructions for
+ * the model). The "only supplied facts, no new terms" guard lives server-side, in the concept prompt and
+ * its claim check, so a tapped goal can't add a claim either way.
+ */
 export function creativeRecommendations(brand: BrandContext, goal = "", recentGoals: string[] = []): CreativeRecommendation[] {
   const current = goal.trim();
   const candidates: (CreativeRecommendation & { category: string; score: number })[] = [];
@@ -21,18 +26,18 @@ export function creativeRecommendations(brand: BrandContext, goal = "", recentGo
     candidates.push({ id: `${category}-${candidates.length}`, category, label: label.slice(0, 100), prompt: prompt.slice(0, 500), score: score + relevance * 2 - repetition });
   };
   for (const offer of (brand.offers ?? []).slice(0, 3)) {
-    if (offer.trim() && !current.toLowerCase().includes(offer.toLowerCase())) add("offer", `Feature: ${offer}`, `Feature this saved offer from ${brand.name}: ${offer.slice(0, 180)}. Do not add new terms.`, 6);
+    if (offer.trim() && !current.toLowerCase().includes(offer.toLowerCase())) add("offer", `Feature: ${offer}`, `Promote our ${offer.slice(0, 180).replace(/[.!\s]+$/, "")}.`, 6);
   }
   for (const benefit of (brand.usps ?? []).slice(0, 3)) {
-    if (benefit.trim() && !current.toLowerCase().includes(benefit.toLowerCase())) add("benefit", `Lead with: ${benefit}`, `Build the hook around this saved business detail: ${benefit.slice(0, 180)}. Invite enquiries without adding claims.`, 5);
+    if (benefit.trim() && !current.toLowerCase().includes(benefit.toLowerCase())) add("benefit", `Lead with: ${benefit}`, `Lead with: ${benefit.slice(0, 180).replace(/[.!\s]+$/, "")}.`, 5);
   }
-  if (brand.target_audience?.trim() && !current.includes(brand.target_audience)) add("audience", `Reach ${brand.target_audience}`, `Address ${brand.target_audience.slice(0, 180)} using ${brand.name}'s saved services and facts.`, 4);
+  if (brand.target_audience?.trim() && !current.includes(brand.target_audience)) add("audience", `Reach ${brand.target_audience}`, `Reach ${brand.target_audience.slice(0, 180).replace(/[.!\s]+$/, "")}.`, 4);
   for (const location of (brand.locations ?? []).slice(0, 2)) {
-    if (location.trim() && !current.toLowerCase().includes(location.toLowerCase())) add("location", `Focus on ${location}`, `Focus the message on ${location.slice(0, 120)}, a saved service area for ${brand.name}.`, 3);
+    if (location.trim() && !current.toLowerCase().includes(location.toLowerCase())) add("location", `Focus on ${location}`, `Get more customers in ${location.slice(0, 120)}.`, 3);
   }
-  add("visual", current ? "Make the service the focus" : "Show our work", `Show ${brand.name}'s service in context, using only saved business details. No invented testimonials or results.`, 2);
-  add("enquiry", "Invite enquiries", `Help interested customers ask ${brand.name} about the services in our Brand Brain and their next steps.`, 1);
-  add("introduction", "Introduce my business", `Introduce ${brand.name} using our saved brand facts. Do not add an offer or unsupported claims.`, 0);
+  add("visual", current ? "Make the service the focus" : "Show our work", `Show our work and the people we help.`, 2);
+  add("enquiry", "Invite enquiries", `Get people to message us about our services.`, 1);
+  add("introduction", "Introduce my business", `Introduce ${brand.name} to new customers.`, 0);
   const categories = new Set<string>();
   return candidates.sort((left, right) => right.score - left.score).filter((candidate) => {
     if (categories.has(candidate.category)) return false;
