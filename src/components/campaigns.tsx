@@ -32,7 +32,9 @@ import {
   X,
 } from "lucide-react";
 import { WhatsAppReadyChecklist } from "@/components/whatsapp-ready";
-import { whatsappGreeting, whatsappLanguageFor, type WhatsAppLanguage } from "@/lib/campaign/whatsapp-greeting";
+import { quotedAsk, whatsappGreeting, whatsappLanguageFor, withQuestionsLastLine, type WhatsAppLanguage } from "@/lib/campaign/whatsapp-greeting";
+import { updateCreativeCopy } from "@/app/(app)/studio/actions";
+import type { EditableCopy } from "@/lib/creative/concept";
 import { suggestedQuestions } from "@/lib/campaign/whatsapp-questions";
 import { whatsappTemplateSchema, type WhatsAppTemplate } from "@/lib/campaign/whatsapp-template";
 import { CampaignWhatsAppMessageDialog } from "@/components/campaign-whatsapp-message-dialog";
@@ -104,7 +106,7 @@ import {
 } from "@/lib/campaign/budget";
 import { effectiveDailyBudget } from "@/lib/campaign/spend";
 import { accountFundingSchema, activationConfirmationPayload, campaignDeliverySnapshotSchema, RESUME_IN_ADS_MANAGER, reviewableCampaign } from "@/lib/campaign/activation";
-import { activationWarnings, WHATSAPP_PICTURE_ON_FORM } from "@/lib/campaign/plan-check";
+import { activationWarnings, QUOTED_ASK_WITH_QUESTIONS, WHATSAPP_PICTURE_ON_FORM } from "@/lib/campaign/plan-check";
 import { campaignAttention } from "@/lib/campaign/health";
 import { campaignWhatsAppSummary } from "@/lib/campaign/results-summary";
 import { costPerCustomer } from "@/lib/campaign/real-enquiries";
@@ -428,6 +430,7 @@ function BusinessCampaigns({
   const [prepareReview, setPrepareReview] = useState<PrepareReviewState | null>(null);
   // Ads edited from the picker (#280); the server reads the saved copy at launch.
   const [editedAds, setEditedAds] = useState<Record<string, Creative>>({});
+  const [rewritingAsks, setRewritingAsks] = useState(false);
   const [editingAdId, setEditingAdId] = useState<string | null>(null);
   const [adEditNotes, setAdEditNotes] = useState<{ id: string; notes: CopyEditNotes } | null>(null);
   const [showAllAds, setShowAllAds] = useState(false);
@@ -1011,6 +1014,26 @@ function BusinessCampaigns({
       if (!signal.aborted) failAt("composer", reason instanceof Error ? reason.message : "Could not recommend an audience.");
     } finally {
       finishPreparation(signal);
+    }
+  }
+
+  /** #1198: Quick questions show no ready message, so the chosen ads stop quoting one; then Review runs again. */
+  async function rewriteQuotedAsks(creativeIds: string[]) {
+    if (rewritingAsks || unresolvedRecovery()) return;
+    setRewritingAsks(true);
+    try {
+      for (const ad of savedPickerAds.filter((item) => creativeIds.includes(item.id) && quotedAsk(item.primary_text))) {
+        const primaryText = withQuestionsLastLine(ad.primary_text ?? "", adLanguages([ad])[0]);
+        const text = savedAdText(ad);
+        const result = await updateCreativeCopy(ad.id, { ...text, cta: text.cta as EditableCopy["cta"], primary_text: primaryText });
+        if (!result.ok) { failAt("review", result.error ?? "The ad couldn't be changed. Edit its last line, then check again."); return; }
+        setEditedAds((current) => ({ ...current, [ad.id]: { ...ad, ...result.creative, primary_text: result.creative?.primary_text ?? primaryText } }));
+      }
+      await prepareManualCampaign();
+    } catch {
+      failAt("review", "The ad couldn't be changed. Edit its last line, then check again.");
+    } finally {
+      setRewritingAsks(false);
     }
   }
 
@@ -1657,6 +1680,12 @@ function BusinessCampaigns({
                           <button type="button" className="ml-1 min-h-11 font-medium text-blue-700 underline"
                             onClick={() => { if (unresolvedRecovery()) return; setDestination("whatsapp"); destinationChosenRef.current = true; setPrepareReview(null); jumpToFix(["destination-whatsapp"]); }}>
                             Switch to WhatsApp
+                          </button>
+                        )}
+                        {warning === QUOTED_ASK_WITH_QUESTIONS && (
+                          <button type="button" className="ml-1 min-h-11 font-medium text-blue-700 underline disabled:opacity-50" disabled={rewritingAsks || preparing}
+                            onClick={() => void rewriteQuotedAsks(prepareReview.draft.input.creativeIds)}>
+                            {rewritingAsks ? "Changing the last line…" : "Change the last line"}
                           </button>
                         )}
                       </span>

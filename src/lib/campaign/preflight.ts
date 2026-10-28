@@ -5,7 +5,7 @@ import { effectiveDailyBudget } from "@/lib/campaign/spend";
 import type { DraftInput, ReviewDTO } from "@/lib/campaign/connect-contracts";
 import type { ReviewBlockerReason, SelectedAssets } from "@/lib/meta/connect-contracts";
 import { normalizeWebsite } from "@/lib/brand/validation";
-import { askMismatchWarning, reviewWarnings, WHATSAPP_PICTURE_ON_FORM } from "@/lib/campaign/plan-check";
+import { askMismatchWarning, QUOTED_ASK_WITH_QUESTIONS, reviewWarnings, WHATSAPP_PICTURE_ON_FORM } from "@/lib/campaign/plan-check";
 import { quotedAsk, sameWords } from "@/lib/campaign/whatsapp-greeting";
 import { batchProofWarning } from "@/lib/creative/proof-line";
 import type { ResolvedWhatsAppMessage } from "@/lib/campaign/whatsapp-template";
@@ -285,9 +285,16 @@ export function runPreflight(input: PreflightInput): ReviewDTO {
     perAdSetDailyBudgetRupees, costPerResultRupees: input.costPerResultRupees,
   });
   // #418 rule 7: an ad that tells customers what to send should match what WhatsApp pre-types. Never a blocker.
-  const prefill = draft.destination === "whatsapp" ? input.whatsappMessage?.opening.autofill?.trim() : "";
-  const mismatch = prefill ? input.creatives.map((creative) => quotedAsk(creative.primaryText)).find((ask) => ask && !sameWords(ask, prefill)) : null;
-  if (mismatch) planWarnings.push(askMismatchWarning(mismatch, prefill!));
+  // #1198: with Quick questions there is no ready message, so a quoted ask can't match anything.
+  const opening = draft.destination === "whatsapp" ? input.whatsappMessage?.opening : undefined;
+  const asks = input.creatives.map((creative) => quotedAsk(creative.primaryText));
+  if (opening?.iceBreakers?.length) {
+    if (asks.some(Boolean)) planWarnings.push(QUOTED_ASK_WITH_QUESTIONS);
+  } else {
+    const prefill = opening?.autofill?.trim();
+    const mismatch = prefill ? asks.find((ask) => ask && !sameWords(ask, prefill)) : null;
+    if (mismatch) planWarnings.push(askMismatchWarning(mismatch, prefill!));
+  }
   // #418 rule 5: the Brand has proof (years, jobs, a credential, a warranty) but no chosen ad cites it.
   const proof = batchProofWarning(input.creatives.map((creative) => [creative.headline, creative.primaryText].filter(Boolean).join("\n")), input.brandFacts ?? []);
   if (proof) planWarnings.push(proof);
