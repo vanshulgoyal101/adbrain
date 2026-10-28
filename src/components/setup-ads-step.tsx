@@ -69,8 +69,10 @@ const BATCH_DEADLINE_MS = 6 * 60 * 1000;
  * with the best 2 picked (fixed rule, `setupPicks`). Leaving mid-way is safe: the generation id is kept,
  * and coming back reads what was saved instead of starting again (#1261).
  */
-export function SetupAdsStep({ business, initialAds, sample = false }: {
+export function SetupAdsStep({ business, initialAds, sample = false, earlier = false }: {
   business: Business; initialAds: Creative[];
+  /** #1475: the owner has ads from earlier details or Studio, so a paid batch starts only from a tap. */
+  earlier?: boolean;
   /** #1407: a sales prospect's account takes its picks away as the marked sample pack, without Review or Go live. */
   sample?: boolean;
 }) {
@@ -81,7 +83,7 @@ export function SetupAdsStep({ business, initialAds, sample = false }: {
   const picksFor = (list: Creative[]) => sample ? list.map((ad) => ad.id) : setupPicks(list);
   const [picked, setPicked] = useState<Set<string>>(() => new Set(picksFor(initialAds)));
   const [slots, setSlots] = useState<LiveAd[] | null>(null);
-  const [making, setMaking] = useState(initialAds.length === 0);
+  const [making, setMaking] = useState(initialAds.length === 0 && !earlier);
   const [failedCount, setFailedCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -93,6 +95,8 @@ export function SetupAdsStep({ business, initialAds, sample = false }: {
 
   useEffect(() => {
     if (startedRef.current || initialAds.length) return;
+    // #1475: a batch already running (another tab) is still picked up; a new one waits for the tap.
+    if (earlier && !readKept(business.id)) return;
     startedRef.current = true;
     void makeAds(FULL_BATCH);
     // Runs once per visit; makeAds reads only stable props.
@@ -295,12 +299,13 @@ export function SetupAdsStep({ business, initialAds, sample = false }: {
 
   const story = storyFor(slots);
   const count = `${ids.length} ${ids.length === 1 ? "ad" : "ads"}`;
+  const waiting = !making && !ads.length && !error && earlier;
   const primaryLabel = making ? "Making your ads…" : !ids.length ? "Pick at least 1 ad"
     : sample ? (downloading ? "Preparing download…" : `Download sample pack (${ids.length})`) : `Continue with ${count}`;
 
   return (
     <SetupSpine step={2} saved={saveError ? "failed" : null} beforeLeave={beforeLeave}
-      primary={sample
+      primary={waiting ? { label: `Make ${FULL_BATCH} ads`, onClick: () => void makeAds(FULL_BATCH) } : sample
         ? { label: primaryLabel, disabled: making || downloading || ids.length === 0, onClick: () => void downloadSamplePack() }
         : { label: primaryLabel, disabled: making || ids.length === 0, href: `/campaigns?new=1&creatives=${ids.join(",")}` }}>
       {making ? (
@@ -308,6 +313,12 @@ export function SetupAdsStep({ business, initialAds, sample = false }: {
           <Loader2 className="h-6 w-6 animate-spin text-primary" aria-hidden="true" />
           <p className="text-lg font-semibold text-slate-950">{SETUP_STORY[story](languageLabel)}</p>
           <p className="text-sm text-slate-600">Usually about a minute</p>
+        </div>
+      ) : waiting ? (
+        <div className="flex flex-col items-start gap-2 py-6">
+          <h2 className="text-xl font-semibold text-slate-950">Make ads from your details</h2>
+          <p className="text-sm text-slate-600">Your earlier ads were made from older details or in Studio, so they aren&apos;t used here. Making ads is free.</p>
+          <Link href="/campaigns?all=1" className="inline-flex min-h-11 items-center text-sm font-medium text-primary underline underline-offset-4">Use your earlier ads</Link>
         </div>
       ) : error && !ads.length ? (
         <div className="flex flex-col items-start gap-3 py-6">

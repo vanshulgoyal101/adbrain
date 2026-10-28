@@ -148,6 +148,9 @@ top-up shows beside its batch (`setupBatch`). Only ads made from today's step 1
 count (`madeForSetup`: the receipt's source fact is today's `setupGoal`, #1432):
 after the owner changes what they sell, where or their offer, step 2 makes new
 ads, and step 3 sends back to step 2 rather than offering older approved ads.
+With such earlier ads (older details, or approved in Studio) step 2 never starts a
+paid batch by itself: it shows "Make 3 ads" (a tap) and "Use your earlier ads" →
+`/campaigns?all=1`; a batch already running in another tab still resumes (#1475).
 `/create?all=1` opens the full Create below.
 
 1. When the business's campaigns have results, Create opens on one line such as "Your
