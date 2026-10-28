@@ -1,11 +1,11 @@
 import { z } from "zod";
 import type { AdReview } from "@/lib/meta/client";
 
-export const HEALTH_KINDS = ["rejected", "not_delivering", "ended"] as const;
+const HEALTH_KINDS = ["rejected", "not_delivering", "ended"] as const;
 export type HealthKind = (typeof HEALTH_KINDS)[number];
 
 /** An active run with zero impressions for this long is flagged (#258). */
-export const NOT_DELIVERING_AFTER_MS = 6 * 3_600_000;
+const NOT_DELIVERING_AFTER_MS = 6 * 3_600_000;
 // A gap longer than this between checks means the run was paused or unchecked, so its clock restarts.
 const CONTINUOUS_CHECK_MS = 2 * 3_600_000;
 

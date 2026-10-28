@@ -156,10 +156,3 @@ export async function getMetaConnection(
     scopes: [],
   };
 }
-
-/** Whether a business can run Meta campaigns right now. */
-export async function isMetaReadyForBusiness(
-  businessId: string,
-): Promise<boolean> {
-  return (await getMetaConnection(businessId)).ready;
-}

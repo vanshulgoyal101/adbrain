@@ -83,7 +83,7 @@ function brandLine(brand: BrandContext): string {
   return parts.join(" | ");
 }
 
-export const MAX_INTERVIEW_ANSWERS = 3;
+const MAX_INTERVIEW_ANSWERS = 3;
 export const INTERVIEW_PROMPT_VERSION = "interview-v5";
 
 const OWNER_LANGUAGES = { hi: "Hindi in Devanagari script", pa: "Punjabi in Gurmukhi script", hinglish: "Hinglish (Hindi in Roman script)" } as const;
@@ -147,7 +147,7 @@ function normalized(value: string): string {
   return value.normalize("NFKC").toLocaleLowerCase().replace(/[^\p{L}\p{M}\p{N}]+/gu, " ").trim();
 }
 
-export function interviewResultIssues(result: InterviewResult, answers: InterviewAnswer[]): string[] {
+function interviewResultIssues(result: InterviewResult, answers: InterviewAnswer[]): string[] {
   if (result.ready) {
     const recommendations = result.recommendations ?? [];
     return new Set(recommendations.map((item) => normalized(item.label))).size !== recommendations.length ||
@@ -287,7 +287,7 @@ const INTERVIEW_RULES: [string, string][] = [
 ];
 
 /** Stable rule names for logs; never user text. */
-export function interviewValidationRules(issues: string[]): string[] {
+function interviewValidationRules(issues: string[]): string[] {
   return [...new Set(issues.map((issue) => {
     const rule = INTERVIEW_RULES.find(([prefix]) => issue.startsWith(prefix));
     const claim = rule?.[1] === "unsupported-commercial-claim" ? /^Unsupported commercial term \[(\w+)\]/.exec(issue) : null;

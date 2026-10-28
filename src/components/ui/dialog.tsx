@@ -11,7 +11,6 @@ import { cn } from "@/lib/utils";
  * phones, centred from `sm`. Every dialog needs a DialogTitle (its accessible name).
  */
 export const Dialog = DialogPrimitive.Root;
-export const DialogTrigger = DialogPrimitive.Trigger;
 export const DialogTitle = DialogPrimitive.Title;
 export const DialogDescription = DialogPrimitive.Description;
 
