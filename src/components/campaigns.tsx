@@ -88,6 +88,7 @@ import type {
 } from "@/lib/campaign/connect-contracts";
 import { targetingInputSchema } from "@/lib/campaign/connect-contracts";
 import { campaignNameDate, defaultCampaignName, draftForSelection } from "@/lib/campaign/draft-name";
+import { REVIEW_AND_SPEND, whatsappExpectation } from "@/lib/campaign/expectations";
 import { campaignDestination } from "@/lib/campaign/outcomes";
 import { handoffRate } from "@/lib/campaign/whatsapp-handoff";
 import { reviewBlockerAlternative, reviewBlockerFix } from "@/lib/campaign/review-fix";
@@ -2089,11 +2090,11 @@ function BusinessCampaigns({
                   </div>}
                 </div>
 
-                {/* #761: what to expect, from AdBrain's own runs (#588 ledger). #1038: no lead-form figure until AdBrain has run lead forms. */}
+                {/* #761: what to expect, from AdBrain's own runs (#588 ledger; #1307: facts with n until 20 results). #1038: no lead-form figure until AdBrain has run lead forms. */}
                 <p className="-mt-2 text-xs text-slate-500">
                   What to expect: {destination === "whatsapp"
-                    ? <>in AdBrain&apos;s runs so far, a WhatsApp chat has cost about ₹150–180.</>
-                    : <>AdBrain hasn&apos;t run enough instant-form campaigns yet to quote a cost per enquiry.</>} Meta reviews new ads first, usually within 24 hours, and nothing spends until you activate.
+                    ? whatsappExpectation()
+                    : <>AdBrain hasn&apos;t run enough instant-form campaigns yet to quote a cost per enquiry.</>} {REVIEW_AND_SPEND}
                 </p>
 
                 {destination === "instant_form" && formsLoading && <p role="status" className="text-sm text-slate-500">Loading lead forms...</p>}
