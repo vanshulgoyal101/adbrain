@@ -19,7 +19,7 @@ const request = () => new Request("http://localhost/api/creatives/export", { met
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.user = { id: "owner", email: "owner@shop.example" };
-  mocks.business.mockResolvedValue({ data: { vertical: "rooftop solar installer" }, error: null });
+  mocks.business.mockResolvedValue({ data: { name: "SunPeak Solar", vertical: "rooftop solar installer" }, error: null });
   mocks.lookup.mockResolvedValue({ data: ids.map((id) => ({ id, angle: "Offer", image_url: `https://example.com/${id}.png` })), error: null });
 });
 
@@ -62,6 +62,7 @@ describe("creative export resource budget", () => {
     expect((await POST(request())).status).toBe(200);
     const copy = mocks.file.mock.calls.find(([name]) => name === "copy.txt")![1] as string;
     expect(copy.trimEnd().endsWith("https://adbrain.vanshul.com/for/solar")).toBe(true);
+    expect(copy).toContain("sample ads I made for SunPeak Solar.");
     mocks.file.mockClear();
     mocks.business.mockResolvedValue({ data: { vertical: "dental clinic" }, error: null });
     await POST(request());

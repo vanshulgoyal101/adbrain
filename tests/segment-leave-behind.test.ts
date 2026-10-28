@@ -14,6 +14,19 @@ describe("prospect pack leave-behind (#1582)", () => {
     expect(segmentForCategory(category)).toBeNull();
   });
 
+  it("uses the CPO's message: business name filled, owner name left for the rep (#1582)", () => {
+    const solar = segmentBySlug("solar")!;
+    const lines = leaveBehindBlock(solar, { businessName: "SunPeak Solar" }).split("\n");
+    expect(lines).toEqual(expect.arrayContaining([
+      "After the visit, send the owner this on WhatsApp:",
+      "Hi {owner name}, thanks for your time today. Here are the 3 sample ads I made for SunPeak Solar.",
+      solar.headline, solar.hinglish,
+      "Your first campaign is set up free. You pay Meta directly, only for the ads you approve.",
+      "See how it works: https://adbrain.vanshul.com/for/solar",
+    ]));
+    expect(leaveBehindBlock(solar)).toContain("made for {business name}.");
+  });
+
   it("ends with the segment's WhatsApp line and its landing link, and never a margin or a promise", () => {
     const block = leaveBehindBlock(segmentBySlug("solar")!);
     expect(block).toContain("https://adbrain.vanshul.com/for/solar");
