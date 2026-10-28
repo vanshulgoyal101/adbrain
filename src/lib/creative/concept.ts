@@ -200,6 +200,27 @@ export function workClaims(text: string): string[] {
   return [...new Set((text.normalize("NFC").match(WORK_CLAIM) ?? []).map((claim) => claim.toLowerCase()))];
 }
 
+/**
+ * #1822 (Reviewer, #1816): Brand text and pasted bios feed the prompt as facts and quotes are copied verbatim, so a
+ * third party's number or link could ship in the ad's words. Links, domains, wa.me and 8+ digit numbers are refused
+ * unless they are the business's own website or phone. (The ad's click destination never comes from the copy.)
+ */
+const LINK_IN_COPY = /\b(?:https?:\/\/|www\.)[^\s,)]+|\bwa\.me\/[^\s,)]*|\b[a-z0-9][a-z0-9-]{1,62}\.(?:co\.in|com|in|net|org|io|biz|info|shop|store|online|site|app|me|co)\b(?:\/[^\s,)]*)?/giu;
+const PHONE_IN_COPY = /\+?\d[\d\s-]{6,}\d/g;
+
+const hostOf = (link: string) => link.toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").split(/[/?#]/)[0];
+const lastTenDigits = (text: string) => text.replace(/\D/g, "").slice(-10);
+
+export function contactsInCopy(text: string, own: { website?: string | null; phone?: string | null }): string[] {
+  const ownHost = own.website ? hostOf(own.website.trim()) : null;
+  const ownPhone = own.phone ? lastTenDigits(own.phone) : null;
+  const links = (text.match(LINK_IN_COPY) ?? []).filter((link) => !ownHost || (hostOf(link) !== ownHost && !hostOf(link).endsWith(`.${ownHost}`)));
+  // A number inside a link (wa.me/91…) is that link's, not a separate phone.
+  const phones = (text.replace(LINK_IN_COPY, " ").match(PHONE_IN_COPY) ?? []).map((phone) => phone.trim())
+    .filter((phone) => phone.replace(/\D/g, "").length >= 8 && (!ownPhone || ownPhone.length < 8 || lastTenDigits(phone) !== ownPhone));
+  return [...new Set([...links, ...phones])];
+}
+
 export const WORK_CLAIM_WARNING = "This picture wasn't taken by you. Say what you offer, not 'our work', or use your own photo.";
 
 export function conceptValidationRules(issues: string[]): string[] {
@@ -207,7 +228,7 @@ export function conceptValidationRules(issues: string[]): string[] {
     "sourceQuotes", "unsupported-commercial-claim", "repeated-headline", "repeated-opening",
     "cliche", "em-dash-overuse", "exclamation-spam", "all-caps", "too-long", "banned-claim",
     "hook-length", "offer-below-fold", "price-unit", "personal-attribute", "unsupported-superlative", "exaggerated-result", "no-subject",
-    "work-claim",
+    "work-claim", "contact-in-copy",
   ]);
   return [...new Set(issues.map((issue) => {
     if (issue.startsWith("schema:")) return issue.slice(0, issue.indexOf(": "));
@@ -557,6 +578,11 @@ export function validateConcept(
     for (const claim of workClaims([concept.headline, concept.primary_text, concept.supportingText, concept.description].filter(Boolean).join("\n"))) {
       issues.push(`work-claim: "${claim}" says the picture is the business's own work, but the picture is generated; say what the business offers instead`);
     }
+  }
+  // #1822: no link or phone number the brand didn't give as its own; the ad's button already reaches the business.
+  for (const contact of contactsInCopy([concept.headline, concept.primary_text, concept.supportingText, concept.description].filter(Boolean).join("\n"),
+    { website: input.brand.website, phone: input.brand.phone })) {
+    issues.push(`contact-in-copy: "${contact.slice(0, 60)}" is a link or phone number the brand didn't give as its own; remove it (the ad's button already reaches the business)`);
   }
   const empty = emptyScene(concept.visual.direction);
   if (empty) {
