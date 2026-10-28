@@ -250,7 +250,7 @@ export function BrandAssets({
                   data-product-event="asset.delete"
                   disabled={uploading || deleting}
                   aria-label="Delete asset"
-                  className="absolute right-1.5 top-1.5 rounded-md bg-black/60 p-1.5 text-white opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+                  className="absolute right-1.5 top-1.5 rounded-md bg-black/60 p-1.5 text-white opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 after:absolute after:-bottom-4 after:-left-4 after:right-0 after:top-0 after:content-[''] max-sm:right-0 max-sm:top-0 max-sm:rounded-none max-sm:rounded-bl-md max-sm:opacity-100"
                 >
                   <Trash2 className="h-4 w-4" />
                 </button>

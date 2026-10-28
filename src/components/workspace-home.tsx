@@ -34,7 +34,7 @@ export interface WorkspaceHomeProps {
 
 const primaryClass =
   "inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary-hover";
-const linkClass = "font-medium text-blue-700 hover:underline";
+const linkClass = "inline-flex min-h-11 items-center font-medium text-blue-700 hover:underline";
 
 /** #847 "calm by default": three figures, one next step, campaigns and the latest ads. */
 export function WorkspaceHome({
@@ -159,7 +159,7 @@ export function WorkspaceHome({
                     return (
                       <li key={campaign.id} className="py-3 sm:flex sm:items-center sm:justify-between sm:gap-6">
                         <div className="min-w-0">
-                          <Link href="/campaigns" className="block truncate text-sm font-medium text-slate-950 hover:text-blue-700">
+                          <Link href="/campaigns" className="-my-3 block truncate py-3 text-sm font-medium text-slate-950 hover:text-blue-700">
                             {campaign.name || "Untitled campaign"}
                           </Link>
                           {attention && <p className="mt-1 text-xs font-medium text-danger">Needs attention: {attention}</p>}

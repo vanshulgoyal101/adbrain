@@ -486,7 +486,7 @@ export function LeadInbox({
               {copied ? <Check className="h-4 w-4 text-blue-600" /> : <Copy className="h-4 w-4" />}
               {copied ? "Copied" : "Copy"}
             </Button>
-            <a className="inline-flex min-h-10 items-center gap-2 text-sm font-semibold text-blue-700" href={whatsappHref} target="_blank" rel="noopener noreferrer">
+            <a className="inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-blue-700" href={whatsappHref} target="_blank" rel="noopener noreferrer">
               <MessageCircle className="h-4 w-4" /> Share on WhatsApp
             </a>
           </div>
