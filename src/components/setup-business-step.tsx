@@ -1,5 +1,6 @@
 "use client";
 
+import { CompactAppLanguage } from "@/components/app-language";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Wand2 } from "lucide-react";
@@ -31,7 +32,11 @@ const FIELD_TEXT: Record<SetupField, { label: string; placeholder: string; helpe
  * #1269 (#1251 WS1 step 1): a first-timer's business in five fields, saved as they type.
  * Everything else on the Brand stays on the full page ("More about your business").
  */
-export function SetupBusinessStep({ business }: { business: Business | null }) {
+export function SetupBusinessStep({ business, chooseLanguage = false }: {
+  business: Business | null;
+  /** #1641: no app language chosen on this browser yet, so offer English / हिंदी above the step. */
+  chooseLanguage?: boolean;
+}) {
   const [fields, setFields] = useState<SetupBusinessFields>(() => setupFieldsFrom(business));
   const [errors, setErrors] = useState<Partial<Record<SetupField, string>>>({});
   const [saved, setSaved] = useState<"saving" | "saved" | "failed" | null>(null);
@@ -146,6 +151,7 @@ export function SetupBusinessStep({ business }: { business: Business | null }) {
 
   return (
     <SetupSpine step={1} saved={saved} beforeLeave={beforeLeave} primary={{ label: "Make my ads", href: SETUP_STEPS[1].href }}>
+      {chooseLanguage && <div className="mb-3 flex justify-end"><CompactAppLanguage /></div>}
       <h2 className="text-xl font-semibold text-slate-950">Tell us about your business</h2>
       <p className="mt-1 text-sm text-slate-600">Five things. Your ads are made from these, and you can change them any time.</p>
 
