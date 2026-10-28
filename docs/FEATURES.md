@@ -225,6 +225,11 @@ tab produce a conflict rather than a silent overwrite. Updates do not extend the
 original expiry. Drafts tied to a creation operation have additional edit/delete
 restrictions.
 
+A new campaign is named after its first chosen ad until the owner types a name:
+headline · WhatsApp or Lead form · day, e.g. "Free 15-minute spine check · WhatsApp ·
+Oct 28" (the day appears once the browser has loaded). Preparing exactly the same ads
+again updates their saved draft instead of adding another (#1151).
+
 Starting a replacement review invalidates the old send action immediately.
 A failed validation, save, or reconnect does not erase a confirmed operation's
 status; recovery is replaced only after the new draft is saved.
