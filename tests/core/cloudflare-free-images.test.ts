@@ -128,11 +128,24 @@ describe("core: free pictures come from Cloudflare FLUX-1-schnell first (#1476)"
     network();
     const { generateImage } = await import("@/lib/imageGen");
     const attempts: Attempt[] = [];
-    const picture = await generateImage({ ...image, onAttempt: (a) => attempts.push(a) });
+    const onFallback = vi.fn();
+    const picture = await generateImage({ ...image, onAttempt: (a) => attempts.push(a), onFallback });
     expect(picture).toMatchObject({ provider: "cloudflare", fallbackFrom: "openrouter-image", estimatedCostUsd: 0 });
     expect(attempts.map(({ provider, status, errorCode }) => [provider, status, errorCode])).toEqual([
       ["openrouter-image", "error", "IMAGE_CREDIT_EXHAUSTED"], ["cloudflare", "success", undefined],
     ]);
     expect(calls.some((call) => call.startsWith("image.pollinations.ai"))).toBe(false);
+    // #1542: Create hears about the fallback (so it can say pictures are slower), and again for the parked key.
+    expect(onFallback).toHaveBeenCalledTimes(1);
+    await generateImage({ ...image, onFallback });
+    expect(onFallback).toHaveBeenCalledTimes(2);
+  });
+
+  it("doesn't report a fallback for an internal account's normal free picture (#1542)", async () => {
+    network();
+    const { generateImage } = await import("@/lib/imageGen");
+    const onFallback = vi.fn();
+    await asInternal(() => generateImage({ ...image, onFallback }));
+    expect(onFallback).not.toHaveBeenCalled();
   });
 });
