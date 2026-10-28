@@ -122,6 +122,13 @@ describe("<LeadInbox> table", () => {
     expect(screen.getByRole("button", { name: /^Follow up Test enquiry from Meta,/ })).toBeInTheDocument();
   });
 
+  it("#1149: Meta's test lead is listed but not counted, so the title matches Home's 0", () => {
+    render(<LeadInbox businessName="Solaride" initialLeads={[lead({ full_name: "<test lead: dummy data for full_name>", phone: "<test lead: dummy data for phone_number>", email: null })]} metaReady />);
+    expect(screen.getByRole("heading", { name: "Enquiries (0)" })).toBeInTheDocument();
+    expect(screen.getByText("Test enquiry from Meta")).toBeInTheDocument();
+    expect(screen.queryByText(/of 0 enquiries/)).toBeNull();
+  });
+
   it("has no internal 'Loaded …' stats (#403)", () => {
     render(<LeadInbox businessName="Solaride" initialLeads={[lead(), lead({ id: "l2", meta_lead_id: "m2" })]} metaReady />);
     expect(screen.queryByText("Loaded with contact")).toBeNull();
