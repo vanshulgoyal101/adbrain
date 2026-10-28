@@ -36,6 +36,11 @@ export const productEventSchema = z.object({
     usageKind: z.enum(["text", "image"]).optional(),
     attempt: z.number().int().min(1).max(100).optional(),
     cacheHit: z.boolean().optional(),
+    /** #1200: which provider limit a 429 hit (Groq names it), with its numbers; never the provider's text. */
+    rateLimitType: z.enum(["TPM", "RPM", "TPD", "RPD", "ITPM", "OTPM"]).optional(),
+    rateLimitLimit: z.number().int().nonnegative().optional(),
+    rateLimitUsed: z.number().int().nonnegative().optional(),
+    rateLimitRequested: z.number().int().nonnegative().optional(),
     /** #1136: on business.create/update, whether the saved Brand has what Prepare needs (brand/usable.ts). */
     brandUsable: z.boolean().optional(),
     /** #366: which campaign kind a Prepare was for, so WhatsApp timings can be read separately. */

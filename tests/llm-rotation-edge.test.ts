@@ -56,6 +56,18 @@ describe("LLM provider fallthrough", () => {
     ]);
   });
 
+  it("#1200: a failed attempt carries which Groq limit the 429 hit", async () => {
+    mockFetchByHost({
+      "api.groq.com": () => Response.json({ error: { message: "Rate limit reached for model `m` in organization `org_x` service tier `on_demand` on requests per day (RPD): Limit 1000, Used 1000, Requested 1. Please try again in 1m26s." } }, { status: 429, headers: { "retry-after": "86" } }),
+      "openrouter.ai": () => ok("fallback"),
+    });
+    const { complete } = await import("@/lib/llm");
+    const attempts: { rateLimit?: unknown }[] = [];
+    await complete([{ role: "user", content: "hi" }], { onAttempt: (attempt) => attempts.push(attempt) });
+    expect(attempts[0].rateLimit).toEqual({ type: "RPD", limit: 1000, used: 1000, requested: 1 });
+    expect(attempts[1].rateLimit).toBeUndefined();
+  });
+
   it("aggregates errors and throws when every provider/key fails", async () => {
     mockFetchByHost({
       "api.groq.com": () => httpError(500),
