@@ -109,7 +109,8 @@ vi.mock("@/lib/creative/persist", () => ({
   persistCreativeImage: async () => "https://cdn.example/photo.png",
   renderAndPersistDesign: mocks.render,
 }));
-vi.mock("@/lib/llm/persist", () => ({
+vi.mock("@/lib/llm/persist", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/llm/persist")>()),
   configuredMonthlyTokenLimit: () => 1000,
   monthlyTokenUsage: async () => mocks.used,
   persistLLMUsage: mocks.persist,

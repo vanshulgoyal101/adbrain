@@ -13,6 +13,7 @@ import { NoLLMKeysError } from "@/lib/llm";
 import {
   configuredMonthlyTokenLimit,
   persistLLMUsage,
+  usageCostUsd,
 } from "@/lib/llm/persist";
 import { rateLimitResponse } from "@/lib/security/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -34,6 +35,8 @@ import { preferenceContext } from "@/lib/preferences/store";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
+
+const roundUsd = (usd: number) => Math.round(usd * 1e6) / 1e6;
 
 /**
  * Reconcile a client whose long-running generation request outlived its HTTP
@@ -251,6 +254,7 @@ async function generate(req: Request, live?: LiveCreate) {
   const failed = new Map<string, { angle: AdAngle; error: unknown; message: string }>();
   let failures: { angle: string; error: string }[] = [];
   let topUp = 0;
+  const cost = { text: 0, image: 0 };
   let noProviderFailures = 0;
   // Usage is unknown only when recording it failed or an unexpected error hid provider calls (#138).
   let usageUnknown = false;
@@ -292,6 +296,11 @@ async function generate(req: Request, live?: LiveCreate) {
     admitted = true;
     live?.onAdmitted();
     const advisoryPreferences = await preferenceContext(businessId, "creative", [brief, instructions].filter(Boolean).join("\n")).catch(() => "");
+    const addCost = (events: Parameters<typeof usageCostUsd>[0]) => {
+      const add = usageCostUsd(events);
+      cost.text += add.text;
+      cost.image += add.image;
+    };
     const run = {
       brand: business,
       brief,
@@ -310,6 +319,7 @@ async function generate(req: Request, live?: LiveCreate) {
             requestId,
             generationId: variantGroup,
           });
+        addCost(events);
         const recorded = await persistLLMUsage(events);
         if (recorded) recordedAngles.add(variant.angleId);
         else usageUnknown = true;
@@ -363,6 +373,7 @@ async function generate(req: Request, live?: LiveCreate) {
             requestId,
             generationId: variantGroup,
           });
+        addCost(events);
         const recorded = await persistLLMUsage(events);
         if (recorded && error instanceof NoLLMKeysError) noProviderFailures++;
         const unknown = !recorded || !(error instanceof CreativeValidationError || error instanceof CreativeImageError
@@ -417,7 +428,9 @@ async function generate(req: Request, live?: LiveCreate) {
   // Internal accounts make free Pollinations images; customers wait on the paid path.
   recordProductEvent({ kind: "workflow", name: "creative.batch", businessId, durationMs: Date.now() - startedAt,
     outcome: !inserted.length ? "failed" : failures.length ? "partial" : "success",
-    attributes: { count: inserted.length, failedCount: failures.length, topUp, provider: freeImagesOnly() ? "pollinations" : "paid" } });
+    // #1468: the estimated AI cost of this Create (USD), for the top-up and image-provider decisions.
+    attributes: { count: inserted.length, failedCount: failures.length, topUp, provider: freeImagesOnly() ? "pollinations" : "paid",
+      costUsd: roundUsd(cost.text + cost.image), textCostUsd: roundUsd(cost.text), imageCostUsd: roundUsd(cost.image) } });
   if (!inserted.length)
     return NextResponse.json(
       { error: failures[0]?.error ?? "No creatives were generated.", failures },
