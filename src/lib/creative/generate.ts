@@ -122,6 +122,8 @@ export async function generateVariants(params: {
   onProgress?: (event: CreateProgressEvent) => void;
   /** Stops the run early (#1123's top-up budget); the 270 s ceiling always applies. */
   signal?: AbortSignal;
+  /** #1547: concepts already validated for these angles; only their pictures are made again (no text call). */
+  concepts?: Partial<Record<string, CreativeConcept>>;
 }): Promise<GeneratedVariant[]> {
   const {
     brand: rawBrand,
@@ -173,10 +175,11 @@ export async function generateVariants(params: {
         const earlierConcepts = planning.then(() => {
           input.recentCopy = recentCopy.slice(0, 12);
         });
-        const planned = waitForTurn.then(() => {
+        const reused = params.concepts?.[angle.id];
+        const planned = (reused ? Promise.resolve({ concept: reused, usage: [] as GeneratedVariant["llmUsage"] }) : waitForTurn.then(() => {
           input.recentCopy = recentCopy.slice(0, 12);
           return generateConcept(input, signal, earlierConcepts, notifyNext, (stage) => progress(angle, stage));
-        }).then((result) => {
+        })).then((result) => {
           recentCopy.unshift(result.concept);
           return result;
         });

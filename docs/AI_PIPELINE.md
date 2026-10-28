@@ -125,7 +125,12 @@ provider down), in parallel and in the same request, through the same validators
 repair. It starts only if the first pass ended within 60 s and is cut off after 45 s
 (`CREATE_TOP_UP_*` in [stream.ts](../src/lib/creative/stream.ts)); the stream sends
 `{ type: "topUp", missing }`, the page says "Making N more…", and `creative.batch`
-records `topUp`, the number of ads retried (#1123). A refused commercial claim in Create adds a
+records `topUp`, the number of ads retried (#1123). On a `+prospect` account (a sales
+visit, free pictures) an ad that lost only its picture is not remade: once the first pass
+ends, it gets one more free picture with the words that already passed (no text call,
+₹0), if at least 45 s remain before 250 s (`PROSPECT_PICTURE_RETRY_*`). The stream sends
+`{ type: "topUp", missing, kind: "picture" }`, the page says "N pictures didn't come
+through. Trying again…", and `creative.batch` records `pictureRetry` (#1547). A refused commercial claim in Create adds a
 `claim:<class>:<reason>` validation rule to its usage row (class `free`/`percent`/
 `currency`/`guarantee`; reason `uncited`, or `negated-quote` when a quote cited it but a
 negation elsewhere in that quote refused it), never the term or the copy (#687).

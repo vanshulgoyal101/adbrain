@@ -25,6 +25,8 @@ const mocks = vi.hoisted(() => ({
   regenerateClaimError: false,
   persist: vi.fn(),
   progress: vi.fn(),
+  user: { id: "owner" } as { id: string; email?: string; email_confirmed_at?: string },
+  free: false,
 }));
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
@@ -61,7 +63,7 @@ vi.mock("@/lib/supabase/admin", () => ({
 }));
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
-    auth: { getUser: async () => ({ data: { user: { id: "owner" } } }) },
+    auth: { getUser: async () => ({ data: { user: mocks.user } }) },
     from: (table: string) => ({
       select: () => ({
         eq: (_key: string, value: string) => ({
@@ -105,6 +107,10 @@ vi.mock("@/lib/creative/references", () => ({
   recentCreativeCopy: mocks.recentCopy,
 }));
 vi.mock("@/lib/preferences/store", () => ({ preferenceContext: mocks.preferenceContext }));
+vi.mock("@/lib/llm/spend-policy", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/llm/spend-policy")>()),
+  freeImagesOnly: () => mocks.free,
+}));
 vi.mock("@/lib/creative/persist", () => ({
   persistCreativeImage: async () => "https://cdn.example/photo.png",
   renderAndPersistDesign: mocks.render,
@@ -160,6 +166,8 @@ beforeEach(() => {
   mocks.regenerateClaims.clear();
   mocks.regenerateClaimError = false;
   mocks.saveError = false;
+  mocks.user = { id: "owner" };
+  mocks.free = false;
   mocks.persist.mockResolvedValue(true);
   process.env.NEXT_PUBLIC_SUPABASE_URL = "https://test.supabase.co";
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "anon";
@@ -504,6 +512,49 @@ describe("creative generation route", () => {
     })]);
     expect(mocks.progress.mock.calls.some(([args]) => args.p_uncertain)).toBe(true);
     expect(mocks.generateVariants).toHaveBeenCalledTimes(2);
+  });
+
+  // #1547: a sales visit's missing pictures get one more free try with the words that passed; nobody else does.
+  describe("prospect picture retry (#1547)", () => {
+    const PROSPECT = { id: "prospect", email: "sales+prospect-nook@adbrain.vanshul.com", email_confirmed_at: "2026-10-01T00:00:00Z" };
+    const TEAM = { id: "team", email: "qa@adbrain.vanshul.com", email_confirmed_at: "2026-10-01T00:00:00Z" };
+    const concept = { headline: "Kitchens that fit", primary_text: "Modular kitchens in Mohali." } as never;
+    // The first pass saves one ad; the other two lose their free pictures after their words passed.
+    const firstPass = async (params: { onFailure: (angle: typeof AD_ANGLES[number], error: Error) => Promise<void>; onVariant: (value: typeof variant) => Promise<void> }) => {
+      await params.onVariant(variant);
+      for (const angle of AD_ANGLES.slice(1, 3)) await params.onFailure(angle, new CreativeImageError(new Error("Free test images are busy"), [], [], concept));
+    };
+
+    it("tries each missing picture once more for a +prospect account, reusing its words (no new concept)", async () => {
+      mocks.user = PROSPECT;
+      mocks.free = true;
+      mocks.generateVariants.mockImplementationOnce(firstPass).mockImplementationOnce(async (params: { onVariant: (value: typeof variant) => Promise<void> }) => {
+        await params.onVariant({ ...variant, angleId: AD_ANGLES[1].id });
+      });
+      const { POST } = await import("@/app/api/creatives/generate/route");
+      const response = await POST(request());
+      expect(response.status).toBe(200);
+      expect(mocks.generateVariants).toHaveBeenCalledTimes(2);
+      const retry = mocks.generateVariants.mock.calls[1][0];
+      expect(retry).toMatchObject({ angleIds: [AD_ANGLES[1].id, AD_ANGLES[2].id], count: 2, ownerPhotos: undefined });
+      expect(retry.concepts).toEqual({ [AD_ANGLES[1].id]: concept, [AD_ANGLES[2].id]: concept });
+      const body = await response.json();
+      expect(body.creatives).toHaveLength(2);
+      expect(body.failures).toEqual([expect.objectContaining({ angle: AD_ANGLES[2].name })]);
+    });
+
+    it.each([
+      ["a customer (paid pictures)", { id: "owner", email: "owner@example.com", email_confirmed_at: "2026-10-01T00:00:00Z" }, false],
+      ["a team account on free pictures", TEAM, true],
+      ["a +prospect account the paid path serves", PROSPECT, false],
+    ])("never retries pictures for %s", async (_who, user, free) => {
+      mocks.user = user;
+      mocks.free = free;
+      mocks.generateVariants.mockImplementationOnce(firstPass).mockImplementation(async () => {});
+      const { POST } = await import("@/app/api/creatives/generate/route");
+      await POST(request());
+      expect(mocks.generateVariants.mock.calls.some(([params]) => params.concepts)).toBe(false);
+    });
   });
 
   it("does not mark a failed angle as whole-request failure before its sibling saves", async () => {
