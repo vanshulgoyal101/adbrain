@@ -223,7 +223,8 @@ describe("<AdAssistant> draft persistence", () => {
     const user = userEvent.setup();
     render(<AdAssistant business={{ ...business, offers: ["$49 initial consultation"] }} />);
     await user.click(screen.getByRole("button", { name: "Feature: $49 initial consultation" }));
-    expect(screen.getByRole("textbox", { name: "Campaign goal" })).toHaveValue("Feature this saved offer from Cedar Ridge Chiro: $49 initial consultation. Do not add new terms.");
+    // #1153: the owner's own plain words, not an instruction for the model.
+    expect(screen.getByRole("textbox", { name: "Campaign goal" })).toHaveValue("Promote our $49 initial consultation.");
     expect(screen.queryByText("Free consult")).toBeNull();
   });
 

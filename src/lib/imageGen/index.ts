@@ -47,7 +47,7 @@ const FREE_IMAGE_DEFAULT_WAIT_MS = 15_000;
 const FREE_IMAGE_MIN_WAIT_MS = 15_000;
 let freeImageQueue: Promise<unknown> = Promise.resolve();
 
-export class FreeImageBusyError extends Error {
+class FreeImageBusyError extends Error {
   constructor() {
     super("Free test images are busy right now. Try again in a minute.");
     this.name = "FreeImageBusyError";
@@ -82,7 +82,7 @@ async function freeImageWithRetry(provider: ImageProvider, req: ImageRequest): P
 }
 
 /** A short, fixed reason for a failed image attempt, for usage rows and events (#451). */
-export function imageFailureCode(error: unknown): string {
+function imageFailureCode(error: unknown): string {
   if (error instanceof FreeImageBusyError) return "IMAGE_FREE_BUSY";
   if (error instanceof SafeFetchError) return error.code === "status" ? `IMAGE_HTTP_${error.status ?? "unknown"}` : `IMAGE_FETCH_${error.code.toUpperCase()}`;
   if (error instanceof ImageProviderError) return error.creditExhausted ? "IMAGE_CREDIT_EXHAUSTED" : "IMAGE_PROVIDER";
@@ -138,11 +138,6 @@ export async function generateImage(
       fallbackFrom: provider.name,
     };
   }
-}
-
-/** The active image provider's name (for UI/diagnostics). */
-export function imageProviderName(): string {
-  return getEnv().IMAGE_PROVIDER;
 }
 
 /** Download image bytes (used when persisting/exporting a creative). */

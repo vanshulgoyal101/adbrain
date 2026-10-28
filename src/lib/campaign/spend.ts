@@ -11,7 +11,7 @@
 import type { CampaignInsights } from "@/lib/meta/insights";
 import type { Campaign } from "@/lib/types";
 
-export const WEEK_DAYS = 7;
+const WEEK_DAYS = 7;
 
 /** Per-business guardrail configuration. */
 export interface SpendLimits {

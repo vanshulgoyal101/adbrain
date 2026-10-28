@@ -30,9 +30,9 @@ import { CampaignEditError } from "./edit-service";
  * Each write is a single in-place ad-set update, so a refused one changes nothing.
  */
 
-export const BUDGET_RATE_LIMITED = "Meta needs 30 seconds between budget changes. Try again in a moment.";
-export const PAUSE_FOR_DAILY = "Pause the campaign to change its daily budget; it resumes at the new amount after your review.";
-export const CONFIRM_BUDGET = "Confirm the new amount first: it's more than you approved.";
+const BUDGET_RATE_LIMITED = "Meta needs 30 seconds between budget changes. Try again in a moment.";
+const PAUSE_FOR_DAILY = "Pause the campaign to change its daily budget; it resumes at the new amount after your review.";
+const CONFIRM_BUDGET = "Confirm the new amount first: it's more than you approved.";
 
 const rupees = (max: number) => z.number().finite().positive().max(max).refine(value => Number.isInteger(Math.round(value * 100 * 1e6) / 1e6), "Use at most two decimals.");
 export const budgetChangeSchema = z.object({

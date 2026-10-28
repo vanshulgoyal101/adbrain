@@ -11,7 +11,7 @@ export type CampaignSkipReason =
 
 export type SkippedCampaign = { name: string | null; reason: CampaignSkipReason };
 
-export const SKIP_REASON_TEXT: Record<CampaignSkipReason, string> = {
+const SKIP_REASON_TEXT: Record<CampaignSkipReason, string> = {
   not_running: "it's archived or deleted in Meta",
   other_account: "it belongs to a different ad account",
   other_page: "it advertises a different Facebook Page",

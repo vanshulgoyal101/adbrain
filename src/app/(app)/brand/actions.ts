@@ -5,6 +5,7 @@ import { observeAction } from "@/lib/observability/logger";
 import { revalidatePath } from "next/cache";
 import { logEvent } from "@/lib/audit";
 import { fieldList, fieldStr } from "@/lib/brand/fields";
+import { brandUsable } from "@/lib/brand/usable";
 import { normalizeWebsite, validateBrandFields } from "@/lib/brand/validation";
 import { createClient } from "@/lib/supabase/server";
 import type { BusinessInsert } from "@/lib/types";
@@ -77,6 +78,7 @@ export async function saveBusiness(
       action: id ? "business.update" : "business.create",
       entityType: "business",
       entityId: saved.id,
+      eventAttributes: { brandUsable: brandUsable(payload) },
     });
 
     revalidatePath("/brand");

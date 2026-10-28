@@ -1135,7 +1135,7 @@ export type Profile = Database["public"]["Tables"]["profiles"]["Row"];
 export type Business = Database["public"]["Tables"]["businesses"]["Row"];
 export type BrandAsset = Database["public"]["Tables"]["brand_assets"]["Row"];
 export type Creative = Database["public"]["Tables"]["creatives"]["Row"];
-export type CreativePreview = Pick<Creative, "id" | "headline" | "image_url" | "status" | "angle">;
+export type CreativePreview = Pick<Creative, "id" | "headline" | "image_url" | "status" | "angle" | "created_at" | "variant_group">;
 export type Campaign = Database["public"]["Tables"]["campaigns"]["Row"];
 export type CampaignResult =
   Database["public"]["Tables"]["campaign_results"]["Row"] & {

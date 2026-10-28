@@ -15,13 +15,13 @@ import type { Campaign, Json } from "@/lib/types";
 
 /** #773: the shared path for editing a launched campaign. Audience now; Dev 4 adds budgets (#774) as another kind. */
 
-export const RESTARTS_LEARNING = "This restarts Meta's learning; results may be slower for 2–3 days.";
-export const PAUSE_FIRST = "Part of this campaign is still running in Meta. Pause the campaign, then edit the audience.";
+const RESTARTS_LEARNING = "This restarts Meta's learning; results may be slower for 2–3 days.";
+const PAUSE_FIRST = "Part of this campaign is still running in Meta. Pause the campaign, then edit the audience.";
 /** #765: Meta refuses an in-place audience change on these ad sets; the owner confirms a PAUSED copy instead (CPO's words). */
-export const RUNNING_NEEDS_COPY = "Meta doesn't allow this change on a running campaign. We'll make a fresh copy with your change (paused, back to review, learning restarts) and stop the old one when you turn the new one on.";
-export const SWITCH_PENDING = "A new audience is waiting for this campaign. Turn it on or cancel it first.";
-export const NO_AREA_EXCLUSIONS = "This campaign covers a whole country, so there are no out-of-area places to leave out.";
-export const ALREADY_EXCLUDED = "Every ad set already leaves out the places outside its area. Nothing to change.";
+const RUNNING_NEEDS_COPY = "Meta doesn't allow this change on a running campaign. We'll make a fresh copy with your change (paused, back to review, learning restarts) and stop the old one when you turn the new one on.";
+const SWITCH_PENDING = "A new audience is waiting for this campaign. Turn it on or cancel it first.";
+const NO_AREA_EXCLUSIONS = "This campaign covers a whole country, so there are no out-of-area places to leave out.";
+const ALREADY_EXCLUDED = "Every ad set already leaves out the places outside its area. Nothing to change.";
 export const RATE_LIMITED = "Meta needs 30 seconds between audience changes. Try again in a moment.";
 
 const metaKey = z.string().regex(/^\d{1,20}$/);
@@ -75,7 +75,7 @@ function canonical(value: unknown): unknown {
   return value;
 }
 
-export const audienceChangeDigest = (change: AudienceChange) => sha256(JSON.stringify(canonical(change)));
+const audienceChangeDigest = (change: AudienceChange) => sha256(JSON.stringify(canonical(change)));
 
 /** Only the audience fields of an ad set's targeting, kept as the "before" of an edit. */
 function audienceOf(targeting: unknown): Json {
@@ -354,7 +354,7 @@ export type AudienceSwitchResult = { action: "switch" | "cancel"; adSets: Array<
 
 /** A switch or cancel holds the row this long; one cut off (route timeout) can be retried after it. */
 const SWITCH_LEASE_MS = 120_000;
-export const SWITCH_IN_PROGRESS = "This new audience is already being switched. Try again in a minute.";
+const SWITCH_IN_PROGRESS = "This new audience is already being switched. Try again in a minute.";
 
 /**
  * #765 (b): the owner turns a waiting copy on (the old ad set is paused first and then retired; the mirror moves to

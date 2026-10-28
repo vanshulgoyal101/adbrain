@@ -192,6 +192,13 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 	park stale issues rather than leaving them open with old status.
 - Prefer existing dependencies, official SDKs and maintained libraries over
 	rebuilding standard pieces. Keep custom code to AdBrain's own business rules.
+- **Lean (owner, Oct 28: no bloatware; #1171).** Delete before you add: every
+	feature PR removes or simplifies something, or says why not. Build only what a
+	customer or the owner needs now; no speculative features. Removing existing
+	features, flags, scripts, docs or workflows needs the owner's scope on the
+	issue. Every removal PR tags the last commit that still has it
+	(`removed/<name>`), adds its row to the pinned log #1173, and never drops a
+	column or table.
 
 ## Branches and deployments
 

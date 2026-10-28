@@ -9,15 +9,23 @@ const BUSINESS = "11111111-1111-4111-8111-111111111111";
 beforeEach(() => localStorage.clear());
 
 describe("WhatsAppAiCard", () => {
-  it("offers the guide with 44 px actions that log the answer, and never says free", () => {
+  // #1154: one line on the card (Show me how, dismiss); the answers live in the guide. All four still log.
+  it("is one line with Show me how and Not now; the guide holds the answers; 44 px actions that log; never says free", () => {
     render(<WhatsAppAiCard businessId={BUSINESS} />);
     const card = screen.getByRole("region", { name: "Reply faster with WhatsApp's AI?" });
-    for (const [name, event] of [["Show me how", "whatsapp_ai.guide"], ["Already on", "whatsapp_ai.done"], ["Not available for me", "whatsapp_ai.unavailable"], ["Not now", "whatsapp_ai.later"]]) {
-      const button = within(card).getByRole("button", { name });
+    expect(within(card).getAllByRole("button").map((button) => button.getAttribute("aria-label") ?? button.textContent)).toEqual(["Show me how", "Not now"]);
+    const check = (scope: HTMLElement, name: string, event: string) => {
+      const button = within(scope).getByRole("button", { name });
       expect(button).toHaveAttribute("data-product-event", event);
       expect(button.className).toMatch(/\bh-11\b/);
-    }
+    };
+    check(card, "Show me how", "whatsapp_ai.guide");
+    check(card, "Not now", "whatsapp_ai.later");
     expect(card.textContent).not.toMatch(/free/i);
+    fireEvent.click(within(card).getByRole("button", { name: "Show me how" }));
+    const dialog = screen.getByRole("dialog", { name: "Turn on WhatsApp's AI reply" });
+    check(dialog, "It's on", "whatsapp_ai.done");
+    check(dialog, "Not available for me", "whatsapp_ai.unavailable");
   });
 
   it("shows the three steps in English and Hinglish", () => {
@@ -37,6 +45,7 @@ describe("WhatsAppAiCard", () => {
 
   it("an answer hides it for that business and stays hidden", () => {
     const { unmount } = render(<WhatsAppAiCard businessId={BUSINESS} />);
+    fireEvent.click(screen.getByRole("button", { name: "Show me how" }));
     fireEvent.click(screen.getByRole("button", { name: "Not available for me" }));
     expect(screen.queryByRole("region")).toBeNull();
     expect(localStorage.getItem(`whatsapp-ai:${BUSINESS}`)).toBe("unavailable");

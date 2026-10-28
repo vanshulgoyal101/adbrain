@@ -51,9 +51,10 @@ export function WhatsAppReadyChecklist({ businessId }: { businessId: string }) {
       <details className="group border-y border-slate-200">
         <summary className="flex min-h-11 cursor-pointer list-none flex-wrap items-center justify-between gap-2 py-2 [&::-webkit-details-marker]:hidden">
           <span id={titleId} className="flex items-center gap-2 text-sm font-medium text-slate-900">
-            <MessageCircle className="h-4 w-4 text-slate-500" aria-hidden="true" />WhatsApp ready?
+            <MessageCircle className="h-4 w-4 text-slate-500" aria-hidden="true" />{ITEMS.length} tips to get more replies
           </span>
-          <span className="text-sm text-slate-600">{done.length} of {ITEMS.length} ready</span>
+          {/* #1154: optional tips, so no "0 of 4" that reads like a blocker; the count shows once one is done. */}
+          {done.length > 0 && <span className="text-sm text-slate-600">{done.length} of {ITEMS.length} done</span>}
         </summary>
         <p className="text-sm text-slate-600">People who tap your ad land in your WhatsApp. These make them send the message.</p>
         <ul className="mt-2 flex flex-col pb-2">

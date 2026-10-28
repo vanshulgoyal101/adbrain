@@ -1,7 +1,7 @@
 import { AllLLMProvidersFailedError } from "@/lib/llm/types";
 import { CreativeImageError } from "./generate";
 
-export const GENERIC_CREATIVE_FAILURE = "This creative could not be generated or saved. Check saved results before trying again.";
+const GENERIC_CREATIVE_FAILURE = "This creative could not be generated or saved. Check saved results before trying again.";
 
 /** #449: the owner-facing reason one ad failed in Create; honest when paid AI credit ran out. */
 export function creativeFailureMessage(error: unknown): string {

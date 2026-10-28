@@ -41,7 +41,7 @@ export function rateLimit(
  * Shared rate check backed by Postgres. Only non-production environments may
  * fall back to the in-memory limiter if the RPC is unavailable.
  */
-export async function checkRateLimit(
+async function checkRateLimit(
   key: string,
   opts: { limit: number; windowMs: number },
 ): Promise<RateLimitResult> {

@@ -288,15 +288,3 @@ export function parseJSON<T>(text: string): T {
   }
 }
 
-/** Whether at least one provider has keys — used to gate AI features in the UI. */
-export function isLLMConfigured(): boolean {
-  return buildRegistry().length > 0;
-}
-
-/** Configured providers and their key counts, for diagnostics. */
-export function llmProviderStatus(): { name: string; keyCount: number }[] {
-  return buildRegistry().map((r) => ({
-    name: r.provider.name,
-    keyCount: r.keys.length,
-  }));
-}

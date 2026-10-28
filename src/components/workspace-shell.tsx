@@ -14,7 +14,7 @@ import styles from "./workspace-shell.module.css";
 const sections: Record<string, string> = {
   dashboard: "Home", create: "Create ads", studio: "Review",
   campaigns: "Campaigns", leads: "Enquiries", brand: OWNER_WORDS.business,
-  assets: "Assets", settings: "Settings",
+  assets: "Assets", settings: "Settings", onboarding: "Get started",
 };
 
 function readViewedAt(key: string): string | null {

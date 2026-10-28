@@ -2,6 +2,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import type { Lead } from "@/lib/types";
 import { leadListSchema } from "./filters";
+import { inLeadPageFilters, META_TEST_LEAD_PATTERN } from "./test-lead";
 
 const positionSchema = z.object({ id: z.uuid(), key: z.string().max(8000), missing: z.boolean() }).strict();
 const cursorSchema = z.object({
@@ -31,8 +32,15 @@ export async function getLeadPage(businessId: string, input: unknown = {}): Prom
   if (error || !data || typeof data !== "object" || Array.isArray(data)) throw new Error("Enquiries unavailable");
   if (!Array.isArray(data.leads) || typeof data.total !== "number") throw new Error("Invalid enquiry page");
   const next = data.nextCursor === null ? null : positionSchema.parse(data.nextCursor);
+  // #1149: Meta's test leads stay listed (labelled) but never count, the same as Home. An unreadable read keeps the total.
+  let tests = 0;
+  if (data.total > 0) {
+    const { data: rows, error: testError } = await database.from("leads").select("full_name, phone, email, city, form_name, workflow_status")
+      .eq("business_id", businessId).ilike("full_name", META_TEST_LEAD_PATTERN).limit(1000);
+    if (!testError && rows) tests = rows.filter((row) => inLeadPageFilters(row, filters)).length;
+  }
   return {
-    leads: data.leads as Lead[], total: data.total,
+    leads: data.leads as Lead[], total: Math.max(0, data.total - tests),
     nextCursor: next ? Buffer.from(JSON.stringify({ ...scope, position: next })).toString("base64url") : null,
   };
 }

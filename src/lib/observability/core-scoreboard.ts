@@ -56,6 +56,7 @@ export type Scoreboard = {
 
 export const SCOREBOARD_EVENT_NAMES = [
   "business.create",
+  "business.update",
   "brand.autofill",
   "campaign.plan",
   "creative.batch",
@@ -129,16 +130,28 @@ export function buildScoreboard(input: {
   const rows: ScoreRow[] = [];
 
   {
-    const created = named("business.create").length;
+    const creates = named("business.create");
+    // #1136: minutes from creating the business to its first save with what Prepare needs (brand/usable.ts).
+    const saves = [...creates, ...named("business.update")];
+    const measured = saves.some((event) => typeof event.attributes?.brandUsable === "boolean");
+    const minutes = creates.flatMap((create) => {
+      const start = Date.parse(create.created_at);
+      const usable = saves.filter((save) => save.business_id === create.business_id && save.attributes?.brandUsable === true
+        && Date.parse(save.created_at) >= start).map((save) => Date.parse(save.created_at));
+      return usable.length ? [(Math.min(...usable) - start) / 60_000] : [];
+    });
+    const slowestUsable = p90(minutes);
+    const usable = !creates.length ? "" : !measured ? " (usable: not measured yet)"
+      : `: ${fmtPct(Math.round(percent(minutes.length, creates.length)))} usable${slowestUsable === null ? "" : `, p90 ${slowestUsable.toFixed(1)} min`}`;
     // #1025: the route's own event counts first-setup autofills (no business yet, so no usage row).
     const autofill = named("brand.autofill");
     const failed = autofill.filter((event) => event.outcome !== "success").length;
     const slowest = p90(autofill.filter((event) => event.outcome === "success" && typeof event.duration_ms === "number").map((event) => event.duration_ms!));
     rows.push({
       step: "Brand",
-      now: `${plural(created, "new business", "new businesses")}; autofill ${plural(autofill.length, "call")} (${failed} failed${slowest === null ? "" : `, p90 ${(slowest / 1000).toFixed(1)} s`})`,
-      target: "new business filled in < 2 min on a phone (walk)",
-      met: null,
+      now: `${plural(creates.length, "new business", "new businesses")}${usable}; autofill ${plural(autofill.length, "call")} (${failed} failed${slowest === null ? "" : `, p90 ${(slowest / 1000).toFixed(1)} s`})`,
+      target: "new business usable (name, category, area, phone, offer) in < 2 min on a phone",
+      met: creates.length && measured ? slowestUsable !== null && slowestUsable < 2 : null,
     });
   }
 
