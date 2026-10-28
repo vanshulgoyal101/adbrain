@@ -23,8 +23,10 @@ export const metadata = {
     "Start with your customer goal and create campaign images and copy for review.",
 };
 
-export default async function CreatePage({ searchParams }: { searchParams?: Promise<{ all?: string | string[] }> } = {}) {
-  const [business, params] = await Promise.all([getPrimaryBusiness(), searchParams ?? ({} as { all?: string | string[] })]);
+export default async function CreatePage({ searchParams }: { searchParams?: Promise<{ all?: string | string[]; again?: string | string[] }> } = {}) {
+  const [business, params] = await Promise.all([getPrimaryBusiness(), searchParams ?? ({} as { all?: string | string[]; again?: string | string[] })]);
+  // #1934: a returning owner's "New campaign" (step 1 just tapped Make my ads) runs step 2 again.
+  const again = params.again === "1";
 
   if (!business) {
     return (
@@ -54,19 +56,19 @@ export default async function CreatePage({ searchParams }: { searchParams?: Prom
     const setup = await Promise.resolve()
       .then(() => Promise.all([hasLaunchedCampaign(business.id), getSetupCreativeBatch(business.id)]))
       .then(([launched, batch]) => {
-        if (launched) return null;
+        if (launched && !again) return null;
         // #1432: ads made from an earlier step 1 aren't offered; step 2 makes new ones from today's.
         const ads = batch.ads.filter((ad) => madeForSetup(ad, business));
         // #1475: with earlier ads (older details, or made in Studio) the owner taps to start a paid batch; a failed
         // read counts as earlier, so nothing paid starts on its own.
-        const earlier = ads.length ? Promise.resolve(false) : batch.ads.length ? Promise.resolve(true)
+        const earlier = ads.length || again ? Promise.resolve(false) : batch.ads.length ? Promise.resolve(true)
           : getApprovedCreatives(business.id).then((approved) => approved.length > 0, () => true);
         // #1402: a "Make another" top-up shows beside its batch; the step checks the newest batch on arrival (#1407).
         return earlier.then((hasEarlier) => ({ ads: ads.map(clientCreative), earlier: hasEarlier }));
       }).catch(() => null);
     // #1272: the + button lands here; a first-timer without the five facts resumes at step 1.
-    if (setup && !brandUsable({ ...business, vertical: setupFieldsFrom(business).vertical })) redirect("/brand");
-    if (setup) return <SetupAdsStep business={business} initialAds={setup.ads} earlier={setup.earlier} sample={await isProspectSession()} locale={await requestLocale()} />;
+    if (setup && !brandUsable({ ...business, vertical: setupFieldsFrom(business).vertical })) redirect(again ? "/brand?again=1" : "/brand");
+    if (setup) return <SetupAdsStep business={business} initialAds={setup.ads} earlier={setup.earlier} again={again} sample={await isProspectSession()} locale={await requestLocale()} />;
   }
 
   const missing = [

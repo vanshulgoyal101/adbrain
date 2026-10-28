@@ -104,8 +104,10 @@ const BATCH_DEADLINE_MS = 6 * 60 * 1000;
  * with the best 2 picked (fixed rule, `setupPicks`). Leaving mid-way is safe: the generation id is kept,
  * and coming back reads what was saved instead of starting again (#1261).
  */
-export function SetupAdsStep({ business, initialAds, sample = false, earlier = false, locale = "en" }: {
+export function SetupAdsStep({ business, initialAds, sample = false, earlier = false, again = false, locale = "en" }: {
   business: Business; initialAds: Creative[];
+  /** #1934: a returning owner's new campaign; Continue and Back keep the mode. */
+  again?: boolean;
   /** #1901: the picture badge's language. */
   locale?: AppLocale;
   /** #1475: the owner has ads from earlier details or Studio, so a paid batch starts only from a tap. */
@@ -359,10 +361,10 @@ export function SetupAdsStep({ business, initialAds, sample = false, earlier = f
     : sample ? (downloading ? "Preparing download…" : `Download sample pack (${ids.length})`) : `Continue with ${count}`;
 
   return (
-    <SetupSpine step={2} saved={saveError ? "failed" : null} beforeLeave={beforeLeave}
+    <SetupSpine step={2} saved={saveError ? "failed" : null} beforeLeave={beforeLeave} again={again}
       primary={waiting ? { label: `Make ${FULL_BATCH} ads`, onClick: () => void makeAds(FULL_BATCH) } : sample
         ? { label: primaryLabel, disabled: making || coming > 0 || downloading || ids.length === 0, onClick: () => void downloadSamplePack() }
-        : { label: primaryLabel, disabled: making || coming > 0 || ids.length === 0, href: `/campaigns?new=1&creatives=${ids.join(",")}` }}>
+        : { label: primaryLabel, disabled: making || coming > 0 || ids.length === 0, href: `/campaigns?${again ? "again" : "new"}=1&creatives=${ids.join(",")}` }}>
       {making ? (
         <div aria-live="polite" className="flex flex-col items-start gap-3 py-10">
           <Loader2 className="h-6 w-6 animate-spin text-primary" aria-hidden="true" />

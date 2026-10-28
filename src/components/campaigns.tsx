@@ -1563,8 +1563,10 @@ function BusinessCampaigns({
       {confirmDialog}
         <p className="text-sm text-slate-500">{campaigns.filter(campaign => campaign.status === "active").length} {OWNER_WORDS.running.toLowerCase()} <span className="mx-2 text-slate-300">/</span> {campaigns.filter(campaign => campaign.status === "paused").length} paused</p>
         <div className="flex flex-wrap items-center gap-2">
-          {/* #1588: the zero state carries its own New campaign; a pending audience decision owns the one solid button. */}
-          {(showComposer || hasHistory) && <Button variant={showComposer || pendingDecision ? "outline" : "primary"} onClick={toggleComposer} aria-expanded={showComposer} aria-controls="campaign-composer">{showComposer ? <X className="h-4 w-4" aria-hidden="true" /> : <Plus className="h-4 w-4" aria-hidden="true" />}{showComposer ? "Close campaign setup" : "New campaign"}</Button>}
+          {/* #1588: the zero state carries its own New campaign; a pending audience decision owns the one solid button.
+              #1934 (CPO): New campaign is the guided 3 steps everywhere; this composer stays as a quiet More options. */}
+          {hasHistory && !showComposer && <Link href="/brand?again=1" className={`inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-md px-4 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${pendingDecision ? "border border-slate-300 bg-white text-slate-900 hover:bg-slate-50" : "bg-primary text-primary-foreground hover:bg-primary-hover"}`}><Plus className="h-4 w-4" aria-hidden="true" />New campaign</Link>}
+          {(showComposer || hasHistory) && <Button variant={showComposer ? "outline" : "quiet"} onClick={toggleComposer} aria-expanded={showComposer} aria-controls="campaign-composer">{showComposer && <X className="h-4 w-4" aria-hidden="true" />}{showComposer ? "Close campaign setup" : "More options"}</Button>}
         </div>
       </div>
       {error && <Alert variant="error">{error}</Alert>}

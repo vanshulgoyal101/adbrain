@@ -96,6 +96,14 @@ from my website", which fills only empty fields. It autosaves only those columns
 (`saveSetupBusiness`; other offers and Brand fields are kept) and "Make my ads"
 checks all five, then goes to `/create`. `/brand?all=1` opens the full page.
 
+After a launch, **New campaign** on Home and in the Campaigns header (`/brand?again=1`, #1934;
+the old composer is the header's quiet **More options**) runs the same three
+steps in returning mode: step 1 "What's new this time?" asks only for the offer (the last
+one as a placeholder) with the rest folded into "Same as last time: … Change"; step 2
+(`/create?again=1`) makes a fresh batch; step 3 (`/campaigns?again=1`) opens Go live even
+with existing campaigns, payment shows "Set up for your last campaign" and the budget starts
+at the offered amount nearest the last campaign's daily budget. `?again=1` is kept by Back.
+
 Until then Home (`/dashboard`) is one resume card, "Your first ad · Step N of 3 ·
 {step} · Continue" (#1272, `setupResumeStep`): step 1 until the five facts make a
 usable Brand, step 2 until an ad is picked (approved), then step 3. At step 3 with ads made
@@ -588,7 +596,7 @@ The create request (idempotency key) is kept in sessionStorage per business, ads
 and budget, so a second tap or a reload resumes its operation
 (`operationForRequest`) instead of creating another campaign.
 
-Closing New campaign retains its unsaved brief, creatives, audience, destination
+Closing the composer (More options) retains its unsaved brief, creatives, audience, destination
 and budget in memory for the current business; returning to a business in the
 same mounted view restores its own setup. Use **Discard and start new** to clear
 it after confirmation. Unsaved edits are not durable across reload/navigation:
