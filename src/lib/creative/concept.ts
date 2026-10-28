@@ -7,7 +7,7 @@ import {
   type AdAngle,
   type BrandContext,
 } from "@/lib/templates/ads";
-import { formatDimensions, type AdFormat } from "@/lib/creative/design";
+import { contactChannel, formatDimensions, whatsappContactLabel, type AdFormat } from "@/lib/creative/design";
 import { bannedClaimsForVertical, capitalWords, scanAdCopy } from "@/lib/creative/slopScan";
 import { policyFindings } from "@/lib/creative/policy-rules";
 import { emptyScene } from "@/lib/creative/visual-rules";
@@ -107,6 +107,8 @@ export function conceptLead(input: Pick<ConceptInput, "brand" | "angle">): { pla
 
 export function buildConceptMessages(input: ConceptInput): ChatMessage[] {
   const format = input.format ?? "portrait";
+  // Same rule as the poster's contact bar (#1167): an India-based phone or a saved WhatsApp message.
+  const whatsapp = contactChannel(input.brand) === "whatsapp";
   return [
     {
       role: "system",
@@ -115,7 +117,9 @@ Design ONE coherent ad concept: its message, copy and visual execution must serv
 Write a distinct hook and argument for this brief and angle, not a summary of the brand profile.
 Choose one relevant benefit and one supporting fact; do not repeat the full credentials,
 service-area list and savings claim in every ad. Avoid generic slogan triplets, forced metaphors,
-and references to incidental objects in the picture. End with a plain, relevant next step.
+and references to incidental objects in the picture. End with a plain, relevant next step. When contact
+is "whatsapp", the ad's button opens a WhatsApp chat: the last line asks people to message on WhatsApp,
+and the ad never asks them to call, phone or email.
 Recent copy is supplied only to avoid repetition, not as evidence for claims. Change the opening,
 sentence structure and persuasion angle, not just synonyms. Do not reuse a recent headline or hook.
 Write a concise Meta link description that complements the headline with a supported detail or
@@ -154,7 +158,9 @@ matter, but never override factual constraints. Use the requested language for a
     {
       role: "user",
       content: JSON.stringify({
-        brand: input.brand,
+        // #1147: a WhatsApp business's ads open a chat, so the model gets no number or email to ask people to use.
+        brand: whatsapp ? { ...input.brand, phone: undefined, email: undefined } : input.brand,
+        contact: whatsapp ? "whatsapp" : "any",
         brief: input.brief,
         instructions: input.instructions ?? "",
         language:
@@ -563,7 +569,24 @@ export function validateConcept(
   }
   if (issues.length) return { success: false, issues, ...(claims.size ? { claims: [...claims] } : {}) };
   const pictureOffer = offerOnPicture(concept, input.brand.offers ?? []);
-  return { success: true, concept: pictureOffer ? { ...concept, supportingText: pictureOffer } : concept };
+  const asked = { ...concept, primary_text: withWhatsAppAsk(concept, input) };
+  return { success: true, concept: pictureOffer ? { ...asked, supportingText: pictureOffer } : asked };
+}
+
+const NAMES_WHATSAPP = /whats\s?app|व्हाट्सऐप|व्हाट्सएप|ਵਟਸਐਪ/i;
+
+/**
+ * #1147: a WhatsApp business's ad ends by asking for a WhatsApp message. When the model's last line doesn't
+ * (Qwen on the free run, Oct 28: "Book a free survey by Nov 10."), the poster's own words are added as a
+ * last line, in the ad's language. $0 and no repair; others' copy is unchanged.
+ */
+function withWhatsAppAsk(concept: CreativeConcept, input: ConceptInput): string {
+  if (contactChannel(input.brand) !== "whatsapp") return concept.primary_text;
+  const lines = concept.primary_text.split("\n").map((line) => line.trim()).filter(Boolean);
+  if (NAMES_WHATSAPP.test(lines.at(-1) ?? "")) return concept.primary_text;
+  const label = whatsappContactLabel([concept.headline, concept.primary_text], input.language);
+  const asked = `${concept.primary_text.trimEnd()}\n${label}${/[\u0900-\u097F\u0A00-\u0A7F]/u.test(label) ? "।" : "."}`;
+  return asked.length <= (creativeConceptSchema.shape.primary_text.maxLength ?? 900) ? asked : concept.primary_text;
 }
 
 /**
