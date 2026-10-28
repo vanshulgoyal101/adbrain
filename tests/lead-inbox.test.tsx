@@ -47,10 +47,19 @@ beforeEach(() => {
 });
 
 describe("<LeadInbox> empty state", () => {
-  it("explains what will appear and how", () => {
+  // #1260 (CPO words, Designer): one action, and never one the owner can't take.
+  it("explains what will appear and offers See your campaigns while alerts can't be turned on", () => {
     render(<LeadInbox businessName="Solaride" initialLeads={[]} metaReady />);
-    expect(screen.getByText("No enquiries yet")).toBeInTheDocument();
-    expect(screen.getByText(/message you on WhatsApp/i)).toBeInTheDocument();
+    expect(screen.getByText("No enquiries yet. When someone fills your form or messages you on WhatsApp from an ad, they'll show up here.")).toBeInTheDocument();
+    expect(screen.getByText("Reply fast: people often go with the first business that answers.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "See your campaigns" })).toHaveAttribute("href", "/campaigns");
+    expect(screen.queryByRole("link", { name: /WhatsApp alert/ })).toBeNull();
+  });
+
+  it("offers a WhatsApp alert for each enquiry when alerts can be turned on", () => {
+    render(<LeadInbox businessName="Solaride" initialLeads={[]} metaReady offerAlerts />);
+    expect(screen.getByRole("link", { name: "Get a WhatsApp alert for each enquiry" })).toHaveAttribute("href", "/settings#whatsapp-alerts-title");
+    expect(screen.queryByRole("link", { name: "See your campaigns" })).toBeNull();
   });
 
   it("hides the digest card when there is nothing to share", () => {
