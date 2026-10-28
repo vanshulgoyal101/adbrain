@@ -76,14 +76,14 @@ export function waitingOnMe(lastBody, m, labels = [], now = Date.now()) {
 
 /**
  * #364: the oldest owned item you can act on now, even when your last word on it was a handoff:
- * not parked, blocked, waiting on the owner, `later` or a CEO `decision`, no open PR naming it,
+ * not parked, blocked, waiting on the owner, `later`, `standing` (channels, umbrellas) or a CEO `decision`, no open PR naming it,
  * and not in `skip` (items snoozed by a future "Next check"). Null when there is none.
  * @param {Array<{ number: number, title?: string, pull_request?: unknown, labels?: Array<string | { name: string }> }>} items
  * @param {Array<{ title?: string }>} openPulls
  * @param {Set<number>} [skip]
  */
 export function nextItem(items, openPulls, skip = new Set()) {
-  const hold = new Set([...PARKED, "later", "decision"]);
+  const hold = new Set([...PARKED, "later", "decision", "standing"]);
   const withPr = new Set(openPulls.flatMap((pr) => linkedIssues(pr.title)));
   const names = (i) => (i.labels ?? []).map((l) => (typeof l === "string" ? l : l.name));
   return items
