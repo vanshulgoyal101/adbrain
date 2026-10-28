@@ -360,7 +360,10 @@ in issues.
    `select count(*) from private.meta_tokens where business_id='<business id>';` is `0`;
    `select count(*) from private.meta_connection_attempts where business_id='<business id>';` is `0`;
    `select count(*) from public.managed_meta_accounts where business_id='<business id>';` is `0`;
-   `select count(*) from public.owner_alert_prefs where business_id='<business id>';` is `0`.
+   `select count(*) from public.owner_alert_prefs where business_id='<business id>';` is `0`;
+   `select count(*) from auth.mfa_factors where user_id='<user id>';` is `0` (a staff TOTP factor
+   would lock the owner out); and the user id is not in `src/lib/internal-accounts.json`
+   (`userIds`, `smokeUserIds`, `exemptFromFreeProviders`), or the owner stays internal.
    If any fails, stop and ask on the issue. Do not connect Meta, provision a managed
    account, or enable WhatsApp/lead alerts during preparation.
 2. With the owner present, first clear the prospect's password and revoke every existing
@@ -378,7 +381,8 @@ in issues.
    `profiles.email` (id = user id) to their address, and delete sales-only
    `ad_instructions` for the business. The audit log shows staff actions from
    preparation as the owner's account; say so to the owner.
-3. Change the account's email to theirs (Supabase dashboard → Authentication → the user →
+3. Have the owner read their address back first: `updateUserById` sends no confirmation, so a
+   typo hands the account to a stranger. Change the account's email to theirs (Supabase dashboard → Authentication → the user →
    change email, or `auth.admin.updateUserById(<user id>, { email })`). Read back:
    `select email, email_confirmed_at, encrypted_password from auth.users where id='<user id>';`
    shows their address, a confirmation timestamp, and no usable password. Read back:
