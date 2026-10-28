@@ -2527,9 +2527,9 @@ function BusinessCampaigns({
 
                     {/* CPO (#1255): a weak ad outranks 1-of-N rejected (it costs money; a rejected ad doesn't). */}
                     {reviews[c.id]?.length && !(weakAdCards.includes(c.id) && reviews[c.id].some((review) => review.state !== "rejected")) ? (
-                      <RejectedAds reviews={reviews[c.id]} spend={r?.spend ?? 0} running={c.status === "active"} adsManagerUrl={c.meta_campaign_id ? adsLink(c) : undefined}
+                      <RejectedAds reviews={reviews[c.id]} spend={r?.spend ?? 0} running={c.status === "active"} vertical={business.vertical} adsManagerUrl={c.meta_campaign_id ? adsLink(c) : undefined}
                         onEditAd={c.meta_campaign_id && (c.status === "paused" || c.status === "active") && reviewableCampaign(c) && (c.meta_ad_ids?.length ?? 0) > 0 && !waitingSwitch[c.id]
-                          ? () => { setAdEditHint(undefined); setAdEdit(c); } : undefined} />
+                          ? (hint) => { setAdEditHint(hint); setAdEdit(c); } : undefined} />
                     ) : null}
                     {r && (
                       // #1274 (#1255): one sentence, one number, one action; the figures stay under Details.
