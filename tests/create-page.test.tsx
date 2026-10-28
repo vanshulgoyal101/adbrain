@@ -12,6 +12,8 @@ const getApprovedCreatives = vi.hoisted(() => vi.fn(async () => [] as unknown[])
 vi.mock("@/lib/supabase/queries", () => ({ getPrimaryBusiness, getBrandAssets, hasLaunchedCampaign, getSetupCreativeBatch, getApprovedCreatives }));
 const setupProps = vi.hoisted(() => vi.fn());
 vi.mock("@/components/setup-ads-step", () => ({ SetupAdsStep: (props: unknown) => { setupProps(props); return <div>Setup step 2</div>; } }));
+const mediaOn = vi.hoisted(() => ({ value: false }));
+vi.mock("@/lib/media/store", () => ({ mediaUploadsEnabled: () => mediaOn.value }));
 vi.mock("@/components/ad-assistant", () => ({ AdAssistant: () => <div>Assistant</div> }));
 
 const sparse = {
@@ -49,6 +51,20 @@ describe("Create page business details (#169)", () => {
     expect(screen.getByRole("link", { name: "Edit your business" })).toHaveAttribute("href", "/brand");
     expect(screen.queryByText("Rs 99 loaf")).not.toBeInTheDocument();
     expect(screen.queryByText(/Not added yet/)).not.toBeInTheDocument();
+  });
+
+  it("#778: with uploads on, offers the entry choice: Make ads with AI · Use my photos & videos; off, no choice", async () => {
+    getPrimaryBusiness.mockResolvedValue(sparse);
+    const { default: CreatePage } = await import("@/app/(app)/create/page");
+    const { unmount } = render(await CreatePage());
+    expect(screen.queryByRole("navigation", { name: "How to make ads" })).not.toBeInTheDocument();
+    unmount();
+    mediaOn.value = true;
+    try {
+      render(await CreatePage());
+      expect(screen.getByText("Make ads with AI")).toHaveAttribute("aria-current", "page");
+      expect(screen.getByRole("link", { name: "Use my photos & videos" })).toHaveAttribute("href", "/assets");
+    } finally { mediaOn.value = false; }
   });
 
   it("asks for a logo and real photos until the Brand has them (#195)", async () => {

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Building2 } from "lucide-react";
 import { AssetsLibrary } from "@/components/assets-library";
+import { MediaLibrary } from "@/components/media-library";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
@@ -10,6 +11,8 @@ import {
   getPrimaryBusiness,
 } from "@/lib/supabase/queries";
 import { isProspectSession } from "@/lib/prospect-session";
+import { listMedia, mediaUploadsEnabled } from "@/lib/media/store";
+import { createClient } from "@/lib/supabase/server";
 
 export const metadata = { title: "Assets" };
 
@@ -43,6 +46,21 @@ export default async function AssetsPage() {
     getBrandAssets(business.id),
     isProspectSession(),
   ]);
+
+  // #778 slice 3a: with uploads on, the page is the owner's photo library; a failed read shows the empty state.
+  if (mediaUploadsEnabled()) {
+    const media = await createClient()
+      .then((client) => listMedia(client, business.id))
+      .then((page) => page.items, () => []);
+    return (
+      <div>
+        <PageHeader title="Photos & videos" description={<p>Your own photos for {business.name}&apos;s ads, and every ad AdBrain made.</p>} />
+        <div className="mt-6">
+          <MediaLibrary media={media} creatives={creatives} brandAssets={brandAssets} sample={sample} />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
