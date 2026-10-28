@@ -1131,9 +1131,15 @@ describe("<Studio> review board batches (#762)", () => {
     render(<Studio business={business} initialCreatives={[made("new1", "g-new", 0), made("stale", "g-stale", 10), made("kept", "g-stale", 10, { status: "approved" })]} />);
     expect(screen.getByRole("radio", { name: "Needs review (1)" })).toBeInTheDocument();
     const board = within(screen.getByRole("region", { name: "Ads" }));
-    expect(board.getByText(/Older unreviewed ads \(1\)/)).toBeVisible();
+    expect(board.getByText(/Set aside \(1\): not picked, or unreviewed after 7 days/)).toBeVisible();
     expect(board.getByRole("button", { name: "Ad stale Needs review" })).not.toBeVisible();
     // Approved ads are never set aside.
     expect(board.getByText(/16 Oct, [^·]+ · 1 ad\b/)).toBeVisible();
+  });
+
+  it("#1148: once one ad from a Create batch is used, the others are set aside, not 'Needs review'", () => {
+    render(<Studio business={business} initialCreatives={[made("picked", "g1", 0, { status: "approved" }), made("other1", "g1", 0), made("other2", "g1", 0), made("fresh", "g2", 0)]} />);
+    expect(screen.getByRole("radio", { name: "Needs review (1)" })).toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "Ads" })).getByText(/Set aside \(2\)/)).toBeVisible();
   });
 });

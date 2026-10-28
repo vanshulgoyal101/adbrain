@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Building2, CheckCircle2, ChevronRight, ImageIcon } from "lucide-react";
 import { SpendStatusBanner } from "@/components/spend-status";
 import { buildWorkQueue } from "@/lib/work-queue";
+import { setAsideIds } from "@/lib/creative/set-aside";
 import { describeAuditEvent, isBackgroundAuditAction } from "@/lib/audit-labels";
 import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
 import { formatDate, formatMoney, formatPerDay } from "@/lib/format";
@@ -52,7 +53,9 @@ export function WorkspaceHome({
 }: WorkspaceHomeProps) {
   const summary = business ? homeResults(campaigns, results) : null;
   const stale = business ? staleCampaignIds(campaigns, results, now) : [];
-  const [next, ...later] = buildWorkQueue({ business, creatives, campaigns, metaReady });
+  const [next, ...later] = buildWorkQueue({ business, creatives, campaigns, metaReady, now });
+  const setAside = setAsideIds(creatives, now);
+  const reviewLabel = (creative: CreativePreview) => creative.status === "approved" ? "Approved" : setAside.has(creative.id) ? "Set aside" : "Needs review";
   const places = business?.locations.length ? business.locations.join(", ") : null;
 
   return (
@@ -190,7 +193,7 @@ export function WorkspaceHome({
             <ul className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-2">
               {creatives.slice(0, 4).map((creative) => (
                 <li key={creative.id} className="min-w-0">
-                  <Link href={`/studio?creative=${encodeURIComponent(creative.id)}`} aria-label={`${creative.headline || "Untitled ad"}: ${creative.status === "approved" ? "approved" : "needs review"}`} className="group block">
+                  <Link href={`/studio?creative=${encodeURIComponent(creative.id)}`} aria-label={`${creative.headline || "Untitled ad"}: ${reviewLabel(creative).toLowerCase()}`} className="group block">
                     <div className="flex aspect-square items-center justify-center overflow-hidden rounded-md bg-slate-100">
                       {creative.image_url ? (
                         <img
@@ -204,7 +207,7 @@ export function WorkspaceHome({
                       )}
                     </div>
                     <p className="mt-1.5 text-xs text-slate-600 group-hover:text-blue-700">
-                      {creative.status === "approved" ? "Approved" : "Needs review"}
+                      {reviewLabel(creative)}
                     </p>
                   </Link>
                 </li>
