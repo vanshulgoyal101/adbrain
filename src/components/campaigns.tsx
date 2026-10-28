@@ -2450,7 +2450,8 @@ function BusinessCampaigns({
                               {c.status === "active" ? "Pause" : "Resume"}
                             </Button>
                           )}
-                        <Button
+                        {/* #1600 (Designer #1633): nothing to fetch for a campaign deleted in Meta; ⋯ stays. */}
+                        {goneInMeta(c) !== "Deleted in Meta" && <Button
                           variant="outline"
                           onClick={() => refresh(c.id)}
                           aria-label="Refresh results"
@@ -2463,7 +2464,7 @@ function BusinessCampaigns({
                           )}
                           {/* #417: a real space, so the visible text reads "Refresh results" like the label. */}
                           Refresh{" "}<span className="-ml-1 hidden sm:inline">results</span>
-                        </Button>
+                        </Button>}
                         <DropdownMenu>
                           <DropdownMenuTrigger
                             aria-label={`More actions for ${c.name ?? "this campaign"}`}

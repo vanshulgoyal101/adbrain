@@ -113,6 +113,9 @@ describe("core: a campaign deleted in Meta shows as deleted after Refresh (#721)
     expect(within(card).queryByText("paused")).toBeNull();
     // #1600 (CPO #1601): the card's own line, which stays after the notice.
     expect(within(card).getByText("This campaign was deleted in Meta Ads Manager, so it can't run or be changed here. Nothing more will spend. Its results up to then stay below.")).toBeTruthy();
+    // Designer #1633: nothing to fetch any more, so no Refresh; ⋯ stays.
+    expect(within(card).queryByRole("button", { name: /Refresh results/ })).toBeNull();
+    expect(within(card).getByRole("button", { name: /More actions/ })).toBeTruthy();
   });
 });
 

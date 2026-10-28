@@ -114,16 +114,18 @@ describe("Home workspace", () => {
     expect(within(list).getByRole("link", { name: "See all 3" })).toBeInTheDocument();
   });
 
-  it("#1600: names a campaign deleted in Meta in the last week, in the CPO's words (EN and HI)", () => {
+  it("#1600 (Designer #1633): a campaign deleted in Meta keeps its Home row for a week, the CPO's line as its status (EN and HI)", () => {
     const now = Date.parse("2026-10-28T18:00:00Z");
     const run = (id: string, at: string) => ({ id, name: `Run ${id}`, status: "completed", daily_budget: 300, raw: { metaStatus: "DELETED", metaGoneAt: at } }) as unknown as Campaign;
     const campaigns = [run("fresh", "2026-10-27T18:00:00Z"), run("old", "2026-10-10T18:00:00Z")];
     const { unmount } = render(<WorkspaceHome {...empty} business={business} now={now} campaigns={campaigns} />);
-    expect(screen.getByRole("link", { name: "‘Run fresh’ was deleted in Meta. Run it again from Campaigns if you still want it." })).toHaveAttribute("href", "/campaigns");
-    expect(screen.queryByText(/Run old’ was deleted/)).toBeNull();
+    const list = screen.getByRole("heading", { name: "Campaigns" }).closest("section")!;
+    const row = within(list).getByRole("link", { name: "Run fresh" }).closest("li")!;
+    expect(within(row).getByText("Deleted in Meta. Run it again from Campaigns if you still want it.")).toBeInTheDocument();
+    expect(within(list).queryByRole("link", { name: "Run old" })).toBeNull();
     unmount();
     render(<WorkspaceHome {...empty} business={business} now={now} campaigns={campaigns} locale="hi" />);
-    expect(screen.getByText("‘Run fresh’ Meta में डिलीट हुआ है। अगर अब भी चाहिए, तो Campaigns से फिर से चलाएँ।")).toBeInTheDocument();
+    expect(screen.getByText("Meta में डिलीट हुआ है। अगर अब भी चाहिए, तो Campaigns से फिर से चलाएँ।")).toBeInTheDocument();
   });
 
   it("#1393: the workspace shell opens the Storage connection before the page streams in", async () => {
