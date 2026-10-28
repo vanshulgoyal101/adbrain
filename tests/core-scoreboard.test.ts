@@ -90,7 +90,7 @@ describe("core scoreboard (#681)", () => {
     expect(row(b, "Create (internal, free images)")).toEqual({
       step: "Create (internal, free images)",
       now: "1 batch: 100% gave 3 ads; AI calls 0/1 failed; p90 110 s",
-      target: "not a target: free Pollinations images, internal only",
+      target: "not a target: free images, internal only",
       met: null,
     });
   });

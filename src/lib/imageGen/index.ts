@@ -1,7 +1,8 @@
 import { getEnv } from "@/lib/env";
 import { createPollinationsProvider } from "./providers/pollinations";
 import { createOpenRouterProvider } from "./providers/openrouter";
-import { ImageProviderError, type GeneratedImage, type ImageProvider, type ImageRequest } from "./types";
+import { CLOUDFLARE_IMAGE_MODEL, cloudflareConfigured, createCloudflareProvider } from "./providers/cloudflare";
+import { FreeImageBusyError, ImageProviderError, type GeneratedImage, type ImageProvider, type ImageRequest } from "./types";
 import { MAX_IMAGE_BYTES, readBoundedResponse, validateRaster } from "./raster";
 import { fetchPublicUrl, SafeFetchError } from "@/lib/security/ssrf";
 import { freeImagesOnly } from "@/lib/llm/spend-policy";
@@ -13,6 +14,9 @@ function getProvider(name = getEnv().IMAGE_PROVIDER): ImageProvider {
   switch (name) {
     case "pollinations":
       return createPollinationsProvider();
+    case "cloudflare":
+      if (!cloudflareConfigured()) throw new Error("Cloudflare image generation is selected but it is not configured.");
+      return createCloudflareProvider();
     case "openrouter":
       if (!env.OPENROUTER_API_KEYS.length) throw new Error("OpenRouter image generation is selected but no key is configured.");
       return createOpenRouterProvider();
@@ -28,7 +32,7 @@ function getFallbackProvider(): ImageProvider | null {
 }
 
 async function executeImage(provider: ImageProvider, req: ImageRequest): Promise<GeneratedImage> {
-  if (provider.name === "pollinations" && req.referenceImages?.length) throw new Error("Pollinations does not support product references. Select a reference-capable image provider.");
+  if (["pollinations", "cloudflare"].includes(provider.name) && req.referenceImages?.length) throw new Error(`${provider.name} does not support product references. Select a reference-capable image provider.`);
   const generated = await provider.generate(req);
   const raster = await downloadImage(generated.url, req.signal).catch((error: unknown) => {
     if (!generated.providerRequestId) throw error;
@@ -47,18 +51,27 @@ const FREE_IMAGE_DEFAULT_WAIT_MS = 15_000;
 const FREE_IMAGE_MIN_WAIT_MS = 15_000;
 let freeImageQueue: Promise<unknown> = Promise.resolve();
 
-class FreeImageBusyError extends Error {
-  constructor() {
-    super("Free test images are busy right now. Try again in a minute.");
-    this.name = "FreeImageBusyError";
-  }
-}
-
 /** `retries`: how many busy answers to wait out; internal accounts wait up to the cap, a paid fallback once (#1422). */
 function queuedFreeImage(provider: ImageProvider, req: ImageRequest, retries = Number.POSITIVE_INFINITY): Promise<GeneratedImage> {
   const run = freeImageQueue.then(() => freeImageWithRetry(provider, req, retries));
   freeImageQueue = run.catch(() => undefined);
   return run;
+}
+
+/** #1476: a free picture: Cloudflare FLUX-1-schnell when configured, Pollinations last. */
+async function freeImage(req: ImageRequest, retries = Number.POSITIVE_INFINITY): Promise<GeneratedImage> {
+  if (cloudflareConfigured()) {
+    const cloudflare = createCloudflareProvider();
+    try {
+      return await executeImage(cloudflare, req);
+    } catch (error) {
+      req.onAttempt?.({ provider: cloudflare.name, model: CLOUDFLARE_IMAGE_MODEL, status: "error", errorCode: imageFailureCode(error),
+        providerRequestId: error instanceof ImageProviderError ? error.providerRequestId : undefined,
+        providerFinalStatus: error instanceof ImageProviderError ? error.providerFinalStatus : "unknown" });
+      req.signal?.throwIfAborted();
+    }
+  }
+  return queuedFreeImage(getProvider("pollinations"), req, retries);
 }
 
 async function freeImageWithRetry(provider: ImageProvider, req: ImageRequest, retries: number): Promise<GeneratedImage> {
@@ -107,7 +120,7 @@ export async function generateImage(
 ): Promise<GeneratedImage> {
   const startedAt = Date.now();
   req.signal?.throwIfAborted();
-  // Internal accounts make free Pollinations images, which take no reference images (#449, #466).
+  // Internal accounts make free images (Cloudflare, then Pollinations), which take no reference images (#449, #466, #1476).
   const free = freeImagesOnly();
   if (free) req = { ...req, referenceImages: undefined };
   const provider = getProvider(free ? "pollinations" : undefined);
@@ -115,10 +128,10 @@ export async function generateImage(
   if (parkedFallback && parkedFallback.name !== provider.name) return fallbackImage(parkedFallback, provider, req, startedAt);
   try {
     const generated = {
-      ...(await (free ? queuedFreeImage(provider, req) : executeImage(provider, req))),
+      ...(await (free ? freeImage(req) : executeImage(provider, req))),
       latencyMs: Date.now() - startedAt,
     };
-    req.onAttempt?.({ provider: provider.name, model: generated.model ?? provider.name,
+    req.onAttempt?.({ provider: generated.provider, model: generated.model ?? generated.provider,
       providerRequestId: generated.providerRequestId, providerFinalStatus: generated.providerFinalStatus ?? "unknown",
       estimatedCostUsd: generated.estimatedCostUsd, status: "success" });
     return generated;
@@ -140,14 +153,15 @@ export async function generateImage(
 async function fallbackImage(fallback: ImageProvider, from: ImageProvider, req: ImageRequest, startedAt: number): Promise<GeneratedImage> {
   const fallbackReq = fallback.name === "pollinations" ? { ...req, referenceImages: undefined } : req;
   // #1422: Pollinations answers 404/busy right after another free picture; wait that out once, one picture at a time.
-  const run = fallback.name === "pollinations" ? queuedFreeImage(fallback, fallbackReq, 1) : executeImage(fallback, fallbackReq);
+  // #1476: the free fallback tries Cloudflare first when it is configured.
+  const run = fallback.name === "pollinations" ? freeImage(fallbackReq, 1) : executeImage(fallback, fallbackReq);
   const generated = await run.catch((fallbackError: unknown) => {
     req.onAttempt?.({ provider: fallback.name, model: fallback.name, status: "error", errorCode: imageFailureCode(fallbackError),
       providerRequestId: fallbackError instanceof ImageProviderError ? fallbackError.providerRequestId : undefined,
       providerFinalStatus: fallbackError instanceof ImageProviderError ? fallbackError.providerFinalStatus : "unknown" });
     throw fallbackError;
   });
-  req.onAttempt?.({ provider: fallback.name, model: generated.model ?? fallback.name,
+  req.onAttempt?.({ provider: generated.provider, model: generated.model ?? generated.provider,
     providerRequestId: generated.providerRequestId, providerFinalStatus: generated.providerFinalStatus ?? "unknown",
     estimatedCostUsd: generated.estimatedCostUsd, status: "success" });
   return {
