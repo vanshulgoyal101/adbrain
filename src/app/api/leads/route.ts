@@ -16,6 +16,6 @@ export const GET = observeRoute("/api/leads", "GET", async (request: Request) =>
     return NextResponse.json(page, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
     const invalid = error instanceof z.ZodError || error instanceof SyntaxError;
-    return NextResponse.json({ error: invalid ? "Invalid enquiry filters." : "Enquiries could not be loaded." }, { status: invalid ? 400 : 503 });
+    return NextResponse.json({ error: invalid ? "Invalid enquiry filters." : "We couldn't load your enquiries. Reload the page." }, { status: invalid ? 400 : 503 });
   }
 });

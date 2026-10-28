@@ -615,7 +615,7 @@ function BusinessCampaigns({
     void createMetaConnectClient().drafts(business.id, controller.signal).then((drafts) => {
       if (!controller.signal.aborted) setSavedDrafts(drafts);
     }).catch((reason) => {
-      if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Saved drafts could not be loaded.");
+      if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "We couldn't load your saved drafts. Reload the page.");
     });
     return () => controller.abort();
   }, [business.id]);
@@ -705,7 +705,7 @@ function BusinessCampaigns({
         window.sessionStorage.removeItem(recoveryKey);
         setPrepareReview(null);
       }
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "Draft could not be removed."); }
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "The draft is still here. Try again in a minute."); }
     finally { setDraftBusy(null); }
   }
 
@@ -1436,7 +1436,7 @@ function BusinessCampaigns({
       setActivationFunding(null);
       setActivationLearning(null);
       setActivationReview(null);
-      const message = reason instanceof Error ? reason.message : "Activation review is unavailable.";
+      const message = reason instanceof Error ? reason.message : "We couldn't check your campaign before switching it on, so it stays as it was. Tap Refresh review.";
       // Resume was tapped on the card; Refresh review on the panel at the top, next to the page banner.
       if (refreshing) setError(message);
       else setCardError({ id: campaign.id, message });

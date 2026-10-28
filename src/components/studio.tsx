@@ -246,7 +246,7 @@ export function Studio({
       const stored = localStorage.getItem(generationKey);
       setPendingGeneration(stored ? studioGenerationSchema.parse(JSON.parse(stored)) : null);
     } catch {
-      setError("Generation recovery storage is unavailable. No generation was started.");
+      setError("This browser won't let AdBrain save your progress, so no ads were started. Turn off private browsing or use another browser.");
     }
   }
 
@@ -336,7 +336,7 @@ export function Studio({
           return;
         }
       } catch {
-        setError("Generation recovery storage is unavailable. No generation was started.");
+        setError("This browser won't let AdBrain save your progress, so no ads were started. Turn off private browsing or use another browser.");
         return;
       }
       setPendingGeneration(intent);
@@ -394,14 +394,14 @@ export function Studio({
         body: JSON.stringify({ creativeIds: ids }),
       });
       if (!res.ok) {
-        setError("Export failed.");
+        setError("The ad pack didn't download. Check your connection and tap Download again.");
         return;
       }
       const blob = await res.blob();
       downloadBlob(blob, "adbrain-ad-pack.zip");
       setExportOk(true);
     } catch {
-      setError("Export failed.");
+      setError("The ad pack didn't download. Check your connection and tap Download again.");
     } finally {
       setExporting(false);
     }
