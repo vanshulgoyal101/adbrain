@@ -7,18 +7,9 @@ import { Button } from "@/components/ui/button";
 import { HelpOnWhatsApp } from "@/components/support-link";
 import { cn } from "@/lib/utils";
 
-/** #1251 WS1: the first-timer's three steps, in the owner's words. */
-export const SETUP_STEPS = [
-  { step: 1, label: "Your business", href: "/brand" },
-  { step: 2, label: "Your ads", href: "/create" },
-  { step: 3, label: "Go live", href: "/campaigns" },
-] as const;
-export type SetupStep = (typeof SETUP_STEPS)[number]["step"];
+import { SETUP_STEPS, type SetupStep } from "@/lib/setup/steps";
 
-/** A first-timer has no campaign that ever went live (`launched_at` is the first confirmed activation) or is on now (imported from Meta). */
-export function firstTimer(campaigns: { launched_at: string | null; status?: string }[]): boolean {
-  return !campaigns.some((campaign) => campaign.launched_at || campaign.status === "active");
-}
+export { SETUP_STEPS, firstTimer, type SetupStep } from "@/lib/setup/steps";
 
 type Primary = { label: string; disabled?: boolean } & ({ href: string; onClick?: never } | { onClick: () => void; href?: never });
 

@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { ConnectionAccessError, requireOwnedBusiness } from "@/lib/meta/connection-access";
 import { rateLimitResponse } from "@/lib/security/rate-limit";
-import { createAnnualPaymentQuote, DEFAULT_ANNUAL_PAYMENT_PAISE, productionPaymentQuoteSchema, toPaymentQuoteView } from "./allocation";
+import { createAnnualPaymentQuote, DEFAULT_ANNUAL_PAYMENT_PAISE, MIN_ANNUAL_PAYMENT_PAISE, productionPaymentQuoteSchema, toPaymentQuoteView } from "./allocation";
 import { CheckoutRequestError, paymentJsonBody, paymentReply, readPaymentBody } from "./checkout-request";
 import { getProductionCollectionPolicy, getProductionPaymentConfig, productionPaymentPolicySchema, ProductionPaymentError,
   quoteForPaymentPolicy, type PaymentSubject } from "./production-config";
@@ -16,7 +16,7 @@ const identifier = (prefix: string) => z.string().regex(new RegExp(`^${prefix}_[
 const hashSchema = z.string().regex(/^[a-f0-9]{64}$/);
 const eventIdSchema = z.string().regex(/^[A-Za-z0-9_:.-]{1,160}$/);
 const amountSchema = z.number().int().min(0).max(1_000_000);
-const MIN_ANNUAL_PAISE = 50_000;
+const MIN_ANNUAL_PAISE = MIN_ANNUAL_PAYMENT_PAISE;
 const PREFILL_ANNUAL_PAISE = 150_000;
 const annualAmountSchema = amountSchema.min(MIN_ANNUAL_PAISE);
 const orderSchema = z.object({

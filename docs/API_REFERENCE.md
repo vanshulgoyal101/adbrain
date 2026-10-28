@@ -262,8 +262,8 @@ credit. Owners can review their balance with `GET /api/payments/customer-balance
 using `businessId` and optional `campaignId`. With `campaignId`, optional
 `capDays` (integer 1–7) reviews a capped run at `daily × capDays` + GST instead
 of 7 × daily; the activation PATCH still enforces the days the owner approves.
-The GET response is the customer view: no `capturedPaise`, `serviceAllocationPaise`
-or `advertisingRefundedPaise`, so AdBrain's margin never reaches the browser (#1235).
+The GET response is the customer view: no `capturedPaise`, `serviceAllocationPaise`,
+`advertisingAllocationPaise` or `advertisingRefundedPaise`, so AdBrain's margin never reaches the browser (#1235).
 Financial operators can submit
 strict `costs` or `refund-allocation` actions with
 `POST /api/payments/customer-balance`; authority is rechecked in SQL. See the
