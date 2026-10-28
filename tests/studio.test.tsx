@@ -922,6 +922,34 @@ describe("<Studio> empty state", () => {
 });
 
 describe("<Studio> review board", () => {
+  // #1162: on a phone the details sit below every batch; a tile tap must bring them into view.
+  it.each([
+    { width: "phone", wide: false, scrolls: true },
+    { width: "lg", wide: true, scrolls: false },
+  ])("scrolls Ad details into view on a tile tap only below lg ($width)", ({ wide, scrolls }) => {
+    vi.stubGlobal("matchMedia", (query: string) => ({ matches: query.includes("min-width") ? wide : false }));
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true, value: scrollIntoView });
+    try {
+      render(<Studio business={business} initialCreatives={[creative({ id: "c1", headline: "First ad" }), creative({ id: "c2", headline: "Second ad" })]} />);
+      const tile = within(screen.getByRole("region", { name: "Ads" })).getByRole("button", { name: "Second ad Needs review" });
+      tile.focus();
+      fireEvent.click(tile);
+      expect(tile).toHaveAttribute("aria-pressed", "true");
+      expect(tile).toHaveFocus();
+      if (scrolls) {
+        expect(scrollIntoView).toHaveBeenCalledTimes(1);
+        expect(scrollIntoView.mock.contexts[0]).toBe(screen.getByRole("region", { name: "Ad details" }));
+        expect(scrollIntoView).toHaveBeenCalledWith({ block: "start", behavior: "smooth" });
+      } else {
+        expect(scrollIntoView).not.toHaveBeenCalled();
+      }
+    } finally {
+      Reflect.deleteProperty(HTMLElement.prototype, "scrollIntoView");
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("keeps duplicate headlines selectable by keyboard and search", async () => {
     const user = userEvent.setup();
     const variants = [
