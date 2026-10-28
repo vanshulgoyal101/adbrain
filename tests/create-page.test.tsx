@@ -7,8 +7,8 @@ const getPrimaryBusiness = vi.hoisted(() => vi.fn());
 const getBrandAssets = vi.hoisted(() => vi.fn(async () => [] as { type: string }[]));
 // An owner whose campaign has gone live sees the full Create; a first-timer gets the setup step (#1270).
 const hasLaunchedCampaign = vi.hoisted(() => vi.fn(async () => true));
-const getLatestCreativeBatch = vi.hoisted(() => vi.fn(async () => []));
-vi.mock("@/lib/supabase/queries", () => ({ getPrimaryBusiness, getBrandAssets, hasLaunchedCampaign, getLatestCreativeBatch }));
+const getSetupCreativeBatch = vi.hoisted(() => vi.fn(async () => ({ ads: [], newest: null })));
+vi.mock("@/lib/supabase/queries", () => ({ getPrimaryBusiness, getBrandAssets, hasLaunchedCampaign, getSetupCreativeBatch }));
 const setupProps = vi.hoisted(() => vi.fn());
 vi.mock("@/components/setup-ads-step", () => ({ SetupAdsStep: (props: unknown) => { setupProps(props); return <div>Setup step 2</div>; } }));
 vi.mock("@/components/ad-assistant", () => ({ AdAssistant: () => <div>Assistant</div> }));
@@ -85,11 +85,11 @@ describe("Create page for a first-timer (#1270)", () => {
     const { setupGoal } = await import("@/lib/creative/setup-picks");
     const made = (id: string, goal: string) => ({ id, headline: id, generation: { sourceFacts: [goal] } });
     const { default: CreatePage } = await import("@/app/(app)/create/page");
-    getLatestCreativeBatch.mockResolvedValue([made("solar", "Get WhatsApp enquiries for rooftop solar in Mohali, leading with: Free site survey")] as never);
+    getSetupCreativeBatch.mockResolvedValue({ ads: [made("solar", "Get WhatsApp enquiries for rooftop solar in Mohali, leading with: Free site survey")], newest: null } as never);
     const { unmount } = render(await CreatePage({ searchParams: Promise.resolve({}) }));
     expect(setupProps.mock.lastCall?.[0]).toMatchObject({ initialAds: [] });
     unmount();
-    getLatestCreativeBatch.mockResolvedValue([made("today", setupGoal(usable))] as never);
+    getSetupCreativeBatch.mockResolvedValue({ ads: [made("today", setupGoal(usable))], newest: null } as never);
     render(await CreatePage({ searchParams: Promise.resolve({}) }));
     expect(setupProps.mock.lastCall?.[0].initialAds).toEqual([expect.objectContaining({ id: "today" })]);
   });
@@ -108,4 +108,5 @@ describe("Create page for a first-timer (#1270)", () => {
     const { default: CreatePage } = await import("@/app/(app)/create/page");
     await expect(CreatePage({ searchParams: Promise.resolve({}) })).rejects.toThrow("NEXT_REDIRECT");
   });
+
 });

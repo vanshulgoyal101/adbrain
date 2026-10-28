@@ -149,7 +149,7 @@ or `error`.
 The CTO keeps 3+ briefed issues per lane labelled `ready` + `lane:<dev|qa|devops|review|design|product|research>`
 (why with evidence, do, done-when, files). Anyone in the lane with nothing actionable claims
 the oldest core one (`--add-label owner:<you> --remove-label ready`); `wait-for-work` offers
-it. QA's walks and the Reviewer's audits file their findings straight into the pool.
+it. Not for you? Add `declined:<you>` and it isn't offered to you again. QA's walks and the Reviewer's audits file their findings straight into the pool.
 
 ### Standing rules
 

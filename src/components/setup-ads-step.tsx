@@ -40,6 +40,26 @@ export function storyFor(slots: LiveAd[] | null): Story {
 }
 
 const generationKey = (businessId: string) => `setup-generation:${businessId}`;
+/** A batch takes 1–3 minutes; a kept id older than this is a leftover, not a run in progress. */
+const KEEP_MS = 15 * 60_000;
+// #1402: the status GET allows 30 reads per 5 minutes; every 10 s for 4 minutes stays inside it.
+const POLL_MS = 10_000;
+const POLLS = 24;
+
+/** #1402: the run in progress lives in localStorage, so a second tab resumes it instead of paying for another. */
+function readKept(businessId: string): { id: string; count: number } | null {
+  try {
+    const [id, count, at] = (window.localStorage.getItem(generationKey(businessId)) ?? "").split(":");
+    if (!id || Date.now() - Number(at) > KEEP_MS) return null;
+    return { id, count: Number(count) || FULL_BATCH };
+  } catch { return null; }
+}
+function keep(businessId: string, id: string, count: number) {
+  try { window.localStorage.setItem(generationKey(businessId), `${id}:${count}:${Date.now()}`); } catch { /* private mode: this tab still guards itself */ }
+}
+function forget(businessId: string) {
+  try { window.localStorage.removeItem(generationKey(businessId)); } catch { /* nothing kept */ }
+}
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 // The generate route stops by 300 s, so a batch whose first ad is older has ended, whatever its status says (#1289).
 const BATCH_DEADLINE_MS = 6 * 60 * 1000;
@@ -86,11 +106,13 @@ export function SetupAdsStep({ business, initialAds, sample = false }: {
     setFailedCount(Math.max(0, expected - saved.length));
     setSlots(null);
     setMaking(false);
-    sessionStorage.removeItem(generationKey(business.id));
+    forget(business.id);
   }
 
   // #1407 (QA 2): coming back to a batch that ended short showed only what was saved. Ask the batch what it expected.
-  const returnedBatch = initialAds[0]?.variant_group && UUID.test(initialAds[0].variant_group) ? initialAds[0].variant_group : null;
+  // #1402: ads come oldest first and a "Make another" top-up last, so the newest batch is the one that may still run.
+  const newestGroup = initialAds.at(-1)?.variant_group;
+  const returnedBatch = newestGroup && UUID.test(newestGroup) ? newestGroup : null;
   useEffect(() => {
     if (!returnedBatch) return;
     let stopped = false;
@@ -117,18 +139,23 @@ export function SetupAdsStep({ business, initialAds, sample = false }: {
     return () => { stopped = true; clearTimeout(timer); };
   }, [business.id, returnedBatch, initialAds, sample]);
 
+  /**
+   * The batch's ads once it has finished: `complete`, `failed`, or `unresolved` (finished short). `processing`
+   * and `partial` (some saved, still running) keep waiting (#1402). Null when it's still running after ~4 minutes.
+   */
   async function savedBatch(generationId: string, expected: number): Promise<Creative[] | null> {
-    for (let attempt = 0; attempt < 15; attempt += 1) {
+    for (let attempt = 0; attempt < POLLS; attempt += 1) {
       try {
         const res = await fetch(`/api/creatives/generate?businessId=${encodeURIComponent(business.id)}&generationId=${encodeURIComponent(generationId)}&expectedCount=${expected}`, { cache: "no-store" });
+        if (res.status === 404) return [];
         if (res.ok) {
           const data = (await res.json()) as { status?: string; creatives?: Creative[] };
-          if (data.status !== "processing" && data.status !== "unresolved") return data.creatives ?? [];
+          if (data.status === "complete" || data.status === "failed" || data.status === "unresolved") return data.creatives ?? [];
         }
       } catch {
         // Keep checking; never start the generation again.
       }
-      await new Promise((resolve) => window.setTimeout(resolve, 2_000));
+      await new Promise((resolve) => window.setTimeout(resolve, POLL_MS));
     }
     return null;
   }
@@ -158,24 +185,22 @@ export function SetupAdsStep({ business, initialAds, sample = false }: {
     setError(null);
     setMaking(true);
     setSlots(null);
-    const key = generationKey(business.id);
-    const kept = sessionStorage.getItem(key);
+    const kept = readKept(business.id);
     if (kept) {
-      const [id, expected] = kept.split(":");
-      const saved = await savedBatch(id, Number(expected) || count);
-      if (saved?.length) return finish(saved, Number(expected) || count, count === FULL_BATCH);
+      const saved = await savedBatch(kept.id, kept.count);
+      if (saved?.length) return finish(saved, kept.count, false);
       if (saved === null) {
         setMaking(false);
         setError("Your ads are still being made. Check again in a minute; we won't start another batch.");
         return;
       }
-      sessionStorage.removeItem(key);
+      forget(business.id);
     }
     let generationId = "";
     try {
       const adBrief = await brief();
       generationId = crypto.randomUUID();
-      sessionStorage.setItem(key, `${generationId}:${count}`);
+      keep(business.id, generationId, count);
       let live: LiveAd[] = Array.from({ length: count }, () => ({ stage: "starting" as const }));
       setSlots(live);
       const res = await fetch("/api/creatives/generate", {
@@ -191,7 +216,7 @@ export function SetupAdsStep({ business, initialAds, sample = false }: {
       if (status >= 200 && status < 300 && saved.length) return finish(saved, count, count === FULL_BATCH);
       if (status >= 400 && status < 500 && status !== 408) {
         // Refused before anything was made: nothing to recover.
-        sessionStorage.removeItem(key);
+        forget(business.id);
         generationId = "";
         throw new Error("refused");
       }
@@ -208,7 +233,7 @@ export function SetupAdsStep({ business, initialAds, sample = false }: {
           setError("Your ads are still being made. Check again in a minute; we won't start another batch.");
           return;
         }
-        sessionStorage.removeItem(key);
+        forget(business.id);
       }
       setMaking(false);
       setSlots(null);

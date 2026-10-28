@@ -71,7 +71,20 @@ export function waitingOnMe(lastBody, m, labels = [], now = Date.now()) {
     return !m.handedToOther(lastBody);
   }
   if (m.addressedToMe(lastBody)) return true;
+  // #1478: on a co-owned issue an un-arrowed FYI isn't every owner's turn; only one that names you is.
+  if (labels.filter((l) => l.startsWith("owner:")).length > 1) return false;
   return !m.handedToOther(lastBody);
+}
+
+/**
+ * #1478: comments created since the wait began; `?since=` filters on updated_at, so edits looked new.
+ * @template {{ created_at?: string }} T
+ * @param {T[]} comments
+ * @param {string} since
+ * @returns {T[]}
+ */
+export function freshComments(comments, since) {
+  return comments.filter((c) => (c.created_at ?? "") >= since);
 }
 
 /**
@@ -109,7 +122,7 @@ export function readyPool(issues, role, max = 3) {
   const names = (i) => (i.labels ?? []).map((l) => (typeof l === "string" ? l : l.name));
   return issues
     .filter((i) => !i.pull_request && names(i).includes("ready") && names(i).includes(`lane:${lane}`)
-      && !names(i).some((n) => n.startsWith("owner:") || PARKED.has(n) || n === "decision"))
+      && !names(i).some((n) => n.startsWith("owner:") || PARKED.has(n) || n === "decision" || n === `declined:${role}`))
     .sort((a, b) => Number(names(b).includes("core")) - Number(names(a).includes("core")) || a.number - b.number)
     .slice(0, max);
 }
@@ -354,10 +367,13 @@ function findWork() {
     }
   }
   // One repo-wide call (newest first) instead of one call per updated issue.
-  for (const comment of api(`repos/${repo}/issues/comments?since=${since}&sort=created&direction=desc&per_page=100`)) {
+  const coOwned = new Set(mine.filter(item => (item.labels ?? []).filter(l => l.name.startsWith("owner:")).length > 1).map(item => item.number));
+  for (const comment of freshComments(api(`repos/${repo}/issues/comments?since=${since}&sort=created&direction=desc&per_page=100`), since)) {
     const number = Number(comment.issue_url.split("/").pop());
     const body = comment.body ?? "";
     if (writtenByMe(body)) continue;
+    // #1478: on a co-owned issue, a comment wakes you only when it names you.
+    if (coOwned.has(number) && !addressedToMe(body)) continue;
     if (mineNumbers.has(number) || addressedToMe(body) || linkedToMine.has(number)) {
       found.push(`#${number} new comment: "${brief(body)}" ${comment.html_url}`);
     }
@@ -405,7 +421,7 @@ function backlog() {
   // Nothing of yours is actionable: pull the next briefed item from your lane instead of idling.
   if (!found.length) {
     for (const item of readyPool(openIssues(), role, 1)) {
-      found.push(`#${item.number} from the ready pool${withSkills(item)}: ${item.title}. Claim it first: gh issue edit ${item.number} --add-label owner:${role} --remove-label ready`);
+      found.push(`#${item.number} from the ready pool${withSkills(item)}: ${item.title}. Claim it first: gh issue edit ${item.number} --add-label owner:${role} --remove-label ready (or decline: --add-label declined:${role})`);
     }
   }
   return found;
