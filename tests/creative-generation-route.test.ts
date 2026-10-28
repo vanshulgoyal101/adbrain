@@ -485,7 +485,8 @@ describe("creative generation route", () => {
   });
 
   it("links failed provider attempts to the admitted generation", async () => {
-    mocks.generateVariants.mockImplementationOnce(async (params: { onFailure: (angle: typeof AD_ANGLES[number], error: Error) => Promise<void> }) => {
+    // Every round fails the same way, including #1123's top-up.
+    mocks.generateVariants.mockImplementation(async (params: { onFailure: (angle: typeof AD_ANGLES[number], error: Error) => Promise<void> }) => {
       await params.onFailure(AD_ANGLES[0], new CreativeImageError(new Error("Provider timeout"), [], [{
         provider: "openrouter-image", model: "paid-image", status: "error",
         providerFinalStatus: "unknown", providerRequestId: "upstream-456",
@@ -501,6 +502,7 @@ describe("creative generation route", () => {
       status: "error",
     })]);
     expect(mocks.progress.mock.calls.some(([args]) => args.p_uncertain)).toBe(true);
+    expect(mocks.generateVariants).toHaveBeenCalledTimes(2);
   });
 
   it("does not mark a failed angle as whole-request failure before its sibling saves", async () => {
@@ -549,12 +551,18 @@ describe("creative generation route", () => {
 
   it("settles a partial run whose every angle has known usage (#138)", async () => {
     mocks.generateVariants.mockImplementationOnce(async (params: { onFailure: (angle: typeof AD_ANGLES[number], error: Error) => Promise<void>; onVariant: (value: typeof variant) => Promise<void> }) => {
-      await params.onFailure(AD_ANGLES[0], new NoLLMKeysError());
+      // The saved variant is AD_ANGLES[0] ("value"); an angle either saves or fails in a round.
+      await params.onFailure(AD_ANGLES[2], new NoLLMKeysError());
       await params.onFailure(AD_ANGLES[1], new CreativeValidationError(["unsupported-commercial-claim"], []));
       await params.onVariant(variant);
+    }).mockImplementationOnce(async (params: { onFailure: (angle: typeof AD_ANGLES[number], error: Error) => Promise<void> }) => {
+      await params.onFailure(AD_ANGLES[1], new CreativeValidationError(["unsupported-commercial-claim"], []));
     });
     const { POST } = await import("@/app/api/creatives/generate/route");
     expect((await POST(request())).status).toBe(200);
+    // #1123: only the refused concept is remade; "no provider" is never retried.
+    expect(mocks.generateVariants).toHaveBeenCalledTimes(2);
+    expect(mocks.generateVariants.mock.calls[1][0]).toMatchObject({ angleIds: [AD_ANGLES[1].id], count: 1 });
     expect(mocks.progress.mock.calls.some(([args]) => args.p_uncertain)).toBe(false);
     expect(mocks.progress).toHaveBeenLastCalledWith(expect.objectContaining({ p_complete: true, p_uncertain: false, p_failed: false }));
   });
