@@ -295,6 +295,30 @@ AdBrain (the #157 run) is adopted after the mark with
 tree back exactly, prints the campaign row (dry run), and `--apply` saves it through
 `saveCampaign` so Pause, sync and results manage the run.
 
+### Pilot setup call (#1279; dry run on the demo business, Oct 28)
+
+Run these in order on the call; each has a read-back. Nothing here spends or
+activates anything.
+
+1. **Operator grant is live** (the mark needs it):
+   `select expires_at > now() from private.production_payment_operators where user_id='<owner id>' and revoked_at is null;`
+   It must be `true`. If not, stop: renewing the grant is the owner's step (CEO asks).
+2. **Mark the business operator-funded** with the command above (`true`, reason
+   `Pilot <n>: owner funds directly on Meta (#…)`). Read back:
+   `select public.operator_funded('<business id>');` gives `true`, and
+   `private.operator_funding_audit` has the new row.
+3. **Weekly cap, by the owner in Settings → Spend guardrails:** Weekly cap (₹),
+   Warn at 80%, tick **Auto-pause at the cap**, **Save guardrails** → "Saved.".
+   Read back: `select weekly_cap_rupees, alert_pct, auto_pause from spend_limits where business_id='<business id>';`.
+4. **Meta spending limit (read-only):**
+   `GET /act_<id>?fields=currency,spend_cap,amount_spent,is_prepay_account,account_status`.
+   Room = `spend_cap − amount_spent` (paise). The first run's total must fit in the
+   room; a `spend_cap` of 0 means no account limit, so the owner sets one in Meta
+   Billing before launch. On Oct 28 the operator account read INR, ₹1,822.04 limit,
+   ₹1,350.63 spent, **₹471.41 room**, prepaid, status 1.
+5. **Undo** (pilot ends or a mistake): `operator_funding_set(…, false, '<reason>')`;
+   clear the cap in Settings (empty cap, auto-pause off, Save).
+
 Insight ingestion validates the aggregate response before saving it: missing
 `data`, multiple rows, pagination, invalid numbers/dates, or duplicate selected
 outcome actions fail refresh instead of replacing stored evidence with zeroes.
@@ -302,6 +326,37 @@ Explicit `data: []` is a valid no-delivery response. Lead extraction prefers exa
 `lead`, then `onsite_conversion.lead_grouped` only when the aggregate is absent;
 it never adds overlapping actions or matches arbitrary names containing `lead`.
 This does not certify attribution equivalence with every Ads Manager report.
+
+### Prospect accounts: prepare, then hand over (#1315, #1317)
+
+AdBrain is one business per account, so each prospect gets its own account; at signing the
+owner takes it over by its email. Keep prospect names in the private sales files, not here or
+in issues.
+
+**Prepare (sales, before the visit):**
+1. Sign in with a team plus-address, `<you>+prospect-<short>@<team domain>`. A confirmed team
+   address is internal (`isInternalUser`), so Create uses the free image providers and no paid
+   model (#466; CEO #1129: no paid spend until the owner tops up).
+2. Brand: **Autofill from website**, or **No website? Paste a bio or listing** with the shop's
+   Instagram bio, Google listing or catalogue text, pasted by hand (no scraping or unofficial
+   APIs). Confirm each proposed field and area chip, then Save.
+3. Create: make 3 ads, approve them, download. Don't connect Meta, start a campaign or add funds.
+
+**Hand over (DevOps executes, QA reviews; a tenant step):**
+1. Read-only checks, all must hold:
+   `select authorization_status from public.meta_connections where business_id='<business id>';`
+   returns no row or `disconnected`;
+   `select count(*) from public.campaigns where business_id='<business id>';` is `0`.
+   If either fails, stop and ask on the issue.
+2. With the owner present, change the account's email to theirs (Supabase dashboard →
+   Authentication → the user → change email, or `auth.admin.updateUserById(<user id>, { email })`).
+3. The owner signs in with a one-time code sent to that email. Receiving the code is their
+   confirmation. Read back:
+   `select email, email_confirmed_at from auth.users where id='<user id>';` shows their address.
+   The account is no longer internal, so the normal owner rules (paid images, allowance) apply
+   from here.
+4. Post 'handed over' with the date on the issue (no names); the owner connects Meta on the
+   20-minute onboarding call (#1279).
 
 ### Scheduled Jobs
 
@@ -354,6 +409,7 @@ for a mismatch. Do not log the header or paste it into support evidence.
 | `/api/cron/campaign-reconciliation` | Read-only Launch watchdog (#734): each campaign operation in `needs_reconciliation` (a launch whose Meta outcome is unknown, so Meta may hold a campaign AdBrain doesn't track) for over 30 min. The scheduled workflow opens one `Launch needs reconciliation (<key>)` `core` bug for Dev 3 per key while none is open. Reconcile: `node scripts/reconcile-operation.mjs --key <key>` reads the row and each external id in Meta (GET only, the owner's system-user token, so only accounts it can see) plus campaigns created in the operation's window, and prints a verdict: `active` (pause it in Ads Manager first), `paused` (import or delete the tree, then rerun), `unreadable` (reconcile with the business's own connection) or `nothing_live`, where `--apply` closes the row as `failed` with the outcome |
 | `/api/cron/access-requests` | Read-only (#692, #725): outside owners who tapped **Ask for Facebook access** in the last 7 days. The app promises a WhatsApp within a working day, so the scheduled workflow opens one `Facebook access request (<key>)` `core` `waiting-owner` issue per person, at most 5 a run (the rest are noted on the newest issue and opened by later runs); the CEO asks the owner to add them as a Meta app Tester (#679). Find them: `select a.actor_label as email, b.name, b.phone, a.created_at from audit_log a join businesses b on b.id = a.business_id where a.action = 'meta.access_request' and left(encode(sha256(convert_to(a.actor_id::text, 'UTF8')), 'hex'), 12) = '<key>' order by a.created_at desc limit 1`; requests from before #725 are only in `product_events` (`attributes->>'action' = 'meta.access_request'`, same key on `user_id`) |
 | `/api/cron/core-scoreboard` | Daily core scoreboard (#681): Brand, Prepare, Create, Regenerate, assistant, Review, Launch and Manage numbers against their Nov 2 targets, smoke excluded. Brand (#1136) times each new business from `business.create` to its first save flagged `brandUsable` (name, category, area, phone and offer: `src/lib/brand/usable.ts`), p90 < 2 min met. Create is split by image path (`freeImagesOnly`: internal accounts on free Pollinations vs customers on paid images); only the customer path is held to the target. Launch scores settled `campaign_operations` creates; `meta.create_paused` failures are shown as context because Prepare, lead-form, preflight and WhatsApp-status reads share that purpose (#615). Manage scores the oldest newest-`campaign_results.fetched_at` across active, Meta-bound campaigns (≤ 15 min met; none active = —), with syncs and reads as context (#992). The scheduled workflow posts it on #681 once a day after 03:00Z (marked `<!-- core-scoreboard -->`, so `wait-for-work` doesn't wake anyone) while #681 is open. Locally: `npm run core-scoreboard [-- --hours 168] [-- --post]` (same numbers, read through the Management API) |
+| `npm run ux-scoreboard` (local, no cron) | UX scoreboard (#1226 workstream 8): the north-star UX metrics against their Nov 30 targets: sign-up → first `campaigns.launched_at` (median over `--days`, default 28), median first reply over 7 d (`medianReplyMinutes`, Meta test leads excluded), and weekly return (distinct IST days with a `page.view` of /dashboard, /campaigns or /leads per owner with an active Meta-bound campaign). Taps to live, help needed and a11y/Web Vitals come from walks, ui-gate and Vercel, shown as —. Smoke is always excluded; internal accounts are too unless `--include-internal`. `-- --post` comments it on #1226 (QA 2) |
 | `/api/cron/llm-credit` | Read-only OpenRouter credit check (#449): `GET /api/v1/key` for each pooled key, dollars only. Called only by the GitHub scheduled workflow (not pg_cron); under $0.50 left it opens one `OpenRouter credit low` issue labelled `decision` for the CEO. OpenRouter errors are logged and never fail the run. |
 
 **Meta reconnect needed (#758).** The scheduled workflow reads `reauth: [{key, since, activeCampaigns}]` (key = first 12 hex of sha256 of the business id) from the `enforce-spend`, `sync-leads` and `refresh-results` responses: owners whose Meta token is dead (expired or revoked). A business is listed when Meta answers Graph 190 or its stored connection is expired, revoked or awaiting reauthorization (not managed accounts, which run on AdBrain's token); it doesn't count toward the run's 503, and refresh-results skips its other campaigns that run. The workflow opens one `Meta reconnect needed (<key>)` `core` `waiting-owner` issue per key with the ACTIVE campaign count; the CEO asks the owner to reconnect. Find them: `select b.name, b.phone, u.email from businesses b join auth.users u on u.id = b.owner_id where left(encode(sha256(convert_to(b.id::text, 'UTF8')), 'hex'), 12) = '<key>'`.

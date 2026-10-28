@@ -127,15 +127,15 @@ function replay(fail?: (path: string) => boolean, edit?: (path: string, body: un
   const sent: string[] = [];
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = new URL(String(input));
-    if (init?.method === "POST" && url.pathname === "/v21.0/106540352242922/messages") {
+    if (init?.method === "POST" && url.pathname === "/v26.0/106540352242922/messages") {
       whatsapp.push(JSON.parse(String(init.body)));
       return Response.json(CLOUD_ACCEPTED);
     }
-    expect(url.origin + url.pathname.slice(0, 7)).toBe("https://graph.facebook.com/v21.0/");
+    expect(url.origin + url.pathname.slice(0, 7)).toBe("https://graph.facebook.com/v26.0/");
     if (url.searchParams.get("access_token") === "dead-token") return Response.json(graph190, { status: 400 });
     expect(init?.method ?? "GET").toBe("GET");
     url.searchParams.delete("access_token");
-    const path = url.pathname.replace("/v21.0/", "") + url.search;
+    const path = url.pathname.replace("/v26.0/", "") + url.search;
     sent.push(path);
     if (fail?.(path)) return Response.json({ error: { message: "Service temporarily unavailable", code: 2 } }, { status: 503 });
     const exchange = (leadsTape as Exchange[]).find(item => item.path === path);

@@ -13,7 +13,7 @@ function replay(overrides: { confirmCreative?: string; accountId?: string; refus
     const url = new URL(String(input));
     url.searchParams.delete("access_token");
     const method = init?.method ?? "GET";
-    const path = decodeURIComponent(url.pathname.replace("/v21.0/", "") + url.search);
+    const path = decodeURIComponent(url.pathname.replace("/v26.0/", "") + url.search);
     const form = init?.body instanceof URLSearchParams ? Object.fromEntries([...init.body].filter(([key]) => key !== "access_token")) : {};
     sent.push({ method, path, form });
     const validateOnly = form.execution_options === JSON.stringify(["validate_only"]);

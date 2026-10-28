@@ -22,8 +22,8 @@ describe("Settings panels with server-loaded data (#238)", () => {
       <PreferenceSettings businessId={businessId} initialState={{ enabled: true, epoch: 3, notes: [] }} />
       <PrivacyRequests initialRequests={[{ id: "r1", kind: "export", status: "received", created_at: "2026-10-23T10:00:00Z", updated_at: "2026-10-23T10:00:00Z" }]} initialOperatorAvailable />
     </>);
-    expect(screen.getByText("Available for a new reservation")).toBeInTheDocument();
-    expect(screen.queryByText("Checking allowance")).not.toBeInTheDocument();
+    expect(screen.getByText("Available ad budget")).toBeInTheDocument();
+    expect(screen.queryByText("Checking ad budget")).not.toBeInTheDocument();
     expect(screen.queryByText("Loading requests")).not.toBeInTheDocument();
     await new Promise(resolve => setTimeout(resolve, 20));
     expect(fetchMock).not.toHaveBeenCalled();

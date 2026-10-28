@@ -27,7 +27,7 @@ import { metaScrubber } from "./lib/scrub-meta";
 
 type Exchange = { method: string; path: string; form?: Record<string, string>; status: number; body: unknown };
 
-const GRAPH = "https://graph.facebook.com/v21.0/";
+const GRAPH = "https://graph.facebook.com/v26.0/";
 const OUT = join(process.cwd(), "tests/core/fixtures/meta");
 let tape: Exchange[] = [];
 const realFetch = globalThis.fetch;
@@ -56,7 +56,7 @@ globalThis.fetch = async (input, init) => {
   }
   tape.push({
     method: init?.method ?? "GET",
-    path: parsed.pathname.replace("/v21.0/", "") + parsed.search,
+    path: parsed.pathname.replace("/v26.0/", "") + parsed.search,
     ...(form ? { form } : {}),
     status: response.status,
     body: scrub(body),

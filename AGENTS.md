@@ -99,6 +99,11 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 	branch, worktree, one-off scripts and temporary files. Don't commit dated
 	reports, audits or handoffs; evidence goes in the issue or PR. Docs hold current
 	truth only, and git keeps the history.
+- **Never lose built work** (owner, Oct 28). Paused work gets the `parked` label
+	and a row with its resume trigger in #1258; keep its PRs open as drafts and its
+	branches. Before deleting any branch or worktree, `git cherry origin/main <branch>`
+	shows no `+` lines (or the work is in an open PR or #1258), and uncommitted edits
+	are pushed to a branch first. Removed product features go in #1173.
 
 ## Execution speed
 

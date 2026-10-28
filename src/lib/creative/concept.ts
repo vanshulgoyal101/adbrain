@@ -2,11 +2,12 @@ import { affirmedInFact, negatedTerm } from "./claim-support";
 import { z } from "zod";
 import type { ChatMessage } from "@/lib/llm";
 import {
+  AD_ANGLES,
   META_CTAS,
   type AdAngle,
   type BrandContext,
 } from "@/lib/templates/ads";
-import { formatDimensions, type AdFormat } from "@/lib/creative/design";
+import { contactChannel, formatDimensions, whatsappContactLabel, type AdFormat } from "@/lib/creative/design";
 import { bannedClaimsForVertical, capitalWords, scanAdCopy } from "@/lib/creative/slopScan";
 import { policyFindings } from "@/lib/creative/policy-rules";
 import { emptyScene } from "@/lib/creative/visual-rules";
@@ -86,8 +87,28 @@ export interface ConceptInput {
   sourceFacts?: string[];
 }
 
+// #1035/#713: parallel concepts can't see each other, and "Rooftop solar for your home in Chandigarh,
+// Mohali & Panchkula" opened all three (Oct 27 14:00Z), so two were lost to repeated-opening even after
+// the repair. Each angle gets its own place and its own way in.
+// Written as instructions: a bare "with the offer" was copied into the ad itself (Qwen, free eval Oct 28).
+const OPENINGS: Record<string, string> = {
+  value: "Open by naming the service and the place.",
+  // Never a question about the reader's body or traits (personal-attribute; free eval Oct 28).
+  problem: "Open by stating the problem the service fixes as a fact about the situation (a rising bill, a deadline, a broken AC). Never ask the reader about themselves.",
+  offer: "Open by stating the offer.",
+  trust: "Open by stating the proof.",
+};
+
+export function conceptLead(input: Pick<ConceptInput, "brand" | "angle">): { place: string | null; opening: string } {
+  const index = Math.max(0, AD_ANGLES.findIndex((angle) => angle.id === input.angle.id));
+  const places = (input.brand.locations ?? []).map((place) => place.trim()).filter(Boolean);
+  return { place: places.length ? places[index % places.length] : null, opening: OPENINGS[input.angle.id] ?? OPENINGS.value };
+}
+
 export function buildConceptMessages(input: ConceptInput): ChatMessage[] {
   const format = input.format ?? "portrait";
+  // Same rule as the poster's contact bar (#1167): an India-based phone or a saved WhatsApp message.
+  const whatsapp = contactChannel(input.brand) === "whatsapp";
   return [
     {
       role: "system",
@@ -96,11 +117,15 @@ Design ONE coherent ad concept: its message, copy and visual execution must serv
 Write a distinct hook and argument for this brief and angle, not a summary of the brand profile.
 Choose one relevant benefit and one supporting fact; do not repeat the full credentials,
 service-area list and savings claim in every ad. Avoid generic slogan triplets, forced metaphors,
-and references to incidental objects in the picture. End with a plain, relevant next step.
+and references to incidental objects in the picture. End with a plain, relevant next step. When contact
+is "whatsapp", the ad's button opens a WhatsApp chat: the last line asks people to message on WhatsApp,
+and the ad never asks them to call, phone or email.
 Recent copy is supplied only to avoid repetition, not as evidence for claims. Change the opening,
 sentence structure and persuasion angle, not just synonyms. Do not reuse a recent headline or hook.
 Write a concise Meta link description that complements the headline with a supported detail or
 next step. It is separate from on-image supportingText and must not merely repeat the headline.
+Follow lead.opening (an instruction; never copy its words into the ad) and name lead.place when given
+(one place, never the list): the ads of one batch are written at the same time, so each must open differently.
 Meta shows only about the first 125 characters of primary_text on mobile before "See more". Put the
 hook, and the supplied offer when the brief is about one, in the first line (at most 125 characters).
 Write primary_text as 2-3 short lines separated by \n, about 220 characters in total, never one paragraph.
@@ -133,12 +158,15 @@ matter, but never override factual constraints. Use the requested language for a
     {
       role: "user",
       content: JSON.stringify({
-        brand: input.brand,
+        // #1147: a WhatsApp business's ads open a chat, so the model gets no number or email to ask people to use.
+        brand: whatsapp ? { ...input.brand, phone: undefined, email: undefined } : input.brand,
+        contact: whatsapp ? "whatsapp" : "any",
         brief: input.brief,
         instructions: input.instructions ?? "",
         language:
           input.language || input.brand.languages?.join(" and ") || "English",
         angle: { name: input.angle.name, intent: input.angle.description },
+        lead: conceptLead(input),
         placement: { format, ...formatDimensions(format) },
         referenceImageCount: input.referenceImages?.slice(0, 3).length ?? 0,
         imageSource: input.ownerPhoto ? "owner_photo" : "generated",
@@ -422,7 +450,8 @@ export function validateConcept(
         const field = path.replace(/\.\d+/g, ".*") || "root";
         // The repair is told how long the text is, so it knows how much to cut (#281).
         const text = issue.path.reduce<unknown>((node, key) => (isRecord(node) || Array.isArray(node) ? (node as Record<PropertyKey, unknown>)[key as PropertyKey] : undefined), draft);
-        const length = (issue.code === "too_big" || issue.code === "too_small") && typeof text === "string" ? `; it is ${text.trim().length} characters` : "";
+        const length = (issue.code === "too_big" || issue.code === "too_small") && typeof text === "string" ? `; it is ${text.trim().length} characters`
+          : issue.code === "invalid_value" && typeof text === "string" ? `; it is "${text.slice(0, 40)}"` : "";
         return `schema:${field}:${issue.code}: ${path}: ${issue.message}${length}`;
       }),
     };
@@ -462,10 +491,11 @@ export function validateConcept(
   ).map((finding) => `${finding.rule}: ${finding.detail}`);
   for (const previous of input.recentCopy ?? []) {
     if (normalizeCopy(concept.headline) === normalizeCopy(previous.headline)) {
-      issues.push("repeated-headline: write a different headline from recent ads");
+      issues.push(`repeated-headline: "${previous.headline.slice(0, 60)}" is a recent ad's headline; write a different one`);
     }
     if (opening(concept.primary_text) === opening(previous.primary_text)) {
-      issues.push("repeated-opening: write a different primary-text hook from recent ads");
+      // #1035: quoting the opening lets the one repair avoid it; "write a different hook" alone repeated it (Oct 27).
+      issues.push(`repeated-opening: a recent ad opens "${previous.primary_text.split(/\s+/).slice(0, 8).join(" ")}"; start primary_text with different words`);
     }
   }
   issues.push(...scanAdCopy(concept.description, {
@@ -539,7 +569,24 @@ export function validateConcept(
   }
   if (issues.length) return { success: false, issues, ...(claims.size ? { claims: [...claims] } : {}) };
   const pictureOffer = offerOnPicture(concept, input.brand.offers ?? []);
-  return { success: true, concept: pictureOffer ? { ...concept, supportingText: pictureOffer } : concept };
+  const asked = { ...concept, primary_text: withWhatsAppAsk(concept, input) };
+  return { success: true, concept: pictureOffer ? { ...asked, supportingText: pictureOffer } : asked };
+}
+
+const NAMES_WHATSAPP = /whats\s?app|व्हाट्सऐप|व्हाट्सएप|ਵਟਸਐਪ/i;
+
+/**
+ * #1147: a WhatsApp business's ad ends by asking for a WhatsApp message. When the model's last line doesn't
+ * (Qwen on the free run, Oct 28: "Book a free survey by Nov 10."), the poster's own words are added as a
+ * last line, in the ad's language. $0 and no repair; others' copy is unchanged.
+ */
+function withWhatsAppAsk(concept: CreativeConcept, input: ConceptInput): string {
+  if (contactChannel(input.brand) !== "whatsapp") return concept.primary_text;
+  const lines = concept.primary_text.split("\n").map((line) => line.trim()).filter(Boolean);
+  if (NAMES_WHATSAPP.test(lines.at(-1) ?? "")) return concept.primary_text;
+  const label = whatsappContactLabel([concept.headline, concept.primary_text], input.language);
+  const asked = `${concept.primary_text.trimEnd()}\n${label}${/[\u0900-\u097F\u0A00-\u0A7F]/u.test(label) ? "।" : "."}`;
+  return asked.length <= (creativeConceptSchema.shape.primary_text.maxLength ?? 900) ? asked : concept.primary_text;
 }
 
 /**

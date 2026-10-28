@@ -1,3 +1,4 @@
+import { GRAPH } from "@/lib/meta/graph-version";
 import { z } from "zod";
 import { WHATSAPP_PUBLISHER_PLATFORMS } from "@/lib/meta/placements";
 import type { SetupReads } from "@/lib/meta/setup-checklist";
@@ -13,7 +14,6 @@ import { EXCLUDABLE_CITIES, INDIA_REGION_KEYS, mergeExclusions, serviceAreaExclu
 import { AD_LANGUAGE_KEYS, storedLocales } from "./locales";
 export type { AdResult, CampaignInsights } from "./insights";
 
-const GRAPH = "https://graph.facebook.com/v21.0";
 
 export interface MetaCredentials {
   adAccountId: string;
@@ -378,26 +378,33 @@ export type CappedActivation = {
 };
 
 export type AdReviewState = "in_review" | "approved" | "rejected" | "issues" | "unknown";
-export type AdReview = { adId: string; state: AdReviewState; effectiveStatus: string | null; reasons: string[] };
+/** #1305: Meta's policy key (e.g. "Personal Attributes") with its message; null policy for `issues_info`. */
+export type AdReviewFeedback = { policy: string | null; message: string };
+export type AdReview = { adId: string; state: AdReviewState; effectiveStatus: string | null; reasons: string[]; feedback: AdReviewFeedback[] };
 
 /** Meta's review outcome for one ad, from `effective_status`, `ad_review_feedback` and `issues_info`. */
 export function adReviewState(ad: { id: string; effective_status?: string; ad_review_feedback?: unknown; issues_info?: unknown }): AdReview {
   const status = ad.effective_status ?? null;
-  const feedback = ad.ad_review_feedback && typeof ad.ad_review_feedback === "object"
-    ? Object.values(ad.ad_review_feedback as Record<string, unknown>).flatMap(group =>
-      group && typeof group === "object" ? Object.values(group as Record<string, unknown>) : [group])
-      .filter((reason): reason is string => typeof reason === "string").map(reason => reason.trim()).filter(Boolean)
+  // `{ global: { "Personal Attributes": "…" }, placement_specific: {…} }`: the inner keys are the policies (#1305).
+  const feedback: AdReviewFeedback[] = ad.ad_review_feedback && typeof ad.ad_review_feedback === "object"
+    ? Object.values(ad.ad_review_feedback as Record<string, unknown>).flatMap((group): AdReviewFeedback[] =>
+      group && typeof group === "object"
+        ? Object.entries(group as Record<string, unknown>).map(([policy, message]) => ({ policy: policy.trim() || null, message: typeof message === "string" ? message.trim() : "" }))
+        : [{ policy: null, message: typeof group === "string" ? group.trim() : "" }])
+      .filter((item) => item.message)
     : [];
-  const issues = Array.isArray(ad.issues_info)
+  const issues: AdReviewFeedback[] = Array.isArray(ad.issues_info)
     ? ad.issues_info.map(issue => (issue as { error_message?: unknown }).error_message)
       .filter((reason): reason is string => typeof reason === "string" && reason.trim() !== "")
+      .map((message) => ({ policy: null, message: message.trim() }))
     : [];
   const state: AdReviewState = status === "DISAPPROVED" ? "rejected"
     : status === "WITH_ISSUES" ? "issues"
     : status === "IN_PROCESS" || status === "PENDING_REVIEW" ? "in_review"
     : status && ["ACTIVE", "PAUSED", "CAMPAIGN_PAUSED", "ADSET_PAUSED", "PREAPPROVED"].includes(status) ? "approved"
     : "unknown";
-  return { adId: ad.id, state, effectiveStatus: status, reasons: [...feedback, ...issues] };
+  const all = [...feedback, ...issues];
+  return { adId: ad.id, state, effectiveStatus: status, reasons: all.map((item) => item.message), feedback: all };
 }
 
 /** Graph allows about one status write per object per 30 s (error 613). */
@@ -825,7 +832,7 @@ export function hasGeo(geo: GeoTargeting | undefined): boolean {
 }
 
 /**
- * Meta Marketing API wrapper (Graph v21). Creates Advantage+ lead campaigns in
+ * Meta Marketing API wrapper (Graph, version in graph-version.ts). Creates Advantage+ lead campaigns in
  * PAUSED state (no spend until activated) and reads insights. Validated against
  * a live ad account.
  */

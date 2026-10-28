@@ -63,3 +63,28 @@ export const BRAND_EXTRACTION = {
   maxTokens: 1_200,
   reasoningEffort: "minimal",
 } as const satisfies CompletionOptions;
+
+/** #1317: what a prospect without a website pastes (an Instagram bio, a Google listing, a catalogue blurb). */
+export const PASTED_TEXT_MAX = 6000;
+const PASTED_MIN_LETTERS = 30;
+
+/** Pasted text as autofill reads it: whitespace collapsed, at most PASTED_TEXT_MAX characters, or null when too short to describe a business. */
+export function pastedBrandText(raw: string): string | null {
+  const text = raw.normalize("NFC").replace(/[\t ]+/g, " ").replace(/\s*\n\s*/g, "\n").trim().slice(0, PASTED_TEXT_MAX);
+  return (text.match(/[\p{L}\p{M}]/gu)?.length ?? 0) >= PASTED_MIN_LETTERS ? text : null;
+}
+
+/** A phone number written in pasted text ("+91 98765 43210", "98765-43210", "wa.me/919876543210"), as +<country><number>. */
+export function phoneInText(text: string): string | undefined {
+  for (const match of text.matchAll(/(?:wa\.me\/|\+)?\d[\d\s-]{8,16}\d/g)) {
+    let digits = match[0].replace(/^wa\.me\//, "+").replace(/[\s-]/g, "");
+    if (!digits.startsWith("+")) {
+      const local = digits.replace(/^0/, "");
+      if (/^[6-9]\d{9}$/.test(local)) digits = `+91${local}`;
+      else if (/^91[6-9]\d{9}$/.test(digits)) digits = `+${digits}`;
+      else continue;
+    }
+    if (isValidPhone(digits)) return digits;
+  }
+  return undefined;
+}

@@ -207,7 +207,7 @@ export function ProductionCheckout({ businessId }: { businessId: string }) {
       {policy && <Script id="razorpay-live-checkout" src="https://checkout.razorpay.com/v1/checkout.js" strategy="afterInteractive"
         onReady={() => { setScriptReady(Boolean(window.Razorpay)); setScriptFailed(!window.Razorpay); }} onError={() => setScriptFailed(true)} />}
       <h3 id="production-checkout-title" className="flex items-center gap-2 font-semibold text-slate-900"><CreditCard size={18} aria-hidden="true" />{verification ? "Payment verification" : "Ad money"}</h3>
-      {!verification && <p className="text-sm text-slate-600">Pay any amount from ₹500. 80% goes to your ads (including Meta&apos;s GST) and 20% is AdBrain&apos;s service fee. Top up any time.</p>}
+      {!verification && <p className="text-sm text-slate-600">Pay any amount from ₹500. It becomes your ad budget, including Meta&apos;s GST, and AdBrain makes and runs your ads. Top up any time.</p>}
       {range && (verification || !order || order.status === "created") && <div className="flex flex-wrap items-end gap-3">
         <div className="w-40 max-w-full space-y-1">
           <Label htmlFor={amountId}>{verification ? "Verification amount (₹)" : "Amount to pay (₹)"}</Label>
@@ -223,18 +223,17 @@ export function ProductionCheckout({ businessId }: { businessId: string }) {
           setNotice("Amount updated.");
         })}><RefreshCw size={16} aria-hidden="true" />Update amount</Button>
       </div>}
-      {displayedQuote && !verification && range && <dl className="grid gap-4 text-sm sm:grid-cols-3">
-        <div><dt className="text-slate-500">Total</dt><dd className="mt-1 text-xl font-semibold tabular-nums">{money(displayedQuote.totalPaise)}</dd></div>
-        <div><dt className="text-slate-500">Ad money, including Meta GST (80%)</dt><dd className="mt-1 font-semibold tabular-nums">{money(displayedQuote.metaAllocationPaise)}</dd></div>
-        <div><dt className="text-slate-500">AdBrain service (20%)</dt><dd className="mt-1 font-semibold tabular-nums">{money(displayedQuote.serviceAllocationPaise)}</dd></div>
+      {displayedQuote && !verification && range && <dl className="grid gap-4 text-sm sm:grid-cols-2">
+        <div><dt className="text-slate-500">You pay</dt><dd className="mt-1 text-xl font-semibold tabular-nums">{money(displayedQuote.totalPaise)}</dd></div>
+        <div><dt className="text-slate-500">Ad budget for your campaigns, incl. Meta&apos;s GST</dt><dd className="mt-1 font-semibold tabular-nums">{money(displayedQuote.metaAllocationPaise)}</dd></div>
       </dl>}
-      {displayedQuote && (verification || !range) && <dl className="grid gap-4 text-sm sm:grid-cols-3">
-        <div><dt className="text-slate-500">Total</dt><dd className="mt-1 text-xl font-semibold tabular-nums">{money(displayedQuote.totalPaise)}</dd></div>
-        <div><dt className="text-slate-500">Service allocation</dt><dd className="mt-1 font-semibold tabular-nums">{money(displayedQuote.serviceAllocationPaise)}</dd></div>
-        <div><dt className="text-slate-500">Meta costs, including applicable tax</dt><dd className="mt-1 font-semibold tabular-nums">{money(displayedQuote.metaAllocationPaise)}</dd></div>
+      {displayedQuote && (verification || !range) && <dl className="grid gap-4 text-sm sm:grid-cols-2">
+        <div><dt className="text-slate-500">You pay</dt><dd className="mt-1 text-xl font-semibold tabular-nums">{money(displayedQuote.totalPaise)}</dd></div>
+        {verification ? <div className="self-end text-slate-600">Checkout test: no ad budget is added</div>
+          : <div><dt className="text-slate-500">Ad budget for your campaigns, incl. Meta&apos;s GST</dt><dd className="mt-1 font-semibold tabular-nums">{money(displayedQuote.metaAllocationPaise)}</dd></div>}
       </dl>}
       <p className="text-sm text-slate-600">Merchant: Vanshul Goyal. Gateway fees absorbed by AdBrain. No automatic renewal.</p>
-      {policy?.fundingMode === "operator_managed" && <p className="text-sm text-slate-600">The operator pays Meta separately. Advertising allocation is not a confirmed Meta balance.</p>}
+      {policy?.fundingMode === "operator_managed" && <p className="text-sm text-slate-600">The operator pays Meta separately. Your ad budget is not yet a confirmed Meta balance.</p>}
       <p role="status" aria-live="polite" className="min-h-6 text-sm font-medium text-slate-800">{working ? "Checking payment" : checkoutOpen ? "Checkout open"
         : order ? statusLabels[order.status] : loaded ? policy ? "Ready for payment" : "Collection is not enabled" : "Loading payment"}</p>
       {order && <p className="break-all text-xs text-slate-500">Payment reference: {order.orderId}</p>}

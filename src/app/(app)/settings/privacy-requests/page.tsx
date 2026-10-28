@@ -16,7 +16,7 @@ export default async function PrivacyOperatorPage() {
   if (!allowed) notFound();
 
   return <div className="max-w-4xl space-y-6">
-    <Link href="/settings" className="text-sm font-medium text-blue-700 underline underline-offset-4">Settings</Link>
+    <Link href="/settings" className="inline-flex min-h-11 items-center text-sm font-medium text-blue-700 underline underline-offset-4">Settings</Link>
     <PageHeader title="Privacy requests" description="Open requests, oldest first." />
     <PrivacyOperatorQueue />
   </div>;

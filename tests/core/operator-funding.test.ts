@@ -14,9 +14,9 @@ function replay(body: Record<string, unknown> = recorded.body) {
   const sent: string[] = [];
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = new URL(String(input));
-    expect(url.origin + url.pathname.slice(0, 7)).toBe("https://graph.facebook.com/v21.0/");
+    expect(url.origin + url.pathname.slice(0, 7)).toBe("https://graph.facebook.com/v26.0/");
     url.searchParams.delete("access_token");
-    const call = `${init?.method ?? "GET"} ${url.pathname.replace("/v21.0/", "")}${url.search}`;
+    const call = `${init?.method ?? "GET"} ${url.pathname.replace("/v26.0/", "")}${url.search}`;
     sent.push(call);
     if (call !== `GET ${recorded.path}`) throw new Error(`Unrecorded Graph call: ${call}`);
     return Response.json(body, { status: recorded.status });
