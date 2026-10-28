@@ -379,7 +379,7 @@ export function SetupAdsStep({ business, initialAds, sample = false, earlier = f
           {/* #1564: opened mid-batch, it isn't ready until the rest lands (or the batch ends short). */}
           <h2 className="text-xl font-semibold text-slate-950">{coming > 0 ? "Making your ads…" : "Your ads are ready"}</h2>
           <p className="mt-1 text-sm text-slate-600">{sample
-            ? "All of them go in the sample pack, each marked 'Sample: not live'. Tap an ad to leave it out, or the pencil to edit its words."
+            ? "All of them go in the sample pack, each marked 'Sample ad: not live yet'. Tap an ad to leave it out, or the pencil to edit its words."
             : `We picked the ${Math.min(SETUP_PICKS, ads.length)} strongest. Tap an ad to change your pick, or the pencil to edit its words.`}</p>
           {sample && (
             <Button id="sample-full-screen" type="button" variant="outline" className="mt-4 w-full sm:w-auto" disabled={!ids.length || coming > 0}
