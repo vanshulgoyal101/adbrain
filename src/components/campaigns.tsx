@@ -240,6 +240,9 @@ function keptLeadForm(current: string, forms: { id: string }[], lastUsed = ""): 
 }
 
 /** What a finished results refresh tells the owner (#671): new numbers, or none since the last fetch. */
+/** The clock, read in an event handler (#1333); kept outside the component for the compiler's purity rule. */
+const currentTime = () => Date.now();
+
 function refreshNotice(previous: CampaignResult | undefined, next: CampaignResult | undefined): string {
   const keys = ["impressions", "clicks", "leads", "spend", "conversations", "whatsapp_opens"] as const;
   if (!next) return "Checked just now: Meta has no results for this campaign yet.";
@@ -1367,7 +1370,7 @@ function BusinessCampaigns({
       setActivationLearning({
         costPerResultRupees: typeof review.learning?.costPerResultRupees === "number" ? review.learning.costPerResultRupees : null,
         pausedAt: typeof review.learning?.pausedAt === "string" ? review.learning.pausedAt : null,
-        now: Date.now(),
+        now: currentTime(),
       });
       setActivationReview(campaign);
       if (!refreshing) setReviewOpens((opens) => opens + 1);
