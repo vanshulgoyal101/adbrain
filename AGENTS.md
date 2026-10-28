@@ -31,6 +31,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 	posts. Need the CEO (priority, money rules, owner approval)? Open an issue
 	labelled `decision`. Need the CTO? Label `owner:cto`. Blocked on the owner? Label
 	`waiting-owner`; only the CEO asks the owner, in one batched list.
+	**The repo is public** (#1605): evidence that includes a customer's name, phone,
+	email or Meta id goes in `vbrain-private`; the issue gets only an opaque key.
 - **GitHub queue first; direct chat messages rarely** (owner, Oct 26). Work and
 	handoffs go on GitHub: the `owner:<role>` label plus a `→ <Role>:` comment on the
 	issue or PR. The receiver's `wait-for-work` wakes on that. Messages sent straight
