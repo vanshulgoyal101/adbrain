@@ -13,19 +13,21 @@ it("distinguishes verified payments, media, tax and unavailable customer funds",
   } })));
   const view = render(<CustomerBalance businessId={businessId} />);
   await screen.findByText("Pending costs require reconciliation.");
-  expect(screen.getByText("Attributed Meta tax")).toBeInTheDocument();
-  expect(screen.getByText("Available for a new reservation")).toBeInTheDocument();
+  expect(screen.getByText("Spent on ads, incl. Meta's GST").nextSibling).toHaveTextContent("₹118.00");
+  expect(screen.getByText("Available ad budget")).toBeInTheDocument();
   // #403: ₹0 rows are noise for an owner; the available figure always shows.
-  expect(screen.queryByText("Verified refunds")).not.toBeInTheDocument();
+  expect(screen.queryByText("Refunded")).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: /pay|activate/i })).not.toBeInTheDocument();
+  // #1235 (owner): AdBrain's split or margin is never shown to customers.
+  expect(view.container.textContent).not.toMatch(/\b(80|20)\s?%|service (fee|allocation)|allocation|margin/i);
   view.rerender(<CustomerBalance businessId="33333333-3333-4333-8333-333333333333" />);
-  expect(screen.queryByText("Attributed Meta tax")).not.toBeInTheDocument();
-  expect(screen.getByRole("status")).toHaveTextContent("Checking allowance");
-  await screen.findByText("Advertising allowance is unavailable.");
+  expect(screen.queryByText("Spent on ads, incl. Meta's GST")).not.toBeInTheDocument();
+  expect(screen.getByRole("status")).toHaveTextContent("Checking ad budget");
+  await screen.findByText("Ad budget is unavailable.");
 });
 it("does not display fabricated zero funds when storage is unavailable", async () => {
   vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
   render(<CustomerBalance businessId={businessId} />);
-  await screen.findByText("Advertising allowance is unavailable.");
-  expect(screen.queryByText("Available for a new reservation")).not.toBeInTheDocument();
+  await screen.findByText("Ad budget is unavailable.");
+  expect(screen.queryByText("Available ad budget")).not.toBeInTheDocument();
 });

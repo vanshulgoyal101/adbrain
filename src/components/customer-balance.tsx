@@ -35,18 +35,18 @@ export function CustomerBalance({ businessId, initialBalance = null }: { busines
   }, [businessId, refresh, serverLoaded]);
   return <section aria-labelledby="customer-balance-title" className="min-w-0 space-y-3 border-t border-slate-200 pt-5">
     <div className="flex items-center justify-between gap-3">
-      <h3 id="customer-balance-title" className="font-semibold text-slate-900">Advertising allowance</h3>
-      <Button variant="outline" onClick={() => setRefresh(value => value + 1)} aria-label="Refresh advertising allowance" title="Refresh advertising allowance"><RefreshCw size={16} aria-hidden="true" /></Button>
+      <h3 id="customer-balance-title" className="font-semibold text-slate-900">Ad budget</h3>
+      <Button variant="outline" onClick={() => setRefresh(value => value + 1)} aria-label="Refresh ad budget" title="Refresh ad budget"><RefreshCw size={16} aria-hidden="true" /></Button>
     </div>
-    {error ? <Alert variant="error">Advertising allowance is unavailable.</Alert> : !balance ? <p role="status">Checking allowance</p> : <>
+    {error ? <Alert variant="error">Ad budget is unavailable.</Alert> : !balance ? <p role="status">Checking ad budget</p> : <>
       {balance.held && <Alert>{balance.reason ?? "Funds are held for reconciliation."}</Alert>}
       <dl className="grid gap-3 text-sm sm:grid-cols-2">
         {([
-          ["Verified customer payments", balance.capturedPaise], ["Verified refunds", balance.refundedPaise],
-          ["Service allocation", balance.serviceAllocationPaise], ["Advertising allocation, including tax", balance.advertisingAllocationPaise],
-          ["Attributed media costs", balance.mediaCostPaise], ["Attributed Meta tax", balance.taxCostPaise],
-          ["Reserved for campaigns and pending costs", balance.reservedPaise], ["Available for a new reservation", balance.remainingPaise],
-        ] as const).filter(([label, amount]) => amount !== 0 || label === "Available for a new reservation").map(([label, amount]) => <div key={label} className="min-w-0"><dt className="text-slate-500">{label}</dt><dd className="font-medium tabular-nums text-slate-900">{money(amount)}</dd></div>)}
+          ["Paid", balance.capturedPaise], ["Refunded", balance.refundedPaise],
+          ["Ad budget, incl. Meta's GST", balance.advertisingAllocationPaise],
+          ["Spent on ads, incl. Meta's GST", balance.mediaCostPaise + balance.taxCostPaise],
+          ["Held for running campaigns", balance.reservedPaise], ["Available ad budget", balance.remainingPaise],
+        ] as const).filter(([label, amount]) => amount !== 0 || label === "Available ad budget").map(([label, amount]) => <div key={label} className="min-w-0"><dt className="text-slate-500">{label}</dt><dd className="font-medium tabular-nums text-slate-900">{money(amount)}</dd></div>)}
       </dl>
     </>}
   </section>;
