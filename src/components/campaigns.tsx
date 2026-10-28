@@ -1,6 +1,6 @@
 "use client";
 
-import { startTransition, useEffect, useEffectEvent, useReducer, useRef, useState, useSyncExternalStore } from "react";
+import { startTransition, useCallback, useEffect, useEffectEvent, useReducer, useRef, useState, useSyncExternalStore } from "react";
 import type { ReactNode } from "react";
 import { flushSync } from "react-dom";
 import { useConfirm } from "@/components/ui/confirm-dialog";
@@ -55,7 +55,8 @@ import {
   type TargetingValue,
 } from "@/components/targeting-controls";
 import { CampaignChat } from "@/components/campaign-chat";
-import { AdResults } from "@/components/ad-results";
+import { AdResults, PauseOffer, useWeakAd } from "@/components/ad-results";
+import { BEST_AD_MIN_RESULTS } from "@/lib/meta/insights";
 import { EditAudienceDialog } from "@/components/edit-audience-dialog";
 import { AudienceSwitchStrip } from "@/components/audience-switch-strip";
 import { createClient as createBrowserClient } from "@/lib/supabase/client";
@@ -96,6 +97,7 @@ import { reviewBlockerAlternative, reviewBlockerFix } from "@/lib/campaign/revie
 import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
 import { useCampaignPreparation } from "@/lib/meta-connect-ui/use-campaign-preparation";
 import { targetingFromEditor, targetingToEditor } from "@/lib/campaign/editor-targeting";
+import { buildManualDraftInput, pickWhatsAppNumber } from "@/lib/campaign/manual-draft-input";
 import type { LeadForm } from "@/lib/meta/client";
 import { maskWhatsAppNumber, maskedWhatsAppNumberPattern, parseWhatsAppStatus, type WhatsAppStatus } from "@/lib/meta/whatsapp-status-shared";
 import type { ConnectIntent, ConnectionDTO } from "@/lib/meta/connect-contracts";
@@ -325,7 +327,7 @@ function BusinessCampaigns({
     const text = whatsappGreeting(business, adWords(ads), [], adLanguages(ads), language);
     return [language, { greeting: text.greeting, prefill: text.autofill }];
   })) as Suggested;
-  const chosenWhatsAppNumber = whatsappOptions.some(({ masked }) => masked === whatsappNumber) ? whatsappNumber : whatsappOptions[0]?.masked ?? whatsappNumber;
+  const chosenWhatsAppNumber = pickWhatsAppNumber(whatsappOptions, whatsappNumber);
   const [leadFormId, setLeadFormId] = useState(initialSetup?.leadFormId ?? leadForms[0]?.id ?? "");
   const leadFormMemoryKey = `campaign-lead-form:${business.owner_id}:${business.id}`;
   const [availableForms, setAvailableForms] = useState(leadForms);
@@ -936,21 +938,21 @@ function BusinessCampaigns({
   function manualDraftInput(requireComplete = true): DraftInput {
     if (requireComplete && selected.size === 0) throw new Error("Select at least one creative.");
     if (requireComplete && budget <= 0) throw new Error("Enter a daily budget.");
-    return {
+    return buildManualDraftInput({
       businessId: business.id,
       name,
       goal: draftGoal || name,
       mode: preparedDraftRef.current?.input.mode === "guided" || creationMode === "guided" ? "guided" : "manual",
       creativeIds: [...selected],
-      dailyBudgetRupees: Math.max(0, budget),
-      leadFormId: destination === "whatsapp" ? null : leadFormId || null,
+      dailyBudgetRupees: budget,
+      leadFormId,
       destination,
-      ...(destination === "whatsapp" && chosenWhatsAppNumber ? { whatsappNumber: chosenWhatsAppNumber } : {}),
-      ...(destination === "whatsapp" && whatsappLanguage !== "ad" ? { whatsappLanguage } : {}),
-      ...(destination === "whatsapp" && whatsappMessage ? { whatsappMessage } : {}),
+      whatsappNumber: chosenWhatsAppNumber,
+      whatsappLanguage,
+      whatsappMessage,
       targeting: targetingFromEditor(targeting, plannedAreas, plannedExclusions),
       abTest,
-    };
+    });
   }
 
   // #366: plan the audience in the background once ads are chosen, so Prepare usually doesn't wait for the AI.
@@ -1363,6 +1365,10 @@ function BusinessCampaigns({
   }, [switchable]);
   // #1274: enquiries waiting for a reply by the inbox's rule (#1260), per running campaign (owners read their own leads).
   const [waitingReplies, setWaitingReplies] = useState<Record<string, number>>({});
+  // #1274 slice 2c: cards whose sentence already offers the pause; their "Which ad worked" doesn't repeat it.
+  const [weakAdCards, setWeakAdCards] = useState<string[]>([]);
+  const weakAdShown = useCallback((campaignId: string, shown: boolean) =>
+    setWeakAdCards((ids) => shown === ids.includes(campaignId) ? ids : shown ? [...ids, campaignId] : ids.filter((id) => id !== campaignId)), []);
   const liveIds = campaigns.filter(c => c.status === "active").map(c => c.id).sort().join(",");
   useEffect(() => {
     if (!liveIds) return;
@@ -2519,13 +2525,13 @@ function BusinessCampaigns({
                         waiting={waitingReplies[c.id] ?? 0} onRunAgain={() => void runAgain(c)} runAgainBusy={rerunBusy === c.id}
                         onEditAd={c.meta_campaign_id && (c.status === "paused" || c.status === "active") && reviewableCampaign(c) && (c.meta_ad_ids?.length ?? 0) > 0 && !waitingSwitch[c.id]
                           ? () => { setAdEditHint(EDIT_AD_HINT); setAdEdit(c); } : undefined}
-                        adsManagerUrl={c.meta_campaign_id ? adsLink(c) : undefined} />
+                        adsManagerUrl={c.meta_campaign_id ? adsLink(c) : undefined} perAd={adResults} onWeakAd={weakAdShown} />
                     )}
                     {r && mounted && (
                       // #1003: always say how old the numbers are.
                       <p className="text-xs text-slate-500">{updatingIds.includes(c.id) ? "Updating results…" : `Updated ${timeAgo(new Date(r.fetched_at))}`}</p>
                     )}
-                    {adResults && r && c.meta_campaign_id && <AdResults campaignId={c.id} whatsapp={outcome === "whatsapp"} onRunAgain={() => void runAgain(c)} runAgainBusy={rerunBusy === c.id} runAgainError={rerunError?.id === c.id ? rerunError.message : null} />}
+                    {adResults && r && c.meta_campaign_id && <AdResults campaignId={c.id} whatsapp={outcome === "whatsapp"} offerPause={!weakAdCards.includes(c.id)} onRunAgain={() => void runAgain(c)} runAgainBusy={rerunBusy === c.id} runAgainError={rerunError?.id === c.id ? rerunError.message : null} />}
                     {r && (r.customers ?? 0) > 0 && (
                       // #798: what a real customer cost, beside the per-enquiry figures.
                       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4" aria-label="Customers">
@@ -2610,11 +2616,15 @@ function madeOutsideAdBrain(campaign: Campaign): boolean {
 /** A launched campaign's numbers: #1255's verdict for WhatsApp and form campaigns, with the figures under Details. */
 const EDIT_AD_HINT = "Tell people what happens after the tap, e.g. 'Tap, then press Send'.";
 
-function CardResults({ campaign, result: r, outcome, comparison, waiting, onRunAgain, runAgainBusy, adsManagerUrl, onEditAd }: {
+function CardResults({ campaign, result: r, outcome, comparison, waiting, onRunAgain, runAgainBusy, adsManagerUrl, onEditAd, perAd, onWeakAd }: {
   campaign: Campaign; result: CampaignResult; outcome: ReturnType<typeof campaignDestination>; comparison: Comparison | null;
   waiting: number; onRunAgain: () => void; runAgainBusy: boolean; adsManagerUrl?: string; onEditAd?: () => void;
+  /** #783's per-ad rows are on; a running campaign with enough results reads them for the weak-ad state. */
+  perAd: boolean; onWeakAd: (campaignId: string, shown: boolean) => void;
 }) {
   const [now] = useState(() => Date.now());
+  const enough = (outcome === "whatsapp" ? r.conversations ?? 0 : r.leads) >= BEST_AD_MIN_RESULTS;
+  const [weakAd, clearWeakAd] = useWeakAd(campaign.id, perAd && campaign.status === "active" && Boolean(campaign.meta_campaign_id) && enough);
   const figures = <>
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
       <Stat label="Impressions" value={formatNumber(r.impressions)} />
@@ -2632,11 +2642,15 @@ function CardResults({ campaign, result: r, outcome, comparison, waiting, onRunA
       </p>
     )}
   </>;
-  const input = cardVerdictInput(campaign, r, { now, waiting, weakAd: null, comparison });
+  const input = cardVerdictInput(campaign, r, { now, waiting, weakAd, comparison });
+  const judged = input ? verdict(input) : null;
+  const weakShown = judged?.state === "weak_ad";
+  useEffect(() => { onWeakAd(campaign.id, weakShown); }, [campaign.id, weakShown, onWeakAd]);
   // A paused card that never showed keeps its one "nothing has spent" line (#173), with no verdict beside it.
-  if (!input || (campaign.status !== "active" && campaign.status !== "completed" && !r.impressions)) return figures;
-  return <CampaignVerdict verdict={verdict(input)} whatsapp={input.destination === "whatsapp"} results={input.results} spend={input.spend}
-    details={figures} onRunAgain={onRunAgain} runAgainBusy={runAgainBusy} adsManagerUrl={adsManagerUrl} onEditAd={onEditAd} />;
+  if (!input || !judged || (campaign.status !== "active" && campaign.status !== "completed" && !r.impressions)) return figures;
+  return <CampaignVerdict verdict={judged} whatsapp={input.destination === "whatsapp"} results={input.results} spend={input.spend}
+    details={figures} onRunAgain={onRunAgain} runAgainBusy={runAgainBusy} adsManagerUrl={adsManagerUrl} onEditAd={onEditAd}
+    pauseOffer={weakAd && <PauseOffer campaignId={campaign.id} suggestion={weakAd} unit={input.destination === "whatsapp" ? { one: "chat", many: "chats" } : { one: "enquiry", many: "enquiries" }} onKeep={clearWeakAd} />} />;
 }
 
 function Stat({ label, value }: { label: string; value: string }) {

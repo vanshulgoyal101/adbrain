@@ -62,9 +62,12 @@ describe("<LeadInbox> empty state", () => {
     expect(screen.queryByRole("link", { name: "See your campaigns" })).toBeNull();
   });
 
-  it("hides the digest card when there is nothing to share", () => {
-    render(<LeadInbox businessName="Solaride" initialLeads={[]} metaReady />);
+  it("has no WhatsApp digest, with or without enquiries (#1260: alerts are #701)", () => {
+    const view = render(<LeadInbox businessName="Solaride" initialLeads={[]} metaReady />);
     expect(screen.queryByText("WhatsApp digest")).toBeNull();
+    view.rerender(<LeadInbox businessName="Solaride" initialLeads={[lead()]} metaReady />);
+    expect(screen.queryByText("WhatsApp digest")).toBeNull();
+    expect(screen.queryByRole("link", { name: /share on whatsapp/i })).toBeNull();
   });
 });
 
@@ -74,12 +77,15 @@ describe("<LeadInbox> Meta readiness", () => {
       <LeadInbox businessName="Solaride" initialLeads={[]} metaReady={false} />,
     );
     expect(screen.getByText(/meta isn’t connected/i)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /check for enquiries/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /check now/i })).toBeNull();
   });
 
-  it("offers syncing once Meta is connected", () => {
-    render(<LeadInbox businessName="Solaride" initialLeads={[]} metaReady />);
-    expect(screen.getByRole("button", { name: /check for enquiries/i })).toBeInTheDocument();
+  it("offers a quiet Check now and the last update time once Meta is connected (#1260)", () => {
+    localStorage.setItem("lead-sync:owner:b1", String(Date.now() - 5 * 60_000));
+    render(<LeadInbox businessName="Solaride" initialLeads={[]} metaReady syncScope="owner:b1" />);
+    expect(screen.getByRole("button", { name: "Check now" })).toBeInTheDocument();
+    expect(screen.getByText("Updated 5m ago")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /check for enquiries/i })).toBeNull();
   });
 });
 
@@ -115,13 +121,6 @@ describe("<LeadInbox> table", () => {
     expect(screen.queryByText("Asha Verma")).toBeNull();
     expect(await screen.findByText("Ravi Shah")).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("1 of 1 enquiries");
-  });
-
-  it("keeps the full digest collapsed until requested", () => {
-    render(<LeadInbox businessName="Form Studio" initialLeads={[lead()]} metaReady />);
-    expect(screen.getByText("WhatsApp digest").closest("details")).not.toHaveAttribute("open");
-    fireEvent.click(screen.getByText("WhatsApp digest"));
-    expect(screen.getByText("WhatsApp digest").closest("details")).toHaveAttribute("open");
   });
 
   it("shows Meta's test lead as a test, not as placeholder text (#403)", () => {
@@ -205,7 +204,8 @@ describe("<LeadInbox> syncing", () => {
     await waitFor(() => expect(fetcher).toHaveBeenCalledWith("/api/leads/sync", { method: "POST" }));
     expect(localStorage.getItem(key)).toBe(previous);
     await act(async () => complete(Response.json({ leads: [lead()], imported: 0, sync: { id: "run-1", state: "complete", hasMore: false } })));
-    expect(await screen.findByText("Up to date. No new enquiries.")).toBeInTheDocument();
+    expect(await screen.findByText("Updated just now")).toBeInTheDocument();
+    expect(screen.queryByText(/Up to date/)).toBeNull();
     expect(Number(localStorage.getItem(key))).toBeGreaterThan(Date.now() - 60_000);
   });
 
@@ -242,7 +242,7 @@ describe("<LeadInbox> syncing", () => {
         sync: { id: "sync-1", state: "partial", hasMore: true } }) }
       : { ok: true, json: async () => ({ leads: [lead()], total: 1, nextCursor: null }) }));
     render(<LeadInbox businessName="Solaride" initialLeads={[lead()]} metaReady />);
-    fireEvent.click(screen.getByRole("button", { name: /check for enquiries/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Check now" }));
     expect(await screen.findByText(/Couldn't read: Restricted form/)).toBeInTheDocument();
     expect(screen.queryByText(/You're up to date/)).toBeNull();
     expect(screen.getByText("Asha Verma")).toBeInTheDocument();
@@ -253,7 +253,7 @@ describe("<LeadInbox> syncing", () => {
   it("retains the inbox when the server cannot reload saved leads", async () => {
     setFetch({ ok: false, json: async () => ({ error: "Could not reload saved leads." }) });
     render(<LeadInbox businessName="Solaride" initialLeads={[lead()]} metaReady />);
-    fireEvent.click(screen.getByRole("button", { name: /check for enquiries/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Check now" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Could not reload saved leads.");
     expect(screen.getByText("Asha Verma")).toBeInTheDocument();
   });
@@ -265,25 +265,25 @@ describe("<LeadInbox> syncing", () => {
     });
     render(<LeadInbox businessName="Solaride" initialLeads={[]} metaReady />);
 
-    fireEvent.click(screen.getByRole("button", { name: /check for enquiries/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Check now" }));
 
     expect(await screen.findByText("2 new enquiries from Meta.")).toBeInTheDocument();
     expect(await screen.findByText("Ravi K")).toBeInTheDocument();
     expect(global.fetch).toHaveBeenCalledWith("/api/leads/sync", { method: "POST" });
   });
 
-  it("says you're up to date when nothing new came back", async () => {
+  it("says only 'Updated just now' when a complete check found nothing new (#1260)", async () => {
+    setFetch({ ok: true, json: async () => ({ leads: [lead()], imported: 0, sync: { id: "run-5", state: "complete", hasMore: false } }) });
     render(<LeadInbox businessName="Solaride" initialLeads={[lead()]} metaReady />);
-    fireEvent.click(screen.getByRole("button", { name: /check for enquiries/i }));
-    expect(
-      await screen.findByText("Up to date. No new enquiries."),
-    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Check now" }));
+    expect(await screen.findByText("Updated just now")).toBeInTheDocument();
+    expect(screen.queryByText(/Up to date|No new enquiries/)).toBeNull();
   });
 
   it("surfaces a server error instead of silently failing", async () => {
     setFetch({ ok: false, json: async () => ({ error: "Meta is not configured" }) });
     render(<LeadInbox businessName="Solaride" initialLeads={[]} metaReady />);
-    fireEvent.click(screen.getByRole("button", { name: /check for enquiries/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Check now" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Meta is not configured",
     );
@@ -292,7 +292,7 @@ describe("<LeadInbox> syncing", () => {
   it("handles a dropped connection", async () => {
     global.fetch = vi.fn().mockRejectedValue(new Error("offline")) as unknown as typeof fetch;
     render(<LeadInbox businessName="Solaride" initialLeads={[]} metaReady />);
-    fireEvent.click(screen.getByRole("button", { name: /check for enquiries/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Check now" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(
       /check your connection/i,
     );
@@ -305,39 +305,12 @@ describe("<LeadInbox> syncing", () => {
     ) as unknown as typeof fetch;
 
     render(<LeadInbox businessName="Solaride" initialLeads={[]} metaReady />);
-    const btn = screen.getByRole("button", { name: /check for enquiries/i });
+    const btn = screen.getByRole("button", { name: "Check now" });
     fireEvent.click(btn);
     await waitFor(() => expect(btn).toBeDisabled());
 
     release({ ok: true, json: async () => ({ leads: [], imported: 0 }) });
     await waitFor(() => expect(btn).not.toBeDisabled());
-  });
-});
-
-describe("<LeadInbox> WhatsApp digest", () => {
-  it("shows a shareable digest and a WhatsApp link", () => {
-    render(<LeadInbox businessName="Solaride" initialLeads={[lead()]} metaReady />);
-    expect(screen.getByText("WhatsApp digest")).toBeInTheDocument();
-    expect(screen.getByText("Last 7 days, up to 10 people")).toBeInTheDocument();
-    fireEvent.click(screen.getByText("WhatsApp digest"));
-    const share = screen.getByRole("link", { name: /share on whatsapp/i });
-    expect(share).toHaveAttribute("target", "_blank");
-    expect(share.getAttribute("href")).toContain("https://wa.me/?text=");
-    // Never open a new tab without severing the opener reference.
-    expect(share).toHaveAttribute("rel", expect.stringContaining("noopener"));
-  });
-
-  it("copies the digest to the clipboard and confirms", async () => {
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.assign(navigator, { clipboard: { writeText } });
-
-    render(<LeadInbox businessName="Solaride" initialLeads={[lead()]} metaReady />);
-    fireEvent.click(screen.getByText("WhatsApp digest"));
-    fireEvent.click(screen.getByRole("button", { name: /^copy$/i }));
-
-    await waitFor(() => expect(writeText).toHaveBeenCalledOnce());
-    expect(writeText.mock.calls[0][0]).toContain("Solaride");
-    expect(await screen.findByRole("button", { name: /copied/i })).toBeInTheDocument();
   });
 });
 
@@ -488,13 +461,13 @@ describe("<LeadInbox> saved enquiry workflow", () => {
     render(<LeadInbox businessName="Fixture" initialLeads={[lead()]} metaReady />);
     fireEvent.change(screen.getByLabelText("Workflow status"), { target: { value: "booked" } });
     await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("1 of 1"));
-    fireEvent.click(screen.getByRole("button", { name: "Check for enquiries" }));
+    fireEvent.click(screen.getByRole("button", { name: "Check now" }));
     expect(await screen.findByText(/so far/)).toBeInTheDocument();
     expect(screen.queryByText(/You're up to date/)).toBeNull();
     await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("1 of 1"));
     expect(screen.queryByText("Partial response only")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Keep checking" }));
-    expect(await screen.findByText("Up to date. No new enquiries.")).toBeInTheDocument();
+    expect(await screen.findByText("Updated just now")).toBeInTheDocument();
     expect(fetcher.mock.calls.filter(([url]) => url.startsWith("/api/leads?")).every(([url]) => url.includes("status=booked"))).toBe(true);
   });
 
@@ -524,13 +497,13 @@ describe("<LeadInbox> saved enquiry workflow", () => {
     render(<LeadInbox businessName="Fixture" initialLeads={[confirmed]} metaReady />);
     fireEvent.change(screen.getByLabelText("Contact availability"), { target: { value: "ready" } });
     await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("1 of 1"));
-    fireEvent.click(screen.getByRole("button", { name: "Check for enquiries" }));
+    fireEvent.click(screen.getByRole("button", { name: "Check now" }));
     expect(await screen.findByText("Could not save the next page. Retry to resume.")).toBeInTheDocument();
     expect(screen.getByText("Asha Verma")).toBeInTheDocument();
     expect(screen.queryByText(/You're up to date/)).toBeNull();
     expect(syncCalls).toBe(1);
 
-    fireEvent.click(screen.getByRole("button", { name: "Check for enquiries" }));
+    fireEvent.click(screen.getByRole("button", { name: "Check now" }));
     expect(await screen.findByText("Committed enquiry")).toBeInTheDocument();
     expect(screen.queryByText("Not the filtered list")).toBeNull();
     expect(screen.getByRole("status")).toHaveTextContent("2 of 2");
@@ -558,7 +531,7 @@ describe("<LeadInbox> saved enquiry workflow", () => {
     render(<LeadInbox businessName="Fixture" initialLeads={[lead()]} metaReady />);
     fireEvent.change(screen.getByLabelText("Search enquiries"), { target: { value: "Late" } });
     await waitFor(() => expect(oldSignal).toBeDefined());
-    fireEvent.click(screen.getByRole("button", { name: "Check for enquiries" }));
+    fireEvent.click(screen.getByRole("button", { name: "Check now" }));
     expect(await screen.findByText("Late arrival")).toBeInTheDocument();
     expect(oldSignal?.aborted).toBe(true);
     await act(async () => resolveOld({ ok: true, json: async () => ({ leads: [lead()], total: 1, nextCursor: null }) }));
@@ -570,7 +543,7 @@ describe("<LeadInbox> saved enquiry workflow", () => {
   it("does not infer complete sync from a legacy response", async () => {
     setFetch({ ok: true, json: async () => ({ leads: [], imported: 0 }) });
     render(<LeadInbox businessName="Fixture" initialLeads={[]} metaReady />);
-    fireEvent.click(screen.getByRole("button", { name: "Check for enquiries" }));
+    fireEvent.click(screen.getByRole("button", { name: "Check now" }));
     expect(await screen.findByText("Checked Meta, but couldn't confirm everything was read.")).toBeInTheDocument();
     expect(screen.queryByText(/You're up to date/)).toBeNull();
   });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ChevronRight, Loader2 } from "lucide-react";
 import type { AdResultView } from "@/lib/campaign/ad-results-store";
 import { KEEP_HIDES_MS, pauseSuggestion, type PauseSuggestion } from "@/lib/campaign/ad-pause";
@@ -59,7 +59,7 @@ const named = (ad: Named) => `“${adLabel(ad)}”`;
  * Never automatic; Keep hides it for 3 days; a pause can be undone here. A suggestion, not a warning:
  * a canvas strip, not amber (#847 keeps amber for Needs review).
  */
-export function PauseOffer({ campaignId, suggestion, unit = UNITS.form }: { campaignId: string; suggestion: PauseSuggestion; unit?: Unit }) {
+export function PauseOffer({ campaignId, suggestion, unit = UNITS.form, onKeep }: { campaignId: string; suggestion: PauseSuggestion; unit?: Unit; onKeep?: () => void }) {
   const { ad, reference } = suggestion;
   // Rendered only after the card's client-side load, so localStorage is there on first render.
   const [state, setState] = useState<"offer" | "busy" | "paused" | "resumed" | "already" | "kept" | { error: string }>(
@@ -96,18 +96,40 @@ export function PauseOffer({ campaignId, suggestion, unit = UNITS.form }: { camp
       {typeof state === "object" && <p role="alert" className="mt-1 text-danger">{state.error}</p>}
       <div className="mt-2 flex flex-wrap gap-2">
         <Button type="button" variant="outline" size="sm" disabled={busy} className="min-h-11" onClick={() => void send("pause")}>{busy ? "Pausing…" : "Pause this ad"}</Button>
-        <Button type="button" variant="ghost" size="sm" disabled={busy} className="min-h-11" onClick={() => { window.localStorage.setItem(keepKey(campaignId, ad.adId), String(Date.now() + KEEP_HIDES_MS)); setState("kept"); }}>Keep</Button>
+        <Button type="button" variant="ghost" size="sm" disabled={busy} className="min-h-11" onClick={() => { window.localStorage.setItem(keepKey(campaignId, ad.adId), String(Date.now() + KEEP_HIDES_MS)); setState("kept"); onKeep?.(); }}>Keep</Button>
       </div>
     </div>
   );
 }
 
 /**
+ * #1274 slice 2c: the card's weak-ad state. Reads the stored per-ad rows once (no Meta call) and returns the ad
+ * worth pausing, or null: feature off, read failed, nothing to pause, or the owner tapped Keep in the last 3 days.
+ */
+export function useWeakAd(campaignId: string, enabled: boolean): [PauseSuggestion | null, () => void] {
+  const [suggestion, setSuggestion] = useState<PauseSuggestion | null>(null);
+  useEffect(() => {
+    if (!enabled) return;
+    let live = true;
+    fetch(`/api/campaigns/${campaignId}/ads`).then(async (response) => {
+      if (!response.ok) return;
+      const data = await response.json() as { ads?: AdResultView[] };
+      const found = Array.isArray(data.ads) ? pauseSuggestion(data.ads) : null;
+      if (live && found && !(Number(window.localStorage.getItem(keepKey(campaignId, found.ad.adId)) ?? 0) > Date.now())) setSuggestion(found);
+    }).catch(() => undefined);
+    return () => { live = false; };
+  }, [campaignId, enabled]);
+  return [suggestion, () => setSuggestion(null)];
+}
+
+/**
  * #783: "Which ad worked" on a campaign card. Loads the stored per-ad results the first time it opens;
  * hidden altogether while the feature is off (the route answers 404).
  */
-export function AdResults({ campaignId, whatsapp = false, onRunAgain, runAgainBusy = false, runAgainError = null }: {
+export function AdResults({ campaignId, whatsapp = false, onRunAgain, runAgainBusy = false, runAgainError = null, offerPause = true }: {
   campaignId: string;
+  /** #1274: false while the card's sentence already offers the pause, so it isn't offered twice. */
+  offerPause?: boolean;
   whatsapp?: boolean;
   /** #1050: with a Best ad, offer to copy the campaign into a new paused one. */
   onRunAgain?: () => void;
@@ -140,7 +162,7 @@ export function AdResults({ campaignId, whatsapp = false, onRunAgain, runAgainBu
   const hasBest = loaded?.ads.some(ad => ad.best) ?? false;
   // Only an AdBrain ad can be copied; an outside Best ad would only lead to an error.
   const canRunAgain = loaded?.ads.some(ad => ad.best && ad.creative) ?? false;
-  const suggestion = loaded ? pauseSuggestion(loaded.ads) : null;
+  const suggestion = loaded && offerPause ? pauseSuggestion(loaded.ads) : null;
 
   return (
     <details className="group border-t border-slate-200 pt-2 text-sm" onToggle={(event) => { if ((event.currentTarget as HTMLDetailsElement).open) void load(); }}>
