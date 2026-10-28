@@ -76,7 +76,7 @@ export function InfoHint({
         onClick={(event) => { event.currentTarget.focus(); setDismissed(false); }}
         onFocus={() => { setFocused(true); setDismissed(false); }}
         onBlur={() => setFocused(false)}
-        className="inline-flex h-4 w-4 items-center justify-center rounded-full text-slate-400 hover:text-slate-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
+        className="relative inline-flex h-4 w-4 items-center justify-center rounded-full text-slate-400 before:absolute before:-inset-3.5 before:content-[''] hover:text-slate-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
       >
         <Info className="h-3.5 w-3.5" />
       </button>

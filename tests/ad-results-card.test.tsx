@@ -8,9 +8,9 @@ import { AdResults } from "@/components/ad-results";
 const ad = (adId: string, over: Record<string, unknown> = {}) => ({
   adId, name: `Ad ${adId}`, delivered: true, replaced: false, best: false, creative: null, earlier: false, impressions: 100, results: 0, spend: 0, costPerResult: null, ...over,
 });
-const open = async (body: unknown, status = 200) => {
+const open = async (body: unknown, status = 200, onRunAgain?: () => void) => {
   vi.stubGlobal("fetch", vi.fn(async () => Response.json(body, { status })));
-  const view = render(<AdResults campaignId="c1" />);
+  const view = render(<AdResults campaignId="c1" onRunAgain={onRunAgain} />);
   const details = view.container.querySelector("details")!;
   details.open = true;
   fireEvent(details, new Event("toggle"));
@@ -51,6 +51,20 @@ describe("<AdResults> (#783)", () => {
     expect(await screen.findByText("(replaced)")).toBeInTheDocument();
     const off = await open({ error: "Not found" }, 404);
     await vi.waitFor(() => expect(off.container.querySelector("details")).toBeNull());
+  });
+
+  it("offers Run this again only when there's a Best ad (#1050)", async () => {
+    const runAgain = vi.fn();
+    await open({ ok: true, syncedAt: null, ads: [ad("1", { best: true, results: 6, spend: 600, costPerResult: 100 }), ad("2", { results: 1, spend: 300, costPerResult: 300 })] }, 200, runAgain);
+    fireEvent.click(await screen.findByRole("button", { name: "Run this again" }));
+    expect(runAgain).toHaveBeenCalledOnce();
+    expect(screen.getByText(/Nothing goes to Meta until you review and send it, paused/)).toBeInTheDocument();
+  });
+
+  it("doesn't offer it without a winner", async () => {
+    await open({ ok: true, syncedAt: null, ads: [ad("1", { results: 1, spend: 70, costPerResult: 70 })] }, 200, vi.fn());
+    expect(await screen.findByText("Early: too few enquiries to pick a winner.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Run this again" })).not.toBeInTheDocument();
   });
 });
 

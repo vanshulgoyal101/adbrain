@@ -1837,10 +1837,12 @@ export class MetaClient {
 
   async verifyCampaignActivation(
     campaignId: string,
-    expected: { dailyBudgetRupees: number; status: string; adSetIds: string[]; adIds: string[]; cappedAdSetIds?: string[] },
+    expected: { dailyBudgetRupees: number; status: string; adSetIds: string[]; adIds: string[]; cappedAdSetIds?: string[]; keepPaused?: string[] },
   ): Promise<CampaignDeliverySnapshot> {
-    const snapshot = await this.readCampaignDelivery(campaignId, expected);
-    if (snapshot.adSets.some(adSet => adSet.status !== "ACTIVE") || snapshot.ads.some(ad => ad.status !== "ACTIVE")) {
+    const { keepPaused = [], ...tree } = expected;
+    const snapshot = await this.readCampaignDelivery(campaignId, tree);
+    // #1055: an ad the owner paused from the card stays paused; every other intended ad must be ACTIVE.
+    if (snapshot.adSets.some(adSet => adSet.status !== "ACTIVE") || snapshot.ads.some(ad => ad.status !== "ACTIVE" && !keepPaused.includes(ad.id))) {
       throw new CampaignDeliveryError("An intended ad set or ad is paused. Activate only the intended children in Meta and review this campaign again.");
     }
     return snapshot;
@@ -2281,6 +2283,20 @@ export class MetaClient {
     await this.writeStatus(adId, status);
     const after = await read();
     return { id: adId, status: after.status ?? null, effectiveStatus: after.effective_status ?? null, changed: true };
+  }
+
+  /**
+   * #1055: the original ad each given ad was copied from (a capped run's copy → its reviewed source ad);
+   * an original maps to itself. Read-only.
+   */
+  async adSources(adIds: string[]): Promise<Record<string, string>> {
+    const sources: Record<string, string> = {};
+    for (const adId of adIds) {
+      const ad = await this.graph<{ id?: string; source_ad_id?: string }>(`${encodeURIComponent(adId)}?fields=id,source_ad_id`);
+      if (ad.id !== adId) throw new MetaError("An ad could not be read back from Meta.");
+      sources[adId] = ad.source_ad_id && /^[1-9]\d*$/.test(ad.source_ad_id) ? ad.source_ad_id : adId;
+    }
+    return sources;
   }
 
   /** Status write with one retry after Meta's 613 (one status change per object per 30 s). */

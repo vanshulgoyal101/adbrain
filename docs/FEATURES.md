@@ -312,7 +312,8 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
   #1045: with at least 5 enquiries across the campaign, a running ad that costs ≥ 2× the best ad per enquiry
   (or spent ≥ 2× the campaign's cost per enquiry with none) gets one line: "“B” costs ₹X per enquiry vs ₹Y
   for “A”. Pause it?" [Pause this ad] [Keep]. Pause turns off only that ad (read back from Meta) and can be
-  undone on the card; Keep hides it for 3 days. Never automatic, never a budget change.
+  undone on the card; Keep hides it for 3 days. Never automatic, never a budget change. Turning the campaign
+  back on keeps that ad paused (#1055): a capped resume copies only the other ads, and the review says so.
 - **Daily results on WhatsApp** (#1022, dark behind `OWNER_ALERTS_ENABLED`): from 09:00 IST, each opted-in
   owner gets one `adbrain_daily_results` line for yesterday (IST): ₹ spent, enquiries (form leads plus
   WhatsApp chats, the same per-ad numbers as "Which ad worked"), ₹ each or "none yet", and the ad to name
@@ -386,6 +387,9 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
   #1081: it also shows the business's past open → message rate across its WhatsApp campaigns
   (from 10 opens), and a soft note when the pre-typed ask names no offer or number ("Hi, I want
   info"); neither blocks the send (`src/lib/campaign/whatsapp-handoff.ts`).
+  With Quick questions there is no pre-typed message, so AdBrain's own welcome reads "…Tap a question
+  below and we'll reply here." (all 4 languages; Brand card, composer and launch alike, #1121); a
+  welcome the owner typed is never changed.
   Choosing "Quick questions" on Brand fills the empty boxes with 3 suggestions from the Brand
   (`src/lib/campaign/whatsapp-questions.ts`, #905): the first offer in the owner's words (a long
   one keeps the part after its label, never cut mid-claim; a free offer is never asked as a cost),

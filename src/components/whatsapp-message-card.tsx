@@ -7,6 +7,7 @@ import { Alert } from "@/components/ui/alert";
 import { saveWhatsAppTemplate, type WhatsAppTemplateResult } from "@/app/(app)/brand/whatsapp-template-actions";
 import { ICE_BREAKER_LIMITS } from "@/lib/meta/limits";
 import { whatsappTemplateSchema, type WhatsAppTemplate } from "@/lib/campaign/whatsapp-template";
+import { prefillWelcome, questionsWelcome } from "@/lib/campaign/whatsapp-greeting";
 
 type Language = WhatsAppTemplate["language"];
 /** AdBrain's suggestion per language: a pre-typed message, or up to 3 questions. */
@@ -32,7 +33,8 @@ export function draftFromTemplate(template: WhatsAppTemplate): MessageDraft {
 
 export function draftFromSuggestion(suggested: Suggested, language: Language | "auto"): MessageDraft {
   const words = suggested[language === "auto" ? "en" : language];
-  return { language, greeting: words.greeting, prefill: words.prefill, button: words.iceBreakers?.length ? "questions" : "none", questions: threeSlots(words.iceBreakers ?? []) };
+  const questions = Boolean(words.iceBreakers?.length);
+  return { language, greeting: questions ? questionsWelcome(words.greeting) : words.greeting, prefill: words.prefill, button: questions ? "questions" : "none", questions: threeSlots(words.iceBreakers ?? []) };
 }
 
 export function templateFromDraft(draft: MessageDraft): WhatsAppTemplate {
@@ -61,6 +63,10 @@ export function WhatsAppMessageFields({ value, onWords, onLanguage, allowAuto, f
   const offer = firstOffer?.trim();
   const questionExample = offer && [...offer].length <= ICE_BREAKER_LIMITS.chars ? offer : "What's the price?";
   const set = (patch: Partial<MessageDraft>) => onWords({ ...value, ...patch });
+  // #1121: AdBrain's own welcome follows the button ("Tap a question below" vs "Send this message"); typed words stay.
+  const setButton = (button: ButtonKind) => set({
+    button, greeting: button === "questions" ? questionsWelcome(value.greeting) : prefillWelcome(value.greeting),
+  });
   return <div className="grid min-w-0 gap-4">
     <div className="grid gap-1">
       <label className="grid gap-1 text-sm font-medium text-slate-800">Language
@@ -79,7 +85,7 @@ export function WhatsAppMessageFields({ value, onWords, onLanguage, allowAuto, f
       <legend className="text-sm font-medium text-slate-800">Button</legend>
       <div className="flex flex-wrap gap-2">
         {([["none", "None"], ["call", "Call now"], ["questions", "Quick questions"]] as const).map(([option, label]) =>
-          <label key={option} className="flex min-h-10 cursor-pointer items-center gap-2 rounded-md border border-slate-200 px-3 text-sm"><input type="radio" name="whatsapp-button" checked={value.button === option} onChange={() => set({ button: option })} className="accent-blue-600" />{label}</label>)}
+          <label key={option} className="flex min-h-10 cursor-pointer items-center gap-2 rounded-md border border-slate-200 px-3 text-sm"><input type="radio" name="whatsapp-button" checked={value.button === option} onChange={() => setButton(option)} className="accent-blue-600" />{label}</label>)}
       </div>
       {value.button === "call" && <p className="text-xs text-slate-600">
         <Suspense fallback="Calls go to the WhatsApp number on your ads.">{callNumber ? <CallsGoTo number={callNumber} /> : "Calls go to the WhatsApp number on your ads."}</Suspense>
@@ -136,7 +142,7 @@ export function WhatsAppMessageCard({ businessId, businessName, saved, suggested
     setMessage(null);
     // A suggested message follows the language; the owner's own words stay as typed.
     const words = suggested[language === "auto" ? "en" : language];
-    setDraft((current) => ({ ...current, language, ...(hasSaved ? {} : { greeting: words.greeting, prefill: words.prefill }), ...(questionsSuggested ? { questions: suggestionFor(language) } : {}) }));
+    setDraft((current) => ({ ...current, language, ...(hasSaved ? {} : { greeting: current.button === "questions" ? questionsWelcome(words.greeting) : words.greeting, prefill: words.prefill }), ...(questionsSuggested ? { questions: suggestionFor(language) } : {}) }));
     if (hasSaved) setDirty(true);
   };
   const save = (value: WhatsAppTemplate | null) => startTransition(async () => {

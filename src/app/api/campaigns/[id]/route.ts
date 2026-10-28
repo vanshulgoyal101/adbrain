@@ -16,6 +16,7 @@ import { createClient } from "@/lib/supabase/server";
 import { campaignActivationPatchSchema } from "@/lib/campaign/connect-contracts";
 import { readStoredCampaignBinding } from "@/lib/campaign/binding";
 import { activationConfirmationPayload, intendedCampaignChildren, RESUME_IN_ADS_MANAGER, reviewableCampaign } from "@/lib/campaign/activation";
+import { pausedAdIds } from "@/lib/campaign/ad-pause";
 import { saveCampaign, deleteVerifiedCampaign } from "@/lib/campaign/trusted-write";
 import { confirmCustomerCampaign, CustomerBalanceError, getCustomerBalance, observeCustomerCosts, reserveCustomerCampaign } from "@/lib/payments/customer-balance";
 import { fundingMode, type FundingMode } from "@/lib/payments/operator-funding";
@@ -59,7 +60,9 @@ export const GET = observeRoute("/api/campaigns/[id]", "GET", async (
       funding: mode !== "managed" ? await readFunding(meta) : null,
     })), getActivationLearning(campaign)]);
     // #419 item 2: inputs for the learning-restart notes; not part of the confirmation digest.
-    return NextResponse.json({ delivery, ...(funding ? { funding, spendLimitRequired: mode === "operator" } : {}), learning }, { headers: { "Cache-Control": "no-store" } });
+    // #1055: ads the owner paused from the card stay paused when the campaign is turned back on.
+    const keptPaused = pausedAdIds(campaign.raw);
+    return NextResponse.json({ delivery, ...(funding ? { funding, spendLimitRequired: mode === "operator" } : {}), learning, ...(keptPaused.length ? { keptPaused } : {}) }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     if (error instanceof CampaignDeliveryError) return apiError(error.message, 409);
     if (error instanceof ConnectionAccessError) return apiError(error.message, error.code === "UNAUTHENTICATED" ? 401 : 409);
@@ -200,10 +203,13 @@ async function handlePATCH(
             throw new ConnectionAccessError("UNAVAILABLE", "Campaign budget and currency must be verified before activation.");
           }
           const capDays = parsed.data.capDays;
+          // #1055: ads AdBrain paused from the card (and, for a capped copy, the reviewed ad it came from)
+          // stay out of what turns on, capped or not. Read before anything is reserved or created.
+          const pausedHere = pausedAdIds(campaign.raw);
           const delivery = capDays
             ? await meta.readCampaignDelivery(campaign.meta_campaign_id!, { dailyBudgetRupees: campaign.daily_budget!, status: campaign.status, ...children! })
             : await meta.verifyCampaignActivation(campaign.meta_campaign_id!, {
-              dailyBudgetRupees: campaign.daily_budget!, status: campaign.status, ...children!,
+              dailyBudgetRupees: campaign.daily_budget!, status: campaign.status, ...children!, keepPaused: pausedHere,
             });
           // #741: a tree built before the out-of-area rule must be rebuilt, never activated.
           if (delivery.adSets.some(adSet => lacksAreaExclusions(adSet.targeting))) {
@@ -212,6 +218,10 @@ async function handlePATCH(
           if (capDays && (delivery.adSets.some(adSet => adSet.status !== "PAUSED") || delivery.ads.some(ad => ad.status !== "PAUSED"))) {
             throw new CampaignDeliveryError("Pause the reviewed ad sets and ads in Meta first. AdBrain turns on only the capped copy.");
           }
+          const keptPausedSources = new Set(pausedHere.length ? Object.values(await meta.adSources(pausedHere)) : []);
+          const priorCappedAds = new Set(delivery.ads.filter(ad => children!.cappedAdSetIds.includes(ad.adSetId)).map(ad => ad.id));
+          const cappedSourceAdIds = children!.adIds.filter(adId => !priorCappedAds.has(adId) && !keptPausedSources.has(adId));
+          if (capDays && !cappedSourceAdIds.length) throw new CampaignDeliveryError("Every ad in this campaign is paused from its card. Undo one of those pauses before turning the campaign on.");
           const expectedDigest = createHash("sha256").update(activationConfirmationPayload(campaign, connection, delivery, capDays)).digest("hex");
           if (parsed.data.confirmationDigest !== expectedDigest) {
             throw new ConnectionAccessError("CONFLICT", "Campaign or child review changed; review the current Meta delivery settings again.");
@@ -247,9 +257,8 @@ async function handlePATCH(
           try {
             if (capDays && capPaise) {
               if (reservation && fundingShortfall({ mode, neededPaise: capPaise, account: null, allowancePaise: reservation.mediaLimitPaise })) throw new CustomerBalanceError("The approved total is more than the available advertising funds.");
-              const priorCappedAds = new Set(delivery.ads.filter(ad => children!.cappedAdSetIds.includes(ad.adSetId)).map(ad => ad.id));
               const capped = await meta.createCappedAdSet(campaign.meta_campaign_id!, {
-                sourceAdSetId: children!.adSetIds[0], sourceAdIds: children!.adIds.filter(adId => !priorCappedAds.has(adId)), lifetimeBudgetPaise: capPaise,
+                sourceAdSetId: children!.adSetIds[0], sourceAdIds: cappedSourceAdIds, lifetimeBudgetPaise: capPaise,
                 endTime: new Date(Date.now() + capDays * 86_400_000),
               });
               const tree = { adSetIds: [...children!.adSetIds, capped.adSetId], adIds: [...children!.adIds, ...capped.adIds] };
@@ -276,6 +285,8 @@ async function handlePATCH(
               await meta.updateCampaignStatus(campaign.meta_campaign_id!, "ACTIVE");
               deliveryAfter = await meta.verifyCampaignActivation(campaign.meta_campaign_id!, {
                 dailyBudgetRupees: campaign.daily_budget!, status: "active", ...children!,
+                // #1055: an ad paused from the card stays paused; it isn't expected ACTIVE.
+                keepPaused: pausedHere,
               });
             }
             await confirm("active");

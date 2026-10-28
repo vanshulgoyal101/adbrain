@@ -49,6 +49,18 @@ export function lastAdAction(snapshot: unknown, adId: string): AdPauseEntry["act
   return mine.at(-1)?.action ?? null;
 }
 
+/** #1055: the ads AdBrain paused from the card and hasn't turned back on (`campaigns.raw.adPauses`). */
+export function pausedAdIds(raw: unknown): string[] {
+  const entries = (raw as { adPauses?: unknown } | null)?.adPauses;
+  if (!Array.isArray(entries)) return [];
+  const last = new Map<string, AdPauseEntry["action"]>();
+  for (const entry of entries) {
+    const { adId, action } = (entry ?? {}) as Partial<AdPauseEntry>;
+    if (typeof adId === "string" && (action === "paused" || action === "resumed")) last.set(adId, action);
+  }
+  return [...last].filter(([, action]) => action === "paused").map(([adId]) => adId);
+}
+
 /** Best effort: adds the pause or undo to the run's ledger row; a missing row only skips the note. */
 export async function recordAdPause(database: Pick<SupabaseClient, "from">, row: { campaignId: string; entry: AdPauseEntry }): Promise<boolean> {
   try {
