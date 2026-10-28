@@ -27,6 +27,21 @@ describe("core: Create concept validation on a recorded production concept", () 
     expect(rules(overrun)).toEqual([]);
   });
 
+  // #1613 (QA): a Hindi paragraph ends its sentences with '।'; it is rewrapped like English instead of failing hook-length.
+  it("rewraps a long Hindi primary-text paragraph at '।' without changing a word", () => {
+    const hindi = "दिन भर डेस्क पर बैठने से गर्दन और पीठ अकड़ जाती है। हमारा ऑस्टिन क्लिनिक नए मरीज़ों को उसी दिन देखता है, शाम और सप्ताहांत में भी। आज ही अपनी पहली मुलाक़ात बुक करें।";
+    expect(hindi.length).toBeGreaterThan(125);
+    const result = validateConcept({ ...recorded.concept, primary_text: hindi }, input);
+    const issues = result.success ? [] : conceptValidationRules(result.issues);
+    expect(issues).not.toContain("hook-length");
+    if (result.success) {
+      const lines = result.concept.primary_text.split("\n");
+      expect(lines.length).toBeGreaterThan(1);
+      expect(lines.every((line) => line.length <= 125)).toBe(true);
+      expect(lines.join(" ")).toBe(hindi);
+    }
+  });
+
   it("clips an over-long link description instead of discarding the concept", () => {
     const long = `${recorded.concept.description} with flexible evening and weekend appointments for busy adults`;
     expect(long.length).toBeGreaterThan(100);
