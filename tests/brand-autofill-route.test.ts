@@ -89,3 +89,33 @@ describe("brand autofill event for the scoreboard (#1025)", () => {
     expect(recorded().every((event) => event.kind === "workflow" && typeof event.durationMs === "number")).toBe(true);
   });
 });
+
+// #1317: a prospect with no website: the same extraction from text the business pasted, with nothing fetched.
+describe("brand autofill from pasted text (#1317)", () => {
+  const bio = "SunPeak Solar ☀️ Rooftop solar for homes in Jaipur & Ajmer. PM Surya Ghar subsidy help. Free site survey! Call 98290 12345 · wa.me/919829012345";
+
+  it("extracts from the text, reads the phone from it, never the model's, and fetches nothing", async () => {
+    completeJSON.mockResolvedValue({ description: "Rooftop solar for homes", locations: ["Jaipur", "Ajmer", "Delhi"], phone: "+91 11111 11111" });
+    const response = await POST(request({ text: bio }));
+    expect(response.status).toBe(200);
+    expect(fetchPublicUrlText).not.toHaveBeenCalled();
+    const [messages] = completeJSON.mock.calls[0];
+    expect(JSON.stringify(messages)).toContain("Rooftop solar for homes in Jaipur");
+    expect(JSON.stringify(messages)).toContain("no website: text the business pasted");
+    const { extraction } = await response.json();
+    // Areas must be written in the text itself (#1037): Delhi isn't.
+    expect(extraction).toMatchObject({ phone: "+919829012345", locations: ["Jaipur", "Ajmer"] });
+  });
+
+  it("asks for more when the text can't describe a business, before any AI call", async () => {
+    const response = await POST(request({ text: "Hi! DM us 🙏" }));
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({ error: "Paste a little more about the business: what it sells, where, and how to reach it." });
+    expect(completeJSON).not.toHaveBeenCalled();
+  });
+
+  it("takes a URL or text, never both", async () => {
+    expect((await POST(request({ url: "example.com", text: bio }))).status).toBe(400);
+    expect(completeJSON).not.toHaveBeenCalled();
+  });
+});
