@@ -74,18 +74,20 @@ export function segmentForCategory(category: string | null | undefined): Segment
 }
 
 /**
- * #1582: the closing block of a sales visit's pack (`copy.txt`): the WhatsApp follow-up to send the owner after the
- * visit, ending with the segment's landing link. Only the words the public /for page already says (#1565).
+ * #1582: the closing block of a sales visit's pack (`copy.txt`): the CPO's WhatsApp follow-up to send the owner after
+ * the visit, ending with the segment's landing link. `{owner name}` stays for the rep to type.
  */
-export function leaveBehindBlock(segment: Segment, origin = "https://adbrain.vanshul.com"): string {
+export function leaveBehindBlock(segment: Segment, { businessName, origin = "https://adbrain.vanshul.com" }: { businessName?: string | null; origin?: string } = {}): string {
   return [
     "----------------------------------------",
     "",
     "After the visit, send the owner this on WhatsApp:",
     "",
-    `${segment.headline} ${segment.hinglish}`,
-    "Your first campaign is free. See how it works:",
-    `${origin}/for/${segment.slug}`,
+    `Hi {owner name}, thanks for your time today. Here are the 3 sample ads I made for ${businessName?.trim() || "{business name}"}.`,
+    segment.headline,
+    segment.hinglish,
+    "Your first campaign is set up free. You pay Meta directly, only for the ads you approve.",
+    `See how it works: ${origin}/for/${segment.slug}`,
     "",
   ].join("\n");
 }

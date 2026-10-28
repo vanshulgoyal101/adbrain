@@ -92,9 +92,10 @@ async function handlePOST(req: Request) {
       : "";
   const sampleNote = sample ? `${SAMPLE_LABEL.toUpperCase()}. Made for a sales visit; these ads run only after the business owner signs up.\n\n` : "";
   // #1582: a sales visit's pack ends with the follow-up to send on WhatsApp and the segment's landing link.
-  const segment = sample && creatives[0]?.business_id ? segmentForCategory((await supabase.from("businesses").select("vertical")
-    .eq("id", creatives[0].business_id).maybeSingle()).data?.vertical) : null;
-  zip.file("copy.txt", sampleNote + note + copy + (segment ? `\n${leaveBehindBlock(segment)}` : ""));
+  const business = sample && creatives[0]?.business_id ? (await supabase.from("businesses").select("name, vertical")
+    .eq("id", creatives[0].business_id).maybeSingle()).data : null;
+  const segment = segmentForCategory(business?.vertical);
+  zip.file("copy.txt", sampleNote + note + copy + (segment ? `\n${leaveBehindBlock(segment, { businessName: business?.name })}` : ""));
 
   const buffer = await zip.generateAsync({ type: "arraybuffer" });
   return new NextResponse(new Blob([buffer], { type: "application/zip" }), {
