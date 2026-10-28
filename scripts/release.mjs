@@ -63,12 +63,12 @@ export function releaseMigrations(files) {
 // lib/managed: 2-Tier child spend caps set from the customer's allowance (#522).
 export const moneyPath = /^src\/(lib\/payments\/|lib\/managed\/|app\/api\/payments\/|app\/api\/cron\/(enforce-spend|payment-health)\/|lib\/campaign\/(spend|activation|budget|funding))/;
 
-// "CTO review of <sha>", "CTO post-release review of <sha>" or the Reviewer's "Reviewer review of <sha>" (#575);
+// "CTO review of <sha>", "CTO re-review of <sha>", "CTO post-release review of <sha>" or the Reviewer's "Reviewer review of <sha>" (#575);
 // in "<old> → <new>" the last sha is the one reviewed.
 export function ctoReviews(comments) {
   return comments.flatMap((c) => {
     const line = c.body.split("\n")[0];
-    const sha = line.match(/^[*_\s]*(?:CTO|Reviewer) (?:post-release )?review of (?:[0-9a-f]{7,40}\s*(?:→|->)\s*)*([0-9a-f]{7,40})\b/i)?.[1];
+    const sha = line.match(/^[*_\s]*(?:CTO|Reviewer) (?:post-release |re-)?review of (?:[0-9a-f]{7,40}\s*(?:→|->)\s*)*([0-9a-f]{7,40})\b/i)?.[1];
     if (!sha) return [];
     const verdict = verdictSentence(c.body);
     const approved = /\*\*approved\.?\*\*/i.test(verdict) && !/\b(not approved|changes requested|request(ed)? changes|withdrawn|blocked)\b/i.test(verdict);

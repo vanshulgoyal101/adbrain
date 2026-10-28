@@ -37,7 +37,7 @@ export default async function DashboardPage() {
   ) : null;
   const activity = business ? getAuditLog(business.id, 8).then<ReactNode, ReactNode>(
     (audit) => <RecentActivity audit={audit} locale={locale} />,
-    () => <Alert variant="error">Recent activity could not be loaded.</Alert>,
+    () => <Alert variant="error">We couldn&apos;t load your recent activity. Reload the page.</Alert>,
   ) : null;
   const [creatives, campaigns, metaConnection] = business
     ? await Promise.all([

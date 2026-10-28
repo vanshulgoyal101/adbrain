@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { act, fireEvent, render, renderHook, screen, waitFor, within } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { StrictMode } from "react";
 import { QueryClient, focusManager, onlineManager } from "@tanstack/react-query";
 import { Campaigns } from "@/components/campaigns";
@@ -713,6 +713,14 @@ describe("campaign review walkthrough dead ends (#158)", () => {
 });
 
 describe("background audience plan (#366)", () => {
+  // #1509: the 1.5 s BACKGROUND_PLAN_DELAY_MS (campaigns.tsx) ran in real time in every test here (~10 s of CI).
+  // Only that timer is shortened; it still fires asynchronously, so "not planned yet" checks keep their meaning.
+  beforeEach(() => {
+    const realSetTimeout = window.setTimeout.bind(window);
+    vi.spyOn(window, "setTimeout").mockImplementation(((handler: TimerHandler, ms?: number, ...args: unknown[]) =>
+      realSetTimeout(handler, ms === 1500 ? 20 : ms, ...args)) as typeof window.setTimeout);
+  });
+  afterEach(() => { vi.mocked(window.setTimeout).mockRestore(); });
   const planCalls = () => vi.mocked(fetch).mock.calls.filter(([url]) => url === "/api/campaigns/plan").length;
   const planned = () => waitFor(() => expect(planCalls()).toBe(1), { timeout: 3000 });
 

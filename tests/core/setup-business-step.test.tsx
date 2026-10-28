@@ -138,13 +138,26 @@ describe("core: <SetupBusinessStep> (#1269)", () => {
   const type = (label: string, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
   const makeMyAds = () => within(screen.getByRole("navigation", { name: "Setup steps" })).getByRole("button", { name: "Make my ads" });
 
+  it("#1853: after हिंदी, the note stays for this visit even when the cookie's re-render turns the offer off", async () => {
+    const setAppLanguage = vi.fn(async () => ({ ok: true }));
+    vi.doMock("@/app/(app)/settings/language-actions", () => ({ setAppLanguage }));
+    const { SetupBusinessStep } = await import("@/components/setup-business-step");
+    const { rerender } = render(<SetupBusinessStep business={business} chooseLanguage />);
+    fireEvent.click(within(screen.getByRole("group", { name: "App language / ऐप की भाषा" })).getByRole("button", { name: "हिंदी" }));
+    await waitFor(() => expect(setAppLanguage).toHaveBeenCalledWith("hi"));
+    // The server action sets the cookie and the route re-renders with chooseLanguage false.
+    rerender(<SetupBusinessStep business={business} chooseLanguage={false} />);
+    expect(await screen.findByText("अभी सिर्फ़ होम हिंदी में है; बाकी स्क्रीन एक-एक करके जुड़ेंगी।")).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "App language / ऐप की भाषा" })).toBeNull();
+  });
+
   it("#1641: offers English / हिंदी only until a language is chosen", async () => {
     vi.doMock("@/app/(app)/settings/language-actions", () => ({ setAppLanguage: vi.fn(async () => ({ ok: true })) }));
     await step(business, true);
-    expect(screen.getByRole("group", { name: "Language / भाषा" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "App language / ऐप की भाषा" })).toBeInTheDocument();
     cleanup();
     await step(business, false);
-    expect(screen.queryByRole("group", { name: "Language / भाषा" })).toBeNull();
+    expect(screen.queryByRole("group", { name: "App language / ऐप की भाषा" })).toBeNull();
   });
 
   it("#1681: 'Ads in' follows what they sell (solar → Hinglish); a picked language is saved before step 2", async () => {

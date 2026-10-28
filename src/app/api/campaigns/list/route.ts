@@ -24,6 +24,6 @@ export const GET = observeRoute("/api/campaigns/list", "GET", async (request: Re
   } catch (error) {
     const status = error instanceof z.ZodError || error instanceof SyntaxError ? 400
       : error instanceof ConnectionAccessError ? error.code === "FORBIDDEN" ? 403 : error.code === "NOT_FOUND" ? 404 : 503 : 503;
-    return NextResponse.json({ error: "Campaign list could not be loaded." }, { status });
+    return NextResponse.json({ error: "We couldn't load your campaigns. Reload the page." }, { status });
   }
 });

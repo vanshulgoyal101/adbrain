@@ -15,6 +15,7 @@
     "contactTime": "आप आमतौर पर <strong>{time}</strong> में संपर्क करते हैं (पिछले 30 दिन)।",
     "seeEnquiries": "पूछताछ देखें",
     "seeCampaigns": "कैंपेन देखें",
+    "updated": "{ago} अपडेट हुआ",
     "nextStep": "अगला कदम",
     "upToDate": "सब काम पूरा है",
     "nothingWaiting": "अभी आपके लिए कुछ बाकी नहीं है।",
@@ -28,7 +29,7 @@
     "needsReview": "जाँचना बाकी",
     "approved": "मंज़ूर",
     "setAside": "अलग रखा",
-    "metaChecking": "Meta आपके विज्ञापन जांच रहा है। आमतौर पर एक दिन में दिखने लगते हैं।",
+    "metaChecking": "Meta आपके विज्ञापन जाँच रहा है। आमतौर पर कुछ मिनट से कुछ घंटे लगते हैं, ज़्यादा से ज़्यादा एक दिन।",
     "metaReview": "Meta जांच"
   },
   "workQueue": {

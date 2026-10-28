@@ -82,7 +82,7 @@ describe("<AdAssistant> next step after Create", () => {
     const user = userEvent.setup();
     render(<AdAssistant business={business} />);
     await user.click(await screen.findByRole("button", { name: "Use this ad" }));
-    expect(await screen.findByText("Couldn't save — try again.")).toBeInTheDocument();
+    expect(await screen.findByText("Your choice wasn't saved. Tap it again.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Use this ad" })).toBeInTheDocument();
     expect(JSON.parse(sessionStorage.getItem(key)!).turns[1].creatives[0].status).toBe("draft");
     expect(screen.queryByRole("link", { name: /create campaign/i })).toBeNull();
@@ -94,7 +94,7 @@ describe("<AdAssistant> next step after Create", () => {
     const user = userEvent.setup();
     render(<AdAssistant business={business} />);
     await user.click(await screen.findByRole("button", { name: "Use this ad" }));
-    expect(await screen.findByText("Couldn't save — try again.")).toBeInTheDocument();
+    expect(await screen.findByText("Your choice wasn't saved. Tap it again.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Use this ad" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Headline ad-1" })).toBeInTheDocument();
     expect(JSON.parse(sessionStorage.getItem(key)!).turns[1].creatives[0].status).toBe("draft");

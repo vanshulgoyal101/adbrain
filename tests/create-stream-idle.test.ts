@@ -27,7 +27,7 @@ describe("readCreateResponse idle limits (#666)", () => {
     await vi.advanceTimersByTimeAsync(CREATE_IDLE_MS - 1);
     send("\n");
     await vi.advanceTimersByTimeAsync(CREATE_IDLE_MS + 1);
-    expect(await outcome).toBe("The Create stream went silent.");
+    expect(await outcome).toBe("We lost contact while making your ads. Open Studio to see what was saved.");
   });
 
   it("stays open through a slow run while heartbeats keep arriving, then returns the result", async () => {
@@ -58,6 +58,6 @@ describe("readCreateResponse idle limits (#666)", () => {
     const timedOut = readCreateResponse(silent.response, () => {}).then(() => "result", (error: Error) => error.message);
     silent.send(progress);
     await vi.advanceTimersByTimeAsync(CREATE_IDLE_NO_HEARTBEAT_MS + 1);
-    expect(await timedOut).toBe("The Create stream went silent.");
+    expect(await timedOut).toBe("We lost contact while making your ads. Open Studio to see what was saved.");
   });
 });

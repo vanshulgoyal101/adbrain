@@ -84,7 +84,7 @@ function suspenseBoundaries(node: any): any[] {
 
 describe("Home workspace", () => {
   // #1469: between launch and first delivery Home says Meta is checking, once.
-  const CHECKING = "Meta is checking your ads. They usually start showing within a day.";
+  const CHECKING = "Meta is checking your ads. This usually takes minutes to a few hours, and up to a day.";
   it("says Meta is checking while the newest campaign's ads are in review (#1469)", () => {
     const live = { id: "c-new", name: "Solar", status: "active", daily_budget: 300, raw: {}, meta_campaign_id: "1" } as unknown as Campaign;
     render(<WorkspaceHome {...empty} business={business} campaigns={[live]} adReview={{ kind: "checking", campaignId: "c-new" }} />);
@@ -421,7 +421,7 @@ describe("Home workspace", () => {
     const page = await DashboardPage();
     const feed = page.props.activity.props.children;
     render(await feed.type(feed.props));
-    expect(screen.getByRole("alert")).toHaveTextContent("Recent activity could not be loaded.");
+    expect(screen.getByRole("alert")).toHaveTextContent("We couldn't load your recent activity. Reload the page.");
     expect(screen.queryByText("Private audit detail")).not.toBeInTheDocument();
   });
 
@@ -493,6 +493,15 @@ describe("Home results row (#764)", () => {
     expect(within(row).getByText("Per enquiry").nextElementSibling).toHaveTextContent("₹143");
     expect(within(row).getByText(/Updated 10m ago/)).toBeInTheDocument();
     expect(within(row).getByRole("link", { name: /See campaigns/ })).toHaveAttribute("href", "/campaigns");
+  });
+
+  // #1774 (QA): in Hindi the freshness line was the one English phrase left in the row.
+  it("#1774: in Hindi, says how fresh in Hindi; English keeps '10m ago'", () => {
+    const old = { ...results, "c-form": { ...results["c-form"], fetched_at: new Date(now - 2 * 86_400_000).toISOString() } } as Record<string, CampaignResult>;
+    render(<WorkspaceHome {...empty} business={business} campaigns={[chats, forms]} results={old} now={now} locale="hi" />);
+    const row = screen.getByRole("region", { name: "अब तक के नतीजे" });
+    expect(within(row).getByText(/2 दिन पहले अपडेट हुआ/)).toBeInTheDocument();
+    expect(within(row).queryByText(/Updated|ago/)).toBeNull();
   });
 
   it("#1049: says how fast the owner replies to enquiries, when there's a reply to measure", () => {

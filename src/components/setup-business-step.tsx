@@ -40,6 +40,9 @@ export function SetupBusinessStep({ business, chooseLanguage = false, words }: {
   const [fields, setFields] = useState<SetupBusinessFields>(() => setupFieldsFrom(business));
   const [errors, setErrors] = useState<Partial<Record<SetupField, string>>>({});
   const [adLanguage, setAdLanguage] = useState<CreateLanguageId | null>(null);
+  // #1853: decided once per visit. Saving the choice sets the cookie and re-renders with chooseLanguage false;
+  // the chooser stays mounted so its Hindi note can show. A reload no longer offers it.
+  const [offerLanguage] = useState(chooseLanguage);
   const [saved, setSaved] = useState<"saving" | "saved" | "failed" | null>(null);
   const [website, setWebsite] = useState(business?.website ?? "");
   const [autofilling, setAutofilling] = useState(false);
@@ -152,7 +155,7 @@ export function SetupBusinessStep({ business, chooseLanguage = false, words }: {
 
   return (
     <SetupSpine step={1} saved={saved} beforeLeave={beforeLeave} primary={{ label: t("business.primary"), href: SETUP_STEPS[1].href }} words={words}>
-      {chooseLanguage && <div className="mb-3 flex justify-end"><CompactAppLanguage /></div>}
+      {offerLanguage && <div className="mb-3 flex justify-end"><CompactAppLanguage /></div>}
       <h2 className="text-xl font-semibold text-slate-950">{t("business.title")}</h2>
       <p className="mt-1 text-sm text-slate-600">{t("business.helper")}</p>
 
