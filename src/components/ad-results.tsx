@@ -105,12 +105,14 @@ export function PauseOffer({ campaignId, suggestion, unit = UNITS.form }: { camp
  * #783: "Which ad worked" on a campaign card. Loads the stored per-ad results the first time it opens;
  * hidden altogether while the feature is off (the route answers 404).
  */
-export function AdResults({ campaignId, whatsapp = false, onRunAgain, runAgainBusy = false }: {
+export function AdResults({ campaignId, whatsapp = false, onRunAgain, runAgainBusy = false, runAgainError = null }: {
   campaignId: string;
   whatsapp?: boolean;
   /** #1050: with a Best ad, offer to copy the campaign into a new paused one. */
   onRunAgain?: () => void;
   runAgainBusy?: boolean;
+  /** Shown under the button, where the owner tapped (Designer, #1050). */
+  runAgainError?: string | null;
 }) {
   const unit = UNITS[whatsapp ? "whatsapp" : "form"];
   const [state, setState] = useState<"idle" | "loading" | "off" | "error" | Loaded>("idle");
@@ -135,6 +137,8 @@ export function AdResults({ campaignId, whatsapp = false, onRunAgain, runAgainBu
   const shown = loaded ? (all ? loaded.ads : loaded.ads.slice(0, SHOWN)) : [];
   const anyResults = loaded?.ads.some(ad => ad.results > 0) ?? false;
   const hasBest = loaded?.ads.some(ad => ad.best) ?? false;
+  // Only an AdBrain ad can be copied; an outside Best ad would only lead to an error.
+  const canRunAgain = loaded?.ads.some(ad => ad.best && ad.creative) ?? false;
   const suggestion = loaded ? pauseSuggestion(loaded.ads) : null;
 
   return (
@@ -159,13 +163,14 @@ export function AdResults({ campaignId, whatsapp = false, onRunAgain, runAgainBu
             <button type="button" className="mt-1 min-h-11 font-medium text-blue-700 underline-offset-4 hover:underline" onClick={() => setAll(true)}>All ads ({loaded.ads.length})</button>
           )}
           {loaded.syncedAt && <p className="pt-2 text-xs text-slate-500">Updated {relativeAge(loaded.syncedAt, new Date()) || "just now"}</p>}
-          {hasBest && onRunAgain && (
+          {canRunAgain && onRunAgain && (
             <div className="pt-3">
               <button type="button" disabled={runAgainBusy} onClick={onRunAgain}
                 className="inline-flex min-h-11 items-center gap-2 rounded-md border border-slate-300 bg-white px-4 font-medium text-slate-900 hover:bg-slate-50 disabled:opacity-60">
                 {runAgainBusy && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
                 Run this again
               </button>
+              {runAgainError && <p role="alert" className="pt-1 text-sm font-medium text-danger">{runAgainError}</p>}
               <p className="pt-1 text-xs text-slate-500">Copies it into a new campaign, best ad first. Nothing goes to Meta until you review and send it, paused.</p>
             </div>
           )}

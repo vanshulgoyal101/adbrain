@@ -375,6 +375,7 @@ function BusinessCampaigns({
   const [showComposer, setShowComposer] = useState(initialSetup?.showComposer ?? (fromReview || initialCampaigns.length === 0));
   const [creationMode, setCreationMode] = useState(initialSetup?.creationMode ?? "manual");
   const nameInputRef = useRef<HTMLInputElement>(null);
+  const noticeRef = useRef<HTMLParagraphElement>(null);
   const guidedModeRef = useRef<HTMLInputElement>(null);
   const focusOnOpenRef = useRef(false);
   useEffect(() => {
@@ -706,12 +707,13 @@ function BusinessCampaigns({
 
   // #1050: "Run this again" copies a campaign that worked into New campaign; Review → Send to Meta (paused) still decides.
   const [rerunBusy, setRerunBusy] = useState<string | null>(null);
+  const [rerunError, setRerunError] = useState<{ id: string; message: string } | null>(null);
   async function runAgain(campaign: Campaign) {
     if (preparing || creating || rerunBusy) return;
-    if (unresolvedRecovery()) { setCardError({ id: campaign.id, message: "Resolve the current campaign operation before starting another campaign." }); return; }
+    setRerunError(null);
+    if (unresolvedRecovery()) { setRerunError({ id: campaign.id, message: "Resolve the current campaign operation before starting another campaign." }); return; }
     if (showComposer && selected.size && !(await askConfirm({ title: "Discard this setup?", description: `Start a copy of "${campaign.name ?? "this campaign"}" instead. Saved drafts stay available.`, confirmLabel: "Discard and copy", tone: "danger" }))) return;
     setRerunBusy(campaign.id);
-    setCardError(null);
     try {
       const response = await fetch(`/api/campaigns/${campaign.id}/rerun`, { cache: "no-store" });
       const data = await response.json().catch(() => null) as { prefill?: RerunPrefill; error?: string } | null;
@@ -744,10 +746,11 @@ function BusinessCampaigns({
       setNotice(prefill.dropped
         ? `Copied "${campaign.name ?? "the campaign"}". ${prefill.dropped} ad${prefill.dropped === 1 ? " isn't" : "s aren't"} approved anymore, so ${prefill.dropped === 1 ? "it was" : "they were"} left out. Check it, then Review.`
         : `Copied "${campaign.name ?? "the campaign"}" with its best ad first. Check it, then Review.`);
-      nameInputRef.current?.scrollIntoView?.({ block: "center" });
-      nameInputRef.current?.focus();
+      // The "Copied …" line and the copied ads come into view; the name field takes focus without jumping past them.
+      noticeRef.current?.scrollIntoView?.({ block: "start" });
+      nameInputRef.current?.focus({ preventScroll: true });
     } catch (reason) {
-      setCardError({ id: campaign.id, message: reason instanceof Error ? reason.message : "This campaign couldn't be copied. Try again." });
+      setRerunError({ id: campaign.id, message: reason instanceof Error ? reason.message : "This campaign couldn't be copied. Try again." });
     } finally {
       setRerunBusy(null);
     }
@@ -1419,7 +1422,7 @@ function BusinessCampaigns({
       {error && <Alert variant="error">{error}</Alert>}
       {placedError?.at === "review" && !prepareReview && <Alert variant="error">{placedError.message}</Alert>}
       {/* #847: sync and save news is a quiet line, as on Enquiries, not a green box on every visit. */}
-      <p aria-live="polite" className={notice ? "text-sm text-slate-600" : "sr-only"}>{notice}</p>
+      <p ref={noticeRef} aria-live="polite" className={notice ? "scroll-mt-20 text-sm text-slate-600" : "sr-only"}>{notice}</p>
       {!connectedForDraft && (
         <div className="space-y-3">
           <Alert variant="warning">
@@ -2371,7 +2374,7 @@ function BusinessCampaigns({
                       // #1003: always say how old the numbers are.
                       <p className="text-xs text-slate-500">{updatingIds.includes(c.id) ? "Updating results…" : `Updated ${timeAgo(new Date(r.fetched_at))}`}</p>
                     )}
-                    {adResults && r && c.meta_campaign_id && <AdResults campaignId={c.id} whatsapp={outcome === "whatsapp"} onRunAgain={() => void runAgain(c)} runAgainBusy={rerunBusy === c.id} />}
+                    {adResults && r && c.meta_campaign_id && <AdResults campaignId={c.id} whatsapp={outcome === "whatsapp"} onRunAgain={() => void runAgain(c)} runAgainBusy={rerunBusy === c.id} runAgainError={rerunError?.id === c.id ? rerunError.message : null} />}
                     {r && outcome === "whatsapp" && r.whatsapp_opens != null && r.conversations != null && (
                       // #493: people reach WhatsApp and leave; show the drop-off plainly.
                       <p className="text-sm text-slate-700">
