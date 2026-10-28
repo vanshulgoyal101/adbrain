@@ -76,6 +76,16 @@ describe("<LeadInbox> nothing yet (#1597)", () => {
     expect(screen.getByRole("heading", { name: "No enquiries yet" })).toBeInTheDocument();
   });
 
+  it("#1810: with only Meta's test lead, Waiting keeps the tabs and says nobody is waiting", async () => {
+    const test = lead({ full_name: "<test lead: dummy data for full_name>", phone: null, email: null });
+    render(<LeadInbox businessName="Solaride" initialLeads={[test]} initialTotal={0} metaReady chatsEmpty allTotal={0} summary={{ waiting: 0, replyMinutes: null }} />);
+    expect(screen.getByText("Test enquiry from Meta")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Waiting" }));
+    expect(await screen.findByRole("heading", { name: "Nobody is waiting." })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "No enquiries yet" })).toBeNull();
+    expect(screen.getByRole("group", { name: "Show" })).toBeInTheDocument();
+  });
+
   it("keeps the full inbox when WhatsApp chats exist", () => {
     render(<LeadInbox businessName="Solaride" initialLeads={[]} metaReady allTotal={0} />);
     expect(screen.queryByRole("heading", { name: "No enquiries yet" })).toBeNull();
