@@ -57,6 +57,7 @@ export type Scoreboard = {
   excluded: { events: number; aiCalls: number };
   rows: ScoreRow[];
   markdown: string;
+  manage: ManageSnapshot;
 };
 
 export const SCOREBOARD_EVENT_NAMES = [
@@ -125,6 +126,10 @@ function requestOutcomes(calls: ScoreAiCall[]) {
 
 const hoursOf = (input: { since: Date; until: Date }) => Math.round((input.until.getTime() - input.since.getTime()) / 3_600_000);
 
+/** #1543: what each scheduled run stores about Manage (count = active campaigns, failedCount = with no results). */
+export type ManageSnapshot = { count: number; failedCount: number; worstMinutes: number; p90Minutes: number };
+export type ScoreManageSnapshot = { created_at: string; attributes: Partial<ManageSnapshot> | null };
+
 export function buildScoreboard(input: {
   events: ScoreEvent[];
   aiCalls: ScoreAiCall[];
@@ -142,6 +147,8 @@ export function buildScoreboard(input: {
   excludedBusinessIds: string[];
   /** #1242: the north-star rows' own reads; without them those rows are left out. */
   northStar?: NorthStarData;
+  /** #1543: earlier runs' Manage snapshots (`scoreboard.manage` events), so past days can be judged. */
+  manageHistory?: ScoreManageSnapshot[];
   since: Date;
   until: Date;
 }): Scoreboard {
@@ -274,6 +281,7 @@ export function buildScoreboard(input: {
     });
   }
 
+  let manage: ManageSnapshot = { count: 0, failedCount: 0, worstMinutes: 0, p90Minutes: 0 };
   {
     const refreshes = named("campaign.refresh");
     const reads = named("meta.read_insights");
@@ -292,6 +300,10 @@ export function buildScoreboard(input: {
       target: "results ≤ 15 min old, always say when",
       met: live.length ? missing === 0 && oldest <= 15 : null,
     });
+    const ages = live.filter((campaign) => campaign.fetched_at !== null)
+      .map((campaign) => Math.floor((input.until.getTime() - Date.parse(campaign.fetched_at as string)) / 60_000));
+    manage = { count: live.length, failedCount: missing, worstMinutes: oldest, p90Minutes: Math.max(0, p90(ages) ?? 0) };
+    if (input.manageHistory?.length) rows.push(manageTrendRow(input.manageHistory));
   }
 
   if (input.northStar) rows.push(...northStarRows(events, input.northStar));
@@ -309,7 +321,34 @@ export function buildScoreboard(input: {
     "",
     `${measured.filter((row) => row.met).length} of ${measured.length} measured rows meet target; — means no data or judged by walks.`,
   ].join("\n");
-  return { hours, since: input.since.toISOString(), until: input.until.toISOString(), excluded, rows, markdown };
+  return { hours, since: input.since.toISOString(), until: input.until.toISOString(), excluded, rows, markdown, manage };
+}
+
+/** #1543: one cell per IST day from the stored snapshots, each day judged by its worst run. */
+function manageTrendRow(history: ScoreManageSnapshot[]): ScoreRow {
+  const days = new Map<string, ManageSnapshot>();
+  for (const snapshot of history) {
+    const a = snapshot.attributes ?? {};
+    const value = { count: a.count ?? 0, failedCount: a.failedCount ?? 0, worstMinutes: a.worstMinutes ?? 0, p90Minutes: a.p90Minutes ?? 0 };
+    const day = istDay(snapshot.created_at);
+    const seen = days.get(day);
+    const worse = !seen || value.failedCount > seen.failedCount || (value.failedCount === seen.failedCount && value.worstMinutes > seen.worstMinutes);
+    if (worse) days.set(day, value);
+  }
+  const label = (day: string) => new Date(`${day}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+  const cells = [...days].sort(([a], [b]) => a.localeCompare(b)).map(([day, value]) => {
+    if (!value.count) return { text: `${label(day)} none active`, met: null };
+    const met = value.failedCount === 0 && value.worstMinutes <= 15;
+    const what = value.failedCount ? `${value.failedCount} with no results` : `${value.worstMinutes} min`;
+    return { text: `${label(day)} ${what} ${met ? "✅" : "❌"}`, met };
+  });
+  const measured = cells.filter((cell) => cell.met !== null);
+  return {
+    step: "Manage, 7 days",
+    now: cells.map((cell) => cell.text).join(" · "),
+    target: "every day ≤ 15 min (oldest results at the daily run)",
+    met: measured.length ? measured.every((cell) => cell.met) : null,
+  };
 }
 
 const IST_MS = 5.5 * 3_600_000;
