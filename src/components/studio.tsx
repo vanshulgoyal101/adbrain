@@ -80,9 +80,12 @@ export function Studio({
   showInternals = false,
   initialFilter = "all",
   initialCreativeId = null,
+  sample = false,
 }: {
   business: Business;
   initialCreatives: Creative[];
+  /** #1317: a prospect's ads are samples: no Share, so no clean picture leaves AdBrain. */
+  sample?: boolean;
   /** Operators see model names and generation costs; owners don't (#403). */
   showInternals?: boolean;
   initialFilter?: "all" | "draft" | "approved";
@@ -642,6 +645,7 @@ export function Studio({
               key={selectedCreative.id}
               business={business}
               showInternals={showInternals}
+              sample={sample}
               onImageSettled={() => setBoardImages(true)}
               creative={selectedCreative}
               onChange={(updated) =>
@@ -692,6 +696,7 @@ export function Studio({
 function CreativeCard({
   business,
   showInternals = false,
+  sample = false,
   onImageSettled,
   creative,
   onChange,
@@ -700,6 +705,7 @@ function CreativeCard({
 }: {
   business: Business;
   showInternals?: boolean;
+  sample?: boolean;
   onImageSettled?: () => void;
   creative: Creative;
   onChange: (c: Creative) => void;
@@ -877,7 +883,7 @@ function CreativeCard({
         <>
         {editNotes && <CopyEditNotice notes={editNotes} />}
         {showInternals && <GenerationDetails value={creative.generation} />}
-        {approved && <ShareCreativeButton creative={creative} data-product-event="creative.share" className="pt-2" />}
+        {approved && !sample && <ShareCreativeButton creative={creative} data-product-event="creative.share" className="pt-2" />}
         <div className="mt-auto flex flex-wrap items-center gap-2 pt-3">
           <Button
             size="sm"
