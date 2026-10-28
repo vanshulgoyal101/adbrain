@@ -374,8 +374,8 @@ async function renderVariant(
     ? { url: ownerPhoto, prompt: "", provider: OWNER_PHOTO_PROVIDER, model: "brand_assets", estimatedCostUsd: 0, width: ownerRaster.width, height: ownerRaster.height,
       latencyMs: undefined, fallbackFrom: undefined, providerRequestId: undefined, providerFinalStatus: undefined }
     : await generateImage({
-      // #418 rule 4: a generated ad shows a person; an owner's own background request (background.ts) is left alone.
-      prompt: [conceptImagePrompt(concept, input), personSubjectLine(concept.visual.direction, [input.instructions, input.brief, input.advisoryPreferences])].filter(Boolean).join("\n"),
+      // #418 rule 4: a generated ad shows a person, named first so the free model reads it; an owner's own background request (background.ts) is left alone.
+      prompt: [personSubjectLine(concept.visual.direction, [input.instructions, input.brief, input.advisoryPreferences], brand), conceptImagePrompt(concept, input)].filter(Boolean).join("\n"),
       width: dims.width,
       height: dims.height,
       referenceImages: referenceImages?.slice(0, 3),

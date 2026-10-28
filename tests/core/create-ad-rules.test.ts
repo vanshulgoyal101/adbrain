@@ -58,13 +58,16 @@ describe("core: Create follows the long-running local ad rules (#418 rules 1, 4,
     const withPerson = recordedDirections.filter(personInScene);
     // Before: about one in five recorded concepts showed anyone.
     expect(withPerson.length / recordedDirections.length).toBeLessThan(0.3);
+    const panels = "Rows of solar panels on a factory roof at dusk.";
     for (const direction of recordedDirections) {
       expect(personSubjectLine(direction) !== null, direction.slice(0, 80)).toBe(!personInScene(direction));
     }
     expect(personSubjectLine("Rows of solar panels on a factory roof at dusk, with no people or vehicles."))
-      .toMatch(/^Main subject \(this overrides any "no people" note above\): a person from the business doing the work/);
+      .toMatch(/^Main subject, overriding any "no people" note: a professional at work with a customer/);
+    // It names the business's work, and the image prompt opens with it: the free model reads only ~77 tokens (Dev 2, #1076).
+    expect(personSubjectLine(panels, [], { name: "Solaride", vertical: "solar energy" }))
+      .toMatch(/^Main subject, overriding any "no people" note: a Solaride solar energy professional at work with a customer, mid-task/);
     // The owner's own words win: "no people" or "just the shop" in the instructions or brief keeps the picture empty.
-    const panels = "Rows of solar panels on a factory roof at dusk.";
     expect(personSubjectLine(panels, ["Use only our product photos style, no people please"])).toBeNull();
     expect(personSubjectLine(panels, [null, "Show just the shop front at night"])).toBeNull();
     expect(personSubjectLine(panels, ["Hindi copy, keep it short", "Factory owners before 31 December"])).not.toBeNull();

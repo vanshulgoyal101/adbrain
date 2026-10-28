@@ -236,9 +236,9 @@ feedback to assess unnecessary questions, abandonment and time to a useful draft
    Chandigarh, Mohali & Panchkula" and two were lost. A `repeated-opening` or
    `repeated-headline` repair now quotes the words to avoid.
 4. Generate an image from the validated concept and up to three reference images.
-   When the concept's visual direction has no person in it, the image prompt adds one
-   (a person from the business at work, or a customer getting the service; #418 rule 4),
-   with no repair. The owner's own words win: instructions, a brief or preferences that rule
+   When the concept's visual direction has no person in it, the image prompt opens with one: a
+   professional of the business at work with a customer, named by the business and its kind of work
+   (#418 rule 4). It goes first because the free image model reads only about 77 tokens. No repair. The owner's own words win: instructions, a brief or preferences that rule
    people out ("no people", "just the shop") keep the picture as directed, and an owner's own
    background request (`background.ts`) is left as typed.
    When the business has uploaded product photos (Brand assets), the first ad

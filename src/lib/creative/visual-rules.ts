@@ -33,11 +33,16 @@ const NO_PEOPLE_WANTED = /\b(?:no|without|avoid|don'?t (?:show|use|add)|never (?
 
 /**
  * #418 rule 4 (Analyst, #941): long-running local ads show a person or real work, not an empty product
- * shot. When the concept's picture has no one in it, the image prompt adds one, at $0 and with no repair.
+ * shot. When the concept's picture has no one in it, the image prompt opens with one, at $0 and with no
+ * repair. It goes first and names the business's work: the free image model reads only about the first
+ * 77 tokens, so a line at the end was ignored (Dev 2, #1076). The owner's own "no people" wins.
  */
-export function personSubjectLine(direction: string, ownerWords: (string | null | undefined)[] = []): string | null {
-  // The owner's own "no people" / "just the product" wins (Reviewer, #1064).
-  return personInScene(direction) || ownerWords.some((words) => words && NO_PEOPLE_WANTED.test(words))
-    ? null
-    : "Main subject (this overrides any \"no people\" note above): a person from the business doing the work, or a customer getting or using it, shown naturally and mid-task, not posed; no product-only or empty shot.";
+export function personSubjectLine(
+  direction: string,
+  ownerWords: (string | null | undefined)[] = [],
+  business: { name?: string | null; vertical?: string | null } = {},
+): string | null {
+  if (personInScene(direction) || ownerWords.some((words) => words && NO_PEOPLE_WANTED.test(words))) return null;
+  const who = [business.name?.trim(), business.vertical?.trim()].filter(Boolean).join(" ").slice(0, 80);
+  return `Main subject, overriding any "no people" note: a ${who ? `${who} ` : ""}professional at work with a customer, mid-task and natural, not posed; never an empty or product-only shot.`;
 }
