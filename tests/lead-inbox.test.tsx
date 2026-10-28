@@ -46,6 +46,43 @@ beforeEach(() => {
   setFetch({ ok: true, json: async () => ({ leads: [], imported: 0, sync: { id: "sync-1", state: "complete", hasMore: false } }) });
 });
 
+// #1597 (Designer, #1463): with no enquiries anywhere, one block replaces banner, count, tabs, search and card.
+describe("<LeadInbox> nothing yet (#1597)", () => {
+  it("not connected: one line and a solid Connect Meta, no banner, count, tabs or search", () => {
+    render(<LeadInbox businessName="Solaride" initialLeads={[]} metaReady={false} chatsEmpty allTotal={0} />);
+    expect(screen.getByRole("heading", { name: "No enquiries yet" })).toBeInTheDocument();
+    expect(screen.getByText("Connect Meta so people who tap your ads can reach you here.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Connect Meta" })).toHaveAttribute("href", "/settings");
+    expect(screen.queryByText(/Meta isn’t connected/)).toBeNull();
+    expect(screen.queryByRole("group", { name: "Show" })).toBeNull();
+    expect(screen.queryByRole("searchbox")).toBeNull();
+    expect(screen.queryByText(/\(0\)/)).toBeNull();
+  });
+
+  it("connected: offers the WhatsApp alert, else See your campaigns (outline)", () => {
+    const { unmount } = render(<LeadInbox businessName="Solaride" initialLeads={[]} metaReady offerAlerts chatsEmpty allTotal={0} />);
+    expect(screen.getByText("People who message you from an ad show up here. Reply fast: they often pick the first business that answers.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Get a WhatsApp alert for each one" })).toHaveAttribute("href", "/settings#whatsapp-alerts-title");
+    unmount();
+    render(<LeadInbox businessName="Solaride" initialLeads={[]} metaReady chatsEmpty allTotal={0} />);
+    expect(screen.getByRole("link", { name: "See your campaigns" })).toHaveClass("border");
+  });
+
+  it("'Add an enquiry' is a text link that opens the WhatsApp campaign's form", () => {
+    render(<LeadInbox businessName="Solaride" initialLeads={[]} metaReady chatsEmpty allTotal={0} addEnquiryFor={{ campaignId: "c1", spend: 0, enquiries: 0 }} />);
+    expect(screen.queryByRole("button", { name: /Got a customer/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Add an enquiry" }));
+    expect(screen.getByRole("button", { name: /Got a customer/ })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "No enquiries yet" })).toBeInTheDocument();
+  });
+
+  it("keeps the full inbox when WhatsApp chats exist", () => {
+    render(<LeadInbox businessName="Solaride" initialLeads={[]} metaReady allTotal={0} />);
+    expect(screen.queryByRole("heading", { name: "No enquiries yet" })).toBeNull();
+    expect(screen.getByRole("group", { name: "Show" })).toBeInTheDocument();
+  });
+});
+
 describe("<LeadInbox> empty state", () => {
   // #1260 (CPO words, Designer): one action, and never one the owner can't take.
   it("explains what will appear and offers See your campaigns while alerts can't be turned on", () => {
