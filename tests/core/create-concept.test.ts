@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { conceptValidationRules, validateConcept, type ConceptInput } from "@/lib/creative/concept";
+import { clipToThought, conceptValidationRules, validateConcept, type ConceptInput } from "@/lib/creative/concept";
 import { AD_ANGLES } from "@/lib/templates/ads";
 import recorded from "./fixtures/create/cedar-ridge-concept.json";
 import groq from "./fixtures/create/cedar-ridge-groq-drafts.json";
@@ -36,6 +36,24 @@ describe("core: Create concept validation on a recorded production concept", () 
       expect(result.concept.description.length).toBeLessThanOrEqual(100);
       expect(long.startsWith(result.concept.description)).toBe(true);
     }
+  });
+
+  // #1544 (QA, production a93f972f, free path): the stored description was 'Modular kitchens for Mohali Phase 8B,
+  // Mohali, Kharar and New Chandigarh. Ask for a quote on' (91), word-clipped from the model's >100. The part past
+  // 100 characters wasn't stored, so the tail here is filled in; the clip point is the recorded one.
+  it("cuts an over-long description back to a complete thought, never mid-sentence", () => {
+    const nook = "Modular kitchens for Mohali Phase 8B, Mohali, Kharar and New Chandigarh. Ask for a quote on your new kitchen today.";
+    expect(nook.slice(0, 100)).toContain("Ask for a quote on");
+    expect(clipToThought(nook, 100)).toBe("Modular kitchens for Mohali Phase 8B, Mohali, Kharar and New Chandigarh.");
+    // No sentence end: the last clause, when it keeps at least half.
+    const clause = "Same-day new-patient slots in Austin with insurance and transparent cash pricing; evening and weekend visits too";
+    expect(clipToThought(clause, 100)).toBe("Same-day new-patient slots in Austin with insurance and transparent cash pricing");
+    // 'Rs.' isn't a sentence end; with no other safe cut the text stays long for the repair.
+    const rupees = "Modular kitchens from Rs. 2 lakh in Mohali with free 3D design and installation in 21 days for every home";
+    expect(clipToThought(rupees, 100)).toBe(rupees);
+    expect(rules({ ...recorded.concept, description: rupees })).toEqual(["schema:description:too_big"]);
+    const saved = validateConcept({ ...recorded.concept, description: `${recorded.concept.description} Ask for a quote on your first visit and more.` }, input);
+    expect(saved.success && saved.concept.description).toBe(recorded.concept.description);
   });
 
   it("still rejects uncited or invented claims and over-length ad copy", () => {
