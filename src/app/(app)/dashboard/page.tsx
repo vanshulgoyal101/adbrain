@@ -3,6 +3,8 @@ import Link from "next/link";
 import { Alert } from "@/components/ui/alert";
 import { SpendStatusBanner } from "@/components/spend-status";
 import { RecentActivity, WorkspaceHome } from "@/components/workspace-home";
+import { SetupResumeCard } from "@/components/setup-resume-card";
+import { setupResumeStep } from "@/lib/setup/resume";
 import { getMetaConnection } from "@/lib/meta/credentials";
 import { newestWaitingEnquiry, recentReplyMinutes } from "@/lib/leads/reply-time";
 import {
@@ -34,6 +36,9 @@ export default async function DashboardPage() {
         getMetaConnection(business.id),
       ])
     : [[], [], null];
+  // #1272 (#1251 WS1): until a first campaign has gone live, Home is the one resume card.
+  const resume = setupResumeStep({ business, creatives, campaigns });
+  if (resume) return <SetupResumeCard step={resume} />;
   // #764: the Home results row; an unreadable result leaves the row out, never the page.
   const launched = campaigns.filter((campaign) => campaign.meta_campaign_id).map((campaign) => campaign.id);
   const [results, replyMinutes, firstEnquiry] = await Promise.all([
