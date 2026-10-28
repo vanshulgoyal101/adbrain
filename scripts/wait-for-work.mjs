@@ -129,12 +129,11 @@ export function queueCounts(issues) {
 }
 
 /** Ready-pool items in a worker's lane count as supply: the waiter offers them, so the queue isn't dry (#573). */
-/** Roles that pick their own work when nothing is queued (Reviewer audits, Analyst research, Designer slices, DevOps ops hygiene), so the CTO doesn't refill them. */
-export const SELF_SOURCING = new Set(["reviewer", "analyst", "designer", "devops", "cpo"]);
 
 export function lowQueues(issues) {
   const counts = queueCounts(issues);
-  return WORKERS.filter((r) => !SELF_SOURCING.has(r) && counts[r] + readyPool(issues, r, MIN_QUEUE).length < MIN_QUEUE).map((r) => ({ role: r, count: counts[r] }));
+  // Every role keeps ≥ MIN_QUEUE, the self-sourcing ones too (CEO, Oct 28: their queues drained in minutes, #364).
+  return WORKERS.filter((r) => counts[r] + readyPool(issues, r, MIN_QUEUE).length < MIN_QUEUE).map((r) => ({ role: r, count: counts[r] }));
 }
 
 export const QUIET_MIN = 90;
