@@ -1,7 +1,8 @@
 "use client";
 
 import { Suspense, use, useState, useTransition } from "react";
-import { Phone } from "lucide-react";
+import { ChevronLeft, Phone, SendHorizontal } from "lucide-react";
+import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
 import { saveWhatsAppTemplate, type WhatsAppTemplateResult } from "@/app/(app)/brand/whatsapp-template-actions";
@@ -19,7 +20,7 @@ export type MessageDraft = { language: Language | "auto"; greeting: string; pref
 
 const LANGUAGES: [Language | "auto", string][] = [["auto", "Auto (follows each ad)"], ["en", "English"], ["hi", "Hindi"], ["hinglish", "Hinglish"], ["pa", "Punjabi"]];
 const LIMIT = 300;
-const threeSlots = (questions: string[]) => [...questions, "", "", ""].slice(0, ICE_BREAKER_LIMITS.count);
+export const threeSlots = (questions: string[]) => [...questions, "", "", ""].slice(0, ICE_BREAKER_LIMITS.count);
 
 export function draftFromTemplate(template: WhatsAppTemplate): MessageDraft {
   const { opening } = template;
@@ -164,9 +165,13 @@ export function WhatsAppMessageCard({ businessId, businessName, saved, suggested
       <span className="text-xs font-medium text-slate-500">{dirty ? "Unsaved changes" : hasSaved ? "Your message" : "Suggested"}</span>
     </div>
     <p className="mt-1 text-sm text-slate-600">What customers see after tapping your ad. Your WhatsApp Business app greeting is separate.</p>
-    <div className="mt-4 grid gap-5 lg:grid-cols-[1fr_260px]">
+    {/* On a phone the preview sits between the fields and Save, so the owner sees the chat before saving it. */}
+    <div className="mt-4 grid gap-5 lg:grid-cols-[1fr_260px] lg:grid-rows-[auto_1fr]">
       <div className="grid min-w-0 gap-4">
         <WhatsAppMessageFields value={draft} onWords={onWords} onLanguage={onLanguage} allowAuto={!hasSaved} fieldError={fieldError} firstOffer={firstOffer} callNumber={callNumber} />
+      </div>
+      <div className="lg:col-start-2 lg:row-span-2 lg:row-start-1"><DraftPreview businessName={businessName} draft={draft} /></div>
+      <div className="grid min-w-0 content-start gap-4">
         {message?.ok && <Alert>{message.text}</Alert>}
         {message && !message.ok && !message.field && <Alert variant="error">{message.text}</Alert>}
         <div className="flex flex-wrap gap-2">
@@ -174,7 +179,6 @@ export function WhatsAppMessageCard({ businessId, businessName, saved, suggested
           {hasSaved && <Button type="button" variant="outline" disabled={pending} onClick={() => save(null)}>Reset to suggested</Button>}
         </div>
       </div>
-      <DraftPreview businessName={businessName} draft={draft} />
     </div>
   </section>;
 }
@@ -190,14 +194,42 @@ export function DraftPreview({ businessName, draft }: { businessName: string; dr
 }
 
 /** A phone-shaped preview of the chat, updating as the owner types. */
-export function WhatsAppPreview({ businessName, greeting, button, questions, prefill }: { businessName: string; greeting: string; button: ButtonKind; questions: string[]; prefill: string }) {
-  return <figure aria-label="WhatsApp preview" className="mx-auto w-full max-w-[260px] overflow-hidden rounded-[1.5rem] border-4 border-slate-800 bg-[#efeae2] text-sm">
-    <figcaption className="bg-[#075e54] px-3 py-2 font-semibold text-white">{businessName}</figcaption>
-    <div className="grid min-h-48 content-start gap-2 p-3">
-      <div className="max-w-[90%] whitespace-pre-wrap break-words rounded-lg bg-white px-3 py-2 text-slate-900 shadow-sm">{greeting || " "}</div>
-      {button === "call" && <div className="flex max-w-[90%] items-center justify-center gap-1.5 rounded-lg bg-white px-3 py-1.5 font-medium text-[#027eb5] shadow-sm"><Phone size={14} aria-hidden="true" />Call now</div>}
-      {button === "questions" && questions.map((question) => <div key={question} className="max-w-[90%] break-words rounded-lg bg-white px-3 py-1.5 text-center font-medium text-[#027eb5] shadow-sm">{question}</div>)}
+/** The ad the customer tapped: WhatsApp quotes it above their first message. */
+export type PreviewAd = { headline: string | null; imageUrl: string | null };
+
+/**
+ * #840/#847: what the customer's phone shows after tapping the ad, drawn like WhatsApp: the business
+ * header, your welcome, the Call now button or the quick questions, and the pre-typed message waiting
+ * in the message box (quoting the ad when Review knows which one).
+ */
+export function WhatsAppPreview({ businessName, greeting, button, questions, prefill, ad = null }: { businessName: string; greeting: string; button: ButtonKind; questions: string[]; prefill: string; ad?: PreviewAd | null }) {
+  const initial = [...businessName.trim()][0]?.toUpperCase() ?? "";
+  return <figure aria-label="WhatsApp preview" className="mx-auto flex min-h-[22rem] w-full max-w-[260px] flex-col overflow-hidden rounded-[1.75rem] border-[6px] border-slate-900 bg-[#efeae2] text-sm text-[#111b21]">
+    <figcaption className="flex items-center gap-2 border-b border-[#e9edef] bg-white px-2 py-2">
+      <ChevronLeft size={18} aria-hidden="true" className="shrink-0 text-[#54656f]" />
+      <span aria-hidden="true" className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[#dfe5e7] text-xs font-semibold text-[#54656f]">{initial}</span>
+      <span className="min-w-0 truncate font-semibold">{businessName}</span>
+    </figcaption>
+    <div className="grid flex-1 content-start gap-1.5 p-2.5">
+      <div className="max-w-[88%] overflow-hidden rounded-lg rounded-tl-none bg-white shadow-[0_1px_0.5px_rgba(11,20,26,0.13)]">
+        <p className="whitespace-pre-wrap break-words px-2.5 py-1.5">{greeting || " "}</p>
+        {button === "call" && <p className="flex items-center justify-center gap-1.5 border-t border-[#e9edef] px-2.5 py-2 font-medium text-[#027eb5]"><Phone size={14} aria-hidden="true" />Call now</p>}
+      </div>
+      {button === "questions" && <ul aria-label="Questions to tap" className="grid max-w-[88%] gap-1">
+        {questions.map((question) => <li key={question} className="break-words rounded-lg bg-white px-2.5 py-1.5 text-center font-medium text-[#027eb5] shadow-[0_1px_0.5px_rgba(11,20,26,0.13)]">{question}</li>)}
+      </ul>}
     </div>
-    {prefill && <div className="border-t border-slate-300 bg-white px-3 py-2 text-slate-700"><span className="sr-only">Ready to send: </span>{prefill}</div>}
+    <div className="flex items-end gap-1.5 p-2">
+      <div className="min-w-0 flex-1 overflow-hidden rounded-[1.25rem] bg-white">
+        {prefill && ad?.headline && <div className="m-1 mb-0 flex items-center gap-2 overflow-hidden rounded-lg border-l-4 border-[#1daa61] bg-[#f0f2f5] py-1 pl-2 pr-1">
+          <span className="min-w-0 flex-1 truncate text-xs text-[#54656f]">{ad.headline}</span>
+          {ad.imageUrl && <img src={creativeThumbnailUrl(ad.imageUrl)} alt="" width={32} height={32} loading="lazy" className="h-8 w-8 shrink-0 rounded object-cover" />}
+        </div>}
+        {prefill
+          ? <p className="break-words px-3 py-2"><span className="sr-only">Ready to send: </span>{prefill}</p>
+          : <p aria-hidden="true" className="px-3 py-2 text-[#667781]">Message</p>}
+      </div>
+      <span aria-hidden="true" className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[#1daa61] text-white"><SendHorizontal size={16} /></span>
+    </div>
   </figure>;
 }

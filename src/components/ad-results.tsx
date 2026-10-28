@@ -56,7 +56,8 @@ const named = (ad: Named) => `“${adLabel(ad)}”`;
 
 /**
  * #1045: one line offering to pause the ad that costs far more per enquiry than the best one.
- * Never automatic; Keep hides it for 3 days; a pause can be undone here.
+ * Never automatic; Keep hides it for 3 days; a pause can be undone here. A suggestion, not a warning:
+ * a canvas strip, not amber (#847 keeps amber for Needs review).
  */
 export function PauseOffer({ campaignId, suggestion, unit = UNITS.form }: { campaignId: string; suggestion: PauseSuggestion; unit?: Unit }) {
   const { ad, reference } = suggestion;
@@ -90,7 +91,7 @@ export function PauseOffer({ campaignId, suggestion, unit = UNITS.form }: { camp
     ? <>{named(ad)} has spent {formatMoney(ad.spend)} with no {unit.many}; {named(reference)} gets them at {formatMoney(reference.costPerResult ?? 0)} each. Pause it?</>
     : <>{named(ad)} costs {formatMoney(ad.costPerResult ?? 0)} per {unit.one} vs {formatMoney(reference.costPerResult ?? 0)} for {named(reference)}. Pause it?</>;
   return (
-    <div className="my-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-slate-800">
+    <div className="my-2 rounded-sm bg-slate-50 p-3 text-xs text-slate-800">
       <p className="wrap-break-word">{line}</p>
       {typeof state === "object" && <p role="alert" className="mt-1 text-danger">{state.error}</p>}
       <div className="mt-2 flex flex-wrap gap-2">

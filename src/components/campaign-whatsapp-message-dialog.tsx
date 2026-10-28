@@ -6,7 +6,7 @@ import { Alert } from "@/components/ui/alert";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { saveWhatsAppTemplate } from "@/app/(app)/brand/whatsapp-template-actions";
 import { whatsappTemplateSchema, type WhatsAppTemplate } from "@/lib/campaign/whatsapp-template";
-import { DraftPreview, WhatsAppMessageFields, draftFromSuggestion, templateFromDraft, type MessageDraft, type Suggested } from "@/components/whatsapp-message-card";
+import { DraftPreview, WhatsAppMessageFields, draftFromSuggestion, templateFromDraft, threeSlots, type MessageDraft, type Suggested } from "@/components/whatsapp-message-card";
 
 const PROBLEMS = {
   greeting: "Write a welcome of up to 300 characters.",
@@ -19,12 +19,14 @@ const PROBLEMS = {
  * what this campaign sends. Only this campaign changes, unless "Also save as my message" is on.
  * The claim checks run in Review (and on save).
  */
-export function CampaignWhatsAppMessageDialog({ businessId, businessName, firstOffer, initial, suggested, followsSuggestion, edited, onUse, onClose }: {
+export function CampaignWhatsAppMessageDialog({ businessId, businessName, firstOffer, initial, suggested, suggestedQuestions, followsSuggestion, edited, onUse, onClose }: {
   businessId: string;
   businessName: string;
   firstOffer?: string | null;
   initial: MessageDraft;
   suggested: Suggested;
+  /** #1114: quick questions from the Brand's offers, per language; they fill empty boxes when Quick questions is chosen. */
+  suggestedQuestions?: (language: MessageDraft["language"]) => string[];
   /** The words are AdBrain's suggestion, so a language change swaps them until the owner types. */
   followsSuggestion: boolean;
   /** This campaign already has its own message, so it can go back to the saved or suggested one. */
@@ -64,7 +66,13 @@ export function CampaignWhatsAppMessageDialog({ businessId, businessName, firstO
       <div className="grid gap-5 md:grid-cols-[1fr_260px]">
         <div className="grid min-w-0 gap-4">
           <WhatsAppMessageFields value={draft} allowAuto={false} fieldError={fieldError} firstOffer={firstOffer}
-            onWords={(next) => { setDraft(next); setTyped(true); setProblem(null); }}
+            onWords={(next) => {
+              // As on the Brand card (#905): choosing Quick questions with empty boxes fills them with the Brand's suggestion.
+              if (next.button === "questions" && draft.button !== "questions" && suggestedQuestions && next.questions.every((question) => !question.trim())) {
+                next = { ...next, questions: threeSlots(suggestedQuestions(next.language)) };
+              }
+              setDraft(next); setTyped(true); setProblem(null);
+            }}
             onLanguage={(language) => { setProblem(null); setDraft((current) => followsSuggestion && !typed ? draftFromSuggestion(suggested, language) : { ...current, language }); }} />
           <div className="grid gap-0.5">
             <label className="flex items-center gap-2 text-sm text-slate-800">

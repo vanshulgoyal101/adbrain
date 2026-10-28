@@ -19,9 +19,10 @@ export const PATCH = observeRoute("/api/leads/[id]", "PATCH", async (
     const { contacted, ...fields } = update;
     if (contacted) {
       // #1049: the first tap only; later taps keep the first time. A new enquiry becomes "contacted".
+      // #1140: only a still-new enquiry gets a first reply time, so a tap on an older lead can't record weeks as a reply.
       const now = new Date().toISOString();
-      const first = await database.from("leads").update({ first_contacted_at: now })
-        .eq("id", id).eq("business_id", business.id).is("first_contacted_at", null);
+      const first = await database.from("leads").update({ first_contacted_at: now, workflow_status: "contacted" })
+        .eq("id", id).eq("business_id", business.id).eq("workflow_status", "new").is("first_contacted_at", null);
       const status = await database.from("leads").update({ workflow_status: "contacted" })
         .eq("id", id).eq("business_id", business.id).eq("workflow_status", "new");
       if (first.error || status.error) throw new Error("Save failed");

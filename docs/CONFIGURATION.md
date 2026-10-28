@@ -43,7 +43,7 @@ settings, credentials and encryption keys are DevOps-owned changes; see the
 | `SUPPORT_WHATSAPP` | empty, phone number | The owner's business WhatsApp for the in-app **Help on WhatsApp** link (#796), pre-typed with the business name. Public number, not a secret; empty hides the link |
 | `NEXT_PUBLIC_SUPPORT_WHATSAPP` | Empty; phone number with country code | Homepage "Questions? WhatsApp us" link (`wa.me`); hidden while empty. Needs a rebuild |
 | `ALERTS_WHATSAPP` | empty, phone number | AdBrain's own WhatsApp Business number for owner alerts (#701). Owners confirm their number by sending it "START <code>"; empty hides Settings → WhatsApp alerts. Public number, not a secret |
-| `WHATSAPP_WEBHOOK_VERIFY_TOKEN` | empty, random string | The `hub.verify_token` for subscribing `/api/whatsapp/webhook` to that number's WABA in Meta (#701). POSTs are checked with `META_APP_SECRET` |
+| `WHATSAPP_WEBHOOK_VERIFY_TOKEN` | empty, random string | The `hub.verify_token` for subscribing `/api/whatsapp/webhook` to that number's WABA in Meta (#701). Subscribe the `messages` and `template_category_update` fields; without the second, a template Meta makes MARKETING keeps sending (#1139). POSTs are checked with `META_APP_SECRET` |
 | `FONTCONFIG_FILE` | Set at runtime by the ad renderer; don't configure | Points fontconfig at `src/lib/creative/fonts` only, so Hindi/Punjabi shaping is identical on every server (#300) |
 | `NEXT_PUBLIC_DEV_AUTH_BYPASS` | Empty; exact `true` outside production | UI identity fallback, not general API authentication |
 | `DEV_LOGIN_EMAIL`, `DEV_LOGIN_PASSWORD` | Empty | Development login credentials |
