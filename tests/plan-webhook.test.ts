@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
+const recorded = vi.hoisted(() => [] as Array<{ name: string; outcome: string; attributes?: Record<string, unknown> }>);
+vi.mock("@/lib/observability/logger", () => ({ recordProductEvent: (event: (typeof recorded)[number]) => recorded.push(event) }));
 import { handlePlanWebhook, type PlanWebhookDeps } from "@/lib/plan/webhook";
 
 const linkId = "plink_Fixture123";
@@ -39,6 +41,19 @@ describe("plan webhook (#718)", () => {
   it("passes on a replay as duplicate", async () => {
     const { deps: d } = deps(paidLink, "duplicate");
     expect(await handlePlanWebhook(linkEvent("payment_link.paid"), d)).toBe("duplicate");
+  });
+
+  // #1583 (Reviewer): Razorpay confirms a captured ₹999 but no open month takes it (a second payment on a paid month,
+  // or a period row that's gone). It's money with no plan month, so DevOps must hear about it.
+  it("raises plan.payment_unmatched when a confirmed payment settles no month; a replay doesn't", async () => {
+    recorded.length = 0;
+    expect(await handlePlanWebhook(linkEvent("payment_link.paid"), deps({ ...paidLink, paymentId: "pay_Second" }, "ignored").deps)).toBe("ignored");
+    expect(recorded).toEqual([expect.objectContaining({ name: "plan.payment_unmatched", outcome: "failed",
+      attributes: expect.objectContaining({ paymentLinkId: linkId, paymentId: "pay_Second" }) })]);
+    recorded.length = 0;
+    await handlePlanWebhook(linkEvent("payment_link.paid"), deps(paidLink, "duplicate").deps);
+    await handlePlanWebhook(linkEvent("payment_link.paid"), deps(paidLink, "paid").deps);
+    expect(recorded).toEqual([]);
   });
 
   it("ignores a paid event Razorpay doesn't confirm (not paid, no captured payment, wrong amount)", async () => {

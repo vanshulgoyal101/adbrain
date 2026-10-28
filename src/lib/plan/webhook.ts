@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { PLAN_PRICE_PAISE } from "@/lib/plan/status";
+import { recordProductEvent } from "@/lib/observability/logger";
 
 /**
  * #718 slice 2: the ₹999 plan's Payment Link events. They never enter the ad-money ledger
@@ -43,6 +44,9 @@ export async function handlePlanWebhook(event: { event: string; payload: unknown
     const result = z.enum(["paid", "duplicate", "ignored"]).parse(await deps.rpc("plan_period_paid", {
       p_link_id: link.id, p_payment_id: link.paymentId, p_paid_at: paidAt.toISOString(),
     }));
+    // #1583: Razorpay holds a captured ₹999 that no month took (a second payment, or the period is gone): refund it.
+    if (result === "ignored") recordProductEvent({ kind: "workflow", name: "plan.payment_unmatched", outcome: "failed",
+      attributes: { provider: "razorpay", paymentLinkId: link.id, paymentId: link.paymentId } });
     return result;
   }
   if (link.status !== "expired" && link.status !== "cancelled") return "ignored";

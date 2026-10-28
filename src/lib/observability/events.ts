@@ -24,6 +24,9 @@ export const productEventSchema = z.object({
     entityType: z.enum(["business", "creative", "campaign", "adset", "ad", "instruction", "asset", "lead"]).optional(),
     count: z.number().int().nonnegative().max(1_000_000).optional(),
     failedCount: z.number().int().nonnegative().max(1_000_000).optional(),
+    /** #1583: a captured plan payment that settled no month, so DevOps can find and refund it in Razorpay. */
+    paymentLinkId: z.string().regex(/^plink_[A-Za-z0-9]{1,100}$/).optional(),
+    paymentId: z.string().regex(/^pay_[A-Za-z0-9]{1,100}$/).optional(),
     /** #1123: ads the Create top-up round retried. */
     topUp: z.number().int().nonnegative().max(6).optional(),
     errorCode: label.optional(),
