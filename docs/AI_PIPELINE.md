@@ -1,7 +1,7 @@
 # AI and Creative Pipeline
 
 This guide describes model calls, image processing, retries, and accounting.
-Parameters are in [Configuration](CONFIGURATION.md) and [API Reference](API_REFERENCE.md).
+Parameters are in [Configuration](CONFIGURATION.md) and [API Reference](api/README.md).
 Design history lives in git history; it does not override current code.
 
 ## Task Boundaries
@@ -293,7 +293,7 @@ clears the stored intent only after saved creatives, `complete`, `failed`, 404 o
 a definitive 4xx rejection. Repeating POST with the same UUID returns 202 without starting another
 producer. `processing` does not prove a worker is alive, and `unresolved` needs
 investigation rather than another paid request. Exact statuses are in
-[Generate and Recover](API_REFERENCE.md#generate-and-recover).
+[Generate and Recover](api/creatives.md#generate-and-recover).
 
 ### Product References
 

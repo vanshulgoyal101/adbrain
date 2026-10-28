@@ -17,7 +17,7 @@ Start at the [documentation index](docs/README.md).
 | Install and run safely | [Developer quick start](docs/QUICK_START.md) |
 | Understand the product | [Features and workflows](docs/FEATURES.md) |
 | Learn the codebase | [Architecture](docs/ARCHITECTURE.md) |
-| Integrate or debug requests | [API reference](docs/API_REFERENCE.md) |
+| Integrate or debug requests | [API reference](docs/api/README.md) |
 | Configure providers and limits | [Configuration](docs/CONFIGURATION.md) |
 | Understand storage and upgrades | [Data model](docs/DATA_MODEL.md) |
 | Validate changes | [Testing](docs/TESTING.md) |

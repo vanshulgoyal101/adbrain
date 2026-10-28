@@ -24,7 +24,7 @@ Inspect durable evidence before retrying anything that can create objects or spe
 	Separate a timeout from a confirmed remote rejection. Never retry a creation,
 	payment or activation with a fresh key to get past an error.
 3. Start with scoped logs, saved status and read-only metadata. Compare the
-	deployed handler and schema with the [API](API_REFERENCE.md) and
+	deployed handler and schema with the [API](api/README.md) and
 	[data](DATA_MODEL.md) guides. A migration file is not proof its objects exist remotely.
 4. If the core loop is broken after a deploy, roll back first and debug second
 	(see [Production guard](RELEASING.md#production-guard)). Migrations, production

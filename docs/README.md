@@ -27,7 +27,7 @@ feature branch or a passing local test.
 | --- | --- |
 | [Worker orchestration](ORCHESTRATION.md) | Who owns each packet/file/resource, what blocks it, and what evidence permits integration? |
 | [Features and workflows](FEATURES.md) | What can owners do, and where are the limits? |
-| [API reference](API_REFERENCE.md) | Which routes/actions exist, which parameters are accepted, and what do failures mean? |
+| [API reference](api/README.md) | Which routes/actions exist, which parameters are accepted, and what do failures mean? |
 | [Configuration](CONFIGURATION.md) | Which variables are required, what are their defaults, and which changes cost money or require a restart? |
 | [Architecture](ARCHITECTURE.md) | Where is behavior owned, and how do requests cross trust boundaries? |
 | [Data model](DATA_MODEL.md) | Which tables, relationships, grants, RPCs, buckets and migrations support the app? |
@@ -47,6 +47,16 @@ feature branch or a passing local test.
 [Roadmap](ROADMAP.md) and the [payment plan](PAYMENTS-PLAN.md) hold intent and
 decisions; the [worker dispatch](ORCHESTRATION.md) holds current assignments.
 Consolidate guidance into its owning reference instead of adding dated documents.
+
+## Moved (#1851)
+
+The flat guides are moving into `product/`, `architecture/`, `api/`,
+`operations/` and `team/`, verbatim. This table goes away two weeks after the
+last move.
+
+| Old file | Now |
+| --- | --- |
+| `API_REFERENCE.md` | [api/](api/README.md): one page per route group |
 
 ## Terminology
 
