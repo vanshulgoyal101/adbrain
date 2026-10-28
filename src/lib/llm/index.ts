@@ -176,7 +176,8 @@ async function callProviders(
         const attemptStart = Date.now();
         try {
           const attemptTimeoutMs = options.providerAttemptTimeoutMs?.[provider.name] ?? options.attemptTimeoutMs;
-          const { text, usage, providerRequestId, providerFinalStatus } = await provider.complete(messages, { ...options, attemptTimeoutMs }, {
+          const maxTokens = options.providerMaxTokens?.[provider.name] ?? options.maxTokens;
+          const { text, usage, providerRequestId, providerFinalStatus } = await provider.complete(messages, { ...options, attemptTimeoutMs, maxTokens }, {
             apiKey: keys[idx],
             model,
           });
@@ -208,7 +209,10 @@ async function callProviders(
               : err.status && err.status >= 500 ? "PROVIDER_SERVER"
                 : err.status ? "PROVIDER_CLIENT" : "TRANSPORT" : "UNKNOWN");
           if (err instanceof LLMError && err.status === 429) {
-            cooldownUntil.set(coolKey, Date.now() + Math.min(err.retryAfterMs ?? COOLDOWN_MS, COOLDOWN_MS));
+            // #1200: a daily limit doesn't lift in a minute; park the key until the provider's retry-after, at most 15 min.
+            const daily = err.rateLimit?.type === "TPD" || err.rateLimit?.type === "RPD";
+            const cap = daily ? CREDIT_COOLDOWN_MS : COOLDOWN_MS;
+            cooldownUntil.set(coolKey, Date.now() + Math.min(err.retryAfterMs ?? cap, cap));
           }
           // Another key on the same model would time out or truncate the same way; try the next model.
           if (err instanceof LLMError && !err.retryable && err.status === undefined) {

@@ -8,10 +8,12 @@ import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { redirect } from "next/navigation";
 import { SetupAdsStep } from "@/components/setup-ads-step";
+import { isProspectSession } from "@/lib/prospect-session";
 import { setupFieldsFrom } from "@/lib/brand/setup-fields";
 import { brandUsable } from "@/lib/brand/usable";
 import { clientCreative } from "@/lib/creative/client-receipt";
-import { getBrandAssets, getLatestCreativeBatch, getPrimaryBusiness, hasLaunchedCampaign } from "@/lib/supabase/queries";
+import { madeForSetup } from "@/lib/creative/setup-picks";
+import { getBrandAssets, getSetupCreativeBatch, getPrimaryBusiness, hasLaunchedCampaign } from "@/lib/supabase/queries";
 import { occasionsFor } from "@/lib/seasonal";
 
 export const metadata = {
@@ -49,11 +51,17 @@ export default async function CreatePage({ searchParams }: { searchParams?: Prom
   // `?all=1` opens the full Create. If either read fails, the full Create shows as before.
   if (params.all !== "1") {
     const setup = await Promise.resolve()
-      .then(() => Promise.all([hasLaunchedCampaign(business.id), getLatestCreativeBatch(business.id)]))
-      .then(([launched, batch]) => launched ? null : batch.map(clientCreative)).catch(() => null);
+      .then(() => Promise.all([hasLaunchedCampaign(business.id), getSetupCreativeBatch(business.id)]))
+      .then(([launched, batch]) => {
+        if (launched) return null;
+        // #1432: ads made from an earlier step 1 aren't offered; step 2 makes new ones from today's.
+        const ads = batch.ads.filter((ad) => madeForSetup(ad, business));
+        // #1402: a "Make another" top-up shows beside its batch; the step checks the newest batch on arrival (#1407).
+        return ads.map(clientCreative);
+      }).catch(() => null);
     // #1272: the + button lands here; a first-timer without the five facts resumes at step 1.
     if (setup && !brandUsable({ ...business, vertical: setupFieldsFrom(business).vertical })) redirect("/brand");
-    if (setup) return <SetupAdsStep business={business} initialAds={setup} />;
+    if (setup) return <SetupAdsStep business={business} initialAds={setup} sample={await isProspectSession()} />;
   }
 
   const missing = [

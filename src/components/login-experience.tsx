@@ -4,7 +4,7 @@ import { Suspense, useEffect, useRef, useState, useSyncExternalStore } from "rea
 import { createPortal } from "react-dom";
 import { Loader2, X } from "lucide-react";
 import { AdbrainCycle } from "@/components/adbrain-cycle";
-import { LoginForm } from "@/components/login-form";
+import { LoginForm, useHashCallbackError } from "@/components/login-form";
 import { useHasPendingIdea } from "@/lib/ideas/pending";
 import { markLoginIntroSeen, useLoginIntroSeen, useReturningVisitor } from "@/lib/login-visitor";
 import styles from "./login-experience.module.css";
@@ -47,7 +47,15 @@ function subscribePhone(listener: () => void) {
 }
 
 /** `deepLink`: sent here from an app page (e.g. ?redirect=/campaigns), so it is a returning user. */
-export function LoginExperience({ deepLink = false }: { deepLink?: boolean }) {
+export function LoginExperience({ deepLink = false, failedSignIn = false }: {
+  deepLink?: boolean;
+  /** #1428: back from a failed sign-in; the phone intro would cover what went wrong. */
+  failedSignIn?: boolean;
+}) {
+  const hashError = useHashCallbackError();
+  // #1417: while the failed-sign-in panel shows, the sign-up heading and switch stay hidden.
+  const [panelGone, setPanelGone] = useState(false);
+  const panelShown = (failedSignIn || hashError !== null) && !panelGone;
   const returning = useReturningVisitor();
   const introSeen = useLoginIntroSeen();
   const [choice, setChoice] = useState<"new" | "returning" | null>(null);
@@ -66,18 +74,20 @@ export function LoginExperience({ deepLink = false }: { deepLink?: boolean }) {
 
   return (
     <>
-      {phone && isNew && !introSeen && !introClosed && <PhoneIntro onClose={closeIntro} />}
-      <div className={styles.heading}>
-        <h1 id="sign-in-title">{isNew ? "Create your free account" : "Welcome back"}</h1>
-        <p>{isNew ? "Make your first ad in about 2 minutes. Nothing runs until you approve it." : "Sign in to see your ads and the customers who messaged you."}</p>
-      </div>
+      {phone && isNew && !introSeen && !introClosed && !failedSignIn && !hashError && <PhoneIntro onClose={closeIntro} />}
+      {panelShown ? <h1 id="sign-in-title" className="sr-only">Sign in</h1> : (
+        <div className={styles.heading}>
+          <h1 id="sign-in-title">{isNew ? "Create your free account" : "Welcome back"}</h1>
+          <p>{isNew ? "Make your first ad in about 2 minutes. Nothing runs until you approve it." : "Sign in to see your ads and the customers who messaged you."}</p>
+        </div>
+      )}
       <Suspense fallback={<div role="status" className="flex min-h-80 items-center justify-center gap-2 text-sm text-slate-500"><Loader2 size={18} aria-hidden="true" className="animate-spin" /> Loading sign in...</div>}>
-        <LoginForm newVisitor={isNew} onSucceeded={() => setChoice(mode)} />
+        <LoginForm newVisitor={isNew} onSucceeded={() => setChoice(mode)} onCallbackDismiss={() => setPanelGone(true)} />
       </Suspense>
-      <p className={styles.switch}>
+      {!panelShown && <p className={styles.switch}>
         {isNew ? "Already have an account?" : "New to AdBrain?"}{" "}
         <button type="button" onClick={() => setChoice(isNew ? "returning" : "new")}>{isNew ? "Sign in" : "Create a free account"}</button>
-      </p>
+      </p>}
     </>
   );
 }

@@ -117,16 +117,20 @@ export async function saveSetupBusiness(id: string | null, input: SetupBusinessF
       return finish(data, "business.create");
     }
 
-    const { data: current, error: readError } = await supabase.from("businesses").select("offers").eq("id", id).single();
-    if (readError || !current) return { ok: false, error: "Brand not found or no longer accessible." };
     const offer = fields.offer.trim();
-    const rest = (current.offers ?? []).slice(1);
+    // #1401: a blank box (mid-retype) never touches saved offers; a typed one replaces only the first.
+    let offers: string[] | undefined;
+    if (offer) {
+      const { data: current, error: readError } = await supabase.from("businesses").select("offers").eq("id", id).single();
+      if (readError || !current) return { ok: false, error: "Brand not found or no longer accessible." };
+      offers = [offer, ...(current.offers ?? []).slice(1)];
+    }
     const { data, error } = await supabase.from("businesses").update({
       ...(name ? { name } : {}),
       ...(fields.vertical.trim() ? { vertical: fields.vertical.trim() } : {}),
       ...(phone !== undefined || !fields.phone.trim() ? { phone: phone ?? null } : {}),
       locations: setupLocations(fields.locations),
-      offers: offer ? [offer, ...rest] : rest,
+      ...(offers ? { offers } : {}),
     }).eq("id", id).select(columns).single();
     if (error || !data) return { ok: false, error: error?.message ?? "Brand not found or no longer accessible." };
     return finish(data, "business.update");

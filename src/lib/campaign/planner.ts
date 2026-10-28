@@ -226,6 +226,13 @@ If you need more info, return:
   ];
 }
 
+/**
+ * #1200: Groq counts the `max_tokens` reservation against its 1,000 output-tokens-per-minute limit, so a 3000
+ * reservation tripped it whenever other calls ran that minute (11 of 29 planner 429s on Oct 28 were OTPM). Its plans are short: max 639, p99 436 output tokens over 313 production plans (7 days
+ * to Oct 28). Other models keep 3000 (Haiku reached 1,740).
+ */
+export const PLANNER_GROQ_MAX_TOKENS = 1000;
+
 export async function runPlanner(
   input: PlannerInput,
   options: {
@@ -260,7 +267,7 @@ export async function runPlanner(
       // then Gemini without thinking gets 5 s (it timed out on 3 of 4 tries in Oct 2026).
       thinking: "off", providerAttemptTimeoutMs: { google: 5_000 }, nextProviders: ["openrouter"], fallbackBeforeRateLimitWait: true,
       json: true, responseSchema: plannerResultSchema, cache: false, signal,
-      promptVersion: PLANNER_PROMPT_VERSION, temperature: 0.2, maxTokens: 3000,
+      promptVersion: PLANNER_PROMPT_VERSION, temperature: 0.2, maxTokens: 3000, providerMaxTokens: { groq: PLANNER_GROQ_MAX_TOKENS },
       onAttempt: (entry) => { if (entry.status === "error") failures.push(entry); },
     }).catch(async (error: unknown) => {
       // A failure seen as a provider attempt is reported (with its usage) below; record it once.

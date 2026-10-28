@@ -513,6 +513,10 @@ limit is spent. AdBrain treats either as `CREDIT_EXHAUSTED`, not as a generic re
   `IMAGE_PROVIDER_FALLBACK` is `none`. Pollinations can't take product reference photos, so that
   picture is made without them; the receipt records `fallbackFrom`. Only the credit refusal counts
   as not charged (`providerFinalStatus: failed`); any other image failure stays `unknown`.
+  The exhausted image provider is then parked for 15 minutes per server (#1422), so the rest of
+  the batch and the next Creates go straight to Pollinations. That fallback picture joins the
+  one-at-a-time free queue and waits out one busy answer (402/404/429/503, at least 15 s) before
+  that ad fails.
 - **Owner message:** if the free models can't help either, Create says plainly that AdBrain's paid
   AI or image credit has run out and to try again shortly, instead of a generic failure.
 

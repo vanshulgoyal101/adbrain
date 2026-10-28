@@ -12,7 +12,8 @@ replace them only in an authorized isolated environment. Source: [route handlers
 business context come from the server. The strict payload always includes a known
 workspace `page` and optionally `viewport` (`compact`, `medium`, `wide`). Existing
 names `page.view`, `client.error` and `client.rejection` remain supported.
-`ui.action` additionally requires an allowlisted `action`; `page.engagement`
+`ui.action` additionally requires an allowlisted `action`; `ui.tap` (#1242) carries only a
+launch-path `page` (`/create`, `/studio`, `/campaigns`); `page.engagement`
 requires integer `durationMs` between 1000 and 3600000. Unknown fields, arbitrary
 labels and client identity overrides are rejected. No request/field content is
 captured. DNT/GPC, 2 KiB body limits, rate limiting and 204 responses are preserved.
@@ -178,7 +179,7 @@ same identity; do not change a key or clear local recovery data to force progres
 | GET | `/api/cron/access-requests` | Cron Bearer auth | Read-only (#692, #725): outside owners who asked for Facebook access in the last 7 days (the `meta.access_request` audit record, plus the older `ui.action` beacon), listed team ids excluded; at most 10 account lookups a run, newest first: `{ok, requests:[{key, hours}], more}` (`more` = outside requests left for the next run); one opaque 12-hex key per user (sha256 of the user id), no IDs |
 | POST | `/api/meta/access-request` | Signed-in owner | **Ask for Facebook access** (#725): `{businessId}` → writes a `meta.access_request` audit record (owner checked by `append_verified_audit_event`), once per user per UTC day → `{ok:true}`; the page says "Request sent" only after this; 400 bad body, 401, 404 not your business, 503 not recorded (retry) |
 | GET | `/api/cron/core-scoreboard` | Cron Bearer auth | Read-only daily core scoreboard (#681): `?hours=` 1–168 (default 24) -> `{ok, hours, since, until, excluded:{events, aiCalls}, rows:[{step, now, target, met}], markdown}`; smoke left out by `smokeUserIds` in `src/lib/internal-accounts.json` (user first, the businesses it owns for background rows); aggregates only, no IDs; 400 bad window, 503 without details |
-| GET | `/api/cron/llm-credit` | Cron Bearer auth | Read-only OpenRouter credit (#449): `{ok, keys:[{index, limitUsd, remainingUsd, error?}], minRemainingUsd, thresholdUsd:0.5, low}`; never returns keys; 503 when OpenRouter refuses a key |
+| GET | `/api/cron/llm-credit` | Cron Bearer auth | Read-only OpenRouter credit (#449): `{ok, keys:[{index, limitUsd, remainingUsd, error?}], minRemainingUsd, thresholdUsd:1, low}`; never returns keys; 503 when OpenRouter refuses a key |
 | POST | `/api/internal/meta-traffic` | Bounded runner options | Allowlisted diagnostic reads; creation mode disabled |
 
 **One owner per Meta campaign (#1138).** The routes above that can write to Meta (`[id]` PATCH, `refresh`, `audience`, `audience/switch`, `budget`, `ads/[adId]` and `ads/[adId]/status`) answer **409** `{error, code:"owned_elsewhere"}` before any Meta call when the row's Meta campaign belongs to another AdBrain business (the sync rule above, read with the service role), and **503** when that can't be read.
@@ -437,7 +438,9 @@ Recovery uses `GET /api/creatives/generate?businessId=...&generationId=...&expec
 provided, must match the claimed count (409 otherwise). The source candidate
 returns `{status, creatives, count, expectedCount}` based on the persisted
 intent and saved rows. Status may be `processing`, `partial`, `complete`,
-`failed` or `unresolved` (including stale processing after five minutes).
+`failed`, `unresolved` (including stale processing after five minutes) or `ended`
+(#1407: the batch finished short, as its closing `creatives.generate` audit row shows;
+no more ads are coming).
 Unknown/foreign ID returns 404; unavailable status or row lookup returns 503.
 An owner lookup returning 404 permanently fences that UUID with a zero-quota
 no-spend record; a delayed original POST cannot start generation afterward.

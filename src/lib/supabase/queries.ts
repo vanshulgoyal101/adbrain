@@ -1,4 +1,6 @@
 import { cookies } from "next/headers";
+import { setupBatch } from "@/lib/creative/setup-picks";
+import { wentLive, type LiveSignals } from "@/lib/setup/steps";
 import { attachRealEnquiries } from "@/lib/campaign/real-enquiries";
 import { cache } from "react";
 import { z } from "zod";
@@ -138,14 +140,17 @@ export async function getCreatives(businessId: string): Promise<Creative[]> {
   return data ?? [];
 }
 
-/** #1270 (WS1 step 2): the business's newest Create batch (one `variant_group`), oldest first. */
-export async function getLatestCreativeBatch(businessId: string): Promise<Creative[]> {
+/**
+ * #1270/#1402 (WS1 step 2): the ads setup made, oldest first: the newest batch (one `variant_group`), plus earlier
+ * batches from the last 2 hours while there are fewer than 3 ads, so a "Make another" top-up shows beside its batch.
+ * `newest` says when that batch started, so a short one can be checked before anything new is made.
+ */
+export async function getSetupCreativeBatch(businessId: string): Promise<ReturnType<typeof setupBatch<Creative>>> {
   const supabase = await createClient();
   const { data, error } = await supabase.from("creatives").select("*")
-    .eq("business_id", businessId).order("created_at", { ascending: false }).limit(6);
+    .eq("business_id", businessId).order("created_at", { ascending: false }).limit(12);
   if (error) throw new Error("Ads could not be loaded.");
-  const group = data?.[0]?.variant_group;
-  return (data ?? []).filter((creative) => group && creative.variant_group === group).reverse();
+  return setupBatch(data ?? []);
 }
 
 /** Brand assets for a business, newest first. */
@@ -255,14 +260,15 @@ export async function getActiveCampaignBudgets(businessId: string): Promise<Camp
   return data.map((c) => ({ id: c.id, status: c.status, dailyBudget: c.daily_budget, spend: 0 }));
 }
 
-/** #1251 WS1: whether any campaign went live through AdBrain (`launched_at`) or is on now (e.g. imported from Meta); the setup spine shows until one has. */
-export async function hasLaunchedCampaign(businessId: string): Promise<boolean> {
+/** #1251 WS1: whether any campaign of the business went live (`wentLive`, #1403); the setup spine shows until one has. */
+// #1393: the layout and the page both ask; one read per request.
+export const hasLaunchedCampaign = cache(async function hasLaunchedCampaign(businessId: string): Promise<boolean> {
   const supabase = await createClient();
-  const { data, error } = await supabase.from("campaigns").select("id")
-    .eq("business_id", businessId).or("launched_at.not.is.null,status.in.(active,completed)").limit(1);
+  const { data, error } = await supabase.from("campaigns").select("launched_at, status, meta_campaign_id, source:raw->>source")
+    .eq("business_id", businessId).or("launched_at.not.is.null,meta_campaign_id.not.is.null,status.in.(active,completed)").limit(QUERY_BATCH_SIZE);
   if (error || !data) throw new Error("Campaigns could not be loaded.");
-  return data.length > 0;
-}
+  return data.some((campaign) => wentLive(campaign as LiveSignals));
+});
 
 /** Campaigns mapped to the minimal shape the spend guardrails need. */
 export async function getCampaignSpend(
