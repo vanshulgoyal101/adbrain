@@ -134,7 +134,8 @@ Choose one relevant benefit and one proof from the Brand facts when they have on
 in business, jobs done), a named credential or a warranty length, cited in sourceQuotes. A bare
 "trusted" or "experienced" is not proof. Do not repeat the full credentials, service-area list and
 savings claim in every ad. Avoid generic slogan triplets, forced metaphors, and references to
-incidental objects in the picture. End with a plain next step. When lead.ask is given, the last line
+incidental objects in the picture. End with a plain next step. The ad's button opens a WhatsApp chat or a
+form, so never ask people to call, phone or email. When lead.ask is given, the last line
 asks for it by quoting it word for word in “ ”, without naming a channel, because the ad may run
 to WhatsApp or a form (for example: Book your “Free site survey” today). Every ad of the batch quotes
 the same words; on WhatsApp they become the message the customer sends.
@@ -179,7 +180,8 @@ matter, but never override factual constraints. Use the requested language for a
     {
       role: "user",
       content: JSON.stringify({
-        brand: input.brand,
+        // #1147: AdBrain ads open a WhatsApp chat or a form, never a call, so the copy gets no number to ask people to ring.
+        brand: { ...input.brand, phone: undefined, email: undefined },
         brief: input.brief,
         instructions: input.instructions ?? "",
         language:

@@ -53,6 +53,17 @@ describe("core: Create follows the long-running local ad rules (#418 rules 1, 4,
     expect(system).not.toMatch(/Do not default to stock people/);
   });
 
+  it("#1147: the copy never asks people to call: the model gets no phone number and is told the button opens a chat or form", () => {
+    expect(system).toMatch(/never ask people to call, phone or email/);
+    const brand = { ...(cedar.brand as BrandContext), phone: "+1 512 555 0142", email: "hello@cedarridge.example" };
+    const user = buildConceptMessages({ brand, brief: cedar.brief, angle: AD_ANGLES[0] })[1].content as string;
+    expect(user).not.toContain("555 0142");
+    expect(user).not.toContain("hello@cedarridge.example");
+    // Before: recorded Haiku copy asked people to call ("…then book or call our Austin clinic"; CPO's #1131 walk saw "…or call <phone>").
+    const recorded = readFileSync(join(FIXTURES, "cedar-ridge-run4.json"), "utf8") + readFileSync(join(FIXTURES, "cedar-ridge-haiku.json"), "utf8");
+    expect(recorded).toMatch(/\bor call\b/);
+  });
+
   it("rule 4: puts a person in every recorded picture that had none, and leaves the others alone", () => {
     expect(recordedDirections.length).toBeGreaterThan(40);
     const withPerson = recordedDirections.filter(personInScene);
