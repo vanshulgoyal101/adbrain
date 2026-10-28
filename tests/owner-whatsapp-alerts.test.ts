@@ -89,6 +89,28 @@ describe("POST /api/whatsapp/webhook (#701)", () => {
     expect((await POST(post(delivery([text("919811112222", "STOP")])))).status).toBe(503);
   });
 
+  // #1139: Meta's documented template_category_update examples (whatsapp/webhooks/reference/template_category_update).
+  const categoryUpdate = (value: Record<string, unknown>) => ({ object: "whatsapp_business_account", entry: [{ id: "102290129340398", time: 1746169200, changes: [{ field: "template_category_update", value }] }] });
+  it("#1139: blocks a template Meta has moved, or will move in 24 h, out of UTILITY", async () => {
+    const { POST } = await import("@/app/api/whatsapp/webhook/route");
+    const done = categoryUpdate({ message_template_id: 278077987957091, message_template_name: "adbrain_lead_alert", message_template_language: "en", previous_category: "UTILITY", new_category: "MARKETING" });
+    const impending = categoryUpdate({ message_template_id: 278077987957092, message_template_name: "adbrain_daily_results", message_template_language: "hi", new_category: "UTILITY", correct_category: "MARKETING", category_update_timestamp: 1746169200 });
+    expect((await POST(post(done))).status).toBe(200);
+    expect((await POST(post(impending))).status).toBe(200);
+    expect(rpc.mock.calls).toEqual([
+      ["owner_alert_template_block", { p_template: "adbrain_lead_alert", p_category: "MARKETING" }],
+      ["owner_alert_template_block", { p_template: "adbrain_daily_results", p_category: "MARKETING" }],
+    ]);
+  });
+
+  it("#1139: a move back to UTILITY blocks nothing, and a failed block asks Meta to retry", async () => {
+    const { POST } = await import("@/app/api/whatsapp/webhook/route");
+    expect((await POST(post(categoryUpdate({ message_template_name: "adbrain_lead_alert", previous_category: "MARKETING", new_category: "UTILITY" })))).status).toBe(200);
+    expect(rpc).not.toHaveBeenCalled();
+    rpc.mockResolvedValueOnce({ data: null, error: { code: "57014" } });
+    expect((await POST(post(categoryUpdate({ message_template_name: "adbrain_lead_alert", previous_category: "UTILITY", new_category: "MARKETING" })))).status).toBe(503);
+  });
+
   it("answers Meta's subscribe handshake only with the right token", async () => {
     const { GET } = await import("@/app/api/whatsapp/webhook/route");
     const ok = await GET(new Request("http://localhost/api/whatsapp/webhook?hub.mode=subscribe&hub.verify_token=verify-me&hub.challenge=12345"));
