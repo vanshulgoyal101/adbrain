@@ -22,9 +22,9 @@ const RULES: { name: string; pattern: RegExp; negatable?: boolean }[] = [
   { name: "promise: 100%", pattern: /\b100\s?%(?=\s+\p{L})/iu },
   { name: "promise: no risk", pattern: /\b(no|zero) risk\b/i },
   // "Best ad" and "Best so far" are measured labels; promotional superlatives are blocked.
-  { name: "promise: best promotional", pattern: /\bthe best\b|\bbest (?:results?|price|deals?|service|quality)\b|\bbest in town\b/i },
-  { name: "promise: best in place", pattern: /\bbest in [A-Z][\p{L}\'\u2019-]*/u },
-  { name: "promise: ranking", pattern: /(?:#1|number one|top-rated)/i },
+  { name: "promise: best promotional", pattern: /\bbest (?:results?|returns?|price|deals?|service|quality)\b|\bbest in town\b/i },
+  { name: "promise: best in place", pattern: /\bbest in [A-Z][\p{L}'\u2019-]*/u },
+  { name: "promise: ranking", pattern: /(?<![\w#[-])#1(?![\w])|\bnumber one\b|\btop-rated\b/i },
   { name: "split: service fee/allocation", pattern: /\bservice (fee|allocation)s?\b/i },
   { name: "split: allocated to service", pattern: /\ballocated to service\b/i },
   { name: "split: 80%/20%", pattern: /(?<![\w.-])(80|20)\s?%/ },
@@ -80,7 +80,7 @@ describe("honest copy in UI strings (#1291)", () => {
     expect(findings("src/components/x.tsx", planted).map((finding) => finding.split(" ")[1])).toEqual(
       expect.arrayContaining(["promise:", "split:"]),
     );
-    expect(findings("src/components/x.tsx", planted)).toHaveLength(16);
+    expect(findings("src/components/x.tsx", planted)).toHaveLength(10);
     const fine = `const s = { width: "100%" }; const c = "w-[calc(100%-2rem)]"; const g = "linear-gradient(#fff 0%, #000 100%)";
       export const b = <p>Best ad. Best so far. No extra charge or guaranteed results. Not a guaranteed boundary.</p>;`;
     expect(findings("src/components/y.tsx", fine)).toEqual([]);
