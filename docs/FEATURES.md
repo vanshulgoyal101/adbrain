@@ -525,6 +525,16 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
 
 ### Review, Create, Activate
 
+A first-timer with approved ads and no campaign yet, who can connect Meta, gets
+setup step 3 "Go live" on `/campaigns` (#1251 WS1, #1271): the picked ads, a daily
+budget (₹300/₹500/₹1,000 a day) for 2 days with the most it can spend, the areas,
+the WhatsApp chat, and the weekly cap line (#1342; over the cap, Go live can't be
+tapped). The checklist shows the Facebook Page, the money row (AdBrain ad money →
+Settings, or payment on the owner's own Meta account) and the "Stops at" total.
+The one primary connects the Page first (MetaConnectDialog), then "Go live · ₹{d} a
+day" opens the campaign review below (`?all=1&new=1&review=1&budget=d&creatives=…`).
+Nothing is created or spent from Go live until the one-tap path (#1271 4b) ships.
+
 Closing New campaign retains its unsaved brief, creatives, audience, destination
 and budget in memory for the current business; returning to a business in the
 same mounted view restores its own setup. Use **Discard and start new** to clear

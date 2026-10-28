@@ -212,7 +212,7 @@ type CampaignsProps = {
   metaReady: boolean;
   adAccountId: string;
   /** Opened from Review: start a new campaign with these ads (non-approved IDs are ignored); with `review` (#1004, from Create) Review opens on its own once the composer has settled. */
-  newCampaign?: { creativeIds: string[]; review?: boolean };
+  newCampaign?: { creativeIds: string[]; review?: boolean; /** #1271: the daily budget chosen on Go live. */ budget?: number };
   /** #783: show "Which ad worked" on launched campaign cards (`AD_RESULTS_ENABLED`). */
   adResults?: boolean;
   /** #1342: the Settings weekly cap and the live campaigns' budgets (read on the server); null when they couldn't be read. */
@@ -305,7 +305,7 @@ function BusinessCampaigns({
     newCampaign?.creativeIds.filter(id => approved.some(creative => creative.id === id)),
   ));
   // #761: ₹300 a day is the core run (#334); less rarely gets Meta out of learning.
-  const [budget, setBudget] = useState(initialSetup?.budget ?? 300);
+  const [budget, setBudget] = useState(initialSetup?.budget ?? newCampaign?.budget ?? 300);
   const [destination, setDestination] = useState<"instant_form" | "whatsapp">(initialSetup?.destination ?? "whatsapp");
   const [whatsappNumber, setWhatsAppNumber] = useState(initialSetup?.whatsappNumber ?? "");
   const [whatsappLanguage, setWhatsAppLanguage] = useState<WhatsAppLanguage>(initialSetup?.whatsappLanguage ?? "ad");
