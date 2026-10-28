@@ -144,6 +144,8 @@ describe("core: <SetupBusinessStep> (#1269)", () => {
     expect(screen.queryByRole("button", { name: "Back" })).toBeNull();
     expect(screen.getByText("Making ads is free. Nothing goes live until you say so.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "More about your business" })).toHaveAttribute("href", "/brand?all=1");
+    // #1570 (CPO, #1438): the pilots are in Tricity, so the example places are too.
+    expect(screen.getByLabelText("Where you serve")).toHaveAttribute("placeholder", "e.g. Mohali\nKharar");
   });
 
   it("completing the five fields saves them (brandUsable) and goes to Your ads", async () => {

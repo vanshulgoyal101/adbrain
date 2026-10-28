@@ -48,6 +48,14 @@ export class ImageProviderError extends Error {
   }
 }
 
+/** #1593: the owner's product photo needs the paid image model, which is out of credit or parked; no generic stand-in. */
+export class ReferencePhotoPausedError extends Error {
+  constructor() {
+    super("The product photo needs the paid image model, which is paused right now.");
+    this.name = "ReferencePhotoPausedError";
+  }
+}
+
 export class FreeImageBusyError extends Error {
   constructor() {
     super("Free test images are busy right now. Try again in a minute.");

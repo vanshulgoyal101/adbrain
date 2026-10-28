@@ -9,7 +9,7 @@ import {
 } from "@/lib/templates/ads";
 import { contactChannel, formatDimensions, whatsappContactLabel, type AdFormat } from "@/lib/creative/design";
 import { quotedAsk } from "@/lib/campaign/whatsapp-greeting";
-import { bannedClaimsForVertical, capitalWords, scanAdCopy } from "@/lib/creative/slopScan";
+import { bannedClaimsForVertical, capitalWords, HEALTH_VERTICAL, MEDICAL_BANNED_CLAIMS, scanAdCopy } from "@/lib/creative/slopScan";
 import { policyFindings } from "@/lib/creative/policy-rules";
 import { emptyScene } from "@/lib/creative/visual-rules";
 import { spelledAmountIndex, spelledCurrency } from "./currency";
@@ -189,11 +189,24 @@ function claimClass(term: string): string {
   return term.includes("%") ? "percent" : "currency";
 }
 
+/**
+ * #1617 (CPO, #1501): first-person work claims ("our work", "kitchens we finished") say the picture shows the business's
+ * own work. Under a generated picture that is misleading (Meta's deceptive-practices policy); the owner's photo may say it.
+ */
+const WORK_CLAIM = /(?<![\p{L}\p{M}])(?:our (?:work|projects?|installs?|installations?)|we (?:built|finished|completed|installed|designed))(?![\p{L}\p{M}])|हमारा काम|हमने बनाया/giu;
+
+export function workClaims(text: string): string[] {
+  return [...new Set((text.normalize("NFC").match(WORK_CLAIM) ?? []).map((claim) => claim.toLowerCase()))];
+}
+
+export const WORK_CLAIM_WARNING = "This picture wasn't taken by you. Say what you offer, not 'our work', or use your own photo.";
+
 export function conceptValidationRules(issues: string[]): string[] {
   const allowedRules = new Set([
     "sourceQuotes", "unsupported-commercial-claim", "repeated-headline", "repeated-opening",
     "cliche", "em-dash-overuse", "exclamation-spam", "all-caps", "too-long", "banned-claim",
     "hook-length", "offer-below-fold", "price-unit", "personal-attribute", "unsupported-superlative", "exaggerated-result", "no-subject",
+    "work-claim",
   ]);
   return [...new Set(issues.map((issue) => {
     if (issue.startsWith("schema:")) return issue.slice(0, issue.indexOf(": "));
@@ -253,7 +266,7 @@ function shortLines(value: unknown): unknown {
   return value.trim().split("\n").map((paragraph) => {
     if (paragraph.trim().length <= FOLD_CHARACTERS) return paragraph;
     const lines: string[] = [];
-    for (const sentence of paragraph.trim().split(/(?<=[.!?])\s+(?=\S)/u)) {
+    for (const sentence of paragraph.trim().split(/(?<=[.!?।])\s+(?=\S)/u)) {
       const last = lines.length - 1;
       if (last >= 0 && lines[last].length + 1 + sentence.length <= FOLD_CHARACTERS) lines[last] += ` ${sentence}`;
       else lines.push(sentence);
@@ -427,6 +440,8 @@ export function copyClaimWarnings(
   copy: Pick<EditableCopy, "headline" | "primary_text" | "description">,
   facts: (string | null | undefined)[],
   vertical?: string | null,
+  /** #1617: false when the ad's picture is generated, not the owner's photo. */
+  options: { ownPicture?: boolean } = {},
 ): string[] {
   const sources = facts.filter((fact): fact is string => typeof fact === "string" && fact.trim() !== "").map((fact) => fact.normalize("NFC"));
   const text = [copy.headline, copy.primary_text, copy.description].join(" ").normalize("NFC");
@@ -442,9 +457,12 @@ export function copyClaimWarnings(
   }
   for (const finding of scanAdCopy(text, { bannedClaims: bannedClaimsForVertical(vertical) })) {
     if (finding.rule === "banned-claim") {
-      warnings.push(`"${finding.detail}" is a health claim Meta often rejects. Consider rewording it.`);
+      // #1609: education terms ("guaranteed") are promises, not health claims.
+      const kind = HEALTH_VERTICAL.test(vertical ?? "") && (MEDICAL_BANNED_CLAIMS as readonly string[]).includes(finding.detail) ? "a health claim" : "a promise";
+      warnings.push(`"${finding.detail}" is ${kind} Meta often rejects. Consider rewording it.`);
     }
   }
+  if (options.ownPicture === false && workClaims(text).length) warnings.push(WORK_CLAIM_WARNING);
   for (const finding of policyFindings([copy.headline, copy.primary_text, copy.description].join("\n"), { vertical, facts: sources })) {
     warnings.push(`"${finding.detail}": Meta often rejects this. ${finding.fix[0].toUpperCase()}${finding.fix.slice(1)}.`);
   }
@@ -525,6 +543,12 @@ export function validateConcept(
     [concept.headline, concept.primary_text, concept.supportingText, concept.description].filter(Boolean).join("\n"),
     { vertical: input.brand.vertical, facts: sources },
   ).map((finding) => `${finding.rule}: "${finding.detail}"; ${finding.fix}`));
+  // #1617: the generated picture isn't the business's own work; the first ad may use the owner's photo.
+  if (!input.ownerPhoto) {
+    for (const claim of workClaims([concept.headline, concept.primary_text, concept.supportingText, concept.description].filter(Boolean).join("\n"))) {
+      issues.push(`work-claim: "${claim}" says the picture is the business's own work, but the picture is generated; say what the business offers instead`);
+    }
+  }
   const empty = emptyScene(concept.visual.direction);
   if (empty) {
     issues.push(`no-subject: visual.direction shows an "${empty}" scene; give the image a clear subject (the people the business serves, its team at work, or its product), not an empty space`);

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { clipToThought, conceptValidationRules, validateConcept, type ConceptInput } from "@/lib/creative/concept";
 import { AD_ANGLES } from "@/lib/templates/ads";
+import { adPolicyHits } from "@/lib/campaign/ad-policy";
 import recorded from "./fixtures/create/cedar-ridge-concept.json";
 import groq from "./fixtures/create/cedar-ridge-groq-drafts.json";
 import groqFields from "./fixtures/create/cedar-ridge-groq-fields.json";
@@ -25,6 +26,46 @@ describe("core: Create concept validation on a recorded production concept", () 
     const overrun = { ...recorded.concept, rationale: `${rationale} ${rationale.slice(0, 200)}` };
     expect(overrun.rationale.length).toBeGreaterThan(600);
     expect(rules(overrun)).toEqual([]);
+  });
+
+  // #1613 (QA): a Hindi paragraph ends its sentences with '।'; it is rewrapped like English instead of failing hook-length.
+  it("rewraps a long Hindi primary-text paragraph at '।' without changing a word", () => {
+    const hindi = "दिन भर डेस्क पर बैठने से गर्दन और पीठ अकड़ जाती है। हमारा ऑस्टिन क्लिनिक नए मरीज़ों को उसी दिन देखता है, शाम और सप्ताहांत में भी। आज ही अपनी पहली मुलाक़ात बुक करें।";
+    expect(hindi.length).toBeGreaterThan(125);
+    const result = validateConcept({ ...recorded.concept, primary_text: hindi }, input);
+    const issues = result.success ? [] : conceptValidationRules(result.issues);
+    expect(issues).not.toContain("hook-length");
+    if (result.success) {
+      const lines = result.concept.primary_text.split("\n");
+      expect(lines.length).toBeGreaterThan(1);
+      expect(lines.every((line) => line.length <= 125)).toBe(true);
+      expect(lines.join(" ")).toBe(hindi);
+    }
+  });
+
+  // #1609 (CPO, #1500): an IELTS business's ad that promises a band is repaired in Create and blocked in Review.
+  it("an IELTS brand's 'guaranteed band' is refused for repair and blocked at Review", () => {
+    const ielts: ConceptInput = { ...input, brand: { ...recorded.brand, vertical: "IELTS coaching" } };
+    const promise = { ...recorded.concept, primary_text: `${recorded.concept.primary_text.split("\n")[0]}\nGuaranteed band 7 in 30 days.` };
+    const result = validateConcept(promise, ielts);
+    expect(result.success).toBe(false);
+    expect(result.success ? [] : conceptValidationRules(result.issues).join(" ")).toMatch(/banned-claim/);
+    expect(adPolicyHits([{ id: "c1", headline: promise.headline, primaryText: promise.primary_text }], "IELTS coaching").map((hit) => hit.term))
+      .toEqual(expect.arrayContaining(["guaranteed", "guaranteed band"]));
+    // The same words pass for a business outside education and health.
+    expect(adPolicyHits([{ id: "c1", headline: promise.headline, primaryText: promise.primary_text }], "solar energy")).toEqual([]);
+  });
+
+  // #1617 (CPO, #1501): a generated picture can't be called the business's own work; the owner's photo can.
+  it("refuses 'Kitchens we finished' under a generated picture, allows it on the owner's photo", () => {
+    const line = (text: string) => ({ ...recorded.concept, primary_text: `${recorded.concept.primary_text.split("\n")[0]}\n${text}` });
+    expect(rules(line("Kitchens we finished in Mohali last month."))).toContain("work-claim");
+    expect(rules(line("See our work in Austin."))).toContain("work-claim");
+    expect(conceptValidationRules((() => {
+      const result = validateConcept(line("Kitchens we finished in Mohali last month."), { ...input, ownerPhoto: "https://core-test.supabase.co/brand/kitchen.jpg" });
+      return result.success ? [] : result.issues;
+    })())).not.toContain("work-claim");
+    expect(rules(line("Modular kitchens in Mohali, free consultation."))).not.toContain("work-claim");
   });
 
   it("clips an over-long link description instead of discarding the concept", () => {

@@ -177,6 +177,26 @@ describe("core: <SetupAdsStep> (#1270)", () => {
     expect(mocks.push).not.toHaveBeenCalled();
   });
 
+  // #1502: on the visit the ads are shown on a phone; full screen, each one still says it's a sample (no clean picture).
+  it("#1502: a prospect's picked ads open full screen, one at a time, each marked as a sample", async () => {
+    render(<SetupAdsStep business={business} initialAds={[ad("a"), ad("b"), ad("c")]} sample />);
+    fireEvent.click(screen.getByRole("button", { name: /Ad b/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Show full screen" }));
+    const viewer = within(screen.getByRole("dialog", { name: "Sample ads" }));
+    expect(viewer.getAllByRole("img").map((img) => img.getAttribute("src"))).toEqual(["/ads/a.png", "/ads/c.png"]);
+    expect(viewer.getAllByText("Sample: not live")).toHaveLength(2);
+    expect(viewer.getByText("1 of 2")).toBeInTheDocument();
+    expect(viewer.getByRole("button", { name: "Close" })).toHaveFocus();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Show full screen" })).toHaveFocus();
+  });
+
+  it("#1502: an owner's own step 2 has no sample viewer", () => {
+    render(<SetupAdsStep business={business} initialAds={[ad("a"), ad("b")]} />);
+    expect(screen.queryByRole("button", { name: "Show full screen" })).not.toBeInTheDocument();
+  });
+
   const batch = "22222222-2222-4222-8222-222222222222";
   const inBatch = (id: string, minutesAgo: number) => ({ ...ad(id), variant_group: batch, created_at: new Date(Date.now() - minutesAgo * 60_000).toISOString() }) as unknown as Creative;
 

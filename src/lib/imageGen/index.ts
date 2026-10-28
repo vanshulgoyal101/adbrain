@@ -2,7 +2,7 @@ import { getEnv } from "@/lib/env";
 import { createPollinationsProvider } from "./providers/pollinations";
 import { createOpenRouterProvider } from "./providers/openrouter";
 import { CLOUDFLARE_IMAGE_MODEL, cloudflareConfigured, createCloudflareProvider } from "./providers/cloudflare";
-import { FreeImageBusyError, ImageProviderError, type GeneratedImage, type ImageProvider, type ImageRequest } from "./types";
+import { FreeImageBusyError, ImageProviderError, ReferencePhotoPausedError, type GeneratedImage, type ImageProvider, type ImageRequest } from "./types";
 import { MAX_IMAGE_BYTES, readBoundedResponse, validateRaster } from "./raster";
 import { fetchPublicUrl, SafeFetchError } from "@/lib/security/ssrf";
 import { freeImagesOnly } from "@/lib/llm/spend-policy";
@@ -31,8 +31,11 @@ function getFallbackProvider(): ImageProvider | null {
     ? null : getProvider(env.IMAGE_PROVIDER_FALLBACK);
 }
 
+/** Providers that take no reference images. */
+const FREE_PROVIDERS = ["pollinations", "cloudflare"];
+
 async function executeImage(provider: ImageProvider, req: ImageRequest): Promise<GeneratedImage> {
-  if (["pollinations", "cloudflare"].includes(provider.name) && req.referenceImages?.length) throw new Error(`${provider.name} does not support product references. Select a reference-capable image provider.`);
+  if (FREE_PROVIDERS.includes(provider.name) && req.referenceImages?.length) throw new Error(`${provider.name} does not support product references. Select a reference-capable image provider.`);
   const generated = await provider.generate(req);
   const raster = await downloadImage(generated.url, req.signal).catch((error: unknown) => {
     if (!generated.providerRequestId) throw error;
@@ -151,15 +154,16 @@ export async function generateImage(
 }
 
 async function fallbackImage(fallback: ImageProvider, from: ImageProvider, req: ImageRequest, startedAt: number): Promise<GeneratedImage> {
+  // #1593: the free pictures can't use the owner's product photo; an unrelated product would misrepresent what they sell.
+  if (req.referenceImages?.length && FREE_PROVIDERS.includes(fallback.name)) throw new ReferencePhotoPausedError();
   try {
     req.onFallback?.();
   } catch {
     // Advisory: a broken listener must not cost the picture.
   }
-  const fallbackReq = fallback.name === "pollinations" ? { ...req, referenceImages: undefined } : req;
   // #1422: Pollinations answers 404/busy right after another free picture; wait that out once, one picture at a time.
   // #1476: the free fallback tries Cloudflare first when it is configured.
-  const run = fallback.name === "pollinations" ? freeImage(fallbackReq, 1) : executeImage(fallback, fallbackReq);
+  const run = fallback.name === "pollinations" ? freeImage(req, 1) : executeImage(fallback, req);
   const generated = await run.catch((fallbackError: unknown) => {
     req.onAttempt?.({ provider: fallback.name, model: fallback.name, status: "error", errorCode: imageFailureCode(fallbackError),
       providerRequestId: fallbackError instanceof ImageProviderError ? fallbackError.providerRequestId : undefined,
