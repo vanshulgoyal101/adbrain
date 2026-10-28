@@ -130,7 +130,7 @@ import { HelpOnWhatsApp } from "@/components/support-link";
 import { cn, timeAgo } from "@/lib/utils";
 import { useMounted } from "@/lib/use-mounted";
 import { refreshIfStale, staleCampaignIds } from "@/lib/campaign/results-freshness";
-import { goneInMeta } from "@/lib/campaign/gone-in-meta";
+import { GONE_LINES, goneInMeta } from "@/lib/campaign/gone-in-meta";
 import { formatDate, formatMoney, formatMoneyExact, formatNumber, formatPerDay } from "@/lib/format";
 
 
@@ -2453,7 +2453,8 @@ function BusinessCampaigns({
                               {c.status === "active" ? "Pause" : "Resume"}
                             </Button>
                           )}
-                        <Button
+                        {/* #1600 (Designer #1633): nothing to fetch for a campaign deleted in Meta; ⋯ stays. */}
+                        {goneInMeta(c) !== "Deleted in Meta" && <Button
                           variant="outline"
                           onClick={() => refresh(c.id)}
                           aria-label="Refresh results"
@@ -2466,7 +2467,7 @@ function BusinessCampaigns({
                           )}
                           {/* #417: a real space, so the visible text reads "Refresh results" like the label. */}
                           Refresh{" "}<span className="-ml-1 hidden sm:inline">results</span>
-                        </Button>
+                        </Button>}
                         <DropdownMenu>
                           <DropdownMenuTrigger
                             aria-label={`More actions for ${c.name ?? "this campaign"}`}
@@ -2514,6 +2515,8 @@ function BusinessCampaigns({
                       </div>
                     </div>
                     {attention ? <p className="text-sm font-medium text-red-800">{attention}</p> : null}
+                    {/* #1600 (CPO #1601): said only once Meta reports it deleted; results up to then stay below. */}
+                    {goneInMeta(c) === "Deleted in Meta" ? <p className="text-sm text-slate-700">{GONE_LINES.deleted}</p> : null}
                     {cardError?.id === c.id ? <p role="alert" className="text-sm font-medium text-red-800">
                       {cardError.message}
                       {cardError.adsManager ? <> <a href={adsLink(c)} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center gap-1 underline underline-offset-4"><ExternalLink className="h-4 w-4" aria-hidden="true" />Open in Ads Manager</a></> : null}

@@ -18,7 +18,7 @@ import type { AuditLog, Business, Campaign, CampaignResult, CreativePreview } fr
 import { campaignAttention } from "@/lib/campaign/health";
 import { formatReplyTime } from "@/lib/leads/first-reply";
 import { campaignStatus, Status } from "@/components/ui/status";
-import { goneInMeta } from "@/lib/campaign/gone-in-meta";
+import { goneInMeta, recentlyDeletedInMeta } from "@/lib/campaign/gone-in-meta";
 import type { HomeAdReview } from "@/lib/campaign/home-ad-review";
 import { translator, type AppLocale } from "@/i18n/locale";
 
@@ -75,7 +75,8 @@ export function WorkspaceHome({
   locale = "en",
 }: WorkspaceHomeProps) {
   const t = translator(locale, "home");
-  const liveCampaigns = campaigns.filter((campaign) => !goneInMeta(campaign));
+  // #1600 (Designer #1633): a campaign deleted in Meta keeps its Home row for a week, with the CPO's line as its status.
+  const liveCampaigns = campaigns.filter((campaign) => !goneInMeta(campaign) || recentlyDeletedInMeta(campaign, now));
   const summary = business ? homeResults(campaigns, results) : null;
   // #1292's line already names the newest person waiting, so the verdict doesn't say it twice.
   const verdicts = business ? homeVerdicts(campaigns, results, { now, waiting: firstEnquiry ? 0 : waiting }) : null;
@@ -214,6 +215,7 @@ export function WorkspaceHome({
                     const status = campaignStatus(campaign);
                     const attention = campaignAttention(campaign);
                     const judged = verdicts?.labels.get(campaign.id);
+                    const deleted = goneInMeta(campaign) === "Deleted in Meta";
                     return (
                       <li key={campaign.id} className="py-3 sm:flex sm:items-center sm:justify-between sm:gap-6">
                         <div className="min-w-0">
@@ -222,11 +224,11 @@ export function WorkspaceHome({
                           </Link>
                           {attention && <p className="mt-1 text-xs font-medium text-danger">Needs attention: {attention}</p>}
                         </div>
-                        <p className="mt-1 flex shrink-0 gap-x-4 text-xs text-slate-600 sm:mt-0">
+                        {deleted ? <p className="mt-1 text-sm text-slate-700 sm:mt-0 sm:max-w-xs">{t("deletedInMeta")}</p> : <p className="mt-1 flex shrink-0 gap-x-4 text-xs text-slate-600 sm:mt-0">
                           <Status tone={status.tone}>{status.label}</Status>
                           {judged && <span>{judged}</span>}
                           {campaign.daily_budget != null && <span className="sm:w-24 sm:text-right">{formatPerDay(campaign.daily_budget)}</span>}
-                        </p>
+                        </p>}
                       </li>
                     );
                   })}
