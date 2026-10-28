@@ -546,18 +546,18 @@ export function BrandForm({ business, photoCount = 0 }: { business: Business | n
           {pending ? <Spinner /> : <Save className="h-4 w-4" />}
           Save your business
         </Button>
+        {/* #1262: always in the page, so screen readers announce "Saved" or the error when it appears. */}
+        <span role="status" className="inline-flex items-center gap-1.5 text-sm empty:hidden">
+          {state.ok && state.submittedRevision === revision && !pending
+            ? <span className="inline-flex items-center gap-1.5 text-blue-700"><CheckCircle2 className="h-4 w-4" aria-hidden="true" /> Saved</span>
+            : state.error ? <span className="text-red-600">{state.error}</span> : null}
+        </span>
         {state.ok && state.submittedRevision === revision && !pending && (
-          <>
-            <span className="inline-flex items-center gap-1.5 text-sm text-blue-700">
-              <CheckCircle2 className="h-4 w-4" /> Saved
-            </span>
-            {/* #681: the next step sits beside Saved, so a phone isn't left at the bottom of the page. */}
-            <Link href="/create" className="ml-auto inline-flex min-h-11 items-center rounded-lg px-3 text-sm font-semibold text-blue-700 hover:bg-slate-100">
-              Next: Create ads
-            </Link>
-          </>
+          // #681: the next step sits beside Saved, so a phone isn't left at the bottom of the page.
+          <Link href="/create" className="ml-auto inline-flex min-h-11 items-center rounded-lg px-3 text-sm font-semibold text-blue-700 hover:bg-slate-100">
+            Next: Create ads
+          </Link>
         )}
-        {state.error && <span className="text-sm text-red-600">{state.error}</span>}
       </div>
     </form>
   );
