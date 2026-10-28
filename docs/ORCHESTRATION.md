@@ -101,10 +101,10 @@ Routine steps never wait for the CEO or the CTO.
    deploys to `main`, lead time to production, change-failure rate and time to
    restore from the production guard's smoke; active hours per role, PR lead time,
    handoff latency, idle gaps, workflow failures) on #364 and fixes the worst number.
-   **Queues never run dry:** every worker keeps at least 2
-   actionable items (not `waiting-owner`, `blocked` or `decision`), each traceable
+   **Queues never run dry:** every worker keeps at least 3
+   actionable items (owner, Oct 28; not `waiting-owner`, `blocked`, `parked` or `decision`), each traceable
    to a line in the CEO priorities below; `wait-for-work --me cto` reports any
-   worker that drops below 2, and the CTO refills that row the same hour. At the
+   worker that drops below 3, and the CTO refills that row the same hour. At the
    end of every wait it also reports workers with queued work but no signed comment
    in 90 minutes and PRs untouched for 60 minutes; the CTO checks and unblocks them.
    **CI failures are the CTO's without being asked** (owner, Oct 27): the waiter reports

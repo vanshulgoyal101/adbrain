@@ -11,7 +11,7 @@
 // Work is: an item newly labelled for you; a comment on your item, addressed to you, or on an open PR
 // whose title names your issue (#309 "#274 …"); and, at start and before giving up, any item you own
 // where someone else spoke last and didn't address another role (so handoffs made while you were busy
-// are never lost). For the CTO it also reports any worker with fewer than 2 actionable items and,
+// are never lost). For the CTO it also reports any worker with fewer than 3 actionable items and,
 // at the end of each wait, workers gone quiet for 90 min and PRs untouched for 60 min.
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -115,7 +115,7 @@ export function readyPool(issues, role, max = 3) {
 }
 
 export const WORKERS = ["dev", "dev2", "dev3", "dev4", "qa", "qa2", "reviewer", "devops", "cpo", "analyst", "designer"];
-export const MIN_QUEUE = 2;
+export const MIN_QUEUE = 3;
 
 /** Workers with fewer than MIN_QUEUE actionable open items (not parked or waiting on the CEO). The CTO refills these. */
 export function queueCounts(issues) {
