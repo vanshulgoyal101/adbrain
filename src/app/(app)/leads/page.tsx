@@ -11,6 +11,7 @@ import { EnquiriesSections } from "@/components/enquiries-sections";
 import { whatsappChatRows, type WhatsAppChatRow } from "@/lib/campaign/real-enquiries";
 import { getLeadPage } from "@/lib/leads/queries";
 import { inboxSummary } from "@/lib/leads/reply-time";
+import { readAlertSettings } from "@/lib/alerts/settings-read";
 
 export const metadata = { title: "Enquiries" };
 
@@ -39,7 +40,7 @@ export default async function LeadsPage() {
     );
   }
 
-  const [page, metaConnection, chatRows, summary] = await Promise.all([
+  const [page, metaConnection, chatRows, summary, alerts] = await Promise.all([
     getLeadPage(business.id),
     getMetaConnection(business.id),
     // #764: WhatsApp chats beside form leads; an unreadable read hides the section, never the inbox.
@@ -49,6 +50,7 @@ export default async function LeadsPage() {
     }).catch((): WhatsAppChatRow[] => []),
     // #1260: the inbox sentence; an unreadable count drops the sentence, never the list.
     inboxSummary(business.id).catch(() => null),
+    readAlertSettings(business.id).catch(() => null),
   ]);
 
   // #1260: the inbox opens on Waiting when someone waits, so its first page (and Load more) is the New list.
@@ -73,6 +75,7 @@ export default async function LeadsPage() {
             initialTotal={firstPage.total}
             initialNextCursor={firstPage.nextCursor}
             allTotal={page.total}
+            offerAlerts={Boolean(alerts && !alerts.leadAlerts && !alerts.optedOut)}
             metaReady={metaConnection.ready}
             syncScope={`${business.owner_id}:${business.id}:${metaConnection.adAccountId ?? ""}:${metaConnection.pageId ?? ""}`}
             title={chatRows.length ? "Form enquiries" : "Enquiries"}
