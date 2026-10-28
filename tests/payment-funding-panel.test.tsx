@@ -506,7 +506,7 @@ describe("managed billing settings", () => {
     expect(screen.queryByText(/Ad money|Pay any amount|Managed billing/)).not.toBeInTheDocument();
     expect(screen.queryByTestId("customer-balance")).not.toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
-    if (mode === "own") expect(screen.getByText("You pay Meta directly from your ad account. AdBrain's pilot is free.")).toBeInTheDocument();
+    if (mode === "own") expect(screen.getByText("You pay Meta directly from your ad account. Your first month of AdBrain is free; after that it's ₹999 a month.")).toBeInTheDocument();
   });
 
   it("a managed business keeps the live checkout and allowance", () => {
