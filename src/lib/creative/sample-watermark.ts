@@ -1,8 +1,8 @@
 import sharp from "sharp";
 import { shapeText } from "@/lib/creative/shaped-text";
+import { SAMPLE_LABEL } from "@/lib/creative/sample-label";
 
-/** #1317: what a prospect's exported ads say on the picture, until the business owner takes the account over. */
-export const SAMPLE_LABEL = "Sample: not live";
+export { SAMPLE_LABEL };
 
 /**
  * The image with a "Sample: not live" band across its foot, in its own format. The words are drawn by Pango with

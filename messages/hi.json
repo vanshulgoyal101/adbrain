@@ -26,7 +26,9 @@
     "recentActivity": "हाल की गतिविधि",
     "needsReview": "जाँचना बाकी",
     "approved": "मंज़ूर",
-    "setAside": "अलग रखा"
+    "setAside": "अलग रखा",
+    "metaChecking": "Meta आपके विज्ञापन जांच रहा है। आमतौर पर एक दिन में दिखने लगते हैं।",
+    "metaReview": "Meta जांच"
   },
   "workQueue": {
     "brandTitle": "अपना बिज़नेस सेट करें",

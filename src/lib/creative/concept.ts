@@ -253,7 +253,7 @@ function shortLines(value: unknown): unknown {
   return value.trim().split("\n").map((paragraph) => {
     if (paragraph.trim().length <= FOLD_CHARACTERS) return paragraph;
     const lines: string[] = [];
-    for (const sentence of paragraph.trim().split(/(?<=[.!?])\s+(?=\S)/u)) {
+    for (const sentence of paragraph.trim().split(/(?<=[.!?।])\s+(?=\S)/u)) {
       const last = lines.length - 1;
       if (last >= 0 && lines[last].length + 1 + sentence.length <= FOLD_CHARACTERS) lines[last] += ` ${sentence}`;
       else lines.push(sentence);

@@ -525,8 +525,11 @@ limit is spent. AdBrain treats either as `CREDIT_EXHAUSTED`, not as a generic re
   before. Usage events record `LLM_CREDIT_EXHAUSTED`.
 - **Images:** a credit-exhausted OpenRouter image falls back to the free picture (Cloudflare when
   configured, then Pollinations, #1476) even when `IMAGE_PROVIDER_FALLBACK` is `none`. Neither can
-  take product reference photos, so that
-  picture is made without them; the receipt records `fallbackFrom`. Only the credit refusal counts
+  take product reference photos, so a picture made from the owner's product photos or past ads
+  **fails** instead (#1593: 'Your product photo needs our paid pictures, which are paused right
+  now. Try again in 15 minutes.'), on the first refusal and while the key is parked; it never
+  becomes a generic product. Pictures without references fall back; the receipt records
+  `fallbackFrom`. Only the credit refusal counts
   as not charged (`providerFinalStatus: failed`); any other image failure stays `unknown`.
   The exhausted image provider is then parked for 15 minutes per server (#1422), so the rest of
   the batch and the next Creates go straight to the free picture. A Pollinations fallback joins the

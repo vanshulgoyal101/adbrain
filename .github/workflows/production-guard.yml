@@ -96,11 +96,11 @@ jobs:
           [ "$code" = 200 ] && exit 0
           echo "FAIL 2-Tier parent token: HTTP $code $summary" | tee -a smoke.txt
           exit 1
-      # #1439: the WS1 first-timer path at 360 px over slow 4G, read-only on Meta. Report-only until it has run green
-      # twice in the guard; then DevOps can make it gating. Skipped while the WS1_* secrets are unset.
+      # #1439: the WS1 first-timer path at 360 px over slow 4G, read-only on Meta. Gating since 5 green guard runs
+      # (Oct 28): a failure turns the guard red and opens a core bug, but never rolls back (that needs the smoke to fail).
+      # Skipped while the WS1_* secrets are unset.
       - name: WS1 first-timer walk (#1439)
         if: steps.smoke.outcome == 'success'
-        continue-on-error: true
         env:
           WS1_EMAIL: ${{ secrets.WS1_EMAIL }}
           WS1_PASSWORD: ${{ secrets.WS1_PASSWORD }}

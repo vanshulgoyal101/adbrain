@@ -26,7 +26,9 @@
     "recentActivity": "Recent activity",
     "needsReview": "Needs review",
     "approved": "Approved",
-    "setAside": "Set aside"
+    "setAside": "Set aside",
+    "metaChecking": "Meta is checking your ads. They usually start showing within a day.",
+    "metaReview": "Meta review"
   },
   "workQueue": {
     "brandTitle": "Set up your business",

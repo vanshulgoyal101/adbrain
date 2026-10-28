@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { setupBatch } from "@/lib/creative/setup-picks";
 import { wentLive, type LiveSignals } from "@/lib/setup/steps";
 import { attachRealEnquiries } from "@/lib/campaign/real-enquiries";
@@ -190,6 +191,17 @@ export const getCampaigns = cache(async function getCampaigns(businessId: string
   }, "Campaigns could not be loaded.");
   return campaigns.sort((left, right) => (right.created_at ?? "").localeCompare(left.created_at ?? ""));
 });
+
+/** #1469: Meta's stored effective status of each ad in a campaign (lifetime rows from the last refresh, RLS read). */
+export async function getAdStatuses(campaignId: string): Promise<(string | null)[]> {
+  const supabase = await createClient();
+  // `ad_results` isn't in the generated types yet (same cast as GET /api/campaigns/[id]/ads).
+  const { data, error } = await (supabase as unknown as SupabaseClient).from("ad_results").select("effective_status")
+    .eq("campaign_id", campaignId).is("period_start", null).is("period_end", null).limit(100)
+    .returns<{ effective_status: string | null }[]>();
+  if (error) throw new Error("Ad statuses could not be loaded.");
+  return (data ?? []).map((row) => row.effective_status);
+}
 
 /** Latest result row per campaign, keyed by campaign id. */
 export async function getLatestResults(

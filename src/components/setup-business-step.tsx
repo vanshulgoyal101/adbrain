@@ -22,7 +22,7 @@ const AUTOSAVE_MS = 800;
 const FIELD_TEXT: Record<SetupField, { label: string; placeholder: string; helper?: string }> = {
   name: { label: "Business name", placeholder: "e.g. SunPeak Solar" },
   vertical: { label: "What you sell", placeholder: "e.g. Rooftop solar for homes" },
-  locations: { label: "Where you serve", placeholder: "e.g. Jaipur\nAjmer", helper: "Your ads show only here. One city or area per line." },
+  locations: { label: "Where you serve", placeholder: "e.g. Mohali\nKharar", helper: "Your ads show only here. One city or area per line." },
   offer: { label: "Your offer", placeholder: "e.g. Free site survey", helper: "One thing customers get for messaging you. Only what you really offer." },
   phone: { label: "WhatsApp number", placeholder: "98765 43210", helper: "Customers message you here." },
 };

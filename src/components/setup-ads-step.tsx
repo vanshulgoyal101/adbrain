@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { preload } from "react-dom";
 import Link from "next/link";
-import { Check, Loader2, Pencil } from "lucide-react";
+import { Check, Loader2, Maximize2, Pencil } from "lucide-react";
 import { setCreativeStatus } from "@/app/(app)/studio/actions";
 import { applyCreateLine, readCreateResponse, type LiveAd } from "@/components/create-progress";
+import { SampleViewer } from "@/components/sample-viewer";
 import { SetupSpine } from "@/components/setup-spine";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -117,6 +118,11 @@ export function SetupAdsStep({ business, initialAds, sample = false, earlier = f
   const [failedCount, setFailedCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [viewing, setViewing] = useState(false);
+  const closeViewer = useCallback(() => {
+    setViewing(false);
+    document.getElementById("sample-full-screen")?.focus();
+  }, []);
   // #1407: on return, ads of this batch still being made (they're added as they land).
   const [coming, setComing] = useState(0);
   const [downloading, setDownloading] = useState(false);
@@ -375,6 +381,13 @@ export function SetupAdsStep({ business, initialAds, sample = false, earlier = f
           <p className="mt-1 text-sm text-slate-600">{sample
             ? "All of them go in the sample pack, each marked 'Sample: not live'. Tap an ad to leave it out, or the pencil to edit its words."
             : `We picked the ${Math.min(SETUP_PICKS, ads.length)} strongest. Tap an ad to change your pick, or the pencil to edit its words.`}</p>
+          {sample && (
+            <Button id="sample-full-screen" type="button" variant="outline" className="mt-4 w-full sm:w-auto" disabled={!ids.length || coming > 0}
+              onClick={() => setViewing(true)}>
+              <Maximize2 className="h-4 w-4" aria-hidden="true" /> Show full screen
+            </Button>
+          )}
+          {viewing && <SampleViewer ads={ads.filter((ad) => picked.has(ad.id))} onClose={closeViewer} />}
           <ul className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-3">
             {ads.map((ad) => {
               const on = picked.has(ad.id);

@@ -72,8 +72,8 @@ describe("core: turn-on refused while a new audience waits (#1571, #1539)", () =
     expect(screen.queryByText(/Couldn't update the campaign|Something went wrong/)).toBeNull();
   });
 
-  // Known bug #1576: the waiting list is read only on load, so this fails today. Flip `it.fails` to `it` in the fix.
-  it.fails("switch_pending offers the way out on the card, even when the copy appeared after the page loaded (#1576)", async () => {
+  // #1576: the card re-reads the waiting list when the server says a copy waits.
+  it("switch_pending offers the way out on the card, even when the copy appeared after the page loaded (#1576)", async () => {
     // The copy was made in another tab after this page read the waiting list; the server knows, the card doesn't yet.
     await turnOn({ status: 409, body: { error: SWITCH_PENDING, code: "switch_pending", retryable: false } },
       () => { mocks.waiting = [{ id: "op-1", campaign_id: "campaign-1", sanitized_error: null }]; });
