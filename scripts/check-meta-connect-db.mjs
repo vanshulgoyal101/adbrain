@@ -1287,6 +1287,52 @@ async function verifyLeadCampaignLink(db, database) {
   });
 }
 
+/**
+ * #1764 (QA red test for #1761, DPDP erasure): a deleted enquiry must stay deleted. The recorded Meta test lead
+ * (tests/core/fixtures/meta/leads.json: lead 1751001369523985 on form 1732372914636573) arrives through the real
+ * lead_sync_checkpoint, the owner deletes it, and Meta keeps returning it on every later sync (leads stay readable
+ * at Meta for 90 days), so the next checkpoint must skip it while a new lead still imports. Another business with
+ * the same Meta lead id is unaffected. The delete below is a plain row delete, the way #1761's route does it; if the
+ * build deletes through an RPC instead, call that here. Red until #1761's tombstone lands.
+ */
+async function verifyDeletedLeadStaysDeleted(db, database) {
+  const RECORDED_LEAD = "1751001369523985", RECORDED_FORM = "1732372914636573";
+  const owner = randomUUID(), other = randomUUID(), business = randomUUID(), otherBusiness = randomUUID();
+  await db.query("insert into auth.users(id) values ($1),($2)", [owner, other]);
+  await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Erasure'),($3,$4,'Erasure other')", [business, owner, otherBusiness, other]);
+  await db.query("insert into public.meta_connections(business_id,generation,authorization_status,ad_account_id,page_id) values ($1,1,'connected','act_fixture','page_fixture'),($2,1,'connected','act_fixture','page_fixture')", [business, otherBusiness]);
+  const sync = async (target, user, rows) => {
+    const run = (await db.query("select * from public.lead_sync_start($1,$2,null,1,'act_fixture','page_fixture')", [target, user])).rows[0];
+    return (await db.query("select public.lead_sync_checkpoint($1,$2,$3,1,'act_fixture','page_fixture',$4,$5::jsonb,$6::jsonb) as result",
+      [target, user, run.id, run.version, JSON.stringify(rows), JSON.stringify({ formsDone: true, pending: [] })])).rows[0].result;
+  };
+  const recorded = { meta_lead_id: RECORDED_LEAD, form_id: RECORDED_FORM, full_name: "Test lead", phone: "+919999999001", created_time: "2026-10-22T05:39:35+0000" };
+  const ids = async (target) => (await db.query("select meta_lead_id from public.leads where business_id=$1 order by meta_lead_id", [target])).rows.map((row) => row.meta_lead_id);
+  await check(`${database}: a deleted enquiry never comes back on the next lead sync; new leads still arrive; other businesses unaffected (#1764, #1761)`, async () => {
+    await sync(business, owner, [recorded]);
+    await sync(otherBusiness, other, [recorded]);
+    assert.deepEqual(await ids(business), [RECORDED_LEAD]);
+    // The owner deletes the enquiry (DPDP erasure).
+    await db.query("delete from public.leads where business_id=$1 and meta_lead_id=$2", [business, RECORDED_LEAD]);
+    assert.deepEqual(await ids(business), []);
+    // Meta still returns it, now alongside a new lead.
+    await sync(business, owner, [recorded, { ...recorded, meta_lead_id: "1751001369529999", full_name: "New lead" }]);
+    assert.deepEqual(await ids(business), ["1751001369529999"], "the deleted lead was re-imported by the sync");
+    // And again on a later run (a tombstone that expires after one sync isn't erasure).
+    await sync(business, owner, [recorded]);
+    assert.deepEqual(await ids(business), ["1751001369529999"]);
+    // Another business's copy of the same Meta lead is untouched, and the tombstone is per business, not global by
+    // Meta id: a business that first syncs this lead after the deletion still gets it.
+    assert.deepEqual(await ids(otherBusiness), [RECORDED_LEAD]);
+    const late = randomUUID(), lateOwner = randomUUID();
+    await db.query("insert into auth.users(id) values ($1)", [lateOwner]);
+    await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Erasure late')", [late, lateOwner]);
+    await db.query("insert into public.meta_connections(business_id,generation,authorization_status,ad_account_id,page_id) values ($1,1,'connected','act_fixture','page_fixture')", [late]);
+    await sync(late, lateOwner, [recorded]);
+    assert.deepEqual(await ids(late), [RECORDED_LEAD], "another business's deletion blocked this business's lead");
+  });
+}
+
 async function verifyWhatsAppTemplate(db, database) {
   const owner = randomUUID(), other = randomUUID(), business = randomUUID();
   await db.query("insert into auth.users(id) values ($1),($2)", [owner, other]);
@@ -2736,6 +2782,7 @@ async function verify(database, source, integrityMigration, customerOnly = false
         await db.query(leadCampaignLinkMigration);
         await db.query(leadCampaignLinkMigration);
         await verifyLeadCampaignLink(db,database);
+        await verifyDeletedLeadStaysDeleted(db,database);
       }
       if (database === "customer_fresh") await verifyAdvisorHardening(db,database);
       await verifyBusinessTransfer(db,database);
