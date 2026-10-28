@@ -250,6 +250,10 @@ or its auth user id to that file in a PR; never an email, because the repo is pu
 over `events`. That is `product_events` of real customers only: by user, or by
 business owner for background events; system rows are left out. Add
 `--include-internal` to either command to see everyone.
+**Smoke/demo Meta writes (#1324).** A business owned by a `smokeUserIds` login may only read,
+validate (`validate_only`) and pause on Meta; MetaClient refuses anything else (403) before it is
+sent, unless the connected ad account is listed in `testAdAccountIds`. Add the test ad account
+there when DevOps creates it.
 
 ## Spend Guardrails
 

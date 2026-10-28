@@ -15,6 +15,8 @@
 .views { display: inline-flex; align-self: flex-start; gap: 4px; padding: 4px; border-radius: 8px; background: var(--color-slate-100); }
 .views button { min-height: 40px; padding: 0 16px; border-radius: 6px; font-size: 14px; font-weight: 500; color: var(--color-slate-600); }
 .views button[aria-pressed="true"] { background: white; color: var(--color-slate-900); box-shadow: 0 1px 2px rgb(15 23 42 / 0.08); }
+/* #1260 (Designer): each view is its own tap target, so 44 px on phones (Tailwind's max-sm). */
+@media (max-width: 639.98px) { .views button { min-height: 44px; } }
 .toolbar { display: flex; flex-wrap: wrap; gap: 10px; }
 .filterToggle { display: inline-flex; align-items: center; gap: 6px; height: 44px; padding: 0 12px; border: 1px solid var(--color-slate-300); border-radius: 6px; background: white; font-size: 13px; font-weight: 500; }
 /* #847: the three selects sit behind one Filter button at every width (#376 started on phones). */

@@ -10,14 +10,16 @@ const store = vi.hoisted(() => {
   function from(table: string) {
     const filters: Array<(row: Row) => boolean> = [];
     let remove = false;
+    let sourceAlias = false;
     const settle = () => {
       const rows = state.tables[table] ??= [];
       const matched = rows.filter(row => filters.every(test => test(row)));
       if (remove) state.tables[table] = rows.filter(row => !matched.includes(row));
-      return { data: matched.map(row => ({ ...row })), error: null };
+      // The ownership read selects only `source:raw->>source`, never the whole raw blob (Reviewer, #1165).
+      return { data: matched.map(row => sourceAlias ? { meta_campaign_id: row.meta_campaign_id, business_id: row.business_id, created_at: row.created_at, source: (row.raw as { source?: string } | undefined)?.source ?? null } : { ...row }), error: null };
     };
     const query = {
-      select: () => query,
+      select: (columns?: string) => { sourceAlias = Boolean(columns?.includes("source:raw->>source")); return query; },
       eq: (key: string, value: unknown) => { filters.push(row => row[key] === value); return query; },
       in: (key: string, values: unknown[]) => { filters.push(row => values.includes(row[key])); return query; },
       order: () => query, limit: () => query,

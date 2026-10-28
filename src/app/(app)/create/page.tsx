@@ -6,7 +6,9 @@ import { CreateFlow } from "@/components/create-flow";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
-import { getBrandAssets, getPrimaryBusiness } from "@/lib/supabase/queries";
+import { SetupAdsStep } from "@/components/setup-ads-step";
+import { clientCreative } from "@/lib/creative/client-receipt";
+import { getBrandAssets, getLatestCreativeBatch, getPrimaryBusiness, hasLaunchedCampaign } from "@/lib/supabase/queries";
 import { occasionsFor } from "@/lib/seasonal";
 
 export const metadata = {
@@ -15,8 +17,8 @@ export const metadata = {
     "Start with your customer goal and create campaign images and copy for review.",
 };
 
-export default async function CreatePage() {
-  const business = await getPrimaryBusiness();
+export default async function CreatePage({ searchParams }: { searchParams?: Promise<{ all?: string | string[] }> } = {}) {
+  const [business, params] = await Promise.all([getPrimaryBusiness(), searchParams ?? ({} as { all?: string | string[] })]);
 
   if (!business) {
     return (
@@ -38,6 +40,15 @@ export default async function CreatePage() {
         </Card>
       </div>
     );
+  }
+
+  // #1270 (#1251 WS1 step 2): until a first campaign has gone live, Create is the guided "Your ads" step;
+  // `?all=1` opens the full Create. If either read fails, the full Create shows as before.
+  if (params.all !== "1") {
+    const setup = await Promise.resolve()
+      .then(() => Promise.all([hasLaunchedCampaign(business.id), getLatestCreativeBatch(business.id)]))
+      .then(([launched, batch]) => launched ? null : batch.map(clientCreative)).catch(() => null);
+    if (setup) return <SetupAdsStep business={business} initialAds={setup} />;
   }
 
   const missing = [

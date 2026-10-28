@@ -144,15 +144,16 @@ describe("live checkout service with synthetic provider evidence", () => {
     const response = await GET(new Request(`${url}&verificationAmountPaise=525`));
     expect(response.status).toBe(200);
     const quoted = await response.json();
-    expect(quoted).toMatchObject({ quote: { totalPaise: 525, serviceAllocationPaise: 0, metaAllocationPaise: 0 },
-      verificationAmountRange: { minPaise: 100, maxPaise: 1000 }, orders: [] });
+    expect(quoted).toMatchObject({ quote: { totalPaise: 525 }, verificationAmountRange: { minPaise: 100, maxPaise: 1000 }, orders: [] });
+    expect(JSON.stringify(quoted)).not.toMatch(/AllocationPaise/);
     expect(mocks.rpc.mock.calls.every(([name]) => name === "production_payment_orders_list")).toBe(true);
     expect(mocks.createOrder).not.toHaveBeenCalled();
     for (const invalid of ["99", "1001", "100.5", "1e3", ""]) {
       expect((await GET(new Request(`${url}&verificationAmountPaise=${invalid}`))).status).toBeGreaterThanOrEqual(400);
     }
-    const { hash, ...terms } = quoted.policy;
-    saved = { ...saved, terms, terms_hash: hash, quote: quoted.quote, amount_paise: 525, funding_evidence_id: null };
+    const { hash, ...terms } = getProductionCollectionPolicy(process.env, Date.now(), { businessId, userId, verificationAmountPaise: 525 });
+    expect(quoted.policy.hash).toBe(hash);
+    saved = { ...saved, terms, terms_hash: hash, quote: quoteForPaymentPolicy(terms), amount_paise: 525, funding_evidence_id: null };
     const body = { ...createBody(), verificationAmountPaise: 525 };
     expect((await POST(request("orders", { ...body, verificationAmountPaise: 1000 }))).status).toBe(409);
     expect(mocks.createOrder).not.toHaveBeenCalled();
@@ -189,8 +190,10 @@ describe("live checkout service with synthetic provider evidence", () => {
     vi.stubEnv("PAYMENTS_LIVE_AMOUNT_PAISE", "1000000");
     mocks.fetchPayment.mockResolvedValue({ ...payment, amount: 50_000 });
     mocks.fetchOrder.mockResolvedValue({ ...remoteOrder, amount: 50_000, amount_paid: 50_000 });
-    expect(await (await verify(callback())).json()).toMatchObject({ status: "captured", amountPaise: 50_000, capturedPaise: 50_000,
-      quote: { serviceAllocationPaise: 10_000, metaAllocationPaise: 40_000 } });
+    const verified = await (await verify(callback())).json();
+    expect(verified).toMatchObject({ status: "captured", amountPaise: 50_000, capturedPaise: 50_000, quote: { totalPaise: 50_000 } });
+    // #1235: the split stays in the stored quote; the browser never receives it.
+    expect(JSON.stringify(verified)).not.toMatch(/AllocationPaise/);
   });
 
   it("lets a customer choose an annual amount from INR 500 to INR 10,000 and splits it exactly", async () => {
@@ -198,11 +201,13 @@ describe("live checkout service with synthetic provider evidence", () => {
     vi.stubEnv("PAYMENTS_LIVE_POLICY_JSON", "");
     const url = `${origin}/api/payments/live/orders?businessId=${businessId}`;
     const quoted = await (await GET(new Request(`${url}&amountPaise=125000`))).json();
-    expect(quoted).toMatchObject({ annualAmountRange: { minPaise: 50_000, maxPaise: 1_000_000 },
-      quote: { totalPaise: 125_000, serviceAllocationPaise: 25_000, metaAllocationPaise: 100_000 } });
+    expect(quoted).toMatchObject({ annualAmountRange: { minPaise: 50_000, maxPaise: 1_000_000 }, quote: { totalPaise: 125_000 } });
+    expect(JSON.stringify(quoted)).not.toMatch(/AllocationPaise/);
     const odd = await (await GET(new Request(`${url}&amountPaise=50005`))).json();
-    expect(odd.quote).toMatchObject({ totalPaise: 50_005, serviceAllocationPaise: 10_001, metaAllocationPaise: 40_004 });
-    expect(odd.quote.serviceAllocationPaise + odd.quote.metaAllocationPaise).toBe(50_005);
+    expect(odd.quote).toMatchObject({ totalPaise: 50_005 });
+    const oddStored = quoteForPaymentPolicy(getProductionCollectionPolicy(process.env, Date.now(), { businessId, userId, annualAmountPaise: 50_005 }));
+    expect(oddStored).toMatchObject({ totalPaise: 50_005, serviceAllocationPaise: 10_001, metaAllocationPaise: 40_004 });
+    expect(oddStored.serviceAllocationPaise + oddStored.metaAllocationPaise).toBe(50_005);
     const { hash, ...terms } = getProductionCollectionPolicy(process.env, Date.now(), { businessId, userId, annualAmountPaise: 125_000 });
     expect(quoted.policy.hash).toBe(hash);
     saved = { ...saved, terms, terms_hash: hash, funding_evidence_id: null, quote: quoteForPaymentPolicy(terms), amount_paise: 125_000 };
@@ -218,8 +223,9 @@ describe("live checkout service with synthetic provider evidence", () => {
     vi.stubEnv("PAYMENTS_LIVE_POLICY_JSON", "");
     const url = `${origin}/api/payments/live/orders?businessId=${businessId}`;
     listed = [];
-    expect(await (await GET(new Request(url))).json()).toMatchObject({ quote: { totalPaise: 150_000, serviceAllocationPaise: 30_000, metaAllocationPaise: 120_000 },
-      annualAmountRange: { minPaise: 50_000, maxPaise: 1_000_000 } });
+    const prefilled = await (await GET(new Request(url))).json();
+    expect(prefilled).toMatchObject({ quote: { totalPaise: 150_000 }, annualAmountRange: { minPaise: 50_000, maxPaise: 1_000_000 } });
+    expect(JSON.stringify(prefilled)).not.toMatch(/AllocationPaise/);
     vi.stubEnv("PAYMENTS_LIVE_AMOUNT_PAISE", "1000000");
     expect((await (await GET(new Request(url))).json()).quote.totalPaise).toBe(1_000_000);
   });
@@ -274,7 +280,7 @@ describe("live checkout service with synthetic provider evidence", () => {
     const { hash, ...terms } = getProductionCollectionPolicy(process.env, at, { businessId, userId });
     saved = { ...saved, terms, terms_hash: hash, quote: quoteForPaymentPolicy(terms), amount_paise: 1_000, funding_evidence_id: null };
     expect(await (await GET(new Request(`${origin}/api/payments/live/orders?businessId=${businessId}`))).json())
-      .toMatchObject({ quote: { totalPaise: 1_000, serviceAllocationPaise: 0, metaAllocationPaise: 0 } });
+      .toMatchObject({ quote: { totalPaise: 1_000 } });
     vi.stubEnv("PAYMENTS_LIVE_VERIFICATION_ENABLED", "false");
     mocks.fetchPayment.mockResolvedValue({ ...payment, amount: 1_000 });
     mocks.fetchOrder.mockResolvedValue({ ...remoteOrder, amount: 1_000, amount_paid: 1_000 });
@@ -300,12 +306,14 @@ describe("live checkout service with synthetic provider evidence", () => {
     expect(mocks.rpc).toHaveBeenCalledWith("production_payment_order_claim", expect.objectContaining({ p_funding_evidence_id: null }));
   });
   it("retains legacy terms and reconciliation when the current offer becomes operator-managed", async () => {
+    // #1235: the browser gets the accepted text, not the stored terms object (which embeds the quote and its split).
+    const accepted = { serviceScope: policy.serviceScope, invoiceTerms: policy.invoiceTerms, refundTerms: policy.refundTerms };
     vi.spyOn(Date, "now").mockReturnValue(Date.parse(PRICING_V2_APPROVED_AT));
     vi.stubEnv("PAYMENTS_LIVE_POLICY_JSON", "");
     storageFailure = "production_payment_funding_valid";
     expect(await (await GET(new Request(`${origin}/api/payments/live/orders?businessId=${businessId}`))).json())
-      .toMatchObject({ policy: { fundingMode: "operator_managed" }, orders: [{ orderId, checkout: null, terms: policy }] });
-    expect(await (await reconcile(request("reconcile", { orderId }))).json()).toMatchObject({ orderId, status: "captured", terms: policy, spendablePaise: 0 });
+      .toMatchObject({ policy: { fundingMode: "operator_managed" }, orders: [{ orderId, checkout: null, terms: accepted }] });
+    expect(await (await reconcile(request("reconcile", { orderId }))).json()).toMatchObject({ orderId, status: "captured", terms: accepted, spendablePaise: 0 });
     expect(mocks.createOrder).not.toHaveBeenCalled();
   });
   it.each(["false", "", "TRUE"])("defaults every route disabled for flag %s", async value => {
