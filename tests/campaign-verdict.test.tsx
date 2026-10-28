@@ -39,7 +39,7 @@ describe("<CampaignVerdict> (#1274)", () => {
 
   it("early days: the count, no action", () => {
     card({ results: 0, spend: 120 });
-    expect(region().getByText("Early days: no chats yet.")).toBeInTheDocument();
+    expect(region().getByText("No chats yet.")).toBeInTheDocument();
     expect(region().getByText("0")).toBeInTheDocument();
     expect(region().getByText(/chats · ₹120 spent/)).toBeInTheDocument();
   });
