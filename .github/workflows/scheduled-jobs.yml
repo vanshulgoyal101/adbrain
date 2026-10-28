@@ -76,6 +76,26 @@ jobs:
           [ "$open" = 0 ] || exit 0
           gh issue create -R "$GITHUB_REPOSITORY" -l core -l bug -l owner:devops -t "$title" \
             -b "$(printf 'Payment health: %s\n\nA captured payment has no capture webhook event after 30 minutes, or an event is unprocessed after an hour. Check the Razorpay webhook settings and reconcile the order (no charges).\n\nRun: %s/%s/actions/runs/%s\nRunbook: docs/OPERATIONS.md#scheduled-jobs\n' "$(jq -c '{events7d, unprocessed, capturedWithoutEvent}' payments.json)" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+      - name: Pilot settings (#1875)
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          [ -n "$CRON_SECRET" ] || { echo "::error::CRON_SECRET is not set"; exit 1; }
+          code=$(curl -sS --max-time 30 -o pilot.json -w '%{http_code}' -H "Authorization: Bearer $CRON_SECRET" "$BASE/api/cron/pilot-readiness") || code=000
+          # Names and states only; the route never returns values.
+          echo "HTTP $code $(jq -c '{ok, missing: [.missing[]? | "\(.name) (\(.state))"], error}' pilot.json 2>/dev/null || echo '{"ok":false,"error":"no JSON body"}')"
+          [ "$code" = 200 ]
+          lines=$(jq -r '.missing[]? | "- `\(.name)`: \(.state), needed for \(.why)"' pilot.json)
+          [ -n "$VERCEL_TOKEN" ] || lines=$(printf '%s\n%s' "$lines" '- `VERCEL_TOKEN` (GitHub Actions secret): missing, needed for the deploy guard and drift check')
+          lines=$(printf '%s' "$lines" | grep -E '^- `[A-Z_ |]+`' || true)
+          [ -n "$lines" ] || exit 0
+          title="Pilot settings missing in production"
+          open=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search "in:title \"$title\"" --json number --jq length)
+          [ "$open" = 0 ] || exit 0
+          gh issue create -R "$GITHUB_REPOSITORY" -l core -l owner:devops -t "$title" \
+            -b "$(printf 'These production settings are missing or switched off (names only, never values):\n\n%s\n\nSet them in Vercel production (or the GitHub secret), redeploy, and close this issue; the next run reopens it if anything is still missing.\nRun: %s/%s/actions/runs/%s\nRunbook: docs/OPERATIONS.md#scheduled-jobs\n' "$lines" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
       - name: Campaign results and health
         if: always()
         env:
