@@ -23,12 +23,33 @@ export function callbackErrorReason(code: string | null | undefined): CallbackEr
   }
 }
 
-/** What the login page says for each reason, and the one action it offers. */
-export const CALLBACK_ERRORS: Record<CallbackErrorReason, { text: string; action: "new_link" | null }> = {
-  link_expired: { text: "That sign-in link has expired or was already used. Each link works once, within an hour.", action: "new_link" },
-  other_browser: { text: "Sign-in has to finish in the browser you started it in. Open the link there, not inside Gmail or another app, or get a new one here.", action: "new_link" },
-  cancelled: { text: "Sign-in was cancelled. Nothing changed.", action: null },
-  auth: { text: "Sign-in failed. Please try again.", action: null },
+/** What the login page's panel does for each reason (#1418). */
+export type CallbackAction = "new_link" | "google" | "email" | "retry" | "help";
+
+/** The CPO's #1418 words, verbatim: a title, a sentence, one primary and at most one secondary. No codes on screen. */
+export const CALLBACK_ERRORS: Record<CallbackErrorReason, {
+  title: string; text: string; primary: { action: CallbackAction; label: string }; secondary: { action: CallbackAction; label: string } | null;
+}> = {
+  link_expired: {
+    title: "This sign-in link has expired",
+    text: "Each link works once and only for a short time. We'll send you a fresh one.",
+    primary: { action: "new_link", label: "Send a new link" }, secondary: { action: "google", label: "Use Google instead" },
+  },
+  other_browser: {
+    title: "Google sign-in didn't finish here",
+    text: "This happens when Google opens in a different app or tab. Try again in this browser, or get an email link.",
+    primary: { action: "google", label: "Try Google again" }, secondary: { action: "email", label: "Email me a link instead" },
+  },
+  cancelled: {
+    title: "Google sign-in was cancelled",
+    text: "No problem. Try again, or sign in with an email link.",
+    primary: { action: "google", label: "Try Google again" }, secondary: { action: "email", label: "Email me a link instead" },
+  },
+  auth: {
+    title: "Sign-in didn't finish",
+    text: "Please try once more. If it keeps happening, message us and we'll help.",
+    primary: { action: "retry", label: "Try again" }, secondary: { action: "help", label: "Help on WhatsApp" },
+  },
 };
 
 /** Supabase's older links put the error in the fragment (`/login#error_code=otp_expired`); read it the same way. */
