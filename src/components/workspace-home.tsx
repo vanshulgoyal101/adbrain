@@ -6,7 +6,8 @@ import { buildWorkQueue } from "@/lib/work-queue";
 import { setAsideIds } from "@/lib/creative/set-aside";
 import { describeAuditEvent, isBackgroundAuditAction } from "@/lib/audit-labels";
 import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
-import { formatDate, formatMoney, formatPerDay } from "@/lib/format";
+import { formatClock, formatDate, formatMoney, formatPerDay } from "@/lib/format";
+import { firstEnquiryLine } from "@/lib/trust-lines";
 import { homeResults } from "@/lib/campaign/home-results";
 import { homeVerdicts } from "@/lib/campaign/card-verdict";
 import { staleCampaignIds } from "@/lib/campaign/results-freshness";
@@ -32,8 +33,10 @@ export interface WorkspaceHomeProps {
   results?: Record<string, CampaignResult>;
   /** #1049: median minutes from enquiry to the owner's first reply over the last 30 days. */
   replyMinutes?: number | null;
-  /** #1274: enquiries from the last 24 h nobody has contacted yet. */
+  /** #1274: enquiries waiting for a first reply (the inbox's rule, #1260). */
   waiting?: number;
+  /** #1292: the newest enquiry from the last 24 hours still waiting for a first reply. */
+  firstEnquiry?: { name: string | null; at: string } | null;
   now?: number;
 }
 
@@ -54,11 +57,13 @@ export function WorkspaceHome({
   results = {},
   replyMinutes = null,
   waiting = 0,
+  firstEnquiry = null,
   now,
 }: WorkspaceHomeProps) {
   const liveCampaigns = campaigns.filter((campaign) => !goneInMeta(campaign));
   const summary = business ? homeResults(campaigns, results) : null;
-  const verdicts = business ? homeVerdicts(campaigns, results, { now, waiting }) : null;
+  // #1292's line already names the newest person waiting, so the verdict doesn't say it twice.
+  const verdicts = business ? homeVerdicts(campaigns, results, { now, waiting: firstEnquiry ? 0 : waiting }) : null;
   const leadCampaign = verdicts?.lead ? campaigns.find((campaign) => campaign.id === verdicts.lead?.campaignId) : null;
   const stale = business ? staleCampaignIds(campaigns, results, now) : [];
   const [next, ...later] = buildWorkQueue({ business, creatives, campaigns, metaReady, now });
@@ -82,6 +87,15 @@ export function WorkspaceHome({
       {spendStatus ?? (spend && (spend.status === "approaching" || spend.status === "over") && (
         <SpendStatusBanner evaluation={spend} />
       ))}
+
+      {firstEnquiry && (
+        <section aria-label="Newest enquiry" className="flex flex-col gap-3 rounded-lg border border-blue-200 bg-blue-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-slate-900">
+            {firstEnquiryLine(firstEnquiry.name, formatClock(firstEnquiry.at, now === undefined ? undefined : new Date(now)))}
+          </p>
+          <Link href="/leads" className={`${linkClass} shrink-0`}>Open Enquiries</Link>
+        </section>
+      )}
 
       {stale.length > 0 && <StaleResultsRefresher campaignIds={stale} />}
       {summary && (

@@ -1,4 +1,5 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
 import { NextRequest } from "next/server";
 
 /**
@@ -128,5 +129,39 @@ describe("proxy auth with local JWT verification", () => {
     const { updateSession } = await import("@/lib/supabase/middleware");
     const stale = await cookieFor(await sign(claims(now() - 60)), now() - 60);
     expect(new URL((await updateSession(request("/dashboard", stale))).headers.get("location")!).pathname).toBe("/login");
+  });
+
+  // #1376: the homepage is static (CDN-cached); the proxy, not the page, sends signed-in owners to the dashboard.
+  it("sends a signed-in owner from / to /dashboard and keeps refreshed cookies", async () => {
+    const fresh = await sign(claims(now() + 3600));
+    fetchMock.mockImplementation(async (url: string) => {
+      if (String(url).endsWith("/.well-known/jwks.json")) return Response.json({ keys: [jwk] });
+      if (String(url).includes("/auth/v1/token?grant_type=refresh_token")) {
+        return Response.json({ access_token: fresh, token_type: "bearer", expires_in: 3600, expires_at: now() + 3600, refresh_token: "refresh-2", user });
+      }
+      throw new Error(`unexpected network call: ${url}`);
+    });
+    const { updateSession } = await import("@/lib/supabase/middleware");
+    const valid = await updateSession(request("/", await cookieFor(fresh, now() + 3600)));
+    expect(valid.status).toBe(307);
+    expect(new URL(valid.headers.get("location")!).pathname).toBe("/dashboard");
+    const refreshed = await updateSession(request("/", await cookieFor(await sign(claims(now() - 60)), now() - 60)));
+    expect(new URL(refreshed.headers.get("location")!).pathname).toBe("/dashboard");
+    expect(refreshed.headers.getSetCookie().some(cookie => cookie.startsWith("sb-test-auth-token="))).toBe(true);
+  });
+
+  it("lets a visitor with no session (or another key's token) see the homepage", async () => {
+    const { updateSession } = await import("@/lib/supabase/middleware");
+    const anonymous = await updateSession(request("/"));
+    expect(anonymous.status).toBe(200);
+    expect(anonymous.headers.get("location")).toBeNull();
+    const forged = await updateSession(request("/", await cookieFor(await sign(claims(now() + 3600), otherKey), now() + 3600)));
+    expect(forged.headers.get("location")).toBeNull();
+    expect(urls().filter(url => !url.endsWith("/.well-known/jwks.json"))).toEqual([]);
+  });
+
+  it("keeps the homepage free of per-request APIs so it renders static", () => {
+    const page = readFileSync("src/app/page.tsx", "utf8");
+    expect(page).not.toMatch(/getUser|cookies\(|headers\(|createClient|redirect\(|connection\(/);
   });
 });

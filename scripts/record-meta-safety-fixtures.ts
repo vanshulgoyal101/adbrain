@@ -5,6 +5,7 @@
  *
  *   npx tsx --env-file=.env.local scripts/record-meta-safety-fixtures.ts <imageUrl> [capped-adset]
  */
+import "./lib/meta-write-gate";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { metaClientFromEnv } from "./lib/meta-env";

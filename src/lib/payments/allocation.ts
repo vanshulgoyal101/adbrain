@@ -6,6 +6,26 @@ export const ANNUAL_PAYMENT_VERSION = "inr-annual-total-v1";
 
 export const DEFAULT_ANNUAL_PAYMENT_PAISE = 1_000_000;
 
+export const MIN_ANNUAL_PAYMENT_PAISE = 50_000;
+
+/** #1271: the most a capped run of `days` × `dailyRupees` can cost with Meta's GST: activation's reserve check, ceil(cap × (10000 + GST bps) / 10000). */
+export function capWithGstPaise(input: { dailyRupees: number; days: number; taxRateBps?: number }): number {
+  const capPaise = Math.round(input.dailyRupees * 100) * input.days;
+  return Math.ceil(capPaise * (10_000 + (input.taxRateBps ?? 1_800)) / 10_000);
+}
+
+/**
+ * #1251: the whole-rupee payment that funds a capped run of `days` × `dailyRupees` plus Meta's GST, after what is
+ * already available. It mirrors activation's reserve check (ceil(cap × (10000 + GST bps) / 10000) ≤ available) and the
+ * quote's ad share (total − floor(total / 5)). 0 when the balance already covers it; never below the ₹500 minimum.
+ */
+export function paymentToCoverPaise(input: { dailyRupees: number; days: number; availablePaise: number; taxRateBps?: number }): number {
+  const neededPaise = capWithGstPaise(input);
+  const shortPaise = neededPaise - Math.max(input.availablePaise, 0);
+  if (shortPaise <= 0) return 0;
+  return Math.max(Math.ceil(shortPaise * 5 / 400) * 100, MIN_ANNUAL_PAYMENT_PAISE);
+}
+
 export function createAnnualPaymentQuote(totalPaise: number = DEFAULT_ANNUAL_PAYMENT_PAISE) {
   requirePaise(totalPaise, "totalPaise", 100);
   if (totalPaise > DEFAULT_ANNUAL_PAYMENT_PAISE) {
@@ -55,6 +75,16 @@ export const productionPaymentQuoteSchema = z.strictObject({
     && (quote.version === ANNUAL_PAYMENT_VERSION) === (quote.totalPaise === DEFAULT_ANNUAL_PAYMENT_PAISE);
 });
 export type ProductionPaymentQuote = z.infer<typeof productionPaymentQuoteSchema>;
+// #1235 (owner): what reaches the browser. The service and Meta allocations would show AdBrain's margin in devtools, so
+// they stay server-side; the stored quote, its checks and the Razorpay order still use the full quote.
+export const paymentQuoteViewSchema = z.object({
+  version: z.enum([ANNUAL_PAYMENT_VERSION, "inr-annual-configurable-v1", "inr-payment-verification-v1"]),
+  merchantDisplay: z.literal("Vanshul Goyal"), currency: z.literal("INR"), totalPaise: quotePaise.min(100),
+  additionalCustomerTaxPaise: z.literal(0), metaTaxTreatment: z.literal("included-in-meta-allocation"),
+  gatewayFees: z.literal("absorbed-by-adbrain"), automaticRenewal: z.literal(false),
+});
+export type PaymentQuoteView = z.infer<typeof paymentQuoteViewSchema>;
+export const toPaymentQuoteView = (quote: ProductionPaymentQuote): PaymentQuoteView => paymentQuoteViewSchema.parse(quote);
 
 export interface PaymentAllocationPolicy {
   readonly version: string;

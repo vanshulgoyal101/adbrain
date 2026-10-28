@@ -1,4 +1,5 @@
 "use client";
+import { formatDate } from "@/lib/format";
 import { AD_FLOW, Stepper } from "@/components/ui/stepper";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { savedCreativeDescription } from "@/lib/creative/concept";
@@ -71,7 +72,7 @@ function createBatches(list: Creative[]): CreateBatch[] {
 
 function formatBatchDate(made: number): string {
   // #724: several batches a day are common, so the time tells them apart.
-  return new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" }).format(made);
+  return formatDate(new Date(made));
 }
 
 export function Studio({

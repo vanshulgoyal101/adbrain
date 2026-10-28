@@ -1,6 +1,7 @@
 import { OWNER_WORDS } from "@/lib/copy/owner-words";
 import { BrandAssets } from "@/components/brand-assets";
 import { BrandForm } from "@/components/brand-form";
+import { SetupBusinessStep } from "@/components/setup-business-step";
 import { WhatsAppMessageCard, type Suggested } from "@/components/whatsapp-message-card";
 import { suggestedQuestions } from "@/lib/campaign/whatsapp-questions";
 import { whatsappGreeting } from "@/lib/campaign/whatsapp-greeting";
@@ -10,14 +11,19 @@ import {
   getAdInstructions,
   getBrandAssets,
   getPrimaryBusiness,
+  hasLaunchedCampaign,
 } from "@/lib/supabase/queries";
 import { getMetaConnection } from "@/lib/meta/credentials";
 import { readWhatsAppStatus, type WhatsAppStatus } from "@/lib/meta/whatsapp-status";
 
 export const metadata = { title: OWNER_WORDS.business };
 
-export default async function BrandPage() {
-  const business = await getPrimaryBusiness();
+export default async function BrandPage({ searchParams }: { searchParams: Promise<{ all?: string | string[] }> }) {
+  const [business, params] = await Promise.all([getPrimaryBusiness(), searchParams]);
+  // #1269 (#1251 WS1 step 1): until a first campaign has gone live, Your business is the five-field setup step;
+  // `?all=1` opens the full page. If the check fails, the full page shows as before.
+  const setup = params.all !== "1" && (!business || !(await hasLaunchedCampaign(business.id).catch(() => true)));
+  if (setup) return <SetupBusinessStep business={business} />;
   const [assets, instructions, connection] = business
     ? await Promise.all([
         getBrandAssets(business.id),

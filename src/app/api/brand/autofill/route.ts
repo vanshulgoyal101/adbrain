@@ -2,7 +2,7 @@ import { currentRequestId, observeRoute, recordProductEvent } from "@/lib/observ
 import { observeIdentity } from "@/lib/observability/context";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { BRAND_EXTRACTION, extractPhone, extractWebsiteText, PASTED_TEXT_MAX, pastedBrandText, phoneInText, verifiedAreas } from "@/lib/brand/autofill";
+import { BRAND_EXTRACTION, extractPhone, extractSiteName, extractWebsiteText, nameInText, PASTED_TEXT_MAX, pastedBrandText, phoneInText, verifiedAreas } from "@/lib/brand/autofill";
 import { metaClientForBusiness } from "@/lib/meta/credentials";
 import { completeJSON, NoLLMKeysError } from "@/lib/llm";
 import { persistLLMUsage } from "@/lib/llm/persist";
@@ -60,12 +60,14 @@ async function handlePOST(req: Request) {
   let text: string;
   let source: string;
   let phone: string | undefined;
+  let name: string | undefined;
   if ("text" in body.data) {
     const pasted = pastedBrandText(body.data.text);
     if (!pasted) return NextResponse.json({ error: "Paste a little more about the business: what it sells, where, and how to reach it." }, { status: 400 });
     text = pasted;
     source = "(no website: text the business pasted, such as an Instagram bio or a Google listing)";
     phone = phoneInText(pasted);
+    name = nameInText(pasted);
   } else {
     const parsed = parsePublicUrl(body.data.url);
     if (!parsed) {
@@ -105,6 +107,7 @@ async function handlePOST(req: Request) {
     }
     source = parsed.toString();
     phone = extractPhone(html);
+    name = extractSiteName(html);
   }
 
   // #650: every provider attempt is a usage row, on the owner's business when it already exists
@@ -136,7 +139,7 @@ async function handlePOST(req: Request) {
     );
     await logUsage((extraction as { __completion?: CompletionResult }).__completion);
     const locations = await resolvableAreas(verifiedAreas(extraction.locations, text), owned);
-    return NextResponse.json({ extraction: { ...extraction, locations: locations.length ? locations : undefined, phone } });
+    return NextResponse.json({ extraction: { ...extraction, locations: locations.length ? locations : undefined, phone, name } });
   } catch (err) {
     await logUsage();
     if (err instanceof NoLLMKeysError) {

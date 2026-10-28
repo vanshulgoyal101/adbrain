@@ -10,6 +10,7 @@ import { decodeAdResults, decodeCampaignInsights, decodeLifetimeSpendPaise, type
 import { maskWhatsAppNumber, maskedWhatsAppNumberPattern } from "./whatsapp-status-shared";
 import { graphEndpoint, graphEntity, graphErrorCode, graphOutcome } from "./graph-event";
 import { recordProductEvent } from "@/lib/observability/logger";
+import { ConnectionAccessError } from "./connection-access-error";
 import { EXCLUDABLE_CITIES, INDIA_REGION_KEYS, mergeExclusions, serviceAreaExclusions, TargetingExclusionsMissingError, type IncludedPlace } from "./service-area";
 import { AD_LANGUAGE_KEYS, storedLocales } from "./locales";
 export type { AdResult, CampaignInsights } from "./insights";
@@ -836,10 +837,21 @@ export function hasGeo(geo: GeoTargeting | undefined): boolean {
  * PAUSED state (no spend until activated) and reads insights. Validated against
  * a live ad account.
  */
+/** #1324: a validate_only check or a plain pause; the only writes a smoke-owned business may send. */
+function readOnlyOrPause(form: Record<string, string> | undefined): boolean {
+  if (!form) return false;
+  if (/"validate_only"/.test(form.execution_options ?? "")) return true;
+  return Object.keys(form).length === 1 && form.status === "PAUSED";
+}
+
 export class MetaClient {
   private pageAccessToken: Promise<string> | null = null;
 
-  constructor(private readonly creds: MetaCredentials, private readonly executionSignal?: AbortSignal) {}
+  constructor(
+    private readonly creds: MetaCredentials,
+    private readonly executionSignal?: AbortSignal,
+    private readonly writes: "all" | "pause-only" = "all",
+  ) {}
 
   private async graph<T>(
     path: string,
@@ -878,6 +890,10 @@ export class MetaClient {
       ...(this.executionSignal ? [this.executionSignal] : []),
     ]);
     signal.throwIfAborted();
+
+    if (this.writes === "pause-only" && method !== "GET" && !readOnlyOrPause(opts.form)) {
+      throw new ConnectionAccessError("FORBIDDEN", "The test account can only check and pause on this Meta ad account.");
+    }
 
     const started = performance.now();
     let reply: { status: number; body: unknown };

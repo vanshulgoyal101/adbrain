@@ -88,6 +88,8 @@ describe("core: Brand autofill reads a real site into the Brand (#650)", () => {
       languages: ["English"],
       // From the page's tel: link, never from the model.
       phone: "+917380280874",
+      // #1379: from the page's og:site_name, never from the model, so Save isn't blocked on an empty name.
+      name: "SOLARIDE",
     });
     // The site lists no offer, and the model didn't invent one.
     expect(body.extraction.offers).toBeUndefined();
