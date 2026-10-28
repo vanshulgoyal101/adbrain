@@ -72,7 +72,7 @@ export default async function DashboardPage() {
       adReview={adReview}
       rejectedAds={adReview?.kind === "rejected" && newest && (
         <Suspense fallback={null}>
-          <HomeRejectedAds campaign={newest} spend={(results as Record<string, { spend?: number }>)[newest.id]?.spend ?? 0} />
+          <HomeRejectedAds campaign={newest} vertical={business?.vertical} spend={(results as Record<string, { spend?: number }>)[newest.id]?.spend ?? 0} />
         </Suspense>
       )}
       locale={locale}
