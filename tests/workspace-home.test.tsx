@@ -14,6 +14,8 @@ const queries = vi.hoisted(() => ({
   getAuditLog: vi.fn(),
   getCampaigns: vi.fn(),
   getCampaignPage: vi.fn(),
+  getSpendLimits: vi.fn(async () => ({ weeklyCapRupees: null, alertPct: 80, autoPause: false })),
+  getActiveCampaignBudgets: vi.fn(async () => []),
   getApprovedCreatives: vi.fn(),
   getLatestResults: vi.fn(),
   getLatestResultsWithEnquiries: vi.fn(),

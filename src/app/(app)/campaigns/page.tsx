@@ -71,7 +71,8 @@ export default async function CampaignsPage({
     results: await getLatestResultsWithEnquiries(page.campaigns.map((campaign) => campaign.id)),
   }));
   // #1342: the Settings cap and the live budgets, for the cap line; on error the line is left out and Activate still refuses.
-  const spendCap = Promise.all([getSpendLimits(business.id), getActiveCampaignBudgets(business.id)])
+  const spendCap = Promise.resolve()
+    .then(() => Promise.all([getSpendLimits(business.id), getActiveCampaignBudgets(business.id)]))
     .then(([limits, active]) => ({ capRupees: limits.weeklyCapRupees, active }))
     .catch(() => null);
   const [approved, page, connection, drafts, weeklyCap] = await Promise.all([
