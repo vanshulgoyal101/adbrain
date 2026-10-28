@@ -37,6 +37,15 @@ describe("core: <SetupGoLive> (#1271)", () => {
     expect(screen.getByRole("link", { name: "Change who sees it" })).toHaveAttribute("href", "/campaigns?all=1&new=1&creatives=a,b");
   });
 
+  it("#1934: returning, payment shows done for the last campaign, the budget starts at the last amount, no first-month line", () => {
+    render(<SetupGoLive business={business} ads={ads} pageConnected funding="own_account" returning initialDaily={500}
+      whatsappNumber="+91 ••••• 3210" weeklyCap={{ capRupees: null, active: [] }} />);
+    expect(screen.getByText("Set up for your last campaign")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Add payment in Meta" })).toBeNull();
+    expect(screen.getByText(/₹500 a day for 2 days/)).toBeInTheDocument();
+    expect(screen.queryByText(/first month of AdBrain is free/)).toBeNull();
+  });
+
   it("a chip changes the daily amount, the total and the primary", () => {
     goLive();
     fireEvent.click(screen.getByRole("button", { name: "₹1,000 a day" }));

@@ -96,6 +96,13 @@ from my website", which fills only empty fields. It autosaves only those columns
 (`saveSetupBusiness`; other offers and Brand fields are kept) and "Make my ads"
 checks all five, then goes to `/create`. `/brand?all=1` opens the full page.
 
+After a launch, Home's **New campaign** (`/brand?again=1`, #1934) runs the same three
+steps in returning mode: step 1 "What's new this time?" asks only for the offer (the last
+one as a placeholder) with the rest folded into "Same as last time: … Change"; step 2
+(`/create?again=1`) makes a fresh batch; step 3 (`/campaigns?again=1`) opens Go live even
+with existing campaigns, payment shows "Set up for your last campaign" and the budget starts
+at the offered amount nearest the last campaign's daily budget. `?again=1` is kept by Back.
+
 Until then Home (`/dashboard`) is one resume card, "Your first ad · Step N of 3 ·
 {step} · Continue" (#1272, `setupResumeStep`): step 1 until the five facts make a
 usable Brand, step 2 until an ad is picked (approved), then step 3. At step 3 with ads made

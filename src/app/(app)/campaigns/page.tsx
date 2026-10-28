@@ -107,10 +107,12 @@ export default async function CampaignsPage({
   // Before App Review an owner who can't connect still gets ReadyAdsNextStep below (#336).
   const canConnect = async () => metaReady || await createClient().then((supabase) => supabase.auth.getUser())
     .then(({ data }) => Boolean(data.user && canUseMetaConnect(data.user.id))).catch(() => false);
-  if (params.all !== "1" && !campaigns.length && approved.length && await canConnect()) {
+  // #1934 (CPO #1924): a returning owner's "New campaign" ends here too, with Page and payment already done.
+  const again = params.again === "1";
+  if (params.all !== "1" && (again || !campaigns.length) && approved.length && await canConnect()) {
     // #1432: only ads made from today's step 1; with none, step 2 makes them.
     const current = approvedRows.filter((creative) => madeForSetup(creative, business)).map(clientCreative);
-    if (!current.length) redirect("/create");
+    if (!current.length) redirect(again ? "/create?again=1" : "/create");
     const picked = current.filter((creative) => requested.includes(creative.id));
     const ads = (picked.length ? picked : current).slice(0, 3);
     const funding = await fundingMode(business.id).catch(() => null);
@@ -119,7 +121,12 @@ export default async function CampaignsPage({
     const welcome = (() => {
       try { return setupWelcome(business, ads.flatMap((ad) => approvedRows.filter((row) => row.id === ad.id))); } catch { return null; }
     })();
-    return <SetupGoLive business={business} ads={ads} pageConnected={metaReady} funding={funding}
+    // #1934: the budget starts at the offered amount nearest the last campaign's.
+    const last = [...campaigns].sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))[0];
+    const lastDaily = again && last?.daily_budget != null ? Number(last.daily_budget) : null;
+    const initialDaily = lastDaily === null ? undefined
+      : BUDGET_PRESETS.reduce((best, amount) => Math.abs(amount - lastDaily) < Math.abs(best - lastDaily) ? amount : best);
+    return <SetupGoLive business={business} ads={ads} pageConnected={metaReady} funding={funding} returning={again} initialDaily={initialDaily}
       whatsappNumber={masked ? maskWhatsAppNumber(`+91${masked}`) : null} weeklyCap={weeklyCap} welcome={welcome} />;
   }
 

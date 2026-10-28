@@ -254,6 +254,16 @@ describe("core: <SetupAdsStep> (#1270)", () => {
     vi.useRealTimers();
   });
 
+  it("#1934: in returning mode Continue goes to Go live with again=1 and Back to the offer step", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+    render(<SetupAdsStep business={business} initialAds={[ad("a"), ad("b")]} again />);
+    await act(async () => fireEvent.click(bar().getByRole("button", { name: /^Continue with/ })));
+    await waitFor(() => expect(mocks.push).toHaveBeenCalledWith(expect.stringMatching(/^\/campaigns\?again=1&creatives=/)));
+    mocks.push.mockClear();
+    await act(async () => fireEvent.click(bar().getByRole("button", { name: "Back" })));
+    await waitFor(() => expect(mocks.push).toHaveBeenCalledWith("/brand?again=1"));
+  });
+
   it("a failed approve keeps the owner on the step and says so", async () => {
     vi.stubGlobal("fetch", vi.fn());
     mocks.setCreativeStatus.mockResolvedValue({ ok: false, error: "offline" });
