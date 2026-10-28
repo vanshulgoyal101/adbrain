@@ -475,8 +475,10 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
   Country-wide and non-Indian areas get no automatic exclusions.
 - Typed area names resolve in the business's country (India; #1555): a name whose only Meta
   match is abroad comes back unresolved ("Meta didn't recognise the area…") unless the owner typed
-  its qualified label ("Austin, Texas"). 'Tricity' searches Chandigarh, Mohali and Panchkula
-  (`src/lib/meta/geo-aliases.ts`); Meta's only 'Tricity' is Tri-City, Oregon.
+  its qualified label ("Austin, Texas"). Everyday Tricity names Meta has no place for search the
+  places it has (`src/lib/meta/geo-aliases.ts`, #1556): Tricity and Zirakpur → Chandigarh, Mohali,
+  Panchkula; Derabassi → Dera Bassi; New Chandigarh, Aerocity → Mohali; 'Sector N'/'Phase N' with
+  a city → that city (a bare 'Sector 17' stays unresolved). Meta's only 'Tricity' is Tri-City, Oregon.
 - Every campaign must have detailed interest targeting before creation. AI plans
   require one to five relevant commercial interests grounded in the business and
   offer. Preparing a draft with missing/empty interests requests AI recommendations

@@ -63,3 +63,30 @@ describe("core: an Indian business never targets a namesake abroad (#1555)", () 
     expect(resolve).toHaveBeenCalledWith(["Chandigarh"], expect.objectContaining({ preferCountry: "IN" }));
   });
 });
+
+describe("core: the pilot's everyday area names resolve (#1556)", () => {
+  const CHANDIGARH = { key: "1021145" }, MOHALI = { key: "1035473" }, PANCHKULA = { key: "2676092" };
+  it.each([
+    [["Derabassi"], [{ key: "1023148" }]],
+    [["New Chandigarh"], [MOHALI]],
+    [["Aerocity Mohali"], [MOHALI]],
+    [["Sector 34 Chandigarh"], [CHANDIGARH]],
+    [["Mohali Phase 7"], [MOHALI]],
+    [["Panchkula Sector 20"], [PANCHKULA]],
+    [["Zirakpur"], [CHANDIGARH, MOHALI, PANCHKULA]],
+    [["Kharar"], [{ key: "1030707" }]],
+  ])("%j", async (names, cities) => {
+    replay();
+    const meta = new MetaClient(creds);
+    const result = await resolveDraftTargeting(draft(names), [], meta.resolveGeoTargeting.bind(meta));
+    expect(result.location).toEqual({ cities });
+    expect(result.unresolvedNames).toEqual([]);
+  });
+
+  it("an area Meta has no place for still says so", async () => {
+    replay();
+    const meta = new MetaClient(creds);
+    const result = await resolveDraftTargeting(draft(["Chandigarh", "Zzqx Nowhereville"]), [], meta.resolveGeoTargeting.bind(meta));
+    expect(result.unresolvedNames).toEqual(["Zzqx Nowhereville"]);
+  });
+});
