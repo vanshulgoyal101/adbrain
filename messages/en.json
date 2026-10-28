@@ -102,5 +102,9 @@
       "prefer_meta": "I'd rather use Meta myself",
       "other": "Something else"
     }
+  },
+  "creative": {
+    "yourPhoto": "Your photo",
+    "aiPicture": "AI picture"
   }
 }

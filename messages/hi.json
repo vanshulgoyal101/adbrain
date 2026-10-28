@@ -102,5 +102,9 @@
       "prefer_meta": "खुद Meta पर चलाना पसंद है",
       "other": "कुछ और"
     }
+  },
+  "creative": {
+    "yourPhoto": "आपकी फ़ोटो",
+    "aiPicture": "AI तस्वीर"
   }
 }

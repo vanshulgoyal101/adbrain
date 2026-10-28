@@ -179,4 +179,13 @@ describe("core: Go live's total is activation's own cap + GST (#1251 CPO/Dev 2)"
     // Dev 2's payment helper still funds exactly that total (#1374 numbers unchanged).
     expect([300, 500, 1000].map((dailyRupees) => paymentToCoverPaise({ dailyRupees, days: 2, availablePaise: 0 }))).toEqual([88_500, 147_500, 295_000]);
   });
+
+describe("#1901: Go live says whose picture each ad is", () => {
+  it("labels each picked ad's picture", () => {
+    render(<SetupGoLive business={business} pageConnected funding="managed" whatsappNumber="+91 ••••• 3210" weeklyCap={{ capRupees: null, active: [] }}
+      ads={[{ ...ads[0], generation: { image: { provider: "owner-photo" } } }, { ...ads[1], generation: { image: { provider: "openrouter" } } }] as Creative[]} />);
+    expect(screen.getByText("Your photo")).toBeInTheDocument();
+    expect(screen.getByText("AI picture")).toBeInTheDocument();
+  });
+});
 });
