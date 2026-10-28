@@ -286,6 +286,21 @@ describe("<BrandForm> prefill", () => {
     expect(await screen.findByText("Saved")).toBeInTheDocument();
     expect((saveBusiness.mock.calls[1][1] as FormData).get("description")).toBe("Draft description");
   });
+
+  it("announces Saved and a failed save in a status region that is there before the save (#1262)", async () => {
+    saveBusiness.mockResolvedValueOnce({ ok: false, error: "Synthetic save failed" });
+    render(<BrandForm business={business()} />);
+    const statuses = () => screen.getAllByRole("status").map((node) => node.textContent ?? "");
+    const before = screen.getAllByRole("status").length;
+    expect(before).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: "Save your business" }));
+    await screen.findByText("Synthetic save failed");
+    expect(screen.getAllByRole("status")).toHaveLength(before);
+    expect(statuses()).toContain("Synthetic save failed");
+    fireEvent.click(screen.getByRole("button", { name: "Save your business" }));
+    await screen.findByText("Saved");
+    expect(statuses().map((text) => text.trim())).toContain("Saved");
+  });
 });
 
 describe("<BrandAssets> persistence", () => {
