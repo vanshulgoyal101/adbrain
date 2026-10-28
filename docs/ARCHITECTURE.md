@@ -184,7 +184,7 @@ or an unawaited Vercel promise. All creation remains PAUSED.
 The existing `campaign_operations` ledger is also the queue. Service-only RPCs
 claim pending rows with `FOR UPDATE SKIP LOCKED`; expired running jobs require
 reconciliation rather than automatic mutation replay. See
-[Operations](OPERATIONS.md#campaign-worker-rollout) for leases and deployment.
+[Operations](operations/runbooks/campaigns.md#campaign-worker-rollout) for leases and deployment.
 Inline execution remains the default compatibility mode until that rollout.
 
 Campaign display reads use stable `(created_at,id)` cursors, owner-scoped filters,
@@ -252,7 +252,7 @@ when UI controls hide actions.
 Paid routes use an atomic shared database rate limiter. Production fails closed
 if enforcement is unavailable; nonproduction can fall back to process memory.
 Monthly usage is a separate non-atomic quota preflight. Neither mechanism is a
-provider billing limit. See [Operations](OPERATIONS.md).
+provider billing limit. See [Operations](operations/README.md).
 
 Meta tokens live encrypted in a private schema and are accessed through server-only
 RPCs. Browser DTOs contain selected assets/capabilities, never tokens. OAuth uses

@@ -22,7 +22,7 @@ In Production it is applied at SHA-256
 `02a409069475caff00872c9de31296771d0669bf852f5e5034f7f876a47d972c`, with one
 owner-confirmed operator registered and zero requests at readback. This does not
 verify the application request workflow; see
-[Privacy request operations](OPERATIONS.md#privacy-request-operations).
+[Privacy request operations](operations/privacy-requests.md#privacy-request-operations).
 
 The source-only [configurable quote migration](../db/migrations/20260927_configurable_payment_quotes.sql)
 depends on the original payment, operator policy and

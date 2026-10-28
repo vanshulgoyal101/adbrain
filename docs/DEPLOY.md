@@ -247,7 +247,7 @@ Supabase `pg_cron` calls enforce-spend, lead sync and the results refresh every
 15 minutes; Vercel also runs keepalive and enforce-spend daily at
 06:00 UTC. Enforcement uses stored spend and can pause ads; keepalive can prune
 old product events.
-See [Operations](OPERATIONS.md#scheduled-jobs) for authentication, timing limits,
+See [Operations](operations/scheduled-jobs.md#scheduled-jobs) for authentication, timing limits,
 partial results, and monitoring. A cron declaration does not prove a job ran.
 
 Choose a previously verified compatible build for rollback. Preserve schema and

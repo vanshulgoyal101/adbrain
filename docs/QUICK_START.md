@@ -133,5 +133,5 @@ read [Testing](TESTING.md) before invoking them.
 | Meta disabled in production | Explicit rollout and app configuration; unset rollout fails closed |
 | Connected but cannot read leads | Lead capability, Page token, form access, `leads_retrieval` |
 
-See [Operations](OPERATIONS.md) for incidents and [Release Workflow](RELEASING.md)
+See [Operations](operations/README.md) for incidents and [Release Workflow](RELEASING.md)
 for publication. Do not use a direct production CLI deploy as a setup shortcut.
