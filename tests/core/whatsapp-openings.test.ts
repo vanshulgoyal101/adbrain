@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { ICE_BREAKER_LIMITS, whatsappWelcomeMessage, type WhatsAppOpening } from "@/lib/meta/client";
 import { resolveWhatsAppMessage, type WhatsAppTemplate } from "@/lib/campaign/whatsapp-template";
 import { buildCanonicalReviewPayload, type PreflightInput } from "@/lib/campaign/preflight";
+import { campaignWhatsAppMessage } from "@/lib/campaign/campaign-whatsapp-message";
+import { whatsappGreeting } from "@/lib/campaign/whatsapp-greeting";
 import recorded from "./fixtures/meta/whatsapp-openings.json";
 
 // whatsapp-openings.json: Meta's validate_only answers for each opening in both creative shapes
@@ -11,7 +13,8 @@ const openings = recorded.openings as Record<string, WhatsAppOpening>;
 describe("core: every WhatsApp opening AdBrain sends is one Meta accepted (#840)", () => {
   it("sends exactly the welcome JSON Meta accepted, for every opening and both creative shapes", () => {
     expect(recorded.tape.map((entry) => `${entry.opening}/${entry.shape}`)).toEqual([
-      "prefill/placement", "prefill/single", "call/placement", "call/single", "ice_breakers/placement", "ice_breakers/single"]);
+      "prefill/placement", "prefill/single", "call/placement", "call/single", "ice_breakers/placement", "ice_breakers/single",
+      "questions_en/placement", "questions_en/single", "questions_hi/placement", "questions_hi/single"]);
     for (const entry of recorded.tape) {
       expect(entry, `${entry.opening} ${entry.shape}`).toMatchObject({ status: 200, body: { success: true } });
       expect(whatsappWelcomeMessage(openings[entry.opening])).toBe(entry.welcome);
@@ -70,5 +73,31 @@ describe("core: the WhatsApp message Review shows is the one launch sends (#840)
     expect(payload(resolveWhatsAppMessage({ saved: null, suggest: () => suggestion }))).toEqual(payload(undefined));
     expect(payload(resolveWhatsAppMessage({ saved: asTemplate(openings.call), suggest: () => suggestion })).whatsappOpening).toEqual(openings.call);
     expect(payload(resolveWhatsAppMessage({ edited: asTemplate(openings.ice_breakers), saved: null, suggest: () => suggestion })).whatsappOpening).toEqual(openings.ice_breakers);
+  });
+});
+
+// #1121: with ice breakers there's no pre-typed message, so AdBrain's suggested "Send this message" welcome
+// would point at nothing. Launch sends the questions welcome instead, the one Meta accepted; owner-typed words stay.
+describe("core: Quick questions get the questions welcome (#1121)", () => {
+  const solaride = { name: "Solaride", offers: ["Free site survey"], locations: ["Mohali"] };
+  const draft = { businessId: "b", destination: "whatsapp", creativeIds: ["c"], leadFormId: null, dailyBudgetRupees: 300, abTest: false, targeting: {} } as never;
+  const saved = (greeting: string, questions: string[], language: WhatsAppTemplate["language"]): WhatsAppTemplate => ({ greeting, language, opening: { kind: "ice_breakers", questions } });
+
+  it("a saved Quick questions message with AdBrain's welcome sends the recorded questions welcome, in English and Hindi", () => {
+    for (const [label, language, copy] of [["questions_en", "en", "Rooftop solar"], ["questions_hi", "hi", "छत पर सोलर"]] as const) {
+      const suggested = whatsappGreeting(solaride, [copy], [], [], language).greeting;
+      const message = campaignWhatsAppMessage({ draft, business: { ...solaride, whatsapp_template: saved(suggested, openings[label].iceBreakers!, language) }, creatives: [] });
+      expect(message.opening).toEqual(openings[label]);
+      const accepted = recorded.tape.filter((entry) => entry.opening === label);
+      expect(accepted).toHaveLength(2);
+      for (const entry of accepted) expect(whatsappWelcomeMessage(message.opening)).toBe(entry.welcome);
+    }
+  });
+
+  it("keeps the owner's own welcome and leaves pre-typed messages alone", () => {
+    const own = campaignWhatsAppMessage({ draft, business: { ...solaride, whatsapp_template: saved(openings.ice_breakers.greeting, openings.ice_breakers.iceBreakers!, "en") }, creatives: [] });
+    expect(own.opening).toEqual(openings.ice_breakers);
+    const prefill = campaignWhatsAppMessage({ draft, business: { ...solaride, whatsapp_template: { greeting: openings.prefill.greeting, language: "en", opening: { kind: "prefill", prefill: openings.prefill.autofill, callButton: false } } }, creatives: [] });
+    expect(prefill.opening.greeting).toBe(openings.prefill.greeting);
   });
 });
