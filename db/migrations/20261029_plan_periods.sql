@@ -53,8 +53,9 @@ begin
 end;
 $$;
 
--- Marks the month behind a paid link: 'paid', 'duplicate' (same payment again) or 'ignored' (unknown link,
--- another payment, or not open). Locks the business so two payments can't overlap their months.
+-- Marks the month behind a paid link: 'paid', 'duplicate' (same payment again) or 'ignored' (unknown link or
+-- another payment). An 'expired' month is credited too: webhook order isn't guaranteed and a link can lapse while
+-- its payment is in flight, and the money is real (Reviewer, #1430). Locks the business so months can't overlap.
 create or replace function public.plan_period_paid(p_link_id text, p_payment_id text, p_paid_at timestamptz)
 returns text language plpgsql security definer set search_path = '' as $$
 declare period public.plan_periods; paid_through timestamptz; starts timestamptz;
@@ -64,7 +65,7 @@ begin
   perform 1 from public.businesses where id = period.business_id for update;
   select * into period from public.plan_periods where id = period.id for update;
   if period.state = 'paid' then return case when period.payment_id = p_payment_id then 'duplicate' else 'ignored' end; end if;
-  if period.state <> 'open' then return 'ignored'; end if;
+  if period.state not in ('open', 'expired') then return 'ignored'; end if;
   select greatest(
       coalesce((select min(c.launched_at) from public.campaigns c where c.business_id = period.business_id) + interval '1 month', p_paid_at),
       coalesce((select max(p.ends_at) from public.plan_periods p where p.business_id = period.business_id and p.state = 'paid'), p_paid_at))

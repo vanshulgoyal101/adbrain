@@ -1502,7 +1502,7 @@ async function verifyPlanPeriods(db, database) {
   const link = (period, id) => service("select public.plan_period_set_link($1,$2,'https://rzp.io/i/x') as r", [period, id]);
   const paid = async (id, payment, at) => (await service("select public.plan_period_paid($1,$2,$3) as r", [id, payment, at])).r;
   const months = async () => (await db.query("select to_char(starts_at at time zone 'UTC','YYYY-MM-DD') as s, to_char(ends_at at time zone 'UTC','YYYY-MM-DD') as e from public.plan_periods where business_id=$1 and state='paid' order by starts_at", [business])).rows;
-  await check(`${database}: plan periods: one open month, paid once, early pay stacks after the free month, late pay starts at payment (#718)`, async () => {
+  await check(`${database}: plan periods: one open month, paid once, early pay stacks after the free month, late pay starts at payment, paid-after-expiry credited (#718)`, async () => {
     const first = await open();
     assert.equal((await open()).periodId, first.periodId);
     assert.equal((await link(first.periodId, "plink_A")).r, true);
@@ -1520,7 +1520,11 @@ async function verifyPlanPeriods(db, database) {
     const third = await open();
     await link(third.periodId, "plink_D");
     assert.equal((await service("select public.plan_period_expire('plink_D') as r")).r, true);
-    assert.equal(await paid("plink_D", "pay_D", "2027-02-01T00:00:00Z"), "ignored");
+    // A payment that lands after its link expired still buys its month (Reviewer, #1430): starts after Feb 28.
+    assert.equal(await paid("plink_D", "pay_D", "2027-02-01T00:00:00Z"), "paid");
+    assert.equal(await paid("plink_D", "pay_D", "2027-02-01T00:00:00Z"), "duplicate");
+    assert.deepEqual((await months()).at(-1), { s: "2027-02-28", e: "2027-03-28" });
+    assert.equal((await service("select public.plan_period_expire('plink_D') as r")).r, false);
   });
   await check(`${database}: plan periods: owners read only their own, nobody writes them directly (#718)`, async () => {
     const as = async (role, user, run) => {
