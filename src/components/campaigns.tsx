@@ -109,6 +109,7 @@ import { campaignAttention } from "@/lib/campaign/health";
 import { campaignWhatsAppSummary } from "@/lib/campaign/results-summary";
 import { costPerCustomer } from "@/lib/campaign/real-enquiries";
 import { describeSkippedCampaigns, type SkippedCampaign } from "@/lib/campaign/sync-skips";
+import type { RerunPrefill } from "@/lib/campaign/rerun";
 import type { AdReview, CampaignDeliverySnapshot } from "@/lib/meta/client";
 import { committedWords, freeRoomPaise, type AccountFunding } from "@/lib/campaign/funding-check";
 import { readCampaignRecovery, recoveryStorageKey, writeCampaignRecovery, type CampaignRecovery } from "@/lib/meta-connect-ui/recovery";
@@ -701,6 +702,55 @@ function BusinessCampaigns({
     setShowComposer(true);
     if (creationMode === "guided") focusOnOpenRef.current = true;
     else nameInputRef.current?.focus();
+  }
+
+  // #1050: "Run this again" copies a campaign that worked into New campaign; Review → Send to Meta (paused) still decides.
+  const [rerunBusy, setRerunBusy] = useState<string | null>(null);
+  async function runAgain(campaign: Campaign) {
+    if (preparing || creating || rerunBusy) return;
+    if (unresolvedRecovery()) { setCardError({ id: campaign.id, message: "Resolve the current campaign operation before starting another campaign." }); return; }
+    if (showComposer && selected.size && !(await askConfirm({ title: "Discard this setup?", description: `Start a copy of "${campaign.name ?? "this campaign"}" instead. Saved drafts stay available.`, confirmLabel: "Discard and copy", tone: "danger" }))) return;
+    setRerunBusy(campaign.id);
+    setCardError(null);
+    try {
+      const response = await fetch(`/api/campaigns/${campaign.id}/rerun`, { cache: "no-store" });
+      const data = await response.json().catch(() => null) as { prefill?: RerunPrefill; error?: string } | null;
+      if (!response.ok || !data?.prefill) throw new Error(data?.error ?? "This campaign couldn't be copied. Try again.");
+      const prefill = data.prefill;
+      clearErrors();
+      preparedDraftRef.current = null;
+      recoveryRef.current = null;
+      operationRef.current = null;
+      window.sessionStorage.removeItem(recoveryKey);
+      setOperation(null);
+      setRecoveryPending(false);
+      setPrepareReview(null);
+      setCreationMode("manual");
+      setName(prefill.name);
+      setDraftGoal(prefill.goal);
+      setSelected(new Set(prefill.creativeIds));
+      setBudget(prefill.dailyBudgetRupees);
+      setAbTest(prefill.abTest);
+      setTargeting(prefill.targeting ? targetingToEditor(prefill.targeting) : defaultTargeting);
+      setIncludedNames((prefill.targeting?.location?.includedNames ?? []).join("\n"));
+      setExcludedNames((prefill.targeting?.location?.excludedNames ?? []).join("\n"));
+      setLeadFormId(prefill.leadFormId ?? "");
+      if (prefill.destination) setDestination(prefill.destination);
+      destinationChosenRef.current = Boolean(prefill.destination);
+      setWhatsAppNumber(!prefill.whatsappNumber || maskedWhatsAppNumberPattern.test(prefill.whatsappNumber) ? prefill.whatsappNumber ?? "" : maskWhatsAppNumber(prefill.whatsappNumber));
+      setWhatsAppLanguage(prefill.whatsappLanguage ?? "ad");
+      setWhatsAppMessage(prefill.whatsappMessage ?? null);
+      flushSync(() => setShowComposer(true));
+      setNotice(prefill.dropped
+        ? `Copied "${campaign.name ?? "the campaign"}". ${prefill.dropped} ad${prefill.dropped === 1 ? " isn't" : "s aren't"} approved anymore, so ${prefill.dropped === 1 ? "it was" : "they were"} left out. Check it, then Review.`
+        : `Copied "${campaign.name ?? "the campaign"}" with its best ad first. Check it, then Review.`);
+      nameInputRef.current?.scrollIntoView?.({ block: "center" });
+      nameInputRef.current?.focus();
+    } catch (reason) {
+      setCardError({ id: campaign.id, message: reason instanceof Error ? reason.message : "This campaign couldn't be copied. Try again." });
+    } finally {
+      setRerunBusy(null);
+    }
   }
 
   function finishDraftConnection(connection: ConnectionDTO) {
@@ -2321,7 +2371,7 @@ function BusinessCampaigns({
                       // #1003: always say how old the numbers are.
                       <p className="text-xs text-slate-500">{updatingIds.includes(c.id) ? "Updating results…" : `Updated ${timeAgo(new Date(r.fetched_at))}`}</p>
                     )}
-                    {adResults && r && c.meta_campaign_id && <AdResults campaignId={c.id} whatsapp={outcome === "whatsapp"} />}
+                    {adResults && r && c.meta_campaign_id && <AdResults campaignId={c.id} whatsapp={outcome === "whatsapp"} onRunAgain={() => void runAgain(c)} runAgainBusy={rerunBusy === c.id} />}
                     {r && outcome === "whatsapp" && r.whatsapp_opens != null && r.conversations != null && (
                       // #493: people reach WhatsApp and leave; show the drop-off plainly.
                       <p className="text-sm text-slate-700">
