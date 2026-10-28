@@ -5,7 +5,7 @@ import { CLOUDFLARE_IMAGE_MODEL, cloudflareConfigured, createCloudflareProvider 
 import { FreeImageBusyError, ImageProviderError, ReferencePhotoPausedError, type GeneratedImage, type ImageProvider, type ImageRequest } from "./types";
 import { MAX_IMAGE_BYTES, readBoundedResponse, validateRaster } from "./raster";
 import { fetchPublicUrl, SafeFetchError } from "@/lib/security/ssrf";
-import { freeImagesOnly } from "@/lib/llm/spend-policy";
+import { costCapped, freeImagesOnly } from "@/lib/llm/spend-policy";
 
 export type { GeneratedImage, ImageRequest } from "./types";
 
@@ -127,6 +127,8 @@ export async function generateImage(
   const free = freeImagesOnly();
   if (free) req = { ...req, referenceImages: undefined };
   const provider = getProvider(free ? "pollinations" : undefined);
+  // #1717: a business over its monthly AI cost cap gets free pictures, like a parked key (with the 'taking longer' notice).
+  if (!free && costCapped() && provider.name !== "pollinations") return fallbackImage(getProvider("pollinations"), provider, req, startedAt, "allowance");
   const parkedFallback = !free && isParked(provider.name) ? getFallbackProvider() ?? getProvider("pollinations") : null;
   if (parkedFallback && parkedFallback.name !== provider.name) return fallbackImage(parkedFallback, provider, req, startedAt);
   try {
@@ -153,9 +155,10 @@ export async function generateImage(
   }
 }
 
-async function fallbackImage(fallback: ImageProvider, from: ImageProvider, req: ImageRequest, startedAt: number): Promise<GeneratedImage> {
+async function fallbackImage(fallback: ImageProvider, from: ImageProvider, req: ImageRequest, startedAt: number,
+  reason: "paused" | "allowance" = "paused"): Promise<GeneratedImage> {
   // #1593: the free pictures can't use the owner's product photo; an unrelated product would misrepresent what they sell.
-  if (req.referenceImages?.length && FREE_PROVIDERS.includes(fallback.name)) throw new ReferencePhotoPausedError();
+  if (req.referenceImages?.length && FREE_PROVIDERS.includes(fallback.name)) throw new ReferencePhotoPausedError(reason);
   try {
     req.onFallback?.();
   } catch {

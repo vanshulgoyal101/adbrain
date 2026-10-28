@@ -33,6 +33,7 @@ import { isProspectAccount } from "@/lib/internal-accounts";
 import { AD_ANGLES, type AdAngle } from "@/lib/templates/ads";
 import { freeImagesOnly } from "@/lib/llm/spend-policy";
 import { cloudflareConfigured } from "@/lib/imageGen/providers/cloudflare";
+import { applyMonthlyCostCap } from "@/lib/llm/cost-cap";
 import { preferenceContext } from "@/lib/preferences/store";
 
 export const runtime = "nodejs";
@@ -236,6 +237,8 @@ async function generate(req: Request, live?: LiveCreate) {
   }
 
   const monthlyLimit = configuredMonthlyTokenLimit(user);
+  // #1717: over the monthly AI cost cap, this Create's pictures are free (text keeps the token cap).
+  await applyMonthlyCostCap(businessId, user);
   const { error: schemaError } = await supabase
     .from("creatives")
     .select("generation")

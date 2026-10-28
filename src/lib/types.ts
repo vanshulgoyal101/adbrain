@@ -751,6 +751,10 @@ export interface Database {
         Args: { p_creative_id: string; p_business_id: string; p_user_id: string; p_attempt_id: string; p_unresolved: boolean };
         Returns: { status: "released" | "unresolved" | "missing" };
       };
+      monthly_ai_cost_usd: {
+        Args: { p_business_id: string; p_since: string };
+        Returns: number;
+      };
       check_rate_limit: {
         Args: { p_key: string; p_limit: number; p_window_ms: number };
         Returns: { allowed: boolean; retry_after_ms: number }[];
