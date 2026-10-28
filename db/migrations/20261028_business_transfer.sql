@@ -1,7 +1,9 @@
--- #1670 (CTO design 18:55Z, Reviewer's 7 points 19:06Z): a rep hands a `+prospect` business to its owner without
--- DevOps. The owner gets their own new login (nothing of the staff login carries over); one definer function moves the
--- business to them in one transaction, after re-checking the #1486 runbook's pre-checks under lock. Staff keep their
--- account and lose access because they no longer own the business. Additive: one table, one column, functions.
+-- #1670 (CTO design 18:55Z, Reviewer's 7 points 19:06Z, transport 19:56Z): a rep hands a `+prospect` business to its
+-- owner without DevOps. No link is sent: the owner signs in on their own phone the normal way (email link or Google,
+-- both confirmed), which proves the address, and Home asks "Make {business} yours?". One definer function then moves
+-- the business to them in one transaction, after re-checking the #1486 runbook's pre-checks under lock. The owner's
+-- login is their own (nothing of the staff login carries over); staff keep their account and lose access because they
+-- no longer own the business. Additive: one table, one column, functions.
 begin;
 set local lock_timeout = '5s';
 
@@ -13,9 +15,7 @@ create table if not exists private.business_transfers (
   business_id uuid not null references public.businesses(id) on delete cascade,
   from_user_id uuid not null references auth.users(id) on delete cascade,
   target_email text not null check (target_email = lower(btrim(target_email)) and target_email ~ '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$'),
-  -- SHA-256 (hex) of 32 random bytes; the token itself is never stored.
-  token_hash text not null unique check (token_hash ~ '^[0-9a-f]{64}$'),
-  state text not null default 'pending' check (state in ('pending', 'claimed', 'cancelled')),
+  state text not null default 'pending' check (state in ('pending', 'claimed', 'cancelled', 'declined')),
   expires_at timestamptz not null,
   created_at timestamptz not null default now(),
   claimed_by uuid references auth.users(id) on delete set null,
@@ -62,7 +62,7 @@ revoke all on function private.is_team_email(text) from public, anon, authentica
 
 -- Service role only (the route checks the staff session first): the starter must own the business with a confirmed
 -- `+prospect` team address, and the pre-checks must pass. Returns the transfer id; 30 minutes to claim.
-create or replace function public.business_transfer_start(p_business_id uuid, p_from_user_id uuid, p_target_email text, p_token_hash text)
+create or replace function public.business_transfer_start(p_business_id uuid, p_from_user_id uuid, p_target_email text)
 returns uuid language plpgsql security definer set search_path = '' as $$
 declare
   staff_email text;
@@ -77,7 +77,7 @@ begin
   if staff_email is null or not private.is_team_email(staff_email) or split_part(staff_email, '@', 1) !~ '\+prospect(-|$)' then
     raise insufficient_privilege using message = 'Only a sales prospect account can hand its business over';
   end if;
-  if target !~ '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$' or coalesce(p_token_hash, '') !~ '^[0-9a-f]{64}$' then
+  if target !~ '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$' then
     raise invalid_parameter_value using message = 'Invalid hand-over';
   end if;
   if private.is_team_email(target) then
@@ -89,14 +89,22 @@ begin
   end if;
   update private.business_transfers set state = 'cancelled', cancelled_at = now()
   where business_id = p_business_id and state = 'pending';
-  insert into private.business_transfers(business_id, from_user_id, target_email, token_hash, expires_at)
-  values (p_business_id, p_from_user_id, target, p_token_hash, now() + interval '30 minutes')
+  insert into private.business_transfers(business_id, from_user_id, target_email, expires_at)
+  values (p_business_id, p_from_user_id, target, now() + interval '30 minutes')
   returning id into transfer_id;
   return transfer_id;
 end;
 $$;
-revoke all on function public.business_transfer_start(uuid, uuid, text, text) from public, anon, authenticated;
-grant execute on function public.business_transfer_start(uuid, uuid, text, text) to service_role;
+revoke all on function public.business_transfer_start(uuid, uuid, text) from public, anon, authenticated;
+grant execute on function public.business_transfer_start(uuid, uuid, text) to service_role;
+
+-- Service role only: what the rep's sheet shows before starting: the first pre-check that blocks, or null.
+create or replace function public.business_transfer_check(p_business_id uuid)
+returns text language sql stable security definer set search_path = '' as $$
+  select private.business_transfer_blocker(p_business_id);
+$$;
+revoke all on function public.business_transfer_check(uuid) from public, anon, authenticated;
+grant execute on function public.business_transfer_check(uuid) to service_role;
 
 -- Service role only: the rep cancels the pending hand-over of a business they still own.
 create or replace function public.business_transfer_cancel(p_business_id uuid, p_from_user_id uuid)
@@ -113,14 +121,57 @@ $$;
 revoke all on function public.business_transfer_cancel(uuid, uuid) from public, anon, authenticated;
 grant execute on function public.business_transfer_cancel(uuid, uuid) to service_role;
 
--- Service role only: the pending hand-over Settings shows the rep (whom it's for, until when).
-create or replace function public.business_transfer_pending(p_business_id uuid)
-returns table (target_email text, expires_at timestamptz) language sql stable security definer set search_path = '' as $$
-  select t.target_email, t.expires_at from private.business_transfers t
-  where t.business_id = p_business_id and t.state = 'pending' and t.expires_at > now();
+-- Service role only: the business's latest hand-over for the rep's Settings (waiting, declined, expired or cancelled).
+create or replace function public.business_transfer_status(p_business_id uuid)
+returns table (target_email text, state text, expires_at timestamptz, updated_at timestamptz)
+language sql stable security definer set search_path = '' as $$
+  select t.target_email,
+    case when t.state = 'pending' and t.expires_at <= now() then 'expired' else t.state end,
+    t.expires_at, coalesce(t.claimed_at, t.cancelled_at, t.created_at)
+  from private.business_transfers t where t.business_id = p_business_id
+  order by t.created_at desc limit 1;
 $$;
-revoke all on function public.business_transfer_pending(uuid) from public, anon, authenticated;
-grant execute on function public.business_transfer_pending(uuid) to service_role;
+revoke all on function public.business_transfer_status(uuid) from public, anon, authenticated;
+grant execute on function public.business_transfer_status(uuid) to service_role;
+
+-- The signed-in owner's own pending hand-over: the one waiting for their confirmed address. Only what Home's question
+-- needs (the business's name, how many ads are ready and up to 3 of their pictures); nothing for an unconfirmed address.
+create or replace function public.business_transfer_mine()
+returns table (transfer_id uuid, business_name text, ads integer, images text[], expires_at timestamptz)
+language plpgsql stable security definer set search_path = '' as $$
+begin
+  return query
+  select t.id, b.name,
+    (select count(*)::integer from public.creatives c where c.business_id = b.id and c.status = 'approved'),
+    array(select c.image_url from public.creatives c where c.business_id = b.id and c.status = 'approved' and c.image_url is not null
+      order by c.created_at desc limit 3),
+    t.expires_at
+  from auth.users u
+  join private.business_transfers t on t.target_email = lower(u.email) and t.state = 'pending' and t.expires_at > now()
+  join public.businesses b on b.id = t.business_id and b.owner_id = t.from_user_id
+  where u.id = auth.uid() and u.email_confirmed_at is not null
+  order by t.created_at desc limit 1;
+end;
+$$;
+revoke all on function public.business_transfer_mine() from public, anon;
+grant execute on function public.business_transfer_mine() to authenticated;
+
+-- "This isn't my business": the owner turns it down; the rep's Settings says so.
+create or replace function public.business_transfer_decline(p_transfer_id uuid)
+returns boolean language plpgsql security definer set search_path = '' as $$
+declare declined int;
+begin
+  if auth.uid() is null then raise insufficient_privilege using message = 'Sign in first'; end if;
+  update private.business_transfers t set state = 'declined', cancelled_at = now()
+  from auth.users u
+  where t.id = p_transfer_id and t.state = 'pending' and u.id = auth.uid() and u.email_confirmed_at is not null
+    and t.target_email = lower(u.email);
+  get diagnostics declined = row_count;
+  return declined > 0;
+end;
+$$;
+revoke all on function public.business_transfer_decline(uuid) from public, anon;
+grant execute on function public.business_transfer_decline(uuid) to authenticated;
 
 -- The move, for the signed-in owner. Everything is re-checked after the locks: the transfer is pending and unexpired,
 -- this user's confirmed address (from auth.users, not the JWT) is the target, the staff still own the business, the
@@ -177,19 +228,16 @@ end;
 $$;
 revoke all on function private.business_transfer_complete(uuid) from public, anon, authenticated, service_role;
 
--- Signed-in owners claim with the hand-over's token (only its hash is sent).
-create or replace function public.business_transfer_claim(p_token_hash text)
+-- The signed-in owner says yes ("Make it mine").
+create or replace function public.business_transfer_claim(p_transfer_id uuid)
 returns uuid language plpgsql security definer set search_path = '' as $$
-declare transfer_id uuid;
 begin
   if auth.uid() is null then raise insufficient_privilege using message = 'Sign in to take over this business'; end if;
-  select id into transfer_id from private.business_transfers where token_hash = p_token_hash;
-  if transfer_id is null then raise invalid_parameter_value using message = 'This hand-over has expired or was already used'; end if;
-  return private.business_transfer_complete(transfer_id);
+  return private.business_transfer_complete(p_transfer_id);
 end;
 $$;
-revoke all on function public.business_transfer_claim(text) from public, anon;
-grant execute on function public.business_transfer_claim(text) to authenticated;
+revoke all on function public.business_transfer_claim(uuid) from public, anon;
+grant execute on function public.business_transfer_claim(uuid) to authenticated;
 
 -- CTO, point 6: the owner's monthly allowance never counts our preparation before the hand-over.
 create or replace function public.monthly_token_usage(p_business_id uuid, p_since timestamptz)
