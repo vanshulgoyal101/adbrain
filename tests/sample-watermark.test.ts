@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import sharp from "sharp";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -48,6 +50,26 @@ describe("sampleWatermark (#1317)", () => {
     expect(at(10, 10)).toBeGreaterThan(240);
     expect(at(10, 495)).toBeLessThan(120);
   });
+  // #1375: on Vercel an SVG <text> drew empty boxes (no system fonts). The words come from Pango with the bundled Inter,
+  // the same path the ads' Hindi text uses in production; a local test can't see tofu, so it also guards the source.
+  it("#1375: draws the words with the bundled font, never an SVG <text> that needs system fonts", async () => {
+    const source = readFileSync(path.join(process.cwd(), "src/lib/creative/sample-watermark.ts"), "utf8");
+    expect(source).not.toMatch(/<text\b/);
+    expect(source).toMatch(/shapeText\(SAMPLE_LABEL/);
+    const marked = await sampleWatermark(await picture("png", 1080, 1350));
+    const { data, info } = await sharp(marked.bytes).raw().toBuffer({ resolveWithObject: true });
+    const band = Math.round(1350 * 0.08);
+    let ink = 0, left = 1080, right = 0;
+    for (let y = 1350 - band; y < 1350; y += 1) for (let x = 0; x < 1080; x += 1) {
+      if (data[(y * 1080 + x) * info.channels] > 200) { ink += 1; left = Math.min(left, x); right = Math.max(right, x); }
+    }
+    expect(ink).toBeGreaterThan(1000);
+    // Centred words about a third of the width, not a full-width strip.
+    expect(Math.abs((left + right) / 2 - 540)).toBeLessThan(30);
+    expect(right - left).toBeGreaterThan(200);
+    expect(right - left).toBeLessThan(800);
+  });
+
   it("refuses what isn't a picture", async () => {
     await expect(sampleWatermark(new TextEncoder().encode("not a picture"))).rejects.toThrow();
   });
