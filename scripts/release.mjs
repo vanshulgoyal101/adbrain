@@ -9,6 +9,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs, parseEnv } from "node:util";
 import { managementMigrationSql, migrationChecksum } from "./database-migrations.mjs";
+import { refuseHeadless } from "./lib/headless.mjs";
 
 const repo = "vanshulgoyal101/adbrain";
 const projectId = "kmzuxrvfrwwpwmoovwcp";
@@ -182,6 +183,8 @@ async function waitForGuard(sha) {
 }
 
 async function main() {
+  // #1513: even --dry-run loads the production Management token, and verdict comments are one shared GitHub user.
+  refuseHeadless("release.mjs");
   const { values } = parseArgs({ options: { pr: { type: "string" }, "dry-run": { type: "boolean", default: false } } });
   if (!/^\d+$/.test(values.pr ?? "")) stop("Usage: node scripts/release.mjs --pr <number> [--dry-run]");
   const dry = values["dry-run"];

@@ -307,10 +307,13 @@ function writeState(state) {
   writeFileSync(join(STATE_DIR, "state.json"), JSON.stringify(state, null, 2));
 }
 
-/** Keep this worktree on origin/main so each tick runs current code; skipped if anyone left edits here. */
+/** Keep this worktree on origin/main so each tick runs current code; false (no refresh) if anyone left edits here. */
 function refresh() {
   const dirty = execFileSync("git", ["-C", WT, "status", "--porcelain"], { encoding: "utf8" }).trim();
-  if (dirty) return log("refresh skipped: worktree has local changes");
+  if (dirty) {
+    log("refresh skipped: worktree has local changes");
+    return false;
+  }
   // stdio ignored: a killed git can leave git-remote-https holding a pipe, and the call would wait on it.
   try {
     execFileSync("git", ["-C", WT, "fetch", "-q", "origin", "main"], { stdio: "ignore" });
@@ -318,6 +321,7 @@ function refresh() {
   } catch (error) {
     log(`refresh failed, running the current checkout: ${String(error?.message ?? error).split("\n")[0].slice(0, 160)}`);
   }
+  return true;
 }
 
 /** The headless run still going, if any: runs are detached from the tick (#766), so a tick checks the recorded pid. */
@@ -339,9 +343,12 @@ function runCli(args, runMin, outFile) {
   });
 }
 
-const agentArgs = (text, credits) => [
-  "-p", text, "-C", WT, "--autopilot", "--no-ask-user", "--allow-all-tools",
+// #1513: deny rules beat --allow-all-tools. `gh auth token` prints the GitHub token; secrets and variables are DevOps's.
+// Releases, applied migrations and Meta writes are refused in code via ADBRAIN_HEADLESS (scripts/lib/headless.mjs).
+export const agentArgs = (text, credits, wt = WT) => [
+  "-p", text, "-C", wt, "--autopilot", "--no-ask-user", "--allow-all-tools",
   "--deny-tool", "shell(launchctl)", "--deny-tool", "shell(vercel)", "--deny-tool", "shell(supabase)",
+  "--deny-tool", "shell(gh auth)", "--deny-tool", "shell(gh secret)", "--deny-tool", "shell(gh variable)",
   "--max-ai-credits", String(credits), "-s",
 ];
 
@@ -409,11 +416,13 @@ async function main() {
   // OFF stops only the headless role runs (#1525): production's scheduled jobs and the nightly backup depend on these dispatches.
   dispatchScheduledJobs(values["dry-run"]);
   dispatchBackup(values["dry-run"]);
-  if (!values["dry-run"]) refresh();
+  const fresh = values["dry-run"] ? true : refresh();
   nightlyExport(values["dry-run"]);
   // A detached run (#766) finishes the run it was given and records it; the tick that started it has long returned.
   if (values["run-role"]) return finishRun(values["run-role"], values["run-start"], runMin, values.credits);
   if (existsSync(join(STATE_DIR, "OFF"))) return values["dry-run"] ? console.log("no role runs: OFF switch") : log("tick: no role runs (OFF switch)");
+  // #1513: runs share this worktree; edits left here (this script included) would be what the next run executes.
+  if (!fresh) return log("tick: no role runs: the supervisor worktree has local edits; clean it to resume");
   const state = readState();
   for (const r of state.runs ?? []) if (r.pid && !r.end && !pidAlive(r.pid)) Object.assign(r, { end: new Date().toISOString(), result: "lost (process gone)" });
   const busy = activeRun(state);
