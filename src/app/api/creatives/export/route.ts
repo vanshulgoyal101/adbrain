@@ -9,6 +9,7 @@ import { z } from "zod";
 import { savedCreativeDescription } from "@/lib/creative/concept";
 import { sampleWatermark, SAMPLE_LABEL } from "@/lib/creative/sample-watermark";
 import { isProspectAccount } from "@/lib/internal-accounts";
+import { leaveBehindBlock, segmentForCategory } from "@/lib/segments";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -90,7 +91,10 @@ async function handlePOST(req: Request) {
       ? `Note: ${skipped} of ${withImage} image(s) were unavailable or exceeded export limits and are not included. Export a smaller selection to include more images.\n\n`
       : "";
   const sampleNote = sample ? `${SAMPLE_LABEL.toUpperCase()}. Made for a sales visit; these ads run only after the business owner signs up.\n\n` : "";
-  zip.file("copy.txt", sampleNote + note + copy);
+  // #1582: a sales visit's pack ends with the follow-up to send on WhatsApp and the segment's landing link.
+  const segment = sample && creatives[0]?.business_id ? segmentForCategory((await supabase.from("businesses").select("vertical")
+    .eq("id", creatives[0].business_id).maybeSingle()).data?.vertical) : null;
+  zip.file("copy.txt", sampleNote + note + copy + (segment ? `\n${leaveBehindBlock(segment)}` : ""));
 
   const buffer = await zip.generateAsync({ type: "arraybuffer" });
   return new NextResponse(new Blob([buffer], { type: "application/zip" }), {

@@ -61,6 +61,35 @@ export const SEGMENTS: Segment[] = [
 
 export const segmentBySlug = (slug: string) => SEGMENTS.find((segment) => segment.slug === slug) ?? null;
 
+const SEGMENT_MATCH: Array<[RegExp, string]> = [
+  [/solar/i, "solar"],
+  [/\b(ielts|pte|toefl)\b|study[\s-]*abroad/i, "ielts"],
+  [/interior|modular|kitchen|wardrobe/i, "interiors"],
+];
+
+/** #1582: the pilot segment for a Brand category (free text), or null outside the three. */
+export function segmentForCategory(category: string | null | undefined): Segment | null {
+  const slug = SEGMENT_MATCH.find(([pattern]) => pattern.test(category ?? ""))?.[1];
+  return slug ? segmentBySlug(slug) : null;
+}
+
+/**
+ * #1582: the closing block of a sales visit's pack (`copy.txt`): the WhatsApp follow-up to send the owner after the
+ * visit, ending with the segment's landing link. Only the words the public /for page already says (#1565).
+ */
+export function leaveBehindBlock(segment: Segment, origin = "https://adbrain.vanshul.com"): string {
+  return [
+    "----------------------------------------",
+    "",
+    "After the visit, send the owner this on WhatsApp:",
+    "",
+    `${segment.headline} ${segment.hinglish}`,
+    "Your first campaign is free. See how it works:",
+    `${origin}/for/${segment.slug}`,
+    "",
+  ].join("\n");
+}
+
 /** The owner's business WhatsApp (#796), read at build time; unset means no WhatsApp button. */
 export function segmentWhatsAppHref(segment: Segment, number = process.env.SUPPORT_WHATSAPP || process.env.NEXT_PUBLIC_SUPPORT_WHATSAPP): string | null {
   const digits = (number ?? "").replace(/\D/g, "");
