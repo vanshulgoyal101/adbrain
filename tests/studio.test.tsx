@@ -1243,4 +1243,11 @@ describe("<Studio> the newest batch on return (#1261)", () => {
     await act(async () => {});
     expect(statusCalls()).toHaveLength(0);
   });
+
+describe("#1901: the Studio tile says whose picture it is", () => {
+  it("shows Your photo on an owner-photo ad", () => {
+    render(<Studio business={business} initialCreatives={[creative({ generation: { image: { provider: "owner-photo" } } })]} />);
+    expect(screen.getByText("Your photo")).toBeInTheDocument();
+  });
+});
 });

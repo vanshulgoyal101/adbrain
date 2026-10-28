@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { requestLocale } from "@/i18n/request-locale";
 import { Building2 } from "lucide-react";
 import { openingLine } from "@/lib/campaign/result-evidence";
 import { getResultEvidence } from "@/lib/campaign/result-evidence-store";
@@ -65,7 +66,7 @@ export default async function CreatePage({ searchParams }: { searchParams?: Prom
       }).catch(() => null);
     // #1272: the + button lands here; a first-timer without the five facts resumes at step 1.
     if (setup && !brandUsable({ ...business, vertical: setupFieldsFrom(business).vertical })) redirect("/brand");
-    if (setup) return <SetupAdsStep business={business} initialAds={setup.ads} earlier={setup.earlier} sample={await isProspectSession()} />;
+    if (setup) return <SetupAdsStep business={business} initialAds={setup.ads} earlier={setup.earlier} sample={await isProspectSession()} locale={await requestLocale()} />;
   }
 
   const missing = [

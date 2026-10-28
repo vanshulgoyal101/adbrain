@@ -1,5 +1,7 @@
 "use client";
 
+import { PictureSourceBadge } from "@/components/picture-source-badge";
+import type { AppLocale } from "@/i18n/locale";
 import { useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -58,7 +60,7 @@ function sessionStore(): Storage | null {
  * Connect Facebook Page → Go live. Go live is one tap (4b): save the draft, review it, create it paused, then turn
  * it on as a 2-day capped run (setup-go-live-flow). Nothing is spent before that tap; the server enforces the cap.
  */
-export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNumber, weeklyCap, welcome = null }: {
+export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNumber, weeklyCap, welcome = null, locale = "en" }: {
   business: Pick<Business, "id" | "name" | "locations">;
   ads: Creative[];
   pageConnected: boolean;
@@ -68,6 +70,8 @@ export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNum
   weeklyCap: { capRupees: number | null; active: CampaignSpend[] } | null;
   /** #1529: the WhatsApp welcome Go live sends (as Review works it out); null if it couldn't be read. */
   welcome?: SetupWelcome | null;
+  /** #1901: the picture badge's language. */
+  locale?: AppLocale;
 }) {
   const router = useRouter();
   const [daily, setDaily] = useState<number>(BUDGET_PRESETS[0]);
@@ -125,9 +129,12 @@ export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNum
       <dl className="mt-4 flex flex-col gap-4 text-sm">
         <div>
           <dt className="text-slate-500">Ads: {ads.length} picked</dt>
-          <dd className="mt-2 flex gap-2">
+          <dd className="mt-2 flex flex-wrap gap-2">
             {ads.map((ad) => ad.image_url && (
-              <img key={ad.id} src={creativeThumbnailUrl(ad.image_url)} alt={ad.headline ?? "Your ad"} className="h-16 w-16 rounded-md bg-slate-100 object-cover" />
+              <figure key={ad.id} className="flex flex-col items-start gap-1">
+                <img src={creativeThumbnailUrl(ad.image_url)} alt={ad.headline ?? "Your ad"} className="h-16 w-16 rounded-md bg-slate-100 object-cover" />
+                <PictureSourceBadge generation={ad.generation} locale={locale} />
+              </figure>
             ))}
           </dd>
         </div>
