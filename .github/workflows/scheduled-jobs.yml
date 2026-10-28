@@ -232,6 +232,22 @@ jobs:
           [ "$open" = 0 ] || exit 0
           gh issue create -R "$GITHUB_REPOSITORY" -l decision -t "$title" \
             -b "$(printf 'An OpenRouter key has $%s left (alert under $%s, #449). Paid Create models (images, Haiku concepts) stop when it runs out.\n\n→ CEO: ask the owner whether to raise the key limit (OpenRouter settings → Keys).\nRun: %s/%s/actions/runs/%s\n' "$(jq -r '.minRemainingUsd' credit.json)" "$(jq -r '.thresholdUsd' credit.json)" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+      # #1627: the repo is public. Flags customer data pasted into issues/PRs since the last run (URL + pattern type only).
+      - name: Check out the public-data scanner
+        if: always()
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            scripts/scan-public-data.mjs
+            src/lib/internal-accounts.json
+          sparse-checkout-cone-mode: false
+      - name: Public-data scan (#1627)
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          last=$(gh run list -R "$GITHUB_REPOSITORY" -w scheduled-jobs.yml --status completed -L 1 --json createdAt --jq '.[0].createdAt // empty')
+          node scripts/scan-public-data.mjs ${last:+--since "$last"}
       - name: Alert on the second consecutive failure
         if: failure()
         env:
