@@ -54,6 +54,14 @@ describe("core: <SetupGoLive> (#1271)", () => {
     expect(mocks.push).not.toHaveBeenCalled();
   });
 
+  it("#718: an own-account business is told AdBrain's price before Go live; others aren't", () => {
+    goLive({ funding: "own" });
+    expect(screen.getByText("Your first month of AdBrain is free. After that it's ₹999 a month; we'll remind you before it's due.")).toBeInTheDocument();
+    cleanup();
+    goLive({ funding: "managed" });
+    expect(screen.queryByText(/₹999 a month/)).not.toBeInTheDocument();
+  });
+
   it("#1292: before Connect, the trust line for who holds the ad money; none once connected", () => {
     goLive({ pageConnected: false, funding: "own" });
     expect(screen.getByText("Your Page, your ad account, your card. AdBrain never holds your ad money.")).toBeInTheDocument();

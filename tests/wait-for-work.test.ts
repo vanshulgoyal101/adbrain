@@ -84,14 +84,14 @@ describe("CTO on-track check", () => {
 describe("CTO queue watch", () => {
   const issue = (...labels: string[]) => ({ labels: labels.map((name) => ({ name })) });
 
-  it("flags workers with fewer than 2 actionable items, ignoring parked ones", () => {
+  it("flags workers with fewer than 3 actionable items (owner, Oct 28), ignoring parked ones", () => {
     const low = lowQueues([
       issue("core", "owner:dev"), issue("owner:dev"),
       issue("owner:dev2"), issue("owner:dev2", "waiting-owner"),
       issue("owner:dev3"), issue("owner:dev3"), issue("owner:dev3", "decision"),
       issue("owner:qa", "owner:dev"), issue("owner:qa"),
     ]);
-    expect(low).toEqual([{ role: "dev2", count: 1 }, { role: "dev4", count: 0 }, { role: "qa2", count: 0 }]);
+    expect(low).toEqual([{ role: "dev2", count: 1 }, { role: "dev3", count: 2 }, { role: "dev4", count: 0 }, { role: "qa", count: 2 }, { role: "qa2", count: 0 }]);
     // The CPO self-sources from walks and #703, like the Analyst and Designer (#364).
     expect(low.map((l) => l.role)).not.toContain("cpo");
   });
@@ -247,6 +247,8 @@ describe("next item (#364: idle with a full queue)", () => {
     expect(nextItem(items, pulls)?.number).toBe(25);
     expect(nextItem(items, pulls, new Set([25]))?.number).toBe(30);
     expect(nextItem([issue(12, "parked")], [])).toBeNull();
+    // Standing channels and umbrellas (#364, #418) are never "your next item".
+    expect(nextItem([issue(364, "standing"), issue(400, "core")], [])?.number).toBe(400);
   });
   it("parked items don't count toward a queue", () => {
     expect(lowQueues([issue(1, "owner:dev"), issue(2, "owner:dev", "parked")]).map((l) => l.role)).toContain("dev");

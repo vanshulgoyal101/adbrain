@@ -4,8 +4,8 @@ import { observeRoute } from "@/lib/observability/logger";
 
 export const runtime = "nodejs";
 
-/** Alert threshold in USD (#449: the CEO asks the owner before Create degrades). */
-const LOW_CREDIT_USD = 0.5;
+/** Alert threshold in USD (#449: the CEO asks the owner before Create degrades; $1 since #1129). */
+const LOW_CREDIT_USD = 1;
 
 type KeyCredit = { index: number; limitUsd: number | null; remainingUsd: number | null; error?: string };
 

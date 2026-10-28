@@ -50,6 +50,11 @@ where ${inWindow} and route in (${list(SCOREBOARD_AI_ROUTES)})`),
 from public.campaigns c where c.status = 'active' and c.meta_campaign_id is not null`),
 ]);
 type Identity = { id: string; email: string | null; email_confirmed_at: string | null };
+// #1136: the Brand row's owners: when they signed up, and whether they're the team.
+const createUserIds = [...new Set((events as ScoreEvent[]).filter((event) => event.name === "business.create" && event.user_id)
+  .map((event) => event.user_id as string))];
+const owners = createUserIds.length ? await readOnlyQuery(`select id, email, email_confirmed_at,
+  to_char(created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as signed_up_at from auth.users where id in (${list(createUserIds)})`) : [];
 
 const board = buildScoreboard({
   events: events as ScoreEvent[],
@@ -58,6 +63,7 @@ const board = buildScoreboard({
   activeResults: active as ScoreActiveResult[],
   freeImageUserIds: (users as Identity[]).filter((user) => isInternalUser(user) && !isExemptFromFreeProviders(user)).map((user) => user.id),
   excludedUserIds: smoke,
+  brandOwners: (owners as Array<Identity & { signed_up_at: string }>).map((owner) => ({ id: owner.id, signedUpAt: owner.signed_up_at, internal: isInternalUser(owner) })),
   excludedBusinessIds: (owned as Array<{ id: string }>).map((row) => row.id),
   since,
   until,

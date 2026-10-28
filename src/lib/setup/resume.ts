@@ -1,6 +1,6 @@
 import { setupFieldsFrom } from "@/lib/brand/setup-fields";
 import { brandUsable } from "@/lib/brand/usable";
-import { firstTimer, type SetupStep } from "@/lib/setup/steps";
+import { firstTimer, type LiveSignals, type SetupStep } from "@/lib/setup/steps";
 import type { Business } from "@/lib/types";
 
 /**
@@ -10,7 +10,7 @@ import type { Business } from "@/lib/types";
 export function setupResumeStep({ business, creatives, campaigns }: {
   business: Pick<Business, "name" | "vertical" | "phone" | "locations" | "offers"> | null;
   creatives: { status: string }[];
-  campaigns: { launched_at: string | null; status?: string }[];
+  campaigns: LiveSignals[];
 }): SetupStep | null {
   if (!firstTimer(campaigns)) return null;
   if (!business || !brandUsable({ ...business, vertical: setupFieldsFrom(business).vertical })) return 1;

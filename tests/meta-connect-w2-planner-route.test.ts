@@ -208,8 +208,9 @@ describe("guided planner route", () => {
     expect(mocks.persist).toHaveBeenCalledExactlyOnceWith([{
       businessId: business.id, userId: expect.any(String), requestId: expect.any(String), route: "campaigns.plan",
       provider: "groq", model: "qwen", usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
-      promptVersion: expect.any(String), latencyMs: 900, attempt: 1, maxTokens: 3000, temperature: 0.2,
-      status: "error", failure: "HTTP_429", errorCode: "LLM_HTTP_429", providerRequestId: "req_1", providerFinalStatus: "unknown",
+      // #1200: a Groq attempt is logged with Groq's own 1,000-token cap.
+      promptVersion: expect.any(String), latencyMs: 900, attempt: 1, maxTokens: 1000, temperature: 0.2,
+      status: "error", failure: "HTTP_429", errorCode: "LLM_HTTP_429", providerRequestId: "req_1", providerFinalStatus: "unknown", rateLimit: undefined,
       metadata: { audienceOnly: false },
     }]);
   });

@@ -32,3 +32,12 @@ export function setupGoal(business: { vertical?: string | null; locations?: read
   const offer = business.offers?.find((item) => item.trim())?.trim();
   return [`Get WhatsApp enquiries for ${what}${where ? ` in ${where}` : ""}`, offer ? `, leading with: ${offer}` : ""].join("").slice(0, 500);
 }
+
+/**
+ * #1432: whether an ad was made from today's step 1. Step 2 sends `setupGoal` as its one source fact, so an
+ * ad made before the owner changed what they sell, where or their offer (or made outside the setup) isn't.
+ */
+export function madeForSetup(creative: Pick<Creative, "generation">, business: Parameters<typeof setupGoal>[0]): boolean {
+  const facts = isRecord(creative.generation) && Array.isArray(creative.generation.sourceFacts) ? creative.generation.sourceFacts : [];
+  return facts.includes(setupGoal(business));
+}
