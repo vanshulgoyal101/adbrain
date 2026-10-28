@@ -3,8 +3,8 @@
 The executable reference is [db/schema.sql](../db/schema.sql), a frozen base, plus
 every newer file in [db/migrations](../db/migrations/); `node scripts/build-schema.mjs`
 prints the full fresh-install schema (see [releasing](RELEASING.md)). Incremental changes
-live in [db/migrations](../db/migrations/). [TypeScript rows](../src/lib/types.ts)
-are hand-authored, not generated proof of schema parity. Check SQL constraints,
+live in [db/migrations](../db/migrations/). [TypeScript rows](../src/lib/types/) (one file per
+domain, re-exported by `src/lib/types.ts`, #1824) are hand-authored, not generated proof of schema parity. Check SQL constraints,
 route schemas, and deployed migration state separately.
 
 The [privacy request migration](../db/migrations/20260930_privacy_requests.sql)
