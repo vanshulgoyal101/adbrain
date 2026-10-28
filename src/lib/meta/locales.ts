@@ -25,7 +25,3 @@ const LOCALE_GROUPS: Readonly<Record<number, readonly number[]>> = { 1001: [6, 2
 export function storedLocales(keys: readonly number[]): number[] {
   return [...new Set(keys.flatMap(key => LOCALE_GROUPS[key] ?? [key]))].sort((a, b) => a - b);
 }
-
-export function languageNames(keys: readonly number[]): string[] {
-  return keys.map(key => AD_LANGUAGES.find(language => language.key === key)?.name ?? `language ${key}`);
-}

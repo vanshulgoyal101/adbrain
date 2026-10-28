@@ -56,7 +56,7 @@ export function UnsavedPreviewBadge() {
 }
 
 /** Inline editor for an ad's words (#280). Saving never calls the AI. */
-export function CreativeCopyEditor({
+function CreativeCopyEditor({
   creative,
   onSaved,
   onCancel,
@@ -220,7 +220,7 @@ const PICTURE_LIMITS = {
 };
 
 /** Redraws the words printed on the picture over the same background (#280). No AI. */
-export function PictureWordsEditor({
+function PictureWordsEditor({
   creative,
   brand,
   onSaved,
@@ -368,7 +368,7 @@ export function PictureWordsEditor({
 }
 
 /** A new picture behind the same words (#280 slice 3). One paid AI image, like Regenerate. */
-export function BackgroundEditor({
+function BackgroundEditor({
   creative,
   brand,
   onSaved,

@@ -5,7 +5,7 @@ export type PrivacyRequest = { id: string; owner_id?: string | null; kind: "expo
   status: "received" | "in_review" | "completed" | "declined"; created_at: string; updated_at: string;
   source?: "owner" | "meta_callback"; confirmation_code?: string | null };
 
-export const PRIVACY_REQUEST_FIELDS = "id,kind,status,created_at,updated_at";
+const PRIVACY_REQUEST_FIELDS = "id,kind,status,created_at,updated_at";
 
 /** The signed-in owner's latest privacy requests, or null when unauthenticated or unavailable. */
 export async function listOwnPrivacyRequests(): Promise<PrivacyRequest[] | null> {

@@ -35,7 +35,6 @@ export function sameWords(left: string, right: string): boolean {
 type Language = "en" | "hi" | "pa" | "hinglish";
 /** A campaign's choice for its WhatsApp message (#493): "ad" follows the ads' own language. */
 export type WhatsAppLanguage = "ad" | Language;
-export const WHATSAPP_LANGUAGES: readonly WhatsAppLanguage[] = ["ad", "en", "hi", "hinglish", "pa"];
 
 const TEXT: Record<Language, {
   offer: (offer: string, city: string | null) => string;

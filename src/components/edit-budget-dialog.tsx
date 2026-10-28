@@ -17,7 +17,7 @@ export const META_WAIT_MS = 30_000;
 const day = (iso: string | null) => iso ? new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short" }) : "no end date";
 
 /** The change in plain words, before saving. */
-export function budgetWords(preview: Pick<Preview, "before" | "after">): string {
+function budgetWords(preview: Pick<Preview, "before" | "after">): string {
   const { before, after } = preview;
   const parts = [
     before.dailyRupees !== after.dailyRupees && `${formatMoney(before.dailyRupees)} → ${formatMoney(after.dailyRupees)} a day`,

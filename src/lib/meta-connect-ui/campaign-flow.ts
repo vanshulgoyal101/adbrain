@@ -10,7 +10,7 @@ export type OperationKey = {
   idempotencyKey: string;
 };
 
-export function reviewOperationKey(review: ReviewDTO): string {
+function reviewOperationKey(review: ReviewDTO): string {
   return `${review.draftId}:${review.draftVersion}:${review.planHash ?? "blocked"}:${review.connectionGeneration}`;
 }
 

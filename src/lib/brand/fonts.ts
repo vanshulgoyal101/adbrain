@@ -18,7 +18,7 @@ export const BRAND_FONTS: BrandFont[] = [
   { id: "mono", label: "Monospace — technical", cssFamily: "monospace" },
 ];
 
-export const DEFAULT_BRAND_FONT = BRAND_FONTS[0];
+const DEFAULT_BRAND_FONT = BRAND_FONTS[0];
 
 /**
  * Resolve a stored `business.font` to a renderable family. Brands saved before
