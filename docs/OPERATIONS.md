@@ -548,7 +548,11 @@ so Supabase can't restore anything (paid backups are a CEO call, #884). Our own 
   to the same value so stored tokens decrypt, and point Vercel at it. Owners sign in again
   by email.
 - **Nightly (#884):** the team supervisor's tick runs the export after 20:00Z (01:30 IST) into
-  `~/.adbrain-backups/<UTC time>` (0700, the owner's Mac), restore-drills it and keeps the newest 7.
+  `~/.adbrain-backups/<UTC time>` (0700, the owner's Mac) and restore-drills it. Then it seals it
+  as `<UTC time>.tar.gz.cms` (0600, CMS-encrypted to `.github/backup/backup-cert.crt`, like `db-backup.yml`),
+  deletes the plaintext and keeps the newest 7 (#1762). To read one: decrypt with the keychain key
+  (RELEASING.md › restore drill: `openssl cms -decrypt …`), then `tar -xzf` and
+  `node scripts/db-export.mjs restore <folder>`.
   A failure opens one `Nightly production export failed` `core` bug for DevOps; its log line is in
   `~/.adbrain-supervisor/supervisor.log`. If the Mac sleeps through 20:00Z, the export runs at the first tick after it wakes.
 - **Lost even with an export:** Auth passwords and sessions, Storage file bytes (ad images
