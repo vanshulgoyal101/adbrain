@@ -115,6 +115,11 @@ export function buildScoreboard(input: {
   /** Users whose ads use free images (`freeImagesOnly`): internal accounts not exempt. */
   freeImageUserIds: string[];
   excludedUserIds: string[];
+  /**
+   * #1136: owners of the window's new businesses. Team accounts (`isInternalUser`) are left out of the Brand row,
+   * and a new owner's clock starts at sign-up: setup collects the Brand before it creates the business.
+   */
+  brandOwners?: { id: string; signedUpAt: string | null; internal: boolean }[];
   excludedBusinessIds: string[];
   since: Date;
   until: Date;
@@ -130,14 +135,20 @@ export function buildScoreboard(input: {
   const rows: ScoreRow[] = [];
 
   {
-    const creates = named("business.create");
-    // #1136: minutes from creating the business to its first save with what Prepare needs (brand/usable.ts).
+    const owners = new Map((input.brandOwners ?? []).map((owner) => [owner.id, owner]));
+    const allCreates = named("business.create");
+    const creates = allCreates.filter((create) => !(create.user_id && owners.get(create.user_id)?.internal));
+    const team = allCreates.length - creates.length;
+    // #1136: minutes from sign-up (an owner who signed up in the 24 h before creating it) or else from creating the
+    // business, to its first save with what Prepare needs (brand/usable.ts).
     const saves = [...creates, ...named("business.update")];
     const measured = saves.some((event) => typeof event.attributes?.brandUsable === "boolean");
     const minutes = creates.flatMap((create) => {
-      const start = Date.parse(create.created_at);
+      const created = Date.parse(create.created_at);
+      const signedUp = Date.parse(owners.get(create.user_id ?? "")?.signedUpAt ?? "");
+      const start = signedUp <= created && created - signedUp <= 24 * 3_600_000 ? signedUp : created;
       const usable = saves.filter((save) => save.business_id === create.business_id && save.attributes?.brandUsable === true
-        && Date.parse(save.created_at) >= start).map((save) => Date.parse(save.created_at));
+        && Date.parse(save.created_at) >= created).map((save) => Date.parse(save.created_at));
       return usable.length ? [(Math.min(...usable) - start) / 60_000] : [];
     });
     const slowestUsable = p90(minutes);
@@ -149,8 +160,8 @@ export function buildScoreboard(input: {
     const slowest = p90(autofill.filter((event) => event.outcome === "success" && typeof event.duration_ms === "number").map((event) => event.duration_ms!));
     rows.push({
       step: "Brand",
-      now: `${plural(creates.length, "new business", "new businesses")}${usable}; autofill ${plural(autofill.length, "call")} (${failed} failed${slowest === null ? "" : `, p90 ${(slowest / 1000).toFixed(1)} s`})`,
-      target: "new business usable (name, category, area, phone, offer) in < 2 min on a phone",
+      now: `${plural(creates.length, "new business", "new businesses")}${team ? ` (${team} team left out)` : ""}${usable}; autofill ${plural(autofill.length, "call")} (${failed} failed${slowest === null ? "" : `, p90 ${(slowest / 1000).toFixed(1)} s`})`,
+      target: "sign-up to a usable business (name, category, area, phone, offer) in < 2 min on a phone",
       met: creates.length && measured ? slowestUsable !== null && slowestUsable < 2 : null,
     });
   }
