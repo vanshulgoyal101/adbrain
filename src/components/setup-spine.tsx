@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -27,6 +27,13 @@ export function SetupSpine({ step, saved = null, beforeLeave, primary, children 
 }) {
   const router = useRouter();
   const [leaving, setLeaving] = useState(false);
+  // #1251 Designer walk: a focused field scrolls clear of the sticky bottom bar (about 96 px), not behind it.
+  useEffect(() => {
+    const root = document.documentElement;
+    const before = root.style.scrollPaddingBottom;
+    root.style.scrollPaddingBottom = "7rem";
+    return () => { root.style.scrollPaddingBottom = before; };
+  }, []);
   const current = SETUP_STEPS[step - 1];
   const previous = step > 1 ? SETUP_STEPS[step - 2] : null;
 
@@ -77,7 +84,7 @@ export function SetupSpine({ step, saved = null, beforeLeave, primary, children 
         </div>
       </div>
 
-      <div className="flex-1 pt-6 pb-6">{children}</div>
+      <div className="flex-1 pt-6 pb-8">{children}</div>
 
       <nav aria-label="Setup steps"
         className="sticky bottom-0 -mx-4 flex gap-3 border-t border-slate-200 bg-background px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:mx-0 sm:px-0">
