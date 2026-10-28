@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getEnv } from "@/lib/env";
-import type { LLMFailureCode, TokenUsage } from "./types";
+import type { LLMFailureCode, RateLimitInfo, TokenUsage } from "./types";
 import type { Json } from "@/lib/types";
 import { recordProductEvent } from "@/lib/observability/logger";
 import { isInternalUser, type AccountIdentity } from "@/lib/internal-accounts";
@@ -30,6 +30,8 @@ export interface LLMUsageEvent {
   status?: "success" | "error" | "fallback";
   errorCode?: string;
   failure?: LLMFailureCode;
+  /** #1200: which provider limit a 429 hit. */
+  rateLimit?: RateLimitInfo;
   imageWidth?: number;
   imageHeight?: number;
   estimatedCostUsd?: number;
@@ -148,6 +150,8 @@ export async function persistLLMUsage(events: LLMUsageEvent[]): Promise<boolean>
       estimatedCostUsd: event.estimatedCostUsd ?? estimatedCost(event.model, event.usage),
       usageKind: event.usageKind ?? "text", attempt: event.attempt ?? 1, cacheHit: event.cacheHit ?? false,
       ...(usageErrorCode(event) ? { errorCode: usageErrorCode(event)! } : {}),
+      ...(event.rateLimit ? { rateLimitType: event.rateLimit.type, rateLimitLimit: event.rateLimit.limit,
+        rateLimitUsed: event.rateLimit.used, rateLimitRequested: event.rateLimit.requested } : {}),
       ...validationRules(event.metadata) },
   });
   const rows = events.filter((event): event is LLMUsageEvent & { businessId: string } => event.businessId !== null);

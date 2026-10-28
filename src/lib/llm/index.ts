@@ -191,7 +191,8 @@ async function callProviders(
             usage: err instanceof LLMError ? err.usage : undefined,
             providerRequestId: err instanceof LLMError ? err.providerRequestId : undefined,
             providerFinalStatus: err instanceof LLMError ? err.providerFinalStatus ?? "unknown" : "unknown",
-            status: "error", failure, latencyMs: Date.now() - attemptStart });
+            status: "error", failure, latencyMs: Date.now() - attemptStart,
+            ...(err instanceof LLMError && err.rateLimit ? { rateLimit: err.rateLimit } : {}) });
           if (err instanceof LLMError && err.usage) {
             recordUsage({ text: "", provider: provider.name, model, usage: err.usage });
           }

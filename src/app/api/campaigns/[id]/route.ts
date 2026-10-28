@@ -21,14 +21,13 @@ import { saveCampaign, deleteVerifiedCampaign } from "@/lib/campaign/trusted-wri
 import { confirmCustomerCampaign, CustomerBalanceError, getCustomerBalance, observeCustomerCosts, reserveCustomerCampaign } from "@/lib/payments/customer-balance";
 import { fundingMode, type FundingMode } from "@/lib/payments/operator-funding";
 import { committedWords, fundingShortfall, readFunding } from "@/lib/campaign/funding-check";
-import { formatMoney } from "@/lib/format";
+import { formatMoney, formatMoneyExact } from "@/lib/format";
 import { getActivationLearning } from "@/lib/campaign/activation-learning";
 import { recordLaunchCap } from "@/lib/campaign/learnings";
 import { lacksAreaExclusions } from "@/lib/meta/service-area";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { campaignOwnedElsewhere, ownerRefusal } from "@/lib/campaign/campaign-owner";
 
-const exactRupees = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" });
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -66,7 +65,7 @@ export const GET = observeRoute("/api/campaigns/[id]", "GET", async (
     return NextResponse.json({ delivery, ...(funding ? { funding, spendLimitRequired: mode === "operator" } : {}), learning, ...(keptPaused.length ? { keptPaused } : {}) }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     if (error instanceof CampaignDeliveryError) return apiError(error.message, 409);
-    if (error instanceof ConnectionAccessError) return apiError(error.message, error.code === "UNAUTHENTICATED" ? 401 : 409);
+    if (error instanceof ConnectionAccessError) return apiError(error.message, error.retryable ? 503 : error.code === "UNAUTHENTICATED" ? 401 : 409);
     if (error instanceof MetaError) return apiError(friendlyMetaError(error), error.status && error.status >= 500 ? 502 : 400);
     return serverError("campaign.delivery", error, "Campaign delivery review is unavailable.");
   }
@@ -196,10 +195,9 @@ async function handlePATCH(
       },
       async (meta, connection) => {
         if (action === "active" && connection.capabilities.canActivate.state !== "available") {
-          throw new ConnectionAccessError(
-            "UNAVAILABLE",
-            "Meta has not confirmed campaign activation access.",
-          );
+          // #1217: Meta's own reason; 'unknown' (couldn't check) can be tried again.
+          const { state, blockers } = connection.capabilities.canActivate;
+          throw new ConnectionAccessError("UNAVAILABLE", blockers[0]?.message ?? "Meta has not confirmed campaign activation access.", { retryable: state === "unknown" });
         }
         if (parsed.data.status === "active") {
           if (!Number.isFinite(campaign.daily_budget) || (campaign.daily_budget ?? 0) <= 0 || connection.selected?.currency !== "INR") {
@@ -240,7 +238,7 @@ async function handlePATCH(
             const short = fundingShortfall({ mode, neededPaise: capPaise, account: funding });
             if (short?.kind === "no_limit") throw new CustomerBalanceError("Set a spending limit on the Meta ad account before activating.");
             if (short?.kind === "short") {
-              throw new CustomerBalanceError(`Meta has ${exactRupees.format(short.roomPaise / 100)} left under the ad account's spending limit${committedWords(short.committed)}; this run needs ${exactRupees.format(short.neededPaise / 100)}. Add funds on Meta or choose fewer days.`);
+              throw new CustomerBalanceError(`Meta has ${formatMoneyExact(short.roomPaise / 100)} left under the ad account's spending limit${committedWords(short.committed)}; this run needs ${formatMoneyExact(short.neededPaise / 100)}. Add funds on Meta or choose fewer days.`);
             }
           } else {
             // #216: AdBrain records Meta's lifetime spend itself; the reserve below stays the gate.
@@ -334,7 +332,7 @@ async function handlePATCH(
     if (err instanceof ConnectionAccessError) {
       return apiError(
         err.message,
-        err.code === "CONFLICT" ? 409 : err.code === "UNAUTHENTICATED" ? 401 : 400,
+        err.retryable ? 503 : err.code === "CONFLICT" ? 409 : err.code === "UNAUTHENTICATED" ? 401 : 400,
       );
     }
     if (isMetaReauthError(err)) {

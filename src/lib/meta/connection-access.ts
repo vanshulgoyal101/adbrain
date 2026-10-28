@@ -1,4 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
+import { metaWriteMode } from "@/lib/internal-accounts";
 import { getEnv } from "@/lib/env";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -16,6 +17,7 @@ import { canUseMetaConnect } from "./pilot-access";
 import { observeIdentity } from "@/lib/observability/context";
 import { recordProductEvent, withEventScope } from "@/lib/observability/logger";
 import { getManagedAccount, hasManagedAssets, isManagedReady, managedConnection, managedCredentials, type ManagedAccount } from "./managed-account";
+import { ConnectionAccessError } from "./connection-access-error";
 
 const authorizedBusinessBrand = Symbol("authorized-business");
 
@@ -25,15 +27,7 @@ export type AuthorizedBusiness = {
   readonly [authorizedBusinessBrand]: true;
 };
 
-export class ConnectionAccessError extends Error {
-  readonly code: "UNAUTHENTICATED" | "NOT_FOUND" | "FORBIDDEN" | "CONFLICT" | "UNAVAILABLE";
-
-  constructor(code: ConnectionAccessError["code"], message: string) {
-    super(message);
-    this.name = "ConnectionAccessError";
-    this.code = code;
-  }
-}
+export { ConnectionAccessError } from "./connection-access-error";
 
 function isAuthorizedBusiness(value: AuthorizedBusiness): boolean {
   return Boolean(value && value[authorizedBusinessBrand] === true);
@@ -163,7 +157,9 @@ async function runMetaConnection<Result>(
 ): Promise<Result> {
   const started = performance.now();
   try {
-    const result = await withConnectionCredentials(context, options, (credentials, connection) => execute(new MetaClient(credentials, options.signal), connection));
+    // #1324: a smoke-owned business may only read, validate and pause on a real ad account.
+    const result = await withConnectionCredentials(context, options, (credentials, connection) =>
+      execute(new MetaClient(credentials, options.signal, metaWriteMode(context.userId, credentials.adAccountId)), connection));
     recordProductEvent({ kind: "workflow", name: `meta.${options.purpose}`, outcome: "success", businessId: context.businessId,
       durationMs: Math.round(performance.now() - started), attributes: { provider: "meta" } });
     return result;
@@ -232,9 +228,11 @@ async function withConnectionCredentials<Result>(
           : "canActivate"
   ];
   if (options.purpose !== "verify" && !reducingDelivery && capability.state !== "available") {
+    // #1217: 'unknown' is "couldn't check" (try again), not a refusal; 'blocked' carries Meta's reason.
     throw new ConnectionAccessError(
       "UNAVAILABLE",
       capability.blockers[0]?.message ?? "Meta has not confirmed access for this operation.",
+      { retryable: capability.state === "unknown" },
     );
   }
   if (managed) {

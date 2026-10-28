@@ -15,7 +15,9 @@ describe("public product example", () => {
     expect(screen.getByText("Made by AdBrain for example businesses, not customers.")).toBeInTheDocument();
     expect(screen.getAllByRole("img", { name: /^An AdBrain ad for a / }).length).toBeGreaterThan(0);
     expect(screen.getByRole("heading", { name: "You approve every rupee." })).toBeInTheDocument();
-    expect(screen.getByText(/Making ads is free\. To run them, top up any amount from ₹500; 80% goes to your ads \(including Meta's GST\) and 20% to AdBrain\./)).toBeInTheDocument();
+    expect(screen.getByText(/Making ads is free\. To run them, top up any amount from ₹500\./)).toBeInTheDocument();
+    // #1235 (owner): AdBrain's split or margin is never shown to customers.
+    expect(document.body.textContent).not.toMatch(/\b(80|20)\s?%|service (fee|allocation)|margin/i);
     expect(screen.queryByText(/partner/i)).toBeNull();
     expect(screen.queryByRole("link", { name: /WhatsApp us/ })).toBeNull();
   });

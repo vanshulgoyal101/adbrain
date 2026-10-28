@@ -1,5 +1,7 @@
 import { cn } from "@/lib/utils";
-import type { CampaignStatus } from "@/lib/types";
+import type { Campaign, CampaignStatus } from "@/lib/types";
+import { goneInMeta } from "@/lib/campaign/gone-in-meta";
+import { OWNER_WORDS } from "@/lib/copy/owner-words";
 
 /** #847: status is a dot plus a word in sentence case. Paused is a normal state, so it stays grey. */
 const TONES = {
@@ -19,8 +21,14 @@ export function Status({ tone, children, className }: { tone: keyof typeof TONES
 }
 
 export const CAMPAIGN_STATUS: Record<CampaignStatus, { label: string; tone: keyof typeof TONES }> = {
-  active: { label: "Live", tone: "live" },
+  active: { label: OWNER_WORDS.running, tone: "live" },
   paused: { label: "Paused", tone: "neutral" },
   draft: { label: "Draft", tone: "neutral" },
   completed: { label: "Ended", tone: "neutral" },
 };
+
+/** #1150: one status word for a campaign on every page; deleted or archived in Meta says so. */
+export function campaignStatus(campaign: Pick<Campaign, "status" | "raw">): { label: string; tone: keyof typeof TONES } {
+  const gone = goneInMeta(campaign);
+  return gone ? { label: gone, tone: "neutral" } : CAMPAIGN_STATUS[campaign.status as CampaignStatus] ?? CAMPAIGN_STATUS.draft;
+}

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LeadInbox } from "@/components/lead-inbox";
 import type { Lead } from "@/lib/types";
 
@@ -47,15 +47,27 @@ beforeEach(() => {
 });
 
 describe("<LeadInbox> empty state", () => {
-  it("explains what will appear and how", () => {
+  // #1260 (CPO words, Designer): one action, and never one the owner can't take.
+  it("explains what will appear and offers See your campaigns while alerts can't be turned on", () => {
     render(<LeadInbox businessName="Solaride" initialLeads={[]} metaReady />);
-    expect(screen.getByText("No enquiries yet")).toBeInTheDocument();
-    expect(screen.getByText(/message you on WhatsApp/i)).toBeInTheDocument();
+    expect(screen.getByText("No enquiries yet. When someone fills your form or messages you on WhatsApp from an ad, they'll show up here.")).toBeInTheDocument();
+    expect(screen.getByText("Reply fast: people often go with the first business that answers.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "See your campaigns" })).toHaveAttribute("href", "/campaigns");
+    expect(screen.queryByRole("link", { name: /WhatsApp alert/ })).toBeNull();
   });
 
-  it("hides the digest card when there is nothing to share", () => {
-    render(<LeadInbox businessName="Solaride" initialLeads={[]} metaReady />);
+  it("offers a WhatsApp alert for each enquiry when alerts can be turned on", () => {
+    render(<LeadInbox businessName="Solaride" initialLeads={[]} metaReady offerAlerts />);
+    expect(screen.getByRole("link", { name: "Get a WhatsApp alert for each enquiry" })).toHaveAttribute("href", "/settings#whatsapp-alerts-title");
+    expect(screen.queryByRole("link", { name: "See your campaigns" })).toBeNull();
+  });
+
+  it("has no WhatsApp digest, with or without enquiries (#1260: alerts are #701)", () => {
+    const view = render(<LeadInbox businessName="Solaride" initialLeads={[]} metaReady />);
     expect(screen.queryByText("WhatsApp digest")).toBeNull();
+    view.rerender(<LeadInbox businessName="Solaride" initialLeads={[lead()]} metaReady />);
+    expect(screen.queryByText("WhatsApp digest")).toBeNull();
+    expect(screen.queryByRole("link", { name: /share on whatsapp/i })).toBeNull();
   });
 });
 
@@ -65,12 +77,15 @@ describe("<LeadInbox> Meta readiness", () => {
       <LeadInbox businessName="Solaride" initialLeads={[]} metaReady={false} />,
     );
     expect(screen.getByText(/meta isn’t connected/i)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /check for enquiries/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /check now/i })).toBeNull();
   });
 
-  it("offers syncing once Meta is connected", () => {
-    render(<LeadInbox businessName="Solaride" initialLeads={[]} metaReady />);
-    expect(screen.getByRole("button", { name: /check for enquiries/i })).toBeInTheDocument();
+  it("offers a quiet Check now and the last update time once Meta is connected (#1260)", () => {
+    localStorage.setItem("lead-sync:owner:b1", String(Date.now() - 5 * 60_000));
+    render(<LeadInbox businessName="Solaride" initialLeads={[]} metaReady syncScope="owner:b1" />);
+    expect(screen.getByRole("button", { name: "Check now" })).toBeInTheDocument();
+    expect(screen.getByText("Updated 5m ago")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /check for enquiries/i })).toBeNull();
   });
 });
 
@@ -106,13 +121,6 @@ describe("<LeadInbox> table", () => {
     expect(screen.queryByText("Asha Verma")).toBeNull();
     expect(await screen.findByText("Ravi Shah")).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("1 of 1 enquiries");
-  });
-
-  it("keeps the full digest collapsed until requested", () => {
-    const { container } = render(<LeadInbox businessName="Form Studio" initialLeads={[lead()]} metaReady />);
-    expect(container.querySelector("details")).not.toHaveAttribute("open");
-    fireEvent.click(screen.getByText("WhatsApp digest"));
-    expect(container.querySelector("details")).toHaveAttribute("open");
   });
 
   it("shows Meta's test lead as a test, not as placeholder text (#403)", () => {
@@ -196,7 +204,8 @@ describe("<LeadInbox> syncing", () => {
     await waitFor(() => expect(fetcher).toHaveBeenCalledWith("/api/leads/sync", { method: "POST" }));
     expect(localStorage.getItem(key)).toBe(previous);
     await act(async () => complete(Response.json({ leads: [lead()], imported: 0, sync: { id: "run-1", state: "complete", hasMore: false } })));
-    expect(await screen.findByText("Up to date. No new enquiries.")).toBeInTheDocument();
+    expect(await screen.findByText("Updated just now")).toBeInTheDocument();
+    expect(screen.queryByText(/Up to date/)).toBeNull();
     expect(Number(localStorage.getItem(key))).toBeGreaterThan(Date.now() - 60_000);
   });
 
@@ -233,7 +242,7 @@ describe("<LeadInbox> syncing", () => {
         sync: { id: "sync-1", state: "partial", hasMore: true } }) }
       : { ok: true, json: async () => ({ leads: [lead()], total: 1, nextCursor: null }) }));
     render(<LeadInbox businessName="Solaride" initialLeads={[lead()]} metaReady />);
-    fireEvent.click(screen.getByRole("button", { name: /check for enquiries/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Check now" }));
     expect(await screen.findByText(/Couldn't read: Restricted form/)).toBeInTheDocument();
     expect(screen.queryByText(/You're up to date/)).toBeNull();
     expect(screen.getByText("Asha Verma")).toBeInTheDocument();
@@ -244,7 +253,7 @@ describe("<LeadInbox> syncing", () => {
   it("retains the inbox when the server cannot reload saved leads", async () => {
     setFetch({ ok: false, json: async () => ({ error: "Could not reload saved leads." }) });
     render(<LeadInbox businessName="Solaride" initialLeads={[lead()]} metaReady />);
-    fireEvent.click(screen.getByRole("button", { name: /check for enquiries/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Check now" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Could not reload saved leads.");
     expect(screen.getByText("Asha Verma")).toBeInTheDocument();
   });
@@ -256,25 +265,25 @@ describe("<LeadInbox> syncing", () => {
     });
     render(<LeadInbox businessName="Solaride" initialLeads={[]} metaReady />);
 
-    fireEvent.click(screen.getByRole("button", { name: /check for enquiries/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Check now" }));
 
     expect(await screen.findByText("2 new enquiries from Meta.")).toBeInTheDocument();
     expect(await screen.findByText("Ravi K")).toBeInTheDocument();
     expect(global.fetch).toHaveBeenCalledWith("/api/leads/sync", { method: "POST" });
   });
 
-  it("says you're up to date when nothing new came back", async () => {
+  it("says only 'Updated just now' when a complete check found nothing new (#1260)", async () => {
+    setFetch({ ok: true, json: async () => ({ leads: [lead()], imported: 0, sync: { id: "run-5", state: "complete", hasMore: false } }) });
     render(<LeadInbox businessName="Solaride" initialLeads={[lead()]} metaReady />);
-    fireEvent.click(screen.getByRole("button", { name: /check for enquiries/i }));
-    expect(
-      await screen.findByText("Up to date. No new enquiries."),
-    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Check now" }));
+    expect(await screen.findByText("Updated just now")).toBeInTheDocument();
+    expect(screen.queryByText(/Up to date|No new enquiries/)).toBeNull();
   });
 
   it("surfaces a server error instead of silently failing", async () => {
     setFetch({ ok: false, json: async () => ({ error: "Meta is not configured" }) });
     render(<LeadInbox businessName="Solaride" initialLeads={[]} metaReady />);
-    fireEvent.click(screen.getByRole("button", { name: /check for enquiries/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Check now" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Meta is not configured",
     );
@@ -283,7 +292,7 @@ describe("<LeadInbox> syncing", () => {
   it("handles a dropped connection", async () => {
     global.fetch = vi.fn().mockRejectedValue(new Error("offline")) as unknown as typeof fetch;
     render(<LeadInbox businessName="Solaride" initialLeads={[]} metaReady />);
-    fireEvent.click(screen.getByRole("button", { name: /check for enquiries/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Check now" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(
       /check your connection/i,
     );
@@ -296,39 +305,12 @@ describe("<LeadInbox> syncing", () => {
     ) as unknown as typeof fetch;
 
     render(<LeadInbox businessName="Solaride" initialLeads={[]} metaReady />);
-    const btn = screen.getByRole("button", { name: /check for enquiries/i });
+    const btn = screen.getByRole("button", { name: "Check now" });
     fireEvent.click(btn);
     await waitFor(() => expect(btn).toBeDisabled());
 
     release({ ok: true, json: async () => ({ leads: [], imported: 0 }) });
     await waitFor(() => expect(btn).not.toBeDisabled());
-  });
-});
-
-describe("<LeadInbox> WhatsApp digest", () => {
-  it("shows a shareable digest and a WhatsApp link", () => {
-    render(<LeadInbox businessName="Solaride" initialLeads={[lead()]} metaReady />);
-    expect(screen.getByText("WhatsApp digest")).toBeInTheDocument();
-    expect(screen.getByText("Last 7 days, up to 10 people")).toBeInTheDocument();
-    fireEvent.click(screen.getByText("WhatsApp digest"));
-    const share = screen.getByRole("link", { name: /share on whatsapp/i });
-    expect(share).toHaveAttribute("target", "_blank");
-    expect(share.getAttribute("href")).toContain("https://wa.me/?text=");
-    // Never open a new tab without severing the opener reference.
-    expect(share).toHaveAttribute("rel", expect.stringContaining("noopener"));
-  });
-
-  it("copies the digest to the clipboard and confirms", async () => {
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.assign(navigator, { clipboard: { writeText } });
-
-    render(<LeadInbox businessName="Solaride" initialLeads={[lead()]} metaReady />);
-    fireEvent.click(screen.getByText("WhatsApp digest"));
-    fireEvent.click(screen.getByRole("button", { name: /^copy$/i }));
-
-    await waitFor(() => expect(writeText).toHaveBeenCalledOnce());
-    expect(writeText.mock.calls[0][0]).toContain("Solaride");
-    expect(await screen.findByRole("button", { name: /copied/i })).toBeInTheDocument();
   });
 });
 
@@ -479,13 +461,13 @@ describe("<LeadInbox> saved enquiry workflow", () => {
     render(<LeadInbox businessName="Fixture" initialLeads={[lead()]} metaReady />);
     fireEvent.change(screen.getByLabelText("Workflow status"), { target: { value: "booked" } });
     await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("1 of 1"));
-    fireEvent.click(screen.getByRole("button", { name: "Check for enquiries" }));
+    fireEvent.click(screen.getByRole("button", { name: "Check now" }));
     expect(await screen.findByText(/so far/)).toBeInTheDocument();
     expect(screen.queryByText(/You're up to date/)).toBeNull();
     await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("1 of 1"));
     expect(screen.queryByText("Partial response only")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Keep checking" }));
-    expect(await screen.findByText("Up to date. No new enquiries.")).toBeInTheDocument();
+    expect(await screen.findByText("Updated just now")).toBeInTheDocument();
     expect(fetcher.mock.calls.filter(([url]) => url.startsWith("/api/leads?")).every(([url]) => url.includes("status=booked"))).toBe(true);
   });
 
@@ -515,13 +497,13 @@ describe("<LeadInbox> saved enquiry workflow", () => {
     render(<LeadInbox businessName="Fixture" initialLeads={[confirmed]} metaReady />);
     fireEvent.change(screen.getByLabelText("Contact availability"), { target: { value: "ready" } });
     await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("1 of 1"));
-    fireEvent.click(screen.getByRole("button", { name: "Check for enquiries" }));
+    fireEvent.click(screen.getByRole("button", { name: "Check now" }));
     expect(await screen.findByText("Could not save the next page. Retry to resume.")).toBeInTheDocument();
     expect(screen.getByText("Asha Verma")).toBeInTheDocument();
     expect(screen.queryByText(/You're up to date/)).toBeNull();
     expect(syncCalls).toBe(1);
 
-    fireEvent.click(screen.getByRole("button", { name: "Check for enquiries" }));
+    fireEvent.click(screen.getByRole("button", { name: "Check now" }));
     expect(await screen.findByText("Committed enquiry")).toBeInTheDocument();
     expect(screen.queryByText("Not the filtered list")).toBeNull();
     expect(screen.getByRole("status")).toHaveTextContent("2 of 2");
@@ -549,7 +531,7 @@ describe("<LeadInbox> saved enquiry workflow", () => {
     render(<LeadInbox businessName="Fixture" initialLeads={[lead()]} metaReady />);
     fireEvent.change(screen.getByLabelText("Search enquiries"), { target: { value: "Late" } });
     await waitFor(() => expect(oldSignal).toBeDefined());
-    fireEvent.click(screen.getByRole("button", { name: "Check for enquiries" }));
+    fireEvent.click(screen.getByRole("button", { name: "Check now" }));
     expect(await screen.findByText("Late arrival")).toBeInTheDocument();
     expect(oldSignal?.aborted).toBe(true);
     await act(async () => resolveOld({ ok: true, json: async () => ({ leads: [lead()], total: 1, nextCursor: null }) }));
@@ -561,7 +543,7 @@ describe("<LeadInbox> saved enquiry workflow", () => {
   it("does not infer complete sync from a legacy response", async () => {
     setFetch({ ok: true, json: async () => ({ leads: [], imported: 0 }) });
     render(<LeadInbox businessName="Fixture" initialLeads={[]} metaReady />);
-    fireEvent.click(screen.getByRole("button", { name: "Check for enquiries" }));
+    fireEvent.click(screen.getByRole("button", { name: "Check now" }));
     expect(await screen.findByText("Checked Meta, but couldn't confirm everything was read.")).toBeInTheDocument();
     expect(screen.queryByText(/You're up to date/)).toBeNull();
   });
@@ -620,7 +602,7 @@ describe("<LeadInbox> on a phone (#376)", () => {
   it("marks empty fields so the phone layout can hide them instead of showing a lone dash", () => {
     render(<LeadInbox businessName="Solaride" initialLeads={[lead({ phone: null, email: null, city: null })]} metaReady />);
     const row = screen.getAllByRole("row").at(-1)!;
-    const blanks = row.querySelectorAll("td > span:not([aria-hidden])");
+    const blanks = row.querySelectorAll("td:not(:first-child) > span:not([aria-hidden])");
     expect([...blanks].map((el) => el.textContent)).toEqual(["—", "—"]);
   });
 
@@ -648,9 +630,140 @@ describe("<LeadInbox> on a phone (#376)", () => {
     expect(screen.getByRole("button", { name: /^Follow up Asha Verma, status Contacted$/ })).toBeInTheDocument();
   });
 
+  // #1260: on phones each row says one state word and keeps when · city on one line; ⋯ holds Not interested and Edit.
+  it("gives each row one state word and a when · city line", () => {
+    render(<LeadInbox businessName="Fixture" initialLeads={[
+      lead({ id: "a", meta_lead_id: "ma", full_name: "Asha Verma", city: "Jaipur" }),
+      lead({ id: "b", meta_lead_id: "mb", full_name: "Ravi Kumar", created_time: "2026-08-20T10:00:00.000Z", first_contacted_at: "2026-08-20T10:04:00.000Z" }),
+      lead({ id: "c", meta_lead_id: "mc", full_name: "Meena", created_time: "2026-08-20T10:00:00.000Z", first_contacted_at: "2026-08-22T11:00:00.000Z" }),
+      lead({ id: "d", meta_lead_id: "md", full_name: "Kiran Shah", workflow_status: "customer" }),
+    ]} metaReady={false} />);
+    const rows = screen.getAllByRole("row").slice(1);
+    const state = (index: number) => rows[index].querySelector("td:first-child > span:nth-child(3)")!.textContent;
+    expect([state(0), state(1), state(2), state(3)]).toEqual(["New", "Contacted in 4 min", "Contacted after 2 days", "Customer"]);
+    expect(rows[0].querySelector("td:first-child > span:first-child")).toHaveTextContent("AV");
+    expect(rows[2].querySelector("td:first-child > span:first-child")).toHaveTextContent("M");
+    expect(rows[0].querySelector("td:first-child > span:last-child")!.textContent).toMatch(/ · Jaipur$/);
+  });
+
+  it("marks an enquiry not interested from ⋯ and undoes it", async () => {
+    const asha = lead({ workflow_status: "contacted" });
+    const sent: unknown[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (_url: string, options?: RequestInit) => {
+      if (options?.method === "PATCH") {
+        const body = JSON.parse(String(options.body)) as { workflow_status: string };
+        sent.push(body);
+        return Response.json({ lead: { ...asha, workflow_status: body.workflow_status } });
+      }
+      return Response.json({ leads: [asha], total: 1, nextCursor: null });
+    }));
+    render(<LeadInbox businessName="Fixture" initialLeads={[asha]} metaReady={false} />);
+    fireEvent.click(screen.getByLabelText("More for Asha Verma"));
+    fireEvent.click(screen.getByRole("button", { name: "Not interested" }));
+    expect(await screen.findByText("Asha Verma is marked not interested.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Not interested" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    expect(await screen.findByText("Asha Verma is back to contacted.")).toBeInTheDocument();
+    expect(sent).toEqual([{ workflow_status: "closed" }, { workflow_status: "contacted" }]);
+  });
+
+  it("opens the follow-up editor from ⋯ Edit", () => {
+    render(<LeadInbox businessName="Fixture" initialLeads={[lead()]} metaReady={false} />);
+    fireEvent.click(screen.getByLabelText("More for Asha Verma"));
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    expect(screen.getByRole("form", { name: "Enquiry follow-up" })).toBeInTheDocument();
+  });
+
   it("offers no customer button for Meta's test lead", () => {
     render(<LeadInbox businessName="Fixture" initialLeads={[lead({ full_name: "<test lead: dummy data for full_name>" })]} metaReady={false} />);
     expect(screen.queryByRole("button", { name: /became a customer/ })).not.toBeInTheDocument();
+  });
+});
+
+describe("<LeadInbox> Waiting · All · Customers (#1260)", () => {
+  const fresh = new Date(Date.now() - 60 * 60_000).toISOString();
+  const waitingRows = [
+    lead({ id: "w1", meta_lead_id: "w1", full_name: "Asha Verma", created_time: fresh, created_at: fresh }),
+    lead({ id: "w2", meta_lead_id: "w2", full_name: "Ravi Kumar", created_time: fresh, created_at: fresh }),
+    lead({ id: "old", meta_lead_id: "old", full_name: "Old Lead", workflow_status: "new" }),
+  ];
+
+  it("opens on Waiting with the sentence, lists only people waiting, and hides search there", () => {
+    render(<LeadInbox businessName="Fixture" initialLeads={waitingRows} allTotal={12} summary={{ waiting: 2, replyMinutes: 9 }} metaReady={false} />);
+    expect(screen.getByText("2 people are waiting for you. You usually contact people within 9 min.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Waiting" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText("Asha Verma")).toBeInTheDocument();
+    expect(screen.getByText("Ravi Kumar")).toBeInTheDocument();
+    expect(screen.queryByText("Old Lead")).not.toBeInTheDocument();
+    expect(screen.queryByRole("searchbox", { name: "Search enquiries" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2 })).toHaveTextContent("(12)");
+  });
+
+  it("says nobody is waiting, leaves out the median under 3 contacts, and opens on All", () => {
+    render(<LeadInbox businessName="Fixture" initialLeads={[lead()]} summary={{ waiting: 0, replyMinutes: null }} metaReady={false} />);
+    expect(screen.getByText("Nobody is waiting.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "All" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("searchbox", { name: "Search enquiries" })).toBeInTheDocument();
+  });
+
+  it("says one person, and loads All and Customers from the server", async () => {
+    const urls: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => { urls.push(url); return Response.json({ leads: [], total: 0, nextCursor: null }); }));
+    render(<LeadInbox businessName="Fixture" initialLeads={waitingRows.slice(0, 1)} summary={{ waiting: 1, replyMinutes: 125 }} metaReady={false} />);
+    expect(screen.getByText("1 person is waiting for you. You usually contact people within 2 h 5 min.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Customers" }));
+    expect(await screen.findByText("No customers yet.")).toBeInTheDocument();
+    expect(new URL(urls.at(-1)!, "http://x").searchParams.get("status")).toBe("customer");
+    fireEvent.click(screen.getByRole("button", { name: "All" }));
+    await waitFor(() => expect(new URL(urls.at(-1)!, "http://x").searchParams.get("status")).toBe("all"));
+    expect(screen.getByRole("searchbox", { name: "Search enquiries" })).toBeInTheDocument();
+  });
+
+  it("keeps a just-contacted person on Waiting with their contact time and counts one fewer", () => {
+    global.fetch = vi.fn(async () => ({ ok: true, json: async () => ({}) })) as unknown as typeof fetch;
+    render(<LeadInbox businessName="Fixture" initialLeads={waitingRows} summary={{ waiting: 2, replyMinutes: null }} metaReady={false} />);
+    const call = screen.getAllByRole("link", { name: "Call" })[0];
+    call.addEventListener("click", (event) => event.preventDefault());
+    fireEvent.click(call);
+    expect(screen.getByText("1 person is waiting for you.")).toBeInTheDocument();
+    expect(screen.getByText("Asha Verma")).toBeInTheDocument();
+    expect(screen.getByText(/^Contacted in /)).toBeInTheDocument();
+  });
+
+  it("offers All when nobody is left on Waiting", () => {
+    render(<LeadInbox businessName="Fixture" initialLeads={[lead()]} summary={{ waiting: 1, replyMinutes: null }} metaReady={false} />);
+    expect(screen.getByRole("heading", { name: "Nobody is waiting." })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "See all enquiries" }));
+    expect(screen.getByRole("button", { name: "All" })).toHaveAttribute("aria-pressed", "true");
+  });
+});
+
+describe("<LeadInbox> two panes from 1280 px (#1260)", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const wide = () => vi.stubGlobal("matchMedia", (query: string) => ({ matches: query === "(min-width: 1280px)", addEventListener: vi.fn(), removeEventListener: vi.fn() }));
+
+  it("shows the first person beside the list with the exact WhatsApp text and their form answers", () => {
+    wide();
+    render(<LeadInbox businessName="Solaride" offer="Free solar site survey" initialLeads={[
+      lead({ phone: "98765 43210", field_data: { full_name: "Asha Verma", phone_number: "98765 43210", "what_is_your_monthly_bill?": "₹3,000" } }),
+      lead({ id: "l2", meta_lead_id: "m2", full_name: "Ravi Kumar", phone: "98111 22233", field_data: {} }),
+    ]} metaReady={false} />);
+    const pane = screen.getByRole("complementary", { name: "Enquiry from Asha Verma" });
+    const message = within(pane).getByText("Opens WhatsApp with:").nextElementSibling!.textContent!;
+    expect(message).toMatch(/free solar site survey/i);
+    expect(within(pane).getByRole("link", { name: "WhatsApp them" })).toHaveAttribute("href", `https://wa.me/919876543210?text=${encodeURIComponent(message)}`);
+    expect(within(pane).getByText("What is your monthly bill").nextElementSibling).toHaveTextContent("₹3,000");
+    expect(within(pane).queryByText("Phone number")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Ravi Kumar" }));
+    const next = screen.getByRole("complementary", { name: "Enquiry from Ravi Kumar" });
+    expect(within(next).queryByText("Their answers")).toBeNull();
+    expect(screen.getByRole("button", { name: "Ravi Kumar" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("stays one pane below 1280 px", () => {
+    render(<LeadInbox businessName="Solaride" initialLeads={[lead()]} metaReady={false} />);
+    expect(screen.queryByRole("complementary")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Asha Verma" })).toBeNull();
   });
 });
 
@@ -661,10 +774,10 @@ describe("<LeadInbox> reply in one tap (#1049)", () => {
     render(<LeadInbox businessName="Solaride" offer="Free solar site survey" language="hinglish" initialLeads={[lead({ phone: "98765 43210" })]} metaReady />);
     const whatsapp = screen.getByRole("link", { name: "WhatsApp them" });
     expect(whatsapp).toHaveAttribute("href", `https://wa.me/919876543210?text=${encodeURIComponent("Namaste Asha ji, Solaride ki taraf se dhanyavaad! Aapne free solar site survey ke baare mein poocha tha. Aapse baat karne ka sahi time kab hai?")}`);
-    expect(screen.getByRole("link", { name: "Call" })).toHaveAttribute("href", "tel:98765 43210");
+    expect(screen.getAllByRole("link", { name: "Call" })[0]).toHaveAttribute("href", "tel:98765 43210");
     whatsapp.addEventListener("click", (event) => event.preventDefault());
     fireEvent.click(whatsapp);
-    fireEvent.click(screen.getByRole("link", { name: "Call" }));
+    fireEvent.click(screen.getAllByRole("link", { name: "Call" })[0]);
     const marks = calls.filter(([url]) => url === "/api/leads/l1");
     expect(marks).toHaveLength(1);
     expect(marks[0][1]).toMatchObject({ method: "PATCH", body: JSON.stringify({ contacted: true }), keepalive: true });
@@ -674,7 +787,7 @@ describe("<LeadInbox> reply in one tap (#1049)", () => {
   it("shows the saved reply time and no WhatsApp button for a number it can't use", () => {
     render(<LeadInbox businessName="Solaride" initialLeads={[lead({ id: "l2", meta_lead_id: "m2", phone: "12345", first_contacted_at: "2026-08-20T10:12:00.000Z" })]} metaReady />);
     expect(screen.queryByRole("link", { name: "WhatsApp them" })).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Call" })).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: "Call" })[0]).toBeInTheDocument();
     expect(screen.getByText("Replied 12 min after the enquiry")).toBeInTheDocument();
   });
 
@@ -682,8 +795,22 @@ describe("<LeadInbox> reply in one tap (#1049)", () => {
     const calls: string[] = [];
     global.fetch = vi.fn(async (url: string) => { calls.push(url); return { ok: true, json: async () => ({}) }; }) as unknown as typeof fetch;
     render(<LeadInbox businessName="Solaride" initialLeads={[lead({ phone: "98765 43210", workflow_status: "contacted" })]} metaReady />);
-    fireEvent.click(screen.getByRole("link", { name: "Call" }));
+    fireEvent.click(screen.getAllByRole("link", { name: "Call" })[0]);
     expect(calls).not.toContain("/api/leads/l1");
     expect(screen.queryByText(/^Replied .* after the enquiry$/)).not.toBeInTheDocument();
+  });
+
+  it("#1260: once contacted, the row's ⋯ holds WhatsApp them and Call (the row shows Became a customer · ⋯)", () => {
+    render(<LeadInbox businessName="Solaride" initialLeads={[lead({ phone: "98765 43210", first_contacted_at: "2026-08-20T10:12:00.000Z" })]} metaReady />);
+    const menu = screen.getByLabelText("More for Asha Verma").closest("details")!;
+    expect(within(menu).getByRole("link", { name: "WhatsApp them" })).toHaveAttribute("href", expect.stringContaining("https://wa.me/919876543210"));
+    expect(within(menu).getByRole("link", { name: "Call" })).toHaveAttribute("href", "tel:98765 43210");
+    expect(screen.getByRole("button", { name: "Asha Verma became a customer" })).toBeInTheDocument();
+  });
+
+  it("#1260: a waiting row's ⋯ doesn't repeat WhatsApp them or Call", () => {
+    render(<LeadInbox businessName="Solaride" initialLeads={[lead({ phone: "98765 43210" })]} metaReady />);
+    const menu = screen.getByLabelText("More for Asha Verma").closest("details")!;
+    expect(within(menu).queryByRole("link")).toBeNull();
   });
 });

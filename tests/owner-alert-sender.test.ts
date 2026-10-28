@@ -41,7 +41,7 @@ describe("owner WhatsApp alert sender (#701 slice 2)", () => {
     // QA on #1065: the SQL cap counts every business's sends, so it is the platform guard (CPO §1), not per owner.
     expect(ALERT_MONTH_CAP).toBe(4000);
     const [url, init] = fetchImpl.mock.calls[0];
-    expect(url).toBe("https://graph.facebook.com/v21.0/106540352242922/messages");
+    expect(url).toBe("https://graph.facebook.com/v26.0/106540352242922/messages");
     expect(JSON.parse(String(init!.body))).toEqual({
       messaging_product: "whatsapp", recipient_type: "individual", to: "919800000009", type: "template",
       template: { name: "adbrain_lead_alert", language: { code: "hi" }, components: [{ type: "body", parameters: [{ type: "text", text: "नाम" }, { type: "text", text: "+91 98000 00009" }, { type: "text", text: "City: Mohali" }] }] },

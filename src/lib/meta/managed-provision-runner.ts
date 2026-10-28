@@ -1,3 +1,4 @@
+import { GRAPH } from "@/lib/meta/graph-version";
 import { createHmac, randomUUID } from "node:crypto";
 import { getEnv } from "@/lib/env";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -30,7 +31,6 @@ export interface RunnerDeps {
 }
 
 const LEASE_SECONDS = 300;
-const GRAPH = "https://graph.facebook.com/v21.0";
 
 export async function runManagedProvisioning(
   input: { businessId: string; customerTokenId: string | null; requestId?: string },

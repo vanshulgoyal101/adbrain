@@ -21,7 +21,7 @@ export function GenerationDetails({ value }: { value: unknown }) {
   const receipt = parsed.data;
   return (
     <details className="border-t border-slate-200 pt-3 text-xs text-slate-600">
-      <summary className="cursor-pointer font-medium text-slate-700">
+      <summary className="flex min-h-11 cursor-pointer items-center font-medium text-slate-700">
         Generation details
       </summary>
       <dl className="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 break-words">

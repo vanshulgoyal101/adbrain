@@ -15,10 +15,10 @@ function replay() {
   const sent: string[] = [];
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = new URL(String(input));
-    expect(url.origin + url.pathname.slice(0, 7)).toBe("https://graph.facebook.com/v21.0/");
+    expect(url.origin + url.pathname.slice(0, 7)).toBe("https://graph.facebook.com/v26.0/");
     url.searchParams.delete("access_token");
     const method = init?.method ?? "GET";
-    const path = url.pathname.replace("/v21.0/", "") + url.search;
+    const path = url.pathname.replace("/v26.0/", "") + url.search;
     sent.push(`${method} ${path}`);
     const index = pending.findIndex(exchange => exchange.method === method && exchange.path === path);
     if (index < 0) throw new Error(`Unrecorded Graph call: ${method} ${path}`);

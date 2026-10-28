@@ -7,6 +7,8 @@ import { createClient } from "@/lib/supabase/server";
 import { rateLimitResponse } from "@/lib/security/rate-limit";
 import { z } from "zod";
 import { savedCreativeDescription } from "@/lib/creative/concept";
+import { sampleWatermark, SAMPLE_LABEL } from "@/lib/creative/sample-watermark";
+import { isProspectAccount } from "@/lib/internal-accounts";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -38,6 +40,8 @@ async function handlePOST(req: Request) {
     return apiError("One or more selected creatives are missing or no longer accessible. Refresh your selection.", 404);
   }
 
+  // #1317: a prospect's ads are samples until the owner takes the account over; every picture says so.
+  const sample = isProspectAccount(user);
   const zip = new JSZip();
   let withImage = 0;
   let skipped = 0;
@@ -54,7 +58,9 @@ async function handlePOST(req: Request) {
         .replace(/\W+/g, "-")
         .toLowerCase()}`;
       try {
-        const { bytes, contentType } = await downloadImage(creative.image_url, signal);
+        const downloaded = await downloadImage(creative.image_url, signal);
+        // A picture that can't be marked is left out, never shipped unmarked.
+        const { bytes, contentType } = sample ? await sampleWatermark(downloaded.bytes) : downloaded;
         if (totalBytes + bytes.byteLength > maximumBytes) {
           exhausted = true;
           skipped++;
@@ -83,7 +89,8 @@ async function handlePOST(req: Request) {
     skipped > 0
       ? `Note: ${skipped} of ${withImage} image(s) were unavailable or exceeded export limits and are not included. Export a smaller selection to include more images.\n\n`
       : "";
-  zip.file("copy.txt", note + copy);
+  const sampleNote = sample ? `${SAMPLE_LABEL.toUpperCase()}. Made for a sales visit; these ads run only after the business owner signs up.\n\n` : "";
+  zip.file("copy.txt", sampleNote + note + copy);
 
   const buffer = await zip.generateAsync({ type: "arraybuffer" });
   return new NextResponse(new Blob([buffer], { type: "application/zip" }), {

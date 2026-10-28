@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readyPool, boardRow, systemicFailures, snoozedUntil, latestWord, linkedIssues, lowQueues, matchers, offTrack, roleCard, unsavedWork, waitingOnMe } from "../scripts/wait-for-work.mjs";
+import { readyPool, boardRow, systemicFailures, snoozedUntil, latestWord, linkedIssues, lowQueues, matchers, nextItem, offTrack, roleCard, unsavedWork, waitingOnMe } from "../scripts/wait-for-work.mjs";
 
 describe("PR reviews count as the latest word (#423)", () => {
   it("picks a review posted after the last comment, and ignores empty approvals", () => {
@@ -91,7 +91,9 @@ describe("CTO queue watch", () => {
       issue("owner:dev3"), issue("owner:dev3"), issue("owner:dev3", "decision"),
       issue("owner:qa", "owner:dev"), issue("owner:qa"),
     ]);
-    expect(low).toEqual([{ role: "dev2", count: 1 }, { role: "dev4", count: 0 }, { role: "qa2", count: 0 }, { role: "cpo", count: 0 }]);
+    expect(low).toEqual([{ role: "dev2", count: 1 }, { role: "dev4", count: 0 }, { role: "qa2", count: 0 }]);
+    // The CPO self-sources from walks and #703, like the Analyst and Designer (#364).
+    expect(low.map((l) => l.role)).not.toContain("cpo");
   });
 
   it("counts the worker's lane pool as supply, so a reactive Reviewer with pool audits isn't low", () => {
@@ -234,5 +236,19 @@ describe("systemic CI failures (CTO auto-track)", () => {
     ]);
     expect(lines).toHaveLength(1);
     expect(lines[0]).toMatch(/^CI systemic: Core approval failed on 2 PR branches \(dev3\/701, designer\/847\)/);
+  });
+});
+
+describe("next item (#364: idle with a full queue)", () => {
+  const issue = (number: number, ...labels: string[]) => ({ number, title: `item ${number}`, labels: labels.map((name) => ({ name })) });
+  it("returns the oldest owned item that is actionable and has no open PR, even when its last word was a handoff", () => {
+    const items = [issue(30, "core"), issue(12, "core", "parked"), issue(14, "later"), issue(15, "waiting-owner"), issue(16, "decision"), issue(20, "core"), issue(25)];
+    const pulls = [{ title: "#20: the fix" }];
+    expect(nextItem(items, pulls)?.number).toBe(25);
+    expect(nextItem(items, pulls, new Set([25]))?.number).toBe(30);
+    expect(nextItem([issue(12, "parked")], [])).toBeNull();
+  });
+  it("parked items don't count toward a queue", () => {
+    expect(lowQueues([issue(1, "owner:dev"), issue(2, "owner:dev", "parked")]).map((l) => l.role)).toContain("dev");
   });
 });

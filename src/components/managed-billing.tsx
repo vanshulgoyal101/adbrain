@@ -1,10 +1,9 @@
 import { WalletCards } from "lucide-react";
 import type { MetaConnection } from "@/lib/meta/credentials";
-import { DEFAULT_PAYMENT_ALLOCATION_POLICY } from "@/lib/payments/allocation";
 import { TestCheckout } from "@/components/test-checkout";
 import { ProductionCheckout } from "@/components/production-checkout";
 import { CustomerBalance } from "@/components/customer-balance";
-import type { CustomerBalance as Balance } from "@/lib/payments/customer-balance-contracts";
+import type { CustomerBalanceView as Balance } from "@/lib/payments/customer-balance-contracts";
 
 type BillingConnection = Pick<MetaConnection, "adAccountId" | "ready" | "pending" | "expired">;
 
@@ -15,7 +14,6 @@ export function ManagedBilling({ connection, testBusinessId, liveBusinessId, ini
     <ProductionCheckout key={liveBusinessId} businessId={liveBusinessId} />
     <CustomerBalance key={`allowance-${liveBusinessId}`} businessId={liveBusinessId} initialBalance={initialBalance} />
   </>;
-  const feePercent = DEFAULT_PAYMENT_ALLOCATION_POLICY.platformFeeBps / 100;
   const connectionStatus = !connection ? "Temporarily unavailable"
     : connection.expired ? "Reconnect required"
       : connection.ready ? "Connected"
@@ -40,16 +38,12 @@ export function ManagedBilling({ connection, testBusinessId, liveBusinessId, ini
       </dl>
 
       <div className="border-y border-slate-200 py-4">
-        <h3 className="text-sm font-medium text-slate-700">Pay any amount from ₹500</h3>
-        <dl className="mt-3 grid grid-cols-2 gap-4">
-          <div><dt className="text-sm text-slate-500">Service allocation</dt><dd className="mt-1 text-2xl font-semibold tabular-nums text-slate-900">{feePercent}%</dd></div>
-          <div><dt className="text-sm text-slate-500">Advertising</dt><dd className="mt-1 text-2xl font-semibold tabular-nums text-emerald-700">{100 - feePercent}%</dd></div>
-        </dl>
-        <p className="mt-3 text-xs leading-5 text-slate-500">One business, one offer and one service area for 12 months, including up to two creatives and one capped Meta campaign. Meta allocation includes applicable Meta tax. Gateway fees absorbed by AdBrain. No extra checkout charge, automatic renewal or guaranteed results.</p>
+        <p className="text-sm leading-6 text-slate-700">Pay any amount from ₹500. Your ad budget pays for Meta&apos;s ads and GST; AdBrain makes and runs the ads.</p>
+        <p className="mt-3 text-xs leading-5 text-slate-500">One business, one offer and one service area for 12 months, including up to two ads and one capped Meta campaign. Gateway fees are on us. No extra checkout charge, automatic renewal or guaranteed results.</p>
       </div>
 
-      <p className="text-sm leading-6 text-slate-600">The operator pays Meta separately. Advertising allocation is not a confirmed Meta balance. Payment confirmation does not authorize ad activation.</p>
-      <p className="text-sm leading-6 text-slate-600">Full refund before work starts. Afterward, unused advertising allocation is refundable after pending-cost reconciliation. Service allocation is earned only after the agreed creatives and campaign setup are delivered; otherwise it remains refundable.</p>
+      <p className="text-sm leading-6 text-slate-600">The operator pays Meta separately. Your ad budget is not yet a confirmed Meta balance. Payment confirmation does not authorize ad activation.</p>
+      <p className="text-sm leading-6 text-slate-600">Full refund before we start work. After that, your unused ad budget is refundable once pending Meta costs are settled. Mandatory customer rights remain applicable.</p>
       <p className="text-xs leading-5 text-slate-500">Live collection is not enabled here. No bank-to-Meta transfer or automatic account creation is performed by AdBrain.</p>
       {testBusinessId && <TestCheckout key={testBusinessId} businessId={testBusinessId} />}
     </section>

@@ -64,6 +64,7 @@ export interface ProviderAttempt {
   status: "success" | "error";
   failure?: LLMFailureCode;
   latencyMs?: number;
+  rateLimit?: RateLimitInfo;
 }
 
 /** What a provider returns from a single completion call. */
@@ -103,6 +104,9 @@ export interface LLMProvider {
   ): Promise<ProviderCompletion>;
 }
 
+/** #1200: which provider limit a 429 hit, from the provider's message: type and numbers only, never its text or org id. */
+export type RateLimitInfo = { type: "TPM" | "RPM" | "TPD" | "RPD" | "ITPM" | "OTPM"; limit?: number; used?: number; requested?: number };
+
 /** Thrown by a provider on an HTTP/transport failure. */
 export class LLMError extends Error {
   readonly provider: string;
@@ -114,12 +118,13 @@ export class LLMError extends Error {
   readonly providerFinalStatus?: "completed" | "failed" | "unknown";
   readonly code?: LLMFailureCode;
   readonly retryAfterMs?: number;
+  readonly rateLimit?: RateLimitInfo;
 
   constructor(
     message: string,
     opts: { provider: string; status?: number; retryable: boolean; model?: string; usage?: TokenUsage;
       providerRequestId?: string; providerFinalStatus?: "completed" | "failed" | "unknown"; code?: LLMFailureCode;
-      retryAfterMs?: number },
+      retryAfterMs?: number; rateLimit?: RateLimitInfo },
   ) {
     super(message);
     this.name = "LLMError";
@@ -132,6 +137,7 @@ export class LLMError extends Error {
     this.providerFinalStatus = opts.providerFinalStatus;
     this.code = opts.code ?? (opts.status ? `HTTP_${opts.status}` : undefined);
     this.retryAfterMs = opts.retryAfterMs;
+    this.rateLimit = opts.rateLimit;
   }
 }
 

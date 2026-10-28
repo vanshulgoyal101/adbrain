@@ -1,5 +1,11 @@
 import { z } from "zod";
+import { GRAPH } from "@/lib/meta/graph-version";
 import type { Capabilities, Capability, SelectedAssets } from "./connect-contracts";
+import { ConnectionAccessError } from "./connection-access-error";
+
+/** #1217: Meta didn't answer (a 5xx, a dropped connection or our 15 s timeout); not a refusal. */
+class MetaNoAnswer extends Error {}
+const noAnswer = (error: unknown) => error instanceof MetaNoAnswer || (error instanceof Error && error.name === "TimeoutError");
 
 const accountSchema = z.object({
   id: z.string(), account_status: z.number().optional(), currency: z.string().optional(),
@@ -15,13 +21,29 @@ function unavailable(message: string, state: "blocked" | "unknown" = "blocked"):
 }
 
 export async function verifyMetaCapabilities(token: string, selected: SelectedAssets): Promise<Capabilities> {
-  async function read(path: string, accessToken = token): Promise<unknown> {
-    const response = await fetch(`https://graph.facebook.com/v21.0/${path}`, {
-      method: "GET", headers: { Authorization: `Bearer ${accessToken}` }, cache: "no-store",
-      signal: AbortSignal.timeout(15_000),
-    });
+  async function readOnce(path: string, accessToken: string): Promise<unknown> {
+    let response: Response;
+    try {
+      response = await fetch(`${GRAPH}/${path}`, {
+        method: "GET", headers: { Authorization: `Bearer ${accessToken}` }, cache: "no-store",
+        signal: AbortSignal.timeout(15_000),
+      });
+    } catch (error) {
+      throw error instanceof TypeError ? new MetaNoAnswer() : error;
+    }
+    if (response.status >= 500) throw new MetaNoAnswer();
     if (!response.ok) throw new Error("Meta access could not be verified.");
     return response.json();
+  }
+  // #1217 (#1204's rule): one repeat after a 5xx or network error; a timeout already spent 15 s and isn't repeated.
+  async function read(path: string, accessToken = token): Promise<unknown> {
+    try {
+      return await readOnce(path, accessToken);
+    } catch (error) {
+      if (!(error instanceof MetaNoAnswer)) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      return readOnce(path, accessToken);
+    }
   }
   const available: Capability = { state: "available", blockers: [] };
   const unknown = unavailable("Meta access could not be verified. Check again.", "unknown");
@@ -35,6 +57,11 @@ export async function verifyMetaCapabilities(token: string, selected: SelectedAs
       .then(value => pageTokenSchema.parse(value))
       .then(page => read(`${encodeURIComponent(selected.pageId)}/leadgen_forms?fields=id,status&limit=1`, page.access_token)),
   ]);
+  // Without permissions, the account or the Pages, the core capabilities would be 'unknown' and block Review;
+  // if Meta just didn't answer, say so and save nothing.
+  if ([permissionsResult, accountResult, pagesResult].some((read) => read.status === "rejected" && noAnswer(read.reason))) {
+    throw new ConnectionAccessError("UNAVAILABLE", "Meta didn't answer. Try again.", { retryable: true });
+  }
   if (permissionsResult.status !== "fulfilled") return result;
   const scopes = new Set(permissionsResult.value.data.filter(entry => entry.status === "granted").map(entry => entry.permission));
   if (insightsResult.status === "fulfilled" && (scopes.has("ads_read") || scopes.has("ads_management"))) result.canReadInsights = available;

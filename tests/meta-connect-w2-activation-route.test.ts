@@ -752,7 +752,7 @@ describe("capped activation: the owner approves daily budget × days and Meta ho
       mocks.readAccountFunding.mockResolvedValue({ spendCapPaise: 88983, amountSpentPaise: 4237, roomPaise: 84746, prepay: true });
       const response = await activate();
       expect(response.status).toBe(409);
-      expect((await response.json()).error).toMatch(/Meta has ₹847\.46 left .* this run needs ₹1,500\.00/);
+      expect((await response.json()).error).toMatch(/Meta has ₹847\.46 left .* this run needs ₹1,500(?!\.\d|\d)/);
       for (const write of metaWrites()) expect(write).not.toHaveBeenCalled();
       expect(mocks.saveCampaign).not.toHaveBeenCalled();
     });
@@ -834,7 +834,7 @@ describe("capped activation: the owner approves daily budget × days and Meta ho
       mocks.readAccountFunding.mockResolvedValue({ spendCapPaise: 88983, amountSpentPaise: 4237, roomPaise: 84746, prepay: true });
       const response = await activate();
       expect(response.status).toBe(409);
-      expect((await response.json()).error).toMatch(/Meta has ₹847\.46 left .* this run needs ₹1,500\.00/);
+      expect((await response.json()).error).toMatch(/Meta has ₹847\.46 left .* this run needs ₹1,500(?!\.\d|\d)/);
       for (const write of metaWrites()) expect(write).not.toHaveBeenCalled();
     });
 

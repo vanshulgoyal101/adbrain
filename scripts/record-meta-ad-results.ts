@@ -7,13 +7,14 @@
  *
  * Uses META_SYSTEM_USER_TOKEN / META_AD_ACCOUNT_ID / META_PAGE_ID. Tokens and the WhatsApp number are scrubbed.
  */
+import "./lib/meta-write-gate";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { metaClientFromEnv } from "./lib/meta-env";
 
 type Exchange = { method: string; path: string; status: number; body: unknown };
 
-const GRAPH = "https://graph.facebook.com/v21.0/";
+const GRAPH = "https://graph.facebook.com/v26.0/";
 const OUT = join(process.cwd(), "tests/core/fixtures/meta/ad-results.json");
 let tape: Exchange[] = [];
 const realFetch = globalThis.fetch;
@@ -34,7 +35,7 @@ globalThis.fetch = async (input, init) => {
   const body = await response.clone().json().catch(() => null);
   const parsed = new URL(url);
   parsed.searchParams.delete("access_token");
-  tape.push({ method: "GET", path: parsed.pathname.replace("/v21.0/", "") + parsed.search, status: response.status, body: scrub(body) });
+  tape.push({ method: "GET", path: parsed.pathname.replace("/v26.0/", "") + parsed.search, status: response.status, body: scrub(body) });
   return response;
 };
 

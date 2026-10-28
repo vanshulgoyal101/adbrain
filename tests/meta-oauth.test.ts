@@ -35,7 +35,7 @@ describe("buildLoginUrl", () => {
     });
     const parsed = new URL(url);
     expect(parsed.origin + parsed.pathname).toBe(
-      "https://www.facebook.com/v21.0/dialog/oauth",
+      "https://www.facebook.com/v26.0/dialog/oauth",
     );
     expect(parsed.searchParams.get("client_id")).toBe("123456");
     expect(parsed.searchParams.get("response_type")).toBe("code");
@@ -188,7 +188,7 @@ describe("token exchange", () => {
 describe("account + page listing", () => {
   it("strips paging tokens and keeps authorization in a header", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce(Response.json({ data: [], paging: { next: "https://graph.facebook.com/v21.0/me/accounts?after=one&access_token=untrusted" } }))
+      .mockResolvedValueOnce(Response.json({ data: [], paging: { next: "https://graph.facebook.com/v26.0/me/accounts?after=one&access_token=untrusted" } }))
       .mockResolvedValueOnce(Response.json({ data: [{ id: "page-1", name: "Page" }] }));
     const { fetchPages } = await import("@/lib/meta/oauth");
     expect(await fetchPages("private-token")).toHaveLength(1);
@@ -245,14 +245,14 @@ describe("account + page listing", () => {
           const isNextPage = url.includes("after=one");
           return new Response(JSON.stringify({
             data: [{ id: isNextPage ? "act_2" : "act_1", account_id: isNextPage ? "2" : "1", name: isNextPage ? "Two" : "One", currency: "INR", account_status: 1 }],
-            ...(isNextPage ? {} : { paging: { next: "https://graph.facebook.com/v21.0/me/adaccounts?after=one" } }),
+            ...(isNextPage ? {} : { paging: { next: "https://graph.facebook.com/v26.0/me/adaccounts?after=one" } }),
           }));
         }
         if (url.includes("me/accounts")) {
           const isNextPage = url.includes("after=one");
           return new Response(JSON.stringify({
             data: [{ id: isNextPage ? "p2" : "p1", name: isNextPage ? "Page two" : "Page one" }],
-            ...(isNextPage ? {} : { paging: { next: "https://graph.facebook.com/v21.0/me/accounts?after=one" } }),
+            ...(isNextPage ? {} : { paging: { next: "https://graph.facebook.com/v26.0/me/accounts?after=one" } }),
           }));
         }
         return new Response(JSON.stringify({ data: [{ id: "act_2", account_id: "2", name: "Two", currency: "INR", account_status: 1 }] }));
@@ -269,12 +269,12 @@ describe("account + page listing", () => {
       if (url.includes("me/adaccounts")) {
         return new Response(JSON.stringify({
           data: [{ id: "act_1", account_id: "1", name: "One", currency: "INR", account_status: 1 }],
-          paging: { next: "https://graph.facebook.com/v21.0/me/adaccounts?after=forever" },
+          paging: { next: "https://graph.facebook.com/v26.0/me/adaccounts?after=forever" },
         }));
       }
       return new Response(JSON.stringify({
         data: [{ id: "page_1", name: "Page" }],
-        paging: { next: "https://graph.facebook.com/v21.0/me/accounts?after=forever" },
+        paging: { next: "https://graph.facebook.com/v26.0/me/accounts?after=forever" },
       }));
     });
     const { discoverMetaAssets } = await import("@/lib/meta/oauth");

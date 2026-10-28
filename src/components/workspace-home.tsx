@@ -6,8 +6,10 @@ import { buildWorkQueue } from "@/lib/work-queue";
 import { setAsideIds } from "@/lib/creative/set-aside";
 import { describeAuditEvent, isBackgroundAuditAction } from "@/lib/audit-labels";
 import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
-import { formatDate, formatMoney, formatPerDay } from "@/lib/format";
+import { formatClock, formatDate, formatMoney, formatPerDay } from "@/lib/format";
+import { firstEnquiryLine } from "@/lib/trust-lines";
 import { homeResults } from "@/lib/campaign/home-results";
+import { homeVerdicts } from "@/lib/campaign/card-verdict";
 import { staleCampaignIds } from "@/lib/campaign/results-freshness";
 import { StaleResultsRefresher } from "@/components/stale-results-refresher";
 import { timeAgo } from "@/lib/utils";
@@ -15,7 +17,8 @@ import type { SpendEvaluation } from "@/lib/campaign/spend";
 import type { AuditLog, Business, Campaign, CampaignResult, CreativePreview } from "@/lib/types";
 import { campaignAttention } from "@/lib/campaign/health";
 import { formatReplyTime } from "@/lib/leads/first-reply";
-import { CAMPAIGN_STATUS, Status } from "@/components/ui/status";
+import { campaignStatus, Status } from "@/components/ui/status";
+import { goneInMeta } from "@/lib/campaign/gone-in-meta";
 
 export interface WorkspaceHomeProps {
   business: Business | null;
@@ -30,6 +33,10 @@ export interface WorkspaceHomeProps {
   results?: Record<string, CampaignResult>;
   /** #1049: median minutes from enquiry to the owner's first reply over the last 30 days. */
   replyMinutes?: number | null;
+  /** #1274: enquiries waiting for a first reply (the inbox's rule, #1260). */
+  waiting?: number;
+  /** #1292: the newest enquiry from the last 24 hours still waiting for a first reply. */
+  firstEnquiry?: { name: string | null; at: string } | null;
   now?: number;
 }
 
@@ -49,9 +56,15 @@ export function WorkspaceHome({
   activity,
   results = {},
   replyMinutes = null,
+  waiting = 0,
+  firstEnquiry = null,
   now,
 }: WorkspaceHomeProps) {
+  const liveCampaigns = campaigns.filter((campaign) => !goneInMeta(campaign));
   const summary = business ? homeResults(campaigns, results) : null;
+  // #1292's line already names the newest person waiting, so the verdict doesn't say it twice.
+  const verdicts = business ? homeVerdicts(campaigns, results, { now, waiting: firstEnquiry ? 0 : waiting }) : null;
+  const leadCampaign = verdicts?.lead ? campaigns.find((campaign) => campaign.id === verdicts.lead?.campaignId) : null;
   const stale = business ? staleCampaignIds(campaigns, results, now) : [];
   const [next, ...later] = buildWorkQueue({ business, creatives, campaigns, metaReady, now });
   const setAside = setAsideIds(creatives, now);
@@ -75,10 +88,27 @@ export function WorkspaceHome({
         <SpendStatusBanner evaluation={spend} />
       ))}
 
+      {firstEnquiry && (
+        <section aria-label="Newest enquiry" className="flex flex-col gap-3 rounded-lg border border-blue-200 bg-blue-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-slate-900">
+            {firstEnquiryLine(firstEnquiry.name, formatClock(firstEnquiry.at, now === undefined ? undefined : new Date(now)))}
+          </p>
+          <Link href="/leads" className={`${linkClass} shrink-0`}>Open Enquiries</Link>
+        </section>
+      )}
+
       {stale.length > 0 && <StaleResultsRefresher campaignIds={stale} />}
       {summary && (
         <section aria-labelledby="results-title">
           <h2 id="results-title" className="sr-only">Results so far</h2>
+          {verdicts?.lead && leadCampaign && (
+            <p className="mb-4 max-w-2xl text-[17px] leading-snug text-slate-900">
+              {verdicts.lead.verdict.sentence}{" "}
+              <Link href="/campaigns" className="text-sm font-medium text-blue-700 hover:underline">
+                {leadCampaign.name || "Untitled campaign"}
+              </Link>
+            </p>
+          )}
           <dl className="grid grid-cols-3 gap-4 sm:flex sm:gap-16">
             {[
               { label: "Enquiries", value: String(summary.enquiries) },
@@ -154,11 +184,13 @@ export function WorkspaceHome({
                   </Link>
                 )}
               </div>
-              {campaigns.length ? (
+              {/* #1150: campaigns deleted or archived in Meta stay on Campaigns, folded. */}
+              {liveCampaigns.length ? (
                 <ul className="mt-2 divide-y divide-slate-200 border-b border-slate-200">
-                  {campaigns.slice(0, 3).map((campaign) => {
-                    const status = CAMPAIGN_STATUS[campaign.status] ?? CAMPAIGN_STATUS.draft;
+                  {liveCampaigns.slice(0, 3).map((campaign) => {
+                    const status = campaignStatus(campaign);
                     const attention = campaignAttention(campaign);
+                    const judged = verdicts?.labels.get(campaign.id);
                     return (
                       <li key={campaign.id} className="py-3 sm:flex sm:items-center sm:justify-between sm:gap-6">
                         <div className="min-w-0">
@@ -169,6 +201,7 @@ export function WorkspaceHome({
                         </div>
                         <p className="mt-1 flex shrink-0 gap-x-4 text-xs text-slate-600 sm:mt-0">
                           <Status tone={status.tone}>{status.label}</Status>
+                          {judged && <span>{judged}</span>}
                           {campaign.daily_budget != null && <span className="sm:w-24 sm:text-right">{formatPerDay(campaign.daily_budget)}</span>}
                         </p>
                       </li>
@@ -177,7 +210,7 @@ export function WorkspaceHome({
                 </ul>
               ) : (
                 <p className="mt-2 text-sm text-slate-600">
-                  No campaigns yet. Approved ads become a paused campaign you check before anything spends.
+                  {campaigns.length ? "No running or paused campaigns." : "No campaigns yet. Approved ads become a paused campaign you check before anything spends."}
                 </p>
               )}
             </section>

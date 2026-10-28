@@ -5,12 +5,13 @@
  *
  *   npx tsx --env-file=.env.local scripts/record-meta-cleanup-fixtures.ts
  */
+import "./lib/meta-write-gate";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { metaClientFromEnv } from "./lib/meta-env";
 
 type Exchange = { method: string; path: string; status: number; body: unknown };
-const GRAPH = "https://graph.facebook.com/v21.0/";
+const GRAPH = "https://graph.facebook.com/v26.0/";
 const tape: Exchange[] = [];
 const realFetch = globalThis.fetch;
 
@@ -30,7 +31,7 @@ globalThis.fetch = async (input, init) => {
   const parsed = new URL(url);
   parsed.searchParams.delete("access_token");
   parsed.searchParams.delete("appsecret_proof");
-  tape.push({ method: init?.method ?? "GET", path: parsed.pathname.replace("/v21.0/", "") + parsed.search, status: response.status,
+  tape.push({ method: init?.method ?? "GET", path: parsed.pathname.replace("/v26.0/", "") + parsed.search, status: response.status,
     body: scrub(await response.clone().json().catch(() => null)) });
   return response;
 };

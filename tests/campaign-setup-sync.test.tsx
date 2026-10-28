@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { formatDate } from "@/lib/format";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Campaigns } from "@/components/campaigns";
@@ -12,10 +13,10 @@ vi.mock("@/components/ui/confirm-dialog", () => ({
 
 const mocks = vi.hoisted(() => ({
   drafts: vi.fn(), draft: vi.fn(), saveDraft: vi.fn(), updateDraft: vi.fn(), status: vi.fn(), preflight: vi.fn(), createCampaign: vi.fn(), operationForRequest: vi.fn(),
-  dialog: { current: null as null | { onConnected: (connection: ConnectionDTO) => void; onBeforeStart?: () => Promise<unknown> } },
+  dialog: { current: null as null | { open?: boolean; onConnected: (connection: ConnectionDTO) => void; onBeforeStart?: () => Promise<unknown> } },
 }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
-vi.mock("@/components/meta-connect/meta-connect-dialog", () => ({ MetaConnectDialog: (props: { onConnected: (connection: ConnectionDTO) => void; onBeforeStart?: () => Promise<unknown> }) => { mocks.dialog.current = props; return null; } }));
+vi.mock("@/components/meta-connect/meta-connect-dialog", () => ({ MetaConnectDialog: (props: { open?: boolean; onConnected: (connection: ConnectionDTO) => void; onBeforeStart?: () => Promise<unknown> }) => { mocks.dialog.current = props; return null; } }));
 vi.mock("@/components/campaign-chat", () => ({ CampaignChat: () => <div data-testid="guided-campaign-chat" /> }));
 vi.mock("@/lib/meta-connect-ui/client", () => ({ createMetaConnectClient: () => mocks, MetaConnectClientError: class extends Error {} }));
 
@@ -201,6 +202,41 @@ describe("unsaved campaign setup", () => {
     expect(screen.getByRole("button", { name: creative.headline! })).toHaveAttribute("aria-pressed", "true");
   });
 });
+describe("Resume goes straight to the activation review when Meta is ready (#1333)", () => {
+  const campaign = () => ({ id: "campaign-1", business_id: business.id, name: "Saved campaign", status: "paused", meta_campaign_id: "meta-1", daily_budget: 500, ...launched } as unknown as Campaign);
+  const capabilities = (canActivate: "available" | "blocked") => ({
+    canCreatePaused: { state: "available", blockers: [] }, canSyncResults: { state: "available", blockers: [] },
+    canActivate: { state: canActivate, blockers: canActivate === "blocked" ? [{ code: "PAYMENT_METHOD_REQUIRED", message: "Add a card in Meta first." }] : [] },
+  });
+  const stubDelivery = () => vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+    if (url.startsWith("/api/payments/customer-balance")) return Response.json({});
+    if (url === "/api/campaigns/campaign-1") return Response.json({ delivery: {
+      campaign: { id: "meta-1", status: "PAUSED", effectiveStatus: "CAMPAIGN_PAUSED" },
+      adSets: [{ id: "set-1", status: "ACTIVE", effectiveStatus: "CAMPAIGN_PAUSED", dailyBudgetPaise: 50000, pageId: "page_1", destinationType: "ON_AD", targeting: null }],
+      ads: [{ id: "ad-1", status: "ACTIVE", effectiveStatus: "CAMPAIGN_PAUSED", adSetId: "set-1", creativeId: "creative-1" }],
+    } });
+    return Response.json({ campaigns: [], nextCursor: null });
+  }));
+
+  it("opens the review with one tap and no connection dialog", async () => {
+    mocks.status.mockResolvedValue({ authorization: "connected", selected, generation: 1, capabilities: capabilities("available"), checkedAt: null });
+    stubDelivery();
+    render(<Campaigns business={business} approved={[creative]} initialCampaigns={[campaign()]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady adAccountId="act_1" />);
+    fireEvent.click(screen.getByRole("button", { name: "Resume" }));
+    expect(await screen.findByRole("button", { name: "Request activation" })).toBeInTheDocument();
+    expect(mocks.dialog.current?.open).toBe(false);
+  });
+
+  it("opens the connection dialog when something needs fixing", async () => {
+    mocks.status.mockResolvedValue({ authorization: "connected", selected, generation: 1, capabilities: capabilities("blocked"), checkedAt: null });
+    stubDelivery();
+    render(<Campaigns business={business} approved={[creative]} initialCampaigns={[campaign()]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady adAccountId="act_1" />);
+    fireEvent.click(screen.getByRole("button", { name: "Resume" }));
+    await waitFor(() => expect(mocks.dialog.current?.open).toBe(true));
+    expect(screen.queryByRole("button", { name: "Request activation" })).toBeNull();
+  });
+});
+
 describe("campaign sync feedback", () => {
   it("shows the intended audience, budget, destination and creative before activation", async () => {
     const campaign = { id: "campaign-1", business_id: business.id, name: "Saved campaign", status: "paused", meta_campaign_id: "meta-1", daily_budget: 500, ...launched } as unknown as Campaign;
@@ -252,6 +288,8 @@ describe("campaign sync feedback", () => {
     expect(screen.getByText(/new ad set.*3 days at about ₹69 a result buys about 21 results/)).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Run for"), { target: { value: "2" } });
     expect(screen.getByText(/Total limit on Meta: ₹1,000 over 2 days/)).toBeInTheDocument();
+    // #1292: the trust line follows the chosen days.
+    expect(screen.getByText("₹500 a day, stops at ₹1,000. Pause any time.")).toBeInTheDocument();
     expect(screen.getByText(/2 days at about ₹69 a result buys about 14 results/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Approve total and activate" }));
     await screen.findByText(/₹1,000 total limit on Meta for 2 days/);
@@ -307,10 +345,10 @@ describe("campaign sync feedback", () => {
     render(<Campaigns business={business} approved={[creative]} initialCampaigns={[campaign]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady={false} adAccountId="act_1" />);
     fireEvent.click(screen.getByRole("button", { name: "Resume" }));
     await act(async () => { mocks.dialog.current!.onConnected({ authorization: "connected", selected, generation: 1 } as ConnectionDTO); });
-    expect(await screen.findByText("Funded on Meta: ₹2,000.00 room for a ₹1,500.00 cap.")).toBeInTheDocument();
+    expect(await screen.findByText("Funded on Meta: ₹2,000 room for a ₹1,500 cap.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Approve total and activate" })).toBeEnabled();
     fireEvent.change(screen.getByLabelText("Run for"), { target: { value: "5" } });
-    expect(screen.getByText("Funded on Meta: ₹2,000.00 room for a ₹2,500.00 cap. Add funds on Meta or choose fewer days.")).toBeInTheDocument();
+    expect(screen.getByText("Funded on Meta: ₹2,000 room for a ₹2,500 cap. Add funds on Meta or choose fewer days.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Approve total and activate" })).toBeDisabled();
     expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).startsWith("/api/payments/customer-balance"))).toBe(false);
   });
@@ -331,11 +369,11 @@ describe("campaign sync feedback", () => {
     render(<Campaigns business={business} approved={[creative]} initialCampaigns={[campaign]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady={false} adAccountId="act_1" />);
     fireEvent.click(screen.getByRole("button", { name: "Resume" }));
     await act(async () => { mocks.dialog.current!.onConnected({ authorization: "connected", selected, generation: 1 } as ConnectionDTO); });
-    expect(await screen.findByText("Funded on Meta: ₹1,500.00 room for a ₹1,500.00 cap after ₹500.00 for your 1 other live run.")).toBeInTheDocument();
+    expect(await screen.findByText("Funded on Meta: ₹1,500 room for a ₹1,500 cap after ₹500 for your 1 other live run.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Approve total and activate" })).toBeEnabled();
     // ₹2,000 fits Meta's ₹2,000 room but not the ₹1,500 left after the other run.
     fireEvent.change(screen.getByLabelText("Run for"), { target: { value: "4" } });
-    expect(screen.getByText("Funded on Meta: ₹1,500.00 room for a ₹2,000.00 cap after ₹500.00 for your 1 other live run. Add funds on Meta or choose fewer days.")).toBeInTheDocument();
+    expect(screen.getByText("Funded on Meta: ₹1,500 room for a ₹2,000 cap after ₹500 for your 1 other live run. Add funds on Meta or choose fewer days.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Approve total and activate" })).toBeDisabled();
   });
 
@@ -484,7 +522,9 @@ describe("campaign sync feedback", () => {
     render(<Campaigns business={business} approved={[creative]} initialCampaigns={[campaign]} initialResults={{ "campaign-1": before } as never} leadForms={[]} leadFormError={null} metaReady={false} adAccountId="act_1" />);
     const card = within(screen.getByRole("heading", { name: "Saved campaign" }).closest("article")!);
     fireEvent.click(card.getByRole("button", { name: "Refresh results" }));
-    const since = new Date(before.fetched_at).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
+    // #1290: India time whatever the server's zone (03:35 UTC is 9:05 am IST).
+    const since = formatDate(before.fetched_at);
+    expect(since).toMatch(/9:05 am$/);
     expect(await card.findByRole("status")).toHaveTextContent(`Checked just now: no new results since ${since}.`);
     next = { ...next, id: "r3", impressions: 300, fetched_at: "2026-10-26T06:00:00.000Z" };
     fireEvent.click(card.getByRole("button", { name: "Refresh results" }));
@@ -745,6 +785,19 @@ describe("campaign sync feedback", () => {
     fireEvent.click(screen.getByRole("button", { name: "Sync from Meta" }));
     await waitFor(() => expect(screen.getByText("Campaign sync completed.")).toBeInTheDocument());
     expect(screen.queryByText(/left unchanged/)).not.toBeInTheDocument();
+  });
+
+  // #1286: a sync that fails reports beside Sync from Meta in a line that's always there, so nothing above the list moves.
+  it("reports a failed automatic sync in the sync line under 'Your campaigns', not as a banner above the page", async () => {
+    localStorage.clear();
+    vi.stubGlobal("fetch", vi.fn((url: string) => url.startsWith("/api/campaigns/sync") ? Promise.reject(new Error("offline")) : Promise.resolve(Response.json({ forms: [] }))));
+    view(true);
+    const message = await screen.findByText("Couldn't reach Meta. Check your connection, then try Sync from Meta again.");
+    const line = message.closest("[data-sync-status]");
+    expect(line).not.toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+    const heading = screen.getByRole("heading", { name: /Your campaigns/ });
+    expect(heading.compareDocumentPosition(line!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("reports a malformed success response and retries the same page", async () => {

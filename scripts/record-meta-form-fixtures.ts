@@ -6,13 +6,14 @@
  *
  * Uses META_SYSTEM_USER_TOKEN / META_AD_ACCOUNT_ID / META_PAGE_ID; tokens are stripped.
  */
+import "./lib/meta-write-gate";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { metaClientFromEnv } from "./lib/meta-env";
 
 type Exchange = { method: string; path: string; status: number; body: unknown };
 
-const GRAPH = "https://graph.facebook.com/v21.0/";
+const GRAPH = "https://graph.facebook.com/v26.0/";
 const tape: Exchange[] = [];
 const realFetch = globalThis.fetch;
 
@@ -25,7 +26,7 @@ globalThis.fetch = async (input, init) => {
   if (body && "access_token" in body) body.access_token = "REDACTED";
   const parsed = new URL(url);
   parsed.searchParams.delete("access_token");
-  tape.push({ method: "GET", path: parsed.pathname.replace("/v21.0/", "") + parsed.search, status: response.status, body });
+  tape.push({ method: "GET", path: parsed.pathname.replace("/v26.0/", "") + parsed.search, status: response.status, body });
   return response;
 };
 

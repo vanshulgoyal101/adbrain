@@ -168,7 +168,7 @@ export function BrandAssets({
     <Card>
       {confirmDialog}
       <CardHeader>
-        <CardTitle>Brand assets</CardTitle>
+        <CardTitle as="h2">Brand assets</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
         <form onSubmit={onUpload} className="flex flex-col gap-3">
@@ -250,9 +250,10 @@ export function BrandAssets({
                   data-product-event="asset.delete"
                   disabled={uploading || deleting}
                   aria-label="Delete asset"
-                  className="absolute right-1.5 top-1.5 rounded-md bg-black/60 p-1.5 text-white opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 after:absolute after:-bottom-4 after:-left-4 after:right-0 after:top-0 after:content-[''] max-sm:right-0 max-sm:top-0 max-sm:rounded-none max-sm:rounded-bl-md max-sm:opacity-100"
+                  // #1156: a 44 px button in the corner; the dark square inside stays 28 px (visible on touch).
+                  className="absolute right-0 top-0 grid h-11 w-11 place-items-start justify-items-end p-1.5 text-white opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 max-sm:p-0 max-sm:opacity-100"
                 >
-                  <Trash2 className="h-4 w-4" />
+                  <span className="rounded-md bg-black/60 p-1.5 max-sm:rounded-none max-sm:rounded-bl-md"><Trash2 className="h-4 w-4" /></span>
                 </button>
                 {a.notes && (
                   <p className="truncate px-2 py-1.5 text-xs text-slate-500">

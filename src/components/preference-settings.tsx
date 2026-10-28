@@ -77,7 +77,7 @@ export function PreferenceSettings({ businessId, initialState = null }: { busine
         <h2 id="preferences-heading" className="text-lg font-semibold text-slate-900">Ad preferences</h2>
         <p className="text-sm text-slate-600">Styles AdBrain remembers from your choices. What you ask for in Create always wins.</p>
       </div>
-      {state && <label className="flex items-center gap-2 text-sm text-slate-700">
+      {state && <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm text-slate-700">
         <input type="checkbox" checked={state.enabled} disabled={busy} onChange={() => change(state.enabled ? "pause" : "enable")}
           className="h-4 w-4" /> Use preferences
       </label>}

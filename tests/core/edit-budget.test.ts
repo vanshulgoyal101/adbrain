@@ -107,7 +107,7 @@ function replay(recorded: Exchange[]) {
     const url = new URL(String(input));
     url.searchParams.delete("access_token");
     const method = init?.method ?? "GET";
-    const path = url.pathname.replace("/v21.0/", "") + url.search;
+    const path = url.pathname.replace("/v26.0/", "") + url.search;
     const form = init?.body instanceof URLSearchParams ? Object.fromEntries([...init.body].filter(([key]) => key !== "access_token")) : {};
     graph.sent.push({ method, path, form });
     const index = graph.pending.findIndex(exchange => exchange.method === method && exchange.path === path);
@@ -231,6 +231,17 @@ describe("core: edit a launched campaign's daily budget (#774)", () => {
     expect(body).toMatchObject({ result: { before: { dailyRupees: 250 }, after: { dailyRupees: 150 }, notices: [expect.stringContaining("learning")] } });
     expect(writes()).toEqual([expect.objectContaining({ form: { daily_budget: "15000" } })]);
     expect(mirror()).toMatchObject({ daily_budget: 150 });
+  });
+
+  // #1146: a waiting new-audience copy holds the budget it was made with; the switch would drop this change.
+  it("refuses while a new audience waits to be switched on, before any Meta call", async () => {
+    storedDaily({ daily_budget: 250 });
+    store.state.tables.campaign_edit_operations = [{ id: "op-waiting", campaign_id: STORED, kind: "audience", state: "awaiting_switch", phase: "copy" }];
+    replay([]);
+    const { status, body } = await edit({ change: { dailyRupees: 150 } });
+    expect(status).toBe(409);
+    expect(body.error).toBe("A new audience is waiting for this campaign. Turn it on or cancel it first.");
+    expect(graph.sent).toEqual([]);
   });
 
   // Reviewer on #901: a running campaign's daily budget is held by its AdBrain reservation (customer_ad_campaign_guard).

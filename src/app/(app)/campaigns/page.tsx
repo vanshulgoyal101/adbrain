@@ -4,12 +4,19 @@ import { clientCreative } from "@/lib/creative/client-receipt";
 import Link from "next/link";
 import { Building2 } from "lucide-react";
 import { Campaigns } from "@/components/campaigns";
+import { SetupGoLive } from "@/components/setup-go-live";
+import { BUDGET_PRESETS } from "@/lib/campaign/budget";
+import { setupPhone } from "@/lib/brand/setup-fields";
+import { maskWhatsAppNumber } from "@/lib/meta/whatsapp-status-shared";
+import { fundingMode } from "@/lib/payments/operator-funding";
+import { canUseMetaConnect } from "@/lib/meta/pilot-access";
 import { adResultsEnabled } from "@/lib/campaign/ad-results-store";
 import { draftDtoSchema, type DraftDTO } from "@/lib/campaign/connect-contracts";
 import { listEditableDrafts } from "@/lib/campaign/draft-repository";
 import { requireOwnedBusiness } from "@/lib/meta/connection-access";
 import { createClient } from "@/lib/supabase/server";
 import { ReadyAdsNextStep } from "@/components/ready-ads-next-step";
+import { isProspectSession } from "@/lib/prospect-session";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
@@ -17,10 +24,12 @@ import {
   getMetaConnection,
 } from "@/lib/meta/credentials";
 import {
+  getActiveCampaignBudgets,
   getApprovedCreatives,
   getCampaignPage,
   getLatestResultsWithEnquiries,
   getPrimaryBusiness,
+  getSpendLimits,
 } from "@/lib/supabase/queries";
 
 export const metadata = { title: "Campaigns" };
@@ -68,16 +77,37 @@ export default async function CampaignsPage({
     ...page,
     results: await getLatestResultsWithEnquiries(page.campaigns.map((campaign) => campaign.id)),
   }));
-  const [approved, page, connection, drafts] = await Promise.all([
+  // #1342: the Settings cap and the live budgets, for the cap line; on error the line is left out and Activate still refuses.
+  const spendCap = Promise.resolve()
+    .then(() => Promise.all([getSpendLimits(business.id), getActiveCampaignBudgets(business.id)]))
+    .then(([limits, active]) => ({ capRupees: limits.weeklyCapRupees, active }))
+    .catch(() => null);
+  const [approved, page, connection, drafts, weeklyCap] = await Promise.all([
     getApprovedCreatives(business.id).then((rows) => rows.map(clientCreative)),
     campaignData,
     getMetaConnection(business.id),
     savedDrafts(business.id),
+    spendCap,
   ]);
   const metaReady = connection.ready;
   const reconnectBy = connection.source === "oauth" && !connection.expired ? reconnectByLabel(connection.tokenExpiresAt) : null;
   const campaigns = page.campaigns;
   const requested = typeof params.creatives === "string" ? params.creatives.split(",") : [];
+  // #1271: Go live's chip; only the offered amounts are taken from the address.
+  const chosenBudget = BUDGET_PRESETS.find((amount) => String(amount) === params.budget);
+
+  // #1271 (#1251 WS1 step 3): a first-timer with ready ads and no campaign yet gets Go live; `?all=1` opens this page.
+  // Before App Review an owner who can't connect still gets ReadyAdsNextStep below (#336).
+  const canConnect = async () => metaReady || await createClient().then((supabase) => supabase.auth.getUser())
+    .then(({ data }) => Boolean(data.user && canUseMetaConnect(data.user.id))).catch(() => false);
+  if (params.all !== "1" && !campaigns.length && approved.length && await canConnect()) {
+    const picked = approved.filter((creative) => requested.includes(creative.id));
+    const ads = (picked.length ? picked : approved).slice(0, 3);
+    const funding = await fundingMode(business.id).catch(() => null);
+    const masked = business.phone ? setupPhone(business.phone) : null;
+    return <SetupGoLive business={business} ads={ads} pageConnected={metaReady} funding={funding}
+      whatsappNumber={masked ? maskWhatsAppNumber(`+91${masked}`) : null} weeklyCap={weeklyCap} />;
+  }
 
   return (
     <div>
@@ -94,7 +124,7 @@ export default async function CampaignsPage({
       <div className="mt-6">
         {/* Before Meta's App Review a new owner can't connect, so the setup form would be a dead end (#336). */}
         {!metaReady && !campaigns.length && approved.length ? (
-          <ReadyAdsNextStep approved={approved} phone={business.phone ?? null} businessId={business.id} />
+          <ReadyAdsNextStep approved={approved} phone={business.phone ?? null} businessId={business.id} sample={await isProspectSession()} />
         ) : <Campaigns
           business={business}
           approved={approved}
@@ -108,7 +138,8 @@ export default async function CampaignsPage({
           metaReady={metaReady}
           adResults={adResultsEnabled()}
           adAccountId={connection.adAccountId ?? ""}
-          newCampaign={params.new === "1" ? { creativeIds: requested, review: params.review === "1" } : undefined}
+          weeklyCap={weeklyCap}
+          newCampaign={params.new === "1" ? { creativeIds: requested, review: params.review === "1", budget: chosenBudget } : undefined}
         />}
       </div>
     </div>

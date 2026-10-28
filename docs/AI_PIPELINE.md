@@ -235,7 +235,9 @@ feedback to assess unnecessary questions, abandonment and time to a useful draft
    campaigns open WhatsApp: an India-based phone (#235) or a saved WhatsApp message (`contactChannel`,
    #1147). The ask is in the ad's language ("Message us on WhatsApp", "WhatsApp पर मैसेज करें",
    "WhatsApp par message karein", "WhatsApp ਤੇ ਮੈਸੇਜ ਕਰੋ"; Indic words shaped like the rest, #1177).
-   Others show their phone number, as do designs saved before #1147. Review warns, without
+   Others show their phone number, as do designs saved before #1147. A WhatsApp business's concept
+   gets no phone or email and is told its button opens a chat; when the copy's last line doesn't mention
+   WhatsApp, that same ask is added as the last line, in the ad's language ($0, no repair). Review warns, without
    blocking, when such a picture goes to a form campaign, and offers "Switch to WhatsApp".
 6. Save usage receipts and report partial failures independently of successful rows.
 
@@ -390,7 +392,9 @@ other model left, the original timeout or truncation error is thrown. Each
 attempt reports a sanitized failure code (`TIMEOUT`, `DEADLINE` for the caller's
 own deadline, `ABORTED`, `TRUNCATED`, `EMPTY`, `TRANSPORT`, `HTTP_<status>`) and
 latency. Usage rows keep it in `metadata.failure` and `ai.completion` events as
-`errorCode: LLM_<code>`. System prompts, Gemini thinking headroom, OpenRouter reasoning exclusion, and
+`errorCode: LLM_<code>`. A 429 whose message names the limit (Groq: "on tokens per minute (TPM): Limit …,
+Used …, Requested …") also records `rateLimitType`, `rateLimitLimit`, `rateLimitUsed` and `rateLimitRequested`
+on the planner's and assistant's failed attempts (#1200); never the message or org id. System prompts, Gemini thinking headroom, OpenRouter reasoning exclusion, and
 provider-reported usage retain their facade semantics. SDK-recomputed totals are
 not substituted for the provider's original counts.
 

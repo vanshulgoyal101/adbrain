@@ -26,7 +26,7 @@ export function Instructions({
   return (
     <Card>
       <CardHeader className="flex items-center justify-between gap-2">
-        <CardTitle>Ad instructions</CardTitle>
+        <CardTitle as="h2">Ad instructions</CardTitle>
         <Button
           size="sm"
           variant="outline"

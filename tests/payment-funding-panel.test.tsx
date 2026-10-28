@@ -203,7 +203,7 @@ describe("production checkout with synthetic responses", () => {
     await waitFor(() => expect(opened).toHaveBeenCalledTimes(1));
     expect(screen.getByText(OPERATOR_MANAGED_POLICY.serviceScope)).toBeInTheDocument();
     expect(screen.getByText(OPERATOR_MANAGED_POLICY.refundTerms)).toBeInTheDocument();
-    expect(screen.getByText(/The operator pays Meta separately\. Advertising allocation/)).toBeInTheDocument();
+    expect(screen.getByText(/The operator pays Meta separately\. Your ad budget is not yet a confirmed Meta balance\./)).toBeInTheDocument();
     expect(options).toMatchObject({ key: "rzp_live_fixture", amount: 1_000_000, order_id: "order_fixture", retry: { enabled: false } });
     expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toMatchObject({ businessId, termsHash: livePolicy.hash, acceptTerms: true });
     act(() => options.handler({ razorpay_order_id: "order_fixture", razorpay_payment_id: "pay_fixture", razorpay_signature: "b".repeat(64) }));
@@ -225,6 +225,9 @@ describe("production checkout with synthetic responses", () => {
     await screen.findByText("Ready for payment");
     expect(screen.getByRole("heading", { name: "Payment verification" })).toBeInTheDocument();
     expect(screen.getByText("Previous payments")).toBeInTheDocument();
+    // #1235: the verification breakdown names no service share.
+    expect(screen.getByText("Checkout test: no ad budget is added")).toBeInTheDocument();
+    expect(screen.queryByText("Service allocation")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Continue saved checkout" })).not.toBeInTheDocument();
     fireEvent.load(screen.getByTestId("checkout-script"));
     fireEvent.click(screen.getByRole("checkbox"));
@@ -304,26 +307,26 @@ describe("production checkout with synthetic responses", () => {
       fireEvent.load(screen.getByTestId("checkout-script"));
     }
 
-    it("says pay-as-you-go: Ad money title and the 80/20 line, no annual wording (#225)", async () => {
+    it("says pay-as-you-go: Ad money title, no split and no annual wording (#225, #1235)", async () => {
       await mountAnnual();
       expect(screen.getByRole("heading", { name: "Ad money" })).toBeInTheDocument();
-      expect(screen.getByText("Pay any amount from \u20b9500. 80% goes to your ads (including Meta's GST) and 20% is AdBrain's service fee. Top up any time.")).toBeInTheDocument();
+      expect(screen.getByText("Pay any amount from \u20b9500. It becomes your ad budget, including Meta's GST, and AdBrain makes and runs your ads. Top up any time.")).toBeInTheDocument();
       expect(screen.queryByText(/Annual/)).not.toBeInTheDocument();
     });
 
-    it("takes an amount, shows the 80% ad money and 20% service split, and creates the order for that amount", async () => {
+    it("takes an amount, shows only what is paid (no ad-budget amount, #1235), and creates the order for that amount", async () => {
       await mountAnnual();
       const input = screen.getByRole("spinbutton", { name: "Amount to pay (₹)" });
       expect(input).toHaveValue(10_000);
-      expect(screen.getByText("Ad money, including Meta GST (80%)").nextSibling).toHaveTextContent("₹8,000");
-      expect(screen.getByText("AdBrain service (20%)").nextSibling).toHaveTextContent("₹2,000");
+      expect(screen.getByText("You pay").nextSibling).toHaveTextContent("₹10,000");
+      expect(screen.queryByText(/Ad budget for|AdBrain service|₹8,000|₹2,000/)).not.toBeInTheDocument();
       fireEvent.change(input, { target: { value: "1250" } });
       expect(screen.getByRole("button", { name: "Pay ₹10,000" })).toBeDisabled();
       fireEvent.click(screen.getByRole("button", { name: "Update amount" }));
       await screen.findByText("Amount updated.");
       expect(fetchMock.mock.calls.at(-1)![0]).toContain("amountPaise=125000");
-      expect(screen.getByText("Ad money, including Meta GST (80%)").nextSibling).toHaveTextContent("₹1,000");
-      expect(screen.getByText("AdBrain service (20%)").nextSibling).toHaveTextContent("₹250");
+      expect(screen.getByText("You pay").nextSibling).toHaveTextContent("₹1,250");
+      expect(screen.queryByText(/₹1,000|₹250/)).not.toBeInTheDocument();
       fireEvent.click(screen.getByRole("checkbox"));
       fireEvent.click(screen.getByRole("button", { name: "Pay ₹1,250" }));
       await waitFor(() => expect(opened).toHaveBeenCalledTimes(1));
@@ -527,12 +530,12 @@ describe("managed billing settings", () => {
     render(<ManagedBilling connection={connected} testBusinessId={businessId} />);
     expect(screen.getByRole("region", { name: "Razorpay test checkout" })).toBeInTheDocument();
   });
-  it("shows planned economics without presenting an enabled payment product", () => {
+  it("shows the offer without AdBrain's split or an enabled payment product (#1235)", () => {
     render(<ManagedBilling connection={connected} />);
     expect(screen.getByRole("region", { name: "Managed billing" })).toBeInTheDocument();
     expect(screen.getByText("Not enabled")).toBeInTheDocument();
-    expect(screen.getByText("20%")).toBeInTheDocument();
-    expect(screen.getByText("80%")).toBeInTheDocument();
+    expect(screen.getByText(/Your ad budget pays for Meta's ads and GST; AdBrain makes and runs the ads\./)).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/\b(80|20)\s?%|service (fee|allocation)|allocation|margin/i);
     expect(screen.getByText("Current operator")).toBeInTheDocument();
     expect(screen.getByText("Vanshul Goyal")).toBeInTheDocument();
     expect(screen.getByText("Operator-managed")).toBeInTheDocument();
@@ -564,7 +567,7 @@ describe("managed billing settings", () => {
 
   it("shows the approved refund boundary without a funding-setup or payment action", () => {
     render(<ManagedBilling connection={connected} />);
-    expect(screen.getByText(/Service allocation is earned only after/)).toBeInTheDocument();
+    expect(screen.getByText(/your unused ad budget is refundable once pending Meta costs are settled/)).toBeInTheDocument();
     expect(screen.queryByText("Funding options")).not.toBeInTheDocument();
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
