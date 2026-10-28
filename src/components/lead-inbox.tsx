@@ -367,14 +367,14 @@ export function LeadInbox({
         <h2 id="enquiries-empty-title" className="text-[17px] font-semibold leading-6 text-slate-900">No enquiries yet</h2>
         <p className="text-[15px] leading-[22px] text-slate-600">
           {metaReady
-            ? "People who message you from an ad show up here. Reply fast: they often pick the first business that answers."
-            : "Connect Meta so people who tap your ads can reach you here."}
+            ? "Enquiries from your ads show up here: form enquiries on their own, WhatsApp chats when you add them. Reply fast: people often pick the first business that answers."
+            : "Connect your Facebook Page to run ads. Enquiries from them show up here."}
         </p>
         <Link href={!metaReady ? "/settings" : offerAlerts ? "/settings#whatsapp-alerts-title" : "/campaigns"}
           className={`mt-2 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md px-4 text-sm font-medium sm:w-auto ${solid
             ? "bg-[var(--primary)] text-white"
             : "border border-slate-300 text-slate-800 hover:bg-slate-50"}`}>
-          {!metaReady ? "Connect Meta" : offerAlerts ? "Get a WhatsApp alert for each one" : "See your campaigns"}
+          {!metaReady ? "Connect Facebook Page" : offerAlerts ? "Get a WhatsApp alert for form enquiries" : "See your campaigns"}
         </Link>
         {metaReady && addEnquiryFor && (adding
           ? <WhatsAppEnquiries compact campaignId={addEnquiryFor.campaignId} spend={addEnquiryFor.spend} enquiries={addEnquiryFor.enquiries}
