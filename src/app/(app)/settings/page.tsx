@@ -177,7 +177,8 @@ async function ConnectionSettings({ businessId, searchParams, whatsapp }: {
       )}
       {whatsapp}
       <BillingSection mode={mode} connection={result.connection} testBusinessId={isRazorpayTestEnabled() ? businessId : undefined}
-        liveBusinessId={isProductionPaymentConfigured() ? businessId : undefined} initialBalance={initialBalance} />
+        liveBusinessId={isProductionPaymentConfigured() ? businessId : undefined} initialBalance={initialBalance}
+        billingTab={typeof params.billing === "string" ? params.billing : null} />
     </>
   );
 }

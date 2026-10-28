@@ -3,17 +3,26 @@ import type { MetaConnection } from "@/lib/meta/credentials";
 import { TestCheckout } from "@/components/test-checkout";
 import { ProductionCheckout } from "@/components/production-checkout";
 import { CustomerBalance } from "@/components/customer-balance";
+import { BillingTabs, type BillingTab } from "@/components/billing-tabs";
 import type { CustomerBalanceView as Balance } from "@/lib/payments/customer-balance-contracts";
 
 type BillingConnection = Pick<MetaConnection, "adAccountId" | "ready" | "pending" | "expired">;
 
-export function ManagedBilling({ connection, testBusinessId, liveBusinessId, initialBalance = null }: {
+/** #1358: a business with any money shows its Ad budget first; one that hasn't paid yet starts on Payments. */
+export function initialBillingTab(balance: Balance | null, requested?: string | null): BillingTab {
+  if (requested === "payments" || requested === "budget") return requested;
+  const anyMoney = balance && [balance.remainingPaise, balance.reservedPaise, balance.mediaCostPaise, balance.taxCostPaise, balance.refundedPaise].some((paise) => paise > 0);
+  return anyMoney ? "budget" : "payments";
+}
+
+export function ManagedBilling({ connection, testBusinessId, liveBusinessId, initialBalance = null, billingTab }: {
   connection: BillingConnection | null; testBusinessId?: string; liveBusinessId?: string; initialBalance?: Balance | null;
+  /** `?billing=payments|budget` from Settings links (e.g. Go live's Add money). */
+  billingTab?: string | null;
 }) {
-  if (liveBusinessId) return <>
-    <ProductionCheckout key={liveBusinessId} businessId={liveBusinessId} />
-    <CustomerBalance key={`allowance-${liveBusinessId}`} businessId={liveBusinessId} initialBalance={initialBalance} />
-  </>;
+  if (liveBusinessId) return <BillingTabs key={liveBusinessId} initialTab={initialBillingTab(initialBalance, billingTab)}
+    budget={<CustomerBalance key={`allowance-${liveBusinessId}`} businessId={liveBusinessId} initialBalance={initialBalance} />}
+    payments={<ProductionCheckout key={liveBusinessId} businessId={liveBusinessId} />} />;
   const connectionStatus = !connection ? "Temporarily unavailable"
     : connection.expired ? "Reconnect required"
       : connection.ready ? "Connected"
