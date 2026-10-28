@@ -14,8 +14,9 @@ import {
   type ScoreAiCall,
   type ScoreEvent,
   type ScoreLaunch,
+  type ScoreManageSnapshot,
 } from "@/lib/observability/core-scoreboard";
-import { observeRoute } from "@/lib/observability/logger";
+import { observeRoute, recordProductEvent } from "@/lib/observability/logger";
 import { isMetaTestLead } from "@/lib/leads/test-lead";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -24,6 +25,8 @@ export const runtime = "nodejs";
 const PAGE = 1000;
 const MAX_PAGES = 30;
 const PAGE_IDS = 100;
+/** #1543: one per scheduled run, so Manage's past days can be judged from data. */
+const MANAGE_SNAPSHOT = "scoreboard.manage";
 
 /**
  * Daily core scoreboard (#681), read-only: each core step's number against its target, smoke
@@ -147,6 +150,9 @@ async function handleGET(request: Request) {
     if ([...creators].some((id) => !known.has(id))) throw new Unavailable();
     const brandOwners = identities.filter((user) => creators.has(user.id))
       .map((user) => ({ id: user.id, signedUpAt: user.created_at ?? null, internal: isInternalUser(user) }));
+    // #1543: earlier runs' Manage snapshots for the 7-day row; unreadable leaves the row out, never the board.
+    const { data: manageHistory } = await db.from("product_events").select("created_at, attributes")
+      .eq("name", MANAGE_SNAPSHOT).gte("created_at", sevenDays).order("created_at").abortSignal(signal());
     const board = buildScoreboard({
       events: [...events, ...planRequests],
       aiCalls,
@@ -158,9 +164,11 @@ async function handleGET(request: Request) {
       brandOwners,
       excludedBusinessIds: (owned as Array<{ id: string }>).map((row) => row.id),
       northStar,
+      manageHistory: Array.isArray(manageHistory) ? manageHistory as ScoreManageSnapshot[] : [],
       since: new Date(since),
       until,
     });
+    recordProductEvent({ kind: "system", name: MANAGE_SNAPSHOT, outcome: "success", attributes: board.manage });
     return NextResponse.json({ ok: true, ...board });
   } catch {
     return NextResponse.json({ ok: false, error: "Scoreboard data is unavailable." }, { status: 503 });

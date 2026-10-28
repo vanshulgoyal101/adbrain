@@ -46,11 +46,12 @@ async function chromeText(page: Page) {
 /**
  * Step 2's outcome within one budget. The free AI providers are sometimes busy (#410), so, as a person would, tap
  * Try again (or Check again) up to twice; past that, fail with the words on screen instead of waiting out the clock.
+ * If step 1's facts changed since the last ads, step 2 asks first (#1432): tap 'Make 3 ads', as the owner would.
  */
 async function waitForAds(page: Page, budgetMs = 330_000, retries = 2) {
   const deadline = Date.now() + budgetMs;
   const ready = page.getByRole("heading", { name: "Your ads are ready" });
-  const stuck = page.getByText(/We couldn.t make your ads|still being made|went wrong/i).first();
+  const stuck = page.getByText(/We couldn.t make your ads|still being made|went wrong|Make ads from your details/i).first();
   const said: string[] = [];
   for (;;) {
     const left = deadline - Date.now();
@@ -60,7 +61,7 @@ async function waitForAds(page: Page, budgetMs = 330_000, retries = 2) {
     said.push((await stuck.innerText()).trim());
     if (said.length > retries) return { ok: false, detail: `"${said.join('", then "')}"` };
     if (/still being made/i.test(said.at(-1)!)) await page.waitForTimeout(Math.min(30_000, Math.max(0, deadline - Date.now() - 5_000)));
-    await page.getByRole("button", { name: /^(Try|Check) again$/ }).click();
+    await page.getByRole("button", { name: /^(Try again|Check again|Make 3 ads)$/ }).click();
     await stuck.waitFor({ state: "hidden", timeout: 10_000 }).catch(() => {});
   }
 }

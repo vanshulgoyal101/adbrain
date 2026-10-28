@@ -18,6 +18,7 @@ import {
   type ScoreAiCall,
   type ScoreEvent,
   type ScoreLaunch,
+  type ScoreManageSnapshot,
 } from "../src/lib/observability/core-scoreboard";
 import { META_TEST_LEAD_PATTERN } from "../src/lib/leads/test-lead";
 import { readOnlyQuery } from "./lib/prod-query.mjs";
@@ -40,7 +41,7 @@ const weekStart = quote(new Date(week.start).toISOString());
 const weekEnd = quote(new Date(week.end).toISOString());
 const sevenDays = quote(new Date(until.getTime() - 7 * 86_400_000).toISOString());
 
-const [owned, events, aiCalls, launches, users, active, businesses, changes, campaigns, pageViews, helpTaps, leads] = await Promise.all([
+const [owned, events, aiCalls, launches, users, active, businesses, changes, campaigns, pageViews, helpTaps, leads, manageHistory] = await Promise.all([
   readOnlyQuery(`select id from public.businesses where owner_id in (${list(smoke)})`),
   readOnlyQuery(`select name, outcome, user_id, business_id, duration_ms, attributes,
   ${iso()} from public.product_events
@@ -65,6 +66,8 @@ where name = 'page.view' and user_id is not null and created_at >= ${weekStart} 
 where name = 'ui.action' and attributes->>'action' = 'help.whatsapp' and user_id is not null and created_at >= ${weekStart}`),
   readOnlyQuery(`select business_id, ${iso("created_time")}, ${iso()}, ${iso("first_contacted_at")} from public.leads
 where created_at >= ${sevenDays} and source in ('meta_form', 'whatsapp_manual') and coalesce(full_name, '') not ilike ${quote(META_TEST_LEAD_PATTERN)}`),
+  // #1543: the scheduled runs' Manage snapshots, for the 7-day row.
+  readOnlyQuery(`select ${iso()}, attributes from public.product_events where name = 'scoreboard.manage' and created_at >= ${sevenDays}`),
 ]);
 type Identity = { id: string; email: string | null; email_confirmed_at: string | null; created_at: string };
 const identities = users as Identity[];
@@ -99,6 +102,7 @@ const board = buildScoreboard({
   brandOwners,
   excludedBusinessIds: (owned as Array<{ id: string }>).map((row) => row.id),
   northStar,
+  manageHistory: manageHistory as ScoreManageSnapshot[],
   since,
   until,
 });

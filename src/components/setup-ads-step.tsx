@@ -342,14 +342,14 @@ export function SetupAdsStep({ business, initialAds, sample = false, earlier = f
   const story = storyFor(slots);
   const count = `${ids.length} ${ids.length === 1 ? "ad" : "ads"}`;
   const waiting = !making && !ads.length && !error && earlier;
-  const primaryLabel = making ? "Making your ads…" : !ids.length ? "Pick at least 1 ad"
+  const primaryLabel = making ? "Making your ads…" : coming > 0 ? `${coming} more on the way…` : !ids.length ? "Pick at least 1 ad"
     : sample ? (downloading ? "Preparing download…" : `Download sample pack (${ids.length})`) : `Continue with ${count}`;
 
   return (
     <SetupSpine step={2} saved={saveError ? "failed" : null} beforeLeave={beforeLeave}
       primary={waiting ? { label: `Make ${FULL_BATCH} ads`, onClick: () => void makeAds(FULL_BATCH) } : sample
-        ? { label: primaryLabel, disabled: making || downloading || ids.length === 0, onClick: () => void downloadSamplePack() }
-        : { label: primaryLabel, disabled: making || ids.length === 0, href: `/campaigns?new=1&creatives=${ids.join(",")}` }}>
+        ? { label: primaryLabel, disabled: making || coming > 0 || downloading || ids.length === 0, onClick: () => void downloadSamplePack() }
+        : { label: primaryLabel, disabled: making || coming > 0 || ids.length === 0, href: `/campaigns?new=1&creatives=${ids.join(",")}` }}>
       {making ? (
         <div aria-live="polite" className="flex flex-col items-start gap-3 py-10">
           <Loader2 className="h-6 w-6 animate-spin text-primary" aria-hidden="true" />
@@ -370,7 +370,8 @@ export function SetupAdsStep({ business, initialAds, sample = false, earlier = f
         </div>
       ) : (
         <>
-          <h2 className="text-xl font-semibold text-slate-950">Your ads are ready</h2>
+          {/* #1564: opened mid-batch, it isn't ready until the rest lands (or the batch ends short). */}
+          <h2 className="text-xl font-semibold text-slate-950">{coming > 0 ? "Making your ads…" : "Your ads are ready"}</h2>
           <p className="mt-1 text-sm text-slate-600">{sample
             ? "All of them go in the sample pack, each marked 'Sample: not live'. Tap an ad to leave it out, or the pencil to edit its words."
             : `We picked the ${Math.min(SETUP_PICKS, ads.length)} strongest. Tap an ad to change your pick, or the pencil to edit its words.`}</p>
