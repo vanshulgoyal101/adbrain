@@ -122,6 +122,7 @@ export function SetupBusinessStep({ business }: { business: Business | null }) {
       // Only empty fields are filled; what the owner typed stays.
       const filled: SetupBusinessFields = {
         ...current,
+        name: current.name.trim() ? current.name : found.name ?? "",
         vertical: current.vertical.trim() ? current.vertical : found.vertical ?? "",
         locations: current.locations.trim() ? current.locations : (found.locations ?? []).join("\n"),
         offer: current.offer.trim() ? current.offer : found.offers?.[0] ?? "",

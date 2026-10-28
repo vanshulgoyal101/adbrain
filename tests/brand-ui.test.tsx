@@ -110,7 +110,7 @@ describe("<BrandForm> prefill", () => {
 
   // #1317: a prospect with no website fills Brand from a pasted bio or listing, through the same autofill.
   it("fills a new Brand from a pasted bio when there's no website", async () => {
-    vi.mocked(global.fetch).mockResolvedValue({ ok: true, json: async () => ({ extraction: { description: "Rooftop solar for homes", phone: "+919829012345" } }) } as unknown as Response);
+    vi.mocked(global.fetch).mockResolvedValue({ ok: true, json: async () => ({ extraction: { description: "Rooftop solar for homes", phone: "+919829012345", name: "SunPeak Solar" } }) } as unknown as Response);
     render(<BrandForm business={null} />);
     fireEvent.click(screen.getByRole("button", { name: "No website? Paste a bio or listing" }));
     const fill = screen.getByRole("button", { name: "Fill from this text" });
@@ -121,6 +121,19 @@ describe("<BrandForm> prefill", () => {
     const [url, init] = vi.mocked(global.fetch).mock.calls[0];
     expect(url).toBe("/api/brand/autofill");
     expect(JSON.parse(String(init!.body))).toEqual({ text: "SunPeak Solar: rooftop solar for homes in Jaipur. Call 98290 12345" });
+    // #1379: the required name is filled too, and the note says where it came from.
+    expect(screen.getByPlaceholderText("Your business name")).toHaveValue("SunPeak Solar");
+    expect(screen.getByText(/^Filled from your text: name, description, phone number\./)).toBeInTheDocument();
+  });
+
+  it("#1379: autofill never replaces a name the owner typed", async () => {
+    vi.mocked(global.fetch).mockResolvedValue({ ok: true, json: async () => ({ extraction: { description: "Rooftop solar for homes", name: "Solaride" } }) } as unknown as Response);
+    render(<BrandForm business={null} />);
+    fireEvent.change(screen.getByPlaceholderText("Your business name"), { target: { value: "SunPeak" } });
+    fireEvent.change(document.querySelector('input[name="website"]')!, { target: { value: "solaride.in" } });
+    fireEvent.click(screen.getByRole("button", { name: /autofill/i }));
+    await waitFor(() => expect(screen.getByPlaceholderText("What your business does, in a sentence or two.")).toHaveValue("Rooftop solar for homes"));
+    expect(screen.getByPlaceholderText("Your business name")).toHaveValue("SunPeak");
   });
 
   it("starts empty for a brand new business", () => {
