@@ -273,6 +273,9 @@ function nightlyExport(dry) {
   };
   if (ok) {
     log(`nightly export ${name}: ${tail(restored).slice(0, 200)}`);
+    // #1891: after a good backup, drop the core smoke's old unreferenced images so Storage stays under the free plan.
+    const pruned = spawnSync(process.execPath, ["scripts/prune-smoke-storage.mjs", "--apply"], { cwd: WT, encoding: "utf8", timeout: 5 * 60_000 });
+    log(`smoke storage prune: ${tail(pruned).slice(0, 200)}`);
     for (const old of exportsToPrune([...names, `${name}.tar.gz.cms`])) rmSync(join(BACKUP_DIR, old), { recursive: true, force: true });
     return;
   }
