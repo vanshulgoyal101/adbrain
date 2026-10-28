@@ -64,7 +64,12 @@
     "exportAction": "विज्ञापन डाउनलोड करें",
     "campaignsTitle": "चालू करने से पहले कैंपेन जाँचें",
     "campaignsDetail": "{paused} रुके हुए, {draft} ड्राफ़्ट। विज्ञापन, ग्राहक और बजट जाँचें; तैयार होने तक रुका रहने दें।",
-    "campaignsAction": "कैंपेन जाँचें"
+    "campaignsAction": "कैंपेन जाँचें",
+    "planFreeEndsTitle": "आपका फ्री महीना {date} को खत्म होगा",
+    "planFreeEndsDetail": "फिर ₹999 महीना। कोई ऑटो-डेबिट नहीं; आप जब चाहें तब भरें।",
+    "planDueTitle": "आपका ₹999 का प्लान बाकी है",
+    "planDueDetail": "चल रहे विज्ञापन चलते रहेंगे। नए विज्ञापन और कैंपेन भुगतान के बाद बनेंगे।",
+    "planPayAction": "₹999 भरें"
   },
   "settings": {
     "language": "ऐप की भाषा",
