@@ -32,13 +32,12 @@ feature branch or a passing local test.
 | [Architecture](ARCHITECTURE.md) | Where is behavior owned, and how do requests cross trust boundaries? |
 | [Data model](DATA_MODEL.md) | Which tables, relationships, grants, RPCs, buckets and migrations support the app? |
 | [AI pipeline](AI_PIPELINE.md) | How do interviews, concepts, images, composition, retries, cache and accounting work? |
-| [Meta connection](META_CONNECT.md) | How do consent, selection, capabilities, paused creation and activation work? |
+| [Meta connection](META_CONNECT.md) | How do consent, selection, capabilities, paused creation and activation work, and what does Meta's App Review need? |
 | [Testing](TESTING.md) | Which commands are safe locally and what does each verification layer prove? |
 | [Operations](OPERATIONS.md) | How do we diagnose partial work, stale spend, provider failures and retention problems? |
 | [Observability](OBSERVABILITY.md) | What is logged, how is it correlated, and what must never be collected? |
 | [Deployment](DEPLOY.md) | How is a target environment configured and smoke-tested? |
 | [Release policy](RELEASING.md) | What approvals and checks govern remote changes? |
-| [Meta approval readiness](META_APPROVAL_ACTION_PLAN.md) | What external review evidence must be prepared and verified? |
 | [Payment plan and readiness](PAYMENTS-PLAN.md) | What are the agreed economics, implemented payment boundaries and remaining live-rollout requirements? |
 | [Brand identity](BRAND-IDENTITY.md) | Which presentation and terminology conventions should the product follow? |
 
