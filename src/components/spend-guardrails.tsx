@@ -65,7 +65,7 @@ export function SpendGuardrails({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
+        <CardTitle as="h2" className="flex items-center gap-2">
           <ShieldCheck className="h-5 w-5 text-slate-500" aria-hidden="true" />
           Spend guardrails
         </CardTitle>
@@ -114,7 +114,7 @@ export function SpendGuardrails({
           </div>
         </div>
 
-        <label className="flex items-start gap-2 text-sm text-slate-700">
+        <label className="flex min-h-11 cursor-pointer items-start gap-2 py-2.5 text-sm text-slate-700">
           <input
             type="checkbox"
             className="mt-1 h-4 w-4 rounded border-slate-300"

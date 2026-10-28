@@ -327,6 +327,40 @@ Explicit `data: []` is a valid no-delivery response. Lead extraction prefers exa
 it never adds overlapping actions or matches arbitrary names containing `lead`.
 This does not certify attribution equivalence with every Ads Manager report.
 
+### Prospect accounts: prepare, then hand over (#1315, #1317)
+
+AdBrain is one business per account, so each prospect gets its own account; at signing the
+owner takes it over by its email. Keep prospect names in the private sales files, not here or
+in issues.
+
+**Prepare (sales, before the visit):**
+1. Sign in with a team plus-address, `<you>+prospect-<short>@<team domain>`. A confirmed team
+   address is internal (`isInternalUser`), so Create uses the free image providers and no paid
+   model (#466; CEO #1129: no paid spend until the owner tops up).
+2. Brand: **Autofill from website**, or **No website? Paste a bio or listing** with the shop's
+   Instagram bio, Google listing or catalogue text, pasted by hand (no scraping or unofficial
+   APIs). Confirm each proposed field and area chip, then Save.
+3. Create: make 3 ads, approve them, download. Don't connect Meta, start a campaign or add funds.
+   Downloads go through the export, which marks every picture 'Sample: not live'; Share and the
+   Assets tile's Download, Copy link and Open are hidden on a `+prospect` account, so no clean
+   picture leaves before hand-over. After hand-over they come back on their own.
+
+**Hand over (DevOps executes, QA reviews; a tenant step):**
+1. Read-only checks, all must hold:
+   `select authorization_status from public.meta_connections where business_id='<business id>';`
+   returns no row or `disconnected`;
+   `select count(*) from public.campaigns where business_id='<business id>';` is `0`.
+   If either fails, stop and ask on the issue.
+2. With the owner present, change the account's email to theirs (Supabase dashboard →
+   Authentication → the user → change email, or `auth.admin.updateUserById(<user id>, { email })`).
+3. The owner signs in with a one-time code sent to that email. Receiving the code is their
+   confirmation. Read back:
+   `select email, email_confirmed_at from auth.users where id='<user id>';` shows their address.
+   The account is no longer internal, so the normal owner rules (paid images, allowance) apply
+   from here.
+4. Post 'handed over' with the date on the issue (no names); the owner connects Meta on the
+   20-minute onboarding call (#1279).
+
 ### Scheduled Jobs
 
 **Supabase `pg_cron` runs the jobs on time** (#274,

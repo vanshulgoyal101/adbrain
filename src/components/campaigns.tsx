@@ -89,6 +89,7 @@ import type {
 } from "@/lib/campaign/connect-contracts";
 import { targetingInputSchema } from "@/lib/campaign/connect-contracts";
 import { campaignNameDate, defaultCampaignName, draftForSelection } from "@/lib/campaign/draft-name";
+import { REVIEW_AND_SPEND, whatsappExpectation } from "@/lib/campaign/expectations";
 import { campaignDestination } from "@/lib/campaign/outcomes";
 import { handoffRate } from "@/lib/campaign/whatsapp-handoff";
 import { reviewBlockerAlternative, reviewBlockerFix } from "@/lib/campaign/review-fix";
@@ -110,13 +111,14 @@ import { accountFundingSchema, activationConfirmationPayload, campaignDeliverySn
 import { activationWarnings, QUOTED_ASK_WITH_QUESTIONS, WHATSAPP_PICTURE_ON_FORM } from "@/lib/campaign/plan-check";
 import { cardVerdictInput, lastCampaignComparison } from "@/lib/campaign/card-verdict";
 import { verdict, type Comparison } from "@/lib/campaign/verdict";
-import { WAITING_COLUMNS, WAITING_WINDOW_MS, waitingByCampaign, type WaitingLeadRow } from "@/lib/leads/waiting";
+import { WAITING_COLUMNS, WAITING_DAYS, waitingByCampaign, type WaitingLeadRow } from "@/lib/leads/waiting";
 import { CampaignVerdict } from "@/components/campaign-verdict";
 import { campaignAttention } from "@/lib/campaign/health";
 import { campaignWhatsAppSummary } from "@/lib/campaign/results-summary";
 import { costPerCustomer } from "@/lib/campaign/real-enquiries";
 import { describeSkippedCampaigns, type SkippedCampaign } from "@/lib/campaign/sync-skips";
 import type { RerunPrefill } from "@/lib/campaign/rerun";
+import { activateTrustLine } from "@/lib/trust-lines";
 import type { AdReview, CampaignDeliverySnapshot } from "@/lib/meta/client";
 import { committedWords, freeRoomPaise, type AccountFunding } from "@/lib/campaign/funding-check";
 import { readCampaignRecovery, recoveryStorageKey, writeCampaignRecovery, type CampaignRecovery } from "@/lib/meta-connect-ui/recovery";
@@ -243,6 +245,9 @@ function keptLeadForm(current: string, forms: { id: string }[], lastUsed = ""): 
 }
 
 /** What a finished results refresh tells the owner (#671): new numbers, or none since the last fetch. */
+/** The clock, read in an event handler (#1333); kept outside the component for the compiler's purity rule. */
+const currentTime = () => Date.now();
+
 function refreshNotice(previous: CampaignResult | undefined, next: CampaignResult | undefined): string {
   const keys = ["impressions", "clicks", "leads", "spend", "conversations", "whatsapp_opens"] as const;
   if (!next) return "Checked just now: Meta has no results for this campaign yet.";
@@ -1335,7 +1340,7 @@ function BusinessCampaigns({
     } catch { /* no browser Supabase config (tests) */ }
     return () => { live = false; };
   }, [switchable]);
-  // #1274: enquiries nobody has contacted yet, from the last 24 h, per running campaign (owners read their own leads).
+  // #1274: enquiries waiting for a reply by the inbox's rule (#1260), per running campaign (owners read their own leads).
   const [waitingReplies, setWaitingReplies] = useState<Record<string, number>>({});
   // #1274 slice 2c: cards whose sentence already offers the pause; their "Which ad worked" doesn't repeat it.
   const [weakAdCards, setWeakAdCards] = useState<string[]>([]);
@@ -1348,7 +1353,7 @@ function BusinessCampaigns({
     try {
       void createBrowserClient().from("leads").select(WAITING_COLUMNS).in("campaign_id", liveIds.split(","))
         .eq("workflow_status", "new").is("first_contacted_at", null)
-        .gte("created_at", new Date(Date.now() - WAITING_WINDOW_MS).toISOString()).limit(500)
+        .gte("created_at", new Date(Date.now() - WAITING_DAYS * 86_400_000).toISOString()).limit(500)
         .then(({ data }) => {
           if (!live || !Array.isArray(data)) return;
           setWaitingReplies(waitingByCampaign(data as WaitingLeadRow[]));
@@ -1393,7 +1398,7 @@ function BusinessCampaigns({
       setActivationLearning({
         costPerResultRupees: typeof review.learning?.costPerResultRupees === "number" ? review.learning.costPerResultRupees : null,
         pausedAt: typeof review.learning?.pausedAt === "string" ? review.learning.pausedAt : null,
-        now: Date.now(),
+        now: currentTime(),
       });
       setActivationReview(campaign);
       if (!refreshing) setReviewOpens((opens) => opens + 1);
@@ -1415,6 +1420,12 @@ function BusinessCampaigns({
     setCardError(null);
     if (next === "active" && !confirmed) {
       setConnectionIntent({ kind: "review_activation", campaignId: c.id });
+      // #1333: a healthy connection goes straight to the activation review; the dialog is only for something to fix.
+      const connection = await createMetaConnectClient().status(business.id).catch(() => null);
+      if (connection?.authorization === "connected" && connection.selected && connection.capabilities?.canActivate?.state === "available") {
+        await openActivationReview(c, connection);
+        return;
+      }
       setConnectOpen(true);
       return;
     }
@@ -1570,6 +1581,8 @@ function BusinessCampaigns({
                       ? "Funded on Meta: set a spending limit on the Meta ad account first."
                       : "Funded on your Meta ad account: no spending limit set; Meta stops at the total limit above."}
                 </p>}
+                {/* #1292: the trust line beside the money decision. */}
+                <p className="mt-1 font-medium">{activateTrustLine(activationReview.daily_budget ?? 0, (activationReview.daily_budget ?? 0) * capDays)}</p>
                 <p className="mt-1">The ad sets and ads listed above stay paused. Meta reviews the copied ads before they deliver.</p>
                 {keptPaused.length > 0 && <p className="mt-1">{keptPaused.length === 1 ? "1 ad you paused from the card stays paused" : `${keptPaused.length} ads you paused from the card stay paused`}: AdBrain doesn&apos;t copy it back in.</p>}
               </div>
@@ -2114,11 +2127,11 @@ function BusinessCampaigns({
                   </div>}
                 </div>
 
-                {/* #761: what to expect, from AdBrain's own runs (#588 ledger). #1038: no lead-form figure until AdBrain has run lead forms. */}
+                {/* #761: what to expect, from AdBrain's own runs (#588 ledger; #1307: facts with n until 20 results). #1038: no lead-form figure until AdBrain has run lead forms. */}
                 <p className="-mt-2 text-xs text-slate-500">
                   What to expect: {destination === "whatsapp"
-                    ? <>in AdBrain&apos;s runs so far, a WhatsApp chat has cost about ₹150–180.</>
-                    : <>AdBrain hasn&apos;t run enough instant-form campaigns yet to quote a cost per enquiry.</>} Meta reviews new ads first, usually within 24 hours, and nothing spends until you activate.
+                    ? whatsappExpectation()
+                    : <>AdBrain hasn&apos;t run enough instant-form campaigns yet to quote a cost per enquiry.</>} {REVIEW_AND_SPEND}
                 </p>
 
                 {destination === "instant_form" && formsLoading && <p role="status" className="text-sm text-slate-500">Loading lead forms...</p>}

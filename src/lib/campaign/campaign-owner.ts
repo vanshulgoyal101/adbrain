@@ -14,13 +14,9 @@ export async function metaCampaignsOwnedElsewhere(businessId: string, metaCampai
   const ids = [...new Set(metaCampaignIds.filter((id): id is string => Boolean(id)))];
   if (!ids.length) return new Set();
   const { data, error } = await createAdminClient().from("campaigns")
-    .select("meta_campaign_id,business_id,created_at,raw").in("meta_campaign_id", ids);
+    .select("meta_campaign_id,business_id,created_at,source:raw->>source").in("meta_campaign_id", ids);
   if (error || !data) throw new Error("Campaign storage unavailable.");
-  const claims: CampaignClaim[] = (data as { meta_campaign_id: string; business_id: string; created_at: string; raw: unknown }[]).map(row => {
-    const source = (row.raw as { source?: unknown } | null)?.source;
-    return { meta_campaign_id: row.meta_campaign_id, business_id: row.business_id, created_at: row.created_at, source: typeof source === "string" ? source : null };
-  });
-  return campaignsOwnedElsewhere(claims, businessId);
+  return campaignsOwnedElsewhere(data as unknown as CampaignClaim[], businessId);
 }
 
 export async function campaignOwnedElsewhere(businessId: string, metaCampaignId: string | null | undefined): Promise<boolean> {

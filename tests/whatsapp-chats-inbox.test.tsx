@@ -21,15 +21,22 @@ describe("WhatsApp chats on Enquiries (#764)", () => {
     ]);
   });
 
-  it("shows each campaign's chats and lets the owner add a real enquiry from them", () => {
+  // #1260 (CPO): one quiet strip per campaign; Meta counts chats started, not people, and AdBrain can't read them.
+  it("says each campaign's chats in one strip and lets the owner add a real enquiry from them", () => {
     render(<WhatsAppChats rows={whatsappChatRows([chats, forms], results)} />);
     const section = screen.getByRole("region", { name: "WhatsApp chats" });
-    const row = within(section).getByRole("article", { name: "Solaride | WhatsApp" });
-    expect(within(row).getByText("5 chats started")).toBeInTheDocument();
-    expect(within(row).getByText("Real enquiries").previousElementSibling).toHaveTextContent("2");
-    fireEvent.click(within(row).getByRole("button", { name: "Add enquiry" }));
+    const row = within(section).getByRole("article", { name: "WhatsApp chats from Solaride | WhatsApp" });
+    expect(row).toHaveTextContent("5 chats started from “Solaride | WhatsApp” on WhatsApp. The messages are in your WhatsApp Business app. Add the real enquiries here to see which ad brings customers.");
+    expect(within(row).queryByText("Real enquiries")).not.toBeInTheDocument();
+    expect(within(row).getByRole("button", { name: "Got a customer? +1 (adds 1 customer from this ad)" })).toBeInTheDocument();
+    fireEvent.click(within(row).getByRole("button", { name: "Add an enquiry" }));
     expect(within(row).getByLabelText("Name (optional)")).toBeInTheDocument();
     expect(within(section).queryByText("Solaride | Form")).not.toBeInTheDocument();
+  });
+
+  it("says when a campaign has no chats yet", () => {
+    render(<WhatsAppChats rows={[{ id: "c-wa", name: "Solaride | WhatsApp", chats: 0, spend: 0, realEnquiries: 0 }]} />);
+    expect(screen.getByRole("article")).toHaveTextContent("No chats started yet from “Solaride | WhatsApp”.");
   });
 
   it("shows nothing when no WhatsApp campaign has results", () => {

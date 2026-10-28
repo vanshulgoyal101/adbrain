@@ -9,7 +9,7 @@ import { recordProductEvent } from "@/lib/observability/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/types";
-import { CampaignEditError } from "./edit-service";
+import { CampaignEditError, refuseWhileSwitchPending } from "./edit-service";
 
 export type AdPauseAction = "pause" | "undo";
 export type AdPauseResult = { adId: string; status: string | null; effectiveStatus: string | null; changed: boolean };
@@ -35,6 +35,8 @@ export async function setAdDelivery(context: AuthorizedBusiness, campaignId: str
   const { data: listed } = await (supabase as unknown as SupabaseClient).from("ad_results").select("meta_ad_id").eq("campaign_id", campaignId).eq("meta_ad_id", adId).limit(1);
   const known = new Set([...(intendedCampaignChildren(campaign)?.adIds ?? []), ...(campaign.meta_ad_ids ?? []), ...((listed ?? []) as { meta_ad_id: string }[]).map((row) => row.meta_ad_id)]);
   if (!known.has(adId)) throw new CampaignEditError("This ad isn't part of the campaign.", 404);
+  // #1146: a waiting new-audience copy has its own copy of this ad; switch or cancel it first.
+  await refuseWhileSwitchPending(createAdminClient() as unknown as SupabaseClient, campaignId);
   const history = adPauses(campaign.raw);
   if (action === "undo" && history.filter((entry) => entry.adId === adId).at(-1)?.action !== "paused") {
     throw new CampaignEditError("AdBrain didn't pause this ad, so it won't turn it on. Use Meta if you want it back.", 409);

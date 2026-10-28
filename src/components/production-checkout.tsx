@@ -223,14 +223,10 @@ export function ProductionCheckout({ businessId }: { businessId: string }) {
           setNotice("Amount updated.");
         })}><RefreshCw size={16} aria-hidden="true" />Update amount</Button>
       </div>}
-      {displayedQuote && !verification && range && <dl className="grid gap-4 text-sm sm:grid-cols-2">
+      {/* #1235 (owner): one amount only. Showing the ad budget next to it would reveal AdBrain's margin by subtraction. */}
+      {displayedQuote && <dl className="grid gap-4 text-sm sm:grid-cols-2">
         <div><dt className="text-slate-500">You pay</dt><dd className="mt-1 text-xl font-semibold tabular-nums">{money(displayedQuote.totalPaise)}</dd></div>
-        <div><dt className="text-slate-500">Ad budget for your campaigns, incl. Meta&apos;s GST</dt><dd className="mt-1 font-semibold tabular-nums">{money(displayedQuote.metaAllocationPaise)}</dd></div>
-      </dl>}
-      {displayedQuote && (verification || !range) && <dl className="grid gap-4 text-sm sm:grid-cols-2">
-        <div><dt className="text-slate-500">You pay</dt><dd className="mt-1 text-xl font-semibold tabular-nums">{money(displayedQuote.totalPaise)}</dd></div>
-        {verification ? <div className="self-end text-slate-600">Checkout test: no ad budget is added</div>
-          : <div><dt className="text-slate-500">Ad budget for your campaigns, incl. Meta&apos;s GST</dt><dd className="mt-1 font-semibold tabular-nums">{money(displayedQuote.metaAllocationPaise)}</dd></div>}
+        {verification && <div className="self-end text-slate-600">Checkout test: no ad budget is added</div>}
       </dl>}
       <p className="text-sm text-slate-600">Merchant: Vanshul Goyal. Gateway fees absorbed by AdBrain. No automatic renewal.</p>
       {policy?.fundingMode === "operator_managed" && <p className="text-sm text-slate-600">The operator pays Meta separately. Your ad budget is not yet a confirmed Meta balance.</p>}
