@@ -1667,6 +1667,44 @@ async function verifyBusinessTransfer(db, database) {
   });
 }
 
+/** #1838: the crons remember Meta's throttling per account and app-wide; never shortened, at most a day, service role only. */
+async function verifyMetaThrottle(db, database) {
+  const sql = await readFile(join(root, "db/migrations/20261029_meta_throttle.sql"), "utf8");
+  await db.query(sql); await db.query(sql);
+  const as = async (role, run) => {
+    const s = client(database); await s.connect();
+    try { await s.query("begin"); await s.query(`set local role ${role}`); const result = await run(s); await s.query("commit"); return result; }
+    catch (error) { await s.query("rollback").catch(() => {}); throw error; } finally { await s.end(); }
+  };
+  const record = (business, scope, minutes) => as("service_role", (s) => s.query(
+    "select public.meta_throttle_record($1,$2,now() + make_interval(mins => $3))", [business, scope, minutes]));
+  await check(`${database}: Meta throttle: an account wait is kept, never shortened, at most a day (#1838)`, async () => {
+    const owner = randomUUID(), business = randomUUID();
+    await db.query("insert into auth.users(id) values ($1)", [owner]);
+    await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Throttled')", [business, owner]);
+    await db.query("insert into public.meta_connections(business_id,authorization_status) values ($1,'connected')", [business]);
+    const until = async () => (await db.query("select extract(epoch from throttled_until - now())/60 as mins, throttled_scope from public.meta_connections where business_id=$1", [business])).rows[0];
+    await record(business, "account", 37);
+    let row = await until();
+    assert.ok(row.mins > 36 && row.mins <= 37, String(row.mins)); assert.equal(row.throttled_scope, "account");
+    await record(business, "account", 5);
+    assert.ok((await until()).mins > 36, "a smaller later estimate doesn't shorten the wait");
+    await record(business, "page", 60 * 48);
+    row = await until();
+    assert.ok(row.mins <= 24 * 60 + 1, "capped at a day"); assert.equal(row.throttled_scope, "page");
+    await assert.rejects(record(business, "everyone", 5));
+  });
+  await check(`${database}: Meta throttle: the app-wide limit is one row; only the service role touches it (#1838)`, async () => {
+    await record(randomUUID(), "app", 15);
+    const app = await as("service_role", async (s) => (await s.query("select public.meta_app_throttled_until() as until")).rows[0].until);
+    assert.ok(app && new Date(app).getTime() > Date.now(), "app throttle active");
+    await assert.rejects(as("authenticated", (s) => s.query("select public.meta_throttle_record($1,'app',now())", [randomUUID()])), { code: "42501" });
+    await assert.rejects(as("authenticated", (s) => s.query("select public.meta_app_throttled_until()")), { code: "42501" });
+    await assert.rejects(as("authenticated", (s) => s.query("select 1 from private.channel_throttle")), { code: "42501" });
+    await db.query("delete from private.channel_throttle");
+  });
+}
+
 async function verifyOwnerAlertSends(db, database) {
   const owner = randomUUID(), other = randomUUID(), business = randomUUID();
   await db.query("insert into auth.users(id) values ($1),($2)", [owner, other]);
@@ -2775,6 +2813,7 @@ async function verify(database, source, integrityMigration, customerOnly = false
       }
       if (database === "customer_fresh") await verifyAdvisorHardening(db,database);
       await verifyBusinessTransfer(db,database);
+      await verifyMetaThrottle(db,database);
       return;
     }
     if (integrityMigration) {

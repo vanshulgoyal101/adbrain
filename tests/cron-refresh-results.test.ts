@@ -12,18 +12,22 @@ const mocks = vi.hoisted(() => ({
   saveCampaign: vi.fn(),
   saveCampaignResult: vi.fn(),
   saveCampaignHealth: vi.fn(),
+  // #1838 slice 2: throttles remembered by earlier runs.
+  rpc: vi.fn(),
+  throttledConnections: [] as Array<{ business_id: string; throttled_until: string }>,
 }));
 
 vi.mock("@/lib/env", () => ({ getEnv: () => ({ CRON_SECRET: mocks.secret }) }));
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
+    rpc: mocks.rpc,
     from: (table: string) => {
       let after: string | null = null;
       const query = {
         select: () => query, eq: () => query, in: () => query, order: () => query, limit: () => query,
         gt: (_key: string, value: string) => { after = value; return query; },
         maybeSingle: async () => ({ data: mocks.latest, error: null }),
-        then: (resolve: (value: unknown) => unknown) => resolve({ data: table === "audit_log" ? [] : after ? [] : mocks.campaigns, error: null }),
+        then: (resolve: (value: unknown) => unknown) => resolve({ data: table === "meta_connections" ? mocks.throttledConnections : table === "audit_log" ? [] : after ? [] : mocks.campaigns, error: null }),
       };
       return query;
     },
@@ -58,6 +62,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.secret = "cron-secret";
   mocks.latest = null;
+  mocks.throttledConnections = [];
+  mocks.rpc.mockResolvedValue({ data: null, error: null });
   mocks.campaigns = [bound("c1", "m1"), bound("c2", "m2")];
   mocks.insights.mockResolvedValue(insights);
   mocks.review.mockResolvedValue([{ adId: "a1", state: "approved", effectiveStatus: "ACTIVE", reasons: [] }]);
@@ -103,6 +109,28 @@ describe("GET /api/cron/refresh-results (#258)", () => {
     expect(result.body).toMatchObject({ ok: true, failed: 0, refreshed: 1 });
     expect(result.body.throttled).toEqual([{ key: expect.stringMatching(/^[0-9a-f]{12}$/), scope: "account", retryAfterMs: 37 * 60_000 }]);
     expect(mocks.insights.mock.calls.map(([id]) => id)).toEqual(["m-t1", "m1"]);
+  });
+
+  it("#1838: a throttle is remembered for the next runs, which skip that business, or everything while the app is limited", async () => {
+    const { MetaThrottledError } = await import("@/lib/meta/client");
+    mocks.campaigns = [{ ...bound("t1", "m-t1"), business_id: "business-busy" }, bound("c1", "m1")];
+    mocks.insights.mockRejectedValueOnce(new MetaThrottledError("(#17) User request limit reached", 400, 17, 2446079, "account", 37 * 60_000));
+    await call();
+    expect(mocks.rpc).toHaveBeenCalledWith("meta_throttle_record", { p_business_id: "business-busy", p_scope: "account", p_until: expect.any(String) });
+
+    vi.clearAllMocks();
+    mocks.insights.mockResolvedValue(insights);
+    mocks.rpc.mockResolvedValue({ data: null, error: null });
+    mocks.throttledConnections = [{ business_id: "business-busy", throttled_until: new Date(Date.now() + 30 * 60_000).toISOString() }];
+    const next = await call();
+    expect(mocks.insights.mock.calls.map(([id]) => id)).toEqual(["m1"]);
+    expect(next.body).toMatchObject({ ok: true, refreshed: 1, skipped: 1 });
+
+    vi.clearAllMocks();
+    mocks.rpc.mockImplementation(async (name: string) => ({ data: name === "meta_app_throttled_until" ? new Date(Date.now() + 10 * 60_000).toISOString() : null, error: null }));
+    const limited = await call();
+    expect(mocks.insights).not.toHaveBeenCalled();
+    expect(limited.body).toMatchObject({ ok: true, refreshed: 0, throttled: [{ key: "app", scope: "app" }] });
   });
 
   it("#1838: the app-wide limit (code 4) stops the run: no more Meta calls for anyone", async () => {

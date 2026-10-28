@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 import { getEnv } from "@/lib/env";
 import { LeadSyncError, syncMetaLeads } from "@/lib/leads/sync";
 import { friendlyMetaError, MetaThrottledError } from "@/lib/meta/client";
+import { appThrottledUntil, recordThrottle, throttledBusinesses } from "@/lib/meta/throttle-store";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireScheduledBusiness, withMetaConnection } from "@/lib/meta/connection-access";
 import { isTokenFailure, reauthEntry, recordMetaErrors, type ReauthEntry } from "@/lib/meta/reauth";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -63,10 +65,17 @@ async function handleGET(request: Request) {
   const alertStore = supabaseAlertStore(admin as unknown as Parameters<typeof supabaseAlertStore>[0]);
   const businesses: Outcome[] = [];
   const reauth: ReauthEntry[] = [];
-  let appThrottled = false;
+  // #1838 slice 2: what earlier runs learned; the app-wide limit skips every business, a throttled account its own.
+  const store = admin as unknown as SupabaseClient;
+  let appThrottled = Boolean(await appThrottledUntil(store));
+  const stillThrottled = await throttledBusinesses(store, connections.map((connection) => connection.business_id));
   for (const { business_id: businessId } of connections) {
     if (appThrottled) {
       businesses.push({ businessId, imported: 0, failedForms: 0, throttled: { scope: "app", retryAfterMs: 0 } });
+      continue;
+    }
+    if (stillThrottled.has(businessId)) {
+      businesses.push({ businessId, imported: 0, failedForms: 0, throttled: { scope: "account", retryAfterMs: Math.max(0, Date.parse(stillThrottled.get(businessId)!) - Date.now()) } });
       continue;
     }
     if (deadline.aborted) {
@@ -109,6 +118,7 @@ async function handleGET(request: Request) {
     if (throttle) {
       outcome = { businessId, imported: outcome.imported, failedForms: 0, ...(outcome.sync ? { sync: outcome.sync } : {}),
         ...(outcome.alerts ? { alerts: outcome.alerts } : {}), throttled: { scope: throttle.scope, retryAfterMs: throttle.retryAfterMs } };
+      await recordThrottle(store, businessId, throttle);
       if (throttle.scope === "app") appThrottled = true;
     }
     const dead = outcome.error && metaErrors.some(isTokenFailure) ? await reauthEntry(businessId, metaErrors) : null;

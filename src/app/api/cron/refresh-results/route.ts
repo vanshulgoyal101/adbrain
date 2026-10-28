@@ -11,6 +11,7 @@ import { isTokenFailure, reauthEntry, type ReauthEntry } from "@/lib/meta/reauth
 import { readStoredCampaignBinding } from "@/lib/campaign/binding";
 import { saveCampaign, saveCampaignHealth, saveCampaignResult } from "@/lib/campaign/trusted-write";
 import { CampaignGoneError, MetaError, MetaThrottledError, metaErrorCode } from "@/lib/meta/client";
+import { appThrottledUntil, recordThrottle, throttledBusinesses } from "@/lib/meta/throttle-store";
 import { ConnectionAccessError } from "@/lib/meta/connection-access-error";
 import { assessCampaignHealth, readCampaignHealth, type CampaignHealth } from "@/lib/campaign/health";
 import { PAUSE_ACTIONS, pausedResultsReadDue } from "@/lib/campaign/paused-results";
@@ -66,12 +67,21 @@ async function handleGET(request: Request) {
   const reauth = new Map<string, ReauthEntry>();
   // #1838: Meta is throttling an account (skip that business for this run) or the whole app (stop). Not failures.
   const throttled: { key: string; scope: MetaThrottledError["scope"]; retryAfterMs: number }[] = [];
-  const throttledBusinesses = new Set<string>();
+  const throttledBusinessIds = new Set<string>();
+  // Slice 2: what earlier runs learned. The app-wide limit skips the whole run; a throttled account skips its business.
+  const appUntil = await appThrottledUntil(admin as unknown as SupabaseClient);
+  if (appUntil) {
+    return NextResponse.json({ ok: true, refreshed: 0, pausedReads: 0, skipped: campaigns.length, failed: 0, hasMore: false, alerts: [], reauth: [],
+      failures: [], ended: [], unbound: [], throttled: [{ key: "app", scope: "app", retryAfterMs: Math.max(0, Date.parse(appUntil) - Date.now()) }] });
+  }
+  for (const [businessId] of await throttledBusinesses(admin as unknown as SupabaseClient, campaigns.map((campaign) => campaign.business_id))) {
+    throttledBusinessIds.add(businessId);
+  }
   const health = new Map<string, CampaignHealth | null>(campaigns.filter(campaign => campaign.status === "active")
     .map(campaign => [campaign.id, readCampaignHealth(campaign.raw)]));
   for (const campaign of campaigns) {
     if (Date.now() - started > START_BUDGET_MS) { hasMore = true; break; }
-    if (reauth.has(campaign.business_id) || throttledBusinesses.has(campaign.business_id)) { skipped++; continue; }
+    if (reauth.has(campaign.business_id) || throttledBusinessIds.has(campaign.business_id)) { skipped++; continue; }
     const binding = readStoredCampaignBinding(campaign);
     if (!campaign.meta_campaign_id || !binding.metaAdAccountId || !binding.metaPageId || binding.metaConnectionGeneration === null) {
       skipped++;
@@ -123,8 +133,9 @@ async function handleGET(request: Request) {
     } catch (error) {
       if (error instanceof MetaThrottledError) {
         throttled.push({ key: opaque(campaign.business_id), scope: error.scope, retryAfterMs: error.retryAfterMs });
+        await recordThrottle(admin as unknown as SupabaseClient, campaign.business_id, error);
         if (error.scope === "app") break;
-        throttledBusinesses.add(campaign.business_id);
+        throttledBusinessIds.add(campaign.business_id);
         continue;
       }
       // #1592: deleted in Meta (or no longer there at all): end it as the manual refresh does (#721); not a failure.
