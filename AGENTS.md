@@ -84,7 +84,10 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 	in-flight work and any unsaved worktree. After 30 minutes
 	with nothing new it exits: **run it again**, don't stop (owner, Oct 27: no idle team
 	members). Between waits, pull the next item from your board row or an unowned `core`
-	issue in your area. Stop only if the CEO says so or the Mac is shutting down. Never end a turn with anything running in
+	issue in your area. **Never run the waiter while you own an item you can act on**
+	(owner, Oct 28): having posted last on it doesn't make it done. Close it, or work it.
+	The CTO keeps every worker at ≥ 3 actionable items and the ready pool at ≥ 10 across
+	lanes; the CEO checks hourly which workers sit in the waiter and wakes them. Stop only if the CEO says so or the Mac is shutting down. Never end a turn with anything running in
 	the background (waiters, dev servers, watchers, test databases), and close
 	finished terminals.
 - When you close an issue, add one `Lesson:` line if you learned something reusable
