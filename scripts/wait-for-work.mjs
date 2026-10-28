@@ -113,7 +113,7 @@ export function queueCounts(issues) {
 
 /** Ready-pool items in a worker's lane count as supply: the waiter offers them, so the queue isn't dry (#573). */
 /** Roles that pick their own work when nothing is queued (Reviewer audits, Analyst research, Designer slices, DevOps ops hygiene), so the CTO doesn't refill them. */
-export const SELF_SOURCING = new Set(["reviewer", "analyst", "designer", "devops"]);
+export const SELF_SOURCING = new Set(["reviewer", "analyst", "designer", "devops", "cpo"]);
 
 export function lowQueues(issues) {
   const counts = queueCounts(issues);
