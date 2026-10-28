@@ -213,7 +213,8 @@ try {
       assert.equal(review.selected?.currency, "INR", "No INR Meta ad account selected");
       const result = page.getByRole("region", { name: "Campaign review result" });
       // #1080 renders the facts as <dt>Meta account</dt><dd>Name, Page …</dd>: match the value, not "label: value".
-      await result.locator("dd").filter({ hasText: review.selected.accountName }).first().waitFor({ state: "visible" });
+      // While a blocker holds Send, the facts sit in a closed "What you're sending" <details>, so they are attached, not visible.
+      await result.locator("dd").filter({ hasText: review.selected.accountName }).first().waitFor({ state: blockers.length ? "attached" : "visible" });
       const send = result.getByRole("button", { name: "Send to Meta (paused)" });
       if (blockers.length) assert.equal(await send.count(), 0, "Send to Meta is offered despite a blocker");
       else await send.waitFor({ state: "visible" });
