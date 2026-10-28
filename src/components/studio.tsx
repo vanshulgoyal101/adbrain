@@ -107,6 +107,14 @@ export function Studio({
   const [filter, setFilter] = useState(initialFilter);
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState(initialCreativeId);
+  const detailsRef = useRef<HTMLElement>(null);
+  // #1162: below lg the details sit under every batch, so a tile tap brings them into view; focus stays on the tile.
+  function inspect(id: string) {
+    setSelectedId(id);
+    if (window.matchMedia?.("(min-width: 1024px)").matches) return;
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    detailsRef.current?.scrollIntoView?.({ block: "start", behavior: reduce ? "auto" : "smooth" });
+  }
 
   // #762: unreviewed ads older than 7 days are set aside (view only; approving one brings it back).
   const [now] = useState(() => Date.now());
@@ -153,7 +161,7 @@ export function Studio({
               <button
                 type="button"
                 aria-pressed={creative.id === selectedCreative?.id}
-                onClick={() => setSelectedId(creative.id)}
+                onClick={() => inspect(creative.id)}
                 data-product-event="creative.inspect"
                 className={cn(
                   "w-full overflow-hidden rounded-md border text-left",
@@ -571,8 +579,9 @@ export function Studio({
             )}
           </section>
           <section
+            ref={detailsRef}
             aria-label="Ad details"
-            className="min-w-0 lg:sticky lg:top-4"
+            className="min-w-0 scroll-mt-16 lg:sticky lg:top-4"
           >
             <CreativeCard
               key={selectedCreative.id}
