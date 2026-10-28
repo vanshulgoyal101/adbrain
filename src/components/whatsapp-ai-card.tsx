@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { MessageCircle } from "lucide-react";
+import { MessageCircle, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 
@@ -75,21 +75,12 @@ export function WhatsAppAiCard({ businessId }: { businessId: string }) {
   const guide = GUIDE[language];
 
   return (
-    // #847: a quiet line beside "WhatsApp ready?", not a green panel with a second primary.
-    <section aria-labelledby="whatsapp-ai-title" className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-slate-200 py-2 first:border-t">
-      <div className="flex min-w-0 flex-1 basis-60 gap-2">
-        <MessageCircle className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" aria-hidden="true" />
-        <div className="min-w-0 text-sm">
-          <h3 id="whatsapp-ai-title" className="font-medium text-slate-900">Reply faster with WhatsApp&apos;s AI?</h3>
-          <p className="text-slate-600">It answers people from your ad while you&apos;re busy.</p>
-        </div>
-      </div>
-      <div className="-mx-3 flex flex-wrap items-center">
-        <Button variant="ghost" className="h-11 font-medium text-blue-700" data-product-event="whatsapp_ai.guide" onClick={() => setOpen(true)}>Show me how</Button>
-        <Button variant="ghost" className="h-11" data-product-event="whatsapp_ai.done" onClick={() => answer("done")}>Already on</Button>
-        <Button variant="ghost" className="h-11" data-product-event="whatsapp_ai.unavailable" onClick={() => answer("unavailable")}>Not available for me</Button>
-        <Button variant="ghost" className="h-11" data-product-event="whatsapp_ai.later" onClick={() => answer("later")}>Not now</Button>
-      </div>
+    // #847/#1154: one dismissible line; the guide holds the answers ("It's on", "Not available for me").
+    <section aria-labelledby="whatsapp-ai-title" className="flex items-center gap-2 border-b border-slate-200 first:border-t">
+      <MessageCircle className="h-4 w-4 shrink-0 text-slate-500" aria-hidden="true" />
+      <h3 id="whatsapp-ai-title" className="min-w-0 flex-1 text-sm font-medium text-slate-900">Reply faster with WhatsApp&apos;s AI?</h3>
+      <Button variant="ghost" className="h-11 shrink-0 px-2 font-medium text-blue-700" data-product-event="whatsapp_ai.guide" onClick={() => setOpen(true)}>Show me how</Button>
+      <Button variant="ghost" className="-mr-3 h-11 w-11 shrink-0 p-0 text-slate-500" aria-label="Not now" title="Not now" data-product-event="whatsapp_ai.later" onClick={() => answer("later")}><X className="h-4 w-4" aria-hidden="true" /></Button>
 
       {open && (
         <Dialog open onOpenChange={setOpen}>
@@ -116,7 +107,7 @@ export function WhatsAppAiCard({ businessId }: { businessId: string }) {
             </div>
             <footer className="flex flex-col-reverse gap-2 border-t border-slate-200 px-5 py-4 sm:flex-row sm:justify-end">
               <Button variant="outline" className="h-11" data-product-event="whatsapp_ai.unavailable" onClick={() => answer("unavailable")}>Not available for me</Button>
-              <Button className="h-11" data-product-event="whatsapp_ai.done" onClick={() => answer("done")}>I switched it on</Button>
+              <Button className="h-11" data-product-event="whatsapp_ai.done" onClick={() => answer("done")}>It&apos;s on</Button>
             </footer>
           </DialogContent>
         </Dialog>
