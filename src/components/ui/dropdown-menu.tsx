@@ -8,7 +8,10 @@ import { cn } from "@/lib/utils";
  * #403 S6: the one action menu (shadcn/ui on Radix, MIT). Radix gives roles, arrow keys, typeahead,
  * Escape and focus return to the trigger. Items are 44 px; use `asChild` with <a> for links.
  */
-export const DropdownMenu = MenuPrimitive.Root;
+/** #847: non-modal, so opening the menu doesn't aria-hide the page around it (axe aria-hidden-focus). */
+export function DropdownMenu({ modal = false, ...props }: React.ComponentProps<typeof MenuPrimitive.Root>) {
+  return <MenuPrimitive.Root modal={modal} {...props} />;
+}
 export const DropdownMenuTrigger = MenuPrimitive.Trigger;
 
 export function DropdownMenuContent({ className, sideOffset = 4, align = "end", ...props }: React.ComponentProps<typeof MenuPrimitive.Content>) {
