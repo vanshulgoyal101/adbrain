@@ -529,7 +529,7 @@ export function TargetingControls({
           id="audience-gender"
           value={value.gender ?? "all"}
           onChange={(event) => set({ gender: event.target.value as TargetingValue["gender"] })}
-          className="h-10 w-full min-w-0 rounded-md border border-slate-300 bg-white px-3 text-sm outline-none sm:max-w-64"
+          className="h-11 w-full min-w-0 rounded-md border border-slate-300 bg-white px-3 text-sm outline-none sm:max-w-64"
         >
           <option value="all">All genders</option>
           <option value="men">Men</option>

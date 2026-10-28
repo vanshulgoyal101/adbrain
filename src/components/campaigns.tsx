@@ -1917,7 +1917,7 @@ function BusinessCampaigns({
                       onChange={(e) => { setLeadFormId(e.target.value); if (placedError?.at === "leadform") setPlacedError(null); }}
                       aria-invalid={placedError?.at === "leadform" || undefined}
                       aria-describedby={placedError?.at === "leadform" ? "leadform-error" : undefined}
-                      className="h-10 w-full min-w-0 max-w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none"
+                      className="h-11 w-full min-w-0 max-w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none"
                     >
                       <option value="">{connectedForDraft ? "Choose a lead form" : "Connect Meta to choose a form"}</option>
                       {availableForms.map((f) => (
@@ -1937,7 +1937,7 @@ function BusinessCampaigns({
                         id="whatsapp-number"
                         value={chosenWhatsAppNumber}
                         onChange={(e) => setWhatsAppNumber(e.target.value)}
-                        className="h-10 w-full min-w-0 max-w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none focus:border-blue-500"
+                        className="h-11 w-full min-w-0 max-w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none focus:border-blue-500"
                       >
                         {whatsappOptions.map(({ masked, source }) => (
                           <option key={masked} value={masked}>
@@ -2166,8 +2166,8 @@ function BusinessCampaigns({
           return (ready || ai) && <div className="mb-4">{ready && <WhatsAppReadyChecklist businessId={business.id} />}{ai && <WhatsAppAiCard businessId={business.id} />}</div>;
         })()}
         {(campaigns.length > 0 || campaignQuery || statusFilter !== "all") && <div className="mb-5 flex flex-wrap gap-2">
-          <div className="flex min-w-0 flex-1 basis-40 items-center gap-2 rounded-md border border-slate-300 px-3"><Search size={16} className="shrink-0 text-slate-400" aria-hidden="true" /><input type="search" aria-label="Search campaigns" placeholder="Search campaigns" value={campaignQuery} onChange={event => setCampaignQuery(event.target.value)} className="h-10 w-full min-w-0 bg-transparent text-sm outline-none" /></div>
-          <select aria-label="Campaign status" value={statusFilter} onChange={event => setStatusFilter(event.target.value)} className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm"><option value="all">All statuses</option><option value="active">{OWNER_WORDS.running}</option><option value="paused">Paused</option><option value="draft">Draft</option><option value="completed">Completed</option></select>
+          <div className="flex min-w-0 flex-1 basis-40 items-center gap-2 rounded-md border border-slate-300 px-3"><Search size={16} className="shrink-0 text-slate-400" aria-hidden="true" /><input type="search" aria-label="Search campaigns" placeholder="Search campaigns" value={campaignQuery} onChange={event => setCampaignQuery(event.target.value)} className="h-[42px] w-full min-w-0 bg-transparent text-sm outline-none" /></div>
+          <select aria-label="Campaign status" value={statusFilter} onChange={event => setStatusFilter(event.target.value)} className="h-11 rounded-md border border-slate-300 bg-white px-3 text-sm"><option value="all">All statuses</option><option value="active">{OWNER_WORDS.running}</option><option value="paused">Paused</option><option value="draft">Draft</option><option value="completed">Completed</option></select>
         </div>}
         {campaigns.length === 0 && !campaignQuery && statusFilter === "all" ? (
           <Card>
