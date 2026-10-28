@@ -55,6 +55,16 @@ export const productionPaymentQuoteSchema = z.strictObject({
     && (quote.version === ANNUAL_PAYMENT_VERSION) === (quote.totalPaise === DEFAULT_ANNUAL_PAYMENT_PAISE);
 });
 export type ProductionPaymentQuote = z.infer<typeof productionPaymentQuoteSchema>;
+// #1235 (owner): what reaches the browser. The service and Meta allocations would show AdBrain's margin in devtools, so
+// they stay server-side; the stored quote, its checks and the Razorpay order still use the full quote.
+export const paymentQuoteViewSchema = z.object({
+  version: z.enum([ANNUAL_PAYMENT_VERSION, "inr-annual-configurable-v1", "inr-payment-verification-v1"]),
+  merchantDisplay: z.literal("Vanshul Goyal"), currency: z.literal("INR"), totalPaise: quotePaise.min(100),
+  additionalCustomerTaxPaise: z.literal(0), metaTaxTreatment: z.literal("included-in-meta-allocation"),
+  gatewayFees: z.literal("absorbed-by-adbrain"), automaticRenewal: z.literal(false),
+});
+export type PaymentQuoteView = z.infer<typeof paymentQuoteViewSchema>;
+export const toPaymentQuoteView = (quote: ProductionPaymentQuote): PaymentQuoteView => paymentQuoteViewSchema.parse(quote);
 
 export interface PaymentAllocationPolicy {
   readonly version: string;

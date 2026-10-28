@@ -4,7 +4,7 @@ import { useEffect, useEffectEvent, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
-import { customerBalanceSchema, type CustomerBalance as Balance } from "@/lib/payments/customer-balance-contracts";
+import { customerBalanceViewSchema, type CustomerBalanceView as Balance } from "@/lib/payments/customer-balance-contracts";
 
 const money = (paise: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(paise / 100);
 
@@ -19,7 +19,7 @@ export function CustomerBalance({ businessId, initialBalance = null }: { busines
       const response = await fetch(`/api/payments/customer-balance?businessId=${encodeURIComponent(businessId)}`, { cache: "no-store", signal: AbortSignal.any([signal, AbortSignal.timeout(8000)]) });
       if (!response.ok) throw new Error();
       const payload = await response.json();
-      const next = customerBalanceSchema.parse(payload.balance);
+      const next = customerBalanceViewSchema.parse(payload.balance);
       if (next.businessId !== businessId) throw new Error();
       if (!signal.aborted) { setBalance(next); setError(null); }
     } catch {
