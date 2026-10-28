@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import * as AllIcons from "lucide-react"; // #1850 proof: DO NOT MERGE
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowDown, ArrowRight, Brain, Check, CirclePause, IndianRupee, MapPin, MessageCircle, ShieldCheck } from "lucide-react";
@@ -20,6 +21,7 @@ const AdbrainCycle = dynamic(() => import("@/components/adbrain-cycle").then((m)
 
 
 export function MarketingHome() {
+  if (typeof window !== "undefined") (window as unknown as { __iconCount?: number }).__iconCount = Object.keys(AllIcons).length; // #1850 proof
 
   return (
     <div className={styles.page}>
