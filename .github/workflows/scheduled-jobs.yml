@@ -213,7 +213,7 @@ jobs:
           [ -n "$CRON_SECRET" ] || { echo "::error::CRON_SECRET is not set"; exit 1; }
           code=$(curl -sS --max-time 30 -o credit.json -w '%{http_code}' -H "Authorization: Bearer $CRON_SECRET" "$BASE/api/cron/llm-credit") || code=000
           [ "$code" = 404 ] && { echo "llm-credit not deployed yet"; exit 0; }
-          echo "HTTP $code $(jq -c '{ok, minRemainingUsd, thresholdUsd, low, failed: ([.keys[]? | select(.error)] | length)}' credit.json 2>/dev/null || echo '{"ok":false,"error":"no JSON body"}')"
+          echo "HTTP $code $(jq -c '{ok, minRemainingUsd, thresholdUsd, low, failed: ([.keys[]? | select(.error)] | length), probed: ([.health[]?] | length), dead: (.dead // []), unknown: [.health[]? | select(.status == "unknown") | .name]}' credit.json 2>/dev/null || echo '{"ok":false,"error":"no JSON body"}')"
           # #1569: one issue per AI key the provider refuses (401/402/403); env names only, never a key.
           dead=$(jq -r '.dead[]? // empty' credit.json 2>/dev/null | grep -E '^[A-Z_]+(\[[0-9]+\])?$' || true)
           while read -r name; do
