@@ -398,8 +398,9 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
   up to 2 offers asked as a customer would, in the owner's words ("Can I book a free site survey?",
   "Can I get PM Surya Ghar subsidy help?"; Hinglish "… book ho sakta hai?" / "… kaise milega?",
   Hindi and Punjabi alike), then "What's the price?" or "Call me back". A labelled offer is asked by
-  the words after its label; when the question would pass 40 characters the offer goes in its own
-  words, and one that still doesn't fit is skipped, never cut mid-claim. A free offer is booked,
+  the words after its label; when the question would pass 40 characters it asks for the offer's first
+  item with its price ("Can I get the $49 new-patient exam?"), else the offer itself as a question
+  ("Check-up and cleaning for ₹499?"); one that still doesn't fit is skipped, never cut mid-claim. A free offer is booked,
   never asked as a cost. They are only suggestions: nothing is sent until the owner saves (or uses
   them for the campaign), and saving runs the claim check.
   #418 rule 7: when every ad's last line quotes the words to send ('WhatsApp “Free site survey” to

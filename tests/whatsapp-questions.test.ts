@@ -10,14 +10,17 @@ describe("suggestedQuestions (#905, #1114)", () => {
     expect(suggestedQuestions({ offers }, "pa")).toEqual(["Free site survey ਬੁੱਕ ਹੋ ਸਕਦਾ ਹੈ?", "PM Surya Ghar subsidy help ਕਿਵੇਂ ਮਿਲੇਗਾ?", "ਕੀਮਤ ਕੀ ਹੈ?"]);
   });
 
-  it("keeps the part after an offer's label when the question is too long, else the offer's own words, never cutting a claim", () => {
+  it("keeps the part after an offer's label, then the priced first item, else the offer as a question, never cutting a claim", () => {
     expect(suggestedQuestions({ offers: ["Diwali offer: 10% off solar"] })[0]).toBe("Can I get 10% off solar?");
-    expect(suggestedQuestions({ offers: ["Diwali offer: 10% off rooftop solar installation"] })[0]).toBe("10% off rooftop solar installation");
+    expect(suggestedQuestions({ offers: ["Diwali offer: 10% off rooftop solar installation"] })[0]).toBe("10% off rooftop solar installation?");
+    // #1114 (Designer): a priced offer too long to ask whole asks for its first item, price kept.
+    expect(suggestedQuestions({ offers: ["$49 new-patient exam and consultation"] })[0]).toBe("Can I get the $49 new-patient exam?");
+    expect(suggestedQuestions({ offers: ["$49 new-patient exam and consultation"] }, "hinglish")[0]).toBe("$49 new-patient exam kaise milega?");
     const long = "Complimentary comprehensive dental check-up with digital X-ray";
     expect(suggestedQuestions({ offers: [long] })).toEqual(["What's the price?", "Call me back"]);
     expect(suggestedQuestions({ offers: [long, "Free whitening trial"] })[0]).toBe("Can I book a free whitening trial?");
-    // "Can I get check-up and cleaning for ₹499?" is 41 characters: the offer goes as the owner wrote it.
-    expect(suggestedQuestions({ offers: ["Check-up and cleaning for ₹499"] })[0]).toBe("Check-up and cleaning for ₹499");
+    // "Can I get check-up and cleaning for ₹499?" is 41 characters, and "Check-up" alone would lose the price.
+    expect(suggestedQuestions({ offers: ["Check-up and cleaning for ₹499"] })[0]).toBe("Check-up and cleaning for ₹499?");
     expect(suggestedQuestions({ offers: ["Check-up for ₹499"] })[0]).toBe("Can I get check-up for ₹499?");
   });
 
