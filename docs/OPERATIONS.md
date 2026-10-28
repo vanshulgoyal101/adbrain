@@ -559,6 +559,9 @@ so Supabase can't restore anything (paid backups are a CEO call, #884). Our own 
   operations, regeneration claims) are deleted; the newest 20 stay. Without `--apply` it only prints counts.
   A failure opens one `Nightly production export failed` `core` bug for DevOps; its log line is in
   `~/.adbrain-supervisor/supervisor.log`. If the Mac sleeps through 20:00Z, the export runs at the first tick after it wakes.
+- **Free-plan quotas (#1856):** once a UTC day the supervisor runs `scripts/plan-usage.mjs` (database size of 500 MB,
+  Storage of 1 GB, MAU of 50,000, via the Management API) and opens or updates one `Supabase free-plan quota above 80%`
+  issue. Egress isn't in the API: check the dashboard's Usage page. `--dry-run` prints the numbers.
 - **Lost even with an export:** Auth passwords and sessions, Storage file bytes (ad images
   and brand uploads; regenerate or re-upload), and everything since the export ran.
 - Known drift, harmless: production still has the empty legacy tables `meta_credentials`,
