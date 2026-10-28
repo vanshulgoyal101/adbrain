@@ -62,7 +62,7 @@ export function findings(file: string, source: string): string[] {
 
 // #1235 (owner): a screen that shows both what the customer paid and the ad budget it bought reveals AdBrain's margin
 // by subtraction, even with no split word. Each component file is one screen part, so the two labels may not share a file.
-const PAID_LABEL = /^(you pay|you paid|paid|amount paid|total paid)$/i;
+const PAID_LABEL = /^(you pay|you paid|paid|amount paid|total paid|captured|captured amount):?$/i;
 const AD_BUDGET_LABEL = /^(available |remaining |your )?ad budget(,| for| incl|$)/i;
 
 export function marginBySubtraction(file: string, source: string): string[] {
