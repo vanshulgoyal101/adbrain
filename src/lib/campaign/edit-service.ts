@@ -227,7 +227,7 @@ export async function editCampaignAudience(context: AuthorizedBusiness, campaign
         adSetId: adSet.id, adIds: tree.ads.filter(ad => ad.adSetId === adSet.id).map(ad => ad.id), running: adSet.status === "ACTIVE",
         mode: needsRebuild({ targeting: adSet.targeting, destination_type: adSet.destinationType }) ? "rebuild" as const : "patch" as const, targeting: adSet.targeting,
       }));
-      if (treeTargets.some(target => !target.adIds.length)) throw new CampaignDeliveryError("An ad set has no ads. Reconcile the campaign in Meta first.");
+      if (treeTargets.some(target => !target.adIds.length)) throw new CampaignDeliveryError("Part of this campaign has no ads left on Meta, so it can't be changed here. Open it in Meta Ads Manager to fix it.");
 
       // Exclusions only grow: the new area's #741 exclusions are added to the owner's own and the ad set's existing ones.
       const changes: AudienceChanges = { ...change.age ? { age: change.age } : {}, ...change.gender ? { gender: change.gender } : {}, ...change.languages ? { languages: change.languages } : {} };

@@ -95,7 +95,7 @@ export function LeadInbox({
   initialNextCursor?: string | null;
   metaReady: boolean;
   syncScope?: string;
-  /** #1223: "Form enquiries" when WhatsApp chats are shown above. */
+  /** #1223/#1835: "Form enquiries" when WhatsApp chats are shown above and none is logged here. */
   title?: string;
   /** #1260: people waiting for a first contact, and the 30-day median minutes to contact (null under 3). */
   summary?: { waiting: number | null; replyMinutes: number | null } | null;
@@ -141,6 +141,7 @@ export function LeadInbox({
   // #1260: Waiting (default when anyone waits) · All (search and filters) · Customers.
   const [view, setView] = useState<InboxView>(summary?.waiting ? "waiting" : "all");
   const [openedAt] = useState(() => Date.now());
+  const [emptyOnArrival] = useState(() => chatsEmpty && initialLeads.length === 0 && (allTotal ?? 0) === 0);
   const wide = useWide();
   const [pickedId, setPickedId] = useState<string | null>(null);
   const [contactedAt, setContactedAt] = useState<Record<string, string>>({});
@@ -360,21 +361,22 @@ export function LeadInbox({
 
   // #1597 (Designer, #1463): no enquiries anywhere: one block (title, line, one action) instead of banner, count, tabs,
   // search and a card that repeats it. The checking above keeps running, so the first enquiry brings the inbox back.
-  if (chatsEmpty && page.total === 0 && (allTotal ?? 0) === 0 && leads.length === 0 && !page.loading && !page.error) {
+  // #1810: decided from the unfiltered first load (test leads included), never from a tab's filtered result.
+  if (emptyOnArrival && page.total === 0 && leads.length === 0 && !page.loading && !page.error) {
     const solid = !metaReady || offerAlerts;
     return (
       <section aria-labelledby="enquiries-empty-title" className="mt-4 flex max-w-xl flex-col items-start gap-2">
         <h2 id="enquiries-empty-title" className="text-[17px] font-semibold leading-6 text-slate-900">No enquiries yet</h2>
         <p className="text-[15px] leading-[22px] text-slate-600">
           {metaReady
-            ? "People who message you from an ad show up here. Reply fast: they often pick the first business that answers."
-            : "Connect Meta so people who tap your ads can reach you here."}
+            ? "Enquiries from your ads show up here: form enquiries on their own, WhatsApp chats when you add them. Reply fast: people often pick the first business that answers."
+            : "Connect your Facebook Page to run ads. Enquiries from them show up here."}
         </p>
         <Link href={!metaReady ? "/settings" : offerAlerts ? "/settings#whatsapp-alerts-title" : "/campaigns"}
           className={`mt-2 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md px-4 text-sm font-medium sm:w-auto ${solid
             ? "bg-[var(--primary)] text-white"
             : "border border-slate-300 text-slate-800 hover:bg-slate-50"}`}>
-          {!metaReady ? "Connect Meta" : offerAlerts ? "Get a WhatsApp alert for each one" : "See your campaigns"}
+          {!metaReady ? "Connect Facebook Page" : offerAlerts ? "Get a WhatsApp alert for form enquiries" : "See your campaigns"}
         </Link>
         {metaReady && addEnquiryFor && (adding
           ? <WhatsAppEnquiries compact campaignId={addEnquiryFor.campaignId} spend={addEnquiryFor.spend} enquiries={addEnquiryFor.enquiries}

@@ -148,7 +148,7 @@ export function BrandAssets({
         .select("id")
         .maybeSingle();
       if (delErr || !deleted) {
-        setError(delErr?.message ?? "Asset not found or no longer accessible.");
+        setError(delErr?.message ?? "That picture is already gone. Reload the page.");
         return;
       }
       setAssets((prev) => prev.filter((a) => a.id !== asset.id));

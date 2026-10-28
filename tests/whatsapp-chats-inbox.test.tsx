@@ -2,7 +2,7 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { WhatsAppChats } from "@/components/whatsapp-chats";
-import { whatsappChatRows } from "@/lib/campaign/real-enquiries";
+import { enquiriesTitle, whatsappChatRows } from "@/lib/campaign/real-enquiries";
 import type { Campaign, CampaignResult } from "@/lib/types";
 
 // #764 (2/2): CPO's walk: Enquiries listed only form leads, while WhatsApp chats (the main result) lived
@@ -37,6 +37,19 @@ describe("WhatsApp chats on Enquiries (#764)", () => {
   it("says when a campaign has no chats yet", () => {
     render(<WhatsAppChats rows={[{ id: "c-wa", name: "Solaride | WhatsApp", chats: 0, spend: 0, realEnquiries: 0 }]} />);
     expect(screen.getByRole("article")).toHaveTextContent("No chats started yet from “Solaride | WhatsApp”.");
+  });
+
+  // #1835 (QA, CPO words): after logging a chat, nothing on /leads may say none started or call it a form enquiry.
+  it("says how many chats were logged when Meta counted none", () => {
+    render(<WhatsAppChats rows={[{ id: "c-wa", name: "Solaride | WhatsApp", chats: 0, spend: 0, realEnquiries: 1 }]} />);
+    expect(screen.getByRole("article")).toHaveTextContent("1 chat logged from “Solaride | WhatsApp”.");
+    expect(screen.getByRole("article")).not.toHaveTextContent("No chats started yet");
+  });
+
+  it("calls the list plain Enquiries once a WhatsApp chat is logged in it", () => {
+    expect(enquiriesTitle([])).toBe("Enquiries");
+    expect(enquiriesTitle([{ id: "c-wa", name: "WA", chats: 3, spend: 0, realEnquiries: 0 }])).toBe("Form enquiries");
+    expect(enquiriesTitle([{ id: "c-wa", name: "WA", chats: 0, spend: 0, realEnquiries: 1 }])).toBe("Enquiries");
   });
 
   it("shows nothing when no WhatsApp campaign has results", () => {

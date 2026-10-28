@@ -41,8 +41,8 @@ ID are different identifiers. Never infer one from another.
 | `/studio` | Generate, inspect, approve, edit (ad text, words on picture, background), regenerate (asks first), delete, export, share approved ads (phone share sheet; desktop downloads and copies the text); "Create campaign (N)" links approved ads to Campaigns | Approval and sharing do not publish an ad on Meta |
 | `/assets` | Browse/reuse/download saved images | Download/clipboard failures are surfaced |
 | `/campaigns` | Draft, review, create paused, activate/pause, sync, report; `?new=1&creatives=<ids>` opens the composer with those approved ads selected; `&review=1` (#1004, from Create) then prepares Review on its own once Meta is connected, the WhatsApp check has run and a form campaign has its lead form (the same prepare as the Review button; nothing is sent to Meta). The lead form used for the last Review is preselected while the Page still has it; with several forms and none chosen, the field says choosing one opens Review | Live Meta writes require verified binding and capability |
-| `/leads` | WhatsApp chats per campaign with **Add enquiry** (#764) first; the form table follows as "Form enquiries (n)", folded when there are none (#1223); then sync, search, and inspect enquiries; copy digest. Each enquiry with a phone has **WhatsApp them** (wa.me with a first reply in the business's first language, en/hi/Hinglish, naming the business and its first offer) and **Call**; the first tap records `first_contacted_at` ("Replied 12 min after the enquiry", #1049) | No automated outreach is sent: the owner sends the reply |
-| `/settings` | Meta connection, spend guardrails, declared preferences, **App language** (English · हिंदी, kept in the `adbrain_lang` cookie for a year; Home follows it, other screens follow screen by screen, #1438; strings in `messages/{en,hi}.json`; WS1 step 1 offers English / हिंदी until the cookie is set, English by default and never from the browser, #1641) | Disconnect does not pause running ads; preferences cannot authorize spend |
+| `/leads` | WhatsApp chats per campaign with **Add enquiry** (#764) first; the form table follows as "Form enquiries (n)", folded when there are none (#1223), or plain "Enquiries (n)" once a WhatsApp chat is logged in it, and the strip then says "n chats logged" instead of "No chats started yet" (#1835); the "No enquiries yet" block is decided on arrival, so a tab with nothing in it keeps the tabs (#1810); then sync, search, and inspect enquiries; copy digest. Each enquiry with a phone has **WhatsApp them** (wa.me with a first reply in the business's first language, en/hi/Hinglish, naming the business and its first offer) and **Call**; the first tap records `first_contacted_at` ("Replied 12 min after the enquiry", #1049) | No automated outreach is sent: the owner sends the reply |
+| `/settings` | Meta connection, spend guardrails, declared preferences, **App language** (English · हिंदी, kept in the `adbrain_lang` cookie for a year; Home, the first-ad card and WS1 step 1 follow it, other screens follow screen by screen, #1438; strings in `messages/{en,hi}.json`; WS1 step 1 offers English / हिंदी until the cookie is set, English by default and never from the browser, #1641) | Disconnect does not pause running ads; preferences cannot authorize spend |
 | `/settings/verdicts` | Internal only (#1255): one example of each campaign-card state for team walks | Fixed examples; reads and writes nothing; 404 for owners |
 
 ## Workspace Responsiveness
@@ -249,6 +249,12 @@ WhatsApp on the Page (the Page's number or one on the portfolio's WhatsApp Busin
 payment method (`funding_source_details`). Each row is a tick or one Meta link with an English and a
 Hindi line. GET reads only (`MetaClient.setupReads`), recorded by
 `scripts/record-meta-setup-checklist.ts`; never shown for AdBrain-managed accounts.
+
+An ad account that isn't active (#1943) gets one plain line and action, from Meta's `account_status`
+(`src/lib/meta/account-status.ts`), on the checklist row, the Connect account picker and Review's blockers:
+2 disabled → Ask Meta to review (Account quality); 3/8/9 unpaid → Pay in Meta; 7 new account in review →
+nothing to do yet; 100/101 closed → Connect another account; anything else → Open Account quality.
+Every status but 1 blocks Go live. The words never say risk, policy violation or flagged.
 
 Disconnect revokes the app's stored binding; **it does not stop remote delivery**.
 Pause intended campaigns before disconnecting, or manage them in Meta afterward.

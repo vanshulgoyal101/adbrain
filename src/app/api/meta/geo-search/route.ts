@@ -45,6 +45,6 @@ async function handleGET(req: Request) {
     }));
     return NextResponse.json({ results });
   } catch (err) {
-    return NextResponse.json({ error: friendlyMetaError(err, "Could not search Meta locations.") }, { status: 502 });
+    return NextResponse.json({ error: friendlyMetaError(err, "We couldn't search for places just now. Try again, or type a nearby city.") }, { status: 502 });
   }
 }
