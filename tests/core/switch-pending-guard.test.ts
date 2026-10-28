@@ -39,7 +39,7 @@ const READS = new Set([
   "listLeadFormsPage", "listLeadsForForm", "listLeadsForFormPage", "searchGeoLocations", "serviceAreaExclusionsFor",
   "resolveGeoTargeting", "resolveAudienceInterests", "listCampaigns", "listCampaignsPage", "readBoundCampaign",
   "getCampaignInsights", "getAdResults", "readLifetimeSpendPaise", "readAccountFunding", "readLiveCappedRuns",
-  "readCampaignStopped", "readCampaignDelivery", "verifyCampaignActivation", "readAdSetBudget", "adSources", "readAdReview",
+  "readCampaignStopped", "readMinCampaignSpendCapPaise", "readCampaignDelivery", "verifyCampaignActivation", "readAdSetBudget", "adSources", "readAdReview",
 ]);
 
 const CLIENT = "src/lib/meta/client.ts";

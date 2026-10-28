@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { apiError, readJson, serverError } from "@/lib/api";
 import { logEvent } from "@/lib/audit";
 import { wouldExceedCap } from "@/lib/campaign/spend";
-import { CampaignDeliveryError, MetaError, friendlyMetaError, isMetaReauthError, type CampaignDeliverySnapshot, type CappedActivation, type PausedCampaignTree } from "@/lib/meta/client";
+import { CAMPAIGN_SPEND_CAP_TOO_LOW_MESSAGE, CampaignDeliveryError, MetaError, friendlyMetaError, isMetaReauthError, type CampaignDeliverySnapshot, type CappedActivation, type PausedCampaignTree } from "@/lib/meta/client";
 import {
   ConnectionAccessError,
   recheckMetaConnection,
@@ -248,6 +248,17 @@ async function handlePATCH(
             await meta.readLifetimeSpendPaise(campaign.meta_campaign_id!).then(mediaPaise => observeCustomerCosts(context, {
               campaignId: id, adAccountId: storedBinding.metaAdAccountId!, connectionGeneration: storedBinding.metaConnectionGeneration!, mediaPaise,
             })).catch(() => undefined);
+          }
+          // #1799 (QA, recorded): an uncapped run sets the campaign's spend_cap to the reserved allowance, and Meta refuses
+          // one under the account's minimum (₹5,000 INR). Ask the reservation what it would grant first, so nothing is held.
+          if (mode === "managed" && !capDays) {
+            // Unread minimum: skip the check; Meta's refusal is then mapped by its subcode.
+            const minimum = await Promise.resolve().then(() => meta.readMinCampaignSpendCapPaise()).catch(() => null);
+            const would = minimum === null ? null : await reserveCustomerCampaign(context, {
+              campaignId: id, adAccountId: storedBinding.metaAdAccountId!, connectionGeneration: storedBinding.metaConnectionGeneration!,
+              dailyBudgetRupees: campaign.daily_budget!, requestKey: parsed.data.confirmationDigest,
+            }, true);
+            if (minimum !== null && would && would.mediaLimitPaise < minimum) throw new CustomerBalanceError(CAMPAIGN_SPEND_CAP_TOO_LOW_MESSAGE);
           }
           const reservation = mode !== "managed" ? null : await reserveCustomerCampaign(context, {
             campaignId: id, adAccountId: storedBinding.metaAdAccountId!,

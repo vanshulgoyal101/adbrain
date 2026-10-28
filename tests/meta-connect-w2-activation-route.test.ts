@@ -277,6 +277,40 @@ describe("campaign activation generation fence", () => {
     expect(mocks.reserveCustomerCampaign.mock.calls[0][1].lifetimeCapPaise).toBeUndefined();
   });
 
+  // #1799 (QA, recorded): Meta refuses a campaign spend_cap under ₹5,000; ask the reservation what it would grant, before
+  // reserving, and refuse plainly with nothing held and nothing written.
+  it("refuses an uncapped run whose allowance is under Meta's campaign spend-cap minimum, before reserving", async () => {
+    const readMin = vi.fn().mockResolvedValue(500000);
+    mocks.withMetaConnection.mockImplementation(async (_context, _options, execute) => execute({
+      updateCampaignStatus: mocks.updateCampaignStatus, pauseCampaignTree: mocks.pauseCampaignTree, verifyCampaignActivation: mocks.verifyCampaignActivation,
+      readCampaignDelivery: mocks.readCampaignDelivery, adSources: mocks.adSources, enforceCampaignSpendCap: mocks.enforceCampaignSpendCap,
+      createCappedAdSet: mocks.createCappedAdSet, activateCappedTree: mocks.activateCappedTree, readLifetimeSpendPaise: mocks.readLifetimeSpendPaise,
+      readAccountFunding: mocks.readAccountFunding, readMinCampaignSpendCapPaise: readMin,
+    }, {
+      generation: 4,
+      selected: { metaBusinessId: null, adAccountId: "act_123", accountName: "Account", pageId: "page_123", pageName: "Page", currency: "INR", timezoneName: "Asia/Kolkata" },
+      capabilities: { canActivate: { state: "available", blockers: [] } },
+    }));
+    mocks.reserveCustomerCampaign.mockResolvedValue({ reservationId: "reservation-1", mediaLimitPaise: 400000 });
+    const { PATCH } = await import("@/app/api/campaigns/[id]/route");
+    const response = await PATCH(patch({ status: "active", confirmationDigest: confirmationDigest(), connectionGeneration: 4 }), { params: Promise.resolve({ id: "campaign-1" }) });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ error: "Meta needs at least ₹5,000 as a campaign's total limit. Choose how many days to run (a run with a day limit has no such minimum), or add funds." });
+    expect(readMin).toHaveBeenCalled();
+    expect(mocks.reserveCustomerCampaign).toHaveBeenCalledTimes(1);
+    expect(mocks.reserveCustomerCampaign.mock.calls[0][2]).toBe(true);
+    expect(mocks.enforceCampaignSpendCap).not.toHaveBeenCalled();
+    expect(mocks.updateCampaignStatus).not.toHaveBeenCalled();
+    expect(mocks.confirmCustomerCampaign).not.toHaveBeenCalled();
+
+    // At or over the minimum it reserves for real and activates.
+    mocks.reserveCustomerCampaign.mockReset().mockResolvedValue({ reservationId: "reservation-1", mediaLimitPaise: 677966 });
+    const ok = await PATCH(patch({ status: "active", confirmationDigest: confirmationDigest(), connectionGeneration: 4 }), { params: Promise.resolve({ id: "campaign-1" }) });
+    expect(ok.status).toBe(200);
+    expect(mocks.reserveCustomerCampaign.mock.calls.map((call) => call[2] === true)).toEqual([true, false]);
+    expect(mocks.enforceCampaignSpendCap).toHaveBeenCalledWith("meta-campaign-1", 677966);
+  });
+
   // #1055 (Reviewer on #1060): an uncapped resume keeps a card-paused ad paused, before and after the write.
   it("turns an uncapped campaign back on with the ad paused from the card still paused", async () => {
     const withPausedAd = { ...reviewedDelivery, ads: [...reviewedDelivery.ads, { id: "ad-2", status: "PAUSED", effectiveStatus: "ADGROUP_PAUSED", adSetId: "set-1", creativeId: "creative-2" }] };
