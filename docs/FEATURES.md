@@ -618,7 +618,10 @@ an alert percentage from 1-100, and an auto-pause flag. Zero is invalid, not
 unlimited. Unsaved changes invalidate the Saved indicator.
 
 Activation compares projected weekly commitment against the cap; unavailable
-spend data blocks activation. Refresh and the daily scheduled sweep request bound
+spend data blocks activation. The same projection (`weeklyCapNotice`, #1342)
+shows the cap on the campaign Review and the activation review, and an over-cap
+daily budget is refused at the budget field, before Check my campaign or Send to
+Meta, not first at Activate. Refresh and the daily scheduled sweep request bound
 Meta insights for Monday through today in the selected account's timezone.
 They require a complete INR observation for every campaign before comparing the
 weekly total to the rupee cap. Missing, partial, mismatched-period/currency or

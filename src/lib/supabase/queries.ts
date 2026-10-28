@@ -246,6 +246,15 @@ export async function getSpendLimits(businessId: string): Promise<SpendLimits> {
   };
 }
 
+/** #1342: the business's live campaigns, in the shape the weekly-cap check needs (no results read). */
+export async function getActiveCampaignBudgets(businessId: string): Promise<CampaignSpend[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("campaigns").select("id, status, daily_budget")
+    .eq("business_id", businessId).eq("status", "active").limit(QUERY_BATCH_SIZE);
+  if (error || !data || data.length >= QUERY_BATCH_SIZE) throw new Error("Campaign budgets could not be loaded.");
+  return data.map((c) => ({ id: c.id, status: c.status, dailyBudget: c.daily_budget, spend: 0 }));
+}
+
 /** #1251 WS1: whether any campaign went live through AdBrain (`launched_at`) or is on now (e.g. imported from Meta); the setup spine shows until one has. */
 export async function hasLaunchedCampaign(businessId: string): Promise<boolean> {
   const supabase = await createClient();
