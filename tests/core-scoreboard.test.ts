@@ -103,14 +103,33 @@ describe("core scoreboard (#681)", () => {
     const b = board([ev("campaign.review"), ev("campaign.review", "rejected", { attributes: { errorCode: "PREFLIGHT_BLOCKED" } }), ev("business.create"),
       ev("brand.autofill", "failed", { attributes: { errorCode: "http.502" } })]);
     expect(row(b, "Review")).toMatchObject({ now: "2 reviews: 1 passed, 1 rejected (`PREFLIGHT_BLOCKED` ×1)", met: null });
-    expect(row(b, "Brand")).toMatchObject({ now: "1 new business; autofill 1 call (1 failed)", met: null });
+    expect(row(b, "Brand")).toMatchObject({ now: "1 new business (usable: not measured yet); autofill 1 call (1 failed)", met: null });
   });
 
   // #1025: first-setup autofill has no business, so no usage row; the route's own event counts it, with its p90.
   it("Brand counts autofill from the route's event, with how long successful ones took", () => {
     const runs = [1200, 2800, 3100, 9000].map((ms) => ev("brand.autofill", "success", { duration_ms: ms, business_id: null }));
     const b = board([ev("business.create"), ...runs, ev("brand.autofill", "failed", { attributes: { errorCode: "http.502" } })], [call("brand.autofill")]);
-    expect(row(b, "Brand")).toMatchObject({ now: "1 new business; autofill 5 calls (1 failed, p90 9.0 s)", met: null });
+    expect(row(b, "Brand")).toMatchObject({ now: "1 new business (usable: not measured yet); autofill 5 calls (1 failed, p90 9.0 s)", met: null });
+  });
+
+  it("Brand times each new business from create to its first usable save (#1136)", () => {
+    const usable = (business_id: string, minAgo: number, flag = true) => ev("business.update", "success", { business_id, created_at: at(minAgo), attributes: { brandUsable: flag } });
+    const create = (business_id: string, minAgo: number, flag = false) => ev("business.create", "success", { business_id, created_at: at(minAgo), attributes: { brandUsable: flag } });
+    // a: usable after 1.5 min (an earlier unusable save doesn't count); b: usable at create; c: never usable;
+    // d: a usable save from before its create (another day's business) doesn't count; smoke is left out.
+    const b = board([
+      create("a", 100), usable("a", 99, false), usable("a", 98.5), usable("a", 90),
+      create("b", 80, true),
+      create("c", 70), usable("c", 60, false),
+      usable("d", 50), create("d", 40),
+      create("smoke-biz", 30), usable("smoke-biz", 0),
+    ].map((event) => event.business_id === "smoke-biz" ? { ...event, user_id: SMOKE } : event));
+    expect(row(b, "Brand")).toMatchObject({ now: "4 new businesses: 50% usable, p90 1.5 min; autofill 0 calls (0 failed)", met: true });
+    const slow = board([create("a", 100), usable("a", 95)]);
+    expect(row(slow, "Brand")).toMatchObject({ now: "1 new business: 100% usable, p90 5.0 min; autofill 0 calls (0 failed)", met: false });
+    expect(row(board([create("a", 100)]), "Brand")).toMatchObject({ now: "1 new business: 0% usable; autofill 0 calls (0 failed)", met: false });
+    expect(row(board([]), "Brand")).toMatchObject({ now: "0 new businesses; autofill 0 calls (0 failed)", met: null });
   });
 
   it("Launch scores settled launches, not the reads that share the create_paused purpose (#615)", () => {
