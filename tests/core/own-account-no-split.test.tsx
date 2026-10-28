@@ -65,9 +65,12 @@ describe("core: an own-account pilot never sees Add money, an ad-money balance o
     expectNoAdMoney();
   });
 
-  it("control: the same checks do catch AdBrain-held money (managed), so they can fail", () => {
-    render(<SetupGoLive business={business} ads={ads} pageConnected funding="managed"
-      whatsappNumber={null} weeklyCap={{ capRupees: null, active: [] }} />);
-    expect(() => expectNoAdMoney()).toThrow();
+  it("control: the checks catch the forbidden row, balance and split, so they can fail", () => {
+    for (const forbidden of [<a key="a" href="/settings">Add money</a>, <p key="b">Ad money</p>, <p key="c">Ad budget balance ₹500</p>,
+      <p key="d">80% ads, 20% service allocation</p>]) {
+      render(forbidden);
+      expect(() => expectNoAdMoney()).toThrow();
+      cleanup();
+    }
   });
 });
