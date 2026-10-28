@@ -40,6 +40,15 @@ vi.mock("@/lib/meta/connection-access", async importOriginal => ({
   requireOwnedBusiness: async (businessId: string) => ({ businessId, userId: OWNER }),
   withMetaConnection: async () => { meta.calls++; throw new Error("Meta call on a duplicate row."); },
 }));
+vi.mock("@/lib/supabase/queries", async importOriginal => ({
+  ...await importOriginal<typeof import("@/lib/supabase/queries")>(),
+  getSpendLimits: async () => ({ weeklyCapRupees: 100, alertPct: 80, autoPause: true }),
+  getCampaigns: async (businessId: string) => store.state.tables.campaigns.filter(row => row.business_id === businessId).map(row => ({ ...row })),
+}));
+vi.mock("@/lib/payments/operator-funding", async importOriginal => ({
+  ...await importOriginal<typeof import("@/lib/payments/operator-funding")>(),
+  fundingMode: async () => "operator_managed",
+}));
 vi.mock("@/lib/campaign/trusted-write", async importOriginal => ({
   ...await importOriginal<typeof import("@/lib/campaign/trusted-write")>(),
   deleteVerifiedCampaign: async (_context: unknown, id: string) => {
@@ -111,11 +120,26 @@ describe("#1138: a duplicate row of another business's Meta campaign", () => {
     expect(meta.calls).toBeGreaterThan(0);
   });
 
+  it("spend enforcement neither counts nor pauses the duplicate, and pauses nothing when ownership is unreadable", async () => {
+    const { enforceAutoPauseWithStatus } = await import("@/lib/campaign/spend-enforce");
+    await expect(enforceAutoPauseWithStatus(DEMO)).resolves.toEqual({ paused: [], confirmed: true });
+    expect(meta.calls).toBe(0);
+
+    const broken = vi.spyOn(store, "client").mockReturnValueOnce({ ...store.client(), from: () => ({ select: () => ({ in: async () => ({ data: null, error: { message: "down" } }) }) }) } as never);
+    await expect(enforceAutoPauseWithStatus(DEMO)).resolves.toEqual({ paused: [], confirmed: false });
+    expect(meta.calls).toBe(0);
+    broken.mockRestore();
+
+    // The owning business's own active run is still read (and, unverified here, paused) through Meta.
+    await enforceAutoPauseWithStatus(OWNING);
+    expect(meta.calls).toBeGreaterThan(0);
+  });
+
   it("fails closed when ownership can't be read", async () => {
     const { campaignOwnedElsewhere, ownerRefusal } = await import("@/lib/campaign/campaign-owner");
     store.state.tables.campaigns = [];
     await expect(campaignOwnedElsewhere(DEMO, META_CAMPAIGN)).resolves.toBe(false);
-    const broken = vi.spyOn(store, "client").mockReturnValueOnce({ ...store.client(), from: () => ({ select: () => ({ eq: async () => ({ data: null, error: { message: "down" } }) }) }) } as never);
+    const broken = vi.spyOn(store, "client").mockReturnValueOnce({ ...store.client(), from: () => ({ select: () => ({ in: async () => ({ data: null, error: { message: "down" } }) }) }) } as never);
     expect((await ownerRefusal(DEMO, META_CAMPAIGN))?.status).toBe(503);
     broken.mockRestore();
   });

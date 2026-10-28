@@ -5,6 +5,7 @@ import {
   withMetaConnection,
 } from "@/lib/meta/connection-access";
 import { readStoredCampaignBinding } from "@/lib/campaign/binding";
+import { withoutDuplicates } from "@/lib/campaign/campaign-owner";
 import { saveCampaign } from "./trusted-write";
 import { confirmCustomerCampaign, getCustomerBalance } from "@/lib/payments/customer-balance";
 import { refreshOpenRunCosts } from "@/lib/payments/meta-cost-evidence";
@@ -20,10 +21,13 @@ import {
  */
 export async function enforceAutoPauseWithStatus(businessId: string): Promise<{ paused: string[]; confirmed: boolean }> {
   try {
-    const [limits, campaigns] = await Promise.all([
+    const [limits, loaded] = await Promise.all([
       getSpendLimits(businessId),
       getCampaigns(businessId),
     ]);
+    // #1138: another business's campaign duplicated here is neither counted nor paused; unreadable → pause nothing.
+    const campaigns = await withoutDuplicates(businessId, loaded).catch(() => null);
+    if (!campaigns) return { paused: [], confirmed: false };
     let context;
     try {
       context = await requireOwnedBusiness(businessId);

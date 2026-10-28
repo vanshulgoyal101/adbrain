@@ -61,7 +61,7 @@ vi.mock("@/lib/audit", () => ({ logEvent: mocks.logEvent }));
 // #1138's ownership read sees no other business's row.
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: (table: string) => ({
   upsert: (rows: unknown, options: unknown) => mocks.upsert(table, rows, options),
-  select: () => ({ eq: async () => ({ data: [], error: null }) }),
+  select: () => ({ in: async () => ({ data: [], error: null }) }),
 }) }) }));
 
 function request(): Request {

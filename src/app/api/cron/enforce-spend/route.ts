@@ -21,6 +21,7 @@ import {
   type SpendLimits,
 } from "@/lib/campaign/spend";
 import type { Json } from "@/lib/types";
+import { withoutDuplicates } from "@/lib/campaign/campaign-owner";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -105,6 +106,8 @@ async function handleGET(request: Request) {
           .eq("business_id", businessId).order("id").limit(100);
         return after ? query.gt("id", after) : query;
       }, "Campaigns could not be loaded.", campaign => campaign.id);
+      // #1138: another business's campaign duplicated here is neither counted, settled nor paused.
+      campaigns = await withoutDuplicates(businessId, campaigns);
     } catch { incomplete = true; unverified.push(businessId); continue; }
     const hasActive = campaigns.some(campaign => campaign.status === "active");
     if (!hasActive && !settlingBusinesses.includes(businessId)) continue;
