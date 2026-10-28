@@ -27,7 +27,7 @@ function ModeToggle({
         aria-pressed={mode === "ai"}
         onClick={() => onChange("ai")}
         className={cn(
-          "inline-flex items-center gap-1 rounded-md px-3 py-1 font-medium transition-colors",
+          "inline-flex items-center gap-1 rounded-md px-3 py-1 font-medium transition-colors max-sm:min-h-11",
           mode === "ai"
             ? "bg-white text-blue-700 shadow-sm"
             : "text-slate-500 hover:text-slate-700",
@@ -42,7 +42,7 @@ function ModeToggle({
         aria-pressed={mode === "manual"}
         onClick={() => onChange("manual")}
         className={cn(
-          "rounded-md px-3 py-1 font-medium transition-colors",
+          "rounded-md px-3 py-1 font-medium transition-colors max-sm:min-h-11",
           mode === "manual"
             ? "bg-white text-slate-900 shadow-sm"
             : "text-slate-500 hover:text-slate-700",
@@ -447,7 +447,7 @@ export function TargetingControls({
                   <input type="radio" name={scopeId} value={scope} checked={cityScope === scope}
                     onChange={() => set({ cityScope: scope })} className="peer sr-only" />
                   <span title={scope === "city_only" ? "No added radius; Meta defines the city area" : "City with a surrounding radius"}
-                    className="flex min-h-10 items-center justify-center rounded px-2 py-1 text-center text-sm font-medium text-slate-600 peer-checked:bg-white peer-checked:text-blue-700 peer-checked:shadow-sm peer-focus-visible:outline-2 peer-focus-visible:outline-blue-600">{label}</span>
+                    className="flex min-h-10 items-center justify-center rounded px-2 py-1 text-center text-sm font-medium text-slate-600 max-sm:min-h-11 peer-checked:bg-white peer-checked:text-blue-700 peer-checked:shadow-sm peer-focus-visible:outline-2 peer-focus-visible:outline-blue-600">{label}</span>
                 </label>
               ))}
             </div>

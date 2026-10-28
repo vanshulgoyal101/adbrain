@@ -1698,7 +1698,7 @@ function BusinessCampaigns({
               <span className="block wrap-break-word">{draft.input.name}</span>
               <span className="mt-0.5 block text-xs font-normal text-slate-500">{formatMoney(draft.input.dailyBudgetRupees)} per ad set</span>
             </button>
-            <Button variant="ghost" size="sm" title={`Remove ${draft.input.name}`} aria-label={`Remove ${draft.input.name}`} disabled={draftBusy !== null || creating} onClick={() => void removeDraft(draft)}><Trash2 className="h-4 w-4" aria-hidden="true" /></Button>
+            <Button variant="ghost" size="sm" className="h-11 w-11 p-0" title={`Remove ${draft.input.name}`} aria-label={`Remove ${draft.input.name}`} disabled={draftBusy !== null || creating} onClick={() => void removeDraft(draft)}><Trash2 className="h-4 w-4" aria-hidden="true" /></Button>
           </li>)}
         </ul>
       </details>}
@@ -1733,11 +1733,11 @@ function BusinessCampaigns({
           <div className="my-4 flex flex-col gap-4 sm:flex-row sm:gap-8">
           <fieldset disabled={preparing || creating} className="flex flex-wrap gap-2">
             <legend className="mb-2 text-xs font-medium text-slate-500">Campaign setup</legend>
-            {[["manual", "Choose settings"], ["guided", "Plan with AdBrain"]].map(([value, label]) => <label key={value} className={cn("flex min-h-10 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm", creationMode === value ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200")}><input ref={value === "guided" ? guidedModeRef : undefined} type="radio" name="creation-mode" value={value} checked={creationMode === value} onChange={() => setCreationMode(value)} className="accent-blue-600" />{label}</label>)}
+            {[["manual", "Choose settings"], ["guided", "Plan with AdBrain"]].map(([value, label]) => <label key={value} className={cn("flex min-h-11 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm", creationMode === value ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200")}><input ref={value === "guided" ? guidedModeRef : undefined} type="radio" name="creation-mode" value={value} checked={creationMode === value} onChange={() => setCreationMode(value)} className="accent-blue-600" />{label}</label>)}
           </fieldset>
           <fieldset disabled={preparing || creating || destinationRecoveryLocked} aria-describedby={showDestinationLock ? "destination-lock-reason" : undefined} className="flex flex-wrap gap-2">
             <legend className="mb-2 text-xs font-medium text-slate-500">Destination</legend>
-            {([ ["instant_form", "Instant form"], ["whatsapp", "WhatsApp chat"] ] as const).map(([value, label]) => <label key={value} className={cn("flex min-h-10 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm", destination === value ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200")}><input id={`destination-${value}`} type="radio" name="campaign-destination" value={value} checked={destination === value} onChange={() => { if (!unresolvedRecovery()) { destinationChosenRef.current = true; setDestination(value); setPrepareReview(null); } }} className="accent-blue-600" />{label}</label>)}
+            {([ ["instant_form", "Instant form"], ["whatsapp", "WhatsApp chat"] ] as const).map(([value, label]) => <label key={value} className={cn("flex min-h-11 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm", destination === value ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200")}><input id={`destination-${value}`} type="radio" name="campaign-destination" value={value} checked={destination === value} onChange={() => { if (!unresolvedRecovery()) { destinationChosenRef.current = true; setDestination(value); setPrepareReview(null); } }} className="accent-blue-600" />{label}</label>)}
           </fieldset>
           </div>
           {showDestinationLock && <p id="destination-lock-reason" role="status" className="mb-4 text-sm text-amber-800">Destination is locked until the previous campaign request is resolved.</p>}
@@ -1837,7 +1837,7 @@ function BusinessCampaigns({
                             setAdEditNotes(null);
                             setEditingAdId(c.id);
                           }}
-                          className="h-9 w-full max-sm:absolute max-sm:bottom-1.5 max-sm:left-1.5 max-sm:h-9 max-sm:w-9 max-sm:rounded-full max-sm:bg-white/95 max-sm:p-0"
+                          className="h-9 w-full max-sm:absolute max-sm:bottom-1.5 max-sm:left-1.5 max-sm:h-9 max-sm:w-9 max-sm:rounded-full max-sm:bg-white/95 max-sm:p-0 max-sm:after:absolute max-sm:after:-inset-1 max-sm:after:content-['']"
                         >
                           {/* #847 T6: on a phone, Edit is a corner icon so a row of ads isn't followed by a row of buttons. */}
                           <Pencil className="h-3.5 w-3.5" aria-hidden="true" /><span className="max-sm:sr-only">Edit</span>
@@ -1847,7 +1847,7 @@ function BusinessCampaigns({
                     })}
                   </div>
                   {!showAllAds && pickerAds.some((c, index) => index >= PHONE_PICKER_ADS && !selected.has(c.id)) && (
-                    <Button type="button" size="sm" variant="ghost" onClick={() => setShowAllAds(true)} className="mt-2 w-full sm:hidden">
+                    <Button type="button" size="sm" variant="ghost" onClick={() => setShowAllAds(true)} className="mt-2 h-11 w-full sm:hidden">
                       Show all {pickerAds.length} ads
                     </Button>
                   )}
@@ -1990,14 +1990,13 @@ function BusinessCampaigns({
                 </div>
 
                 <div className="-mt-2 flex flex-wrap items-center gap-2">
-                  <span className="text-xs text-slate-400">Quick pick:</span>
                   {BUDGET_PRESETS.map((amount) => (
                     <button
                       key={amount}
                       type="button"
                       onClick={() => { setBudget(amount); if (!unresolvedRecovery()) setPrepareReview(null); }}
                       className={cn(
-                        "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                        "min-h-11 rounded-full border px-3 text-sm font-medium transition-colors sm:min-h-8 sm:text-xs",
                         budget === amount
                           ? "border-blue-500 bg-blue-50 text-blue-700"
                           : "border-slate-200 text-slate-600 hover:border-slate-300",
@@ -2097,7 +2096,7 @@ function BusinessCampaigns({
                     Check my campaign (nothing spends)
                   </Button>
                 </div>
-                <details className="border-t border-slate-200 pt-3"><summary className="cursor-pointer text-xs font-medium text-slate-500">After campaign creation</summary><HowItWorks /></details>
+                <details className="border-t border-slate-200 pt-3"><summary className="flex min-h-11 cursor-pointer items-center text-xs font-medium text-slate-500">After campaign creation</summary><HowItWorks /></details>
               </>
             )}
             </fieldset>
@@ -2133,7 +2132,7 @@ function BusinessCampaigns({
                 <a
                   href="/api/campaigns/report"
                   download
-                  className="inline-flex min-h-10 items-center gap-1.5 rounded-md px-3 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100"
+                  className="inline-flex min-h-11 items-center gap-1.5 rounded-md px-3 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100"
                 >
                   <FileText className="h-4 w-4" /> Export report
                 </a>
@@ -2141,6 +2140,7 @@ function BusinessCampaigns({
               <Button
                 size="sm"
                 variant="outline"
+                className="max-sm:h-11"
                 onClick={() => syncFromMeta()}
                 data-product-event="campaign.sync"
                 disabled={syncing}
