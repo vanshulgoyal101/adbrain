@@ -49,6 +49,12 @@ describe("core: Campaigns → Go live for a first-timer (#1271)", () => {
     });
   });
 
+  it("#1529: passes the welcome Go live sends (the Brand's saved message here)", async () => {
+    m.getPrimaryBusiness.mockResolvedValue({ ...business, whatsapp_template: { greeting: "Namaste from SunPeak!", opening: { kind: "prefill", prefill: "I'd like a free site survey", callButton: false }, language: "en" } });
+    await page({});
+    expect(m.goLive.mock.calls[0][0].welcome).toEqual({ source: "saved", language: "en", greeting: "Namaste from SunPeak!", autofill: "I'd like a free site survey", callButton: false });
+  });
+
   it("?all=1 opens the campaign review with Go live's budget; an amount not offered is ignored", async () => {
     await page({ all: "1", new: "1", review: "1", budget: "500", creatives: "a" });
     expect(m.campaigns.mock.calls[0][0].newCampaign).toEqual({ creativeIds: ["a"], review: true, budget: 500 });

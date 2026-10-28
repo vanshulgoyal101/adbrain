@@ -7,6 +7,7 @@ import { redirect } from "next/navigation";
 import { Building2 } from "lucide-react";
 import { Campaigns } from "@/components/campaigns";
 import { SetupGoLive } from "@/components/setup-go-live";
+import { setupWelcome } from "@/lib/campaign/setup-welcome";
 import { BUDGET_PRESETS } from "@/lib/campaign/budget";
 import { setupPhone } from "@/lib/brand/setup-fields";
 import { maskWhatsAppNumber } from "@/lib/meta/whatsapp-status-shared";
@@ -111,8 +112,12 @@ export default async function CampaignsPage({
     const ads = (picked.length ? picked : current).slice(0, 3);
     const funding = await fundingMode(business.id).catch(() => null);
     const masked = business.phone ? setupPhone(business.phone) : null;
+    // #1529: the welcome Go live sends, from the same ad rows Review reads.
+    const welcome = (() => {
+      try { return setupWelcome(business, ads.flatMap((ad) => approvedRows.filter((row) => row.id === ad.id))); } catch { return null; }
+    })();
     return <SetupGoLive business={business} ads={ads} pageConnected={metaReady} funding={funding}
-      whatsappNumber={masked ? maskWhatsAppNumber(`+91${masked}`) : null} weeklyCap={weeklyCap} />;
+      whatsappNumber={masked ? maskWhatsAppNumber(`+91${masked}`) : null} weeklyCap={weeklyCap} welcome={welcome} />;
   }
 
   return (

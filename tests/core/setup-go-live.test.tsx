@@ -48,6 +48,8 @@ describe("core: <SetupGoLive> (#1271)", () => {
   it("Page not connected: the primary connects it first, then the page refreshes", () => {
     goLive({ pageConnected: false });
     expect(screen.getByText("Not connected")).toBeInTheDocument();
+    // #1529: before Connect, the full composer is the pre-access dead end, so the link isn't offered.
+    expect(screen.queryByRole("link", { name: "Change who sees it" })).toBeNull();
     fireEvent.click(bar().getByRole("button", { name: "Connect Facebook Page" }));
     fireEvent.click(screen.getByRole("button", { name: "Meta dialog: connected" }));
     expect(mocks.refresh).toHaveBeenCalled();
@@ -147,6 +149,16 @@ describe("core: <SetupGoLive> (#1271)", () => {
       expect(screen.getByText("Stops at ₹708")).toBeInTheDocument();
     }
   });
+});
+
+describe("core: step 3 shows the WhatsApp welcome Go live sends (#1529)", () => {
+  it("the welcome and what's ready to send, read-only", () => {
+    render(<SetupGoLive business={business} ads={ads} pageConnected={false} funding="own" whatsappNumber="+91 ••••• 3210" weeklyCap={null}
+      welcome={{ source: "saved", language: "en", greeting: "Hi! Thanks for asking about a free site survey.", autofill: "I'd like a free site survey", callButton: true }} />);
+    expect(screen.getByText("“Hi! Thanks for asking about a free site survey.”")).toBeInTheDocument();
+    expect(screen.getByText("Customers see your welcome, a Call now button, and 'I'd like a free site survey' ready to send.")).toBeInTheDocument();
+  });
+
 });
 
 describe("core: Go live's total is activation's own cap + GST (#1251 CPO/Dev 2)", () => {
