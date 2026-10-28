@@ -105,10 +105,10 @@ describe("customer balance API", () => {
     expect(response.headers.get("cache-control")).toContain("no-store");
     expect(mocks.owned).toHaveBeenCalledWith(actor.businessId);
     // #1235: paid, the service share and the ad-share refund stay server-side (margin by subtraction).
-    const view = Object.fromEntries(Object.entries(balance).filter(([key]) => !["capturedPaise", "serviceAllocationPaise"].includes(key)));
+    const view = Object.fromEntries(Object.entries(balance).filter(([key]) => !["capturedPaise", "serviceAllocationPaise", "advertisingAllocationPaise"].includes(key)));
     const sent = (await response.json()).balance;
     expect(sent).toEqual(view);
-    expect(JSON.stringify(sent)).not.toMatch(/serviceAllocation|capturedPaise|advertisingRefunded/);
+    expect(JSON.stringify(sent)).not.toMatch(/serviceAllocation|advertisingAllocation|capturedPaise|advertisingRefunded/);
   });
   it.each([["UNAUTHENTICATED", 401], ["FORBIDDEN", 403], ["NOT_FOUND", 404]] as const)("rejects %s without reading money", async (code, status) => {
     mocks.owned.mockRejectedValueOnce(new ConnectionAccessError(code, "Denied"));
