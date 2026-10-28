@@ -194,9 +194,11 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 	rebuilding standard pieces. Keep custom code to AdBrain's own business rules.
 - **Lean (owner, Oct 28: no bloatware; #1171).** Delete before you add: every
 	feature PR removes or simplifies something, or says why not. Build only what a
-	customer or the owner needs now; no speculative features. A feature flag lives
-	14 days at most, then it ships on or its code is deleted. A one-off script is
-	deleted in the PR that used it (fixture recorders behind core tests stay).
+	customer or the owner needs now; no speculative features. Removing existing
+	features, flags, scripts, docs or workflows needs the owner's scope on the
+	issue. Every removal PR tags the last commit that still has it
+	(`removed/<name>`), adds its row to the pinned log #1173, and never drops a
+	column or table.
 
 ## Branches and deployments
 
