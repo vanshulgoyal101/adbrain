@@ -26,7 +26,9 @@
 .in { background: #fff; border-top-left-radius: 0; }
 .out { justify-self: end; background: var(--sent); border-top-right-radius: 0; font-weight: 600; }
 
-.block { max-width: 680px; width: 100%; margin: 0 auto; padding: 28px 20px; border-top: 1px solid var(--border); }
+/* Same left edge as the hero at every width; the text column stays under ~70 characters. */
+.block { max-width: 1080px; width: 100%; margin: 0 auto; padding: 28px 20px; border-top: 1px solid var(--border); }
+.block > * { max-width: 640px; }
 .block h2 { font-size: 22px; line-height: 1.25; font-weight: 700; }
 .list, .steps { margin-top: 14px !important; padding-left: 20px; display: grid; gap: 10px; font-size: 16px; line-height: 1.55; }
 .steps li::marker { font-weight: 700; color: var(--wa); }
