@@ -553,6 +553,9 @@ so Supabase can't restore anything (paid backups are a CEO call, #884). Our own 
   deletes the plaintext and keeps the newest 7 (#1762). To read one: decrypt with the keychain key
   (RELEASING.md › restore drill: `openssl cms -decrypt …`), then `tar -xzf` and
   `node scripts/db-export.mjs restore <folder>`.
+  After a good export it also runs `scripts/prune-smoke-storage.mjs --apply` (#1891): the core smoke's own
+  creatives and `creatives`-bucket files older than 7 days that nothing references (campaigns, ads, drafts,
+  operations, regeneration claims) are deleted; the newest 20 stay. Without `--apply` it only prints counts.
   A failure opens one `Nightly production export failed` `core` bug for DevOps; its log line is in
   `~/.adbrain-supervisor/supervisor.log`. If the Mac sleeps through 20:00Z, the export runs at the first tick after it wakes.
 - **Lost even with an export:** Auth passwords and sessions, Storage file bytes (ad images
