@@ -670,4 +670,13 @@ describe("<LeadInbox> reply in one tap (#1049)", () => {
     expect(screen.getByRole("link", { name: "Call" })).toBeInTheDocument();
     expect(screen.getByText("Replied 12 min after the enquiry")).toBeInTheDocument();
   });
+
+  it("#1140: a tap on an older lead already contacted records no reply time", () => {
+    const calls: string[] = [];
+    global.fetch = vi.fn(async (url: string) => { calls.push(url); return { ok: true, json: async () => ({}) }; }) as unknown as typeof fetch;
+    render(<LeadInbox businessName="Solaride" initialLeads={[lead({ phone: "98765 43210", workflow_status: "contacted" })]} metaReady />);
+    fireEvent.click(screen.getByRole("link", { name: "Call" }));
+    expect(calls).not.toContain("/api/leads/l1");
+    expect(screen.queryByText(/^Replied .* after the enquiry$/)).not.toBeInTheDocument();
+  });
 });
