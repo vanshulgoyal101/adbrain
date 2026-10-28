@@ -1550,6 +1550,8 @@ async function verifyPlanPeriods(db, database) {
       await assert.rejects(session.query("select 1 from public.plan_periods"), { code: "42501" });
     });
     await assert.rejects(db.query("insert into public.plan_periods(business_id,amount_paise) values ($1,100)", [business]), { code: "23514" });
+    // QA (#1430): paid months are receipts (GST, disputes), so deleting the business can't silently erase them.
+    await assert.rejects(db.query("delete from public.businesses where id=$1", [business]), { code: "23503" });
   });
 }
 
