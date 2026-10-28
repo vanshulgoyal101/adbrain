@@ -307,7 +307,7 @@ export function LeadInbox({
       setNotice(
         data.imported
           ? `${data.imported} new ${data.imported === 1 ? "enquiry" : "enquiries"} from Meta.`
-          : data.sync?.state === "complete" ? null : "Checked Meta, but couldn't confirm everything was read.",
+          : data.sync?.state === "complete" ? null : "Some enquiries on Meta couldn't be checked. The ones below are saved; tap Check now to try again.",
       );
     } catch {
       setError("Couldn't check Meta for enquiries. Check your connection.");

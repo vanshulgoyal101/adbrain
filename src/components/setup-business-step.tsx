@@ -203,7 +203,7 @@ export function SetupBusinessStep({ business }: { business: Business | null }) {
         })}
       </div>
 
-      <p className="mt-6 text-sm text-slate-600">Making ads is free. Nothing goes live until you say so.</p>
+      <p className="mt-6 text-sm text-slate-600">Making ads is included. Nothing goes live until you say so.</p>
       <Link href="/brand?all=1" onClick={() => void saveNow().catch(() => undefined)} className="mt-2 inline-flex min-h-11 items-center text-sm font-medium text-slate-700 underline underline-offset-4">
         More about your business
       </Link>
