@@ -1,5 +1,6 @@
 "use client";
 
+import { formatMoneyExact } from "@/lib/format";
 import Script from "next/script";
 import { useEffect, useEffectEvent, useId, useRef, useState } from "react";
 import { CreditCard, ReceiptText, RefreshCw } from "lucide-react";
@@ -38,7 +39,7 @@ const statusLabels: Record<Order["status"], string> = {
   superseded: "Replaced by a newer payment request",
 };
 // #403: exact like a receipt, but no ".00" on whole rupees ("₹10,000", "₹12,345.67").
-const money = (paise: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", minimumFractionDigits: paise % 100 === 0 ? 0 : 2, maximumFractionDigits: 2 }).format(paise / 100);
+const money = (paise: number) => formatMoneyExact(paise / 100);
 
 export function ProductionCheckout({ businessId }: { businessId: string }) {
   const [order, setOrder] = useState<Order | null>(null);

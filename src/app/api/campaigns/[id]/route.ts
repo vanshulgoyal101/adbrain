@@ -21,14 +21,13 @@ import { saveCampaign, deleteVerifiedCampaign } from "@/lib/campaign/trusted-wri
 import { confirmCustomerCampaign, CustomerBalanceError, getCustomerBalance, observeCustomerCosts, reserveCustomerCampaign } from "@/lib/payments/customer-balance";
 import { fundingMode, type FundingMode } from "@/lib/payments/operator-funding";
 import { committedWords, fundingShortfall, readFunding } from "@/lib/campaign/funding-check";
-import { formatMoney } from "@/lib/format";
+import { formatMoney, formatMoneyExact } from "@/lib/format";
 import { getActivationLearning } from "@/lib/campaign/activation-learning";
 import { recordLaunchCap } from "@/lib/campaign/learnings";
 import { lacksAreaExclusions } from "@/lib/meta/service-area";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { campaignOwnedElsewhere, ownerRefusal } from "@/lib/campaign/campaign-owner";
 
-const exactRupees = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" });
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -240,7 +239,7 @@ async function handlePATCH(
             const short = fundingShortfall({ mode, neededPaise: capPaise, account: funding });
             if (short?.kind === "no_limit") throw new CustomerBalanceError("Set a spending limit on the Meta ad account before activating.");
             if (short?.kind === "short") {
-              throw new CustomerBalanceError(`Meta has ${exactRupees.format(short.roomPaise / 100)} left under the ad account's spending limit${committedWords(short.committed)}; this run needs ${exactRupees.format(short.neededPaise / 100)}. Add funds on Meta or choose fewer days.`);
+              throw new CustomerBalanceError(`Meta has ${formatMoneyExact(short.roomPaise / 100)} left under the ad account's spending limit${committedWords(short.committed)}; this run needs ${formatMoneyExact(short.neededPaise / 100)}. Add funds on Meta or choose fewer days.`);
             }
           } else {
             // #216: AdBrain records Meta's lifetime spend itself; the reserve below stays the gate.

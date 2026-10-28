@@ -13,7 +13,7 @@ it("distinguishes verified payments, media, tax and unavailable customer funds",
   } })));
   const view = render(<CustomerBalance businessId={businessId} />);
   await screen.findByText("Pending costs require reconciliation.");
-  expect(screen.getByText("Spent on ads, incl. Meta's GST").nextSibling).toHaveTextContent("₹118.00");
+  expect(screen.getByText("Spent on ads, incl. Meta's GST").nextSibling).toHaveTextContent("₹118");
   expect(screen.getByText("Available ad budget")).toBeInTheDocument();
   // #403: ₹0 rows are noise for an owner; the available figure always shows.
   expect(screen.queryByText("Refunded")).not.toBeInTheDocument();

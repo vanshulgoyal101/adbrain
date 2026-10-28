@@ -307,10 +307,10 @@ describe("campaign sync feedback", () => {
     render(<Campaigns business={business} approved={[creative]} initialCampaigns={[campaign]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady={false} adAccountId="act_1" />);
     fireEvent.click(screen.getByRole("button", { name: "Resume" }));
     await act(async () => { mocks.dialog.current!.onConnected({ authorization: "connected", selected, generation: 1 } as ConnectionDTO); });
-    expect(await screen.findByText("Funded on Meta: ₹2,000.00 room for a ₹1,500.00 cap.")).toBeInTheDocument();
+    expect(await screen.findByText("Funded on Meta: ₹2,000 room for a ₹1,500 cap.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Approve total and activate" })).toBeEnabled();
     fireEvent.change(screen.getByLabelText("Run for"), { target: { value: "5" } });
-    expect(screen.getByText("Funded on Meta: ₹2,000.00 room for a ₹2,500.00 cap. Add funds on Meta or choose fewer days.")).toBeInTheDocument();
+    expect(screen.getByText("Funded on Meta: ₹2,000 room for a ₹2,500 cap. Add funds on Meta or choose fewer days.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Approve total and activate" })).toBeDisabled();
     expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).startsWith("/api/payments/customer-balance"))).toBe(false);
   });
@@ -331,11 +331,11 @@ describe("campaign sync feedback", () => {
     render(<Campaigns business={business} approved={[creative]} initialCampaigns={[campaign]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady={false} adAccountId="act_1" />);
     fireEvent.click(screen.getByRole("button", { name: "Resume" }));
     await act(async () => { mocks.dialog.current!.onConnected({ authorization: "connected", selected, generation: 1 } as ConnectionDTO); });
-    expect(await screen.findByText("Funded on Meta: ₹1,500.00 room for a ₹1,500.00 cap after ₹500.00 for your 1 other live run.")).toBeInTheDocument();
+    expect(await screen.findByText("Funded on Meta: ₹1,500 room for a ₹1,500 cap after ₹500 for your 1 other live run.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Approve total and activate" })).toBeEnabled();
     // ₹2,000 fits Meta's ₹2,000 room but not the ₹1,500 left after the other run.
     fireEvent.change(screen.getByLabelText("Run for"), { target: { value: "4" } });
-    expect(screen.getByText("Funded on Meta: ₹1,500.00 room for a ₹2,000.00 cap after ₹500.00 for your 1 other live run. Add funds on Meta or choose fewer days.")).toBeInTheDocument();
+    expect(screen.getByText("Funded on Meta: ₹1,500 room for a ₹2,000 cap after ₹500 for your 1 other live run. Add funds on Meta or choose fewer days.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Approve total and activate" })).toBeDisabled();
   });
 

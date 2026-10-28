@@ -120,9 +120,8 @@ import { cn, timeAgo } from "@/lib/utils";
 import { useMounted } from "@/lib/use-mounted";
 import { refreshIfStale, staleCampaignIds } from "@/lib/campaign/results-freshness";
 import { goneInMeta } from "@/lib/campaign/gone-in-meta";
-import { formatMoney, formatNumber, formatPerDay } from "@/lib/format";
+import { formatDate, formatMoney, formatMoneyExact, formatNumber, formatPerDay } from "@/lib/format";
 
-const exactRupees = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" });
 
 const subscribeNever = () => () => {};
 
@@ -242,7 +241,7 @@ function refreshNotice(previous: CampaignResult | undefined, next: CampaignResul
   const keys = ["impressions", "clicks", "leads", "spend", "conversations", "whatsapp_opens"] as const;
   if (!next) return "Checked just now: Meta has no results for this campaign yet.";
   if (!previous || keys.some(key => (previous[key] ?? null) !== (next[key] ?? null))) return "Results updated just now.";
-  const since = new Date(previous.fetched_at).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
+  const since = formatDate(previous.fetched_at);
   return `Checked just now: no new results since ${since}.`;
 }
 
@@ -1534,7 +1533,7 @@ function BusinessCampaigns({
                 <p className="mt-1 font-medium">Total limit on Meta: {formatMoney((activationReview.daily_budget ?? 0) * capDays)} over {capDays} {capDays === 1 ? "day" : "days"}. Meta stops delivery at that amount or the end date, whichever comes first.</p>
                 {activationFunding && <p className="mt-1 font-medium">
                   {activationFunding.spendCapPaise > 0
-                    ? `Funded on Meta: ${exactRupees.format(freeRoomPaise(activationFunding) / 100)} room for a ${exactRupees.format(activationCapPaise / 100)} cap${committedWords(activationFunding.committed)}.${activationFunded ? "" : " Add funds on Meta or choose fewer days."}`
+                    ? `Funded on Meta: ${formatMoneyExact(freeRoomPaise(activationFunding) / 100)} room for a ${formatMoneyExact(activationCapPaise / 100)} cap${committedWords(activationFunding.committed)}.${activationFunded ? "" : " Add funds on Meta or choose fewer days."}`
                     : spendLimitRequired
                       ? "Funded on Meta: set a spending limit on the Meta ad account first."
                       : "Funded on your Meta ad account: no spending limit set; Meta stops at the total limit above."}
