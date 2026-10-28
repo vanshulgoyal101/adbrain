@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
-import { getEnv } from "@/lib/env";
 import { isInternalUser } from "@/lib/internal-accounts";
 import { observeRoute } from "@/lib/observability/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { cronAuthError } from "@/lib/security/cron-auth";
 
 export const runtime = "nodejs";
 
@@ -19,11 +19,8 @@ const MAX_LOOKUPS = 10;
 export const GET = observeRoute("/api/cron/access-requests", "GET", handleGET);
 
 async function handleGET(request: Request) {
-  const secret = getEnv().CRON_SECRET;
-  if (!secret) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  if (request.headers.get("authorization") !== `Bearer ${secret}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const unauthorized = cronAuthError(request);
+  if (unauthorized) return unauthorized;
   const admin = createAdminClient();
   const since = new Date(Date.now() - WINDOW_MS).toISOString();
   // #725: the durable record (written before the page says "Request sent"), plus the older analytics beacon.

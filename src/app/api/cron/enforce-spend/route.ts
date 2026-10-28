@@ -1,6 +1,5 @@
 import { observeRoute } from "@/lib/observability/logger";
 import { NextResponse } from "next/server";
-import { getEnv } from "@/lib/env";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { readAllByCursor } from "@/lib/supabase/queries";
 import { confirmCustomerCampaign, getCustomerBalance, listSettlingBusinesses } from "@/lib/payments/customer-balance";
@@ -22,6 +21,7 @@ import {
 } from "@/lib/campaign/spend";
 import type { Json } from "@/lib/types";
 import { withoutDuplicates } from "@/lib/campaign/campaign-owner";
+import { cronAuthError } from "@/lib/security/cron-auth";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -49,11 +49,8 @@ const MANAGED_SWEEP_BUDGET_MS = 45_000;
 
 async function handleGET(request: Request) {
   const startedAt = Date.now();
-  const secret = getEnv().CRON_SECRET;
-  if (!secret) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  if (request.headers.get("authorization") !== `Bearer ${secret}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const unauthorized = cronAuthError(request);
+  if (unauthorized) return unauthorized;
 
   const admin = createAdminClient();
 

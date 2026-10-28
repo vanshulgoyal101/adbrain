@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { getEnv } from "@/lib/env";
 import { observeRoute } from "@/lib/observability/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { cronAuthError } from "@/lib/security/cron-auth";
 
 export const runtime = "nodejs";
 
@@ -23,11 +23,8 @@ const LOOKBACK_MS = 24 * 3_600_000;
 export const GET = observeRoute("/api/cron/scheduler-health", "GET", handleGET);
 
 async function handleGET(request: Request) {
-  const secret = getEnv().CRON_SECRET;
-  if (!secret) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  if (request.headers.get("authorization") !== `Bearer ${secret}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const unauthorized = cronAuthError(request);
+  if (unauthorized) return unauthorized;
   const now = Date.now();
   const { data, error } = await createAdminClient().from("product_events")
     .select("created_at, outcome, route:attributes->>route")

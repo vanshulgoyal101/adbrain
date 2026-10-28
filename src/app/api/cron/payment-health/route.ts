@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { getEnv } from "@/lib/env";
 import { observeRoute } from "@/lib/observability/logger";
 import { getProductionPaymentConfig, ProductionPaymentError } from "@/lib/payments/production-config";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { cronAuthError } from "@/lib/security/cron-auth";
 
 export const runtime = "nodejs";
 
@@ -21,11 +21,8 @@ const healthSchema = z.object({
 export const GET = observeRoute("/api/cron/payment-health", "GET", handleGET);
 
 async function handleGET(request: Request) {
-  const secret = getEnv().CRON_SECRET;
-  if (!secret) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  if (request.headers.get("authorization") !== `Bearer ${secret}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const unauthorized = cronAuthError(request);
+  if (unauthorized) return unauthorized;
   let accountId: string;
   try {
     accountId = getProductionPaymentConfig().accountId;

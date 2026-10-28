@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getEnv } from "@/lib/env";
 import { probeKeys } from "@/lib/llm/key-health";
 import { observeRoute } from "@/lib/observability/logger";
+import { cronAuthError } from "@/lib/security/cron-auth";
 
 export const runtime = "nodejs";
 
@@ -21,10 +22,8 @@ export const GET = observeRoute("/api/cron/llm-credit", "GET", handleGET);
 
 async function handleGET(request: Request) {
   const env = getEnv();
-  if (!env.CRON_SECRET) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  if (request.headers.get("authorization") !== `Bearer ${env.CRON_SECRET}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const unauthorized = cronAuthError(request);
+  if (unauthorized) return unauthorized;
   const [keys, health] = await Promise.all([
     Promise.all(env.OPENROUTER_API_KEYS.map((key, index) => readKey(key, index))),
     probeKeys(env).catch(() => []),
