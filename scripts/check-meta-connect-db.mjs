@@ -599,9 +599,7 @@ async function verifyConfigurablePayments(db, database) {
   });
   await check(`${database}: webhook health counts captured orders held for review until they're refunded (#1684)`, async () => {
     const health = () => service("select public.production_payment_webhook_health('acc_pricing') as result");
-    const held = async () => (await db.query("select count(*)::int as count from private.production_payment_orders where account_id='acc_pricing' and review_required and captured_paise>0 and refunded_paise<amount_paise")).rows[0].count;
     const before = await health();
-    assert.equal(before.reviewRequired,await held());
     const order = (await db.query("select id,key_id from private.production_payment_orders where account_id='acc_pricing' and captured_paise>0 and not review_required and refunded_paise=0 limit 1")).rows[0];
     assert.ok(order,'a clean captured order to flag');
     await service("select public.production_payment_order_review($1,'acc_pricing',$2) as result",[order.id,order.key_id]);
@@ -609,6 +607,17 @@ async function verifyConfigurablePayments(db, database) {
     // The operator resolves it by refunding the customer; review_required stays set, but the money is no longer held.
     await db.query("update private.production_payment_orders set refunded_paise=amount_paise,provider_refunded_paise=amount_paise where id=$1",[order.id]);
     assert.equal((await health()).reviewRequired,before.reviewRequired,'a refunded order stops alerting');
+    // The headline case (Reviewer on #1710): Razorpay captured a payment that doesn't match the quote, so it never
+    // verifies and captured_paise stays 0, yet the customer's money is held.
+    const pending = (await db.query("select id,key_id,provider_order_id from private.production_payment_orders where account_id='acc_pricing' and captured_paise=0 and provider_order_id is not null and not review_required limit 1")).rows[0];
+    assert.ok(pending,'an unpaid order to receive a mismatched capture');
+    await service("select public.production_payment_event_receive('acc_pricing',$1,$2,$3,$4,'pay_mismatch',$5,null,'capture') as result",[pending.key_id,randomUUID(),'evt_mismatch','b'.repeat(64),pending.provider_order_id]);
+    const observed = await service("select public.production_payment_observe($1,'acc_pricing',$2,'pay_mismatch',false,0,true,$3) as result",[pending.id,pending.key_id,'c'.repeat(64)]);
+    assert.equal(observed.state,'review_required');
+    assert.equal(observed.captured_paise,0,'a mismatched capture is never credited');
+    assert.equal((await health()).reviewRequired,before.reviewRequired+1,'money held on a mismatched capture alerts');
+    await db.query("update private.production_payment_orders set provider_refunded_paise=amount_paise where id=$1",[pending.id]);
+    assert.equal((await health()).reviewRequired,before.reviewRequired,'a full provider refund stops alerting');
   });
   await check(`${database}: pricing objects remain inaccessible to browser roles`, async () => {
     for (const role of ['anon','authenticated']) {
