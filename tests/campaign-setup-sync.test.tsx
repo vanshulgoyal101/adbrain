@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { formatDate } from "@/lib/format";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Campaigns } from "@/components/campaigns";
@@ -484,7 +485,9 @@ describe("campaign sync feedback", () => {
     render(<Campaigns business={business} approved={[creative]} initialCampaigns={[campaign]} initialResults={{ "campaign-1": before } as never} leadForms={[]} leadFormError={null} metaReady={false} adAccountId="act_1" />);
     const card = within(screen.getByRole("heading", { name: "Saved campaign" }).closest("article")!);
     fireEvent.click(card.getByRole("button", { name: "Refresh results" }));
-    const since = new Date(before.fetched_at).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
+    // #1290: India time whatever the server's zone (03:35 UTC is 9:05 am IST).
+    const since = formatDate(before.fetched_at);
+    expect(since).toMatch(/9:05 am$/);
     expect(await card.findByRole("status")).toHaveTextContent(`Checked just now: no new results since ${since}.`);
     next = { ...next, id: "r3", impressions: 300, fetched_at: "2026-10-26T06:00:00.000Z" };
     fireEvent.click(card.getByRole("button", { name: "Refresh results" }));
