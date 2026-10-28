@@ -343,13 +343,16 @@ export function LeadInbox({
     const contactMinutes = first ? (Date.parse(first) - Date.parse(l.created_time ?? l.created_at)) / 60_000 : NaN;
     const current = statusOf(l);
     // #1260: one state word per row: New → Contacted in {m} → Customer.
-    const state = current === "customer" ? "customer" : current === "closed" ? "closed" : first ? "contacted" : current === "new" ? "new" : "other";
-    const stateLabel = state === "new" ? "New" : state === "contacted" ? contactedLabel(contactMinutes) : state === "closed" ? "Not interested" : STATUS_LABEL[current];
+    // #1819: Meta's test lead isn't someone waiting (the counts leave it out), so it says what it is.
+    const state = isMetaTestLead(l) ? "test" : current === "customer" ? "customer" : current === "closed" ? "closed" : first ? "contacted" : current === "new" ? "new" : "other";
+    const stateLabel = state === "test" ? "Test lead" : state === "new" ? "New" : state === "contacted" ? contactedLabel(contactMinutes) : state === "closed" ? "Not interested" : STATUS_LABEL[current];
+    // #1819: no WhatsApp/Call line and no Became a customer, so ⋯ sits on the name row instead of alone on a line.
+    const noActions = state === "test" || state === "customer" || (state === "new" && !l.phone);
     const city = isMetaTestLead(l) ? null : l.city;
     const meta = [l.created_time ? whenLabel(l.created_time) : null, l.source === "whatsapp_manual" ? "WhatsApp chat" : null, city].filter(Boolean).join(" · ");
     const replyText = firstReplyText({ leadName: leadName(l), businessName, offer, language });
     const whatsapp = isMetaTestLead(l) ? null : whatsappReplyLink(l.phone, replyText);
-    return { first, contactMinutes, current, state, stateLabel, meta, name: leadName(l) ?? "this enquiry", replyText, whatsapp };
+    return { first, contactMinutes, current, state, stateLabel, meta, name: leadName(l) ?? "this enquiry", replyText, whatsapp, noActions };
   }
   const selectedLead = wide ? leads.find((lead) => lead.id === pickedId) ?? leads[0] ?? null : null;
   const detail = selectedLead ? rowInfo(selectedLead) : null;
@@ -506,9 +509,9 @@ export function LeadInbox({
             </thead>
             <tbody className="divide-y divide-slate-100">
               {leads.map((l) => {
-                const { first, contactMinutes, current, state, stateLabel, meta, name, whatsapp } = rowInfo(l);
+                const { first, contactMinutes, current, state, stateLabel, meta, name, whatsapp, noActions } = rowInfo(l);
                 return (
-                <tr role="row" key={l.id} className="hover:bg-slate-50" data-state={state} data-selected={selectedLead?.id === l.id || undefined}>
+                <tr role="row" key={l.id} className="hover:bg-slate-50" data-lead={l.id} data-state={state} data-actions={noActions ? "none" : undefined} data-selected={selectedLead?.id === l.id || undefined}>
                   <td role="cell" className={styles.person}>
                     <span className={styles.avatar} aria-hidden="true">{initials(leadName(l))}</span>
                     {wide ? <button type="button" className={styles.name} aria-pressed={selectedLead?.id === l.id} onClick={() => setPickedId(l.id)}>{leadName(l) ?? "—"}</button>
