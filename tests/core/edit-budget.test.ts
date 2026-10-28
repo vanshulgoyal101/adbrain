@@ -4,6 +4,7 @@ import cappedTape from "./fixtures/meta/edit-budget-capped.json";
 import refusedTape from "./fixtures/meta/edit-budget-refused.json";
 import rateLimitedTape from "./fixtures/meta/edit-budget-rate-limited.json";
 import fundingTape from "./fixtures/meta/account-funding.json";
+import liveRunsTape from "./fixtures/meta/account-funding-live-runs.json";
 
 // #774 3/3: POST /api/campaigns/[id]/budget through the real route, connection access, budget-edit service,
 // money rules, MetaClient, trusted write and audit, on a token sealed by the real token store. Only Supabase
@@ -14,6 +15,9 @@ import fundingTape from "./fixtures/meta/account-funding.json";
 // budget refusal (1885272) and its 30 s limit (613, which counts validate_only). The service reads each ad
 // set before the edit, so that read is replayed from the tape's own read of the same state. The account
 // funding is recorded (₹847.46 of room); "no account limit" for the successful cap raise is synthesised.
+// #1094: the account's live ad sets are Solaride's real listing (recorded and scrubbed Oct 27, 18:00Z: the lever-2
+// WhatsApp run, ₹450 left), mapped onto this account, with this campaign's own capped ad set added, so the raise
+// excludes it and counts the other.
 // The clock is the recording time, so the capped run's end dates stay in the future.
 type Exchange = { method: string; path: string; status: number; body: unknown };
 type Row = Record<string, unknown>;
@@ -79,7 +83,7 @@ const BUSINESS = "00000000-0000-4000-8000-000000000774";
 const OWNER = "00000000-0000-4000-8000-000000000001";
 const SEAL_ID = "00000000-0000-4000-8000-000000000003";
 const STORED = "00000000-0000-4000-8000-000000000004";
-const ACCOUNT = "act_2398686420592052", PAGE = "885223068001054", GENERATION = 3;
+const ACCOUNT = "act_9000000000000001", PAGE = "900000000000002", GENERATION = 3;
 const available = { state: "available", blockers: [] };
 const RECORDED_AT = new Date("2026-10-26T14:45:00Z");
 
@@ -88,6 +92,11 @@ const CAMPAIGN = "120253712459000526", DAILY_AD_SET = "120253712459810526", DAIL
 const CAPPED_AD_SET = "120253712571840526", CAPPED_AD = "120253712576640526";
 const recordedFunding = fundingTape[0] as Exchange;
 const noAccountLimit: Exchange = { ...recordedFunding, body: { ...recordedFunding.body as Row, spend_cap: "0" } };
+const recordedListing = JSON.parse(JSON.stringify(liveRunsTape.tape[1]).replaceAll(liveRunsTape.adAccountId, ACCOUNT)) as Exchange;
+const listing = (others: boolean): Exchange => ({ ...recordedListing, body: { ...recordedListing.body as Row, data: [
+  { id: CAPPED_AD_SET, effective_status: "ACTIVE", lifetime_budget: "60000", budget_remaining: "60000", daily_budget: "0" },
+  ...others ? (recordedListing.body as { data: Row[] }).data : [],
+] } });
 
 const audit: Row[] = [];
 const graph = { sent: [] as Array<{ method: string; path: string; form: Record<string, string> }>, pending: [] as Exchange[] };
@@ -287,7 +296,7 @@ describe("core: edit a capped run's total and end date (#774)", () => {
 
   it("raises the cap and runs longer after a confirmation, and keeps raw written meanwhile", async () => {
     storedCapped(launchCap);
-    replay([capped[2], noAccountLimit, ...capped.slice(0, 4), capped[6], noAccountLimit, ...capped.slice(4, 9)]);
+    replay([capped[2], noAccountLimit, listing(true), ...capped.slice(0, 4), capped[6], noAccountLimit, listing(true), ...capped.slice(4, 9)]);
     const change = { capRupees: 900, endTime: longer };
     const preview = await edit({ change, preview: true });
     expect(preview.status).toBe(200);
@@ -320,7 +329,7 @@ describe("core: edit a capped run's total and end date (#774)", () => {
   it("checks a running capped run's faster pace against the weekly limit in Settings, before any write", async () => {
     storedCapped(launchCap, { status: "active" });
     money.weeklyCapRupees = 1_000;
-    replay([capped[2], noAccountLimit]);
+    replay([capped[2], noAccountLimit, listing(true)]);
     const { status, body } = await edit({ change: { capRupees: 900 }, preview: true });
     expect(status).toBe(422);
     expect(body.error).toBe("About ₹301 a day would take your campaigns past your weekly limit of ₹1,000 in Settings.");
@@ -329,10 +338,25 @@ describe("core: edit a capped run's total and end date (#774)", () => {
 
   it("refuses a cap the Meta ad account can't fund (recorded room ₹847.46), before any write", async () => {
     storedCapped(launchCap);
-    replay([capped[2], recordedFunding]);
+    replay([capped[2], recordedFunding, listing(false)]);
     const { status, body } = await edit({ change: { capRupees: 900 }, preview: true });
     expect(status).toBe(422);
-    expect(body.error).toContain("left under the ad account's spending limit");
+    // #1094: the run's own ₹600 still to spend is not subtracted again: it is part of the ₹900 it needs.
+    expect(body.error).toBe("Meta has ₹847 left under the ad account's spending limit; this cap needs ₹900. Add funds on Meta or choose a lower cap.");
+    expect(writes()).toEqual([]);
+  });
+
+  // #1094 (CTO): tonight's ₹250 → ₹450 raise was checked against the whole room, not what other runs leave.
+  it("counts the account's other live run against a raise, names it, and leaves out uncapped spend", async () => {
+    storedCapped(launchCap);
+    const withDaily = listing(true);
+    (withDaily.body as { data: Row[] }).data.push({ id: "120253700000000526", effective_status: "ACTIVE", lifetime_budget: "0", budget_remaining: "0", daily_budget: "20000" });
+    replay([capped[2], recordedFunding, withDaily]);
+    const { status, body } = await edit({ change: { capRupees: 800 }, preview: true });
+    expect(status).toBe(422);
+    // ₹847.46 room − ₹450 still promised to the WhatsApp run = ₹397.46 < ₹800; the ₹200/day ad set is named only.
+    expect(body.error).toBe("Meta has ₹397 left under the ad account's spending limit after ₹450 for your 1 other live run, and ₹200 a day also runs on 1 uncapped ad set; this cap needs ₹800. Add funds on Meta or choose a lower cap.");
+    expect(graph.sent.map(call => call.path)).toContain(recordedListing.path);
     expect(writes()).toEqual([]);
   });
 

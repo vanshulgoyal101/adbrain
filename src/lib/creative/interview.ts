@@ -96,8 +96,13 @@ export function ownerLanguage(input: Pick<InterviewInput, "goal" | "answers">): 
   const text = [input.goal, ...typed].join(" ");
   if (/\p{Script=Devanagari}/u.test(text)) return "hi";
   if (/\p{Script=Gurmukhi}/u.test(text)) return "pa";
+  return isRomanHindi(text) ? "hinglish" : undefined;
+}
+
+/** Hindi written in Roman script: at least two common Hindi words ("mujhe … chahiye"). */
+export function isRomanHindi(text: string): boolean {
   const words = new Set(text.toLowerCase().match(/[a-z]+/g) ?? []);
-  return [...HINGLISH_WORDS].filter((word) => words.has(word)).length >= 2 ? "hinglish" : undefined;
+  return [...HINGLISH_WORDS].filter((word) => words.has(word)).length >= 2;
 }
 
 const text = (max: number) => z.string().trim().min(1).max(max);

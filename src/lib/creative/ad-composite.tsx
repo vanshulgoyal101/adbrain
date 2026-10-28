@@ -1,4 +1,4 @@
-import type { AdDesignSpec } from "./design";
+import { STORY_SAFE, type AdDesignSpec } from "./design";
 import type { ShapedText } from "./shaped-text";
 
 // The ad overlay as plain React (#387): the server rasterises it with Satori (render.tsx),
@@ -57,9 +57,9 @@ export function logoTileWidth(ratio: number, s: number): number {
 
 export function AdComposite({ spec, logoRatio = 1, shaped = {} }: { spec: AdDesignSpec; logoRatio?: number; shaped?: ShapedWords }) {
   const { s, pad, headlineSize, subheadSize, benefitSize, brandSize, ctaSize, contactSize, phoneSize } = adMetrics(spec);
-  // Stories and Reels cover the top (profile bar) and bottom (reply box, CTA) with their own UI.
-  const safeTop = spec.format === "story" ? Math.round(spec.height * 0.13) : 0;
-  const safeBottom = spec.format === "story" ? Math.round(spec.height * 0.18) : 0;
+  // Stories and Reels cover the top (profile bar) and bottom (caption, reply box, CTA) with their own UI (#1077).
+  const safeTop = spec.format === "story" ? Math.round(spec.height * STORY_SAFE.top) : 0;
+  const safeBottom = spec.format === "story" ? Math.round(spec.height * STORY_SAFE.bottom) : 0;
   const contentTop =
     spec.layout === "top"
       ? safeTop + pad + Math.round(96 * s)

@@ -10,7 +10,7 @@ import { createAnnualPaymentQuote } from "@/lib/payments/allocation";
 // the decision and the client are real.
 type Exchange = { method: string; path: string; form?: Record<string, string>; status: number; body: Record<string, unknown> };
 const exchanges = tape.exchanges as Exchange[];
-const creds = { adAccountId: tape.adAccountId, pageId: "885223068001054", accessToken: "test-token" };
+const creds = { adAccountId: tape.adAccountId, pageId: "900000000000002", accessToken: "test-token" };
 
 function replay(readBack: Record<string, unknown> = exchanges[1].body) {
   const sent: string[] = [];

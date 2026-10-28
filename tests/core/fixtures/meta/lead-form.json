@@ -1,11 +1,11 @@
 [
   {
     "method": "GET",
-    "path": "885223068001054?fields=access_token",
+    "path": "900000000000002?fields=access_token",
     "status": 200,
     "body": {
       "access_token": "REDACTED",
-      "id": "885223068001054"
+      "id": "900000000000002"
     }
   },
   {
@@ -18,7 +18,7 @@
       "status": "ACTIVE",
       "page": {
         "name": "Solaride Energy",
-        "id": "885223068001054"
+        "id": "900000000000002"
       }
     }
   },

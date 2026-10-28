@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { MetaSetupChecklist } from "@/components/meta-setup-checklist";
 import { setupChecklist } from "@/lib/meta/setup-checklist";
@@ -19,6 +19,23 @@ describe("Meta setup checklist (#1016)", () => {
     expect(link).toHaveAttribute("rel", "noopener noreferrer");
     expect(screen.getAllByRole("link")).toHaveLength(1);
     expect(document.querySelector('[lang="hi"]')?.textContent).toMatch(/UPI/);
+  });
+
+  it("puts the row to fix first and counts it; what's done is a short list (#847)", () => {
+    render(<MetaSetupChecklist rows={setupChecklist(reads, { adAccountId: "act_42" })} />);
+    expect(screen.getByText(/^1 thing to fix in Meta before you launch/)).toBeInTheDocument();
+    const items = screen.getAllByRole("listitem");
+    expect(items[0]).toHaveTextContent("Payment method");
+    expect(within(screen.getByRole("list", { name: "Already set" })).getAllByRole("listitem")).toHaveLength(4);
+    expect(screen.getByText(/\(Solaride\)/)).toBeInTheDocument();
+  });
+
+  it("is one line when everything is set, with the checks behind a disclosure (#847)", () => {
+    render(<MetaSetupChecklist rows={setupChecklist({ ...reads, paymentMethod: true }, { adAccountId: "act_42" })} />);
+    expect(screen.getByText(/^All 5 set\./)).toBeInTheDocument();
+    expect(screen.getByText("See what AdBrain checked").closest("details")).not.toHaveAttribute("open");
+    expect(screen.queryByRole("link")).toBeNull();
+    expect(screen.queryByText(": needs action")).toBeNull();
   });
 
   it("says so plainly when Meta can't be read", () => {

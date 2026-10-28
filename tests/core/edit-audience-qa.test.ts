@@ -10,7 +10,7 @@ import { MetaClient } from "@/lib/meta/client";
 // 2. #741 (P0): an owner exclusion must not wipe the out-of-area exclusions already on the ad set.
 type Exchange = { method: string; path: string; status: number; body: unknown };
 type Sent = { method: string; path: string; form: Record<string, string> };
-const creds = { adAccountId: "act_2398686420592052", pageId: "885223068001054", accessToken: "test-token" };
+const creds = { adAccountId: "act_9000000000000001", pageId: "900000000000002", accessToken: "test-token" };
 const AREA = [{ key: "1723" }, { key: "1731" }]; // two of #802's 33 excluded states
 
 function tapeWith(edit: (source: Record<string, unknown>) => void): Exchange[] {

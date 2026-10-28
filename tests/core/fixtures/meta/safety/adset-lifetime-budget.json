@@ -1,7 +1,7 @@
 [
   {
     "method": "POST",
-    "path": "act_2398686420592052/adsets",
+    "path": "act_9000000000000001/adsets",
     "form": {
       "name": "AdBrain safety fixture lifetime ad set (PAUSED test)",
       "campaign_id": "120253654207670526",
@@ -12,7 +12,7 @@
       "optimization_goal": "LEAD_GENERATION",
       "bid_strategy": "LOWEST_COST_WITHOUT_CAP",
       "destination_type": "ON_AD",
-      "promoted_object": "{\"page_id\":\"885223068001054\"}",
+      "promoted_object": "{\"page_id\":\"900000000000002\"}",
       "targeting": "{\"geo_locations\":{\"cities\":[{\"key\":\"2525495\"}],\"location_types\":[\"home\",\"recent\"]},\"age_min\":25,\"age_max\":55,\"targeting_automation\":{\"advantage_audience\":0}}"
     },
     "status": 200,

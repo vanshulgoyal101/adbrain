@@ -2,7 +2,7 @@
 
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { Check, Copy, Inbox, Loader2, MessageCircle, RefreshCw, Search, X, Save, Pencil, ChevronDown, SlidersHorizontal, UserCheck } from "lucide-react";
+import { Check, Copy, Inbox, Loader2, MessageCircle, Phone, RefreshCw, Search, X, Save, Pencil, ChevronDown, SlidersHorizontal, UserCheck } from "lucide-react";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -13,6 +13,7 @@ import { useMounted } from "@/lib/use-mounted";
 import type { Lead } from "@/lib/types";
 import { useLeadList } from "@/lib/leads/use-lead-list";
 import { workflowStatuses, type WorkflowStatus } from "@/lib/leads/filters";
+import { firstReplyText, formatReplyTime, whatsappReplyLink, type ReplyLanguage } from "@/lib/leads/first-reply";
 import styles from "./lead-inbox.module.css";
 
 const LEADS_FRESH_MS = 15 * 60_000;
@@ -41,6 +42,8 @@ function leadName(lead: Pick<Lead, "full_name">): string | null {
 
 export function LeadInbox({
   businessName,
+  offer = null,
+  language = "en",
   initialLeads,
   initialTotal = initialLeads.length,
   initialNextCursor = null,
@@ -48,6 +51,9 @@ export function LeadInbox({
   syncScope,
 }: {
   businessName: string;
+  /** #1049: the business's first offer and language, for the pre-filled first WhatsApp reply. */
+  offer?: string | null;
+  language?: ReplyLanguage;
   initialLeads: Lead[];
   initialTotal?: number;
   initialNextCursor?: string | null;
@@ -166,6 +172,18 @@ export function LeadInbox({
   }
 
   const statusOf = (lead: Lead): WorkflowStatus => confirmed[draftKey(lead)]?.status ?? lead.workflow_status ?? "new";
+
+  // #1049: the first time the owner reached out from the card (this session's tap, else the saved one).
+  const [contactedAt, setContactedAt] = useState<Record<string, string>>({});
+  const firstContact = (lead: Lead) => lead.first_contacted_at ?? contactedAt[draftKey(lead)] ?? null;
+  function markContacted(lead: Lead) {
+    if (firstContact(lead)) return;
+    setContactedAt(current => ({ ...current, [draftKey(lead)]: new Date().toISOString() }));
+    // keepalive: the tap leaves for WhatsApp or the dialer, and the record still has to land.
+    void fetch(`/api/leads/${lead.id}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contacted: true }), keepalive: true,
+    }).catch(() => undefined);
+  }
 
   /** #798: one tap marks an enquiry as a customer (and Undo puts the old status back); notes are kept. */
   async function setCustomer(lead: Lead, status: WorkflowStatus, previous: WorkflowStatus) {
@@ -401,6 +419,22 @@ export function LeadInbox({
                         {l.phone}
                       </a>
                     )}
+                    {!isMetaTestLead(l) && l.phone && (() => {
+                      const whatsapp = whatsappReplyLink(l.phone, firstReplyText({ leadName: leadName(l), businessName, offer, language }));
+                      const first = firstContact(l);
+                      const replied = first ? Date.parse(first) - Date.parse(l.created_time ?? l.created_at) : NaN;
+                      return <div className="mt-1 flex flex-wrap items-center gap-2">
+                        {whatsapp && <a href={whatsapp} target="_blank" rel="noopener noreferrer" onClick={() => markContacted(l)}
+                          className="inline-flex min-h-11 items-center gap-1 rounded-md bg-emerald-600 px-3 text-xs font-medium text-white hover:bg-emerald-700">
+                          <MessageCircle size={14} aria-hidden="true" />WhatsApp them</a>}
+                        <a href={`tel:${l.phone}`} onClick={() => markContacted(l)}
+                          className="inline-flex min-h-11 items-center gap-1 rounded-md border border-slate-300 px-3 text-xs font-medium text-slate-800 hover:bg-slate-50">
+                          <Phone size={14} aria-hidden="true" />Call</a>
+                        {first && <span className="block w-full text-xs text-slate-500">
+                          {Number.isFinite(replied) && replied >= 0 ? `Replied ${formatReplyTime(replied / 60_000)} after the enquiry` : "Replied"}
+                        </span>}
+                      </div>;
+                    })()}
                     {!isMetaTestLead(l) && l.email && (
                       <a href={`mailto:${l.email}`} className="block max-w-64 break-all text-blue-700 hover:underline">
                         {l.email}
@@ -420,7 +454,7 @@ export function LeadInbox({
                         <Pencil size={14} aria-hidden="true" />{statusOf(l) === "customer" ? <Status tone="live">Customer</Status> : STATUS_LABEL[statusOf(l)]}
                       </button>
                       {statusOf(l) !== "customer" && !isMetaTestLead(l) && (
-                        <Button type="button" size="sm" variant="outline" className="min-h-11" data-product-event="lead.customer" disabled={!!marking || saving}
+                        <Button type="button" size="sm" variant="outline" className="h-auto min-h-11 max-w-full shrink whitespace-normal py-1.5 text-left" data-product-event="lead.customer" disabled={!!marking || saving}
                           aria-label={`${leadName(l) ?? "This enquiry"} became a customer`} onClick={() => void setCustomer(l, "customer", statusOf(l))}>
                           {marking === l.id ? <Loader2 size={14} className="animate-spin" aria-hidden="true" /> : <UserCheck size={14} aria-hidden="true" />}Became a customer
                         </Button>

@@ -130,7 +130,9 @@ function clearDraft(businessId: string): void {
 function createFactsLine(business: Pick<Business, "locations" | "offers" | "usps">): string {
   const first = (values?: string[] | null) => (values ?? []).map((value) => value.trim()).filter(Boolean);
   const cut = (value: string) => (value.length > 40 ? `${value.slice(0, 39).trimEnd()}…` : value);
-  const places = first(business.locations).slice(0, 2).join(", ");
+  // #1034: Create sends every Brand area, so none is dropped here: the first 3, then how many more.
+  const areas = first(business.locations);
+  const places = areas.slice(0, 3).join(", ") + (areas.length > 3 ? ` +${areas.length - 3} more` : "");
   const offer = first(business.offers)[0];
   const proof = offer ? undefined : first(business.usps)[0];
   const facts = [places, offer && `offer: ${cut(offer)}`, proof && `proof: ${cut(proof)}`].filter(Boolean).join(" · ");

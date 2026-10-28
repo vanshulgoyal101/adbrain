@@ -39,8 +39,8 @@ const CHILD_ROW_ID = "00000000-0000-4000-8000-000000000624";
 const KEY = Buffer.alloc(32, 7).toString("base64");
 let LEDGER: Record<string, unknown>;
 const BASE_LEDGER = {
-  business_id: BUSINESS, state: "ready", child_business_id: "1158100643072999", ad_account_id: "act_2398686420592052",
-  page_id: "885223068001054", funding_state: "card_attached", generation: 1, manager_token_id: CHILD_ROW_ID,
+  business_id: BUSINESS, state: "ready", child_business_id: "1158100643072999", ad_account_id: "act_9000000000000001",
+  page_id: "900000000000002", funding_state: "card_attached", generation: 1, manager_token_id: CHILD_ROW_ID,
 };
 async function storedChildToken(overrides: Record<string, unknown> = {}) {
   const { encryptMetaToken } = await import("@/lib/meta/token-store");

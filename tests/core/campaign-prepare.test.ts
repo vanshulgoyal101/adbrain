@@ -89,7 +89,7 @@ function replayMeta(tape: { method: string; path: string; status: number; body: 
     return Response.json(exchange.body, { status: exchange.status });
   });
   mocks.meta.mockImplementation(async (_actor: unknown, _options: unknown, run: (meta: MetaClient) => unknown) =>
-    run(new MetaClient({ accessToken: "token", adAccountId: "act_2398686420592052", pageId: "885223068001054" })));
+    run(new MetaClient({ accessToken: "token", adAccountId: "act_9000000000000001", pageId: "900000000000002" })));
 }
 
 describe("core: Prepare audience", () => {

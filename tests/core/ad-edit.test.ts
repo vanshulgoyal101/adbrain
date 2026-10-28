@@ -4,7 +4,7 @@ import recorded from "./fixtures/meta/ad-edit.json";
 
 // ad-edit.json: #499's paused ad and its creative as Meta stores them, and Meta's validate_only
 // answers for the edited creative and the ad swap (scripts/record-meta-ad-edit.ts, nothing created).
-const creds = { adAccountId: "act_2398686420592052", pageId: "885223068001054", accessToken: "test-token" };
+const creds = { adAccountId: "act_9000000000000001", pageId: "900000000000002", accessToken: "test-token" };
 type Sent = { method: string; path: string; form: Record<string, string> };
 
 function replay(overrides: { confirmCreative?: string; accountId?: string; refuseCreative?: boolean } = {}) {

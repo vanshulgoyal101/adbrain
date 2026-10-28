@@ -131,6 +131,9 @@ export interface MatchedGeo {
   label: string;
 }
 
+/** #1045: one ad's status as Meta reads it back; `changed` is false when it already had that status (no write). */
+export type AdStatus = { id: string; status: string | null; effectiveStatus: string | null; changed: boolean };
+
 export interface ResolvedGeo {
   targeting: GeoTargeting;
   matched: MatchedGeo[];
@@ -174,6 +177,8 @@ export type AudienceChanges = {
   languages?: number[];
 };
 export type AudienceEdit = { mode: "patch" | "rebuild"; validated: boolean; adSetId: string; adIds: string[]; retiredAdSetId: string | null };
+/** #765 (b): a running ad set's PAUSED copy was switched on and the old ad set retired. */
+export type AdSetSwitch = { fromAdSetId: string; adSetId: string; adIds: string[] };
 /** #774: an ad set's budget as Meta reports it, in paise. A capped run has a lifetime budget and an end time. */
 export type AdSetBudget = {
   adSetId: string; status: string; dailyBudgetPaise: number; lifetimeBudgetPaise: number; remainingPaise: number; endTime: string | null;
@@ -340,6 +345,8 @@ export function metaErrorMessage(error: GraphErrorBody | undefined, status: numb
 }
 
 export class CampaignDeliveryError extends MetaError {}
+/** The switch failed after the old ad set was paused and it couldn't be turned back on: reconcile in Meta. */
+export class AdSetSwitchStuckError extends CampaignDeliveryError {}
 
 /** #721: Meta deleted or archived the campaign, so it has no ad sets left to read. */
 export class CampaignGoneError extends MetaError {
@@ -361,6 +368,8 @@ export type PausedCampaignTree = {
 };
 
 export type CappedAdSet = { adSetId: string; adIds: string[]; lifetimeBudgetPaise: number; endTime: string };
+/** #1058/#1094: ad set states that can still spend their budget; over-counting is the safe side for money. */
+const SPENDING_AD_SET_STATUSES = ["ACTIVE", "IN_PROCESS", "WITH_ISSUES"];
 export type AccountFunding = { spendCapPaise: number; amountSpentPaise: number; roomPaise: number; prepay: boolean };
 export type CappedActivation = {
   campaign: { id: string; status: "ACTIVE"; effectiveStatus: string | null };
@@ -1688,6 +1697,32 @@ export class MetaClient {
   }
 
   /**
+   * #1058: the lifetime budget still to spend on this ad account's running capped runs. Meta's account
+   * room counts only what was spent, so each ACTIVE lifetime-budget ad set's `budget_remaining` is already
+   * promised. #1094: `exclude` leaves out the ad sets being edited, and daily-budget ad sets are reported
+   * (not counted: they have no total). Ad sets Meta is still processing or flags keep their budget, so they
+   * count too (QA on #1083). Read-only; an incomplete or unreadable listing fails closed.
+   */
+  async readLiveCappedRuns(exclude: string[] = []): Promise<{ runs: number; remainingPaise: number; uncapped: { adSets: number; dailyPaise: number } }> {
+    const listing = await this.graph<{ data?: Array<{ id?: string; effective_status?: string; lifetime_budget?: string; budget_remaining?: string; daily_budget?: string }>; paging?: { next?: string } }>(
+      `${encodeURIComponent(this.creds.adAccountId)}/adsets?fields=id,effective_status,lifetime_budget,budget_remaining,daily_budget&limit=100&effective_status=${encodeURIComponent(JSON.stringify(SPENDING_AD_SET_STATUSES))}`,
+    );
+    const paise = /^\d{1,15}$/;
+    if (!Array.isArray(listing.data) || listing.paging?.next || listing.data.some(adSet => !adSet.id
+      || !paise.test(adSet.lifetime_budget ?? "0") || !paise.test(adSet.budget_remaining ?? "0") || !paise.test(adSet.daily_budget ?? "0"))) {
+      throw new MetaError("Meta ad account funding could not be verified.");
+    }
+    const others = listing.data.filter(adSet => !exclude.includes(adSet.id!) && SPENDING_AD_SET_STATUSES.includes(adSet.effective_status ?? ""));
+    const capped = others.filter(adSet => Number(adSet.lifetime_budget ?? 0) > 0);
+    const daily = others.filter(adSet => Number(adSet.lifetime_budget ?? 0) <= 0 && Number(adSet.daily_budget ?? 0) > 0);
+    return {
+      runs: capped.length,
+      remainingPaise: capped.reduce((sum, adSet) => sum + Number(adSet.budget_remaining ?? 0), 0),
+      uncapped: { adSets: daily.length, dailyPaise: daily.reduce((sum, adSet) => sum + Number(adSet.daily_budget ?? 0), 0) },
+    };
+  }
+
+  /**
    * Sets the ad account's spending limit (#522, managed child accounts) and reads it back. Meta takes
    * the limit in rupees and reports it in paise; 0 would mean no limit, so it is refused, and no
    * `spend_cap_action` (reset or delete) is ever sent. If writing the limit restarted Meta's spent
@@ -1924,7 +1959,7 @@ export class MetaClient {
   async editAdSetTargeting(
     campaignId: string,
     input: { adSetId: string; adIds: string[]; changes: AudienceChanges },
-    options: { validateOnly?: boolean } = {},
+    options: { validateOnly?: boolean; copyOnly?: boolean } = {},
   ): Promise<AudienceEdit> {
     const { adSetId, adIds, changes } = input;
     const validAge = !changes.age || (Number.isInteger(changes.age.min) && Number.isInteger(changes.age.max)
@@ -1945,7 +1980,7 @@ export class MetaClient {
       || !source.billing_event || !source.optimization_goal || !source.targeting || typeof source.targeting !== "object") {
       throw new CampaignDeliveryError("The ad set could not be verified. Keep the campaign paused.");
     }
-    if (source.status !== "PAUSED") throw new CampaignDeliveryError("Pause the ad set before changing its audience.");
+    if (source.status !== "PAUSED" && source.status !== "ACTIVE") throw new CampaignDeliveryError("Pause the ad set before changing its audience.");
     // #741 (QA on #828): a new area must arrive with its own out-of-area exclusions ({} when it has none),
     // so the old area's are replaced, and the result may never exclude a place it includes.
     if (changes.location && !changes.excludedLocation) throw new TargetingExclusionsMissingError();
@@ -1956,6 +1991,10 @@ export class MetaClient {
       throw new TargetingExclusionsMissingError("The new area is also excluded, so the ads would reach no one. Nothing changed.");
     }
     const rebuild = needsRebuild(source);
+    // #765: a running ad set is only changed in place; a rebuild would leave the old one delivering, unless it
+    // builds a PAUSED copy for the owner to switch to (copyOnly: the old ad set is left exactly as it is).
+    if (rebuild && source.status !== "PAUSED" && !options.copyOnly) throw new CampaignDeliveryError("Pause the ad set before changing its audience.");
+    if (options.copyOnly && !rebuild) throw new MetaError("Only an ad set Meta can't change in place is copied.");
     const validate: Record<string, string> = options.validateOnly ? { execution_options: JSON.stringify(["validate_only"]) } : {};
     if (!rebuild) {
       const patched = await this.graph<{ success?: boolean }>(encodeURIComponent(adSetId), {
@@ -1964,8 +2003,8 @@ export class MetaClient {
       if (patched.success !== true) throw new CampaignDeliveryError("Meta did not accept the new audience. Nothing changed.");
       if (options.validateOnly) return { mode: "patch", validated: true, adSetId, adIds, retiredAdSetId: null };
       const after = await this.graph<{ id?: string; status?: string; targeting?: Record<string, unknown> }>(`${encodeURIComponent(adSetId)}?fields=id,status,targeting`);
-      if (after.id !== adSetId || after.status !== "PAUSED" || !sameAudience(after.targeting, targeting, changes)) {
-        throw new CampaignDeliveryError("Meta did not confirm the new audience. Keep the campaign paused.");
+      if (after.id !== adSetId || after.status !== source.status || !sameAudience(after.targeting, targeting, changes)) {
+        throw new CampaignDeliveryError(source.status === "PAUSED" ? "Meta did not confirm the new audience. Keep the campaign paused." : "Meta did not confirm the new audience. Check the campaign in Meta.");
       }
       return { mode: "patch", validated: false, adSetId, adIds, retiredAdSetId: null };
     }
@@ -2016,12 +2055,111 @@ export class MetaClient {
         || ads.data.some(ad => !copied.includes(ad.id) || ad.status !== "PAUSED" || ad.adset_id !== newAdSetId)) {
         throw new CampaignDeliveryError("Meta did not confirm the new ad set.");
       }
+      if (options.copyOnly) return { mode: "rebuild", validated: false, adSetId: newAdSetId, adIds: copied, retiredAdSetId: null };
       await this.writeStatus(adSetId, "ARCHIVED");
       return { mode: "rebuild", validated: false, adSetId: newAdSetId, adIds: copied, retiredAdSetId: adSetId };
     } catch (error) {
       await this.graph(encodeURIComponent(newAdSetId), { method: "DELETE" }).catch(() => undefined);
-      throw error instanceof CampaignDeliveryError ? new CampaignDeliveryError(`${error.message} The old ad set is unchanged and the campaign stays paused.`) : error;
+      const unchanged = source.status === "PAUSED" ? "The old ad set is unchanged and the campaign stays paused." : "The old ad set is unchanged and keeps running.";
+      throw error instanceof CampaignDeliveryError ? new CampaignDeliveryError(`${error.message} ${unchanged}`) : error;
     }
+  }
+
+  /**
+   * #765 (b): turns a running ad set's PAUSED copy on in its place. Never two ACTIVE: Meta first checks the
+   * copy's activation (validate_only), then the old ad set is paused, a capped copy's total is cut to what the
+   * old one has left, the copy's ads and then the copy go ACTIVE, and both are read back. If anything fails
+   * after the pause, the copy is paused again and the old ad set resumed. The old ad set is archived last.
+   * `running` is the campaign's intended state: on a paused campaign nothing is turned on, the copy just takes
+   * the old ad set's place. Safe to retry: a switch Meta already finished is completed, and one cut off after
+   * the pause carries on from where it stopped.
+   */
+  async switchAdSet(campaignId: string, input: { fromAdSetId: string; toAdSetId: string; toAdIds: string[]; running: boolean }): Promise<AdSetSwitch> {
+    const { fromAdSetId, toAdSetId, toAdIds, running } = input;
+    if (fromAdSetId === toAdSetId || !toAdIds.length || new Set(toAdIds).size !== toAdIds.length) throw new MetaError("Invalid ad set switch.");
+    type AdSetRead = { id?: string; campaign_id?: string; status?: string; lifetime_budget?: string; budget_remaining?: string };
+    const read = (id: string) => this.graph<AdSetRead>(`${encodeURIComponent(id)}?fields=id,campaign_id,status,lifetime_budget,budget_remaining`);
+    const readAds = (id: string) => this.graph<{ data?: Array<{ id: string; status?: string; adset_id?: string }>; paging?: { next?: string } }>(`${encodeURIComponent(id)}/ads?fields=id,status,adset_id&limit=100`);
+    const [from, to, ads] = await Promise.all([read(fromAdSetId), read(toAdSetId), readAds(toAdSetId)]);
+    const sameAds = (list: typeof ads) => Array.isArray(list.data) && !list.paging?.next && list.data.length === toAdIds.length
+      && list.data.every(ad => toAdIds.includes(ad.id) && ad.adset_id === toAdSetId);
+    if (from.id !== fromAdSetId || from.campaign_id !== campaignId || to.id !== toAdSetId || to.campaign_id !== campaignId || !sameAds(ads)) {
+      throw new CampaignDeliveryError("The new audience's ad set could not be verified. Nothing changed.");
+    }
+    const done = { fromAdSetId, adSetId: toAdSetId, adIds: toAdIds };
+    const oldStopped = from.status === "PAUSED" || from.status === "ARCHIVED";
+    // A retry after Meta finished: the copy delivers (or, on a paused campaign, has taken the old one's place).
+    if (running && to.status === "ACTIVE" && ads.data!.every(ad => ad.status === "ACTIVE") && oldStopped) {
+      if (from.status === "PAUSED") await this.writeStatus(fromAdSetId, "ARCHIVED").catch(() => undefined);
+      return done;
+    }
+    if (!running && to.status === "PAUSED" && from.status === "ARCHIVED") return done;
+    if (to.status !== "PAUSED" || !["ACTIVE", "PAUSED", "ARCHIVED"].includes(from.status ?? "")) {
+      throw new CampaignDeliveryError("The old ad set or the new one is in an unexpected state. Nothing changed; check the campaign in Meta.");
+    }
+    const capped = Number(from.lifetime_budget ?? 0) > 0;
+    const cutCap = async () => {
+      // The old ad set kept spending while the copy waited; the copy may spend only what is left now.
+      const left = await read(fromAdSetId);
+      if (left.status === "ACTIVE" || !/^[1-9]\d*$/.test(left.budget_remaining ?? "")) throw new CampaignDeliveryError("This capped run has spent its total. Start a new run instead.");
+      if (to.lifetime_budget === left.budget_remaining) return;
+      await this.graph(encodeURIComponent(toAdSetId), { method: "POST", form: { lifetime_budget: left.budget_remaining! } });
+      const cut = await read(toAdSetId);
+      if (cut.lifetime_budget !== left.budget_remaining) throw new CampaignDeliveryError("Meta did not confirm the new ad set's total.");
+    };
+    if (!running) {
+      if (from.status === "ACTIVE") await this.writeStatus(fromAdSetId, "PAUSED");
+      if (capped) await cutCap();
+      await this.writeStatus(fromAdSetId, "ARCHIVED");
+      return done;
+    }
+    const activation = await this.graph<{ success?: boolean }>(encodeURIComponent(toAdSetId), {
+      method: "POST", form: { status: "ACTIVE", execution_options: JSON.stringify(["validate_only"]) },
+    });
+    if (activation.success !== true) throw new CampaignDeliveryError("Meta would not turn the new audience on. Nothing changed.");
+
+    // An attempt cut off after the pause (old PAUSED) or after the archive carries on from here.
+    if (from.status === "ACTIVE") await this.writeStatus(fromAdSetId, "PAUSED");
+    try {
+      if (capped) await cutCap();
+      for (const adId of toAdIds) await this.writeStatus(adId, "ACTIVE");
+      await this.writeStatus(toAdSetId, "ACTIVE");
+      const [oldAfter, newAfter, adsAfter] = await Promise.all([read(fromAdSetId), read(toAdSetId), readAds(toAdSetId)]);
+      if (oldAfter.status === "ACTIVE" || newAfter.status !== "ACTIVE" || !sameAds(adsAfter) || adsAfter.data!.some(ad => ad.status !== "ACTIVE")) {
+        throw new CampaignDeliveryError("Meta did not confirm the switch.");
+      }
+    } catch (error) {
+      const message = error instanceof MetaError ? error.message.replace(/\.?$/, ".") : "Meta refused the switch.";
+      const restored = await this.writeStatus(toAdSetId, "PAUSED")
+        .then(() => from.status === "ARCHIVED" ? false : this.writeStatus(fromAdSetId, "ACTIVE").then(() => true))
+        .catch(() => false);
+      if (!restored) throw new AdSetSwitchStuckError(`${message} The old audience could not be turned back on. Try again, or check the campaign in Meta.`);
+      throw new CampaignDeliveryError(`${message} The old audience is running again.`);
+    }
+    // Delivery has moved; a failed archive only leaves a PAUSED ad set behind, finished on a retry.
+    if (from.status !== "ARCHIVED") await this.writeStatus(fromAdSetId, "ARCHIVED").catch(() => undefined);
+    return done;
+  }
+
+  /** #765 (b): deletes a PAUSED copy that was never switched on. Only that ad set is written. */
+  async deleteAdSetCopy(campaignId: string, adSetId: string, options: { runningAdSetId?: string } = {}): Promise<void> {
+    const node = encodeURIComponent(adSetId);
+    // On a running campaign, a switch cut off after its pause leaves the old ad set paused: deleting the copy then
+    // would leave nothing delivering. That ad set is only read here, never written.
+    if (options.runningAdSetId) {
+      const running = await this.graph<{ id?: string; campaign_id?: string; status?: string }>(`${encodeURIComponent(options.runningAdSetId)}?fields=id,campaign_id,status`);
+      if (running.id !== options.runningAdSetId || running.campaign_id !== campaignId || running.status !== "ACTIVE") {
+        throw new CampaignDeliveryError("The current audience isn't running, so the new one can't be cancelled. Turn the new audience on to finish.");
+      }
+    }
+    const copy = await this.graph<{ id?: string; campaign_id?: string; status?: string }>(`${node}?fields=id,campaign_id,status`);
+    // A retry after Meta already deleted it.
+    if (copy.id === adSetId && copy.campaign_id === campaignId && copy.status === "DELETED") return;
+    if (copy.id !== adSetId || copy.campaign_id !== campaignId || copy.status !== "PAUSED") {
+      throw new CampaignDeliveryError("The new audience's ad set isn't a paused copy in this campaign. Nothing was deleted.");
+    }
+    const deleted = await this.graph<{ success?: boolean }>(node, { method: "DELETE" });
+    if (deleted.success !== true) throw new CampaignDeliveryError("Meta did not delete the copy. Try again.");
   }
 
   /** #774: an ad set's budget and end time, verified to belong to the campaign and the bound Page. */
@@ -2120,6 +2258,29 @@ export class MetaClient {
     const paused = (id: string) => objects.some(object => object.id === id && object.status === "PAUSED");
     const confirmed = campaign.id === campaignId && [campaignId, ...children.adSetIds, ...children.adIds].every(paused);
     return { confirmed, objects };
+  }
+
+  /**
+   * #1045: turns one ad of a verified campaign off (or back on, to undo AdBrain's own pause) and reads
+   * it back. Nothing else changes: no ad set, budget or campaign write. `validateOnly` asks Meta to
+   * check the write without making it.
+   */
+  async setAdStatus(campaignId: string, adId: string, status: "PAUSED" | "ACTIVE", options: { validateOnly?: boolean } = {}): Promise<AdStatus> {
+    await this.verifyCampaignBinding(campaignId);
+    type AdNode = { id?: string; campaign_id?: string; status?: string; effective_status?: string };
+    const read = () => this.graph<AdNode>(`${encodeURIComponent(adId)}?fields=id,campaign_id,status,effective_status`);
+    const before = await read();
+    if (before.id !== adId || before.campaign_id !== campaignId) throw new MetaError("That ad isn't part of this campaign.");
+    // Already so (e.g. the owner paused it in Meta after the last refresh): write nothing, so AdBrain
+    // never records a pause it didn't make and can't later "undo" the owner's own decision.
+    if (before.status === status) return { id: adId, status, effectiveStatus: before.effective_status ?? null, changed: false };
+    if (options.validateOnly) {
+      await this.graph(encodeURIComponent(adId), { method: "POST", form: { status, execution_options: JSON.stringify(["validate_only"]) } });
+      return { id: adId, status: before.status ?? null, effectiveStatus: before.effective_status ?? null, changed: false };
+    }
+    await this.writeStatus(adId, status);
+    const after = await read();
+    return { id: adId, status: after.status ?? null, effectiveStatus: after.effective_status ?? null, changed: true };
   }
 
   /** Status write with one retry after Meta's 613 (one status change per object per 30 s). */

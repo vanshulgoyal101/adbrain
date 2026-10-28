@@ -83,7 +83,7 @@ export function WhatsAppEnquiries({ campaignId, spend, enquiries, onLogged, onCu
           <p className="text-xs text-slate-500">Per real enquiry</p>
         </div>
       </div>
-      <p className="text-xs text-slate-500">Not every chat is a customer. Add each real enquiry from these WhatsApp chats.</p>
+      {enquiries === 0 && <p className="text-xs text-slate-500">Not every chat is a customer. Add each real enquiry from these WhatsApp chats.</p>}
       {open ? (
         <form className="flex flex-col gap-2" onSubmit={(event) => { event.preventDefault(); void save(); }}>
           <div className="grid gap-2 sm:grid-cols-2">

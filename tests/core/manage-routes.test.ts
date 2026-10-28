@@ -6,7 +6,7 @@ import campaignSpendCapTape from "./fixtures/meta/safety/campaign-spend-cap.json
 import pauseAllTape from "./fixtures/meta/safety/pause-all.json";
 import tokenRevoked from "./fixtures/meta/token-revoked.json";
 import deliveryTape from "./fixtures/meta/delivery.json";
-import fundingTape from "./fixtures/meta/account-funding.json";
+import fundingTape from "./fixtures/meta/account-funding-live-runs.json";
 import deletedTape from "./fixtures/meta/campaign-deleted.json";
 
 // #649: the manage loop (pause, sync, refresh, activation review and refusals) through the real route
@@ -18,8 +18,8 @@ import deletedTape from "./fixtures/meta/campaign-deleted.json";
 // Recorded: the pause tree (safety/campaign-spend-cap binding + safety/pause-all), the sync listing
 // and the bound campaign's ad sets (sync.json), the live #157 run's insights and ad review
 // (results.json), the paused launch's delivery reads (delivery.json) and the ad account's funding
-// (account-funding.json). Synthesised from recorded bodies: the sync listing trimmed to campaigns
-// whose ad sets were recorded, one of them moved to another ad account, and a #157 capped campaign
+// with its running capped runs (account-funding-live-runs.json, both read at the same moment, #1058).
+// Synthesised from recorded bodies: the sync listing trimmed to campaigns whose ad sets were recorded, one of them moved to another ad account, and a #157 capped campaign
 // whose ad set list is the recorded capped ad set read-back (safety/capped-adset).
 // Activation: GET /api/campaigns/[id] returns the recorded delivery (and funding when operator-funded);
 // PATCH "active" is refused for a stale digest, another connection generation, the weekly cap, an
@@ -115,7 +115,7 @@ const STRANGER = "00000000-0000-4000-8000-000000000002";
 const SEAL_ID = "00000000-0000-4000-8000-000000000003";
 const STORED = "00000000-0000-4000-8000-000000000004";
 const ACCESS = "oauth-connection-access";
-const ACCOUNT = "act_2398686420592052", PAGE = "885223068001054", GENERATION = 3;
+const ACCOUNT = "act_9000000000000001", PAGE = "900000000000002", GENERATION = 3;
 const SYNCED = "120253646427440526", CAPPED = "120253655093920526", LIVE = "120253678786150526";
 const TREE = { campaignId: "120253654207670526", adSetIds: ["120253654208240526"], adIds: ["120253654209040526"] };
 const REVIEWED = { campaignId: SYNCED, adSetIds: ["120253646428630526"], adIds: ["120253646430200526"] };
@@ -124,7 +124,8 @@ const ADSET_FIELDS = "fields=id%2Cstatus%2Cdaily_budget%2Clifetime_budget%2Cprom
 
 const tapes = {
   delivery: deliveryTape as Exchange[],
-  funding: fundingTape as Exchange[],
+  // Scrubbed (#1094): its fake ad account is mapped onto this file's recorded account.
+  funding: JSON.parse(JSON.stringify(fundingTape.tape).replaceAll(fundingTape.adAccountId, ACCOUNT)) as Exchange[],
   pause: [...(campaignSpendCapTape as Exchange[]).slice(0, 2), ...pauseAllTape as Exchange[]],
   results: (resultsTape as Exchange[]).filter(exchange => exchange.path.startsWith(LIVE)),
   sync: (campaignIds: string[]) => {
@@ -135,7 +136,7 @@ const tapes = {
     const campaigns = [
       recorded.data.find(campaign => campaign.id === SYNCED)!,
       { ...recorded.data.find(campaign => campaign.id === "120253256980050526")!, account_id: "1000000000000001" },
-      { id: CAPPED, name: "#157 capped run", status: "PAUSED", objective: "OUTCOME_LEADS", account_id: "2398686420592052" },
+      { id: CAPPED, name: "#157 capped run", status: "PAUSED", objective: "OUTCOME_LEADS", account_id: "9000000000000001" },
     ].filter(campaign => campaignIds.includes(String(campaign.id)));
     return [
       { ...listing, body: { ...recorded, data: campaigns } }, adSets,
@@ -438,7 +439,7 @@ describe("core: manage routes against recorded Graph responses (#649)", () => {
         adSets: [expect.objectContaining({ id: REVIEWED.adSetIds[0], status: "PAUSED", effectiveStatus: "IN_PROCESS", dailyBudgetPaise: 20000, pageId: PAGE, destinationType: "ON_AD" })],
         ads: [{ id: REVIEWED.adIds[0], status: "PAUSED", effectiveStatus: "IN_PROCESS", adSetId: REVIEWED.adSetIds[0], creativeId: "1148404661464451" }],
       },
-      funding: { spendCapPaise: 88983, amountSpentPaise: 4237, roomPaise: 84746, prepay: true },
+      funding: { spendCapPaise: 182204, amountSpentPaise: 123717, roomPaise: 58487, prepay: true, committed: { runs: 1, remainingPaise: 45000, uncapped: { adSets: 0, dailyPaise: 0 } } },
       spendLimitRequired: true,
       learning: { costPerResultRupees: null, pausedAt: null },
     });
@@ -458,7 +459,7 @@ describe("core: manage routes against recorded Graph responses (#649)", () => {
     const response = await review();
     expect(response.status).toBe(200);
     const body = await response.json();
-    expect(body).toMatchObject({ funding: { spendCapPaise: 88983, roomPaise: 84746 }, spendLimitRequired: false });
+    expect(body).toMatchObject({ funding: { spendCapPaise: 182204, roomPaise: 58487, committed: { runs: 1, remainingPaise: 45000, uncapped: { adSets: 0, dailyPaise: 0 } } }, spendLimitRequired: false });
     expect(body.delivery.campaign).toEqual({ id: REVIEWED.campaignId, status: "PAUSED", effectiveStatus: "PAUSED" });
     expect(writes()).toEqual([]);
   });
@@ -511,13 +512,14 @@ describe("core: manage routes against recorded Graph responses (#649)", () => {
     replay(tapes.delivery, tapes.funding);
     const { delivery } = await (await review()).json();
     replay(tapes.delivery, tapes.funding);
-    // 5 days × ₹200 = ₹1,000 against ₹847.46 left under the recorded account spending limit.
+    // 5 days × ₹200 = ₹1,000 against ₹134.87: Meta's ₹584.87 room less ₹450 still promised to the account's
+    // live capped run (#1058; Meta's room alone would have said ₹584.87).
     const response = await activate({ confirmationDigest: await digest(campaign, delivery, 5), connectionGeneration: GENERATION, capDays: 5 });
     expect(response.status).toBe(409);
     expect(await response.json()).toMatchObject({
-      error: "Meta has ₹847.46 left under the ad account's spending limit; this run needs ₹1,000.00. Add funds on Meta or choose fewer days.",
+      error: "Meta has ₹134.87 left under the ad account's spending limit after ₹450.00 for your 1 other live run; this run needs ₹1,000.00. Add funds on Meta or choose fewer days.",
     });
-    expect(graph.sent.map(call => `${call.method} ${call.path}`).sort()).toEqual([...deliveryReads, `GET ${tapes.funding[0].path}`].sort());
+    expect(graph.sent.map(call => `${call.method} ${call.path}`).sort()).toEqual([...deliveryReads, ...tapes.funding.map(exchange => `GET ${exchange.path}`)].sort());
     expect(writes()).toEqual([]);
     expect(graph.pending).toEqual([]);
     expect(store.state.tables.campaigns[0].status).toBe("paused");

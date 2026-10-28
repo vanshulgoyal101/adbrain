@@ -75,7 +75,7 @@ export async function sendNewLeadAlerts(
   const { data: leadRows, error: leadsError } = await db.from("leads")
     .select("id, meta_lead_id, full_name, phone, field_data, form_name, campaign_id")
     .eq("business_id", businessId).eq("source", "meta_form").not("meta_lead_id", "is", null)
-    .gte("created_time", since).order("created_time", { ascending: true }).limit(100);
+    .gte("created_time", since).order("created_time", { ascending: false }).limit(100);
   if (leadsError) return { error: "leads" };
   const leads = (leadRows ?? []) as (Omit<AlertLead, "campaignName"> & { campaign_id: string | null })[];
   if (!leads.length) return { sent: 0, skipped: {} };
@@ -85,7 +85,8 @@ export async function sendNewLeadAlerts(
     .in("dedupe_key", leads.map((lead) => lead.meta_lead_id));
   if (sendsError) return { error: "sends" };
   const done = new Set(((sendRows ?? []) as { dedupe_key: string }[]).map((row) => row.dedupe_key));
-  const pending = leads.filter((lead) => !done.has(lead.meta_lead_id)).slice(0, LEAD_ALERTS_PER_RUN);
+  // The newest 100 are read (QA on #1065: a busy day must not hold back fresh leads); sent oldest first.
+  const pending = leads.filter((lead) => !done.has(lead.meta_lead_id)).slice(0, LEAD_ALERTS_PER_RUN).reverse();
   if (!pending.length) return { sent: 0, skipped: {} };
 
   const campaignIds = [...new Set(pending.map((lead) => lead.campaign_id).filter((id): id is string => Boolean(id)))];

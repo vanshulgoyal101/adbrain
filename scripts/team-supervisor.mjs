@@ -11,7 +11,7 @@
 // Each tick also dispatches scheduled-jobs.yml when GitHub's own schedule has lapsed (#692), and once a
 // night exports production to ~/.adbrain-backups and restore-drills it (#884).
 // Kill switch: touch ~/.adbrain-supervisor/OFF. Log: ~/.adbrain-supervisor/supervisor.log.
-import { execFileSync, spawn, spawnSync } from "node:child_process";
+import { execFileSync as rawExecFileSync, spawn, spawnSync } from "node:child_process";
 import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -19,6 +19,10 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { NAMES } from "./wait-for-work.mjs";
 import { probe } from "./team-status.mjs";
+
+// One hung network call (a GitHub blip, Oct 27 16:14Z) froze a tick for 53 min and with it every wake-up: cap each call.
+const CALL_TIMEOUT_MS = 120_000;
+const execFileSync = (cmd, args, opts = {}) => rawExecFileSync(cmd, args, { timeout: CALL_TIMEOUT_MS, killSignal: "SIGKILL", ...opts });
 
 /** Handoff bottlenecks first (reviews, releases), then builders. CTO/CEO coordinate through chat tools, so they're excluded. */
 export const ORDER = ["devops", "qa", "reviewer", "qa2", "dev3", "dev", "dev2", "dev4", "cpo", "analyst", "designer"];
@@ -287,8 +291,13 @@ function writeState(state) {
 function refresh() {
   const dirty = execFileSync("git", ["-C", WT, "status", "--porcelain"], { encoding: "utf8" }).trim();
   if (dirty) return log("refresh skipped: worktree has local changes");
-  execFileSync("git", ["-C", WT, "fetch", "-q", "origin", "main"]);
-  execFileSync("git", ["-C", WT, "checkout", "-q", "--detach", "origin/main"]);
+  // stdio ignored: a killed git can leave git-remote-https holding a pipe, and the call would wait on it.
+  try {
+    execFileSync("git", ["-C", WT, "fetch", "-q", "origin", "main"], { stdio: "ignore" });
+    execFileSync("git", ["-C", WT, "checkout", "-q", "--detach", "origin/main"], { stdio: "ignore" });
+  } catch (error) {
+    log(`refresh failed, running the current checkout: ${String(error?.message ?? error).split("\n")[0].slice(0, 160)}`);
+  }
 }
 
 /** The headless run still going, if any: runs are detached from the tick (#766), so a tick checks the recorded pid. */
