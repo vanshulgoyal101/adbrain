@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { handlePlanWebhook, type PlanWebhookDeps } from "@/lib/plan/webhook";
 
 const linkId = "plink_Fixture123";
-const paidLink = { id: linkId, status: "paid", amountPaise: 99_900, referenceId: "44444444-4444-4444-8444-444444444444", paymentId: "pay_Plan1" };
+const paidLink: { id: string; status: string; amountPaise: number; referenceId: string; paymentId: string | null } = { id: linkId, status: "paid", amountPaise: 99_900, referenceId: "44444444-4444-4444-8444-444444444444", paymentId: "pay_Plan1" };
 function deps(link = paidLink, rpcResult: unknown = "paid") {
   const rpc = vi.fn(async () => rpcResult);
   const fetchPlanLink = vi.fn(async () => link);
