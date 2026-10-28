@@ -1551,7 +1551,8 @@ async function verifyPlanPeriods(db, database) {
     });
     await assert.rejects(db.query("insert into public.plan_periods(business_id,amount_paise) values ($1,100)", [business]), { code: "23514" });
     // QA (#1430): paid months are receipts (GST, disputes), so deleting the business can't silently erase them.
-    await assert.rejects(db.query("delete from public.businesses where id=$1", [business]), { code: "23503" });
+    // RESTRICT reports 23001 (restrict_violation); NO ACTION-style checks report 23503. Either means refused.
+    await assert.rejects(db.query("delete from public.businesses where id=$1", [business]), { code: /^(23001|23503)$/ });
   });
 }
 
