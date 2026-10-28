@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { ConnectionAccessError, requireOwnedBusiness } from "@/lib/meta/connection-access";
 import { rateLimitResponse } from "@/lib/security/rate-limit";
-import { createAnnualPaymentQuote, DEFAULT_ANNUAL_PAYMENT_PAISE, productionPaymentQuoteSchema } from "./allocation";
+import { createAnnualPaymentQuote, DEFAULT_ANNUAL_PAYMENT_PAISE, productionPaymentQuoteSchema, toPaymentQuoteView } from "./allocation";
 import { CheckoutRequestError, paymentJsonBody, paymentReply, readPaymentBody } from "./checkout-request";
 import { getProductionCollectionPolicy, getProductionPaymentConfig, productionPaymentPolicySchema, ProductionPaymentError,
   quoteForPaymentPolicy, type PaymentSubject } from "./production-config";
@@ -71,6 +71,12 @@ function currentPolicy(subject?: PaymentSubject) {
   }
 }
 
+// #1235 (owner): the browser gets the terms text it accepts (and their hash), never the embedded quote with AdBrain's split.
+type Terms = { serviceScope: string; invoiceTerms: string; refundTerms: string; fundingMode?: string };
+const termsView = (terms: Terms) => ({ serviceScope: terms.serviceScope, invoiceTerms: terms.invoiceTerms, refundTerms: terms.refundTerms,
+  ...(terms.fundingMode === undefined ? {} : { fundingMode: terms.fundingMode }) });
+const policyView = (policy: (Terms & { hash: string }) | null) => policy && { hash: policy.hash, ...termsView(policy) };
+
 async function orderResponse(order: SavedOrder, config: Config, policy = currentPolicy({ businessId: order.business_id, userId: order.user_id,
   verificationCompleted: order.quote.version === "inr-payment-verification-v1" && order.captured_paise > 0,
   verificationAmountPaise: order.quote.version === "inr-payment-verification-v1" ? order.amount_paise : undefined,
@@ -80,10 +86,10 @@ async function orderResponse(order: SavedOrder, config: Config, policy = current
       p_business_id: order.business_id, p_funding_evidence_id: order.funding_evidence_id!,
     }), z.boolean()).catch(() => false));
   return {
-    orderId: order.id, environment: "live", status: order.state, amountPaise: order.amount_paise, currency: order.currency, quote: order.quote,
+    orderId: order.id, environment: "live", status: order.state, amountPaise: order.amount_paise, currency: order.currency, quote: toPaymentQuoteView(order.quote),
     capturedPaise: order.captured_paise, refundedPaise: order.refunded_paise, reviewRequired: order.review_required,
     providerReportedRefundedPaise: order.provider_refunded_paise, refundReconciliationPending: order.provider_refunded_paise > order.refunded_paise,
-    refundHold: order.refund_hold, acceptedAt: order.accepted_at, terms: order.terms, termsHash: order.terms_hash,
+    refundHold: order.refund_hold, acceptedAt: order.accepted_at, terms: termsView(order.terms), termsHash: order.terms_hash,
     spendablePaise: 0, canActivateCampaign: false,
     receipt: order.captured_paise > 0 ? { reference: order.id, paymentId: order.payment_id, merchant: "Vanshul Goyal", amountPaise: order.captured_paise, currency: "INR", isTaxInvoice: false } : null,
     checkout: checkoutAllowed ? {
@@ -276,7 +282,7 @@ export async function handleProductionPayments(request: Request, action: Action)
         && verificationOrder && verificationOrder.amount_paise <= baseQuote.totalPaise ? verificationOrder.amount_paise : undefined);
       if (action === "read") {
         const policy = input.verificationAmountPaise === undefined ? currentPolicy(subject) : getProductionCollectionPolicy(process.env, Date.now(), subject);
-        return paymentReply({ quote: policy ? quoteForPaymentPolicy(policy) : createAnnualPaymentQuote(), policy,
+        return paymentReply({ quote: toPaymentQuoteView(policy ? quoteForPaymentPolicy(policy) : createAnnualPaymentQuote()), policy: policyView(policy),
           verificationAmountRange: baseQuote?.version === "inr-payment-verification-v1" && !verificationOrder
             ? { minPaise: 100, maxPaise: baseQuote.totalPaise } : null,
           annualAmountRange: policy && "fundingMode" in policy && quoteForPaymentPolicy(policy).version !== "inr-payment-verification-v1"

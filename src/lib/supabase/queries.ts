@@ -138,6 +138,16 @@ export async function getCreatives(businessId: string): Promise<Creative[]> {
   return data ?? [];
 }
 
+/** #1270 (WS1 step 2): the business's newest Create batch (one `variant_group`), oldest first. */
+export async function getLatestCreativeBatch(businessId: string): Promise<Creative[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("creatives").select("*")
+    .eq("business_id", businessId).order("created_at", { ascending: false }).limit(6);
+  if (error) throw new Error("Ads could not be loaded.");
+  const group = data?.[0]?.variant_group;
+  return (data ?? []).filter((creative) => group && creative.variant_group === group).reverse();
+}
+
 /** Brand assets for a business, newest first. */
 export async function getBrandAssets(
   businessId: string,
@@ -243,6 +253,15 @@ export async function getActiveCampaignBudgets(businessId: string): Promise<Camp
     .eq("business_id", businessId).eq("status", "active").limit(QUERY_BATCH_SIZE);
   if (error || !data || data.length >= QUERY_BATCH_SIZE) throw new Error("Campaign budgets could not be loaded.");
   return data.map((c) => ({ id: c.id, status: c.status, dailyBudget: c.daily_budget, spend: 0 }));
+}
+
+/** #1251 WS1: whether any campaign went live through AdBrain (`launched_at`) or is on now (e.g. imported from Meta); the setup spine shows until one has. */
+export async function hasLaunchedCampaign(businessId: string): Promise<boolean> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("campaigns").select("id")
+    .eq("business_id", businessId).or("launched_at.not.is.null,status.eq.active").limit(1);
+  if (error || !data) throw new Error("Campaigns could not be loaded.");
+  return data.length > 0;
 }
 
 /** Campaigns mapped to the minimal shape the spend guardrails need. */

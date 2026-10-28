@@ -46,8 +46,54 @@ describe("read-only Meta capability verification", () => {
     provider({ funded: true, tasks: ["CREATE_CONTENT"] });
     expect((await verifyMetaCapabilities("fixture-token", selected)).canCreatePaused.state).toBe("blocked");
   });
-  it("keeps provider failures unknown", async () => {
-    provider({ fail: true });
-    expect(Object.values(await verifyMetaCapabilities("fixture-token", selected)).every(capability => capability.state === "unknown")).toBe(true);
+  // #1217: a Meta that didn't answer isn't a missing permission; nothing is saved and the owner can try again.
+  it("#1217: when Meta doesn't answer (every read 5xx, even after one repeat), it says so instead of returning 'unknown'", async () => {
+    const fetcher = provider({ fail: true });
+    await expect(verifyMetaCapabilities("fixture-token", selected)).rejects.toMatchObject({ name: "ConnectionAccessError", code: "UNAVAILABLE", retryable: true, message: "Meta didn't answer. Try again." });
+    expect(fetcher.mock.calls.filter(([url]) => url.includes("me/permissions"))).toHaveLength(2);
+  });
+
+  it("#1217: repeats a read once after a 5xx or a network error, so one blip doesn't block activation", async () => {
+    for (const blip of [() => Response.json({}, { status: 500 }), () => { throw new TypeError("fetch failed"); }]) {
+      const fetcher = provider({ funded: true });
+      const answer = fetcher.getMockImplementation()!;
+      let first = true;
+      fetcher.mockImplementation(async (url: string, init: RequestInit) => {
+        if (url.includes("me/permissions") && first) { first = false; return blip(); }
+        return answer(url, init);
+      });
+      const result = await verifyMetaCapabilities("fixture-token", selected);
+      expect(result.canActivate.state).toBe("available");
+      expect(fetcher.mock.calls.filter(([url]) => url.includes("me/permissions"))).toHaveLength(2);
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("#1217: a timeout isn't repeated (the activation route has no deadline), but still isn't saved as 'unknown'", async () => {
+    const fetcher = provider({ funded: true });
+    const answer = fetcher.getMockImplementation()!;
+    fetcher.mockImplementation(async (url: string, init: RequestInit) => {
+      if (url.includes("me/permissions")) throw new DOMException("The operation was aborted due to timeout", "TimeoutError");
+      return answer(url, init);
+    });
+    await expect(verifyMetaCapabilities("fixture-token", selected)).rejects.toMatchObject({ code: "UNAVAILABLE", retryable: true });
+    expect(fetcher.mock.calls.filter(([url]) => url.includes("me/permissions"))).toHaveLength(1);
+  });
+
+  it("#1217: the ad account read not answering also says 'try again' (it would leave create/activate unknown)", async () => {
+    const fetcher = provider({ funded: true });
+    const answer = fetcher.getMockImplementation()!;
+    fetcher.mockImplementation(async (url: string, init: RequestInit) => url.includes("act_123?") ? Response.json({}, { status: 502 }) : answer(url, init));
+    await expect(verifyMetaCapabilities("fixture-token", selected)).rejects.toMatchObject({ code: "UNAVAILABLE", retryable: true });
+  });
+
+  it("#1217: a real refusal (4xx) is still an answer: the capability stays unknown/blocked, not 'try again'", async () => {
+    const fetcher = provider({ funded: true });
+    const answer = fetcher.getMockImplementation()!;
+    fetcher.mockImplementation(async (url: string, init: RequestInit) => url.includes("/insights") ? Response.json({ error: { code: 10 } }, { status: 403 }) : answer(url, init));
+    const result = await verifyMetaCapabilities("fixture-token", selected);
+    expect(result.canReadInsights.state).toBe("unknown");
+    expect(result.canActivate.state).toBe("available");
+    expect(fetcher.mock.calls.filter(([url]) => url.includes("/insights"))).toHaveLength(1);
   });
 });

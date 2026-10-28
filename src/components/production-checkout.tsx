@@ -8,13 +8,13 @@ import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import type { TestCheckoutOptions } from "@/components/test-checkout";
-import { createAnnualPaymentQuote, productionPaymentQuoteSchema, type ProductionPaymentQuote } from "@/lib/payments/allocation";
+import { createAnnualPaymentQuote, paymentQuoteViewSchema, toPaymentQuoteView, type PaymentQuoteView } from "@/lib/payments/allocation";
 
 const identifier = (prefix: string) => z.string().regex(new RegExp(`^${prefix}_[A-Za-z0-9]{1,100}$`));
 const policySchema = z.object({ hash: z.string().regex(/^[a-f0-9]{64}$/), serviceScope: z.string(), invoiceTerms: z.string(), refundTerms: z.string(), fundingMode: z.literal("operator_managed").optional() });
 const orderSchema = z.object({
   orderId: z.uuid(), environment: z.literal("live"), amountPaise: z.number().int().min(100).max(1_000_000), currency: z.literal("INR"),
-  quote: productionPaymentQuoteSchema.default(createAnnualPaymentQuote()),
+  quote: paymentQuoteViewSchema.default(toPaymentQuoteView(createAnnualPaymentQuote())),
   status: z.enum(["creating", "created", "captured", "needs_reconciliation", "review_required", "refund_pending", "partially_refunded", "refunded", "superseded"]),
   capturedPaise: z.number().int().min(0).max(1_000_000), refundedPaise: z.number().int().min(0).max(1_000_000),
   refundReconciliationPending: z.boolean(), spendablePaise: z.literal(0), canActivateCampaign: z.literal(false),
@@ -26,7 +26,7 @@ const orderSchema = z.object({
   && order.capturedPaise <= order.amountPaise && order.refundedPaise <= order.amountPaise);
 const amountRangeSchema = z.object({ minPaise: z.number().int().min(100), maxPaise: z.number().int().min(100).max(1_000_000) });
 const enteredAmountSchema = z.string().regex(/^\d+(\.\d{1,2})?$/).transform(value => Math.round(Number(value) * 100)).pipe(z.number().int().min(100).max(1_000_000));
-const listSchema = z.object({ quote: productionPaymentQuoteSchema.default(createAnnualPaymentQuote()),
+const listSchema = z.object({ quote: paymentQuoteViewSchema.default(toPaymentQuoteView(createAnnualPaymentQuote())),
   verificationAmountRange: amountRangeSchema.nullable().default(null),
   annualAmountRange: amountRangeSchema.nullable().default(null),
   policy: policySchema.nullable(), orders: z.array(orderSchema).max(20) }).refine(result => !result.verificationAmountRange
@@ -43,7 +43,7 @@ const money = (paise: number) => new Intl.NumberFormat("en-IN", { style: "curren
 export function ProductionCheckout({ businessId }: { businessId: string }) {
   const [order, setOrder] = useState<Order | null>(null);
   const [otherOrders, setOtherOrders] = useState<Order[]>([]);
-  const [quote, setQuote] = useState<ProductionPaymentQuote | null>(null);
+  const [quote, setQuote] = useState<PaymentQuoteView | null>(null);
   const [amountRange, setAmountRange] = useState<z.infer<typeof amountRangeSchema> | null>(null);
   const [annualRange, setAnnualRange] = useState<z.infer<typeof amountRangeSchema> | null>(null);
   const [amountDraft, setAmountDraft] = useState("");
@@ -223,14 +223,10 @@ export function ProductionCheckout({ businessId }: { businessId: string }) {
           setNotice("Amount updated.");
         })}><RefreshCw size={16} aria-hidden="true" />Update amount</Button>
       </div>}
-      {displayedQuote && !verification && range && <dl className="grid gap-4 text-sm sm:grid-cols-2">
+      {/* #1235 (owner): one amount only. Showing the ad budget next to it would reveal AdBrain's margin by subtraction. */}
+      {displayedQuote && <dl className="grid gap-4 text-sm sm:grid-cols-2">
         <div><dt className="text-slate-500">You pay</dt><dd className="mt-1 text-xl font-semibold tabular-nums">{money(displayedQuote.totalPaise)}</dd></div>
-        <div><dt className="text-slate-500">Ad budget for your campaigns, incl. Meta&apos;s GST</dt><dd className="mt-1 font-semibold tabular-nums">{money(displayedQuote.metaAllocationPaise)}</dd></div>
-      </dl>}
-      {displayedQuote && (verification || !range) && <dl className="grid gap-4 text-sm sm:grid-cols-2">
-        <div><dt className="text-slate-500">You pay</dt><dd className="mt-1 text-xl font-semibold tabular-nums">{money(displayedQuote.totalPaise)}</dd></div>
-        {verification ? <div className="self-end text-slate-600">Checkout test: no ad budget is added</div>
-          : <div><dt className="text-slate-500">Ad budget for your campaigns, incl. Meta&apos;s GST</dt><dd className="mt-1 font-semibold tabular-nums">{money(displayedQuote.metaAllocationPaise)}</dd></div>}
+        {verification && <div className="self-end text-slate-600">Checkout test: no ad budget is added</div>}
       </dl>}
       <p className="text-sm text-slate-600">Merchant: Vanshul Goyal. Gateway fees absorbed by AdBrain. No automatic renewal.</p>
       {policy?.fundingMode === "operator_managed" && <p className="text-sm text-slate-600">The operator pays Meta separately. Your ad budget is not yet a confirmed Meta balance.</p>}

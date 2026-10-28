@@ -109,6 +109,10 @@ import {
 import { effectiveDailyBudget, weeklyCapNotice, type CampaignSpend } from "@/lib/campaign/spend";
 import { accountFundingSchema, activationConfirmationPayload, campaignDeliverySnapshotSchema, RESUME_IN_ADS_MANAGER, reviewableCampaign } from "@/lib/campaign/activation";
 import { activationWarnings, QUOTED_ASK_WITH_QUESTIONS, WHATSAPP_PICTURE_ON_FORM } from "@/lib/campaign/plan-check";
+import { cardVerdictInput, lastCampaignComparison } from "@/lib/campaign/card-verdict";
+import { verdict, type Comparison } from "@/lib/campaign/verdict";
+import { WAITING_COLUMNS, WAITING_DAYS, waitingByCampaign, type WaitingLeadRow } from "@/lib/leads/waiting";
+import { CampaignVerdict } from "@/components/campaign-verdict";
 import { campaignAttention } from "@/lib/campaign/health";
 import { campaignWhatsAppSummary } from "@/lib/campaign/results-summary";
 import { costPerCustomer } from "@/lib/campaign/real-enquiries";
@@ -243,6 +247,9 @@ function keptLeadForm(current: string, forms: { id: string }[], lastUsed = ""): 
 }
 
 /** What a finished results refresh tells the owner (#671): new numbers, or none since the last fetch. */
+/** The clock, read in an event handler (#1333); kept outside the component for the compiler's purity rule. */
+const currentTime = () => Date.now();
+
 function refreshNotice(previous: CampaignResult | undefined, next: CampaignResult | undefined): string {
   const keys = ["impressions", "clicks", "leads", "spend", "conversations", "whatsapp_opens"] as const;
   if (!next) return "Checked just now: Meta has no results for this campaign yet.";
@@ -1354,8 +1361,27 @@ function BusinessCampaigns({
     } catch { /* no browser Supabase config (tests) */ }
     return () => { live = false; };
   }, [switchable]);
+  // #1274: enquiries waiting for a reply by the inbox's rule (#1260), per running campaign (owners read their own leads).
+  const [waitingReplies, setWaitingReplies] = useState<Record<string, number>>({});
+  const liveIds = campaigns.filter(c => c.status === "active").map(c => c.id).sort().join(",");
+  useEffect(() => {
+    if (!liveIds) return;
+    let live = true;
+    try {
+      void createBrowserClient().from("leads").select(WAITING_COLUMNS).in("campaign_id", liveIds.split(","))
+        .eq("workflow_status", "new").is("first_contacted_at", null)
+        .gte("created_at", new Date(Date.now() - WAITING_DAYS * 86_400_000).toISOString()).limit(500)
+        .then(({ data }) => {
+          if (!live || !Array.isArray(data)) return;
+          setWaitingReplies(waitingByCampaign(data as WaitingLeadRow[]));
+        }, () => undefined);
+    } catch { /* no browser Supabase config (tests) */ }
+    return () => { live = false; };
+  }, [liveIds]);
   const [budgetEdit, setBudgetEdit] = useState<{ campaign: Campaign; start: NonNullable<ReturnType<typeof budgetFormStart>> } | null>(null);
   const [adEdit, setAdEdit] = useState<Campaign | null>(null);
+  // #1274: the card's "Edit the ad" (no chats yet) opens the same editor with a hint about the last line.
+  const [adEditHint, setAdEditHint] = useState<string | undefined>(undefined);
   const [statusChangingId, setStatusChangingId] = useState<string | null>(null);
   const [reviews, setReviews] = useState<Record<string, AdReview[]>>({});
 
@@ -1389,7 +1415,7 @@ function BusinessCampaigns({
       setActivationLearning({
         costPerResultRupees: typeof review.learning?.costPerResultRupees === "number" ? review.learning.costPerResultRupees : null,
         pausedAt: typeof review.learning?.pausedAt === "string" ? review.learning.pausedAt : null,
-        now: Date.now(),
+        now: currentTime(),
       });
       setActivationReview(campaign);
       if (!refreshing) setReviewOpens((opens) => opens + 1);
@@ -1411,6 +1437,12 @@ function BusinessCampaigns({
     setCardError(null);
     if (next === "active" && !confirmed) {
       setConnectionIntent({ kind: "review_activation", campaignId: c.id });
+      // #1333: a healthy connection goes straight to the activation review; the dialog is only for something to fix.
+      const connection = await createMetaConnectClient().status(business.id).catch(() => null);
+      if (connection?.authorization === "connected" && connection.selected && connection.capabilities?.canActivate?.state === "available") {
+        await openActivationReview(c, connection);
+        return;
+      }
       setConnectOpen(true);
       return;
     }
@@ -2324,7 +2356,8 @@ function BusinessCampaigns({
                 campaign={adEdit}
                 campaignName={adEdit.name ?? `${business.name} — ${adEdit.objective}`}
                 creatives={approved}
-                onClose={() => setAdEdit(null)}
+                hint={adEditHint}
+                onClose={() => { setAdEdit(null); setAdEditHint(undefined); }}
                 onSaved={(message, { adId, change }) => {
                   // Mirror the server's raw.adWords, so reopening the editor shows the new words.
                   setCampaigns((list) => list.map((item) => {
@@ -2336,6 +2369,7 @@ function BusinessCampaigns({
                   }));
                   setCardNotice({ id: adEdit.id, message });
                   setAdEdit(null);
+                  setAdEditHint(undefined);
                 }}
               />
             )}
@@ -2471,27 +2505,18 @@ function BusinessCampaigns({
                     {cardNotice?.id === c.id && cardError?.id !== c.id ? <p role="status" className="text-sm text-slate-600">{cardNotice.message}</p> : null}
 
                     {r && (
-                      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                        <Stat label="Impressions" value={formatNumber(r.impressions)} />
-                        <Stat label="Clicks" value={formatNumber(r.clicks)} />
-                        <Stat label={outcome === "whatsapp" ? "WhatsApp chats" : outcome === "instant_form" ? "Leads" : "Results unavailable"} value={outcome === "whatsapp" ? (r.conversations != null ? formatNumber(r.conversations) : "—") : outcome === "instant_form" ? formatNumber(r.leads) : "—"} />
-                        <Stat
-                          label={outcome === "whatsapp" ? "Cost / chat" : outcome === "instant_form" ? "Cost / lead" : "Cost / result"}
-                          value={outcome === "whatsapp" ? (r.conversations != null && r.cost_per_conversation != null ? formatMoney(r.cost_per_conversation) : "—") : outcome === "instant_form" && r.cpl != null ? formatMoney(r.cpl) : "—"}
-                        />
-                      </div>
+                      // #1274 (#1255): one sentence, one number, one action; the figures stay under Details.
+                      <CardResults campaign={c} result={r} outcome={outcome} comparison={lastCampaignComparison(c, campaigns, results)}
+                        waiting={waitingReplies[c.id] ?? 0} onRunAgain={() => void runAgain(c)} runAgainBusy={rerunBusy === c.id}
+                        onEditAd={c.meta_campaign_id && (c.status === "paused" || c.status === "active") && reviewableCampaign(c) && (c.meta_ad_ids?.length ?? 0) > 0 && !waitingSwitch[c.id]
+                          ? () => { setAdEditHint(EDIT_AD_HINT); setAdEdit(c); } : undefined}
+                        adsManagerUrl={c.meta_campaign_id ? adsLink(c) : undefined} />
                     )}
                     {r && mounted && (
                       // #1003: always say how old the numbers are.
                       <p className="text-xs text-slate-500">{updatingIds.includes(c.id) ? "Updating results…" : `Updated ${timeAgo(new Date(r.fetched_at))}`}</p>
                     )}
                     {adResults && r && c.meta_campaign_id && <AdResults campaignId={c.id} whatsapp={outcome === "whatsapp"} onRunAgain={() => void runAgain(c)} runAgainBusy={rerunBusy === c.id} runAgainError={rerunError?.id === c.id ? rerunError.message : null} />}
-                    {r && outcome === "whatsapp" && r.whatsapp_opens != null && r.conversations != null && (
-                      // #493: people reach WhatsApp and leave; show the drop-off plainly.
-                      <p className="text-sm text-slate-700">
-                        {formatNumber(r.whatsapp_opens)} opened WhatsApp, {formatNumber(r.conversations)} messaged you
-                      </p>
-                    )}
                     {r && (r.customers ?? 0) > 0 && (
                       // #798: what a real customer cost, beside the per-enquiry figures.
                       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4" aria-label="Customers">
@@ -2571,6 +2596,38 @@ function BusinessCampaigns({
 function madeOutsideAdBrain(campaign: Campaign): boolean {
   const raw = campaign.raw;
   return !!campaign.meta_campaign_id && !(raw && typeof raw === "object" && "metaResult" in raw);
+}
+
+/** A launched campaign's numbers: #1255's verdict for WhatsApp and form campaigns, with the figures under Details. */
+const EDIT_AD_HINT = "Tell people what happens after the tap, e.g. 'Tap, then press Send'.";
+
+function CardResults({ campaign, result: r, outcome, comparison, waiting, onRunAgain, runAgainBusy, adsManagerUrl, onEditAd }: {
+  campaign: Campaign; result: CampaignResult; outcome: ReturnType<typeof campaignDestination>; comparison: Comparison | null;
+  waiting: number; onRunAgain: () => void; runAgainBusy: boolean; adsManagerUrl?: string; onEditAd?: () => void;
+}) {
+  const [now] = useState(() => Date.now());
+  const figures = <>
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <Stat label="Impressions" value={formatNumber(r.impressions)} />
+      <Stat label="Clicks" value={formatNumber(r.clicks)} />
+      <Stat label={outcome === "whatsapp" ? "WhatsApp chats" : outcome === "instant_form" ? "Leads" : "Results unavailable"} value={outcome === "whatsapp" ? (r.conversations != null ? formatNumber(r.conversations) : "—") : outcome === "instant_form" ? formatNumber(r.leads) : "—"} />
+      <Stat
+        label={outcome === "whatsapp" ? "Cost / chat" : outcome === "instant_form" ? "Cost / lead" : "Cost / result"}
+        value={outcome === "whatsapp" ? (r.conversations != null && r.cost_per_conversation != null ? formatMoney(r.cost_per_conversation) : "—") : outcome === "instant_form" && r.cpl != null ? formatMoney(r.cpl) : "—"}
+      />
+    </div>
+    {outcome === "whatsapp" && r.whatsapp_opens != null && r.conversations != null && (
+      // #493: people reach WhatsApp and leave; show the drop-off plainly.
+      <p className="text-sm text-slate-700">
+        {formatNumber(r.whatsapp_opens)} opened WhatsApp, {formatNumber(r.conversations)} messaged you
+      </p>
+    )}
+  </>;
+  const input = cardVerdictInput(campaign, r, { now, waiting, weakAd: null, comparison });
+  // A paused card that never showed keeps its one "nothing has spent" line (#173), with no verdict beside it.
+  if (!input || (campaign.status !== "active" && campaign.status !== "completed" && !r.impressions)) return figures;
+  return <CampaignVerdict verdict={verdict(input)} whatsapp={input.destination === "whatsapp"} results={input.results} spend={input.spend}
+    details={figures} onRunAgain={onRunAgain} runAgainBusy={runAgainBusy} adsManagerUrl={adsManagerUrl} onEditAd={onEditAd} />;
 }
 
 function Stat({ label, value }: { label: string; value: string }) {

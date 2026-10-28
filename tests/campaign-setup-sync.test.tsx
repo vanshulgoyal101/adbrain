@@ -12,10 +12,10 @@ vi.mock("@/components/ui/confirm-dialog", () => ({
 
 const mocks = vi.hoisted(() => ({
   drafts: vi.fn(), draft: vi.fn(), saveDraft: vi.fn(), updateDraft: vi.fn(), status: vi.fn(), preflight: vi.fn(), createCampaign: vi.fn(), operationForRequest: vi.fn(),
-  dialog: { current: null as null | { onConnected: (connection: ConnectionDTO) => void; onBeforeStart?: () => Promise<unknown> } },
+  dialog: { current: null as null | { open?: boolean; onConnected: (connection: ConnectionDTO) => void; onBeforeStart?: () => Promise<unknown> } },
 }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
-vi.mock("@/components/meta-connect/meta-connect-dialog", () => ({ MetaConnectDialog: (props: { onConnected: (connection: ConnectionDTO) => void; onBeforeStart?: () => Promise<unknown> }) => { mocks.dialog.current = props; return null; } }));
+vi.mock("@/components/meta-connect/meta-connect-dialog", () => ({ MetaConnectDialog: (props: { open?: boolean; onConnected: (connection: ConnectionDTO) => void; onBeforeStart?: () => Promise<unknown> }) => { mocks.dialog.current = props; return null; } }));
 vi.mock("@/components/campaign-chat", () => ({ CampaignChat: () => <div data-testid="guided-campaign-chat" /> }));
 vi.mock("@/lib/meta-connect-ui/client", () => ({ createMetaConnectClient: () => mocks, MetaConnectClientError: class extends Error {} }));
 
@@ -201,6 +201,41 @@ describe("unsaved campaign setup", () => {
     expect(screen.getByRole("button", { name: creative.headline! })).toHaveAttribute("aria-pressed", "true");
   });
 });
+describe("Resume goes straight to the activation review when Meta is ready (#1333)", () => {
+  const campaign = () => ({ id: "campaign-1", business_id: business.id, name: "Saved campaign", status: "paused", meta_campaign_id: "meta-1", daily_budget: 500, ...launched } as unknown as Campaign);
+  const capabilities = (canActivate: "available" | "blocked") => ({
+    canCreatePaused: { state: "available", blockers: [] }, canSyncResults: { state: "available", blockers: [] },
+    canActivate: { state: canActivate, blockers: canActivate === "blocked" ? [{ code: "PAYMENT_METHOD_REQUIRED", message: "Add a card in Meta first." }] : [] },
+  });
+  const stubDelivery = () => vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+    if (url.startsWith("/api/payments/customer-balance")) return Response.json({});
+    if (url === "/api/campaigns/campaign-1") return Response.json({ delivery: {
+      campaign: { id: "meta-1", status: "PAUSED", effectiveStatus: "CAMPAIGN_PAUSED" },
+      adSets: [{ id: "set-1", status: "ACTIVE", effectiveStatus: "CAMPAIGN_PAUSED", dailyBudgetPaise: 50000, pageId: "page_1", destinationType: "ON_AD", targeting: null }],
+      ads: [{ id: "ad-1", status: "ACTIVE", effectiveStatus: "CAMPAIGN_PAUSED", adSetId: "set-1", creativeId: "creative-1" }],
+    } });
+    return Response.json({ campaigns: [], nextCursor: null });
+  }));
+
+  it("opens the review with one tap and no connection dialog", async () => {
+    mocks.status.mockResolvedValue({ authorization: "connected", selected, generation: 1, capabilities: capabilities("available"), checkedAt: null });
+    stubDelivery();
+    render(<Campaigns business={business} approved={[creative]} initialCampaigns={[campaign()]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady adAccountId="act_1" />);
+    fireEvent.click(screen.getByRole("button", { name: "Resume" }));
+    expect(await screen.findByRole("button", { name: "Request activation" })).toBeInTheDocument();
+    expect(mocks.dialog.current?.open).toBe(false);
+  });
+
+  it("opens the connection dialog when something needs fixing", async () => {
+    mocks.status.mockResolvedValue({ authorization: "connected", selected, generation: 1, capabilities: capabilities("blocked"), checkedAt: null });
+    stubDelivery();
+    render(<Campaigns business={business} approved={[creative]} initialCampaigns={[campaign()]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady adAccountId="act_1" />);
+    fireEvent.click(screen.getByRole("button", { name: "Resume" }));
+    await waitFor(() => expect(mocks.dialog.current?.open).toBe(true));
+    expect(screen.queryByRole("button", { name: "Request activation" })).toBeNull();
+  });
+});
+
 describe("campaign sync feedback", () => {
   it("shows the intended audience, budget, destination and creative before activation", async () => {
     const campaign = { id: "campaign-1", business_id: business.id, name: "Saved campaign", status: "paused", meta_campaign_id: "meta-1", daily_budget: 500, ...launched } as unknown as Campaign;
