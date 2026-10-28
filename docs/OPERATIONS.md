@@ -331,6 +331,18 @@ Explicit `data: []` is a valid no-delivery response. Lead extraction prefers exa
 it never adds overlapping actions or matches arbitrary names containing `lead`.
 This does not certify attribution equivalence with every Ads Manager report.
 
+### Pilot day-7 pricing answers (#1650, for #718)
+
+Seven days after a pilot's first Go live, Home asks own-account, non-team businesses "would you pay ₹999 a month?"
+once ('Not now' hides it 3 days, at most twice). Answers are product events (codes only), kept 90 days, so copy the
+tally to #718 before then (read-only):
+
+```sql
+select attributes->>'answer' as answer, attributes->>'reason' as reason, count(*) as owners,
+  round(avg((attributes->>'days')::int)) as avg_days
+from public.product_events where name = 'pilot_day7' group by 1, 2 order by 1, 3 desc;
+```
+
 ### Prospect accounts: prepare, then hand over (#1315, #1317)
 
 AdBrain is one business per account, so each prospect gets its own account; at signing the
