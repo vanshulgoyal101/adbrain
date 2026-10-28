@@ -82,7 +82,7 @@ describe("workspace work queue", () => {
       id: "campaigns",
       action: "Review campaigns",
     });
-    expect(queue[0].detail).toContain("1 paused, 0 draft");
+    expect(queue[0].detail).toContain("1 paused, 0 not started");
   });
 
   it("still points an owner with campaigns at the Meta connection when it drops", () => {

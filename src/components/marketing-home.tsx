@@ -48,7 +48,7 @@ export function MarketingHome() {
               <Link href="/login" className={styles.primary}>Make my first ad free <ArrowRight aria-hidden="true" size={18} /></Link>
               <a href="#cycle" className={styles.heroSecondary}>See how it works <ArrowDown aria-hidden="true" size={17} /></a>
             </div>
-            <p className={styles.heroNote}>Free to try. ₹999 a month after your first campaign. Your ad money goes to Meta, not to us.</p>
+            <p className={styles.heroNote}>Free to try. ₹999 a month after your first month. Your ad money goes to Meta, not to us.</p>
           </div>
           <p className={styles.heroCaption}>Made by AdBrain for example businesses</p>
         </section>

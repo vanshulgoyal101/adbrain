@@ -72,7 +72,7 @@ export async function saveBusiness(
 
     const { data: saved, error } = await query;
     if (error) return { ok: false, error: error.message };
-    if (!saved) return { ok: false, error: "Brand not found or no longer accessible." };
+    if (!saved) return { ok: false, error: "We couldn't find your business details. Reload the page." };
 
     await logEvent({
       businessId: saved.id,
@@ -113,7 +113,11 @@ export async function saveSetupBusiness(id: string | null, input: SetupBusinessF
         owner_id: user.id, name, vertical: fields.vertical.trim() || undefined, phone: phone ?? null,
         locations: setupLocations(fields.locations), offers: offer ? [offer] : [],
       }).select(columns).single();
-      if (error || !data) return { ok: false, error: error?.message ?? "Your business could not be saved." };
+      if (error || !data) {
+        // #1657: the owner sees plain words; the database's own message goes to the logs only.
+        console.error("[business.create]", error?.message ?? "no row");
+        return { ok: false, error: "Your business details weren't saved. Check your connection and try again." };
+      }
       return finish(data, "business.create");
     }
 
@@ -122,7 +126,7 @@ export async function saveSetupBusiness(id: string | null, input: SetupBusinessF
     let offers: string[] | undefined;
     if (offer) {
       const { data: current, error: readError } = await supabase.from("businesses").select("offers").eq("id", id).single();
-      if (readError || !current) return { ok: false, error: "Brand not found or no longer accessible." };
+      if (readError || !current) return { ok: false, error: "We couldn't find your business details. Reload the page." };
       offers = [offer, ...(current.offers ?? []).slice(1)];
     }
     const { data, error } = await supabase.from("businesses").update({
@@ -132,7 +136,10 @@ export async function saveSetupBusiness(id: string | null, input: SetupBusinessF
       locations: setupLocations(fields.locations),
       ...(offers ? { offers } : {}),
     }).eq("id", id).select(columns).single();
-    if (error || !data) return { ok: false, error: error?.message ?? "Brand not found or no longer accessible." };
+    if (error || !data) {
+      console.error("[business.update]", error?.message ?? "no row");
+      return { ok: false, error: error ? "Your business details weren't saved. Check your connection and try again." : "We couldn't find your business details. Reload the page." };
+    }
     return finish(data, "business.update");
   });
 
