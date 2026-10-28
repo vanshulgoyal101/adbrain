@@ -166,6 +166,7 @@ export function prompt(role, items, runMin) {
     `Your queue (from wait-for-work):`,
     ...items.slice(0, 3).map((i) => `- ${i}`),
     `Hard limits: no charges or refunds, no Meta writes or ad activation, no secrets printed or changed, no production settings or env changes, no force-push, no db:push, no paid Create beyond your budget share. If the item needs any of these, the owner, or the signed-in browser, post one line on the item saying what is needed (label waiting-owner, decision or owner:devops as fits) and stop.`,
+    `Research and findings go in an issue comment, never as a file in the repo; outreach or contact data never in this public repo.`,
     `Never run wait-for-work and never leave anything running. Finish within ${runMin} minutes, remove your worktree once its PR is merged or handed off, then exit.`,
   ].join("\n");
 }
