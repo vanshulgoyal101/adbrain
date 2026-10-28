@@ -404,7 +404,9 @@ Live progress (Create): send `Accept: application/x-ndjson`. A request rejected
 before admission still gets its normal JSON status. After admission the route
 answers 200 `application/x-ndjson`, one JSON object per line:
 `{type:"progress", angleId, angleName, stage, at}` (stage `queued`, `writing`,
-`checking`, `fixing`, `image`, `ready` or `failed`; angles run concurrently),
+`checking`, `fixing`, `image`, `ready` or `failed`; angles run concurrently; an
+`image` line with `slowPictures: true` means that ad's picture fell back to the slower
+free provider, and the page says "Pictures are taking longer today", #1542),
 `{type:"creative", angleId, creative}` once that ad is saved (before its
 `ready`), and last `{type:"result", status, body}` carrying the status and body
 the JSON mode would have returned. A blank line arrives every 15 s as a
