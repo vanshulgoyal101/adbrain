@@ -78,7 +78,7 @@ export function waitingOnMe(lastBody, m, labels = [], now = Date.now()) {
 let nextDue = Infinity;
 
 /** Ready-pool lane per role: briefed, unowned issues labelled `ready` + `lane:<lane>` (#573). */
-export const LANES = { dev: "dev", dev2: "dev", dev3: "dev", dev4: "dev", qa: "qa", qa2: "qa", devops: "devops", reviewer: "review" };
+export const LANES = { dev: "dev", dev2: "dev", dev3: "dev", dev4: "dev", qa: "qa", qa2: "qa", devops: "devops", reviewer: "review", designer: "design", cpo: "product", analyst: "research" };
 
 /**
  * The lane's unclaimed ready issues, core first, oldest first; at most `max`.

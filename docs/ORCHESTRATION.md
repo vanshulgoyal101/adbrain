@@ -146,7 +146,7 @@ or `error`.
 
 ### Ready pool (pull, don't wait)
 
-The CTO keeps 3+ briefed issues per lane labelled `ready` + `lane:<dev|qa|devops|review>`
+The CTO keeps 3+ briefed issues per lane labelled `ready` + `lane:<dev|qa|devops|review|design|product|research>`
 (why with evidence, do, done-when, files). Anyone in the lane with nothing actionable claims
 the oldest core one (`--add-label owner:<you> --remove-label ready`); `wait-for-work` offers
 it. QA's walks and the Reviewer's audits file their findings straight into the pool.
