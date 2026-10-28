@@ -5,6 +5,7 @@
  *
  *   npx tsx --env-file=<.env.local> scripts/record-meta-whatsapp-adset.ts <businessId>
  */
+import "./lib/meta-write-gate";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { destinationPlan } from "@/lib/meta/client";

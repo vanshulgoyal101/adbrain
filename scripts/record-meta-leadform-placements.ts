@@ -8,6 +8,7 @@
  *
  *   npx tsx --env-file=<.env.local> scripts/record-meta-leadform-placements.ts <leadCampaignId> <leadAdSetId> <targetingSourceAdSetId> <formId> <feedHash> <storyHash>
  */
+import "./lib/meta-write-gate";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { placementCreativeSpec, withoutAudienceNetwork } from "@/lib/meta/client";

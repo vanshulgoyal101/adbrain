@@ -7,6 +7,7 @@
  * Uses META_SYSTEM_USER_TOKEN / META_AD_ACCOUNT_ID / META_PAGE_ID. Tokens are
  * stripped from the fixtures; image bytes are replaced with a placeholder.
  */
+import "./lib/meta-write-gate";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { metaClientFromEnv } from "./lib/meta-env";
