@@ -43,6 +43,28 @@ async function chromeText(page: Page) {
   });
 }
 
+/**
+ * Step 2's outcome within one budget. The free AI providers are sometimes busy (#410), so, as a person would, tap
+ * Try again (or Check again) up to twice; past that, fail with the words on screen instead of waiting out the clock.
+ */
+async function waitForAds(page: Page, budgetMs = 330_000, retries = 2) {
+  const deadline = Date.now() + budgetMs;
+  const ready = page.getByRole("heading", { name: "Your ads are ready" });
+  const stuck = page.getByText(/We couldn.t make your ads|still being made|went wrong/i).first();
+  const said: string[] = [];
+  for (;;) {
+    const left = deadline - Date.now();
+    const seen = left > 0 && await ready.or(stuck).first().waitFor({ timeout: left }).then(() => true, () => false);
+    if (!seen) return { ok: false, detail: `nothing after ${Math.round(budgetMs / 1000)} s${said.length ? `; said "${said.join('", then "')}"` : ""}` };
+    if (await ready.isVisible()) return { ok: true, detail: said.length ? `after ${said.length} ${said.length === 1 ? "retry" : "retries"}: "${said.join('", then "')}"` : "" };
+    said.push((await stuck.innerText()).trim());
+    if (said.length > retries) return { ok: false, detail: `"${said.join('", then "')}"` };
+    if (/still being made/i.test(said.at(-1)!)) await page.waitForTimeout(Math.min(30_000, Math.max(0, deadline - Date.now() - 5_000)));
+    await page.getByRole("button", { name: /^(Try|Check) again$/ }).click();
+    await stuck.waitFor({ state: "hidden", timeout: 10_000 }).catch(() => {});
+  }
+}
+
 const browser = await chromium.launch({ headless: true });
 const metaWrites: string[] = [];
 try {
@@ -116,8 +138,9 @@ try {
   await page.waitForURL(/\/create/, { timeout: 60_000 });
 
   // Step 2: ads (made now only if there are none), the best 2 picked; then a cold load for vitals.
-  const ready = page.getByText(/Your ads are ready|couldn.t be made|went wrong/i).first();
-  await ready.waitFor({ timeout: 330_000 });
+  const made = await waitForAds(page);
+  if (!made.ok) throw new Error(`Step 2 made no ads: ${made.detail}`);
+  check(true, "Step 2 ads made", made.detail);
   await page.getByText(/Step 2 of 3/).waitFor();
   const v2 = await vitals(page);
   check(v2.lcp > 0 && v2.lcp <= LCP_MS && v2.cls <= CLS_MAX, "Step 2 LCP/CLS", `LCP ${v2.lcp} ms, CLS ${v2.cls}`);
