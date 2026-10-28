@@ -339,6 +339,8 @@ function BusinessCampaigns({
   const [creating, setCreating] = useState(false);
   const [sendingNew, setSendingNew] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // #1286: sync news has its own line under 'Your campaigns', so a late answer never moves the list.
+  const [syncError, setSyncError] = useState<string | null>(null);
   // #667: a composer or review error shows beside the control that needs fixing, not in the page banner far above it.
   const [placedError, setPlacedError] = useState<{ at: "leadform" | "budget" | "ads" | "composer" | "review"; message: string } | null>(null);
   const placedErrorRef = useRef<HTMLParagraphElement | null>(null);
@@ -851,6 +853,7 @@ function BusinessCampaigns({
   async function syncFromMeta(background = false) {
     setSyncing(true);
     clearErrors();
+    setSyncError(null);
     try {
       const cursor = syncCursorRef.current;
       const res = await fetch(`/api/campaigns/sync${cursor ? `?after=${encodeURIComponent(cursor)}` : ""}`, { method: "POST" });
@@ -877,10 +880,10 @@ function BusinessCampaigns({
         // #847: an automatic sync that finished with nothing to report stays quiet, so the list doesn't jump on load.
         if (!background || data.nextCursor || skippedNotice) setNotice(`${data.nextCursor ? "More campaigns are available. Sync again to continue." : "Campaign sync completed."}${skippedNotice}`);
       } else {
-        setError(data.error ?? "Couldn't sync from Meta. Your campaigns below are from the last sync; try Sync from Meta again.");
+        setSyncError(data.error ?? "Couldn't sync from Meta. Your campaigns below are from the last sync; try Sync from Meta again.");
       }
     } catch {
-      setError("Couldn't reach Meta. Check your connection, then try Sync from Meta again.");
+      setSyncError("Couldn't reach Meta. Check your connection, then try Sync from Meta again.");
     } finally {
       setSyncing(false);
     }
@@ -2206,11 +2209,6 @@ function BusinessCampaigns({
           </h2>
           {metaReady && (
             <div className="flex flex-wrap items-center gap-2">
-              {lastSynced && !syncing && (
-                <span className="text-xs text-slate-400">
-                  Synced {timeAgo(lastSynced)}
-                </span>
-              )}
               {campaigns.length > 0 && (
                 <a
                   href="/api/campaigns/report"
@@ -2238,6 +2236,10 @@ function BusinessCampaigns({
             </div>
           )}
         </div>
+        {/* #1286: one line, always there (two lines' room on a phone), for sync news: a late answer never moves the list. */}
+        {metaReady && <p data-sync-status aria-live="polite" className="-mt-1 mb-3 min-h-10 text-xs text-slate-500 sm:min-h-5">
+          {syncError ? <span className="font-medium text-danger">{syncError}</span> : lastSynced && !syncing ? `Synced ${timeAgo(lastSynced)}` : null}
+        </p>}
         {(() => {
           const ready = !(showComposer && destination === "whatsapp") && campaigns.some((c) => campaignDestination(c, results[c.id]) === "whatsapp");
           return ready && <div className="mb-4"><WhatsAppReadyChecklist businessId={business.id} /></div>;
