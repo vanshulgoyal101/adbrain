@@ -186,7 +186,7 @@ export function WorkspaceHome({
                 )}
               </>
             ) : (
-              <div className="flex items-start gap-3 rounded-lg border border-slate-200 p-4 sm:p-6">
+              <div className="flex items-start gap-3 py-4">
                 <CheckCircle2 size={20} className="mt-0.5 shrink-0 text-blue-700" aria-hidden="true" />
                 <div>
                   <h3 className="text-lg font-semibold text-slate-950">{t("upToDate")}</h3>

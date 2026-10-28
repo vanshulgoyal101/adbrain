@@ -536,7 +536,8 @@ describe("campaign sync feedback", () => {
     const campaign = { id: "campaign-1", name: "Saved campaign", status: "active" } as Campaign;
     const synced = { id: "campaign-2", name: "Agency campaign", status: "paused", meta_campaign_id: "120000000000000001", raw: { source: "sync" } } as unknown as Campaign;
     render(<Campaigns business={business} approved={[creative]} initialCampaigns={[campaign, synced]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady={false} adAccountId="" />);
-    expect(screen.getAllByText("Running")).toHaveLength(2);
+    // #1588: one 'Running' (the card's); the status filter that also said it appears only on 6+ campaigns.
+    expect(screen.getAllByText("Running")).toHaveLength(1);
     expect(screen.getByText(/1 running/)).toBeInTheDocument();
     expect(screen.queryByText(/requested active/i)).toBeNull();
     const row = (name: string) => within(screen.getByRole("heading", { name }).closest("article")!);
@@ -553,9 +554,10 @@ describe("campaign sync feedback", () => {
   });
 
   it("requests a status selection immediately without the search typing delay", async () => {
-    const first = { id: "first", name: "First campaign", status: "paused" } as Campaign;
+    // #1588: the status filter shows on a list of 6 or more.
+    const list = Array.from({ length: 6 }, (_, index) => ({ id: `c-${index}`, name: `Campaign ${index}`, status: "paused" }) as Campaign);
     vi.stubGlobal("fetch", vi.fn(async () => Response.json({ campaigns: [], results: {}, nextCursor: null })));
-    render(<Campaigns business={business} approved={[creative]} initialCampaigns={[first]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady={false} adAccountId="" />);
+    render(<Campaigns business={business} approved={[creative]} initialCampaigns={list} initialResults={{}} leadForms={[]} leadFormError={null} metaReady={false} adAccountId="" />);
     expect(fetch).not.toHaveBeenCalled();
     fireEvent.change(screen.getByRole("combobox", { name: "Campaign status" }), { target: { value: "active" } });
     expect(fetch).toHaveBeenCalledWith(expect.stringContaining("status=active"), { signal: expect.any(AbortSignal), credentials: "same-origin", cache: "no-store" });
