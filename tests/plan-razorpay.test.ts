@@ -13,7 +13,7 @@ const environment = {
 };
 const sdkAxios: { defaults: { adapter: unknown } } = createRequire(createRequire(import.meta.url).resolve("razorpay"))("axios").default;
 const originalAdapter = sdkAxios.defaults.adapter;
-type TransportRequest = { url: string; method: string; data?: string; timeout: number; maxRedirects: number };
+type TransportRequest = { url: string; method: string; data?: string; params?: Record<string, unknown>; timeout: number; maxRedirects: number };
 const sdkRequest = vi.fn<(config: TransportRequest) => Promise<unknown>>();
 beforeEach(() => { sdkRequest.mockReset().mockRejectedValue(new Error("Unexpected SDK request")); sdkAxios.defaults.adapter = sdkRequest; });
 afterEach(() => { sdkAxios.defaults.adapter = originalAdapter; vi.restoreAllMocks(); });
@@ -62,5 +62,13 @@ describe("plan payment links (#718)", () => {
     await expect(createProductionPaymentClient(environment).fetchPlanLink("plink_Fixture123"))
       .resolves.toEqual({ id: "plink_Fixture123", status: "paid", amountPaise: 99_900, referenceId: periodId, paymentId: "pay_Fixture1" });
     await expect(createProductionPaymentClient(environment).fetchPlanLink("not-a-link")).rejects.toThrow();
+  });
+
+  it("finds the month's existing link by its period after a failed or raced create", async () => {
+    respondWith({ payment_links: [link(), link({ id: "plink_Other", reference_id: "another" })] });
+    await expect(createProductionPaymentClient(environment).findPlanLink(periodId)).resolves.toEqual({ id: "plink_Fixture123", shortUrl: "https://rzp.io/i/fixture" });
+    expect(sdkRequest.mock.calls[0][0].params).toMatchObject({ reference_id: periodId });
+    respondWith({ payment_links: [] });
+    await expect(createProductionPaymentClient(environment).findPlanLink(periodId)).resolves.toBeNull();
   });
 });

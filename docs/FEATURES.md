@@ -18,6 +18,7 @@ configuration; check [Data Model](DATA_MODEL.md#migration-map) and
 | Declared preferences, customer allowance | Their additive migrations |
 | Worker campaign creation | `CAMPAIGN_EXECUTION_MODE=worker`, worker migration and a running worker; default is inline |
 | Live checkout | Live payment flags on a production `main` deployment; see [API Reference](API_REFERENCE.md#configurable-live-payments) |
+| ₹999 plan (#718) | `PLAN_BILLING_ENABLED=true`: own-account owners see Settings → Billing → Plan (free month from the first Go live, then a monthly Razorpay Payment Link with reminders, no auto-debit); team, managed and operator businesses are exempt |
 | Test checkout | Local only: `PAYMENTS_TEST_ENABLED=true`, loopback Supabase, no Vercel environment; see [test payments](API_REFERENCE.md#local-test-payments) |
 | Scheduled jobs | `vercel.json` schedules only the keepalive and the daily spend-enforcement sweep |
 

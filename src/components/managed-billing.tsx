@@ -3,6 +3,8 @@ import type { MetaConnection } from "@/lib/meta/credentials";
 import { TestCheckout } from "@/components/test-checkout";
 import { ProductionCheckout } from "@/components/production-checkout";
 import { CustomerBalance } from "@/components/customer-balance";
+import { PlanCard } from "@/components/plan-card";
+import type { PlanStatus } from "@/lib/plan/status";
 import type { CustomerBalanceView as Balance } from "@/lib/payments/customer-balance-contracts";
 
 type BillingConnection = Pick<MetaConnection, "adAccountId" | "ready" | "pending" | "expired">;
@@ -54,7 +56,9 @@ export function ManagedBilling({ connection, testBusinessId, liveBusinessId, ini
  * directly and an operator-funded business is paid by the operator, so neither is asked to pay; nor is anyone
  * while the funding mode can't be read.
  */
-export function BillingSection({ mode, ...billing }: { mode: "managed" | "own" | "operator" | null } & Parameters<typeof ManagedBilling>[0]) {
+export function BillingSection({ mode, plan, planBusinessId, ...billing }: { mode: "managed" | "own" | "operator" | null;
+  /** #718 slice 2: an own-account owner's ₹999 plan, when plan billing is on. */
+  plan?: { status: PlanStatus; payUrl: string | null } | null; planBusinessId?: string } & Parameters<typeof ManagedBilling>[0]) {
   if (mode === "managed") return <ManagedBilling {...billing} />;
   if (mode !== "own") return null;
   return (
@@ -63,7 +67,10 @@ export function BillingSection({ mode, ...billing }: { mode: "managed" | "own" |
         <WalletCards aria-hidden="true" className="h-5 w-5 text-blue-600" />
         Billing
       </h2>
-      <p className="text-sm leading-6 text-slate-600">You pay Meta directly from your ad account. AdBrain&apos;s pilot is free.</p>
+      {plan && planBusinessId ? <>
+        <p className="text-sm leading-6 text-slate-600">You pay Meta directly from your ad account.</p>
+        <PlanCard businessId={planBusinessId} status={plan.status} payUrl={plan.payUrl} />
+      </> : <p className="text-sm leading-6 text-slate-600">You pay Meta directly from your ad account. AdBrain&apos;s pilot is free.</p>}
     </section>
   );
 }
