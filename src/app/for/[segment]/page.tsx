@@ -77,7 +77,7 @@ export default async function SegmentPage({ params }: { params: Promise<{ segmen
           <ol className={styles.steps}>
             <li>Tell AdBrain your business, where you work and one real offer.</li>
             <li>AdBrain makes 3 ads. For {segment.trade} they can lead with: {segment.angles.join("; ")}. You pick the ones you like.</li>
-            <li>You set the daily amount and go live. Meta checks your ads first, usually within a day.</li>
+            <li>You set the daily amount and go live. Meta checks your ads first, usually within a few hours and up to a day.</li>
           </ol>
         </section>
 

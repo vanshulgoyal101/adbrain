@@ -51,8 +51,8 @@ describe("<LeadInbox> nothing yet (#1597)", () => {
   it("not connected: one line and a solid Connect Meta, no banner, count, tabs or search", () => {
     render(<LeadInbox businessName="Solaride" initialLeads={[]} metaReady={false} chatsEmpty allTotal={0} />);
     expect(screen.getByRole("heading", { name: "No enquiries yet" })).toBeInTheDocument();
-    expect(screen.getByText("Connect Meta so people who tap your ads can reach you here.")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Connect Meta" })).toHaveAttribute("href", "/settings");
+    expect(screen.getByText("Connect your Facebook Page to run ads. Enquiries from them show up here.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Connect Facebook Page" })).toHaveAttribute("href", "/settings");
     expect(screen.queryByText(/Meta isn’t connected/)).toBeNull();
     expect(screen.queryByRole("group", { name: "Show" })).toBeNull();
     expect(screen.queryByRole("searchbox")).toBeNull();
@@ -61,8 +61,8 @@ describe("<LeadInbox> nothing yet (#1597)", () => {
 
   it("connected: offers the WhatsApp alert, else See your campaigns (outline)", () => {
     const { unmount } = render(<LeadInbox businessName="Solaride" initialLeads={[]} metaReady offerAlerts chatsEmpty allTotal={0} />);
-    expect(screen.getByText("People who message you from an ad show up here. Reply fast: they often pick the first business that answers.")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Get a WhatsApp alert for each one" })).toHaveAttribute("href", "/settings#whatsapp-alerts-title");
+    expect(screen.getByText("Enquiries from your ads show up here: form enquiries on their own, WhatsApp chats when you add them. Reply fast: people often pick the first business that answers.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Get a WhatsApp alert for form enquiries" })).toHaveAttribute("href", "/settings#whatsapp-alerts-title");
     unmount();
     render(<LeadInbox businessName="Solaride" initialLeads={[]} metaReady chatsEmpty allTotal={0} />);
     expect(screen.getByRole("link", { name: "See your campaigns" })).toHaveClass("border");
