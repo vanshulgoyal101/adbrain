@@ -51,8 +51,11 @@ describe("first-party product telemetry", () => {
     fireEvent.click(view.getByText("Unknown"));
     fireEvent.click(view.getByText("Disabled"));
     const bodies = vi.mocked(fetch).mock.calls.map(([, options]) => JSON.parse(options!.body as string));
+    // #1242: every enabled tap on the launch path is a bare `ui.tap` (page only); a disabled one is nothing.
     expect(bodies).toEqual([{ name: "page.view", page: "/studio", viewport: "wide" },
-      { name: "ui.action", page: "/studio", action: "creative.generate", viewport: "wide" }]);
+      { name: "ui.tap", page: "/studio", viewport: "wide" },
+      { name: "ui.action", page: "/studio", action: "creative.generate", viewport: "wide" },
+      { name: "ui.tap", page: "/studio", viewport: "wide" }]);
     expect(JSON.stringify(bodies)).not.toMatch(/private|customer|offer|business|@/i);
   });
   it("records foreground duration without hidden time or duplicate pagehide flushes", () => {
@@ -76,11 +79,21 @@ describe("first-party product telemetry", () => {
     expect(fetch).toHaveBeenCalledTimes(45);
     vi.mocked(performance.now).mockReturnValue(60_000);
     fireEvent.click(view.getByText("Generate"));
-    expect(fetch).toHaveBeenCalledTimes(46);
+    // The new minute's click sends its ui.tap and ui.action (#1242).
+    expect(fetch).toHaveBeenCalledTimes(47);
     Object.defineProperty(navigator, "globalPrivacyControl", { configurable: true, value: true });
     fireEvent.click(view.getByText("Generate"));
     fireEvent(window, new Event("pagehide"));
-    expect(fetch).toHaveBeenCalledTimes(46);
+    expect(fetch).toHaveBeenCalledTimes(47);
+  });
+
+  it("counts taps only on the launch path, never off it (#1242)", () => {
+    state.pathname = "/leads";
+    const view = render(<><ProductTelemetry /><button>Call</button><a href="/x">Open</a></>);
+    fireEvent.click(view.getByText("Call"));
+    fireEvent.click(view.getByText("Open"));
+    const names = vi.mocked(fetch).mock.calls.map(([, options]) => JSON.parse(options!.body as string).name);
+    expect(names).toEqual(["page.view"]);
   });
   it("keeps StrictMode page views deduplicated and never throws when telemetry fails", () => {
     vi.mocked(fetch).mockImplementation(() => { throw new Error("Offline"); });

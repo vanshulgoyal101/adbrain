@@ -5,7 +5,9 @@ const mocks = vi.hoisted(() => ({
   adminFrom: vi.fn(),
   rpc: vi.fn(),
   decrypt: vi.fn(),
+  record: vi.fn(),
 }));
+vi.mock("@/lib/observability/logger", async (actual) => ({ ...(await actual<object>()), recordProductEvent: mocks.record }));
 vi.mock("@/lib/env", () => ({ getEnv: () => ({ CRON_SECRET: "local-test-secret" }) }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: mocks.sessionClient }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: mocks.adminFrom, rpc: mocks.rpc }) }));
@@ -69,6 +71,14 @@ describe("scheduled Meta safety boundary", () => {
       purpose: "pause", binding: { adAccountId: "act_1", pageId: "page_1" }, expectedGeneration: 4,
     }, execute)).resolves.toBe("paused");
     expect(execute).toHaveBeenCalledOnce();
+  });
+
+  // #1540: a status read gated as create_paused (WhatsApp numbers) must not be counted as a launch call.
+  it("names the workflow event by its label when given, by its purpose otherwise (#1540)", async () => {
+    const context = await requireScheduledBusiness("business-1", request());
+    await withMetaConnection(context, { purpose: "read_insights", event: "whatsapp_numbers" }, vi.fn().mockResolvedValue(null));
+    await withMetaConnection(context, { purpose: "read_insights" }, vi.fn().mockResolvedValue(null));
+    expect(mocks.record.mock.calls.map(([event]) => event.name)).toEqual(["meta.whatsapp_numbers", "meta.read_insights"]);
   });
 
   it("still rejects activation when its capability is blocked", async () => {

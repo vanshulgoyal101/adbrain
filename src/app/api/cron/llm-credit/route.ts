@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { getEnv } from "@/lib/env";
+import { probeKeys } from "@/lib/llm/key-health";
 import { observeRoute } from "@/lib/observability/logger";
 
 export const runtime = "nodejs";
 
-/** Alert threshold in USD (#449: the CEO asks the owner before Create degrades). */
-const LOW_CREDIT_USD = 0.5;
+/** Alert threshold in USD (#449: the CEO asks the owner before Create degrades; $1 since #1129). */
+const LOW_CREDIT_USD = 1;
 
 type KeyCredit = { index: number; limitUsd: number | null; remainingUsd: number | null; error?: string };
 
@@ -13,6 +14,8 @@ type KeyCredit = { index: number; limitUsd: number | null; remainingUsd: number 
  * Read-only OpenRouter credit check (#449). Reads `GET /api/v1/key` for each pooled key and returns
  * dollars only, never the key. `low` when any capped key has under LOW_CREDIT_USD left; the scheduled
  * workflow then opens one `decision` issue.
+ * #1569: `health` probes every configured AI key (text and image) on a free endpoint, by env name only;
+ * `dead` lists the ones the provider refuses, and the workflow opens one issue per dead key for DevOps.
  */
 export const GET = observeRoute("/api/cron/llm-credit", "GET", handleGET);
 
@@ -22,7 +25,10 @@ async function handleGET(request: Request) {
   if (request.headers.get("authorization") !== `Bearer ${env.CRON_SECRET}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const keys = await Promise.all(env.OPENROUTER_API_KEYS.map((key, index) => readKey(key, index)));
+  const [keys, health] = await Promise.all([
+    Promise.all(env.OPENROUTER_API_KEYS.map((key, index) => readKey(key, index))),
+    probeKeys(env).catch(() => []),
+  ]);
   const capped = keys.flatMap((k) => (k.remainingUsd === null ? [] : [k.remainingUsd]));
   const minRemainingUsd = capped.length ? Math.min(...capped) : null;
   const ok = keys.every((k) => !k.error);
@@ -32,6 +38,8 @@ async function handleGET(request: Request) {
     minRemainingUsd,
     thresholdUsd: LOW_CREDIT_USD,
     low: minRemainingUsd !== null && minRemainingUsd < LOW_CREDIT_USD,
+    health,
+    dead: health.filter((key) => key.status === "dead").map((key) => key.name),
   }, { status: ok ? 200 : 503 });
 }
 

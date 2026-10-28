@@ -15,6 +15,8 @@ import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
 import { formatMoney } from "@/lib/format";
 import { createMetaConnectClient } from "@/lib/meta-connect-ui/client";
 import { connectTrustLine } from "@/lib/trust-lines";
+import type { SetupWelcome } from "@/lib/campaign/setup-welcome";
+import { whenTheyTapLine } from "@/components/when-they-tap";
 import type { Business, Creative } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -22,6 +24,13 @@ import { cn } from "@/lib/utils";
 export const SETUP_RUN_DAYS = 2;
 
 export type SetupFunding = "operator" | "managed" | "own";
+
+/**
+ * #1251 CEO (owner's margin rule): row 2b ('Ad money', pay AdBrain) stays off until pricing is the flat
+ * ₹999/month with pass-through ad money; 'Add ₹{pay}' next to 'Stops at ₹{total}' would show our share.
+ * Until then every owner sees row 2a: pay Meta on their own ad account.
+ */
+const SHOW_ADBRAIN_AD_MONEY = false;
 
 function Row({ done, title, status, action }: { done: boolean; title: string; status: string; action?: React.ReactNode }) {
   return (
@@ -49,7 +58,7 @@ function sessionStore(): Storage | null {
  * Connect Facebook Page → Go live. Go live is one tap (4b): save the draft, review it, create it paused, then turn
  * it on as a 2-day capped run (setup-go-live-flow). Nothing is spent before that tap; the server enforces the cap.
  */
-export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNumber, weeklyCap }: {
+export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNumber, weeklyCap, welcome = null }: {
   business: Pick<Business, "id" | "name" | "locations">;
   ads: Creative[];
   pageConnected: boolean;
@@ -57,6 +66,8 @@ export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNum
   /** Masked, as the owner sees it elsewhere. */
   whatsappNumber: string | null;
   weeklyCap: { capRupees: number | null; active: CampaignSpend[] } | null;
+  /** #1529: the WhatsApp welcome Go live sends (as Review works it out); null if it couldn't be read. */
+  welcome?: SetupWelcome | null;
 }) {
   const router = useRouter();
   const [daily, setDaily] = useState<number>(BUDGET_PRESETS[0]);
@@ -70,6 +81,7 @@ export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNum
   const areas = (business.locations ?? []).filter((place) => place.trim()).join(", ");
   const ids = ads.map((ad) => ad.id).join(",");
   const ownAccount = funding === "own";
+  const payMetaRow = ownAccount || !SHOW_ADBRAIN_AD_MONEY;
   const reviewHref = `/campaigns?all=1&new=1&review=1&budget=${daily}&creatives=${ids}`;
   const stepWords: Record<GoLiveStep, string> = {
     check: "Checking your campaign…",
@@ -107,6 +119,8 @@ export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNum
 
   return (
     <SetupSpine step={3} primary={primary}>
+      {/* #1587: a readable column at 1440, not the full width. */}
+      <div className="max-w-2xl">
       <h2 className="text-xl font-semibold text-slate-950">Go live</h2>
       <dl className="mt-4 flex flex-col gap-4 text-sm">
         <div>
@@ -121,12 +135,13 @@ export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNum
           <dt className="text-slate-500">Budget</dt>
           <dd className="mt-1 font-medium text-slate-950">{formatMoney(daily)} a day for {SETUP_RUN_DAYS} days, {formatMoney(total)} at most including Meta&apos;s GST</dd>
           <dd className="mt-2"><div className="flex flex-wrap gap-2" role="group" aria-label="Daily budget">
-            {BUDGET_PRESETS.map((amount) => (
-              <button key={amount} type="button" aria-pressed={daily === amount} disabled={step !== null || result?.kind === "live"}
+            {BUDGET_PRESETS.map((amount, index) => (
+              <button key={amount} type="button" aria-pressed={daily === amount} aria-label={`${formatMoney(amount)} a day`} disabled={step !== null || result?.kind === "live"}
                 onClick={() => { setDaily(amount); setResult(null); }}
                 className={cn("min-h-11 rounded-full border px-4 text-sm font-medium",
-                  daily === amount ? "border-primary bg-primary text-primary-foreground" : "border-slate-300 bg-white text-slate-700")}>
-                {formatMoney(amount)} a day
+                  daily === amount ? "border-primary bg-primary/10 text-primary" : "border-slate-300 bg-white text-slate-700")}>
+                {/* #1587: one solid primary on the step; 'a day' once, so the chips fit one row at 390. */}
+                {index === 0 ? `${formatMoney(amount)} a day` : formatMoney(amount)}
               </button>
             ))}
           </div></dd>
@@ -141,15 +156,22 @@ export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNum
           <dd className="mt-1 font-medium text-slate-950">
             {whatsappNumber ? `They message you on WhatsApp at ${whatsappNumber}` : "They message you on WhatsApp"}
           </dd>
+          {welcome && <>
+            <dd className="mt-2 whitespace-pre-wrap break-words rounded-lg bg-slate-50 p-3 text-slate-800">&ldquo;{welcome.greeting}&rdquo;</dd>
+            <dd className="mt-1 text-slate-600">{whenTheyTapLine(welcome)}</dd>
+          </>}
         </div>
       </dl>
-      <Link href={`/campaigns?all=1&new=1&creatives=${ids}`} className="mt-3 inline-flex min-h-11 items-center text-sm font-medium text-slate-700 underline underline-offset-4">
-        Change who sees it
-      </Link>
+      {/* #1529: before the Page is connected, the full composer is the pre-access panel, a dead end. */}
+      {pageConnected && (
+        <Link href={`/campaigns?all=1&new=1&creatives=${ids}`} className="mt-3 inline-flex min-h-11 items-center text-sm font-medium text-slate-700 underline underline-offset-4">
+          Change who sees it
+        </Link>
+      )}
 
       <ul aria-label="Before you go live" className="mt-4 divide-y divide-slate-200 border-y border-slate-200">
         <Row done={pageConnected} title="Facebook Page" status={pageConnected ? "Connected" : "Not connected"} />
-        {ownAccount ? (
+        {payMetaRow ? (
           <Row done={false} title="Payment on Meta" status="Add a card or UPI in Meta"
             action={<a href="https://business.facebook.com/billing_hub/payment_settings" target="_blank" rel="noopener noreferrer"
               className="inline-flex min-h-11 items-center text-sm font-medium text-primary underline underline-offset-4">Add payment in Meta</a>} />
@@ -159,7 +181,9 @@ export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNum
         )}
         <Row done title={`Stops at ${formatMoney(total)}`} status={`${SETUP_RUN_DAYS} days at ${formatMoney(daily)} a day, including Meta's GST`} />
       </ul>
-      <p className="mt-4 text-sm text-slate-600">Meta checks your ads first, usually within a day. Spending starts only after that and stops at {formatMoney(total)}, including Meta&apos;s GST.</p>
+      <p className="mt-4 text-sm text-slate-600">Meta checks your ads first, usually within a day.</p>
+      {/* #718 (CEO, path A): AdBrain's own price, said before the first Go live. */}
+      {ownAccount && <p className="mt-3 text-sm text-slate-600">Your first month of AdBrain is free. After that it&apos;s ₹999 a month; we&apos;ll remind you before it&apos;s due.</p>}
       {/* #1292: the Connect moment's trust line, next to the Connect Facebook Page primary. */}
       {!pageConnected && funding && <p className="mt-3 text-sm font-medium text-slate-800">{connectTrustLine(funding)}</p>}
 
@@ -187,6 +211,7 @@ export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNum
           onClose={() => setConnectOpen(false)}
           onConnected={() => { setConnectOpen(false); router.refresh(); }} />
       )}
+      </div>
     </SetupSpine>
   );
 }

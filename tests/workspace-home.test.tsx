@@ -22,6 +22,7 @@ const queries = vi.hoisted(() => ({
   getLatestResultsWithEnquiries: vi.fn(),
   getSpendEvaluation: vi.fn(),
   getMetaConnection: vi.fn(),
+  getAdStatuses: vi.fn(async () => ({})),
   getUser: vi.fn(),
   businessLLMUsageSummary: vi.fn(),
 }));
@@ -79,6 +80,29 @@ function suspenseBoundaries(node: any): any[] {
 }
 
 describe("Home workspace", () => {
+  // #1469: between launch and first delivery Home says Meta is checking, once.
+  const CHECKING = "Meta is checking your ads. They usually start showing within a day.";
+  it("says Meta is checking while the newest campaign's ads are in review (#1469)", () => {
+    const live = { id: "c-new", name: "Solar", status: "active", daily_budget: 300, raw: {}, meta_campaign_id: "1" } as unknown as Campaign;
+    render(<WorkspaceHome {...empty} business={business} campaigns={[live]} adReview={{ kind: "checking", campaignId: "c-new" }} />);
+    expect(screen.getByRole("status", { name: "Meta review" })).toHaveTextContent(CHECKING);
+  });
+
+  it("doesn't repeat it when the results verdict already says Meta is checking (#1469)", () => {
+    const live = { id: "c-new", name: "Solar", status: "active", daily_budget: 300, raw: {}, meta_campaign_id: "1", launched_at: new Date().toISOString() } as unknown as Campaign;
+    const result = { campaign_id: "c-new", impressions: 0, clicks: 0, spend: 0, leads: 0, conversations: 0, fetched_at: new Date().toISOString(), raw: {} } as unknown as CampaignResult;
+    render(<WorkspaceHome {...empty} business={business} campaigns={[live]} results={{ "c-new": result }} adReview={{ kind: "checking", campaignId: "c-new" }} />);
+    expect(screen.getAllByText(/Meta is checking your ads/)).toHaveLength(1);
+    expect(screen.queryByRole("status", { name: "Meta review" })).toBeNull();
+  });
+
+  it("shows the rejected-ads section in place of the checking line (#1469)", () => {
+    render(<WorkspaceHome {...empty} business={business} campaigns={[wentLive]} adReview={{ kind: "rejected", campaignId: "c-live" }}
+      rejectedAds={<p>Meta didn&apos;t approve your ad.</p>} />);
+    expect(screen.getByText("Meta didn't approve your ad.")).toBeInTheDocument();
+    expect(screen.queryByText(CHECKING)).toBeNull();
+  });
+
   // #1150: Home lists only campaigns still in Meta, with the Campaigns page's status word.
   it("leaves campaigns deleted in Meta off Home's list", () => {
     const run = (id: string, status: string, raw: object = {}) => ({ id, name: `Run ${id}`, status, daily_budget: 300, raw }) as unknown as Campaign;
@@ -332,6 +356,24 @@ describe("Home workspace", () => {
     expect(screen.getByRole("link", { name: "Continue" })).toHaveAttribute("href", "/brand");
   });
 
+  it("reads the newest live campaign's stored ad statuses for the Meta review line (#1469)", async () => {
+    vi.stubEnv("AD_RESULTS_ENABLED", "true");
+    const live = { id: "c-new", name: "Solar", status: "active", daily_budget: 300, raw: {}, meta_campaign_id: "123", launched_at: "2026-10-28T10:00:00Z", created_at: "2026-10-28T10:00:00Z" } as unknown as Campaign;
+    queries.getPrimaryBusiness.mockResolvedValue(business);
+    queries.getCreativePreviews.mockResolvedValue([]);
+    queries.getCampaigns.mockResolvedValue([live, wentLive]);
+    queries.getMetaConnection.mockResolvedValue({ ready: true });
+    queries.getSpendEvaluation.mockResolvedValue({ evaluation: { status: "healthy" } });
+    queries.getAuditLog.mockResolvedValue([]);
+    queries.getLatestResults.mockResolvedValue({});
+    queries.getAdStatuses.mockResolvedValue(["PENDING_REVIEW", "IN_PROCESS"]);
+    const { default: DashboardPage } = await import("@/app/(app)/dashboard/page");
+    render(await DashboardPage());
+    expect(queries.getAdStatuses).toHaveBeenCalledWith("c-new");
+    expect(screen.getByRole("status", { name: "Meta review" })).toHaveTextContent("Meta is checking your ads");
+    vi.unstubAllEnvs();
+  });
+
   it("keeps recent activity failures local to their section", async () => {
     queries.getPrimaryBusiness.mockResolvedValue(business);
     queries.getCreativePreviews.mockResolvedValue([]);
@@ -420,9 +462,9 @@ describe("Home results row (#764)", () => {
 
   it("#1049: says how fast the owner replies to enquiries, when there's a reply to measure", () => {
     const { rerender } = render(<WorkspaceHome {...empty} business={business} campaigns={[chats, forms]} results={results} replyMinutes={12.4} now={now} />);
-    expect(screen.getByText(/You reply to an enquiry in/)).toHaveTextContent("You reply to an enquiry in 12 min (median, last 30 days).");
+    expect(screen.getByText(/You usually contact people within/)).toHaveTextContent("You usually contact people within 12 min (last 30 days).");
     rerender(<WorkspaceHome {...empty} business={business} campaigns={[chats, forms]} results={results} replyMinutes={null} now={now} />);
-    expect(screen.queryByText(/You reply to an enquiry in/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/You usually contact people within/)).not.toBeInTheDocument();
   });
 
   // #1274 slice 2b: Home leads with the best running campaign's verdict, people waiting first; each row gets its word.

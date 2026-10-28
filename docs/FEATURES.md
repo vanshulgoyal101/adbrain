@@ -35,14 +35,14 @@ ID are different identifiers. Never infer one from another.
 
 | Page | Job | Important boundary |
 | --- | --- | --- |
-| `/dashboard` | The newest enquiry from the last 24 h still waiting for a first reply ("Rohit tapped your ad at 9:40 am. Reply now; …", #1292), then results so far (enquiries, spent, per enquiry, oldest update; same latest results as the campaign cards, #764; the median time to first reply over 30 days, #1049), next action, onboarding progress, activity | Uses stored state; not proof of live provider health |
+| `/dashboard` | The newest enquiry from the last 24 h still waiting for a first reply ("Rohit tapped your ad at 9:40 am. Reply now; …", #1292); for the newest live campaign, "Meta is checking your ads; they usually start within a day." while every ad is in review and nothing has delivered (stored per-ad statuses, no Meta call), or the rejected-ads sentence and fixes when Meta disapproved an ad (one Meta review read, #1469); then results so far (enquiries, spent, per enquiry, oldest update; same latest results as the campaign cards, #764; the median time to the first WhatsApp/Call tap over 30 days, "You usually contact people within …", #1049/#1443), next action, onboarding progress, activity | Uses stored state (plus that one review read); not proof of live provider health |
 | `/brand` | Setup step 1 for first-timers; profile, assets, Markdown instructions (`?all=1`) | Saved business facts ground AI output |
 | `/create` | Guided creative interview and brief review | Reviewing a brief is distinct from paid generation; the Brand context panel names missing offers, service areas and phone before a run. Any goal, typed or from a suggestion, on a Brand with an offer or proof point, an area and a phone skips the review when the interview needs no question. The start screen says what the ads will use ('Your 3 ads will use: Mohali · offer: Free site survey'; every Brand area Create sends, the first 3 then '+N more' (#1034); a proof point is labelled 'proof:', facts cut at 40 characters) above 'Make 3 ads', with 'About 2 minutes. Nothing is published.' under it and 'Edit brief' to keep the review; afterwards the brief shows as a collapsed 'What I'll write about · Edit' line (#858, #1004). After 'Use this ad', the one primary step 'Next: set up campaign' opens `/campaigns?…&review=1`, which prepares Review on its own (#1004, #1152); 'Review ads' and 'Make another' stay in the quieter row above. Up to two 'Coming up' occasion chips (festivals and seasons for today's date in IST, `src/lib/seasonal.ts`; November adds Chhath Puja, Guru Nanak Jayanti and the winter season, and a festival comes before a long season, #1210) fill the goal in one tap with plain words ('An ad for Chhath Puja from <Business>.'); they never assert a sale, discount or deadline, and the concept prompt and claim check allow only saved offers (#700, #1153) |
 | `/studio` | Generate, inspect, approve, edit (ad text, words on picture, background), regenerate (asks first), delete, export, share approved ads (phone share sheet; desktop downloads and copies the text); "Create campaign (N)" links approved ads to Campaigns | Approval and sharing do not publish an ad on Meta |
 | `/assets` | Browse/reuse/download saved images | Download/clipboard failures are surfaced |
 | `/campaigns` | Draft, review, create paused, activate/pause, sync, report; `?new=1&creatives=<ids>` opens the composer with those approved ads selected; `&review=1` (#1004, from Create) then prepares Review on its own once Meta is connected, the WhatsApp check has run and a form campaign has its lead form (the same prepare as the Review button; nothing is sent to Meta). The lead form used for the last Review is preselected while the Page still has it; with several forms and none chosen, the field says choosing one opens Review | Live Meta writes require verified binding and capability |
 | `/leads` | WhatsApp chats per campaign with **Add enquiry** (#764) first; the form table follows as "Form enquiries (n)", folded when there are none (#1223); then sync, search, and inspect enquiries; copy digest. Each enquiry with a phone has **WhatsApp them** (wa.me with a first reply in the business's first language, en/hi/Hinglish, naming the business and its first offer) and **Call**; the first tap records `first_contacted_at` ("Replied 12 min after the enquiry", #1049) | No automated outreach is sent: the owner sends the reply |
-| `/settings` | Meta connection, spend guardrails, declared preferences | Disconnect does not pause running ads; preferences cannot authorize spend |
+| `/settings` | Meta connection, spend guardrails, declared preferences, **App language** (English · हिंदी, kept in the `adbrain_lang` cookie for a year; Home follows it, other screens follow screen by screen, #1438; strings in `messages/{en,hi}.json`) | Disconnect does not pause running ads; preferences cannot authorize spend |
 | `/settings/verdicts` | Internal only (#1255): one example of each campaign-card state for team walks | Fixed examples; reads and writes nothing; 404 for owners |
 
 ## Workspace Responsiveness
@@ -141,9 +141,20 @@ showing one line of progress at a time. Then it shows the newest batch
 (`variant_group`) with 2 pre-picked by a fixed rule (`setupPicks`: fewest text
 repairs, then no image fallback, then the order made). "Continue" approves the picks
 and opens `/campaigns?new=1&creatives=…`. The generation id is kept in
-sessionStorage, so coming back mid-run reads the saved ads instead of starting
-again; missing ads show "N ads couldn't be made. Make another". `/create?all=1`
-opens the full Create below.
+localStorage for 15 minutes (#1402), so coming back or a second tab reads the
+saved ads instead of starting again; the step waits through "processing" and
+"partial" and treats "unresolved" as finished short, and on arrival it checks the
+newest batch (#1407). The tab that gets a batch's ads publishes them in localStorage
+(`setup-generation-result:{businessId}`, 15 minutes), so other waiting tabs show them
+at once; a 429 from the shared status budget waits out Retry-After (#1534). Opened mid-batch, the step says "Making your ads…" and Continue waits ("N more on the way…") until the rest lands or the batch ends short (#1564). Missing ads show "N ads couldn't be made. Make another", and a
+top-up shows beside its batch (`setupBatch`). Only ads made from today's step 1
+count (`madeForSetup`: the receipt's source fact is today's `setupGoal`, #1432):
+after the owner changes what they sell, where or their offer, step 2 makes new
+ads, and step 3 sends back to step 2 rather than offering older approved ads.
+With such earlier ads (older details, or approved in Studio) step 2 never starts a
+paid batch by itself: it shows "Make 3 ads" (a tap) and "Use your earlier ads" →
+`/campaigns?all=1`; a batch already running in another tab still resumes (#1475).
+`/create?all=1` opens the full Create below.
 
 1. When the business's campaigns have results, Create opens on one line such as "Your
    “Roof ready?” ad got 1 chat at ₹10.69 (early: based on 1 chat). Make 3 more like it, or
@@ -463,6 +474,12 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
   interests, Meta refuses later targeting edits, so exclusions must be in the create;
   a targeting edit on a live ad set restarts ad review (about 5 minutes on #157).
   Country-wide and non-Indian areas get no automatic exclusions.
+- Typed area names resolve in the business's country (India; #1555): a name whose only Meta
+  match is abroad comes back unresolved ("Meta didn't recognise the area…") unless the owner typed
+  its qualified label ("Austin, Texas"). Everyday Tricity names Meta has no place for search the
+  places it has (`src/lib/meta/geo-aliases.ts`, #1556): Tricity and Zirakpur → Chandigarh, Mohali,
+  Panchkula; Derabassi → Dera Bassi; New Chandigarh, Aerocity → Mohali; 'Sector N'/'Phase N' with
+  a city → that city (a bare 'Sector 17' stays unresolved). Meta's only 'Tricity' is Tri-City, Oregon.
 - Every campaign must have detailed interest targeting before creation. AI plans
   require one to five relevant commercial interests grounded in the business and
   offer. Preparing a draft with missing/empty interests requests AI recommendations
@@ -537,9 +554,13 @@ A first-timer with approved ads and no campaign yet, who can connect Meta, gets
 setup step 3 "Go live" on `/campaigns` (#1251 WS1, #1271): the picked ads, a daily
 budget (₹300/₹500/₹1,000 a day) for 2 days with the most it can spend including
 Meta's GST (`capWithGstPaise`, the activation reserve's own formula), the areas,
-the WhatsApp chat, and the weekly cap line (#1342; over the cap, Go live can't be
-tapped). The checklist shows the Facebook Page, the money row (AdBrain ad money →
-Settings, or payment on the owner's own Meta account) and the "Stops at" total.
+the WhatsApp chat with the welcome Go live sends (#1529: `setupWelcome`, Review's own
+`campaignWhatsAppMessage` on Go live's draft, so the saved message or AdBrain's), "Change
+who sees it" (full composer) once the Page is connected, and the weekly cap line (#1342; over the cap, Go live can't be
+tapped). The checklist shows the Facebook Page, the money row (payment on the
+owner's own Meta account; the AdBrain ad money row is hidden for every funding
+mode until flat ₹999/month pricing with pass-through ad money, #1251 CEO) and the
+"Stops at" total.
 The one primary connects the Page first (MetaConnectDialog), then "Go live · ₹{d} a
 day" is one tap (#1271 4b, `src/lib/campaign/setup-go-live-flow.ts`) through the
 same routes the Campaigns page uses: connection status (not connected → the Meta
@@ -704,6 +725,14 @@ example local businesses, labelled as examples, made by `scripts/make-idea-ads.t
 with the production Create pipeline (no phone numbers, evergreen offers). "Make one
 like this" saves the idea's goal in localStorage and opens Create, which starts from
 it after sign-in; the login page keeps the create-account view while it's pending.
+
+`/for/solar`, `/for/ielts` and `/for/interiors` (#1565, #1315) are static leave-behind
+landings for the pilot segments (`src/lib/segments.ts`): the segment's headline, a
+WhatsApp chat showing what a customer sends, the pilot kit's offer (free first
+campaign, the owner pays Meta from their own ad account, then ₹999 a month with the
+first month free) and trust lines, with "Start my free campaign" → `/login`. The
+"Message us on WhatsApp" button appears when `SUPPORT_WHATSAPP` (or
+`NEXT_PUBLIC_SUPPORT_WHATSAPP`) is set at build time (#796). No margin, no promised results.
 
 Owner activity records, AI usage events, and structured product telemetry serve
 different purposes. See [Observability](OBSERVABILITY.md) for privacy, access, and

@@ -7,6 +7,11 @@ const mocks = vi.hoisted(() => ({
   error: null as unknown,
   queries: [] as Filter[],
   users: {} as Record<string, { id: string; email: string; email_confirmed_at: string | null }>,
+  recorded: [] as Array<{ name: string; attributes?: Record<string, unknown> }>,
+}));
+vi.mock("@/lib/observability/logger", async (actual) => ({
+  ...(await actual<object>()),
+  recordProductEvent: (event: { name: string; attributes?: Record<string, unknown> }) => mocks.recorded.push(event),
 }));
 vi.mock("@/lib/env", () => ({ getEnv: () => ({ CRON_SECRET: mocks.secret }) }));
 vi.mock("@/lib/internal-accounts.json", () => ({
@@ -14,14 +19,18 @@ vi.mock("@/lib/internal-accounts.json", () => ({
 }));
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
-    auth: { admin: { getUserById: async (id: string) => (mocks.users[id]
-      ? { data: { user: mocks.users[id] }, error: null }
-      : { data: { user: null }, error: { message: "not found" } }) } },
+    auth: { admin: {
+      getUserById: async (id: string) => (mocks.users[id]
+        ? { data: { user: mocks.users[id] }, error: null }
+        : { data: { user: null }, error: { message: "not found" } }),
+      // #1242: the scoreboard lists every account once.
+      listUsers: async () => ({ data: { users: Object.values(mocks.users).map((user) => ({ created_at: "2026-01-01T00:00:00Z", ...user })) }, error: null }),
+    } },
     from: (table: string) => {
       const query: Filter = { table, ops: [] };
       mocks.queries.push(query);
       const builder: Record<string, unknown> = {};
-      for (const op of ["select", "in", "gte", "eq", "not", "order", "range"]) {
+      for (const op of ["select", "in", "gte", "lt", "eq", "not", "order", "range", "like"]) {
         builder[op] = (...args: unknown[]) => { query.ops.push([op, args]); return builder; };
       }
       builder.abortSignal = async () => {
@@ -29,9 +38,14 @@ vi.mock("@/lib/supabase/admin", () => ({
         const rows = mocks.tables[table] ?? [];
         const range = query.ops.find(([op]) => op === "range")?.[1] as [number, number] | undefined;
         const isPlanRoute = query.ops.some(([op, args]) => op === "eq" && args[0] === "name" && args[1] === "http.request");
-        const selected = table === "product_events"
-          ? rows.filter((r) => ((r as { name: string }).name === "http.request") === isPlanRoute)
-          : rows;
+        const named = query.ops.find(([op, args]) => op === "eq" && args[0] === "name" && args[1] !== "http.request")?.[1] as [string, string] | undefined;
+        // #1242: the sign-up query matches by prefix; the others never see sign-ups.
+        const like = query.ops.find(([op]) => op === "like")?.[1] as [string, string] | undefined;
+        const name = (r: unknown) => (r as { name: string }).name;
+        const selected = table !== "product_events" ? rows
+          : named ? rows.filter((r) => name(r) === named[1])
+          : like ? rows.filter((r) => name(r).startsWith(like[1].replace(/%$/, "")))
+            : rows.filter((r) => !name(r).startsWith("auth.sign_up.") && name(r) !== "scoreboard.manage" && (name(r) === "http.request") === isPlanRoute);
         return { data: range ? selected.slice(range[0], range[1] + 1) : selected, error: null };
       };
       return builder;
@@ -50,6 +64,7 @@ beforeEach(() => {
   mocks.secret = "cron-secret";
   mocks.error = null;
   mocks.queries = [];
+  mocks.recorded = [];
   mocks.tables = {
     businesses: [{ id: "smoke-business" }],
     product_events: [
@@ -106,6 +121,17 @@ describe("GET /api/cron/core-scoreboard (#681)", () => {
     expect(JSON.stringify(body)).not.toMatch(/real-user|team-user|smoke-business|"b1"|example/);
     const businesses = mocks.queries.find((q) => q.table === "businesses")!;
     expect(businesses.ops).toContainEqual(["in", ["owner_id", ["smoke-user"]]]);
+  });
+
+  it("#1543: records today's Manage snapshot and reads the last 7 days of them into the trend row", async () => {
+    mocks.tables.product_events.push({ name: "scoreboard.manage", outcome: "success", user_id: null, business_id: null, duration_ms: null,
+      attributes: { count: 1, failedCount: 0, worstMinutes: 29, p90Minutes: 29 }, created_at: new Date(Date.now() - 86_400_000).toISOString() });
+    const { body } = await call();
+    expect(mocks.recorded).toContainEqual(expect.objectContaining({ kind: "system", name: "scoreboard.manage", outcome: "success",
+      attributes: { count: 1, failedCount: 0, worstMinutes: 5, p90Minutes: 5 } }));
+    const history = mocks.queries.find((q) => q.ops.some(([op, args]) => op === "eq" && args[1] === "scoreboard.manage"))!;
+    expect(history.ops).toContainEqual(["gte", ["created_at", expect.any(String)]]);
+    expect(body.rows.find((r: { step: string }) => r.step === "Manage, 7 days").now).toMatch(/29 min ❌$/);
   });
 
   it("pages past 1,000 rows", async () => {

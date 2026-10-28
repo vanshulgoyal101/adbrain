@@ -1,5 +1,6 @@
 import type { DraftInput } from "./connect-contracts";
 import { geoItemsToTargeting, type GeoTargeting, type MetaClient } from "@/lib/meta/client";
+import { DEFAULT_COUNTRY_CODE } from "@/lib/brand/countries";
 
 function mergeGeo(first: GeoTargeting, second: GeoTargeting): GeoTargeting {
   const countries = [...new Set([...(first.countries ?? []), ...(second.countries ?? [])])];
@@ -20,6 +21,8 @@ export async function resolveDraftTargeting(
   input: DraftInput,
   businessLocations: string[],
   resolve: MetaClient["resolveGeoTargeting"],
+  /** #1555: the business's country; a namesake abroad comes back unresolved. */
+  preferCountry: string = DEFAULT_COUNTRY_CODE,
 ) {
   const location = input.targeting.location;
   const included = location?.mode === "manual" ? location.included ?? [] : [];
@@ -28,8 +31,8 @@ export async function resolveDraftTargeting(
   const excludedNames = location?.excludedNames ?? [];
   const empty = { targeting: {}, matched: [], unresolved: [] };
   const [namedIncluded, namedExcluded] = await Promise.all([
-    includedNames.length ? resolve(includedNames, { radiusKm: location?.radiusKm, cityScope: location?.cityScope }) : empty,
-    excludedNames.length ? resolve(excludedNames, { radiusKm: location?.radiusKm, cityScope: location?.cityScope }) : empty,
+    includedNames.length ? resolve(includedNames, { radiusKm: location?.radiusKm, cityScope: location?.cityScope, preferCountry }) : empty,
+    excludedNames.length ? resolve(excludedNames, { radiusKm: location?.radiusKm, cityScope: location?.cityScope, preferCountry }) : empty,
   ]);
   const targeting = mergeGeo(geoItemsToTargeting(included, location?.radiusKm ?? 25, location?.cityScope), namedIncluded.targeting);
   const excludedTargeting = mergeGeo(geoItemsToTargeting(excluded, location?.radiusKm ?? 25, location?.cityScope), namedExcluded.targeting);

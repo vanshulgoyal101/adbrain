@@ -18,10 +18,13 @@ vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ auth: { g
 vi.mock("@/lib/meta/connection-access", () => ({ requireOwnedBusiness: async () => { throw new Error("skip drafts"); } }));
 vi.mock("@/components/setup-go-live", () => ({ SetupGoLive: (props: unknown) => { m.goLive(props); return <div>Go live step</div>; } }));
 vi.mock("@/components/campaigns", () => ({ Campaigns: (props: unknown) => { m.campaigns(props); return <div>Campaigns loaded</div>; } }));
+vi.mock("next/navigation", async (actual) => ({ ...(await actual<typeof import("next/navigation")>()), redirect: (to: string) => { throw new Error(`redirect:${to}`); } }));
 vi.mock("@/components/ready-ads-next-step", () => ({ ReadyAdsNextStep: () => <div>Ready ads next step</div> }));
 
 const business = { id: "b1", name: "SunPeak", locations: ["Jaipur"], phone: "98765 43210" } as unknown as Business;
-const ad = (id: string) => ({ id, status: "approved", headline: id, image_url: null, generation: null }) as unknown as Creative;
+// Made by step 2 from today's step 1: its source fact is setupGoal(business) (#1432).
+const ad = (id: string, goal = "Get WhatsApp enquiries for our business in Jaipur") =>
+  ({ id, status: "approved", headline: id, image_url: null, generation: { sourceFacts: [goal] } }) as unknown as Creative;
 
 async function page(params: Record<string, string>) {
   const { default: CampaignsPage } = await import("@/app/(app)/campaigns/page");
@@ -46,6 +49,12 @@ describe("core: Campaigns → Go live for a first-timer (#1271)", () => {
     });
   });
 
+  it("#1529: passes the welcome Go live sends (the Brand's saved message here)", async () => {
+    m.getPrimaryBusiness.mockResolvedValue({ ...business, whatsapp_template: { greeting: "Namaste from SunPeak!", opening: { kind: "prefill", prefill: "I'd like a free site survey", callButton: false }, language: "en" } });
+    await page({});
+    expect(m.goLive.mock.calls[0][0].welcome).toEqual({ source: "saved", language: "en", greeting: "Namaste from SunPeak!", autofill: "I'd like a free site survey", callButton: false });
+  });
+
   it("?all=1 opens the campaign review with Go live's budget; an amount not offered is ignored", async () => {
     await page({ all: "1", new: "1", review: "1", budget: "500", creatives: "a" });
     expect(m.campaigns.mock.calls[0][0].newCampaign).toEqual({ creativeIds: ["a"], review: true, budget: 500 });
@@ -57,6 +66,15 @@ describe("core: Campaigns → Go live for a first-timer (#1271)", () => {
     document.body.innerHTML = "";
     await page({ all: "1", new: "1", budget: "99999", creatives: "a" });
     expect(m.campaigns.mock.calls[0][0].newCampaign.budget).toBeUndefined();
+  });
+
+  it("#1432: approved ads made from an earlier step 1 (or outside the setup) send the owner back to step 2", async () => {
+    m.getApprovedCreatives.mockResolvedValue([ad("old", "Get WhatsApp enquiries for rooftop solar in Mohali, leading with: Free site survey"),
+      { ...ad("studio"), generation: { sourceFacts: [] } }]);
+    await expect(page({})).rejects.toThrow("redirect:/create");
+    m.getApprovedCreatives.mockResolvedValue([ad("old", "Get WhatsApp enquiries for rooftop solar in Mohali"), ad("new")]);
+    await page({});
+    expect(m.goLive.mock.calls[0][0].ads).toEqual([expect.objectContaining({ id: "new" })]);
   });
 
   it("a business with a campaign keeps the Campaigns page", async () => {

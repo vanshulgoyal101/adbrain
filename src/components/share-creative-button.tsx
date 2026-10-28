@@ -11,10 +11,13 @@ import { cn } from "@/lib/utils";
 export function ShareCreativeButton({
   creative,
   className,
+  variant = "primary",
   ...rest
 }: {
   creative: Creative;
   className?: string;
+  /** #1598: Review's card keeps one solid primary (Create campaign), so Share is outline there. */
+  variant?: "primary" | "outline";
   "data-product-event"?: string;
 }) {
   const file = useRef<{ url: string | null; promise: Promise<File> } | null>(null);
@@ -55,7 +58,7 @@ export function ShareCreativeButton({
       <Button
         type="button"
         size="sm"
-        variant="primary"
+        variant={variant}
         onPointerDown={() => void prefetch().catch(() => undefined)}
         onFocus={() => void prefetch().catch(() => undefined)}
         onClick={share}

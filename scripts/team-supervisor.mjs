@@ -10,10 +10,10 @@
 //   node scripts/team-supervisor.mjs --restart-prompt <role|all>          the prompt to resend with create_session
 // Each tick also dispatches scheduled-jobs.yml when GitHub's own schedule has lapsed (#692), and once a
 // night exports production to ~/.adbrain-backups and restore-drills it (#884).
-// Kill switch: touch ~/.adbrain-supervisor/OFF. Log: ~/.adbrain-supervisor/supervisor.log.
+// Kill switch for role runs: touch ~/.adbrain-supervisor/OFF (scheduled-job dispatch and the nightly backup keep running). Log: ~/.adbrain-supervisor/supervisor.log.
 import { execFileSync as rawExecFileSync, spawn, spawnSync } from "node:child_process";
 import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { cpus, freemem, homedir, loadavg, totalmem } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
@@ -192,6 +192,25 @@ export function scheduledJobsDue(latest, now = Date.now(), staleMin = 9) {
   return !Number.isFinite(started) || now - started > staleMin * 60_000;
 }
 
+/** #1495: the reason to hold a headless run while the shared Mac is overloaded, or null to launch. */
+export function loadSkip({ load1, cores, availableBytes }, { maxLoadPerCore = 1.5, minFreeGb = 2 } = {}) {
+  const perCore = load1 / Math.max(1, cores);
+  if (perCore > maxLoadPerCore) return `load ${load1.toFixed(1)} on ${cores} cores (${perCore.toFixed(2)}/core > ${maxLoadPerCore})`;
+  const gb = availableBytes / 2 ** 30;
+  if (gb < minFreeGb) return `${gb.toFixed(1)} GB memory available (< ${minFreeGb} GB)`;
+  return null;
+}
+
+/** os.freemem() on macOS counts only never-used pages (≈0.2 GB on a healthy 8 GB Mac), so use the kernel's memory-pressure level instead. */
+export function machineLoad() {
+  let availableBytes = freemem();
+  if (process.platform === "darwin") {
+    const level = Number(spawnSync("sysctl", ["-n", "kern.memorystatus_level"], { encoding: "utf8" }).stdout?.trim());
+    if (Number.isFinite(level) && level > 0) availableBytes = (totalmem() * level) / 100;
+  }
+  return { load1: loadavg()[0], cores: cpus().length, availableBytes };
+}
+
 export const BACKUP_DIR = join(HOME, ".adbrain-backups");
 const BACKUP_KEEP = 7;
 
@@ -288,10 +307,13 @@ function writeState(state) {
   writeFileSync(join(STATE_DIR, "state.json"), JSON.stringify(state, null, 2));
 }
 
-/** Keep this worktree on origin/main so each tick runs current code; skipped if anyone left edits here. */
+/** Keep this worktree on origin/main so each tick runs current code; false (no refresh) if anyone left edits here. */
 function refresh() {
   const dirty = execFileSync("git", ["-C", WT, "status", "--porcelain"], { encoding: "utf8" }).trim();
-  if (dirty) return log("refresh skipped: worktree has local changes");
+  if (dirty) {
+    log("refresh skipped: worktree has local changes");
+    return false;
+  }
   // stdio ignored: a killed git can leave git-remote-https holding a pipe, and the call would wait on it.
   try {
     execFileSync("git", ["-C", WT, "fetch", "-q", "origin", "main"], { stdio: "ignore" });
@@ -299,6 +321,7 @@ function refresh() {
   } catch (error) {
     log(`refresh failed, running the current checkout: ${String(error?.message ?? error).split("\n")[0].slice(0, 160)}`);
   }
+  return true;
 }
 
 /** The headless run still going, if any: runs are detached from the tick (#766), so a tick checks the recorded pid. */
@@ -320,9 +343,12 @@ function runCli(args, runMin, outFile) {
   });
 }
 
-const agentArgs = (text, credits) => [
-  "-p", text, "-C", WT, "--autopilot", "--no-ask-user", "--allow-all-tools",
+// #1513: deny rules beat --allow-all-tools. `gh auth token` prints the GitHub token; secrets and variables are DevOps's.
+// Releases, applied migrations and Meta writes are refused in code via ADBRAIN_HEADLESS (scripts/lib/headless.mjs).
+export const agentArgs = (text, credits, wt = WT) => [
+  "-p", text, "-C", wt, "--autopilot", "--no-ask-user", "--allow-all-tools",
   "--deny-tool", "shell(launchctl)", "--deny-tool", "shell(vercel)", "--deny-tool", "shell(supabase)",
+  "--deny-tool", "shell(gh auth)", "--deny-tool", "shell(gh secret)", "--deny-tool", "shell(gh variable)",
   "--max-ai-credits", String(credits), "-s",
 ];
 
@@ -387,13 +413,16 @@ async function main() {
     const result = await runCli(["-p", "Reply with exactly the word: ok", "-C", WT, "--no-ask-user", "--max-ai-credits", "30", "-s"], 5, out);
     return console.log(`${result}: ${readFileSync(out, "utf8").trim().split("\n").pop()}`);
   }
-  if (existsSync(join(STATE_DIR, "OFF"))) return log("tick skipped: OFF switch");
+  // OFF stops only the headless role runs (#1525): production's scheduled jobs and the nightly backup depend on these dispatches.
   dispatchScheduledJobs(values["dry-run"]);
   dispatchBackup(values["dry-run"]);
-  if (!values["dry-run"]) refresh();
+  const fresh = values["dry-run"] ? true : refresh();
   nightlyExport(values["dry-run"]);
   // A detached run (#766) finishes the run it was given and records it; the tick that started it has long returned.
   if (values["run-role"]) return finishRun(values["run-role"], values["run-start"], runMin, values.credits);
+  if (existsSync(join(STATE_DIR, "OFF"))) return values["dry-run"] ? console.log("no role runs: OFF switch") : log("tick: no role runs (OFF switch)");
+  // #1513: runs share this worktree; edits left here (this script included) would be what the next run executes.
+  if (!fresh) return log("tick: no role runs: the supervisor worktree has local edits; clean it to resume");
   const state = readState();
   for (const r of state.runs ?? []) if (r.pid && !r.end && !pidAlive(r.pid)) Object.assign(r, { end: new Date().toISOString(), result: "lost (process gone)" });
   const busy = activeRun(state);
@@ -408,6 +437,14 @@ async function main() {
   const pick = pickRole(statuses, live, roles, { last: lastWakes(state), capped, overdueMin: Number(values["overdue-min"]) });
   const summary = roles.map((r) => `${r}:${live.has(r) ? "live" : statuses[r]?.state}`).join(" ");
   if (!pick) return log(capped ? `tick: daily cap ${values["max-runs-day"]} reached, nobody overdue (${summary})` : `tick: nothing to wake (${summary})`);
+  const overloaded = loadSkip(machineLoad(), {
+    maxLoadPerCore: Number(process.env.ADBRAIN_SUPERVISOR_MAX_LOAD ?? 1.5),
+    minFreeGb: Number(process.env.ADBRAIN_SUPERVISOR_MIN_FREE_GB ?? 2),
+  });
+  if (overloaded) {
+    const why = `tick skipped: Mac overloaded, ${overloaded}; would wake ${pick.role}`;
+    return values["dry-run"] ? console.log(why) : log(why);
+  }
   if (values["dry-run"]) return console.log(`would wake ${NAMES[pick.role]}${pick.overdue ? " (overdue)" : ""} on: ${pick.items[0]}\n(${summary})`);
 
   const run = { role: pick.role, item: pick.items[0]?.slice(0, 160), items: pick.items.slice(0, 3), start: new Date().toISOString() };

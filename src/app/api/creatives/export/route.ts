@@ -7,8 +7,9 @@ import { createClient } from "@/lib/supabase/server";
 import { rateLimitResponse } from "@/lib/security/rate-limit";
 import { z } from "zod";
 import { savedCreativeDescription } from "@/lib/creative/concept";
-import { sampleWatermark, SAMPLE_LABEL } from "@/lib/creative/sample-watermark";
+import { sampleNoteCard, sampleWatermark, SAMPLE_LABEL, SAMPLE_NOTE } from "@/lib/creative/sample-watermark";
 import { isProspectAccount } from "@/lib/internal-accounts";
+import { leaveBehindBlock, segmentForCategory } from "@/lib/segments";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -49,6 +50,14 @@ async function handlePOST(req: Request) {
   let exhausted = false;
   const maximumBytes = 40 * 1024 * 1024;
   const signal = AbortSignal.any([req.signal, AbortSignal.timeout(45_000)]);
+  // #1582: a sales visit's pack names the business and ends with the segment's follow-up.
+  const business = sample && creatives[0]?.business_id ? (await supabase.from("businesses").select("name, vertical")
+    .eq("id", creatives[0].business_id).maybeSingle()).data : null;
+  // #1471: the note card comes first, so whoever opens the pack reads what these ads are before the ads.
+  if (sample) {
+    const card = await sampleNoteCard(business?.name).catch(() => null);
+    if (card) zip.file("00-sample-note.png", card);
+  }
 
   for (const [index, creative] of creatives.entries()) {
       if (!creative.image_url) continue;
@@ -89,8 +98,9 @@ async function handlePOST(req: Request) {
     skipped > 0
       ? `Note: ${skipped} of ${withImage} image(s) were unavailable or exceeded export limits and are not included. Export a smaller selection to include more images.\n\n`
       : "";
-  const sampleNote = sample ? `${SAMPLE_LABEL.toUpperCase()}. Made for a sales visit; these ads run only after the business owner signs up.\n\n` : "";
-  zip.file("copy.txt", sampleNote + note + copy);
+  const sampleNote = sample ? `${SAMPLE_LABEL}. ${SAMPLE_NOTE}\n\n` : "";
+  const segment = segmentForCategory(business?.vertical);
+  zip.file("copy.txt", sampleNote + note + copy + (segment ? `\n${leaveBehindBlock(segment, { businessName: business?.name })}` : ""));
 
   const buffer = await zip.generateAsync({ type: "arraybuffer" });
   return new NextResponse(new Blob([buffer], { type: "application/zip" }), {

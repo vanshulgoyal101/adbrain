@@ -1590,6 +1590,8 @@ async function verifyOwnerWhatsAppAlerts(db, database) {
     await as("authenticated", other, async (session) => {
       assert.equal((await session.query("select count(*)::int as n from public.owner_alert_prefs")).rows[0].n, 0);
       assert.equal((await session.query("select count(*)::int as n from public.owner_alert_consent_events")).rows[0].n, 0);
+      // #1606: whoever holds a START code gets the business's enquiries, so another user can never mint one.
+      await assert.rejects(session.query("select public.owner_alert_start_verification($1)", [business]), { code: "42501" });
     });
     await as("anon", null, async (session) => {
       await assert.rejects(session.query("select 1 from public.owner_alert_prefs"), { code: "42501" });

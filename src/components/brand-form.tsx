@@ -406,7 +406,7 @@ export function BrandForm({ business, photoCount = 0 }: { business: Business | n
                 name="address"
                 value={fields.address}
                 onChange={(e) => set("address", e.target.value)}
-                placeholder="Shop 4, MI Road, Jaipur 302001"
+                placeholder="SCO 12, Phase 3B2, Mohali 160059"
               />
             </Field>
           </div>

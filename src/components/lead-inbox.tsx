@@ -18,6 +18,7 @@ import { isMetaTestLead } from "@/lib/leads/test-lead";
 import { isWaiting } from "@/lib/leads/waiting";
 import { leadAnswers } from "@/lib/leads/answers";
 import styles from "./lead-inbox.module.css";
+import { WhatsAppEnquiries } from "@/components/whatsapp-enquiries";
 
 const LEADS_FRESH_MS = 15 * 60_000;
 
@@ -82,6 +83,8 @@ export function LeadInbox({
   summary = null,
   allTotal,
   offerAlerts = false,
+  chatsEmpty = false,
+  addEnquiryFor = null,
 }: {
   businessName: string;
   /** #1049: the business's first offer and language, for the pre-filled first WhatsApp reply. */
@@ -100,7 +103,12 @@ export function LeadInbox({
   allTotal?: number;
   /** #1260: WhatsApp alerts (#701) can be turned on here and aren't yet, so the empty state offers them. */
   offerAlerts?: boolean;
+  /** #1597: the page found no WhatsApp chat or logged enquiry either; with no form enquiry, one block replaces the inbox. */
+  chatsEmpty?: boolean;
+  /** #1597: a WhatsApp campaign the empty block's 'Add an enquiry' logs to. */
+  addEnquiryFor?: { campaignId: string; spend: number; enquiries: number } | null;
 }) {
+  const [adding, setAdding] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -347,6 +355,32 @@ export function LeadInbox({
   const detail = selectedLead ? rowInfo(selectedLead) : null;
   const answers = selectedLead && !isMetaTestLead(selectedLead) ? leadAnswers(selectedLead.field_data) : [];
 
+  // #1597 (Designer, #1463): no enquiries anywhere: one block (title, line, one action) instead of banner, count, tabs,
+  // search and a card that repeats it. The checking above keeps running, so the first enquiry brings the inbox back.
+  if (chatsEmpty && page.total === 0 && (allTotal ?? 0) === 0 && leads.length === 0 && !page.loading && !page.error) {
+    const solid = !metaReady || offerAlerts;
+    return (
+      <section aria-labelledby="enquiries-empty-title" className="mt-4 flex max-w-xl flex-col items-start gap-2">
+        <h2 id="enquiries-empty-title" className="text-[17px] font-semibold leading-6 text-slate-900">No enquiries yet</h2>
+        <p className="text-[15px] leading-[22px] text-slate-600">
+          {metaReady
+            ? "People who message you from an ad show up here. Reply fast: they often pick the first business that answers."
+            : "Connect Meta so people who tap your ads can reach you here."}
+        </p>
+        <Link href={!metaReady ? "/settings" : offerAlerts ? "/settings#whatsapp-alerts-title" : "/campaigns"}
+          className={`mt-2 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md px-4 text-sm font-medium sm:w-auto ${solid
+            ? "bg-[var(--primary)] text-white"
+            : "border border-slate-300 text-slate-800 hover:bg-slate-50"}`}>
+          {!metaReady ? "Connect Meta" : offerAlerts ? "Get a WhatsApp alert for each one" : "See your campaigns"}
+        </Link>
+        {metaReady && addEnquiryFor && (adding
+          ? <WhatsAppEnquiries compact campaignId={addEnquiryFor.campaignId} spend={addEnquiryFor.spend} enquiries={addEnquiryFor.enquiries}
+            onLogged={() => window.location.reload()} />
+          : <button type="button" className="inline-flex min-h-11 items-center text-sm font-medium text-blue-700 hover:underline" onClick={() => setAdding(true)}>Add an enquiry</button>)}
+      </section>
+    );
+  }
+
   return (
     <div className={styles.inbox}>
       {!metaReady && (
@@ -455,7 +489,7 @@ export function LeadInbox({
           </CardContent>
         </Card>
       ) : leads.length === 0 ? (
-        <div className={styles.empty}><Search size={28} aria-hidden="true" /><h3>No matching enquiries</h3><Button variant="outline" onClick={clearFilters}>Clear filters</Button></div>
+        <div className={styles.empty}><h3>No matching enquiries</h3><Button variant="outline" onClick={clearFilters}>Clear filters</Button></div>
       ) : (
         <div className={detail ? styles.panes : undefined}>
         <div className={styles.listPane}>

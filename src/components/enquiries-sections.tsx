@@ -7,7 +7,14 @@ import type { WhatsAppChatRow } from "@/lib/campaign/real-enquiries";
  * (children) follows; with chats and no form enquiries it folds under "Form enquiries (0)", still reachable
  * for Sync. Without chats the form table is the page, as before.
  */
-export function EnquiriesSections({ chatRows, formTotal, children }: { chatRows: WhatsAppChatRow[]; formTotal: number; children: ReactNode }) {
+export function EnquiriesSections({ chatRows, formTotal, empty = false, children }: {
+  chatRows: WhatsAppChatRow[];
+  formTotal: number;
+  /** #1597: no enquiries anywhere; the inbox shows one empty block, with no chat strips or "(0)" fold. */
+  empty?: boolean;
+  children: ReactNode;
+}) {
+  if (empty) return <>{children}</>;
   const fold = chatRows.length > 0 && formTotal === 0;
   return (
     <div className="flex flex-col gap-8">

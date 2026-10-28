@@ -144,6 +144,8 @@ describe("core: <SetupBusinessStep> (#1269)", () => {
     expect(screen.queryByRole("button", { name: "Back" })).toBeNull();
     expect(screen.getByText("Making ads is free. Nothing goes live until you say so.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "More about your business" })).toHaveAttribute("href", "/brand?all=1");
+    // #1570 (CPO, #1438): the pilots are in Tricity, so the example places are too.
+    expect(screen.getByLabelText("Where you serve")).toHaveAttribute("placeholder", "e.g. Mohali\nKharar");
   });
 
   it("completing the five fields saves them (brandUsable) and goes to Your ads", async () => {
@@ -166,6 +168,19 @@ describe("core: <SetupBusinessStep> (#1269)", () => {
     expect(screen.getByText("Say what you sell, in a few words.")).toBeInTheDocument();
     expect(screen.getByText("Enter a 10-digit mobile number.")).toBeInTheDocument();
     expect(screen.getByLabelText("What you sell")).toHaveFocus();
+    expect(mocks.push).not.toHaveBeenCalled();
+  });
+
+  it("the service area is required (#1136 CEO): everything else filled, no area → stays on step 1", async () => {
+    await step();
+    type("What you sell", complete.vertical);
+    type("Where you serve", " \n ");
+    type("Your offer", complete.offer);
+    type("WhatsApp number", complete.phone);
+    await act(async () => fireEvent.click(makeMyAds()));
+    expect(screen.getByText("Add at least one city or area.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Where you serve")).toHaveFocus();
+    expect(screen.getByLabelText("Where you serve")).toHaveAttribute("aria-invalid", "true");
     expect(mocks.push).not.toHaveBeenCalled();
   });
 

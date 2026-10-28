@@ -89,7 +89,7 @@ export function SetupSpine({ step, saved = null, beforeLeave, primary, children 
       <nav aria-label="Setup steps"
         className="sticky bottom-0 -mx-4 flex gap-3 border-t border-slate-200 bg-background px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:mx-0 sm:px-0">
         {back}
-        <Button type="button" className="flex-1" disabled={primary.disabled || leaving}
+        <Button type="button" className="flex-1 sm:flex-none sm:px-6" disabled={primary.disabled || leaving}
           onClick={() => primary.href ? void leave(primary.href) : primary.onClick?.()}>
           {primary.label}
         </Button>

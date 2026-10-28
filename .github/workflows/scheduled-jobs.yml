@@ -205,7 +205,7 @@ jobs:
           echo "HTTP $code $(jq -c '{ok, skipped, day, sent, results: ([.outcomes[]?.result] | group_by(.) | map({(.[0]): length}) | add)}' daily.json 2>/dev/null || echo '{\"ok\":false}')"
           # Advisory: dark behind OWNER_ALERTS_ENABLED; one owner's failure never fails the scheduler.
           exit 0
-      - name: OpenRouter credit (#449)
+      - name: OpenRouter credit (#449) and AI key health (#1569)
         if: always()
         env:
           GH_TOKEN: ${{ github.token }}
@@ -213,7 +213,18 @@ jobs:
           [ -n "$CRON_SECRET" ] || { echo "::error::CRON_SECRET is not set"; exit 1; }
           code=$(curl -sS --max-time 30 -o credit.json -w '%{http_code}' -H "Authorization: Bearer $CRON_SECRET" "$BASE/api/cron/llm-credit") || code=000
           [ "$code" = 404 ] && { echo "llm-credit not deployed yet"; exit 0; }
-          echo "HTTP $code $(jq -c '{ok, minRemainingUsd, thresholdUsd, low, failed: ([.keys[]? | select(.error)] | length)}' credit.json 2>/dev/null || echo '{"ok":false,"error":"no JSON body"}')"
+          echo "HTTP $code $(jq -c '{ok, minRemainingUsd, thresholdUsd, low, failed: ([.keys[]? | select(.error)] | length), probed: ([.health[]?] | length), dead: (.dead // []), unknown: [.health[]? | select(.status == "unknown") | .name]}' credit.json 2>/dev/null || echo '{"ok":false,"error":"no JSON body"}')"
+          # #1569: one issue per AI key the provider refuses (401/402/403); env names only, never a key.
+          dead=$(jq -r '.dead[]? // empty' credit.json 2>/dev/null | grep -E '^[A-Z_]+(\[[0-9]+\])?$' || true)
+          while read -r name; do
+            [ -n "$name" ] || continue
+            title="AI key refused: $name"
+            open=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search "in:title \"$title\"" --json number --jq length)
+            [ "$open" = 0 ] || continue
+            detail=$(jq -r --arg n "$name" '.health[]? | select(.name == $n) | "\(.provider) \(.detail)"' credit.json)
+            gh issue create -R "$GITHUB_REPOSITORY" -l core -l bug -l owner:devops -t "$title" \
+              -b "$(printf 'The ₹0 key probe (#1569) got a refusal for %s (%s). Calls fall back to other keys or providers until it is fixed.\n\n→ DevOps: rotate or remove it in Vercel Production, then close this.\nRun: %s/%s/actions/runs/%s\n' "$name" "$detail" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")" || true
+          done <<< "$dead"
           # Advisory: OpenRouter being unreachable must not fail the scheduler.
           [ "$(jq -r '.low' credit.json 2>/dev/null)" = true ] || exit 0
           title="OpenRouter credit low"

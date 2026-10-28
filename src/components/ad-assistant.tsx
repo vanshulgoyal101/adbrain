@@ -175,6 +175,7 @@ export function AdAssistant({ business, opening = null, occasions = [], onFlowSt
   // #760: ads still being made after the owner moved on with the saved ones; the same request finishes them.
   const [stillMaking, setStillMaking] = useState(0);
   const [makingMore, setMakingMore] = useState(0);
+  const [makingMorePictures, setMakingMorePictures] = useState(false);
   const movedOnRef = useRef(false);
   const useSavedRef = useRef<(() => void) | null>(null);
   // #858/#1004: any goal on a Brand with offer, area and phone skips the brief review ('Edit brief' keeps it).
@@ -421,7 +422,10 @@ export function AdAssistant({ business, opening = null, occasions = [], onFlowSt
         }),
       });
       const { status, data: body } = await readCreateResponse(res, (line) => {
-        if (line.type === "topUp") setMakingMore(line.missing);
+        if (line.type === "topUp") {
+          setMakingMore(line.missing);
+          setMakingMorePictures(line.kind === "picture");
+        }
         slots = applyCreateLine(slots, line);
         if (!movedOnRef.current) setLive(slots);
       });
@@ -487,7 +491,7 @@ export function AdAssistant({ business, opening = null, occasions = [], onFlowSt
         }
         if (res.ok) {
           const data = (await res.json()) as {
-            status?: "processing" | "partial" | "complete" | "failed" | "unresolved";
+            status?: "processing" | "partial" | "complete" | "failed" | "unresolved" | "ended";
             creatives?: Creative[];
           };
           if (data.creatives?.length) {
@@ -742,7 +746,7 @@ export function AdAssistant({ business, opening = null, occasions = [], onFlowSt
           ))}
 
           {phase === "generating" && live ? (
-            <CreateProgress ads={live} makingMore={makingMore} onUseSaved={() => useSavedRef.current?.()} renderReady={(creative) => <ResultCard creative={creative} brand={business} onEdited={(edited) => liveEditsRef.current.set(edited.id, edited)} />} />
+            <CreateProgress ads={live} makingMore={makingMore} makingMorePictures={makingMorePictures} onUseSaved={() => useSavedRef.current?.()} renderReady={(creative) => <ResultCard creative={creative} brand={business} onEdited={(edited) => liveEditsRef.current.set(edited.id, edited)} />} />
           ) : (loading || phase === "generating") && (
             <div role="status" className="flex items-center gap-2 text-sm text-slate-500">
               <Loader2 className="h-4 w-4 animate-spin" /> {phase === "generating" ? "Creating images and copy…" : "Preparing your brief…"}

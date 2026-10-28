@@ -32,8 +32,9 @@
   --color-primary-foreground: var(--primary-foreground);
   --color-accent: var(--accent);
   --color-surface-subtle: var(--surface-subtle);
-  --font-sans: "DM Sans Variable", sans-serif;
-  --font-display: "DM Sans Variable", sans-serif;
+  /* #1503: one stack. Hindi and Punjabi use the phone's own faces (Android: Noto, iOS: Kohinoor/Mukta Mahee): no download. */
+  --font-sans: "DM Sans Variable", "Noto Sans Devanagari", "Kohinoor Devanagari", "Noto Sans Gurmukhi", "Mukta Mahee", sans-serif;
+  --font-display: var(--font-sans);
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --color-primary-hover: var(--primary-hover);
   --color-lime-wash: var(--lime-wash);
@@ -110,10 +111,27 @@ html {
 body {
   background: var(--background);
   color: var(--foreground);
-  /* Hindi and Punjabi use the phone's own faces (Android: Noto, iOS: Kohinoor/Mukta Mahee): no download. */
-  font-family: var(--font-sans), "Noto Sans Devanagari", "Kohinoor Devanagari", "Noto Sans Gurmukhi", "Mukta Mahee", sans-serif;
+  /* Hindi and Punjabi use the phone's own faces via --font-sans (#1503). */
+  font-family: var(--font-sans);
   letter-spacing: 0;
   font-variant-numeric: tabular-nums;
+}
+
+/*
+ * #1503: Devanagari and Gurmukhi carry vowel signs above and below the letters, so Latin line heights let one
+ * line's matras touch the next. Text marked lang="hi" / "mr" / "pa" (each translated screen marks its own part,
+ * so English left in it is still read as English) gets taller lines at every size of the #847 scale.
+ */
+:lang(hi), :lang(mr), :lang(pa) {
+  line-height: 1.7;
+  --text-xs--line-height: 1.65;
+  --text-sm--line-height: 1.65;
+  --text-base--line-height: 1.65;
+  --text-lg--line-height: 1.55;
+  --text-xl--line-height: 1.55;
+  --text-2xl--line-height: 1.4;
+  --text-3xl--line-height: 1.4;
+  --text-4xl--line-height: 1.35;
 }
 
 button,

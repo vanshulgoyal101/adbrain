@@ -3,13 +3,18 @@ import Link from "next/link";
 import { Alert } from "@/components/ui/alert";
 import { SpendStatusBanner } from "@/components/spend-status";
 import { RecentActivity, WorkspaceHome } from "@/components/workspace-home";
+import { requestLocale } from "@/i18n/request-locale";
 import { SetupResumeCard } from "@/components/setup-resume-card";
 import { setupResumeStep } from "@/lib/setup/resume";
 import { getMetaConnection } from "@/lib/meta/credentials";
+import { HomeRejectedAds } from "@/components/home-rejected-ads";
+import { adResultsEnabled } from "@/lib/campaign/ad-results-store";
+import { homeAdReview, newestLiveCampaign } from "@/lib/campaign/home-ad-review";
 import { inboxSummary, newestWaitingEnquiry, recentReplyMinutes } from "@/lib/leads/reply-time";
 import {
   getCampaigns,
   getCreativePreviews,
+  getAdStatuses,
   getAuditLog,
   getLatestResults,
   getPrimaryBusiness,
@@ -19,14 +24,14 @@ import {
 export const metadata = { title: "Dashboard" };
 
 export default async function DashboardPage() {
-  const business = await getPrimaryBusiness();
+  const [business, locale] = await Promise.all([getPrimaryBusiness(), requestLocale()]);
   const spendStatus = business ? getSpendEvaluation(business.id).then<ReactNode, ReactNode>(
     ({ evaluation }) => evaluation.status === "approaching" || evaluation.status === "over"
       ? <SpendStatusBanner evaluation={evaluation} /> : null,
     () => <Alert variant="error">Spend status could not be loaded. Check your saved limits in <Link href="/settings" className="font-medium underline">Settings</Link>.</Alert>,
   ) : null;
   const activity = business ? getAuditLog(business.id, 8).then<ReactNode, ReactNode>(
-    (audit) => <RecentActivity audit={audit} />,
+    (audit) => <RecentActivity audit={audit} locale={locale} />,
     () => <Alert variant="error">Recent activity could not be loaded.</Alert>,
   ) : null;
   const [creatives, campaigns, metaConnection] = business
@@ -41,7 +46,8 @@ export default async function DashboardPage() {
   if (resume) return <SetupResumeCard step={resume} />;
   // #764: the Home results row; an unreadable result leaves the row out, never the page.
   const launched = campaigns.filter((campaign) => campaign.meta_campaign_id).map((campaign) => campaign.id);
-  const [results, replyMinutes, waiting, firstEnquiry] = await Promise.all([
+  const newest = newestLiveCampaign(campaigns);
+  const [results, replyMinutes, waiting, firstEnquiry, newestAdStatuses] = await Promise.all([
     launched.length ? getLatestResults(launched).catch(() => ({})) : {},
     // #1049: an unreadable reply time leaves the line out, never the page.
     business ? recentReplyMinutes(business.id).catch(() => null) : null,
@@ -49,7 +55,10 @@ export default async function DashboardPage() {
     business ? inboxSummary(business.id).then((summary) => summary.waiting ?? 0, () => 0) : 0,
     // #1292: same rule; an unreadable enquiry leaves the line out.
     business ? newestWaitingEnquiry(business.id).catch(() => null) : null,
+    // #1469: the stored per-ad statuses (no Meta call); unreadable means no review line.
+    newest && adResultsEnabled() ? getAdStatuses(newest.id).catch(() => null) : [],
   ]);
+  const adReview = newest && newestAdStatuses ? homeAdReview([newest], { [newest.id]: newestAdStatuses }, results) : null;
 
   return (
     <WorkspaceHome
@@ -60,6 +69,13 @@ export default async function DashboardPage() {
       replyMinutes={replyMinutes}
       waiting={waiting}
       firstEnquiry={firstEnquiry}
+      adReview={adReview}
+      rejectedAds={adReview?.kind === "rejected" && newest && (
+        <Suspense fallback={null}>
+          <HomeRejectedAds campaign={newest} vertical={business?.vertical} spend={(results as Record<string, { spend?: number }>)[newest.id]?.spend ?? 0} />
+        </Suspense>
+      )}
+      locale={locale}
       audit={[]}
       spend={null}
       spendStatus={spendStatus && (

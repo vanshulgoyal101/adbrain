@@ -38,6 +38,17 @@ describe("core: the card's rejected-ads line (#1274, #1305)", () => {
     expect(region().queryByRole("button")).not.toBeInTheDocument();
   });
 
+  // #1645: the business type picks the words; the edit opens with the licence hint for an IELTS job/visa reading.
+  it("an IELTS ad read as a job offer: the course words, and the editor opens with the licence hint", () => {
+    const onEditAd = vi.fn();
+    const reviews = [adReviewState({ id: "1", effective_status: "DISAPPROVED",
+      ad_review_feedback: { global: { "Unacceptable Business Practices": "Ads must not promote job offers or immigration schemes." } } })];
+    render(<RejectedAds reviews={reviews} spend={0} vertical="IELTS coaching" onEditAd={onEditAd} />);
+    expect(region().getByText(/Meta read this as a job or visa offer\. Keep it about the course/)).toBeInTheDocument();
+    fireEvent.click(region().getByRole("button", { name: "Edit the words" }));
+    expect(onEditAd).toHaveBeenCalledWith("Add your licence number as the last line, e.g. 'Punjab licence no. 123'.");
+  });
+
   it("says nothing when no ad is rejected or Meta gave no reason", () => {
     const { container } = render(<RejectedAds reviews={[adReviewState({ id: "1", effective_status: "ACTIVE" }), adReviewState({ id: "2", effective_status: "DISAPPROVED" })]} spend={0} />);
     expect(container).toBeEmptyDOMElement();

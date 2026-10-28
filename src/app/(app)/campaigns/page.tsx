@@ -1,10 +1,13 @@
 import { reconnectByLabel } from "@/lib/meta/token-expiry";
 import { Alert } from "@/components/ui/alert";
 import { clientCreative } from "@/lib/creative/client-receipt";
+import { madeForSetup } from "@/lib/creative/setup-picks";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Building2 } from "lucide-react";
 import { Campaigns } from "@/components/campaigns";
 import { SetupGoLive } from "@/components/setup-go-live";
+import { setupWelcome } from "@/lib/campaign/setup-welcome";
 import { BUDGET_PRESETS } from "@/lib/campaign/budget";
 import { setupPhone } from "@/lib/brand/setup-fields";
 import { maskWhatsAppNumber } from "@/lib/meta/whatsapp-status-shared";
@@ -82,13 +85,14 @@ export default async function CampaignsPage({
     .then(() => Promise.all([getSpendLimits(business.id), getActiveCampaignBudgets(business.id)]))
     .then(([limits, active]) => ({ capRupees: limits.weeklyCapRupees, active }))
     .catch(() => null);
-  const [approved, page, connection, drafts, weeklyCap] = await Promise.all([
-    getApprovedCreatives(business.id).then((rows) => rows.map(clientCreative)),
+  const [approvedRows, page, connection, drafts, weeklyCap] = await Promise.all([
+    getApprovedCreatives(business.id),
     campaignData,
     getMetaConnection(business.id),
     savedDrafts(business.id),
     spendCap,
   ]);
+  const approved = approvedRows.map(clientCreative);
   const metaReady = connection.ready;
   const reconnectBy = connection.source === "oauth" && !connection.expired ? reconnectByLabel(connection.tokenExpiresAt) : null;
   const campaigns = page.campaigns;
@@ -101,12 +105,19 @@ export default async function CampaignsPage({
   const canConnect = async () => metaReady || await createClient().then((supabase) => supabase.auth.getUser())
     .then(({ data }) => Boolean(data.user && canUseMetaConnect(data.user.id))).catch(() => false);
   if (params.all !== "1" && !campaigns.length && approved.length && await canConnect()) {
-    const picked = approved.filter((creative) => requested.includes(creative.id));
-    const ads = (picked.length ? picked : approved).slice(0, 3);
+    // #1432: only ads made from today's step 1; with none, step 2 makes them.
+    const current = approvedRows.filter((creative) => madeForSetup(creative, business)).map(clientCreative);
+    if (!current.length) redirect("/create");
+    const picked = current.filter((creative) => requested.includes(creative.id));
+    const ads = (picked.length ? picked : current).slice(0, 3);
     const funding = await fundingMode(business.id).catch(() => null);
     const masked = business.phone ? setupPhone(business.phone) : null;
+    // #1529: the welcome Go live sends, from the same ad rows Review reads.
+    const welcome = (() => {
+      try { return setupWelcome(business, ads.flatMap((ad) => approvedRows.filter((row) => row.id === ad.id))); } catch { return null; }
+    })();
     return <SetupGoLive business={business} ads={ads} pageConnected={metaReady} funding={funding}
-      whatsappNumber={masked ? maskWhatsAppNumber(`+91${masked}`) : null} weeklyCap={weeklyCap} />;
+      whatsappNumber={masked ? maskWhatsAppNumber(`+91${masked}`) : null} weeklyCap={weeklyCap} welcome={welcome} />;
   }
 
   return (

@@ -66,6 +66,15 @@ describe("Enquiries order (#1223)", () => {
     expect(screen.getByRole("region", { name: "WhatsApp chats" }).compareDocumentPosition(screen.getByText("form table")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
+  // #1597: nothing has come in anywhere: no chat strip and no "(0)" fold, only the inbox's one empty block.
+  it("with no enquiries at all, shows only the inbox (no chat strips, no fold)", async () => {
+    const { EnquiriesSections } = await import("@/components/enquiries-sections");
+    const { container } = render(<EnquiriesSections chatRows={whatsappChatRows([chats], results)} formTotal={0} empty><p>form table</p></EnquiriesSections>);
+    expect(container.querySelector("details")).toBeNull();
+    expect(screen.queryByRole("region", { name: "WhatsApp chats" })).toBeNull();
+    expect(screen.getByText("form table")).toBeVisible();
+  });
+
   it("with no WhatsApp chats, the form table is the page, as before", async () => {
     const { EnquiriesSections } = await import("@/components/enquiries-sections");
     const { container } = render(<EnquiriesSections chatRows={[]} formTotal={0}><p>form table</p></EnquiriesSections>);

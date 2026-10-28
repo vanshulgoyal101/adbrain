@@ -55,7 +55,8 @@ vi.mock("@/lib/creative/persist", () => ({
     `${SUPABASE}/storage/v1/object/public/creatives/${businessId}/${group}/${angle}.webp`,
   renderAndPersistDesign: async (_client: unknown, _businessId: string, _group: string, _angle: string, _design: unknown, photoUrl: string) => photoUrl,
 }));
-vi.mock("@/lib/llm/persist", () => ({
+vi.mock("@/lib/llm/persist", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/llm/persist")>()),
   configuredMonthlyTokenLimit: () => 0,
   monthlyTokenUsage: async () => 0,
   persistLLMUsage: async (events: Record<string, unknown>[]) => { mocks.usage.push(...events); return true; },
@@ -301,6 +302,10 @@ describe("core: Create route on recorded run 4", () => {
     // #681: the batch event carries the run's own wall time and path, for the scoreboard.
     const batch = info.mock.calls.map(([entry]) => String(entry)).find((entry) => entry.includes('"name":"creative.batch"'));
     expect(JSON.parse(batch!)).toMatchObject({ outcome: "success", durationMs: elapsed, attributes: { count: 3, provider: "paid" } });
+    // #1468: the run's estimated AI cost, from the same usage rows it saved.
+    const { attributes } = JSON.parse(batch!) as { attributes: { costUsd: number; textCostUsd: number; imageCostUsd: number } };
+    expect(attributes.textCostUsd).toBeGreaterThan(0);
+    expect(attributes.costUsd).toBeCloseTo(attributes.textCostUsd + attributes.imageCostUsd, 6);
   });
 
   it("fits the 270 s route deadline at a 60 s attempt limit when every concept answers 1 ms before it", async () => {
