@@ -15,13 +15,14 @@ import {
   operationToDTO,
 } from "@/lib/campaign/operation-store";
 import { ConnectionAccessError, requireOwnedBusiness } from "@/lib/meta/connection-access";
+import { planGate } from "@/lib/plan/gate";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-type ErrorCode = "UNAUTHENTICATED" | "NOT_FOUND" | "FORBIDDEN" | "INVALID_INPUT" | "CONFLICT" | "PREFLIGHT_BLOCKED" | "UNAVAILABLE";
+type ErrorCode = "UNAUTHENTICATED" | "NOT_FOUND" | "FORBIDDEN" | "INVALID_INPUT" | "CONFLICT" | "PREFLIGHT_BLOCKED" | "UNAVAILABLE" | "PLAN_UNPAID";
 
 function errorResponse(requestId: string, status: number, code: ErrorCode, message: string, retryable = false) {
   return NextResponse.json({ ok: false, error: { code, message, retryable }, requestId }, { status });
@@ -100,6 +101,12 @@ async function handlePOST(request: Request) {
     if (existingOperation.leaseUntil !== null && existingOperation.leaseUntil > Date.now()) {
       return errorResponse(requestId, 409, "CONFLICT", "This campaign operation is already running.", true);
     }
+  }
+
+  // #718: an unpaid own-account plan pauses new campaigns only; resuming a started create above is never blocked.
+  if (!existingOperationRow) {
+    const unpaid = await planGate(actor.businessId);
+    if (unpaid) return errorResponse(requestId, unpaid.status, unpaid.code, unpaid.error);
   }
 
   const { data: draftRow, error: draftError } = await supabase.from("campaign_drafts")

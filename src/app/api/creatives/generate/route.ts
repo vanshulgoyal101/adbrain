@@ -1,4 +1,5 @@
 import { observeRoute, recordProductEvent, currentRequestId } from "@/lib/observability/logger";
+import { planGate } from "@/lib/plan/gate";
 import { creativeFailureMessage } from "@/lib/creative/failure-message";
 import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
@@ -221,6 +222,9 @@ async function generate(req: Request, live?: LiveCreate) {
   if (!business) {
     return NextResponse.json({ error: "Business not found" }, { status: 404 });
   }
+  // #718: an unpaid own-account plan pauses new ads only, before any AI spend; it fails open.
+  const unpaid = await planGate(businessId);
+  if (unpaid) return NextResponse.json({ error: unpaid.error, code: unpaid.code }, { status: unpaid.status });
 
   const monthlyLimit = configuredMonthlyTokenLimit(user);
   const { error: schemaError } = await supabase
