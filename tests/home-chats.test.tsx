@@ -42,7 +42,7 @@ describe("Home: chats are chats (#1624)", () => {
   });
 
   it("asks which chats were real enquiries, after Review, linking to Enquiries", () => {
-    const creatives = [{ id: "c", status: "draft", created_at: new Date().toISOString() }];
+    const creatives = [{ id: "c", status: "draft" as const, created_at: new Date().toISOString() }];
     const queue = buildWorkQueue({ business, creatives, campaigns: [], metaReady: true, unloggedChats: 3 });
     expect(queue.map((item) => item.id).slice(0, 2)).toEqual(["review", "chats"]);
     expect(queue[1]).toMatchObject({ title: "Which of your 3 chats were real enquiries?", detail: "Add each real one so you can see what an enquiry costs you.", action: "Add enquiries", href: "/leads", tone: "work" });
