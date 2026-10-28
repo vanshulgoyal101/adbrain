@@ -336,7 +336,7 @@ export function LeadInbox({
     <div className={styles.inbox}>
       {!metaReady && (
         <Alert variant="warning">
-          Meta isn’t connected, so new enquiries can’t come in yet. <Link href="/settings" className="font-semibold underline">Connect your account in Settings</Link>.
+          Meta isn’t connected, so new enquiries can’t come in yet. <Link href="/settings" className="inline-flex min-h-11 items-center font-semibold underline">Connect your account in Settings</Link>.
         </Alert>
       )}
 
