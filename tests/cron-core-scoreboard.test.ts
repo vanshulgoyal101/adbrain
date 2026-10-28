@@ -21,7 +21,7 @@ vi.mock("@/lib/supabase/admin", () => ({
       const query: Filter = { table, ops: [] };
       mocks.queries.push(query);
       const builder: Record<string, unknown> = {};
-      for (const op of ["select", "in", "gte", "eq", "not", "order", "range"]) {
+      for (const op of ["select", "in", "gte", "eq", "not", "order", "range", "like"]) {
         builder[op] = (...args: unknown[]) => { query.ops.push([op, args]); return builder; };
       }
       builder.abortSignal = async () => {
@@ -29,9 +29,12 @@ vi.mock("@/lib/supabase/admin", () => ({
         const rows = mocks.tables[table] ?? [];
         const range = query.ops.find(([op]) => op === "range")?.[1] as [number, number] | undefined;
         const isPlanRoute = query.ops.some(([op, args]) => op === "eq" && args[0] === "name" && args[1] === "http.request");
-        const selected = table === "product_events"
-          ? rows.filter((r) => ((r as { name: string }).name === "http.request") === isPlanRoute)
-          : rows;
+        // #1242: the sign-up query matches by prefix; the others never see sign-ups.
+        const like = query.ops.find(([op]) => op === "like")?.[1] as [string, string] | undefined;
+        const name = (r: unknown) => (r as { name: string }).name;
+        const selected = table !== "product_events" ? rows
+          : like ? rows.filter((r) => name(r).startsWith(like[1].replace(/%$/, "")))
+            : rows.filter((r) => !name(r).startsWith("auth.sign_up.") && (name(r) === "http.request") === isPlanRoute);
         return { data: range ? selected.slice(range[0], range[1] + 1) : selected, error: null };
       };
       return builder;

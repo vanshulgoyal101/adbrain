@@ -11,6 +11,7 @@ import {
   SCOREBOARD_AI_ROUTES,
   SCOREBOARD_EVENT_NAMES,
   SCOREBOARD_PLAN_ROUTE,
+  SCOREBOARD_SIGN_UP_PREFIX,
   type ScoreActiveResult,
   type ScoreAiCall,
   type ScoreEvent,
@@ -31,23 +32,29 @@ const inWindow = `created_at >= ${quote(since.toISOString())} and created_at <= 
 const smoke = internal.smokeUserIds;
 const iso = `to_char(created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as created_at`;
 
-const [owned, events, aiCalls, launches, users, active] = await Promise.all([
+const [owned, events, aiCalls, launches, users, active, owners] = await Promise.all([
   readOnlyQuery(`select id from public.businesses where owner_id in (${list(smoke)})`),
   readOnlyQuery(`select name, outcome, user_id, business_id, duration_ms, attributes,
   ${iso} from public.product_events
-where ${inWindow} and (name in (${list(SCOREBOARD_EVENT_NAMES)}) or (name = 'http.request' and attributes->>'route' = ${quote(SCOREBOARD_PLAN_ROUTE)}))`),
+where ${inWindow} and (name in (${list(SCOREBOARD_EVENT_NAMES)}) or name like ${quote(`${SCOREBOARD_SIGN_UP_PREFIX}%`)}
+  or (name = 'http.request' and attributes->>'route' = ${quote(SCOREBOARD_PLAN_ROUTE)}))`),
   readOnlyQuery(`select route, status, user_id, business_id, request_id, latency_ms,
   ${iso} from public.llm_usage_events
 where ${inWindow} and route in (${list(SCOREBOARD_AI_ROUTES)})`),
   readOnlyQuery(`select business_id, state, ${iso} from public.campaign_operations where ${inWindow} and kind = 'campaign_create'`),
-  // Who made ads in the window, for the free-image split (same rule as spend-policy.ts `freeImagesOnly`).
+  // Who acted in the window: the free-image split (same rule as spend-policy.ts `freeImagesOnly`) and,
+  // for #1242's owner rows, which of them are internal or demo accounts.
   readOnlyQuery(`select u.id, u.email, u.email_confirmed_at from auth.users u where u.id in (
   select user_id from public.llm_usage_events where ${inWindow} and route = 'creatives.generate'
-  union select user_id from public.product_events where ${inWindow} and name = 'creative.batch')`),
+  union select user_id from public.product_events where ${inWindow} and user_id is not null
+    and (name in (${list(SCOREBOARD_EVENT_NAMES)}) or name like ${quote(`${SCOREBOARD_SIGN_UP_PREFIX}%`)}))`),
   // #992: newest results per active, Meta-bound campaign (the ones refresh-results keeps fresh).
   readOnlyQuery(`select c.business_id, (select to_char(max(r.fetched_at) at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')
   from public.campaign_results r where r.campaign_id = c.id and r.fetched_at >= ${quote(since.toISOString())}) as fetched_at
 from public.campaigns c where c.status = 'active' and c.meta_campaign_id is not null`),
+  // #1242: the businesses of users who signed up in the window.
+  readOnlyQuery(`select id, owner_id from public.businesses where owner_id in (
+  select user_id from public.product_events where ${inWindow} and name like ${quote(`${SCOREBOARD_SIGN_UP_PREFIX}%`)} and user_id is not null)`),
 ]);
 type Identity = { id: string; email: string | null; email_confirmed_at: string | null };
 
@@ -58,6 +65,8 @@ const board = buildScoreboard({
   activeResults: active as ScoreActiveResult[],
   freeImageUserIds: (users as Identity[]).filter((user) => isInternalUser(user) && !isExemptFromFreeProviders(user)).map((user) => user.id),
   excludedUserIds: smoke,
+  businessOwners: owners as Array<{ id: string; owner_id: string }>,
+  internalUserIds: (users as Identity[]).filter((user) => isInternalUser(user)).map((user) => user.id),
   excludedBusinessIds: (owned as Array<{ id: string }>).map((row) => row.id),
   since,
   until,

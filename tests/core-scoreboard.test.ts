@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildScoreboard, newestResults, p90, type ScoreActiveResult, type ScoreAiCall, type ScoreEvent, type ScoreLaunch } from "@/lib/observability/core-scoreboard";
+import { buildScoreboard, median, newestResults, northStarRows, p90, type ScoreActiveResult, type ScoreAiCall, type ScoreEvent, type ScoreLaunch } from "@/lib/observability/core-scoreboard";
 
 const until = new Date("2026-10-26T03:30:00Z");
 const since = new Date("2026-10-25T03:30:00Z");
@@ -174,5 +174,58 @@ describe("core scoreboard (#681)", () => {
     expect(b.markdown).toContain("| Prepare | no runs | ≥ 95% success, p90 < 8 s | — |");
     expect(b.markdown).toContain("1 of 1 measured rows meet target");
     expect(b.markdown).not.toMatch(/real-user|real-business|smoke-user|smoke-business/);
+  });
+});
+
+// #1242: today's baselines for #1226's north-star metrics; owners only.
+describe("north-star rows (#1242)", () => {
+  const OWNER = "owner-1", INTERNAL = "team-1";
+  const e = (name: string, user: string, minutes: number, extra: Partial<ScoreEvent> = {}): ScoreEvent =>
+    ({ name, outcome: "success", user_id: user, business_id: `${user}-biz`, duration_ms: null, attributes: {}, created_at: new Date(Date.parse("2026-10-20T04:00:00Z") + minutes * 60_000).toISOString(), ...extra });
+  const week = { since: new Date("2026-10-20T00:00:00Z"), until: new Date("2026-10-27T00:00:00Z") };
+  const rowOf = (rows: ReturnType<typeof northStarRows>, step: string) => rows.find((r) => r.step.startsWith(step))!;
+  const owners = [{ id: `${OWNER}-biz`, owner_id: OWNER }, { id: `${INTERNAL}-biz`, owner_id: INTERNAL }];
+
+  it("medians odd and even lists", () => {
+    expect(median([5, 1, 3])).toBe(3);
+    expect(median([4, 1, 3, 2])).toBe(2.5);
+    expect(median([])).toBeNull();
+  });
+
+  it("times sign-up to the owner's own first live campaign, leaving internal accounts out", () => {
+    const rows = northStarRows([
+      e("auth.sign_up.otp", OWNER, 0), e("campaign.resume", OWNER, 8), e("campaign.resume", OWNER, 30),
+      e("auth.sign_up.google", "slow", 0), e("campaign.resume", "slow", 45, { business_id: "slow-biz" }),
+      e("auth.sign_up.otp", "never", 0),
+      e("auth.sign_up.otp", INTERNAL, 0), e("campaign.resume", INTERNAL, 1),
+      // Someone else's business going live doesn't count for this sign-up.
+      e("campaign.resume", "x", 2, { business_id: "x-biz" }),
+    ], { ...week, businessOwners: [...owners, { id: "slow-biz", owner_id: "slow" }], internalUserIds: [INTERNAL] });
+    expect(rowOf(rows, "Sign-up")).toMatchObject({ now: "3 sign-ups: 2 live, median 27 min", met: false });
+    expect(rowOf(northStarRows([e("auth.sign_up.otp", OWNER, 0), e("campaign.resume", OWNER, 9)], { ...week, businessOwners: owners }), "Sign-up").met).toBe(true);
+  });
+
+  it("counts taps from the Create page view before the first batch to the first live campaign after it", () => {
+    const tap = (minutes: number) => e("ui.tap", OWNER, minutes);
+    const rows = northStarRows([
+      tap(-30), e("page.view", OWNER, -10, { attributes: { route: "/create" } }), tap(-5), tap(-4),
+      e("creative.batch", OWNER, 0), tap(2), tap(3), tap(4), e("campaign.resume", OWNER, 5), tap(6),
+      e("creative.batch", "stuck", 0), e("ui.tap", "stuck", 1),
+    ], week);
+    expect(rowOf(rows, "Taps")).toMatchObject({ now: "1 owner reached live: median 5 taps", met: true });
+    expect(rowOf(northStarRows([e("creative.batch", OWNER, 0)], week), "Taps")).toMatchObject({ now: expect.stringContaining("not measured yet"), met: null });
+  });
+
+  it("scales distinct IST days with a Home or Campaigns view to a week", () => {
+    const view = (user: string, minutes: number, route = "/dashboard") => e("page.view", user, minutes, { attributes: { route } });
+    const rows = northStarRows([
+      view(OWNER, 0), view(OWNER, 60), view(OWNER, 24 * 60, "/campaigns"), view(OWNER, 3 * 24 * 60), view(OWNER, 4 * 24 * 60, "/leads"),
+      view("daily", 0), view("daily", 24 * 60), view("daily", 2 * 24 * 60), view("daily", 3 * 24 * 60),
+      view(INTERNAL, 0),
+    ], { ...week, internalUserIds: [INTERNAL] });
+    expect(rowOf(rows, "Weekly return")).toMatchObject({ now: "2 owners: median 3.5 days/week", met: true });
+    expect(rowOf(northStarRows([view(INTERNAL, 0)], { ...week, internalUserIds: [INTERNAL] }), "Weekly return").now).toBe("no owner opened Home or Campaigns (team accounts: 1)");
+    // Under a week of data: shown, not scored.
+    expect(rowOf(northStarRows([view(OWNER, 0)], { since: new Date("2026-10-26T00:00:00Z"), until: new Date("2026-10-27T00:00:00Z") }), "Weekly return").met).toBeNull();
   });
 });

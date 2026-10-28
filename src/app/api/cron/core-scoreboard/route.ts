@@ -8,6 +8,7 @@ import {
   SCOREBOARD_AI_ROUTES,
   SCOREBOARD_EVENT_NAMES,
   SCOREBOARD_PLAN_ROUTE,
+  SCOREBOARD_SIGN_UP_PREFIX,
   type ScoreAiCall,
   type ScoreEvent,
   type ScoreLaunch,
@@ -63,9 +64,12 @@ async function handleGET(request: Request) {
     const smokeUsers = internal.smokeUserIds;
     const { data: owned, error } = await db.from("businesses").select("id").in("owner_id", smokeUsers).abortSignal(signal());
     if (error || !Array.isArray(owned)) throw new Unavailable();
-    const [events, planRequests, aiCalls, launches, active] = await Promise.all([
+    const [events, signUps, planRequests, aiCalls, launches, active] = await Promise.all([
       pages<ScoreEvent>((from, to) => db.from("product_events").select(eventColumns)
         .gte("created_at", since).in("name", [...SCOREBOARD_EVENT_NAMES])
+        .order("created_at").range(from, to).abortSignal(signal())),
+      pages<ScoreEvent>((from, to) => db.from("product_events").select(eventColumns)
+        .gte("created_at", since).like("name", `${SCOREBOARD_SIGN_UP_PREFIX}%`)
         .order("created_at").range(from, to).abortSignal(signal())),
       pages<ScoreEvent>((from, to) => db.from("product_events").select(eventColumns)
         .gte("created_at", since).eq("name", "http.request").eq("attributes->>route", SCOREBOARD_PLAN_ROUTE)
@@ -89,24 +93,34 @@ async function handleGET(request: Request) {
         .order("fetched_at").range(from, to).abortSignal(signal())));
     }
     // Same rule as `freeImagesOnly` (spend-policy.ts): internal and not exempt means free images.
-    const createUsers = [...new Set([
-      ...events.filter((event) => event.name === "creative.batch").map((event) => event.user_id),
+    const users = [...new Set([
+      ...[...events, ...signUps].map((event) => event.user_id),
       ...aiCalls.filter((call) => call.route === "creatives.generate").map((call) => call.user_id),
     ].filter((id): id is string => Boolean(id) && !smokeUsers.includes(id as string)))];
     const freeImageUserIds: string[] = [];
-    for (const id of createUsers) {
+    // #1242: internal and demo accounts are left out of the owner rows.
+    const internalUserIds: string[] = [];
+    for (const id of users) {
       const { data, error: userError } = await db.auth.admin.getUserById(id);
       if (userError || !data?.user) throw new Unavailable();
+      if (isInternalUser(data.user)) internalUserIds.push(id);
       if (isInternalUser(data.user) && !isExemptFromFreeProviders(data.user)) freeImageUserIds.push(id);
     }
+    const signUpUsers = [...new Set(signUps.map((event) => event.user_id).filter((id): id is string => Boolean(id)))];
+    const businessOwners = signUpUsers.length
+      ? await pages<{ id: string; owner_id: string }>((from, to) => db.from("businesses").select("id, owner_id")
+        .in("owner_id", signUpUsers).order("id").range(from, to).abortSignal(signal()))
+      : [];
     const board = buildScoreboard({
-      events: [...events, ...planRequests],
+      events: [...events, ...signUps, ...planRequests],
       aiCalls,
       launches,
       activeResults: newestResults(active, results),
       freeImageUserIds,
       excludedUserIds: smokeUsers,
       excludedBusinessIds: (owned as Array<{ id: string }>).map((row) => row.id),
+      businessOwners,
+      internalUserIds,
       since: new Date(since),
       until,
     });

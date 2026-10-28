@@ -84,6 +84,9 @@ The stream includes:
   upload/delete, follow-up save, payment quote/checkout, Meta connect controls and
   `meta.access_request` (a new owner asking for Facebook access before App Review),
   and the audience edit (`campaign.edit_audience`).
+- `ui.tap` (#1242): one per tap on an enabled control (button, link, tab, checkbox, select) on the
+  launch path (`/create`, `/studio`, `/campaigns`), page only, never which control or what was typed;
+  it counts #1226's "taps from Create to live". Same switch, Do Not Track and 45-a-minute cap.
 - `page.engagement` foreground-visible time, flushed on hide, navigation or exit,
   excluding background time. Each segment is 1 second to 1 hour; it measures visible
   time, not attention, billable usage or proof of activity. Coarse viewport categories

@@ -64,13 +64,29 @@ export const SCOREBOARD_EVENT_NAMES = [
   "meta.create_paused",
   "campaign.refresh",
   "meta.read_insights",
+  // #1242 north-star baselines (#1226).
+  "campaign.resume",
+  "page.view",
+  "ui.action",
+  "ui.tap",
 ] as const;
+/** #1242: first sign-ins that created the account (`auth.sign_up.<method>`); the script matches the prefix. */
+export const SCOREBOARD_SIGN_UP_PREFIX = "auth.sign_up.";
+/** #1226 weekly return: the screens where an owner sees results. */
+export const RESULTS_PAGES = ["/dashboard", "/campaigns"] as const;
 export const SCOREBOARD_PLAN_ROUTE = "/api/campaigns/plan";
 export const SCOREBOARD_AI_ROUTES = ["brand.autofill", "creatives.generate", "creatives.regenerate", "creatives.assistant"] as const;
 
 const percent = (part: number, whole: number) => (whole ? (100 * part) / whole : 0);
 const fmtPct = (value: number) => `${Number.isInteger(value) ? value : value.toFixed(1)}%`;
 const plural = (n: number, word: string, many = `${word}s`) => `${n} ${n === 1 ? word : many}`;
+
+export function median(values: number[]): number | null {
+  if (!values.length) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+}
 
 export function p90(values: number[]): number | null {
   if (!values.length) return null;
@@ -116,6 +132,10 @@ export function buildScoreboard(input: {
   freeImageUserIds: string[];
   excludedUserIds: string[];
   excludedBusinessIds: string[];
+  /** #1242: who owns each business, so a sign-up is matched to its own first live campaign. */
+  businessOwners?: Array<{ id: string; owner_id: string }>;
+  /** #1242: internal and demo accounts, left out of the owner rows (sign-up, taps, weekly return). */
+  internalUserIds?: string[];
   since: Date;
   until: Date;
 }): Scoreboard {
@@ -258,6 +278,8 @@ export function buildScoreboard(input: {
     });
   }
 
+  rows.push(...northStarRows(events, input));
+
   const hours = hoursOf(input);
   const excluded = { events: input.events.length - events.length, aiCalls: input.aiCalls.length - aiCalls.length };
   const mark = (met: boolean | null) => (met === null ? "—" : met ? "✅" : "❌");
@@ -272,4 +294,85 @@ export function buildScoreboard(input: {
     `${measured.filter((row) => row.met).length} of ${measured.length} measured rows meet target; — means no data or judged by walks.`,
   ].join("\n");
   return { hours, since: input.since.toISOString(), until: input.until.toISOString(), excluded, rows, markdown };
+}
+
+const istDay = (iso: string) => new Date(Date.parse(iso) + 5.5 * 3_600_000).toISOString().slice(0, 10);
+
+/**
+ * #1242: today's baselines for #1226's north-star metrics, owners only (smoke, internal and demo accounts left out).
+ * 1. Sign-up → first campaign live: minutes from `auth.sign_up.*` to the first `campaign.resume` (the owner turning a
+ *    campaign on) for a business the new user owns.
+ * 2. Taps from Create to Live: `ui.tap` events from the last Create page view before the owner's first ad batch to
+ *    their first `campaign.resume` after it.
+ * 3. Weekly return: distinct days (IST) with a Home or Campaigns view, per owner, scaled to a week.
+ */
+export function northStarRows(events: ScoreEvent[], input: {
+  businessOwners?: Array<{ id: string; owner_id: string }>; internalUserIds?: string[]; since: Date; until: Date;
+}): ScoreRow[] {
+  const internal = new Set(input.internalUserIds ?? []);
+  const owned = events.filter((event) => event.user_id && !internal.has(event.user_id))
+    .sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at));
+  const by = (user: string, test: (event: ScoreEvent) => boolean) => owned.filter((event) => event.user_id === user && test(event));
+  const live = (event: ScoreEvent) => event.name === "campaign.resume" && event.outcome === "success";
+  const rows: ScoreRow[] = [];
+
+  {
+    const ownerOf = new Map((input.businessOwners ?? []).map((business) => [business.id, business.owner_id]));
+    const signUps = owned.filter((event) => event.name.startsWith(SCOREBOARD_SIGN_UP_PREFIX));
+    const minutes = signUps.flatMap((signUp) => {
+      const first = owned.find((event) => live(event) && event.business_id && ownerOf.get(event.business_id) === signUp.user_id
+        && Date.parse(event.created_at) >= Date.parse(signUp.created_at));
+      return first ? [(Date.parse(first.created_at) - Date.parse(signUp.created_at)) / 60_000] : [];
+    });
+    const middle = median(minutes);
+    rows.push({
+      step: "Sign-up → first campaign live",
+      now: signUps.length
+        ? `${plural(signUps.length, "sign-up")}: ${minutes.length} live${middle === null ? "" : `, median ${middle < 120 ? `${Math.round(middle)} min` : `${(middle / 60).toFixed(1)} h`}`}`
+        : "no sign-ups",
+      target: "median ≤ 10 min (#1226)",
+      met: middle === null ? null : middle <= 10,
+    });
+  }
+
+  {
+    const users = [...new Set(owned.filter((event) => event.name === "creative.batch").map((event) => event.user_id!))];
+    const measured = owned.some((event) => event.name === "ui.tap");
+    const taps = users.flatMap((user) => {
+      const batch = by(user, (event) => event.name === "creative.batch")[0];
+      const start = by(user, (event) => event.name === "page.view" && event.attributes?.route === "/create"
+        && Date.parse(event.created_at) <= Date.parse(batch.created_at)).at(-1) ?? batch;
+      const end = by(user, (event) => live(event) && Date.parse(event.created_at) >= Date.parse(batch.created_at))[0];
+      if (!end) return [];
+      return [by(user, (event) => event.name === "ui.tap" && event.created_at >= start.created_at && event.created_at <= end.created_at).length];
+    });
+    const middle = median(taps);
+    rows.push({
+      step: "Taps, Create → live",
+      now: !measured ? "not measured yet (`ui.tap` events start with #1242)"
+        : taps.length ? `${plural(taps.length, "owner")} reached live: median ${Math.round(middle!)} taps` : `no owner reached live (${plural(users.length, "owner")} made ads)`,
+      target: "≤ 12 taps (#1226)",
+      met: measured && middle !== null ? middle <= 12 : null,
+    });
+  }
+
+  {
+    const resultsView = (event: ScoreEvent) => event.name === "page.view" && (RESULTS_PAGES as readonly unknown[]).includes(event.attributes?.route);
+    const views = owned.filter(resultsView);
+    const teamViewers = new Set(events.filter((event) => resultsView(event) && event.user_id && internal.has(event.user_id)).map((event) => event.user_id)).size;
+    const days = new Map<string, Set<string>>();
+    for (const view of views) days.set(view.user_id!, (days.get(view.user_id!) ?? new Set()).add(istDay(view.created_at)));
+    const windowDays = Math.max(1, (input.until.getTime() - input.since.getTime()) / 86_400_000);
+    const perWeek = [...days.values()].map((set) => Math.min(7, (set.size * 7) / Math.max(7, windowDays)));
+    const middle = median(perWeek);
+    rows.push({
+      step: "Weekly return (results views)",
+      now: days.size
+        ? `${plural(days.size, "owner")}: median ${middle!.toFixed(1)} days/week${windowDays < 7 ? ` (only ${Math.round(windowDays * 24)} h of data; run with --hours 168)` : ""}`
+        : `no owner opened Home or Campaigns${teamViewers ? ` (team accounts: ${teamViewers})` : ""}`,
+      target: "≥ 3 days/week (#1226)",
+      met: middle === null || windowDays < 7 ? null : middle >= 3,
+    });
+  }
+  return rows;
 }
