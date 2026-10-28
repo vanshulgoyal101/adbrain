@@ -122,6 +122,13 @@ describe("<LeadInbox> table", () => {
     expect(screen.getByRole("button", { name: /^Follow up Test enquiry from Meta,/ })).toBeInTheDocument();
   });
 
+  it("#1149: Meta's test lead is listed but not counted, so the title matches Home's 0", () => {
+    render(<LeadInbox businessName="Solaride" initialLeads={[lead({ full_name: "<test lead: dummy data for full_name>", phone: "<test lead: dummy data for phone_number>", email: null })]} metaReady />);
+    expect(screen.getByRole("heading", { name: "Enquiries (0)" })).toBeInTheDocument();
+    expect(screen.getByText("Test enquiry from Meta")).toBeInTheDocument();
+    expect(screen.queryByText(/of 0 enquiries/)).toBeNull();
+  });
+
   it("has no internal 'Loaded …' stats (#403)", () => {
     render(<LeadInbox businessName="Solaride" initialLeads={[lead(), lead({ id: "l2", meta_lead_id: "m2" })]} metaReady />);
     expect(screen.queryByText("Loaded with contact")).toBeNull();
@@ -669,5 +676,14 @@ describe("<LeadInbox> reply in one tap (#1049)", () => {
     expect(screen.queryByRole("link", { name: "WhatsApp them" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Call" })).toBeInTheDocument();
     expect(screen.getByText("Replied 12 min after the enquiry")).toBeInTheDocument();
+  });
+
+  it("#1140: a tap on an older lead already contacted records no reply time", () => {
+    const calls: string[] = [];
+    global.fetch = vi.fn(async (url: string) => { calls.push(url); return { ok: true, json: async () => ({}) }; }) as unknown as typeof fetch;
+    render(<LeadInbox businessName="Solaride" initialLeads={[lead({ phone: "98765 43210", workflow_status: "contacted" })]} metaReady />);
+    fireEvent.click(screen.getByRole("link", { name: "Call" }));
+    expect(calls).not.toContain("/api/leads/l1");
+    expect(screen.queryByText(/^Replied .* after the enquiry$/)).not.toBeInTheDocument();
   });
 });

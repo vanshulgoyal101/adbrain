@@ -1,5 +1,6 @@
 import type { AdAngle, BrandContext, GeneratedCopy } from "@/lib/templates/ads";
 import { fontFamilyFor } from "@/lib/brand/fonts";
+import { parsePhone } from "@/lib/brand/countries";
 import type { CreativeConcept } from "./concept";
 
 /**
@@ -34,6 +35,11 @@ export interface AdDesignSpec {
   benefits: string[];
   /** Shown big and bold: the number is what local customers look for. */
   phone: string | null;
+  /**
+   * #1147: what the contact bar asks for. "whatsapp" draws a chat icon and "Message us on WhatsApp"
+   * instead of a number to call, because the campaign opens WhatsApp. Absent on older designs (phone).
+   */
+  contact?: "phone" | "whatsapp";
   contactLine: string | null;
   ctaLabel: string;
   /**
@@ -161,6 +167,19 @@ function hostFromUrl(url: string | null | undefined): string | null {
   }
 }
 
+export const WHATSAPP_CONTACT_LABEL = "Message us on WhatsApp";
+
+/**
+ * #1147: a business whose campaigns open WhatsApp gets a WhatsApp contact bar: an India-based one
+ * (WhatsApp is the default channel there, #235 and the owner's Oct 27 decision on #680) or one that
+ * saved its WhatsApp message. Others keep the phone number.
+ */
+export function contactChannel(brand: Pick<BrandContext, "phone"> & { whatsapp_template?: unknown }): "phone" | "whatsapp" {
+  if (brand.whatsapp_template) return "whatsapp";
+  const phone = brand.phone?.trim();
+  return phone && parsePhone(phone).countryCode === "IN" ? "whatsapp" : "phone";
+}
+
 /** Build the footer contact line from the brand's website and locality. */
 export function deriveContactLine(brand: BrandContext): string | null {
   const site = hostFromUrl(brand.website);
@@ -224,6 +243,7 @@ export function buildAdDesign(params: {
     subhead: params.concept ? params.concept.supportingText : deriveSubhead(copy.primary_text),
     benefits: params.concept ? [] : pickBenefits(brand),
     phone: brand.phone?.trim() || null,
+    contact: contactChannel(brand),
     contactLine: deriveContactLine({ ...brand, phone: null }),
     ctaLabel: (copy.cta ?? "").trim() || "Learn More",
     showCta: false,

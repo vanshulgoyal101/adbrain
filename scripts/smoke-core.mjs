@@ -275,13 +275,16 @@ try {
       const result = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/creatives/generate" && response.request().method() === "POST", { timeout: 300_000 });
       await generate.click();
       const response = await result;
-      const create = await readCreateResponse(response);
-      savedCount = Array.isArray(create.data?.creatives) ? create.data.creatives.length : null;
-      if (create.status !== 200 || savedCount !== 3) {
+      // Chrome can drop a long stream's body before Playwright reads it (#1123: 131 s, "No data found
+      // for resource"); the page read it, so the saved-results check below decides instead.
+      const create = await readCreateResponse(response).catch(() => null);
+      savedCount = Array.isArray(create?.data?.creatives) ? create.data.creatives.length : null;
+      if (create?.status !== 200 || savedCount !== 3) {
         savedCount = await recoverSavedCount();
       }
       assert.equal(generationCount, 1, "Paid Create request was blocked");
-      assert.equal(create.status, 200, `Create returned HTTP ${create.status}`);
+      if (create) assert.equal(create.status, 200, `Create returned HTTP ${create.status}`);
+      else console.log("NOTE Create stream body was not kept by the browser; counted the saved ads instead");
       assert.equal(savedCount, 3, `Create saved ${savedCount}/3 ads; do not retry before checking saved work`);
       await page.getByRole("button", { name: "Review ads" }).waitFor({ state: "visible" });
       assert.equal(errors.length, 0, errors[0] ?? "Browser error after Create");

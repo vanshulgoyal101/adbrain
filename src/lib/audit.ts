@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/types";
 import { recordProductEvent } from "@/lib/observability/logger";
+import type { ProductEvent } from "@/lib/observability/events";
 import { currentVerifiedActor } from "@/lib/observability/context";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -22,6 +23,8 @@ export interface AuditEvent {
   metaObjectId?: string | null;
   reason?: string | null;
   details?: Record<string, unknown>;
+  /** Extra product-event attributes (aggregate flags only; the event is public on the scoreboard). */
+  eventAttributes?: Pick<ProductEvent["attributes"], "brandUsable">;
 }
 
 /**
@@ -35,7 +38,7 @@ export async function logEvent(event: AuditEvent): Promise<void> {
     if (!user) throw new Error("Verified audit actor required.");
 
     recordProductEvent({ kind: "workflow", name: event.action, outcome: "success", businessId: event.businessId,
-      attributes: { entityType: event.entityType } });
+      attributes: { entityType: event.entityType, ...event.eventAttributes } });
     const { error } = await createAdminClient().rpc("append_verified_audit_event", {
       p_business_id: event.businessId,
       p_actor_id: user.id,

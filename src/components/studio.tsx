@@ -34,6 +34,7 @@ import { useSessionDraft } from "@/lib/use-session-draft";
 import { useMounted } from "@/lib/use-mounted";
 import { cn } from "@/lib/utils";
 import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
+import { setAsideIds } from "@/lib/creative/set-aside";
 import { GenerationDetails } from "@/components/generation-details";
 import { CopyEditNotice, CreativeEditor, UnsavedPreviewBadge, sameAdText, savedAdText, type AdText, type CopyEditNotes } from "@/components/creative-copy-editor";
 import { ShareCreativeButton } from "@/components/share-creative-button";
@@ -45,7 +46,6 @@ z.config({ jitless: true });
 const studioGenerationSchema = z.object({ generationId: z.string().uuid(), count: z.number().int().min(1).max(6) });
 type StudioGeneration = z.infer<typeof studioGenerationSchema>;
 
-const SET_ASIDE_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
 
 type CreateBatch = { key: string; made: number | null; items: Creative[] };
 
@@ -107,10 +107,19 @@ export function Studio({
   const [filter, setFilter] = useState(initialFilter);
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState(initialCreativeId);
+  const detailsRef = useRef<HTMLElement>(null);
+  // #1162: below lg the details sit under every batch, so a tile tap brings them into view; focus stays on the tile.
+  function inspect(id: string) {
+    setSelectedId(id);
+    if (window.matchMedia?.("(min-width: 1024px)").matches) return;
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    detailsRef.current?.scrollIntoView?.({ block: "start", behavior: reduce ? "auto" : "smooth" });
+  }
 
-  // #762: unreviewed ads older than 7 days are set aside (view only; approving one brings it back).
+  // #762/#1148: unreviewed ads older than 7 days, and ads not picked from their Create batch, are set aside (view only; approving one brings it back).
   const [now] = useState(() => Date.now());
-  const setAside = (item: Creative) => item.status !== "approved" && Boolean(item.created_at) && now - Date.parse(item.created_at) > SET_ASIDE_AFTER_MS;
+  const setAsideSet = setAsideIds(items, now);
+  const setAside = (item: Creative) => setAsideSet.has(item.id);
   const approvedCount = items.filter((i) => i.status === "approved").length;
   const setAsideCount = items.filter(setAside).length;
   const reviewCount = items.length - approvedCount - setAsideCount;
@@ -153,7 +162,7 @@ export function Studio({
               <button
                 type="button"
                 aria-pressed={creative.id === selectedCreative?.id}
-                onClick={() => setSelectedId(creative.id)}
+                onClick={() => inspect(creative.id)}
                 data-product-event="creative.inspect"
                 className={cn(
                   "w-full overflow-hidden rounded-md border text-left",
@@ -565,14 +574,15 @@ export function Studio({
             })}
             {setAsideItems.length > 0 && (
               <details open={setAsideItems.some((item) => item.id === selectedCreative.id) || undefined} className="border-t border-slate-200 pt-2">
-                <summary className="flex min-h-10 cursor-pointer items-center px-1 text-sm font-medium text-slate-700">Older unreviewed ads ({setAsideItems.length}), set aside after 7 days</summary>
+                <summary className="flex min-h-10 cursor-pointer items-center px-1 text-sm font-medium text-slate-700">Set aside ({setAsideItems.length}): not picked, or unreviewed after 7 days</summary>
                 {adList(setAsideItems)}
               </details>
             )}
           </section>
           <section
+            ref={detailsRef}
             aria-label="Ad details"
-            className="min-w-0 lg:sticky lg:top-4"
+            className="min-w-0 scroll-mt-16 lg:sticky lg:top-4"
           >
             <CreativeCard
               key={selectedCreative.id}

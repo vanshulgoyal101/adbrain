@@ -922,6 +922,34 @@ describe("<Studio> empty state", () => {
 });
 
 describe("<Studio> review board", () => {
+  // #1162: on a phone the details sit below every batch; a tile tap must bring them into view.
+  it.each([
+    { width: "phone", wide: false, scrolls: true },
+    { width: "lg", wide: true, scrolls: false },
+  ])("scrolls Ad details into view on a tile tap only below lg ($width)", ({ wide, scrolls }) => {
+    vi.stubGlobal("matchMedia", (query: string) => ({ matches: query.includes("min-width") ? wide : false }));
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true, value: scrollIntoView });
+    try {
+      render(<Studio business={business} initialCreatives={[creative({ id: "c1", headline: "First ad" }), creative({ id: "c2", headline: "Second ad" })]} />);
+      const tile = within(screen.getByRole("region", { name: "Ads" })).getByRole("button", { name: "Second ad Needs review" });
+      tile.focus();
+      fireEvent.click(tile);
+      expect(tile).toHaveAttribute("aria-pressed", "true");
+      expect(tile).toHaveFocus();
+      if (scrolls) {
+        expect(scrollIntoView).toHaveBeenCalledTimes(1);
+        expect(scrollIntoView.mock.contexts[0]).toBe(screen.getByRole("region", { name: "Ad details" }));
+        expect(scrollIntoView).toHaveBeenCalledWith({ block: "start", behavior: "smooth" });
+      } else {
+        expect(scrollIntoView).not.toHaveBeenCalled();
+      }
+    } finally {
+      Reflect.deleteProperty(HTMLElement.prototype, "scrollIntoView");
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("keeps duplicate headlines selectable by keyboard and search", async () => {
     const user = userEvent.setup();
     const variants = [
@@ -1131,9 +1159,15 @@ describe("<Studio> review board batches (#762)", () => {
     render(<Studio business={business} initialCreatives={[made("new1", "g-new", 0), made("stale", "g-stale", 10), made("kept", "g-stale", 10, { status: "approved" })]} />);
     expect(screen.getByRole("radio", { name: "Needs review (1)" })).toBeInTheDocument();
     const board = within(screen.getByRole("region", { name: "Ads" }));
-    expect(board.getByText(/Older unreviewed ads \(1\)/)).toBeVisible();
+    expect(board.getByText(/Set aside \(1\): not picked, or unreviewed after 7 days/)).toBeVisible();
     expect(board.getByRole("button", { name: "Ad stale Needs review" })).not.toBeVisible();
     // Approved ads are never set aside.
     expect(board.getByText(/16 Oct, [^·]+ · 1 ad\b/)).toBeVisible();
+  });
+
+  it("#1148: once one ad from a Create batch is used, the others are set aside, not 'Needs review'", () => {
+    render(<Studio business={business} initialCreatives={[made("picked", "g1", 0, { status: "approved" }), made("other1", "g1", 0), made("other2", "g1", 0), made("fresh", "g2", 0)]} />);
+    expect(screen.getByRole("radio", { name: "Needs review (1)" })).toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "Ads" })).getByText(/Set aside \(2\)/)).toBeVisible();
   });
 });

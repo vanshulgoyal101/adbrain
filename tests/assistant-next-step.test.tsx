@@ -110,7 +110,10 @@ describe("<AdAssistant> next step after Create", () => {
     expect(screen.getByRole("link", { name: /review ads/i })).toHaveAttribute("href", "/studio");
 
     await user.click(screen.getAllByRole("button", { name: "Use this ad" })[2]);
-    expect(await screen.findByRole("link", { name: "Review campaign" })).toHaveAttribute("href", "/campaigns?new=1&creatives=ad-3&review=1");
+    // #1152: one primary step after selection, not a second "Review" beside "Review ads".
+    expect(await screen.findByRole("link", { name: "Next: set up campaign" })).toHaveAttribute("href", "/campaigns?new=1&creatives=ad-3&review=1");
+    expect(screen.queryByRole("link", { name: "Review campaign" })).not.toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: /review/i }).map((link) => link.textContent)).toEqual(["Review ads"]);
     expect(screen.getByRole("link", { name: /review ads/i })).toBeInTheDocument();
   });
 

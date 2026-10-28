@@ -33,16 +33,22 @@ The smallest measurable sequence is:
    since #995; suggestions that read as real customer questions are #1114. Pass:
    open-to-message rate of at least 20% (pilot baseline about 8%) in the next
    controlled run (#680).
-2. **Reason to send (W2, #1081):** one concrete promise in the ad, prefill and
-   greeting (for example a subsidy estimate within minutes), stated as a Brand
-   offer so claim checks accept it. It runs only after the owner commits to
-   reply that fast. Language and Review's open-to-message rate are live
-   (#1085, #1087). Pass: open-to-message up and median first reply of 5 minutes
-   or less.
+2. **Offer up front (W2, ad only):** the Brand's offer, stated as the headline,
+   the first line of the text and on the picture, and the ad asks for a
+   WhatsApp message instead of a call (#1147). The WhatsApp opening stays
+   exactly the owner's saved template. Pass: more ad taps that open WhatsApp
+   and a higher open-to-message rate, at similar spend. Review's
+   open-to-message rate is live (#1087).
 3. **Reply speed (#1049, live):** reply or call from the enquiry card in one tap;
    `contacted at` and the median time to first reply show on Home.
 4. **Owner alerts (#701):** deliver new enquiries and a daily results line to
    the owner's WhatsApp, subject to the CEO's rate-card and spend-cap decision.
+
+**Rule (owner, October 28, 2026):** AdBrain never sends customers automated
+WhatsApp messages beyond the owner's saved template. Quick questions (W1) are
+buttons the customer chooses, so they are allowed, and the owner's welcome
+text stays unchanged. Custom greetings and promised reply times are not
+allowed. Owner alerts (#701) go to the owner, not to customers.
 
 Manage work that supports this loop: per-ad results and the Best rule (#783,
 live), Run this again (#1050) and editing a launched campaign (#765).

@@ -8,9 +8,9 @@ import { AdResults } from "@/components/ad-results";
 const ad = (adId: string, over: Record<string, unknown> = {}) => ({
   adId, name: `Ad ${adId}`, delivered: true, replaced: false, best: false, creative: null, earlier: false, impressions: 100, results: 0, spend: 0, costPerResult: null, ...over,
 });
-const open = async (body: unknown, status = 200, onRunAgain?: () => void) => {
+const open = async (body: unknown, status = 200, onRunAgain?: () => void, runAgainError?: string) => {
   vi.stubGlobal("fetch", vi.fn(async () => Response.json(body, { status })));
-  const view = render(<AdResults campaignId="c1" onRunAgain={onRunAgain} />);
+  const view = render(<AdResults campaignId="c1" onRunAgain={onRunAgain} runAgainError={runAgainError} />);
   const details = view.container.querySelector("details")!;
   details.open = true;
   fireEvent(details, new Event("toggle"));
@@ -53,12 +53,27 @@ describe("<AdResults> (#783)", () => {
     await vi.waitFor(() => expect(off.container.querySelector("details")).toBeNull());
   });
 
+  const ours = { headline: "Free site survey", imageUrl: null };
   it("offers Run this again only when there's a Best ad (#1050)", async () => {
     const runAgain = vi.fn();
-    await open({ ok: true, syncedAt: null, ads: [ad("1", { best: true, results: 6, spend: 600, costPerResult: 100 }), ad("2", { results: 1, spend: 300, costPerResult: 300 })] }, 200, runAgain);
+    await open({ ok: true, syncedAt: null, ads: [ad("1", { best: true, creative: ours, results: 6, spend: 600, costPerResult: 100 }), ad("2", { results: 1, spend: 300, costPerResult: 300 })] }, 200, runAgain);
     fireEvent.click(await screen.findByRole("button", { name: "Run this again" }));
     expect(runAgain).toHaveBeenCalledOnce();
     expect(screen.getByText(/Nothing goes to Meta until you review and send it, paused/)).toBeInTheDocument();
+  });
+
+  it("doesn't offer it when the Best ad wasn't made in AdBrain: there's nothing to copy (Designer, #1050)", async () => {
+    await open({ ok: true, syncedAt: null, ads: [ad("1", { best: true, results: 6, spend: 600, costPerResult: 100 })] }, 200, vi.fn());
+    expect(await screen.findByText("Best")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Run this again" })).not.toBeInTheDocument();
+  });
+
+  it("shows a copy error under the button, where the tap was (Designer, #1050)", async () => {
+    await open({ ok: true, syncedAt: null, ads: [ad("1", { best: true, creative: ours, results: 6, spend: 600, costPerResult: 100 })] }, 200, vi.fn(), "This campaign couldn't be copied. Try again.");
+    const button = await screen.findByRole("button", { name: "Run this again" });
+    const alert = screen.getByRole("alert");
+    expect(alert).toHaveTextContent("This campaign couldn't be copied. Try again.");
+    expect(button.compareDocumentPosition(alert) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("doesn't offer it without a winner", async () => {

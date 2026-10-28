@@ -94,4 +94,37 @@ describe("workspace work queue", () => {
     expect(queue.map((item) => item.id)).toEqual(["connection", "approved", "campaigns"]);
     expect(queue[1]).toMatchObject({ href: "/studio?status=approved", action: "Export ads" });
   });
+
+  describe("#1148: after one Create and 'Use this ad', Home says Launch, not review", () => {
+    const now = Date.parse("2026-10-28T08:00:00Z");
+    const made = "2026-10-28T07:00:00Z";
+    const batch = [
+      { id: "picked", status: "approved" as const, variant_group: "g1", created_at: made },
+      { id: "other-1", status: "draft" as const, variant_group: "g1", created_at: made },
+      { id: "other-2", status: "draft" as const, variant_group: "g1", created_at: made },
+    ];
+
+    it("launch comes first and the unpicked ads don't count as needing review", () => {
+      const queue = buildWorkQueue({ ...base, metaReady: true, creatives: batch, now });
+      expect(queue.map((item) => item.id)).toEqual(["launch"]);
+      expect(queue[0]).toMatchObject({ title: "Launch a campaign with your approved ads", href: "/campaigns", action: "Launch a campaign" });
+    });
+
+    it("a fresh unreviewed batch still needs review, after Launch; ads older than 7 days don't", () => {
+      const fresh = [{ id: "new-1", status: "draft" as const, variant_group: "g2", created_at: made }, { id: "new-2", status: "draft" as const, variant_group: "g2", created_at: made }];
+      const old = { id: "old", status: "draft" as const, variant_group: "g0", created_at: "2026-10-10T07:00:00Z" };
+      const queue = buildWorkQueue({ ...base, metaReady: true, creatives: [...batch, ...fresh, old], now });
+      expect(queue.map((item) => item.id)).toEqual(["launch", "review"]);
+      expect(queue[1].title).toBe("2 ads need review");
+    });
+
+    it("while a campaign runs, or one is paused or a draft, Launch isn't pushed", () => {
+      expect(buildWorkQueue({ ...base, metaReady: true, creatives: batch, campaigns: [{ status: "active", creative_ids: ["picked"] }], now }).map((item) => item.id)).toEqual([]);
+      expect(buildWorkQueue({ ...base, metaReady: true, creatives: batch, campaigns: [{ status: "paused", creative_ids: ["picked"] }], now }).map((item) => item.id)).toEqual(["campaigns"]);
+    });
+
+    it("without Meta, the ready ads to share come first", () => {
+      expect(buildWorkQueue({ ...base, creatives: batch, now }).map((item) => item.id)).toEqual(["approved"]);
+    });
+  });
 });

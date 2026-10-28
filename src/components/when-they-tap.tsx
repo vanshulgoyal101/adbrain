@@ -1,5 +1,5 @@
 import type { ReviewDTO } from "@/lib/campaign/connect-contracts";
-import { WhatsAppPreview } from "@/components/whatsapp-message-card";
+import { WhatsAppPreview, type PreviewAd } from "@/components/whatsapp-message-card";
 import { handoffLine, isGenericAsk, type Handoff } from "@/lib/campaign/whatsapp-handoff";
 
 type Message = NonNullable<ReviewDTO["whatsappMessage"]>;
@@ -22,8 +22,10 @@ export function whenTheyTapLine(message: Message): string {
  * line. A message in another language than the ads gets a soft note; it never blocks.
  * #1081: the business's past open → message rate, and a note when the pre-typed ask is too general.
  */
-export function WhenTheyTap({ message, businessName, adsLanguage, onEdit, handoff = null, offers = [] }: {
+export function WhenTheyTap({ message, businessName, adsLanguage, onEdit, handoff = null, offers = [], ad = null }: {
   message: Message; businessName: string; adsLanguage: Language; onEdit: () => void; handoff?: Handoff | null; offers?: string[];
+  /** The campaign's first ad, quoted in the preview's message box like WhatsApp does. */
+  ad?: PreviewAd | null;
 }) {
   const mismatch = message.language && message.language !== adsLanguage;
   const generic = !message.iceBreakers?.length && isGenericAsk(message.autofill, offers);
@@ -41,6 +43,6 @@ export function WhenTheyTap({ message, businessName, adsLanguage, onEdit, handof
         <button type="button" onClick={onEdit} className="font-medium text-blue-700 underline">Edit</button>
       </p>}
     </div>
-    <WhatsAppPreview businessName={businessName} greeting={message.greeting} button={message.iceBreakers?.length ? "questions" : message.callButton ? "call" : "none"} questions={message.iceBreakers ?? []} prefill={message.iceBreakers?.length ? "" : message.autofill} />
+    <WhatsAppPreview businessName={businessName} greeting={message.greeting} button={message.iceBreakers?.length ? "questions" : message.callButton ? "call" : "none"} questions={message.iceBreakers ?? []} prefill={message.iceBreakers?.length ? "" : message.autofill} ad={ad} />
   </section>;
 }

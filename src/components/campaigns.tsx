@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 import { WhatsAppReadyChecklist } from "@/components/whatsapp-ready";
 import { whatsappGreeting, whatsappLanguageFor, type WhatsAppLanguage } from "@/lib/campaign/whatsapp-greeting";
+import { suggestedQuestions } from "@/lib/campaign/whatsapp-questions";
 import { whatsappTemplateSchema, type WhatsAppTemplate } from "@/lib/campaign/whatsapp-template";
 import { CampaignWhatsAppMessageDialog } from "@/components/campaign-whatsapp-message-dialog";
 import { WhenTheyTap } from "@/components/when-they-tap";
@@ -375,6 +376,7 @@ function BusinessCampaigns({
   const [showComposer, setShowComposer] = useState(initialSetup?.showComposer ?? (fromReview || initialCampaigns.length === 0));
   const [creationMode, setCreationMode] = useState(initialSetup?.creationMode ?? "manual");
   const nameInputRef = useRef<HTMLInputElement>(null);
+  const noticeRef = useRef<HTMLParagraphElement>(null);
   const guidedModeRef = useRef<HTMLInputElement>(null);
   const focusOnOpenRef = useRef(false);
   useEffect(() => {
@@ -706,12 +708,13 @@ function BusinessCampaigns({
 
   // #1050: "Run this again" copies a campaign that worked into New campaign; Review → Send to Meta (paused) still decides.
   const [rerunBusy, setRerunBusy] = useState<string | null>(null);
+  const [rerunError, setRerunError] = useState<{ id: string; message: string } | null>(null);
   async function runAgain(campaign: Campaign) {
     if (preparing || creating || rerunBusy) return;
-    if (unresolvedRecovery()) { setCardError({ id: campaign.id, message: "Resolve the current campaign operation before starting another campaign." }); return; }
+    setRerunError(null);
+    if (unresolvedRecovery()) { setRerunError({ id: campaign.id, message: "Resolve the current campaign operation before starting another campaign." }); return; }
     if (showComposer && selected.size && !(await askConfirm({ title: "Discard this setup?", description: `Start a copy of "${campaign.name ?? "this campaign"}" instead. Saved drafts stay available.`, confirmLabel: "Discard and copy", tone: "danger" }))) return;
     setRerunBusy(campaign.id);
-    setCardError(null);
     try {
       const response = await fetch(`/api/campaigns/${campaign.id}/rerun`, { cache: "no-store" });
       const data = await response.json().catch(() => null) as { prefill?: RerunPrefill; error?: string } | null;
@@ -744,10 +747,11 @@ function BusinessCampaigns({
       setNotice(prefill.dropped
         ? `Copied "${campaign.name ?? "the campaign"}". ${prefill.dropped} ad${prefill.dropped === 1 ? " isn't" : "s aren't"} approved anymore, so ${prefill.dropped === 1 ? "it was" : "they were"} left out. Check it, then Review.`
         : `Copied "${campaign.name ?? "the campaign"}" with its best ad first. Check it, then Review.`);
-      nameInputRef.current?.scrollIntoView?.({ block: "center" });
-      nameInputRef.current?.focus();
+      // The "Copied …" line and the copied ads come into view; the name field takes focus without jumping past them.
+      noticeRef.current?.scrollIntoView?.({ block: "start" });
+      nameInputRef.current?.focus({ preventScroll: true });
     } catch (reason) {
-      setCardError({ id: campaign.id, message: reason instanceof Error ? reason.message : "This campaign couldn't be copied. Try again." });
+      setRerunError({ id: campaign.id, message: reason instanceof Error ? reason.message : "This campaign couldn't be copied. Try again." });
     } finally {
       setRerunBusy(null);
     }
@@ -1419,7 +1423,7 @@ function BusinessCampaigns({
       {error && <Alert variant="error">{error}</Alert>}
       {placedError?.at === "review" && !prepareReview && <Alert variant="error">{placedError.message}</Alert>}
       {/* #847: sync and save news is a quiet line, as on Enquiries, not a green box on every visit. */}
-      <p aria-live="polite" className={notice ? "text-sm text-slate-600" : "sr-only"}>{notice}</p>
+      <p ref={noticeRef} aria-live="polite" className={notice ? "scroll-mt-20 text-sm text-slate-600" : "sr-only"}>{notice}</p>
       {!connectedForDraft && (
         <div className="space-y-3">
           <Alert variant="warning">
@@ -1605,6 +1609,7 @@ function BusinessCampaigns({
                   adsLanguage={adsLanguage(adsFor(prepareReview.draft.input.creativeIds))}
                   handoff={handoffRate(campaigns.filter((c) => campaignDestination(c, results[c.id]) === "whatsapp").map((c) => results[c.id]).filter(Boolean))}
                   offers={business.offers ?? []}
+                  ad={(() => { const first = adsFor(prepareReview.draft.input.creativeIds.slice(0, 1))[0]; return first ? { headline: first.headline, imageUrl: first.image_url } : null; })()}
                   onEdit={() => { setMessageEditorOpen(true); document.getElementById("whatsapp-message")?.scrollIntoView({ block: "center" }); }} />
               )}
               {/* #419 2(b): Meta's new-advertiser guidance, as plain notes; never blocks the send. */}
@@ -1913,7 +1918,7 @@ function BusinessCampaigns({
                       onChange={(e) => { setLeadFormId(e.target.value); if (placedError?.at === "leadform") setPlacedError(null); }}
                       aria-invalid={placedError?.at === "leadform" || undefined}
                       aria-describedby={placedError?.at === "leadform" ? "leadform-error" : undefined}
-                      className="h-10 w-full min-w-0 max-w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none"
+                      className="h-11 w-full min-w-0 max-w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none"
                     >
                       <option value="">{connectedForDraft ? "Choose a lead form" : "Connect Meta to choose a form"}</option>
                       {availableForms.map((f) => (
@@ -1933,7 +1938,7 @@ function BusinessCampaigns({
                         id="whatsapp-number"
                         value={chosenWhatsAppNumber}
                         onChange={(e) => setWhatsAppNumber(e.target.value)}
-                        className="h-10 w-full min-w-0 max-w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none focus:border-blue-500"
+                        className="h-11 w-full min-w-0 max-w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none focus:border-blue-500"
                       >
                         {whatsappOptions.map(({ masked, source }) => (
                           <option key={masked} value={masked}>
@@ -1962,6 +1967,7 @@ function BusinessCampaigns({
                       const current = whatsappMessage ?? savedWhatsAppMessage;
                       return <CampaignWhatsAppMessageDialog businessId={business.id} businessName={business.name} firstOffer={business.offers?.[0]}
                         initial={current ? draftFromTemplate(current) : draftFromSuggestion(suggested, language)} suggested={suggested}
+                        suggestedQuestions={(chosen) => suggestedQuestions(business, chosen === "auto" ? language : chosen)}
                         followsSuggestion={!current} edited={Boolean(whatsappMessage)} onClose={() => setMessageEditorOpen(false)}
                         onUse={(template, saved) => {
                           setWhatsAppMessage(template);
@@ -2162,8 +2168,8 @@ function BusinessCampaigns({
           return (ready || ai) && <div className="mb-4">{ready && <WhatsAppReadyChecklist businessId={business.id} />}{ai && <WhatsAppAiCard businessId={business.id} />}</div>;
         })()}
         {(campaigns.length > 0 || campaignQuery || statusFilter !== "all") && <div className="mb-5 flex flex-wrap gap-2">
-          <div className="flex min-w-0 flex-1 basis-40 items-center gap-2 rounded-md border border-slate-300 px-3"><Search size={16} className="shrink-0 text-slate-400" aria-hidden="true" /><input type="search" aria-label="Search campaigns" placeholder="Search campaigns" value={campaignQuery} onChange={event => setCampaignQuery(event.target.value)} className="h-10 w-full min-w-0 bg-transparent text-sm outline-none" /></div>
-          <select aria-label="Campaign status" value={statusFilter} onChange={event => setStatusFilter(event.target.value)} className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm"><option value="all">All statuses</option><option value="active">{OWNER_WORDS.running}</option><option value="paused">Paused</option><option value="draft">Draft</option><option value="completed">Completed</option></select>
+          <div className="flex min-w-0 flex-1 basis-40 items-center gap-2 rounded-md border border-slate-300 px-3"><Search size={16} className="shrink-0 text-slate-400" aria-hidden="true" /><input type="search" aria-label="Search campaigns" placeholder="Search campaigns" value={campaignQuery} onChange={event => setCampaignQuery(event.target.value)} className="h-[42px] w-full min-w-0 bg-transparent text-sm outline-none" /></div>
+          <select aria-label="Campaign status" value={statusFilter} onChange={event => setStatusFilter(event.target.value)} className="h-11 rounded-md border border-slate-300 bg-white px-3 text-sm"><option value="all">All statuses</option><option value="active">{OWNER_WORDS.running}</option><option value="paused">Paused</option><option value="draft">Draft</option><option value="completed">Completed</option></select>
         </div>}
         {campaigns.length === 0 && !campaignQuery && statusFilter === "all" ? (
           <Card>
@@ -2371,7 +2377,7 @@ function BusinessCampaigns({
                       // #1003: always say how old the numbers are.
                       <p className="text-xs text-slate-500">{updatingIds.includes(c.id) ? "Updating results…" : `Updated ${timeAgo(new Date(r.fetched_at))}`}</p>
                     )}
-                    {adResults && r && c.meta_campaign_id && <AdResults campaignId={c.id} whatsapp={outcome === "whatsapp"} onRunAgain={() => void runAgain(c)} runAgainBusy={rerunBusy === c.id} />}
+                    {adResults && r && c.meta_campaign_id && <AdResults campaignId={c.id} whatsapp={outcome === "whatsapp"} onRunAgain={() => void runAgain(c)} runAgainBusy={rerunBusy === c.id} runAgainError={rerunError?.id === c.id ? rerunError.message : null} />}
                     {r && outcome === "whatsapp" && r.whatsapp_opens != null && r.conversations != null && (
                       // #493: people reach WhatsApp and leave; show the drop-off plainly.
                       <p className="text-sm text-slate-700">

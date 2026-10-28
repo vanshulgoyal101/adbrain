@@ -14,6 +14,7 @@ import type { Lead } from "@/lib/types";
 import { useLeadList } from "@/lib/leads/use-lead-list";
 import { workflowStatuses, type WorkflowStatus } from "@/lib/leads/filters";
 import { firstReplyText, formatReplyTime, whatsappReplyLink, type ReplyLanguage } from "@/lib/leads/first-reply";
+import { isMetaTestLead } from "@/lib/leads/test-lead";
 import styles from "./lead-inbox.module.css";
 
 const LEADS_FRESH_MS = 15 * 60_000;
@@ -26,10 +27,6 @@ function saveLeadSyncTime(key: string, completedAt: number) {
   try { localStorage.setItem(key, String(completedAt)); } catch { return; }
 }
 
-/** Meta's Lead Ads testing tool fills every field with "<test lead: dummy data for …>" (#403). */
-function isMetaTestLead(lead: Pick<Lead, "full_name">): boolean {
-  return /^<test lead: dummy data/i.test(lead.full_name ?? "");
-}
 
 /** #798: follow-up statuses in owners' words; "customer" is an enquiry that became a customer. */
 const STATUS_LABEL: Record<WorkflowStatus, string> = {
@@ -45,7 +42,7 @@ export function LeadInbox({
   offer = null,
   language = "en",
   initialLeads,
-  initialTotal = initialLeads.length,
+  initialTotal = initialLeads.filter((lead) => !isMetaTestLead(lead)).length,
   initialNextCursor = null,
   metaReady,
   syncScope,
@@ -92,6 +89,8 @@ export function LeadInbox({
     query, status, contact: contactFilter, sort,
   });
   const leads = page.leads;
+  // #1149: Meta's test leads are listed (labelled) but not counted; the server's total leaves them out too.
+  const realShown = leads.filter((lead) => !isMetaTestLead(lead)).length;
   const mounted = useMounted();
   const dirty = selected && (draftStatus !== (selected.workflow_status ?? "new") || draftNote !== (selected.follow_up_note ?? ""));
 
@@ -177,7 +176,8 @@ export function LeadInbox({
   const [contactedAt, setContactedAt] = useState<Record<string, string>>({});
   const firstContact = (lead: Lead) => lead.first_contacted_at ?? contactedAt[draftKey(lead)] ?? null;
   function markContacted(lead: Lead) {
-    if (firstContact(lead)) return;
+    // #1140: only a still-new enquiry gets a first reply time (the server does the same).
+    if (firstContact(lead) || statusOf(lead) !== "new") return;
     setContactedAt(current => ({ ...current, [draftKey(lead)]: new Date().toISOString() }));
     // keepalive: the tap leaves for WhatsApp or the dialer, and the record still has to land.
     void fetch(`/api/leads/${lead.id}`, {
@@ -364,7 +364,7 @@ export function LeadInbox({
           </select>
           </div>
         </div>
-        <div className={styles.resultCount}><span role="status">{page.loading ? "Loading enquiries..." : hasFilters || leads.length < page.total ? `${leads.length} of ${page.total} enquiries` : ""}</span>{hasFilters && leads.length > 0 && <button type="button" onClick={clearFilters}>Clear filters</button>}</div>
+        <div className={styles.resultCount}><span role="status">{page.loading ? "Loading enquiries..." : hasFilters || realShown < page.total ? `${realShown} of ${page.total} enquiries` : ""}</span>{hasFilters && leads.length > 0 && <button type="button" onClick={clearFilters}>Clear filters</button>}</div>
       </div>
 
       {selected && <form className={styles.editor} aria-label="Enquiry follow-up" onSubmit={saveFollowUp}>

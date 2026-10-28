@@ -3,6 +3,8 @@ import { getEnv } from "@/lib/env";
 import { observeRoute } from "@/lib/observability/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { alertCommand, inboundTexts, validWebhookSignature } from "@/lib/alerts/owner-alerts";
+import { supabaseAlertStore } from "@/lib/alerts/alert-store";
+import { recategorisedTemplates } from "@/lib/alerts/sender";
 
 export const runtime = "nodejs";
 
@@ -19,6 +21,7 @@ export const GET = observeRoute("/api/whatsapp/webhook", "GET", async (request: 
 /**
  * #701: messages to AdBrain's alerts number. "START <code>" confirms an owner's number for alerts;
  * "STOP" or "बंद" turns them off. Anything else is ignored. Message text is never logged.
+ * #1139: a template Meta moves (or will move) out of UTILITY is blocked, so no alert goes out on it.
  */
 export const POST = observeRoute("/api/whatsapp/webhook", "POST", async (request: Request) => {
   const raw = await request.text();
@@ -28,6 +31,12 @@ export const POST = observeRoute("/api/whatsapp/webhook", "POST", async (request
   let body: unknown = null;
   try { body = JSON.parse(raw); } catch { return NextResponse.json({ ok: true }); }
   const admin = createAdminClient();
+  const store = supabaseAlertStore(admin as unknown as Parameters<typeof supabaseAlertStore>[0]);
+  for (const { template, category } of recategorisedTemplates(body)) {
+    try { await store.blockTemplate(template, category); } catch {
+      return NextResponse.json({ error: "Template block could not be recorded." }, { status: 503 });
+    }
+  }
   for (const message of inboundTexts(body, getEnv().ALERTS_WHATSAPP)) {
     const command = alertCommand(message.text);
     if (!command) continue;

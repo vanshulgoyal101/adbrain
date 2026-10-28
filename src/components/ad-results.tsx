@@ -56,7 +56,8 @@ const named = (ad: Named) => `“${adLabel(ad)}”`;
 
 /**
  * #1045: one line offering to pause the ad that costs far more per enquiry than the best one.
- * Never automatic; Keep hides it for 3 days; a pause can be undone here.
+ * Never automatic; Keep hides it for 3 days; a pause can be undone here. A suggestion, not a warning:
+ * a canvas strip, not amber (#847 keeps amber for Needs review).
  */
 export function PauseOffer({ campaignId, suggestion, unit = UNITS.form }: { campaignId: string; suggestion: PauseSuggestion; unit?: Unit }) {
   const { ad, reference } = suggestion;
@@ -90,7 +91,7 @@ export function PauseOffer({ campaignId, suggestion, unit = UNITS.form }: { camp
     ? <>{named(ad)} has spent {formatMoney(ad.spend)} with no {unit.many}; {named(reference)} gets them at {formatMoney(reference.costPerResult ?? 0)} each. Pause it?</>
     : <>{named(ad)} costs {formatMoney(ad.costPerResult ?? 0)} per {unit.one} vs {formatMoney(reference.costPerResult ?? 0)} for {named(reference)}. Pause it?</>;
   return (
-    <div className="my-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-slate-800">
+    <div className="my-2 rounded-sm bg-slate-50 p-3 text-xs text-slate-800">
       <p className="wrap-break-word">{line}</p>
       {typeof state === "object" && <p role="alert" className="mt-1 text-danger">{state.error}</p>}
       <div className="mt-2 flex flex-wrap gap-2">
@@ -105,12 +106,14 @@ export function PauseOffer({ campaignId, suggestion, unit = UNITS.form }: { camp
  * #783: "Which ad worked" on a campaign card. Loads the stored per-ad results the first time it opens;
  * hidden altogether while the feature is off (the route answers 404).
  */
-export function AdResults({ campaignId, whatsapp = false, onRunAgain, runAgainBusy = false }: {
+export function AdResults({ campaignId, whatsapp = false, onRunAgain, runAgainBusy = false, runAgainError = null }: {
   campaignId: string;
   whatsapp?: boolean;
   /** #1050: with a Best ad, offer to copy the campaign into a new paused one. */
   onRunAgain?: () => void;
   runAgainBusy?: boolean;
+  /** Shown under the button, where the owner tapped (Designer, #1050). */
+  runAgainError?: string | null;
 }) {
   const unit = UNITS[whatsapp ? "whatsapp" : "form"];
   const [state, setState] = useState<"idle" | "loading" | "off" | "error" | Loaded>("idle");
@@ -135,6 +138,8 @@ export function AdResults({ campaignId, whatsapp = false, onRunAgain, runAgainBu
   const shown = loaded ? (all ? loaded.ads : loaded.ads.slice(0, SHOWN)) : [];
   const anyResults = loaded?.ads.some(ad => ad.results > 0) ?? false;
   const hasBest = loaded?.ads.some(ad => ad.best) ?? false;
+  // Only an AdBrain ad can be copied; an outside Best ad would only lead to an error.
+  const canRunAgain = loaded?.ads.some(ad => ad.best && ad.creative) ?? false;
   const suggestion = loaded ? pauseSuggestion(loaded.ads) : null;
 
   return (
@@ -159,13 +164,14 @@ export function AdResults({ campaignId, whatsapp = false, onRunAgain, runAgainBu
             <button type="button" className="mt-1 min-h-11 font-medium text-blue-700 underline-offset-4 hover:underline" onClick={() => setAll(true)}>All ads ({loaded.ads.length})</button>
           )}
           {loaded.syncedAt && <p className="pt-2 text-xs text-slate-500">Updated {relativeAge(loaded.syncedAt, new Date()) || "just now"}</p>}
-          {hasBest && onRunAgain && (
+          {canRunAgain && onRunAgain && (
             <div className="pt-3">
               <button type="button" disabled={runAgainBusy} onClick={onRunAgain}
                 className="inline-flex min-h-11 items-center gap-2 rounded-md border border-slate-300 bg-white px-4 font-medium text-slate-900 hover:bg-slate-50 disabled:opacity-60">
                 {runAgainBusy && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
                 Run this again
               </button>
+              {runAgainError && <p role="alert" className="pt-1 text-sm font-medium text-danger">{runAgainError}</p>}
               <p className="pt-1 text-xs text-slate-500">Copies it into a new campaign, best ad first. Nothing goes to Meta until you review and send it, paused.</p>
             </div>
           )}
