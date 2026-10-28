@@ -11,7 +11,8 @@ export function AdLanguageChips({ value, onChange, disabled = false }: {
 }) {
   return (
     <div role="group" aria-labelledby="ad-language-label" className="flex flex-wrap items-center gap-2">
-      <span id="ad-language-label" className="text-sm text-slate-600">Ads in</span>
+      {/* CEO (owner, #1681): the ads' language, worded so it isn't taken for the app language. */}
+      <span id="ad-language-label" className="text-sm text-slate-600">Your ads will be in</span>
       {CREATE_LANGUAGES.map((language) => (
         <button key={language.id} type="button" lang={LANG_ATTR[language.id]} aria-pressed={value === language.id} disabled={disabled}
           onClick={() => onChange(language.id)}
