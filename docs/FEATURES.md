@@ -145,7 +145,7 @@ saved ads instead of starting again; the step waits through "processing" and
 "partial" and treats "unresolved" as finished short, and on arrival it checks the
 newest batch (#1407). The tab that gets a batch's ads publishes them in localStorage
 (`setup-generation-result:{businessId}`, 15 minutes), so other waiting tabs show them
-at once; a 429 from the shared status budget waits out Retry-After (#1534). Missing ads show "N ads couldn't be made. Make another", and a
+at once; a 429 from the shared status budget waits out Retry-After (#1534). Opened mid-batch, the step says "Making your ads…" and Continue waits ("N more on the way…") until the rest lands or the batch ends short (#1564). Missing ads show "N ads couldn't be made. Make another", and a
 top-up shows beside its batch (`setupBatch`). Only ads made from today's step 1
 count (`madeForSetup`: the receipt's source fact is today's `setupGoal`, #1432):
 after the owner changes what they sell, where or their offer, step 2 makes new

@@ -196,6 +196,23 @@ describe("core: <SetupAdsStep> (#1270)", () => {
     expect(await screen.findByText("1 more ad is still being made. It appears here when it's ready.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Ad b/ })).toBeInTheDocument();
     expect(screen.queryByText(/couldn't be made/)).not.toBeInTheDocument();
+    // #1564: not "ready" yet, and Continue waits for the rest of the batch.
+    expect(screen.getByRole("heading", { name: "Making your ads…" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Your ads are ready" })).toBeNull();
+    expect(bar().getByRole("button", { name: "1 more on the way…" })).toBeDisabled();
+  });
+
+  it("#1564: once the rest of the batch lands, it's ready and Continue works", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const first = [inBatch("a", 1)];
+    const replies = [Response.json({ status: "partial", expectedCount: 3, creatives: first })];
+    vi.stubGlobal("fetch", vi.fn(async () => replies.shift() ?? Response.json({ status: "complete", expectedCount: 3, creatives: [...first, inBatch("b", 0), inBatch("c", 0)] })));
+    render(<SetupAdsStep business={business} initialAds={first} />);
+    expect(await screen.findByRole("heading", { name: "Making your ads…" })).toBeInTheDocument();
+    await act(async () => { await vi.advanceTimersByTimeAsync(15_000); });
+    expect(await screen.findByRole("heading", { name: "Your ads are ready" })).toBeInTheDocument();
+    expect(bar().getByRole("button", { name: /^Continue with/ })).toBeEnabled();
+    vi.useRealTimers();
   });
 
   it("a failed approve keeps the owner on the step and says so", async () => {
