@@ -78,6 +78,13 @@ describe("<CampaignVerdict> (#1274)", () => {
     card({ results: 0, spend: 450, opens: 38 });
     expect(region().queryByRole("button")).not.toBeInTheDocument();
   });
+
+  it("slice 2c: one weak ad: the sentence says how much more it costs and the action is the pause offer", () => {
+    const weakAd = { ad: { adId: "a2", name: "Ad 2", creative: null, spend: 900, results: 3, costPerResult: 300 }, reference: { adId: "a1", name: "Ad 1", creative: null, costPerResult: 100 }, reason: "expensive" as const };
+    card({ weakAd }, { pauseOffer: <button type="button">Pause this ad</button> });
+    expect(region().getByText("One ad costs 3 times as much per chat as your others. Pausing it leaves more of your budget for the ones that work.")).toBeInTheDocument();
+    expect(region().getByRole("button", { name: "Pause this ad" })).toBeInTheDocument();
+  });
 });
 
 describe("card verdict inputs (#1274)", () => {

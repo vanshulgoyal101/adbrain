@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, renderHook, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { AdResults } from "@/components/ad-results";
+import { AdResults, useWeakAd } from "@/components/ad-results";
 
 // #783: "Which ad worked" on the campaign card (CPO + Designer notes): one quiet row per ad, "Best" as a word,
 // "—" before an ad's first enquiry, "Early" while no winner, the rest behind "All ads", hidden while off.
@@ -171,5 +171,43 @@ describe("<AdResults> pause offer (#1045)", () => {
     expect(rows[1]).toHaveTextContent("Rooftop solar, planned before install(earlier run)");
     expect(rows[1].querySelector("img")).toBeNull();
     expect(rows[2]).toHaveTextContent("Outside ad");
+  });
+});
+
+// #1274 slice 2c: the card's sentence reads the same stored rows to name a weak ad; the details don't offer it twice.
+describe("useWeakAd (#1274)", () => {
+  const rows = [ad("1", { best: true, status: "ACTIVE", results: 6, spend: 600, costPerResult: 100 }), ad("2", { status: "ACTIVE", results: 2, spend: 600, costPerResult: 300 })];
+  afterEach(() => window.localStorage.clear());
+
+  it("returns the ad worth pausing from the stored rows, and nothing while disabled", async () => {
+    const fetch = vi.fn(async () => Response.json({ ok: true, ads: rows }));
+    vi.stubGlobal("fetch", fetch);
+    const off = renderHook(() => useWeakAd("c1", false));
+    expect(off.result.current[0]).toBeNull();
+    expect(fetch).not.toHaveBeenCalled();
+    const on = renderHook(() => useWeakAd("c1", true));
+    await vi.waitFor(() => expect(on.result.current[0]?.ad.adId).toBe("2"));
+    expect(fetch).toHaveBeenCalledWith("/api/campaigns/c1/ads");
+  });
+
+  it("stays quiet after Keep, when the feature is off, or when the read fails", async () => {
+    window.localStorage.setItem("adbrain.keepAd.c1.2", String(Date.now() + 60_000));
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ ok: true, ads: rows })));
+    const kept = renderHook(() => useWeakAd("c1", true));
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ error: "Not found" }, { status: 404 })));
+    const off = renderHook(() => useWeakAd("c2", true));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(kept.result.current[0]).toBeNull();
+    expect(off.result.current[0]).toBeNull();
+  });
+
+  it("Which ad worked doesn't repeat the offer the card's sentence already makes", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ ok: true, syncedAt: null, ads: rows })));
+    const view = render(<AdResults campaignId="c1" offerPause={false} />);
+    const details = view.container.querySelector("details")!;
+    details.open = true;
+    fireEvent(details, new Event("toggle"));
+    expect(await screen.findAllByRole("listitem")).toHaveLength(2);
+    expect(screen.queryByRole("button", { name: "Pause this ad" })).not.toBeInTheDocument();
   });
 });
