@@ -2097,18 +2097,25 @@ export class MetaClient {
 
   /**
    * #765 (b): turns a running ad set's PAUSED copy on in its place. Never two ACTIVE: Meta first checks the
-   * copy's activation (validate_only), then the old ad set is paused, a capped copy's total is cut to what the
-   * old one has left, the copy's ads and then the copy go ACTIVE, and both are read back. If anything fails
+   * copy's activation (validate_only), then the old ad set is paused, the copy takes the old one's budget as it is
+   * now (a capped copy only what is left; its end date too), the copy's ads (except ones the owner paused, #1146)
+   * and then the copy go ACTIVE, and both are read back. If anything fails
    * after the pause, the copy is paused again and the old ad set resumed. The old ad set is archived last.
    * `running` is the campaign's intended state: on a paused campaign nothing is turned on, the copy just takes
    * the old ad set's place. Safe to retry: a switch Meta already finished is completed, and one cut off after
    * the pause carries on from where it stopped.
    */
-  async switchAdSet(campaignId: string, input: { fromAdSetId: string; toAdSetId: string; toAdIds: string[]; running: boolean }): Promise<AdSetSwitch> {
+  async switchAdSet(campaignId: string, input: { fromAdSetId: string; toAdSetId: string; toAdIds: string[]; running: boolean; keepPausedAdIds?: string[] }): Promise<AdSetSwitch> {
     const { fromAdSetId, toAdSetId, toAdIds, running } = input;
     if (fromAdSetId === toAdSetId || !toAdIds.length || new Set(toAdIds).size !== toAdIds.length) throw new MetaError("Invalid ad set switch.");
-    type AdSetRead = { id?: string; campaign_id?: string; status?: string; lifetime_budget?: string; budget_remaining?: string };
-    const read = (id: string) => this.graph<AdSetRead>(`${encodeURIComponent(id)}?fields=id,campaign_id,status,lifetime_budget,budget_remaining`);
+    // #1146: copies of ads the owner paused from the card stay PAUSED; the rest go ACTIVE.
+    const keptPaused = new Set(input.keepPausedAdIds ?? []);
+    if ([...keptPaused].some(adId => !toAdIds.includes(adId))) throw new MetaError("Invalid ad set switch.");
+    const turnOn = toAdIds.filter(adId => !keptPaused.has(adId));
+    if (running && !turnOn.length) throw new CampaignDeliveryError("Every ad in this audience is paused. Turn one on before switching. Nothing changed.");
+    const expected = (ad: { id: string; status?: string }) => ad.status === (keptPaused.has(ad.id) ? "PAUSED" : "ACTIVE");
+    type AdSetRead = { id?: string; campaign_id?: string; status?: string; lifetime_budget?: string; budget_remaining?: string; daily_budget?: string; end_time?: string };
+    const read = (id: string) => this.graph<AdSetRead>(`${encodeURIComponent(id)}?fields=id,campaign_id,status,lifetime_budget,budget_remaining,daily_budget,end_time`);
     const readAds = (id: string) => this.graph<{ data?: Array<{ id: string; status?: string; adset_id?: string }>; paging?: { next?: string } }>(`${encodeURIComponent(id)}/ads?fields=id,status,adset_id&limit=100`);
     const [from, to, ads] = await Promise.all([read(fromAdSetId), read(toAdSetId), readAds(toAdSetId)]);
     const sameAds = (list: typeof ads) => Array.isArray(list.data) && !list.paging?.next && list.data.length === toAdIds.length
@@ -2119,7 +2126,7 @@ export class MetaClient {
     const done = { fromAdSetId, adSetId: toAdSetId, adIds: toAdIds };
     const oldStopped = from.status === "PAUSED" || from.status === "ARCHIVED";
     // A retry after Meta finished: the copy delivers (or, on a paused campaign, has taken the old one's place).
-    if (running && to.status === "ACTIVE" && ads.data!.every(ad => ad.status === "ACTIVE") && oldStopped) {
+    if (running && to.status === "ACTIVE" && ads.data!.every(expected) && oldStopped) {
       if (from.status === "PAUSED") await this.writeStatus(fromAdSetId, "ARCHIVED").catch(() => undefined);
       return done;
     }
@@ -2128,18 +2135,28 @@ export class MetaClient {
       throw new CampaignDeliveryError("The old ad set or the new one is in an unexpected state. Nothing changed; check the campaign in Meta.");
     }
     const capped = Number(from.lifetime_budget ?? 0) > 0;
-    const cutCap = async () => {
-      // The old ad set kept spending while the copy waited; the copy may spend only what is left now.
-      const left = await read(fromAdSetId);
-      if (left.status === "ACTIVE" || !/^[1-9]\d*$/.test(left.budget_remaining ?? "")) throw new CampaignDeliveryError("This capped run has spent its total. Start a new run instead.");
-      if (to.lifetime_budget === left.budget_remaining) return;
-      await this.graph(encodeURIComponent(toAdSetId), { method: "POST", form: { lifetime_budget: left.budget_remaining! } });
-      const cut = await read(toAdSetId);
-      if (cut.lifetime_budget !== left.budget_remaining) throw new CampaignDeliveryError("Meta did not confirm the new ad set's total.");
+    /**
+     * The copy takes the old ad set's money as it is now (#1146): a capped run only what is left of its total
+     * (the old one kept spending while the copy waited), an uncapped one its current daily budget, and either
+     * its current end date, so a budget or end change made while the copy waited isn't lost.
+     */
+    const matchOld = async () => {
+      const left = capped ? await read(fromAdSetId) : from;
+      if (capped && (left.status === "ACTIVE" || !/^[1-9]\d*$/.test(left.budget_remaining ?? ""))) throw new CampaignDeliveryError("This capped run has spent its total. Start a new run instead.");
+      const form: Record<string, string> = {};
+      if (capped && to.lifetime_budget !== left.budget_remaining) form.lifetime_budget = left.budget_remaining!;
+      if (!capped && /^[1-9]\d*$/.test(left.daily_budget ?? "") && to.daily_budget !== left.daily_budget) form.daily_budget = left.daily_budget!;
+      if (left.end_time && to.end_time !== left.end_time) form.end_time = left.end_time;
+      if (!Object.keys(form).length) return;
+      await this.graph(encodeURIComponent(toAdSetId), { method: "POST", form });
+      const after = await read(toAdSetId);
+      if (Object.entries(form).some(([key, value]) => key === "end_time" ? Date.parse(after.end_time ?? "") !== Date.parse(value) : after[key as keyof AdSetRead] !== value)) {
+        throw new CampaignDeliveryError("Meta did not confirm the new ad set's budget.");
+      }
     };
     if (!running) {
       if (from.status === "ACTIVE") await this.writeStatus(fromAdSetId, "PAUSED");
-      if (capped) await cutCap();
+      await matchOld();
       await this.writeStatus(fromAdSetId, "ARCHIVED");
       return done;
     }
@@ -2151,11 +2168,11 @@ export class MetaClient {
     // An attempt cut off after the pause (old PAUSED) or after the archive carries on from here.
     if (from.status === "ACTIVE") await this.writeStatus(fromAdSetId, "PAUSED");
     try {
-      if (capped) await cutCap();
-      for (const adId of toAdIds) await this.writeStatus(adId, "ACTIVE");
+      await matchOld();
+      for (const adId of turnOn) await this.writeStatus(adId, "ACTIVE");
       await this.writeStatus(toAdSetId, "ACTIVE");
       const [oldAfter, newAfter, adsAfter] = await Promise.all([read(fromAdSetId), read(toAdSetId), readAds(toAdSetId)]);
-      if (oldAfter.status === "ACTIVE" || newAfter.status !== "ACTIVE" || !sameAds(adsAfter) || adsAfter.data!.some(ad => ad.status !== "ACTIVE")) {
+      if (oldAfter.status === "ACTIVE" || newAfter.status !== "ACTIVE" || !sameAds(adsAfter) || !adsAfter.data!.every(expected)) {
         throw new CampaignDeliveryError("Meta did not confirm the switch.");
       }
     } catch (error) {
