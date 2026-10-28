@@ -6,7 +6,8 @@ import { setupAdCost, setupGoal, setupPicks } from "@/lib/creative/setup-picks";
 import type { Business, Creative } from "@/lib/types";
 
 // #1270 (#1251 WS1 slice 3): step 2 makes 3 ads with the existing Create calls and pre-picks the best 2.
-const mocks = vi.hoisted(() => ({ push: vi.fn(), setCreativeStatus: vi.fn() }));
+const mocks = vi.hoisted(() => ({ push: vi.fn(), setCreativeStatus: vi.fn(), downloadBlob: vi.fn() }));
+vi.mock("@/lib/download", () => ({ downloadBlob: mocks.downloadBlob }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: mocks.push }) }));
 vi.mock("@/app/(app)/studio/actions", () => ({ setCreativeStatus: mocks.setCreativeStatus }));
 import { SetupAdsStep, storyFor } from "@/components/setup-ads-step";
@@ -132,6 +133,41 @@ describe("core: <SetupAdsStep> (#1270)", () => {
     expect(await screen.findByText("We couldn't make your ads this time.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
     expect(sessionStorage.length).toBe(0);
+  });
+
+  // #1407 (QA 2's prospect re-time): a sales visit leaves step 2 with all 3 ads as the marked pack, never via Review.
+  it("#1407: a prospect's step 2 picks all 3 and downloads the marked sample pack, approving them on the way", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(new Blob(["zip"]))));
+    render(<SetupAdsStep business={business} initialAds={[ad("a", 2), ad("b"), ad("c")]} sample />);
+    for (const name of [/Ad a/, /Ad b/, /Ad c/]) expect(screen.getByRole("button", { name })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText(/All of them go in the sample pack, each marked 'Sample: not live'/)).toBeInTheDocument();
+    await act(async () => fireEvent.click(bar().getByRole("button", { name: "Download sample pack (3)" })));
+    await waitFor(() => expect(mocks.downloadBlob).toHaveBeenCalledWith(expect.any(Blob), "adbrain-sample-pack.zip"));
+    expect(mocks.setCreativeStatus.mock.calls).toEqual([["a", "approved"], ["b", "approved"], ["c", "approved"]]);
+    const [url, init] = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect([url, JSON.parse(String(init.body))]).toEqual(["/api/creatives/export", { creativeIds: ["a", "b", "c"] }]);
+    expect(mocks.push).not.toHaveBeenCalled();
+  });
+
+  const batch = "22222222-2222-4222-8222-222222222222";
+  const inBatch = (id: string, minutesAgo: number) => ({ ...ad(id), variant_group: batch, created_at: new Date(Date.now() - minutesAgo * 60_000).toISOString() }) as unknown as Creative;
+
+  it("#1407: coming back to a batch that ended short says how many couldn't be made, with Make another", async () => {
+    const saved = [inBatch("a", 10), inBatch("b", 9)];
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ status: "partial", expectedCount: 3, creatives: saved })));
+    render(<SetupAdsStep business={business} initialAds={saved} />);
+    expect(await screen.findByText(/^1 ad couldn't be made\./)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Make another" })).toBeInTheDocument();
+    expect(String((fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0])).toContain(`generationId=${batch}`);
+  });
+
+  it("#1407: coming back while the batch is still running says more are coming and adds them", async () => {
+    const first = [inBatch("a", 1)];
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ status: "processing", expectedCount: 3, creatives: [...first, inBatch("b", 0)] })));
+    render(<SetupAdsStep business={business} initialAds={first} />);
+    expect(await screen.findByText("1 more ad is still being made. It appears here when it's ready.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Ad b/ })).toBeInTheDocument();
+    expect(screen.queryByText(/couldn't be made/)).not.toBeInTheDocument();
   });
 
   it("a failed approve keeps the owner on the step and says so", async () => {
