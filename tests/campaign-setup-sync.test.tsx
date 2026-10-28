@@ -252,6 +252,8 @@ describe("campaign sync feedback", () => {
     expect(screen.getByText(/new ad set.*3 days at about ₹69 a result buys about 21 results/)).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Run for"), { target: { value: "2" } });
     expect(screen.getByText(/Total limit on Meta: ₹1,000 over 2 days/)).toBeInTheDocument();
+    // #1292: the trust line follows the chosen days.
+    expect(screen.getByText("₹500 a day, stops at ₹1,000. Pause any time.")).toBeInTheDocument();
     expect(screen.getByText(/2 days at about ₹69 a result buys about 14 results/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Approve total and activate" }));
     await screen.findByText(/₹1,000 total limit on Meta for 2 days/);
