@@ -1,4 +1,5 @@
 import { GRAPH } from "@/lib/meta/graph-version";
+import { jpegIfWebp } from "@/lib/imageGen/encode";
 import { z } from "zod";
 import { WHATSAPP_PUBLISHER_PLATFORMS } from "@/lib/meta/placements";
 import type { SetupReads } from "@/lib/meta/setup-checklist";
@@ -1258,7 +1259,8 @@ export class MetaClient {
   }
 
   async uploadAdImageBytes(bytes: Uint8Array): Promise<string> {
-    const b64 = Buffer.from(bytes).toString("base64");
+    // #1897: stored ads are WebP; Meta's ad images are sent as JPEG.
+    const b64 = Buffer.from((await jpegIfWebp(bytes)).bytes).toString("base64");
     const data = await this.graph<{ images: Record<string, { hash: string }> }>(
       `${this.creds.adAccountId}/adimages`,
       { method: "POST", form: { bytes: b64 } },
