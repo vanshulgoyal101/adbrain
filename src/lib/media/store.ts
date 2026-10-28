@@ -67,8 +67,18 @@ export async function signUpload(admin: SupabaseClient, input: SignInput): Promi
     throw new MediaError(429, "MEDIA_QUOTA", `You've used ${MEDIA_MONTHLY_UPLOADS} of ${MEDIA_MONTHLY_UPLOADS} photo uploads this month.`);
   }
 
-  // A pending row (an earlier try that didn't finish) keeps its path, so retrying never stores the file twice.
+  // A pending row (an earlier try that didn't finish) is reused, so retrying never stores the file twice; it gets a new
+  // path, because an upload token can't overwrite (Reviewer, #1245), and the old object (if any) goes.
   let row = existing;
+  if (row) {
+    const retired = row.path;
+    const path = `${input.businessId}/${randomUUID()}.${MEDIA_EXTENSION[input.mime as MediaMime]}`;
+    const { data: moved, error: moveError } = await admin.from("media_assets").update({ path, updated_at: new Date().toISOString() })
+      .eq("id", row.id).eq("status", "pending").select(COLUMNS).single();
+    if (moveError || !moved) throw new MediaError(503, "MEDIA_UNAVAILABLE", "Couldn't save the photo. Try again.");
+    row = moved as MediaRow;
+    await admin.storage.from(MEDIA_BUCKET).remove([retired]).catch(() => undefined);
+  }
   if (!row) {
     const path = `${input.businessId}/${randomUUID()}.${MEDIA_EXTENSION[input.mime as MediaMime]}`;
     const { data, error } = await admin.from("media_assets").insert({
@@ -84,7 +94,8 @@ export async function signUpload(admin: SupabaseClient, input: SignInput): Promi
     } else row = data as MediaRow;
   }
   if (!row) throw new MediaError(503, "MEDIA_UNAVAILABLE", "Couldn't save the photo. Try again.");
-  const { data: signed, error } = await admin.storage.from(MEDIA_BUCKET).createSignedUploadUrl(row.path, { upsert: true });
+  // Reviewer (#1245): a token that could overwrite would let a finished photo be swapped for other bytes for ~2 h.
+  const { data: signed, error } = await admin.storage.from(MEDIA_BUCKET).createSignedUploadUrl(row.path, { upsert: false });
   if (error || !signed) throw new MediaError(503, "MEDIA_UNAVAILABLE", "Couldn't start the upload. Try again.");
   return { duplicate: false, id: row.id, path: row.path, token: signed.token, fit };
 }
@@ -115,13 +126,43 @@ export async function finalizeUpload(admin: SupabaseClient, row: MediaRow): Prom
   const mime = meta?.format ? SHARP_MIME[meta.format] : undefined;
   if (!meta?.width || !meta.height || !mime) return reject(415, "MEDIA_TYPE", "Please choose a JPG, PNG or WebP photo.");
   if (Math.max(meta.width, meta.height) > MEDIA_MAX_LONG_SIDE * 2) return reject(413, "MEDIA_TOO_LARGE", "This photo is too large. Add it again so it can be resized.");
-  const fit = mediaFit(meta.width, meta.height);
+  // Reviewer (#1245): EXIF/XMP/IPTC can carry GPS, a camera serial and times. The server re-encodes without them
+  // (sharp drops metadata unless asked; `rotate()` applies the orientation first), whatever the browser did.
+  let stored: Uint8Array = bytes, width = meta.width, height = meta.height;
+  if (meta.exif || meta.xmp || meta.iptc) {
+    const clean = await sharp(bytes).rotate().toFormat(meta.format as "jpeg" | "png" | "webp", meta.format === "jpeg" ? { quality: 90 } : {})
+      .toBuffer({ resolveWithObject: true }).catch(() => null);
+    if (!clean) return reject(415, "MEDIA_TYPE", "Please choose a JPG, PNG or WebP photo.");
+    const { error: writeError } = await admin.storage.from(MEDIA_BUCKET).upload(row.path, clean.data, { upsert: true, contentType: mime });
+    if (writeError) throw new MediaError(503, "MEDIA_UNAVAILABLE", "Couldn't save the photo. Try again.");
+    stored = new Uint8Array(clean.data);
+    width = clean.info.width;
+    height = clean.info.height;
+  }
+  const fit = mediaFit(width, height);
   if (fit.level === "too_small") return reject(422, "MEDIA_TOO_SMALL", fit.message);
+  const storedSha256 = createHash("sha256").update(stored).digest("hex");
   const { data, error: saveError } = await admin.from("media_assets").update({
-    status: "ready", bytes: bytes.length, mime, width: meta.width, height: meta.height, checks: { fit }, updated_at: new Date().toISOString(),
+    status: "ready", bytes: stored.length, mime, width, height, checks: { fit, storedSha256 }, updated_at: new Date().toISOString(),
   }).eq("id", row.id).select(COLUMNS).single();
   if (saveError || !data) throw new MediaError(503, "MEDIA_UNAVAILABLE", "Couldn't save the photo. Try again.");
   return (await mediaViews(admin, [data as MediaRow]))[0];
+}
+
+/**
+ * The bytes of a finished photo for use (a picture, a Meta upload), only if they're still what finalize stored
+ * (Reviewer, #1245): anything else is refused rather than put in an ad.
+ */
+export async function readVerifiedMedia(admin: SupabaseClient, row: MediaRow): Promise<Uint8Array> {
+  if (row.status !== "ready") throw new MediaError(409, "MEDIA_NOT_UPLOADED", "This photo isn't ready yet.");
+  const { data: blob, error } = await admin.storage.from(MEDIA_BUCKET).download(row.path);
+  if (error || !blob) throw new MediaError(503, "MEDIA_UNAVAILABLE", "Couldn't read the photo. Try again.");
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  const expected = typeof row.checks?.storedSha256 === "string" ? row.checks.storedSha256 : row.sha256;
+  if (createHash("sha256").update(bytes).digest("hex") !== expected) {
+    throw new MediaError(409, "MEDIA_CHANGED", "This photo changed after it was added. Add it again.");
+  }
+  return bytes;
 }
 
 /** Rows to what the library shows, each with a signed URL to the private object (an hour). */

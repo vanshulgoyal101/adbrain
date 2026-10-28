@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { MEDIA_MONTHLY_UPLOADS, mediaFit } from "@/lib/media/rules";
 const CONFIRMED = "2026-10-28T10:00:00.000Z";
-import { deleteMedia, finalizeUpload, listMedia, monthStartIst, signUpload, type MediaRow } from "@/lib/media/store";
+import { deleteMedia, finalizeUpload, listMedia, monthStartIst, readVerifiedMedia, signUpload, type MediaRow } from "@/lib/media/store";
 
 vi.mock("@/lib/env", () => ({ getEnv: () => ({ MEDIA_UPLOADS_ENABLED: true }) }));
 
@@ -13,6 +13,7 @@ type Row = Record<string, unknown>;
 function fakeSupabase() {
   const tables: Record<string, Row[]> = { media_assets: [], media_consents: [], creatives: [], campaigns: [] };
   const objects = new Map<string, Uint8Array>();
+  const uploadOptions: { path: string; upsert?: boolean }[] = [];
   const removed: string[] = [];
   const query = (table: string) => {
     const filters: ((row: Row) => boolean)[] = [];
@@ -58,7 +59,11 @@ function fakeSupabase() {
     from: query,
     storage: {
       from: () => ({
-        createSignedUploadUrl: async (path: string) => ({ data: { path, token: `token-${path}`, signedUrl: `https://storage.test/upload/${path}` }, error: null }),
+        createSignedUploadUrl: async (path: string, options?: { upsert?: boolean }) => {
+          uploadOptions.push({ path, upsert: options?.upsert });
+          return { data: { path, token: `token-${path}`, signedUrl: `https://storage.test/upload/${path}` }, error: null };
+        },
+        upload: async (path: string, body: Uint8Array) => { objects.set(path, new Uint8Array(body)); return { data: { path }, error: null }; },
         download: async (path: string) => objects.has(path)
           ? { data: new Blob([objects.get(path)! as BlobPart]), error: null }
           : { data: null, error: { message: "Object not found" } },
@@ -67,7 +72,7 @@ function fakeSupabase() {
       }),
     },
   };
-  return { client: client as unknown as SupabaseClient, tables, objects, removed };
+  return { client: client as unknown as SupabaseClient, tables, objects, removed, uploadOptions };
 }
 
 const BUSINESS = "11111111-1111-4111-8111-111111111111";
@@ -118,13 +123,18 @@ describe("signUpload (#1209)", () => {
     expect(db.tables.media_assets).toEqual([]);
   });
 
-  it("reuses an unfinished upload's path and returns a finished duplicate instead of a second copy", async () => {
+  // Reviewer (#1245): an upload token never overwrites; a retry gets a new path on the same row, and the old object goes.
+  it("a retry of an unfinished upload gets a new path on the same row; tokens can't overwrite; a finished one is a duplicate", async () => {
     const bytes = await photo(1080, 1350);
     const first = await signed(bytes);
+    db.objects.set(first.duplicate ? "" : first.path, bytes);
     const again = await signed(bytes);
     if (first.duplicate || again.duplicate) throw new Error("unexpected duplicate");
-    expect(again.path).toBe(first.path);
-    db.objects.set(first.path, bytes);
+    expect(again.id).toBe(first.id);
+    expect(again.path).not.toBe(first.path);
+    expect(db.objects.has(first.path)).toBe(false);
+    expect(db.uploadOptions.every((call) => call.upsert === false)).toBe(true);
+    db.objects.set(again.path, bytes);
     await finalizeUpload(db.client, db.tables.media_assets[0] as MediaRow);
     await expect(signed(bytes)).resolves.toMatchObject({ duplicate: true, asset: { id: first.id } });
     expect(db.tables.media_assets).toHaveLength(1);
@@ -147,7 +157,7 @@ describe("finalizeUpload (#1209)", () => {
   it("re-reads the stored photo, records its real size and fit, and lists it with a signed URL", async () => {
     const bytes = await photo(1080, 1350);
     const asset = await finalizeUpload(db.client, await pending(bytes));
-    expect(asset).toMatchObject({ width: 1080, height: 1350, bytes: bytes.length, fit: { level: "ready", ratio: "4:5" } });
+    expect(asset).toMatchObject({ width: 1080, height: 1350, fit: { level: "ready", ratio: "4:5" } });
     expect(asset.url).toMatch(/^https:\/\/storage\.test\/sign\//);
     expect(db.tables.media_assets[0]).toMatchObject({ status: "ready", mime: "image/jpeg" });
     expect((await listMedia(db.client, BUSINESS)).items.map((item) => item.id)).toEqual([asset.id]);
@@ -169,6 +179,29 @@ describe("finalizeUpload (#1209)", () => {
     expect(db.tables.media_assets[0]).toMatchObject({ status: "ready", mime: "image/png" });
     const small = await photo(400, 400);
     await expect(finalizeUpload(db.client, await pending(small))).rejects.toMatchObject({ code: "MEDIA_TOO_SMALL" });
+  });
+
+  // Reviewer (#1245): an owner's home or a client's address must not ride along in a photo's EXIF into ads or Meta.
+  it("strips EXIF/GPS on the server, whatever the browser did, and records the stored object's own hash", async () => {
+    const withGps = new Uint8Array(await sharp({ create: { width: 1080, height: 1350, channels: 3, background: "#4a7" } })
+      .withExif({ IFD0: { Make: "PhoneCo", Model: "X1" }, IFD3: { GPSLatitudeRef: "N", GPSLatitude: "30/1 44/1 0/1", GPSLongitudeRef: "E", GPSLongitude: "76/1 47/1 0/1" } })
+      .jpeg().toBuffer());
+    expect((await sharp(withGps).metadata()).exif).toBeDefined();
+    const row = await pending(withGps);
+    await finalizeUpload(db.client, row);
+    const stored = db.objects.get(row.path)!;
+    expect((await sharp(stored).metadata()).exif).toBeUndefined();
+    expect(db.tables.media_assets[0]).toMatchObject({ status: "ready", bytes: stored.length, checks: expect.objectContaining({ storedSha256: sha(stored) }) });
+  });
+
+  it("a photo is read for use only if it's still the bytes finalize stored", async () => {
+    const bytes = await photo(1080, 1350);
+    const row = await pending(bytes);
+    await finalizeUpload(db.client, row);
+    const ready = db.tables.media_assets[0] as MediaRow;
+    await expect(readVerifiedMedia(db.client, ready)).resolves.toBeInstanceOf(Uint8Array);
+    db.objects.set(ready.path, await photo(1080, 1351));
+    await expect(readVerifiedMedia(db.client, ready)).rejects.toMatchObject({ code: "MEDIA_CHANGED" });
   });
 
   it("asks to retry when the upload never arrived, and keeps the row for that retry", async () => {
