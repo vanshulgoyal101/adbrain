@@ -7,9 +7,10 @@ const getPrimaryBusiness = vi.hoisted(() => vi.fn());
 const getBrandAssets = vi.hoisted(() => vi.fn(async () => [] as { type: string }[]));
 // An owner whose campaign has gone live sees the full Create; a first-timer gets the setup step (#1270).
 const hasLaunchedCampaign = vi.hoisted(() => vi.fn(async () => true));
-const getLatestCreativeBatch = vi.hoisted(() => vi.fn(async () => []));
-vi.mock("@/lib/supabase/queries", () => ({ getPrimaryBusiness, getBrandAssets, hasLaunchedCampaign, getLatestCreativeBatch }));
-vi.mock("@/components/setup-ads-step", () => ({ SetupAdsStep: () => <div>Setup step 2</div> }));
+const getSetupCreativeBatch = vi.hoisted(() => vi.fn(async () => ({ ads: [], newest: null, pending: null })));
+vi.mock("@/lib/supabase/queries", () => ({ getPrimaryBusiness, getBrandAssets, hasLaunchedCampaign, getSetupCreativeBatch }));
+const setupProps = vi.hoisted(() => vi.fn());
+vi.mock("@/components/setup-ads-step", () => ({ SetupAdsStep: (props: unknown) => { setupProps(props); return <div>Setup step 2</div>; } }));
 vi.mock("@/components/ad-assistant", () => ({ AdAssistant: () => <div>Assistant</div> }));
 
 const sparse = {
@@ -91,5 +92,22 @@ describe("Create page for a first-timer (#1270)", () => {
     hasLaunchedCampaign.mockResolvedValue(false);
     const { default: CreatePage } = await import("@/app/(app)/create/page");
     await expect(CreatePage({ searchParams: Promise.resolve({}) })).rejects.toThrow("NEXT_REDIRECT");
+  });
+
+  it("a short batch from the last 15 minutes is checked before anything new is made (#1402)", async () => {
+    const usable = { ...sparse, vertical: "Bakery", locations: ["Jaipur"], offers: ["Free cake"], phone: "9876543210" } as unknown as Business;
+    getPrimaryBusiness.mockResolvedValue(usable);
+    hasLaunchedCampaign.mockResolvedValue(false);
+    const { default: CreatePage } = await import("@/app/(app)/create/page");
+    const { pendingSetupBatch } = await import("@/lib/creative/setup-picks");
+    const now = Date.parse("2026-10-28T12:00:00Z");
+    const newest = (count: number, minutesAgo: number) => ({ generationId: "g1", count, createdAt: new Date(now - minutesAgo * 60_000).toISOString() });
+    expect(pendingSetupBatch(newest(2, 2), now)).toEqual({ generationId: "g1" });
+    expect(pendingSetupBatch(newest(3, 2), now)).toBeNull();
+    expect(pendingSetupBatch(newest(1, 20), now)).toBeNull();
+    expect(pendingSetupBatch(null, now)).toBeNull();
+    getSetupCreativeBatch.mockResolvedValueOnce({ ads: [], newest: newest(2, 2), pending: { generationId: "g1" } } as never);
+    render(await CreatePage({ searchParams: Promise.resolve({}) }));
+    expect(setupProps.mock.calls.at(-1)?.[0].pendingBatch).toEqual({ generationId: "g1" });
   });
 });

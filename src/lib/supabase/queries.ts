@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { pendingSetupBatch, setupBatch } from "@/lib/creative/setup-picks";
 import { attachRealEnquiries } from "@/lib/campaign/real-enquiries";
 import { cache } from "react";
 import { z } from "zod";
@@ -138,14 +139,18 @@ export async function getCreatives(businessId: string): Promise<Creative[]> {
   return data ?? [];
 }
 
-/** #1270 (WS1 step 2): the business's newest Create batch (one `variant_group`), oldest first. */
-export async function getLatestCreativeBatch(businessId: string): Promise<Creative[]> {
+/**
+ * #1270/#1402 (WS1 step 2): the ads setup made, oldest first: the newest batch (one `variant_group`), plus earlier
+ * batches from the last 2 hours while there are fewer than 3 ads, so a "Make another" top-up shows beside its batch.
+ * `newest` says when that batch started, so a short one can be checked before anything new is made.
+ */
+export async function getSetupCreativeBatch(businessId: string): Promise<ReturnType<typeof setupBatch<Creative>> & { pending: { generationId: string } | null }> {
   const supabase = await createClient();
   const { data, error } = await supabase.from("creatives").select("*")
-    .eq("business_id", businessId).order("created_at", { ascending: false }).limit(6);
+    .eq("business_id", businessId).order("created_at", { ascending: false }).limit(12);
   if (error) throw new Error("Ads could not be loaded.");
-  const group = data?.[0]?.variant_group;
-  return (data ?? []).filter((creative) => group && creative.variant_group === group).reverse();
+  const batch = setupBatch(data ?? []);
+  return { ...batch, pending: pendingSetupBatch(batch.newest, Date.now()) };
 }
 
 /** Brand assets for a business, newest first. */

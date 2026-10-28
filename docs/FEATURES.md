@@ -140,8 +140,11 @@ showing one line of progress at a time. Then it shows the newest batch
 (`variant_group`) with 2 pre-picked by a fixed rule (`setupPicks`: fewest text
 repairs, then no image fallback, then the order made). "Continue" approves the picks
 and opens `/campaigns?new=1&creatives=…`. The generation id is kept in
-sessionStorage, so coming back mid-run reads the saved ads instead of starting
-again; missing ads show "N ads couldn't be made. Make another". `/create?all=1`
+localStorage for 15 minutes (#1402), so coming back or a second tab reads the
+saved ads instead of starting again, and a short batch from the last 15 minutes
+(another device) is checked before anything new is made. The step waits through
+"processing" and "partial", and treats "unresolved" as finished short; missing ads
+show "N ads couldn't be made. Make another", whose ads show beside their batch. `/create?all=1`
 opens the full Create below.
 
 1. When the business's campaigns have results, Create opens on one line such as "Your

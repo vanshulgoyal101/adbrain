@@ -39,19 +39,44 @@ export function storyFor(slots: LiveAd[] | null): Story {
 }
 
 const generationKey = (businessId: string) => `setup-generation:${businessId}`;
+/** A batch takes 1–3 minutes; a kept id older than this is a leftover, not a run in progress. */
+const KEEP_MS = 15 * 60_000;
+// #1402: the status GET allows 30 reads per 5 minutes; every 10 s for 4 minutes stays inside it.
+const POLL_MS = 10_000;
+const POLLS = 24;
+
+/** #1402: the run in progress lives in localStorage, so a second tab resumes it instead of paying for another. */
+function readKept(businessId: string): { id: string; count: number } | null {
+  try {
+    const [id, count, at] = (window.localStorage.getItem(generationKey(businessId)) ?? "").split(":");
+    if (!id || Date.now() - Number(at) > KEEP_MS) return null;
+    return { id, count: Number(count) || FULL_BATCH };
+  } catch { return null; }
+}
+function keep(businessId: string, id: string, count: number) {
+  try { window.localStorage.setItem(generationKey(businessId), `${id}:${count}:${Date.now()}`); } catch { /* private mode: this tab still guards itself */ }
+}
+function forget(businessId: string) {
+  try { window.localStorage.removeItem(generationKey(businessId)); } catch { /* nothing kept */ }
+}
 
 /**
  * #1270 (#1251 WS1 step 2): makes 3 ads with the existing interview and Create stream, then shows them
  * with the best 2 picked (fixed rule, `setupPicks`). Leaving mid-way is safe: the generation id is kept,
  * and coming back reads what was saved instead of starting again (#1261).
  */
-export function SetupAdsStep({ business, initialAds }: { business: Business; initialAds: Creative[] }) {
+export function SetupAdsStep({ business, initialAds, pendingBatch = null }: {
+  business: Business;
+  initialAds: Creative[];
+  /** #1402: the newest batch is recent and short, so it may still be running (e.g. started on another device). */
+  pendingBatch?: { generationId: string } | null;
+}) {
   const language = defaultAdLanguage(business.languages);
   const languageLabel = CREATE_LANGUAGES.find((item) => item.id === language)?.label ?? "English";
   const [ads, setAds] = useState<Creative[]>(initialAds);
   const [picked, setPicked] = useState<Set<string>>(() => new Set(setupPicks(initialAds)));
   const [slots, setSlots] = useState<LiveAd[] | null>(null);
-  const [making, setMaking] = useState(initialAds.length === 0);
+  const [making, setMaking] = useState(initialAds.length === 0 || Boolean(pendingBatch));
   const [failedCount, setFailedCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -59,9 +84,10 @@ export function SetupAdsStep({ business, initialAds }: { business: Business; ini
   const briefRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (startedRef.current || initialAds.length) return;
+    if (startedRef.current) return;
     startedRef.current = true;
-    void makeAds(FULL_BATCH);
+    if (pendingBatch) void resume(pendingBatch.generationId);
+    else if (!initialAds.length) void makeAds(FULL_BATCH);
     // Runs once per visit; makeAds reads only stable props.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -73,21 +99,36 @@ export function SetupAdsStep({ business, initialAds }: { business: Business; ini
     setFailedCount(Math.max(0, expected - saved.length));
     setSlots(null);
     setMaking(false);
-    sessionStorage.removeItem(generationKey(business.id));
+    forget(business.id);
   }
 
-  async function savedBatch(generationId: string, expected: number): Promise<Creative[] | null> {
-    for (let attempt = 0; attempt < 15; attempt += 1) {
+  /** #1402: wait for a batch already running (this or another tab or device) instead of starting one. */
+  async function resume(generationId: string, expected?: number) {
+    const done = await savedBatch(generationId, expected);
+    if (done) return finish(done.creatives, done.expected, false);
+    setMaking(false);
+    setError("Your ads are still being made. Check again in a minute; we won't start another batch.");
+  }
+
+  /**
+   * The batch once it has finished: `complete`, `failed`, or `unresolved` (finished short). `processing` and
+   * `partial` (some ads saved, still running) keep waiting (#1402). Null when it's still running after ~4 minutes.
+   */
+  async function savedBatch(generationId: string, expected?: number): Promise<{ creatives: Creative[]; expected: number } | null> {
+    for (let attempt = 0; attempt < POLLS; attempt += 1) {
       try {
-        const res = await fetch(`/api/creatives/generate?businessId=${encodeURIComponent(business.id)}&generationId=${encodeURIComponent(generationId)}&expectedCount=${expected}`, { cache: "no-store" });
+        const res = await fetch(`/api/creatives/generate?businessId=${encodeURIComponent(business.id)}&generationId=${encodeURIComponent(generationId)}${expected ? `&expectedCount=${expected}` : ""}`, { cache: "no-store" });
+        if (res.status === 404) return { creatives: [], expected: expected ?? FULL_BATCH };
         if (res.ok) {
-          const data = (await res.json()) as { status?: string; creatives?: Creative[] };
-          if (data.status !== "processing" && data.status !== "unresolved") return data.creatives ?? [];
+          const data = (await res.json()) as { status?: string; creatives?: Creative[]; expectedCount?: number };
+          if (data.status === "complete" || data.status === "failed" || data.status === "unresolved") {
+            return { creatives: data.creatives ?? [], expected: data.expectedCount ?? expected ?? FULL_BATCH };
+          }
         }
       } catch {
         // Keep checking; never start the generation again.
       }
-      await new Promise((resolve) => window.setTimeout(resolve, 2_000));
+      await new Promise((resolve) => window.setTimeout(resolve, POLL_MS));
     }
     return null;
   }
@@ -117,24 +158,22 @@ export function SetupAdsStep({ business, initialAds }: { business: Business; ini
     setError(null);
     setMaking(true);
     setSlots(null);
-    const key = generationKey(business.id);
-    const kept = sessionStorage.getItem(key);
+    const kept = readKept(business.id);
     if (kept) {
-      const [id, expected] = kept.split(":");
-      const saved = await savedBatch(id, Number(expected) || count);
-      if (saved?.length) return finish(saved, Number(expected) || count, count === FULL_BATCH);
+      const saved = await savedBatch(kept.id, kept.count);
+      if (saved?.creatives.length) return finish(saved.creatives, saved.expected, false);
       if (saved === null) {
         setMaking(false);
         setError("Your ads are still being made. Check again in a minute; we won't start another batch.");
         return;
       }
-      sessionStorage.removeItem(key);
+      forget(business.id);
     }
     let generationId = "";
     try {
       const adBrief = await brief();
       generationId = crypto.randomUUID();
-      sessionStorage.setItem(key, `${generationId}:${count}`);
+      keep(business.id, generationId, count);
       let live: LiveAd[] = Array.from({ length: count }, () => ({ stage: "starting" as const }));
       setSlots(live);
       const res = await fetch("/api/creatives/generate", {
@@ -150,24 +189,24 @@ export function SetupAdsStep({ business, initialAds }: { business: Business; ini
       if (status >= 200 && status < 300 && saved.length) return finish(saved, count, count === FULL_BATCH);
       if (status >= 400 && status < 500 && status !== 408) {
         // Refused before anything was made: nothing to recover.
-        sessionStorage.removeItem(key);
+        forget(business.id);
         generationId = "";
         throw new Error("refused");
       }
       const recovered = await savedBatch(generationId, count);
-      if (recovered?.length) return finish(recovered, count, count === FULL_BATCH);
+      if (recovered?.creatives.length) return finish(recovered.creatives, recovered.expected, count === FULL_BATCH);
       throw new Error("none");
     } catch {
       if (generationId) {
         const recovered = await savedBatch(generationId, count);
-        if (recovered?.length) return finish(recovered, count, count === FULL_BATCH);
+        if (recovered?.creatives.length) return finish(recovered.creatives, recovered.expected, count === FULL_BATCH);
         if (recovered === null) {
           setMaking(false);
           setSlots(null);
           setError("Your ads are still being made. Check again in a minute; we won't start another batch.");
           return;
         }
-        sessionStorage.removeItem(key);
+        forget(business.id);
       }
       setMaking(false);
       setSlots(null);

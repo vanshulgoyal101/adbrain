@@ -11,7 +11,7 @@ import { SetupAdsStep } from "@/components/setup-ads-step";
 import { setupFieldsFrom } from "@/lib/brand/setup-fields";
 import { brandUsable } from "@/lib/brand/usable";
 import { clientCreative } from "@/lib/creative/client-receipt";
-import { getBrandAssets, getLatestCreativeBatch, getPrimaryBusiness, hasLaunchedCampaign } from "@/lib/supabase/queries";
+import { getBrandAssets, getSetupCreativeBatch, getPrimaryBusiness, hasLaunchedCampaign } from "@/lib/supabase/queries";
 import { occasionsFor } from "@/lib/seasonal";
 
 export const metadata = {
@@ -49,11 +49,12 @@ export default async function CreatePage({ searchParams }: { searchParams?: Prom
   // `?all=1` opens the full Create. If either read fails, the full Create shows as before.
   if (params.all !== "1") {
     const setup = await Promise.resolve()
-      .then(() => Promise.all([hasLaunchedCampaign(business.id), getLatestCreativeBatch(business.id)]))
-      .then(([launched, batch]) => launched ? null : batch.map(clientCreative)).catch(() => null);
+      .then(() => Promise.all([hasLaunchedCampaign(business.id), getSetupCreativeBatch(business.id)]))
+      .then(([launched, batch]) => launched ? null : batch).catch(() => null);
     // #1272: the + button lands here; a first-timer without the five facts resumes at step 1.
     if (setup && !brandUsable({ ...business, vertical: setupFieldsFrom(business).vertical })) redirect("/brand");
-    if (setup) return <SetupAdsStep business={business} initialAds={setup} />;
+    // #1402: a short batch from the last 15 minutes (another tab or device) is checked before anything new is made.
+    if (setup) return <SetupAdsStep business={business} initialAds={setup.ads.map(clientCreative)} pendingBatch={setup.pending} />;
   }
 
   const missing = [
