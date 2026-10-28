@@ -20,7 +20,7 @@ function replay(tape: { path: string; status: number; body: unknown }[] = record
     const url = new URL(String(input));
     expect(init?.method ?? "GET").toBe("GET");
     url.searchParams.delete("access_token");
-    const path = decodeURIComponent(url.pathname.replace("/v21.0/", "") + url.search);
+    const path = decodeURIComponent(url.pathname.replace("/v26.0/", "") + url.search);
     calls.push(path);
     if (path === `${creds.pageId}?fields=access_token`) return Response.json({ access_token: "page-token" });
     const exchange = tape.find((entry) => entry.path === path);
@@ -126,7 +126,7 @@ describe("core: WhatsApp button number against recorded Graph reads (#157)", () 
       return replayed(input, init);
     });
     const result = new MetaClient(creds).getWhatsAppNumber("+91 ••••• 4842", both);
-    await vi.waitFor(() => expect(started).toEqual(expect.arrayContaining([`/v21.0/${creds.pageId}`, `/v21.0/${creds.adAccountId}`])));
+    await vi.waitFor(() => expect(started).toEqual(expect.arrayContaining([`/v26.0/${creds.pageId}`, `/v26.0/${creds.adAccountId}`])));
     release();
     expect(await result).toBe("+919999994842");
   });

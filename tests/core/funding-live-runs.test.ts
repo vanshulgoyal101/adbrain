@@ -17,7 +17,7 @@ function replay(adSets: Record<string, unknown> = adSetsBody) {
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = new URL(String(input));
     url.searchParams.delete("access_token");
-    const call = `${init?.method ?? "GET"} ${url.pathname.replace("/v21.0/", "")}${url.search}`;
+    const call = `${init?.method ?? "GET"} ${url.pathname.replace("/v26.0/", "")}${url.search}`;
     sent.push(call);
     const exchange = recorded.find(item => call === `GET ${item.path}`);
     if (!exchange) throw new Error(`Unrecorded Graph call: ${call}`);
@@ -90,7 +90,7 @@ describe("core: activation funding counts the account's other live capped runs (
 
   it("fails closed on a listing it can't verify", async () => {
     for (const adSets of [
-      { ...adSetsBody, paging: { next: "https://graph.facebook.com/v21.0/next" } },
+      { ...adSetsBody, paging: { next: "https://graph.facebook.com/v26.0/next" } },
       { ...adSetsBody, data: [{ ...adSetsBody.data[0], budget_remaining: "12.5" }] },
       { ...adSetsBody, data: [{ ...adSetsBody.data[0], daily_budget: "-1" }] },
       { ...adSetsBody, data: [{ lifetime_budget: "25000", budget_remaining: "25000" }] },

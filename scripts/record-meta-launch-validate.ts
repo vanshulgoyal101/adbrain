@@ -14,7 +14,7 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { MetaClient, type AdDestination } from "@/lib/meta/client";
 
-const GRAPH = "https://graph.facebook.com/v21.0/";
+const GRAPH = "https://graph.facebook.com/v26.0/";
 const VALIDATE = JSON.stringify(["validate_only"]);
 const token = process.env.META_SYSTEM_USER_TOKEN!;
 const account = `act_${process.env.META_AD_ACCOUNT_ID!.replace(/^act_/, "")}`;
@@ -65,11 +65,11 @@ globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     const res = await realFetch(input, init);
     const body = await res.clone().json();
     url.searchParams.delete("access_token");
-    geoMeta = { path: url.pathname.replace("/v21.0/", "") + url.search, status: res.status, body };
+    geoMeta = { path: url.pathname.replace("/v26.0/", "") + url.search, status: res.status, body };
     return res;
   }
   if (!url.href.startsWith(GRAPH) || (init?.method ?? "GET") !== "POST") return realFetch(input, init);
-  const path = url.pathname.replace("/v21.0/", "");
+  const path = url.pathname.replace("/v26.0/", "");
   const kind = path.split("/").pop()!;
   const form = Object.fromEntries([...(init!.body as URLSearchParams)].filter(([key]) => key !== "access_token"));
   if (kind === "adimages") {
