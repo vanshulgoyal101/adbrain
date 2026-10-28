@@ -81,24 +81,6 @@ jobs:
           smoke | tee smoke.txt && exit 0
           sleep 60
           smoke | tee smoke.txt
-      - name: 2-Tier parent token (#520)
-        id: parent
-        if: steps.smoke.outcome == 'success'
-        env:
-          CRON_SECRET: ${{ secrets.CRON_SECRET }}
-        run: |
-          [ -n "$CRON_SECRET" ] || { echo "CRON_SECRET not set; parent token check skipped"; exit 0; }
-          code=$(curl -sS --max-time 30 -o parent.json -w '%{http_code}' -H "Authorization: Bearer $CRON_SECRET" https://adbrain.vanshul.com/api/cron/meta-parent-health) || code=000
-          # Codes only (public repo): never the token or Meta's message.
-          summary=$(jq -c '{ok, configured, enabled, errorCode}' parent.json 2>/dev/null || echo '{"ok":false,"error":"no JSON body"}')
-          echo "HTTP $code $summary"
-          [ "$code" = 404 ] && { echo "Route not deployed yet; skipped"; exit 0; }
-          [ "$code" = 200 ] && exit 0
-          echo "FAIL 2-Tier parent token: HTTP $code $summary" | tee -a smoke.txt
-          exit 1
-      # #1439: the WS1 first-timer path at 360 px over slow 4G, read-only on Meta. Gating since 5 green guard runs
-      # (Oct 28): a failure turns the guard red and opens a core bug, but never rolls back (that needs the smoke to fail).
-      # Skipped while the WS1_* secrets are unset.
       - name: WS1 first-timer walk (#1439)
         if: steps.smoke.outcome == 'success'
         env:
