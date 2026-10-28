@@ -6,7 +6,9 @@ import type { VerdictInput } from "@/lib/campaign/verdict";
  * without seeding fake Meta campaigns into production (crons would read them, and the Manage row would count them).
  * Figures follow Solaride's real runs; nothing here is read from or written to the database.
  */
-export type GalleryCard = { name: string; status: "Running" | "Paused" | "Ended"; input: VerdictInput; reviews?: AdReview[] };
+export type GalleryCard = { name: string; status: "Running" | "Paused" | "Ended"; input: VerdictInput; reviews?: AdReview[];
+  /** #1841: a card line outside the verdict (deleted in Meta, #1600; a new audience waiting, #1560/#1749). */
+  extra?: "deleted_in_meta" | "audience_waiting" };
 
 const DAY = 24 * 60 * 60 * 1000;
 const own = (typical: number) => ({ kind: "own" as const, results: 24, typical });
@@ -35,6 +37,8 @@ export function galleryCards(now = Date.now()): GalleryCard[] {
       ],
     },
     { name: "Ended, it worked", status: "Ended", input: { ...base, status: "completed", comparison: own(240) } },
+    { name: "Deleted in Meta", status: "Ended", input: { ...base, status: "completed" }, extra: "deleted_in_meta" },
+    { name: "New audience waiting", status: "Paused", input: { ...base, status: "paused" }, extra: "audience_waiting" },
     { name: "People waiting", status: "Running", input: { ...base, waiting: 2 } },
   ];
 }

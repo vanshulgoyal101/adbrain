@@ -16,10 +16,14 @@ describe("card states gallery (#1255)", () => {
       "Not showing after a day": "not_showing_day",
       "1 of 3 ads rejected": "early",
       "Ended, it worked": "ended_worked",
+      "Deleted in Meta": "ended_measured",
+      "New audience waiting": "measured",
       "People waiting": "measured",
     });
     const rejected = cards.find((card) => card.reviews)!;
     expect(rejectionCopy(rejected.reviews!.flatMap((review) => review.feedback))?.row).toBe("misleading");
     expect(verdict(cards.at(-1)!.input).sentence).toMatch(/^2 people are waiting for your reply\./);
+    // #1841 (Designer): the newer card states are on the page too, so walks cover them.
+    expect(cards.filter((card) => card.extra).map((card) => [card.name, card.extra])).toEqual([["Deleted in Meta", "deleted_in_meta"], ["New audience waiting", "audience_waiting"]]);
   });
 });
