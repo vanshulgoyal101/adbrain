@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import run4 from "./fixtures/create/cedar-ridge-run4.json";
-import { setupAdCost, setupGoal, setupPicks } from "@/lib/creative/setup-picks";
+import { setupAdCost, setupBatch, setupGoal, setupPicks } from "@/lib/creative/setup-picks";
 import type { Business, Creative } from "@/lib/types";
 
 // #1270 (#1251 WS1 slice 3): step 2 makes 3 ads with the existing Create calls and pre-picks the best 2.
@@ -59,6 +59,7 @@ describe("core: <SetupAdsStep> (#1270)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     sessionStorage.clear();
+    localStorage.clear();
     mocks.setCreativeStatus.mockResolvedValue({ ok: true });
   });
 
@@ -111,11 +112,11 @@ describe("core: <SetupAdsStep> (#1270)", () => {
     expect(generate).toHaveBeenCalledTimes(1);
     expect(generate.mock.calls[0][0]).toMatchObject({ businessId: business.id, brief: "Rooftop solar brief", count: 3, language: "en" });
     expect(screen.getByRole("button", { name: /Ad b/ })).toHaveAttribute("aria-pressed", "false");
-    expect(sessionStorage.length).toBe(0);
+    expect(localStorage.length).toBe(0);
   });
 
-  it("coming back mid-way reads the saved batch and never starts another (#1261)", async () => {
-    sessionStorage.setItem(`setup-generation:${business.id}`, "22222222-2222-4222-8222-222222222222:3");
+  it("coming back mid-way (or a second tab, #1402) reads the saved batch and never starts another (#1261)", async () => {
+    localStorage.setItem(`setup-generation:${business.id}`, `22222222-2222-4222-8222-222222222222:3:${Date.now()}`);
     vi.stubGlobal("fetch", vi.fn(async () => Response.json({ status: "complete", creatives: [ad("a"), ad("b")] })));
     render(<SetupAdsStep business={business} initialAds={[]} />);
     expect(await screen.findByRole("heading", { name: "Your ads are ready" })).toBeInTheDocument();
@@ -132,7 +133,7 @@ describe("core: <SetupAdsStep> (#1270)", () => {
     render(<SetupAdsStep business={business} initialAds={[]} />);
     expect(await screen.findByText("We couldn't make your ads this time.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
-    expect(sessionStorage.length).toBe(0);
+    expect(localStorage.length).toBe(0);
   });
 
   // #1407 (QA 2's prospect re-time): a sales visit leaves step 2 with all 3 ads as the marked pack, never via Review.
@@ -177,5 +178,67 @@ describe("core: <SetupAdsStep> (#1270)", () => {
     await act(async () => fireEvent.click(bar().getByRole("button", { name: "Continue with 2 ads" })));
     await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Not saved. Check your connection."));
     expect(mocks.push).not.toHaveBeenCalled();
+  });
+});
+
+describe("core: step 2 batches (#1402)", () => {
+  const status = (body: object) => Response.json(body);
+  beforeEach(() => { vi.clearAllMocks(); localStorage.clear(); sessionStorage.clear(); });
+  afterEach(() => vi.useRealTimers());
+
+  it("an id kept over 15 minutes ago is a leftover: a new batch is made", async () => {
+    localStorage.setItem(`setup-generation:${business.id}`, `22222222-2222-4222-8222-222222222222:3:${Date.now() - 16 * 60_000}`);
+    const generate = vi.fn();
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "/api/creatives/assistant") return Response.json({ ready: true, brief: "b" });
+      generate(init?.method);
+      return Response.json({ creatives: [ad("a"), ad("b"), ad("c")] });
+    }));
+    render(<SetupAdsStep business={business} initialAds={[]} />);
+    expect(await screen.findByRole("heading", { name: "Your ads are ready" })).toBeInTheDocument();
+    expect(generate).toHaveBeenCalledWith("POST");
+  });
+
+  it("a batch that finished short ('unresolved') is shown with what was saved, not 'still being made'", async () => {
+    localStorage.setItem(`setup-generation:${business.id}`, `22222222-2222-4222-8222-222222222222:3:${Date.now()}`);
+    vi.stubGlobal("fetch", vi.fn(async () => status({ status: "unresolved", creatives: [ad("a"), ad("b")], expectedCount: 3 })));
+    render(<SetupAdsStep business={business} initialAds={[]} />);
+    expect(await screen.findByRole("heading", { name: "Your ads are ready" })).toBeInTheDocument();
+    expect(screen.getByText(/1 ad couldn't be made\./)).toBeInTheDocument();
+    expect(screen.queryByText(/still being made/)).toBeNull();
+  });
+
+  it("a half-done batch ('partial') keeps waiting until it completes", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    localStorage.setItem(`setup-generation:${business.id}`, `22222222-2222-4222-8222-222222222222:3:${Date.now()}`);
+    const replies = [status({ status: "partial", creatives: [ad("a")], expectedCount: 3 }), status({ status: "complete", creatives: [ad("a"), ad("b"), ad("c")], expectedCount: 3 })];
+    vi.stubGlobal("fetch", vi.fn(async () => replies.shift() ?? status({ status: "complete", creatives: [ad("a"), ad("b"), ad("c")], expectedCount: 3 })));
+    render(<SetupAdsStep business={business} initialAds={[]} />);
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+    expect(screen.queryByRole("heading", { name: "Your ads are ready" })).toBeNull();
+    await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+    expect(await screen.findByRole("heading", { name: "Your ads are ready" })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /Ad [abc]/ })).toHaveLength(3);
+  });
+
+  it("on arrival the newest batch (a 'Make another' top-up comes last) is checked and its new ads join (#1402/#1407)", async () => {
+    const g1 = "22222222-2222-4222-8222-222222222222", g2 = "33333333-3333-4333-8333-333333333333";
+    const withGroup = (creative: Creative, group: string) => ({ ...creative, variant_group: group, created_at: new Date().toISOString() }) as Creative;
+    vi.stubGlobal("fetch", vi.fn(async () => status({ status: "complete", creatives: [withGroup(ad("c"), g2), withGroup(ad("d"), g2)], expectedCount: 2 })));
+    render(<SetupAdsStep business={business} initialAds={[withGroup(ad("a"), g1), withGroup(ad("b"), g1), withGroup(ad("c"), g2)]} />);
+    await waitFor(() => expect(screen.getAllByRole("button", { name: /Ad [abcd]/ })).toHaveLength(4));
+    expect(String((fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0])).toContain(`generationId=${g2}`);
+  });
+
+  it("a 'Make another' top-up shows beside its batch; a full newer batch shows alone", () => {
+    const row = (id: string, group: string, minutesAgo: number) => ({ ...ad(id), variant_group: group, created_at: new Date(Date.parse("2026-10-28T12:00:00Z") - minutesAgo * 60_000).toISOString() });
+    const topUp = setupBatch([row("c", "g2", 0), row("b", "g1", 5), row("a", "g1", 6)]);
+    expect(topUp.ads.map((creative) => creative.id)).toEqual(["a", "b", "c"]);
+    expect(topUp.newest).toMatchObject({ generationId: "g2", count: 1 });
+    const fresh = setupBatch([row("f", "g3", 0), row("e", "g3", 0), row("d", "g3", 1), row("c", "g2", 30)]);
+    expect(fresh.ads.map((creative) => creative.id)).toEqual(["d", "e", "f"]);
+    const old = setupBatch([row("c", "g2", 0), row("b", "g1", 3 * 60)]);
+    expect(old.ads.map((creative) => creative.id)).toEqual(["c"]);
+    expect(setupBatch([])).toEqual({ ads: [], newest: null });
   });
 });
