@@ -14,7 +14,8 @@ import type { SpendEvaluation } from "@/lib/campaign/spend";
 import type { AuditLog, Business, Campaign, CampaignResult, CreativePreview } from "@/lib/types";
 import { campaignAttention } from "@/lib/campaign/health";
 import { formatReplyTime } from "@/lib/leads/first-reply";
-import { CAMPAIGN_STATUS, Status } from "@/components/ui/status";
+import { campaignStatus, Status } from "@/components/ui/status";
+import { goneInMeta } from "@/lib/campaign/gone-in-meta";
 
 export interface WorkspaceHomeProps {
   business: Business | null;
@@ -50,6 +51,7 @@ export function WorkspaceHome({
   replyMinutes = null,
   now,
 }: WorkspaceHomeProps) {
+  const liveCampaigns = campaigns.filter((campaign) => !goneInMeta(campaign));
   const summary = business ? homeResults(campaigns, results) : null;
   const stale = business ? staleCampaignIds(campaigns, results, now) : [];
   const [next, ...later] = buildWorkQueue({ business, creatives, campaigns, metaReady });
@@ -151,10 +153,11 @@ export function WorkspaceHome({
                   </Link>
                 )}
               </div>
-              {campaigns.length ? (
+              {/* #1150: campaigns deleted or archived in Meta stay on Campaigns, folded. */}
+              {liveCampaigns.length ? (
                 <ul className="mt-2 divide-y divide-slate-200 border-b border-slate-200">
-                  {campaigns.slice(0, 3).map((campaign) => {
-                    const status = CAMPAIGN_STATUS[campaign.status] ?? CAMPAIGN_STATUS.draft;
+                  {liveCampaigns.slice(0, 3).map((campaign) => {
+                    const status = campaignStatus(campaign);
                     const attention = campaignAttention(campaign);
                     return (
                       <li key={campaign.id} className="py-3 sm:flex sm:items-center sm:justify-between sm:gap-6">
@@ -174,7 +177,7 @@ export function WorkspaceHome({
                 </ul>
               ) : (
                 <p className="mt-2 text-sm text-slate-600">
-                  No campaigns yet. Approved ads become a paused campaign you check before anything spends.
+                  {campaigns.length ? "No running or paused campaigns." : "No campaigns yet. Approved ads become a paused campaign you check before anything spends."}
                 </p>
               )}
             </section>

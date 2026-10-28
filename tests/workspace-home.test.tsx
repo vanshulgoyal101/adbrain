@@ -74,6 +74,17 @@ function suspenseBoundaries(node: any): any[] {
 }
 
 describe("Home workspace", () => {
+  // #1150: Home lists only campaigns still in Meta, with the Campaigns page's status word.
+  it("leaves campaigns deleted in Meta off Home's list", () => {
+    const run = (id: string, status: string, raw: object = {}) => ({ id, name: `Run ${id}`, status, daily_budget: 300, raw }) as unknown as Campaign;
+    render(<WorkspaceHome {...empty} business={business} campaigns={[run("old-1", "completed", { metaStatus: "DELETED" }), run("old-2", "completed", { metaStatus: "DELETED" }), run("live", "active")]} />);
+    const list = screen.getByRole("heading", { name: "Campaigns" }).closest("section")!;
+    expect(within(list).getByRole("link", { name: "Run live" })).toBeInTheDocument();
+    expect(within(list).queryByRole("link", { name: /Run old/ })).toBeNull();
+    expect(within(list).getByText("Running")).toBeInTheDocument();
+    expect(within(list).getByRole("link", { name: "See all 3" })).toBeInTheDocument();
+  });
+
   it("shows workspace loading while auth is pending and gates the shell on user and business", async () => {
     let resolveAuth!: (value: { id: string; email: string }) => void;
     let resolveBusiness!: (value: Business) => void;
