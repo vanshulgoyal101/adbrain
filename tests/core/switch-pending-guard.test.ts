@@ -32,6 +32,7 @@ const OTHER_WRITERS: Record<string, string> = {
   pauseCampaignTree: "stopping spend must always work",
   // Its turn-on call sits behind the activation guard above; its pause calls (spend enforcement) must never wait.
   updateCampaignStatus: "stopping spend must always work",
+  revokeGrant: "#1649: revokes the app's grant for a user on disconnect; never touches a campaign",
 };
 
 const READS = new Set([
