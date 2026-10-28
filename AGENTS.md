@@ -192,6 +192,11 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 	park stale issues rather than leaving them open with old status.
 - Prefer existing dependencies, official SDKs and maintained libraries over
 	rebuilding standard pieces. Keep custom code to AdBrain's own business rules.
+- **Lean (owner, Oct 28: no bloatware; #1171).** Delete before you add: every
+	feature PR removes or simplifies something, or says why not. Build only what a
+	customer or the owner needs now; no speculative features. A feature flag lives
+	14 days at most, then it ships on or its code is deleted. A one-off script is
+	deleted in the PR that used it (fixture recorders behind core tests stay).
 
 ## Branches and deployments
 
