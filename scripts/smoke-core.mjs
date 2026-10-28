@@ -106,10 +106,14 @@ try {
         return route.continue();
       }
     }
-    if (campaignSetup && request.method() === "POST" && url.origin === origin) {
+    if (campaignSetup && ["POST", "PUT"].includes(request.method()) && url.origin === origin) {
       // #497: choosing an ad starts a background plan, and Prepare may plan again. Both are read-only.
       if (url.pathname === "/api/campaigns/plan" && planCount++ < 2) return route.continue();
-      if (url.pathname === "/api/campaign-drafts" && draftCount++ === 0) {
+      // #1151: Prepare updates (PUT) a saved draft with the same ads instead of adding one; either save is the
+      // smoke account's own draft row, removed afterwards, and nothing reaches Meta.
+      const draftSave = (request.method() === "POST" && url.pathname === "/api/campaign-drafts")
+        || (request.method() === "PUT" && /^\/api\/campaign-drafts\/[0-9a-f-]{36}$/.test(url.pathname));
+      if (draftSave && draftCount++ === 0) {
         const response = await route.fetch();
         const draft = (await response.json().catch(() => null))?.data;
         if (response.ok() && draft?.draftId) savedDraft = { id: draft.draftId, version: draft.version };
