@@ -581,7 +581,7 @@ describe("<LeadInbox> saved enquiry workflow", () => {
     setFetch({ ok: true, json: async () => ({ leads: [], imported: 0 }) });
     render(<LeadInbox businessName="Fixture" initialLeads={[]} metaReady />);
     fireEvent.click(screen.getByRole("button", { name: "Check now" }));
-    expect(await screen.findByText("Checked Meta, but couldn't confirm everything was read.")).toBeInTheDocument();
+    expect(await screen.findByText("Some enquiries on Meta couldn't be checked. The ones below are saved; tap Check now to try again.")).toBeInTheDocument();
     expect(screen.queryByText(/You're up to date/)).toBeNull();
   });
 

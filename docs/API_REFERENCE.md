@@ -165,6 +165,7 @@ same identity; do not change a key or clear local recovery data to force progres
 | POST | `/api/payments/test/verify` | Test payment proof | Nonproduction only |
 | POST | `/api/payments/test/webhook` | Test signed event | Nonproduction only |
 | POST | `/api/events` | Fixed client event | Optional telemetry, normally 204 |
+| POST | `/api/feedback/pilot-day7` | `{businessId, answer: yes\|maybe\|no, reason: <code>}` or `{businessId, dismiss: true}` -> `{ok:true}`; **409** when the question isn't open (exempt, before day 7, already answered, or snoozed); **400** for an unlisted answer/reason or extra fields | Owner only; one `pilot_day7` (or `pilot_day7.dismissed`) product event, codes only (#1650) |
 | POST | `/api/auth/outcome` | How a browser sign-in step ended: `{method: password\|email_link\|google, outcome: success\|started}` or `{…, outcome: failed, code}` (Supabase code from a fixed list, else `other`) | Signed-out allowed; same origin, strict body ≤ 512 bytes, 20/min per address (`x-real-ip`) and 600/min overall; a `success` counts only with a session; 204, never the email (#451 L4) |
 | GET | `/api/cron/keepalive` | Cron Bearer auth | DB health and optional telemetry pruning |
 | GET | `/api/cron/enforce-spend` | Cron Bearer auth | Can pause live campaigns; `{ok,at,swept,unverified,reauth,managedSpendCaps}`, `reauth: [{key,since,activeCampaigns}]` for dead owner tokens, which don't fail the run (#758) |
