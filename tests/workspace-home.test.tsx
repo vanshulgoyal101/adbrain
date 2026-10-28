@@ -27,7 +27,7 @@ const queries = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/supabase/queries", () => queries);
 vi.mock("@/lib/llm/persist", () => ({ businessLLMUsageSummary: queries.businessLLMUsageSummary }));
-vi.mock("@/lib/env", () => ({ getEnv: () => ({ DEMO_USER_EMAIL: "demo@example.test" }) }));
+vi.mock("@/lib/env", () => ({ getEnv: () => ({ DEMO_USER_EMAIL: "demo@example.test", NEXT_PUBLIC_SUPABASE_URL: "https://project.supabase.co" }) }));
 const operator = vi.hoisted(() => ({ allowed: true }));
 vi.mock("@/lib/privacy-requests", () => ({ privacyOperatorAllowed: async () => operator.allowed }));
 vi.mock("@/components/studio", () => ({ Studio: () => <div>Studio loaded</div> }));
@@ -88,6 +88,14 @@ describe("Home workspace", () => {
     expect(within(list).queryByRole("link", { name: /Run old/ })).toBeNull();
     expect(within(list).getByText("Running")).toBeInTheDocument();
     expect(within(list).getByRole("link", { name: "See all 3" })).toBeInTheDocument();
+  });
+
+  it("#1393: the workspace shell opens the Storage connection before the page streams in", async () => {
+    queries.getUser.mockReturnValue(new Promise(() => {}));
+    const { default: AppLayout } = await import("@/app/(app)/layout");
+    const html = renderToString(<AppLayout><span>Private workspace</span></AppLayout>);
+    expect(html).toContain('<link rel="preconnect" href="https://project.supabase.co"/>');
+    expect(html).toContain("Loading workspace");
   });
 
   it("shows workspace loading while auth is pending and gates the shell on user and business", async () => {
@@ -415,6 +423,26 @@ describe("Home results row (#764)", () => {
     expect(screen.getByText(/You reply to an enquiry in/)).toHaveTextContent("You reply to an enquiry in 12 min (median, last 30 days).");
     rerender(<WorkspaceHome {...empty} business={business} campaigns={[chats, forms]} results={results} replyMinutes={null} now={now} />);
     expect(screen.queryByText(/You reply to an enquiry in/)).not.toBeInTheDocument();
+  });
+
+  // #1274 slice 2b: Home leads with the best running campaign's verdict, people waiting first; each row gets its word.
+  it("#1274: leads with the running campaign's verdict sentence and labels each campaign", () => {
+    const { rerender } = render(<WorkspaceHome {...empty} business={business} campaigns={[chats, forms]} results={results} now={now} />);
+    const row = screen.getByRole("region", { name: "Results so far" });
+    const lead = within(row).getByRole("link", { name: "WhatsApp run" }).closest("p");
+    expect(lead).toHaveTextContent("Each chat costs ₹168. WhatsApp run");
+    const campaignsList = screen.getByRole("region", { name: "Campaigns" });
+    expect(within(campaignsList).getAllByText("Live")).not.toHaveLength(0);
+    rerender(<WorkspaceHome {...empty} business={business} campaigns={[chats, forms]} results={results} waiting={2} now={now} />);
+    expect(within(screen.getByRole("region", { name: "Results so far" })).getByRole("link", { name: "WhatsApp run" }).closest("p")).toHaveTextContent(/^2 people are waiting for your reply\. /);
+    // With #1292's named line on Home, the count isn't repeated.
+    rerender(<WorkspaceHome {...empty} business={business} campaigns={[chats, forms]} results={results} waiting={2} firstEnquiry={{ name: "Rohit", at: "2026-10-26T04:10:00Z" }} now={now} />);
+    expect(within(screen.getByRole("region", { name: "Results so far" })).getByRole("link", { name: "WhatsApp run" }).closest("p")).toHaveTextContent("Each chat costs ₹168. WhatsApp run");
+  });
+
+  it("#1274: no lead sentence when nothing is running", () => {
+    render(<WorkspaceHome {...empty} business={business} campaigns={[{ ...chats, status: "paused" } as Campaign, forms]} results={results} now={now} />);
+    expect(within(screen.getByRole("region", { name: "Results so far" })).queryByRole("link", { name: "WhatsApp run" })).not.toBeInTheDocument();
   });
 
   it("#1292: names the newest unanswered enquiry and when they tapped the ad (CPO's words)", () => {

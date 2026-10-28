@@ -256,13 +256,14 @@ export async function getActiveCampaignBudgets(businessId: string): Promise<Camp
 }
 
 /** #1251 WS1: whether any campaign went live through AdBrain (`launched_at`) or is on now (e.g. imported from Meta); the setup spine shows until one has. */
-export async function hasLaunchedCampaign(businessId: string): Promise<boolean> {
+// #1393: the layout and the page both ask; one read per request.
+export const hasLaunchedCampaign = cache(async function hasLaunchedCampaign(businessId: string): Promise<boolean> {
   const supabase = await createClient();
   const { data, error } = await supabase.from("campaigns").select("id")
     .eq("business_id", businessId).or("launched_at.not.is.null,status.in.(active,completed)").limit(1);
   if (error || !data) throw new Error("Campaigns could not be loaded.");
   return data.length > 0;
-}
+});
 
 /** Campaigns mapped to the minimal shape the spend guardrails need. */
 export async function getCampaignSpend(

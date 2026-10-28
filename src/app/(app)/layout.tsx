@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { preconnect } from "react-dom";
 import { redirect } from "next/navigation";
 import { WorkspaceShell } from "@/components/workspace-shell";
 import { ProductTelemetry } from "@/components/product-telemetry";
@@ -16,6 +17,10 @@ export default function AppLayout({
 }: {
   children: React.ReactNode;
 }) {
+  // #1393: ad pictures come from Supabase Storage; open that connection while the workspace is still loading,
+  // not after the page streams in (3 round trips on a slow phone network).
+  const storage = getEnv().NEXT_PUBLIC_SUPABASE_URL;
+  if (storage) preconnect(new URL(storage).origin);
   return <Suspense fallback={<Loading />}><AuthenticatedWorkspace>{children}</AuthenticatedWorkspace></Suspense>;
 }
 
