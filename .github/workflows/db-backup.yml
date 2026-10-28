@@ -17,6 +17,8 @@ concurrency:
 jobs:
   dump:
     runs-on: ubuntu-latest
+    # #1893: BACKUP_DATABASE_URL lives only in this main-only environment.
+    environment: production-secrets
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
