@@ -40,6 +40,14 @@ describe("core: L1 'Tap, then press Send' builds in AdBrain as it is (#1211)", (
     }
   });
 
+  it("a phone's curly quotes and apostrophe (“I’d …”) still match the pre-typed message", () => {
+    const typed = quotedAsk(`A free site survey comes first.\nTap, then press Send: “I’d like a free site survey”`);
+    expect(typed).toBe("I’d like a free site survey");
+    expect(sameWords(typed!, "I'd like a free site survey")).toBe(true);
+    expect(sameWords("I'd like a free site survey", "I’d like a free site survey.")).toBe(true);
+    expect(sameWords("I’d like a free site survey", "I'd like a site survey")).toBe(false);
+  });
+
   it("launch keeps the owner's saved message, so Review has no rule 7 mismatch", () => {
     const draft = { destination: "whatsapp", creativeIds: [], whatsappLanguage: "ad" } as unknown as DraftInput;
     const message = campaignWhatsAppMessage({ draft, business: solaride, creatives: ads });
