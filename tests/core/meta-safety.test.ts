@@ -89,7 +89,7 @@ describe("core: first-activation safety against recorded Graph responses (#157)"
   it("review: a new ad reads as in review", async () => {
     const tape = replay(binding, reviewNewAd as Exchange[]);
     expect(await new MetaClient(creds).readAdReview(campaignId)).toEqual([
-      { adId, state: "in_review", effectiveStatus: "IN_PROCESS", reasons: [] },
+      { adId, state: "in_review", effectiveStatus: "IN_PROCESS", reasons: [], feedback: [] },
     ]);
     expect(tape.pending).toEqual([]);
     expect(tape.sent.every(call => call.method === "GET")).toBe(true);
