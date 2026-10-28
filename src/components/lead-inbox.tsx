@@ -95,7 +95,7 @@ export function LeadInbox({
   initialNextCursor?: string | null;
   metaReady: boolean;
   syncScope?: string;
-  /** #1223: "Form enquiries" when WhatsApp chats are shown above. */
+  /** #1223/#1835: "Form enquiries" when WhatsApp chats are shown above and none is logged here. */
   title?: string;
   /** #1260: people waiting for a first contact, and the 30-day median minutes to contact (null under 3). */
   summary?: { waiting: number | null; replyMinutes: number | null } | null;
@@ -141,6 +141,7 @@ export function LeadInbox({
   // #1260: Waiting (default when anyone waits) · All (search and filters) · Customers.
   const [view, setView] = useState<InboxView>(summary?.waiting ? "waiting" : "all");
   const [openedAt] = useState(() => Date.now());
+  const [emptyOnArrival] = useState(() => chatsEmpty && initialLeads.length === 0 && (allTotal ?? 0) === 0);
   const wide = useWide();
   const [pickedId, setPickedId] = useState<string | null>(null);
   const [contactedAt, setContactedAt] = useState<Record<string, string>>({});
@@ -360,7 +361,8 @@ export function LeadInbox({
 
   // #1597 (Designer, #1463): no enquiries anywhere: one block (title, line, one action) instead of banner, count, tabs,
   // search and a card that repeats it. The checking above keeps running, so the first enquiry brings the inbox back.
-  if (chatsEmpty && page.total === 0 && (allTotal ?? 0) === 0 && leads.length === 0 && !page.loading && !page.error) {
+  // #1810: decided from the unfiltered first load (test leads included), never from a tab's filtered result.
+  if (emptyOnArrival && page.total === 0 && leads.length === 0 && !page.loading && !page.error) {
     const solid = !metaReady || offerAlerts;
     return (
       <section aria-labelledby="enquiries-empty-title" className="mt-4 flex max-w-xl flex-col items-start gap-2">
