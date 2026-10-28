@@ -6,7 +6,7 @@ import { formatMoney, formatPerDay } from "@/lib/format";
 import { WHATSAPP_PUBLISHER_PLATFORMS } from "@/lib/meta/placements";
 
 /** Meta's learning phase ends after about 50 optimisation events within 7 days of the last significant edit. */
-export const LEARNING_EVENTS_PER_WEEK = 50;
+const LEARNING_EVENTS_PER_WEEK = 50;
 
 export type PlanCheckStatus = "pass" | "warn" | "fail" | "unknown";
 export type PlanFinding = { rule: string; status: PlanCheckStatus; detail: string };
@@ -122,6 +122,9 @@ export const REVIEW_WARNINGS = {
 } as const;
 
 /** #418 rule 7: an ad's last line asks customers to send other words than WhatsApp pre-types. */
+/** #1177: Review shows "Switch to WhatsApp" beside this warning. */
+export const WHATSAPP_PICTURE_ON_FORM = "An ad's picture asks people to message you on WhatsApp, but this campaign opens a form. Switch to WhatsApp, or choose ads made for forms";
+
 export function askMismatchWarning(ask: string, prefill: string): string {
   return `An ad asks customers to send “${ask.slice(0, 80)}”, but WhatsApp pre-types “${prefill.slice(0, 80)}”. Edit the WhatsApp message so they match`;
 }
@@ -146,7 +149,7 @@ export function reviewWarnings(input: {
 
 
 /** Meta restarts learning when an ad set resumes after a pause of this many days or more. */
-export const LEARNING_RESET_PAUSE_DAYS = 7;
+const LEARNING_RESET_PAUSE_DAYS = 7;
 
 /**
  * #419 item 2: the edits AdBrain itself makes that restart Meta's learning, shown on the activation

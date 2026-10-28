@@ -1,3 +1,4 @@
+import { setAsideIds } from "@/lib/creative/set-aside";
 import type { Business, Campaign, Creative } from "@/lib/types";
 
 export interface WorkItem {
@@ -28,11 +29,13 @@ export function buildWorkQueue({
   creatives,
   campaigns,
   metaReady,
+  now = Date.now(),
 }: {
   business: QueueBusiness | null;
-  creatives: Pick<Creative, "id" | "status">[];
+  creatives: (Pick<Creative, "id" | "status"> & Partial<Pick<Creative, "created_at" | "variant_group">>)[];
   campaigns: Pick<Campaign, "status" | "creative_ids">[];
   metaReady: boolean;
+  now?: number;
 }): WorkItem[] {
   if (!business)
     return [
@@ -47,9 +50,13 @@ export function buildWorkQueue({
     ];
 
   const queue: WorkItem[] = [];
+  // #1148: set-aside ads (older than 7 days, or not picked from their Create batch) don't need review.
+  const setAside = setAsideIds(creatives, now);
   const drafts = creatives.filter(
-    (creative) => creative.status === "draft",
+    (creative) => creative.status === "draft" && !setAside.has(creative.id),
   ).length;
+  const approved = creatives.filter((creative) => creative.status === "approved").length;
+  const running = campaigns.some((campaign) => campaign.status === "active");
   const usedIds = new Set(
     campaigns.flatMap((campaign) => campaign.creative_ids),
   );
@@ -101,7 +108,18 @@ export function buildWorkQueue({
       action: "Open settings",
       tone: "attention",
     });
-  if (!metaReady && !campaigns.length && unusedApproved)
+  // #1148: with approved ads and nothing running, launching comes before reviewing more ads.
+  const launchFirst = metaReady && !running && !paused && !draftCampaigns && approved > 0;
+  if (launchFirst)
+    queue.unshift({
+      id: "launch",
+      title: "Launch a campaign with your approved ads",
+      detail: `${approved} approved ${approved === 1 ? "ad is" : "ads are"} ready. Choose where to show them and how much to spend.`,
+      href: "/campaigns",
+      action: "Launch a campaign",
+      tone: "work",
+    });
+  else if (!metaReady && !campaigns.length && unusedApproved)
     queue.push({
       id: "approved",
       title: "Your ads are ready",

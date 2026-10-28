@@ -30,7 +30,6 @@ import type {
   CampaignResult,
   Creative,
   CreativePreview,
-  Lead,
 } from "@/lib/types";
 
 const QUERY_BATCH_SIZE = 100;
@@ -100,7 +99,7 @@ export const getUser = cache(async function getUser(): Promise<AppUser | null> {
 });
 
 /** All businesses owned by the current user (RLS-scoped). */
-export const getBusinesses = cache(async function getBusinesses(): Promise<Business[]> {
+const getBusinesses = cache(async function getBusinesses(): Promise<Business[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("businesses")
@@ -118,21 +117,11 @@ export async function getPrimaryBusiness(): Promise<Business | null> {
   return businesses[0] ?? null;
 }
 
-export async function getBusinessById(id: string): Promise<Business | null> {
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("businesses")
-    .select("*")
-    .eq("id", id)
-    .maybeSingle();
-  return data ?? null;
-}
-
 export async function getCreativePreviews(businessId: string): Promise<CreativePreview[]> {
   const supabase = await createClient();
   const { data } = await supabase
     .from("creatives")
-    .select("id, headline, image_url, status, angle")
+    .select("id, headline, image_url, status, angle, created_at, variant_group")
     .eq("business_id", businessId)
     .order("created_at", { ascending: false });
   return data ?? [];
@@ -310,20 +299,6 @@ export async function getAuditLog(
     .select("*")
     .eq("business_id", businessId)
     .order("created_at", { ascending: false })
-    .limit(limit);
-  return data ?? [];
-}
-
-export async function getLeads(
-  businessId: string,
-  limit = 200,
-): Promise<Lead[]> {
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("leads")
-    .select("*")
-    .eq("business_id", businessId)
-    .order("created_time", { ascending: false, nullsFirst: false })
     .limit(limit);
   return data ?? [];
 }

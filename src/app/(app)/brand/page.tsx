@@ -56,7 +56,7 @@ export default async function BrandPage() {
           <a
             key={href}
             href={`#${href}`}
-            className="whitespace-nowrap rounded-lg px-3 py-2 font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-950"
+            className="flex min-h-11 items-center whitespace-nowrap rounded-lg px-3 font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-950"
           >
             {label}
           </a>

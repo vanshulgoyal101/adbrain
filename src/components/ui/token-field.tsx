@@ -65,7 +65,7 @@ export function TokenField({
                 type="button"
                 aria-label={`Remove ${token}`}
                 onClick={() => remove(token)}
-                className="opacity-60 hover:opacity-100"
+                className="relative -mr-1.5 grid h-6 w-6 place-items-center rounded-full opacity-60 before:absolute before:-inset-2.5 before:content-[''] hover:opacity-100"
               >
                 <X className="h-3 w-3" />
               </button>

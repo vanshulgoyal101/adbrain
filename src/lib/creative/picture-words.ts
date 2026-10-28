@@ -28,6 +28,7 @@ const storedDesignSchema = z.object({
   phone: z.string().nullable(),
   // Designs saved before #1147 asked for a call.
   contact: z.enum(["phone", "whatsapp"]).default("phone"),
+  contactLabel: z.string().nullable().optional(),
   contactLine: z.string().nullable(),
   ctaLabel: z.string(),
   // Designs saved before #760 were all drawn with the button.
@@ -73,6 +74,7 @@ export function pictureDesign(creative: CreativeRow, brand: BrandContext): AdDes
     copy: { headline: creative.headline ?? "", primary_text: creative.primary_text ?? "", cta: creative.cta ?? "" },
     angle: getAngleByName(creative.angle ?? ""),
     format,
+    language: typeof generation.language === "string" ? generation.language : null,
   });
   // Ads this old were all drawn with the button (before #760); keep it on redraw.
   if (typeof concept.headline !== "string") return { ...design, showCta: true };

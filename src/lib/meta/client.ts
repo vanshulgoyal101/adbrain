@@ -186,7 +186,7 @@ export type AdSetBudget = {
 export type AdSetBudgetChange = { dailyBudgetPaise?: number; lifetimeBudgetPaise?: number; endTime?: string };
 
 /** Interests (or other detailed targeting) make Meta refuse an in-place targeting update (100/1359202). */
-export function hasInterests(targeting: Record<string, unknown>): boolean {
+function hasInterests(targeting: Record<string, unknown>): boolean {
   const flexible = targeting.flexible_spec;
   return (Array.isArray(targeting.interests) && targeting.interests.length > 0)
     || (Array.isArray(flexible) && flexible.some(spec => spec && typeof spec === "object" && Object.keys(spec).length > 0));
@@ -442,7 +442,7 @@ export function friendlyMetaError(
 export type AdDestination = "instant_form" | "whatsapp" | "call";
 
 /** #680: WhatsApp and lead-form ads get the 9:16 placement creative and leave Audience Network out, so an A/B differs only in destination. */
-export function hasPlacementCreative(destination: AdDestination): boolean {
+function hasPlacementCreative(destination: AdDestination): boolean {
   return destination === "whatsapp" || destination === "instant_form";
 }
 
@@ -568,7 +568,7 @@ export function destinationCTA(
 }
 
 /** Meta rejects a hard minimum age above this with Advantage+ audience on (subcode 1870188). */
-export const ADVANTAGE_AUDIENCE_MAX_HARD_AGE_MIN = 25;
+const ADVANTAGE_AUDIENCE_MAX_HARD_AGE_MIN = 25;
 
 /**
  * Ad set targeting with Advantage+ audience on (#334). Area and exclusions stay hard
@@ -609,7 +609,7 @@ export function withoutAudienceNetwork(targeting: Record<string, unknown>): Reco
 }
 
 /** #334: every ad set runs with Advantage+ audience (area and age_min hard). The learning ledger records it (#588). */
-export const ADVANTAGE_AUDIENCE = true;
+const ADVANTAGE_AUDIENCE = true;
 
 /** A short, loggable code for a failed Graph call: Meta's code/subcode, else the HTTP status. */
 export function metaErrorCode(error: unknown): string {
@@ -621,7 +621,7 @@ export function metaErrorCode(error: unknown): string {
  * Meta answered and refused the request (a 4xx with a Meta subcode, e.g. 100/1772103). Timeouts,
  * transport errors and 5xx are not refusals: the object may exist, so retrying could duplicate it.
  */
-export function isMetaRefusal(error: unknown): boolean {
+function isMetaRefusal(error: unknown): boolean {
   return error instanceof MetaError && error.status !== undefined && error.status >= 400 && error.status < 500 && error.subcode !== undefined;
 }
 

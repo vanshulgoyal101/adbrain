@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { hasStoryDesign } from "@/lib/creative/picture-words";
+import { hasStoryDesign, storedPictureDesign } from "@/lib/creative/picture-words";
 import { getCostPerResult } from "@/lib/campaign/result-evidence-store";
 import { getConnectionStatus, withMetaConnection, type AuthorizedBusiness } from "@/lib/meta/connection-access";
 import { draftRecordFromRow } from "@/lib/campaign/draft-store";
@@ -47,6 +47,7 @@ export function buildCampaignPreflightLoaders(
         description: savedCreativeDescription(creative.generation),
         cta: creative.cta,
         storyReady: hasStoryDesign(creative.generation),
+        asksWhatsApp: storedPictureDesign((creative.generation as { design?: unknown } | null)?.design)?.contact === "whatsapp",
       }));
     },
     findCostPerResult: (actor, destination) => getCostPerResult(actor.businessId, destination),

@@ -6,7 +6,7 @@ import type { Campaign, CampaignResult } from "@/lib/types";
  * opens. The 15-min pg_cron refresh (#992) is the floor; this covers a missed run. Below it the
  * refresh route answers from the stored row with no Meta call (`?ifStale=1`).
  */
-export const RESULTS_STALE_MS = 10 * 60_000;
+const RESULTS_STALE_MS = 10 * 60_000;
 
 export function resultsStale(fetchedAt: string | null | undefined, now = Date.now()): boolean {
   const at = fetchedAt ? Date.parse(fetchedAt) : NaN;

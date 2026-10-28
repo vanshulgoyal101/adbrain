@@ -5,7 +5,7 @@ const isoDate = z.string().datetime({ offset: true });
 const safeMessage = z.string().min(1).max(240);
 const metaId = z.string().min(1).max(128);
 
-export const errorCodes = [
+const errorCodes = [
   "UNAUTHENTICATED",
   "NOT_FOUND",
   "FORBIDDEN",
@@ -28,7 +28,7 @@ export const errorCodes = [
 export const errorCodeSchema = z.enum(errorCodes);
 export type ErrorCode = z.infer<typeof errorCodeSchema>;
 
-export const apiErrorSchema = z.object({
+const apiErrorSchema = z.object({
   code: errorCodeSchema,
   message: safeMessage,
   retryable: z.boolean(),
@@ -62,7 +62,7 @@ export const connectIntentSchema = z.discriminatedUnion("kind", [
 ]);
 export type ConnectIntent = z.infer<typeof connectIntentSchema>;
 
-export const recoveryActionSchema = z.discriminatedUnion("kind", [
+const recoveryActionSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("reconnect") }),
   z.object({ kind: z.literal("retry_check") }),
   z.object({ kind: z.literal("choose_assets") }),

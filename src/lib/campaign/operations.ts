@@ -113,7 +113,7 @@ export function recordExternalId(operation: OperationRecord, externalId: string)
   return { ...operation, externalIds: [...operation.externalIds, externalId] };
 }
 
-export function sanitizeOperationError(error: unknown): string {
+function sanitizeOperationError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
   return message
     .replace(/(access[_ -]?token|api[_ -]?key|password|secret|credential)([=: ]+)[^\s&]+/gi, "$1$2[redacted]")

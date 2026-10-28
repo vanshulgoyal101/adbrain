@@ -20,7 +20,7 @@ export type BudgetEditCheck = { ok: true; needsConfirmation: boolean; notices: s
 
 /** Meta's wording: a budget change "may or may not be significant, depending on the magnitude"; a fifth is our line. */
 const LEARNING_CHANGE = 0.2;
-export const LEARNING_NOTICE = "This is a big budget change, so it may restart Meta's learning; results can be slower for 2–3 days.";
+const LEARNING_NOTICE = "This is a big budget change, so it may restart Meta's learning; results can be slower for 2–3 days.";
 
 /** #774: the money rules for editing a launched campaign's budget, cap and end date, before any Meta call. */
 export function checkBudgetEdit(input: BudgetEditInput): BudgetEditCheck {

@@ -22,7 +22,7 @@ do not establish ownership. See [API Reference](API_REFERENCE.md) for exact bodi
 Do not populate global `META_SYSTEM_USER_TOKEN`, `META_AD_ACCOUNT_ID`, or
 `META_PAGE_ID` and assume a tenant is connected. Current publishing resolves the
 business-bound encrypted credential. Public customer access also depends on Meta's
-external review process; see [Approval Readiness](META_APPROVAL_ACTION_PLAN.md).
+external review process; see [App Review](#app-review-156).
 
 ## Attempt Lifecycle
 
@@ -257,3 +257,40 @@ Deletion confirms the Meta operation before deleting the local mirror; external
 success and local persistence are not a distributed transaction. Sync imports
 supported ACTIVE/PAUSED campaigns page by page, reports skips, and does not prune
 all local rows absent from a page. Use [Operations](OPERATIONS.md) for incidents.
+
+## App Review (#156)
+
+Serving businesses outside the app's roles needs Meta's App Review (advanced access per
+permission, #156) and Access Verification as a Tech Provider (#517). Submission status, the
+screencast script and the owner's dashboard checklist live on #156. Approval is Meta's decision:
+no call volume, elapsed time or own-account success substitutes for it, so don't create
+disposable campaigns to raise API activity.
+
+Login uses Facebook Login, Graph v21.0, redirect
+`https://adbrain.vanshul.com/api/meta/oauth/callback`. Scopes come from
+`META_LOGIN_SCOPES` in [oauth.ts](../src/lib/meta/oauth.ts). All seven are used;
+none can be dropped without breaking the core loop.
+
+| Permission | Why AdBrain needs it | Where the reviewer sees it |
+| --- | --- | --- |
+| `ads_management` | Upload images, create creatives, create the campaign/ad set/ads paused, pause and sync | `/campaigns` → Send to Meta (paused), Pause, Sync from Meta |
+| `ads_read` | List ad accounts (`me/adaccounts`) and read campaign insights | `/settings` → Connect Meta → ad account picker; `/campaigns` results |
+| `leads_retrieval` | Read the leads submitted to the customer's own lead forms | `/leads` → Check for enquiries |
+| `pages_show_list` | List the Pages the user manages (`me/accounts`) | `/settings` → Connect Meta → Page picker |
+| `pages_read_engagement` | Read lead forms and the Page's WhatsApp number for the ad destination | `/campaigns` → lead form dropdown; WhatsApp destination |
+| `pages_manage_ads` | Run ads and lead forms on behalf of the selected Page | `/campaigns` → Launch with the selected Page |
+| `business_management` | Read the owning Business of each ad account and Page so only valid account/Page pairs are offered | `/settings` → Connect Meta → paired account/Page choices |
+
+### App Dashboard URLs
+
+| Dashboard field | Value |
+| --- | --- |
+| Privacy Policy URL | `https://adbrain.vanshul.com/privacy` |
+| Terms of Service URL | `https://adbrain.vanshul.com/terms` |
+| Data deletion callback URL | `https://adbrain.vanshul.com/api/meta/deauthorize` (returns `{url, confirmation_code}`) |
+| Deauthorize callback URL (Facebook Login settings) | `https://adbrain.vanshul.com/api/meta/deauthorize` |
+| Valid OAuth redirect URI | `https://adbrain.vanshul.com/api/meta/oauth/callback` |
+| App domain / site URL | `adbrain.vanshul.com` / `https://adbrain.vanshul.com` |
+
+If the dashboard prefers an instructions URL instead of a callback, use
+`https://adbrain.vanshul.com/data-deletion`. All four pages are public.

@@ -8,7 +8,7 @@ import { PATCH } from "@/app/api/leads/[id]/route";
 
 const databaseMocks = vi.hoisted(() => ({
   getUser: vi.fn(), business: vi.fn(), rpc: vi.fn(), from: vi.fn(), update: vi.fn(),
-  eq: vi.fn(), select: vi.fn(), gt: vi.fn(), maybeSingle: vi.fn(),
+  eq: vi.fn(), select: vi.fn(), gt: vi.fn(), maybeSingle: vi.fn(), ilike: vi.fn(), limit: vi.fn(),
 }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({
   auth: { getUser: databaseMocks.getUser }, rpc: databaseMocks.rpc, from: databaseMocks.from,
@@ -28,7 +28,10 @@ describe("enquiry list and follow-up routes", () => {
     databaseMocks.update.mockReturnValue(databaseMocks);
     databaseMocks.eq.mockReturnValue(databaseMocks);
     databaseMocks.select.mockReturnValue(databaseMocks);
-    databaseMocks.gt.mockResolvedValue({ count: 3, error: null });
+    // A thenable chain: the unseen count resolves to 3, its Meta-test-lead count (after ilike) to 0.
+    databaseMocks.gt.mockImplementation(() => ({ then: (resolve: (value: unknown) => unknown) => resolve({ count: 3, error: null }), ilike: databaseMocks.ilike }));
+    databaseMocks.ilike.mockImplementation(() => ({ then: (resolve: (value: unknown) => unknown) => resolve({ count: 0, error: null }), limit: databaseMocks.limit }));
+    databaseMocks.limit.mockResolvedValue({ data: [], error: null });
     databaseMocks.maybeSingle.mockResolvedValue({ data: { id: leadId, workflow_status: "booked", follow_up_note: "Synthetic" }, error: null });
   });
   const patch = (body: unknown, id = leadId) => PATCH(new Request(`http://localhost/api/leads/${id}`, {
@@ -57,7 +60,7 @@ describe("enquiry list and follow-up routes", () => {
     expect(databaseMocks.gt).toHaveBeenCalledWith("created_at", "2026-10-01T00:00:00.000Z");
     expect((await GETUnseen(new Request(`${url}&business_id=foreign`))).status).toBe(400);
     expect((await GETUnseen(new Request("http://localhost/api/leads/unseen?since=not-a-date"))).status).toBe(400);
-    databaseMocks.gt.mockResolvedValueOnce({ count: null, error: { message: "private database detail" } });
+    databaseMocks.gt.mockImplementationOnce(() => ({ then: (resolve: (value: unknown) => unknown) => resolve({ count: null, error: { message: "private database detail" } }), ilike: databaseMocks.ilike }));
     const failed = await GETUnseen(new Request(url));
     expect(failed.status).toBe(503);
     expect(JSON.stringify(await failed.json())).not.toContain("private database detail");
@@ -65,6 +68,26 @@ describe("enquiry list and follow-up routes", () => {
     expect((await GETUnseen(new Request(url))).status).toBe(404);
     databaseMocks.getUser.mockResolvedValue({ data: { user: null } });
     expect((await GETUnseen(new Request(url))).status).toBe(401);
+  });
+
+  it("#1149: Meta's test leads are listed but never counted (page total and the nav badge)", async () => {
+    const testLead = { full_name: "<test lead: dummy data for full_name>", phone: "<test lead: dummy data for phone_number>", email: null, city: null, form_name: "Solar", workflow_status: "new" };
+    databaseMocks.rpc.mockResolvedValueOnce({ data: { leads: [{ id: leadId, ...testLead }], nextCursor: null, total: 1 }, error: null });
+    databaseMocks.limit.mockResolvedValueOnce({ data: [testLead], error: null });
+    expect((await getLeadPage(businessId)).total).toBe(0);
+    expect(databaseMocks.ilike).toHaveBeenCalledWith("full_name", "<test lead: dummy data%");
+    // A filter the test lead doesn't match leaves the total alone.
+    databaseMocks.rpc.mockResolvedValueOnce({ data: { leads: [], nextCursor: null, total: 4 }, error: null });
+    databaseMocks.limit.mockResolvedValueOnce({ data: [testLead], error: null });
+    expect((await getLeadPage(businessId, { status: "booked" })).total).toBe(4);
+    // An unreadable test-lead read keeps the page.
+    databaseMocks.rpc.mockResolvedValueOnce({ data: { leads: [], nextCursor: null, total: 2 }, error: null });
+    databaseMocks.limit.mockResolvedValueOnce({ data: null, error: { message: "x" } });
+    expect((await getLeadPage(businessId)).total).toBe(2);
+
+    databaseMocks.ilike.mockImplementationOnce(() => ({ then: (resolve: (value: unknown) => unknown) => resolve({ count: 1, error: null }), limit: databaseMocks.limit }));
+    const { GET: GETUnseen } = await import("@/app/api/leads/unseen/route");
+    expect(await (await GETUnseen(new Request("http://localhost/api/leads/unseen?since=2026-10-01T00%3A00%3A00.000Z"))).json()).toEqual({ count: 2 });
   });
 
   it("binds opaque cursors to the tenant, filters and stable database position", async () => {

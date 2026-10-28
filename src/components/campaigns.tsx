@@ -1,6 +1,6 @@
 "use client";
 
-import { startTransition, useEffect, useEffectEvent, useReducer, useRef, useState } from "react";
+import { startTransition, useEffect, useEffectEvent, useReducer, useRef, useState, useSyncExternalStore } from "react";
 import type { ReactNode } from "react";
 import { flushSync } from "react-dom";
 import { useConfirm } from "@/components/ui/confirm-dialog";
@@ -86,6 +86,7 @@ import type {
   ReviewDTO,
 } from "@/lib/campaign/connect-contracts";
 import { targetingInputSchema } from "@/lib/campaign/connect-contracts";
+import { campaignNameDate, defaultCampaignName, draftForSelection } from "@/lib/campaign/draft-name";
 import { campaignDestination } from "@/lib/campaign/outcomes";
 import { handoffRate } from "@/lib/campaign/whatsapp-handoff";
 import { reviewBlockerAlternative, reviewBlockerFix } from "@/lib/campaign/review-fix";
@@ -105,7 +106,7 @@ import {
 } from "@/lib/campaign/budget";
 import { effectiveDailyBudget } from "@/lib/campaign/spend";
 import { accountFundingSchema, activationConfirmationPayload, campaignDeliverySnapshotSchema, RESUME_IN_ADS_MANAGER, reviewableCampaign } from "@/lib/campaign/activation";
-import { activationWarnings } from "@/lib/campaign/plan-check";
+import { activationWarnings, WHATSAPP_PICTURE_ON_FORM } from "@/lib/campaign/plan-check";
 import { campaignAttention } from "@/lib/campaign/health";
 import { campaignWhatsAppSummary } from "@/lib/campaign/results-summary";
 import { costPerCustomer } from "@/lib/campaign/real-enquiries";
@@ -123,6 +124,8 @@ import { formatMoney, formatNumber, formatPerDay } from "@/lib/format";
 const exactRupees = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" });
 
 /** #721: Meta deleted or archived it; Refresh ended the row and kept why in `raw.metaStatus`. */
+const subscribeNever = () => () => {};
+
 function goneInMeta(campaign: Campaign): string | null {
   const status = campaign.raw && typeof campaign.raw === "object" && !Array.isArray(campaign.raw) ? (campaign.raw as { metaStatus?: unknown }).metaStatus : null;
   return status === "DELETED" ? "Deleted in Meta" : status === "ARCHIVED" ? "Archived in Meta" : null;
@@ -181,7 +184,8 @@ type ComposerSetup = {
   /** #840: this campaign's own WhatsApp message ("Edit for this campaign"). */
   whatsappMessage?: WhatsAppTemplate | null;
   leadFormId: string;
-  name: string;
+  /** The name the owner typed; null keeps the #1151 default. */
+  name: string | null;
   targeting: TargetingValue;
   draftGoal: string;
   includedNames: string;
@@ -323,12 +327,21 @@ function BusinessCampaigns({
   const [formsRetry, setFormsRetry] = useState(0);
   const formsFreshnessRef = useRef<{ ownerId: string; businessId: string; retry: number; fetchedAt: number } | null>(null);
   const [connectedForDraft, setConnectedForDraft] = useState(metaReady);
-  const [name, setName] = useState(initialSetup?.name ?? `${business.name} — leads`);
+  const [customName, setName] = useState<string | null>(initialSetup?.name ?? null);
+  // #1151: client-only, so the server render (UTC) and the owner's browser never disagree on the day.
+  const nameDate = useSyncExternalStore(subscribeNever, () => campaignNameDate(new Date()), () => null);
+  const firstSelected = selected.values().next().value;
+  const name = customName ?? defaultCampaignName({
+    headline: approved.find((creative) => creative.id === firstSelected)?.headline, businessName: business.name, destination, date: nameDate,
+  });
   const [targeting, setTargeting] = useState<TargetingValue>(initialSetup?.targeting ?? defaultTargeting);
   const [draftGoal, setDraftGoal] = useState(initialSetup?.draftGoal ?? "");
   const [includedNames, setIncludedNames] = useState(initialSetup?.includedNames ?? "");
   const [excludedNames, setExcludedNames] = useState(initialSetup?.excludedNames ?? "");
   const [abTest, setAbTest] = useState(initialSetup?.abTest ?? false);
+  // #1155: who sees the ads folds under one line; it starts open only for a setup that already changed it.
+  const [whoOpen, setWhoOpen] = useState(() => abTest || targeting.locationMode === "manual" || targeting.ageMode === "manual"
+    || targeting.gender !== "all" || targeting.cityScope !== "city_only" || Boolean(targeting.audience) || Boolean(initialSetup?.excludedNames || initialSetup?.includedNames));
   const [creating, setCreating] = useState(false);
   const [sendingNew, setSendingNew] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -353,6 +366,7 @@ function BusinessCampaigns({
   function jumpToFix(targets: string[]) {
     flushSync(() => setShowComposer(true));
     const target = targets.map((id) => document.getElementById(id)).find((element) => element !== null);
+    if (target?.closest("details#who-sees-it") && !whoOpen) flushSync(() => setWhoOpen(true));
     const control = target?.matches("button, input, select, textarea") ? target : target?.querySelector<HTMLElement>("button, input, select, textarea");
     control?.scrollIntoView?.({ block: "center" });
     control?.focus();
@@ -454,8 +468,8 @@ function BusinessCampaigns({
   const [draftBusy, setDraftBusy] = useState<string | null>(null);
   const [retryAllowed, setRetryAllowed] = useState(false);
   useEffect(() => {
-    onSetupChange([scope, { selected, budget, destination, whatsappNumber, whatsappLanguage, whatsappMessage, leadFormId, name, targeting, draftGoal, includedNames, excludedNames, abTest, creationMode, showComposer }]);
-  }, [selected, budget, destination, whatsappNumber, whatsappLanguage, whatsappMessage, leadFormId, name, targeting, draftGoal, includedNames, excludedNames, abTest, creationMode, showComposer, scope, onSetupChange]);
+    onSetupChange([scope, { selected, budget, destination, whatsappNumber, whatsappLanguage, whatsappMessage, leadFormId, name: customName, targeting, draftGoal, includedNames, excludedNames, abTest, creationMode, showComposer }]);
+  }, [selected, budget, destination, whatsappNumber, whatsappLanguage, whatsappMessage, leadFormId, customName, targeting, draftGoal, includedNames, excludedNames, abTest, creationMode, showComposer, scope, onSetupChange]);
   const visibleCampaigns = campaigns.filter(campaign =>
     (statusFilter === "all" || campaign.status === statusFilter) &&
     (campaign.name ?? business.name).toLocaleLowerCase().includes(campaignQuery.trim().toLocaleLowerCase()),
@@ -688,7 +702,7 @@ function BusinessCampaigns({
     setRecoveryPending(false);
     setPrepareReview(null);
     setCreationMode("manual");
-    setName(`${business.name} - leads`);
+    setName(null);
     setDraftGoal("");
     setSelected(new Set());
     setBudget(200);
@@ -1042,7 +1056,8 @@ function BusinessCampaigns({
       }
       signal.throwIfAborted();
       setPreparationStage(signal, "Saving draft...");
-      const previous = preparedDraftRef.current;
+      // #1151: the same ads prepared again update their saved draft instead of adding another.
+      const previous = preparedDraftRef.current ?? draftForSelection(savedDrafts, input.creativeIds);
       const draft = previous && !recoveryRef.current?.request
         ? await client.updateDraft(previous.draftId, previous.version, input, signal)
         : await client.saveDraft(input, signal);
@@ -1416,7 +1431,6 @@ function BusinessCampaigns({
       {confirmDialog}
         <p className="text-sm text-slate-500">{campaigns.filter(campaign => campaign.status === "active").length} {OWNER_WORDS.running.toLowerCase()} <span className="mx-2 text-slate-300">/</span> {campaigns.filter(campaign => campaign.status === "paused").length} paused</p>
         <div className="flex flex-wrap items-center gap-2">
-          {showComposer && <Button variant="ghost" onClick={startNewCampaign}><Trash2 className="h-4 w-4" aria-hidden="true" />Discard and start new</Button>}
           <Button variant={showComposer ? "outline" : "primary"} onClick={toggleComposer} aria-expanded={showComposer} aria-controls="campaign-composer">{showComposer ? <X className="h-4 w-4" aria-hidden="true" /> : <Plus className="h-4 w-4" aria-hidden="true" />}{showComposer ? "Close campaign setup" : "New campaign"}</Button>
         </div>
       </div>
@@ -1618,7 +1632,16 @@ function BusinessCampaigns({
                   {prepareReview.review.planWarnings.map((warning) => (
                     <li key={warning} className="flex items-start gap-1.5">
                       <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                      <span>{warning}</span>
+                      <span>
+                        {warning}
+                        {/* #1177: one tap switches to WhatsApp; the owner then reviews again. */}
+                        {warning === WHATSAPP_PICTURE_ON_FORM && (
+                          <button type="button" className="ml-1 min-h-11 font-medium text-blue-700 underline"
+                            onClick={() => { if (unresolvedRecovery()) return; setDestination("whatsapp"); destinationChosenRef.current = true; setPrepareReview(null); jumpToFix(["destination-whatsapp"]); }}>
+                            Switch to WhatsApp
+                          </button>
+                        )}
+                      </span>
                     </li>
                   ))}
                 </ul>
@@ -1664,8 +1687,8 @@ function BusinessCampaigns({
               if (unresolvedRecovery()) throw new Error("Check the existing operation before connecting again.");
               setPrepareReview(null);
               const client = createMetaConnectClient();
-              const previous = preparedDraftRef.current;
               const input = manualDraftInput(false);
+              const previous = preparedDraftRef.current ?? draftForSelection(savedDrafts, input.creativeIds);
               const draft = previous && !recoveryRef.current?.request
                 ? await client.updateDraft(previous.draftId, previous.version, input)
                 : await client.saveDraft(input);
@@ -1710,7 +1733,11 @@ function BusinessCampaigns({
       <div id="campaign-composer" hidden={!showComposer}>
       {(
         <>
-          <h2 className="mb-1 text-[17px] font-semibold text-slate-950">New campaign</h2>
+          {/* #1164: one exit above the page (Close); starting over lives with the setup it discards. */}
+          <div className="mb-1 flex flex-wrap items-center justify-between gap-x-3">
+            <h2 className="text-[17px] font-semibold text-slate-950">New campaign</h2>
+            {showComposer && <Button variant="ghost" size="sm" onClick={startNewCampaign}><Trash2 className="h-4 w-4" aria-hidden="true" />Discard and start new</Button>}
+          </div>
           {approved.length > 0 && connectedForDraft ? (
             <p aria-label="Launch preflight" className="flex items-start gap-2 pb-1 text-sm text-slate-600">
               <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-emerald-600" aria-hidden="true" />
@@ -1842,7 +1869,7 @@ function BusinessCampaigns({
                             setAdEditNotes(null);
                             setEditingAdId(c.id);
                           }}
-                          className="h-9 w-full max-sm:absolute max-sm:bottom-1.5 max-sm:left-1.5 max-sm:h-9 max-sm:w-9 max-sm:rounded-full max-sm:bg-white/95 max-sm:p-0 max-sm:after:absolute max-sm:after:-inset-1 max-sm:after:content-['']"
+                          className="h-9 w-full max-sm:absolute max-sm:bottom-1.5 max-sm:left-1.5 max-sm:h-9 max-sm:min-h-0 max-sm:w-9 max-sm:rounded-full max-sm:bg-white/95 max-sm:p-0 max-sm:after:absolute max-sm:after:-inset-1 max-sm:after:content-['']"
                         >
                           {/* #847 T6: on a phone, Edit is a corner icon so a row of ads isn't followed by a row of buttons. */}
                           <Pencil className="h-3.5 w-3.5" aria-hidden="true" /><span className="max-sm:sr-only">Edit</span>
@@ -1908,6 +1935,25 @@ function BusinessCampaigns({
                       aria-invalid={placedError?.at === "budget" || undefined}
                       aria-describedby={placedError?.at === "budget" ? "budget-error" : undefined}
                     />
+                    {/* #1163: the quick amounts sit with the budget they set. */}
+                    <div className="flex flex-wrap items-center gap-2">
+                      {BUDGET_PRESETS.map((amount) => (
+                        <button
+                          key={amount}
+                          type="button"
+                          onClick={() => { setBudget(amount); if (!unresolvedRecovery()) setPrepareReview(null); }}
+                          className={cn(
+                            "min-h-11 rounded-full border px-3 text-sm font-medium transition-colors sm:min-h-8 sm:text-xs",
+                            budget === amount
+                              ? "border-blue-500 bg-blue-50 text-blue-700"
+                              : "border-slate-200 text-slate-600 hover:border-slate-300",
+                          )}
+                        >
+                          {formatPerDay(amount)}
+                        </button>
+                      ))}
+                      {abTest && <span className="basis-full text-xs font-medium text-slate-600">Total: {formatPerDay(totalDailyBudget)} across 2 ad sets</span>}
+                    </div>
                     {placedError?.at === "budget" && <p id="budget-error" role="alert" className="text-sm font-medium text-red-800">{placedError.message}</p>}
                   </div>
                   {destination === "instant_form" && <div className="flex min-w-0 flex-col gap-1.5">
@@ -1995,26 +2041,6 @@ function BusinessCampaigns({
                   </div>}
                 </div>
 
-                <div className="-mt-2 flex flex-wrap items-center gap-2">
-                  {BUDGET_PRESETS.map((amount) => (
-                    <button
-                      key={amount}
-                      type="button"
-                      onClick={() => { setBudget(amount); if (!unresolvedRecovery()) setPrepareReview(null); }}
-                      className={cn(
-                        "min-h-11 rounded-full border px-3 text-sm font-medium transition-colors sm:min-h-8 sm:text-xs",
-                        budget === amount
-                          ? "border-blue-500 bg-blue-50 text-blue-700"
-                          : "border-slate-200 text-slate-600 hover:border-slate-300",
-                      )}
-                    >
-                      {formatPerDay(amount)}
-                    </button>
-                  ))}
-                  <span className="ml-auto text-xs font-medium text-slate-600">
-                    Total: {formatPerDay(totalDailyBudget)}{abTest ? " across 2 ad sets" : ""}
-                  </span>
-                </div>
                 {/* #761: what to expect, from AdBrain's own runs (#588 ledger). #1038: no lead-form figure until AdBrain has run lead forms. */}
                 <p className="-mt-2 text-xs text-slate-500">
                   What to expect: {destination === "whatsapp"
@@ -2032,6 +2058,13 @@ function BusinessCampaigns({
                   </Alert>
                 )}
 
+                <details id="who-sees-it" open={whoOpen} onToggle={(event) => setWhoOpen(event.currentTarget.open)} className="group border-y border-slate-200">
+                  <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 py-2 [&::-webkit-details-marker]:hidden">
+                    <ChevronRight className="h-4 w-4 shrink-0 text-slate-500 transition-transform group-open:rotate-90" aria-hidden="true" />
+                    <span className="text-sm font-medium text-slate-900">Change who sees it</span>
+                    <span className="min-w-0 truncate text-xs text-slate-500 max-sm:hidden">Goal, places, age, gender, A/B test</span>
+                  </summary>
+                <div className="flex flex-col gap-4 pb-4 pt-2">
                 <div className="flex flex-col gap-2">
                   <div><Label htmlFor="campaign-goal">Campaign goal</Label><Input id="campaign-goal" value={draftGoal} onChange={(event) => setDraftGoal(event.target.value)} placeholder="Qualified enquiries for the current offer" /></div>
                   <Label className="mt-4">Audience &amp; location</Label>
@@ -2075,6 +2108,8 @@ function BusinessCampaigns({
                     </span>
                   </span>
                 </label>
+                </div>
+                </details>
 
                 <div className="border-t border-slate-200 pt-5">
                   <CampaignLaunchReview
