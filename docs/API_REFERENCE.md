@@ -147,7 +147,7 @@ same identity; do not change a key or clear local recovery data to force progres
 | POST | `/api/managed/whatsapp` | `{businessId}` -> envelope `{status: linked (masked) \| not_linked \| waiting_setup \| taken \| unavailable}` | #524 v1: reads the number linked to the customer's Page (the child's own token, #624, needs the child ad account), records `whatsapp_number_e164` (funded → `whatsapp_linked`), binds it `page_link` and unbinds the business's other `page_link` numbers; `unavailable` for failed/offboarding accounts; behind the managed-route gate (`managedRouteUser`, #625: managed accounts on for the user (404), signed in (401), Meta Connect open (403)) |
 | POST | `/api/meta/connections/attempts/[id]/select` | Pair/revision/confirmation -> envelope result | Commit verified connection |
 | POST | `/api/meta/connections/recheck` | Business/optional generation -> envelope connection | Live capability recheck |
-| POST | `/api/meta/disconnect` | Explicit business, or legacy empty body -> `{ok:true}` | Disconnect stored binding, not running ads |
+| POST | `/api/meta/disconnect` | Explicit business, or legacy empty body -> `{ok:true}` | Disconnect stored binding, not running ads. First, best effort (#1649): `DELETE /{meta-user}/permissions` for a user token whose Meta user connects no other live business (never a system user or the smoke account); the outcome is a `meta.revoke` event and never blocks the disconnect |
 | GET | `/api/meta/oauth/start` | Retired | 410; use contextual start |
 | GET | `/api/meta/oauth/callback` | Provider callback | Signed/bound OAuth completion and redirect |
 | GET | `/api/meta/accounts` | Owned `businessId` | Retired discovery, 410 after validation |

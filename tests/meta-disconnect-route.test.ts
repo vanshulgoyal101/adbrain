@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ rpc: vi.fn(), owned: vi.fn(), primary: vi.fn() }));
+const mocks = vi.hoisted(() => ({ rpc: vi.fn(), owned: vi.fn(), primary: vi.fn(), revoke: vi.fn(), order: [] as string[] }));
+vi.mock("@/lib/meta/revoke-grant", () => ({ revokeMetaGrant: mocks.revoke }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ auth: { getUser: async () => ({ data: { user: { id: "owner" } } }) } }) }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ rpc: mocks.rpc }) }));
 vi.mock("@/lib/supabase/queries", () => ({ getPrimaryBusiness: mocks.primary }));
@@ -15,6 +16,9 @@ beforeEach(() => {
   mocks.primary.mockResolvedValue({ id: "primary" });
   mocks.rpc.mockResolvedValue({ data: true, error: null });
   mocks.owned.mockImplementation(async businessId => ({ businessId }));
+  mocks.order = [];
+  mocks.revoke.mockImplementation(async () => { mocks.order.push("revoke"); return "revoked"; });
+  mocks.rpc.mockImplementation(async (name: string) => { mocks.order.push(name); return { data: true, error: null }; });
 });
 
 describe("Meta disconnect target validation", () => {
@@ -45,5 +49,18 @@ describe("Meta disconnect target validation", () => {
     mocks.owned.mockRejectedValue(new ConnectionAccessError(code, "Access failed"));
     expect((await POST(new Request("https://app.test/api/meta/disconnect", { method: "POST", body: JSON.stringify({ businessId: "11111111-1111-4111-8111-111111111111" }) }))).status).toBe(status);
     expect(mocks.rpc).not.toHaveBeenCalled();
+  });
+
+  // #1649: the grant is revoked at Meta (best effort) before the token is purged; a failed revoke never blocks it.
+  it("revokes the Meta grant first, then disconnects, even when the revoke fails", async () => {
+    const { POST } = await import("@/app/api/meta/disconnect/route");
+    const businessId = "11111111-1111-4111-8111-111111111111";
+    const request = () => new Request("https://app.test/api/meta/disconnect", { method: "POST", body: JSON.stringify({ businessId }) });
+    expect((await POST(request())).status).toBe(200);
+    expect(mocks.revoke).toHaveBeenCalledWith(businessId);
+    expect(mocks.order).toEqual(["revoke", "meta_disconnect"]);
+    mocks.revoke.mockResolvedValue("failed");
+    expect((await POST(request())).status).toBe(200);
+    expect(mocks.rpc).toHaveBeenLastCalledWith("meta_disconnect", { p_business_id: businessId, p_user_id: "owner" });
   });
 });
