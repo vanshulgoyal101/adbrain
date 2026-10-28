@@ -132,7 +132,7 @@ export async function getCreativePreviews(businessId: string): Promise<CreativeP
   const supabase = await createClient();
   const { data } = await supabase
     .from("creatives")
-    .select("id, headline, image_url, status, angle")
+    .select("id, headline, image_url, status, angle, created_at, variant_group")
     .eq("business_id", businessId)
     .order("created_at", { ascending: false });
   return data ?? [];

@@ -147,9 +147,12 @@ paid request. Browser recovery metadata is scoped to user/business in session
 storage; it is not cross-device durable generation idempotency.
 
 The Review board groups ads by Create batch (`variant_group`), newest batch first
-and open, older batches folded (#762). Unreviewed ads older than 7 days sit in a
-folded "Older unreviewed ads" section and leave the Needs review count; this is
-view-only, so approving one brings it back.
+and open, older batches folded (#762). Unreviewed ads older than 7 days, and the
+ads not picked from a batch once one of them is approved (#1148), sit in a folded
+"Set aside" section and leave the Needs review count (Home's too); this is
+view-only, so approving one brings it back. With approved ads and no campaign
+running, paused or drafted, Home's next step is "Launch a campaign with your
+approved ads", ahead of any review.
 
 Newly saved creatives use a smaller WebP for Review board and generated Assets
 tiles when the derivative is smaller and its upload succeeds. Inspect, Open,
