@@ -21,13 +21,13 @@ jobs:
       NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
       NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
       - run: npm ci
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: .next/cache
           key: next-${{ hashFiles('package-lock.json') }}-${{ github.sha }}
@@ -40,8 +40,8 @@ jobs:
       NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
       NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
@@ -59,8 +59,8 @@ jobs:
       NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
       NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
@@ -73,11 +73,11 @@ jobs:
       NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
       NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # test:meta-db replays historical schema blobs with git show
           fetch-depth: 0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
@@ -103,11 +103,11 @@ jobs:
       NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
       NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # the generation hold check replays a historical schema blob with git show
           fetch-depth: 0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
@@ -121,8 +121,8 @@ jobs:
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
@@ -132,8 +132,8 @@ jobs:
   docs:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
@@ -149,10 +149,10 @@ jobs:
       contents: read
       pull-requests: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: gitleaks/gitleaks-action@v2
+      - uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_ENABLE_COMMENTS: "false"
@@ -172,7 +172,7 @@ jobs:
       NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
       BASE_REF: ${{ github.base_ref }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -185,7 +185,7 @@ jobs:
             echo "No change under src/app or src/components; nothing to compare."
           fi
       - if: steps.changed.outputs.ui == 'true'
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
@@ -214,7 +214,7 @@ jobs:
           node scripts/ui-gate.mjs --public-only --origin http://localhost:3001 --out ui-gate/base
           node scripts/ui-gate.mjs --public-only --origin http://localhost:3002 --compare ui-gate/base --out ui-gate/head
       - if: failure() && steps.changed.outputs.ui == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ui-gate
           path: ui-gate/
