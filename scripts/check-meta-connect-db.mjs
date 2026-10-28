@@ -1203,6 +1203,40 @@ async function verifyMetaTokenPurge(db, database) {
   });
 }
 
+/** #1649: which live token disconnect may revoke at Meta, and whether that Meta user is shared with another business. */
+async function verifyMetaRevocationTarget(db, database) {
+  await check(`${database}: revocation target: unshared, shared, system user, already revoked (#1649)`, async () => {
+    const owner = randomUUID();
+    const [a, b, c, d] = [randomUUID(), randomUUID(), randomUUID(), randomUUID()];
+    const target = async (business) => (await db.query("select * from public.meta_token_revocation_target($1)", [business])).rows;
+    await db.query("begin");
+    try {
+      await db.query("insert into auth.users(id) values ($1)", [owner]);
+      const connect = async (business, subject, kind) => {
+        const token = randomUUID();
+        await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Revoke target')", [business, owner]);
+        await db.query(`select public.meta_token_insert($1,$2,$3,$4,$5,$6,$7,$8,'k1','v1',array['ads_management'],'[]'::jsonb,null,now(),null)`,
+          [token, business, owner, subject, kind, "\\x01", `\\x${"00".repeat(12)}`, `\\x${"00".repeat(16)}`]);
+        await db.query("insert into public.meta_connections(business_id,generation,authorization_status,ad_account_id,page_id,token_id) values ($1,1,'connected','act_123','123',$2)", [business, token]);
+        return token;
+      };
+      const tokenA = await connect(a, "4242", "user");
+      assert.deepEqual(await target(a), [{ token_id: tokenA, subject_id: "4242", token_kind: "user", shared: false }]);
+      await connect(b, "4242", "user");
+      assert.equal((await target(a))[0].shared, true);
+      await connect(c, "9001", "business_system_user");
+      assert.deepEqual((await target(c)).map((r) => [r.token_kind, r.shared]), [["business_system_user", false]]);
+      await connect(d, "7777", "user");
+      await db.query("update private.meta_tokens set revoked_at = now() where business_id = $1", [d]);
+      assert.equal((await target(d)).length, 0);
+      await db.query("update private.meta_tokens set revoked_at = now() where business_id = $1", [b]);
+      assert.equal((await target(a))[0].shared, false);
+      await db.query("set local role authenticated");
+      await assert.rejects(db.query("select * from public.meta_token_revocation_target($1)", [a]), { code: "42501" });
+    } finally { await db.query("rollback"); }
+  });
+}
+
 async function verifyConnectionReauth(db, database) {
   await check(`${database}: a Graph 190 marks only the failing connection generation reauth_required, service role only (#757)`, async () => {
     const owner = randomUUID(), business = randomUUID();
@@ -2597,6 +2631,7 @@ async function verify(database, source, integrityMigration, customerOnly = false
       await db.query(tokenSearchPathMigration);
       await verifyTokenSearchPath(db,database);
       await verifyMetaTokenPurge(db,database);
+      await verifyMetaRevocationTarget(db,database);
       await db.query(whatsappTemplateMigration);
       await db.query(whatsappTemplateMigration);
       await verifyWhatsAppTemplate(db,database);

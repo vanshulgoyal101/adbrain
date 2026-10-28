@@ -57,4 +57,18 @@ as $$ select t.id, t.business_id,
 revoke all on function public.meta_token_get(uuid, uuid) from public, anon, authenticated;
 grant execute on function public.meta_token_get(uuid, uuid) to service_role;
 
+-- #1649: before disconnect purges it, the app may revoke the grant at Meta. Revoking is app-wide for that Meta
+-- user, so `shared` says whether another business still holds a live token for the same person.
+create or replace function public.meta_token_revocation_target(p_business_id uuid)
+returns table (token_id uuid, subject_id text, token_kind text, shared boolean)
+language sql stable security definer set search_path = ''
+as $$ select t.id, t.subject_id, t.token_kind,
+  exists (select 1 from private.meta_tokens o
+    where o.subject_id = t.subject_id and o.business_id <> t.business_id and o.revoked_at is null)
+  from public.meta_connections c
+  join private.meta_tokens t on t.id = c.token_id and t.business_id = c.business_id
+  where c.business_id = p_business_id and t.revoked_at is null; $$;
+revoke all on function public.meta_token_revocation_target(uuid) from public, anon, authenticated;
+grant execute on function public.meta_token_revocation_target(uuid) to service_role;
+
 commit;
