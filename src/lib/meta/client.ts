@@ -305,6 +305,44 @@ export class MetaError extends Error {
   }
 }
 
+/** #1838: Meta's rate limits: app (4), user/account (17, 613, 80000–80014), Page (32). */
+export function isThrottleCode(code: number | undefined): boolean {
+  return code === 4 || code === 17 || code === 32 || code === 613 || (code !== undefined && code >= 80000 && code <= 80014);
+}
+
+/**
+ * #1838 (Reviewer, CTO): Meta is throttling us. `scope` says who waits (the whole app, one ad account, one Page) and
+ * `retryAfterMs` for how long (Meta's own estimate from the usage headers, else 15 min). Crons skip on it; a person's
+ * pause or activation is still tried. `reason` maps 1:1 to ADR-001's ChannelError code later.
+ */
+export class MetaThrottledError extends MetaError {
+  readonly reason = "rate_limited" as const;
+  constructor(message: string, status: number | undefined, code: number | undefined, subcode: number | undefined,
+    readonly scope: "app" | "account" | "page", readonly retryAfterMs: number, details?: MetaErrorDetails) {
+    super(message, status, code, subcode, details);
+    this.name = "MetaThrottledError";
+  }
+}
+
+const THROTTLE_DEFAULT_MS = 15 * 60_000;
+
+/** Meta's estimated wait from `x-business-use-case-usage` (minutes) or `x-ad-account-usage` (seconds); null if none. */
+export function throttleWaitMs(headers: Headers): number | null {
+  const waits: number[] = [];
+  try {
+    const usage = JSON.parse(headers.get("x-business-use-case-usage") ?? "{}") as Record<string, { estimated_time_to_regain_access?: number }[]>;
+    for (const rows of Object.values(usage)) for (const row of Array.isArray(rows) ? rows : []) {
+      if (typeof row?.estimated_time_to_regain_access === "number") waits.push(row.estimated_time_to_regain_access * 60_000);
+    }
+  } catch {}
+  try {
+    const account = JSON.parse(headers.get("x-ad-account-usage") ?? "{}") as { reset_time_duration?: number };
+    if (typeof account.reset_time_duration === "number") waits.push(account.reset_time_duration * 1000);
+  } catch {}
+  const longest = Math.max(0, ...waits.filter((wait) => Number.isFinite(wait)));
+  return longest > 0 ? longest : null;
+}
+
 /** #757: Graph 190 (any subcode: expired, password change, checkpoint, permission removed) means the token is dead. */
 export function isMetaReauthError(error: unknown): error is MetaError {
   return error instanceof MetaError && error.code === 190;
@@ -948,8 +986,12 @@ export class MetaClient {
     const json = await res.json().catch(() => ({}));
     if (!res.ok || (json as { error?: unknown }).error) {
       const err = (json as { error?: GraphErrorBody }).error;
-      throw new MetaError(metaErrorMessage(err, res.status), res.status, err?.code, err?.error_subcode,
-        { userTitle: err?.error_user_title, fbtraceId: err?.fbtrace_id, path: graphEndpoint(path) });
+      const details = { userTitle: err?.error_user_title, fbtraceId: err?.fbtrace_id, path: graphEndpoint(path) };
+      if (isThrottleCode(err?.code)) {
+        throw new MetaThrottledError(metaErrorMessage(err, res.status), res.status, err?.code, err?.error_subcode,
+          err?.code === 4 ? "app" : err?.code === 32 ? "page" : "account", throttleWaitMs(res.headers) ?? THROTTLE_DEFAULT_MS, details);
+      }
+      throw new MetaError(metaErrorMessage(err, res.status), res.status, err?.code, err?.error_subcode, details);
     }
     return { status: res.status, body: json as unknown };
   }

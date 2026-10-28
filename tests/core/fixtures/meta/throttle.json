@@ -1,0 +1,27 @@
+{
+  "note": "#1838: usage headers recorded read-only from one Ads Insights GET (ids scrubbed); error17 is Meta's documented body for a code-17 throttle (not provoked live).",
+  "recordedAt": "2026-10-28T21:00:58.246Z",
+  "headers": {
+    "x-business-use-case-usage": "{\"900000000000002\":[{\"type\":\"ads_insights\",\"call_count\":1,\"total_cputime\":1,\"total_time\":1,\"estimated_time_to_regain_access\":0,\"ads_api_access_tier\":\"standard_access\"}]}",
+    "x-fb-ads-insights-throttle": "{\"app_id_util_pct\":0.01,\"acc_id_util_pct\":0,\"ads_api_access_tier\":\"standard_access\"}"
+  },
+  "error17": {
+    "error": {
+      "message": "(#17) User request limit reached",
+      "type": "OAuthException",
+      "is_transient": true,
+      "code": 17,
+      "error_subcode": 2446079,
+      "fbtrace_id": "AbCdEf123"
+    }
+  },
+  "error4": {
+    "error": {
+      "message": "(#4) Application request limit reached",
+      "type": "OAuthException",
+      "is_transient": true,
+      "code": 4,
+      "fbtrace_id": "AbCdEf456"
+    }
+  }
+}
