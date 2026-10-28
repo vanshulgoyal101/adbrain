@@ -235,7 +235,9 @@ feedback to assess unnecessary questions, abandonment and time to a useful draft
    campaigns open WhatsApp: an India-based phone (#235) or a saved WhatsApp message (`contactChannel`,
    #1147). The ask is in the ad's language ("Message us on WhatsApp", "WhatsApp पर मैसेज करें",
    "WhatsApp par message karein", "WhatsApp ਤੇ ਮੈਸੇਜ ਕਰੋ"; Indic words shaped like the rest, #1177).
-   Others show their phone number, as do designs saved before #1147. Review warns, without
+   Others show their phone number, as do designs saved before #1147. A WhatsApp business's concept
+   gets no phone or email and is told its button opens a chat; when the copy's last line doesn't mention
+   WhatsApp, that same ask is added as the last line, in the ad's language ($0, no repair). Review warns, without
    blocking, when such a picture goes to a form campaign, and offers "Switch to WhatsApp".
 6. Save usage receipts and report partial failures independently of successful rows.
 

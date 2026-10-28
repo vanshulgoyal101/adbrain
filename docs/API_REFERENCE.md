@@ -86,14 +86,14 @@ same identity; do not change a key or clear local recovery data to force progres
 
 | Method | Path | Input / result | Effect |
 | --- | --- | --- | --- |
-| POST | `/api/brand/autofill` | URL -> plain extraction | Website fetch + model call, no brand save |
+| POST | `/api/brand/autofill` | `{url}` or (#1317) `{text}`: an Instagram bio, Google listing or catalogue text pasted by hand (30+ letters, ≤ 6000 chars; nothing fetched, phone read from the text). URL -> plain extraction | Website fetch + model call, no brand save |
 | POST | `/api/creatives/assistant` | Interview -> question/brief | Model call |
 | POST | `/api/creatives/generate` | Generation input -> saved variants/failures | Paid work + Storage/DB |
 | GET | `/api/creatives/generate` | Business/group/count -> saved status | DB lookup/unknown-ID fence, no generation |
 | POST | `/api/creatives/[id]/regenerate` | No body -> `{creative}` | Paid work, overwrite, reset approval |
 | POST | `/api/creatives/[id]/picture` | `{headline,subhead,phone,ctaLabel,showCta?}` -> `{creative,liveNotice?}` | Re-renders the overlay, no AI; new `image_url`, status kept. `showCta` paints the button on the picture (off for new ads, #760); omitted keeps it as is |
 | POST | `/api/creatives/[id]/background` | `{instruction}` (3-300) or `{photoUrl}` -> `{creative,liveNotice?}` | Paid image (like Regenerate) or the owner's Brand photo (free), same claim; keeps copy, overlay words and status |
-| POST | `/api/creatives/export` | IDs -> ZIP | Downloads selected media |
+| POST | `/api/creatives/export` | IDs -> ZIP; a sales prospect's account (internal `+prospect` address, #1317) gets every picture with a 'Sample: not live' band and a SAMPLE note atop copy.txt; a picture that can't be marked is left out (`X-Images-Skipped`) | Downloads selected media |
 | GET | `/api/campaign-drafts` | `businessId` -> envelope draft array | Owner-scoped read |
 | POST | `/api/campaign-drafts` | DraftInput -> envelope draft | DB write, no model or Meta creation |
 | GET | `/api/campaign-drafts/[id]` | Path ID -> envelope draft | Read |
@@ -307,7 +307,7 @@ Supabase Auth client APIs rather than an invented `/api/login` endpoint.
 
 ### Website Autofill
 
-`POST /api/brand/autofill`: `{url: string, businessId?: uuid}`; trimmed length 1-2048. Public URL
+`POST /api/brand/autofill`: `{url: string, businessId?: uuid}`; trimmed length 1-2048, or (#1317) `{text: string, businessId?: uuid}` with text pasted by hand (an Instagram bio, a Google listing; at least 30 letters, read up to 6000 characters, never fetched; 400 'Paste a little more…' when too short). Public URL
 policy and redirect/DNS checks apply. Returns `{extraction}` with suggested brand
 fields; the caller must review and save separately. Blocked URL: 400; fetch/model
 failure: 502; no readable text: 422. Extraction is a model result, not a factual

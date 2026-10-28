@@ -1,3 +1,4 @@
+import { leadAnswers } from "@/lib/leads/answers";
 import { answersLine, deliverOwnerAlert, type AlertConfig, type AlertLanguage, type AlertStore } from "@/lib/alerts/sender";
 
 /** #701 v1: only leads Meta received in the last 24 h get an alert (CPO spec §2). */
@@ -15,8 +16,9 @@ export type AlertLead = {
   campaignName: string | null;
 };
 
+export { leadAnswers };
+
 const NOT_GIVEN: Record<AlertLanguage, string> = { en: "not given", hi: "नहीं दिया" };
-const CONTACT_KEY = /^(full_name|first_name|last_name|name)$|phone|mobile|email|whatsapp/;
 
 /** "+919800000009" → "+91 98000 00009"; WhatsApp turns it into a tap-to-call link. */
 export function displayPhone(phone: string | null): string | null {
@@ -25,16 +27,6 @@ export function displayPhone(phone: string | null): string | null {
   return india ? `+91 ${india[1]} ${india[2]}` : phone;
 }
 
-/** The form's other answers: "What is your monthly bill: ₹3,000 · City: Mohali". */
-export function leadAnswers(fieldData: unknown): { question: string; answer: string }[] {
-  if (!fieldData || typeof fieldData !== "object" || Array.isArray(fieldData)) return [];
-  return Object.entries(fieldData as Record<string, unknown>)
-    .filter(([key, value]) => typeof value === "string" && value.trim() && !CONTACT_KEY.test(key))
-    .map(([key, value]) => {
-      const question = key.replace(/_+/g, " ").replace(/\?+$/, "").trim();
-      return { question: question.charAt(0).toUpperCase() + question.slice(1), answer: value as string };
-    });
-}
 
 /** `adbrain_lead_alert` body: {{1}} business, {{2}} name, {{3}} phone, {{4}} answers, {{5}} ad. */
 export function leadAlertParams(businessName: string, lead: AlertLead, language: AlertLanguage): string[] {

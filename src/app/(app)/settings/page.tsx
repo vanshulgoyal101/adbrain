@@ -161,7 +161,7 @@ async function ConnectionSettings({ businessId, searchParams, whatsapp }: {
     <>
       {result.connection ? (
         <MetaConnectionPanel businessId={businessId} connection={result.connection}
-          oauthConfigured={metaOAuthConfigured()} notice={noticeFrom(params)} />
+          oauthConfigured={metaOAuthConfigured()} notice={noticeFrom(params)} fundingMode={mode} />
       ) : (
         <Alert variant="error">
           Meta connection status is temporarily unavailable. Your campaign draft is preserved.
