@@ -15,6 +15,8 @@ import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
 import { formatMoney } from "@/lib/format";
 import { createMetaConnectClient } from "@/lib/meta-connect-ui/client";
 import { connectTrustLine } from "@/lib/trust-lines";
+import type { SetupWelcome } from "@/lib/campaign/setup-welcome";
+import { whenTheyTapLine } from "@/components/when-they-tap";
 import type { Business, Creative } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -56,7 +58,7 @@ function sessionStore(): Storage | null {
  * Connect Facebook Page → Go live. Go live is one tap (4b): save the draft, review it, create it paused, then turn
  * it on as a 2-day capped run (setup-go-live-flow). Nothing is spent before that tap; the server enforces the cap.
  */
-export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNumber, weeklyCap }: {
+export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNumber, weeklyCap, welcome = null }: {
   business: Pick<Business, "id" | "name" | "locations">;
   ads: Creative[];
   pageConnected: boolean;
@@ -64,6 +66,8 @@ export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNum
   /** Masked, as the owner sees it elsewhere. */
   whatsappNumber: string | null;
   weeklyCap: { capRupees: number | null; active: CampaignSpend[] } | null;
+  /** #1529: the WhatsApp welcome Go live sends (as Review works it out); null if it couldn't be read. */
+  welcome?: SetupWelcome | null;
 }) {
   const router = useRouter();
   const [daily, setDaily] = useState<number>(BUDGET_PRESETS[0]);
@@ -149,11 +153,18 @@ export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNum
           <dd className="mt-1 font-medium text-slate-950">
             {whatsappNumber ? `They message you on WhatsApp at ${whatsappNumber}` : "They message you on WhatsApp"}
           </dd>
+          {welcome && <>
+            <dd className="mt-2 whitespace-pre-wrap break-words rounded-lg bg-slate-50 p-3 text-slate-800">&ldquo;{welcome.greeting}&rdquo;</dd>
+            <dd className="mt-1 text-slate-600">{whenTheyTapLine(welcome)}</dd>
+          </>}
         </div>
       </dl>
-      <Link href={`/campaigns?all=1&new=1&creatives=${ids}`} className="mt-3 inline-flex min-h-11 items-center text-sm font-medium text-slate-700 underline underline-offset-4">
-        Change who sees it
-      </Link>
+      {/* #1529: before the Page is connected, the full composer is the pre-access panel, a dead end. */}
+      {pageConnected && (
+        <Link href={`/campaigns?all=1&new=1&creatives=${ids}`} className="mt-3 inline-flex min-h-11 items-center text-sm font-medium text-slate-700 underline underline-offset-4">
+          Change who sees it
+        </Link>
+      )}
 
       <ul aria-label="Before you go live" className="mt-4 divide-y divide-slate-200 border-y border-slate-200">
         <Row done={pageConnected} title="Facebook Page" status={pageConnected ? "Connected" : "Not connected"} />
