@@ -26,6 +26,8 @@ const storedDesignSchema = z.object({
   subhead: z.string().nullable(),
   benefits: z.array(z.string()),
   phone: z.string().nullable(),
+  // Designs saved before #1147 asked for a call.
+  contact: z.enum(["phone", "whatsapp"]).default("phone"),
   contactLine: z.string().nullable(),
   ctaLabel: z.string(),
   // Designs saved before #760 were all drawn with the button.
