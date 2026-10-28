@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { ArrowLeft, ArrowRight, Eye, EyeOff, Loader2, Mail, MailCheck } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -10,17 +10,25 @@ import { openAfterSignIn, safeAuthRedirect } from "@/lib/auth-redirect";
 import { rememberReturningVisitor } from "@/lib/login-visitor";
 import { reportAuthOutcome } from "@/lib/observability/auth-beacon";
 import { authCode } from "@/lib/observability/auth-events";
-import { CALLBACK_ERRORS, parseCallbackError } from "@/lib/auth-callback-error";
+import { CALLBACK_ERRORS, hashCallbackError, parseCallbackError } from "@/lib/auth-callback-error";
 
 const primaryClass = "bg-primary font-semibold text-primary-foreground shadow-xs hover:bg-primary-hover";
 
 /** `newVisitor` leads with a sign-in link, which also creates the account; passwords stay one tap away. */
+const noHash = () => () => {};
+/** #1414: the fragment's sign-in error (old-style links); none on the server. */
+export function useHashCallbackError() {
+  return useSyncExternalStore(noHash, () => hashCallbackError(window.location.hash), () => null);
+}
+
 export function LoginForm({ newVisitor = false, onSucceeded }: { newVisitor?: boolean; onSucceeded?: () => void }) {
   const searchParams = useSearchParams();
   const redirect = safeAuthRedirect(searchParams.get("redirect"));
   // #1414: why the last sign-in failed, with its one action (a new link, or Google again in this browser).
-  const callbackError = parseCallbackError(searchParams.get("error"));
-  const [callbackShown, setCallbackShown] = useState(callbackError !== null);
+  const hashError = useHashCallbackError();
+  const callbackError = parseCallbackError(searchParams.get("error")) ?? hashError;
+  const [callbackDismissed, setCallbackDismissed] = useState(false);
+  const callbackShown = !callbackDismissed;
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -216,14 +224,8 @@ export function LoginForm({ newVisitor = false, onSucceeded }: { newVisitor?: bo
             <p className="break-words">{CALLBACK_ERRORS[callbackError].text}</p>
             {CALLBACK_ERRORS[callbackError].action === "new_link" && (
               <button type="button" className="min-h-11 font-medium text-slate-900 underline underline-offset-4" disabled={pending !== null}
-                onClick={() => { setCallbackShown(false); if (email) void sendMagicLink(); else emailRef.current?.focus(); }}>
+                onClick={() => { setCallbackDismissed(true); if (email) void sendMagicLink(); else emailRef.current?.focus(); }}>
                 {email ? "Send a new link" : "Enter your email for a new link"}
-              </button>
-            )}
-            {CALLBACK_ERRORS[callbackError].action === "google" && (
-              <button type="button" className="min-h-11 font-medium text-slate-900 underline underline-offset-4" disabled={pending !== null}
-                onClick={() => { setCallbackShown(false); void signInWithGoogle(); }}>
-                Try Google again
               </button>
             )}
           </div>

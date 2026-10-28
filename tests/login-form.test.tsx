@@ -240,6 +240,15 @@ describe("new and returning visitors", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
+  // #1428 (QA 2): back from a failed sign-in on a phone, the intro covered what went wrong.
+  it("#1428: a failed sign-in on a phone shows the error, not the intro", async () => {
+    phoneViewport = true;
+    mocks.error = "link_expired";
+    render(await LoginPage({ searchParams: Promise.resolve({ error: "link_expired" }) }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByRole("alert")).toHaveTextContent("That sign-in link has expired or was already used.");
+  });
+
   it("never covers the form for a returning visitor or on a laptop", async () => {
     render(await LoginPage({}));
     expect(screen.queryByRole("dialog")).toBeNull();
@@ -287,12 +296,22 @@ describe("sign-in callback errors (#1414)", () => {
     expect(mocks.signInWithOtp).toHaveBeenCalledWith(expect.objectContaining({ email: "owner@example.test" }));
   });
 
-  it("Google that finished in another browser offers Google again, here", async () => {
+  it("a link opened in another browser or app says so, and offers a new link (QA 2: usually Gmail's in-app browser)", () => {
     mocks.error = "other_browser";
-    render(<LoginForm />);
-    expect(screen.getByRole("alert")).toHaveTextContent("Google sign-in has to finish in the browser where it started. Start it again here.");
-    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Try Google again" })));
-    expect(mocks.signInWithOAuth).toHaveBeenCalledOnce();
+    render(<LoginForm newVisitor />);
+    expect(screen.getByRole("alert")).toHaveTextContent("Sign-in has to finish in the browser you started it in. Open the link there, not inside Gmail or another app, or get a new one here.");
+    fireEvent.click(screen.getByRole("button", { name: "Enter your email for a new link" }));
+    expect(screen.getByLabelText("Email")).toHaveFocus();
+  });
+
+  it("an old-style link's error in the fragment is explained too", () => {
+    window.location.hash = "#error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid";
+    try {
+      render(<LoginForm newVisitor />);
+      expect(screen.getByRole("alert")).toHaveTextContent("That sign-in link has expired or was already used.");
+    } finally {
+      window.location.hash = "";
+    }
   });
 
   it("an unknown reason in the address shows the plain message, never the address's text", () => {
