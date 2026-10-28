@@ -18,7 +18,7 @@ import type { AuditLog, Business, Campaign, CampaignResult, CreativePreview } fr
 import { campaignAttention } from "@/lib/campaign/health";
 import { formatReplyTime } from "@/lib/leads/first-reply";
 import { campaignStatus, Status } from "@/components/ui/status";
-import { goneInMeta } from "@/lib/campaign/gone-in-meta";
+import { goneInMeta, recentlyDeletedInMeta } from "@/lib/campaign/gone-in-meta";
 import type { HomeAdReview } from "@/lib/campaign/home-ad-review";
 import { translator, type AppLocale } from "@/i18n/locale";
 
@@ -73,6 +73,7 @@ export function WorkspaceHome({
 }: WorkspaceHomeProps) {
   const t = translator(locale, "home");
   const liveCampaigns = campaigns.filter((campaign) => !goneInMeta(campaign));
+  const deletedInMeta = campaigns.filter((campaign) => recentlyDeletedInMeta(campaign, now));
   const summary = business ? homeResults(campaigns, results) : null;
   // #1292's line already names the newest person waiting, so the verdict doesn't say it twice.
   const verdicts = business ? homeVerdicts(campaigns, results, { now, waiting: firstEnquiry ? 0 : waiting }) : null;
@@ -116,6 +117,12 @@ export function WorkspaceHome({
       {adReview?.kind === "rejected" && rejectedAds}
 
       {stale.length > 0 && <StaleResultsRefresher campaignIds={stale} />}
+      {/* #1600 (CPO #1601): a campaign deleted in Meta Ads Manager is named here for a week. */}
+      {deletedInMeta.map((campaign) => (
+        <p key={campaign.id} className="max-w-2xl text-sm text-slate-700">
+          <Link href="/campaigns" className="hover:underline">{t("deletedInMeta", { name: campaign.name || t("untitledCampaign") })}</Link>
+        </p>
+      ))}
       {summary && (
         <section aria-labelledby="results-title">
           <h2 id="results-title" className="sr-only">{t("resultsSoFar")}</h2>

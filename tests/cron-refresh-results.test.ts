@@ -174,8 +174,10 @@ describe("campaignAttention", () => {
       const { status, body } = await call();
       expect(status).toBe(200);
       expect(body).toMatchObject({ ok: true, refreshed: 1, failed: 0, ended: [await key("gone")], failures: [] });
+      // #1600: one 'ended' alert for the workflow, by opaque key.
+      expect(body.alerts).toEqual([{ kind: "ended", key: await key("gone") }]);
       expect(mocks.saveCampaign).toHaveBeenCalledWith({ businessId: "business-1", userId: "owner-1" },
-        { status: "completed", raw: { cap: { days: 2 }, metaStatus: "DELETED" } }, "gone");
+        { status: "completed", raw: { cap: { days: 2 }, metaStatus: "DELETED", metaGoneAt: expect.any(String) } }, "gone");
     });
 
     it("Meta's recorded 'object does not exist' (100/33) is ended as MISSING", async () => {
