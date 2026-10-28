@@ -43,6 +43,26 @@
 .person { font-weight: 600; }
 .contact > a { min-height: 26px; }
 .mobileLabel { display: none; }
+.listPane { min-width: 0; }
+.name { font: inherit; text-align: left; }
+button.name { min-height: 44px; color: inherit; cursor: pointer; }
+button.name:hover { text-decoration: underline; }
+/* #1260 slice 4: 1280+ shows the list and the selected person side by side. */
+.panes { display: grid; grid-template-columns: minmax(0, 1fr) minmax(360px, 420px); gap: 24px; align-items: start; }
+.panes tr[data-selected] { background: var(--color-slate-50); }
+.detail { position: sticky; top: 16px; display: grid; gap: 20px; padding: 20px; border: 1px solid var(--color-slate-200); border-radius: 10px; background: white; }
+.detailHead { display: flex; gap: 12px; align-items: center; }
+.detailHead h3 { font-size: 18px; font-weight: 600; overflow-wrap: anywhere; }
+.detailHead p { font-size: 13px; color: var(--color-slate-500); }
+.detailAvatar { display: grid; place-items: center; flex-shrink: 0; width: 48px; height: 48px; border-radius: 50%; background: var(--color-slate-100); color: var(--color-slate-700); font-weight: 600; }
+.detailState { font-weight: 500; color: var(--color-slate-700); }
+.detailState[data-state="new"] { color: var(--color-blue-700); }
+.detailState[data-state="customer"] { color: var(--color-emerald-700); }
+.detail h4 { margin-bottom: 6px; font-size: 13px; font-weight: 600; color: var(--color-slate-500); }
+.detailMessage { padding: 12px; border-radius: 8px; background: var(--color-emerald-50); font-size: 14px; line-height: 1.5; color: var(--color-slate-800); }
+.answers { display: grid; gap: 10px; font-size: 14px; }
+.answers dt { color: var(--color-slate-500); }
+.answers dd { color: var(--color-slate-900); overflow-wrap: anywhere; }
 /* #1260: phone-row parts; the desktop table stays as it was. */
 .avatar, .rowState, .rowMeta, .more { display: none; }
 .more summary { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 6px; color: var(--color-slate-600); cursor: pointer; list-style: none; }
@@ -59,6 +79,7 @@
 .digest summary::after { content: "+"; font-size: 20px; font-weight: 400; }
 .digest[open] summary::after { content: "-"; }
 @media (max-width: 900px) {
+  .toolbar select { flex: 1; min-width: 0; }
   .table, .table tbody { display: block; }
   .table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
   .table tbody tr { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px 18px; padding: 18px 0; border-bottom: 1px solid var(--color-slate-200); }
@@ -67,7 +88,6 @@
   .table .person { font-size: 15px; }
   .contact { display: flex !important; flex-wrap: wrap; gap: 8px 20px; }
   .contact > a { display: flex; min-height: 36px; align-items: center; }
-  .toolbar select { flex: 1; min-width: 0; }
   /* #1260: one row per person: initials, name and state word, then when · city, then the actions. No labels. */
   .table tbody tr { grid-template-columns: 40px minmax(0, 1fr); gap: 10px 12px; }
   .table td { grid-column: 2; }
@@ -88,6 +108,37 @@
   /* Waiting: WhatsApp them + Call. Customers: the word 'Customer' and ⋯ only. */
   tr[data-state="new"] .followUpCell > button:not(.followUpButton) { display: none; }
   tr[data-state="customer"] .contact { display: none !important; }
+}
+/* #1260 slice 4: the left pane at 1280+ uses the same rows as a phone. */
+@media (min-width: 1280px) {
+  .panes .table, .panes .table tbody { display: block; }
+  .panes .table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .panes .table tbody tr { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px 18px; padding: 18px 0; border-bottom: 1px solid var(--color-slate-200); }
+  .panes .table td { display: block; padding: 0; border: 0; }
+  .panes .table .person, .panes .table .contact { grid-column: 1 / -1; }
+  .panes .table .person { font-size: 15px; }
+  .panes .contact { display: flex !important; flex-wrap: wrap; gap: 8px 20px; }
+  .panes .contact > a { display: flex; min-height: 36px; align-items: center; }
+  /* #1260: one row per person: initials, name and state word, then when · city, then the actions. No labels. */
+  .panes .table tbody tr { grid-template-columns: 40px minmax(0, 1fr); gap: 10px 12px; }
+  .panes .table td { grid-column: 2; }
+  .panes .table .person { grid-column: 1 / -1; display: grid !important; grid-template-columns: 40px minmax(0, 1fr) auto; column-gap: 12px; align-items: center; font-size: 15px; }
+  .panes .avatar { display: grid; place-items: center; grid-row: span 2; width: 40px; height: 40px; border-radius: 50%; background: var(--color-slate-100); color: var(--color-slate-700); font-size: 14px; font-weight: 600; }
+  .panes .name { min-width: 0; overflow-wrap: anywhere; }
+  .panes .rowState { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; color: var(--color-slate-600); white-space: nowrap; }
+  .panes .rowState[data-state="new"] { color: var(--color-blue-700); }
+  .panes .rowState[data-state="new"]::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+  .panes .rowState[data-state="customer"] { color: var(--color-emerald-700); }
+  .panes .rowMeta { display: block; grid-column: 2 / -1; font-size: 13px; font-weight: 400; color: var(--color-slate-500); overflow-wrap: anywhere; }
+  .panes .desktopOnly, .panes .phoneNumber, .panes .repliedLine, .panes .followUpButton { display: none !important; }
+  .panes .contact { gap: 8px; }
+  .panes .replyActions { margin-top: 0; }
+  .panes .followUp { display: flex !important; align-items: center; }
+  .panes .followUpCell { flex: 1; }
+  .panes .more { display: block; margin-left: auto; }
+  /* Waiting: WhatsApp them + Call. Customers: the word 'Customer' and ⋯ only. */
+  .panes tr[data-state="new"] .followUpCell > button:not(.followUpButton) { display: none; }
+  .panes tr[data-state="customer"] .contact { display: none !important; }
 }
 @media (max-width: 600px) {
   /* #376: no dead space on a phone. */
