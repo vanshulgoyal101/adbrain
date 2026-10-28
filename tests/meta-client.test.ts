@@ -39,7 +39,7 @@ describe("Meta lead pagination", () => {
     const client = new MetaClient(creds);
     expect((await client.listLeadForms()).map(form => form.id)).toEqual(["f1", "f2"]);
     expect((await client.listLeadsForForm("f2")).map(lead => lead.id)).toEqual(["lead1", "lead2"]);
-    expect(fetchMock.mock.calls.every(([url]) => String(url).startsWith("https://graph.facebook.com/v21.0/"))).toBe(true);
+    expect(fetchMock.mock.calls.every(([url]) => String(url).startsWith("https://graph.facebook.com/v26.0/"))).toBe(true);
     expect(String(fetchMock.mock.calls[2][0])).toContain("after=forms2");
     expect(String(fetchMock.mock.calls[4][0])).toContain("after=leads2");
   });
@@ -358,7 +358,7 @@ describe("MetaClient.updateCampaignStatus", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(3);
     const [url, init] = fetchMock.mock.calls[2];
-    expect(String(url)).toBe("https://graph.facebook.com/v21.0/camp_1");
+    expect(String(url)).toBe("https://graph.facebook.com/v26.0/camp_1");
     expect(init?.method).toBe("POST");
     const body = String(init?.body);
     expect(body).toContain("status=PAUSED");

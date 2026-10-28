@@ -87,7 +87,7 @@ export function MarketingHome() {
           <ul>
             <li><Check aria-hidden="true" /><div><h3>Approve every ad</h3><p>Check the picture, the words and every claim before an ad is used.</p></div></li>
             <li><CirclePause aria-hidden="true" /><div><h3>Your limit, your pause button</h3><p>Campaigns start paused with the daily limit you set. Pause any time; Meta&apos;s own review still applies.</p></div></li>
-            <li><IndianRupee aria-hidden="true" /><div><h3>Pay as you go, in rupees</h3><p>Making ads is free. To run them, top up any amount from ₹500; 80% goes to your ads (including Meta&apos;s GST) and 20% to AdBrain.</p></div></li>
+            <li><IndianRupee aria-hidden="true" /><div><h3>Pay as you go, in rupees</h3><p>Making ads is free. To run them, top up any amount from ₹500.</p></div></li>
             <li><MapPin aria-hidden="true" /><div><h3>Your own Page, your customers</h3><p>Ads run from your Facebook Page and Instagram, and customers message your WhatsApp directly.</p></div></li>
           </ul>
         </section>

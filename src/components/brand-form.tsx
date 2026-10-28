@@ -298,7 +298,7 @@ export function BrandForm({ business, photoCount = 0 }: { business: Business | n
               placeholder="Your business name"
             />
           </Field>
-          <Field label="Website (needed only for instant forms)" error={errors.website}>
+          <Field label="Website (optional: lets AdBrain fill this page for you)" error={errors.website}>
             <Input
               name="website"
               value={fields.website}

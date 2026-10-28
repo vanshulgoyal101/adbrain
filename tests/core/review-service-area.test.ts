@@ -14,7 +14,7 @@ function replay() {
   return vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
     const url = new URL(String(input));
     url.searchParams.delete("access_token");
-    const exchange = tape.find((entry) => entry.path === url.pathname.replace("/v21.0/", "") + url.search);
+    const exchange = tape.find((entry) => entry.path === url.pathname.replace("/v26.0/", "") + url.search);
     if (!exchange) throw new Error(`Unrecorded Graph call: ${url.pathname}${url.search}`);
     return Response.json(exchange.body, { status: exchange.status });
   });

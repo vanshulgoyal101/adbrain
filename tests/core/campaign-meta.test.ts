@@ -28,10 +28,10 @@ function replay(...tapes: unknown[][]) {
   const sent: Sent[] = [];
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = new URL(String(input));
-    expect(url.origin + url.pathname.slice(0, 7)).toBe("https://graph.facebook.com/v21.0/");
+    expect(url.origin + url.pathname.slice(0, 7)).toBe("https://graph.facebook.com/v26.0/");
     url.searchParams.delete("access_token");
     const method = init?.method ?? "GET";
-    const path = url.pathname.replace("/v21.0/", "") + url.search;
+    const path = url.pathname.replace("/v26.0/", "") + url.search;
     const form = init?.body instanceof URLSearchParams
       ? Object.fromEntries([...init.body].filter(([key]) => key !== "access_token")) : {};
     sent.push({ method, path, form });

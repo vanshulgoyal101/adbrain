@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { GRAPH } from "@/lib/meta/graph-version";
 import type { Capabilities, Capability, SelectedAssets } from "./connect-contracts";
 
 const accountSchema = z.object({
@@ -16,7 +17,7 @@ function unavailable(message: string, state: "blocked" | "unknown" = "blocked"):
 
 export async function verifyMetaCapabilities(token: string, selected: SelectedAssets): Promise<Capabilities> {
   async function read(path: string, accessToken = token): Promise<unknown> {
-    const response = await fetch(`https://graph.facebook.com/v21.0/${path}`, {
+    const response = await fetch(`${GRAPH}/${path}`, {
       method: "GET", headers: { Authorization: `Bearer ${accessToken}` }, cache: "no-store",
       signal: AbortSignal.timeout(15_000),
     });

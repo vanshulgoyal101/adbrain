@@ -752,8 +752,10 @@ function BusinessCampaigns({
       setIncludedNames((prefill.targeting?.location?.includedNames ?? []).join("\n"));
       setExcludedNames((prefill.targeting?.location?.excludedNames ?? []).join("\n"));
       setLeadFormId(prefill.leadFormId ?? "");
-      if (prefill.destination) setDestination(prefill.destination);
-      destinationChosenRef.current = Boolean(prefill.destination);
+      // #1216: a copy with a lead form is a form campaign, whatever the composer's default.
+      const copiedDestination = prefill.destination ?? (prefill.leadFormId ? "instant_form" : undefined);
+      if (copiedDestination) setDestination(copiedDestination);
+      destinationChosenRef.current = Boolean(copiedDestination);
       setWhatsAppNumber(!prefill.whatsappNumber || maskedWhatsAppNumberPattern.test(prefill.whatsappNumber) ? prefill.whatsappNumber ?? "" : maskWhatsAppNumber(prefill.whatsappNumber));
       setWhatsAppLanguage(prefill.whatsappLanguage ?? "ad");
       setWhatsAppMessage(prefill.whatsappMessage ?? null);
@@ -1449,14 +1451,14 @@ function BusinessCampaigns({
 
   const savedDraftsBlock = savedDrafts.length > 0 && (
     <details aria-label="Saved drafts" className="group border-y border-slate-200 py-3">
-      <summary className="flex min-h-10 cursor-pointer list-none items-center gap-2 text-sm font-semibold text-slate-900 [&::-webkit-details-marker]:hidden">
+      <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 text-sm font-semibold text-slate-900 [&::-webkit-details-marker]:hidden">
         <ChevronRight className="h-4 w-4 text-slate-500 transition-transform group-open:rotate-90" aria-hidden="true" />
         <h2>Saved drafts</h2>
         <span className="font-normal text-slate-500">({savedDrafts.length})</span>
       </summary>
       <ul className="mt-1 divide-y divide-slate-100">
         {savedDrafts.map((draft) => <li key={draft.draftId} className="flex min-w-0 items-center justify-between gap-3 py-2">
-          <button type="button" disabled={draftBusy !== null || creating || operationChecking} onClick={() => void reopenDraft(draft.draftId)} className="min-w-0 flex-1 text-left text-sm font-medium text-slate-800 hover:text-blue-700 disabled:opacity-50">
+          <button type="button" disabled={draftBusy !== null || creating || operationChecking} onClick={() => void reopenDraft(draft.draftId)} className="min-h-11 min-w-0 flex-1 text-left text-sm font-medium text-slate-800 hover:text-blue-700 disabled:opacity-50">
             <span className="block wrap-break-word">{draft.input.name}</span>
             <span className="mt-0.5 block text-xs font-normal text-slate-500">{formatMoney(draft.input.dailyBudgetRupees)} per ad set</span>
           </button>
@@ -1488,7 +1490,7 @@ function BusinessCampaigns({
             <Button onClick={openConnect}>
               <Link2 className="h-4 w-4" aria-hidden="true" /> Connect Business
             </Button>
-            <Link href="/settings" className="inline-flex h-10 items-center rounded-md px-3 text-sm font-medium text-slate-700 hover:bg-slate-100">
+            <Link href="/settings" className="inline-flex h-11 items-center rounded-md px-3 text-sm font-medium text-slate-700 hover:bg-slate-100">
               Open Settings
             </Link>
           </div>
@@ -2039,7 +2041,7 @@ function BusinessCampaigns({
                     <p className="text-sm text-slate-700">
                       {whatsappMessage ? "Edited for this campaign" : savedWhatsAppMessage ? "Your saved message" : "Suggested message"}
                       {" · "}
-                      <button id="whatsapp-message" type="button" onClick={() => setMessageEditorOpen(true)} className="font-medium text-blue-700 underline">Edit for this campaign</button>
+                      <button id="whatsapp-message" type="button" onClick={() => setMessageEditorOpen(true)} className="inline-flex min-h-11 items-center font-medium text-blue-700 underline">Edit for this campaign</button>
                     </p>
                     {messageEditorOpen && (() => {
                       const ads = adsFor(selected);
