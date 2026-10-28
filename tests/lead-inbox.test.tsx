@@ -801,10 +801,10 @@ describe("<LeadInbox> reply in one tap (#1049)", () => {
     render(<LeadInbox businessName="Solaride" offer="Free solar site survey" language="hinglish" initialLeads={[lead({ phone: "98765 43210" })]} metaReady />);
     const whatsapp = screen.getByRole("link", { name: "WhatsApp them" });
     expect(whatsapp).toHaveAttribute("href", `https://wa.me/919876543210?text=${encodeURIComponent("Namaste Asha ji, Solaride ki taraf se dhanyavaad! Aapne free solar site survey ke baare mein poocha tha. Aapse baat karne ka sahi time kab hai?")}`);
-    expect(screen.getByRole("link", { name: "Call" })).toHaveAttribute("href", "tel:98765 43210");
+    expect(screen.getAllByRole("link", { name: "Call" })[0]).toHaveAttribute("href", "tel:98765 43210");
     whatsapp.addEventListener("click", (event) => event.preventDefault());
     fireEvent.click(whatsapp);
-    fireEvent.click(screen.getByRole("link", { name: "Call" }));
+    fireEvent.click(screen.getAllByRole("link", { name: "Call" })[0]);
     const marks = calls.filter(([url]) => url === "/api/leads/l1");
     expect(marks).toHaveLength(1);
     expect(marks[0][1]).toMatchObject({ method: "PATCH", body: JSON.stringify({ contacted: true }), keepalive: true });
@@ -814,7 +814,7 @@ describe("<LeadInbox> reply in one tap (#1049)", () => {
   it("shows the saved reply time and no WhatsApp button for a number it can't use", () => {
     render(<LeadInbox businessName="Solaride" initialLeads={[lead({ id: "l2", meta_lead_id: "m2", phone: "12345", first_contacted_at: "2026-08-20T10:12:00.000Z" })]} metaReady />);
     expect(screen.queryByRole("link", { name: "WhatsApp them" })).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Call" })).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: "Call" })[0]).toBeInTheDocument();
     expect(screen.getByText("Replied 12 min after the enquiry")).toBeInTheDocument();
   });
 
@@ -822,8 +822,22 @@ describe("<LeadInbox> reply in one tap (#1049)", () => {
     const calls: string[] = [];
     global.fetch = vi.fn(async (url: string) => { calls.push(url); return { ok: true, json: async () => ({}) }; }) as unknown as typeof fetch;
     render(<LeadInbox businessName="Solaride" initialLeads={[lead({ phone: "98765 43210", workflow_status: "contacted" })]} metaReady />);
-    fireEvent.click(screen.getByRole("link", { name: "Call" }));
+    fireEvent.click(screen.getAllByRole("link", { name: "Call" })[0]);
     expect(calls).not.toContain("/api/leads/l1");
     expect(screen.queryByText(/^Replied .* after the enquiry$/)).not.toBeInTheDocument();
+  });
+
+  it("#1260: once contacted, the row's ⋯ holds WhatsApp them and Call (the row shows Became a customer · ⋯)", () => {
+    render(<LeadInbox businessName="Solaride" initialLeads={[lead({ phone: "98765 43210", first_contacted_at: "2026-08-20T10:12:00.000Z" })]} metaReady />);
+    const menu = screen.getByLabelText("More for Asha Verma").closest("details")!;
+    expect(within(menu).getByRole("link", { name: "WhatsApp them" })).toHaveAttribute("href", expect.stringContaining("https://wa.me/919876543210"));
+    expect(within(menu).getByRole("link", { name: "Call" })).toHaveAttribute("href", "tel:98765 43210");
+    expect(screen.getByRole("button", { name: "Asha Verma became a customer" })).toBeInTheDocument();
+  });
+
+  it("#1260: a waiting row's ⋯ doesn't repeat WhatsApp them or Call", () => {
+    render(<LeadInbox businessName="Solaride" initialLeads={[lead({ phone: "98765 43210" })]} metaReady />);
+    const menu = screen.getByLabelText("More for Asha Verma").closest("details")!;
+    expect(within(menu).queryByRole("link")).toBeNull();
   });
 });
