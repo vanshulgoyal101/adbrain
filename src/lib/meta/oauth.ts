@@ -1,9 +1,9 @@
+import { GRAPH, GRAPH_VERSION } from "@/lib/meta/graph-version";
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { getEnv } from "@/lib/env";
 import { MetaError } from "./client";
 
-const GRAPH = "https://graph.facebook.com/v21.0";
-const OAUTH_DIALOG = "https://www.facebook.com/v21.0/dialog/oauth";
+const OAUTH_DIALOG = `https://www.facebook.com/${GRAPH_VERSION}/dialog/oauth`;
 
 /**
  * Permissions requested from the business owner. These cover reading their ad

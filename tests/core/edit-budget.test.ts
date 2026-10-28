@@ -107,7 +107,7 @@ function replay(recorded: Exchange[]) {
     const url = new URL(String(input));
     url.searchParams.delete("access_token");
     const method = init?.method ?? "GET";
-    const path = url.pathname.replace("/v21.0/", "") + url.search;
+    const path = url.pathname.replace("/v26.0/", "") + url.search;
     const form = init?.body instanceof URLSearchParams ? Object.fromEntries([...init.body].filter(([key]) => key !== "access_token")) : {};
     graph.sent.push({ method, path, form });
     const index = graph.pending.findIndex(exchange => exchange.method === method && exchange.path === path);

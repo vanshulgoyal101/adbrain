@@ -266,7 +266,7 @@ screencast script and the owner's dashboard checklist live on #156. Approval is 
 no call volume, elapsed time or own-account success substitutes for it, so don't create
 disposable campaigns to raise API activity.
 
-Login uses Facebook Login, Graph v21.0, redirect
+Login uses Facebook Login, Graph `GRAPH_VERSION` (src/lib/meta/graph-version.ts, v26.0), redirect
 `https://adbrain.vanshul.com/api/meta/oauth/callback`. Scopes come from
 `META_LOGIN_SCOPES` in [oauth.ts](../src/lib/meta/oauth.ts). All seven are used;
 none can be dropped without breaking the core loop.
