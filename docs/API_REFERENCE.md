@@ -146,8 +146,9 @@ same identity; do not change a key or clear local recovery data to force progres
 | POST | `/api/events` | Fixed client event | Optional telemetry, normally 204 |
 | GET | `/api/cron/keepalive` | Cron Bearer auth | DB health and optional telemetry pruning |
 | GET | `/api/cron/enforce-spend` | Cron Bearer auth | Can pause live campaigns |
-| GET | `/api/cron/sync-leads` | Cron Bearer auth | Imports new Meta leads for every connected business (read-only on Meta) |
-| GET | `/api/cron/refresh-results` | Cron Bearer auth | Hourly per active campaign: Meta insights and ad review (read-only), one result row and `raw.health` flags; `{ok,refreshed,skipped,failed,hasMore,alerts:[{kind,key}]}`, never pauses (#258) |
+| GET | `/api/cron/sync-leads` | Cron Bearer auth | Imports new Meta leads for every connected business (read-only on Meta). With `LEAD_EMAIL_ENABLED` (#229) it then emails queued new enquiries to each owner and returns `emails` counts only (`claimed`, `sent`, `retried`, `failed`, or `enabled:false`); an email failure never turns the sync red |
+| GET/POST | `/api/lead-email` | Session, owner | `?businessId` reads, POST `{businessId, enabled}` sets the enquiry-email switch (default on); returns `{enabled, available}` where `available` is false until sending is configured |
+| GET/POST | `/api/email/unsubscribe?token=` | Signed link, no session | GET shows a confirm button (mail scanners cannot unsubscribe anyone); POST, also RFC 8058 one-click, switches the business's enquiry emails off |
 | GET | `/api/cron/payment-health` | Cron Bearer auth | Razorpay webhook counts for the live account (`events7d`, `unprocessed`, `capturedWithoutEvent`); `ok:false` when a capture lacks its webhook event; read-only |
 | POST | `/api/internal/meta-traffic` | Bounded runner options | Allowlisted diagnostic reads; creation mode disabled |
 
@@ -242,11 +243,7 @@ above the bound do (#208). AdBrain itself records non-final evidence from Meta's
 lifetime campaign spend (`customer_ad_observe_costs`, service role only) during
 the activation review, activation, Refresh and the `enforce-spend` sweep, so no
 operator is needed to start or keep a funded run; final evidence stays
-operator-only (#216). For paused runs the sweep confirms the whole Meta tree
-is stopped and records settle reads (`customer_ad_settle_costs`); two equal
-reads 30 minutes apart, at least 3 hours after the pause, finalize the run and
-close its reservation without an operator. Capped runs past their Meta end time
-are paused by the sweep first (#221). Capturing payment
+operator-only (#216). Capturing payment
 does not earn service fees or activate ads. Review precedes an atomic reservation
 for one campaign. Before ACTIVE, the Meta cap must be written and read back
 within the reserved media allowance; unsupported or rejected caps block
@@ -605,14 +602,6 @@ lifetime budget only on those ad sets; their daily budget must be 0 and they are
 out of the daily total and the bound `meta_adset_id`. A new run still needs every
 child PAUSED (Pause first), then copies only the original ads into a new capped ad
 set; earlier capped sets stay PAUSED.
-Operator-funded businesses (#245): the review GET adds
-`funding:{spendCapPaise,amountSpentPaise,roomPaise,prepay}` read live from
-`act_<id>?fields=id,spend_cap,amount_spent,is_prepay_account,currency`, and the
-client skips the customer-balance review. Activation requires `capDays` (409
-otherwise), INR, a spending limit above 0 and room (limit minus amount spent) of
-at least the cap, all before any Meta write (409). It then runs the capped flow
-above with no reservation, cost evidence or confirmation; the compensating pause
-still applies. 503 when the funding mode cannot be read.
 Pause writes PAUSED to the campaign, then its stored ad sets and ads (one retry
 after Meta's 613 status rate limit), and reads all three levels back; `pause` is
 `{confirmed,objects:[{id,level,status,effectiveStatus}]}`. It is saved locally only
