@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { buildSchema } from "../../scripts/build-schema.mjs";
-import { reserveCustomerCampaign, type CustomerBalanceError } from "@/lib/payments/customer-balance";
+import { reserveCustomerCampaign, CustomerBalanceError } from "@/lib/payments/customer-balance";
 
 // #782 core: Activate turns each `customer_ad_reserve` refusal into its cause, read from the SQL that actually
 // runs (the canonical schema plus migrations, as `test:meta-db` builds it). If the SQL's wording changes, this
@@ -41,7 +41,8 @@ describe("core: a pilot's Activate says why its AdBrain balance can't cover the 
           ? { data: balance, error: null }
           : { data: null, error: { message, code: "23514", details: null, hint: null } },
       }));
-      const error = await reserveCustomerCampaign(actor, admission).catch((caught: unknown) => caught as CustomerBalanceError);
+      const error = await reserveCustomerCampaign(actor, admission).catch((caught: unknown) => caught);
+      if (!(error instanceof CustomerBalanceError)) throw new Error(`${message}: expected a CustomerBalanceError`);
       expect(error.code, message).not.toBe("UNVERIFIED");
       expect(error.message, message).not.toMatch(/could not be verified/);
     }
