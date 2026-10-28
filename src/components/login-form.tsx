@@ -10,6 +10,7 @@ import { openAfterSignIn, safeAuthRedirect } from "@/lib/auth-redirect";
 import { rememberReturningVisitor } from "@/lib/login-visitor";
 import { reportAuthOutcome } from "@/lib/observability/auth-beacon";
 import { authCode } from "@/lib/observability/auth-events";
+import { CALLBACK_ERRORS, parseCallbackError } from "@/lib/auth-callback-error";
 
 const primaryClass = "bg-primary font-semibold text-primary-foreground shadow-xs hover:bg-primary-hover";
 
@@ -17,7 +18,9 @@ const primaryClass = "bg-primary font-semibold text-primary-foreground shadow-xs
 export function LoginForm({ newVisitor = false, onSucceeded }: { newVisitor?: boolean; onSucceeded?: () => void }) {
   const searchParams = useSearchParams();
   const redirect = safeAuthRedirect(searchParams.get("redirect"));
-  const authError = searchParams.get("error");
+  // #1414: why the last sign-in failed, with its one action (a new link, or Google again in this browser).
+  const callbackError = parseCallbackError(searchParams.get("error"));
+  const [callbackShown, setCallbackShown] = useState(callbackError !== null);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -28,9 +31,7 @@ export function LoginForm({ newVisitor = false, onSucceeded }: { newVisitor?: bo
   const restoreEmailFocus = useRef(false);
   const [status, setStatus] = useState<"idle" | "sending" | "sent">("idle");
   const [pending, setPending] = useState<"magic" | "password" | "google" | null>(null);
-  const [error, setError] = useState<string | null>(
-    authError ? "Sign-in failed. Please try again." : null,
-  );
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (status === "idle" && restoreEmailFocus.current) {
@@ -210,6 +211,23 @@ export function LoginForm({ newVisitor = false, onSucceeded }: { newVisitor?: bo
           </div>
         </div>}
         {error && <p role="alert" className="break-words border-l-2 border-red-500 pl-3 text-sm leading-6 text-red-700">{error}</p>}
+        {!error && callbackShown && callbackError && (
+          <div role="alert" className="flex flex-col items-start gap-1 border-l-2 border-red-500 pl-3 text-sm leading-6 text-red-700">
+            <p className="break-words">{CALLBACK_ERRORS[callbackError].text}</p>
+            {CALLBACK_ERRORS[callbackError].action === "new_link" && (
+              <button type="button" className="min-h-11 font-medium text-slate-900 underline underline-offset-4" disabled={pending !== null}
+                onClick={() => { setCallbackShown(false); if (email) void sendMagicLink(); else emailRef.current?.focus(); }}>
+                {email ? "Send a new link" : "Enter your email for a new link"}
+              </button>
+            )}
+            {CALLBACK_ERRORS[callbackError].action === "google" && (
+              <button type="button" className="min-h-11 font-medium text-slate-900 underline underline-offset-4" disabled={pending !== null}
+                onClick={() => { setCallbackShown(false); void signInWithGoogle(); }}>
+                Try Google again
+              </button>
+            )}
+          </div>
+        )}
         {passwordMode ? <>
         <Button type="submit" className={`h-11 ${primaryClass}`} disabled={pending !== null || !email || !password}>
           {pending === "password" && <Loader2 size={16} aria-hidden="true" className="animate-spin" />}

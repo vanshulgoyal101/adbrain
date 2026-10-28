@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import type { EmailOtpType } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { safeAuthRedirect } from "@/lib/auth-redirect";
+import { callbackErrorReason } from "@/lib/auth-callback-error";
 
 /**
  * Handles both auth completion paths:
@@ -21,24 +22,30 @@ async function handleGET(request: Request) {
   const next = safeAuthRedirect(searchParams.get("redirect"));
 
   const supabase = await createClient();
+  let failure: string | null | undefined;
 
   if (code) {
     const { data, error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) return signedIn("google", data?.user, `${origin}${next}`);
-    recordFailure("auth.sign_in.google", error.code);
+    failure = error.code;
+    recordFailure("auth.sign_in.google", failure);
   } else if (tokenHash && type) {
     const { data, error } = await supabase.auth.verifyOtp({
       type,
       token_hash: tokenHash,
     });
     if (!error) return signedIn("email_link", data?.user, `${origin}${next}`);
-    recordFailure("auth.sign_in.email_link", error.code);
+    failure = error.code;
+    recordFailure("auth.sign_in.email_link", failure);
   } else {
     // A provider error (Google cancelled) or a bare link: this used to be a silent 302 (#451 L4).
-    recordFailure("auth.sign_in", searchParams.get("error_code") ?? searchParams.get("error") ?? "missing_params");
+    failure = searchParams.get("error_code") ?? searchParams.get("error") ?? "missing_params";
+    recordFailure("auth.sign_in", failure);
   }
 
-  return NextResponse.redirect(`${origin}/login?error=auth`);
+  // #1414: the login page says what happened (expired link, other browser, cancelled) with one action.
+  const back = next === "/dashboard" ? "" : `&redirect=${encodeURIComponent(next)}`;
+  return NextResponse.redirect(`${origin}/login?error=${callbackErrorReason(failure)}${back}`);
 }
 
 type CallbackUser = { id: string; email?: string | null; email_confirmed_at?: string | null; last_sign_in_at?: string | null } | null | undefined;
