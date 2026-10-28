@@ -259,7 +259,7 @@ export async function getActiveCampaignBudgets(businessId: string): Promise<Camp
 export async function hasLaunchedCampaign(businessId: string): Promise<boolean> {
   const supabase = await createClient();
   const { data, error } = await supabase.from("campaigns").select("id")
-    .eq("business_id", businessId).or("launched_at.not.is.null,status.eq.active").limit(1);
+    .eq("business_id", businessId).or("launched_at.not.is.null,status.in.(active,completed)").limit(1);
   if (error || !data) throw new Error("Campaigns could not be loaded.");
   return data.length > 0;
 }
