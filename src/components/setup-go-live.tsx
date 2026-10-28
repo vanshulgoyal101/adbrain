@@ -119,6 +119,8 @@ export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNum
 
   return (
     <SetupSpine step={3} primary={primary}>
+      {/* #1587: a readable column at 1440, not the full width. */}
+      <div className="max-w-2xl">
       <h2 className="text-xl font-semibold text-slate-950">Go live</h2>
       <dl className="mt-4 flex flex-col gap-4 text-sm">
         <div>
@@ -133,12 +135,13 @@ export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNum
           <dt className="text-slate-500">Budget</dt>
           <dd className="mt-1 font-medium text-slate-950">{formatMoney(daily)} a day for {SETUP_RUN_DAYS} days, {formatMoney(total)} at most including Meta&apos;s GST</dd>
           <dd className="mt-2"><div className="flex flex-wrap gap-2" role="group" aria-label="Daily budget">
-            {BUDGET_PRESETS.map((amount) => (
-              <button key={amount} type="button" aria-pressed={daily === amount} disabled={step !== null || result?.kind === "live"}
+            {BUDGET_PRESETS.map((amount, index) => (
+              <button key={amount} type="button" aria-pressed={daily === amount} aria-label={`${formatMoney(amount)} a day`} disabled={step !== null || result?.kind === "live"}
                 onClick={() => { setDaily(amount); setResult(null); }}
                 className={cn("min-h-11 rounded-full border px-4 text-sm font-medium",
-                  daily === amount ? "border-primary bg-primary text-primary-foreground" : "border-slate-300 bg-white text-slate-700")}>
-                {formatMoney(amount)} a day
+                  daily === amount ? "border-primary bg-primary/10 text-primary" : "border-slate-300 bg-white text-slate-700")}>
+                {/* #1587: one solid primary on the step; 'a day' once, so the chips fit one row at 390. */}
+                {index === 0 ? `${formatMoney(amount)} a day` : formatMoney(amount)}
               </button>
             ))}
           </div></dd>
@@ -178,7 +181,7 @@ export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNum
         )}
         <Row done title={`Stops at ${formatMoney(total)}`} status={`${SETUP_RUN_DAYS} days at ${formatMoney(daily)} a day, including Meta's GST`} />
       </ul>
-      <p className="mt-4 text-sm text-slate-600">Meta checks your ads first, usually within a day. Spending starts only after that and stops at {formatMoney(total)}, including Meta&apos;s GST.</p>
+      <p className="mt-4 text-sm text-slate-600">Meta checks your ads first, usually within a day.</p>
       {/* #718 (CEO, path A): AdBrain's own price, said before the first Go live. */}
       {ownAccount && <p className="mt-3 text-sm text-slate-600">Your first month of AdBrain is free. After that it&apos;s ₹999 a month; we&apos;ll remind you before it&apos;s due.</p>}
       {/* #1292: the Connect moment's trust line, next to the Connect Facebook Page primary. */}
@@ -208,6 +211,7 @@ export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNum
           onClose={() => setConnectOpen(false)}
           onConnected={() => { setConnectOpen(false); router.refresh(); }} />
       )}
+      </div>
     </SetupSpine>
   );
 }
