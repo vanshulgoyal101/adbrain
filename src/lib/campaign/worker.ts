@@ -33,7 +33,7 @@ export async function runCampaignJob(database: CampaignSupabase, row: OperationR
     signal.throwIfAborted();
     if (result.kind !== "review" || !result.review.canCreatePaused || !result.review.selected || !result.review.resolvedLocation
       || result.review.planHash !== request.planHash || result.review.connectionGeneration !== request.connectionGeneration) {
-      throw new Error("Queued campaign review is stale or blocked. Review again before creating.");
+      throw new Error("This campaign changed after you checked it. Tap Check my campaign again, then Send to Meta.");
     }
     executionStarted = true;
     return await executeReviewedCampaign({
