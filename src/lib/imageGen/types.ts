@@ -46,6 +46,13 @@ export class ImageProviderError extends Error {
   }
 }
 
+export class FreeImageBusyError extends Error {
+  constructor() {
+    super("Free test images are busy right now. Try again in a minute.");
+    this.name = "FreeImageBusyError";
+  }
+}
+
 export interface ImageProvider {
   name: string;
   generate(req: ImageRequest): Promise<GeneratedImage>;

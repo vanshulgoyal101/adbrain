@@ -42,7 +42,7 @@ ID are different identifiers. Never infer one from another.
 | `/assets` | Browse/reuse/download saved images | Download/clipboard failures are surfaced |
 | `/campaigns` | Draft, review, create paused, activate/pause, sync, report; `?new=1&creatives=<ids>` opens the composer with those approved ads selected; `&review=1` (#1004, from Create) then prepares Review on its own once Meta is connected, the WhatsApp check has run and a form campaign has its lead form (the same prepare as the Review button; nothing is sent to Meta). The lead form used for the last Review is preselected while the Page still has it; with several forms and none chosen, the field says choosing one opens Review | Live Meta writes require verified binding and capability |
 | `/leads` | WhatsApp chats per campaign with **Add enquiry** (#764) first; the form table follows as "Form enquiries (n)", folded when there are none (#1223); then sync, search, and inspect enquiries; copy digest. Each enquiry with a phone has **WhatsApp them** (wa.me with a first reply in the business's first language, en/hi/Hinglish, naming the business and its first offer) and **Call**; the first tap records `first_contacted_at` ("Replied 12 min after the enquiry", #1049) | No automated outreach is sent: the owner sends the reply |
-| `/settings` | Meta connection, spend guardrails, declared preferences | Disconnect does not pause running ads; preferences cannot authorize spend |
+| `/settings` | Meta connection, spend guardrails, declared preferences, **App language** (English · हिंदी, kept in the `adbrain_lang` cookie for a year; Home follows it, other screens follow screen by screen, #1438; strings in `messages/{en,hi}.json`) | Disconnect does not pause running ads; preferences cannot authorize spend |
 
 ## Workspace Responsiveness
 
@@ -143,11 +143,16 @@ and opens `/campaigns?new=1&creatives=…`. The generation id is kept in
 localStorage for 15 minutes (#1402), so coming back or a second tab reads the
 saved ads instead of starting again; the step waits through "processing" and
 "partial" and treats "unresolved" as finished short, and on arrival it checks the
-newest batch (#1407). Missing ads show "N ads couldn't be made. Make another", and a
+newest batch (#1407). The tab that gets a batch's ads publishes them in localStorage
+(`setup-generation-result:{businessId}`, 15 minutes), so other waiting tabs show them
+at once; a 429 from the shared status budget waits out Retry-After (#1534). Missing ads show "N ads couldn't be made. Make another", and a
 top-up shows beside its batch (`setupBatch`). Only ads made from today's step 1
 count (`madeForSetup`: the receipt's source fact is today's `setupGoal`, #1432):
 after the owner changes what they sell, where or their offer, step 2 makes new
 ads, and step 3 sends back to step 2 rather than offering older approved ads.
+With such earlier ads (older details, or approved in Studio) step 2 never starts a
+paid batch by itself: it shows "Make 3 ads" (a tap) and "Use your earlier ads" →
+`/campaigns?all=1`; a batch already running in another tab still resumes (#1475).
 `/create?all=1` opens the full Create below.
 
 1. When the business's campaigns have results, Create opens on one line such as "Your

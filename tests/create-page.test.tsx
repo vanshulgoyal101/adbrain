@@ -8,7 +8,8 @@ const getBrandAssets = vi.hoisted(() => vi.fn(async () => [] as { type: string }
 // An owner whose campaign has gone live sees the full Create; a first-timer gets the setup step (#1270).
 const hasLaunchedCampaign = vi.hoisted(() => vi.fn(async () => true));
 const getSetupCreativeBatch = vi.hoisted(() => vi.fn(async () => ({ ads: [], newest: null })));
-vi.mock("@/lib/supabase/queries", () => ({ getPrimaryBusiness, getBrandAssets, hasLaunchedCampaign, getSetupCreativeBatch }));
+const getApprovedCreatives = vi.hoisted(() => vi.fn(async () => [] as unknown[]));
+vi.mock("@/lib/supabase/queries", () => ({ getPrimaryBusiness, getBrandAssets, hasLaunchedCampaign, getSetupCreativeBatch, getApprovedCreatives }));
 const setupProps = vi.hoisted(() => vi.fn());
 vi.mock("@/components/setup-ads-step", () => ({ SetupAdsStep: (props: unknown) => { setupProps(props); return <div>Setup step 2</div>; } }));
 vi.mock("@/components/ad-assistant", () => ({ AdAssistant: () => <div>Assistant</div> }));
@@ -102,8 +103,33 @@ describe("Create page for a first-timer (#1270)", () => {
     expect(screen.queryByText("Setup step 2")).toBeNull();
   });
 
+  it("#1475: earlier ads (Studio-made, or from older details) reach step 2 as 'earlier', so nothing paid auto-starts", async () => {
+    getPrimaryBusiness.mockResolvedValue(usable);
+    hasLaunchedCampaign.mockResolvedValue(false);
+    const { default: CreatePage } = await import("@/app/(app)/create/page");
+    getSetupCreativeBatch.mockResolvedValue({ ads: [{ id: "old", generation: { sourceFacts: ["older details"] } }], newest: null } as never);
+    const { unmount } = render(await CreatePage({ searchParams: Promise.resolve({}) }));
+    expect(setupProps.mock.lastCall?.[0]).toMatchObject({ initialAds: [], earlier: true });
+    unmount();
+    getSetupCreativeBatch.mockResolvedValue({ ads: [], newest: null });
+    getApprovedCreatives.mockResolvedValue([{ id: "studio" }] as never);
+    const second = render(await CreatePage({ searchParams: Promise.resolve({}) }));
+    expect(setupProps.mock.lastCall?.[0]).toMatchObject({ initialAds: [], earlier: true });
+    second.unmount();
+    getApprovedCreatives.mockResolvedValue([]);
+    render(await CreatePage({ searchParams: Promise.resolve({}) }));
+    expect(setupProps.mock.lastCall?.[0]).toMatchObject({ initialAds: [], earlier: false });
+  });
+
   it("+ lands here; a first-timer without the five facts resumes at step 1 (#1272)", async () => {
     getPrimaryBusiness.mockResolvedValue(sparse);
+    hasLaunchedCampaign.mockResolvedValue(false);
+    const { default: CreatePage } = await import("@/app/(app)/create/page");
+    await expect(CreatePage({ searchParams: Promise.resolve({}) })).rejects.toThrow("NEXT_REDIRECT");
+  });
+
+  it("no service area is not usable: step 2 sends the first-timer back to step 1 (#1136 CEO)", async () => {
+    getPrimaryBusiness.mockResolvedValue({ ...usable, locations: [" "] });
     hasLaunchedCampaign.mockResolvedValue(false);
     const { default: CreatePage } = await import("@/app/(app)/create/page");
     await expect(CreatePage({ searchParams: Promise.resolve({}) })).rejects.toThrow("NEXT_REDIRECT");

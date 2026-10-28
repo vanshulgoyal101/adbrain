@@ -218,6 +218,22 @@ function clipField(value: unknown, max: number | null): unknown {
   return text.length > max ? clipAtWord(text, max) : text;
 }
 
+/**
+ * #1544: a link description over its limit is cut back to its last full sentence, else its last clause (keeping at
+ * least half the limit), never mid-thought ('…Ask for a quote on'). With neither, it stays too long, so validation
+ * fails and the one repair rewrites it.
+ */
+export function clipToThought(value: unknown, max: number | null): unknown {
+  if (typeof value !== "string" || max === null) return value;
+  const text = value.trim();
+  if (text.length <= max) return text;
+  let sentence = -1;
+  for (const match of text.matchAll(/(?<!\b(?:rs|dr|mr|mrs|ms|st|no|sr|jr|ph|vs|etc|approx|govt|pvt|ltd|co|inc))[.!?।](?=\s|$)/giu)) if (match.index < max) sentence = match.index;
+  if (sentence >= 0) return text.slice(0, sentence + 1);
+  const clause = Math.max(...[...text.slice(0, max).matchAll(/\s*[,;:—–]\s/gu)].map((match) => match.index));
+  return clause >= max / 2 ? text.slice(0, clause) : text;
+}
+
 // The "center" layout is a left-side text panel, so "left" (Groq, Oct 21) maps there; "right" has no layout.
 function placement(value: unknown): unknown {
   if (typeof value !== "string") return value;
@@ -267,7 +283,7 @@ function normalizeDraft(value: unknown): unknown {
   return {
     ...value,
     primary_text: shortLines(value.primary_text),
-    description: clipField(value.description, shape.description.maxLength),
+    description: clipToThought(value.description, shape.description.maxLength),
     rationale: clipField(value.rationale, shape.rationale.maxLength),
     cta,
     visual,

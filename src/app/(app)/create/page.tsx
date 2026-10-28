@@ -13,7 +13,7 @@ import { setupFieldsFrom } from "@/lib/brand/setup-fields";
 import { brandUsable } from "@/lib/brand/usable";
 import { clientCreative } from "@/lib/creative/client-receipt";
 import { madeForSetup } from "@/lib/creative/setup-picks";
-import { getBrandAssets, getSetupCreativeBatch, getPrimaryBusiness, hasLaunchedCampaign } from "@/lib/supabase/queries";
+import { getApprovedCreatives, getBrandAssets, getSetupCreativeBatch, getPrimaryBusiness, hasLaunchedCampaign } from "@/lib/supabase/queries";
 import { occasionsFor } from "@/lib/seasonal";
 
 export const metadata = {
@@ -56,12 +56,16 @@ export default async function CreatePage({ searchParams }: { searchParams?: Prom
         if (launched) return null;
         // #1432: ads made from an earlier step 1 aren't offered; step 2 makes new ones from today's.
         const ads = batch.ads.filter((ad) => madeForSetup(ad, business));
+        // #1475: with earlier ads (older details, or made in Studio) the owner taps to start a paid batch; a failed
+        // read counts as earlier, so nothing paid starts on its own.
+        const earlier = ads.length ? Promise.resolve(false) : batch.ads.length ? Promise.resolve(true)
+          : getApprovedCreatives(business.id).then((approved) => approved.length > 0, () => true);
         // #1402: a "Make another" top-up shows beside its batch; the step checks the newest batch on arrival (#1407).
-        return ads.map(clientCreative);
+        return earlier.then((hasEarlier) => ({ ads: ads.map(clientCreative), earlier: hasEarlier }));
       }).catch(() => null);
     // #1272: the + button lands here; a first-timer without the five facts resumes at step 1.
     if (setup && !brandUsable({ ...business, vertical: setupFieldsFrom(business).vertical })) redirect("/brand");
-    if (setup) return <SetupAdsStep business={business} initialAds={setup} sample={await isProspectSession()} />;
+    if (setup) return <SetupAdsStep business={business} initialAds={setup.ads} earlier={setup.earlier} sample={await isProspectSession()} />;
   }
 
   const missing = [

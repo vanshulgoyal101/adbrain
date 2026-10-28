@@ -31,6 +31,7 @@ import { creativeAssets, recentCreativeCopy } from "@/lib/creative/references";
 import { CREATE_HEARTBEAT_MS, CREATE_TOP_UP_BUDGET_MS, CREATE_TOP_UP_START_MS } from "@/lib/creative/stream";
 import { AD_ANGLES, type AdAngle } from "@/lib/templates/ads";
 import { freeImagesOnly } from "@/lib/llm/spend-policy";
+import { cloudflareConfigured } from "@/lib/imageGen/providers/cloudflare";
 import { preferenceContext } from "@/lib/preferences/store";
 
 export const runtime = "nodejs";
@@ -425,11 +426,11 @@ async function generate(req: Request, live?: LiveCreate) {
   }
 
   // #681: the whole batch's wall time; usage rows are written at the end, so they can't time it.
-  // Internal accounts make free Pollinations images; customers wait on the paid path.
+  // Internal accounts make free images (Cloudflare when configured, else Pollinations, #1476); customers wait on the paid path.
   recordProductEvent({ kind: "workflow", name: "creative.batch", businessId, durationMs: Date.now() - startedAt,
     outcome: !inserted.length ? "failed" : failures.length ? "partial" : "success",
     // #1468: the estimated AI cost of this Create (USD), for the top-up and image-provider decisions.
-    attributes: { count: inserted.length, failedCount: failures.length, topUp, provider: freeImagesOnly() ? "pollinations" : "paid",
+    attributes: { count: inserted.length, failedCount: failures.length, topUp, provider: freeImagesOnly() ? (cloudflareConfigured() ? "cloudflare" : "pollinations") : "paid",
       costUsd: roundUsd(cost.text + cost.image), textCostUsd: roundUsd(cost.text), imageCostUsd: roundUsd(cost.image) } });
   if (!inserted.length)
     return NextResponse.json(
