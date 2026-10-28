@@ -177,5 +177,9 @@
         "phone": "Enter a 10-digit mobile number."
       }
     }
+  },
+  "creative": {
+    "yourPhoto": "Your photo",
+    "aiPicture": "AI picture"
   }
 }

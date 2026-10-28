@@ -364,4 +364,18 @@ describe("core: step 2 batches (#1402)", () => {
     expect(old.ads.map((creative) => creative.id)).toEqual(["c"]);
     expect(setupBatch([])).toEqual({ ads: [], newest: null });
   });
+
+describe("#1901: each ad says whose picture it is", () => {
+  it("labels the owner's photo and the AI picture, in Hindi too", () => {
+    const yours = { ...ad("a"), generation: { image: { provider: "owner-photo" } } } as unknown as Creative;
+    const ai = { ...ad("b"), generation: { image: { provider: "cloudflare" } } } as unknown as Creative;
+    const { unmount } = render(<SetupAdsStep business={business} initialAds={[yours, ai]} />);
+    expect(screen.getByText("Your photo")).toBeInTheDocument();
+    expect(screen.getByText("AI picture")).toBeInTheDocument();
+    unmount();
+    render(<SetupAdsStep business={business} initialAds={[yours, ai]} locale="hi" />);
+    expect(screen.getByText("आपकी फ़ोटो")).toBeInTheDocument();
+    expect(screen.getByText("AI तस्वीर")).toBeInTheDocument();
+  });
+});
 });
