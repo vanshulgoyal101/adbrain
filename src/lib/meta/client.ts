@@ -617,6 +617,14 @@ export function metaErrorCode(error: unknown): string {
   return error instanceof Error && error.name === "TimeoutError" ? "timeout" : "unknown";
 }
 
+const GET_RETRY_DELAY_MS = 500;
+
+/** #1199: a failure a repeat of the same read can cure: our 15 s timeout, a dropped connection, or a Meta 5xx. */
+function transientReadFailure(error: unknown): boolean {
+  if (error instanceof MetaError) return error.status !== undefined && error.status >= 500;
+  return error instanceof TypeError || (error instanceof Error && error.name === "TimeoutError");
+}
+
 /**
  * Meta answered and refused the request (a 4xx with a Meta subcode, e.g. 100/1772103). Timeouts,
  * transport errors and 5xx are not refusals: the object may exist, so retrying could duplicate it.
@@ -836,6 +844,26 @@ export class MetaClient {
     } = {},
   ): Promise<T> {
     const method = opts.method ?? "GET";
+    try {
+      return await this.graphOnce<T>(path, method, opts);
+    } catch (error) {
+      // #1199: a read is safe to repeat, so one failed GET (network, 5xx) gets one more try. Writes never repeat
+      // (they may have been done), nor does a call the caller or the route's budget stopped. A timeout already
+      // spent 15 s, so it repeats only under a job deadline (the launch worker); a 60 s route without one could be
+      // killed mid-write (Reviewer on #1204).
+      const stopped = Boolean(opts.signal?.aborted || this.executionSignal?.aborted);
+      const timedOut = error instanceof Error && error.name === "TimeoutError";
+      if (method !== "GET" || stopped || !transientReadFailure(error) || (timedOut && !this.executionSignal)) throw error;
+      await new Promise((resolve) => setTimeout(resolve, GET_RETRY_DELAY_MS));
+      return this.graphOnce<T>(path, method, opts);
+    }
+  }
+
+  private async graphOnce<T>(
+    path: string,
+    method: string,
+    opts: { token?: string; form?: Record<string, string>; signal?: AbortSignal },
+  ): Promise<T> {
     const token = opts.token ?? this.creds.accessToken;
     const signal = AbortSignal.any([
       AbortSignal.timeout(15_000),
