@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Business, Creative } from "@/lib/types";
 
@@ -52,6 +52,17 @@ describe("core: <SetupGoLive> (#1271)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Meta dialog: connected" }));
     expect(mocks.refresh).toHaveBeenCalled();
     expect(mocks.push).not.toHaveBeenCalled();
+  });
+
+  it("#1292: before Connect, the trust line for who holds the ad money; none once connected", () => {
+    goLive({ pageConnected: false, funding: "own" });
+    expect(screen.getByText("Your Page, your ad account, your card. AdBrain never holds your ad money.")).toBeInTheDocument();
+    cleanup();
+    goLive({ pageConnected: false, funding: "managed" });
+    expect(screen.getByText("Your ad budget stays yours: you see every rupee spent.")).toBeInTheDocument();
+    cleanup();
+    goLive({ pageConnected: true, funding: "own" });
+    expect(screen.queryByText(/AdBrain never holds your ad money/)).not.toBeInTheDocument();
   });
 
   /** Go live with the flow paused at each step; `finish` settles it with the given outcome. */

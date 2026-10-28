@@ -232,15 +232,16 @@ export function SetupAdsStep({ business, initialAds }: { business: Business; ini
               const on = picked.has(ad.id);
               return (
                 <li key={ad.id} className={cn("relative overflow-hidden rounded-xl border-2 bg-white", on ? "border-primary" : "border-slate-200")}>
-                  <button type="button" aria-pressed={on} onClick={() => toggle(ad.id)} className="block w-full text-left">
+                  {/* #1251 Designer walk: a phone shows a row per ad (picture 96×120), so all 3 and Continue fit one screen; sm+ keeps the 3-up grid. */}
+                  <button type="button" aria-pressed={on} onClick={() => toggle(ad.id)} className="flex w-full items-start text-left sm:block">
                     {ad.image_url && (
                       // Studio's thumbnail, falling back to the full picture (as Review does).
-                      <img src={creativeThumbnailUrl(ad.image_url)} alt="" width={960} height={960} className="aspect-square h-auto w-full bg-slate-100 object-contain"
+                      <img src={creativeThumbnailUrl(ad.image_url)} alt="" width={960} height={960} className="h-[120px] w-24 shrink-0 bg-slate-100 object-cover sm:aspect-square sm:h-auto sm:w-full sm:object-contain"
                         // #1393: only the first card is on screen on a phone; the others wait so they don't share its bandwidth.
                         fetchPriority={ad.image_url === firstPicture ? "high" : "auto"} loading={ad.image_url === firstPicture ? "eager" : "lazy"}
                         onError={(event) => { if (ad.image_url && event.currentTarget.src !== ad.image_url) event.currentTarget.src = ad.image_url; }} />
                     )}
-                    <span className="block p-3">
+                    <span className="block min-w-0 p-3 pr-14 sm:pr-3">
                       <span className="block font-medium text-slate-950">{ad.headline}</span>
                       <span className={cn("mt-2 inline-flex min-h-6 items-center gap-1 text-sm font-medium", on ? "text-primary" : "text-slate-600")}>
                         {on ? <><Check className="h-4 w-4" aria-hidden="true" /> Picked</> : "Tap to pick"}

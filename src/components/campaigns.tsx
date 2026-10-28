@@ -1,6 +1,6 @@
 "use client";
 
-import { startTransition, useEffect, useEffectEvent, useReducer, useRef, useState, useSyncExternalStore } from "react";
+import { startTransition, useCallback, useEffect, useEffectEvent, useReducer, useRef, useState, useSyncExternalStore } from "react";
 import type { ReactNode } from "react";
 import { flushSync } from "react-dom";
 import { useConfirm } from "@/components/ui/confirm-dialog";
@@ -55,8 +55,9 @@ import {
   type TargetingValue,
 } from "@/components/targeting-controls";
 import { CampaignChat } from "@/components/campaign-chat";
-import { AdResults } from "@/components/ad-results";
+import { AdResults, PauseOffer, useWeakAd } from "@/components/ad-results";
 import { RejectedAds } from "@/components/rejected-ads";
+import { BEST_AD_MIN_RESULTS } from "@/lib/meta/insights";
 import { EditAudienceDialog } from "@/components/edit-audience-dialog";
 import { AudienceSwitchStrip } from "@/components/audience-switch-strip";
 import { createClient as createBrowserClient } from "@/lib/supabase/client";
@@ -1365,6 +1366,10 @@ function BusinessCampaigns({
   }, [switchable]);
   // #1274: enquiries waiting for a reply by the inbox's rule (#1260), per running campaign (owners read their own leads).
   const [waitingReplies, setWaitingReplies] = useState<Record<string, number>>({});
+  // #1274 slice 2c: cards whose sentence already offers the pause; their "Which ad worked" doesn't repeat it.
+  const [weakAdCards, setWeakAdCards] = useState<string[]>([]);
+  const weakAdShown = useCallback((campaignId: string, shown: boolean) =>
+    setWeakAdCards((ids) => shown === ids.includes(campaignId) ? ids : shown ? [...ids, campaignId] : ids.filter((id) => id !== campaignId)), []);
   const liveIds = campaigns.filter(c => c.status === "active").map(c => c.id).sort().join(",");
   useEffect(() => {
     if (!liveIds) return;
@@ -2515,7 +2520,8 @@ function BusinessCampaigns({
                     ) : null}
                     {cardNotice?.id === c.id && cardError?.id !== c.id ? <p role="status" className="text-sm text-slate-600">{cardNotice.message}</p> : null}
 
-                    {reviews[c.id]?.length ? (
+                    {/* CPO (#1255): a weak ad outranks 1-of-N rejected (it costs money; a rejected ad doesn't). */}
+                    {reviews[c.id]?.length && !(weakAdCards.includes(c.id) && reviews[c.id].some((review) => review.state !== "rejected")) ? (
                       <RejectedAds reviews={reviews[c.id]} spend={r?.spend ?? 0} running={c.status === "active"} adsManagerUrl={c.meta_campaign_id ? adsLink(c) : undefined}
                         onEditAd={c.meta_campaign_id && (c.status === "paused" || c.status === "active") && reviewableCampaign(c) && (c.meta_ad_ids?.length ?? 0) > 0 && !waitingSwitch[c.id]
                           ? () => { setAdEditHint(undefined); setAdEdit(c); } : undefined} />
@@ -2526,13 +2532,13 @@ function BusinessCampaigns({
                         waiting={waitingReplies[c.id] ?? 0} onRunAgain={() => void runAgain(c)} runAgainBusy={rerunBusy === c.id}
                         onEditAd={c.meta_campaign_id && (c.status === "paused" || c.status === "active") && reviewableCampaign(c) && (c.meta_ad_ids?.length ?? 0) > 0 && !waitingSwitch[c.id]
                           ? () => { setAdEditHint(EDIT_AD_HINT); setAdEdit(c); } : undefined}
-                        adsManagerUrl={c.meta_campaign_id ? adsLink(c) : undefined} />
+                        adsManagerUrl={c.meta_campaign_id ? adsLink(c) : undefined} perAd={adResults} onWeakAd={weakAdShown} />
                     )}
                     {r && mounted && (
                       // #1003: always say how old the numbers are.
                       <p className="text-xs text-slate-500">{updatingIds.includes(c.id) ? "Updating results…" : `Updated ${timeAgo(new Date(r.fetched_at))}`}</p>
                     )}
-                    {adResults && r && c.meta_campaign_id && <AdResults campaignId={c.id} whatsapp={outcome === "whatsapp"} onRunAgain={() => void runAgain(c)} runAgainBusy={rerunBusy === c.id} runAgainError={rerunError?.id === c.id ? rerunError.message : null} />}
+                    {adResults && r && c.meta_campaign_id && <AdResults campaignId={c.id} whatsapp={outcome === "whatsapp"} offerPause={!weakAdCards.includes(c.id)} onRunAgain={() => void runAgain(c)} runAgainBusy={rerunBusy === c.id} runAgainError={rerunError?.id === c.id ? rerunError.message : null} />}
                     {r && (r.customers ?? 0) > 0 && (
                       // #798: what a real customer cost, beside the per-enquiry figures.
                       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4" aria-label="Customers">
@@ -2617,11 +2623,15 @@ function madeOutsideAdBrain(campaign: Campaign): boolean {
 /** A launched campaign's numbers: #1255's verdict for WhatsApp and form campaigns, with the figures under Details. */
 const EDIT_AD_HINT = "Tell people what happens after the tap, e.g. 'Tap, then press Send'.";
 
-function CardResults({ campaign, result: r, outcome, comparison, waiting, onRunAgain, runAgainBusy, adsManagerUrl, onEditAd }: {
+function CardResults({ campaign, result: r, outcome, comparison, waiting, onRunAgain, runAgainBusy, adsManagerUrl, onEditAd, perAd, onWeakAd }: {
   campaign: Campaign; result: CampaignResult; outcome: ReturnType<typeof campaignDestination>; comparison: Comparison | null;
   waiting: number; onRunAgain: () => void; runAgainBusy: boolean; adsManagerUrl?: string; onEditAd?: () => void;
+  /** #783's per-ad rows are on; a running campaign with enough results reads them for the weak-ad state. */
+  perAd: boolean; onWeakAd: (campaignId: string, shown: boolean) => void;
 }) {
   const [now] = useState(() => Date.now());
+  const enough = (outcome === "whatsapp" ? r.conversations ?? 0 : r.leads) >= BEST_AD_MIN_RESULTS;
+  const [weakAd, clearWeakAd] = useWeakAd(campaign.id, perAd && campaign.status === "active" && Boolean(campaign.meta_campaign_id) && enough);
   const figures = <>
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
       <Stat label="Impressions" value={formatNumber(r.impressions)} />
@@ -2639,11 +2649,15 @@ function CardResults({ campaign, result: r, outcome, comparison, waiting, onRunA
       </p>
     )}
   </>;
-  const input = cardVerdictInput(campaign, r, { now, waiting, weakAd: null, comparison });
+  const input = cardVerdictInput(campaign, r, { now, waiting, weakAd, comparison });
+  const judged = input ? verdict(input) : null;
+  const weakShown = judged?.state === "weak_ad";
+  useEffect(() => { onWeakAd(campaign.id, weakShown); }, [campaign.id, weakShown, onWeakAd]);
   // A paused card that never showed keeps its one "nothing has spent" line (#173), with no verdict beside it.
-  if (!input || (campaign.status !== "active" && campaign.status !== "completed" && !r.impressions)) return figures;
-  return <CampaignVerdict verdict={verdict(input)} whatsapp={input.destination === "whatsapp"} results={input.results} spend={input.spend}
-    details={figures} onRunAgain={onRunAgain} runAgainBusy={runAgainBusy} adsManagerUrl={adsManagerUrl} onEditAd={onEditAd} />;
+  if (!input || !judged || (campaign.status !== "active" && campaign.status !== "completed" && !r.impressions)) return figures;
+  return <CampaignVerdict verdict={judged} whatsapp={input.destination === "whatsapp"} results={input.results} spend={input.spend}
+    details={figures} onRunAgain={onRunAgain} runAgainBusy={runAgainBusy} adsManagerUrl={adsManagerUrl} onEditAd={onEditAd}
+    pauseOffer={weakAd && <PauseOffer campaignId={campaign.id} suggestion={weakAd} unit={input.destination === "whatsapp" ? { one: "chat", many: "chats" } : { one: "enquiry", many: "enquiries" }} onKeep={clearWeakAd} />} />;
 }
 
 function Stat({ label, value }: { label: string; value: string }) {

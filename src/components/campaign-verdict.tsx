@@ -15,7 +15,7 @@ const outline = cn(link, "border border-slate-300 bg-white text-slate-900 hover:
  * #1274 (#1255 slice 2): a campaign card answers "Is it working? What should I do?" with one sentence, one number and
  * at most one action. The figures it replaces stay one tap away under Details.
  */
-export function CampaignVerdict({ verdict, whatsapp, results, spend, details, onRunAgain, runAgainBusy = false, adsManagerUrl, onEditAd }: {
+export function CampaignVerdict({ verdict, whatsapp, results, spend, details, onRunAgain, runAgainBusy = false, adsManagerUrl, onEditAd, pauseOffer }: {
   verdict: Verdict;
   whatsapp: boolean;
   results: number;
@@ -26,6 +26,8 @@ export function CampaignVerdict({ verdict, whatsapp, results, spend, details, on
   adsManagerUrl?: string;
   /** #1274 (CPO): state 3's action opens the ad's copy editor (#765); editing a running campaign's message is later. */
   onEditAd?: () => void;
+  /** #1274 slice 2c: the weak-ad state's action is #1045's own Pause/Keep offer, naming the ad. */
+  pauseOffer?: ReactNode;
 }) {
   const noun = (n: number) => whatsapp ? (n === 1 ? "chat" : "chats") : (n === 1 ? "enquiry" : "enquiries");
   const action = (() => {
@@ -46,6 +48,8 @@ export function CampaignVerdict({ verdict, whatsapp, results, spend, details, on
         ) : null;
       case "edit_message":
         return onEditAd ? <Button size="sm" variant="outline" onClick={onEditAd}>Edit the ad</Button> : null;
+      case "pause_ad":
+        return pauseOffer ?? null;
       // "Pause this ad" lives on the ad's own row (#1045, Which ad worked).
       default:
         return null;

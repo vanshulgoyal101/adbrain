@@ -50,6 +50,13 @@ describe("<SetupSpine> (#1268)", () => {
     expect(router.push).not.toHaveBeenCalled();
   });
 
+  it("a focused field scrolls clear of the sticky bar, and the page is restored on leaving", () => {
+    const { unmount } = render(<SetupSpine step={1} primary={{ label: "Make my ads", href: "/create" }}><input /></SetupSpine>);
+    expect(document.documentElement.style.scrollPaddingBottom).toBe("7rem");
+    unmount();
+    expect(document.documentElement.style.scrollPaddingBottom).toBe("");
+  });
+
   it("the primary can be an action and can be disabled", () => {
     const onClick = vi.fn();
     const { rerender } = render(<SetupSpine step={3} primary={{ label: "Go live · ₹300 a day", onClick }}><p /></SetupSpine>);

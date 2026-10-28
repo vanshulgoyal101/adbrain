@@ -113,3 +113,34 @@ describe("core: a campaign deleted in Meta shows as deleted after Refresh (#721)
     expect(within(card).queryByText("paused")).toBeNull();
   });
 });
+
+// CPO on #1255: a weak ad (it costs money) outranks one rejected ad of several (it doesn't); all rejected always shows.
+describe("core: a weak ad outranks 1-of-N rejected on the card (#1274)", () => {
+  const ad = (adId: string, over: Record<string, unknown>) => ({ adId, name: `Ad ${adId}`, delivered: true, replaced: false, best: false, creative: null, earlier: false, impressions: 1000, status: "ACTIVE", ...over });
+  const rows = [ad("1", { best: true, results: 6, spend: 600, costPerResult: 100 }), ad("2", { results: 2, spend: 600, costPerResult: 300 })];
+  function show(review: Ad[]) {
+    const live = { ...launched, status: "active", destination: "whatsapp" } as Campaign;
+    const result = { id: "r1", campaign_id: "c1", destination: "whatsapp", impressions: 9000, clicks: 90, leads: 0, conversations: 8, spend: 1200, cpl: null, fetched_at: new Date().toISOString() };
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/refresh")) return Response.json({ result, review: review.map(adReviewState) });
+      if (url.endsWith("/ads")) return Response.json({ ok: true, syncedAt: null, ads: rows });
+      return Response.json({ campaigns: [live], results: { c1: result }, nextCursor: null });
+    }));
+    render(<Campaigns business={business} approved={[]} initialCampaigns={[live]} initialResults={{ c1: result } as never}
+      leadForms={[]} leadFormError={null} metaReady={false} adAccountId="act_9000000000000001" adResults />);
+    fireEvent.click(screen.getByRole("button", { name: /Refresh results/ }));
+  }
+  const rejected = { id: "a1", effective_status: "DISAPPROVED", ad_review_feedback: { global: { "Adult Content": "Suggestive." } } };
+
+  it("1 of 2 rejected with a weak ad: the pause offer leads, the rejection waits", async () => {
+    show([rejected, { id: "a2", effective_status: "ACTIVE" }]);
+    expect(await screen.findByRole("button", { name: "Pause this ad" })).toBeTruthy();
+    await waitFor(() => expect(screen.queryByRole("region", { name: "Ads Meta didn't approve" })).toBeNull());
+  });
+
+  it("every ad rejected: the rejection shows", async () => {
+    show([rejected]);
+    expect(await screen.findByRole("region", { name: "Ads Meta didn't approve" })).toBeTruthy();
+  });
+});
