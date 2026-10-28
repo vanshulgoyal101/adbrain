@@ -5,6 +5,7 @@ import { SpendStatusBanner } from "@/components/spend-status";
 import { RecentActivity, WorkspaceHome } from "@/components/workspace-home";
 import { requestLocale } from "@/i18n/request-locale";
 import { SetupResumeCard } from "@/components/setup-resume-card";
+import { madeForSetup } from "@/lib/creative/setup-picks";
 import { setupResumeStep } from "@/lib/setup/resume";
 import { getMetaConnection } from "@/lib/meta/credentials";
 import { HomeRejectedAds } from "@/components/home-rejected-ads";
@@ -15,6 +16,7 @@ import {
   getCampaigns,
   getCreativePreviews,
   getAdStatuses,
+  getApprovedCreatives,
   getAuditLog,
   getLatestResults,
   getPrimaryBusiness,
@@ -43,7 +45,13 @@ export default async function DashboardPage() {
     : [[], [], null];
   // #1272 (#1251 WS1): until a first campaign has gone live, Home is the one resume card.
   const resume = setupResumeStep({ business, creatives, campaigns });
-  if (resume) return <SetupResumeCard step={resume} />;
+  if (resume) {
+    // #1712: at step 3, the ads Go live will use (made from today's step 1, #1432); unreadable shows the plain card.
+    const ready = resume === 3 && business
+      ? await getApprovedCreatives(business.id).then((rows) => rows.filter((row) => madeForSetup(row, business)), () => [])
+      : [];
+    return <SetupResumeCard step={resume} ready={ready} />;
+  }
   // #764: the Home results row; an unreadable result leaves the row out, never the page.
   const launched = campaigns.filter((campaign) => campaign.meta_campaign_id).map((campaign) => campaign.id);
   const newest = newestLiveCampaign(campaigns);
