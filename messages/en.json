@@ -15,6 +15,7 @@
     "contactTime": "You usually contact people within <strong>{time}</strong> (last 30 days).",
     "seeEnquiries": "See enquiries",
     "seeCampaigns": "See campaigns",
+    "updated": "Updated {ago}",
     "nextStep": "Next step",
     "upToDate": "You're up to date",
     "nothingWaiting": "Nothing is waiting for you.",

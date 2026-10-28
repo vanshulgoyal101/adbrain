@@ -495,6 +495,15 @@ describe("Home results row (#764)", () => {
     expect(within(row).getByRole("link", { name: /See campaigns/ })).toHaveAttribute("href", "/campaigns");
   });
 
+  // #1774 (QA): in Hindi the freshness line was the one English phrase left in the row.
+  it("#1774: in Hindi, says how fresh in Hindi; English keeps '10m ago'", () => {
+    const old = { ...results, "c-form": { ...results["c-form"], fetched_at: new Date(now - 2 * 86_400_000).toISOString() } } as Record<string, CampaignResult>;
+    render(<WorkspaceHome {...empty} business={business} campaigns={[chats, forms]} results={old} now={now} locale="hi" />);
+    const row = screen.getByRole("region", { name: "अब तक के नतीजे" });
+    expect(within(row).getByText(/2 दिन पहले अपडेट हुआ/)).toBeInTheDocument();
+    expect(within(row).queryByText(/Updated|ago/)).toBeNull();
+  });
+
   it("#1049: says how fast the owner replies to enquiries, when there's a reply to measure", () => {
     const { rerender } = render(<WorkspaceHome {...empty} business={business} campaigns={[chats, forms]} results={results} replyMinutes={12.4} now={now} />);
     expect(screen.getByText(/You usually contact people within/)).toHaveTextContent("You usually contact people within 12 min (last 30 days).");
