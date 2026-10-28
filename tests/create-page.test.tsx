@@ -109,4 +109,11 @@ describe("Create page for a first-timer (#1270)", () => {
     await expect(CreatePage({ searchParams: Promise.resolve({}) })).rejects.toThrow("NEXT_REDIRECT");
   });
 
+  it("no service area is not usable: step 2 sends the first-timer back to step 1 (#1136 CEO)", async () => {
+    getPrimaryBusiness.mockResolvedValue({ ...usable, locations: [" "] });
+    hasLaunchedCampaign.mockResolvedValue(false);
+    const { default: CreatePage } = await import("@/app/(app)/create/page");
+    await expect(CreatePage({ searchParams: Promise.resolve({}) })).rejects.toThrow("NEXT_REDIRECT");
+  });
+
 });
