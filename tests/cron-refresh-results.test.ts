@@ -100,7 +100,7 @@ describe("GET /api/cron/refresh-results (#258)", () => {
   it("saves a result row and health per campaign and never pauses or changes a campaign", async () => {
     const { status, body } = await call();
     expect(status).toBe(200);
-    expect(body).toEqual({ ok: true, refreshed: 2, pausedReads: 0, skipped: 0, failed: 0, hasMore: false, alerts: [], reauth: [] });
+    expect(body).toEqual({ ok: true, refreshed: 2, pausedReads: 0, skipped: 0, failed: 0, hasMore: false, alerts: [], reauth: [], failures: [], ended: [], unbound: [] });
     expect(mocks.saveCampaignResult).toHaveBeenCalledWith({ businessId: "business-1", userId: "owner-1" }, expect.objectContaining({ campaign_id: "c1", impressions: 120, leads: 1 }));
     expect(mocks.saveCampaignHealth).toHaveBeenCalledWith(expect.anything(), "c1", expect.objectContaining({ flags: [] }));
     for (const write of [mocks.pause, mocks.updateStatus, mocks.saveCampaign]) expect(write).not.toHaveBeenCalled();
@@ -161,5 +161,54 @@ describe("campaignAttention", () => {
     expect(campaignAttention({ status: "active", raw })).toBe("This run's end date has passed. Pause it, or start a new run.");
     expect(campaignAttention({ status: "paused", raw })).toBeNull();
     expect(campaignAttention({ status: "active", raw: null })).toBeNull();
+  });
+
+  describe("#1592: a campaign that can't be read never keeps the job red forever", () => {
+    const key = async (id: string) => (await import("node:crypto")).createHash("sha256").update(`refresh:${id}`).digest("hex").slice(0, 12);
+
+    it("deleted in Meta (CampaignGoneError) is ended, as the manual refresh does, and the run stays green", async () => {
+      const { CampaignGoneError } = await import("@/lib/meta/client");
+      mocks.campaigns = [bound("gone", "m-gone", { cap: { days: 2 } }), bound("c1", "m1")];
+      mocks.insights.mockImplementation(async (id: string) => { if (id === "m-gone") throw new CampaignGoneError("DELETED"); return insights; });
+      mocks.saveCampaign.mockResolvedValue({ data: {}, error: null });
+      const { status, body } = await call();
+      expect(status).toBe(200);
+      expect(body).toMatchObject({ ok: true, refreshed: 1, failed: 0, ended: [await key("gone")], failures: [] });
+      expect(mocks.saveCampaign).toHaveBeenCalledWith({ businessId: "business-1", userId: "owner-1" },
+        { status: "completed", raw: { cap: { days: 2 }, metaStatus: "DELETED" } }, "gone");
+    });
+
+    it("Meta's recorded 'object does not exist' (100/33) is ended as MISSING", async () => {
+      const tape = (await import("./core/fixtures/meta/create-cleanup-refusals.json")).default as unknown as Array<{ status: number; body?: { error?: { message: string; code: number; error_subcode: number } } }>;
+      const graph = tape.map((entry) => entry.body?.error).find((error) => error?.code === 100 && error.error_subcode === 33)!;
+      const { MetaError } = await import("@/lib/meta/client");
+      mocks.campaigns = [bound("missing", "m-missing")];
+      mocks.insights.mockRejectedValue(new MetaError(graph.message, 400, graph.code, graph.error_subcode));
+      mocks.saveCampaign.mockResolvedValue({ data: {}, error: null });
+      const { status, body } = await call();
+      expect(status).toBe(200);
+      expect(body).toMatchObject({ ok: true, failed: 0, ended: [await key("missing")] });
+      expect(mocks.saveCampaign.mock.calls[0][1]).toMatchObject({ status: "completed", raw: { metaStatus: "MISSING" } });
+    });
+
+    it("assets that no longer match the connection (CONFLICT) are listed, not failed", async () => {
+      const { ConnectionAccessError } = await import("@/lib/meta/connection-access-error");
+      mocks.campaigns = [bound("moved", "m-moved"), bound("c1", "m1")];
+      mocks.insights.mockImplementation(async (id: string) => { if (id === "m-moved") throw new ConnectionAccessError("CONFLICT", "Campaign Meta assets no longer match the connection."); return insights; });
+      const { status, body } = await call();
+      expect(status).toBe(200);
+      expect(body).toMatchObject({ ok: true, failed: 0, unbound: [await key("moved")] });
+      expect(mocks.saveCampaign).not.toHaveBeenCalled();
+    });
+
+    it("any other failure still fails the run, now with its opaque key and code (never an id)", async () => {
+      const { MetaError } = await import("@/lib/meta/client");
+      mocks.campaigns = [bound("broken", "m-broken")];
+      mocks.insights.mockRejectedValue(new MetaError("Service temporarily unavailable", 503, 2));
+      const { status, body } = await call();
+      expect(status).toBe(503);
+      expect(body).toMatchObject({ ok: false, failed: 1, failures: [{ key: await key("broken"), code: "2" }] });
+      expect(JSON.stringify(body)).not.toContain("broken");
+    });
   });
 });
