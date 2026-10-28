@@ -17,10 +17,12 @@ import {
   getMetaConnection,
 } from "@/lib/meta/credentials";
 import {
+  getActiveCampaignBudgets,
   getApprovedCreatives,
   getCampaignPage,
   getLatestResultsWithEnquiries,
   getPrimaryBusiness,
+  getSpendLimits,
 } from "@/lib/supabase/queries";
 
 export const metadata = { title: "Campaigns" };
@@ -68,11 +70,16 @@ export default async function CampaignsPage({
     ...page,
     results: await getLatestResultsWithEnquiries(page.campaigns.map((campaign) => campaign.id)),
   }));
-  const [approved, page, connection, drafts] = await Promise.all([
+  // #1342: the Settings cap and the live budgets, for the cap line; on error the line is left out and Activate still refuses.
+  const spendCap = Promise.all([getSpendLimits(business.id), getActiveCampaignBudgets(business.id)])
+    .then(([limits, active]) => ({ capRupees: limits.weeklyCapRupees, active }))
+    .catch(() => null);
+  const [approved, page, connection, drafts, weeklyCap] = await Promise.all([
     getApprovedCreatives(business.id).then((rows) => rows.map(clientCreative)),
     campaignData,
     getMetaConnection(business.id),
     savedDrafts(business.id),
+    spendCap,
   ]);
   const metaReady = connection.ready;
   const reconnectBy = connection.source === "oauth" && !connection.expired ? reconnectByLabel(connection.tokenExpiresAt) : null;
@@ -108,6 +115,7 @@ export default async function CampaignsPage({
           metaReady={metaReady}
           adResults={adResultsEnabled()}
           adAccountId={connection.adAccountId ?? ""}
+          weeklyCap={weeklyCap}
           newCampaign={params.new === "1" ? { creativeIds: requested, review: params.review === "1" } : undefined}
         />}
       </div>
