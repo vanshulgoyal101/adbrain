@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   tables: {} as Record<string, unknown>, rpc: vi.fn(), getUserById: vi.fn(), fundingMode: vi.fn(),
-  createPlanLink: vi.fn(), findPlanLink: vi.fn(),
+  createPlanLink: vi.fn(), findPlanLink: vi.fn(), fetchPlanLink: vi.fn(),
 }));
 function query(table: string) {
   const result = { data: mocks.tables[table], error: null };
@@ -14,7 +14,7 @@ function query(table: string) {
 }
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: query, rpc: mocks.rpc, auth: { admin: { getUserById: mocks.getUserById } } }) }));
 vi.mock("@/lib/payments/operator-funding", () => ({ fundingMode: mocks.fundingMode }));
-vi.mock("@/lib/payments/razorpay-production", () => ({ createProductionPaymentClient: () => ({ createPlanLink: mocks.createPlanLink, findPlanLink: mocks.findPlanLink }) }));
+vi.mock("@/lib/payments/razorpay-production", () => ({ createProductionPaymentClient: () => ({ createPlanLink: mocks.createPlanLink, findPlanLink: mocks.findPlanLink, fetchPlanLink: mocks.fetchPlanLink }) }));
 
 import { ensurePayLink, planContact, PlanNotDueError, readPlan } from "@/lib/plan/store";
 
@@ -71,6 +71,52 @@ describe("plan store (#718)", () => {
     mocks.tables.campaigns = [];
     await expect(ensurePayLink(businessId, now)).rejects.toBeInstanceOf(PlanNotDueError);
     expect(mocks.createPlanLink).not.toHaveBeenCalled();
+  });
+
+  // #1583 (Reviewer): a lost payment_link.expired/paid webhook must not leave the owner with a dead Pay link while
+  // the gate blocks new ads. Past its lifetime, the open month's link is re-read from Razorpay and settled.
+  describe("an open month whose link has outlived its 30 days (#1583)", () => {
+    const stale = { state: "open", starts_at: null, ends_at: null, paid_at: null, short_url: "https://rzp.io/i/old", payment_link_id: "plink_Old", created_at: "2026-10-01T00:00:00Z" };
+    const link = (status: string, paymentId: string | null = null) => ({ id: "plink_Old", status, amountPaise: 99900, referenceId: periodId, paymentId });
+    beforeEach(() => {
+      mocks.tables.plan_periods = [{ ...stale }];
+      mocks.rpc.mockImplementation(async (name: string) => {
+        if (name === "plan_period_expire") { mocks.tables.plan_periods = [{ ...stale, state: "expired" }]; return { data: true, error: null }; }
+        if (name === "plan_period_paid") return { data: "paid", error: null };
+        return { data: name === "plan_period_open" ? { periodId, linkId: null, shortUrl: null } : true, error: null };
+      });
+    });
+
+    it("expires it when Razorpay says expired, then makes this month's fresh link", async () => {
+      mocks.fetchPlanLink.mockResolvedValue(link("expired"));
+      await expect(ensurePayLink(businessId, now)).resolves.toBe("https://rzp.io/i/a");
+      expect(mocks.fetchPlanLink).toHaveBeenCalledWith("plink_Old");
+      expect(mocks.rpc).toHaveBeenCalledWith("plan_period_expire", { p_link_id: "plink_Old" });
+      expect(mocks.createPlanLink).toHaveBeenCalledOnce();
+    });
+
+    it("settles the month when Razorpay says it was paid, and never expires a paid link", async () => {
+      mocks.fetchPlanLink.mockResolvedValue(link("paid", "pay_Lost"));
+      await readPlan(businessId, now);
+      expect(mocks.rpc).toHaveBeenCalledWith("plan_period_paid", expect.objectContaining({ p_link_id: "plink_Old", p_payment_id: "pay_Lost" }));
+      expect(mocks.rpc).not.toHaveBeenCalledWith("plan_period_expire", expect.anything());
+    });
+
+    it("leaves a link Razorpay still has open alone", async () => {
+      mocks.fetchPlanLink.mockResolvedValue(link("created"));
+      await expect(ensurePayLink(businessId, now)).resolves.toBe("https://rzp.io/i/old");
+      expect(mocks.rpc).not.toHaveBeenCalledWith("plan_period_expire", expect.anything());
+      expect(mocks.createPlanLink).not.toHaveBeenCalled();
+    });
+
+    it("doesn't ask Razorpay about a link inside its 30 days, and a failed check keeps the old answer", async () => {
+      mocks.tables.plan_periods = [{ ...stale, created_at: "2026-10-20T00:00:00Z" }];
+      await expect(ensurePayLink(businessId, now)).resolves.toBe("https://rzp.io/i/old");
+      expect(mocks.fetchPlanLink).not.toHaveBeenCalled();
+      mocks.tables.plan_periods = [{ ...stale }];
+      mocks.fetchPlanLink.mockRejectedValue(new Error("Razorpay down"));
+      await expect(ensurePayLink(businessId, now)).resolves.toBe("https://rzp.io/i/old");
+    });
   });
 
   it("formats Indian numbers for Razorpay and drops anything else", () => {

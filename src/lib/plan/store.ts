@@ -3,6 +3,7 @@ import { isInternalUser } from "@/lib/internal-accounts";
 import { fundingMode } from "@/lib/payments/operator-funding";
 import { createProductionPaymentClient } from "@/lib/payments/razorpay-production";
 import { planStatus, type PlanStatus } from "@/lib/plan/status";
+import { handlePlanWebhook } from "@/lib/plan/webhook";
 
 /** #718 slice 2: off until DevOps turns it on; then own-account businesses see the plan and the gate applies. */
 export const isPlanBillingEnabled = (environment: Readonly<Record<string, string | undefined>> = process.env) =>
@@ -24,15 +25,48 @@ export function planContact(phone: string | null | undefined): string | null {
   return null;
 }
 
+type PeriodRow = { state: string; starts_at: string | null; ends_at: string | null; paid_at: string | null; short_url: string | null;
+  payment_link_id: string | null; created_at: string };
+
+const readPeriods = (db: ReturnType<typeof createAdminClient>, businessId: string) =>
+  db.from("plan_periods").select("state, starts_at, ends_at, paid_at, short_url, payment_link_id, created_at").eq("business_id", businessId);
+
+/**
+ * #1583 (Reviewer): the month only leaves `open` through the payment_link webhook. If that delivery was lost, the link
+ * is dead (or paid) while the gate still blocks new ads. Once it has outlived LINK_LIFETIME_S, ask Razorpay and replay
+ * the webhook's own checks: paid settles the month, expired/cancelled frees it for a fresh link. True when it changed.
+ */
+async function settleStaleLink(db: ReturnType<typeof createAdminClient>, periods: PeriodRow[], now: Date): Promise<boolean> {
+  const open = periods.find((period) => period.state === "open" && period.payment_link_id);
+  if (!open?.payment_link_id || Date.parse(open.created_at) + LINK_LIFETIME_S * 1000 > now.getTime()) return false;
+  const link = await createProductionPaymentClient().fetchPlanLink(open.payment_link_id);
+  const event = link.status === "paid" ? "payment_link.paid" : link.status === "expired" || link.status === "cancelled" ? "payment_link.expired" : null;
+  if (!event) return false;
+  const result = await handlePlanWebhook({ event, payload: { payment_link: { entity: { id: link.id } } } }, {
+    fetchPlanLink: async () => link,
+    rpc: async (name: "plan_period_paid" | "plan_period_expire", args: Record<string, string>) => {
+      const { data, error } = await db.rpc(name, args as never);
+      if (error) throw new Error("Plan is unavailable.");
+      return data;
+    },
+    now: () => now,
+  });
+  return result === "paid" || result === "expired";
+}
+
 async function load(businessId: string, now: Date) {
   const db = createAdminClient();
-  const [business, launch, periods, mode] = await Promise.all([
+  const [business, launch, firstRead, mode] = await Promise.all([
     db.from("businesses").select("owner_id, phone").eq("id", businessId).maybeSingle(),
     db.from("campaigns").select("launched_at").eq("business_id", businessId).not("launched_at", "is", null).order("launched_at").limit(1),
-    db.from("plan_periods").select("state, starts_at, ends_at, paid_at, short_url").eq("business_id", businessId),
+    readPeriods(db, businessId),
     fundingMode(businessId),
   ]);
-  if (business.error || !business.data || launch.error || periods.error) throw new Error("Plan is unavailable.");
+  if (business.error || !business.data || launch.error || firstRead.error) throw new Error("Plan is unavailable.");
+  // A failed check keeps today's answer; the next read or the daily cron tries again.
+  const settled = await settleStaleLink(db, firstRead.data as PeriodRow[], now).catch(() => false);
+  const periods = settled ? await readPeriods(db, businessId) : firstRead;
+  if (periods.error) throw new Error("Plan is unavailable.");
   const { data: owner, error } = await db.auth.admin.getUserById(business.data.owner_id);
   if (error || !owner?.user) throw new Error("Plan is unavailable.");
   const status = planStatus({
