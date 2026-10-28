@@ -74,8 +74,27 @@ describe("core: a daily-limit 429 parks Groq until retry-after (#1200)", () => {
     expect(await twoCalls("tokens per day (TPD): Limit 200000, Used 199998, Requested 2013", 600, 120_000)).toEqual(["openrouter"]);
   });
 
-  it("tokens per day: parked at most 15 minutes, then tried again", async () => {
-    expect(await twoCalls("tokens per day (TPD): Limit 200000, Used 199998, Requested 2013", 7_200, 16 * 60_000)).toEqual(["groq", "openrouter"]);
+  it("tokens per day: parked for Groq's own retry-after, not 15 minutes (#1568), then tried again", async () => {
+    const tpd = "tokens per day (TPD): Limit 200000, Used 199998, Requested 2013";
+    expect(await twoCalls(tpd, 7_200, 16 * 60_000)).toEqual(["openrouter"]);
+    setEnv();
+    expect(await twoCalls(tpd, 7_200, 7_200_000 + 1_000)).toEqual(["groq", "openrouter"]);
+  });
+
+  it("a daily park is capped at 6 hours even if retry-after says more (#1568)", async () => {
+    expect(await twoCalls("tokens per day (TPD): Limit 200000, Used 199998, Requested 2013", 86_400, 6 * 3_600_000 + 1_000)).toEqual(["groq", "openrouter"]);
+  });
+
+  it("an org-wide limit parks every Groq key, not just the one that answered (#1568)", async () => {
+    process.env.GROQ_API_KEYS = "gk1,gk2";
+    vi.resetModules();
+    const calls = routeFetch(groqLimit("tokens per day (TPD): Limit 200000, Used 199998, Requested 2013", 600));
+    const { complete } = await import("@/lib/llm");
+    await complete([{ role: "user", content: "plan 1" }], {});
+    expect(calls.map((call) => call.host)).toEqual(["groq", "openrouter"]);
+    calls.length = 0;
+    await complete([{ role: "user", content: "plan 2" }], {});
+    expect(calls.map((call) => call.host)).toEqual(["openrouter"]);
   });
 
   it("a per-minute limit still clears after a minute, as before", async () => {

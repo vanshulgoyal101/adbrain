@@ -40,6 +40,8 @@ const RATE_LIMIT_WAIT_MS = 20_000;
 const cooldownUntil = new Map<string, number>();
 // #449: a key out of credit stays parked long enough not to slow every Create; the free models answer meanwhile.
 const CREDIT_COOLDOWN_MS = 15 * 60_000;
+// #1568: a daily limit parks the provider until its own retry-after, up to this long.
+const DAILY_PARK_MAX_MS = 6 * 3_600_000;
 const FREE_PROVIDERS = ["google", "groq"];
 // Round-robin cursor per provider so load spreads across a key pool.
 const rrCursor = new Map<string, number>();
@@ -209,10 +211,12 @@ async function callProviders(
               : err.status && err.status >= 500 ? "PROVIDER_SERVER"
                 : err.status ? "PROVIDER_CLIENT" : "TRANSPORT" : "UNKNOWN");
           if (err instanceof LLMError && err.status === 429) {
-            // #1200: a daily limit doesn't lift in a minute; park the key until the provider's retry-after, at most 15 min.
+            // #1200/#1568: a daily limit doesn't lift in a minute; park until the provider's retry-after (≤ 6 h).
             const daily = err.rateLimit?.type === "TPD" || err.rateLimit?.type === "RPD";
-            const cap = daily ? CREDIT_COOLDOWN_MS : COOLDOWN_MS;
-            cooldownUntil.set(coolKey, Date.now() + Math.min(err.retryAfterMs ?? cap, cap));
+            const until = Date.now() + Math.min(err.retryAfterMs ?? (daily ? CREDIT_COOLDOWN_MS : COOLDOWN_MS), daily ? DAILY_PARK_MAX_MS : COOLDOWN_MS);
+            // #1568: a limit the provider names (Groq's TPD, OTPM…) is the organization's, shared by every key.
+            const parked = err.rateLimit ? keys.map((_, k) => `${provider.name}:${k}`) : [coolKey];
+            for (const key of parked) cooldownUntil.set(key, Math.max(cooldownUntil.get(key) ?? 0, until));
           }
           // Another key on the same model would time out or truncate the same way; try the next model.
           if (err instanceof LLMError && !err.retryable && err.status === undefined) {
