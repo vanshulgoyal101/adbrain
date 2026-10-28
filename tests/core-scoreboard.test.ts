@@ -132,6 +132,19 @@ describe("core scoreboard (#681)", () => {
     expect(row(board([]), "Brand")).toMatchObject({ now: "0 new businesses; autofill 0 calls (0 failed)", met: null });
   });
 
+  it("Brand starts a new owner's clock at sign-up and leaves the team's accounts out (#1136)", () => {
+    const create = (business_id: string, user_id: string, minAgo: number) => ev("business.create", "success", { business_id, user_id, created_at: at(minAgo), attributes: { brandUsable: true } });
+    const events = [create("new", "new-owner", 100), create("old", "old-owner", 90), create("team", "qa", 80), create("late", "late-owner", 70)];
+    const b = buildScoreboard({ events, aiCalls: [], launches: [], activeResults: [], freeImageUserIds: [], excludedUserIds: [SMOKE], excludedBusinessIds: [], since, until,
+      brandOwners: [
+        { id: "new-owner", signedUpAt: at(103), internal: false }, // signed up 3 min before the usable create
+        { id: "old-owner", signedUpAt: at(60 * 24 * 30), internal: false }, // an older account: the clock starts at create
+        { id: "qa", signedUpAt: at(81), internal: true },
+        { id: "late-owner", signedUpAt: at(60), internal: false }, // sign-up after create (clock skew): create starts it
+      ] });
+    expect(row(b, "Brand")).toMatchObject({ now: "3 new businesses (1 team left out): 100% usable, p90 3.0 min; autofill 0 calls (0 failed)", met: false });
+  });
+
   it("Launch scores settled launches, not the reads that share the create_paused purpose (#615)", () => {
     const reads = [ev("meta.create_paused"), ev("meta.create_paused", "failed", { attributes: { errorCode: "META_OPERATION_FAILED" } })];
     expect(row(board(reads), "Launch")).toMatchObject({
