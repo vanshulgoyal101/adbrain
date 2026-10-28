@@ -134,8 +134,9 @@ export async function deliverOwnerAlert(
 }
 
 /**
- * Templates Meta moved out of UTILITY, from a WhatsApp Business Account webhook
- * (`template_category_update`). A marketing template costs more and needs marketing consent: stop it.
+ * Templates Meta moved out of UTILITY, or will move within 24 h (`correct_category`, #1139), from a
+ * WhatsApp Business Account webhook (`template_category_update`). A marketing template costs more and
+ * needs marketing consent: stop it.
  */
 export function recategorisedTemplates(body: unknown): { template: string; category: string }[] {
   const entries = (body as { object?: unknown; entry?: unknown } | null)?.object === "whatsapp_business_account"
@@ -144,8 +145,9 @@ export function recategorisedTemplates(body: unknown): { template: string; categ
   return entries.flatMap((entry) => Array.isArray(entry?.changes) ? entry.changes : [])
     .filter((change) => change?.field === "template_category_update")
     .flatMap((change) => {
-      const value = change?.value as { message_template_name?: unknown; new_category?: unknown } | undefined;
-      return typeof value?.message_template_name === "string" && typeof value.new_category === "string" && value.new_category.toUpperCase() !== "UTILITY"
-        ? [{ template: value.message_template_name.slice(0, 512), category: value.new_category.toUpperCase().slice(0, 32) }] : [];
+      const value = change?.value as { message_template_name?: unknown; new_category?: unknown; correct_category?: unknown } | undefined;
+      const category = typeof value?.correct_category === "string" ? value.correct_category : value?.new_category;
+      return typeof value?.message_template_name === "string" && value.message_template_name && typeof category === "string" && category && category.toUpperCase() !== "UTILITY"
+        ? [{ template: value.message_template_name.slice(0, 512), category: category.toUpperCase().slice(0, 32) }] : [];
     });
 }
