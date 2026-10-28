@@ -915,9 +915,25 @@ describe("<Studio> export", () => {
 });
 
 describe("<Studio> empty state", () => {
-  it("nudges the owner to generate their first batch", () => {
+  it("#1598: no ads is one block (title, line, one solid Make ads); no stepper, header, tabs or Create campaign (0)", () => {
     render(<Studio business={business} initialCreatives={[]} />);
-    expect(screen.getByText(/generate your first batch/i)).toBeInTheDocument();
+    const block = screen.getByRole("region", { name: "No ads yet" });
+    expect(within(block).getByText("AdBrain makes 3 ads from your business details in about a minute.")).toBeInTheDocument();
+    expect(within(block).getByRole("link", { name: "Make ads" })).toHaveAttribute("href", "/create");
+    expect(screen.queryByRole("button", { name: /Create campaign/ })).toBeNull();
+    expect(screen.queryByRole("link", { name: /Create campaign/ })).toBeNull();
+    expect(screen.queryByRole("searchbox", { name: "Search ads" })).toBeNull();
+    expect(screen.queryByText(/Ads\s*\(0\)/)).toBeNull();
+    // Writing a brief here still works, behind the closed 'Make more ads'.
+    expect(screen.getByText("Make more ads").closest("details")).not.toHaveAttribute("open");
+  });
+
+  it("#1598: with ads, Create campaign is the one solid primary; the card's Share is outline", () => {
+    render(<Studio business={business} initialCreatives={[creative({ status: "approved" })]} />);
+    expect(screen.getByRole("link", { name: /Create campaign \(1\)/ }).className).toContain("bg-primary");
+    const share = screen.getByRole("button", { name: "Share to WhatsApp or Instagram" });
+    expect(share.className).not.toMatch(/(^|\s)bg-primary(\s|$)/);
+    expect(screen.queryByRole("region", { name: "No ads yet" })).toBeNull();
   });
 });
 
