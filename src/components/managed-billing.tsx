@@ -17,7 +17,7 @@ export function initialBillingTab(balance: Balance | null, requested?: string | 
 
 export function ManagedBilling({ connection, testBusinessId, liveBusinessId, initialBalance = null, billingTab }: {
   connection: BillingConnection | null; testBusinessId?: string; liveBusinessId?: string; initialBalance?: Balance | null;
-  /** `?billing=payments|budget` from Settings links (e.g. Go live's Add money). */
+  /** `/settings?billing=payments|budget` opens that tab. */
   billingTab?: string | null;
 }) {
   if (liveBusinessId) return <BillingTabs key={liveBusinessId} initialTab={initialBillingTab(initialBalance, billingTab)}
