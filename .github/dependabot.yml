@@ -1,0 +1,19 @@
+# #1772: keeps the GitHub Action pins (#1756) fresh. One grouped PR a week into `next`;
+# dependabot-automerge.yml turns on auto-merge, so it ships on green CI like any low-risk PR.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: next
+    schedule:
+      interval: weekly
+      day: monday
+      time: "04:00"
+      timezone: Asia/Kolkata
+    groups:
+      actions:
+        patterns: ["*"]
+    labels: [dependencies]
+    commit-message:
+      prefix: "#1772 actions"
+    open-pull-requests-limit: 2
