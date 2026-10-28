@@ -1,0 +1,8 @@
+{
+  "note": "#1809: the production smoke business's saved inputs that Prepare validates (scripts/smoke-core.mjs, Cedar Ridge on the Solaride ad account). No personal data. Change this and the production row together; re-record geo-smoke.json when the areas change.",
+  "country": "IN",
+  "locations": ["Austin, Texas", "Round Rock, Texas", "Cedar Park, Texas"],
+  "dailyBudgetRupees": 350,
+  "destination": "instant_form",
+  "before1745": { "locations": ["Austin, Texas", "Round Rock", "Cedar Park"] }
+}

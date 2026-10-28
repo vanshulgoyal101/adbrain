@@ -9,6 +9,7 @@ import type { Business } from "@/lib/types";
 const mocks = vi.hoisted(() => ({
   push: vi.fn(),
   saveSetupBusiness: vi.fn(),
+  saveAdLanguage: vi.fn(async () => ({ ok: true })),
   getUser: vi.fn(),
   insert: vi.fn(),
   update: vi.fn(),
@@ -126,7 +127,7 @@ describe("core: <SetupBusinessStep> (#1269)", () => {
   beforeEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
-    vi.doMock("@/app/(app)/brand/actions", () => ({ saveSetupBusiness: mocks.saveSetupBusiness }));
+    vi.doMock("@/app/(app)/brand/actions", () => ({ saveSetupBusiness: mocks.saveSetupBusiness, saveAdLanguage: mocks.saveAdLanguage }));
     mocks.saveSetupBusiness.mockImplementation(async (id: string | null) => ({ ok: true, id: id ?? "b-new", usable: true }));
   });
 
@@ -140,10 +141,25 @@ describe("core: <SetupBusinessStep> (#1269)", () => {
   it("#1641: offers English / हिंदी only until a language is chosen", async () => {
     vi.doMock("@/app/(app)/settings/language-actions", () => ({ setAppLanguage: vi.fn(async () => ({ ok: true })) }));
     await step(business, true);
-    expect(screen.getByRole("group", { name: "Language / भाषा" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "App language / ऐप की भाषा" })).toBeInTheDocument();
     cleanup();
     await step(business, false);
-    expect(screen.queryByRole("group", { name: "Language / भाषा" })).toBeNull();
+    expect(screen.queryByRole("group", { name: "App language / ऐप की भाषा" })).toBeNull();
+  });
+
+  it("#1681: 'Ads in' follows what they sell (solar → Hinglish); a picked language is saved before step 2", async () => {
+    await step();
+    type("What you sell", "Rooftop solar");
+    expect(screen.getByRole("button", { name: "Hinglish" })).toHaveAttribute("aria-pressed", "true");
+    type("What you sell", "Modular kitchens");
+    expect(screen.getByRole("button", { name: "English" })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByRole("button", { name: "ਪੰਜਾਬੀ" }));
+    type("Where you serve", complete.locations);
+    type("Your offer", complete.offer);
+    type("WhatsApp number", complete.phone);
+    await act(async () => fireEvent.click(makeMyAds()));
+    await waitFor(() => expect(mocks.push).toHaveBeenCalledWith("/create"));
+    expect(mocks.saveAdLanguage).toHaveBeenCalledWith("b1", "pa");
   });
 
   it("is step 1 of 3 with the five fields, no Back, and the free note", async () => {

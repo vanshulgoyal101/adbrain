@@ -15,6 +15,7 @@
     "contactTime": "You usually contact people within <strong>{time}</strong> (last 30 days).",
     "seeEnquiries": "See enquiries",
     "seeCampaigns": "See campaigns",
+    "updated": "Updated {ago}",
     "nextStep": "Next step",
     "upToDate": "You're up to date",
     "nothingWaiting": "Nothing is waiting for you.",
@@ -75,7 +76,12 @@
   "settings": {
     "language": "App language",
     "languageHint": "Home shows in Hindi now; more screens follow.",
-    "saveFailed": "Couldn't save your language. Try again."
+    "saveFailed": "Couldn't save your language. Try again.",
+    "alertsIntro": "A short WhatsApp message from AdBrain when something needs you. Customer chats from your ads already arrive in your WhatsApp Business app.",
+    "alertsDaily": "Yesterday's results, 9 am",
+    "alertsDailyDetail": "One line: spent, chats and enquiries, and what each enquiry cost.",
+    "alertsForm": "New form enquiry",
+    "alertsFormDetail": "Only for ads with a form: name, phone and which ad, with a tap to call."
   },
   "pilotDay7": {
     "question": "One question after your first week: would you pay ₹999 a month to keep using AdBrain?",

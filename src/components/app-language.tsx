@@ -66,7 +66,7 @@ export function CompactAppLanguage() {
   if (chosen) return null;
   return <div className="flex flex-col items-end gap-1">
     <div role="group" aria-labelledby="setup-language-label" className="flex flex-wrap items-center justify-end gap-2">
-      <span id="setup-language-label" className="text-sm text-slate-600">Language / <span lang="hi">भाषा</span></span>
+      <span id="setup-language-label" className="text-sm text-slate-600">App language / <span lang="hi">ऐप की भाषा</span></span>
       {CHOICES.map((choice) => (
         <button key={choice.locale} type="button" lang={choice.locale} aria-pressed={false} disabled={pending}
           onClick={() => choose(choice.locale)}

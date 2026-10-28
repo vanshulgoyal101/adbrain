@@ -194,7 +194,7 @@ The Supabase free plan keeps no backups (owner, Oct 27: no Pro), so we keep our 
   over 23 h old.
 - **Before every migration:** `scripts/release.mjs` requires a successful backup that finished
   less than an hour ago, and dispatches one and waits if needed.
-- **Second copy:** the supervisor's nightly JSON export into `~/.adbrain-backups`
+- **Second copy:** the supervisor's nightly JSON export into `~/.adbrain-backups`, encrypted to the same certificate (`.tar.gz.cms`)
   ([Operations](OPERATIONS.md#data-safety-and-recovery)).
 - **Storage:** the same run mirrors the owners' uploads (`brand-assets`: logos, product photos;
   names from the database, files from their public URLs) into a separate `<name>-uploads` artifact, encrypted

@@ -12,7 +12,6 @@ import { homeResults } from "@/lib/campaign/home-results";
 import { homeVerdicts } from "@/lib/campaign/card-verdict";
 import { staleCampaignIds } from "@/lib/campaign/results-freshness";
 import { StaleResultsRefresher } from "@/components/stale-results-refresher";
-import { timeAgo } from "@/lib/utils";
 import type { SpendEvaluation } from "@/lib/campaign/spend";
 import type { AuditLog, Business, Campaign, CampaignResult, CreativePreview } from "@/lib/types";
 import { campaignAttention } from "@/lib/campaign/health";
@@ -20,7 +19,7 @@ import { formatReplyTime } from "@/lib/leads/first-reply";
 import { campaignStatus, Status } from "@/components/ui/status";
 import { goneInMeta, recentlyDeletedInMeta } from "@/lib/campaign/gone-in-meta";
 import type { HomeAdReview } from "@/lib/campaign/home-ad-review";
-import { translator, type AppLocale } from "@/i18n/locale";
+import { timeAgoIn, translator, type AppLocale } from "@/i18n/locale";
 
 export interface WorkspaceHomeProps {
   business: Business | null;
@@ -152,7 +151,7 @@ export function WorkspaceHome({
             <Link href="/leads" className={linkClass}>{t("seeEnquiries")}</Link>
           </p>}
           <p className="mt-3 text-xs text-slate-500">
-            Updated {timeAgo(new Date(summary.oldestFetchedAt), now === undefined ? undefined : new Date(now))} ·{" "}
+            {t("updated", { ago: timeAgoIn(locale, new Date(summary.oldestFetchedAt), now === undefined ? undefined : new Date(now)) })} ·{" "}
             <Link href="/campaigns" className={linkClass}>{t("seeCampaigns")}</Link>
           </p>
         </section>
@@ -186,7 +185,7 @@ export function WorkspaceHome({
                 )}
               </>
             ) : (
-              <div className="flex items-start gap-3 rounded-lg border border-slate-200 p-4 sm:p-6">
+              <div className="flex items-start gap-3 py-4">
                 <CheckCircle2 size={20} className="mt-0.5 shrink-0 text-blue-700" aria-hidden="true" />
                 <div>
                   <h3 className="text-lg font-semibold text-slate-950">{t("upToDate")}</h3>
