@@ -177,7 +177,8 @@ export function LeadInbox({
   const [contactedAt, setContactedAt] = useState<Record<string, string>>({});
   const firstContact = (lead: Lead) => lead.first_contacted_at ?? contactedAt[draftKey(lead)] ?? null;
   function markContacted(lead: Lead) {
-    if (firstContact(lead)) return;
+    // #1140: only a still-new enquiry gets a first reply time (the server does the same).
+    if (firstContact(lead) || statusOf(lead) !== "new") return;
     setContactedAt(current => ({ ...current, [draftKey(lead)]: new Date().toISOString() }));
     // keepalive: the tap leaves for WhatsApp or the dialer, and the record still has to land.
     void fetch(`/api/leads/${lead.id}`, {
