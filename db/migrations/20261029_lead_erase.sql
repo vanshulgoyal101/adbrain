@@ -49,6 +49,8 @@ $$;
 revoke all on function public.leads_erase(uuid, uuid, uuid) from public, anon;
 grant execute on function public.leads_erase(uuid, uuid, uuid) to authenticated, service_role;
 
+-- Built on 20261028_lead_sync_shared_page.sql (#1775's shared-Page filter kept), adding the tombstone skip.
+-- Rollback of this function: re-apply 20261028_lead_sync_shared_page.sql.
 create or replace function public.lead_sync_checkpoint(
   p_business_id uuid, p_owner_id uuid, p_sync_id uuid,
   p_generation bigint, p_ad_account_id text, p_page_id text,
@@ -56,7 +58,7 @@ create or replace function public.lead_sync_checkpoint(
 ) returns jsonb
 language plpgsql security invoker set search_path = public
 as $$
-declare current_run public.lead_sync_runs; inserted_count integer;
+declare current_run public.lead_sync_runs; inserted_count integer; shared_page boolean;
 begin
   select * into current_run from public.lead_sync_start(p_business_id, p_owner_id, p_sync_id, p_generation, p_ad_account_id, p_page_id);
   if current_run.version <> p_version or current_run.state <> 'partial' then
@@ -68,6 +70,9 @@ begin
     or jsonb_typeof(p_progress->'formsDone') is distinct from 'boolean' then
     raise exception 'Invalid sync checkpoint' using errcode = '22023';
   end if;
+  -- #1775: a Page bound to another business too is shared, so only leads from this business's own campaigns are its.
+  shared_page := exists (select 1 from public.meta_connections other
+    where other.page_id = p_page_id and other.business_id <> p_business_id);
   with upserted as (
     insert into public.leads(business_id, campaign_id, meta_lead_id, form_id, form_name, full_name, phone, email, city, field_data, created_time)
       -- One row per lead: a batch may repeat a lead, and DO UPDATE can't touch a row twice.
@@ -77,9 +82,10 @@ begin
         full_name text, phone text, email text, city text, field_data jsonb, created_time timestamptz)
       left join public.campaigns campaign
         on campaign.business_id = p_business_id and campaign.meta_campaign_id = incoming.meta_campaign_id
-      -- #1761: an enquiry the owner deleted is never imported again.
-      where not exists (select 1 from public.lead_tombstones tombstone
-        where tombstone.business_id = p_business_id and tombstone.meta_lead_hash = public.lead_meta_hash(incoming.meta_lead_id))
+      where (not shared_page or campaign.id is not null)
+        -- #1761: an enquiry the owner deleted is never imported again.
+        and not exists (select 1 from public.lead_tombstones tombstone
+          where tombstone.business_id = p_business_id and tombstone.meta_lead_hash = public.lead_meta_hash(incoming.meta_lead_id))
       order by incoming.meta_lead_id, campaign.id nulls last
       on conflict (business_id, meta_lead_id) do update set campaign_id = excluded.campaign_id
         where leads.campaign_id is null and excluded.campaign_id is not null

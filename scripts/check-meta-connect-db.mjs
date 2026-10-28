@@ -45,6 +45,7 @@ const hardeningMigration = await readFile(join(root, "db/migrations/20261026_leg
 const reauthMigration = await readFile(join(root, "db/migrations/20261026_meta_connection_reauth.sql"), "utf8");
 const leadCampaignLinkMigration = await readFile(join(root, "db/migrations/20261026_lead_campaign_link.sql"), "utf8");
 const leadEraseMigration = await readFile(join(root, "db/migrations/20261029_lead_erase.sql"), "utf8");
+const leadSharedPageMigration = await readFile(join(root, "db/migrations/20261028_lead_sync_shared_page.sql"), "utf8");
 const managedWhatsAppMigration = await readFile(join(root, "db/migrations/20261025_managed_whatsapp_page_link.sql"), "utf8");
 const productRollupMigration = await readFile(join(root, "db/migrations/20260928_product_event_rollups.sql"), "utf8");
 const bin = process.env.META_TEST_PG_BIN ?? "/opt/homebrew/opt/postgresql@17/bin";
@@ -1339,6 +1340,38 @@ async function verifyLeadErase(db, database) {
     assert.equal(saved.imported, 1);
     const ids = (await db.query("select meta_lead_id from public.leads where business_id=$1 and meta_lead_id is not null order by 1", [business])).rows.map(r => r.meta_lead_id);
     assert.deepEqual(ids, ["erase-3", "erase-new"]);
+  });
+}
+
+async function verifySharedPageLeads(db, database) {
+  const [ownerA, ownerB, ownerC, a, b, c, campA, campB] = Array.from({ length: 8 }, () => randomUUID());
+  await db.query("insert into auth.users(id) values ($1),($2),($3)", [ownerA, ownerB, ownerC]);
+  await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Shared A'),($3,$4,'Shared B'),($5,$6,'Solo C')", [a, ownerA, b, ownerB, c, ownerC]);
+  await db.query("insert into public.campaigns(id,business_id,daily_budget,meta_campaign_id) values ($1,$2,300,'1301'),($3,$4,300,'1302')", [campA, a, campB, b]);
+  await db.query(`insert into public.meta_connections(business_id,generation,authorization_status,ad_account_id,page_id)
+    values ($1,1,'connected','act_shared_a','page_shared'),($2,1,'connected','act_shared_b','page_shared'),($3,1,'connected','act_solo','page_solo')`, [a, b, c]);
+  const sync = async (business, owner, account, page, rows) => {
+    const run = (await db.query("select * from public.lead_sync_start($1,$2,null,1,$3,$4)", [business, owner, account, page])).rows[0];
+    return (await db.query("select public.lead_sync_checkpoint($1,$2,$3,1,$4,$5,$6,$7::jsonb,$8::jsonb) as result",
+      [business, owner, run.id, account, page, run.version, JSON.stringify(rows), JSON.stringify({ formsDone: true, pending: [] })])).rows[0].result;
+  };
+  const leadsOf = async (business) => (await db.query("select meta_lead_id from public.leads where business_id=$1 order by 1", [business])).rows.map(row => row.meta_lead_id);
+  await check(`${database}: on a Page two businesses share, a lead goes only to the business whose campaign it came from (#1775)`, async () => {
+    const rows = [
+      { meta_lead_id: "from-b", meta_campaign_id: "1302", form_id: "f" },
+      { meta_lead_id: "from-a", meta_campaign_id: "1301", form_id: "f" },
+      { meta_lead_id: "outside", meta_campaign_id: "9999", form_id: "f" },
+      { meta_lead_id: "no-campaign", meta_campaign_id: null, form_id: "f" },
+    ];
+    assert.equal((await sync(b, ownerB, "act_shared_b", "page_shared", rows)).imported, 1);
+    assert.deepEqual(await leadsOf(b), ["from-b"]);
+    assert.equal((await sync(a, ownerA, "act_shared_a", "page_shared", rows)).imported, 1);
+    assert.deepEqual(await leadsOf(a), ["from-a"]);
+  });
+  await check(`${database}: a business that alone has its Page still imports all of its Page's leads (#680, #1775)`, async () => {
+    const rows = [{ meta_lead_id: "boost", meta_campaign_id: "8888", form_id: "f" }, { meta_lead_id: "test", meta_campaign_id: null, form_id: "f" }];
+    assert.equal((await sync(c, ownerC, "act_solo", "page_solo", rows)).imported, 2);
+    assert.deepEqual(await leadsOf(c), ["boost", "test"]);
   });
 }
 
@@ -2790,9 +2823,13 @@ async function verify(database, source, integrityMigration, customerOnly = false
       if ((await db.query("select to_regclass('public.lead_sync_runs') is not null as installed")).rows[0].installed) {
         await db.query(leadCampaignLinkMigration);
         await db.query(leadCampaignLinkMigration);
+        await db.query(leadSharedPageMigration);
+        await db.query(leadSharedPageMigration);
+        // #1761 (QA): the erase migration redefines the checkpoint last, so every check below runs on the final function.
+        await db.query(leadEraseMigration);
+        await db.query(leadEraseMigration);
         await verifyLeadCampaignLink(db,database);
-        await db.query(leadEraseMigration);
-        await db.query(leadEraseMigration);
+        await verifySharedPageLeads(db,database);
         await verifyLeadErase(db,database);
       }
       if (database === "customer_fresh") await verifyAdvisorHardening(db,database);
