@@ -43,7 +43,8 @@ describe("Indian scripts on the ad image", () => {
 
   it("shapes only the fields written in Devanagari or Gurmukhi", async () => {
     const shaped = await shapeIndicText(design("बिजली बिल आधा", "ਮੁਫ਼ਤ ਸਾਈਟ ਸਰਵੇ"));
-    expect(Object.keys(shaped).sort()).toEqual(["headline", "subhead"]);
+    // #1177: a Hindi ad's WhatsApp ask ("WhatsApp पर मैसेज करें") is shaped too.
+    expect(Object.keys(shaped).sort()).toEqual(["contactAsk", "headline", "subhead"]);
     expect(await shapeIndicText(design("Wondering Whether Your Roof Is Ready?", "Free site survey"))).toEqual({});
   });
 

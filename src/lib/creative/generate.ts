@@ -403,6 +403,7 @@ async function renderVariant(
       angle,
       backgroundUrl: image.url,
       format,
+      language: input.language,
     }),
     llmUsage: usage,
     imageUsage: {

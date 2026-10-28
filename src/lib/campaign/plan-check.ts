@@ -122,6 +122,9 @@ export const REVIEW_WARNINGS = {
 } as const;
 
 /** #418 rule 7: an ad's last line asks customers to send other words than WhatsApp pre-types. */
+/** #1177: Review shows "Switch to WhatsApp" beside this warning. */
+export const WHATSAPP_PICTURE_ON_FORM = "An ad's picture asks people to message you on WhatsApp, but this campaign opens a form. Switch to WhatsApp, or choose ads made for forms";
+
 export function askMismatchWarning(ask: string, prefill: string): string {
   return `An ad asks customers to send “${ask.slice(0, 80)}”, but WhatsApp pre-types “${prefill.slice(0, 80)}”. Edit the WhatsApp message so they match`;
 }

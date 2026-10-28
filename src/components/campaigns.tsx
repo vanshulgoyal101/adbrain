@@ -105,7 +105,7 @@ import {
 } from "@/lib/campaign/budget";
 import { effectiveDailyBudget } from "@/lib/campaign/spend";
 import { accountFundingSchema, activationConfirmationPayload, campaignDeliverySnapshotSchema, RESUME_IN_ADS_MANAGER, reviewableCampaign } from "@/lib/campaign/activation";
-import { activationWarnings } from "@/lib/campaign/plan-check";
+import { activationWarnings, WHATSAPP_PICTURE_ON_FORM } from "@/lib/campaign/plan-check";
 import { campaignAttention } from "@/lib/campaign/health";
 import { campaignWhatsAppSummary } from "@/lib/campaign/results-summary";
 import { costPerCustomer } from "@/lib/campaign/real-enquiries";
@@ -1618,7 +1618,16 @@ function BusinessCampaigns({
                   {prepareReview.review.planWarnings.map((warning) => (
                     <li key={warning} className="flex items-start gap-1.5">
                       <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                      <span>{warning}</span>
+                      <span>
+                        {warning}
+                        {/* #1177: one tap switches to WhatsApp; the owner then reviews again. */}
+                        {warning === WHATSAPP_PICTURE_ON_FORM && (
+                          <button type="button" className="ml-1 min-h-11 font-medium text-blue-700 underline"
+                            onClick={() => { if (unresolvedRecovery()) return; setDestination("whatsapp"); destinationChosenRef.current = true; setPrepareReview(null); jumpToFix(["destination-whatsapp"]); }}>
+                            Switch to WhatsApp
+                          </button>
+                        )}
+                      </span>
                     </li>
                   ))}
                 </ul>
