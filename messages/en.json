@@ -75,5 +75,25 @@
     "language": "App language",
     "languageHint": "Home shows in Hindi now; more screens follow.",
     "saveFailed": "Couldn't save your language. Try again."
+  },
+  "pilotDay7": {
+    "question": "One question after your first week: would you pay ₹999 a month to keep using AdBrain?",
+    "yes": "Yes",
+    "maybe": "Maybe",
+    "no": "No",
+    "notNow": "Not now",
+    "thanks": "Thanks, that helps us decide.",
+    "saveFailed": "Your answer couldn't be saved. Try again.",
+    "why": "What's the main reason?",
+    "reason": {
+      "brings_enquiries": "It brings enquiries",
+      "saves_time": "It saves me time",
+      "sees_cost": "I can see what each enquiry costs",
+      "few_enquiries": "Not enough enquiries yet",
+      "too_expensive": "Too expensive",
+      "hard_to_use": "Hard to use",
+      "prefer_meta": "I'd rather use Meta myself",
+      "other": "Something else"
+    }
   }
 }

@@ -27,6 +27,9 @@ const queries = vi.hoisted(() => ({
   businessLLMUsageSummary: vi.fn(),
 }));
 vi.mock("@/lib/supabase/queries", () => queries);
+// #1650: the day-7 question's facts (exempt, first Go live, earlier answers); hidden unless a test opens it.
+const pilot = vi.hoisted(() => ({ facts: vi.fn(async (): Promise<{ exempt: boolean; firstLaunchAt: string | null; events: { name: string; created_at: string }[] }> => ({ exempt: true, firstLaunchAt: null, events: [] })) }));
+vi.mock("@/lib/feedback/pilot-day7-store", () => ({ pilotDay7Facts: pilot.facts }));
 vi.mock("@/lib/llm/persist", () => ({ businessLLMUsageSummary: queries.businessLLMUsageSummary }));
 vi.mock("@/lib/env", () => ({ getEnv: () => ({ DEMO_USER_EMAIL: "demo@example.test", NEXT_PUBLIC_SUPABASE_URL: "https://project.supabase.co" }) }));
 const operator = vi.hoisted(() => ({ allowed: true }));
@@ -372,6 +375,24 @@ describe("Home workspace", () => {
     expect(queries.getAdStatuses).toHaveBeenCalledWith("c-new");
     expect(screen.getByRole("status", { name: "Meta review" })).toHaveTextContent("Meta is checking your ads");
     vi.unstubAllEnvs();
+  });
+
+  it("asks the day-7 pricing question once the first week has passed, and not for an exempt business (#1650)", async () => {
+    const live = { id: "c-new", name: "Solar", status: "active", daily_budget: 300, raw: {}, meta_campaign_id: "123", launched_at: "2026-10-01T10:00:00Z", created_at: "2026-10-01T10:00:00Z" } as unknown as Campaign;
+    queries.getPrimaryBusiness.mockResolvedValue(business);
+    queries.getCreativePreviews.mockResolvedValue([]);
+    queries.getCampaigns.mockResolvedValue([live]);
+    queries.getMetaConnection.mockResolvedValue({ ready: true });
+    queries.getSpendEvaluation.mockResolvedValue({ evaluation: { status: "healthy" } });
+    queries.getAuditLog.mockResolvedValue([]);
+    queries.getLatestResultsWithEnquiries.mockResolvedValue({});
+    pilot.facts.mockResolvedValueOnce({ exempt: false, firstLaunchAt: new Date(Date.now() - 8 * 86_400_000).toISOString(), events: [] });
+    const { default: DashboardPage } = await import("@/app/(app)/dashboard/page");
+    const { unmount } = render(await DashboardPage());
+    expect(screen.getByText(/would you pay ₹999 a month/)).toBeInTheDocument();
+    unmount();
+    render(await DashboardPage());
+    expect(screen.queryByText(/would you pay ₹999 a month/)).toBeNull();
   });
 
   it("keeps recent activity failures local to their section", async () => {
