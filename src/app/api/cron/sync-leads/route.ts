@@ -1,6 +1,5 @@
 import { observeRoute } from "@/lib/observability/logger";
 import { NextResponse } from "next/server";
-import { getEnv } from "@/lib/env";
 import { LeadSyncError, syncMetaLeads } from "@/lib/leads/sync";
 import { friendlyMetaError } from "@/lib/meta/client";
 import { requireScheduledBusiness, withMetaConnection } from "@/lib/meta/connection-access";
@@ -10,6 +9,7 @@ import { readAllByCursor } from "@/lib/supabase/queries";
 import { ownerAlertsConfig } from "@/lib/alerts/sender";
 import { supabaseAlertStore } from "@/lib/alerts/alert-store";
 import { sendNewLeadAlerts, type LeadAlertRun } from "@/lib/alerts/lead-alerts";
+import { cronAuthError } from "@/lib/security/cron-auth";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -37,11 +37,8 @@ type Outcome = {
 export const GET = observeRoute("/api/cron/sync-leads", "GET", handleGET);
 
 async function handleGET(request: Request) {
-  const secret = getEnv().CRON_SECRET;
-  if (!secret) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  if (request.headers.get("authorization") !== `Bearer ${secret}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const unauthorized = cronAuthError(request);
+  if (unauthorized) return unauthorized;
   const deadline = AbortSignal.timeout(45_000);
   const admin = createAdminClient();
 

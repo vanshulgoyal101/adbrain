@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
-import { getEnv } from "@/lib/env";
 import { observeRoute } from "@/lib/observability/logger";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { adResultsEnabled, saveAdResults } from "@/lib/campaign/ad-results-store";
@@ -14,6 +13,7 @@ import { CampaignGoneError, MetaError, metaErrorCode } from "@/lib/meta/client";
 import { ConnectionAccessError } from "@/lib/meta/connection-access-error";
 import { assessCampaignHealth, readCampaignHealth, type CampaignHealth } from "@/lib/campaign/health";
 import { PAUSE_ACTIONS, pausedResultsReadDue } from "@/lib/campaign/paused-results";
+import { cronAuthError } from "@/lib/security/cron-auth";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -38,11 +38,8 @@ const ALERT_WINDOW_MS = 24 * 3_600_000;
 export const GET = observeRoute("/api/cron/refresh-results", "GET", handleGET);
 
 async function handleGET(request: Request) {
-  const secret = getEnv().CRON_SECRET;
-  if (!secret) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  if (request.headers.get("authorization") !== `Bearer ${secret}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const unauthorized = cronAuthError(request);
+  if (unauthorized) return unauthorized;
   const started = Date.now();
   const admin = createAdminClient();
   let campaigns;
