@@ -81,6 +81,24 @@ describe("auth callback destinations", () => {
     expect(verifyOtp).toHaveBeenCalledOnce();
   });
 
+  // #1414: production's codes (otp_expired ×3, pkce_code_verifier_not_found ×1 in 12 h) each get their own word.
+  it.each([
+    ["an email link opened late or twice", "error=access_denied&error_code=otp_expired", null, "link_expired"],
+    ["Google finished in another browser", "code=c1", { message: "verifier", code: "pkce_code_verifier_not_found" }, "other_browser"],
+    ["Google cancelled", "error=access_denied", null, "cancelled"],
+  ])("%s → /login?error=%s", async (_case, query, failure, reason) => {
+    if (failure) exchangeCodeForSession.mockResolvedValue({ data: { user: null }, error: failure });
+    const response = await GET(new Request(`https://adbrain.example/auth/callback?${query}`));
+    expect(response.headers.get("location")).toBe(`https://adbrain.example/login?error=${reason}`);
+  });
+
+  it("#1414: an expired email link keeps where the owner was going", async () => {
+    verifyOtp.mockResolvedValue({ data: { user: null }, error: { message: "expired", code: "otp_expired" } });
+    const query = new URLSearchParams({ token_hash: "h", type: "email", redirect: "/studio" });
+    const response = await GET(new Request(`https://adbrain.example/auth/callback?${query}`));
+    expect(response.headers.get("location")).toBe("https://adbrain.example/login?error=link_expired&redirect=%2Fstudio");
+  });
+
   it("returns to login after a failed code exchange", async () => {
     exchangeCodeForSession.mockResolvedValue({ error: { message: "invalid" } });
     const response = await GET(new Request("https://adbrain.example/auth/callback?code=bad"));
