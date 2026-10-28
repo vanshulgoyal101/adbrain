@@ -4,7 +4,8 @@ import { verdict, type VerdictInput } from "@/lib/campaign/verdict";
 
 // #1255 slice 1: the card's one sentence, one number, one action, at every edge the CPO set.
 const NOW = Date.parse("2026-10-28T12:00:00Z");
-const solar = { kind: "category", category: "solar", low: 150, high: 180 } as const;
+// The Analyst's gates: 20–29 pooled results compare with the median; 30+ may quote the interquartile range.
+const solar = { kind: "category", category: "solar", results: 24, typical: 200 } as const;
 const base: VerdictInput = {
   destination: "whatsapp", status: "active", liveSince: "2026-10-20T10:00:00Z", impressions: 5000, results: 10, spend: 1500,
   opens: 40, waiting: 0, weakAd: null, comparison: solar, now: NOW,
@@ -23,22 +24,33 @@ describe("verdict (#1255)", () => {
     expect(v({ results: 1, spend: 120 }).sentence).toBe("Early days: 1 chat so far. AdBrain will tell you if it's working after 5.");
   });
 
-  it("working, about average and costly against the solar range, with the 1.25× edge", () => {
-    expect(v({ results: 10, spend: 1800 })).toMatchObject({ state: "working", sentence: "Working: each chat costs ₹180, less than most solar ads AdBrain has run (₹150–180).", action: null });
-    expect(v({ results: 10, spend: 2250 })).toMatchObject({ state: "about_average", label: "About average", sentence: "Each chat costs ₹225, about the same as most solar ads AdBrain has run (₹150–180)." });
-    expect(v({ results: 10, spend: 2251 })).toMatchObject({ state: "costly", label: "Costly", action: "new_ads", sentence: "Each chat costs ₹225, more than most solar ads AdBrain has run (₹150–180)." });
+  it("bands around the typical cost: < 0.67× working, 0.67–1.5× about the same, > 1.5× costly", () => {
+    expect(v({ results: 10, spend: 1330 })).toMatchObject({ state: "working", label: "Working", action: null, sentence: "Working: each chat costs ₹133, less than usual for solar ads AdBrain has run (about ₹200 each)." });
+    expect(v({ results: 10, spend: 1340 })).toMatchObject({ state: "about_average", label: "About average", sentence: "Each chat costs ₹134, about the same as usual for solar ads AdBrain has run (about ₹200 each)." });
+    expect(v({ results: 10, spend: 3000 })).toMatchObject({ state: "about_average" });
+    expect(v({ results: 10, spend: 3001 })).toMatchObject({ state: "costly", label: "Costly", action: "new_ads", sentence: "Each chat costs ₹300, more than usual for solar ads AdBrain has run (about ₹200 each)." });
   });
 
-  it("compares with the owner's last campaign, or says the number only", () => {
-    expect(v({ comparison: { kind: "own", last: 180 } }).sentence).toBe("Working: each chat costs ₹150, less than your last campaign (₹180).");
-    expect(v({ comparison: null })).toMatchObject({ state: "working", sentence: "Each chat costs ₹150." });
-    expect(v({ comparison: null, destination: "instant_form", opens: null }).sentence).toBe("Each enquiry costs ₹150.");
+  it("never says 'less than' for a cost inside the usual range (Reviewer: ₹290 against ₹100–300)", () => {
+    const wide = { kind: "category", category: "solar", results: 40, typical: 200, low: 100, high: 300 } as const;
+    expect(v({ results: 10, spend: 2900, comparison: wide })).toMatchObject({ state: "about_average", sentence: "Each chat costs ₹290, about the same as usual for solar ads AdBrain has run (₹100–300)." });
+    expect(v({ results: 10, spend: 1300, comparison: wide }).sentence).toBe("Working: each chat costs ₹130, less than usual for solar ads AdBrain has run (₹100–300).");
+  });
+
+  it("compares only with 20+ results behind the typical cost; below that, the number with no judgement", () => {
+    expect(v({ comparison: { ...solar, results: 19 } })).toMatchObject({ state: "measured", label: "Live", sentence: "Each chat costs ₹150." });
+    expect(v({ comparison: { kind: "own", results: 19, typical: 300 } })).toMatchObject({ state: "measured" });
+    expect(v({ comparison: { kind: "own", results: 20, typical: 300 } }).sentence).toBe("Working: each chat costs ₹150, less than your last campaign (₹300 each).");
+    expect(v({ comparison: null, destination: "instant_form", opens: null })).toMatchObject({ state: "measured", sentence: "Each enquiry costs ₹150." });
   });
 
   it("spent with no results: ₹299 is early, ₹300 says so; the range's 1.5× upper end raises the bar; opens only from 10", () => {
     expect(v({ results: 0, spend: 299, comparison: null })).toMatchObject({ state: "early", sentence: "Early days: no chats yet.", number: { kind: "count", value: 0 } });
     expect(v({ results: 0, spend: 300, comparison: null, opens: 9 })).toMatchObject({ state: "no_results", label: "No chats yet", sentence: "₹300 spent, no chats yet.", action: "edit_message" });
-    expect(v({ results: 0, spend: 269 })).toMatchObject({ state: "early" });
+    // A comparison raises the bar to 1.5× its typical cost (₹200 → ₹300).
+    expect(v({ results: 0, spend: 299 })).toMatchObject({ state: "early" });
+    expect(v({ results: 0, spend: 299, comparison: { ...solar, typical: 250 } })).toMatchObject({ state: "early" });
+    expect(v({ results: 0, spend: 375, comparison: { ...solar, typical: 250 } })).toMatchObject({ state: "no_results" });
     expect(v({ results: 0, spend: 300, opens: 10 }).sentence).toBe("₹300 spent, no chats yet. 10 people opened WhatsApp but didn't send the message.");
     expect(v({ results: 0, spend: 300, destination: "instant_form", opens: null })).toMatchObject({ sentence: "₹300 spent, no enquiries yet.", action: null });
   });
@@ -55,14 +67,16 @@ describe("verdict (#1255)", () => {
     expect(v({ weakAd: silent }).sentence).toBe("One ad has spent ₹450 with no chats while your others bring them. Pausing it leaves more of your budget for the ones that work.");
   });
 
-  it("ended: worked, costly, or too few to judge", () => {
+  it("ended: worked, costly, measured without a comparison, or too few to judge", () => {
     expect(v({ status: "completed", results: 14, spend: 1344 })).toMatchObject({ state: "ended_worked", label: "Ended", action: "run_again", sentence: "It worked: 14 chats at ₹96 each. Run it again with the best ad first?" });
-    expect(v({ status: "completed", results: 10, spend: 3000 })).toMatchObject({ state: "ended_costly", action: "new_ads", sentence: "It didn't bring chats at a good price. Try new ads?" });
-    expect(v({ status: "completed", results: 1, spend: 33 })).toMatchObject({ state: "ended_too_few", action: null, sentence: "It ended with 1 chat, too few to judge." });
+    expect(v({ status: "completed", results: 10, spend: 3010 })).toMatchObject({ state: "ended_costly", action: "new_ads", sentence: "It didn't bring chats at a good price. Try new ads?" });
+    // CPO: no comparison, no judgement; Run this again once there are 5+ chats (#1050 picks the best ad).
+    expect(v({ status: "completed", results: 14, spend: 1344, comparison: null })).toMatchObject({ state: "ended_measured", action: "run_again", sentence: "It ended with 14 chats at ₹96 each." });
+    expect(v({ status: "completed", results: 1, spend: 33 })).toMatchObject({ state: "ended_too_few", action: "new_ads", sentence: "It ended with 1 chat, too few to judge." });
   });
 
   it("people waiting prefix any live state, and Reply is the action only where the state has none", () => {
-    expect(v({ waiting: 2 })).toMatchObject({ state: "working", action: "reply", sentence: "2 people are waiting for your reply. Working: each chat costs ₹150, less than most solar ads AdBrain has run (₹150–180)." });
+    expect(v({ waiting: 2 })).toMatchObject({ state: "about_average", action: "reply", sentence: "2 people are waiting for your reply. Each chat costs ₹150, about the same as usual for solar ads AdBrain has run (about ₹200 each)." });
     expect(v({ waiting: 1, results: 0, spend: 400, comparison: null })).toMatchObject({ action: "edit_message", sentence: "1 person is waiting for your reply. ₹400 spent, no chats yet. 40 people opened WhatsApp but didn't send the message." });
     expect(v({ waiting: 3, status: "completed", results: 1, spend: 33 }).sentence).toBe("It ended with 1 chat, too few to judge.");
   });

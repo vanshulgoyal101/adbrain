@@ -108,6 +108,21 @@ describe("<BrandForm> prefill", () => {
     expect(h.storageFrom).not.toHaveBeenCalled();
   });
 
+  // #1317: a prospect with no website fills Brand from a pasted bio or listing, through the same autofill.
+  it("fills a new Brand from a pasted bio when there's no website", async () => {
+    vi.mocked(global.fetch).mockResolvedValue({ ok: true, json: async () => ({ extraction: { description: "Rooftop solar for homes", phone: "+919829012345" } }) } as unknown as Response);
+    render(<BrandForm business={null} />);
+    fireEvent.click(screen.getByRole("button", { name: "No website? Paste a bio or listing" }));
+    const fill = screen.getByRole("button", { name: "Fill from this text" });
+    expect(fill).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Instagram bio, Google listing or catalogue text"), { target: { value: "SunPeak Solar: rooftop solar for homes in Jaipur. Call 98290 12345" } });
+    fireEvent.click(fill);
+    await waitFor(() => expect(screen.getByPlaceholderText("What your business does, in a sentence or two.")).toHaveValue("Rooftop solar for homes"));
+    const [url, init] = vi.mocked(global.fetch).mock.calls[0];
+    expect(url).toBe("/api/brand/autofill");
+    expect(JSON.parse(String(init!.body))).toEqual({ text: "SunPeak Solar: rooftop solar for homes in Jaipur. Call 98290 12345" });
+  });
+
   it("starts empty for a brand new business", () => {
     render(<BrandForm business={null} />);
     expect(screen.getByPlaceholderText("Your business name")).toHaveValue("");
@@ -441,7 +456,7 @@ describe("<BrandForm> autofill", () => {
   it("insists on a website first", async () => {
     render(<BrandForm business={business({ website: null })} />);
     fireEvent.click(screen.getByRole("button", { name: /autofill/i }));
-    expect(await screen.findByText("Enter your website URL first.")).toBeInTheDocument();
+    expect(await screen.findByText("Enter your website URL first, or paste a bio or listing.")).toBeInTheDocument();
     expect(global.fetch).not.toHaveBeenCalled();
   });
 

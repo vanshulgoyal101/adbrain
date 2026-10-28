@@ -8,6 +8,8 @@
  * server-side concept prompt and claim check let the ads use only offers saved on Brand.
  */
 
+import { parsePhone } from "@/lib/brand/countries";
+
 export interface Suggestion {
   id: string;
   label: string;
@@ -81,4 +83,14 @@ export function occasionIdeas(brandName: string, now: Date = new Date(), max = 2
       label: o.label,
       prompt: `An ad for ${o.name} from ${brand}.`,
     }));
+}
+
+/**
+ * #679 (QA 2's stranger walk): these are Indian occasions, so a business whose phone is from another country
+ * (an Austin clinic) gets none. A business without a phone is treated as India-based, as elsewhere (#235).
+ */
+export function occasionsFor(business: { name: string; phone?: string | null }, now: Date = new Date(), max = 2): Suggestion[] {
+  const phone = business.phone?.trim();
+  if (phone && parsePhone(phone).countryCode !== "IN") return [];
+  return occasionIdeas(business.name, now, max);
 }

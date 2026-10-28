@@ -21,8 +21,10 @@ const RULES: { name: string; pattern: RegExp; negatable?: boolean }[] = [
   { name: "promise: will get", pattern: /\bwill get\b/i },
   { name: "promise: 100%", pattern: /\b100\s?%(?=\s+\p{L})/iu },
   { name: "promise: no risk", pattern: /\b(no|zero) risk\b/i },
-  // "Best ad" is a measured label (lowest cost per result); only "best" as a promise is blocked.
-  { name: "promise: best results", pattern: /\bbest (results?|returns?|price|deals?)\b/i },
+  // "Best ad" and "Best so far" are measured labels; promotional superlatives are blocked.
+  { name: "promise: best promotional", pattern: /\bbest (?:results?|returns?|price|deals?|service|quality)\b|\bbest in town\b/i },
+  { name: "promise: best in place", pattern: /\bbest in [A-Z][\p{L}'\u2019-]*/u },
+  { name: "promise: ranking", pattern: /(?<![\w#[-])#1(?![\w])|\bnumber one\b|\btop-rated\b/i },
   { name: "split: service fee/allocation", pattern: /\bservice (fee|allocation)s?\b/i },
   { name: "split: allocated to service", pattern: /\ballocated to service\b/i },
   { name: "split: 80%/20%", pattern: /(?<![\w.-])(80|20)\s?%/ },
@@ -58,6 +60,19 @@ export function findings(file: string, source: string): string[] {
   }));
 }
 
+// #1235 (owner): a screen that shows both what the customer paid and the ad budget it bought reveals AdBrain's margin
+// by subtraction, even with no split word. Each component file is one screen part, so the two labels may not share a file.
+const PAID_LABEL = /^(you pay|you paid|paid|amount paid|total paid|captured|captured amount):?$/i;
+const AD_BUDGET_LABEL = /^(available |remaining |your )?ad budget(,| for| incl|$)/i;
+
+export function marginBySubtraction(file: string, source: string): string[] {
+  if (!/pa(y|id)/i.test(source) || !/ad budget/i.test(source)) return [];
+  const labels = texts(file, source).map(({ line, text }) => ({ line, text: text.trim() }));
+  const paid = labels.find(({ text }) => PAID_LABEL.test(text));
+  const budget = labels.find(({ text }) => AD_BUDGET_LABEL.test(text));
+  return paid && budget ? [`${file}:${paid.line}+${budget.line} margin by subtraction: "${paid.text}" with "${budget.text}"`] : [];
+}
+
 function sourceFiles(path: string): string[] {
   return statSync(path).isDirectory() ? readdirSync(path).flatMap((name) => sourceFiles(join(path, name))) : /\.tsx?$/.test(path) ? [path] : [];
 }
@@ -69,18 +84,32 @@ describe("honest copy in UI strings (#1291)", () => {
     expect(files.flatMap((file) => findings(file, readFileSync(file, "utf8")))).toEqual([]);
   });
 
+  it("no screen shows a paid total next to an ad-budget amount (#1235)", () => {
+    const files = ROOTS.flatMap(sourceFiles).filter((file) => !ALLOWED_FILES.some((allowed) => allowed.test(file)));
+    expect(files.flatMap((file) => marginBySubtraction(file, readFileSync(file, "utf8")))).toEqual([]);
+  });
+
+  it("fails on a planted paid total beside an ad budget, and keeps one amount with the plain sentence", () => {
+    const checkout = `export const a = <dl><dt>You pay</dt><dd>{x}</dd><dt>Ad budget for your campaigns, incl. Meta&apos;s GST</dt><dd>{y}</dd></dl>;`;
+    expect(marginBySubtraction("src/components/x.tsx", checkout)).toHaveLength(1);
+    const balance = `const rows = [["Paid", a], ["Refunded", b], ["Available ad budget", c]];`;
+    expect(marginBySubtraction("src/components/x.tsx", balance)).toHaveLength(1);
+    const fine = `export const b = <><p>It becomes your ad budget, including Meta's GST, and AdBrain makes and runs your ads.</p><dt>You pay</dt><dd>{x}</dd></>;`;
+    expect(marginBySubtraction("src/components/y.tsx", fine)).toEqual([]);
+  });
+
   it("each pending allowance still matches its text, so it is removed when its fix lands", () => {
     for (const entry of PENDING) expect(readFileSync(entry.file, "utf8"), `${entry.text} (${entry.until})`).toContain(entry.text);
   });
 
   it("fails on planted words, and keeps CSS, negated disclaimers and the Best ad label", () => {
-    const planted = `export const a = <p>Guaranteed leads in 7 days. You will get 100% more calls. 20% goes to AdBrain as a service fee; our margin is small. Best results, no risk.</p>;`;
+    const planted = `export const a = <p>Guaranteed leads in 7 days. You will get 100% more calls. 20% goes to AdBrain as a service fee; our margin is small. The best results, best price, best deal, best service, best quality, best in town, best in Mumbai, #1, number one, top-rated, no risk.</p>;`;
     expect(findings("src/components/x.tsx", planted).map((finding) => finding.split(" ")[1])).toEqual(
       expect.arrayContaining(["promise:", "split:"]),
     );
-    expect(findings("src/components/x.tsx", planted)).toHaveLength(8);
+    expect(findings("src/components/x.tsx", planted)).toHaveLength(10);
     const fine = `const s = { width: "100%" }; const c = "w-[calc(100%-2rem)]"; const g = "linear-gradient(#fff 0%, #000 100%)";
-      export const b = <p>Best ad. No extra charge or guaranteed results. Not a guaranteed boundary.</p>;`;
+      export const b = <p>Best ad. Best so far. No extra charge or guaranteed results. Not a guaranteed boundary.</p>;`;
     expect(findings("src/components/y.tsx", fine)).toEqual([]);
   });
 });

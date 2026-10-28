@@ -10,17 +10,22 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MetaConnectDialog } from "@/components/meta-connect/meta-connect-dialog";
 import type { MetaConnection } from "@/lib/meta/credentials";
+import { connectTrustLine } from "@/lib/trust-lines";
+import type { FundingMode } from "@/lib/payments/operator-funding";
 
 export function MetaConnectionPanel({
   businessId,
   connection,
   oauthConfigured,
   notice,
+  fundingMode = null,
 }: {
   businessId?: string;
   connection: MetaConnection;
   oauthConfigured: boolean;
   notice?: { kind: "success" | "error"; message: string };
+  /** #1292: who holds the ad money decides the trust line; unknown shows none. */
+  fundingMode?: FundingMode | null;
 }) {
   const router = useRouter();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -83,6 +88,7 @@ export function MetaConnectionPanel({
             Connect an existing Meta business to prepare campaigns. You can keep working on a draft first.
           </p>
         )}
+        {businessId && fundingMode && <p className="text-sm text-slate-700">{connectTrustLine(fundingMode)}</p>}
         {!businessId && <Alert variant="warning">Set up your business before connecting Meta.</Alert>}
         {businessId && !oauthConfigured && (
           <Alert variant="warning">Meta connection is not configured on this server yet.</Alert>

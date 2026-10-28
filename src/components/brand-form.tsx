@@ -138,6 +138,8 @@ export function BrandForm({ business, photoCount = 0 }: { business: Business | n
   const [confirm, confirmDialog] = useConfirm();
   const [autofillError, setAutofillError] = useState<string | null>(null);
   const [autofillNote, setAutofillNote] = useState<string | null>(null);
+  const [pasteOpen, setPasteOpen] = useState(false);
+  const [pastedText, setPastedText] = useState("");
   const websiteRevision = useRef(0);
   const autoTried = useRef<string | null>(null);
   const [savedLogo, setSavedLogo] = useState(business?.logo_url ?? "");
@@ -202,16 +204,17 @@ export function BrandForm({ business, photoCount = 0 }: { business: Business | n
     void autofill();
   }
 
-  async function autofill() {
+  /** #1317: from the website, or from text pasted instead (an Instagram bio, a Google listing). */
+  async function autofill(pasted?: string) {
     setAutofillError(null);
     setAutofillNote(null);
-    if (!fields.website.trim()) {
-      setAutofillError("Enter your website URL first.");
+    if (pasted === undefined && !fields.website.trim()) {
+      setAutofillError("Enter your website URL first, or paste a bio or listing.");
       return;
     }
     if (
       hasContent &&
-      !(await confirm({ title: "Replace what you've filled in?", description: "Autofill replaces some fields you've already filled with what it finds on your website.", confirmLabel: "Autofill" }))
+      !(await confirm({ title: "Replace what you've filled in?", description: `Autofill replaces some fields you've already filled with what it finds ${pasted === undefined ? "on your website" : "in the text"}.`, confirmLabel: "Autofill" }))
     ) {
       return;
     }
@@ -222,7 +225,7 @@ export function BrandForm({ business, photoCount = 0 }: { business: Business | n
         method: "POST",
         headers: { "Content-Type": "application/json" },
         // #650: usage is logged on the business once it exists.
-        body: JSON.stringify({ url: fields.website, ...(business ? { businessId: business.id } : {}) }),
+        body: JSON.stringify({ ...(pasted === undefined ? { url: fields.website } : { text: pasted }), ...(business ? { businessId: business.id } : {}) }),
         signal: AbortSignal.timeout(50_000),
       });
       const data = (await res.json()) as {
@@ -233,7 +236,7 @@ export function BrandForm({ business, photoCount = 0 }: { business: Business | n
         setAutofillError(data.error ?? "Autofill failed.");
         return;
       }
-      if (revision !== websiteRevision.current) {
+      if (pasted === undefined && revision !== websiteRevision.current) {
         setAutofillError("Website changed during autofill. Run it again for the current website.");
         return;
       }
@@ -262,7 +265,7 @@ export function BrandForm({ business, photoCount = 0 }: { business: Business | n
       });
       setAutofillNote(autofillSummary(extracted, fields));
     } catch {
-      setAutofillError("Autofill failed — could not reach the site.");
+      setAutofillError(pasted === undefined ? "Autofill failed — could not reach the site." : "Autofill failed. Try again in a moment.");
     } finally {
       setAutofilling(false);
     }
@@ -281,7 +284,7 @@ export function BrandForm({ business, photoCount = 0 }: { business: Business | n
             type="button"
             variant="outline"
             size="sm"
-            onClick={autofill}
+            onClick={() => void autofill()}
             disabled={autofilling || pending}
           >
             {autofilling ? <Spinner /> : <Wand2 className="h-4 w-4" />}
@@ -307,6 +310,22 @@ export function BrandForm({ business, photoCount = 0 }: { business: Business | n
               placeholder="example.com"
               aria-invalid={errors.website ? true : undefined}
             />
+            {!pasteOpen && !fields.website.trim() && (
+              <button type="button" onClick={() => setPasteOpen(true)} className="min-h-11 w-fit text-left text-sm font-medium text-blue-700 underline underline-offset-4">
+                No website? Paste a bio or listing
+              </button>
+            )}
+            {pasteOpen && (
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="brand-paste">Instagram bio, Google listing or catalogue text</Label>
+                <Textarea id="brand-paste" rows={4} value={pastedText} onChange={(e) => setPastedText(e.target.value)}
+                  placeholder="Paste what the business says about itself: what it sells, where, and a phone number." />
+                <Button type="button" variant="outline" size="sm" className="w-fit" onClick={() => void autofill(pastedText)} disabled={autofilling || pending || !pastedText.trim()}>
+                  {autofilling ? <Spinner /> : <Wand2 className="h-4 w-4" />}
+                  Fill from this text
+                </Button>
+              </div>
+            )}
             {websiteLink && (
               <p className="text-xs text-slate-500">
                 Ads link to{" "}

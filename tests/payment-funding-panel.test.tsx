@@ -314,20 +314,19 @@ describe("production checkout with synthetic responses", () => {
       expect(screen.queryByText(/Annual/)).not.toBeInTheDocument();
     });
 
-    it("takes an amount, shows what is paid and the ad budget it buys, and creates the order for that amount", async () => {
+    it("takes an amount, shows only what is paid (no ad-budget amount, #1235), and creates the order for that amount", async () => {
       await mountAnnual();
       const input = screen.getByRole("spinbutton", { name: "Amount to pay (₹)" });
       expect(input).toHaveValue(10_000);
       expect(screen.getByText("You pay").nextSibling).toHaveTextContent("₹10,000");
-      expect(screen.getByText("Ad budget for your campaigns, incl. Meta's GST").nextSibling).toHaveTextContent("₹8,000");
-      expect(screen.queryByText(/AdBrain service|₹2,000/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Ad budget for|AdBrain service|₹8,000|₹2,000/)).not.toBeInTheDocument();
       fireEvent.change(input, { target: { value: "1250" } });
       expect(screen.getByRole("button", { name: "Pay ₹10,000" })).toBeDisabled();
       fireEvent.click(screen.getByRole("button", { name: "Update amount" }));
       await screen.findByText("Amount updated.");
       expect(fetchMock.mock.calls.at(-1)![0]).toContain("amountPaise=125000");
-      expect(screen.getByText("Ad budget for your campaigns, incl. Meta's GST").nextSibling).toHaveTextContent("₹1,000");
-      expect(screen.queryByText("₹250")).not.toBeInTheDocument();
+      expect(screen.getByText("You pay").nextSibling).toHaveTextContent("₹1,250");
+      expect(screen.queryByText(/₹1,000|₹250/)).not.toBeInTheDocument();
       fireEvent.click(screen.getByRole("checkbox"));
       fireEvent.click(screen.getByRole("button", { name: "Pay ₹1,250" }));
       await waitFor(() => expect(opened).toHaveBeenCalledTimes(1));

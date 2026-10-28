@@ -42,7 +42,8 @@ export function CustomerBalance({ businessId, initialBalance = null }: { busines
       {balance.held && <Alert>{balance.reason ?? "Funds are held for reconciliation."}</Alert>}
       <dl className="grid gap-3 text-sm sm:grid-cols-2">
         {([
-          ["Paid", balance.capturedPaise], ["Refunded", balance.refundedPaise],
+          // #1235 (owner): no Paid row; next to the ad budget it would reveal AdBrain's margin by subtraction.
+          ["Refunded", balance.refundedPaise],
           ["Ad budget, incl. Meta's GST", balance.advertisingAllocationPaise],
           ["Spent on ads, incl. Meta's GST", balance.mediaCostPaise + balance.taxCostPaise],
           ["Held for running campaigns", balance.reservedPaise], ["Available ad budget", balance.remainingPaise],
