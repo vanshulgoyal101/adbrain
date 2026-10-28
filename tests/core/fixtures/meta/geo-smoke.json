@@ -1,0 +1,162 @@
+{
+  "recordedAt": "2026-10-28T20:28:41.576Z",
+  "tape": [
+    {
+      "method": "GET",
+      "path": "search?type=adgeolocation&q=Round+Rock%2C+Texas&location_types=%5B%22city%22%2C%22region%22%2C%22country%22%5D&limit=10",
+      "status": 200,
+      "body": {
+        "data": [
+          {
+            "key": "2529681",
+            "name": "Round Rock",
+            "type": "city",
+            "country_code": "US",
+            "country_name": "अमेरिका",
+            "region": "Texas",
+            "region_id": 3886,
+            "supports_region": true,
+            "supports_city": true
+          }
+        ],
+        "paging": {
+          "cursors": {
+            "before": "MAZDZD",
+            "after": "MAZDZD"
+          },
+          "next": "https://graph.facebook.com/v26.0/search?type=adgeolocation&q=Round+Rock%2C+Texas&location_types=%5B%22city%22%2C%22region%22%2C%22country%22%5D&limit=10&access_token=REDACTED&after=MAZDZD"
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "search?type=adgeolocation&q=Austin%2C+Texas&location_types=%5B%22city%22%2C%22region%22%2C%22country%22%5D&limit=10",
+      "status": 200,
+      "body": {
+        "data": [
+          {
+            "key": "2525495",
+            "name": "Austin",
+            "type": "city",
+            "country_code": "US",
+            "country_name": "अमेरिका",
+            "region": "Texas",
+            "region_id": 3886,
+            "supports_region": true,
+            "supports_city": true
+          }
+        ],
+        "paging": {
+          "cursors": {
+            "before": "MAZDZD",
+            "after": "MAZDZD"
+          },
+          "next": "https://graph.facebook.com/v26.0/search?type=adgeolocation&q=Austin%2C+Texas&location_types=%5B%22city%22%2C%22region%22%2C%22country%22%5D&limit=10&access_token=REDACTED&after=MAZDZD"
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "search?type=adgeolocation&q=Cedar+Park%2C+Texas&location_types=%5B%22city%22%2C%22region%22%2C%22country%22%5D&limit=10",
+      "status": 200,
+      "body": {
+        "data": [
+          {
+            "key": "2526105",
+            "name": "Cedar Park",
+            "type": "city",
+            "country_code": "US",
+            "country_name": "अमेरिका",
+            "region": "Texas",
+            "region_id": 3886,
+            "supports_region": true,
+            "supports_city": true
+          }
+        ],
+        "paging": {
+          "cursors": {
+            "before": "MAZDZD",
+            "after": "MAZDZD"
+          },
+          "next": "https://graph.facebook.com/v26.0/search?type=adgeolocation&q=Cedar+Park%2C+Texas&location_types=%5B%22city%22%2C%22region%22%2C%22country%22%5D&limit=10&access_token=REDACTED&after=MAZDZD"
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "search?type=adgeolocation&q=Round+Rock&location_types=%5B%22city%22%2C%22region%22%2C%22country%22%5D&limit=10",
+      "status": 200,
+      "body": {
+        "data": [
+          {
+            "key": "2529681",
+            "name": "Round Rock",
+            "type": "city",
+            "country_code": "US",
+            "country_name": "अमेरिका",
+            "region": "Texas",
+            "region_id": 3886,
+            "supports_region": true,
+            "supports_city": true
+          },
+          {
+            "key": "2413877",
+            "name": "Round Rock",
+            "type": "city",
+            "country_code": "US",
+            "country_name": "अमेरिका",
+            "region": "Arizona",
+            "region_id": 3845,
+            "supports_region": true,
+            "supports_city": true
+          }
+        ],
+        "paging": {
+          "cursors": {
+            "before": "MAZDZD",
+            "after": "MQZDZD"
+          },
+          "next": "https://graph.facebook.com/v26.0/search?type=adgeolocation&q=Round+Rock&location_types=%5B%22city%22%2C%22region%22%2C%22country%22%5D&limit=10&access_token=REDACTED&after=MQZDZD"
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "search?type=adgeolocation&q=Cedar+Park&location_types=%5B%22city%22%2C%22region%22%2C%22country%22%5D&limit=10",
+      "status": 200,
+      "body": {
+        "data": [
+          {
+            "key": "2526105",
+            "name": "Cedar Park",
+            "type": "city",
+            "country_code": "US",
+            "country_name": "अमेरिका",
+            "region": "Texas",
+            "region_id": 3886,
+            "supports_region": true,
+            "supports_city": true
+          },
+          {
+            "key": "2418442",
+            "name": "Cedarpines Park",
+            "type": "city",
+            "country_code": "US",
+            "country_name": "अमेरिका",
+            "region": "California",
+            "region_id": 3847,
+            "supports_region": true,
+            "supports_city": true
+          }
+        ],
+        "paging": {
+          "cursors": {
+            "before": "MAZDZD",
+            "after": "MQZDZD"
+          },
+          "next": "https://graph.facebook.com/v26.0/search?type=adgeolocation&q=Cedar+Park&location_types=%5B%22city%22%2C%22region%22%2C%22country%22%5D&limit=10&access_token=REDACTED&after=MQZDZD"
+        }
+      }
+    }
+  ]
+}
