@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { buildConceptMessages, validateConcept } from "@/lib/creative/concept";
+import { quotedAsk } from "@/lib/campaign/whatsapp-greeting";
 import { AD_ANGLES, type BrandContext } from "@/lib/templates/ads";
 import regenerate from "./fixtures/create/solaride-regenerate.json";
 import run4 from "./fixtures/create/cedar-ridge-run4.json";
@@ -22,7 +23,7 @@ describe("core: a WhatsApp business's copy asks for a WhatsApp message, never a 
     expect(user.brand.phone).toBeUndefined();
     expect(user.brand.email).toBeUndefined();
     expect(JSON.stringify(user)).not.toMatch(/73802|hello@solaride/);
-    expect(system).toMatch(/When contact\s+is "whatsapp", the ad's button opens a WhatsApp chat: the last line asks people to message on WhatsApp,\s+and the ad never asks them to call, phone or email/);
+    expect(system).toMatch(/When contact\s+is "whatsapp", the ad's button opens a WhatsApp chat: the last line asks people to message on WhatsApp,\s+and the ad never asks them to call, phone or email \(and never picks "Call Now"\)/);
   });
 
   it("a saved WhatsApp message makes any business a WhatsApp one; a US clinic without one keeps its number", () => {
@@ -71,3 +72,30 @@ describe("core: the last line points to WhatsApp, added when the model's doesn't
     }
   });
 });
+
+describe("core: the WhatsApp line keeps a quoted ask last, and Call Now becomes Contact Us (#1364)", () => {
+  const replies = regenerate.replies.map((reply) => JSON.parse(reply.content.replace(/^```json\s*|\s*```\s*$/g, "")));
+  const solaride = { ...(regenerate.brand as BrandContext), phone: "+91 73802 80874" };
+  const input = (brand: BrandContext) => ({ brand, brief: regenerate.brief, angle: AD_ANGLES.find((angle) => angle.name === regenerate.angle) ?? AD_ANGLES[0], instructions: regenerate.instructions, sourceFacts: regenerate.sourceFacts });
+
+  it("a recorded concept ending in a quoted ask keeps it last, so the pre-typed message still reads it (#1027)", () => {
+    const lines = replies[0].primary_text.split("\n").filter(Boolean);
+    const quoted = { ...replies[0], primary_text: [...lines.slice(0, -1), "Send “Free site survey” to book."].join("\n") };
+    const result = validateConcept(quoted, input(solaride));
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    const out = result.concept.primary_text.split("\n");
+    expect(out.at(-1)).toBe("Send “Free site survey” to book.");
+    expect(out.at(-2)).toBe("Message us on WhatsApp.");
+    expect(quotedAsk(result.concept.primary_text)).toBe("Free site survey");
+  });
+
+  it("stores Contact Us instead of Call Now for a WhatsApp business only", () => {
+    const call = { ...replies[0], cta: "Call Now" };
+    const whatsapp = validateConcept(call, input(solaride));
+    expect(whatsapp.success && whatsapp.concept.cta).toBe("Contact Us");
+    const other = validateConcept(call, input({ ...(regenerate.brand as BrandContext), phone: "+1 512 555 0142" }));
+    expect(other.success && other.concept.cta).toBe("Call Now");
+  });
+});
+
