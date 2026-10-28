@@ -341,9 +341,10 @@ in issues.
 1. Sign in with a team plus-address, `<you>+prospect-<short>@<team domain>`. A confirmed team
    address is internal (`isInternalUser`), so Create uses the free image providers and no paid
    model (#466; CEO #1129: no paid spend until the owner tops up).
-2. Brand: **Autofill from website**, or **No website? Paste a bio or listing** with the shop's
-   Instagram bio, Google listing or catalogue text, pasted by hand (no scraping or unofficial
-   APIs). Confirm each proposed field and area chip, then Save.
+2. Step 1, "Tell us about your business": **Fill it from my website**, or **No website? Paste a
+   bio or listing** with the shop's Instagram bio, Google listing or catalogue text, pasted by hand
+   (no scraping or unofficial APIs). Both fill only empty fields, name included; check each line
+   (it saves as you go), then **Make my ads**.
 3. Create: make 3 ads, approve them, download. Don't connect Meta, start a campaign or add funds.
    Downloads go through the export, which marks every picture 'Sample: not live'; Share and the
    Assets tile's Download, Copy link and Open are hidden on a `+prospect` account, so no clean

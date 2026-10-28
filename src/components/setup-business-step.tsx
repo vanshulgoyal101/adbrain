@@ -38,6 +38,9 @@ export function SetupBusinessStep({ business }: { business: Business | null }) {
   const [website, setWebsite] = useState(business?.website ?? "");
   const [autofilling, setAutofilling] = useState(false);
   const [autofillNote, setAutofillNote] = useState<{ ok: boolean; text: string } | null>(null);
+  // #1317: a shop with no website fills step 1 from a pasted Instagram bio or Google listing.
+  const [pasting, setPasting] = useState(false);
+  const [pastedText, setPastedText] = useState("");
   const fieldsRef = useRef(fields);
   const idRef = useRef<string | null>(business?.id ?? null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -101,9 +104,9 @@ export function SetupBusinessStep({ business }: { business: Business | null }) {
     await saveNow();
   }
 
-  async function autofill() {
+  async function autofill(pasted?: string) {
     setAutofillNote(null);
-    if (!website.trim()) {
+    if (pasted === undefined && !website.trim()) {
       setAutofillNote({ ok: false, text: "Add your website first, like yourbusiness.com." });
       return;
     }
@@ -112,10 +115,12 @@ export function SetupBusinessStep({ business }: { business: Business | null }) {
       const res = await fetch("/api/brand/autofill", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: website, ...(idRef.current ? { businessId: idRef.current } : {}) }),
+        body: JSON.stringify({ ...(pasted === undefined ? { url: website } : { text: pasted }), ...(idRef.current ? { businessId: idRef.current } : {}) }),
         signal: AbortSignal.timeout(50_000),
       });
-      const data = (await res.json()) as { extraction?: BrandExtraction };
+      const data = (await res.json()) as { extraction?: BrandExtraction; error?: string };
+      // The server's own words when pasted text is too short to read ("Paste a little more about the business…").
+      if (pasted !== undefined && res.status === 400 && data.error) { setAutofillNote({ ok: false, text: data.error }); return; }
       if (!res.ok || !data.extraction) throw new Error("autofill");
       const found = data.extraction;
       const current = fieldsRef.current;
@@ -129,9 +134,11 @@ export function SetupBusinessStep({ business }: { business: Business | null }) {
         phone: current.phone.trim() ? current.phone : found.phone ?? "",
       };
       change(filled);
-      setAutofillNote({ ok: true, text: "Filled from your website. Check each line." });
+      setAutofillNote({ ok: true, text: `Filled from your ${pasted === undefined ? "website" : "text"}. Check each line.` });
     } catch {
-      setAutofillNote({ ok: false, text: "We couldn't read that website. Fill it in yourself; it takes about a minute." });
+      setAutofillNote({ ok: false, text: pasted === undefined
+        ? "We couldn't read that website. Fill it in yourself; it takes about a minute."
+        : "We couldn't read that text. Try again, or fill it in yourself; it takes about a minute." });
     } finally {
       setAutofilling(false);
     }
@@ -152,6 +159,21 @@ export function SetupBusinessStep({ business }: { business: Business | null }) {
             Fill it from my website
           </Button>
         </div>
+        {pasting ? (
+          <div className="flex flex-col gap-2">
+            <label htmlFor="setup-pasted" className="text-sm font-medium text-slate-900">Instagram bio, Google listing or catalogue text</label>
+            <Textarea id="setup-pasted" rows={4} maxLength={6000} value={pastedText} onChange={(event) => setPastedText(event.target.value)}
+              placeholder="Paste what the business says about itself." />
+            <Button type="button" variant="outline" className="h-11 w-fit" onClick={() => void autofill(pastedText)} disabled={autofilling || !pastedText.trim()}>
+              {autofilling ? <Spinner /> : <Wand2 className="h-4 w-4" aria-hidden="true" />}
+              Fill from this text
+            </Button>
+          </div>
+        ) : (
+          <button type="button" onClick={() => setPasting(true)} className="inline-flex min-h-11 w-fit items-center text-sm font-medium text-blue-700 underline underline-offset-4">
+            No website? Paste a bio or listing
+          </button>
+        )}
         {autofillNote && <Alert variant={autofillNote.ok ? "info" : "error"}>{autofillNote.text}</Alert>}
       </div>
 
