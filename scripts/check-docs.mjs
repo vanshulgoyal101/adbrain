@@ -123,6 +123,7 @@ export function routeRows(text) {
 
 export function checkDocumentation(root, options = {}) {
   root = resolve(root);
+  const legacyFlat = options.legacyFlat ?? LEGACY_FLAT;
   const moduleReadmes = walk(resolve(root, "src")).filter(file => file.endsWith(`${sep}README.md`));
   const files = [...["README.md", "AGENTS.md"].map(file => resolve(root, file)).filter(existsSync), ...walk(resolve(root, "docs")).filter(file => file.endsWith(".md")), ...moduleReadmes];
   const inventory = files.map(path => ({ file: relative(root, path).split(sep).join("/"), role: classification(relative(root, path).split(sep).join("/")) }));
@@ -208,8 +209,8 @@ export function checkDocumentation(root, options = {}) {
   // Shape: short pages, an index per folder that links each page, nothing new loose in docs/.
   for (const file of docFiles) {
     const lines = textOf(file).split("\n").length - 1;
-    if (lines > MAX_LINES && !LEGACY_FLAT.has(file)) fail(file, MAX_LINES + 1, `Page has ${lines} lines; split it (limit ${MAX_LINES})`);
-    if (!file.slice("docs/".length).includes("/") && !TOP_LEVEL.has(file) && !LEGACY_FLAT.has(file)) fail(file, 1, "Put pages in a docs/ subfolder (product, architecture, api, operations, team)");
+    if (lines > MAX_LINES && !legacyFlat.has(file)) fail(file, MAX_LINES + 1, `Page has ${lines} lines; split it (limit ${MAX_LINES})`);
+    if (!file.slice("docs/".length).includes("/") && !TOP_LEVEL.has(file) && !legacyFlat.has(file)) fail(file, 1, "Put pages in a docs/ subfolder (product, architecture, api, operations, team)");
   }
   const folders = new Set([...docFiles.length ? ["docs/"] : [], ...docFiles.map(file => file.slice(0, file.lastIndexOf("/") + 1))]);
   for (const folder of [...folders].filter(folder => folder !== "docs/")) {
