@@ -91,6 +91,8 @@ const schema = z.object({
   // 2-Tier managed accounts (#518, #520): Solaride is the parent business; its system user's
   // token provisions child businesses. Off until provisioning ships; the token is Sensitive in Vercel.
   MANAGED_ACCOUNTS_ENABLED: z.string().optional().default("false").transform((v) => v === "true" || v === "1"),
+  // #1209: owners upload their own photos into the private `media` bucket. Off until the migration is applied.
+  MEDIA_UPLOADS_ENABLED: z.string().optional().default("false").transform((v) => v === "true" || v === "1"),
   META_PARENT_BUSINESS_ID: z.string().regex(/^\d+$/).optional().default("1158100643072508"),
   META_PARENT_SYSTEM_TOKEN: z.string().optional().default(""),
 
