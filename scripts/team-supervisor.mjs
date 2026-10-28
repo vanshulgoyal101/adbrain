@@ -10,7 +10,7 @@
 //   node scripts/team-supervisor.mjs --restart-prompt <role|all>          the prompt to resend with create_session
 // Each tick also dispatches scheduled-jobs.yml when GitHub's own schedule has lapsed (#692), and once a
 // night exports production to ~/.adbrain-backups and restore-drills it (#884).
-// Kill switch: touch ~/.adbrain-supervisor/OFF. Log: ~/.adbrain-supervisor/supervisor.log.
+// Kill switch for role runs: touch ~/.adbrain-supervisor/OFF (scheduled-job dispatch and the nightly backup keep running). Log: ~/.adbrain-supervisor/supervisor.log.
 import { execFileSync as rawExecFileSync, spawn, spawnSync } from "node:child_process";
 import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { cpus, freemem, homedir, loadavg, totalmem } from "node:os";
@@ -406,13 +406,14 @@ async function main() {
     const result = await runCli(["-p", "Reply with exactly the word: ok", "-C", WT, "--no-ask-user", "--max-ai-credits", "30", "-s"], 5, out);
     return console.log(`${result}: ${readFileSync(out, "utf8").trim().split("\n").pop()}`);
   }
-  if (existsSync(join(STATE_DIR, "OFF"))) return log("tick skipped: OFF switch");
+  // OFF stops only the headless role runs (#1525): production's scheduled jobs and the nightly backup depend on these dispatches.
   dispatchScheduledJobs(values["dry-run"]);
   dispatchBackup(values["dry-run"]);
   if (!values["dry-run"]) refresh();
   nightlyExport(values["dry-run"]);
   // A detached run (#766) finishes the run it was given and records it; the tick that started it has long returned.
   if (values["run-role"]) return finishRun(values["run-role"], values["run-start"], runMin, values.credits);
+  if (existsSync(join(STATE_DIR, "OFF"))) return values["dry-run"] ? console.log("no role runs: OFF switch") : log("tick: no role runs (OFF switch)");
   const state = readState();
   for (const r of state.runs ?? []) if (r.pid && !r.end && !pidAlive(r.pid)) Object.assign(r, { end: new Date().toISOString(), result: "lost (process gone)" });
   const busy = activeRun(state);
