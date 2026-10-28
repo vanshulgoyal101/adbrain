@@ -1,9 +1,12 @@
 "use client";
 
+import { CompactAppLanguage } from "@/components/app-language";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Wand2 } from "lucide-react";
-import { saveSetupBusiness } from "@/app/(app)/brand/actions";
+import { saveAdLanguage, saveSetupBusiness } from "@/app/(app)/brand/actions";
+import { AdLanguageChips } from "@/components/ad-language-chips";
+import { defaultAdLanguage, type CreateLanguageId } from "@/lib/languages";
 import { SetupSpine, SETUP_STEPS } from "@/components/setup-spine";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -31,9 +34,14 @@ const FIELD_TEXT: Record<SetupField, { label: string; placeholder: string; helpe
  * #1269 (#1251 WS1 step 1): a first-timer's business in five fields, saved as they type.
  * Everything else on the Brand stays on the full page ("More about your business").
  */
-export function SetupBusinessStep({ business }: { business: Business | null }) {
+export function SetupBusinessStep({ business, chooseLanguage = false }: {
+  business: Business | null;
+  /** #1641: no app language chosen on this browser yet, so offer English / हिंदी above the step. */
+  chooseLanguage?: boolean;
+}) {
   const [fields, setFields] = useState<SetupBusinessFields>(() => setupFieldsFrom(business));
   const [errors, setErrors] = useState<Partial<Record<SetupField, string>>>({});
+  const [adLanguage, setAdLanguage] = useState<CreateLanguageId | null>(null);
   const [saved, setSaved] = useState<"saving" | "saved" | "failed" | null>(null);
   const [website, setWebsite] = useState(business?.website ?? "");
   const [autofilling, setAutofilling] = useState(false);
@@ -102,6 +110,8 @@ export function SetupBusinessStep({ business }: { business: Business | null }) {
     }
     dirtyRef.current = true;
     await saveNow();
+    // #1681: a picked ad language is saved before step 2 starts the batch; the default needs no save (step 2 works it out).
+    if (adLanguage && idRef.current) await saveAdLanguage(idRef.current, adLanguage).catch(() => undefined);
   }
 
   async function autofill(pasted?: string) {
@@ -146,6 +156,7 @@ export function SetupBusinessStep({ business }: { business: Business | null }) {
 
   return (
     <SetupSpine step={1} saved={saved} beforeLeave={beforeLeave} primary={{ label: "Make my ads", href: SETUP_STEPS[1].href }}>
+      {chooseLanguage && <div className="mb-3 flex justify-end"><CompactAppLanguage /></div>}
       <h2 className="text-xl font-semibold text-slate-950">Tell us about your business</h2>
       <p className="mt-1 text-sm text-slate-600">Five things. Your ads are made from these, and you can change them any time.</p>
 
@@ -203,7 +214,9 @@ export function SetupBusinessStep({ business }: { business: Business | null }) {
         })}
       </div>
 
-      <p className="mt-6 text-sm text-slate-600">Making ads is included. Nothing goes live until you say so.</p>
+      {/* #1681 (CPO #1669): the language the first 3 ads are written in, defaulting by what they sell. */}
+      <div className="mt-6"><AdLanguageChips value={adLanguage ?? defaultAdLanguage(business?.languages, fields.vertical)} onChange={setAdLanguage} /></div>
+      <p className="mt-4 text-sm text-slate-600">Making ads is included. Nothing goes live until you say so.</p>
       <Link href="/brand?all=1" onClick={() => void saveNow().catch(() => undefined)} className="mt-2 inline-flex min-h-11 items-center text-sm font-medium text-slate-700 underline underline-offset-4">
         More about your business
       </Link>

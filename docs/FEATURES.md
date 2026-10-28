@@ -42,7 +42,7 @@ ID are different identifiers. Never infer one from another.
 | `/assets` | Browse/reuse/download saved images | Download/clipboard failures are surfaced |
 | `/campaigns` | Draft, review, create paused, activate/pause, sync, report; `?new=1&creatives=<ids>` opens the composer with those approved ads selected; `&review=1` (#1004, from Create) then prepares Review on its own once Meta is connected, the WhatsApp check has run and a form campaign has its lead form (the same prepare as the Review button; nothing is sent to Meta). The lead form used for the last Review is preselected while the Page still has it; with several forms and none chosen, the field says choosing one opens Review | Live Meta writes require verified binding and capability |
 | `/leads` | WhatsApp chats per campaign with **Add enquiry** (#764) first; the form table follows as "Form enquiries (n)", folded when there are none (#1223); then sync, search, and inspect enquiries; copy digest. Each enquiry with a phone has **WhatsApp them** (wa.me with a first reply in the business's first language, en/hi/Hinglish, naming the business and its first offer) and **Call**; the first tap records `first_contacted_at` ("Replied 12 min after the enquiry", #1049) | No automated outreach is sent: the owner sends the reply |
-| `/settings` | Meta connection, spend guardrails, declared preferences, **App language** (English · हिंदी, kept in the `adbrain_lang` cookie for a year; Home follows it, other screens follow screen by screen, #1438; strings in `messages/{en,hi}.json`) | Disconnect does not pause running ads; preferences cannot authorize spend |
+| `/settings` | Meta connection, spend guardrails, declared preferences, **App language** (English · हिंदी, kept in the `adbrain_lang` cookie for a year; Home follows it, other screens follow screen by screen, #1438; strings in `messages/{en,hi}.json`; WS1 step 1 offers English / हिंदी until the cookie is set, English by default and never from the browser, #1641) | Disconnect does not pause running ads; preferences cannot authorize spend |
 | `/settings/verdicts` | Internal only (#1255): one example of each campaign-card state for team walks | Fixed examples; reads and writes nothing; 404 for owners |
 
 ## Workspace Responsiveness
@@ -139,7 +139,10 @@ details in prompts. See [Data Model](DATA_MODEL.md) and [AI Pipeline](AI_PIPELIN
 
 Until a business has a campaign that went live (or is on now), `/create` is setup
 step 2 of 3 (#1251 WS1, #1270). With no saved batch it runs the existing interview
-(answering "Let the AI decide" to any question, up to 3) and one 3-ad Create run,
+(answering "Let the AI decide" to any question, up to 3) and one 3-ad Create run
+in the Brand's first language, else the segment default (solar → Hinglish, others
+English; #1681). Step 1 (and step 2 before a tapped "Make 3 ads") shows "Ads in:
+English · Hinglish · हिंदी · ਪੰਜਾਬੀ"; a pick is saved first in Brand `languages`,
 showing one line of progress at a time. Then it shows the newest batch
 (`variant_group`) with 2 pre-picked by a fixed rule (`setupPicks`: fewest text
 repairs, then no image fallback, then the order made). "Continue" approves the picks

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { appSecretProof } from "@/lib/meta/appsecret-proof";
 import { GRAPH } from "@/lib/meta/graph-version";
 import type { Capabilities, Capability, SelectedAssets } from "./connect-contracts";
 import { ConnectionAccessError } from "./connection-access-error";
@@ -24,7 +25,9 @@ export async function verifyMetaCapabilities(token: string, selected: SelectedAs
   async function readOnce(path: string, accessToken: string): Promise<unknown> {
     let response: Response;
     try {
-      response = await fetch(`${GRAPH}/${path}`, {
+      // #1696: the proof for this read's own token, so Connect keeps working with Meta's 'Require app secret' on.
+      const proof = appSecretProof(accessToken);
+      response = await fetch(`${GRAPH}/${path}${proof ? `${path.includes("?") ? "&" : "?"}appsecret_proof=${proof}` : ""}`, {
         method: "GET", headers: { Authorization: `Bearer ${accessToken}` }, cache: "no-store",
         signal: AbortSignal.timeout(15_000),
       });
