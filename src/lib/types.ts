@@ -66,6 +66,12 @@ export type LeadSyncRow = {
 export interface Database {
   public: {
     Tables: {
+      llm_cooldowns: {
+        Row: { key: string; until: string; updated_at: string };
+        Insert: { key: string; until: string; updated_at?: string };
+        Update: Partial<Database["public"]["Tables"]["llm_cooldowns"]["Insert"]>;
+        Relationships: [];
+      };
       privacy_requests: {
         Row: { id: string; owner_id: string | null; kind: "export" | "delete"; status: "received" | "in_review" | "completed" | "declined"; handled_by: string | null; source: "owner" | "meta_callback"; confirmation_code: string | null; meta_subject_id: string | null; created_at: string; updated_at: string };
         Insert: { id?: string; owner_id: string; kind: "export" | "delete"; status?: "received" | "in_review" | "completed" | "declined"; handled_by?: string | null; created_at?: string; updated_at?: string };
@@ -750,6 +756,10 @@ export interface Database {
       creative_regeneration_finish: {
         Args: { p_creative_id: string; p_business_id: string; p_user_id: string; p_attempt_id: string; p_unresolved: boolean };
         Returns: { status: "released" | "unresolved" | "missing" };
+      };
+      park_llm_key: {
+        Args: { p_key: string; p_until: string };
+        Returns: undefined;
       };
       check_rate_limit: {
         Args: { p_key: string; p_limit: number; p_window_ms: number };

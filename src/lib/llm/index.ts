@@ -3,6 +3,7 @@ import { createGeminiProvider } from "./providers/gemini";
 import { createOpenAICompatibleProvider } from "./providers/openai-compatible";
 import { cacheKey, withCache } from "./cache";
 import { recordUsage } from "./usage";
+import { parkShared, sharedParks } from "./shared-cooldown";
 import {
   AllLLMProvidersFailedError,
   LLMError,
@@ -38,6 +39,11 @@ const COOLDOWN_MS = 60_000;
 // beats falling through to a model that needs 60-90s.
 const RATE_LIMIT_WAIT_MS = 20_000;
 const cooldownUntil = new Map<string, number>();
+/** Parks a key here and (#1568) for every other server instance. */
+function park(coolKey: string, until: number) {
+  cooldownUntil.set(coolKey, until);
+  parkShared(coolKey, until);
+}
 // #449: a key out of credit stays parked long enough not to slow every Create; the free models answer meanwhile.
 const CREDIT_COOLDOWN_MS = 15 * 60_000;
 const FREE_PROVIDERS = ["google", "groq"];
@@ -158,6 +164,8 @@ async function callProviders(
   let terminal: LLMError | undefined;
   let creditExhausted = false;
 
+  // #1568: a key another instance parked is skipped here too.
+  for (const [key, until] of await sharedParks()) if (until > (cooldownUntil.get(key) ?? 0)) cooldownUntil.set(key, until);
   const queue = [...registry];
   const deferred = new Set<RegisteredProvider>();
   const available = ({ provider, keys }: RegisteredProvider) =>
@@ -200,7 +208,7 @@ async function callProviders(
           options.signal?.throwIfAborted();
           if (failure === "CREDIT_EXHAUSTED") {
             creditExhausted = true;
-            cooldownUntil.set(coolKey, Date.now() + CREDIT_COOLDOWN_MS);
+            park(coolKey, Date.now() + CREDIT_COOLDOWN_MS);
             failures.push("CREDIT_EXHAUSTED");
             continue;
           }
@@ -212,7 +220,7 @@ async function callProviders(
             // #1200: a daily limit doesn't lift in a minute; park the key until the provider's retry-after, at most 15 min.
             const daily = err.rateLimit?.type === "TPD" || err.rateLimit?.type === "RPD";
             const cap = daily ? CREDIT_COOLDOWN_MS : COOLDOWN_MS;
-            cooldownUntil.set(coolKey, Date.now() + Math.min(err.retryAfterMs ?? cap, cap));
+            park(coolKey, Date.now() + Math.min(err.retryAfterMs ?? cap, cap));
           }
           // Another key on the same model would time out or truncate the same way; try the next model.
           if (err instanceof LLMError && !err.retryable && err.status === undefined) {
