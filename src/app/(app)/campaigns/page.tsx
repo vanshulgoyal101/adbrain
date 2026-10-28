@@ -10,6 +10,7 @@ import { listEditableDrafts } from "@/lib/campaign/draft-repository";
 import { requireOwnedBusiness } from "@/lib/meta/connection-access";
 import { createClient } from "@/lib/supabase/server";
 import { ReadyAdsNextStep } from "@/components/ready-ads-next-step";
+import { isProspectSession } from "@/lib/prospect-session";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
@@ -94,7 +95,7 @@ export default async function CampaignsPage({
       <div className="mt-6">
         {/* Before Meta's App Review a new owner can't connect, so the setup form would be a dead end (#336). */}
         {!metaReady && !campaigns.length && approved.length ? (
-          <ReadyAdsNextStep approved={approved} phone={business.phone ?? null} businessId={business.id} />
+          <ReadyAdsNextStep approved={approved} phone={business.phone ?? null} businessId={business.id} sample={await isProspectSession()} />
         ) : <Campaigns
           business={business}
           approved={approved}

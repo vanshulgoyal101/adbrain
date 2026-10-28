@@ -131,4 +131,13 @@ describe("MetaConnectionPanel", () => {
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Connect your business to Meta" })).toBeInTheDocument();
   });
+
+  it("says who holds the ad money at Connect (#1292)", () => {
+    const { unmount } = render(<MetaConnectionPanel businessId="11111111-1111-4111-8111-111111111111" connection={connection({ source: "oauth", ready: false })} oauthConfigured fundingMode="own" />);
+    expect(screen.getByText("Your Page, your ad account, your card. AdBrain never holds your ad money.")).toBeInTheDocument();
+    unmount();
+    render(<MetaConnectionPanel businessId="11111111-1111-4111-8111-111111111111" connection={connection({ source: "oauth", ready: false })} oauthConfigured fundingMode="managed" />);
+    expect(screen.getByText("Your ad budget stays yours: you see every rupee spent.")).toBeInTheDocument();
+    expect(screen.queryByText(/never holds your ad money/)).toBeNull();
+  });
 });

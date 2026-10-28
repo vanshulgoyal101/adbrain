@@ -191,6 +191,17 @@ describe("core: edit a launched ad's words through the route (#775)", () => {
     expect(store.state.tables.campaign_edit_operations ?? []).toEqual([]);
   });
 
+  // #1146 (QA): a waiting new-audience copy has its own copy of this ad's words; the switch would undo the edit.
+  it("refuses while a new audience waits to be switched on, before any Meta call", async () => {
+    store.state.tables.campaign_edit_operations = [{ id: "op-waiting", business_id: BUSINESS, campaign_id: CAMPAIGN, kind: "audience", state: "awaiting_switch", phase: "copy" }];
+    replay();
+    const result = await patchAd(recorded.edit);
+    expect(result.status).toBe(409);
+    expect(result.body).toMatchObject({ error: "A new audience is waiting for this campaign. Turn it on or cancel it first." });
+    expect(graph.sent).toEqual([]);
+    expect(store.state.tables.campaign_edit_operations).toHaveLength(1);
+  });
+
   it("refuses an ad that isn't part of the campaign", async () => {
     replay();
     expect((await patchAd(recorded.edit, "ad-edit-key-0002", "120253700000000000")).status).toBe(404);
