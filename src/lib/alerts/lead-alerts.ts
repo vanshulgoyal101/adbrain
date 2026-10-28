@@ -1,5 +1,4 @@
 import { answersLine, deliverOwnerAlert, type AlertConfig, type AlertLanguage, type AlertStore } from "@/lib/alerts/sender";
-import { isMetaTestLead } from "@/lib/leads/test-lead";
 
 /** #701 v1: only leads Meta received in the last 24 h get an alert (CPO spec §2). */
 export const LEAD_ALERT_MAX_AGE_MS = 24 * 60 * 60 * 1000;
@@ -78,8 +77,7 @@ export async function sendNewLeadAlerts(
     .eq("business_id", businessId).eq("source", "meta_form").not("meta_lead_id", "is", null)
     .gte("created_time", since).order("created_time", { ascending: false }).limit(100);
   if (leadsError) return { error: "leads" };
-  // #1149: a Meta test lead is not an enquiry, so it never costs an alert.
-  const leads = ((leadRows ?? []) as (Omit<AlertLead, "campaignName"> & { campaign_id: string | null })[]).filter((lead) => !isMetaTestLead(lead));
+  const leads = (leadRows ?? []) as (Omit<AlertLead, "campaignName"> & { campaign_id: string | null })[];
   if (!leads.length) return { sent: 0, skipped: {} };
 
   const { data: sendRows, error: sendsError } = await db.from("owner_alert_sends").select("dedupe_key")

@@ -59,11 +59,5 @@ describe("#701: which leads get an alert", () => {
     expect(calls.find((c) => c.table === "leads" && c.op === "order")?.args).toEqual(["created_time", { ascending: false }]);
     expect(calls.find((c) => c.table === "leads" && c.op === "gte")?.args).toEqual(["created_time", "2026-10-26T12:00:00.000Z"]);
     expect(keys).toEqual(["lead-1", "lead-3"]);
-
-    // #1149: a Meta test lead is not an enquiry and never costs an alert.
-    keys.length = 0;
-    newestFirst[0].full_name = "<test lead: dummy data for full_name>" as never;
-    expect(await sendNewLeadAlerts({ db: db as never, store, config, now: new Date("2026-10-27T12:00:00Z") }, "b1")).toEqual({ sent: 0, skipped: { duplicate: 1 } });
-    expect(keys).toEqual(["lead-1"]);
   });
 });
