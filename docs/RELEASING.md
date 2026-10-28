@@ -15,10 +15,12 @@ The release process ([AGENTS.md](../AGENTS.md)).
    ([ci.yml](../.github/workflows/ci.yml)), plus `core-approval`
    ([core-approval.yml](../.github/workflows/core-approval.yml), #926): a PR that
    touches `src/lib/meta/`, `src/lib/campaign/`, the Meta, campaign, managed,
-   payments or spend-limit APIs, money paths or `db/migrations/` stays pending until
+   payments or spend-limit APIs, money paths (including the ₹999 plan, `src/lib/plan/`),
+   tenant/auth boundaries (`/api/cron`, `/api/whatsapp`, privacy requests,
+   `src/lib/security/`, `src/lib/alerts/`, `internal-accounts`) or `db/migrations/` stays pending until
    a QA verdict, `Reviewer review of <sha>: **approved**` or `CTO review of <sha>:
    **approved**` names its head (or an earlier head with the same patch). The deploy
-   train and a revert labelled `rollback` pass. Hold with `gh pr merge <n>
+   train (this repo's `next` → `main` only, never a fork's `next`) and a revert labelled `rollback` pass. Hold with `gh pr merge <n>
    --disable-auto`. `audit` and `docs` also run but do not block. A change to generation, validation, prompts, models, timeouts, the
    planner, Meta calls or CSP adds or updates a `test:core` test with recorded real
    responses. Update the matching doc in the same PR.
