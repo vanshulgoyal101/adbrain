@@ -1,7 +1,7 @@
 import type { PauseSuggestion } from "@/lib/campaign/ad-pause";
 import { readCampaignHealth } from "@/lib/campaign/health";
 import { campaignDestination } from "@/lib/campaign/outcomes";
-import type { Comparison, VerdictInput } from "@/lib/campaign/verdict";
+import { verdict, type Comparison, type Verdict, type VerdictInput } from "@/lib/campaign/verdict";
 import type { Campaign, CampaignResult } from "@/lib/types";
 
 type CardCampaign = Pick<Campaign, "id" | "status" | "created_at" | "raw" | "destination" | "objective">;
@@ -39,4 +39,28 @@ export function lastCampaignComparison(campaign: CardCampaign, campaigns: CardCa
   const result = previous ? results[previous.id]! : null;
   const count = result ? resultsOf(destination, result) : 0;
   return result && count ? { kind: "own", results: count, typical: Number(result.spend ?? 0) / count } : null;
+}
+
+/** #1274 slice 2b: which running campaign Home speaks for, best first (CPO: "the best live campaign"). */
+const HOME_ORDER: string[] = ["working", "about_average", "measured", "early", "not_showing", "not_showing_day", "no_results", "costly", "weak_ad"];
+
+/**
+ * Home's one sentence and number: the best running campaign's verdict, with the account's waiting enquiries in front,
+ * plus each listed campaign's one-word verdict. Null when no running campaign has results.
+ */
+export function homeVerdicts(campaigns: Array<CardCampaign & { id: string }>, results: Record<string, CardResult | undefined>, extra: { now?: number; waiting: number }) {
+  const now = extra.now ?? Date.now();
+  const labels = new Map<string, string>();
+  const live: Array<{ id: string; verdict: Verdict; input: VerdictInput }> = [];
+  for (const campaign of campaigns) {
+    const result = results[campaign.id];
+    if (!result) continue;
+    const input = cardVerdictInput(campaign, result, { now, waiting: 0, weakAd: null, comparison: lastCampaignComparison(campaign, campaigns, results) });
+    if (!input) continue;
+    const judged = verdict(input);
+    labels.set(campaign.id, judged.label);
+    if (campaign.status === "active") live.push({ id: campaign.id, verdict: judged, input });
+  }
+  const best = live.sort((a, b) => HOME_ORDER.indexOf(a.verdict.state) - HOME_ORDER.indexOf(b.verdict.state))[0];
+  return { labels, lead: best ? { campaignId: best.id, verdict: verdict({ ...best.input, waiting: extra.waiting }), input: best.input } : null };
 }

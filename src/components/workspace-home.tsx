@@ -8,6 +8,7 @@ import { describeAuditEvent, isBackgroundAuditAction } from "@/lib/audit-labels"
 import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
 import { formatDate, formatMoney, formatPerDay } from "@/lib/format";
 import { homeResults } from "@/lib/campaign/home-results";
+import { homeVerdicts } from "@/lib/campaign/card-verdict";
 import { staleCampaignIds } from "@/lib/campaign/results-freshness";
 import { StaleResultsRefresher } from "@/components/stale-results-refresher";
 import { timeAgo } from "@/lib/utils";
@@ -31,6 +32,8 @@ export interface WorkspaceHomeProps {
   results?: Record<string, CampaignResult>;
   /** #1049: median minutes from enquiry to the owner's first reply over the last 30 days. */
   replyMinutes?: number | null;
+  /** #1274: enquiries from the last 24 h nobody has contacted yet. */
+  waiting?: number;
   now?: number;
 }
 
@@ -50,10 +53,13 @@ export function WorkspaceHome({
   activity,
   results = {},
   replyMinutes = null,
+  waiting = 0,
   now,
 }: WorkspaceHomeProps) {
   const liveCampaigns = campaigns.filter((campaign) => !goneInMeta(campaign));
   const summary = business ? homeResults(campaigns, results) : null;
+  const verdicts = business ? homeVerdicts(campaigns, results, { now, waiting }) : null;
+  const leadCampaign = verdicts?.lead ? campaigns.find((campaign) => campaign.id === verdicts.lead?.campaignId) : null;
   const stale = business ? staleCampaignIds(campaigns, results, now) : [];
   const [next, ...later] = buildWorkQueue({ business, creatives, campaigns, metaReady, now });
   const setAside = setAsideIds(creatives, now);
@@ -81,6 +87,14 @@ export function WorkspaceHome({
       {summary && (
         <section aria-labelledby="results-title">
           <h2 id="results-title" className="sr-only">Results so far</h2>
+          {verdicts?.lead && leadCampaign && (
+            <p className="mb-4 max-w-2xl text-[17px] leading-snug text-slate-900">
+              {verdicts.lead.verdict.sentence}{" "}
+              <Link href="/campaigns" className="text-sm font-medium text-blue-700 hover:underline">
+                {leadCampaign.name || "Untitled campaign"}
+              </Link>
+            </p>
+          )}
           <dl className="grid grid-cols-3 gap-4 sm:flex sm:gap-16">
             {[
               { label: "Enquiries", value: String(summary.enquiries) },
@@ -162,6 +176,7 @@ export function WorkspaceHome({
                   {liveCampaigns.slice(0, 3).map((campaign) => {
                     const status = campaignStatus(campaign);
                     const attention = campaignAttention(campaign);
+                    const judged = verdicts?.labels.get(campaign.id);
                     return (
                       <li key={campaign.id} className="py-3 sm:flex sm:items-center sm:justify-between sm:gap-6">
                         <div className="min-w-0">
@@ -172,6 +187,7 @@ export function WorkspaceHome({
                         </div>
                         <p className="mt-1 flex shrink-0 gap-x-4 text-xs text-slate-600 sm:mt-0">
                           <Status tone={status.tone}>{status.label}</Status>
+                          {judged && <span>{judged}</span>}
                           {campaign.daily_budget != null && <span className="sm:w-24 sm:text-right">{formatPerDay(campaign.daily_budget)}</span>}
                         </p>
                       </li>

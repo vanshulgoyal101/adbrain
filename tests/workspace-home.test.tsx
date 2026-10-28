@@ -397,6 +397,23 @@ describe("Home results row (#764)", () => {
     expect(screen.queryByText(/You reply to an enquiry in/)).not.toBeInTheDocument();
   });
 
+  // #1274 slice 2b: Home leads with the best running campaign's verdict, people waiting first; each row gets its word.
+  it("#1274: leads with the running campaign's verdict sentence and labels each campaign", () => {
+    const { rerender } = render(<WorkspaceHome {...empty} business={business} campaigns={[chats, forms]} results={results} now={now} />);
+    const row = screen.getByRole("region", { name: "Results so far" });
+    const lead = within(row).getByRole("link", { name: "WhatsApp run" }).closest("p");
+    expect(lead).toHaveTextContent("Each chat costs ₹168. WhatsApp run");
+    const campaignsList = screen.getByRole("region", { name: "Campaigns" });
+    expect(within(campaignsList).getAllByText("Live")).not.toHaveLength(0);
+    rerender(<WorkspaceHome {...empty} business={business} campaigns={[chats, forms]} results={results} waiting={2} now={now} />);
+    expect(within(screen.getByRole("region", { name: "Results so far" })).getByRole("link", { name: "WhatsApp run" }).closest("p")).toHaveTextContent(/^2 people are waiting for your reply\. /);
+  });
+
+  it("#1274: no lead sentence when nothing is running", () => {
+    render(<WorkspaceHome {...empty} business={business} campaigns={[{ ...chats, status: "paused" } as Campaign, forms]} results={results} now={now} />);
+    expect(within(screen.getByRole("region", { name: "Results so far" })).queryByRole("link", { name: "WhatsApp run" })).not.toBeInTheDocument();
+  });
+
   it("shows no results row before any campaign has results", () => {
     render(<WorkspaceHome {...empty} business={business} campaigns={[chats]} results={{}} now={now} />);
     expect(screen.queryByRole("region", { name: "Results so far" })).not.toBeInTheDocument();

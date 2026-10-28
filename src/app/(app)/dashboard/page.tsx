@@ -4,7 +4,7 @@ import { Alert } from "@/components/ui/alert";
 import { SpendStatusBanner } from "@/components/spend-status";
 import { RecentActivity, WorkspaceHome } from "@/components/workspace-home";
 import { getMetaConnection } from "@/lib/meta/credentials";
-import { recentReplyMinutes } from "@/lib/leads/reply-time";
+import { recentReplyMinutes, waitingEnquiries } from "@/lib/leads/reply-time";
 import {
   getCampaigns,
   getCreativePreviews,
@@ -36,10 +36,12 @@ export default async function DashboardPage() {
     : [[], [], null];
   // #764: the Home results row; an unreadable result leaves the row out, never the page.
   const launched = campaigns.filter((campaign) => campaign.meta_campaign_id).map((campaign) => campaign.id);
-  const [results, replyMinutes] = await Promise.all([
+  const [results, replyMinutes, waiting] = await Promise.all([
     launched.length ? getLatestResults(launched).catch(() => ({})) : {},
     // #1049: an unreadable reply time leaves the line out, never the page.
     business ? recentReplyMinutes(business.id).catch(() => null) : null,
+    // #1274: people waiting for a reply lead Home's sentence; unreadable means none shown.
+    business ? waitingEnquiries(business.id).catch(() => 0) : 0,
   ]);
 
   return (
@@ -49,6 +51,7 @@ export default async function DashboardPage() {
       campaigns={campaigns}
       results={results}
       replyMinutes={replyMinutes}
+      waiting={waiting}
       audit={[]}
       spend={null}
       spendStatus={spendStatus && (
