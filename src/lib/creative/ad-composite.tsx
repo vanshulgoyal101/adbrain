@@ -1,4 +1,4 @@
-import { STORY_SAFE, type AdDesignSpec } from "./design";
+import { STORY_SAFE, WHATSAPP_CONTACT_LABEL, type AdDesignSpec } from "./design";
 import type { ShapedText } from "./shaped-text";
 
 // The ad overlay as plain React (#387): the server rasterises it with Satori (render.tsx),
@@ -22,8 +22,13 @@ export function adMetrics(spec: AdDesignSpec) {
     brandSize: Math.round(Math.min(38, Math.max(20, 1500 / Math.max(spec.brandName.length, 1))) * s),
     ctaSize,
     contactSize: Math.min(ctaSize, Math.max(18 * s, 850 * s / Math.max(spec.contactLine?.length ?? 1, 1))),
-    phoneSize: Math.round(Math.min(spec.format === "landscape" ? 40 : 52, 760 / Math.max(spec.phone?.length ?? 1, 1)) * s),
+    phoneSize: Math.round(Math.min(spec.format === "landscape" ? 40 : 52, 760 / Math.max(contactText(spec)?.length ?? 1, 1)) * s),
   };
+}
+
+/** #1147: the contact bar's big line: the chat ask for a WhatsApp business, else the number to call. */
+function contactText(spec: AdDesignSpec): string | null {
+  return spec.contact === "whatsapp" ? WHATSAPP_CONTACT_LABEL : spec.phone;
 }
 
 /**
@@ -300,7 +305,7 @@ export function AdComposite({ spec, logoRatio = 1, shaped = {} }: { spec: AdDesi
           }}
         >
           <div style={{ display: "flex", flexDirection: "column", flex: 1, gap: Math.round(8 * s) }}>
-            {spec.phone ? (
+            {contactText(spec) ? (
               <div style={{ display: "flex", alignItems: "center", gap: Math.round(14 * s), fontSize: phoneSize, fontWeight: 800, color: "#ffffff", lineHeight: 1 }}>
                 <div
                   style={{
@@ -324,10 +329,13 @@ export function AdComposite({ spec, logoRatio = 1, shaped = {} }: { spec: AdDesi
                     strokeLinecap="round"
                     strokeLinejoin="round"
                   >
-                    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+                    {spec.contact === "whatsapp"
+                      // A chat bubble: the campaign opens WhatsApp, so the picture doesn't ask for a call (#1147).
+                      ? <path d="M3 21l1.65-4.95A8.5 8.5 0 1 1 8 19.4L3 21z" />
+                      : <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />}
                   </svg>
                 </div>
-                {spec.phone}
+                {contactText(spec)}
               </div>
             ) : null}
             {spec.contactLine ? (
