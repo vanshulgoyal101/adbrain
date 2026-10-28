@@ -70,9 +70,8 @@ describe("core: Meta text fields never end mid-thought (#1580, #1544)", () => {
     }
   });
 
-  // Known bug #1613: shortLines splits only on . ! ?, so a Hindi paragraph past the fold is refused (hook-length) instead
-  // of being rewrapped like English. Flip `it.fails` to `it` in the fix.
-  it.fails("a Devanagari paragraph past the fold is rewrapped at '।' and saved, like English (#1613)", () => {
+  // #1613 (fixed in #1626): a Hindi paragraph past the fold is rewrapped at '।' like English, with no repair call.
+  it("a Devanagari paragraph past the fold is rewrapped at '।' and saved, like English (#1613)", () => {
     const hindi = CASES.find(([field, name]) => field === "primary_text" && name.startsWith("Devanagari"))![2];
     const outcome = save("primary_text", hindi);
     expect("saved" in outcome && words(outcome.saved) === words(hindi)).toBe(true);
