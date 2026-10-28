@@ -24,6 +24,10 @@ export const productEventSchema = z.object({
     entityType: z.enum(["business", "creative", "campaign", "adset", "ad", "instruction", "asset", "lead"]).optional(),
     count: z.number().int().nonnegative().max(1_000_000).optional(),
     failedCount: z.number().int().nonnegative().max(1_000_000).optional(),
+    /** #1650: the day-7 pricing question; codes only (no free text, no personal data). */
+    answer: z.enum(["yes", "maybe", "no"]).optional(),
+    reason: z.enum(["brings_enquiries", "saves_time", "sees_cost", "few_enquiries", "too_expensive", "hard_to_use", "prefer_meta", "other"]).optional(),
+    days: z.number().int().nonnegative().max(3650).optional(),
     /** #1543: the scoreboard's Manage snapshot: oldest and p90 results age (minutes) across active campaigns. */
     worstMinutes: z.number().int().nonnegative().max(1_000_000).optional(),
     p90Minutes: z.number().int().nonnegative().max(1_000_000).optional(),

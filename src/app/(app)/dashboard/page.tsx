@@ -5,9 +5,13 @@ import { SpendStatusBanner } from "@/components/spend-status";
 import { RecentActivity, WorkspaceHome } from "@/components/workspace-home";
 import { requestLocale } from "@/i18n/request-locale";
 import { SetupResumeCard } from "@/components/setup-resume-card";
+import { madeForSetup } from "@/lib/creative/setup-picks";
 import { setupResumeStep } from "@/lib/setup/resume";
 import { getMetaConnection } from "@/lib/meta/credentials";
 import { HomeRejectedAds } from "@/components/home-rejected-ads";
+import { PilotDay7Card } from "@/components/pilot-day7-card";
+import { pilotDay7Visible } from "@/lib/feedback/pilot-day7";
+import { pilotDay7Facts } from "@/lib/feedback/pilot-day7-store";
 import { adResultsEnabled } from "@/lib/campaign/ad-results-store";
 import { homeAdReview, newestLiveCampaign } from "@/lib/campaign/home-ad-review";
 import { inboxSummary, newestWaitingEnquiry, recentReplyMinutes } from "@/lib/leads/reply-time";
@@ -15,6 +19,7 @@ import {
   getCampaigns,
   getCreativePreviews,
   getAdStatuses,
+  getApprovedCreatives,
   getAuditLog,
   getLatestResults,
   getPrimaryBusiness,
@@ -43,7 +48,13 @@ export default async function DashboardPage() {
     : [[], [], null];
   // #1272 (#1251 WS1): until a first campaign has gone live, Home is the one resume card.
   const resume = setupResumeStep({ business, creatives, campaigns });
-  if (resume) return <SetupResumeCard step={resume} />;
+  if (resume) {
+    // #1712: at step 3, the ads Go live will use (made from today's step 1, #1432); unreadable shows the plain card.
+    const ready = resume === 3 && business
+      ? await getApprovedCreatives(business.id).then((rows) => rows.filter((row) => madeForSetup(row, business)), () => [])
+      : [];
+    return <SetupResumeCard step={resume} ready={ready} />;
+  }
   // #764: the Home results row; an unreadable result leaves the row out, never the page.
   const launched = campaigns.filter((campaign) => campaign.meta_campaign_id).map((campaign) => campaign.id);
   const newest = newestLiveCampaign(campaigns);
@@ -59,6 +70,9 @@ export default async function DashboardPage() {
     newest && adResultsEnabled() ? getAdStatuses(newest.id).catch(() => null) : [],
   ]);
   const adReview = newest && newestAdStatuses ? homeAdReview([newest], { [newest.id]: newestAdStatuses }, results) : null;
+  // #1650: after the first week, one question for the pricing call (#718); unreadable means not shown.
+  const pilotFacts = business && campaigns.some((campaign) => campaign.launched_at) ? await pilotDay7Facts(business.id).catch(() => null) : null;
+  const askPilot = Boolean(pilotFacts && pilotDay7Visible({ ...pilotFacts, now: new Date() }));
 
   return (
     <WorkspaceHome
@@ -70,6 +84,7 @@ export default async function DashboardPage() {
       waiting={waiting}
       firstEnquiry={firstEnquiry}
       adReview={adReview}
+      pilotQuestion={askPilot && business ? <PilotDay7Card businessId={business.id} locale={locale} /> : null}
       rejectedAds={adReview?.kind === "rejected" && newest && (
         <Suspense fallback={null}>
           <HomeRejectedAds campaign={newest} vertical={business?.vertical} spend={(results as Record<string, { spend?: number }>)[newest.id]?.spend ?? 0} />

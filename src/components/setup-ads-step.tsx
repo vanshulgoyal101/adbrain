@@ -365,7 +365,7 @@ export function SetupAdsStep({ business, initialAds, sample = false, earlier = f
       ) : waiting ? (
         <div className="flex flex-col items-start gap-2 py-6">
           <h2 className="text-xl font-semibold text-slate-950">Make ads from your details</h2>
-          <p className="text-sm text-slate-600">Your earlier ads were made from older details or in Studio, so they aren&apos;t used here. Making ads is free.</p>
+          <p className="text-sm text-slate-600">Your earlier ads were made from older details or in Studio, so they aren&apos;t used here. Making ads is included.</p>
           <Link href="/campaigns?all=1" className="inline-flex min-h-11 items-center text-sm font-medium text-primary underline underline-offset-4">Use your earlier ads</Link>
         </div>
       ) : error && !ads.length ? (
