@@ -36,6 +36,18 @@ describe("WhatsApp message card (#840)", () => {
     expect(await screen.findByText("Saved. New WhatsApp campaigns will use it.")).toBeInTheDocument();
   });
 
+  // #1121: Quick questions have no pre-typed message, so AdBrain's welcome stops saying "Send this message".
+  it("switches AdBrain's welcome to the questions wording and back, but never the owner's own words", () => {
+    render(<WhatsAppMessageCard businessId="b1" businessName="Solaride" saved={null} suggested={suggested} />);
+    fireEvent.click(screen.getByLabelText("Quick questions"));
+    expect(within(preview()).getByText("Hi! Thanks for messaging Solaride. Tap a question below and we'll reply here.")).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText("None"));
+    expect(within(preview()).getByText(suggested.en.greeting)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/Welcome message/), { target: { value: "Hi! Solaride here." } });
+    fireEvent.click(screen.getByLabelText("Quick questions"));
+    expect(within(preview()).getByText("Hi! Solaride here.")).toBeInTheDocument();
+  });
+
   it("turns quick questions into tappable bubbles and drops the pre-typed message", async () => {
     render(<WhatsAppMessageCard businessId="b1" businessName="Solaride" saved={null} suggested={suggested} />);
     fireEvent.click(screen.getByLabelText("Quick questions"));

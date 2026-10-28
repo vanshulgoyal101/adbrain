@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { whatsappGreeting } from "@/lib/campaign/whatsapp-greeting";
+import { prefillWelcome, questionsWelcome, whatsappGreeting } from "@/lib/campaign/whatsapp-greeting";
 
 // Solaride's Brand offers and Create run 21's saved Special offer ad (8df360e7, Oct 23).
 const solaride = {
@@ -97,5 +97,25 @@ describe("whatsappGreeting (#209, #493)", () => {
     expect(whatsappGreeting(solaride, ["घर की छत पर सोलर, Free site survey के साथ"], ["Mohali"], [], "en").autofill).toBe("Hi! I'd like a Free site survey in Mohali.");
     expect(whatsappGreeting(solaride, run21Offer, [], ["English"], "hinglish").autofill).toBe("Namaste, mujhe free site survey ke baare mein jaankari chahiye.");
     expect(whatsappGreeting(solaride, run21Offer, [], [], "ad").autofill).toBe("Hi! I'd like a free site survey.");
+  });
+
+  // #1121: ice breakers get a welcome that points to the questions; only AdBrain's own wording is swapped.
+  it("swaps AdBrain's welcome to the questions wording in every language, and back", () => {
+    const expected = {
+      en: "Hi! Thanks for messaging Cedar Ridge. Tap a question below and we'll reply here.",
+      hi: "नमस्ते! Cedar Ridge को मैसेज करने के लिए धन्यवाद। नीचे कोई सवाल चुनिए, हम यहीं जवाब देंगे।",
+      hinglish: "Namaste! Cedar Ridge ko message karne ke liye dhanyavaad. Neeche koi sawaal chuniye, hum yahin jawab denge.",
+      pa: "ਸਤ ਸ੍ਰੀ ਅਕਾਲ! Cedar Ridge ਨੂੰ ਸੁਨੇਹਾ ਭੇਜਣ ਲਈ ਧੰਨਵਾਦ। ਹੇਠਾਂ ਕੋਈ ਸਵਾਲ ਚੁਣੋ, ਅਸੀਂ ਇੱਥੇ ਹੀ ਜਵਾਬ ਦੇਵਾਂਗੇ।",
+    };
+    for (const [language, questions] of Object.entries(expected) as [keyof typeof expected, string][]) {
+      const greeting = whatsappGreeting({ name: "Cedar Ridge" }, ["x"], [], [], language).greeting;
+      expect(questionsWelcome(greeting), language).toBe(questions);
+      expect(prefillWelcome(questions), language).toBe(greeting);
+      expect(questionsWelcome(questions)).toBe(questions);
+    }
+    for (const own of ["Hi! Thanks for messaging Solaride.", "Welcome! Send this message and we'll reply here.", ""]) {
+      expect(questionsWelcome(own)).toBe(own);
+      expect(prefillWelcome(own)).toBe(own);
+    }
   });
 });

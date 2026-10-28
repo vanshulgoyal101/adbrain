@@ -41,29 +41,62 @@ const TEXT: Record<Language, {
   offer: (offer: string, city: string | null) => string;
   business: (name: string, city: string | null) => string;
   greeting: (name: string) => string;
+  /** #1121: with ice breakers there is no pre-typed message; the welcome points to the questions. */
+  questions: (name: string) => string;
 }> = {
   en: {
     // Short, simple English (owner, Oct 25): "Hi! I'd like a free site survey."
     offer: (offer, city) => `Hi! I'd like ${/^free\b/i.test(offer) ? "a" : "the"} ${offer}${city ? ` in ${city}` : ""}.`,
     business: (name, city) => `Hi! I'd like to know more about ${name}${city ? ` in ${city}` : ""}.`,
     greeting: (name) => `Hi! Thanks for messaging ${name}. Send this message and we'll reply here.`,
+    questions: (name) => `Hi! Thanks for messaging ${name}. Tap a question below and we'll reply here.`,
   },
   hi: {
     offer: (offer, city) => `नमस्ते, मुझे ${city ? `${city} में ` : ""}${offer} के बारे में जानकारी चाहिए।`,
     business: (name, city) => `नमस्ते, मुझे ${city ? `${city} में ` : ""}${name} के बारे में जानकारी चाहिए।`,
     greeting: (name) => `नमस्ते! ${name} को मैसेज करने के लिए धन्यवाद। यह मैसेज भेजिए, हम यहीं जवाब देंगे।`,
+    questions: (name) => `नमस्ते! ${name} को मैसेज करने के लिए धन्यवाद। नीचे कोई सवाल चुनिए, हम यहीं जवाब देंगे।`,
   },
   hinglish: {
     offer: (offer, city) => `Namaste, mujhe ${city ? `${city} mein ` : ""}${offer} ke baare mein jaankari chahiye.`,
     business: (name, city) => `Namaste, mujhe ${city ? `${city} mein ` : ""}${name} ke baare mein jaankari chahiye.`,
     greeting: (name) => `Namaste! ${name} ko message karne ke liye dhanyavaad. Yeh message bhejiye, hum yahin jawab denge.`,
+    questions: (name) => `Namaste! ${name} ko message karne ke liye dhanyavaad. Neeche koi sawaal chuniye, hum yahin jawab denge.`,
   },
   pa: {
     offer: (offer, city) => `ਸਤ ਸ੍ਰੀ ਅਕਾਲ, ਮੈਨੂੰ ${city ? `${city} ਵਿੱਚ ` : ""}${offer} ਬਾਰੇ ਜਾਣਕਾਰੀ ਚਾਹੀਦੀ ਹੈ।`,
     business: (name, city) => `ਸਤ ਸ੍ਰੀ ਅਕਾਲ, ਮੈਨੂੰ ${city ? `${city} ਵਿੱਚ ` : ""}${name} ਬਾਰੇ ਜਾਣਕਾਰੀ ਚਾਹੀਦੀ ਹੈ।`,
     greeting: (name) => `ਸਤ ਸ੍ਰੀ ਅਕਾਲ! ${name} ਨੂੰ ਸੁਨੇਹਾ ਭੇਜਣ ਲਈ ਧੰਨਵਾਦ। ਇਹ ਸੁਨੇਹਾ ਭੇਜੋ, ਅਸੀਂ ਇੱਥੇ ਹੀ ਜਵਾਬ ਦੇਵਾਂਗੇ।`,
+    questions: (name) => `ਸਤ ਸ੍ਰੀ ਅਕਾਲ! ${name} ਨੂੰ ਸੁਨੇਹਾ ਭੇਜਣ ਲਈ ਧੰਨਵਾਦ। ਹੇਠਾਂ ਕੋਈ ਸਵਾਲ ਚੁਣੋ, ਅਸੀਂ ਇੱਥੇ ਹੀ ਜਵਾਬ ਦੇਵਾਂਗੇ।`,
   },
 };
+
+/** The business name inside one of AdBrain's own welcomes of this kind, or null for the owner's own words. */
+function nameIn(greeting: string, kind: "greeting" | "questions"): { language: Language; name: string } | null {
+  const marker = "\u0000";
+  for (const language of Object.keys(TEXT) as Language[]) {
+    const [before, after] = TEXT[language][kind](marker).split(marker);
+    if (greeting.length > before.length + after.length && greeting.startsWith(before) && greeting.endsWith(after)) {
+      return { language, name: greeting.slice(before.length, greeting.length - after.length) };
+    }
+  }
+  return null;
+}
+
+/**
+ * #1121: with ice breakers, AdBrain's suggested welcome ("Send this message…") becomes the questions
+ * one ("Tap a question below…") in the same language. A welcome the owner wrote is never changed.
+ */
+export function questionsWelcome(greeting: string): string {
+  const found = nameIn(greeting, "greeting");
+  return found ? TEXT[found.language].questions(found.name).slice(0, 300) : greeting;
+}
+
+/** The reverse, when the owner switches from Quick questions back to a pre-typed message. */
+export function prefillWelcome(greeting: string): string {
+  const found = nameIn(greeting, "questions");
+  return found ? TEXT[found.language].greeting(found.name).slice(0, 300) : greeting;
+}
 
 /** Which script the copy is in, for a stored language that doesn't say ("Hindi", "Punjabi"). */
 function scriptOf(copy: string): "devanagari" | "gurmukhi" | "latin" {
