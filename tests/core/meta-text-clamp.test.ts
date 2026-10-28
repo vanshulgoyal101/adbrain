@@ -25,7 +25,9 @@ function completeThought(saved: string, original: string): boolean {
   return /[.!?।]$/u.test(s) || /^\s*[,;:—–]\s/u.test(o.slice(s.length));
 }
 
-function save(field: Field, text: string) {
+type Outcome = { saved: string } | { refused: boolean; issues: string[] };
+
+function save(field: Field, text: string): Outcome {
   const result = validateConcept({ ...recorded.concept, [field]: text }, input);
   return result.success
     ? { saved: result.concept[field] as string }
