@@ -14,14 +14,18 @@ vi.mock("@/lib/internal-accounts.json", () => ({
 }));
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
-    auth: { admin: { getUserById: async (id: string) => (mocks.users[id]
-      ? { data: { user: mocks.users[id] }, error: null }
-      : { data: { user: null }, error: { message: "not found" } }) } },
+    auth: { admin: {
+      getUserById: async (id: string) => (mocks.users[id]
+        ? { data: { user: mocks.users[id] }, error: null }
+        : { data: { user: null }, error: { message: "not found" } }),
+      // #1242: the scoreboard lists every account once.
+      listUsers: async () => ({ data: { users: Object.values(mocks.users).map((user) => ({ created_at: "2026-01-01T00:00:00Z", ...user })) }, error: null }),
+    } },
     from: (table: string) => {
       const query: Filter = { table, ops: [] };
       mocks.queries.push(query);
       const builder: Record<string, unknown> = {};
-      for (const op of ["select", "in", "gte", "eq", "not", "order", "range", "like"]) {
+      for (const op of ["select", "in", "gte", "lt", "eq", "not", "order", "range", "like"]) {
         builder[op] = (...args: unknown[]) => { query.ops.push([op, args]); return builder; };
       }
       builder.abortSignal = async () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildScoreboard, median, newestResults, northStarRows, p90, type ScoreActiveResult, type ScoreAiCall, type ScoreEvent, type ScoreLaunch } from "@/lib/observability/core-scoreboard";
+import { buildScoreboard, lastIstWeek, median, newestResults, northStarRows, p90, type NorthStarData, type ScoreActiveResult, type ScoreAiCall, type ScoreEvent, type ScoreLaunch } from "@/lib/observability/core-scoreboard";
 
 const until = new Date("2026-10-26T03:30:00Z");
 const since = new Date("2026-10-25T03:30:00Z");
@@ -177,55 +177,96 @@ describe("core scoreboard (#681)", () => {
   });
 });
 
-// #1242: today's baselines for #1226's north-star metrics; owners only.
-describe("north-star rows (#1242)", () => {
+// #1242 / #1284: #1226's north-star rows, as the CPO defined them (weeks Mon–Sun IST, owners only).
+describe("north-star rows (#1242, #1284)", () => {
+  const NOW = new Date("2026-10-28T06:30:00Z"); // Wed 28 Oct, 12:00 IST: the last full week is 19–25 Oct IST
   const OWNER = "owner-1", INTERNAL = "team-1";
-  const e = (name: string, user: string, minutes: number, extra: Partial<ScoreEvent> = {}): ScoreEvent =>
-    ({ name, outcome: "success", user_id: user, business_id: `${user}-biz`, duration_ms: null, attributes: {}, created_at: new Date(Date.parse("2026-10-20T04:00:00Z") + minutes * 60_000).toISOString(), ...extra });
-  const week = { since: new Date("2026-10-20T00:00:00Z"), until: new Date("2026-10-27T00:00:00Z") };
+  const at = (iso: string) => new Date(iso).toISOString();
+  const base: NorthStarData = {
+    signUps: [], businesses: [{ id: "b-owner", owner_id: OWNER }, { id: "b-team", owner_id: INTERNAL }],
+    campaignChanges: [], campaigns: [], pageViews: [], helpTaps: [], leads: [], internalUserIds: [INTERNAL], now: NOW,
+  };
+  const rowsOf = (data: Partial<NorthStarData>, events: ScoreEvent[] = []) => northStarRows(events, { ...base, ...data });
   const rowOf = (rows: ReturnType<typeof northStarRows>, step: string) => rows.find((r) => r.step.startsWith(step))!;
-  const owners = [{ id: `${OWNER}-biz`, owner_id: OWNER }, { id: `${INTERNAL}-biz`, owner_id: INTERNAL }];
 
-  it("medians odd and even lists", () => {
+  it("finds the last full Monday–Sunday IST week", () => {
+    expect(lastIstWeek(NOW)).toEqual({ start: Date.parse("2026-10-18T18:30:00Z"), end: Date.parse("2026-10-25T18:30:00Z") });
+    expect(lastIstWeek(new Date("2026-10-25T18:29:00Z")).end).toBe(Date.parse("2026-10-18T18:30:00Z"));
     expect(median([5, 1, 3])).toBe(3);
     expect(median([4, 1, 3, 2])).toBe(2.5);
-    expect(median([])).toBeNull();
   });
 
-  it("times sign-up to the owner's own first live campaign, leaving internal accounts out", () => {
-    const rows = northStarRows([
-      e("auth.sign_up.otp", OWNER, 0), e("campaign.resume", OWNER, 8), e("campaign.resume", OWNER, 30),
-      e("auth.sign_up.google", "slow", 0), e("campaign.resume", "slow", 45, { business_id: "slow-biz" }),
-      e("auth.sign_up.otp", "never", 0),
-      e("auth.sign_up.otp", INTERNAL, 0), e("campaign.resume", INTERNAL, 1),
-      // Someone else's business going live doesn't count for this sign-up.
-      e("campaign.resume", "x", 2, { business_id: "x-biz" }),
-    ], { ...week, businessOwners: [...owners, { id: "slow-biz", owner_id: "slow" }], internalUserIds: [INTERNAL] });
-    expect(rowOf(rows, "Sign-up")).toMatchObject({ now: "3 sign-ups: 2 live, median 27 min", met: false });
-    expect(rowOf(northStarRows([e("auth.sign_up.otp", OWNER, 0), e("campaign.resume", OWNER, 9)], { ...week, businessOwners: owners }), "Sign-up").met).toBe(true);
+  it("sign-up → first live: that week's cohort, the owner's first resume within 14 days, % live, team left out", () => {
+    const rows = rowsOf({
+      signUps: [{ id: OWNER, created_at: at("2026-10-20T04:00:00Z") }, { id: "slow", created_at: at("2026-10-21T04:00:00Z") },
+        { id: "never", created_at: at("2026-10-22T04:00:00Z") }, { id: INTERNAL, created_at: at("2026-10-20T04:00:00Z") },
+        { id: "next-week", created_at: at("2026-10-27T04:00:00Z") }],
+      businesses: [...base.businesses, { id: "b-slow", owner_id: "slow" }],
+      campaignChanges: [
+        { campaign_id: "c1", business_id: "b-owner", action: "campaign.resume", created_at: at("2026-10-20T04:08:00Z") },
+        { campaign_id: "c1", business_id: "b-owner", action: "campaign.resume", created_at: at("2026-10-23T04:00:00Z") },
+        { campaign_id: "c2", business_id: "b-slow", action: "campaign.resume", created_at: at("2026-10-21T05:00:00Z") },
+        { campaign_id: "c3", business_id: "b-team", action: "campaign.resume", created_at: at("2026-10-20T04:01:00Z") },
+      ],
+    });
+    expect(rowOf(rows, "Sign-up")).toMatchObject({ now: "week of 19 Oct: 3 sign-ups, 67% live, median 34 min (counting until 8 Nov)", met: false });
+  });
+
+  it("owners needing help: help taps before going live, in that week's cohort", () => {
+    const rows = rowsOf({
+      signUps: [{ id: OWNER, created_at: at("2026-10-20T04:00:00Z") }, { id: "b", created_at: at("2026-10-20T05:00:00Z") }, { id: "c", created_at: at("2026-10-20T06:00:00Z") }],
+      campaignChanges: [{ campaign_id: "c1", business_id: "b-owner", action: "campaign.resume", created_at: at("2026-10-20T05:00:00Z") }],
+      helpTaps: [{ user_id: OWNER, created_at: at("2026-10-20T06:00:00Z") }, { user_id: "b", created_at: at("2026-10-20T05:30:00Z") }],
+    });
+    expect(rowOf(rows, "Owners needing help")).toMatchObject({ now: "week of 19 Oct: 1 of 3 new owners tapped Help on WhatsApp before going live (#796 calls not counted)", met: true });
+  });
+
+  it("time to first contact: from Meta's created_time when there is one, with % contacted", () => {
+    const rows = rowsOf({ leads: [
+      { created_time: at("2026-10-27T10:00:00Z"), created_at: at("2026-10-28T04:00:00Z"), first_contacted_at: at("2026-10-27T10:12:00Z") },
+      { created_time: null, created_at: at("2026-10-27T11:00:00Z"), first_contacted_at: at("2026-10-27T11:20:00Z") },
+      { created_time: null, created_at: at("2026-10-27T12:00:00Z"), first_contacted_at: null },
+    ] });
+    expect(rowOf(rows, "Time to first contact")).toMatchObject({ now: "3 enquiries in 7 days: 67% contacted, median 16 min", met: false });
+  });
+
+  it("weekly return: owners with a campaign live at any point that week, distinct IST days on Home, Campaigns or Enquiries", () => {
+    const view = (user: string, iso: string, route = "/dashboard") => ({ user_id: user, route, created_at: at(iso) });
+    const rows = rowsOf({
+      businesses: [...base.businesses, { id: "b-two", owner_id: "two" }, { id: "b-paused", owner_id: "paused" }],
+      campaigns: [{ id: "c1", business_id: "b-owner", status: "paused" }, { id: "c2", business_id: "b-two", status: "active" },
+        { id: "c3", business_id: "b-paused", status: "paused" }, { id: "c4", business_id: "b-team", status: "active" }],
+      campaignChanges: [
+        // Live when the week began, paused mid-week: counts.
+        { campaign_id: "c1", business_id: "b-owner", action: "campaign.resume", created_at: at("2026-10-15T04:00:00Z") },
+        { campaign_id: "c1", business_id: "b-owner", action: "campaign.pause", created_at: at("2026-10-22T04:00:00Z") },
+        // Paused before the week and not resumed in it: doesn't.
+        { campaign_id: "c3", business_id: "b-paused", action: "campaign.resume", created_at: at("2026-10-10T04:00:00Z") },
+        { campaign_id: "c3", business_id: "b-paused", action: "campaign.pause", created_at: at("2026-10-12T04:00:00Z") },
+      ],
+      pageViews: [view(OWNER, "2026-10-19T04:00:00Z"), view(OWNER, "2026-10-19T09:00:00Z", "/leads"), view(OWNER, "2026-10-20T04:00:00Z", "/campaigns"),
+        view(OWNER, "2026-10-22T19:00:00Z"), view("two", "2026-10-21T04:00:00Z"), view("paused", "2026-10-21T04:00:00Z"), view(INTERNAL, "2026-10-21T04:00:00Z")],
+    });
+    // owner-1: 19, 20, 23 Oct (IST) = 3 days; "two" (active, no changes on record): 1 day → median 2.
+    expect(rowOf(rows, "Weekly return")).toMatchObject({ now: "week of 19 Oct: 2 owners with a live campaign: median 2 days", met: false });
+  });
+
+  it("says so plainly when there's nothing to measure", () => {
+    const rows = rowsOf({});
+    expect(rows.map((row) => [row.step, row.met])).toEqual([
+      ["Sign-up → first campaign live", null], ["Taps, Create → live", null], ["Owners needing help", null],
+      ["Time to first contact", null], ["Weekly return (results views)", null],
+    ]);
+    expect(rowOf(rows, "Weekly return").now).toBe("week of 19 Oct: no owner outside the team had a live campaign");
   });
 
   it("counts taps from the Create page view before the first batch to the first live campaign after it", () => {
+    const e = (name: string, user: string, minutes: number, extra: Partial<ScoreEvent> = {}): ScoreEvent =>
+      ({ name, outcome: "success", user_id: user, business_id: "b-owner", duration_ms: null, attributes: {}, created_at: new Date(Date.parse("2026-10-27T04:00:00Z") + minutes * 60_000).toISOString(), ...extra });
     const tap = (minutes: number) => e("ui.tap", OWNER, minutes);
-    const rows = northStarRows([
-      tap(-30), e("page.view", OWNER, -10, { attributes: { route: "/create" } }), tap(-5), tap(-4),
-      e("creative.batch", OWNER, 0), tap(2), tap(3), tap(4), e("campaign.resume", OWNER, 5), tap(6),
-      e("creative.batch", "stuck", 0), e("ui.tap", "stuck", 1),
-    ], week);
+    const rows = rowsOf({}, [tap(-30), e("page.view", OWNER, -10, { attributes: { route: "/create" } }), tap(-5), tap(-4),
+      e("creative.batch", OWNER, 0), tap(2), tap(3), tap(4), e("campaign.resume", OWNER, 5), tap(6), e("creative.batch", "stuck", 0), e("ui.tap", "stuck", 1)]);
     expect(rowOf(rows, "Taps")).toMatchObject({ now: "1 owner reached live: median 5 taps", met: true });
-    expect(rowOf(northStarRows([e("creative.batch", OWNER, 0)], week), "Taps")).toMatchObject({ now: expect.stringContaining("not measured yet"), met: null });
-  });
-
-  it("scales distinct IST days with a Home or Campaigns view to a week", () => {
-    const view = (user: string, minutes: number, route = "/dashboard") => e("page.view", user, minutes, { attributes: { route } });
-    const rows = northStarRows([
-      view(OWNER, 0), view(OWNER, 60), view(OWNER, 24 * 60, "/campaigns"), view(OWNER, 3 * 24 * 60), view(OWNER, 4 * 24 * 60, "/leads"),
-      view("daily", 0), view("daily", 24 * 60), view("daily", 2 * 24 * 60), view("daily", 3 * 24 * 60),
-      view(INTERNAL, 0),
-    ], { ...week, internalUserIds: [INTERNAL] });
-    expect(rowOf(rows, "Weekly return")).toMatchObject({ now: "2 owners: median 3.5 days/week", met: true });
-    expect(rowOf(northStarRows([view(INTERNAL, 0)], { ...week, internalUserIds: [INTERNAL] }), "Weekly return").now).toBe("no owner opened Home or Campaigns (team accounts: 1)");
-    // Under a week of data: shown, not scored.
-    expect(rowOf(northStarRows([view(OWNER, 0)], { since: new Date("2026-10-26T00:00:00Z"), until: new Date("2026-10-27T00:00:00Z") }), "Weekly return").met).toBeNull();
+    expect(rowOf(rowsOf({}, [e("creative.batch", OWNER, 0)]), "Taps")).toMatchObject({ now: expect.stringContaining("not measured yet"), met: null });
   });
 });

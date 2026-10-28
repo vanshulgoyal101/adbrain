@@ -83,7 +83,7 @@ The stream includes:
   regeneration/export, campaign create/review/activate/pause/sync, Brand save,
   upload/delete, follow-up save, payment quote/checkout, Meta connect controls and
   `meta.access_request` (a new owner asking for Facebook access before App Review),
-  and the audience edit (`campaign.edit_audience`).
+  the audience edit (`campaign.edit_audience`), and Help on WhatsApp (`help.whatsapp`, #1284).
 - `ui.tap` (#1242): one per tap on an enabled control (button, link, tab, checkbox, select) on the
   launch path (`/create`, `/studio`, `/campaigns`), page only, never which control or what was typed;
   it counts #1226's "taps from Create to live". Same switch, Do Not Track and 45-a-minute cap.
