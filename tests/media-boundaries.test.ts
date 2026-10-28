@@ -94,20 +94,23 @@ vi.mock("@/lib/supabase/admin", () => ({
 }));
 
 const theirPath = `${THEIRS}/${THEIR_ASSET}.jpg`;
-beforeEach(() => {
+// #1248: the owner's rights confirmation is a stored row for the current terms version; uploads are signed only after it.
+const termsVersion = async () => existsSync(join(process.cwd(), "src/lib/media/consent.ts"))
+  ? (await load("src/lib/media/consent.ts")).MEDIA_TERMS_VERSION as string : "unversioned";
+beforeEach(async () => {
   m.calls.length = 0;
   m.objects.clear();
   m.db = {
     businesses: [{ id: MINE, owner_id: OWNER, name: "Mine" }, { id: THEIRS, owner_id: OTHER_OWNER, name: "Theirs" }],
     media_assets: [{ id: THEIR_ASSET, business_id: THEIRS, bucket: "media", path: theirPath, status: "ready", deleted_at: null, sha256: "a".repeat(64), width: 1080, height: 1350, tags: [], created_at: "2026-10-28T00:00:00Z" }],
-    media_consents: [{ business_id: MINE, user_id: OWNER, terms_version: "media-v1", people_confirmed: true }],
+    media_consents: [{ business_id: MINE, user_id: OWNER, terms_version: await termsVersion(), people_confirmed: true, confirmed_at: "2026-10-28T00:00:00Z" }],
     creatives: [], campaigns: [],
   };
   m.objects.set(theirPath, new Uint8Array([1, 2, 3]));
 });
 
 const touchedAssets = () => m.calls.filter((c) => c.table === "media_assets" && c.op !== "from" || (c.bucket && c.op !== "getPublicUrl"));
-const signBody = (over: Record<string, unknown> = {}) => ({ businessId: MINE, mime: "image/jpeg", bytes: 500_000, sha256: "b".repeat(64), width: 1080, height: 1350, rightsConfirmed: true, ...over });
+const signBody = (over: Record<string, unknown> = {}) => ({ businessId: MINE, mime: "image/jpeg", bytes: 500_000, sha256: "b".repeat(64), width: 1080, height: 1350, ...over });
 async function sign(body: Record<string, unknown>) {
   const { POST } = await load("src/app/api/media/sign/route.ts");
   return POST(new Request("https://adbrain.vanshul.com/api/media/sign", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) })) as Promise<Response>;
@@ -135,6 +138,13 @@ describe.skipIf(!built)("media library boundaries (#1865, #1209 slice A)", () =>
     expect(m.calls.filter((c) => c.op === "remove" || (c.table === "media_assets" && ["update", "delete"].includes(c.op)))).toEqual([]);
     expect(m.objects.has(theirPath)).toBe(true);
     expect(m.db.media_assets.find((row) => row.id === THEIR_ASSET)?.deleted_at).toBeNull();
+  });
+
+  it("without a current rights confirmation nothing is signed (#784, #1248)", async () => {
+    m.db.media_consents = [];
+    const response = await sign(signBody());
+    expect(response.status).toBe(409);
+    expect(m.calls.filter((c) => c.op === "insert" || c.op === "createSignedUploadUrl")).toEqual([]);
   });
 
   it.each([
