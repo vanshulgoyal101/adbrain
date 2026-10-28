@@ -84,7 +84,7 @@ async function handlePOST(req: Request) {
           usage: failure.usage ?? { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
           promptVersion: INTERVIEW_PROMPT_VERSION, latencyMs: failure.latencyMs,
           attempt, maxTokens: 2400, temperature: attempt === 1 ? 0.5 : 0.2,
-          status: "error", failure: failure.failure, errorCode: `LLM_${failure.failure ?? "UNKNOWN"}`,
+          status: "error", failure: failure.failure, errorCode: `LLM_${failure.failure ?? "UNKNOWN"}`, rateLimit: failure.rateLimit,
           providerRequestId: failure.providerRequestId, providerFinalStatus: failure.providerFinalStatus,
           metadata: { answerCount: answers.length, repaired: attempt > 1 },
         })));

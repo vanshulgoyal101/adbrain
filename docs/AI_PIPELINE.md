@@ -390,7 +390,9 @@ other model left, the original timeout or truncation error is thrown. Each
 attempt reports a sanitized failure code (`TIMEOUT`, `DEADLINE` for the caller's
 own deadline, `ABORTED`, `TRUNCATED`, `EMPTY`, `TRANSPORT`, `HTTP_<status>`) and
 latency. Usage rows keep it in `metadata.failure` and `ai.completion` events as
-`errorCode: LLM_<code>`. System prompts, Gemini thinking headroom, OpenRouter reasoning exclusion, and
+`errorCode: LLM_<code>`. A 429 whose message names the limit (Groq: "on tokens per minute (TPM): Limit …,
+Used …, Requested …") also records `rateLimitType`, `rateLimitLimit`, `rateLimitUsed` and `rateLimitRequested`
+on the planner's and assistant's failed attempts (#1200); never the message or org id. System prompts, Gemini thinking headroom, OpenRouter reasoning exclusion, and
 provider-reported usage retain their facade semantics. SDK-recomputed totals are
 not substituted for the provider's original counts.
 

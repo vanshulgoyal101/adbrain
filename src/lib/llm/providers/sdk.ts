@@ -1,5 +1,16 @@
 import { APICallError, generateText, NoObjectGeneratedError, Output, type LanguageModel } from "ai";
-import { LLMError, type ChatMessage, type CompletionOptions, type ProviderCompletion } from "../types";
+import { LLMError, type ChatMessage, type CompletionOptions, type ProviderCompletion, type RateLimitInfo } from "../types";
+
+/** #1200: Groq's 429 names the org limit: "… on tokens per minute (TPM): Limit 6000, Used 3120, Requested 5612." */
+export function rateLimitInfo(body: string | undefined): RateLimitInfo | undefined {
+  const type = /\((ITPM|OTPM|TPM|RPM|TPD|RPD)\)/.exec(body ?? "")?.[1] as RateLimitInfo["type"] | undefined;
+  if (!type) return undefined;
+  const number = (name: string) => {
+    const value = Number(new RegExp(`\\b${name}:?\\s+(\\d+)`, "i").exec(body ?? "")?.[1]);
+    return Number.isSafeInteger(value) ? { [name.toLowerCase()]: value } : {};
+  };
+  return { type, ...number("Limit"), ...number("Used"), ...number("Requested") };
+}
 
 function providerId(value: unknown): string | undefined {
   return typeof value === "string" && /^[\w.:-]{1,256}$/.test(value) ? value : undefined;
@@ -87,6 +98,7 @@ export async function sdkCompletion(
       throw new LLMError(`${provider}: ${status ? `HTTP ${status}` : "provider request failed"}`, {
         provider, status, providerFinalStatus: "unknown", code: creditExhausted ? "CREDIT_EXHAUSTED" : status ? `HTTP_${status}` : "TRANSPORT",
         retryAfterMs: Number.isFinite(retryAfter) && retryAfter >= 0 ? retryAfter * 1000 : undefined,
+        ...(status === 429 ? { rateLimit: rateLimitInfo(error.responseBody) } : {}),
         providerRequestId: providerId(headers?.["x-request-id"] ?? headers?.["x-openrouter-request-id"] ?? headers?.["x-goog-request-id"]),
         retryable: creditExhausted || status === undefined || status === 429 || status >= 500 || status === 403 || (provider !== "google" && status === 401),
       });
