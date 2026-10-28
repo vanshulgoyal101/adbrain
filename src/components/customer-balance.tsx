@@ -1,12 +1,13 @@
 "use client";
 
+import { formatMoneyExact } from "@/lib/format";
 import { useEffect, useEffectEvent, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
 import { customerBalanceViewSchema, type CustomerBalanceView as Balance } from "@/lib/payments/customer-balance-contracts";
 
-const money = (paise: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(paise / 100);
+const money = (paise: number) => formatMoneyExact(paise / 100);
 
 export function CustomerBalance({ businessId, initialBalance = null }: { businessId: string; initialBalance?: Balance | null }) {
   const [storedBalance, setBalance] = useState<Balance | null>(initialBalance?.businessId === businessId ? initialBalance : null);
