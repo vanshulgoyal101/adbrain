@@ -8,6 +8,7 @@ import { MetaConnectDialog } from "@/components/meta-connect/meta-connect-dialog
 import { SetupSpine } from "@/components/setup-spine";
 import { WeeklyCapLine } from "@/components/weekly-cap-line";
 import { BUDGET_PRESETS } from "@/lib/campaign/budget";
+import { capWithGstPaise } from "@/lib/payments/allocation";
 import { goLive, type GoLiveResult, type GoLiveStep } from "@/lib/campaign/setup-go-live-flow";
 import { weeklyCapNotice, type CampaignSpend } from "@/lib/campaign/spend";
 import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
@@ -62,7 +63,8 @@ export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNum
   const [step, setStep] = useState<GoLiveStep | null>(null);
   const [result, setResult] = useState<GoLiveResult | null>(null);
   const running = useRef(false);
-  const total = daily * SETUP_RUN_DAYS;
+  // #1251 CPO/Dev 2: the most it can cost includes Meta's GST, worked out as activation's reserve check does.
+  const total = capWithGstPaise({ dailyRupees: daily, days: SETUP_RUN_DAYS }) / 100;
   const cap = weeklyCap ? weeklyCapNotice(weeklyCap.active, daily, weeklyCap.capRupees) : null;
   const areas = (business.locations ?? []).filter((place) => place.trim()).join(", ");
   const ids = ads.map((ad) => ad.id).join(",");
@@ -71,7 +73,7 @@ export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNum
   const stepWords: Record<GoLiveStep, string> = {
     check: "Checking your campaign…",
     create: "Creating it on Meta, paused…",
-    activate: `Turning it on with a ${formatMoney(total)} limit…`,
+    activate: "Turning it on…",
   };
 
   async function startGoLive() {
@@ -116,7 +118,7 @@ export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNum
         </div>
         <div>
           <dt className="text-slate-500">Budget</dt>
-          <dd className="mt-1 font-medium text-slate-950">{formatMoney(daily)} a day for {SETUP_RUN_DAYS} days, {formatMoney(total)} at most</dd>
+          <dd className="mt-1 font-medium text-slate-950">{formatMoney(daily)} a day for {SETUP_RUN_DAYS} days, {formatMoney(total)} at most including Meta&apos;s GST</dd>
           <dd className="mt-2"><div className="flex flex-wrap gap-2" role="group" aria-label="Daily budget">
             {BUDGET_PRESETS.map((amount) => (
               <button key={amount} type="button" aria-pressed={daily === amount} disabled={step !== null || result?.kind === "live"}
@@ -154,9 +156,9 @@ export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNum
           <Row done={false} title="Ad money" status="Pay by UPI or card"
             action={<Link href="/settings" className="inline-flex min-h-11 items-center text-sm font-medium text-primary underline underline-offset-4">Add money</Link>} />
         )}
-        <Row done title={`Stops at ${formatMoney(total)}`} status={`${SETUP_RUN_DAYS} days at ${formatMoney(daily)} a day`} />
+        <Row done title={`Stops at ${formatMoney(total)}`} status={`${SETUP_RUN_DAYS} days at ${formatMoney(daily)} a day, including Meta's GST`} />
       </ul>
-      <p className="mt-4 text-sm text-slate-600">Meta checks your ads first, usually within a day. Spending starts only after that and stops at {formatMoney(total)}.</p>
+      <p className="mt-4 text-sm text-slate-600">Meta checks your ads first, usually within a day. Spending starts only after that and stops at {formatMoney(total)}, including Meta&apos;s GST.</p>
 
       {step && <p role="status" className="mt-4 text-sm font-medium text-slate-950">{stepWords[step]}</p>}
       {result?.kind === "live" && (

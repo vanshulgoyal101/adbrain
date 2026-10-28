@@ -27,11 +27,11 @@ function goLive({ pageConnected = true, funding = "managed" as SetupFunding | nu
 beforeEach(() => vi.clearAllMocks());
 
 describe("core: <SetupGoLive> (#1271)", () => {
-  it("says what will run: ads, ₹300 a day for 2 days (₹600 at most), where, and the WhatsApp chat", () => {
+  it("says what will run: ads, ₹300 a day for 2 days (₹708 at most with Meta's GST), where, and the WhatsApp chat", () => {
     goLive();
     expect(screen.getByRole("group", { name: "Step 3 of 3: Go live" })).toBeInTheDocument();
     expect(screen.getByText("Ads: 2 picked")).toBeInTheDocument();
-    expect(screen.getByText("₹300 a day for 2 days, ₹600 at most")).toBeInTheDocument();
+    expect(screen.getByText("₹300 a day for 2 days, ₹708 at most including Meta's GST")).toBeInTheDocument();
     expect(screen.getByText("Jaipur, Ajmer")).toBeInTheDocument();
     expect(screen.getByText("They message you on WhatsApp at +91 ••••• 3210")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Change who sees it" })).toHaveAttribute("href", "/campaigns?all=1&new=1&creatives=a,b");
@@ -40,8 +40,8 @@ describe("core: <SetupGoLive> (#1271)", () => {
   it("a chip changes the daily amount, the total and the primary", () => {
     goLive();
     fireEvent.click(screen.getByRole("button", { name: "₹1,000 a day" }));
-    expect(screen.getByText("₹1,000 a day for 2 days, ₹2,000 at most")).toBeInTheDocument();
-    expect(screen.getByText("Stops at ₹2,000")).toBeInTheDocument();
+    expect(screen.getByText("₹1,000 a day for 2 days, ₹2,360 at most including Meta's GST")).toBeInTheDocument();
+    expect(screen.getByText("Stops at ₹2,360")).toBeInTheDocument();
     expect(bar().getByRole("button", { name: "Go live · ₹1,000 a day" })).toBeEnabled();
   });
 
@@ -80,7 +80,7 @@ describe("core: <SetupGoLive> (#1271)", () => {
     run.step("create");
     expect(screen.getByText("Creating it on Meta, paused…")).toHaveAttribute("role", "status");
     run.step("activate");
-    expect(screen.getByText("Turning it on with a ₹1,000 limit…")).toHaveAttribute("role", "status");
+    expect(screen.getByText("Turning it on…")).toHaveAttribute("role", "status");
     await run.finish({ kind: "live", campaignId: "c1" });
     expect(screen.getByText("You're live. Meta is checking your ads; they usually start within a day.")).toHaveAttribute("role", "status");
     fireEvent.click(bar().getByRole("button", { name: "Open your campaign" }));
@@ -125,5 +125,14 @@ describe("core: <SetupGoLive> (#1271)", () => {
     goLive({ funding: "own" });
     expect(screen.getByText("Payment on Meta")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Add payment in Meta" })).toHaveAttribute("target", "_blank");
+  });
+});
+
+describe("core: Go live's total is activation's own cap + GST (#1251 CPO/Dev 2)", () => {
+  it("₹300/₹500/₹1,000 a day for 2 days → ₹708/₹1,180/₹2,360, the amount the reserve check needs", async () => {
+    const { capWithGstPaise, paymentToCoverPaise } = await import("@/lib/payments/allocation");
+    expect([300, 500, 1000].map((dailyRupees) => capWithGstPaise({ dailyRupees, days: 2 }))).toEqual([70_800, 118_000, 236_000]);
+    // Dev 2's payment helper still funds exactly that total (#1374 numbers unchanged).
+    expect([300, 500, 1000].map((dailyRupees) => paymentToCoverPaise({ dailyRupees, days: 2, availablePaise: 0 }))).toEqual([88_500, 147_500, 295_000]);
   });
 });
