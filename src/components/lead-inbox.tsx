@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { Check, Copy, Inbox, Loader2, MessageCircle, Phone, RefreshCw, Search, X, Save, Pencil, ChevronDown, SlidersHorizontal, UserCheck, MoreHorizontal } from "lucide-react";
 import { Alert } from "@/components/ui/alert";
@@ -16,6 +16,7 @@ import { workflowStatuses, type WorkflowStatus } from "@/lib/leads/filters";
 import { firstReplyText, formatReplyTime, whatsappReplyLink, type ReplyLanguage } from "@/lib/leads/first-reply";
 import { isMetaTestLead } from "@/lib/leads/test-lead";
 import { isWaiting } from "@/lib/leads/waiting";
+import { leadAnswers } from "@/lib/leads/answers";
 import styles from "./lead-inbox.module.css";
 
 const LEADS_FRESH_MS = 15 * 60_000;
@@ -39,6 +40,20 @@ function leadName(lead: Pick<Lead, "full_name">): string | null {
 }
 
 type InboxView = "waiting" | "all" | "customers";
+
+/** #1260 slice 4: two panes (list + the selected person) from 1280 px; server and first paint are one pane. */
+const WIDE = "(min-width: 1280px)";
+function useWide(): boolean {
+  return useSyncExternalStore(
+    (change) => {
+      const query = typeof window !== "undefined" ? window.matchMedia?.(WIDE) : undefined;
+      query?.addEventListener("change", change);
+      return () => query?.removeEventListener("change", change);
+    },
+    () => Boolean(window.matchMedia?.(WIDE).matches),
+    () => false,
+  );
+}
 const VIEW_LABEL: Record<InboxView, string> = { waiting: "Waiting", all: "All", customers: "Customers" };
 
 function initials(name: string | null): string {
@@ -117,6 +132,8 @@ export function LeadInbox({
   // #1260: Waiting (default when anyone waits) · All (search and filters) · Customers.
   const [view, setView] = useState<InboxView>(summary?.waiting ? "waiting" : "all");
   const [openedAt] = useState(() => Date.now());
+  const wide = useWide();
+  const [pickedId, setPickedId] = useState<string | null>(null);
   const [contactedAt, setContactedAt] = useState<Record<string, string>>({});
   const page = useLeadList({ leads: initialLeads, total: initialTotal, nextCursor: initialNextCursor }, view === "all"
     ? { query, status, contact: contactFilter, sort }
@@ -335,6 +352,23 @@ export function LeadInbox({
     return formatDate(createdTime) || "—";
   }
 
+  function rowInfo(l: Lead) {
+    const first = firstContact(l);
+    const contactMinutes = first ? (Date.parse(first) - Date.parse(l.created_time ?? l.created_at)) / 60_000 : NaN;
+    const current = statusOf(l);
+    // #1260: one state word per row: New → Contacted in {m} → Customer.
+    const state = current === "customer" ? "customer" : current === "closed" ? "closed" : first ? "contacted" : current === "new" ? "new" : "other";
+    const stateLabel = state === "new" ? "New" : state === "contacted" ? contactedLabel(contactMinutes) : state === "closed" ? "Not interested" : STATUS_LABEL[current];
+    const city = isMetaTestLead(l) ? null : l.city;
+    const meta = [l.created_time ? whenLabel(l.created_time) : null, l.source === "whatsapp_manual" ? "WhatsApp chat" : null, city].filter(Boolean).join(" · ");
+    const replyText = firstReplyText({ leadName: leadName(l), businessName, offer, language });
+    const whatsapp = isMetaTestLead(l) ? null : whatsappReplyLink(l.phone, replyText);
+    return { first, contactMinutes, current, state, stateLabel, meta, name: leadName(l) ?? "this enquiry", replyText, whatsapp };
+  }
+  const selectedLead = wide ? leads.find((lead) => lead.id === pickedId) ?? leads[0] ?? null : null;
+  const detail = selectedLead ? rowInfo(selectedLead) : null;
+  const answers = selectedLead && !isMetaTestLead(selectedLead) ? leadAnswers(selectedLead.field_data) : [];
+
   return (
     <div className={styles.inbox}>
       {!metaReady && (
@@ -447,7 +481,8 @@ export function LeadInbox({
       ) : leads.length === 0 ? (
         <div className={styles.empty}><Search size={28} aria-hidden="true" /><h3>No matching enquiries</h3><Button variant="outline" onClick={clearFilters}>Clear filters</Button></div>
       ) : (
-        <div>
+        <div className={detail ? styles.panes : undefined}>
+        <div className={styles.listPane}>
           <table role="table" aria-label="Customer enquiries" className={styles.table}>
             <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
               <tr>
@@ -461,20 +496,13 @@ export function LeadInbox({
             </thead>
             <tbody className="divide-y divide-slate-100">
               {leads.map((l) => {
-                const first = firstContact(l);
-                const contactMinutes = first ? (Date.parse(first) - Date.parse(l.created_time ?? l.created_at)) / 60_000 : NaN;
-                const current = statusOf(l);
-                // #1260: one state word per row on phones: New → Contacted in {m} → Customer.
-                const state = current === "customer" ? "customer" : current === "closed" ? "closed" : first ? "contacted" : current === "new" ? "new" : "other";
-                const stateLabel = state === "new" ? "New" : state === "contacted" ? contactedLabel(contactMinutes) : state === "closed" ? "Not interested" : STATUS_LABEL[current];
-                const city = isMetaTestLead(l) ? null : l.city;
-                const meta = [l.created_time ? whenLabel(l.created_time) : null, l.source === "whatsapp_manual" ? "WhatsApp chat" : null, city].filter(Boolean).join(" · ");
-                const name = leadName(l) ?? "this enquiry";
+                const { first, contactMinutes, current, state, stateLabel, meta, name } = rowInfo(l);
                 return (
-                <tr role="row" key={l.id} className="hover:bg-slate-50" data-state={state}>
+                <tr role="row" key={l.id} className="hover:bg-slate-50" data-state={state} data-selected={selectedLead?.id === l.id || undefined}>
                   <td role="cell" className={styles.person}>
                     <span className={styles.avatar} aria-hidden="true">{initials(leadName(l))}</span>
-                    <span className={styles.name}>{leadName(l) ?? "—"}</span>
+                    {wide ? <button type="button" className={styles.name} aria-pressed={selectedLead?.id === l.id} onClick={() => setPickedId(l.id)}>{leadName(l) ?? "—"}</button>
+                      : <span className={styles.name}>{leadName(l) ?? "—"}</span>}
                     <span className={styles.rowState} data-state={state}>{stateLabel}</span>
                     {meta && <span className={styles.rowMeta}>{meta}</span>}
                   </td>
@@ -488,7 +516,7 @@ export function LeadInbox({
                       </a>
                     )}
                     {!isMetaTestLead(l) && l.phone && (() => {
-                      const whatsapp = whatsappReplyLink(l.phone, firstReplyText({ leadName: leadName(l), businessName, offer, language }));
+                      const { whatsapp } = rowInfo(l);
                       const replied = contactMinutes * 60_000;
                       return <div className={`${styles.replyActions} mt-1 flex flex-wrap items-center gap-2`}>
                         {whatsapp && <a href={whatsapp} target="_blank" rel="noopener noreferrer" onClick={() => markContacted(l)}
@@ -542,6 +570,36 @@ export function LeadInbox({
               })}
             </tbody>
           </table>
+        </div>
+        {selectedLead && detail && (
+          <aside className={styles.detail} aria-label={`Enquiry from ${detail.name}`}>
+            <div className={styles.detailHead}>
+              <span className={styles.detailAvatar} aria-hidden="true">{initials(leadName(selectedLead))}</span>
+              <div className="min-w-0">
+                <h3>{leadName(selectedLead) ?? "Unnamed enquiry"}</h3>
+                <p><span className={styles.detailState} data-state={detail.state}>{detail.stateLabel}</span>{detail.meta && ` · ${detail.meta}`}</p>
+              </div>
+            </div>
+            {!isMetaTestLead(selectedLead) && detail.state !== "customer" && <div className="flex flex-wrap gap-2">
+              {detail.whatsapp && <a href={detail.whatsapp} target="_blank" rel="noopener noreferrer" onClick={() => markContacted(selectedLead)}
+                className="inline-flex min-h-11 items-center gap-2 rounded-md bg-emerald-600 px-4 text-sm font-medium text-white hover:bg-emerald-700">
+                <MessageCircle size={16} aria-hidden="true" />WhatsApp them</a>}
+              {selectedLead.phone && <a href={`tel:${selectedLead.phone}`} onClick={() => markContacted(selectedLead)}
+                className="inline-flex min-h-11 items-center gap-2 rounded-md border border-slate-300 px-4 text-sm font-medium text-slate-800 hover:bg-slate-50">
+                <Phone size={16} aria-hidden="true" />Call</a>}
+              {detail.first && <Button type="button" variant="outline" className="min-h-11" data-product-event="lead.customer" disabled={!!marking || saving}
+                onClick={() => void setCustomer(selectedLead, "customer", detail.current)}><UserCheck size={16} aria-hidden="true" />Became a customer</Button>}
+            </div>}
+            {detail.whatsapp && detail.state !== "customer" && <section>
+              <h4>Opens WhatsApp with:</h4>
+              <p className={styles.detailMessage}>{detail.replyText}</p>
+            </section>}
+            {answers.length > 0 && <section>
+              <h4>Their answers</h4>
+              <dl className={styles.answers}>{answers.map(({ question, answer }) => <div key={question}><dt>{question}</dt><dd>{answer}</dd></div>)}</dl>
+            </section>}
+          </aside>
+        )}
         </div>
       )}
       {page.nextCursor && <Button variant="outline" disabled={page.loading} onClick={page.loadMore}>{page.loading ? <Loader2 size={16} className="animate-spin" /> : <ChevronDown size={16} />}Load more enquiries</Button>}

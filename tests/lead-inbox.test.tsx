@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LeadInbox } from "@/components/lead-inbox";
 import type { Lead } from "@/lib/types";
 
@@ -762,6 +762,35 @@ describe("<LeadInbox> Waiting · All · Customers (#1260)", () => {
     expect(screen.getByRole("heading", { name: "Nobody is waiting." })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "See all enquiries" }));
     expect(screen.getByRole("button", { name: "All" })).toHaveAttribute("aria-pressed", "true");
+  });
+});
+
+describe("<LeadInbox> two panes from 1280 px (#1260)", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const wide = () => vi.stubGlobal("matchMedia", (query: string) => ({ matches: query === "(min-width: 1280px)", addEventListener: vi.fn(), removeEventListener: vi.fn() }));
+
+  it("shows the first person beside the list with the exact WhatsApp text and their form answers", () => {
+    wide();
+    render(<LeadInbox businessName="Solaride" offer="Free solar site survey" initialLeads={[
+      lead({ phone: "98765 43210", field_data: { full_name: "Asha Verma", phone_number: "98765 43210", "what_is_your_monthly_bill?": "₹3,000" } }),
+      lead({ id: "l2", meta_lead_id: "m2", full_name: "Ravi Kumar", phone: "98111 22233", field_data: {} }),
+    ]} metaReady={false} />);
+    const pane = screen.getByRole("complementary", { name: "Enquiry from Asha Verma" });
+    const message = within(pane).getByText("Opens WhatsApp with:").nextElementSibling!.textContent!;
+    expect(message).toMatch(/free solar site survey/i);
+    expect(within(pane).getByRole("link", { name: "WhatsApp them" })).toHaveAttribute("href", `https://wa.me/919876543210?text=${encodeURIComponent(message)}`);
+    expect(within(pane).getByText("What is your monthly bill").nextElementSibling).toHaveTextContent("₹3,000");
+    expect(within(pane).queryByText("Phone number")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Ravi Kumar" }));
+    const next = screen.getByRole("complementary", { name: "Enquiry from Ravi Kumar" });
+    expect(within(next).queryByText("Their answers")).toBeNull();
+    expect(screen.getByRole("button", { name: "Ravi Kumar" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("stays one pane below 1280 px", () => {
+    render(<LeadInbox businessName="Solaride" initialLeads={[lead()]} metaReady={false} />);
+    expect(screen.queryByRole("complementary")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Asha Verma" })).toBeNull();
   });
 });
 
