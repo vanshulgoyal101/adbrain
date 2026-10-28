@@ -112,7 +112,9 @@ describe("core: <SetupAdsStep> (#1270)", () => {
     expect(generate).toHaveBeenCalledTimes(1);
     expect(generate.mock.calls[0][0]).toMatchObject({ businessId: business.id, brief: "Rooftop solar brief", count: 3, language: "en" });
     expect(screen.getByRole("button", { name: /Ad b/ })).toHaveAttribute("aria-pressed", "false");
-    expect(localStorage.length).toBe(0);
+    // The run's id is gone; only its result stays, for other tabs (#1534), and expires like the id.
+    expect(localStorage.getItem(`setup-generation:${business.id}`)).toBeNull();
+    expect(Object.keys(localStorage)).toEqual([`setup-generation-result:${business.id}`]);
   });
 
   it("#1475: with only earlier ads (Studio-made or older details), nothing paid starts until the owner taps Make 3 ads", async () => {
@@ -244,6 +246,36 @@ describe("core: step 2 batches (#1402)", () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
     expect(await screen.findByRole("heading", { name: "Your ads are ready" })).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: /Ad [abc]/ })).toHaveLength(3);
+  });
+
+  it("#1534: a waiting tab rate-limited (429) takes the finished batch from the tab that got it, within moments", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const id = "22222222-2222-4222-8222-222222222222";
+    localStorage.setItem(`setup-generation:${business.id}`, `${id}:3:${Date.now()}`);
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ error: "Too many requests" }, { status: 429, headers: { "Retry-After": "120" } })));
+    render(<SetupAdsStep business={business} initialAds={[]} />);
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+    expect(screen.queryByRole("heading", { name: "Your ads are ready" })).toBeNull();
+    // Another tab finished the batch: it publishes the ads under the batch's id.
+    const value = JSON.stringify({ id, at: Date.now(), creatives: [ad("a"), ad("b"), ad("c")] });
+    localStorage.setItem(`setup-generation-result:${business.id}`, value);
+    await act(async () => { window.dispatchEvent(new StorageEvent("storage", { key: `setup-generation-result:${business.id}`, newValue: value })); });
+    expect(await screen.findByRole("heading", { name: "Your ads are ready" })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /Ad [abc]/ })).toHaveLength(3);
+    expect(screen.queryByText(/still being made/)).toBeNull();
+    // It waited out Retry-After instead of polling every 10 s into more 429s.
+    expect((fetch as unknown as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(1);
+  });
+
+  it("#1534: a finished batch is published for other tabs; a result for another batch is ignored", async () => {
+    const id = "22222222-2222-4222-8222-222222222222";
+    localStorage.setItem(`setup-generation:${business.id}`, `${id}:3:${Date.now()}`);
+    localStorage.setItem(`setup-generation-result:${business.id}`, JSON.stringify({ id: "33333333-3333-4333-8333-333333333333", at: Date.now(), creatives: [ad("z")] }));
+    vi.stubGlobal("fetch", vi.fn(async () => status({ status: "complete", creatives: [ad("a"), ad("b")] })));
+    render(<SetupAdsStep business={business} initialAds={[]} />);
+    expect(await screen.findByRole("heading", { name: "Your ads are ready" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Ad z/ })).toBeNull();
+    expect(JSON.parse(localStorage.getItem(`setup-generation-result:${business.id}`)!)).toMatchObject({ id, creatives: [{ id: "a" }, { id: "b" }] });
   });
 
   it("on arrival the newest batch (a 'Make another' top-up comes last) is checked and its new ads join (#1402/#1407)", async () => {

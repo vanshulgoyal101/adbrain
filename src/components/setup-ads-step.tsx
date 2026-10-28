@@ -45,6 +45,7 @@ const KEEP_MS = 15 * 60_000;
 // #1402: the status GET allows 30 reads per 5 minutes; every 10 s for 4 minutes stays inside it.
 const POLL_MS = 10_000;
 const POLLS = 24;
+const RATE_LIMIT_WAIT_MS = 60_000;
 
 /** #1402: the run in progress lives in localStorage, so a second tab resumes it instead of paying for another. */
 function readKept(businessId: string): { id: string; count: number } | null {
@@ -59,6 +60,35 @@ function keep(businessId: string, id: string, count: number) {
 }
 function forget(businessId: string) {
   try { window.localStorage.removeItem(generationKey(businessId)); } catch { /* nothing kept */ }
+}
+/**
+ * #1534: the tab that gets a batch's ads publishes them, so other tabs waiting on the same batch show them at once
+ * instead of polling the status route (30 reads per 5 minutes per owner, shared by every tab) into 429s.
+ */
+const resultKey = (businessId: string) => `setup-generation-result:${businessId}`;
+function readResult(businessId: string, id: string, raw?: string | null): Creative[] | null {
+  try {
+    const value = JSON.parse(raw ?? window.localStorage.getItem(resultKey(businessId)) ?? "null") as { id?: string; at?: number; creatives?: Creative[] } | null;
+    if (value && Date.now() - Number(value.at) > KEEP_MS) { window.localStorage.removeItem(resultKey(businessId)); return null; }
+    return value?.id === id && Array.isArray(value.creatives) && value.creatives.length ? value.creatives : null;
+  } catch { return null; }
+}
+function publish(businessId: string, id: string, creatives: Creative[]) {
+  if (!creatives.length) return;
+  try { window.localStorage.setItem(resultKey(businessId), JSON.stringify({ id, at: Date.now(), creatives })); } catch { /* the other tabs keep polling */ }
+}
+/** Waits up to `ms` for another tab to publish this batch; null if none did. */
+function publishedWithin(businessId: string, id: string, ms: number): Promise<Creative[] | null> {
+  return new Promise((resolve) => {
+    const done = (value: Creative[] | null) => { window.clearTimeout(timer); window.removeEventListener("storage", heard); resolve(value); };
+    const heard = (event: StorageEvent) => {
+      if (event.key !== resultKey(businessId)) return;
+      const found = readResult(businessId, id, event.newValue);
+      if (found) done(found);
+    };
+    const timer = window.setTimeout(() => done(readResult(businessId, id)), ms);
+    window.addEventListener("storage", heard);
+  });
 }
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 // The generate route stops by 300 s, so a batch whose first ad is older has ended, whatever its status says (#1289).
@@ -149,17 +179,26 @@ export function SetupAdsStep({ business, initialAds, sample = false, earlier = f
    */
   async function savedBatch(generationId: string, expected: number): Promise<Creative[] | null> {
     for (let attempt = 0; attempt < POLLS; attempt += 1) {
+      const shared = readResult(business.id, generationId);
+      if (shared) return shared;
+      let wait = POLL_MS;
       try {
         const res = await fetch(`/api/creatives/generate?businessId=${encodeURIComponent(business.id)}&generationId=${encodeURIComponent(generationId)}&expectedCount=${expected}`, { cache: "no-store" });
         if (res.status === 404) return [];
+        // #1534: every tab shares the owner's status budget; wait it out (another tab may publish meanwhile).
+        if (res.status === 429) wait = Math.min(Math.max(POLL_MS, (Number(res.headers.get("Retry-After")) || 0) * 1000), RATE_LIMIT_WAIT_MS);
         if (res.ok) {
           const data = (await res.json()) as { status?: string; creatives?: Creative[] };
-          if (data.status === "complete" || data.status === "failed" || data.status === "unresolved") return data.creatives ?? [];
+          if (data.status === "complete" || data.status === "failed" || data.status === "unresolved") {
+            publish(business.id, generationId, data.creatives ?? []);
+            return data.creatives ?? [];
+          }
         }
       } catch {
         // Keep checking; never start the generation again.
       }
-      await new Promise((resolve) => window.setTimeout(resolve, POLL_MS));
+      const heard = await publishedWithin(business.id, generationId, wait);
+      if (heard) return heard;
     }
     return null;
   }
@@ -217,7 +256,10 @@ export function SetupAdsStep({ business, initialAds, sample = false, earlier = f
         setSlots(live);
       });
       const saved = (data as { creatives?: Creative[] } | null)?.creatives ?? [];
-      if (status >= 200 && status < 300 && saved.length) return finish(saved, count, count === FULL_BATCH);
+      if (status >= 200 && status < 300 && saved.length) {
+        publish(business.id, generationId, saved);
+        return finish(saved, count, count === FULL_BATCH);
+      }
       if (status >= 400 && status < 500 && status !== 408) {
         // Refused before anything was made: nothing to recover.
         forget(business.id);
