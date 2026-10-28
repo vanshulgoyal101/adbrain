@@ -9,6 +9,9 @@
 
 import { medianReplyMinutes } from "@/lib/leads/first-reply";
 
+/** #1468: the rupee rate the CEO uses for AI money ($5 ≈ ₹420 on #1129); for reading, never billing. */
+const INR_PER_USD = 84;
+
 export type ScoreEvent = {
   name: string;
   outcome: string;
@@ -213,10 +216,14 @@ export function buildScoreboard(input: {
     const calls = ai("creatives.generate").filter((call) => onFreePath(call) === freePath);
     const failedCalls = calls.filter((call) => call.status !== "success").length;
     const seconds = p90(requestOutcomes(calls).map((request) => (request.end - request.start) / 1000));
+    // #1468: the median estimated AI cost of a Create, from batches that recorded it.
+    const costs = batches.map((event) => event.attributes?.costUsd).filter((usd): usd is number => typeof usd === "number").sort((a, b) => a - b);
+    const median = costs.length ? costs[Math.floor((costs.length - 1) / 2)] : null;
+    const cost = median === null ? "" : `; median $${median.toFixed(4)} (≈₹${(median * INR_PER_USD).toFixed(2)}) per Create`;
     rows.push({
       step,
       now: batches.length
-        ? `${plural(batches.length, "batch", "batches")}: ${fmtPct(rate)} gave 3 ads; AI calls ${failedCalls}/${calls.length} failed; p90 ${seconds === null ? "n/a" : `${Math.round(seconds)} s`}`
+        ? `${plural(batches.length, "batch", "batches")}: ${fmtPct(rate)} gave 3 ads; AI calls ${failedCalls}/${calls.length} failed; p90 ${seconds === null ? "n/a" : `${Math.round(seconds)} s`}${cost}`
         : "no batches",
       target: freePath ? "not a target: free Pollinations images, internal only" : "≥ 95% of batches give 3 usable ads, p90 < 30 s",
       met: freePath || !batches.length ? null : rate >= 95 && seconds !== null && seconds < 30,
