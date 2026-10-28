@@ -352,8 +352,10 @@ in issues.
 
 **Hand over (DevOps executes, QA reviews; a tenant step):**
 1. Read-only checks, all must hold:
-   `select authorization_status from public.meta_connections where business_id='<business id>';`
-   returns no row or `disconnected`;
+   `select authorization_status, token_id from public.meta_connections where business_id='<business id>';`
+   returns no row, or `disconnected`/`revoked` with `token_id` null;
+   `select provider from auth.identities where user_id='<user id>';` returns `email` only (a
+   linked Google or other identity still signs staff in: unlink it first);
    `select count(*) from public.campaigns where business_id='<business id>';` is `0`;
    `select count(*) from private.meta_tokens where business_id='<business id>';` is `0`;
    `select count(*) from private.meta_connection_attempts where business_id='<business id>';` is `0`;
@@ -367,9 +369,15 @@ in issues.
    `update auth.users set encrypted_password = '' where id='<user id>';`
    `delete from auth.sessions where user_id='<user id>';`
    `delete from auth.one_time_tokens where user_id='<user id>';`
-   Then use the dashboard's **Invalidate sessions** action to clear recovery,
-   confirmation, and email-change token fields on that `auth.users` row. Never run these
-   statements with an application client or paste credentials into an issue.
+   `update auth.users set recovery_token = '', confirmation_token = '', email_change_token_new = '', email_change_token_current = '', reauthentication_token = '' where id='<user id>';`
+   Read back: `select recovery_token, confirmation_token, email_change_token_new, email_change_token_current, reauthentication_token from auth.users where id='<user id>';`
+   are all empty. Never run these statements with an application client or paste
+   credentials into an issue. Deleting sessions doesn't void an access token staff
+   already hold: it works until it expires (`jwt_expiry`, 1 hour), so note the time.
+   Then make the Brand theirs: set `businesses.email`/`phone` to the owner's, set
+   `profiles.email` (id = user id) to their address, and delete sales-only
+   `ad_instructions` for the business. The audit log shows staff actions from
+   preparation as the owner's account; say so to the owner.
 3. Change the account's email to theirs (Supabase dashboard → Authentication → the user →
    change email, or `auth.admin.updateUserById(<user id>, { email })`). Read back:
    `select email, email_confirmed_at, encrypted_password from auth.users where id='<user id>';`
@@ -379,7 +387,9 @@ in issues.
 4. The owner signs in with a one-time code sent to that email. Receiving the code is their
    confirmation. The account is no longer internal, so the normal owner rules (paid images,
    allowance) apply from here. Do not connect Meta until the session/token counts above are
-   zero and the owner has confirmed the new address.
+   zero, the owner has confirmed the new address, **and at least 1 hour has passed since
+   step 2** (staff access tokens expired). Auth **Confirm email** must be on in production
+   (dashboard → Authentication → Sign In / Providers → Email); check it once per hand-over.
 5. Post 'handed over' with the date on the issue (no names); the owner connects Meta on the
    20-minute onboarding call (#1279).
 
