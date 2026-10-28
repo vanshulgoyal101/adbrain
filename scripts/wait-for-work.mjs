@@ -22,7 +22,7 @@ import { parseArgs } from "node:util";
 
 export const NAMES = { dev: "Dev", dev2: "Dev 2", dev3: "Dev 3", dev4: "Dev 4", qa: "QA", qa2: "QA 2", reviewer: "Reviewer", devops: "DevOps", cpo: "CPO", analyst: "Analyst", designer: "Designer", cto: "CTO", ceo: "CEO" };
 // Items parked on someone outside the team never count as waiting on you.
-const PARKED = new Set(["waiting-owner", "blocked"]);
+const PARKED = new Set(["waiting-owner", "blocked", "parked"]);
 
 /** How a comment relates to `role`: written by it, addressed to it, or addressed only to someone else. */
 export function matchers(role) {
@@ -72,6 +72,23 @@ export function waitingOnMe(lastBody, m, labels = [], now = Date.now()) {
   }
   if (m.addressedToMe(lastBody)) return true;
   return !m.handedToOther(lastBody);
+}
+
+/**
+ * #364: the oldest owned item you can act on now, even when your last word on it was a handoff:
+ * not parked, blocked, waiting on the owner, `later` or a CEO `decision`, no open PR naming it,
+ * and not in `skip` (items snoozed by a future "Next check"). Null when there is none.
+ * @param {Array<{ number: number, title?: string, pull_request?: unknown, labels?: Array<string | { name: string }> }>} items
+ * @param {Array<{ title?: string }>} openPulls
+ * @param {Set<number>} [skip]
+ */
+export function nextItem(items, openPulls, skip = new Set()) {
+  const hold = new Set([...PARKED, "later", "decision"]);
+  const withPr = new Set(openPulls.flatMap((pr) => linkedIssues(pr.title)));
+  const names = (i) => (i.labels ?? []).map((l) => (typeof l === "string" ? l : l.name));
+  return items
+    .filter((i) => !i.pull_request && !names(i).some((n) => hold.has(n)) && !withPr.has(i.number) && !skip.has(i.number))
+    .sort((a, b) => a.number - b.number)[0] ?? null;
 }
 
 /** Earliest scheduled check seen this run; the wait loop rechecks the backlog when it passes. */
@@ -369,13 +386,22 @@ function findWork() {
 // Items you own where the last word is someone else's (said while you were busy, or before this wait).
 function backlog() {
   const found = [];
-  for (const item of owned().slice(0, 20)) {
+  const items = owned();
+  const snoozed = new Set();
+  for (const item of items.slice(0, 20)) {
     const comments = item.comments ? api(`repos/${repo}/issues/${item.number}/comments?per_page=100`) : [];
     const reviews = item.pull_request ? api(`repos/${repo}/pulls/${item.number}/reviews?per_page=100`) : [];
     const last = latestWord(comments, reviews);
+    const due = last && writtenByMe(last.body ?? "") ? snoozedUntil(last.body) : null;
+    if (due !== null && Date.now() < due) snoozed.add(item.number);
     if (waitingOnMe(last?.body ?? null, m, (item.labels ?? []).map(l => l.name))) {
       found.push(last ? `#${item.number} is waiting on you${withSkills(item)}: "${brief(last.body)}" ${last.url}` : `#${item.number} is yours and not started${withSkills(item)}: ${item.title}`);
     }
+  }
+  // #364: nothing is waiting on you, but you still own work with no open PR: continue the oldest.
+  if (!found.length) {
+    const next = nextItem(items, api(`repos/${repo}/pulls?state=open&per_page=100`), snoozed);
+    if (next) found.push(`#${next.number} is your next item${withSkills(next)}: ${next.title} (your oldest open item with no PR; continue it, ship it, or hand it off with its label)`);
   }
   // Nothing of yours is actionable: pull the next briefed item from your lane instead of idling.
   if (!found.length) {
