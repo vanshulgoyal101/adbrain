@@ -2,6 +2,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { ArrowLeft, Brain, MessageCircle, ShieldCheck, Timer } from "lucide-react";
 import { LoginExperience } from "@/components/login-experience";
+import { SupportLinkProvider } from "@/components/support-link";
+import { supportWhatsAppUrl } from "@/lib/support";
 import { LEGAL_LINKS } from "@/lib/legal-links";
 import { safeAuthRedirect } from "@/lib/auth-redirect";
 import styles from "./login.module.css";
@@ -36,9 +38,14 @@ export default async function LoginPage({ searchParams }: { searchParams?: Promi
       <main className={styles.main}>
         <section id="sign-in" tabIndex={-1} aria-labelledby="sign-in-title" className={styles.formColumn}>
           <div className={styles.formInner}>
-            <LoginExperience deepLink={deepLink} failedSignIn={Boolean(params?.error)} />
+            {/* #1418: 'Help on WhatsApp' on the failed-sign-in panel, only when the support number is set (#850). */}
+            <SupportLinkProvider url={supportWhatsAppUrl(process.env.SUPPORT_WHATSAPP, null)}>
+              <LoginExperience deepLink={deepLink} failedSignIn={Boolean(params?.error)} />
+            </SupportLinkProvider>
           </div>
         </section>
+        {/* #1417: a failed sign-in shows only what happened and how to finish. */}
+        {!params?.error && (
         <aside className={styles.proof} aria-label="What you get">
           <figure className={styles.post}>
             <div className={styles.postHead}>
@@ -56,6 +63,7 @@ export default async function LoginPage({ searchParams }: { searchParams?: Promi
             ))}
           </ul>
         </aside>
+        )}
       </main>
       <footer className={styles.footer}>
         <span>AdBrain</span>

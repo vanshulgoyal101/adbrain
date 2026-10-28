@@ -214,7 +214,7 @@ describe("new and returning visitors", () => {
     render(await LoginPage({}));
     fireEvent.change(screen.getByLabelText("Email"), { target: { value: "new@example.test" } });
     fireEvent.click(screen.getByRole("button", { name: "Email me a sign-in link" }));
-    expect(await screen.findByText(/finish creating your account/)).toBeInTheDocument();
+    expect(await screen.findByText(/It works once, for a short time\./)).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Create your free account" })).toBeInTheDocument();
     expect(localStorage.getItem("adbrain:returning-visitor")).toBe("1");
   });
@@ -246,7 +246,10 @@ describe("new and returning visitors", () => {
     mocks.error = "link_expired";
     render(await LoginPage({ searchParams: Promise.resolve({ error: "link_expired" }) }));
     expect(screen.queryByRole("dialog")).toBeNull();
-    expect(screen.getByRole("alert")).toHaveTextContent("That sign-in link has expired or was already used.");
+    expect(screen.getByRole("heading", { name: "This sign-in link has expired" })).toBeInTheDocument();
+    // #1417: the sign-up pitch stays hidden until they act.
+    expect(screen.queryByRole("heading", { name: "Create your free account" })).toBeNull();
+    expect(screen.queryByRole("complementary", { name: "What you get" })).toBeNull();
   });
 
   it("never covers the form for a returning visitor or on a laptop", async () => {
@@ -278,45 +281,74 @@ describe("new and returning visitors", () => {
   });
 });
 
-// #1414: a failed callback says what happened, with its one action, not a generic "Sign-in failed".
+// #1414 / #1418 / #1417: a failed callback replaces the form with the CPO's words and one primary, one secondary.
 describe("sign-in callback errors (#1414)", () => {
-  it("an expired email link offers a new one to the address typed", async () => {
+  it("an expired link with no address known: Send a new link opens the email form, focused", () => {
     mocks.error = "link_expired";
     render(<LoginForm newVisitor />);
-    expect(screen.getByRole("alert")).toHaveTextContent("That sign-in link has expired or was already used. Each link works once, within an hour.");
-    fireEvent.click(screen.getByRole("button", { name: "Enter your email for a new link" }));
-    expect(screen.getByLabelText("Email")).toHaveFocus();
+    expect(screen.getByRole("heading", { name: "This sign-in link has expired" })).toBeInTheDocument();
+    expect(screen.getByText("Each link works once and only for a short time. We'll send you a fresh one.")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Email")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Send a new link" }));
+    expect(screen.getByLabelText("Email")).toBeInTheDocument();
   });
 
-  it("with the email typed, Send a new link sends it", async () => {
+  it("an expired link sends a fresh one at once to the address used on this device, then shows Check your email", async () => {
+    localStorage.setItem("adbrain:sign-in-email", "owner@example.test");
     mocks.error = "link_expired";
-    render(<LoginForm newVisitor />);
-    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "owner@example.test" } });
+    render(<LoginForm />);
     await act(async () => fireEvent.click(screen.getByRole("button", { name: "Send a new link" })));
     expect(mocks.signInWithOtp).toHaveBeenCalledWith(expect.objectContaining({ email: "owner@example.test" }));
+    expect(await screen.findByText("New link sent to owner@example.test.")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Check your email" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open email app" })).toHaveAttribute("href", "mailto:");
+    expect(screen.getByRole("button", { name: /Send again in \d+ s/ })).toBeDisabled();
   });
 
-  it("a link opened in another browser or app says so, and offers a new link (QA 2: usually Gmail's in-app browser)", () => {
-    mocks.error = "other_browser";
-    render(<LoginForm newVisitor />);
-    expect(screen.getByRole("alert")).toHaveTextContent("Sign-in has to finish in the browser you started it in. Open the link there, not inside Gmail or another app, or get a new one here.");
-    fireEvent.click(screen.getByRole("button", { name: "Enter your email for a new link" }));
-    expect(screen.getByLabelText("Email")).toHaveFocus();
+  it("Use Google instead starts Google", async () => {
+    mocks.error = "link_expired";
+    render(<LoginForm />);
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Use Google instead" })));
+    expect(mocks.signInWithOAuth).toHaveBeenCalledOnce();
   });
 
-  it("an old-style link's error in the fragment is explained too", () => {
+  it.each([
+    ["other_browser", "Google sign-in didn't finish here", "This happens when Google opens in a different app or tab. Try again in this browser, or get an email link."],
+    ["cancelled", "Google sign-in was cancelled", "No problem. Try again, or sign in with an email link."],
+  ])("%s: Try Google again, or Email me a link instead", async (reason, title, text) => {
+    mocks.error = reason;
+    render(<LoginForm />);
+    expect(screen.getByRole("heading", { name: title })).toBeInTheDocument();
+    expect(screen.getByText(text)).toBeInTheDocument();
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Try Google again" })));
+    expect(mocks.signInWithOAuth).toHaveBeenCalledOnce();
+  });
+
+  it("Email me a link instead switches to the email-link form", () => {
+    mocks.error = "cancelled";
+    render(<LoginForm />);
+    fireEvent.click(screen.getByRole("button", { name: "Email me a link instead" }));
+    expect(screen.getByRole("button", { name: "Send magic link" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Email")).toBeInTheDocument();
+  });
+
+  it("anything else: Sign-in didn't finish, Try again shows the form; no titles say failed or error", () => {
+    mocks.error = "<script>";
+    render(<LoginForm />);
+    expect(screen.getByRole("heading", { name: "Sign-in didn't finish" })).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/failed|error|invalid/i);
+    expect(screen.queryByRole("link", { name: "Help on WhatsApp" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(screen.getByLabelText("Email")).toBeInTheDocument();
+  });
+
+  it("an old-style link's error in the fragment gets the same panel", () => {
     window.location.hash = "#error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid";
     try {
       render(<LoginForm newVisitor />);
-      expect(screen.getByRole("alert")).toHaveTextContent("That sign-in link has expired or was already used.");
+      expect(screen.getByRole("heading", { name: "This sign-in link has expired" })).toBeInTheDocument();
     } finally {
       window.location.hash = "";
     }
-  });
-
-  it("an unknown reason in the address shows the plain message, never the address's text", () => {
-    mocks.error = "<script>";
-    render(<LoginForm />);
-    expect(screen.getByRole("alert")).toHaveTextContent("Sign-in failed. Please try again.");
   });
 });
