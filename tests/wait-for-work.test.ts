@@ -247,6 +247,8 @@ describe("next item (#364: idle with a full queue)", () => {
     expect(nextItem(items, pulls)?.number).toBe(25);
     expect(nextItem(items, pulls, new Set([25]))?.number).toBe(30);
     expect(nextItem([issue(12, "parked")], [])).toBeNull();
+    // Standing channels and umbrellas (#364, #418) are never "your next item".
+    expect(nextItem([issue(364, "standing"), issue(400, "core")], [])?.number).toBe(400);
   });
   it("parked items don't count toward a queue", () => {
     expect(lowQueues([issue(1, "owner:dev"), issue(2, "owner:dev", "parked")]).map((l) => l.role)).toContain("dev");
