@@ -173,5 +173,17 @@
         "phone": "Enter a 10-digit mobile number."
       }
     }
+  },
+  "pauseAll": {
+    "button": "Pause all ads",
+    "title": "Pause all your ads?",
+    "body": "{n} running campaigns will pause in Meta. Nothing is deleted, and nothing more will be spent once Meta stops them (usually within minutes). You can turn each one back on from Campaigns.",
+    "confirm": "Pause all",
+    "cancel": "Keep running",
+    "pausing": "Pausing…",
+    "done": "All {n} campaigns are paused. Nothing more will be spent.",
+    "partial": "{k} of {n} paused. {names} didn't pause; tap Try again, or pause it in Meta Ads Manager.",
+    "tryAgain": "Try again",
+    "openAdsManager": "Open in Ads Manager"
   }
 }
