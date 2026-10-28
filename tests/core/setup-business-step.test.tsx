@@ -169,6 +169,19 @@ describe("core: <SetupBusinessStep> (#1269)", () => {
     expect(mocks.push).not.toHaveBeenCalled();
   });
 
+  it("the service area is required (#1136 CEO): everything else filled, no area → stays on step 1", async () => {
+    await step();
+    type("What you sell", complete.vertical);
+    type("Where you serve", " \n ");
+    type("Your offer", complete.offer);
+    type("WhatsApp number", complete.phone);
+    await act(async () => fireEvent.click(makeMyAds()));
+    expect(screen.getByText("Add at least one city or area.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Where you serve")).toHaveFocus();
+    expect(screen.getByLabelText("Where you serve")).toHaveAttribute("aria-invalid", "true");
+    expect(mocks.push).not.toHaveBeenCalled();
+  });
+
   it("saves as they type and says Saved", async () => {
     await step();
     type("Your offer", "Free site survey");
