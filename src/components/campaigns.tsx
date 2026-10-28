@@ -620,7 +620,7 @@ function BusinessCampaigns({
     void createMetaConnectClient().drafts(business.id, controller.signal).then((drafts) => {
       if (!controller.signal.aborted) setSavedDrafts(drafts);
     }).catch((reason) => {
-      if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Saved drafts could not be loaded.");
+      if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "We couldn't load your saved drafts. Reload the page.");
     });
     return () => controller.abort();
   }, [business.id]);
@@ -710,7 +710,7 @@ function BusinessCampaigns({
         window.sessionStorage.removeItem(recoveryKey);
         setPrepareReview(null);
       }
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "Draft could not be removed."); }
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "The draft is still here. Try again in a minute."); }
     finally { setDraftBusy(null); }
   }
 
@@ -1026,7 +1026,7 @@ function BusinessCampaigns({
     const background = reuseBackground ? takeBackgroundPlan(input, signal) : null;
     const { response, data } = (background && await background) || await fetchAudiencePlan(input, signal);
     signal.throwIfAborted();
-    if (!response.ok || !data.ready) throw new Error(data.error ?? data.handoff?.message ?? (data.questions?.map((question) => question.question).join(" ") || "Could not recommend an audience."));
+    if (!response.ok || !data.ready) throw new Error(data.error ?? data.handoff?.message ?? (data.questions?.map((question) => question.question).join(" ") || "We couldn't suggest who should see your ads. Try again, or choose the area yourself."));
     const recommended = { ...targetingInputSchema.parse(data.targeting), gender: input.targeting.gender ?? "all" as const };
     if (data.fallback && recommended.audience) setNotice(recommended.audience.rationale);
     else if (!recommended.audience?.interestNames.length) throw new Error("The detailed targeting recommendation is incomplete. Try again.");
@@ -1056,7 +1056,7 @@ function BusinessCampaigns({
       }
       await recommendAudience(input, signal);
     } catch (reason) {
-      if (!signal.aborted) failAt("composer", reason instanceof Error ? reason.message : "Could not recommend an audience.");
+      if (!signal.aborted) failAt("composer", reason instanceof Error ? reason.message : "We couldn't suggest who should see your ads. Try again, or choose the area yourself.");
     } finally {
       finishPreparation(signal);
     }
@@ -1447,7 +1447,7 @@ function BusinessCampaigns({
       setActivationFunding(null);
       setActivationLearning(null);
       setActivationReview(null);
-      const message = reason instanceof Error ? reason.message : "Activation review is unavailable.";
+      const message = reason instanceof Error ? reason.message : "We couldn't check your campaign before switching it on, so it stays as it was. Tap Refresh review.";
       // Resume was tapped on the card; Refresh review on the panel at the top, next to the page banner.
       if (refreshing) setError(message);
       else setCardError({ id: campaign.id, message });

@@ -84,7 +84,7 @@ function suspenseBoundaries(node: any): any[] {
 
 describe("Home workspace", () => {
   // #1469: between launch and first delivery Home says Meta is checking, once.
-  const CHECKING = "Meta is checking your ads. They usually start showing within a day.";
+  const CHECKING = "Meta is checking your ads. This usually takes minutes to a few hours, and up to a day.";
   it("says Meta is checking while the newest campaign's ads are in review (#1469)", () => {
     const live = { id: "c-new", name: "Solar", status: "active", daily_budget: 300, raw: {}, meta_campaign_id: "1" } as unknown as Campaign;
     render(<WorkspaceHome {...empty} business={business} campaigns={[live]} adReview={{ kind: "checking", campaignId: "c-new" }} />);
@@ -421,7 +421,7 @@ describe("Home workspace", () => {
     const page = await DashboardPage();
     const feed = page.props.activity.props.children;
     render(await feed.type(feed.props));
-    expect(screen.getByRole("alert")).toHaveTextContent("Recent activity could not be loaded.");
+    expect(screen.getByRole("alert")).toHaveTextContent("We couldn't load your recent activity. Reload the page.");
     expect(screen.queryByText("Private audit detail")).not.toBeInTheDocument();
   });
 

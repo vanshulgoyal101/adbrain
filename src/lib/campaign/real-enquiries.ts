@@ -39,3 +39,8 @@ export function whatsappChatRows(campaigns: Campaign[], results: Record<string, 
     return [{ id: campaign.id, name: campaign.name ?? "WhatsApp campaign", chats: result.conversations ?? 0, spend: result.spend, realEnquiries: result.real_enquiries ?? 0 }];
   });
 }
+
+/** #1223/#1835: "Form enquiries" only while the list below the chat strips holds form leads alone; logged chats make it plain "Enquiries". */
+export function enquiriesTitle(rows: WhatsAppChatRow[]): string {
+  return rows.length && rows.every((row) => row.realEnquiries === 0) ? "Form enquiries" : "Enquiries";
+}

@@ -8,7 +8,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { getMetaConnection } from "@/lib/meta/credentials";
 import { getCampaigns, getLatestResultsWithEnquiries, getPrimaryBusiness } from "@/lib/supabase/queries";
 import { EnquiriesSections } from "@/components/enquiries-sections";
-import { whatsappChatRows, type WhatsAppChatRow } from "@/lib/campaign/real-enquiries";
+import { enquiriesTitle, whatsappChatRows, type WhatsAppChatRow } from "@/lib/campaign/real-enquiries";
 import { getLeadPage } from "@/lib/leads/queries";
 import { inboxSummary } from "@/lib/leads/reply-time";
 import { readAlertSettings } from "@/lib/alerts/settings-read";
@@ -83,7 +83,7 @@ export default async function LeadsPage() {
             addEnquiryFor={whatsapp ? { campaignId: whatsapp.id, spend: whatsapp.spend, enquiries: whatsapp.realEnquiries } : null}
             metaReady={metaConnection.ready}
             syncScope={`${business.owner_id}:${business.id}:${metaConnection.adAccountId ?? ""}:${metaConnection.pageId ?? ""}`}
-            title={chatRows.length ? "Form enquiries" : "Enquiries"}
+            title={enquiriesTitle(chatRows)}
             summary={waitingPage || !summary?.waiting ? summary : { ...summary, waiting: null }}
           />
         </EnquiriesSections>

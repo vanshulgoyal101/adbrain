@@ -81,10 +81,12 @@ describe("core: rejected ads in plain words (#1305)", () => {
 describe("core: rejections in the segment's own words (#1645)", () => {
   const IELTS = "IELTS coaching", INTERIORS = "Modular kitchens and interiors", SOLAR = "Solar installer";
   const LICENCE = "Add your licence number as the last line, e.g. 'Punjab licence no. 123'.";
+  // #1770 (QA, CPO): a licence number doesn't take a guarantee out; that row's hint names what to remove.
+  const NO_PROMISE = "Take out 'guaranteed', '100%' or any promised band, visa or admission.";
 
   it("misleading: the example fits the business", () => {
     const misleading = [{ policy: "Misleading Claims", message: "Unrealistic outcomes." }];
-    expect(rejectionCopy([segments.ielts.misleading], { vertical: IELTS })).toMatchObject({ row: "misleading", actions: ["edit_words"], editHint: LICENCE,
+    expect(rejectionCopy([segments.ielts.misleading], { vertical: IELTS })).toMatchObject({ row: "misleading", actions: ["edit_words"], editHint: NO_PROMISE,
       sentence: "It promises a result Meta thinks can't be proven, like a guaranteed band, visa or admission." });
     expect(rejectionCopy([segments.interiors.misleading], { vertical: INTERIORS })?.sentence).toBe("It promises a result Meta thinks can't be proven, like the lowest price or a fixed handover date.");
     expect(rejectionCopy(misleading, { vertical: SOLAR })?.sentence).toBe("It promises a result Meta thinks can't be proven, like a guaranteed saving.");
@@ -93,7 +95,8 @@ describe("core: rejections in the segment's own words (#1645)", () => {
   });
 
   it("personal attributes: the reader's own result, by policy key or by Meta's words", () => {
-    const sentence = "The ad talks about the reader's own result (\"Failed IELTS?\"). Meta doesn't allow that. Talk about your classes instead.";
+    // #1770: no quoted example the ad may not have used.
+    const sentence = "The ad talks about the reader's own result, like a past test score or a visa refusal. Meta doesn't allow that. Talk about your classes instead.";
     expect(rejectionCopy([segments.ielts.personal], { vertical: IELTS })).toMatchObject({ row: "personal_attributes", sentence, actions: ["edit_words"] });
     expect(rejectionCopy([segments.ielts.personal_words_only], { vertical: IELTS })).toMatchObject({ row: "personal_attributes", sentence });
   });

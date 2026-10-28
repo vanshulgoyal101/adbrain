@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { AudienceSwitchStrip } from "@/components/audience-switch-strip";
 import { CampaignVerdict } from "@/components/campaign-verdict";
 import { RejectedAds } from "@/components/rejected-ads";
@@ -17,6 +18,8 @@ const nothing = () => {};
  */
 export function VerdictGalleryCard({ card }: { card: GalleryCard }) {
   const judged = verdict(card.input);
+  // #1854: the real card opens the words editor with the row's hint; here it says which.
+  const [hint, setHint] = useState<string | null>(null);
   const whatsapp = card.input.destination === "whatsapp";
   return (
     <li className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4 sm:p-6">
@@ -29,7 +32,9 @@ export function VerdictGalleryCard({ card }: { card: GalleryCard }) {
         <AudienceSwitchStrip campaignId="00000000-0000-4000-8000-000000001841" operationId="00000000-0000-4000-8000-000000001842"
           running={card.input.status === "active"} onDone={nothing} />
       )}
-      {card.reviews && <RejectedAds reviews={card.reviews} spend={card.input.spend} running={card.input.status === "active"} onEditAd={nothing} />}
+      {card.reviews && <RejectedAds reviews={card.reviews} spend={card.input.spend} running={card.input.status === "active"} vertical={card.vertical ?? null}
+        onEditAd={(editHint) => setHint(editHint ?? "")} />}
+      {hint !== null && <p role="status" className="text-sm text-slate-700">Opens the words editor{hint ? ` with: ${hint}` : "."}</p>}
       <CampaignVerdict verdict={judged} whatsapp={whatsapp} results={card.input.results} spend={card.input.spend}
         onRunAgain={nothing} onEditAd={nothing}
         adsManagerUrl="https://adsmanager.facebook.com/adsmanager/manage/campaigns"
