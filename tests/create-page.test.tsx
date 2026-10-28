@@ -7,7 +7,7 @@ const getPrimaryBusiness = vi.hoisted(() => vi.fn());
 const getBrandAssets = vi.hoisted(() => vi.fn(async () => [] as { type: string }[]));
 // An owner whose campaign has gone live sees the full Create; a first-timer gets the setup step (#1270).
 const hasLaunchedCampaign = vi.hoisted(() => vi.fn(async () => true));
-const getSetupCreativeBatch = vi.hoisted(() => vi.fn(async () => ({ ads: [], newest: null, pending: null })));
+const getSetupCreativeBatch = vi.hoisted(() => vi.fn(async () => ({ ads: [], newest: null })));
 vi.mock("@/lib/supabase/queries", () => ({ getPrimaryBusiness, getBrandAssets, hasLaunchedCampaign, getSetupCreativeBatch }));
 const setupProps = vi.hoisted(() => vi.fn());
 vi.mock("@/components/setup-ads-step", () => ({ SetupAdsStep: (props: unknown) => { setupProps(props); return <div>Setup step 2</div>; } }));
@@ -79,6 +79,21 @@ describe("Create page for a first-timer (#1270)", () => {
     expect(screen.queryByText("Setup step 2")).toBeNull();
   });
 
+  it("#1432: step 2 offers only ads made from today's step 1; older ones get new ads made", async () => {
+    getPrimaryBusiness.mockResolvedValue(usable);
+    hasLaunchedCampaign.mockResolvedValue(false);
+    const { setupGoal } = await import("@/lib/creative/setup-picks");
+    const made = (id: string, goal: string) => ({ id, headline: id, generation: { sourceFacts: [goal] } });
+    const { default: CreatePage } = await import("@/app/(app)/create/page");
+    getSetupCreativeBatch.mockResolvedValue({ ads: [made("solar", "Get WhatsApp enquiries for rooftop solar in Mohali, leading with: Free site survey")], newest: null } as never);
+    const { unmount } = render(await CreatePage({ searchParams: Promise.resolve({}) }));
+    expect(setupProps.mock.lastCall?.[0]).toMatchObject({ initialAds: [] });
+    unmount();
+    getSetupCreativeBatch.mockResolvedValue({ ads: [made("today", setupGoal(usable))], newest: null } as never);
+    render(await CreatePage({ searchParams: Promise.resolve({}) }));
+    expect(setupProps.mock.lastCall?.[0].initialAds).toEqual([expect.objectContaining({ id: "today" })]);
+  });
+
   it("shows the full Create when the check fails", async () => {
     getPrimaryBusiness.mockResolvedValue(sparse);
     hasLaunchedCampaign.mockRejectedValue(new Error("down"));
@@ -94,20 +109,4 @@ describe("Create page for a first-timer (#1270)", () => {
     await expect(CreatePage({ searchParams: Promise.resolve({}) })).rejects.toThrow("NEXT_REDIRECT");
   });
 
-  it("a short batch from the last 15 minutes is checked before anything new is made (#1402)", async () => {
-    const usable = { ...sparse, vertical: "Bakery", locations: ["Jaipur"], offers: ["Free cake"], phone: "9876543210" } as unknown as Business;
-    getPrimaryBusiness.mockResolvedValue(usable);
-    hasLaunchedCampaign.mockResolvedValue(false);
-    const { default: CreatePage } = await import("@/app/(app)/create/page");
-    const { pendingSetupBatch } = await import("@/lib/creative/setup-picks");
-    const now = Date.parse("2026-10-28T12:00:00Z");
-    const newest = (count: number, minutesAgo: number) => ({ generationId: "g1", count, createdAt: new Date(now - minutesAgo * 60_000).toISOString() });
-    expect(pendingSetupBatch(newest(2, 2), now)).toEqual({ generationId: "g1" });
-    expect(pendingSetupBatch(newest(3, 2), now)).toBeNull();
-    expect(pendingSetupBatch(newest(1, 20), now)).toBeNull();
-    expect(pendingSetupBatch(null, now)).toBeNull();
-    getSetupCreativeBatch.mockResolvedValueOnce({ ads: [], newest: newest(2, 2), pending: { generationId: "g1" } } as never);
-    render(await CreatePage({ searchParams: Promise.resolve({}) }));
-    expect(setupProps.mock.calls.at(-1)?.[0].pendingBatch).toEqual({ generationId: "g1" });
-  });
 });

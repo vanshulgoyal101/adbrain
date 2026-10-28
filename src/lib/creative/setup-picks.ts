@@ -63,7 +63,12 @@ export function setupBatch<T extends BatchRow>(newestFirst: T[]): { ads: T[]; ne
   };
 }
 
-/** #1402: a short batch started in the last 15 minutes may still be running (another tab or device). */
-export function pendingSetupBatch(newest: { generationId: string; createdAt: string; count: number } | null, now: number): { generationId: string } | null {
-  return newest && newest.count < SETUP_BATCH && now - Date.parse(newest.createdAt) < 15 * 60_000 ? { generationId: newest.generationId } : null;
+
+/**
+ * #1432: whether an ad was made from today's step 1. Step 2 sends `setupGoal` as its one source fact, so an
+ * ad made before the owner changed what they sell, where or their offer (or made outside the setup) isn't.
+ */
+export function madeForSetup(creative: Pick<Creative, "generation">, business: Parameters<typeof setupGoal>[0]): boolean {
+  const facts = isRecord(creative.generation) && Array.isArray(creative.generation.sourceFacts) ? creative.generation.sourceFacts : [];
+  return facts.includes(setupGoal(business));
 }

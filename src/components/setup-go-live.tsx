@@ -160,6 +160,8 @@ export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNum
         <Row done title={`Stops at ${formatMoney(total)}`} status={`${SETUP_RUN_DAYS} days at ${formatMoney(daily)} a day, including Meta's GST`} />
       </ul>
       <p className="mt-4 text-sm text-slate-600">Meta checks your ads first, usually within a day. Spending starts only after that and stops at {formatMoney(total)}, including Meta&apos;s GST.</p>
+      {/* #718 (CEO, path A): AdBrain's own price, said before the first Go live. */}
+      {ownAccount && <p className="mt-3 text-sm text-slate-600">Your first month of AdBrain is free. After that it&apos;s ₹999 a month; we&apos;ll remind you before it&apos;s due.</p>}
       {/* #1292: the Connect moment's trust line, next to the Connect Facebook Page primary. */}
       {!pageConnected && funding && <p className="mt-3 text-sm font-medium text-slate-800">{connectTrustLine(funding)}</p>}
 

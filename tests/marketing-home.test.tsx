@@ -15,7 +15,9 @@ describe("public product example", () => {
     expect(screen.getByText("Made by AdBrain for example businesses, not customers.")).toBeInTheDocument();
     expect(screen.getAllByRole("img", { name: /^An AdBrain ad for a / }).length).toBeGreaterThan(0);
     expect(screen.getByRole("heading", { name: "You approve every rupee." })).toBeInTheDocument();
-    expect(screen.getByText(/Making ads is free\. To run them, top up any amount from ₹500\./)).toBeInTheDocument();
+    // #718 (CEO, path A): the price the owner sees, and the ad money goes to Meta.
+    expect(screen.getByRole("heading", { name: "Simple pricing" })).toBeInTheDocument();
+    expect(screen.getByText("₹999 a month for AdBrain, first month free. You pay Meta for your ads directly, with a limit you set. No auto-debit, stop any time.")).toBeInTheDocument();
     // #1235 (owner): AdBrain's split or margin is never shown to customers.
     expect(document.body.textContent).not.toMatch(/\b(80|20)\s?%|service (fee|allocation)|margin/i);
     expect(screen.queryByText(/partner/i)).toBeNull();
@@ -32,7 +34,7 @@ describe("public product example", () => {
   it("positions the product around customers without a solar identity or promised results", () => {
     const { container } = render(<MarketingHome />);
     expect(screen.getByText("Ad banao, customers paao, seedha WhatsApp par.")).toHaveAttribute("lang", "hi-Latn");
-    expect(screen.getByText("Making ads is free. You pay only when you choose to run one.")).toBeInTheDocument();
+    expect(screen.getByText("Free to try. ₹999 a month after your first campaign. Your ad money goes to Meta, not to us.")).toBeInTheDocument();
     // Solaride appears only as a labelled example further down, never in the hero.
     expect(container.querySelector("#hero-title")!.closest("section")!.textContent).not.toMatch(/solar/i);
     expect(container.textContent).not.toMatch(/run ads|guaranteed customers/i);

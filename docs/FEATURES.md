@@ -141,11 +141,14 @@ showing one line of progress at a time. Then it shows the newest batch
 repairs, then no image fallback, then the order made). "Continue" approves the picks
 and opens `/campaigns?new=1&creatives=…`. The generation id is kept in
 localStorage for 15 minutes (#1402), so coming back or a second tab reads the
-saved ads instead of starting again, and a short batch from the last 15 minutes
-(another device) is checked before anything new is made. The step waits through
-"processing" and "partial", and treats "unresolved" as finished short; missing ads
-show "N ads couldn't be made. Make another", whose ads show beside their batch. `/create?all=1`
-opens the full Create below.
+saved ads instead of starting again; the step waits through "processing" and
+"partial" and treats "unresolved" as finished short, and on arrival it checks the
+newest batch (#1407). Missing ads show "N ads couldn't be made. Make another", and a
+top-up shows beside its batch (`setupBatch`). Only ads made from today's step 1
+count (`madeForSetup`: the receipt's source fact is today's `setupGoal`, #1432):
+after the owner changes what they sell, where or their offer, step 2 makes new
+ads, and step 3 sends back to step 2 rather than offering older approved ads.
+`/create?all=1` opens the full Create below.
 
 1. When the business's campaigns have results, Create opens on one line such as "Your
    “Roof ready?” ad got 1 chat at ₹10.69 (early: based on 1 chat). Make 3 more like it, or

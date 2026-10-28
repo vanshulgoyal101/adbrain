@@ -92,3 +92,72 @@ describe("core: Create's pictures keep coming when the OpenRouter key is out of 
     vi.doUnmock("@/lib/security/ssrf");
   });
 });
+
+// #1422 (CTO, production 11:26Z): openrouter-image ran out of credit, then Pollinations answered 404 in the same ms and the
+// ad was lost; every later ad asked the exhausted key again. Now: the key is parked, and the free picture waits out one busy.
+describe("core: an exhausted image key is parked and the free picture waits out one busy answer (#1422)", () => {
+  it("exhausted → Pollinations 404 → one wait → saved; the next picture skips the exhausted key", async () => {
+    vi.resetModules();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    process.env.IMAGE_PROVIDER = "openrouter";
+    process.env.IMAGE_PROVIDER_FALLBACK = "none";
+    const sharp = (await import("sharp")).default;
+    const png = await sharp({ create: { width: 1024, height: 1024, channels: 3, background: "#e8f0e8" } }).png().toBuffer();
+    const { SafeFetchError } = await import("@/lib/security/ssrf");
+    const downloads: string[] = [];
+    vi.doMock("@/lib/security/ssrf", async (original) => ({
+      ...(await original<typeof import("@/lib/security/ssrf")>()),
+      fetchPublicUrl: async () => {
+        downloads.push(downloads.length === 0 ? "404" : "ok");
+        if (downloads.length === 1) throw new SafeFetchError("status", 404);
+        return new Response(new Uint8Array(png), { headers: { "content-type": "image/png" } });
+      },
+    }));
+    const paid: string[] = [];
+    global.fetch = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input instanceof Request ? input.url : input);
+      if (url.includes("/images/models/")) return Response.json({ endpoints: [{ supported_parameters: { input_references: { max: 3 } } }] });
+      if (url.endsWith("/api/v1/images")) { paid.push("openrouter"); return Response.json(recorded.body, { status: recorded.status }); }
+      throw new Error(`unexpected ${url}`);
+    }) as unknown as typeof fetch;
+    const { generateImage } = await import("@/lib/imageGen");
+    const attempts: [string, string, string | undefined][] = [];
+    const onAttempt = (attempt: { provider: string; status: string; errorCode?: string }) => attempts.push([attempt.provider, attempt.status, attempt.errorCode]);
+
+    const pending = generateImage({ prompt: "rooftop solar panels on a house", width: 1024, height: 1024, onAttempt });
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(await pending).toMatchObject({ provider: "pollinations", fallbackFrom: "openrouter-image" });
+    expect(downloads).toEqual(["404", "ok"]);
+    expect(attempts).toEqual([["openrouter-image", "error", "IMAGE_CREDIT_EXHAUSTED"], ["pollinations", "success", undefined]]);
+
+    const second = await generateImage({ prompt: "a family on their roof", width: 1024, height: 1024, onAttempt });
+    expect(second).toMatchObject({ provider: "pollinations", fallbackFrom: "openrouter-image" });
+    expect(paid).toEqual(["openrouter"]);
+    vi.useRealTimers();
+    vi.doUnmock("@/lib/security/ssrf");
+  });
+
+  it("a second busy answer fails that picture instead of waiting longer", async () => {
+    vi.resetModules();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    process.env.IMAGE_PROVIDER = "openrouter";
+    process.env.IMAGE_PROVIDER_FALLBACK = "none";
+    const { SafeFetchError } = await import("@/lib/security/ssrf");
+    vi.doMock("@/lib/security/ssrf", async (original) => ({
+      ...(await original<typeof import("@/lib/security/ssrf")>()),
+      fetchPublicUrl: async () => { throw new SafeFetchError("status", 404); },
+    }));
+    global.fetch = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input instanceof Request ? input.url : input);
+      if (url.includes("/images/models/")) return Response.json({ endpoints: [{ supported_parameters: { input_references: { max: 3 } } }] });
+      return Response.json(recorded.body, { status: recorded.status });
+    }) as unknown as typeof fetch;
+    const { generateImage } = await import("@/lib/imageGen");
+    const pending = generateImage({ prompt: "rooftop solar", width: 1024, height: 1024 });
+    const outcome = expect(pending).rejects.toThrow(/busy/i);
+    await vi.advanceTimersByTimeAsync(20_000);
+    await outcome;
+    vi.useRealTimers();
+    vi.doUnmock("@/lib/security/ssrf");
+  });
+});

@@ -300,7 +300,8 @@ export function Studio({
         if (response.ok) {
           const result = await response.json() as { status?: string; creatives?: Creative[] };
           acceptResults(result.creatives ?? []);
-          if (result.status === "complete" && (result.creatives?.length ?? 0) >= intent.count) {
+          // #1407: 'ended' is a batch that finished short; the notice above says how many couldn't be made.
+          if (result.status === "ended" || (result.status === "complete" && (result.creatives?.length ?? 0) >= intent.count)) {
             clearIntent();
             return;
           }

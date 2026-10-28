@@ -99,6 +99,14 @@ async function handleGET(request: Request) {
       if (userError || !data?.user) throw new Unavailable();
       if (isInternalUser(data.user) && !isExemptFromFreeProviders(data.user)) freeImageUserIds.push(id);
     }
+    // #1136: the Brand row's owners: sign-up time, and team accounts left out.
+    const brandOwners = [];
+    for (const id of new Set(events.filter((event) => event.name === "business.create" && event.user_id && !smokeUsers.includes(event.user_id))
+      .map((event) => event.user_id as string))) {
+      const { data, error: userError } = await db.auth.admin.getUserById(id);
+      if (userError || !data?.user) throw new Unavailable();
+      brandOwners.push({ id, signedUpAt: data.user.created_at ?? null, internal: isInternalUser(data.user) });
+    }
     const board = buildScoreboard({
       events: [...events, ...planRequests],
       aiCalls,
@@ -106,6 +114,7 @@ async function handleGET(request: Request) {
       activeResults: newestResults(active, results),
       freeImageUserIds,
       excludedUserIds: smokeUsers,
+      brandOwners,
       excludedBusinessIds: (owned as Array<{ id: string }>).map((row) => row.id),
       since: new Date(since),
       until,
