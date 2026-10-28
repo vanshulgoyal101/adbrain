@@ -40,6 +40,22 @@ beforeEach(() => {
 });
 
 describe("Campaigns rows (#403 S5)", () => {
+  // #1150: campaigns deleted in Meta fold under "Deleted (n)" after the live list, with one status word.
+  it("folds campaigns deleted in Meta under Deleted (n) after the live one", async () => {
+    const deleted = (id: string, metaStatus: string) => ({ ...paused, id, name: "Rooftop solar old", status: "completed", raw: { ...paused.raw as object, metaStatus } }) as unknown as Campaign;
+    render(<Campaigns business={business} approved={[]} initialCampaigns={[deleted("campaign-8", "DELETED"), deleted("campaign-9", "ARCHIVED"), active]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady={false} adAccountId="act_999" />);
+    const live = await screen.findByRole("heading", { name: "Solar EMI" });
+    expect(screen.getByRole("heading", { name: /Your campaigns/ })).toHaveTextContent("(1)");
+    const fold = screen.getByText("Deleted (2)").closest("details")!;
+    expect(fold).not.toHaveAttribute("open");
+    expect(within(fold).getAllByRole("heading", { name: "Rooftop solar old" })).toHaveLength(2);
+    expect(within(fold).getByText("Deleted in Meta")).toBeInTheDocument();
+    expect(within(fold).getByText("Archived in Meta")).toBeInTheDocument();
+    expect(fold.contains(live)).toBe(false);
+    expect(live.compareDocumentPosition(fold) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(live.closest("article")!).getByText("Running")).toBeInTheDocument();
+  });
+
   // #1171: no nudge toward WhatsApp's AI reply (owner rule: no extra automated WhatsApp messages to customers).
   it("never shows a WhatsApp AI reply nudge, even with a launched WhatsApp campaign", async () => {
     render(<Campaigns business={business} approved={[]} initialCampaigns={[{ ...paused, destination: "whatsapp" } as Campaign]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady={false} adAccountId="act_999" />);

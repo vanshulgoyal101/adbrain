@@ -66,7 +66,7 @@ import { OWNER_WORDS } from "@/lib/copy/owner-words";
 import { CampaignLaunchReview } from "@/components/campaign-launch-review";
 import { WhatsAppEnquiries } from "@/components/whatsapp-enquiries";
 import { LivePicture, type PicturePreview } from "@/components/live-picture";
-import { CAMPAIGN_STATUS, Status } from "@/components/ui/status";
+import { campaignStatus, Status } from "@/components/ui/status";
 import { CopyEditNotice, CreativeEditor, UnsavedPreviewBadge, sameAdText, savedAdText, type AdText, type CopyEditNotes } from "@/components/creative-copy-editor";
 import { MetaConnectDialog } from "@/components/meta-connect/meta-connect-dialog";
 import {
@@ -119,17 +119,12 @@ import { HelpOnWhatsApp } from "@/components/support-link";
 import { cn, timeAgo } from "@/lib/utils";
 import { useMounted } from "@/lib/use-mounted";
 import { refreshIfStale, staleCampaignIds } from "@/lib/campaign/results-freshness";
+import { goneInMeta } from "@/lib/campaign/gone-in-meta";
 import { formatMoney, formatNumber, formatPerDay } from "@/lib/format";
 
 const exactRupees = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" });
 
-/** #721: Meta deleted or archived it; Refresh ended the row and kept why in `raw.metaStatus`. */
 const subscribeNever = () => () => {};
-
-function goneInMeta(campaign: Campaign): string | null {
-  const status = campaign.raw && typeof campaign.raw === "object" && !Array.isArray(campaign.raw) ? (campaign.raw as { metaStatus?: unknown }).metaStatus : null;
-  return status === "DELETED" ? "Deleted in Meta" : status === "ARCHIVED" ? "Archived in Meta" : null;
-}
 
 /** #741: where the ads won't show, in the owner's words (launch applies the same exclusions). */
 function serviceAreaLine(area: NonNullable<ReviewDTO["serviceArea"]>): string {
@@ -474,6 +469,12 @@ function BusinessCampaigns({
     (statusFilter === "all" || campaign.status === statusFilter) &&
     (campaign.name ?? business.name).toLocaleLowerCase().includes(campaignQuery.trim().toLocaleLowerCase()),
   );
+  // #1150: campaigns deleted or archived in Meta fold under "Deleted (n)" after the live list. One that a
+  // Refresh found gone during this visit stays in place, with its notice, until the next visit.
+  const [endedHere, setEndedHere] = useState<ReadonlySet<string>>(() => new Set());
+  const folded = (campaign: Campaign) => Boolean(goneInMeta(campaign)) && !endedHere.has(campaign.id);
+  const liveCampaigns = visibleCampaigns.filter(campaign => !folded(campaign));
+  const goneCampaigns = visibleCampaigns.filter(folded);
   const totalDailyBudget = effectiveDailyBudget(budget, abTest ? 2 : 1);
   const [summaries, setSummaries] = useState<Record<string, string>>({});
   const [refreshingId, setRefreshingId] = useState<string | null>(null);
@@ -491,7 +492,10 @@ function BusinessCampaigns({
         const data = await refreshIfStale(id);
         if (data?.result) setResults((previous) => ({ ...previous, [id]: data.result! }));
         if (data?.summary) setSummaries((previous) => ({ ...previous, [id]: data.summary! }));
-        if (data?.gone && data.campaign) setCampaigns((list) => list.map((item) => (item.id === id ? data.campaign! : item)));
+        if (data?.gone && data.campaign) {
+          setEndedHere((ids) => new Set(ids).add(id));
+          setCampaigns((list) => list.map((item) => (item.id === id ? data.campaign! : item)));
+        }
         setUpdatingIds((list) => list.filter((item) => item !== id));
       }
     })();
@@ -1270,6 +1274,7 @@ function BusinessCampaigns({
         campaign?: Campaign | null;
       };
       if (res.status === 410 && data.gone) {
+        setEndedHere((ids) => new Set(ids).add(id));
         if (data.campaign) setCampaigns((list) => list.map((item) => (item.id === id ? data.campaign! : item)));
         setCardNotice({ id, message: data.error ?? "This campaign is no longer in Meta." });
       } else if (res.ok) {
@@ -2196,7 +2201,7 @@ function BusinessCampaigns({
           <h2 className="text-lg font-semibold text-slate-900">
             Your campaigns{" "}
             <span className="font-normal text-slate-400">
-              ({campaigns.length})
+              ({campaigns.filter(campaign => !goneInMeta(campaign)).length})
             </span>
           </h2>
           {metaReady && (
@@ -2302,7 +2307,8 @@ function BusinessCampaigns({
                 }}
               />
             )}
-            {visibleCampaigns.map((c) => {
+            {[liveCampaigns, goneCampaigns].map((list, folded) => {
+            const cards = list.map((c) => {
               const r = results[c.id];
               const outcome = campaignDestination(c, r);
               const attention = campaignAttention(c);
@@ -2315,8 +2321,8 @@ function BusinessCampaigns({
                         <h3 id={`campaign-${c.id}-name`} className="min-w-0 wrap-break-word font-semibold text-slate-900">
                           {c.name ?? `${business.name} — ${c.objective}`}
                         </h3>
-                        <Status tone={goneInMeta(c) ? "neutral" : CAMPAIGN_STATUS[c.status]?.tone ?? "neutral"} className="text-sm text-slate-600">
-                          {goneInMeta(c) ?? (c.status === "active" ? OWNER_WORDS.running : CAMPAIGN_STATUS[c.status]?.label ?? c.status)}
+                        <Status tone={campaignStatus(c).tone} className="text-sm text-slate-600">
+                          {campaignStatus(c).label}
                         </Status>
                         {reviews[c.id]?.length ? <AdReviewBadge reviews={reviews[c.id]} /> : null}
                         {attention ? <Badge className="bg-red-50 text-red-800">Needs attention</Badge> : null}
@@ -2508,9 +2514,13 @@ function BusinessCampaigns({
                     )}
                 </article>
               );
+            });
+            return folded
+              ? list.length > 0 && <details key="gone" className="group border-b border-slate-200"><summary className="flex min-h-11 cursor-pointer items-center text-sm font-medium text-slate-600">Deleted ({list.length})</summary>{cards}</details>
+              : cards;
             })}
             {/* #847: said once for the list, after it, so it never pushes the cards down when results arrive (CLS). */}
-            {(() => { const waiting = visibleCampaigns.filter((item) => !results[item.id]).length; return waiting ? <p className="pt-4 text-sm text-slate-500">No results yet for {waiting === visibleCampaigns.length ? (waiting === 1 ? "this campaign" : "these campaigns") : `${waiting} of these campaigns`}. Refresh a campaign to get Meta&apos;s latest numbers.</p> : null; })()}
+            {(() => { const waiting = liveCampaigns.filter((item) => !results[item.id]).length; return waiting ? <p className="pt-4 text-sm text-slate-500">No results yet for {waiting === liveCampaigns.length ? (waiting === 1 ? "this campaign" : "these campaigns") : `${waiting} of these campaigns`}. Refresh a campaign to get Meta&apos;s latest numbers.</p> : null; })()}
           </div>
         )}
         {(nextListCursor || listLoading) && <div className="mt-4 flex justify-center">
