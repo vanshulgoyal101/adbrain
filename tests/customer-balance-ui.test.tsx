@@ -22,9 +22,9 @@ it("distinguishes verified payments, media, tax and unavailable customer funds",
   expect(view.container.textContent).not.toMatch(/\b(80|20)\s?%|service (fee|allocation)|allocation|margin/i);
   // Paid beside the ad budget would show the margin by subtraction, so the default view has no Paid row.
   // CPO row 4: Available leads with its plain line; no Paid and no total ad budget.
-  expect(screen.getByText("Available ad budget").nextSibling).toHaveTextContent("₹0.00");
+  expect(screen.getByText("Available ad budget").nextSibling).toHaveTextContent("₹0");
   expect(screen.getByText("What your ads can still spend, including Meta's GST.")).toBeInTheDocument();
-  expect(screen.getByText("Held for running campaigns").nextSibling).toHaveTextContent("₹7,882.00");
+  expect(screen.getByText("Held for running campaigns").nextSibling).toHaveTextContent("₹7,882");
   expect(screen.queryByText(/^Paid$|^Ad budget,/)).not.toBeInTheDocument();
   expect(view.container.textContent).not.toMatch(/₹10,000|₹8,000/);
   view.rerender(<CustomerBalance businessId="33333333-3333-4333-8333-333333333333" />);
