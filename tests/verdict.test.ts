@@ -58,6 +58,8 @@ describe("verdict (#1255)", () => {
   it("not showing: under a day Meta is checking; from a day, see Meta's status", () => {
     expect(v({ impressions: 0, results: 0, spend: 0, liveSince: new Date(NOW - 86_399_000).toISOString() })).toMatchObject({ state: "not_showing", action: null });
     expect(v({ impressions: 0, results: 0, spend: 0, liveSince: new Date(NOW - 86_400_000).toISOString() })).toMatchObject({ state: "not_showing_day", action: "meta_status" });
+    // A paused campaign isn't waiting on Meta (#173 keeps its own line on the card).
+    expect(v({ status: "paused", impressions: 0, results: 0, spend: 0 }).state).toBe("early");
   });
 
   it("#1045's weak ad leads, with how many times as much it costs", () => {
