@@ -37,3 +37,33 @@ describe("WhatsApp chats on Enquiries (#764)", () => {
     expect(container).toBeEmptyDOMElement();
   });
 });
+
+// #1223: a WhatsApp-first owner's results are the chats; the form table came first and filled the phone screen.
+describe("Enquiries order (#1223)", () => {
+  it("puts WhatsApp chats first and folds the form table away when it has no form enquiries", async () => {
+    const { EnquiriesSections } = await import("@/components/enquiries-sections");
+    const rows = whatsappChatRows([chats], results);
+    const { container } = render(<EnquiriesSections chatRows={rows} formTotal={0}><p>form table</p></EnquiriesSections>);
+    const chatsSection = screen.getByRole("region", { name: "WhatsApp chats" });
+    const fold = container.querySelector("details")!;
+    expect(chatsSection.compareDocumentPosition(fold) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(fold).not.toHaveAttribute("open");
+    expect(within(fold).getByText("Form enquiries (0)")).toBeInTheDocument();
+    expect(within(fold).getByText("form table")).toBeInTheDocument();
+  });
+
+  it("shows the form table open, after the chats, when there are form enquiries", async () => {
+    const { EnquiriesSections } = await import("@/components/enquiries-sections");
+    const { container } = render(<EnquiriesSections chatRows={whatsappChatRows([chats], results)} formTotal={3}><p>form table</p></EnquiriesSections>);
+    expect(container.querySelector("details")).toBeNull();
+    expect(screen.getByRole("region", { name: "WhatsApp chats" }).compareDocumentPosition(screen.getByText("form table")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("with no WhatsApp chats, the form table is the page, as before", async () => {
+    const { EnquiriesSections } = await import("@/components/enquiries-sections");
+    const { container } = render(<EnquiriesSections chatRows={[]} formTotal={0}><p>form table</p></EnquiriesSections>);
+    expect(container.querySelector("details")).toBeNull();
+    expect(screen.queryByRole("region", { name: "WhatsApp chats" })).toBeNull();
+    expect(screen.getByText("form table")).toBeVisible();
+  });
+});

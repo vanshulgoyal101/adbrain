@@ -46,6 +46,7 @@ export function LeadInbox({
   initialNextCursor = null,
   metaReady,
   syncScope,
+  title = "Enquiries",
 }: {
   businessName: string;
   /** #1049: the business's first offer and language, for the pre-filled first WhatsApp reply. */
@@ -56,6 +57,8 @@ export function LeadInbox({
   initialNextCursor?: string | null;
   metaReady: boolean;
   syncScope?: string;
+  /** #1223: "Form enquiries" when WhatsApp chats are shown above. */
+  title?: string;
 }) {
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -310,7 +313,7 @@ export function LeadInbox({
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-lg font-semibold text-slate-900">
-          Enquiries{" "}
+          {title}{" "}
           <span className="font-normal text-slate-400">({page.total})</span>
         </h2>
         {metaReady && (
