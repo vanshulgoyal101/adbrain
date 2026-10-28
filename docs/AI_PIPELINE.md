@@ -241,6 +241,10 @@ feedback to assess unnecessary questions, abandonment and time to a useful draft
    its concept is told the image is the owner's unseen photo, and the receipt
    records `ownerPhoto`. If that photo can't be downloaded or validated, the ad
    gets a generated image as usual.
+   The renderer fits every background to the ad's exact frame first
+   (`fitPhoto`, #1904): EXIF orientation, then sharp's `attention` saliency crop
+   so a phone photo's face isn't cut off, or `backgroundFit: "blur"` (the whole
+   photo on a blurred copy of itself) for group shots.
 5. Download and validate the raster, persist the source image, render the designed
    poster when enabled, persist the final image, then insert a draft creative row.
    The poster's contact bar asks for a WhatsApp message (chat icon, no number) for a business whose

@@ -13,6 +13,7 @@ import type { CreativeConcept } from "./concept";
  * testable; the actual rasterisation lives in `render.tsx`.
  */
 
+import type { PhotoFit } from "@/lib/creative/fit-photo";
 export type AdFormat = "portrait" | "square" | "story" | "landscape";
 
 /**
@@ -28,6 +29,8 @@ export interface AdDesignSpec {
   height: number;
   /** The AI-generated photo composited underneath the design (null = gradient). */
   backgroundUrl: string | null;
+  /** #1904: how the background photo meets the frame; a saliency crop unless set (owner photos may ask for 'blur'). */
+  backgroundFit?: PhotoFit;
   brandName: string;
   logoUrl: string | null;
   headline: string;
