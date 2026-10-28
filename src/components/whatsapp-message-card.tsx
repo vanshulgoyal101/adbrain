@@ -20,7 +20,7 @@ export type MessageDraft = { language: Language | "auto"; greeting: string; pref
 
 const LANGUAGES: [Language | "auto", string][] = [["auto", "Auto (follows each ad)"], ["en", "English"], ["hi", "Hindi"], ["hinglish", "Hinglish"], ["pa", "Punjabi"]];
 const LIMIT = 300;
-const threeSlots = (questions: string[]) => [...questions, "", "", ""].slice(0, ICE_BREAKER_LIMITS.count);
+export const threeSlots = (questions: string[]) => [...questions, "", "", ""].slice(0, ICE_BREAKER_LIMITS.count);
 
 export function draftFromTemplate(template: WhatsAppTemplate): MessageDraft {
   const { opening } = template;

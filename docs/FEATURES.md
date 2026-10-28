@@ -390,11 +390,15 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
   With Quick questions there is no pre-typed message, so AdBrain's own welcome reads "…Tap a question
   below and we'll reply here." (all 4 languages; Brand card, composer and launch alike, #1121); a
   welcome the owner typed is never changed.
-  Choosing "Quick questions" on Brand fills the empty boxes with 3 suggestions from the Brand
-  (`src/lib/campaign/whatsapp-questions.ts`, #905): the first offer in the owner's words (a long
-  one keeps the part after its label, never cut mid-claim; a free offer is never asked as a cost),
-  "What's the price?" and "Call me back", per language. They are only suggestions: nothing is sent
-  until the owner saves, and saving runs the claim check.
+  Choosing "Quick questions" on Brand, or in Review's "Edit for this campaign", fills the empty
+  boxes with 3 suggestions from the Brand (`src/lib/campaign/whatsapp-questions.ts`, #905, #1114):
+  up to 2 offers asked as a customer would, in the owner's words ("Can I book a free site survey?",
+  "Can I get PM Surya Ghar subsidy help?"; Hinglish "… book ho sakta hai?" / "… kaise milega?",
+  Hindi and Punjabi alike), then "What's the price?" or "Call me back". A labelled offer is asked by
+  the words after its label; when the question would pass 40 characters the offer goes in its own
+  words, and one that still doesn't fit is skipped, never cut mid-claim. A free offer is booked,
+  never asked as a cost. They are only suggestions: nothing is sent until the owner saves (or uses
+  them for the campaign), and saving runs the claim check.
   #418 rule 7: when every ad's last line quotes the words to send ('WhatsApp “Free site survey” to
   book'), AdBrain's suggested pre-typed message is exactly those words (`quotedAsk`). When an ad
   quotes other words than the message WhatsApp will pre-type (a saved or edited one), Review warns
