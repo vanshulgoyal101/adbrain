@@ -74,6 +74,13 @@ describe("core scoreboard (#681)", () => {
     expect(row(board([batches[0]], calls.slice(2)), customers).met).toBe(true);
   });
 
+  it("#1468: the median estimated AI cost per Create, from batches that recorded one", () => {
+    const batches = [0.012, 0.003, 0.0405].map((usd) => ev("creative.batch", "success", { attributes: { count: 3, costUsd: usd } }));
+    const calls = [call("creatives.generate", "success", { request_id: "r1", latency_ms: 10_000 })];
+    expect(row(board([...batches, ev("creative.batch", "success", { attributes: { count: 3 } })], calls), "Create (customers, paid images)").now)
+      .toBe("4 batches: 100% gave 3 ads; AI calls 0/1 failed; p90 10 s; median $0.0120 (≈₹1.01) per Create");
+  });
+
   it("splits Create by image path and holds only the customer path to the target", () => {
     const b = board(
       [ev("creative.batch", "success", { attributes: { count: 3 } }), ev("creative.batch", "success", { user_id: FREE, attributes: { count: 3 } })],

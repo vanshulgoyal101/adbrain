@@ -26,6 +26,10 @@ export const productEventSchema = z.object({
     failedCount: z.number().int().nonnegative().max(1_000_000).optional(),
     /** #1123: ads the Create top-up round retried. */
     topUp: z.number().int().nonnegative().max(6).optional(),
+    /** #1468: a Create's estimated AI cost in USD (text, images and total). */
+    costUsd: z.number().nonnegative().max(100).optional(),
+    textCostUsd: z.number().nonnegative().max(100).optional(),
+    imageCostUsd: z.number().nonnegative().max(100).optional(),
     errorCode: label.optional(),
     provider: label.optional(),
     model: label.optional(),
