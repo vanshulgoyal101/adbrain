@@ -174,10 +174,13 @@ describe("core: WhatsApp button number against recorded Graph reads (#157)", () 
   const timeout = () => { throw new DOMException("The operation was aborted due to timeout", "TimeoutError"); };
   const network = () => { throw new TypeError("fetch failed"); };
 
-  it("#1199: retries a read-only GET once after a timeout or a network error, so Launch's number check succeeds", async () => {
+  // The launch worker always runs under a job deadline (worker.ts: 8 min).
+  const job = () => new AbortController().signal;
+
+  it("#1199: retries a read-only GET once after a timeout (under a job deadline) or a network error, so Launch's number check succeeds", async () => {
     for (const fail of [timeout, network]) {
       const calls = flaky([fail]);
-      expect(await new MetaClient(creds).getWhatsAppNumber("+919999994842", ["+919999994842"])).toBe("+919999994842");
+      expect(await new MetaClient(creds, job()).getWhatsAppNumber("+919999994842", ["+919999994842"])).toBe("+919999994842");
       expect(calls.filter((path) => path.includes(WABA))).toHaveLength(2);
       vi.restoreAllMocks();
     }
@@ -191,13 +194,22 @@ describe("core: WhatsApp button number against recorded Graph reads (#157)", () 
 
   it("#1199: two timeouts in a row still fail; the caller's own abort is never retried", async () => {
     flaky([timeout, timeout]);
-    await expect(new MetaClient(creds).whatsappNumbers()).rejects.toMatchObject({ name: "TimeoutError" });
+    await expect(new MetaClient(creds, job()).whatsappNumbers()).rejects.toMatchObject({ name: "TimeoutError" });
     vi.restoreAllMocks();
     const stop = new AbortController();
     stop.abort(new DOMException("Execution budget spent", "TimeoutError"));
     flaky([timeout]);
     await expect(new MetaClient(creds, stop.signal).whatsappNumbers()).rejects.toBeDefined();
     expect(vi.mocked(globalThis.fetch).mock.calls.length).toBe(0);
+  });
+
+  it("#1199: without a job deadline (a 60 s route), a timeout is not repeated; a network error still is", async () => {
+    const calls = flaky([timeout]);
+    await expect(new MetaClient(creds).whatsappNumbers()).rejects.toMatchObject({ name: "TimeoutError" });
+    expect(calls.filter((path) => path.includes(WABA))).toHaveLength(1);
+    vi.restoreAllMocks();
+    flaky([network]);
+    expect(await new MetaClient(creds).whatsappNumbers()).toEqual({ page: null, business: both });
   });
 
   it("#1199: never retries a POST (it may have been done)", async () => {

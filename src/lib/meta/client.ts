@@ -847,10 +847,13 @@ export class MetaClient {
     try {
       return await this.graphOnce<T>(path, method, opts);
     } catch (error) {
-      // #1199: a read is safe to repeat, so one slow or failed GET (timeout, network, 5xx) gets one more try.
-      // Writes never repeat (they may have been done), nor does a call the caller or the route's budget stopped.
+      // #1199: a read is safe to repeat, so one failed GET (network, 5xx) gets one more try. Writes never repeat
+      // (they may have been done), nor does a call the caller or the route's budget stopped. A timeout already
+      // spent 15 s, so it repeats only under a job deadline (the launch worker); a 60 s route without one could be
+      // killed mid-write (Reviewer on #1204).
       const stopped = Boolean(opts.signal?.aborted || this.executionSignal?.aborted);
-      if (method !== "GET" || stopped || !transientReadFailure(error)) throw error;
+      const timedOut = error instanceof Error && error.name === "TimeoutError";
+      if (method !== "GET" || stopped || !transientReadFailure(error) || (timedOut && !this.executionSignal)) throw error;
       await new Promise((resolve) => setTimeout(resolve, GET_RETRY_DELAY_MS));
       return this.graphOnce<T>(path, method, opts);
     }
