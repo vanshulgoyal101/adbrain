@@ -36,7 +36,7 @@ ID are different identifiers. Never infer one from another.
 | Page | Job | Important boundary |
 | --- | --- | --- |
 | `/dashboard` | Results so far first (enquiries, spent, per enquiry, oldest update; same latest results as the campaign cards, #764; the median time to first reply over 30 days, #1049), next action, onboarding progress, activity | Uses stored state; not proof of live provider health |
-| `/brand` | Profile, assets, Markdown instructions | Saved business facts ground AI output |
+| `/brand` | Setup step 1 for first-timers; profile, assets, Markdown instructions (`?all=1`) | Saved business facts ground AI output |
 | `/create` | Guided creative interview and brief review | Reviewing a brief is distinct from paid generation; the Brand context panel names missing offers, service areas and phone before a run. Any goal, typed or from a suggestion, on a Brand with an offer or proof point, an area and a phone skips the review when the interview needs no question. The start screen says what the ads will use ('Your 3 ads will use: Mohali · offer: Free site survey'; every Brand area Create sends, the first 3 then '+N more' (#1034); a proof point is labelled 'proof:', facts cut at 40 characters) above 'Make 3 ads', with 'About 2 minutes. Nothing is published.' under it and 'Edit brief' to keep the review; afterwards the brief shows as a collapsed 'What I'll write about · Edit' line (#858, #1004). After 'Use this ad', the one primary step 'Next: set up campaign' opens `/campaigns?…&review=1`, which prepares Review on its own (#1004, #1152); 'Review ads' and 'Make another' stay in the quieter row above. Up to two 'Coming up' occasion chips (festivals and seasons for today's date in IST, `src/lib/seasonal.ts`; November adds Chhath Puja, Guru Nanak Jayanti and the winter season, and a festival comes before a long season, #1210) fill the goal in one tap with plain words ('An ad for Chhath Puja from <Business>.'); they never assert a sale, discount or deadline, and the concept prompt and claim check allow only saved offers (#700, #1153) |
 | `/studio` | Generate, inspect, approve, edit (ad text, words on picture, background), regenerate (asks first), delete, export, share approved ads (phone share sheet; desktop downloads and copies the text); "Create campaign (N)" links approved ads to Campaigns | Approval and sharing do not publish an ad on Meta |
 | `/assets` | Browse/reuse/download saved images | Download/clipboard failures are surfaced |
@@ -86,7 +86,14 @@ as "Ads link to …" (#470). The industry is free text, not a solar-only enum. T
 copy, image prompts, and campaign audience suggestions.
 "Saved" acknowledges only the submitted form revision after a successful save.
 Later edits, including edits made while a save is pending, require another save;
-failed saves leave the draft available for retry. There is no autosave.
+failed saves leave the draft available for retry. The full form has no autosave.
+
+Until a business has a campaign that went live (or is on now), `/brand` is setup
+step 1 of 3 (#1251 WS1, #1269): the five `brandUsable` fields (name, what you
+sell, places one per line, one offer, a 10-digit WhatsApp number) plus "Fill it
+from my website", which fills only empty fields. It autosaves only those columns
+(`saveSetupBusiness`; other offers and Brand fields are kept) and "Make my ads"
+checks all five, then goes to `/create`. `/brand?all=1` opens the full page.
 
 Website autofill fetches a public website and proposes extracted facts. On a Brand with
 nothing filled in yet it runs by itself when the owner leaves the Website field (once per

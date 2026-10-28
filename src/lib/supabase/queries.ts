@@ -236,6 +236,15 @@ export async function getSpendLimits(businessId: string): Promise<SpendLimits> {
   };
 }
 
+/** #1251 WS1: whether any campaign went live through AdBrain (`launched_at`) or is on now (e.g. imported from Meta); the setup spine shows until one has. */
+export async function hasLaunchedCampaign(businessId: string): Promise<boolean> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("campaigns").select("id")
+    .eq("business_id", businessId).or("launched_at.not.is.null,status.eq.active").limit(1);
+  if (error || !data) throw new Error("Campaigns could not be loaded.");
+  return data.length > 0;
+}
+
 /** Campaigns mapped to the minimal shape the spend guardrails need. */
 export async function getCampaignSpend(
   businessId: string,
