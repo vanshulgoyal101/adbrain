@@ -21,8 +21,9 @@ const PROMISES = [
   { icon: MessageCircle, title: "Enquiries come to your WhatsApp", body: "Customers tap the ad and message you directly." },
 ];
 
-export default async function LoginPage({ searchParams }: { searchParams?: Promise<{ redirect?: string | string[] }> }) {
-  const redirect = (await searchParams)?.redirect;
+export default async function LoginPage({ searchParams }: { searchParams?: Promise<{ redirect?: string | string[]; error?: string | string[] }> }) {
+  const params = await searchParams;
+  const redirect = params?.redirect;
   // Only a real in-app destination counts; the default /dashboard fallback does not.
   const deepLink = typeof redirect === "string" && safeAuthRedirect(redirect) === redirect;
   return (
@@ -35,7 +36,7 @@ export default async function LoginPage({ searchParams }: { searchParams?: Promi
       <main className={styles.main}>
         <section id="sign-in" tabIndex={-1} aria-labelledby="sign-in-title" className={styles.formColumn}>
           <div className={styles.formInner}>
-            <LoginExperience deepLink={deepLink} />
+            <LoginExperience deepLink={deepLink} failedSignIn={Boolean(params?.error)} />
           </div>
         </section>
         <aside className={styles.proof} aria-label="What you get">
