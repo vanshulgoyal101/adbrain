@@ -138,6 +138,16 @@ export async function getCreatives(businessId: string): Promise<Creative[]> {
   return data ?? [];
 }
 
+/** #1270 (WS1 step 2): the business's newest Create batch (one `variant_group`), oldest first. */
+export async function getLatestCreativeBatch(businessId: string): Promise<Creative[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("creatives").select("*")
+    .eq("business_id", businessId).order("created_at", { ascending: false }).limit(6);
+  if (error) throw new Error("Ads could not be loaded.");
+  const group = data?.[0]?.variant_group;
+  return (data ?? []).filter((creative) => group && creative.variant_group === group).reverse();
+}
+
 /** Brand assets for a business, newest first. */
 export async function getBrandAssets(
   businessId: string,
