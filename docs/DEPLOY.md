@@ -211,7 +211,7 @@ required by Supabase's provider setup, not an invented direct application route.
 
 In Meta, configure the exact `/api/meta/oauth/callback`, appropriate application
 domains, privacy/deletion URLs, Login for Business settings and permissions. Follow
-[Meta Connect](META_CONNECT.md), including its [App Review](META_CONNECT.md#app-review-156) section.
+[Meta Connect](META_CONNECT.md), including its [App Review](META_CONNECT.md#app-review-156) section, and [Approval Readiness](META_APPROVAL_ACTION_PLAN.md).
 An AdBrain login smoke test does not verify this second authorization flow.
 
 ## 5. Validate and Promote

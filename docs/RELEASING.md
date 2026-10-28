@@ -52,6 +52,11 @@ These controls are split between [.github/workflows/ci.yml](../.github/workflows
 deployments are not blocked by Git branch protection; never use `vercel --prod` to
 skip review.
 
+**Action updates (#1772):** [dependabot.yml](../.github/dependabot.yml) opens one grouped `github-actions`
+PR into `next` every Monday; [dependabot-automerge.yml](../.github/workflows/dependabot-automerge.yml) enables
+auto-merge only when Dependabot is the author and every changed file is under `.github/workflows/`. Required
+checks still gate the merge. Anything else Dependabot opens waits for a person.
+
 **The corrected checked-in wildcard disables slash-containing Git branches.** Earlier
 single-star configurations did not.
 Before pushing a feature or release branch, inspect effective remote deployment
@@ -194,7 +199,7 @@ The Supabase free plan keeps no backups (owner, Oct 27: no Pro), so we keep our 
   over 23 h old.
 - **Before every migration:** `scripts/release.mjs` requires a successful backup that finished
   less than an hour ago, and dispatches one and waits if needed.
-- **Second copy:** the supervisor's nightly JSON export into `~/.adbrain-backups`
+- **Second copy:** the supervisor's nightly JSON export into `~/.adbrain-backups`, encrypted to the same certificate (`.tar.gz.cms`)
   ([Operations](OPERATIONS.md#data-safety-and-recovery)).
 - **Storage:** the same run mirrors the owners' uploads (`brand-assets`: logos, product photos;
   names from the database, files from their public URLs) into a separate `<name>-uploads` artifact, encrypted
@@ -247,6 +252,14 @@ anyone watching (owner-approved automatic rollback, #111):
   `core` `bug` issue with the failing step.
 - **Daily at 03:30 UTC** it runs the same smoke and opens an issue on failure
   (no rollback).
+- **WS1 first-timer walk (#1439), gating:** after a green smoke it runs
+  `scripts/ws1-walk.mts` as `WS1_EMAIL`/`WS1_PASSWORD` (a confirmed internal account whose
+  business has never gone live) on a 360 px phone over slow 4G: step 1's five fields (filled
+  from a pasted bio where empty), step 2's two picked ads, and step 3's cap, Connect/payment
+  and trust lines, each with LCP ≤ 2.5 s, CLS ≤ 0.1 and the honest-copy rules
+  (`src/lib/copy/honest-copy-rules.ts`). Every Meta write is blocked. The result lands in the
+  run summary; a FAIL turns the guard red and opens a core bug, but never rolls back. Skipped while the secrets are
+  unset. `--plant` must make it FAIL (a planted promise and a slowed load).
 - **After each push to `main`, and every 15 minutes if GitHub fires the schedule**
   [`production-drift.yml`](../.github/workflows/production-drift.yml) waits until
   15 minutes after main HEAD landed, then fails and opens one
@@ -270,9 +283,13 @@ The rollback drill input `drill` forces the same FAIL, then really rolls
 production back and opens a `[DRILL]` core bug; restore with the recovery steps
 below.
 
-**Without `VERCEL_TOKEN` (CEO, Oct 24, #413):** the guard waits 3 minutes after each
-production deploy, runs the read-only smoke and only reports (one tracker issue); there
-is no automatic rollback and the drift check is skipped. Roll back by hand from a
+**Without `VERCEL_TOKEN` (CEO, Oct 24, #413):** after each production deploy the guard
+waits until the domain's `X-AdBrain-Release` header (the build's commit, #1457) is that
+commit, then runs the read-only smoke and only reports (one tracker issue). A newer commit
+counts as superseded (its own run smokes it). If the domain never serves the commit within
+6 minutes (a pinned domain after a hand rollback, #1347), the guard **fails** with `FAIL
+Domain serves …` instead of smoking an old build. There is no automatic rollback and the
+drift check is skipped. Roll back by hand from a
 logged-in CLI: `npx --yes vercel@60.1.3 promote <previous-deployment-url> --scope vanshul-goyals-projects`.
 Revisit if a bad deploy ever stays live longer than an hour.
 
@@ -281,5 +298,10 @@ last good deployment (#390), so Vercel keeps auto-promoting later deploys; each 
 deploy gets its own guard. Fix forward or revert through a PR; when the fix is live
 and its guard passes, close the issue. While one `Production smoke failed` issue is
 open, further failures comment on it instead of opening more. A rollback done by
-hand with `vercel rollback` (or the dashboard) does turn auto-promotion off: undo it
-with `npx --yes vercel@60.1.3 promote <deployment-url> --scope vanshul-goyals-projects`.
+hand with `vercel rollback` (or the dashboard) does turn auto-promotion off. **Never end
+an incident there (#1457):** once the fix is merged, promote the deployment of **main
+HEAD** (not the one you rolled back from; find it with
+`gh api "repos/vanshulgoyal101/adbrain/deployments?environment=Production&per_page=1"`)
+with `npx --yes vercel@60.1.3 promote <deployment-url> --scope vanshul-goyals-projects`,
+then confirm `curl -sI https://adbrain.vanshul.com/ | grep -i x-adbrain-release` shows
+main HEAD. The next deploy's guard fails if the domain is still pinned.

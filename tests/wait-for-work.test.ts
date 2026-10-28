@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readyPool, boardRow, systemicFailures, snoozedUntil, latestWord, linkedIssues, lowQueues, matchers, offTrack, roleCard, unsavedWork, waitingOnMe } from "../scripts/wait-for-work.mjs";
+import { readyPool, boardRow, systemicFailures, snoozedUntil, latestWord, linkedIssues, lowQueues, matchers, nextItem, freshComments, offTrack, roleCard, unsavedWork, waitingOnMe } from "../scripts/wait-for-work.mjs";
 
 describe("PR reviews count as the latest word (#423)", () => {
   it("picks a review posted after the last comment, and ignores empty approvals", () => {
@@ -84,19 +84,28 @@ describe("CTO on-track check", () => {
 describe("CTO queue watch", () => {
   const issue = (...labels: string[]) => ({ labels: labels.map((name) => ({ name })) });
 
-  it("flags workers with fewer than 2 actionable items, ignoring parked ones", () => {
+  it("flags workers with fewer than 3 actionable items (owner, Oct 28), ignoring parked ones", () => {
     const low = lowQueues([
       issue("core", "owner:dev"), issue("owner:dev"),
       issue("owner:dev2"), issue("owner:dev2", "waiting-owner"),
       issue("owner:dev3"), issue("owner:dev3"), issue("owner:dev3", "decision"),
       issue("owner:qa", "owner:dev"), issue("owner:qa"),
     ]);
-    expect(low).toEqual([{ role: "dev2", count: 1 }, { role: "dev4", count: 0 }, { role: "qa2", count: 0 }, { role: "cpo", count: 0 }]);
+    expect(low).toEqual([{ role: "dev2", count: 1 }, { role: "dev3", count: 2 }, { role: "dev4", count: 0 }, { role: "qa", count: 2 }, { role: "qa2", count: 0 },
+      { role: "reviewer", count: 0 }, { role: "devops", count: 0 }, { role: "cpo", count: 0 }, { role: "analyst", count: 0 }, { role: "designer", count: 0 }, { role: "docs", count: 0 }]);
+  });
+
+  it("knows the Docs role (owner, Oct 29): handoffs wake it, and it isn't confused with docs/ paths", () => {
+    const docs = matchers("docs");
+    expect(waitingOnMe("CEO: → Docs: split API_REFERENCE into docs/api/.", docs)).toBe(true);
+    expect(waitingOnMe("Docs: reorganised docs/product/. → CTO: check the ADR link.", docs)).toBe(false);
+    expect(docs.addressedToMe("Updated docs/OPERATIONS.md in this PR.")).toBe(false);
+    expect(lowQueues([issue("owner:docs", "core")]).find((l) => l.role === "docs")).toEqual({ role: "docs", count: 1 });
   });
 
   it("counts the worker's lane pool as supply, so a reactive Reviewer with pool audits isn't low", () => {
     const pool = (lane: string) => ({ labels: [{ name: "core" }, { name: "ready" }, { name: `lane:${lane}` }] });
-    const low = lowQueues([issue("owner:reviewer"), pool("review"), pool("dev")]).map((l) => l.role);
+    const low = lowQueues([issue("owner:reviewer"), pool("review"), pool("review"), pool("dev")]).map((l) => l.role);
     expect(low).not.toContain("reviewer");
     expect(low).toContain("dev4");
     expect(low).toContain("qa");
@@ -168,7 +177,7 @@ describe("Reviewer and QA 2 roles (#575)", () => {
   it("counts their queues", () => {
     const low = lowQueues([{ labels: [{ name: "owner:qa2" }] }, { labels: [{ name: "owner:reviewer" }] }]).map((x) => x.role);
     expect(low).toContain("qa2");
-    expect(low).not.toContain("reviewer"); // self-sourcing (#573)
+    expect(low).toContain("reviewer"); // every role keeps ≥ 3 (CEO, #364)
   });
 });
 
@@ -203,6 +212,12 @@ describe("ready pool (#573)", () => {
     expect(readyPool(pool, "devops")).toEqual([]);
     expect(readyPool(pool, "cto")).toEqual([]);
   });
+  it("gives the Designer, CPO and Analyst their own lanes (#364)", () => {
+    const lanes = [issue(20, "ready", "lane:design"), issue(21, "ready", "lane:product"), issue(22, "ready", "lane:research")];
+    expect(readyPool(lanes, "designer").map((i) => i.number)).toEqual([20]);
+    expect(readyPool(lanes, "cpo").map((i) => i.number)).toEqual([21]);
+    expect(readyPool(lanes, "analyst").map((i) => i.number)).toEqual([22]);
+  });
 });
 
 describe("Dev 4 role", () => {
@@ -228,5 +243,45 @@ describe("systemic CI failures (CTO auto-track)", () => {
     ]);
     expect(lines).toHaveLength(1);
     expect(lines[0]).toMatch(/^CI systemic: Core approval failed on 2 PR branches \(dev3\/701, designer\/847\)/);
+  });
+});
+
+describe("next item (#364: idle with a full queue)", () => {
+  const issue = (number: number, ...labels: string[]) => ({ number, title: `item ${number}`, labels: labels.map((name) => ({ name })) });
+  it("returns the oldest owned item that is actionable and has no open PR, even when its last word was a handoff", () => {
+    const items = [issue(30, "core"), issue(12, "core", "parked"), issue(14, "later"), issue(15, "waiting-owner"), issue(16, "decision"), issue(20, "core"), issue(25)];
+    const pulls = [{ title: "#20: the fix" }];
+    expect(nextItem(items, pulls)?.number).toBe(25);
+    expect(nextItem(items, pulls, new Set([25]))?.number).toBe(30);
+    expect(nextItem([issue(12, "parked")], [])).toBeNull();
+    // Standing channels and umbrellas (#364, #418) are never "your next item".
+    expect(nextItem([issue(364, "standing"), issue(400, "core")], [])?.number).toBe(400);
+  });
+  it("parked items don't count toward a queue", () => {
+    expect(lowQueues([issue(1, "owner:dev"), issue(2, "owner:dev", "parked")]).map((l) => l.role)).toContain("dev");
+  });
+});
+
+describe("waiter fixes (#1478)", () => {
+  it("an edited comment isn't new: only comments created since the wait began count", () => {
+    const since = "2026-10-28T09:08:00Z";
+    const comments = [
+      { id: 1, created_at: "2026-10-28T09:07:10Z", updated_at: "2026-10-28T09:25:49Z", body: "Dev 3: runbook" },
+      { id: 2, created_at: "2026-10-28T09:10:00Z", updated_at: "2026-10-28T09:10:00Z", body: "QA 2: read" },
+    ];
+    expect(freshComments(comments, since).map((c) => c.id)).toEqual([2]);
+  });
+  it("on a co-owned issue, an un-arrowed FYI isn't waiting on every owner; one that names you is", () => {
+    const qa2 = matchers("qa2");
+    const coOwned = ["core", "owner:qa2", "owner:dev3"];
+    expect(waitingOnMe("CPO: Review gap filed as #1198 (Dev 4).", qa2, coOwned)).toBe(false);
+    expect(waitingOnMe("CPO: → QA 2: please re-read the arm.", qa2, coOwned)).toBe(true);
+    expect(waitingOnMe("CPO: Review gap filed as #1198 (Dev 4).", qa2, ["core", "owner:qa2"])).toBe(true);
+  });
+  it("a ready item a role declined (declined:<role>) isn't offered to that role again", () => {
+    const issue = (number: number, ...labels: string[]) => ({ number, labels: labels.map((name) => ({ name })) });
+    const pool = [issue(1228, "core", "ready", "lane:qa", "declined:qa2"), issue(1230, "core", "ready", "lane:qa")];
+    expect(readyPool(pool, "qa2").map((i) => i.number)).toEqual([1230]);
+    expect(readyPool(pool, "qa").map((i) => i.number)).toEqual([1228, 1230]);
   });
 });

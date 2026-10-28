@@ -1,7 +1,7 @@
+import { GRAPH } from "@/lib/meta/graph-version";
 import { z } from "zod";
 import { getEnv } from "@/lib/env";
 
-const GRAPH = "https://graph.facebook.com/v21.0";
 const meSchema = z.object({ id: z.string() });
 const businessSchema = z.object({ id: z.string(), verification_status: z.string().optional() });
 const errorSchema = z.object({ error: z.object({ code: z.number().optional(), error_subcode: z.number().optional(), type: z.string().optional() }) });

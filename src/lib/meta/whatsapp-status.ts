@@ -11,7 +11,7 @@ export async function readWhatsAppStatus(businessId: string): Promise<WhatsAppSt
   const context = await requireOwnedBusiness(businessId);
   const connection = await getConnectionStatus(context);
   if (!connection.selected || connection.capabilities.canCreatePaused.state !== "available") return { state: "unavailable" };
-  const { page, business } = await withMetaConnection(context, { purpose: "create_paused" }, (meta) => meta.whatsappNumbers());
+  const { page, business } = await withMetaConnection(context, { purpose: "create_paused", event: "whatsapp_numbers" }, (meta) => meta.whatsappNumbers());
   const numbers = [
     ...(page ? [{ masked: maskWhatsAppNumber(page), source: "page" as const }] : []),
     ...business.map((number) => ({ masked: maskWhatsAppNumber(number), source: "business" as const })),

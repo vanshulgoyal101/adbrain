@@ -13,7 +13,7 @@ export function SupportLinkProvider({ url, children }: { url: string | null; chi
 export function HelpOnWhatsApp({ label = "Help on WhatsApp", className }: { label?: string; className?: string }) {
   const url = useContext(SupportLinkContext);
   if (!url) return null;
-  return <a href={url} target="_blank" rel="noopener noreferrer" className={className ?? "inline-flex items-center gap-1.5 text-sm font-medium text-emerald-700 hover:underline"}>
+  return <a href={url} target="_blank" rel="noopener noreferrer" data-product-event="help.whatsapp" className={className ?? "inline-flex items-center gap-1.5 text-sm font-medium text-emerald-700 hover:underline"}>
     <MessageCircle size={15} aria-hidden="true" />{label}
   </a>;
 }

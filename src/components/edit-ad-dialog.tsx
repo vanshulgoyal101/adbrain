@@ -26,13 +26,15 @@ function adWordsOf(campaign: Pick<Campaign, "raw">): Record<string, Partial<Word
       .flatMap((field) => typeof (value as Record<string, unknown>)[field] === "string" ? [[field, (value as Record<string, string>)[field]]] : [])) : {}]));
 }
 
-export function EditAdDialog({ campaign, campaignName, creatives, onClose, onSaved }: {
+export function EditAdDialog({ campaign, campaignName, creatives, onClose, onSaved, hint }: {
   campaign: Pick<Campaign, "id" | "meta_campaign_id" | "meta_adset_id" | "meta_ad_ids" | "raw" | "creative_ids">;
   campaignName: string;
   creatives: Creative[];
   onClose: () => void;
   /** `change` is what the ad now says differently, for the caller's copy of the campaign. */
   onSaved: (message: string, saved: { adId: string; change: Partial<Words> }) => void;
+  /** #1274: why the owner was sent here (the card's "Edit the ad"), shown above the ad text. */
+  hint?: string;
 }) {
   const campaignId = campaign.id;
   const ads = React.useMemo(() => editableAds(campaign, campaign.creative_ids ?? []).map((ad) => {
@@ -92,6 +94,7 @@ export function EditAdDialog({ campaign, campaignName, creatives, onClose, onSav
         <Input id={ids.headline} value={words.headline} maxLength={255} onChange={(event) => edit({ headline: event.target.value })} />
       </label>
       <label htmlFor={ids.message} className="grid gap-1 text-sm font-medium text-slate-800">Ad text
+        {hint && <span className="text-sm font-normal text-slate-600">{hint}</span>}
         <Textarea id={ids.message} value={words.message} rows={5} maxLength={2000} onChange={(event) => edit({ message: event.target.value })} />
       </label>
       <label htmlFor={ids.description} className="grid gap-1 text-sm font-medium text-slate-800">Description

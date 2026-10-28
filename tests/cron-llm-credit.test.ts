@@ -24,18 +24,18 @@ describe("OpenRouter credit alert (#449)", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("reports the lowest capped key as low under $0.50, with the key only in a header", async () => {
+  it("reports the lowest capped key as low under $1 (CEO, #1129), with the key only in a header", async () => {
     const fetchMock = vi.fn()
-      .mockResolvedValueOnce(json(200, { data: { limit: 9, limit_remaining: 0.4321 } }))
+      .mockResolvedValueOnce(json(200, { data: { limit: 9, limit_remaining: 0.9426 } }))
       .mockResolvedValueOnce(json(200, { data: { limit: null, limit_remaining: null } }));
     vi.stubGlobal("fetch", fetchMock);
     const { GET } = await import("@/app/api/cron/llm-credit/route");
     const res = await GET(request());
     const body = await res.json();
     expect(res.status).toBe(200);
-    expect(body).toMatchObject({ ok: true, minRemainingUsd: 0.43, thresholdUsd: 0.5, low: true });
+    expect(body).toMatchObject({ ok: true, minRemainingUsd: 0.94, thresholdUsd: 1, low: true });
     expect(body.keys).toEqual([
-      { index: 0, limitUsd: 9, remainingUsd: 0.43 },
+      { index: 0, limitUsd: 9, remainingUsd: 0.94 },
       { index: 1, limitUsd: null, remainingUsd: null },
     ]);
     expect(fetchMock.mock.calls[0][0]).toBe("https://openrouter.ai/api/v1/key");

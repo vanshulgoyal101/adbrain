@@ -55,7 +55,7 @@ async function main() {
   const delivery = await meta.readCampaignDelivery(args.campaign, {
     dailyBudgetRupees: input.dailyBudgetRupees, status: "active", ...tree, cappedAdSetIds: [args["capped-adset"]],
   });
-  const response = await fetch(`https://graph.facebook.com/v21.0/${args["capped-adset"]}?fields=id,campaign_id,lifetime_budget,end_time&access_token=${encodeURIComponent(creds.accessToken)}`);
+  const response = await fetch(`https://graph.facebook.com/v26.0/${args["capped-adset"]}?fields=id,campaign_id,lifetime_budget,end_time&access_token=${encodeURIComponent(creds.accessToken)}`);
   const cappedSet = z.object({ id: z.literal(args["capped-adset"]), campaign_id: z.literal(args.campaign), lifetime_budget: z.string().regex(/^[1-9]\d*$/), end_time: z.string() })
     .parse(await response.json());
   const cappedAd = delivery.ads.find(ad => ad.id === args["capped-ad"]);

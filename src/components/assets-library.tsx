@@ -40,12 +40,14 @@ function AssetTile({
   title,
   meta,
   filename,
+  actions = true,
 }: {
   url: string;
   thumbnailUrl?: string;
   title: string;
   meta?: React.ReactNode;
   filename: string;
+  actions?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
   const [broken, setBroken] = useState(false);
@@ -79,7 +81,7 @@ function AssetTile({
         </p>
         {meta && <div className="text-xs text-slate-500">{meta}</div>}
         {/* #847: one row of labelled 44 px icons instead of three wrapping text links. */}
-        <div className="-mx-2 flex items-center text-slate-600">
+        {actions && <div className="-mx-2 flex items-center text-slate-600">
           <button
             type="button"
             disabled={downloading}
@@ -123,7 +125,7 @@ function AssetTile({
           >
             <ExternalLink className="h-4 w-4" aria-hidden="true" />
           </a>
-        </div>
+        </div>}
         {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
       </CardContent>
     </Card>
@@ -133,9 +135,12 @@ function AssetTile({
 export function AssetsLibrary({
   creatives,
   brandAssets,
+  sample = false,
 }: {
   creatives: CreativePreview[];
   brandAssets: BrandAsset[];
+  /** #1317: a prospect's ads are samples: no Download, Copy link or Open on them (the owner's own uploads keep theirs). */
+  sample?: boolean;
 }) {
   const generated = creatives.filter((c) => c.image_url);
   // #847: 88+ full images made a 44,000 px phone page; show a page at a time.
@@ -165,6 +170,7 @@ export function AssetsLibrary({
                 title={c.headline ?? "Ad creative"}
                 filename={`adbrain-${slugify(c.headline ?? c.angle ?? "creative", c.id.slice(0, 6))}.jpg`}
                 meta={c.status === "approved" ? <Status tone="live">Approved</Status> : undefined}
+                actions={!sample}
               />
             ))}
           </div>

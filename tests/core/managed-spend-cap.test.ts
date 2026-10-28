@@ -19,7 +19,7 @@ function replay(readBack: Record<string, unknown> = exchanges[1].body) {
     url.searchParams.delete("access_token");
     const body = new URLSearchParams(requestBody(init));
     body.delete("access_token");
-    const call = `${init?.method ?? "GET"} ${url.pathname.replace("/v21.0/", "")}${url.search}${body.size ? ` ${body}` : ""}`;
+    const call = `${init?.method ?? "GET"} ${url.pathname.replace("/v26.0/", "")}${url.search}${body.size ? ` ${body}` : ""}`;
     sent.push(call);
     const match = exchanges.find((exchange) => call === `${exchange.method} ${exchange.path}${exchange.form ? ` ${new URLSearchParams(exchange.form)}` : ""}`);
     if (!match) throw new Error(`Unrecorded Graph call: ${call}`);

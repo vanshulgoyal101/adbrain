@@ -36,7 +36,7 @@ function replay(...tapes: Exchange[][]) {
     const url = new URL(String(input));
     url.searchParams.delete("access_token");
     const method = init?.method ?? "GET";
-    const path = url.pathname.replace("/v21.0/", "") + url.search;
+    const path = url.pathname.replace("/v26.0/", "") + url.search;
     const form = init?.body instanceof URLSearchParams
       ? Object.fromEntries([...init.body].filter(([key]) => key !== "access_token")) : {};
     sent.push({ method, path, form });
@@ -89,7 +89,7 @@ describe("core: first-activation safety against recorded Graph responses (#157)"
   it("review: a new ad reads as in review", async () => {
     const tape = replay(binding, reviewNewAd as Exchange[]);
     expect(await new MetaClient(creds).readAdReview(campaignId)).toEqual([
-      { adId, state: "in_review", effectiveStatus: "IN_PROCESS", reasons: [] },
+      { adId, state: "in_review", effectiveStatus: "IN_PROCESS", reasons: [], feedback: [] },
     ]);
     expect(tape.pending).toEqual([]);
     expect(tape.sent.every(call => call.method === "GET")).toBe(true);
@@ -209,9 +209,9 @@ describe("core: first-activation safety against recorded Graph responses (#157)"
     const recordedAdSet = recorded.find(exchange => exchange.method === "GET" && exchange.path.startsWith(`${capped.adSetId}?`))!.body as Record<string, unknown>;
     const recordedAds = recorded.find(exchange => exchange.path.startsWith(`${capped.adSetId}/ads?`))!.body as { data: Array<Record<string, unknown>> };
     const graphPath = (path: string) => {
-      const url = new URL(`https://graph.facebook.com/v21.0/${path}`);
+      const url = new URL(`https://graph.facebook.com/v26.0/${path}`);
       url.searchParams.delete("access_token");
-      return url.pathname.replace("/v21.0/", "") + url.search;
+      return url.pathname.replace("/v26.0/", "") + url.search;
     };
     const reads = (status: string, adSetOverride: Record<string, unknown> = {}): Exchange[] => [
       { method: "GET", path: graphPath(`${capped.campaignId}?fields=id,status,effective_status`), status: 200, body: { id: capped.campaignId, status, effective_status: status } },

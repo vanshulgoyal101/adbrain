@@ -104,7 +104,11 @@ describe("customer balance API", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toContain("no-store");
     expect(mocks.owned).toHaveBeenCalledWith(actor.businessId);
-    expect((await response.json()).balance).toEqual(balance);
+    // #1235: paid, the service share and the ad-share refund stay server-side (margin by subtraction).
+    const view = Object.fromEntries(Object.entries(balance).filter(([key]) => !["capturedPaise", "serviceAllocationPaise", "advertisingAllocationPaise"].includes(key)));
+    const sent = (await response.json()).balance;
+    expect(sent).toEqual(view);
+    expect(JSON.stringify(sent)).not.toMatch(/serviceAllocation|advertisingAllocation|capturedPaise|advertisingRefunded/);
   });
   it.each([["UNAUTHENTICATED", 401], ["FORBIDDEN", 403], ["NOT_FOUND", 404]] as const)("rejects %s without reading money", async (code, status) => {
     mocks.owned.mockRejectedValueOnce(new ConnectionAccessError(code, "Denied"));
@@ -184,5 +188,48 @@ describe("customer balance API", () => {
   it("rejects client actor overrides and invalid evidence", async () => {
     expect((await POST(post({ action: "costs", businessId: actor.businessId, evidence, userId: campaignId }))).status).toBe(400);
     expect(mocks.rpc).not.toHaveBeenCalled();
+  });
+});
+// #782: Activate says exactly why the AdBrain balance can't cover a run, with its one action.
+describe("customer_ad_reserve refusals keep their cause (#782)", () => {
+  const pg = (message: string) => ({ message, code: "23514", details: null, hint: null });
+  function refuses(message: string, current = balance) {
+    mocks.rpc.mockImplementation((name: string) => ({
+      abortSignal: async () => name === "customer_ad_balance" ? { data: current, error: null } : { data: null, error: pg(message) },
+    }));
+  }
+  const reserve = () => reserveCustomerCampaign(actor, { ...admission, lifetimeCapPaise: 45_000 }).catch((error: unknown) => error as CustomerBalanceError);
+
+  it("no AdBrain balance: says to add funds", async () => {
+    refuses("Insufficient customer advertising allowance", { ...balance, remainingPaise: 0 });
+    expect(await reserve()).toMatchObject({ code: "BALANCE_INSUFFICIENT", message: "There's no AdBrain balance for ads yet. Add funds to run this campaign (₹450 cap plus GST)." });
+  });
+
+  it("a balance below the run's cap: names both amounts", async () => {
+    refuses("Insufficient customer advertising allowance", { ...balance, remainingPaise: 30_000 });
+    expect(await reserve()).toMatchObject({ code: "BALANCE_INSUFFICIENT", message: "Your AdBrain balance for ads is ₹300, below this run's ₹450 cap plus GST. Add funds or choose fewer days." });
+  });
+
+  it("a held balance: a payment check is running", async () => {
+    refuses("Current attributed media and tax evidence required", { ...balance, held: true });
+    expect(await reserve()).toMatchObject({ code: "BALANCE_HELD", message: "Your AdBrain balance is on hold while we check a payment. We'll clear it; you can't start ads until then." });
+  });
+
+  it("costs not confirmed yet, an earlier activation still settling, a changed connection: each says what to do", async () => {
+    refuses("Current attributed media and tax evidence required");
+    expect(await reserve()).toMatchObject({ code: "BALANCE_UNAVAILABLE", message: "AdBrain couldn't confirm this campaign's latest Meta costs. Wait a few minutes and try again." });
+    refuses("Existing activation must be reconciled before another attempt");
+    expect(await reserve()).toMatchObject({ code: "ACTIVATION_PENDING", message: "An earlier start of this campaign is still being confirmed. Wait a minute, refresh, and try again." });
+    refuses("Campaign customer binding changed");
+    expect(await reserve()).toMatchObject({ code: "BINDING_CHANGED", message: "This campaign's Meta connection changed since you reviewed it. Refresh the page and try again." });
+  });
+
+  it("an unknown or unreadable failure keeps the generic message; the balance read failing doesn't hide the cause", async () => {
+    refuses("something else entirely");
+    expect(await reserve()).toMatchObject({ code: "UNVERIFIED", message: "Customer advertising funds could not be verified. Payment or cost reconciliation is required." });
+    mocks.rpc.mockImplementation((name: string) => ({
+      abortSignal: async () => name === "customer_ad_balance" ? { data: null, error: pg("timeout") } : { data: null, error: pg("Insufficient customer advertising allowance") },
+    }));
+    expect(await reserve()).toMatchObject({ code: "BALANCE_INSUFFICIENT", message: "Your AdBrain balance for ads is below this run's ₹450 cap plus GST. Add funds or choose fewer days." });
   });
 });

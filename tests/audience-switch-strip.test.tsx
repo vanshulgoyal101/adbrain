@@ -24,6 +24,17 @@ describe("AudienceSwitchStrip", () => {
     expect(sent()).toEqual({ operationId: "op-1", action: "switch" });
   });
 
+  // #1737: a waiting choice, not a warning: a neutral inset, one solid action, Cancel as quiet text.
+  it("is calm: no amber, one solid button, Cancel as a quiet text button", () => {
+    render(<AudienceSwitchStrip campaignId="c-1" operationId="op-1" running={false} onDone={vi.fn()} />);
+    const strip = screen.getByRole("group", { name: "New audience ready" });
+    expect(strip.className).not.toMatch(/amber/);
+    expect(screen.getByRole("button", { name: "Use the new audience" }).className).toMatch(/\bbg-primary\b/);
+    const cancel = screen.getByRole("button", { name: "Cancel new audience" });
+    expect(cancel.className).not.toMatch(/\bborder\b|\bbg-primary\b/);
+    expect(cancel.className).toMatch(/\bh-11\b/);
+  });
+
   it("cancels: only the copy goes and the current audience keeps running", async () => {
     const onDone = vi.fn();
     render(<AudienceSwitchStrip campaignId="c-1" operationId="op-1" running onDone={onDone} />);

@@ -6,6 +6,7 @@ const m = vi.hoisted(() => ({
   saved: [] as unknown[],
   setAdStatus: vi.fn(),
   purposes: [] as string[],
+  waiting: false,
 }));
 const query = (rows: () => unknown) => {
   const q: Record<string, unknown> = {};
@@ -15,7 +16,7 @@ const query = (rows: () => unknown) => {
   return q;
 };
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ from: (table: string) => query(() => table === "ad_results" ? m.listed : m.campaign) }) }));
-vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: () => query(() => ({ raw: m.campaign?.raw ?? {} })) }) }));
+vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: (table: string) => query(() => table === "campaign_edit_operations" ? (m.waiting ? [{ id: "op-1" }] : []) : { raw: m.campaign?.raw ?? {} }) }) }));
 vi.mock("@/lib/campaign/activation", () => ({
   reviewableCampaign: (campaign: Record<string, unknown>) => campaign.meta_campaign_id ? { adAccountId: "act_1", pageId: "page_1", generation: 1 } : null,
   intendedCampaignChildren: () => ({ adIds: ["11"], adSetIds: ["1"], cappedAdSetIds: [] }),
@@ -34,11 +35,18 @@ const context = { businessId: "b1", userId: "u1" } as never;
 beforeEach(() => {
   m.campaign = { id: "c1", name: "Run", status: "active", meta_campaign_id: "100", meta_ad_ids: ["11"], raw: {} };
   m.listed = [{ meta_ad_id: "22" }];
-  m.saved = []; m.purposes = [];
+  m.saved = []; m.purposes = []; m.waiting = false;
   m.setAdStatus.mockReset().mockImplementation(async (_campaign: string, adId: string, status: string) => ({ id: adId, status, effectiveStatus: status, changed: true }));
 });
 
 describe("setAdDelivery (#1045)", () => {
+  // #1146: the waiting new-audience copy has its own copy of the ad, which a pause here wouldn't reach.
+  it("refuses, before any Meta call, while a new audience waits to be switched on", async () => {
+    m.waiting = true;
+    await expect(setAdDelivery(context, "c1", "22", "pause")).rejects.toMatchObject({ status: 409, code: "switch_pending" });
+    expect(m.setAdStatus).not.toHaveBeenCalled();
+  });
+
   it("pauses a card ad (a capped copy from the stored results) and records it on the campaign", async () => {
     expect(await setAdDelivery(context, "c1", "22", "pause", "expensive")).toEqual({ adId: "22", status: "PAUSED", effectiveStatus: "PAUSED", changed: true });
     expect(m.setAdStatus).toHaveBeenCalledWith("100", "22", "PAUSED");

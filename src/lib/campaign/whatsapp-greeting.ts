@@ -27,9 +27,9 @@ export function quotedAsk(primaryText: string | null | undefined): string | null
 }
 
 
-/** Same words, ignoring case, spacing and end punctuation. */
+/** Same words, ignoring case, spacing, end punctuation and a phone's curly apostrophes (I’d = I'd). */
 export function sameWords(left: string, right: string): boolean {
-  const norm = (text: string) => text.toLowerCase().replace(/[\s]+/g, " ").replace(/[.!?।]+$/u, "").trim();
+  const norm = (text: string) => text.toLowerCase().replace(/[‘’ʼ]/gu, "'").replace(/[\s]+/g, " ").replace(/[.!?।]+$/u, "").trim();
   return norm(left) === norm(right);
 }
 

@@ -3,8 +3,8 @@
 The executable reference is [db/schema.sql](../db/schema.sql), a frozen base, plus
 every newer file in [db/migrations](../db/migrations/); `node scripts/build-schema.mjs`
 prints the full fresh-install schema (see [releasing](RELEASING.md)). Incremental changes
-live in [db/migrations](../db/migrations/). [TypeScript rows](../src/lib/types.ts)
-are hand-authored, not generated proof of schema parity. Check SQL constraints,
+live in [db/migrations](../db/migrations/). [TypeScript rows](../src/lib/types/) (one file per
+domain, re-exported by `src/lib/types.ts`, #1824) are hand-authored, not generated proof of schema parity. Check SQL constraints,
 route schemas, and deployed migration state separately.
 
 The [privacy request migration](../db/migrations/20260930_privacy_requests.sql)
@@ -457,6 +457,7 @@ alone is not a safe deployment plan.
 | [20261026_lead_customer_status.sql](../db/migrations/20261026_lead_customer_status.sql) | #798: `leads.workflow_status` also allows `customer` ("Became a customer", counted for ₹ per customer) and `get_lead_page` filters by it; same function signature; constraint swap guarded on the column existing; additive, release before the app change that sends it |
 | [20261026_meta_token_search_path.sql](../db/migrations/20261026_meta_token_search_path.sql) | #625: `meta_token_insert`/`get`/`delete` run with `search_path = ''` (#359 standard); bodies already fully qualified, behaviour unchanged |
 | [20261026_lead_campaign_link.sql](../db/migrations/20261026_lead_campaign_link.sql) | Same-signature `lead_sync_checkpoint` links synced leads to their campaign by Meta campaign id and backfills empty links (#680); either release order works (the old function ignores the new key) |
+| [20261028_lead_sync_shared_page.sql](../db/migrations/20261028_lead_sync_shared_page.sql) | Same-signature `lead_sync_checkpoint`: when the Page is also bound to another business (`meta_connections.page_id`), only leads from this business's own campaigns are imported (#1775); a business that alone has its Page imports all its Page's leads as before. Function body only |
 | [20261026_business_whatsapp_template.sql](../db/migrations/20261026_business_whatsapp_template.sql) | #840: nullable `businesses.whatsapp_template` jsonb (object, ≤ 4 KB), the business's WhatsApp opening (greeting + pre-typed message with optional Call now, or ≤ 3 questions; the app validates it with zod in #840 step 3); covered by the owner policy; additive, any release order |
 | [20261026_meta_deletion_requests.sql](../db/migrations/20261026_meta_deletion_requests.sql) | #730: `privacy_requests` gains `source`, `confirmation_code`, `meta_subject_id` (nullable `owner_id` only for callback rows); service-only `meta_deletion_request_record` files the callback's deletion request, idempotent per open code and owner |
 | [20261026_legacy_credentials_bucket_limits.sql](../db/migrations/20261026_legacy_credentials_bucket_limits.sql) | #731: revoke browser access to legacy `meta_credentials` (when present); `brand-assets` 10 MB and `creatives` 20 MB, PNG/JPEG/WebP only |

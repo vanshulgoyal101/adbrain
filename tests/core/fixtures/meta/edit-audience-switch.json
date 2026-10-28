@@ -21,26 +21,28 @@
   },
   {
     "method": "GET",
-    "path": "900000000000000007?fields=id%2Ccampaign_id%2Cstatus%2Clifetime_budget%2Cbudget_remaining",
+    "path": "900000000000000007?fields=id%2Ccampaign_id%2Cstatus%2Clifetime_budget%2Cbudget_remaining%2Cdaily_budget%2Cend_time",
     "status": 200,
     "body": {
       "id": "900000000000000007",
       "campaign_id": "900000000000000003",
       "status": "PAUSED",
       "lifetime_budget": "0",
-      "budget_remaining": "351"
+      "budget_remaining": "351",
+      "daily_budget": "10000"
     }
   },
   {
     "method": "GET",
-    "path": "900000000000000005?fields=id%2Ccampaign_id%2Cstatus%2Clifetime_budget%2Cbudget_remaining",
+    "path": "900000000000000005?fields=id%2Ccampaign_id%2Cstatus%2Clifetime_budget%2Cbudget_remaining%2Cdaily_budget%2Cend_time",
     "status": 200,
     "body": {
       "id": "900000000000000005",
       "campaign_id": "900000000000000003",
       "status": "ACTIVE",
       "lifetime_budget": "0",
-      "budget_remaining": "362"
+      "budget_remaining": "362",
+      "daily_budget": "10000"
     }
   },
   {
@@ -90,14 +92,15 @@
   },
   {
     "method": "GET",
-    "path": "900000000000000007?fields=id%2Ccampaign_id%2Cstatus%2Clifetime_budget%2Cbudget_remaining",
+    "path": "900000000000000007?fields=id%2Ccampaign_id%2Cstatus%2Clifetime_budget%2Cbudget_remaining%2Cdaily_budget%2Cend_time",
     "status": 200,
     "body": {
       "id": "900000000000000007",
       "campaign_id": "900000000000000003",
       "status": "ACTIVE",
       "lifetime_budget": "0",
-      "budget_remaining": "351"
+      "budget_remaining": "351",
+      "daily_budget": "10000"
     }
   },
   {
@@ -122,14 +125,15 @@
   },
   {
     "method": "GET",
-    "path": "900000000000000005?fields=id%2Ccampaign_id%2Cstatus%2Clifetime_budget%2Cbudget_remaining",
+    "path": "900000000000000005?fields=id%2Ccampaign_id%2Cstatus%2Clifetime_budget%2Cbudget_remaining%2Cdaily_budget%2Cend_time",
     "status": 200,
     "body": {
       "id": "900000000000000005",
       "campaign_id": "900000000000000003",
       "status": "PAUSED",
       "lifetime_budget": "0",
-      "budget_remaining": "362"
+      "budget_remaining": "362",
+      "daily_budget": "10000"
     }
   },
   {

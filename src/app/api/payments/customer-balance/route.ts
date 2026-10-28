@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { ConnectionAccessError, requireOwnedBusiness, withMetaConnection } from "@/lib/meta/connection-access";
 import { getCustomerBalance, observeCustomerCosts, reconcileCustomerCosts, reconcileCustomerRefund, reserveCustomerCampaign } from "@/lib/payments/customer-balance";
 import { readStoredCampaignBinding } from "@/lib/campaign/binding";
-import { customerCostEvidenceSchema, customerRefundAllocationSchema } from "@/lib/payments/customer-balance-contracts";
+import { customerCostEvidenceSchema, customerRefundAllocationSchema, toCustomerBalanceView } from "@/lib/payments/customer-balance-contracts";
 import { getProductionPaymentConfig } from "@/lib/payments/production-config";
 import { paymentJsonBody, paymentReply } from "@/lib/payments/checkout-request";
 import { rateLimitResponse } from "@/lib/security/rate-limit";
@@ -44,9 +44,9 @@ async function handleGET(request: Request) {
         dailyBudgetRupees: campaign.daily_budget!, requestKey: "0".repeat(64),
         lifetimeCapPaise: capDays ? Math.round(campaign.daily_budget! * 100) * capDays : undefined,
       }, true);
-      return Response.json({ balance: reviewed.balance }, { headers: { "Cache-Control": "no-store" } });
+      return Response.json({ balance: toCustomerBalanceView(reviewed.balance) }, { headers: { "Cache-Control": "no-store" } });
     }
-    return Response.json({ balance: await getCustomerBalance(context) }, { headers: { "Cache-Control": "no-store" } });
+    return Response.json({ balance: toCustomerBalanceView(await getCustomerBalance(context)) }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     const status = error instanceof z.ZodError ? 400 : error instanceof ConnectionAccessError
       ? ({ UNAUTHENTICATED: 401, NOT_FOUND: 404, FORBIDDEN: 403, CONFLICT: 409, UNAVAILABLE: 503 } as const)[error.code] : 409;

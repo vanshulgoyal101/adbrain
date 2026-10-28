@@ -39,6 +39,7 @@
     "smoke:core": "node scripts/smoke-core.mjs",
     "stats": "node scripts/stats.mjs",
     "core-scoreboard": "tsx scripts/core-scoreboard.mts",
+    "ux-scoreboard": "tsx scripts/ux-scoreboard.mts",
     "learnings": "node --env-file-if-exists=.env.local scripts/learnings.mjs",
     "perf:pages": "node scripts/perf-pages.mjs"
   },
@@ -65,6 +66,7 @@
     "tailwind-merge": "^3.7.0",
     "tsx": "^4.23.15",
     "undici": "^7.30.1",
+    "use-intl": "^4.14.9",
     "zod": "^4.6.7"
   },
   "devDependencies": {
