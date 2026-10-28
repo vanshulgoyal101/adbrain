@@ -45,6 +45,17 @@ describe("core: <SetupGoLive> (#1271)", () => {
     expect(bar().getByRole("button", { name: "Go live · ₹1,000 a day" })).toBeEnabled();
   });
 
+  it("#1587: one solid primary; 'a day' once so the chips fit a row; the total isn't said three times", () => {
+    goLive();
+    const chips = within(screen.getByRole("group", { name: "Daily budget" })).getAllByRole("button");
+    expect(chips.map((chip) => chip.textContent)).toEqual(["₹300 a day", "₹500", "₹1,000"]);
+    expect(chips[0]).toHaveAttribute("aria-pressed", "true");
+    expect(chips[0].className).toContain("bg-primary/10");
+    expect(chips[0].className).not.toMatch(/(^|\s)bg-primary(\s|$)/);
+    expect(screen.getByText("Meta checks your ads first, usually within a day.")).toBeInTheDocument();
+    expect(screen.getAllByText(/₹708/)).toHaveLength(2);
+  });
+
   it("Page not connected: the primary connects it first, then the page refreshes", () => {
     goLive({ pageConnected: false });
     expect(screen.getByText("Not connected")).toBeInTheDocument();
