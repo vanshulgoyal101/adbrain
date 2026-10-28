@@ -124,9 +124,15 @@ jobs:
           # as 0-job failures and email the owner every train. They add nothing (next's checks above are the gate),
           # so cancel any that haven't started; a cancelled run sends no failure email.
           sleep 10
-          for rid in $(gh api "repos/$repo/actions/runs?head_sha=$sha&event=pull_request&per_page=50" \
-              --jq '.workflow_runs[] | select(.status != "completed" and .actor.login == "github-actions[bot]") | .id'); do
-            gh run cancel "$rid" -R "$repo" >/dev/null 2>&1 || true
+          # Log each run's state and the cancel result: the 18:46Z train's cancels didn't take, silently.
+          gh api "repos/$repo/actions/runs?head_sha=$sha&event=pull_request&per_page=50" \
+            --jq '.workflow_runs[] | select(.actor.login == "github-actions[bot]") | "\(.id) \(.status) \(.name)"' |
+          while read -r rid rstatus rname; do
+            echo "train PR run $rid ($rname): $rstatus"
+            [ "$rstatus" = completed ] && continue
+            gh api -X POST "repos/$repo/actions/runs/$rid/cancel" >/dev/null 2>cancel.err \
+              || gh api -X POST "repos/$repo/actions/runs/$rid/force-cancel" >/dev/null 2>>cancel.err \
+              || echo "::warning::could not cancel $rid: $(tr '\n' ' ' < cancel.err | cut -c1-200)"
           done
           merged=""; rerun=""
           for i in $(seq 1 30); do
