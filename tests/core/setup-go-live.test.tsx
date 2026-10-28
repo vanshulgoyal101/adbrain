@@ -136,14 +136,16 @@ describe("core: <SetupGoLive> (#1271)", () => {
     expect(bar().getByRole("button", { name: "Go live · ₹1,000 a day" })).toBeDisabled();
   });
 
-  it("money row: AdBrain ad money vs paying Meta on your own account", () => {
-    goLive({ funding: "managed" });
-    expect(screen.getByText("Ad money")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Add money" })).toHaveAttribute("href", "/settings");
-    document.body.innerHTML = "";
-    goLive({ funding: "own" });
-    expect(screen.getByText("Payment on Meta")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Add payment in Meta" })).toHaveAttribute("target", "_blank");
+  it("money row (#1251 CEO): only the own-ad-account row; AdBrain's 'Ad money' row stays hidden for every funding mode", () => {
+    for (const funding of ["managed", "operator", "own", null] as const) {
+      document.body.innerHTML = "";
+      goLive({ funding });
+      expect(screen.getByText("Payment on Meta")).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "Add payment in Meta" })).toHaveAttribute("target", "_blank");
+      expect(screen.queryByText("Ad money")).not.toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: "Add money" })).not.toBeInTheDocument();
+      expect(screen.getByText("Stops at ₹708")).toBeInTheDocument();
+    }
   });
 });
 

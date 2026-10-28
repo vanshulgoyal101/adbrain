@@ -543,8 +543,10 @@ setup step 3 "Go live" on `/campaigns` (#1251 WS1, #1271): the picked ads, a dai
 budget (₹300/₹500/₹1,000 a day) for 2 days with the most it can spend including
 Meta's GST (`capWithGstPaise`, the activation reserve's own formula), the areas,
 the WhatsApp chat, and the weekly cap line (#1342; over the cap, Go live can't be
-tapped). The checklist shows the Facebook Page, the money row (AdBrain ad money →
-Settings, or payment on the owner's own Meta account) and the "Stops at" total.
+tapped). The checklist shows the Facebook Page, the money row (payment on the
+owner's own Meta account; the AdBrain ad money row is hidden for every funding
+mode until flat ₹999/month pricing with pass-through ad money, #1251 CEO) and the
+"Stops at" total.
 The one primary connects the Page first (MetaConnectDialog), then "Go live · ₹{d} a
 day" is one tap (#1271 4b, `src/lib/campaign/setup-go-live-flow.ts`) through the
 same routes the Campaigns page uses: connection status (not connected → the Meta
