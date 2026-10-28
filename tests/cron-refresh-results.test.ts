@@ -17,13 +17,13 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/lib/env", () => ({ getEnv: () => ({ CRON_SECRET: mocks.secret }) }));
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
-    from: () => {
+    from: (table: string) => {
       let after: string | null = null;
       const query = {
-        select: () => query, eq: () => query, order: () => query, limit: () => query,
+        select: () => query, eq: () => query, in: () => query, order: () => query, limit: () => query,
         gt: (_key: string, value: string) => { after = value; return query; },
         maybeSingle: async () => ({ data: mocks.latest, error: null }),
-        then: (resolve: (value: unknown) => unknown) => resolve({ data: after ? [] : mocks.campaigns, error: null }),
+        then: (resolve: (value: unknown) => unknown) => resolve({ data: table === "audit_log" ? [] : after ? [] : mocks.campaigns, error: null }),
       };
       return query;
     },
@@ -100,7 +100,7 @@ describe("GET /api/cron/refresh-results (#258)", () => {
   it("saves a result row and health per campaign and never pauses or changes a campaign", async () => {
     const { status, body } = await call();
     expect(status).toBe(200);
-    expect(body).toEqual({ ok: true, refreshed: 2, skipped: 0, failed: 0, hasMore: false, alerts: [], reauth: [] });
+    expect(body).toEqual({ ok: true, refreshed: 2, pausedReads: 0, skipped: 0, failed: 0, hasMore: false, alerts: [], reauth: [] });
     expect(mocks.saveCampaignResult).toHaveBeenCalledWith({ businessId: "business-1", userId: "owner-1" }, expect.objectContaining({ campaign_id: "c1", impressions: 120, leads: 1 }));
     expect(mocks.saveCampaignHealth).toHaveBeenCalledWith(expect.anything(), "c1", expect.objectContaining({ flags: [] }));
     for (const write of [mocks.pause, mocks.updateStatus, mocks.saveCampaign]) expect(write).not.toHaveBeenCalled();

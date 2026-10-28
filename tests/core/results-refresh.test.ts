@@ -15,6 +15,7 @@ const live = "120253678786150526", paused = "120253164673180526";
 const db = vi.hoisted(() => ({
   campaigns: [] as Row[],
   results: [] as Array<{ campaign_id: string; fetched_at: string; impressions?: number }>,
+  audit: [] as Array<{ entity_type: string; entity_id: string; action: string; created_at: string }>,
 }));
 
 vi.mock("@/lib/env", () => ({ getEnv: () => ({ CRON_SECRET: "cron-secret-value" }) }));
@@ -22,10 +23,12 @@ vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
     from: (table: string) => {
       const filters = new Map<string, unknown>();
+      const within = new Map<string, unknown[]>();
       let after: string | null = null;
       const query = {
         select: () => query, order: () => query, limit: () => query,
         eq: (key: string, value: unknown) => { filters.set(key, value); return query; },
+        in: (key: string, values: unknown[]) => { within.set(key, values); return query; },
         gt: (_key: string, value: string) => { after = value; return query; },
         maybeSingle: async () => {
           const latest = db.results.filter(row => row.campaign_id === filters.get("campaign_id"))
@@ -33,8 +36,13 @@ vi.mock("@/lib/supabase/admin", () => ({
           return { data: latest ?? null, error: null };
         },
         then: (resolve: (value: unknown) => unknown) => {
+          if (table === "audit_log") {
+            return resolve({ data: db.audit.filter(row => row.entity_type === filters.get("entity_type")
+              && within.get("entity_id")!.includes(row.entity_id) && within.get("action")!.includes(row.action))
+              .sort((left, right) => right.created_at.localeCompare(left.created_at)), error: null });
+          }
           expect(table).toBe("campaigns");
-          return resolve({ data: db.campaigns.filter(row => row.status === filters.get("status") && (after === null || row.id > after)), error: null });
+          return resolve({ data: db.campaigns.filter(row => within.get("status")!.includes(row.status) && (after === null || row.id > after)), error: null });
         },
       };
       return query;
@@ -82,7 +90,7 @@ function replay(edit: (exchange: Exchange) => unknown = exchange => exchange.bod
 const run = async () => {
   const { GET } = await import("@/app/api/cron/refresh-results/route");
   const response = await GET(new Request("http://localhost/api/cron/refresh-results", { headers: { authorization: `Bearer ${SECRET}` } }));
-  return { status: response.status, body: await response.json() as { refreshed: number; skipped: number; failed: number; alerts: Array<{ kind: string; key: string }> } };
+  return { status: response.status, body: await response.json() as { refreshed: number; pausedReads: number; skipped: number; failed: number; alerts: Array<{ kind: string; key: string }> } };
 };
 const healthOf = (meta: string) => db.campaigns.find(row => row.meta_campaign_id === meta)!.raw.health as { activeSince: string; flags: Array<{ kind: string; reason: string; key: string }> };
 
@@ -90,6 +98,7 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-10-23T17:00:00Z"));
   db.results = [];
+  db.audit = [];
   db.campaigns = [{
     id: "00000000-0000-4000-8000-000000000157", business_id: "00000000-0000-4000-8000-0000000000b1", status: "active",
     meta_campaign_id: live, meta_adset_id: "120253678787370526", meta_ad_ids: ["120253678789370526", "120253678790440526"],
@@ -163,5 +172,74 @@ describe("core: live campaigns refresh their results and health by themselves (#
     replay(exchange => exchange.path.startsWith(`${live}/ads?`) ? { data: [] } : exchange.body);
     await run();
     expect(healthOf(live).flags).toEqual([]);
+  });
+});
+
+// #1003 (QA 2's #1133 audit): Meta keeps attributing after a pause, and an imported campaign had no row at all.
+describe("core: paused campaigns get their late results, then stop (#1003)", () => {
+  const PAUSED_ID = "00000000-0000-4000-8000-000000000999";
+  const pausedRow = () => db.campaigns.find(row => row.id === PAUSED_ID)!;
+  const pausedReads = (sent: string[]) => sent.filter(call => call.startsWith(`GET ${paused}/insights`));
+
+  it("reads a campaign AdBrain paused once a day later and once at 7 days, with no health flags or ad review", async () => {
+    pausedRow().status = "paused";
+    db.audit = [{ entity_type: "campaign", entity_id: PAUSED_ID, action: "campaign.pause", created_at: "2026-10-22T16:00:00.000Z" }];
+    db.results = [{ campaign_id: PAUSED_ID, fetched_at: "2026-10-22T15:55:00.000Z", impressions: 0 }];
+    const before = structuredClone(pausedRow().raw);
+
+    // 17:00Z Oct 23 is past pause + 1 day: one results read, no review, health untouched.
+    let sent = replay();
+    let { body } = await run();
+    expect(body).toMatchObject({ refreshed: 1, pausedReads: 1, failed: 0 });
+    expect(pausedReads(sent)).toHaveLength(1);
+    expect(sent.some(call => call.startsWith(`GET ${paused}/ads?`))).toBe(false);
+    expect(sent.every(call => call.startsWith("GET "))).toBe(true);
+    expect(pausedRow().raw).toEqual(before);
+    expect(body.alerts).toEqual([]);
+
+    // Then nothing until the 7-day read.
+    for (const at of ["2026-10-23T17:15:00Z", "2026-10-26T12:00:00Z", "2026-10-29T15:59:00Z"]) {
+      vi.setSystemTime(new Date(at));
+      sent = replay();
+      ({ body } = await run());
+      expect(pausedReads(sent), at).toEqual([]);
+      expect(body.pausedReads).toBe(0);
+    }
+    vi.setSystemTime(new Date("2026-10-29T16:00:00Z"));
+    sent = replay();
+    expect((await run()).body.pausedReads).toBe(1);
+    expect(pausedReads(sent)).toHaveLength(1);
+
+    // Final after that.
+    vi.setSystemTime(new Date("2026-11-20T16:00:00Z"));
+    sent = replay();
+    expect((await run()).body.pausedReads).toBe(0);
+    expect(pausedReads(sent)).toEqual([]);
+    expect(db.results.filter(row => row.campaign_id === PAUSED_ID)).toHaveLength(3);
+  });
+
+  it("gives an imported paused campaign with no results one lifetime read, then leaves it", async () => {
+    pausedRow().status = "paused";
+    const sent = replay();
+    expect((await run()).body).toMatchObject({ refreshed: 1, pausedReads: 1 });
+    expect(pausedReads(sent)).toHaveLength(1);
+    expect(db.results.filter(row => row.campaign_id === PAUSED_ID)).toEqual([expect.objectContaining({ impressions: 0 })]);
+
+    vi.setSystemTime(new Date("2026-11-20T16:00:00Z"));
+    const later = replay();
+    expect((await run()).body.pausedReads).toBe(0);
+    expect(pausedReads(later)).toEqual([]);
+  });
+
+  it("does not follow up a pause that was resumed and paused again in Ads Manager", async () => {
+    pausedRow().status = "paused";
+    db.audit = [
+      { entity_type: "campaign", entity_id: PAUSED_ID, action: "campaign.pause", created_at: "2026-10-20T10:00:00.000Z" },
+      { entity_type: "campaign", entity_id: PAUSED_ID, action: "campaign.resume", created_at: "2026-10-21T10:00:00.000Z" },
+    ];
+    db.results = [{ campaign_id: PAUSED_ID, fetched_at: "2026-10-22T09:00:00.000Z", impressions: 0 }];
+    const sent = replay();
+    expect((await run()).body.pausedReads).toBe(0);
+    expect(pausedReads(sent)).toEqual([]);
   });
 });
