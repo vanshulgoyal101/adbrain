@@ -49,8 +49,8 @@ beforeEach(() => {
 describe("<LeadInbox> empty state", () => {
   it("explains what will appear and how", () => {
     render(<LeadInbox businessName="Solaride" initialLeads={[]} metaReady />);
-    expect(screen.getByText("No leads yet")).toBeInTheDocument();
-    expect(screen.getByText(/they’ll show up here/i)).toBeInTheDocument();
+    expect(screen.getByText("No enquiries yet")).toBeInTheDocument();
+    expect(screen.getByText(/message you on WhatsApp/i)).toBeInTheDocument();
   });
 
   it("hides the digest card when there is nothing to share", () => {

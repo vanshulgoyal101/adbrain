@@ -38,6 +38,14 @@ function view(metaReady = false) {
   return render(<Campaigns business={business} approved={[creative]} initialCampaigns={[]} initialResults={{}} leadForms={[{ id: "form-1", name: "Enquiries", status: "ACTIVE" }]} leadFormError={null} metaReady={metaReady} adAccountId="" />);
 }
 
+// #1171: WhatsApp chat is the default; lead forms load only once Instant form is chosen.
+const chooseInstantForm = () => fireEvent.click(screen.getByRole("radio", { name: "Instant form" }));
+function viewInstantForm(metaReady = false) {
+  const result = view(metaReady);
+  chooseInstantForm();
+  return result;
+}
+
 beforeEach(() => {
   vi.resetAllMocks();
   sessionStorage.clear();
@@ -112,14 +120,15 @@ describe("unsaved campaign setup", () => {
     render(<Campaigns business={business} approved={[creative]} initialCampaigns={[]} initialResults={{}}
       leadForms={[{ id: "form-1", name: "Enquiries", status: "ACTIVE" }, { id: "form-2", name: "Consultations", status: "ACTIVE" }]}
       leadFormError={null} metaReady={false} adAccountId="" />);
+    chooseInstantForm();
     fireEvent.change(screen.getByRole("combobox", { name: "Lead form" }), { target: { value: "form-2" } });
     fireEvent.click(screen.getByRole("button", { name: "Close campaign setup" }));
     fireEvent.click(screen.getByRole("button", { name: "New campaign" }));
     expect(screen.getByRole("combobox", { name: "Lead form" })).toHaveValue("form-2");
-    fireEvent.click(screen.getByRole("radio", { name: "WhatsApp chat" }));
+    fireEvent.click(screen.getByRole("radio", { name: "WhatsApp chat (recommended)" }));
     fireEvent.click(screen.getByRole("button", { name: "Close campaign setup" }));
     fireEvent.click(screen.getByRole("button", { name: "New campaign" }));
-    expect(screen.getByRole("radio", { name: "WhatsApp chat" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "WhatsApp chat (recommended)" })).toBeChecked();
     fireEvent.click(screen.getByRole("radio", { name: "Instant form" }));
     expect(screen.getByRole("combobox", { name: "Lead form" })).toHaveValue("form-2");
     expect(mocks.saveDraft).not.toHaveBeenCalled();
@@ -555,6 +564,7 @@ describe("campaign sync feedback", () => {
     vi.stubGlobal("fetch", vi.fn(async () => Response.json({ forms: [] })));
     const props = { approved: [creative], initialCampaigns: [], initialResults: {}, leadForms: [], leadFormError: null, metaReady: true, adAccountId: "" };
     const current = render(<Campaigns {...props} business={business} />);
+    chooseInstantForm();
     await waitFor(() => expect(screen.queryByText("Loading lead forms...")).not.toBeInTheDocument());
     const formCalls = () => vi.mocked(fetch).mock.calls.filter(([url]) => url === "/api/campaigns/lead-forms");
     expect(formCalls()).toHaveLength(1);
@@ -562,8 +572,10 @@ describe("campaign sync feedback", () => {
     fireEvent.click(screen.getByRole("button", { name: "New campaign" }));
     expect(formCalls()).toHaveLength(1);
     current.rerender(<Campaigns {...props} business={{ ...business, id: "other-business" }} />);
+    chooseInstantForm();
     await waitFor(() => expect(formCalls()).toHaveLength(2));
     current.rerender(<Campaigns {...props} business={{ ...business, id: "other-business", owner_id: "other-owner" }} />);
+    chooseInstantForm();
     await waitFor(() => expect(formCalls()).toHaveLength(3));
   });
 
@@ -575,7 +587,7 @@ describe("campaign sync feedback", () => {
       .mockResolvedValueOnce(Response.json({ forms: [{ id: "form-2", name: "Fresh form", status: "ACTIVE" }] }));
     vi.stubGlobal("fetch", vi.fn((url: string) => url === "/api/campaigns/lead-forms"
       ? forms() : Promise.resolve(Response.json({ campaigns: [], nextCursor: null }))));
-    view(true);
+    viewInstantForm(true);
     await screen.findByText("Loading lead forms...");
     fireEvent.click(screen.getByRole("button", { name: "Close campaign setup" }));
     await act(async () => { completeFirst(Response.json({ forms: [{ id: "old", name: "Cancelled form", status: "ACTIVE" }] })); });
@@ -593,7 +605,7 @@ describe("campaign sync feedback", () => {
   it("reuses successful forms on reopen and refreshes after one minute", async () => {
     const clock = vi.spyOn(Date, "now").mockReturnValue(1_000_000);
     try {
-      view(true);
+      viewInstantForm(true);
       await waitFor(() => expect(screen.queryByText("Loading lead forms...")).not.toBeInTheDocument());
       const formCalls = () => vi.mocked(fetch).mock.calls.filter(([url]) => url === "/api/campaigns/lead-forms");
       expect(formCalls()).toHaveLength(1);
@@ -613,7 +625,7 @@ describe("campaign sync feedback", () => {
   });
 
   it("refreshes fresh forms after reconnecting", async () => {
-    view(true);
+    viewInstantForm(true);
     await waitFor(() => expect(screen.queryByText("Loading lead forms...")).not.toBeInTheDocument());
     await act(async () => { await mocks.dialog.current!.onBeforeStart!(); });
     await act(async () => { mocks.dialog.current!.onConnected({ authorization: "connected", selected, generation: 2 } as ConnectionDTO); });
@@ -625,7 +637,7 @@ describe("campaign sync feedback", () => {
   });
 
   it("loads lead forms once when a connection completes", async () => {
-    view(false);
+    viewInstantForm(false);
     await act(async () => { await mocks.dialog.current!.onBeforeStart!(); });
     await act(async () => { mocks.dialog.current!.onConnected({ authorization: "connected", selected, generation: 1 } as ConnectionDTO); });
     await waitFor(() => expect(vi.mocked(fetch).mock.calls.filter(([url]) => String(url).startsWith("/api/campaigns/lead-forms"))).toHaveLength(1));
@@ -701,6 +713,7 @@ describe("campaign sync feedback", () => {
     await screen.findByRole("button", { name: "New campaign" });
     expect(forms).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "New campaign" }));
+    chooseInstantForm();
     await screen.findByText(/Page forms are temporarily unavailable/);
     fireEvent.click(screen.getByRole("button", { name: "Retry lead forms" }));
     await screen.findByRole("option", { name: "New enquiry" });

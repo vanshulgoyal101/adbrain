@@ -59,7 +59,8 @@ describe("WhatsApp ready? checklist (#493)", () => {
     view([whatsapp]);
     const newCampaign = screen.queryByRole("button", { name: "New campaign" });
     if (newCampaign) fireEvent.click(newCampaign);
-    fireEvent.click(await screen.findByRole("radio", { name: "WhatsApp chat" }));
+    fireEvent.click(await screen.findByRole("radio", { name: "Instant form" }));
+    fireEvent.click(screen.getByRole("radio", { name: "WhatsApp chat (recommended)" }));
     expect(screen.getAllByRole("region", { name: "4 tips to get more replies" })).toHaveLength(1);
   });
 });
