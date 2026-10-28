@@ -96,6 +96,7 @@ import { reviewBlockerAlternative, reviewBlockerFix } from "@/lib/campaign/revie
 import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
 import { useCampaignPreparation } from "@/lib/meta-connect-ui/use-campaign-preparation";
 import { targetingFromEditor, targetingToEditor } from "@/lib/campaign/editor-targeting";
+import { buildManualDraftInput, pickWhatsAppNumber } from "@/lib/campaign/manual-draft-input";
 import type { LeadForm } from "@/lib/meta/client";
 import { maskWhatsAppNumber, maskedWhatsAppNumberPattern, parseWhatsAppStatus, type WhatsAppStatus } from "@/lib/meta/whatsapp-status-shared";
 import type { ConnectIntent, ConnectionDTO } from "@/lib/meta/connect-contracts";
@@ -108,6 +109,7 @@ import {
 } from "@/lib/campaign/budget";
 import { effectiveDailyBudget, weeklyCapNotice, type CampaignSpend } from "@/lib/campaign/spend";
 import { accountFundingSchema, activationConfirmationPayload, campaignDeliverySnapshotSchema, RESUME_IN_ADS_MANAGER, reviewableCampaign } from "@/lib/campaign/activation";
+import { WHATSAPP_LINK_URL, WHATSAPP_UNVERIFIED_STEP } from "@/lib/meta/setup-checklist";
 import { activationWarnings, QUOTED_ASK_WITH_QUESTIONS, WHATSAPP_PICTURE_ON_FORM } from "@/lib/campaign/plan-check";
 import { cardVerdictInput, lastCampaignComparison } from "@/lib/campaign/card-verdict";
 import { verdict, type Comparison } from "@/lib/campaign/verdict";
@@ -324,7 +326,7 @@ function BusinessCampaigns({
     const text = whatsappGreeting(business, adWords(ads), [], adLanguages(ads), language);
     return [language, { greeting: text.greeting, prefill: text.autofill }];
   })) as Suggested;
-  const chosenWhatsAppNumber = whatsappOptions.some(({ masked }) => masked === whatsappNumber) ? whatsappNumber : whatsappOptions[0]?.masked ?? whatsappNumber;
+  const chosenWhatsAppNumber = pickWhatsAppNumber(whatsappOptions, whatsappNumber);
   const [leadFormId, setLeadFormId] = useState(initialSetup?.leadFormId ?? leadForms[0]?.id ?? "");
   const leadFormMemoryKey = `campaign-lead-form:${business.owner_id}:${business.id}`;
   const [availableForms, setAvailableForms] = useState(leadForms);
@@ -935,21 +937,21 @@ function BusinessCampaigns({
   function manualDraftInput(requireComplete = true): DraftInput {
     if (requireComplete && selected.size === 0) throw new Error("Select at least one creative.");
     if (requireComplete && budget <= 0) throw new Error("Enter a daily budget.");
-    return {
+    return buildManualDraftInput({
       businessId: business.id,
       name,
       goal: draftGoal || name,
       mode: preparedDraftRef.current?.input.mode === "guided" || creationMode === "guided" ? "guided" : "manual",
       creativeIds: [...selected],
-      dailyBudgetRupees: Math.max(0, budget),
-      leadFormId: destination === "whatsapp" ? null : leadFormId || null,
+      dailyBudgetRupees: budget,
+      leadFormId,
       destination,
-      ...(destination === "whatsapp" && chosenWhatsAppNumber ? { whatsappNumber: chosenWhatsAppNumber } : {}),
-      ...(destination === "whatsapp" && whatsappLanguage !== "ad" ? { whatsappLanguage } : {}),
-      ...(destination === "whatsapp" && whatsappMessage ? { whatsappMessage } : {}),
+      whatsappNumber: chosenWhatsAppNumber,
+      whatsappLanguage,
+      whatsappMessage,
       targeting: targetingFromEditor(targeting, plannedAreas, plannedExclusions),
       abTest,
-    };
+    });
   }
 
   // #366: plan the audience in the background once ads are chosen, so Prepare usually doesn't wait for the AI.
@@ -1712,7 +1714,16 @@ function BusinessCampaigns({
                     {fact("Budget", <>{formatMoney(review.totalDailyBudgetRupees)} a day{review.perAdSetDailyBudgetRupees !== review.totalDailyBudgetRupees && <span className="text-slate-600"> ({formatMoney(review.perAdSetDailyBudgetRupees)} per ad set)</span>}</>)}
                     {fact("Where", <>{review.resolvedAreaLabel ?? "Needs review"}, {input.targeting.location?.cityScope === "city_only" ? "city only (no added radius)" : `${input.targeting.location?.radiusKm ?? 25} km radius`}{review.serviceArea && <span className="block text-slate-600">{serviceAreaLine(review.serviceArea)}</span>}</>)}
                     {fact("Who", <>Ages {age?.min ?? "unset"}–{age?.max === 65 ? "65+" : age?.max ?? "unset"}, {{ all: "all genders", men: "men", women: "women" }[input.targeting.gender ?? "all"]}{interests ? `, interested in ${interests}` : input.targeting.audience?.interestNames.length ? ", interests need resolving" : ", no interest narrowing"}</>)}
-                    {fact("Destination", <>{input.destination === "whatsapp" ? `WhatsApp chat ${review.whatsappNumber ?? "(number not verified)"}` : "Instant lead form"}{/* #906: WhatsApp and lead-form ads leave Audience Network out. */}{(input.destination === "whatsapp" || input.destination === "instant_form") && <span className="block text-slate-600">Shown on Facebook, Instagram and Messenger</span>}</>)}
+                    {fact("Destination", <>{input.destination === "whatsapp" ? `WhatsApp chat ${review.whatsappNumber ?? "(number not verified)"}` : "Instant lead form"}{input.destination === "whatsapp" && !review.whatsappNumber && (
+                      // #1301: an unverified number gets one plain next step, a link and a re-check (the same preflight read).
+                      <span className="block text-slate-700">
+                        {WHATSAPP_UNVERIFIED_STEP}{" "}
+                        <a href={WHATSAPP_LINK_URL} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center font-medium text-blue-700 underline">Open WhatsApp settings</a>{" "}
+                        <button type="button" className="inline-flex min-h-11 items-center font-medium text-blue-700 underline disabled:opacity-60"
+                          disabled={prepareReview.status !== "ready"}
+                          onClick={() => void loadPrepareReview(prepareReview.draft, prepareReview.connection).catch(() => undefined)}>Check again</button>
+                      </span>
+                    )}{/* #906: WhatsApp and lead-form ads leave Audience Network out. */}{(input.destination === "whatsapp" || input.destination === "instant_form") && <span className="block text-slate-600">Shown on Facebook, Instagram and Messenger</span>}</>)}
                     {fact("Meta account", <>{review.selected?.accountName ?? prepareReview.connection.selected?.accountName ?? "Unavailable"}, Page {review.selected?.pageName ?? prepareReview.connection.selected?.pageName ?? "Unavailable"} ({review.currency})</>)}
                   </dl>
                   <p className="mt-3 text-xs text-slate-500">Location includes residents and recent visitors. Interest signals may expand under Meta lead optimization.</p>

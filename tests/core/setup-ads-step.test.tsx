@@ -75,6 +75,16 @@ describe("core: <SetupAdsStep> (#1270)", () => {
     expect(screen.getByRole("link", { name: "Edit the words of Ad b" })).toHaveAttribute("href", "/studio?creative=b");
   });
 
+  it("#1393: the first picture loads first (preloaded, high priority); the others wait until scrolled to", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+    const { renderToString } = await import("react-dom/server");
+    const html = renderToString(<SetupAdsStep business={business} initialAds={[ad("a"), ad("b"), ad("c")]} />);
+    expect(html).toMatch(/<link rel="preload" href="\/ads\/a\.png" as="image" fetchPriority="high"\/>/);
+    const { container } = render(<SetupAdsStep business={business} initialAds={[ad("a"), ad("b"), ad("c")]} />);
+    const pictures = [...container.querySelectorAll("img")].map((img) => [img.getAttribute("src"), img.getAttribute("fetchpriority"), img.getAttribute("loading")]);
+    expect(pictures).toEqual([["/ads/a.png", "high", "eager"], ["/ads/b.png", "auto", "lazy"], ["/ads/c.png", "auto", "lazy"]]);
+  });
+
   it("nothing picked: the primary says so and can't be tapped", () => {
     vi.stubGlobal("fetch", vi.fn());
     render(<SetupAdsStep business={business} initialAds={[ad("a")]} />);

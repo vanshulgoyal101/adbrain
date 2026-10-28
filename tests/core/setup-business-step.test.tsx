@@ -174,7 +174,7 @@ describe("core: <SetupBusinessStep> (#1269)", () => {
   });
 
   it("Fill it from my website fills only the empty fields", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ extraction: { vertical: "Solar panels", locations: ["Jaipur"], offers: ["Free survey"], phone: "9876543210", name: "SunPeak Solar" } })));
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ extraction: { vertical: "Solar panels", locations: ["Jaipur"], offers: ["Free survey"], phone: "9876543210", name: "Solaride" } })));
     await step();
     type("Your offer", "My own offer");
     type("Your website (optional)", "sunpeak.in");
@@ -183,7 +183,35 @@ describe("core: <SetupBusinessStep> (#1269)", () => {
     expect(screen.getByLabelText("What you sell")).toHaveValue("Solar panels");
     expect(screen.getByLabelText("Your offer")).toHaveValue("My own offer");
     expect(screen.getByLabelText("WhatsApp number")).toHaveValue("9876543210");
+    // #1379: the owner's name stays; an empty one is filled (the pasted-bio test below).
     expect(screen.getByLabelText("Business name")).toHaveValue("SunPeak Solar");
+  });
+
+  // #1317 (QA 2's #1365 walk): a bio-only prospect fills step 1 from pasted text, with no trip to the full Brand page.
+  it("No website? fills only the empty fields from a pasted bio, and says where they came from", async () => {
+    const fetch = vi.fn(async () => Response.json({ extraction: { name: "Sweet Crumbs Bakery", vertical: "Eggless cakes", locations: ["Mohali"], phone: "+919829012345" } }));
+    vi.stubGlobal("fetch", fetch);
+    await step({ ...business, name: "" } as Business);
+    type("Your offer", "Free delivery");
+    fireEvent.click(screen.getByRole("button", { name: "No website? Paste a bio or listing" }));
+    const fill = screen.getByRole("button", { name: "Fill from this text" });
+    expect(fill).toBeDisabled();
+    type("Instagram bio, Google listing or catalogue text", "Sweet Crumbs Bakery 🍰 Mohali Phase 7 | Eggless cakes | WhatsApp 98290 12345");
+    await act(async () => fireEvent.click(fill));
+    expect(await screen.findByText("Filled from your text. Check each line.")).toBeInTheDocument();
+    expect(JSON.parse(String((fetch.mock.calls[0] as unknown as [string, RequestInit])[1].body))).toMatchObject({ text: "Sweet Crumbs Bakery 🍰 Mohali Phase 7 | Eggless cakes | WhatsApp 98290 12345" });
+    expect(screen.getByLabelText("Business name")).toHaveValue("Sweet Crumbs Bakery");
+    expect(screen.getByLabelText("What you sell")).toHaveValue("Eggless cakes");
+    expect(screen.getByLabelText("Your offer")).toHaveValue("Free delivery");
+  });
+
+  it("pasted text too short to read gets the server's own words", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ error: "Paste a little more about the business: what it sells, where, and how to reach it." }, { status: 400 })));
+    await step();
+    fireEvent.click(screen.getByRole("button", { name: "No website? Paste a bio or listing" }));
+    type("Instagram bio, Google listing or catalogue text", "Cakes!");
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Fill from this text" })));
+    expect(await screen.findByText("Paste a little more about the business: what it sells, where, and how to reach it.")).toBeInTheDocument();
   });
 
   it("a website it can't read says so plainly", async () => {

@@ -35,7 +35,7 @@ ID are different identifiers. Never infer one from another.
 
 | Page | Job | Important boundary |
 | --- | --- | --- |
-| `/dashboard` | Results so far first (enquiries, spent, per enquiry, oldest update; same latest results as the campaign cards, #764; the median time to first reply over 30 days, #1049), next action, onboarding progress, activity | Uses stored state; not proof of live provider health |
+| `/dashboard` | The newest enquiry from the last 24 h still waiting for a first reply ("Rohit tapped your ad at 9:40 am. Reply now; …", #1292), then results so far (enquiries, spent, per enquiry, oldest update; same latest results as the campaign cards, #764; the median time to first reply over 30 days, #1049), next action, onboarding progress, activity | Uses stored state; not proof of live provider health |
 | `/brand` | Setup step 1 for first-timers; profile, assets, Markdown instructions (`?all=1`) | Saved business facts ground AI output |
 | `/create` | Guided creative interview and brief review | Reviewing a brief is distinct from paid generation; the Brand context panel names missing offers, service areas and phone before a run. Any goal, typed or from a suggestion, on a Brand with an offer or proof point, an area and a phone skips the review when the interview needs no question. The start screen says what the ads will use ('Your 3 ads will use: Mohali · offer: Free site survey'; every Brand area Create sends, the first 3 then '+N more' (#1034); a proof point is labelled 'proof:', facts cut at 40 characters) above 'Make 3 ads', with 'About 2 minutes. Nothing is published.' under it and 'Edit brief' to keep the review; afterwards the brief shows as a collapsed 'What I'll write about · Edit' line (#858, #1004). After 'Use this ad', the one primary step 'Next: set up campaign' opens `/campaigns?…&review=1`, which prepares Review on its own (#1004, #1152); 'Review ads' and 'Make another' stay in the quieter row above. Up to two 'Coming up' occasion chips (festivals and seasons for today's date in IST, `src/lib/seasonal.ts`; November adds Chhath Puja, Guru Nanak Jayanti and the winter season, and a festival comes before a long season, #1210) fill the goal in one tap with plain words ('An ad for Chhath Puja from <Business>.'); they never assert a sale, discount or deadline, and the concept prompt and claim check allow only saved offers (#700, #1153) |
 | `/studio` | Generate, inspect, approve, edit (ad text, words on picture, background), regenerate (asks first), delete, export, share approved ads (phone share sheet; desktop downloads and copies the text); "Create campaign (N)" links approved ads to Campaigns | Approval and sharing do not publish an ad on Meta |
@@ -94,6 +94,13 @@ sell, places one per line, one offer, a 10-digit WhatsApp number) plus "Fill it
 from my website", which fills only empty fields. It autosaves only those columns
 (`saveSetupBusiness`; other offers and Brand fields are kept) and "Make my ads"
 checks all five, then goes to `/create`. `/brand?all=1` opens the full page.
+
+Until then Home (`/dashboard`) is one resume card, "Your first ad · Step N of 3 ·
+{step} · Continue" (#1272, `setupResumeStep`): step 1 until the five facts make a
+usable Brand, step 2 until an ad is picked (approved), then step 3. The + button
+reads "Continue your first ad" and `/create` sends a first-timer without the five
+facts to `/brand`. A campaign counts as having gone live once it has `launched_at`
+or is active or completed.
 
 Website autofill fetches a public website and proposes extracted facts. On a Brand with
 nothing filled in yet it runs by itself when the owner leaves the Website field (once per
@@ -527,13 +534,25 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
 
 A first-timer with approved ads and no campaign yet, who can connect Meta, gets
 setup step 3 "Go live" on `/campaigns` (#1251 WS1, #1271): the picked ads, a daily
-budget (₹300/₹500/₹1,000 a day) for 2 days with the most it can spend, the areas,
+budget (₹300/₹500/₹1,000 a day) for 2 days with the most it can spend including
+Meta's GST (`capWithGstPaise`, the activation reserve's own formula), the areas,
 the WhatsApp chat, and the weekly cap line (#1342; over the cap, Go live can't be
 tapped). The checklist shows the Facebook Page, the money row (AdBrain ad money →
 Settings, or payment on the owner's own Meta account) and the "Stops at" total.
 The one primary connects the Page first (MetaConnectDialog), then "Go live · ₹{d} a
-day" opens the campaign review below (`?all=1&new=1&review=1&budget=d&creatives=…`).
-Nothing is created or spent from Go live until the one-tap path (#1271 4b) ships.
+day" is one tap (#1271 4b, `src/lib/campaign/setup-go-live-flow.ts`) through the
+same routes the Campaigns page uses: connection status (not connected → the Meta
+dialog), save the composer's default draft (the picked ads, ₹d a day, WhatsApp to
+Meta's first ready number, default targeting, no A/B), preflight, create it PAUSED
+(operation polled), then `GET /api/campaigns/{id}` and `PATCH` it active as a
+2-day capped run (`capDays: 2`, so Meta's total limit is ₹d×2; the server also
+checks the weekly cap and funding). One progress line per step. Review blockers
+are shown in their own words with "Fix in campaign review"
+(`?all=1&new=1&review=1&budget=d&creatives=…`) and nothing is created; a refused
+activation is shown verbatim and the campaign stays paused with nothing spent.
+The create request (idempotency key) is kept in sessionStorage per business, ads
+and budget, so a second tap or a reload resumes its operation
+(`operationForRequest`) instead of creating another campaign.
 
 Closing New campaign retains its unsaved brief, creatives, audience, destination
 and budget in memory for the current business; returning to a business in the

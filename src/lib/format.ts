@@ -63,6 +63,17 @@ export function formatDate(date: Date | string, now: Date = new Date()): string 
   return `${p.day} ${p.month}, ${time}`;
 }
 
+/** #1292: "9:40 am" today, "9:40 pm yesterday", otherwise "24 Oct, 9:40 am", for "tapped your ad at …". */
+export function formatClock(date: Date | string, now: Date = new Date()): string {
+  const d = typeof date === "string" ? new Date(date) : date;
+  if (Number.isNaN(d.getTime())) return "";
+  const p = parts(d, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true });
+  const time = `${p.hour}:${p.minute} ${String(p.dayPeriod).toLowerCase()}`;
+  if (istDay(d) === istDay(now)) return time;
+  if (istDay(d) === istDay(new Date(now.getTime() - 86_400_000))) return `${time} yesterday`;
+  return `${p.day} ${p.month}, ${time}`;
+}
+
 /** #1290: a day without the time ("24 Oct"), by the India calendar. "" for an invalid date. */
 export function formatDay(date: Date | string): string {
   const d = typeof date === "string" ? new Date(date) : date;

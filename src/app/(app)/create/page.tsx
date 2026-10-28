@@ -6,7 +6,10 @@ import { CreateFlow } from "@/components/create-flow";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
+import { redirect } from "next/navigation";
 import { SetupAdsStep } from "@/components/setup-ads-step";
+import { setupFieldsFrom } from "@/lib/brand/setup-fields";
+import { brandUsable } from "@/lib/brand/usable";
 import { clientCreative } from "@/lib/creative/client-receipt";
 import { getBrandAssets, getLatestCreativeBatch, getPrimaryBusiness, hasLaunchedCampaign } from "@/lib/supabase/queries";
 import { occasionsFor } from "@/lib/seasonal";
@@ -48,6 +51,8 @@ export default async function CreatePage({ searchParams }: { searchParams?: Prom
     const setup = await Promise.resolve()
       .then(() => Promise.all([hasLaunchedCampaign(business.id), getLatestCreativeBatch(business.id)]))
       .then(([launched, batch]) => launched ? null : batch.map(clientCreative)).catch(() => null);
+    // #1272: the + button lands here; a first-timer without the five facts resumes at step 1.
+    if (setup && !brandUsable({ ...business, vertical: setupFieldsFrom(business).vertical })) redirect("/brand");
     if (setup) return <SetupAdsStep business={business} initialAds={setup} />;
   }
 

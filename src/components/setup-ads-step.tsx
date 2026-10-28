@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { preload } from "react-dom";
 import Link from "next/link";
 import { Check, Loader2, Pencil } from "lucide-react";
 import { setCreativeStatus } from "@/app/(app)/studio/actions";
@@ -184,6 +185,10 @@ export function SetupAdsStep({ business, initialAds }: { business: Business; ini
     });
   }
 
+  // #1393: the first picture is the step's LCP on a phone; start it before the page's scripts, not after.
+  const firstPicture = ads.find((ad) => ad.image_url)?.image_url;
+  if (firstPicture) preload(creativeThumbnailUrl(firstPicture), { as: "image", fetchPriority: "high" });
+
   const chosen = ads.filter((ad) => picked.has(ad.id));
   const ids = chosen.map((ad) => ad.id);
 
@@ -230,7 +235,9 @@ export function SetupAdsStep({ business, initialAds }: { business: Business; ini
                   <button type="button" aria-pressed={on} onClick={() => toggle(ad.id)} className="block w-full text-left">
                     {ad.image_url && (
                       // Studio's thumbnail, falling back to the full picture (as Review does).
-                      <img src={creativeThumbnailUrl(ad.image_url)} alt="" className="aspect-square w-full bg-slate-100 object-contain"
+                      <img src={creativeThumbnailUrl(ad.image_url)} alt="" width={960} height={960} className="aspect-square h-auto w-full bg-slate-100 object-contain"
+                        // #1393: only the first card is on screen on a phone; the others wait so they don't share its bandwidth.
+                        fetchPriority={ad.image_url === firstPicture ? "high" : "auto"} loading={ad.image_url === firstPicture ? "eager" : "lazy"}
                         onError={(event) => { if (ad.image_url && event.currentTarget.src !== ad.image_url) event.currentTarget.src = ad.image_url; }} />
                     )}
                     <span className="block p-3">
