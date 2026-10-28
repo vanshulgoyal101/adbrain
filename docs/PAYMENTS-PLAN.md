@@ -65,6 +65,14 @@ Owner explicitly approved this initial live-checkout policy on September 26, 202
 - The operator handles Meta payments externally. Approval does not initiate a
   charge, refund, bank operation or campaign activation.
 
+**Customer wording (#1235, CEO, Oct 28):** customers never see AdBrain's share. New
+checkouts use terms `operator-managed-priced-v2`: "₹X for 12 months for one business,
+one offer and one service area, including up to two ads and one capped Meta
+campaign. It includes your ad budget, with Meta's GST…" and "Full refund before we
+start work. After that, your unused ad budget is refundable once pending Meta costs
+are settled." The internal split and accounting above are unchanged; v1 orders keep
+their v1 terms.
+
 Implement these as versioned terms shown before customer consent. Do not mark
 service allocation earned at capture, or charge a fee on top of the total.
 This is an approved commercial policy, not a determination of the operator's tax

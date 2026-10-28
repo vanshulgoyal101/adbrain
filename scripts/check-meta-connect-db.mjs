@@ -19,6 +19,7 @@ const configurablePaymentMigration = await readFile(join(root, "db/migrations/20
 const webhookHealthMigration = await readFile(join(root, "db/migrations/20261022_payment_webhook_health.sql"), "utf8");
 const cappedBoundMigration = await readFile(join(root, "db/migrations/20261023_capped_reservation_bound.sql"), "utf8");
 const customAmountMigration = await readFile(join(root, "db/migrations/20261023_custom_payment_amount.sql"), "utf8");
+const paymentTermsV2Migration = await readFile(join(root, "db/migrations/20261028_payment_terms_v2.sql"), "utf8");
 const metaCostMigration = await readFile(join(root, "db/migrations/20261023_meta_cost_observation.sql"), "utf8");
 const metaSettleMigration = await readFile(join(root, "db/migrations/20261023_meta_cost_settle.sql"), "utf8");
 const operatorFundedMigration = await readFile(join(root, "db/migrations/20261023_operator_funded_businesses.sql"), "utf8");
@@ -320,7 +321,9 @@ async function verifyConfigurablePayments(db, database) {
     finally { await session.end(); }
   };
   const quote = async (amount, verification = false) => (await db.query("select private.production_payment_quote($1,$2) as quote", [amount,verification])).rows[0].quote;
-  const terms = async (value, verification = null) => (await db.query("select private.production_payment_priced_policy($1,$2) as policy", [value,verification])).rows[0].policy;
+  // #1235: new checkouts use the v2 terms; v1 (priced and fixed) stays valid for existing orders.
+  const terms = async (value, verification = null) => (await db.query("select private.production_payment_priced_policy_v2($1,$2) as policy", [value,verification])).rows[0].policy;
+  const termsV1 = async (value, verification = null) => (await db.query("select private.production_payment_priced_policy($1,$2) as policy", [value,verification])).rows[0].policy;
   const claim = (value, policy, requestKey = randomUUID(), businessId = business, userId = owner) => {
     const text = JSON.stringify(policy);
     return service("select public.production_payment_order_claim($1,$2,$3,$4,'acc_pricing','rzp_live_pricing',$5,$6,$7,null) as result",
@@ -341,7 +344,7 @@ async function verifyConfigurablePayments(db, database) {
       RAZORPAY_LIVE_KEY_SECRET:'synthetic-key-only',RAZORPAY_LIVE_WEBHOOK_SECRET:'synthetic-webhook-only',RAZORPAY_LIVE_ACCOUNT_ID:'acc_fixture',
       PAYMENTS_LIVE_WEBHOOK_ID:randomUUID(),VERCEL_PROJECT_ID:'prj_fixture',PAYMENTS_LIVE_PROJECT_ID:'prj_fixture',
       NEXT_PUBLIC_SUPABASE_URL:'https://fixture.supabase.co',PAYMENTS_LIVE_SUPABASE_URL:'https://fixture.supabase.co' };
-    for (const [amount,scope,chosen] of [[100,null],[1005,null],[50000,null],[999999,null],[1000,verification],[125000,null,true],[50005,null,true]]) {
+    for (const [amount,scope,chosen] of [[100,null],[1005,null],[50000,null],[999999,null],[1000000,null],[1000,verification],[125000,null,true],[50005,null,true]]) {
       const settings = { ...environment,PAYMENTS_LIVE_AMOUNT_PAISE:chosen ? '1000000' : String(amount),...(scope ? {
         PAYMENTS_LIVE_VERIFICATION_ENABLED:'true',PAYMENTS_LIVE_VERIFICATION_AMOUNT_PAISE:String(amount),
         PAYMENTS_LIVE_VERIFICATION_BUSINESS_ID:business,PAYMENTS_LIVE_VERIFICATION_USER_ID:owner,PAYMENTS_LIVE_VERIFICATION_EXPIRES_AT:scope.expiresAt } : {}) };
@@ -351,6 +354,18 @@ async function verifyConfigurablePayments(db, database) {
       assert.deepEqual(actual,await terms(await quote(amount,Boolean(scope)),scope));
       assert.equal((await db.query("select private.production_payment_contract_valid($1,$2,$3) as valid",[amount,actual.quote,actual])).rows[0].valid,true);
     }
+  });
+  await check(`${database}: v2 terms name no split, and v1 terms still validate for old orders (#1235)`, async () => {
+    const value = await quote(125000);
+    const [v2, v1] = [await terms(value), await termsV1(value)];
+    assert.equal(v2.version, 'operator-managed-priced-v2');
+    assert.match(v2.serviceScope, /^₹1,250 for 12 months/);
+    assert.doesNotMatch(`${v2.serviceScope} ${v2.refundTerms}`, /allocat|20%|80%|service fee|INR 250/i);
+    const valid = async (policy) => (await db.query("select private.production_payment_contract_valid($1,$2,$3) as valid",[125000,value,policy])).rows[0].valid;
+    assert.equal(await valid(v2), true);
+    assert.equal(await valid(v1), true);
+    assert.equal(await valid({ ...v2, refundTerms: v1.refundTerms }), false);
+    assert.equal(await valid({ ...v1, version: 'operator-managed-priced-v2' }), false);
   });
   await check(`${database}: exact verification quote and single concurrent order`, async () => {
     const results = await Promise.all([claim(verificationQuote,verificationPolicy),claim(verificationQuote,verificationPolicy)]);
@@ -2462,6 +2477,12 @@ async function verify(database, source, integrityMigration, customerOnly = false
         await check(`${database}: custom payment amount migration applies once and skips replay`,async () => {
           assert.equal(await applyMigration(db,"20261023_custom_payment_amount.sql",customAmountMigration),'applied');
           assert.equal(await applyMigration(db,"20261023_custom_payment_amount.sql",customAmountMigration),'already_applied');
+        });
+      }
+      if (!(await db.query("select to_regprocedure('private.production_payment_priced_policy_v2(jsonb,jsonb)') is not null as installed")).rows[0].installed) {
+        await check(`${database}: payment terms v2 migration applies once and skips replay (#1235)`,async () => {
+          assert.equal(await applyMigration(db,"20261028_payment_terms_v2.sql",paymentTermsV2Migration),'applied');
+          assert.equal(await applyMigration(db,"20261028_payment_terms_v2.sql",paymentTermsV2Migration),'already_applied');
         });
       }
       await verifyConfigurablePayments(db,database);

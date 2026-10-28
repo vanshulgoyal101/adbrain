@@ -120,9 +120,9 @@ available for the normal annual package, other users, expired or completed tests
 If the quote update fails, payment stays disabled until the amount is restored or
 a valid updated quote is received and accepted.
 
-The normal default preserves the original quote and policy. Other totals produce
-a versioned quote and matching service/refund terms, requiring fresh hash-bound
-consent. Nondefault pricing or enabled verification cannot be combined with an
+Every total, the default included, produces a versioned quote and matching
+`operator-managed-priced-v2` service/refund terms (#1235: no split shown), requiring
+fresh hash-bound consent. Orders accepted under v1 keep their v1 terms. Nondefault pricing or enabled verification cannot be combined with an
 explicit `PAYMENTS_LIVE_POLICY_JSON` override. Stored amounts, quotes, consent and
 identities are immutable. A changed configuration never reprices an old order;
 only a customer's own new amount replaces an unpaid order (see below).

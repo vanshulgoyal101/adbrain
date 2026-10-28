@@ -6,7 +6,7 @@ import { POST as verify } from "@/app/api/payments/live/verify/route";
 import { POST as webhook } from "@/app/api/payments/live/webhook/route";
 import { POST as reconcile } from "@/app/api/payments/live/reconcile/route";
 import { POST as operator } from "@/app/api/payments/live/operator/route";
-import { getProductionCollectionPolicy, OPERATOR_MANAGED_POLICY, PRICING_APPROVED_AT, productionPaymentPolicySchema, quoteForPaymentPolicy } from "@/lib/payments/production-config";
+import { getProductionCollectionPolicy, PRICING_V2_APPROVED_AT, productionPaymentPolicySchema, quoteForPaymentPolicy } from "@/lib/payments/production-config";
 import { createAnnualPaymentQuote, type ProductionPaymentQuote } from "@/lib/payments/allocation";
 
 const mocks = vi.hoisted(() => ({ rpc: vi.fn(), getUser: vi.fn(), own: vi.fn(), rateLimit: vi.fn(), createOrder: vi.fn(), fetchOrder: vi.fn(),
@@ -131,7 +131,7 @@ afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks(); });
 
 describe("live checkout service with synthetic provider evidence", () => {
   it("quotes a bounded custom verification amount without creating an order and locks it after creation", async () => {
-    const at = Date.parse(PRICING_APPROVED_AT);
+    const at = Date.parse(PRICING_V2_APPROVED_AT);
     vi.spyOn(Date, "now").mockReturnValue(at);
     for (const [name, value] of Object.entries({ PAYMENTS_LIVE_POLICY_JSON: "", PAYMENTS_LIVE_VERIFICATION_ENABLED: "true",
       PAYMENTS_LIVE_VERIFICATION_BUSINESS_ID: businessId, PAYMENTS_LIVE_VERIFICATION_USER_ID: userId,
@@ -179,7 +179,7 @@ describe("live checkout service with synthetic provider evidence", () => {
   });
 
   it("uses the saved configured amount for creation and capture after the current price changes", async () => {
-    vi.spyOn(Date, "now").mockReturnValue(Date.parse(PRICING_APPROVED_AT));
+    vi.spyOn(Date, "now").mockReturnValue(Date.parse(PRICING_V2_APPROVED_AT));
     vi.stubEnv("PAYMENTS_LIVE_POLICY_JSON", "");
     vi.stubEnv("PAYMENTS_LIVE_AMOUNT_PAISE", "50000");
     const { hash, ...terms } = getProductionCollectionPolicy();
@@ -194,7 +194,7 @@ describe("live checkout service with synthetic provider evidence", () => {
   });
 
   it("lets a customer choose an annual amount from INR 500 to INR 10,000 and splits it exactly", async () => {
-    vi.spyOn(Date, "now").mockReturnValue(Date.parse(PRICING_APPROVED_AT));
+    vi.spyOn(Date, "now").mockReturnValue(Date.parse(PRICING_V2_APPROVED_AT));
     vi.stubEnv("PAYMENTS_LIVE_POLICY_JSON", "");
     const url = `${origin}/api/payments/live/orders?businessId=${businessId}`;
     const quoted = await (await GET(new Request(`${url}&amountPaise=125000`))).json();
@@ -214,7 +214,7 @@ describe("live checkout service with synthetic provider evidence", () => {
   });
 
   it("pre-fills INR 1,500 when nothing is saved and no amount is configured (#225)", async () => {
-    vi.spyOn(Date, "now").mockReturnValue(Date.parse(PRICING_APPROVED_AT));
+    vi.spyOn(Date, "now").mockReturnValue(Date.parse(PRICING_V2_APPROVED_AT));
     vi.stubEnv("PAYMENTS_LIVE_POLICY_JSON", "");
     const url = `${origin}/api/payments/live/orders?businessId=${businessId}`;
     listed = [];
@@ -225,7 +225,7 @@ describe("live checkout service with synthetic provider evidence", () => {
   });
 
   it("rejects annual amounts outside the bounds and terms accepted for another amount", async () => {
-    vi.spyOn(Date, "now").mockReturnValue(Date.parse(PRICING_APPROVED_AT));
+    vi.spyOn(Date, "now").mockReturnValue(Date.parse(PRICING_V2_APPROVED_AT));
     vi.stubEnv("PAYMENTS_LIVE_POLICY_JSON", "");
     const url = `${origin}/api/payments/live/orders?businessId=${businessId}`;
     for (const amount of [0, 100, 49_999, 1_000_001, 1.5, "abc"]) {
@@ -242,7 +242,7 @@ describe("live checkout service with synthetic provider evidence", () => {
   });
 
   it("shows a replaced unpaid order without a Pay button and keeps every paid top-up", async () => {
-    vi.spyOn(Date, "now").mockReturnValue(Date.parse(PRICING_APPROVED_AT));
+    vi.spyOn(Date, "now").mockReturnValue(Date.parse(PRICING_V2_APPROVED_AT));
     vi.stubEnv("PAYMENTS_LIVE_POLICY_JSON", "");
     const annual = (amount: number, id: string, overrides: Record<string, unknown>) => {
       const { hash, ...terms } = getProductionCollectionPolicy(process.env, Date.now(), { businessId, userId, annualAmountPaise: amount });
@@ -266,7 +266,7 @@ describe("live checkout service with synthetic provider evidence", () => {
   });
 
   it("restores the normal quote after a verification capture while preserving its receipt", async () => {
-    const at = Date.parse(PRICING_APPROVED_AT);
+    const at = Date.parse(PRICING_V2_APPROVED_AT);
     vi.spyOn(Date, "now").mockReturnValue(at);
     for (const [name, value] of Object.entries({ PAYMENTS_LIVE_POLICY_JSON: "", PAYMENTS_LIVE_VERIFICATION_ENABLED: "true",
       PAYMENTS_LIVE_VERIFICATION_BUSINESS_ID: businessId, PAYMENTS_LIVE_VERIFICATION_USER_ID: userId,
@@ -285,9 +285,10 @@ describe("live checkout service with synthetic provider evidence", () => {
   });
 
   it.each(["meta_funding_latest_record", "production_payment_funding_valid"])("creates and replays operator checkout without Meta onboarding or available %s", async unavailable => {
-    vi.spyOn(Date, "now").mockReturnValue(Date.parse(OPERATOR_MANAGED_POLICY.approvedAt));
+    vi.spyOn(Date, "now").mockReturnValue(Date.parse(PRICING_V2_APPROVED_AT));
     vi.stubEnv("PAYMENTS_LIVE_POLICY_JSON", "");
-    saved = { ...saved, terms: OPERATOR_MANAGED_POLICY, terms_hash: getProductionCollectionPolicy().hash, funding_evidence_id: null };
+    const { hash, ...current } = getProductionCollectionPolicy();
+    saved = { ...saved, terms: current, terms_hash: hash, funding_evidence_id: null };
     storageFailure = unavailable; fundingValid = false;
     expect(await (await POST(request("orders", createBody()))).json()).toMatchObject({ orderId, checkout: { key: "rzp_live_fixture" }, spendablePaise: 0, canActivateCampaign: false });
     replay = true;
@@ -299,7 +300,7 @@ describe("live checkout service with synthetic provider evidence", () => {
     expect(mocks.rpc).toHaveBeenCalledWith("production_payment_order_claim", expect.objectContaining({ p_funding_evidence_id: null }));
   });
   it("retains legacy terms and reconciliation when the current offer becomes operator-managed", async () => {
-    vi.spyOn(Date, "now").mockReturnValue(Date.parse(OPERATOR_MANAGED_POLICY.approvedAt));
+    vi.spyOn(Date, "now").mockReturnValue(Date.parse(PRICING_V2_APPROVED_AT));
     vi.stubEnv("PAYMENTS_LIVE_POLICY_JSON", "");
     storageFailure = "production_payment_funding_valid";
     expect(await (await GET(new Request(`${origin}/api/payments/live/orders?businessId=${businessId}`))).json())
