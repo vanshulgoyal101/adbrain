@@ -1608,6 +1608,7 @@ function BusinessCampaigns({
                   adsLanguage={adsLanguage(adsFor(prepareReview.draft.input.creativeIds))}
                   handoff={handoffRate(campaigns.filter((c) => campaignDestination(c, results[c.id]) === "whatsapp").map((c) => results[c.id]).filter(Boolean))}
                   offers={business.offers ?? []}
+                  ad={(() => { const first = adsFor(prepareReview.draft.input.creativeIds.slice(0, 1))[0]; return first ? { headline: first.headline, imageUrl: first.image_url } : null; })()}
                   onEdit={() => { setMessageEditorOpen(true); document.getElementById("whatsapp-message")?.scrollIntoView({ block: "center" }); }} />
               )}
               {/* #419 2(b): Meta's new-advertiser guidance, as plain notes; never blocks the send. */}

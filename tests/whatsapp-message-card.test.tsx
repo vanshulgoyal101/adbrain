@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const save = vi.hoisted(() => vi.fn());
 vi.mock("@/app/(app)/brand/whatsapp-template-actions", () => ({ saveWhatsAppTemplate: save }));
-import { WhatsAppMessageCard } from "@/components/whatsapp-message-card";
+import { WhatsAppMessageCard, WhatsAppPreview } from "@/components/whatsapp-message-card";
 
 const suggested = {
   en: { greeting: "Hi! Thanks for messaging Solaride. Send this message and we'll reply here.", prefill: "Hi! I'd like a free solar site survey." },
@@ -154,3 +154,24 @@ describe("WhatsApp message card (#840)", () => {
   });
 });
 
+
+describe("WhatsApp preview (#847: what the customer's phone shows)", () => {
+  const ad = { headline: "Free solar site survey in Mohali", imageUrl: null };
+  it("puts the pre-typed message in the message box, quoting the ad the customer tapped", () => {
+    render(<WhatsAppPreview businessName="Solaride" greeting="Hi! Solaride here." button="call" questions={[]} prefill="Can I get a free survey?" ad={ad} />);
+    const phone = preview();
+    expect(within(phone).getByText("Solaride")).toBeInTheDocument();
+    expect(within(phone).getByText("Hi! Solaride here.")).toBeInTheDocument();
+    expect(within(phone).getByText("Call now")).toBeInTheDocument();
+    expect(within(phone).getByText("Can I get a free survey?")).toBeInTheDocument();
+    expect(within(phone).getByText("Free solar site survey in Mohali")).toBeInTheDocument();
+  });
+
+  it("with quick questions, lists them to tap and leaves the message box empty", () => {
+    render(<WhatsAppPreview businessName="Solaride" greeting="Tap a question below." button="questions" questions={["Price for my home?", "Call me back"]} prefill="" ad={ad} />);
+    const phone = preview();
+    expect(within(within(phone).getByRole("list", { name: "Questions to tap" })).getAllByRole("listitem").map((item) => item.textContent)).toEqual(["Price for my home?", "Call me back"]);
+    expect(within(phone).queryByText("Free solar site survey in Mohali")).not.toBeInTheDocument();
+    expect(phone).not.toHaveTextContent("Ready to send");
+  });
+});
