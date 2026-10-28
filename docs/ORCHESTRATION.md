@@ -137,7 +137,7 @@ Each tick:
    **Load guard (#1495):** no run starts while the 1-min load is over 1.5 per core or under 2 GB of memory is
    available (macOS memory-pressure level, not `os.freemem()`); the tick logs why. Override with
    `ADBRAIN_SUPERVISOR_MAX_LOAD` / `ADBRAIN_SUPERVISOR_MIN_FREE_GB`. Scheduled jobs and the nightly backup still run.
-3. Log: `~/.adbrain-supervisor/supervisor.log`; stop it with `touch ~/.adbrain-supervisor/OFF`;
+3. Log: `~/.adbrain-supervisor/supervisor.log`; stop role runs with `touch ~/.adbrain-supervisor/OFF` (scheduled-job dispatch and the nightly backup keep running, #1525);
    `--dry-run` shows who it would wake; `--install`/`--uninstall` manage the LaunchAgent.
 
 **After a VS Code restart** the old chats can't be messaged. The CEO (CTO as backup) starts one
