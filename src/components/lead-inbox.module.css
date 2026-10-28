@@ -10,6 +10,11 @@
 .followUpButton { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; color: var(--color-blue-700); }
 .followUpCell { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .inbox :is(button, a, summary):focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+/* #1260: the inbox sentence and its three views. */
+.summary { font-size: 17px; font-weight: 500; color: var(--color-slate-900); }
+.views { display: inline-flex; align-self: flex-start; gap: 4px; padding: 4px; border-radius: 8px; background: var(--color-slate-100); }
+.views button { min-height: 40px; padding: 0 16px; border-radius: 6px; font-size: 14px; font-weight: 500; color: var(--color-slate-600); }
+.views button[aria-pressed="true"] { background: white; color: var(--color-slate-900); box-shadow: 0 1px 2px rgb(15 23 42 / 0.08); }
 .toolbar { display: flex; flex-wrap: wrap; gap: 10px; }
 .filterToggle { display: inline-flex; align-items: center; gap: 6px; height: 44px; padding: 0 12px; border: 1px solid var(--color-slate-300); border-radius: 6px; background: white; font-size: 13px; font-weight: 500; }
 /* #847: the three selects sit behind one Filter button at every width (#376 started on phones). */

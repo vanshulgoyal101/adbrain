@@ -698,6 +698,64 @@ describe("<LeadInbox> on a phone (#376)", () => {
   });
 });
 
+describe("<LeadInbox> Waiting · All · Customers (#1260)", () => {
+  const fresh = new Date(Date.now() - 60 * 60_000).toISOString();
+  const waitingRows = [
+    lead({ id: "w1", meta_lead_id: "w1", full_name: "Asha Verma", created_time: fresh, created_at: fresh }),
+    lead({ id: "w2", meta_lead_id: "w2", full_name: "Ravi Kumar", created_time: fresh, created_at: fresh }),
+    lead({ id: "old", meta_lead_id: "old", full_name: "Old Lead", workflow_status: "new" }),
+  ];
+
+  it("opens on Waiting with the sentence, lists only people waiting, and hides search there", () => {
+    render(<LeadInbox businessName="Fixture" initialLeads={waitingRows} allTotal={12} summary={{ waiting: 2, replyMinutes: 9 }} metaReady={false} />);
+    expect(screen.getByText("2 people are waiting for you. You usually contact people within 9 min.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Waiting" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText("Asha Verma")).toBeInTheDocument();
+    expect(screen.getByText("Ravi Kumar")).toBeInTheDocument();
+    expect(screen.queryByText("Old Lead")).not.toBeInTheDocument();
+    expect(screen.queryByRole("searchbox", { name: "Search enquiries" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2 })).toHaveTextContent("(12)");
+  });
+
+  it("says nobody is waiting, leaves out the median under 3 contacts, and opens on All", () => {
+    render(<LeadInbox businessName="Fixture" initialLeads={[lead()]} summary={{ waiting: 0, replyMinutes: null }} metaReady={false} />);
+    expect(screen.getByText("Nobody is waiting.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "All" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("searchbox", { name: "Search enquiries" })).toBeInTheDocument();
+  });
+
+  it("says one person, and loads All and Customers from the server", async () => {
+    const urls: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => { urls.push(url); return Response.json({ leads: [], total: 0, nextCursor: null }); }));
+    render(<LeadInbox businessName="Fixture" initialLeads={waitingRows.slice(0, 1)} summary={{ waiting: 1, replyMinutes: 125 }} metaReady={false} />);
+    expect(screen.getByText("1 person is waiting for you. You usually contact people within 2 h 5 min.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Customers" }));
+    expect(await screen.findByText("No customers yet.")).toBeInTheDocument();
+    expect(new URL(urls.at(-1)!, "http://x").searchParams.get("status")).toBe("customer");
+    fireEvent.click(screen.getByRole("button", { name: "All" }));
+    await waitFor(() => expect(new URL(urls.at(-1)!, "http://x").searchParams.get("status")).toBe("all"));
+    expect(screen.getByRole("searchbox", { name: "Search enquiries" })).toBeInTheDocument();
+  });
+
+  it("keeps a just-contacted person on Waiting with their contact time and counts one fewer", () => {
+    global.fetch = vi.fn(async () => ({ ok: true, json: async () => ({}) })) as unknown as typeof fetch;
+    render(<LeadInbox businessName="Fixture" initialLeads={waitingRows} summary={{ waiting: 2, replyMinutes: null }} metaReady={false} />);
+    const call = screen.getAllByRole("link", { name: "Call" })[0];
+    call.addEventListener("click", (event) => event.preventDefault());
+    fireEvent.click(call);
+    expect(screen.getByText("1 person is waiting for you.")).toBeInTheDocument();
+    expect(screen.getByText("Asha Verma")).toBeInTheDocument();
+    expect(screen.getByText(/^Contacted in /)).toBeInTheDocument();
+  });
+
+  it("offers All when nobody is left on Waiting", () => {
+    render(<LeadInbox businessName="Fixture" initialLeads={[lead()]} summary={{ waiting: 1, replyMinutes: null }} metaReady={false} />);
+    expect(screen.getByRole("heading", { name: "Nobody is waiting." })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "See all enquiries" }));
+    expect(screen.getByRole("button", { name: "All" })).toHaveAttribute("aria-pressed", "true");
+  });
+});
+
 describe("<LeadInbox> reply in one tap (#1049)", () => {
   it("offers WhatsApp them with a pre-filled first reply and Call, records the first tap once, and shows the reply time", async () => {
     const calls: [string, RequestInit | undefined][] = [];

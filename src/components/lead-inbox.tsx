@@ -15,6 +15,7 @@ import { useLeadList } from "@/lib/leads/use-lead-list";
 import { workflowStatuses, type WorkflowStatus } from "@/lib/leads/filters";
 import { firstReplyText, formatReplyTime, whatsappReplyLink, type ReplyLanguage } from "@/lib/leads/first-reply";
 import { isMetaTestLead } from "@/lib/leads/test-lead";
+import { isWaiting } from "@/lib/leads/waiting";
 import styles from "./lead-inbox.module.css";
 
 const LEADS_FRESH_MS = 15 * 60_000;
@@ -36,6 +37,9 @@ const STATUS_LABEL: Record<WorkflowStatus, string> = {
 function leadName(lead: Pick<Lead, "full_name">): string | null {
   return isMetaTestLead(lead) ? "Test enquiry from Meta" : lead.full_name;
 }
+
+type InboxView = "waiting" | "all" | "customers";
+const VIEW_LABEL: Record<InboxView, string> = { waiting: "Waiting", all: "All", customers: "Customers" };
 
 function initials(name: string | null): string {
   const words = (name ?? "").trim().split(/\s+/).filter(Boolean);
@@ -60,6 +64,8 @@ export function LeadInbox({
   metaReady,
   syncScope,
   title = "Enquiries",
+  summary = null,
+  allTotal,
 }: {
   businessName: string;
   /** #1049: the business's first offer and language, for the pre-filled first WhatsApp reply. */
@@ -72,6 +78,10 @@ export function LeadInbox({
   syncScope?: string;
   /** #1223: "Form enquiries" when WhatsApp chats are shown above. */
   title?: string;
+  /** #1260: people waiting for a first contact, and the 30-day median minutes to contact (null under 3). */
+  summary?: { waiting: number | null; replyMinutes: number | null } | null;
+  /** #1260: every enquiry, for the heading while Waiting or Customers is shown (the first page may be New only). */
+  allTotal?: number;
 }) {
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -101,16 +111,23 @@ export function LeadInbox({
   const editorTrigger = useRef<HTMLElement>(null);
   const searchField = useRef<HTMLInputElement>(null);
   useEffect(() => { editorField.current?.focus(); }, [selected?.id]);
-  const page = useLeadList({ leads: initialLeads, total: initialTotal, nextCursor: initialNextCursor }, {
-    query, status, contact: contactFilter, sort,
-  });
-  const leads = page.leads;
+  // #1260: Waiting (default when anyone waits) · All (search and filters) · Customers.
+  const [view, setView] = useState<InboxView>(summary?.waiting ? "waiting" : "all");
+  const [openedAt] = useState(() => Date.now());
+  const [contactedAt, setContactedAt] = useState<Record<string, string>>({});
+  const page = useLeadList({ leads: initialLeads, total: initialTotal, nextCursor: initialNextCursor }, view === "all"
+    ? { query, status, contact: contactFilter, sort }
+    : { query: "", status: view === "waiting" ? "new" : "customer", contact: "all", sort: "newest" });
+  // A row the owner just contacted stays in Waiting this visit, showing 'Contacted in …'.
+  const leads = view === "waiting" ? page.leads.filter((lead) => isWaiting(lead, openedAt) || contactedAt[`${lead.business_id}:${lead.id}`]) : page.leads;
+  const contactedNow = page.leads.filter((lead) => isWaiting(lead, openedAt) && contactedAt[`${lead.business_id}:${lead.id}`]).length;
+  const waiting = summary?.waiting == null ? null : Math.max(0, summary.waiting - (view === "waiting" ? contactedNow : 0));
   // #1149: Meta's test leads are listed (labelled) but not counted; the server's total leaves them out too.
   const realShown = leads.filter((lead) => !isMetaTestLead(lead)).length;
   const mounted = useMounted();
   const dirty = selected && (draftStatus !== (selected.workflow_status ?? "new") || draftNote !== (selected.follow_up_note ?? ""));
 
-  const hasFilters = Boolean(query || contactFilter !== "all" || status !== "all");
+  const hasFilters = view === "all" && Boolean(query || contactFilter !== "all" || status !== "all");
   function clearFilters() {
     setQuery("");
     setContactFilter("all");
@@ -189,7 +206,6 @@ export function LeadInbox({
   const statusOf = (lead: Lead): WorkflowStatus => confirmed[draftKey(lead)]?.status ?? lead.workflow_status ?? "new";
 
   // #1049: the first time the owner reached out from the card (this session's tap, else the saved one).
-  const [contactedAt, setContactedAt] = useState<Record<string, string>>({});
   const firstContact = (lead: Lead) => lead.first_contacted_at ?? contactedAt[draftKey(lead)] ?? null;
   function markContacted(lead: Lead) {
     // #1140: only a still-new enquiry gets a first reply time (the server does the same).
@@ -327,7 +343,7 @@ export function LeadInbox({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-lg font-semibold text-slate-900">
           {title}{" "}
-          <span className="font-normal text-slate-400">({page.total})</span>
+          <span className="font-normal text-slate-400">({view === "all" || allTotal === undefined ? page.total : allTotal})</span>
         </h2>
         {metaReady && (
           <Button size="sm" variant="outline" onClick={sync} disabled={syncing}>
@@ -341,6 +357,15 @@ export function LeadInbox({
         )}
       </div>
 
+      {waiting !== null && <p className={styles.summary}>
+        {waiting === 0 ? "Nobody is waiting." : `${waiting} ${waiting === 1 ? "person is" : "people are"} waiting for you.`}
+        {summary?.replyMinutes != null && ` You usually contact people within ${formatReplyTime(summary.replyMinutes)}.`}
+      </p>}
+      <div className={styles.views} role="group" aria-label="Show">
+        {(["waiting", "all", "customers"] as const).map((option) => (
+          <button key={option} type="button" aria-pressed={view === option} onClick={() => { setView(option); setFiltersOpen(false); }}>{VIEW_LABEL[option]}</button>
+        ))}
+      </div>
       {error && <Alert variant="error">{error}</Alert>}
       {customerNotice && (
         <p role="status" className="flex flex-wrap items-center gap-2 text-sm text-slate-700">
@@ -358,7 +383,7 @@ export function LeadInbox({
       <p aria-live="polite" className={warning || notice ? "text-sm text-slate-600" : "sr-only"}>{warning ?? notice}</p>
       {page.error && <Alert variant="error">{page.error} <button type="button" onClick={page.refresh}>Retry list</button></Alert>}
 
-      <div>
+      {view === "all" && <div>
         <div className={styles.toolbar}>
           <div className={styles.search}>
             <Search size={17} aria-hidden="true" />
@@ -382,7 +407,7 @@ export function LeadInbox({
           </div>
         </div>
         <div className={styles.resultCount}><span role="status">{page.loading ? "Loading enquiries..." : hasFilters || realShown < page.total ? `${realShown} of ${page.total} enquiries` : ""}</span>{hasFilters && leads.length > 0 && <button type="button" onClick={clearFilters}>Clear filters</button>}</div>
-      </div>
+      </div>}
 
       {selected && <form className={styles.editor} aria-label="Enquiry follow-up" onSubmit={saveFollowUp}>
         <div className={styles.editorHeading}><div><h3>Follow up: {leadName(selected) ?? "Unnamed enquiry"}</h3>{dirty && <p role="status" className="text-xs text-amber-800">Unsaved changes</p>}</div><button type="button" aria-label="Close follow-up" title="Close follow-up" disabled={saving} onClick={closeEditor}><X size={18} /></button></div>
@@ -395,7 +420,11 @@ export function LeadInbox({
         {saved && <Alert variant="success">Follow-up saved.</Alert>}
       </form>}
 
-      {page.error && leads.length === 0 ? null : page.loading && leads.length === 0 ? <div className={styles.empty}><Loader2 className="animate-spin" aria-label="Loading enquiries" /></div> : leads.length === 0 && !hasFilters ? (
+      {page.error && leads.length === 0 ? null : page.loading && leads.length === 0 ? <div className={styles.empty}><Loader2 className="animate-spin" aria-label="Loading enquiries" /></div> : leads.length === 0 && view === "waiting" ? (
+        <div className={styles.empty}><h3>Nobody is waiting.</h3><Button variant="outline" onClick={() => setView("all")}>See all enquiries</Button></div>
+      ) : leads.length === 0 && view === "customers" ? (
+        <div className={styles.empty}><h3>No customers yet.</h3><p className="text-sm text-slate-500">Tap Became a customer on an enquiry when they buy.</p></div>
+      ) : leads.length === 0 && !hasFilters ? (
         <Card>
           <CardContent className="flex flex-col items-center gap-1 py-12 text-center">
             <Inbox className="h-6 w-6 text-slate-300" />
