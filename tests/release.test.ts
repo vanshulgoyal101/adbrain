@@ -156,6 +156,11 @@ describe("CTO review (#259)", () => {
     expect(ctoApproval(reviews, isHead(head)).approved).toBe(true);
   });
 
+  it("reads a CTO re-review like a review", () => {
+    const [review] = ctoReviews([comment("CTO re-review of 56e5af36 (migration sha256 58395f36…): **approved**. Matches the spec.", "2026-10-28T19:25:00Z")]);
+    expect([review.sha, review.approved]).toEqual(["56e5af36", true]);
+  });
+
   it("lets a later review of the same patch withdraw an approval", () => {
     const reviews = ctoReviews([...pr247, comment("CTO review of 3bafc67: **changes requested.** The settle window is off by one read.", "2026-10-23T17:00:00Z")]);
     expect(ctoApproval(reviews, isHead(head247)).approved).toBe(false);
