@@ -53,7 +53,7 @@ export default async function DashboardPage() {
     const ready = resume === 3 && business
       ? await getApprovedCreatives(business.id).then((rows) => rows.filter((row) => madeForSetup(row, business)), () => [])
       : [];
-    return <SetupResumeCard step={resume} ready={ready} />;
+    return <SetupResumeCard step={resume} ready={ready} locale={locale} />;
   }
   // #764: the Home results row; an unreadable result leaves the row out, never the page.
   const launched = campaigns.filter((campaign) => campaign.meta_campaign_id).map((campaign) => campaign.id);

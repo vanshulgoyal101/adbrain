@@ -16,6 +16,11 @@ export function toLocale(value: string | null | undefined): AppLocale {
 type Messages = typeof en;
 const MESSAGES: Record<AppLocale, Messages> = { en, hi };
 
+/** One namespace's messages, for a server page to hand a client component (the rest stays on the server). */
+export function namespaceMessages<Namespace extends keyof Messages>(locale: AppLocale, namespace: Namespace): Messages[Namespace] {
+  return MESSAGES[locale][namespace];
+}
+
 /** Synchronous, so it works the same in server components, plain helpers and tests. */
 export function translator<Namespace extends keyof Messages>(locale: AppLocale, namespace: Namespace) {
   return createTranslator({ locale, messages: MESSAGES[locale], namespace });
