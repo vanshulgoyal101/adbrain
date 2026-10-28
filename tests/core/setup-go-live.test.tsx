@@ -45,9 +45,22 @@ describe("core: <SetupGoLive> (#1271)", () => {
     expect(bar().getByRole("button", { name: "Go live · ₹1,000 a day" })).toBeEnabled();
   });
 
+  it("#1587: one solid primary; 'a day' once so the chips fit a row; the total isn't said three times", () => {
+    goLive();
+    const chips = within(screen.getByRole("group", { name: "Daily budget" })).getAllByRole("button");
+    expect(chips.map((chip) => chip.textContent)).toEqual(["₹300 a day", "₹500", "₹1,000"]);
+    expect(chips[0]).toHaveAttribute("aria-pressed", "true");
+    expect(chips[0].className).toContain("bg-primary/10");
+    expect(chips[0].className).not.toMatch(/(^|\s)bg-primary(\s|$)/);
+    expect(screen.getByText("Meta checks your ads first, usually within a day.")).toBeInTheDocument();
+    expect(screen.getAllByText(/₹708/)).toHaveLength(2);
+  });
+
   it("Page not connected: the primary connects it first, then the page refreshes", () => {
     goLive({ pageConnected: false });
     expect(screen.getByText("Not connected")).toBeInTheDocument();
+    // #1529: before Connect, the full composer is the pre-access dead end, so the link isn't offered.
+    expect(screen.queryByRole("link", { name: "Change who sees it" })).toBeNull();
     fireEvent.click(bar().getByRole("button", { name: "Connect Facebook Page" }));
     fireEvent.click(screen.getByRole("button", { name: "Meta dialog: connected" }));
     expect(mocks.refresh).toHaveBeenCalled();
@@ -147,6 +160,16 @@ describe("core: <SetupGoLive> (#1271)", () => {
       expect(screen.getByText("Stops at ₹708")).toBeInTheDocument();
     }
   });
+});
+
+describe("core: step 3 shows the WhatsApp welcome Go live sends (#1529)", () => {
+  it("the welcome and what's ready to send, read-only", () => {
+    render(<SetupGoLive business={business} ads={ads} pageConnected={false} funding="own" whatsappNumber="+91 ••••• 3210" weeklyCap={null}
+      welcome={{ source: "saved", language: "en", greeting: "Hi! Thanks for asking about a free site survey.", autofill: "I'd like a free site survey", callButton: true }} />);
+    expect(screen.getByText("“Hi! Thanks for asking about a free site survey.”")).toBeInTheDocument();
+    expect(screen.getByText("Customers see your welcome, a Call now button, and 'I'd like a free site survey' ready to send.")).toBeInTheDocument();
+  });
+
 });
 
 describe("core: Go live's total is activation's own cap + GST (#1251 CPO/Dev 2)", () => {

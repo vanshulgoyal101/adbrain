@@ -13,6 +13,7 @@ import { recordProductEvent } from "@/lib/observability/logger";
 import { ConnectionAccessError } from "./connection-access-error";
 import { EXCLUDABLE_CITIES, INDIA_REGION_KEYS, mergeExclusions, serviceAreaExclusions, TargetingExclusionsMissingError, type IncludedPlace } from "./service-area";
 import { AD_LANGUAGE_KEYS, storedLocales } from "./locales";
+import { expandPlaceAliases } from "./geo-aliases";
 export type { AdResult, CampaignInsights } from "./insights";
 
 
@@ -740,26 +741,27 @@ function clampRadiusKm(km: number): number {
  * Pick the best adgeolocation match for a typed place name. Meta returns
  * Exact names and qualified city/region labels take precedence. Otherwise keep
  * Meta's relevance order within the requested country and preferred place type.
+ * #1555: with a country, a place abroad counts only when the owner typed its
+ * qualified label ("Austin, Texas"); a bare namesake ('Tricity' → Tri-City,
+ * Oregon) is no match, so it comes back unresolved instead of spending abroad.
  */
 export function pickBestGeoMatch(
   matches: GeoSearchResult[],
   query: string,
   preferCountry = "",
 ): GeoSearchResult | null {
-  if (!matches.length) return null;
   const normalizedQuery = query.trim().toLowerCase();
-  const exact = matches.filter((match) => [match.name, geoLabel(match)]
-    .some((label) => label.trim().toLowerCase() === normalizedQuery));
-  const candidates = exact.length ? exact : matches;
-  const inCountry = preferCountry
-    ? candidates.filter((m) => !m.country_code || m.country_code === preferCountry)
-    : candidates;
-  const pool = inCountry.length ? inCountry : candidates;
-  for (const type of ["city", "region", "country"]) {
-    const hit = pool.find((m) => m.type === type);
-    if (hit) return hit;
-  }
-  return pool[0] ?? null;
+  const qualified = (match: GeoSearchResult) => Boolean(match.region) && geoLabel(match).trim().toLowerCase() === normalizedQuery;
+  const exact = matches.filter((match) => match.name.trim().toLowerCase() === normalizedQuery || qualified(match));
+  const byType = (pool: GeoSearchResult[]) => ["city", "region", "country"]
+    .map((type) => pool.find((m) => m.type === type)).find(Boolean) ?? pool[0] ?? null;
+  if (!preferCountry) return byType(exact.length ? exact : matches);
+  const home = (match: GeoSearchResult) => !match.country_code || match.country_code === preferCountry;
+  const homeExact = exact.filter(home);
+  if (homeExact.length) return byType(homeExact);
+  const namedAbroad = exact.filter(qualified);
+  if (namedAbroad.length) return byType(namedAbroad);
+  return byType(matches.filter(home));
 }
 
 /**
@@ -1185,7 +1187,7 @@ export class MetaClient {
     const unresolved: string[] = [];
     const seen = new Set<string>();
     // #271: independent searches run together; results are applied in the given order.
-    const searches = await Promise.all(names.map(async raw => {
+    const searches = await Promise.all(expandPlaceAliases(names).map(async raw => {
       const name = (raw ?? "").trim();
       if (!name) return null;
       return { name, results: await this.searchGeoLocations(name).catch(() => null) };

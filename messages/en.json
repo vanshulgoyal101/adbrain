@@ -64,7 +64,12 @@
     "exportAction": "Export ads",
     "campaignsTitle": "Review campaigns before activation",
     "campaignsDetail": "{paused} paused, {draft} draft. Check the creative, audience, and budget; leave paused until you are ready.",
-    "campaignsAction": "Review campaigns"
+    "campaignsAction": "Review campaigns",
+    "planFreeEndsTitle": "Your free month ends on {date}",
+    "planFreeEndsDetail": "Then it's ₹999 a month. No auto-debit; you pay when you choose.",
+    "planDueTitle": "Your ₹999 plan payment is due",
+    "planDueDetail": "Running ads keep running. New ads and campaigns wait until you pay.",
+    "planPayAction": "Pay ₹999"
   },
   "settings": {
     "language": "App language",

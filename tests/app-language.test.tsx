@@ -47,4 +47,16 @@ describe("AppLanguage", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("Couldn't save.");
     expect(screen.getByRole("button", { name: "English" })).toHaveAttribute("aria-pressed", "true");
   });
+
+  // #1503: Hindi labels are marked as Hindi, so screen readers pronounce them and the type system gives them taller lines.
+  it("marks its labels with the language they're written in", async () => {
+    vi.doMock("@/app/(app)/settings/language-actions", () => action);
+    const { AppLanguage } = await import("@/components/app-language");
+    const { unmount } = render(<AppLanguage initial="hi" labels={{ language: "ऐप की भाषा", hint: "", saveFailed: "सेव नहीं हुआ।" }} />);
+    expect(screen.getByRole("heading", { name: "ऐप की भाषा" }).closest("section")).toHaveAttribute("lang", "hi");
+    expect(screen.getByRole("button", { name: "English" })).toHaveAttribute("lang", "en");
+    unmount();
+    render(<AppLanguage initial="en" labels={{ language: "App language", hint: "", saveFailed: "Couldn't save." }} />);
+    expect(screen.getByRole("heading", { name: "App language" }).closest("section")).not.toHaveAttribute("lang");
+  });
 });

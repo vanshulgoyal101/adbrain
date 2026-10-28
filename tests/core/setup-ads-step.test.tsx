@@ -168,7 +168,7 @@ describe("core: <SetupAdsStep> (#1270)", () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(new Blob(["zip"]))));
     render(<SetupAdsStep business={business} initialAds={[ad("a", 2), ad("b"), ad("c")]} sample />);
     for (const name of [/Ad a/, /Ad b/, /Ad c/]) expect(screen.getByRole("button", { name })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByText(/All of them go in the sample pack, each marked 'Sample: not live'/)).toBeInTheDocument();
+    expect(screen.getByText(/All of them go in the sample pack, each marked 'Sample ad: not live yet'/)).toBeInTheDocument();
     await act(async () => fireEvent.click(bar().getByRole("button", { name: "Download sample pack (3)" })));
     await waitFor(() => expect(mocks.downloadBlob).toHaveBeenCalledWith(expect.any(Blob), "adbrain-sample-pack.zip"));
     expect(mocks.setCreativeStatus.mock.calls).toEqual([["a", "approved"], ["b", "approved"], ["c", "approved"]]);
@@ -184,7 +184,7 @@ describe("core: <SetupAdsStep> (#1270)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Show full screen" }));
     const viewer = within(screen.getByRole("dialog", { name: "Sample ads" }));
     expect(viewer.getAllByRole("img").map((img) => img.getAttribute("src"))).toEqual(["/ads/a.png", "/ads/c.png"]);
-    expect(viewer.getAllByText("Sample: not live")).toHaveLength(2);
+    expect(viewer.getAllByText("Sample ad: not live yet")).toHaveLength(2);
     expect(viewer.getByText("1 of 2")).toBeInTheDocument();
     expect(viewer.getByRole("button", { name: "Close" })).toHaveFocus();
     fireEvent.keyDown(document, { key: "Escape" });

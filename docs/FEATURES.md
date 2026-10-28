@@ -43,6 +43,7 @@ ID are different identifiers. Never infer one from another.
 | `/campaigns` | Draft, review, create paused, activate/pause, sync, report; `?new=1&creatives=<ids>` opens the composer with those approved ads selected; `&review=1` (#1004, from Create) then prepares Review on its own once Meta is connected, the WhatsApp check has run and a form campaign has its lead form (the same prepare as the Review button; nothing is sent to Meta). The lead form used for the last Review is preselected while the Page still has it; with several forms and none chosen, the field says choosing one opens Review | Live Meta writes require verified binding and capability |
 | `/leads` | WhatsApp chats per campaign with **Add enquiry** (#764) first; the form table follows as "Form enquiries (n)", folded when there are none (#1223); then sync, search, and inspect enquiries; copy digest. Each enquiry with a phone has **WhatsApp them** (wa.me with a first reply in the business's first language, en/hi/Hinglish, naming the business and its first offer) and **Call**; the first tap records `first_contacted_at` ("Replied 12 min after the enquiry", #1049) | No automated outreach is sent: the owner sends the reply |
 | `/settings` | Meta connection, spend guardrails, declared preferences, **App language** (English · हिंदी, kept in the `adbrain_lang` cookie for a year; Home follows it, other screens follow screen by screen, #1438; strings in `messages/{en,hi}.json`) | Disconnect does not pause running ads; preferences cannot authorize spend |
+| `/settings/verdicts` | Internal only (#1255): one example of each campaign-card state for team walks | Fixed examples; reads and writes nothing; 404 for owners |
 
 ## Workspace Responsiveness
 
@@ -473,6 +474,12 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
   interests, Meta refuses later targeting edits, so exclusions must be in the create;
   a targeting edit on a live ad set restarts ad review (about 5 minutes on #157).
   Country-wide and non-Indian areas get no automatic exclusions.
+- Typed area names resolve in the business's country (India; #1555): a name whose only Meta
+  match is abroad comes back unresolved ("Meta didn't recognise the area…") unless the owner typed
+  its qualified label ("Austin, Texas"). Everyday Tricity names Meta has no place for search the
+  places it has (`src/lib/meta/geo-aliases.ts`, #1556): Tricity and Zirakpur → Chandigarh, Mohali,
+  Panchkula; Derabassi → Dera Bassi; New Chandigarh, Aerocity → Mohali; 'Sector N'/'Phase N' with
+  a city → that city (a bare 'Sector 17' stays unresolved). Meta's only 'Tricity' is Tri-City, Oregon.
 - Every campaign must have detailed interest targeting before creation. AI plans
   require one to five relevant commercial interests grounded in the business and
   offer. Preparing a draft with missing/empty interests requests AI recommendations
@@ -547,7 +554,9 @@ A first-timer with approved ads and no campaign yet, who can connect Meta, gets
 setup step 3 "Go live" on `/campaigns` (#1251 WS1, #1271): the picked ads, a daily
 budget (₹300/₹500/₹1,000 a day) for 2 days with the most it can spend including
 Meta's GST (`capWithGstPaise`, the activation reserve's own formula), the areas,
-the WhatsApp chat, and the weekly cap line (#1342; over the cap, Go live can't be
+the WhatsApp chat with the welcome Go live sends (#1529: `setupWelcome`, Review's own
+`campaignWhatsAppMessage` on Go live's draft, so the saved message or AdBrain's), "Change
+who sees it" (full composer) once the Page is connected, and the weekly cap line (#1342; over the cap, Go live can't be
 tapped). The checklist shows the Facebook Page, the money row (payment on the
 owner's own Meta account; the AdBrain ad money row is hidden for every funding
 mode until flat ₹999/month pricing with pass-through ad money, #1251 CEO) and the

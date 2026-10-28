@@ -24,7 +24,7 @@ export function AppLanguage({ initial, labels }: { initial: AppLocale; labels: {
     });
   }
 
-  return <section aria-labelledby="app-language-heading" className="space-y-3">
+  return <section aria-labelledby="app-language-heading" className="space-y-3" lang={initial === "en" ? undefined : initial}>
     <div>
       <h2 id="app-language-heading" className="text-lg font-semibold text-slate-900">{labels.language}</h2>
       {labels.hint && <p className="text-sm text-slate-600">{labels.hint}</p>}

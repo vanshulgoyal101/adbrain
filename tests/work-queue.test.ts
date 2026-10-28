@@ -128,3 +128,35 @@ describe("workspace work queue", () => {
     });
   });
 });
+
+// #1630 (CPO, #1604): the ₹999 plan on Home, from #1442's plan status; nothing while billing is off.
+describe("buildWorkQueue: the ₹999 plan (#1630)", () => {
+  const now = Date.parse("2026-11-20T06:30:00Z");
+  const day = 86_400_000;
+  const plan = (state: Parameters<typeof buildWorkQueue>[0]["plan"]) => buildWorkQueue({ ...base, business, now, plan: state });
+
+  it("adds nothing with billing off, for an exempt business, or with more than 7 days of the free month left", () => {
+    expect(plan(null).some((item) => item.id === "plan")).toBe(false);
+    expect(plan({ state: "exempt" }).some((item) => item.id === "plan")).toBe(false);
+    expect(plan({ state: "trial_not_started" }).some((item) => item.id === "plan")).toBe(false);
+    expect(plan({ state: "free", until: new Date(now + 8 * day).toISOString(), dueSoon: false }).some((item) => item.id === "plan")).toBe(false);
+  });
+
+  it("free month ending within 7 days: the date, the price, Pay ₹999 to Settings → Plan, first in the queue", () => {
+    const [first] = plan({ state: "free", until: "2026-11-27T06:30:00Z", dueSoon: true });
+    expect(first).toEqual({ id: "plan", title: "Your free month ends on 27 November", detail: "Then it's ₹999 a month. No auto-debit; you pay when you choose.",
+      href: "/settings#plan-title", action: "Pay ₹999", tone: "work" });
+  });
+
+  it("unpaid: running ads keep running, new ones wait; attention", () => {
+    const [first] = plan({ state: "unpaid", since: "2026-11-19T06:30:00Z" });
+    expect(first).toMatchObject({ id: "plan", title: "Your ₹999 plan payment is due", detail: "Running ads keep running. New ads and campaigns wait until you pay.", action: "Pay ₹999", tone: "attention" });
+  });
+
+  it("speaks Hindi with the same shape", () => {
+    const [due] = buildWorkQueue({ ...base, business, now, plan: { state: "unpaid", since: "2026-11-19T06:30:00Z" }, locale: "hi" });
+    expect(due).toMatchObject({ title: "आपका ₹999 का प्लान बाकी है", action: "₹999 भरें", tone: "attention" });
+    const [ending] = buildWorkQueue({ ...base, business, now, plan: { state: "free", until: "2026-11-27T06:30:00Z", dueSoon: true }, locale: "hi" });
+    expect(ending.title).toMatch(/^आपका फ्री महीना .+ को खत्म होगा$/);
+  });
+});

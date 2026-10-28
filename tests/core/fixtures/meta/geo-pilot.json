@@ -1,0 +1,142 @@
+[
+  {
+    "method": "GET",
+    "path": "search?type=adgeolocation&q=Tricity&location_types=%5B%22city%22%2C%22region%22%2C%22country%22%5D&limit=10",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "key": "2505867",
+          "name": "Tri-City",
+          "type": "city",
+          "country_code": "US",
+          "country_name": "अमेरिका",
+          "region": "Oregon",
+          "region_id": 3880,
+          "supports_region": true,
+          "supports_city": true
+        }
+      ],
+      "paging": {
+        "cursors": {
+          "before": "MAZDZD",
+          "after": "MAZDZD"
+        },
+        "next": "https://graph.facebook.com/v26.0/search?type=adgeolocation&q=Tricity&location_types=%5B%22city%22%2C%22region%22%2C%22country%22%5D&limit=10&access_token=REDACTED&after=MAZDZD"
+      }
+    }
+  },
+  {
+    "method": "GET",
+    "path": "search?type=adgeolocation&q=Zirakpur&location_types=%5B%22city%22%2C%22region%22%2C%22country%22%5D&limit=10",
+    "status": 200,
+    "body": {
+      "data": []
+    }
+  },
+  {
+    "method": "GET",
+    "path": "search?type=adgeolocation&q=Derabassi&location_types=%5B%22city%22%2C%22region%22%2C%22country%22%5D&limit=10",
+    "status": 200,
+    "body": {
+      "data": []
+    }
+  },
+  {
+    "method": "GET",
+    "path": "search?type=adgeolocation&q=Dera+Bassi&location_types=%5B%22city%22%2C%22region%22%2C%22country%22%5D&limit=10",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "key": "1023148",
+          "name": "Dera Bassi",
+          "type": "city",
+          "country_code": "IN",
+          "country_name": "भारत",
+          "region": "Punjab region",
+          "region_id": 1742,
+          "supports_region": true,
+          "supports_city": true
+        }
+      ],
+      "paging": {
+        "cursors": {
+          "before": "MAZDZD",
+          "after": "MAZDZD"
+        },
+        "next": "https://graph.facebook.com/v26.0/search?type=adgeolocation&q=Dera+Bassi&location_types=%5B%22city%22%2C%22region%22%2C%22country%22%5D&limit=10&access_token=REDACTED&after=MAZDZD"
+      }
+    }
+  },
+  {
+    "method": "GET",
+    "path": "search?type=adgeolocation&q=New+Chandigarh&location_types=%5B%22city%22%2C%22region%22%2C%22country%22%5D&limit=10",
+    "status": 200,
+    "body": {
+      "data": []
+    }
+  },
+  {
+    "method": "GET",
+    "path": "search?type=adgeolocation&q=Aerocity+Mohali&location_types=%5B%22city%22%2C%22region%22%2C%22country%22%5D&limit=10",
+    "status": 200,
+    "body": {
+      "data": []
+    }
+  },
+  {
+    "method": "GET",
+    "path": "search?type=adgeolocation&q=Sector+34+Chandigarh&location_types=%5B%22city%22%2C%22region%22%2C%22country%22%5D&limit=10",
+    "status": 200,
+    "body": {
+      "data": []
+    }
+  },
+  {
+    "method": "GET",
+    "path": "search?type=adgeolocation&q=Mohali+Phase+7&location_types=%5B%22city%22%2C%22region%22%2C%22country%22%5D&limit=10",
+    "status": 200,
+    "body": {
+      "data": []
+    }
+  },
+  {
+    "method": "GET",
+    "path": "search?type=adgeolocation&q=Kharar&location_types=%5B%22city%22%2C%22region%22%2C%22country%22%5D&limit=10",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "key": "1030707",
+          "name": "खरार",
+          "type": "city",
+          "country_code": "IN",
+          "country_name": "भारत",
+          "region": "Punjab region",
+          "region_id": 1742,
+          "supports_region": true,
+          "supports_city": true
+        },
+        {
+          "key": "1030708",
+          "name": "Kharar, India",
+          "type": "city",
+          "country_code": "IN",
+          "country_name": "भारत",
+          "region": "West Bengal",
+          "region_id": 1746,
+          "supports_region": true,
+          "supports_city": true
+        }
+      ],
+      "paging": {
+        "cursors": {
+          "before": "MAZDZD",
+          "after": "MQZDZD"
+        },
+        "next": "https://graph.facebook.com/v26.0/search?type=adgeolocation&q=Kharar&location_types=%5B%22city%22%2C%22region%22%2C%22country%22%5D&limit=10&access_token=REDACTED&after=MQZDZD"
+      }
+    }
+  }
+]
