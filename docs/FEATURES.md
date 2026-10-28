@@ -416,7 +416,9 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
   #418 rule 7: when every ad's last line quotes the words to send ('WhatsApp “Free site survey” to
   book'), AdBrain's suggested pre-typed message is exactly those words (`quotedAsk`). When an ad
   quotes other words than the message WhatsApp will pre-type (a saved or edited one), Review warns
-  (never blocks): "An ad asks customers to send “…”, but WhatsApp pre-types “…”".
+  (never blocks): "An ad asks customers to send “…”, but WhatsApp pre-types “…”". With Quick
+  questions nothing is pre-typed, so Review warns when an ad quotes words that aren't one of the
+  questions ("…End the ad with “Tap, then pick a question to send”, or make it one of the questions").
   #418 rule 5: when the Brand has proof (years in business, jobs done, a named credential or a
   warranty; `src/lib/creative/proof-line.ts`) and none of the chosen ads cites it, Review warns
   (never blocks) and names one ("None of these ads has a proof line from your Brand…").

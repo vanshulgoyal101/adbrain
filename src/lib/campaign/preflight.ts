@@ -5,7 +5,7 @@ import { effectiveDailyBudget } from "@/lib/campaign/spend";
 import type { DraftInput, ReviewDTO } from "@/lib/campaign/connect-contracts";
 import type { ReviewBlockerReason, SelectedAssets } from "@/lib/meta/connect-contracts";
 import { normalizeWebsite } from "@/lib/brand/validation";
-import { askMismatchWarning, reviewWarnings, WHATSAPP_PICTURE_ON_FORM } from "@/lib/campaign/plan-check";
+import { askMismatchWarning, askWithQuestionsWarning, reviewWarnings, WHATSAPP_PICTURE_ON_FORM } from "@/lib/campaign/plan-check";
 import { quotedAsk, sameWords } from "@/lib/campaign/whatsapp-greeting";
 import { batchProofWarning } from "@/lib/creative/proof-line";
 import type { ResolvedWhatsAppMessage } from "@/lib/campaign/whatsapp-template";
@@ -288,6 +288,10 @@ export function runPreflight(input: PreflightInput): ReviewDTO {
   const prefill = draft.destination === "whatsapp" ? input.whatsappMessage?.opening.autofill?.trim() : "";
   const mismatch = prefill ? input.creatives.map((creative) => quotedAsk(creative.primaryText)).find((ask) => ask && !sameWords(ask, prefill)) : null;
   if (mismatch) planWarnings.push(askMismatchWarning(mismatch, prefill!));
+  // #680 W1: Quick questions pre-type nothing, so a quoted ask must be one of the questions.
+  const questions = draft.destination === "whatsapp" ? input.whatsappMessage?.opening.iceBreakers ?? [] : [];
+  const unanswered = questions.length ? input.creatives.map((creative) => quotedAsk(creative.primaryText)).find((ask) => ask && !questions.some((question) => sameWords(question, ask))) : null;
+  if (unanswered) planWarnings.push(askWithQuestionsWarning(unanswered));
   // #418 rule 5: the Brand has proof (years, jobs, a credential, a warranty) but no chosen ad cites it.
   const proof = batchProofWarning(input.creatives.map((creative) => [creative.headline, creative.primaryText].filter(Boolean).join("\n")), input.brandFacts ?? []);
   if (proof) planWarnings.push(proof);

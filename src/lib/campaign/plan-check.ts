@@ -129,6 +129,11 @@ export function askMismatchWarning(ask: string, prefill: string): string {
   return `An ad asks customers to send “${ask.slice(0, 80)}”, but WhatsApp pre-types “${prefill.slice(0, 80)}”. Edit the WhatsApp message so they match`;
 }
 
+/** #680 W1: with Quick questions nothing is pre-typed, so a quoted ask must be one of the questions. */
+export function askWithQuestionsWarning(ask: string): string {
+  return `An ad asks customers to send “${ask.slice(0, 80)}”, but with Quick questions nothing is pre-typed. End the ad with “Tap, then pick a question to send”, or make it one of the questions`;
+}
+
 /**
  * The Review warnings for a planned campaign. A 9:16 is made for WhatsApp and lead-form ads with a saved
  * design (#333). The budget warning needs the business's own cost per result; without one it says

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import story from "./fixtures/meta/story-validate.json";
 import { runPreflight } from "@/lib/campaign/preflight";
-import { askMismatchWarning } from "@/lib/campaign/plan-check";
+import { askMismatchWarning, askWithQuestionsWarning } from "@/lib/campaign/plan-check";
 import { campaignWhatsAppMessage } from "@/lib/campaign/campaign-whatsapp-message";
 import { quotedAsk } from "@/lib/campaign/whatsapp-greeting";
 
@@ -47,6 +47,19 @@ describe("core: the ad's last line and the WhatsApp message use the same words (
     expect(result.blockers).toEqual([]);
     expect(result.canCreatePaused).toBe(true);
     expect(result.planHash).toBe(review(recorded, owners).planHash);
+  });
+
+  // #680 W1: Quick questions have no pre-typed text, so an ad that quotes words to send promises something that isn't there.
+  const questions = (list: string[]) => ({ greeting: owners.greeting, opening: { kind: "ice_breakers", questions: list }, language: "en" });
+  const w1 = ["How much subsidy can I get?", "Can I book a free site survey?", "How much will my bill go down?"];
+  it("with Quick questions, warns (never blocks) when an ad quotes words that aren't one of the questions", () => {
+    const result = review(quoting, questions(w1));
+    expect(result.planWarnings).toEqual([askWithQuestionsWarning("Free site survey")]);
+    expect(result.blockers).toEqual([]);
+    expect(result.canCreatePaused).toBe(true);
+    expect(review(quoting, questions([...w1.slice(0, 2), "Free site survey"])).planWarnings ?? []).toEqual([]);
+    expect(review(recorded, questions(w1)).planWarnings ?? []).toEqual([]);
+    expect(review(recorded.replace(/Message Solaride on WhatsApp to book your free site survey\.$/, "Tap, then pick a question to send."), questions(w1)).planWarnings ?? []).toEqual([]);
   });
 
   it("reads only paired quotes on the last line", () => {
