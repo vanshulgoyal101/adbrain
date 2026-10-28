@@ -190,10 +190,10 @@ describe("contextual creative recommendations", () => {
 
   it("fills the goal box with the owner's plain words, never instructions for the model (#1153)", () => {
     const full = { name: "Solaride", offers: ["Free site survey", "Diwali offer: 10% off rooftop solar installation"], usps: ["Local teams in Mohali"], target_audience: "Homeowners in Punjab", locations: ["Mohali", "Chandigarh"] };
-    const goals = [...creativeRecommendations(full), ...creativeRecommendations(full, "Promote our Free site survey."), ...creativeRecommendations({ name: "Solaride" })].map((item) => item.prompt);
+    const goals = [...creativeRecommendations(full), ...creativeRecommendations(full, "Promote our Free site survey."), ...creativeRecommendations({ name: "Solaride" }), ...creativeFollowUps()].map((item) => item.prompt);
     expect(goals).toContain("Promote our Free site survey.");
     for (const goal of goals) {
-      expect(goal).not.toMatch(/Do not add|saved (?:offer|business|brand|service)|Brand Brain|unsupported|invented|without adding claims|Build the hook/i);
+      expect(goal).not.toMatch(/Do not add|saved (?:offer|business|brand|service)|Brand Brain|unsupported|invented|without adding claims|Build the hook|Preserve all|confirmed (?:message|offer)|Explore a different/i);
     }
   });
 

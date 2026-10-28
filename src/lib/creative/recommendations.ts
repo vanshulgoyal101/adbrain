@@ -48,9 +48,10 @@ export function creativeRecommendations(brand: BrandContext, goal = "", recentGo
 
 export function creativeFollowUps(): CreativeRecommendation[] {
   return [
-    { id: "scene", label: "Explore another scene", direction: "Keep the confirmed message, but propose a different image composition. Preserve all factual constraints." },
-    { id: "hook", label: "Try a different hook", direction: "Explore a different opening hook for the same goal. Keep the audience and confirmed offer unchanged." },
-    { id: "tone", label: "Change the tone", direction: "Explore a different tone for this message. Ask which direction I prefer without repeating the earlier business questions." },
+    // #1153: these fill the goal box too, so they are the owner's words; the brief and claim check keep the facts.
+    { id: "scene", label: "Explore another scene", direction: "Same message, with a different picture." },
+    { id: "hook", label: "Try a different hook", direction: "Same goal and offer, with a different opening line." },
+    { id: "tone", label: "Change the tone", direction: "Same message in a different tone. Ask me which tone I'd like." },
   ].map(({ id, label, direction }) => ({ id, label, prompt: direction }));
 }
 /**
