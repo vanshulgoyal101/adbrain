@@ -18,27 +18,25 @@ import {
 } from "@/lib/brand/setup-fields";
 import type { BrandExtraction } from "@/lib/templates/ads";
 import type { Business } from "@/lib/types";
+import { setupTranslator, type SetupWords } from "@/i18n/setup-words";
 
 const AUTOSAVE_MS = 800;
 
-/** The CPO's #1251 words for each field: label, placeholder, helper. */
-const FIELD_TEXT: Record<SetupField, { label: string; placeholder: string; helper?: string }> = {
-  name: { label: "Business name", placeholder: "e.g. SunPeak Solar" },
-  vertical: { label: "What you sell", placeholder: "e.g. Rooftop solar for homes" },
-  locations: { label: "Where you serve", placeholder: "e.g. Mohali\nKharar", helper: "Your ads show only here. One city or area per line." },
-  offer: { label: "Your offer", placeholder: "e.g. Free site survey", helper: "One thing customers get for messaging you. Only what you really offer." },
-  phone: { label: "WhatsApp number", placeholder: "98765 43210", helper: "Customers message you here." },
-};
+/** Fields with a helper line under them (the CPO's #1251 words; text in messages `setup.business.fields`). */
+const HAS_HELPER: Record<SetupField, boolean> = { name: false, vertical: false, locations: true, offer: true, phone: true };
 
 /**
  * #1269 (#1251 WS1 step 1): a first-timer's business in five fields, saved as they type.
  * Everything else on the Brand stays on the full page ("More about your business").
  */
-export function SetupBusinessStep({ business, chooseLanguage = false }: {
+export function SetupBusinessStep({ business, chooseLanguage = false, words }: {
   business: Business | null;
+  /** #1438: the owner's app language (Settings or the chips above); English without it. */
+  words?: SetupWords;
   /** #1641: no app language chosen on this browser yet, so offer English / हिंदी above the step. */
   chooseLanguage?: boolean;
 }) {
+  const t = setupTranslator(words);
   const [fields, setFields] = useState<SetupBusinessFields>(() => setupFieldsFrom(business));
   const [errors, setErrors] = useState<Partial<Record<SetupField, string>>>({});
   const [adLanguage, setAdLanguage] = useState<CreateLanguageId | null>(null);
@@ -120,7 +118,7 @@ export function SetupBusinessStep({ business, chooseLanguage = false }: {
   async function autofill(pasted?: string) {
     setAutofillNote(null);
     if (pasted === undefined && !website.trim()) {
-      setAutofillNote({ ok: false, text: "Add your website first, like yourbusiness.com." });
+      setAutofillNote({ ok: false, text: t("business.needWebsite") });
       return;
     }
     setAutofilling(true);
@@ -147,45 +145,43 @@ export function SetupBusinessStep({ business, chooseLanguage = false }: {
         phone: current.phone.trim() ? current.phone : found.phone ?? "",
       };
       change(filled);
-      setAutofillNote({ ok: true, text: `Filled from your ${pasted === undefined ? "website" : "text"}. Check each line.` });
+      setAutofillNote({ ok: true, text: pasted === undefined ? t("business.filledWebsite") : t("business.filledText") });
     } catch {
-      setAutofillNote({ ok: false, text: pasted === undefined
-        ? "We couldn't read that website. Fill it in yourself; it takes about a minute."
-        : "We couldn't read that text. Try again, or fill it in yourself; it takes about a minute." });
+      setAutofillNote({ ok: false, text: pasted === undefined ? t("business.websiteFailed") : t("business.textFailed") });
     } finally {
       setAutofilling(false);
     }
   }
 
   return (
-    <SetupSpine step={1} saved={saved} beforeLeave={beforeLeave} primary={{ label: "Make my ads", href: SETUP_STEPS[1].href }}>
+    <SetupSpine step={1} saved={saved} beforeLeave={beforeLeave} primary={{ label: t("business.primary"), href: SETUP_STEPS[1].href }} words={words}>
       {offerLanguage && <div className="mb-3 flex justify-end"><CompactAppLanguage /></div>}
-      <h2 className="text-xl font-semibold text-slate-950">Tell us about your business</h2>
-      <p className="mt-1 text-sm text-slate-600">Five things. Your ads are made from these, and you can change them any time.</p>
+      <h2 className="text-xl font-semibold text-slate-950">{t("business.title")}</h2>
+      <p className="mt-1 text-sm text-slate-600">{t("business.helper")}</p>
 
       <div className="mt-5 flex flex-col gap-2">
-        <label htmlFor="setup-website" className="text-sm font-medium text-slate-900">Your website (optional)</label>
+        <label htmlFor="setup-website" className="text-sm font-medium text-slate-900">{t("business.website")}</label>
         <div className="flex flex-col gap-2 sm:flex-row">
           <Input id="setup-website" type="url" inputMode="url" placeholder="yourbusiness.com" value={website}
             onChange={(event) => setWebsite(event.target.value)} className="h-11" />
           <Button type="button" variant="outline" className="h-11 shrink-0" onClick={() => void autofill()} disabled={autofilling}>
             {autofilling ? <Spinner /> : <Wand2 className="h-4 w-4" aria-hidden="true" />}
-            Fill it from my website
+            {t("business.fillWebsite")}
           </Button>
         </div>
         {pasting ? (
           <div className="flex flex-col gap-2">
-            <label htmlFor="setup-pasted" className="text-sm font-medium text-slate-900">Instagram bio, Google listing or catalogue text</label>
+            <label htmlFor="setup-pasted" className="text-sm font-medium text-slate-900">{t("business.pasteLabel")}</label>
             <Textarea id="setup-pasted" rows={4} maxLength={6000} value={pastedText} onChange={(event) => setPastedText(event.target.value)}
-              placeholder="Paste what the business says about itself." />
+              placeholder={t("business.pastePlaceholder")} />
             <Button type="button" variant="outline" className="h-11 w-fit" onClick={() => void autofill(pastedText)} disabled={autofilling || !pastedText.trim()}>
               {autofilling ? <Spinner /> : <Wand2 className="h-4 w-4" aria-hidden="true" />}
-              Fill from this text
+              {t("business.fillText")}
             </Button>
           </div>
         ) : (
           <button type="button" onClick={() => setPasting(true)} className="inline-flex min-h-11 w-fit items-center text-sm font-medium text-blue-700 underline underline-offset-4">
-            No website? Paste a bio or listing
+            {t("business.pasteToggle")}
           </button>
         )}
         {autofillNote && <Alert variant={autofillNote.ok ? "info" : "error"}>{autofillNote.text}</Alert>}
@@ -193,7 +189,8 @@ export function SetupBusinessStep({ business, chooseLanguage = false }: {
 
       <div className="mt-6 flex flex-col gap-5">
         {SETUP_FIELDS.map((key) => {
-          const text = FIELD_TEXT[key];
+          const text = { label: t(`business.fields.${key}.label`), placeholder: t(`business.fields.${key}.placeholder`),
+            helper: HAS_HELPER[key] ? t(`business.fields.${key}.helper` as "business.fields.offer.helper") : undefined };
           const id = `setup-${key}`;
           const described = [text.helper && `${id}-helper`, errors[key] && `${id}-error`].filter(Boolean).join(" ") || undefined;
           const common = {
@@ -211,7 +208,7 @@ export function SetupBusinessStep({ business, chooseLanguage = false }: {
                     autoComplete={key === "phone" ? "tel-national" : key === "name" ? "organization" : "off"}
                     onChange={(event) => set(key, event.target.value)} />}
               {text.helper && <p id={`${id}-helper`} className="text-xs text-slate-500">{text.helper}</p>}
-              {errors[key] && <p id={`${id}-error`} className="text-sm font-medium text-red-800">{errors[key]}</p>}
+              {errors[key] && <p id={`${id}-error`} className="text-sm font-medium text-red-800">{t(`business.errors.${key}`)}</p>}
             </div>
           );
         })}
@@ -219,9 +216,9 @@ export function SetupBusinessStep({ business, chooseLanguage = false }: {
 
       {/* #1681 (CPO #1669): the language the first 3 ads are written in, defaulting by what they sell. */}
       <div className="mt-6"><AdLanguageChips value={adLanguage ?? defaultAdLanguage(business?.languages, fields.vertical)} onChange={setAdLanguage} /></div>
-      <p className="mt-4 text-sm text-slate-600">Making ads is included. Nothing goes live until you say so.</p>
+      <p className="mt-4 text-sm text-slate-600">{t("business.included")}</p>
       <Link href="/brand?all=1" onClick={() => void saveNow().catch(() => undefined)} className="mt-2 inline-flex min-h-11 items-center text-sm font-medium text-slate-700 underline underline-offset-4">
-        More about your business
+        {t("business.more")}
       </Link>
     </SetupSpine>
   );

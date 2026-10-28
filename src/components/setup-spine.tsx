@@ -6,6 +6,7 @@ import { ChevronLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { HelpOnWhatsApp } from "@/components/support-link";
 import { cn } from "@/lib/utils";
+import { setupTranslator, type SetupWords } from "@/i18n/setup-words";
 
 import { SETUP_STEPS, type SetupStep } from "@/lib/setup/steps";
 
@@ -18,8 +19,10 @@ type Primary = { label: string; disabled?: boolean } & ({ href: string; onClick?
  * bottom bar with one primary (+ Back from step 2). Back-safe: leaving waits for the step's own save
  * (`beforeLeave`) and stays put if it fails; Back goes to the step before, never browser history.
  */
-export function SetupSpine({ step, saved = null, beforeLeave, primary, children }: {
+export function SetupSpine({ step, saved = null, beforeLeave, primary, words, children }: {
   step: SetupStep;
+  /** #1438: the owner's app language; English without it. */
+  words?: SetupWords;
   saved?: "saving" | "saved" | "failed" | null;
   beforeLeave?: () => Promise<void>;
   primary: Primary;
@@ -34,6 +37,8 @@ export function SetupSpine({ step, saved = null, beforeLeave, primary, children 
     root.style.scrollPaddingBottom = "7rem";
     return () => { root.style.scrollPaddingBottom = before; };
   }, []);
+  const t = setupTranslator(words);
+  const label = (n: SetupStep) => t(`step${n}`);
   const current = SETUP_STEPS[step - 1];
   const previous = step > 1 ? SETUP_STEPS[step - 2] : null;
 
@@ -52,29 +57,29 @@ export function SetupSpine({ step, saved = null, beforeLeave, primary, children 
 
   const back = previous && (
     <Button type="button" variant="outline" onClick={() => void leave(previous.href)} disabled={leaving}>
-      Back
+      {t("back")}
     </Button>
   );
 
   return (
-    <div className="flex min-h-full flex-col">
+    <div className="flex min-h-full flex-col" lang={words && words.locale !== "en" ? words.locale : undefined}>
       <div className="flex min-h-11 items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-1">
           {previous && (
-            <button type="button" onClick={() => void leave(previous.href)} disabled={leaving} aria-label={`Back to ${previous.label}`}
+            <button type="button" onClick={() => void leave(previous.href)} disabled={leaving} aria-label={t("backTo", { step: label(previous.step) })}
               className="-ml-2 inline-flex size-11 shrink-0 items-center justify-center rounded-md text-slate-700 hover:bg-slate-100">
               <ChevronLeft size={20} aria-hidden="true" />
             </button>
           )}
-          <h1 className="truncate text-base font-semibold text-slate-900">Set up your first ad</h1>
+          <h1 className="truncate text-base font-semibold text-slate-900">{t("title")}</h1>
         </div>
-        <HelpOnWhatsApp label="Help" />
+        <HelpOnWhatsApp label={t("help")} />
       </div>
 
-      <div role="group" aria-label={`Step ${step} of 3: ${current.label}`} className="mt-2">
+      <div role="group" aria-label={`${t("stepOf", { n: step })}: ${label(current.step)}`} className="mt-2">
         <div className="flex items-baseline justify-between gap-3 text-sm">
-          <p className="text-slate-600"><span className="font-semibold text-slate-900">Step {step} of 3</span> <span aria-hidden="true">·</span> <span>{current.label}</span></p>
-          <p role="status" className={cn("text-xs", saved === "failed" ? "font-medium text-red-800" : "text-slate-500")}>{saved === "saving" ? "Saving…" : saved === "saved" ? "Saved" : saved === "failed" ? "Not saved. Check your connection." : ""}</p>
+          <p className="text-slate-600"><span className="font-semibold text-slate-900">{t("stepOf", { n: step })}</span> <span aria-hidden="true">·</span> <span>{label(current.step)}</span></p>
+          <p role="status" className={cn("text-xs", saved === "failed" ? "font-medium text-red-800" : "text-slate-500")}>{saved === "saving" ? t("saving") : saved === "saved" ? t("saved") : saved === "failed" ? t("saveFailed") : ""}</p>
         </div>
         <div className="mt-2 grid grid-cols-3 gap-1.5" aria-hidden="true">
           {SETUP_STEPS.map((item) => (

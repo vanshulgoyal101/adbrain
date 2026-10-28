@@ -18,6 +18,8 @@ concurrency:
 jobs:
   run:
     runs-on: ubuntu-latest
+    # #1893: CRON_SECRET lives only in this main-only environment, so a dispatch from another branch gets no secret.
+    environment: production-secrets
     timeout-minutes: 5
     defaults:
       run:
@@ -262,6 +264,22 @@ jobs:
           [ "$open" = 0 ] || exit 0
           gh issue create -R "$GITHUB_REPOSITORY" -l decision -t "$title" \
             -b "$(printf 'An OpenRouter key has $%s left (alert under $%s, #449). Paid Create models (images, Haiku concepts) stop when it runs out.\n\n→ CEO: ask the owner whether to raise the key limit (OpenRouter settings → Keys).\nRun: %s/%s/actions/runs/%s\n' "$(jq -r '.minRemainingUsd' credit.json)" "$(jq -r '.thresholdUsd' credit.json)" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+      # Moved from production-guard (#1893): the guard runs on Vercel's SHA-ref deployments, which a main-only environment can't serve.
+      - name: 2-Tier parent token (#520)
+        if: always()
+        run: |
+          [ -n "$CRON_SECRET" ] || { echo "CRON_SECRET not set; parent token check skipped"; exit 0; }
+          code=$(curl -sS --max-time 30 -o parent.json -w '%{http_code}' -H "Authorization: Bearer $CRON_SECRET" https://adbrain.vanshul.com/api/cron/meta-parent-health) || code=000
+          # Codes only (public repo): never the token or Meta's message.
+          summary=$(jq -c '{ok, configured, enabled, errorCode}' parent.json 2>/dev/null || echo '{"ok":false,"error":"no JSON body"}')
+          echo "HTTP $code $summary"
+          [ "$code" = 404 ] && { echo "Route not deployed yet; skipped"; exit 0; }
+          [ "$code" = 200 ] && exit 0
+          echo "FAIL 2-Tier parent token: HTTP $code $summary"
+          exit 1
+      # #1439: the WS1 first-timer path at 360 px over slow 4G, read-only on Meta. Gating since 5 green guard runs
+      # (Oct 28): a failure turns the guard red and opens a core bug, but never rolls back (that needs the smoke to fail).
+      # Skipped while the WS1_* secrets are unset.
       - name: Alert on the second consecutive failure
         if: failure()
         env:

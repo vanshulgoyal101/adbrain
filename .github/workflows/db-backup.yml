@@ -17,9 +17,11 @@ concurrency:
 jobs:
   dump:
     runs-on: ubuntu-latest
+    # #1893: BACKUP_DATABASE_URL lives only in this main-only environment.
+    environment: production-secrets
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           sparse-checkout: .github/backup
           persist-credentials: false
@@ -42,7 +44,7 @@ jobs:
           rm -f dump.sql.gz
           sha256sum "$name.sql.gz.cms"
       # Saved before the uploads mirror, so a bad upload can't cost the night's database backup.
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ${{ env.NAME }}
           path: ${{ env.NAME }}.sql.gz.cms
@@ -73,7 +75,7 @@ jobs:
           tar -czf uploads.tar.gz uploads uploads.txt
           openssl cms -encrypt -binary -aes256 -outform DER -in uploads.tar.gz -out "$NAME.uploads.tar.gz.cms" .github/backup/backup-cert.crt
           rm -rf uploads uploads.txt uploads.tar.gz
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ${{ env.NAME }}-uploads
           path: ${{ env.NAME }}.uploads.tar.gz.cms

@@ -75,12 +75,16 @@ async function main() {
 
   // Same patch: an approval of an earlier head still counts after a clean merge of the base (as in release.mjs).
   const diffOf = (sha) => gh(["api", "-H", "Accept: application/vnd.github.diff", `repos/${repo}/compare/${pr.base.ref}...${sha}`]);
-  const headLines = changedLines(gh(["pr", "diff", String(n), "-R", repo]));
+  // Lazy and fail-safe: GitHub refuses diffs over 300 files (HTTP 406). Then only a verdict on the exact head counts.
+  let headLines;
   const memo = new Map();
   const samePatch = (sha) => {
     if (head.toLowerCase().startsWith(sha.toLowerCase())) return true;
     if (!memo.has(sha)) {
-      try { memo.set(sha, changedLines(diffOf(sha)) === headLines); } catch { memo.set(sha, false); }
+      try {
+        headLines ??= changedLines(diffOf(head));
+        memo.set(sha, changedLines(diffOf(sha)) === headLines);
+      } catch { memo.set(sha, false); }
     }
     return memo.get(sha);
   };
