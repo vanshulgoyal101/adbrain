@@ -168,7 +168,7 @@ export function BrandAssets({
     <Card>
       {confirmDialog}
       <CardHeader>
-        <CardTitle>Brand assets</CardTitle>
+        <CardTitle as="h2">Brand assets</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
         <form onSubmit={onUpload} className="flex flex-col gap-3">

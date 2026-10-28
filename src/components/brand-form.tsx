@@ -276,7 +276,7 @@ export function BrandForm({ business, photoCount = 0 }: { business: Business | n
       <div id="brand-identity" className="scroll-mt-6">
       <Card>
         <CardHeader className="flex items-center justify-between gap-4">
-          <CardTitle>Basics</CardTitle>
+          <CardTitle as="h2">Basics</CardTitle>
           <Button
             type="button"
             variant="outline"
@@ -352,7 +352,7 @@ export function BrandForm({ business, photoCount = 0 }: { business: Business | n
       <div id="brand-contact" className="scroll-mt-6">
       <Card>
         <CardHeader>
-          <CardTitle>Contact details</CardTitle>
+          <CardTitle as="h2">Contact details</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
           <p className="text-sm text-slate-500 sm:col-span-2">
@@ -394,7 +394,7 @@ export function BrandForm({ business, photoCount = 0 }: { business: Business | n
       <div id="brand-creative" className="scroll-mt-6">
       <Card>
         <CardHeader>
-          <CardTitle>Brand details</CardTitle>
+          <CardTitle as="h2">Brand details</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
           {/* #681: what ads need first (area, offer); styling after, so a phone reaches them sooner. */}

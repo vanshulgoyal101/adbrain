@@ -28,12 +28,14 @@ export function CardHeader({
   );
 }
 
+/** #1313: `as="h2"` for a card that sits straight under the page's h1, so headings don't skip a level. */
 export function CardTitle({
   className,
+  as: Heading = "h3",
   ...props
-}: React.HTMLAttributes<HTMLHeadingElement>) {
+}: React.HTMLAttributes<HTMLHeadingElement> & { as?: "h2" | "h3" }) {
   return (
-    <h3
+    <Heading
       className={cn("font-semibold text-slate-900", className)}
       {...props}
     />
