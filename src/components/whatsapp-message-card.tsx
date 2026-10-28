@@ -86,7 +86,7 @@ export function WhatsAppMessageFields({ value, onWords, onLanguage, allowAuto, f
       <legend className="text-sm font-medium text-slate-800">Button</legend>
       <div className="flex flex-wrap gap-2">
         {([["none", "None"], ["call", "Call now"], ["questions", "Quick questions"]] as const).map(([option, label]) =>
-          <label key={option} className="flex min-h-10 cursor-pointer items-center gap-2 rounded-md border border-slate-200 px-3 text-sm"><input type="radio" name="whatsapp-button" checked={value.button === option} onChange={() => setButton(option)} className="accent-blue-600" />{label}</label>)}
+          <label key={option} className="flex min-h-11 cursor-pointer items-center gap-2 rounded-md border border-slate-200 px-3 text-sm"><input type="radio" name="whatsapp-button" checked={value.button === option} onChange={() => setButton(option)} className="accent-blue-600" />{label}</label>)}
       </div>
       {value.button === "call" && <p className="text-xs text-slate-600">
         <Suspense fallback="Calls go to the WhatsApp number on your ads.">{callNumber ? <CallsGoTo number={callNumber} /> : "Calls go to the WhatsApp number on your ads."}</Suspense>

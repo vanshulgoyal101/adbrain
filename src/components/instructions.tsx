@@ -129,7 +129,7 @@ function InstructionEditor({
             onChange={(e) => setTitle(e.target.value)}
             placeholder="Instruction title (e.g. Tone & rules)"
           />
-          <label className="flex shrink-0 items-center gap-1.5 text-sm text-slate-600">
+          <label className="flex min-h-11 shrink-0 cursor-pointer items-center gap-1.5 text-sm text-slate-600">
             <input
               type="checkbox"
               checked={isActive}
