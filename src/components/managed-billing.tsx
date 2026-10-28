@@ -72,7 +72,7 @@ export function BillingSection({ mode, ...billing }: { mode: "managed" | "own" |
         <WalletCards aria-hidden="true" className="h-5 w-5 text-blue-600" />
         Billing
       </h2>
-      <p className="text-sm leading-6 text-slate-600">You pay Meta directly from your ad account. AdBrain&apos;s pilot is free.</p>
+      <p className="text-sm leading-6 text-slate-600">You pay Meta directly from your ad account. Your first month of AdBrain is free; after that it&apos;s ₹999 a month.</p>
     </section>
   );
 }
