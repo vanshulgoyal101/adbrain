@@ -54,7 +54,9 @@ describe("core: Campaigns shows Meta's ad review status (#157)", () => {
     const reason = adReviewState(rejected).reasons[0];
     showAfterRefresh([rejected, ads.find(ad => ad.effective_status === "PAUSED")!]);
     expect(await screen.findByText("Rejected by Meta (1 of 2 ads)")).toBeTruthy();
-    expect(screen.getByText(reason)).toBeTruthy();
+    // #1274: the owner's sentence leads; Meta's own reason stays on the card under Details.
+    expect(screen.getByText(/^Meta didn't approve 1 ad: /)).toBeTruthy();
+    expect(screen.getByText(`Meta's message: “${reason}”`)).toBeTruthy();
   });
 
   it("all ads approved shows approved", async () => {

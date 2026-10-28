@@ -56,6 +56,7 @@ import {
 } from "@/components/targeting-controls";
 import { CampaignChat } from "@/components/campaign-chat";
 import { AdResults } from "@/components/ad-results";
+import { RejectedAds } from "@/components/rejected-ads";
 import { EditAudienceDialog } from "@/components/edit-audience-dialog";
 import { AudienceSwitchStrip } from "@/components/audience-switch-strip";
 import { createClient as createBrowserClient } from "@/lib/supabase/client";
@@ -2478,6 +2479,11 @@ function BusinessCampaigns({
                     ) : null}
                     {cardNotice?.id === c.id && cardError?.id !== c.id ? <p role="status" className="text-sm text-slate-600">{cardNotice.message}</p> : null}
 
+                    {reviews[c.id]?.length ? (
+                      <RejectedAds reviews={reviews[c.id]} spend={r?.spend ?? 0} adsManagerUrl={c.meta_campaign_id ? adsLink(c) : undefined}
+                        onEditAd={c.meta_campaign_id && (c.status === "paused" || c.status === "active") && reviewableCampaign(c) && (c.meta_ad_ids?.length ?? 0) > 0 && !waitingSwitch[c.id]
+                          ? () => { setAdEditHint(undefined); setAdEdit(c); } : undefined} />
+                    ) : null}
                     {r && (
                       // #1274 (#1255): one sentence, one number, one action; the figures stay under Details.
                       <CardResults campaign={c} result={r} outcome={outcome} comparison={lastCampaignComparison(c, campaigns, results)}
@@ -2621,7 +2627,7 @@ const REVIEW_LABELS: Record<AdReview["state"], { label: string; style: string }>
   approved: { label: "Approved by Meta", style: "bg-emerald-50 text-emerald-700" },
 };
 
-/** The least-ready ad decides the badge; rejection reasons are shown as Meta wrote them. */
+/** The least-ready ad decides the badge; flagged issues are shown as Meta wrote them, rejections by <RejectedAds> (#1274). */
 function AdReviewBadge({ reviews }: { reviews: AdReview[] }) {
   const order: AdReview["state"][] = ["rejected", "issues", "in_review", "unknown", "approved"];
   const state = order.find(candidate => reviews.some(review => review.state === candidate))!;
@@ -2632,7 +2638,7 @@ function AdReviewBadge({ reviews }: { reviews: AdReview[] }) {
       <Badge className={REVIEW_LABELS[state].style}>
         {REVIEW_LABELS[state].label}{reviews.length > 1 ? ` (${count} of ${reviews.length} ads)` : ""}
       </Badge>
-      {reasons.length > 0 && <span className="text-xs text-slate-600">{reasons.join(" ")}</span>}
+      {reasons.length > 0 && state !== "rejected" && <span className="text-xs text-slate-600">{reasons.join(" ")}</span>}
     </span>
   );
 }
