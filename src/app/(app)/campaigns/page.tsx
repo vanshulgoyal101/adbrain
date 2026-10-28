@@ -4,6 +4,12 @@ import { clientCreative } from "@/lib/creative/client-receipt";
 import Link from "next/link";
 import { Building2 } from "lucide-react";
 import { Campaigns } from "@/components/campaigns";
+import { SetupGoLive } from "@/components/setup-go-live";
+import { BUDGET_PRESETS } from "@/lib/campaign/budget";
+import { setupPhone } from "@/lib/brand/setup-fields";
+import { maskWhatsAppNumber } from "@/lib/meta/whatsapp-status-shared";
+import { fundingMode } from "@/lib/payments/operator-funding";
+import { canUseMetaConnect } from "@/lib/meta/pilot-access";
 import { adResultsEnabled } from "@/lib/campaign/ad-results-store";
 import { draftDtoSchema, type DraftDTO } from "@/lib/campaign/connect-contracts";
 import { listEditableDrafts } from "@/lib/campaign/draft-repository";
@@ -87,6 +93,21 @@ export default async function CampaignsPage({
   const reconnectBy = connection.source === "oauth" && !connection.expired ? reconnectByLabel(connection.tokenExpiresAt) : null;
   const campaigns = page.campaigns;
   const requested = typeof params.creatives === "string" ? params.creatives.split(",") : [];
+  // #1271: Go live's chip; only the offered amounts are taken from the address.
+  const chosenBudget = BUDGET_PRESETS.find((amount) => String(amount) === params.budget);
+
+  // #1271 (#1251 WS1 step 3): a first-timer with ready ads and no campaign yet gets Go live; `?all=1` opens this page.
+  // Before App Review an owner who can't connect still gets ReadyAdsNextStep below (#336).
+  const canConnect = async () => metaReady || await createClient().then((supabase) => supabase.auth.getUser())
+    .then(({ data }) => Boolean(data.user && canUseMetaConnect(data.user.id))).catch(() => false);
+  if (params.all !== "1" && !campaigns.length && approved.length && await canConnect()) {
+    const picked = approved.filter((creative) => requested.includes(creative.id));
+    const ads = (picked.length ? picked : approved).slice(0, 3);
+    const funding = await fundingMode(business.id).catch(() => null);
+    const masked = business.phone ? setupPhone(business.phone) : null;
+    return <SetupGoLive business={business} ads={ads} pageConnected={metaReady} funding={funding}
+      whatsappNumber={masked ? maskWhatsAppNumber(`+91${masked}`) : null} weeklyCap={weeklyCap} />;
+  }
 
   return (
     <div>
@@ -118,7 +139,7 @@ export default async function CampaignsPage({
           adResults={adResultsEnabled()}
           adAccountId={connection.adAccountId ?? ""}
           weeklyCap={weeklyCap}
-          newCampaign={params.new === "1" ? { creativeIds: requested, review: params.review === "1" } : undefined}
+          newCampaign={params.new === "1" ? { creativeIds: requested, review: params.review === "1", budget: chosenBudget } : undefined}
         />}
       </div>
     </div>
