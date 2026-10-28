@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useEffectEvent, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useEffectEvent, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
-import { Check, Copy, Inbox, Loader2, MessageCircle, Phone, RefreshCw, Search, X, Save, Pencil, ChevronDown, SlidersHorizontal, UserCheck, MoreHorizontal } from "lucide-react";
+import { Inbox, Loader2, MessageCircle, Phone, RefreshCw, Search, X, Save, Pencil, ChevronDown, SlidersHorizontal, UserCheck, MoreHorizontal } from "lucide-react";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Status } from "@/components/ui/status";
-import { buildLeadDigest, relativeAge } from "@/lib/leads/digest";
+import { relativeAge } from "@/lib/leads/digest";
 import { formatDate } from "@/lib/format";
 import { useMounted } from "@/lib/use-mounted";
 import type { Lead } from "@/lib/types";
@@ -105,7 +105,8 @@ export function LeadInbox({
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
+  // #1260: when this Page's last complete check finished, for the quiet 'Updated' line (null = read storage).
+  const [syncedAt, setSyncedAt] = useState<number | null>(null);
   const [query, setQuery] = useState("");
   const [contactFilter, setContactFilter] = useState("all");
   const [sort, setSort] = useState("newest");
@@ -259,22 +260,6 @@ export function LeadInbox({
     }
   }
 
-  const digest = useMemo(
-    () =>
-      buildLeadDigest(
-        leads.map((l) => ({
-          fullName: leadName(l),
-          phone: l.phone,
-          email: l.email,
-          city: l.city,
-          formName: l.form_name ?? (l.source === "whatsapp_manual" ? "WhatsApp chat" : null),
-          createdTime: l.created_time,
-        })),
-        { businessName },
-      ),
-    [leads, businessName],
-  );
-
   async function sync() {
     if (syncing) return;
     setSyncing(true);
@@ -305,13 +290,16 @@ export function LeadInbox({
           !res.ok ? `Some forms didn't answer. ${soFar}; Keep checking to try again.` : `Still checking Meta. ${soFar}; Keep checking to finish.`);
         return;
       }
-      if (syncStorageKey && data.sync?.state === "complete") {
-        saveLeadSyncTime(syncStorageKey, Date.now());
+      if (data.sync?.state === "complete") {
+        const at = Date.now();
+        if (syncStorageKey) saveLeadSyncTime(syncStorageKey, at);
+        setSyncedAt(at);
       }
+      // #1260: 'Updated just now' says a quiet check found nothing; only news gets a sentence.
       setNotice(
         data.imported
           ? `${data.imported} new ${data.imported === 1 ? "enquiry" : "enquiries"} from Meta.`
-          : data.sync?.state === "complete" ? "Up to date. No new enquiries." : "Checked Meta, but couldn't confirm everything was read.",
+          : data.sync?.state === "complete" ? null : "Checked Meta, but couldn't confirm everything was read.",
       );
     } catch {
       setError("Couldn't check Meta for enquiries. Check your connection.");
@@ -330,18 +318,8 @@ export function LeadInbox({
     return () => window.clearTimeout(timer);
   }, [metaReady, syncStorageKey]);
 
-  async function copyDigest() {
-    try {
-      await navigator.clipboard.writeText(digest);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {
-      setError("Couldn't copy — select and copy the text manually.");
-    }
-  }
-
-  const whatsappHref = `https://wa.me/?text=${encodeURIComponent(digest)}`;
   const now = new Date();
+  const lastSync = syncedAt ?? (mounted && syncStorageKey ? readLeadSyncTime(syncStorageKey) : 0);
 
   // Render a deterministic absolute date on the server and first client render
   // (same string on both sides = no hydration mismatch), then upgrade to the
@@ -382,17 +360,15 @@ export function LeadInbox({
           {title}{" "}
           <span className="font-normal text-slate-400">({view === "all" || allTotal === undefined ? page.total : allTotal})</span>
         </h2>
-        {metaReady && (
-          <Button size="sm" variant="outline" onClick={sync} disabled={syncing}>
-            {syncing ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <RefreshCw className="h-4 w-4" />
-            )}
-            {syncId ? "Keep checking" : "Check for enquiries"}
-          </Button>
-        )}
       </div>
+      {metaReady && <p className="-mt-2 flex flex-wrap items-center gap-x-2 text-xs text-slate-500">
+        {/* #1260: checking runs on open; the time sits quietly here, with a small Check now for impatient owners and retries. */}
+        <span aria-live="polite">{syncing ? "Checking Meta for new enquiries…" : lastSync ? `Updated ${relativeAge(new Date(lastSync).toISOString(), now)}` : null}</span>
+        <button type="button" className="inline-flex min-h-11 items-center gap-1 font-medium text-blue-700 disabled:text-slate-400" onClick={sync} disabled={syncing}>
+          {syncing ? <Loader2 size={12} className="animate-spin" aria-hidden="true" /> : <RefreshCw size={12} aria-hidden="true" />}
+          {syncId ? "Keep checking" : "Check now"}
+        </button>
+      </p>}
 
       {waiting !== null && <p className={styles.summary}>
         {waiting === 0 ? "Nobody is waiting." : `${waiting} ${waiting === 1 ? "person is" : "people are"} waiting for you.`}
@@ -608,29 +584,6 @@ export function LeadInbox({
         </div>
       )}
       {page.nextCursor && <Button variant="outline" disabled={page.loading} onClick={page.loadMore}>{page.loading ? <Loader2 size={16} className="animate-spin" /> : <ChevronDown size={16} />}Load more enquiries</Button>}
-      {leads.length > 0 && (
-        <details className={styles.digest}>
-          <summary className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-            <MessageCircle className="h-4 w-4 text-blue-600" />
-            WhatsApp digest
-            <span className="ml-auto text-xs font-normal text-slate-500">Last 7 days, up to 10 people</span>
-          </summary>
-          <pre
-            className="scrollbar-stable max-h-72 overflow-y-scroll whitespace-pre-wrap break-words rounded-md bg-slate-50 p-4 text-sm text-slate-700"
-          >
-            {digest}
-          </pre>
-          <div className="mt-3 flex flex-wrap items-center gap-3 pb-4">
-            <Button size="sm" variant="outline" onClick={copyDigest}>
-              {copied ? <Check className="h-4 w-4 text-blue-600" /> : <Copy className="h-4 w-4" />}
-              {copied ? "Copied" : "Copy"}
-            </Button>
-            <a className="inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-blue-700" href={whatsappHref} target="_blank" rel="noopener noreferrer">
-              <MessageCircle className="h-4 w-4" /> Share on WhatsApp
-            </a>
-          </div>
-        </details>
-      )}
     </div>
   );
 }
