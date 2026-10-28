@@ -40,14 +40,18 @@ export function CustomerBalance({ businessId, initialBalance = null }: { busines
     </div>
     {error ? <Alert variant="error">Ad budget is unavailable.</Alert> : !balance ? <p role="status">Checking ad budget</p> : <>
       {balance.held && <Alert>{balance.reason ?? "Funds are held for reconciliation."}</Alert>}
-      <dl className="grid gap-3 text-sm sm:grid-cols-2">
-        {([
-          // #1235 (owner): no Paid row; next to the ad budget it would reveal AdBrain's margin by subtraction.
-          ["Refunded", balance.refundedPaise],
-          ["Ad budget, incl. Meta's GST", balance.advertisingAllocationPaise],
-          ["Spent on ads, incl. Meta's GST", balance.mediaCostPaise + balance.taxCostPaise],
-          ["Held for running campaigns", balance.reservedPaise], ["Available ad budget", balance.remainingPaise],
-        ] as const).filter(([label, amount]) => amount !== 0 || label === "Available ad budget").map(([label, amount]) => <div key={label} className="min-w-0"><dt className="text-slate-500">{label}</dt><dd className="font-medium tabular-nums text-slate-900">{money(amount)}</dd></div>)}
+      {/* #1235 (CEO, CPO row 4): Available leads; no Paid and no total budget, which beside a payment would show AdBrain's margin. */}
+      <dl className="space-y-3 text-sm">
+        <div className="min-w-0"><dt className="text-slate-500">Available ad budget</dt>
+          <dd className="text-2xl font-semibold tabular-nums text-slate-900">{money(balance.remainingPaise)}</dd>
+          <dd className="text-slate-600">What your ads can still spend, including Meta&apos;s GST.</dd></div>
+        <div className="grid gap-3 sm:grid-cols-3">
+          {([
+            ["Spent on ads, incl. Meta's GST", balance.mediaCostPaise + balance.taxCostPaise],
+            ["Held for running campaigns", balance.reservedPaise],
+            ["Refunded", balance.refundedPaise],
+          ] as const).filter(([, amount]) => amount !== 0).map(([label, amount]) => <div key={label} className="min-w-0"><dt className="text-slate-500">{label}</dt><dd className="font-medium tabular-nums text-slate-900">{money(amount)}</dd></div>)}
+        </div>
       </dl>
     </>}
   </section>;
