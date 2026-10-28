@@ -17,8 +17,8 @@ configuration; check [Data Model](DATA_MODEL.md#migration-map) and
 | WhatsApp conversation results | WhatsApp reporting migration |
 | Declared preferences, customer allowance | Their additive migrations |
 | Worker campaign creation | `CAMPAIGN_EXECUTION_MODE=worker`, worker migration and a running worker; default is inline |
-| Live checkout | Live payment flags on a production `main` deployment; see [API Reference](API_REFERENCE.md#configurable-live-payments) |
-| Test checkout | Local only: `PAYMENTS_TEST_ENABLED=true`, loopback Supabase, no Vercel environment; see [test payments](API_REFERENCE.md#local-test-payments) |
+| Live checkout | Live payment flags on a production `main` deployment; see [API Reference](api/payments.md#configurable-live-payments) |
+| Test checkout | Local only: `PAYMENTS_TEST_ENABLED=true`, loopback Supabase, no Vercel environment; see [test payments](api/payments.md#local-test-payments) |
 | Scheduled jobs | `vercel.json` schedules only the keepalive and the daily spend-enforcement sweep |
 
 No checkout path, test or live, makes money spendable or activates ads. Mocked
@@ -38,7 +38,7 @@ ID are different identifiers. Never infer one from another.
 | `/dashboard` | The newest enquiry from the last 24 h still waiting for a first reply ("Rohit tapped your ad at 9:40 am. Reply now; …", #1292); for the newest live campaign, "Meta is checking your ads; they usually start within a day." while every ad is in review and nothing has delivered (stored per-ad statuses, no Meta call), or the rejected-ads sentence and fixes when Meta disapproved an ad (one Meta review read, #1469); then results so far (enquiries, spent, per enquiry, oldest update; same latest results as the campaign cards, #764; the median time to the first WhatsApp/Call tap over 30 days, "You usually contact people within …", #1049/#1443), next action, onboarding progress, activity | Uses stored state (plus that one review read); not proof of live provider health |
 | `/brand` | Setup step 1 for first-timers; profile, assets, Markdown instructions (`?all=1`) | Saved business facts ground AI output |
 | `/create` | Guided creative interview and brief review | Reviewing a brief is distinct from paid generation; the Brand context panel names missing offers, service areas and phone before a run. Any goal, typed or from a suggestion, on a Brand with an offer or proof point, an area and a phone skips the review when the interview needs no question. The start screen says what the ads will use ('Your 3 ads will use: Mohali · offer: Free site survey'; every Brand area Create sends, the first 3 then '+N more' (#1034); a proof point is labelled 'proof:', facts cut at 40 characters) above 'Make 3 ads', with 'About 2 minutes. Nothing is published.' under it and 'Edit brief' to keep the review; afterwards the brief shows as a collapsed 'What I'll write about · Edit' line (#858, #1004). After 'Use this ad', the one primary step 'Next: set up campaign' opens `/campaigns?…&review=1`, which prepares Review on its own (#1004, #1152); 'Review ads' and 'Make another' stay in the quieter row above. Up to two 'Coming up' occasion chips (festivals and seasons for today's date in IST, `src/lib/seasonal.ts`; November adds Chhath Puja, Guru Nanak Jayanti and the winter season, and a festival comes before a long season, #1210) fill the goal in one tap with plain words ('An ad for Chhath Puja from <Business>.'); they never assert a sale, discount or deadline, and the concept prompt and claim check allow only saved offers (#700, #1153) |
-| `/studio` | Generate, inspect, approve, edit (ad text, words on picture, background), regenerate (asks first), delete, export, share approved ads (phone share sheet; desktop downloads and copies the text); "Create campaign (N)" links approved ads to Campaigns | Approval and sharing do not publish an ad on Meta |
+| `/studio` | Generate, inspect, approve, edit (ad text, words on picture, background); every ad tile here, in Create step 2 and on Go live says **Your photo** or **AI picture** (#1901, Hindi too), and only a Your photo ad may say "our work" (#1617); regenerate (asks first), delete, export, share approved ads (phone share sheet; desktop downloads and copies the text); "Create campaign (N)" links approved ads to Campaigns | Approval and sharing do not publish an ad on Meta |
 | `/assets` | Browse/reuse/download saved images | Download/clipboard failures are surfaced |
 | `/campaigns` | Draft, review, create paused, activate/pause, sync, report; `?new=1&creatives=<ids>` opens the composer with those approved ads selected; `&review=1` (#1004, from Create) then prepares Review on its own once Meta is connected, the WhatsApp check has run and a form campaign has its lead form (the same prepare as the Review button; nothing is sent to Meta). The lead form used for the last Review is preselected while the Page still has it; with several forms and none chosen, the field says choosing one opens Review | Live Meta writes require verified binding and capability |
 | `/leads` | WhatsApp chats per campaign with **Add enquiry** (#764) first; the form table follows as "Form enquiries (n)", folded when there are none (#1223), or plain "Enquiries (n)" once a WhatsApp chat is logged in it, and the strip then says "n chats logged" instead of "No chats started yet" (#1835); the "No enquiries yet" block is decided on arrival, so a tab with nothing in it keeps the tabs (#1810); then sync, search, and inspect enquiries; copy digest. Each enquiry with a phone has **WhatsApp them** (wa.me with a first reply in the business's first language, en/hi/Hinglish, naming the business and its first offer) and **Call**; the first tap records `first_contacted_at` ("Replied 12 min after the enquiry", #1049) | No automated outreach is sent: the owner sends the reply |
@@ -95,6 +95,14 @@ sell, places one per line, one offer, a 10-digit WhatsApp number) plus "Fill it
 from my website", which fills only empty fields. It autosaves only those columns
 (`saveSetupBusiness`; other offers and Brand fields are kept) and "Make my ads"
 checks all five, then goes to `/create`. `/brand?all=1` opens the full page.
+
+After a launch, **New campaign** on Home and in the Campaigns header (`/brand?again=1`, #1934;
+the old composer is the header's quiet **More options**) runs the same three
+steps in returning mode: step 1 "What's new this time?" asks only for the offer (the last
+one as a placeholder) with the rest folded into "Same as last time: … Change"; step 2
+(`/create?again=1`) makes a fresh batch; step 3 (`/campaigns?again=1`) opens Go live even
+with existing campaigns, payment shows "Set up for your last campaign" and the budget starts
+at the offered amount nearest the last campaign's daily budget. `?again=1` is kept by Back.
 
 Until then Home (`/dashboard`) is one resume card, "Your first ad · Step N of 3 ·
 {step} · Continue" (#1272, `setupResumeStep`): step 1 until the five facts make a
@@ -588,7 +596,7 @@ The create request (idempotency key) is kept in sessionStorage per business, ads
 and budget, so a second tap or a reload resumes its operation
 (`operationForRequest`) instead of creating another campaign.
 
-Closing New campaign retains its unsaved brief, creatives, audience, destination
+Closing the composer (More options) retains its unsaved brief, creatives, audience, destination
 and budget in memory for the current business; returning to a business in the
 same mounted view restores its own setup. Use **Discard and start new** to clear
 it after confirmation. Unsaved edits are not durable across reload/navigation:
@@ -618,7 +626,7 @@ IDs. Poll it after ambiguity; do not submit a new key to escape a pending or
 does not fall back to inline execution when the queue is unavailable. A created campaign is paused. Activation requires a
 fresh confirmation digest, connection recheck, provider verification, and spend
 guardrail check. Creation idempotency does not extend to activation or paid
-generation. See [API Reference](API_REFERENCE.md) for payloads and states.
+generation. See [API Reference](api/README.md) for payloads and states.
 
 Pause and delete verify account/Page binding too. Missing legacy binding requires
 reconciliation, not guessing. Meta writes and local mirrors are not atomic: a
