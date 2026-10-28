@@ -70,7 +70,9 @@ describe("<SetupSpine> (#1268)", () => {
     expect(firstTimer([])).toBe(true);
     expect(firstTimer([{ launched_at: null }, { launched_at: null }])).toBe(true);
     expect(firstTimer([{ launched_at: null }, { launched_at: "2026-10-27T15:29:00Z" }])).toBe(false);
-    // A campaign imported from Meta and on now is live too, though AdBrain never activated it.
+    // Imported Meta campaigns count as live unless AdBrain created them.
     expect(firstTimer([{ launched_at: null, status: "active" }])).toBe(false);
+    expect(firstTimer([{ launched_at: null, meta_campaign_id: "mc-1", raw: { source: "sync" } }])).toBe(false);
+    expect(firstTimer([{ launched_at: null, meta_campaign_id: "mc-1", raw: { source: "campaign_operation" } }])).toBe(true);
   });
 });
