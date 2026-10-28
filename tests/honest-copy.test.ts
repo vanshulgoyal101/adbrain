@@ -76,7 +76,7 @@ describe("honest copy in UI strings (#1291)", () => {
   });
 
   it("fails on planted words, and keeps CSS, negated disclaimers and the Best ad label", () => {
-    const planted = `export const a = <p>Guaranteed leads in 7 days. You will get 100% more calls. 20% goes to AdBrain as a service fee; our margin is small. Best results, no risk.</p>;`;
+    const planted = `export const a = <p>Guaranteed leads in 7 days. You will get 100% more calls. 20% goes to AdBrain as a service fee; our margin is small. The best results, best price, best deal, best service, best quality, best in town, best in Mumbai, #1, number one, top-rated, no risk.</p>;`;
     expect(findings("src/components/x.tsx", planted).map((finding) => finding.split(" ")[1])).toEqual(
       expect.arrayContaining(["promise:", "split:"]),
     );
