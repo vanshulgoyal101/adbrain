@@ -78,6 +78,14 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["preference_settings"]["Insert"]>;
         Relationships: [];
       };
+      // #718 slice 2: one row per paid ₹999 month (db/migrations/20261029_plan_periods.sql); service-only writes.
+      plan_periods: {
+        Row: { id: string; business_id: string; state: "open" | "paid" | "expired"; amount_paise: number; payment_link_id: string | null;
+          short_url: string | null; payment_id: string | null; starts_at: string | null; ends_at: string | null; paid_at: string | null; created_at: string };
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
       owner_alert_prefs: {
         Row: OwnerAlertPrefsRow;
         Insert: Partial<OwnerAlertPrefsRow> & { business_id: string; owner_id: string };
@@ -678,6 +686,10 @@ export interface Database {
       owner_alert_start_verification: { Args: { p_business_id: string }; Returns: string };
       owner_alert_confirm: { Args: { p_code: string; p_phone: string }; Returns: string | null };
       owner_alert_stop: { Args: { p_phone: string }; Returns: number };
+      plan_period_open: { Args: { p_business_id: string }; Returns: { periodId: string; linkId: string | null; shortUrl: string | null } };
+      plan_period_set_link: { Args: { p_period_id: string; p_link_id: string; p_short_url: string }; Returns: boolean };
+      plan_period_paid: { Args: { p_link_id: string; p_payment_id: string; p_paid_at: string }; Returns: "paid" | "duplicate" | "ignored" };
+      plan_period_expire: { Args: { p_link_id: string }; Returns: boolean };
       change_declared_preferences: {
         Args: { p_business_id: string; p_operation: "enable" | "pause" | "save" | "forget" | "clear";
           p_expected_epoch: number; p_category?: string | null; p_value?: string | null };

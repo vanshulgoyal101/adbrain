@@ -11,7 +11,7 @@ import { createAnnualPaymentQuote, type ProductionPaymentQuote } from "@/lib/pay
 
 const mocks = vi.hoisted(() => ({ rpc: vi.fn(), getUser: vi.fn(), own: vi.fn(), rateLimit: vi.fn(), createOrder: vi.fn(), fetchOrder: vi.fn(),
   findOrder: vi.fn(), fetchPayment: vi.fn(), fetchOrderPayments: vi.fn(), createRefund: vi.fn(), fetchRefund: vi.fn(), fetchRefunds: vi.fn(),
-  scheduleSpendCap: vi.fn() }));
+  scheduleSpendCap: vi.fn(), fetchPlanLink: vi.fn() }));
 vi.mock("@/lib/managed/spend-cap-wiring", () => ({ flagManagedSpendCap: mocks.scheduleSpendCap }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ rpc: mocks.rpc }) }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ auth: { getUser: mocks.getUser } }) }));
@@ -403,6 +403,31 @@ describe("live checkout service with synthetic provider evidence", () => {
     expect(mocks.rpc.mock.calls.filter(([name]) => name === "production_payment_observe").map(([, args]) => args))
       .toEqual([expect.objectContaining({ p_payment_id: payment.id, p_capture_verified: true, p_review_required: false })]);
     expect(mocks.createOrder).not.toHaveBeenCalled();
+  });
+  // #718: the ₹999 plan's payments never enter the ad-money ledger.
+  it("skips a captured plan payment before the ad-money ledger sees it", async () => {
+    const response = await webhook(notification({ payload: { payment: { entity: { id: "pay_Plan1", order_id: "order_Plan1", notes: { purpose: "adbrain_plan" } } } } }));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ received: true, ignored: true, plan: "ignored" });
+    expect(mocks.rpc.mock.calls.map(([name]) => name)).not.toContain("production_payment_event_receive");
+    expect(mocks.scheduleSpendCap).not.toHaveBeenCalled();
+  });
+  it("settles a paid plan link from Razorpay's answer and skips the ad-money ledger", async () => {
+    const original = mocks.rpc.getMockImplementation()!;
+    mocks.rpc.mockImplementation((name, args) => name === "plan_period_paid"
+      ? { abortSignal: async () => ({ data: "paid", error: null }) } : original(name, args));
+    mocks.fetchPlanLink.mockResolvedValue({ id: "plink_Fixture1", status: "paid", amountPaise: 99_900, referenceId: "p", paymentId: "pay_Plan1" });
+    const response = await webhook(notification({ event: "payment_link.paid", payload: {
+      payment_link: { entity: { id: "plink_Fixture1" } }, payment: { entity: { id: "pay_Plan1", created_at: 1_793_000_000 } },
+    } }));
+    expect(await response.json()).toMatchObject({ received: true, ignored: false, plan: "paid" });
+    expect(mocks.rpc).toHaveBeenCalledWith("plan_period_paid", { p_link_id: "plink_Fixture1", p_payment_id: "pay_Plan1", p_paid_at: new Date(1_793_000_000_000).toISOString() });
+    expect(mocks.rpc.mock.calls.map(([name]) => name)).not.toContain("production_payment_event_receive");
+  });
+  it("fails a plan webhook Razorpay can't confirm right now, so Razorpay retries it", async () => {
+    mocks.fetchPlanLink.mockRejectedValue(new Error("down"));
+    const response = await webhook(notification({ event: "payment_link.paid", payload: { payment_link: { entity: { id: "plink_Fixture1" } } } }));
+    expect(response.status).toBeGreaterThanOrEqual(500);
   });
   it("holds failed evidence about the already captured payment itself", async () => {
     saved = { ...saved, state: "captured", captured_paise: 1_000_000, payment_id: payment.id };
