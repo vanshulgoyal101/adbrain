@@ -3,10 +3,10 @@ import { GONE_LINES, goneInMeta, recentlyDeletedInMeta } from "@/lib/campaign/go
 
 // #1600 (CPO #1601): words for a campaign deleted in Meta Ads Manager.
 describe("gone in Meta (#721, #1600)", () => {
-  it("names DELETED, ARCHIVED and the scheduled refresh's MISSING (100/33)", () => {
+  it("names DELETED and ARCHIVED only (#1678: a bare 100/33 never ends a campaign)", () => {
     expect(goneInMeta({ raw: { metaStatus: "DELETED" } })).toBe("Deleted in Meta");
     expect(goneInMeta({ raw: { metaStatus: "ARCHIVED" } })).toBe("Archived in Meta");
-    expect(goneInMeta({ raw: { metaStatus: "MISSING" } })).toBe("Not found in Meta");
+    expect(goneInMeta({ raw: { metaStatus: "MISSING" } })).toBeNull();
     expect(goneInMeta({ raw: null })).toBeNull();
   });
 

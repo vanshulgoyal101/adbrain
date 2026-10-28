@@ -119,8 +119,8 @@ async function handleGET(request: Request) {
       refreshed++;
     } catch (error) {
       // #1592: deleted in Meta (or no longer there at all): end it as the manual refresh does (#721); not a failure.
-      const gone = error instanceof CampaignGoneError ? error.metaStatus
-        : error instanceof MetaError && error.code === 100 && error.subcode === 33 ? "MISSING" : null;
+      // #1678: only Meta's own DELETED/ARCHIVED status ends a campaign; a bare 100/33 can also mean "no permission".
+      const gone = error instanceof CampaignGoneError ? error.metaStatus : null;
       if (gone && context) {
         const raw = campaign.raw && typeof campaign.raw === "object" && !Array.isArray(campaign.raw) ? campaign.raw : {};
         const { error: endError } = await saveCampaign(context, { status: "completed", raw: { ...raw, metaStatus: gone, metaGoneAt: new Date().toISOString() } }, campaign.id)
@@ -132,8 +132,10 @@ async function handleGET(request: Request) {
           continue;
         }
       }
-      // The campaign's ad account or Page is no longer the business's connection: nothing a retry can fix.
-      if (error instanceof ConnectionAccessError && error.code === "CONFLICT") { unbound.push(opaque(campaign.id)); continue; }
+      // The campaign's ad account or Page is no longer the business's connection, or Meta won't load it (100/33: gone or
+      // no permission). Listed, never ended: it stays active, so enforce-spend keeps guarding it.
+      if ((error instanceof ConnectionAccessError && error.code === "CONFLICT")
+        || (error instanceof MetaError && error.code === 100 && error.subcode === 33)) { unbound.push(opaque(campaign.id)); continue; }
       const dead = isTokenFailure(error) ? await reauthEntry(campaign.business_id, [error],
         campaigns.filter(({ business_id }) => business_id === campaign.business_id).length) : null;
       if (dead) reauth.set(campaign.business_id, dead);
