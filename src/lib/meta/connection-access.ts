@@ -16,6 +16,7 @@ import { canUseMetaConnect } from "./pilot-access";
 import { observeIdentity } from "@/lib/observability/context";
 import { recordProductEvent, withEventScope } from "@/lib/observability/logger";
 import { getManagedAccount, hasManagedAssets, isManagedReady, managedConnection, managedCredentials, type ManagedAccount } from "./managed-account";
+import { ConnectionAccessError } from "./connection-access-error";
 
 const authorizedBusinessBrand = Symbol("authorized-business");
 
@@ -25,15 +26,7 @@ export type AuthorizedBusiness = {
   readonly [authorizedBusinessBrand]: true;
 };
 
-export class ConnectionAccessError extends Error {
-  readonly code: "UNAUTHENTICATED" | "NOT_FOUND" | "FORBIDDEN" | "CONFLICT" | "UNAVAILABLE";
-
-  constructor(code: ConnectionAccessError["code"], message: string) {
-    super(message);
-    this.name = "ConnectionAccessError";
-    this.code = code;
-  }
-}
+export { ConnectionAccessError } from "./connection-access-error";
 
 function isAuthorizedBusiness(value: AuthorizedBusiness): boolean {
   return Boolean(value && value[authorizedBusinessBrand] === true);
@@ -232,9 +225,11 @@ async function withConnectionCredentials<Result>(
           : "canActivate"
   ];
   if (options.purpose !== "verify" && !reducingDelivery && capability.state !== "available") {
+    // #1217: 'unknown' is "couldn't check" (try again), not a refusal; 'blocked' carries Meta's reason.
     throw new ConnectionAccessError(
       "UNAVAILABLE",
       capability.blockers[0]?.message ?? "Meta has not confirmed access for this operation.",
+      { retryable: capability.state === "unknown" },
     );
   }
   if (managed) {
