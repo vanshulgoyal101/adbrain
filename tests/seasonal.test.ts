@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { OCCASIONS, occasionIdeas } from "@/lib/seasonal";
+import { OCCASIONS, occasionIdeas, occasionsFor } from "@/lib/seasonal";
 
 const at = (iso: string) => occasionIdeas("Sharma Dental", new Date(iso));
 const labels = (iso: string) => at(iso).map((s) => s.label);
@@ -61,5 +61,14 @@ describe("occasionIdeas (#700)", () => {
   it("respects max and falls back to a generic brand name", () => {
     expect(occasionIdeas("Shop", new Date("2026-12-20T06:00:00Z"), 1)).toHaveLength(1);
     expect(occasionIdeas("  ", new Date("2026-10-26T06:00:00Z"))[0].prompt).toContain("from my business");
+  });
+});
+
+describe("occasionsFor (#679)", () => {
+  const diwali = new Date("2026-10-26T06:00:00Z");
+  it("offers Indian occasions to an Indian business or one without a phone, and none abroad", () => {
+    expect(occasionsFor({ name: "Solaride", phone: "+91 73802 80874" }, diwali).map((idea) => idea.label)).toEqual(["Diwali festive season", "Chhath Puja"]);
+    expect(occasionsFor({ name: "Solaride", phone: null }, diwali)).toHaveLength(2);
+    expect(occasionsFor({ name: "Cedar Ridge", phone: "+1 512 555 0142" }, diwali)).toEqual([]);
   });
 });

@@ -4,7 +4,7 @@ import { Alert } from "@/components/ui/alert";
 import { SpendStatusBanner } from "@/components/spend-status";
 import { RecentActivity, WorkspaceHome } from "@/components/workspace-home";
 import { getMetaConnection } from "@/lib/meta/credentials";
-import { recentReplyMinutes, waitingEnquiries } from "@/lib/leads/reply-time";
+import { inboxSummary, recentReplyMinutes } from "@/lib/leads/reply-time";
 import {
   getCampaigns,
   getCreativePreviews,
@@ -40,8 +40,8 @@ export default async function DashboardPage() {
     launched.length ? getLatestResults(launched).catch(() => ({})) : {},
     // #1049: an unreadable reply time leaves the line out, never the page.
     business ? recentReplyMinutes(business.id).catch(() => null) : null,
-    // #1274: people waiting for a reply lead Home's sentence; unreadable means none shown.
-    business ? waitingEnquiries(business.id).catch(() => 0) : 0,
+    // #1274: people waiting for a reply (the inbox's Waiting count, #1260) lead Home's sentence; unreadable means none shown.
+    business ? inboxSummary(business.id).then((summary) => summary.waiting ?? 0, () => 0) : 0,
   ]);
 
   return (

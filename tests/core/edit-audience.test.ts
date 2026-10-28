@@ -31,6 +31,8 @@ const rebind = (tape: unknown) => JSON.parse(JSON.stringify(tape).replaceAll("90
 const runningTape = rebind(scrubbedRunningTape);
 // #765 (b): one recording (CEO-approved on #765, campaign PAUSED throughout, tree deleted after): an ACTIVE WhatsApp
 // ad set A gets a PAUSED copy B; A switches to B; B gets a copy C, which is cancelled. Ids join up across the tapes.
+// The switch tape's ad set reads were extended with daily_budget,end_time after recording (#1146); both ad sets
+// carry the recorded run's ₹100/day and no ad set end time, so the copy's budget already matches and isn't written.
 const copyTape = rebind(scrubbedCopyTape), switchTape = rebind(scrubbedSwitchTape), cancelTape = rebind(scrubbedCancelTape);
 const RECORDED = { campaign: "900000000000000003", a: "900000000000000005", aAd: "900000000000000008", b: "900000000000000007", bAd: "900000000000000009", c: "900000000000000010" };
 const mohali = { cities: [{ key: "1029599", name: "Mohali", radius: 25, distance_unit: "kilometer" }] };

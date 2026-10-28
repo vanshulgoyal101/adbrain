@@ -1,0 +1,74 @@
+{
+  "recordedAt": "2026-10-28T12:15:21.050Z",
+  "campaignId": "900000000000000001",
+  "tape": [
+    {
+      "method": "GET",
+      "path": "900000000000000001?fields=id%2Caccount_id",
+      "status": 200,
+      "body": {
+        "id": "900000000000000001",
+        "account_id": "9000000000000002"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "900000000000000001/adsets?fields=promoted_object%2Cdestination_type&limit=100",
+      "status": 200,
+      "body": {
+        "data": [
+          {
+            "promoted_object": {
+              "page_id": "900000000000003",
+              "smart_pse_enabled": false
+            },
+            "destination_type": "ON_AD",
+            "id": "900000000000000004"
+          }
+        ],
+        "paging": {
+          "cursors": {
+            "before": "CURSOR",
+            "after": "CURSOR"
+          }
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "900000000000000001/ads?fields=id%2Cstatus%2Ceffective_status%2Cconfigured_status%2Cad_review_feedback%2Cissues_info&limit=100&locale=en_US",
+      "status": 200,
+      "body": {
+        "data": [
+          {
+            "id": "900000000000000005",
+            "status": "PAUSED",
+            "effective_status": "DISAPPROVED",
+            "configured_status": "PAUSED",
+            "ad_review_feedback": {
+              "global": {
+                "Lead Ads": " It looks like your ad contains content that is not allowed on Meta’s Advertising platforms. This goes against our Advertising Standards, Community Standards or Terms of Service. Visit Business Support Home to understand why your ad was removed and how to fix it."
+              }
+            }
+          }
+        ],
+        "paging": {
+          "cursors": {
+            "before": "CURSOR",
+            "after": "CURSOR"
+          }
+        }
+      }
+    }
+  ],
+  "reviews": [
+    {
+      "adId": "900000000000000005",
+      "state": "rejected",
+      "effectiveStatus": "DISAPPROVED",
+      "reasons": [
+        "It looks like your ad contains content that is not allowed on Meta’s Advertising platforms. This goes against our Advertising Standards, Community Standards or Terms of Service. Visit Business Support Home to understand why your ad was removed and how to fix it."
+      ]
+    }
+  ]
+}

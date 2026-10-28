@@ -58,11 +58,12 @@ describe("launch composer defaults and plain words (#761)", () => {
     expect(await screen.findByLabelText("Daily budget (₹)")).toHaveValue(300);
     expect(screen.getByRole("button", { name: "₹300 a day" })).toBeInTheDocument();
     // #1038, #1171: the default destination is WhatsApp chat, so its cost shows; Instant form has none yet.
-    expect(await screen.findByText(/What to expect: in AdBrain's runs so far, a WhatsApp chat has cost about ₹150–180\. Meta reviews new ads first/)).toBeInTheDocument();
+    // #1307: the ledger's facts with n (6 chats), not a range it can't support.
+    expect(await screen.findByText("What to expect: AdBrain's WhatsApp ads so far got 6 chats for about ₹1,200, about ₹200 each. That's too few to predict yours. Meta reviews new ads first, usually within 24 hours, and nothing spends until you go live.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Check my campaign (nothing spends)" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("radio", { name: "Instant form" }));
     expect(await screen.findByText(/What to expect: AdBrain hasn't run enough instant-form campaigns yet to quote a cost per enquiry\. Meta reviews new ads first/)).toBeInTheDocument();
-    expect(document.body.textContent).not.toContain("WhatsApp chat has cost");
+    expect(document.body.textContent).not.toContain("WhatsApp ads so far got");
     // The WhatsApp line may say its number's verification is pending; the age never does.
     expect(document.body.textContent).not.toContain("pending");
   });
