@@ -3,9 +3,8 @@
 import { useState } from "react";
 import { CreditCard, Loader2 } from "lucide-react";
 import { Alert } from "@/components/ui/alert";
+import { formatDay } from "@/lib/format";
 import type { PlanStatus } from "@/lib/plan/status";
-
-const day = (iso: string) => new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" }).format(new Date(iso));
 
 /** #718 slice 2: the owner's ₹999 plan. No auto-debit: each month is a payment link the owner opens. */
 export function PlanCard({ businessId, status, payUrl: initialUrl }: { businessId: string; status: PlanStatus; payUrl: string | null }) {
@@ -16,8 +15,8 @@ export function PlanCard({ businessId, status, payUrl: initialUrl }: { businessI
   if (status.state === "exempt") return null;
   const due = status.state === "unpaid" || ((status.state === "free" || status.state === "paid") && status.dueSoon);
   const line = status.state === "trial_not_started" ? "Free until your first Go live, then one month free."
-    : status.state === "unpaid" ? `Payment due since ${day(status.since)}. Running ads keep running; new ads and campaigns wait until you pay.`
-      : status.state === "free" ? `Free until ${day(status.until)}.` : `Paid through ${day(status.until)}.`;
+    : status.state === "unpaid" ? `Payment due since ${formatDay(status.since, true)}. Running ads keep running; new ads and campaigns wait until you pay.`
+      : status.state === "free" ? `Free until ${formatDay(status.until, true)}.` : `Paid through ${formatDay(status.until, true)}.`;
   async function open() {
     setWorking(true);
     setError(null);
