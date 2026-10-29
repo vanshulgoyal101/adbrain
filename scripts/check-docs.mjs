@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, existsSync, statSync, realpathSync } from "node:fs";
+import { readFileSync, readdirSync, existsSync, statSync, realpathSync, writeFileSync } from "node:fs";
 import { resolve, relative, dirname, extname, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
@@ -186,6 +186,32 @@ export function scheduleDrift(root, markdown) {
   ];
 }
 
+// #2277: each docs/product/hi page carries `<!-- mirrors ../x.md <hash> -->` under its H1. The hash covers the English
+// page's headings and quoted labels, so a changed step or label names the Hindi page to refresh. Stamp after a refresh
+// with `npm run docs:check -- --stamp docs/product/hi/x.md`.
+const MIRROR = /<!-- mirrors (\S+\.md) ([0-9a-f]{12}) -->/;
+export const isHindiMirror = file => /^docs\/product\/hi\/(?!README\.md$)[^/]+\.md$/.test(file);
+export function mirrorHash(markdown) {
+  const text = markdown.replace(/^(```|~~~)[^\n]*\n[\s\S]*?^\1[^\n]*$/gm, "");
+  const parts = [...text.match(/^#{1,6} .*$/gm) ?? [], ...text.match(/"[^"\n]{1,200}"/g) ?? []].map(part => part.trim());
+  return createHash("sha256").update(parts.join("\n")).digest("hex").slice(0, 12);
+}
+export function mirrorDrift(path, markdown) {
+  const stamp = markdown.match(MIRROR);
+  if (!stamp) return "No mirror stamp: run `npm run docs:check -- --stamp <this file>` once it matches its English page";
+  const english = resolve(dirname(path), stamp[1]);
+  if (!existsSync(english)) return `Mirrored English page is missing: ${stamp[1]}`;
+  return mirrorHash(readFileSync(english, "utf8")) === stamp[2] ? null
+    : `${stamp[1]} changed since this translation: update this page, then run \`npm run docs:check -- --stamp <this file>\``;
+}
+export function stampMirror(path) {
+  const markdown = readFileSync(path, "utf8");
+  const target = markdown.match(MIRROR)?.[1] ?? markdown.match(/\]\((\.\.\/[^)#\s]+\.md)\)/)?.[1];
+  if (!target) throw new Error(`${path}: no link to its English page`);
+  const line = `<!-- mirrors ${target} ${mirrorHash(readFileSync(resolve(dirname(path), target), "utf8"))} -->`;
+  writeFileSync(path, MIRROR.test(markdown) ? markdown.replace(MIRROR, line) : markdown.replace(/^(# .*\n)/, `$1${line}\n`));
+}
+
 export function checkDocumentation(root, options = {}) {
   root = resolve(root);
   const moduleReadmes = walk(resolve(root, "src")).filter(file => file.endsWith(`${sep}README.md`));
@@ -212,6 +238,7 @@ export function checkDocumentation(root, options = {}) {
     const report = (line, message, warning = false) => diagnostics.push({ severity: historical || warning ? "warning" : "error", file, line, message });
     checked.push({ file, role: historical ? "historical" : "current", sha256: createHash("sha256").update(document.text).digest("hex") });
     for (const line of document.unclosedFences) report(line, "Unclosed fenced code block");
+    if (isHindiMirror(file) && !historical) { const drift = mirrorDrift(path, readFileSync(path, "utf8")); if (drift) report(1, drift); }
     if (file === "docs/operations/scheduled-jobs.md") for (const { line, message } of scheduleDrift(root, readFileSync(path, "utf8"))) report(line, message);
     if (file.startsWith("docs/product/") && !historical) {
       for (const { line, label } of missingLabels(document.prose, appText ??= appCopy(root))) report(line, `Quoted label not in the app: "${label}" (fix it to the app's text, or add example text to LABEL_PROSE)`);
@@ -324,13 +351,16 @@ if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToP
   const files = [];
   let all = false;
   let json = false;
+  let stamp = false;
   for (let index = 0; index < args.length; index++) {
     if (args[index] === "--root" && args[index + 1]) root = resolve(args[++index]);
     else if (args[index] === "--all") all = true;
     else if (args[index] === "--json") json = true;
+    else if (args[index] === "--stamp") stamp = true;
     else if (args[index].startsWith("--")) throw new Error(`Unknown option: ${args[index]}`);
     else files.push(args[index]);
   }
+  if (stamp) for (const file of files.map(file => relative(root, resolve(root, file)).split(sep).join("/")).filter(isHindiMirror)) stampMirror(resolve(root, file));
   const result = checkDocumentation(root, { files, all });
   if (json) console.log(JSON.stringify(result, null, 2));
   else {

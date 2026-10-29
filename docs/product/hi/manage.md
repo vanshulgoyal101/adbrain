@@ -1,4 +1,5 @@
 # मैनेज करें: सिंक, नतीजे और लीड
+<!-- mirrors ../manage.md 9fd124f54cf5 -->
 
 यह [Manage: Sync, Results and Leads](../manage.md) का हिंदी रूप है; अंग्रेज़ी पेज बदले तो इसे भी बदलें।
 [Features and workflows](../README.md) का हिस्सा।

@@ -1,4 +1,5 @@
 # AdBrain कैसे काम करता है
+<!-- mirrors ../how-adbrain-works.md b971100b382b -->
 
 यह [How AdBrain Works](../how-adbrain-works.md) का हिंदी रूप है; अंग्रेज़ी पेज बदले तो इसे भी बदलें।
 [Features and workflows](../README.md) का हिस्सा। आसान शब्दों में एक पेज, पायलट ग्राहकों,
