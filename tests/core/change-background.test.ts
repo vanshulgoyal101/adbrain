@@ -214,6 +214,33 @@ describe("core: change only the background on a recorded run-4 ad", () => {
       image: { provider: "owner-photo", estimatedCostUsd: 0 },
       imagePrompt: "[No image prompt: this ad uses the business's own photo from Brand assets.]",
     });
+    // #1904: no choice means the saliency crop.
+    expect((mocks.updates[0].generation as { design: Record<string, unknown> }).design.backgroundFit).toBe("attention");
+    expect(mocks.claims.size).toBe(0);
+  });
+
+  it("saves the owner's 'Show whole photo' choice for every later render, and a new AI picture clears it (#1904)", async () => {
+    const { buildAdDesign } = await import("@/lib/creative/design");
+    const { pictureDesign, storedPictureDesign } = await import("@/lib/creative/picture-words");
+    const photo = `${SUPABASE}/storage/v1/object/public/brand-assets/${run4.brand.id}/team.jpg`;
+    mocks.assets = [photo];
+    expect((await post(undefined, { photoUrl: photo, fit: "blur" })).status).toBe(200);
+    const saved = mocks.updates[0].generation as { design: Record<string, unknown> };
+    expect(saved.design.backgroundFit).toBe("blur");
+    // The words editor and the 9:16 launch render read the saved design back.
+    expect(storedPictureDesign(saved.design)?.backgroundFit).toBe("blur");
+    expect(pictureDesign({ ...creativeRow(), generation: saved as never }, run4.brand).backgroundFit).toBe("blur");
+
+    mocks.editedDuringImage = JSON.parse(JSON.stringify({ ...buildAdDesign({ brand: run4.brand, copy: angle.concept, concept: angle.concept as never }), backgroundUrl: undefined, backgroundFit: "blur" }));
+    expect((await post()).status).toBe(200);
+    expect((mocks.updates[1].generation as { design: Record<string, unknown> }).design).not.toHaveProperty("backgroundFit");
+  });
+
+  it("rejects an unknown fit before the claim", async () => {
+    const photo = `${SUPABASE}/storage/v1/object/public/brand-assets/${run4.brand.id}/team.jpg`;
+    mocks.assets = [photo];
+    expect((await post(undefined, { photoUrl: photo, fit: "stretch" })).status).toBe(400);
+    expect(mocks.updates).toEqual([]);
     expect(mocks.claims.size).toBe(0);
   });
 

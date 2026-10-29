@@ -5,6 +5,7 @@ import { Campaigns } from "@/components/campaigns";
 import { StaleResultsRefresher } from "@/components/stale-results-refresher";
 import { resultsStale, staleCampaignIds } from "@/lib/campaign/results-freshness";
 import type { Business, Campaign, CampaignResult } from "@/lib/types";
+import hi from "../messages/hi.json";
 
 // #1003: stale live results refresh quietly when the card or Home opens, and every card says how old its numbers are.
 const mocks = vi.hoisted(() => ({ drafts: vi.fn(), status: vi.fn(), routerRefresh: vi.fn() }));
@@ -97,5 +98,14 @@ describe("results freshness (#1003)", () => {
     await waitFor(() => expect(refreshCalls()).toHaveLength(1));
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(mocks.routerRefresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("#1438: the campaign card's results read in Hindi when the page passes Hindi words", async () => {
+    render(<Campaigns business={business} approved={[]} initialCampaigns={[paused, active]} initialResults={{ "campaign-2": { ...result(minutesAgo(2)), conversations: 6, destination: "whatsapp" } as CampaignResult }}
+      leadForms={[]} leadFormError={null} metaReady={false} adAccountId="act_999" verdictWords={{ locale: "hi", messages: hi.verdict }} />);
+    const live = await card("Solar EMI");
+    expect(live.getByRole("group", { name: "कैसा चल रहा है" })).toBeTruthy();
+    expect(live.queryByRole("group", { name: "How it's going" })).toBeNull();
+    expect(live.getAllByText(/चैट/).length).toBeGreaterThan(0);
   });
 });

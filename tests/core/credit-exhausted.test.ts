@@ -182,10 +182,16 @@ describe("core: an exhausted image key is parked and the free picture waits out 
     vi.useFakeTimers({ shouldAdvanceTime: true });
     process.env.IMAGE_PROVIDER = "openrouter";
     process.env.IMAGE_PROVIDER_FALLBACK = "none";
+    const sharp = (await import("sharp")).default;
+    const png = await sharp({ create: { width: 1024, height: 1024, channels: 3, background: "#e8f0e8" } }).png().toBuffer();
     const { SafeFetchError } = await import("@/lib/security/ssrf");
+    let busy = true;
     vi.doMock("@/lib/security/ssrf", async (original) => ({
       ...(await original<typeof import("@/lib/security/ssrf")>()),
-      fetchPublicUrl: async () => { throw new SafeFetchError("status", 404); },
+      fetchPublicUrl: async () => {
+        if (busy) throw new SafeFetchError("status", 404);
+        return new Response(new Uint8Array(png), { headers: { "content-type": "image/png" } });
+      },
     }));
     global.fetch = vi.fn(async (input: string | URL | Request) => {
       const url = String(input instanceof Request ? input.url : input);
@@ -197,6 +203,9 @@ describe("core: an exhausted image key is parked and the free picture waits out 
     const outcome = expect(pending).rejects.toThrow(/busy/i);
     await vi.advanceTimersByTimeAsync(20_000);
     await outcome;
+    // #2153: a customer's one-retry busy-out doesn't park the free pictures (only the 90 s cap does); the next one is tried.
+    busy = false;
+    await expect(generateImage({ prompt: "a family on their roof", width: 1024, height: 1024 })).resolves.toMatchObject({ provider: "pollinations" });
     vi.useRealTimers();
     vi.doUnmock("@/lib/security/ssrf");
   });

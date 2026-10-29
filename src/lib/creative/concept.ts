@@ -13,6 +13,7 @@ import { bannedClaimsForVertical, capitalWords, HEALTH_VERTICAL, MEDICAL_BANNED_
 import { policyFindings } from "@/lib/creative/policy-rules";
 import { emptyScene } from "@/lib/creative/visual-rules";
 import { spelledAmountIndex, spelledCurrency } from "./currency";
+import { contactsInCopy } from "./contact-in-copy";
 
 export const CONCEPT_VERSION = "creative-concept-v3";
 // Primary text Meta shows on mobile before "See more" (#194).
@@ -198,27 +199,6 @@ const WORK_CLAIM = /(?<![\p{L}\p{M}])(?:our (?:work|projects?|installs?|installa
 
 export function workClaims(text: string): string[] {
   return [...new Set((text.normalize("NFC").match(WORK_CLAIM) ?? []).map((claim) => claim.toLowerCase()))];
-}
-
-/**
- * #1822 (Reviewer, #1816): Brand text and pasted bios feed the prompt as facts and quotes are copied verbatim, so a
- * third party's number or link could ship in the ad's words. Links, domains, wa.me and 8+ digit numbers are refused
- * unless they are the business's own website or phone. (The ad's click destination never comes from the copy.)
- */
-const LINK_IN_COPY = /\b(?:https?:\/\/|www\.)[^\s,)]+|\bwa\.me\/[^\s,)]*|\b[a-z0-9][a-z0-9-]{1,62}\.(?:co\.in|com|in|net|org|io|biz|info|shop|store|online|site|app|me|co)\b(?:\/[^\s,)]*)?/giu;
-const PHONE_IN_COPY = /\+?\d[\d\s-]{6,}\d/g;
-
-const hostOf = (link: string) => link.toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").split(/[/?#]/)[0];
-const lastTenDigits = (text: string) => text.replace(/\D/g, "").slice(-10);
-
-export function contactsInCopy(text: string, own: { website?: string | null; phone?: string | null }): string[] {
-  const ownHost = own.website ? hostOf(own.website.trim()) : null;
-  const ownPhone = own.phone ? lastTenDigits(own.phone) : null;
-  const links = (text.match(LINK_IN_COPY) ?? []).filter((link) => !ownHost || (hostOf(link) !== ownHost && !hostOf(link).endsWith(`.${ownHost}`)));
-  // A number inside a link (wa.me/91…) is that link's, not a separate phone.
-  const phones = (text.replace(LINK_IN_COPY, " ").match(PHONE_IN_COPY) ?? []).map((phone) => phone.trim())
-    .filter((phone) => phone.replace(/\D/g, "").length >= 8 && (!ownPhone || ownPhone.length < 8 || lastTenDigits(phone) !== ownPhone));
-  return [...new Set([...links, ...phones])];
 }
 
 export const WORK_CLAIM_WARNING = "This picture wasn't taken by you. Say what you offer, not 'our work', or use your own photo.";
