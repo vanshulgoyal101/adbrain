@@ -31,7 +31,9 @@
     "approved": "Approved",
     "setAside": "Set aside",
     "metaChecking": "Meta is checking your ads. This usually takes minutes to a few hours, and up to a day.",
-    "metaReview": "Meta review"
+    "metaReview": "Meta review",
+    "chats": "Chats",
+    "perChat": "Per chat"
   },
   "workQueue": {
     "brandTitle": "Set up your business",
@@ -68,6 +70,9 @@
     "campaignsTitle": "Check your paused campaigns",
     "campaignsDetail": "{paused} paused, {draft} not started. Check the ads, area and budget, then turn one on when you're ready.",
     "campaignsAction": "Review campaigns",
+    "chatsTitle": "Which of your {n} chats were real enquiries?",
+    "chatsDetail": "Add each real one so you can see what an enquiry costs you.",
+    "chatsAction": "Add enquiries",
     "planFreeEndsTitle": "Your free month ends on {date}",
     "planFreeEndsDetail": "Then it's ₹999 a month. No auto-debit; you pay when you choose.",
     "planDueTitle": "Your ₹999 plan payment is due",
@@ -76,17 +81,34 @@
   },
   "settings": {
     "language": "App language",
-    "languageHint": "Home shows in Hindi now; more screens follow.",
+    "languageHint": "Some screens show in Hindi now; more follow.",
     "saveFailed": "Couldn't save your language. Try again.",
     "alertsIntro": "A short WhatsApp message from AdBrain when something needs you. Customer chats from your ads already arrive in your WhatsApp Business app.",
     "alertsDaily": "Yesterday's results, 9 am",
-    "alertsDailyDetail": "One line: spent, chats and enquiries, and what each enquiry cost.",
+    "alertsDailyDetail": "One line: what you spent, how many people messaged you or filled a form, and the cost of each.",
     "alertsForm": "New form enquiry",
     "alertsFormDetail": "Only for ads with a form: name, phone and which ad, with a tap to call.",
+    "alertsTitle": "WhatsApp alerts",
+    "alertsLanguage": "Language",
+    "alertsSave": "Save alerts",
+    "alertsSaved": "Saved. Alerts go to your WhatsApp.",
+    "alertsSavedConfirm": "Saved. Confirm your WhatsApp number above to start getting them.",
+    "alertsSavedOff": "Saved. Alerts are off.",
+    "alertsSaveFailed": "Couldn't save your alert settings. Try again.",
+    "alertsConfirmFailed": "Couldn't start the confirmation. Try again.",
+    "alertsGoTo": "Alerts go to <number></number>. Reply STOP on WhatsApp anytime to turn them off.",
+    "alertsOptedOut": "You replied STOP, so alerts are off. Send START from your WhatsApp to turn them back on.",
+    "alertsFirstStep": "First, confirm the WhatsApp number that should get alerts: send one message from it.",
+    "alertsOpenWhatsApp": "Open WhatsApp and send START",
+    "alertsConfirmNumber": "Confirm my WhatsApp number",
+    "alertsOtherNumber": "Use another number",
+    "alertsLinkNote": "The message is ready to send. The link works for 15 minutes.",
+    "billingTitle": "Billing",
+    "ownBilling": "You pay Meta directly from your ad account. Your first month of AdBrain is free; after that it's ₹999 a month.",
     "ifYouStop": {
       "title": "If you stop",
       "payingLead": "If you stop paying:",
-      "paying": "your running ads keep running on Meta, and your results and enquiries stay here. Making new ads and campaigns waits until you pay. Nothing is deleted.",
+      "paying": "your running ads keep running on Meta, and your results and enquiries stay here. We'll remind you on Home when a payment is due. Nothing is deleted.",
       "disconnectLead": "If you disconnect Facebook:",
       "disconnect": "your ads keep running in Meta until you pause them there. AdBrain can't pause them or update results after that.",
       "deleteLead": "To delete your data:",
@@ -124,6 +146,7 @@
     "step1": "Your business",
     "step2": "Your ads",
     "step3": "Go live",
+    "pacing": "Meta spreads it across the days, so one day can be a bit more than {d} and another less. The total never goes past the limit above.",
     "stepOf": "Step {n} of 3",
     "help": "Help",
     "back": "Back",
@@ -281,8 +304,37 @@
       "openCampaigns": "Open Campaigns"
     }
   },
+  "pauseAll": {
+    "button": "Pause all ads",
+    "title": "Pause all your ads?",
+    "body": "{n} running campaigns will pause in Meta. Nothing is deleted, and nothing more will be spent once Meta stops them (usually within minutes). You can turn each one back on from Campaigns.",
+    "confirm": "Pause all",
+    "cancel": "Keep running",
+    "pausing": "Pausing {k} of {n}…",
+    "done": "All {n} campaigns are paused. Nothing more will be spent.",
+    "partial": "{k} of {n} paused. {names} didn't pause; tap Try again, or pause {f, plural, one {it} other {them}} in Meta Ads Manager.",
+    "tryAgain": "Try again",
+    "openAdsManager": "Open in Ads Manager",
+    "row": {
+      "waiting": "Waiting",
+      "pausing": "Pausing…",
+      "paused": "Paused",
+      "failed": "Didn't pause"
+    }
+  },
   "creative": {
     "yourPhoto": "Your photo",
     "aiPicture": "AI picture"
+  },
+  "shell": {
+    "home": "Home",
+    "create": "Create ads",
+    "review": "Review",
+    "campaigns": "Campaigns",
+    "enquiries": "Enquiries",
+    "business": "Your business",
+    "assets": "Assets",
+    "settings": "Settings",
+    "getStarted": "Get started"
   }
 }

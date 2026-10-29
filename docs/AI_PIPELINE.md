@@ -1,7 +1,7 @@
 # AI and Creative Pipeline
 
 This guide describes model calls, image processing, retries, and accounting.
-Parameters are in [Configuration](CONFIGURATION.md) and [API Reference](api/README.md).
+Parameters are in [Configuration](operations/configuration.md) and [API Reference](api/README.md).
 Design history lives in git history; it does not override current code.
 
 ## Task Boundaries

@@ -18,7 +18,7 @@ Start at the [documentation index](docs/README.md).
 | Understand the product | [Features and workflows](docs/product/README.md) |
 | Learn the codebase | [Architecture](docs/ARCHITECTURE.md) |
 | Integrate or debug requests | [API reference](docs/api/README.md) |
-| Configure providers and limits | [Configuration](docs/CONFIGURATION.md) |
+| Configure providers and limits | [Configuration](docs/operations/configuration.md) |
 | Understand storage and upgrades | [Data model](docs/DATA_MODEL.md) |
 | Validate changes | [Testing](docs/TESTING.md) |
 | Diagnose production | [Operations](docs/operations/README.md) and [observability](docs/operations/observability.md) |
@@ -42,7 +42,7 @@ See the [architecture guide](docs/ARCHITECTURE.md) for ownership and trust bound
 ## Local Development
 
 Start with the [quick start](docs/QUICK_START.md), then the
-[configuration reference](docs/CONFIGURATION.md). Use isolated credentials and
+[configuration reference](docs/operations/configuration.md). Use isolated credentials and
 confirm the database target before starting the application. An existing
 `.env.local` may point to production; do not overwrite it or copy it into a test
 worktree. The repository's shared development environment is not a sandbox.

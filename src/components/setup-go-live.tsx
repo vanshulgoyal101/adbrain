@@ -206,6 +206,8 @@ export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNum
         <div>
           <dt className="text-slate-500">{t("goLive.budget")}</dt>
           <dd className="mt-1 font-medium text-slate-950">{t("goLive.budgetLine", { daily: formatMoney(daily), days: SETUP_RUN_DAYS, total: formatMoney(total) })}</dd>
+          {/* #2007: a capped run is a lifetime budget, so Meta paces the total, not each day. The total isn't repeated (#1587). */}
+          <dd className="mt-1 text-slate-600">{t("pacing", { d: formatMoney(daily) })}</dd>
           <dd className="mt-2"><div className="flex flex-wrap gap-2" role="group" aria-label={t("goLive.dailyBudget")}>
             {BUDGET_PRESETS.map((amount, index) => (
               <button key={amount} type="button" aria-pressed={daily === amount} aria-label={t("goLive.perDay", { amount: formatMoney(amount) })} disabled={step !== null || result?.kind === "live"}

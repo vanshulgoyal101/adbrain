@@ -45,7 +45,7 @@ Annual refund allocation and service earnings are bounded by the stored quote.
 Private tables and service-only RPC authority are unchanged. Apply once through
 the checksum ledger, not by replaying the canonical schema. After a nondefault
 order exists, rollback must retain a quote-aware runtime; see
-[pricing operations](CONFIGURATION.md#configurable-live-amounts).
+[pricing operations](operations/configuration-payments.md#configurable-live-amounts).
 
 ## Relationships
 
