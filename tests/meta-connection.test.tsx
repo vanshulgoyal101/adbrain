@@ -34,7 +34,7 @@ describe("MetaConnectionPanel", () => {
     vi.stubGlobal("fetch", request);
     render(<MetaConnectionPanel businessId="11111111-1111-4111-8111-111111111111" connection={connection({ source: "oauth", ready: true })} oauthConfigured />);
     fireEvent.click(screen.getByRole("button", { name: "Disconnect" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent(failure === "network" ? "Network unavailable" : failure === "server" ? "Disconnect rejected" : "Could not disconnect");
+    expect(await screen.findByRole("alert")).toHaveTextContent(failure === "network" ? "Network unavailable" : failure === "server" ? "Disconnect rejected" : "Facebook is still connected. Try again in a minute.");
     expect(screen.getByRole("button", { name: "Disconnect" })).toBeEnabled();
     expect(refresh).not.toHaveBeenCalled();
     expect(request).toHaveBeenCalledWith("/api/meta/disconnect", expect.objectContaining({ body: JSON.stringify({ businessId: "11111111-1111-4111-8111-111111111111" }) }));

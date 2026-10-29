@@ -147,6 +147,8 @@ export function buildScoreboard(input: {
   excludedBusinessIds: string[];
   /** #1242: the north-star rows' own reads; without them those rows are left out. */
   northStar?: NorthStarData;
+  /** #1697: the pilot funnel's facts (counts only). */
+  pilots?: PilotData;
   /** #1543: earlier runs' Manage snapshots (`scoreboard.manage` events), so past days can be judged. */
   manageHistory?: ScoreManageSnapshot[];
   since: Date;
@@ -307,6 +309,7 @@ export function buildScoreboard(input: {
   }
 
   if (input.northStar) rows.push(...northStarRows(events, input.northStar));
+  if (input.pilots) rows.push(...pilotRows(input.pilots));
 
   const hours = hoursOf(input);
   const excluded = { events: input.events.length - events.length, aiCalls: input.aiCalls.length - aiCalls.length };
@@ -349,6 +352,71 @@ function manageTrendRow(history: ScoreManageSnapshot[]): ScoreRow {
     target: "every day ≤ 15 min (oldest results at the daily run)",
     met: measured.length ? measured.every((cell) => cell.met) : null,
   };
+}
+
+/** #1697: hand-over is recorded by the prospect runbook's last step (#1486, #1670) as this product event. */
+export const PROSPECT_HANDED_OVER = "prospect.handed_over";
+
+export type PilotData = {
+  /** Businesses still owned by a `+prospect` account with at least one creative. */
+  prospectBusinessIds: string[];
+  /** Businesses with a `prospect.handed_over` event. */
+  handedOverBusinessIds: string[];
+  /** First `campaigns.launched_at` per business. */
+  firstLaunch: Record<string, string>;
+  /** Each business's latest `pilot_day7` answer (#1650). */
+  day7Answers: Record<string, "yes" | "maybe" | "no">;
+  excludedBusinessIds: string[];
+  now: Date;
+};
+
+/** #1697: builds PilotData from the raw reads the route and the local script both make. */
+export function pilotData({ prospectCreatives, pilotEvents, launchedRows, excludedBusinessIds, now }: {
+  prospectCreatives: { business_id: string }[];
+  pilotEvents: { business_id: string | null; name: string; attributes: { answer?: string } | null; created_at: string }[];
+  launchedRows: { business_id: string; launched_at: string }[];
+  excludedBusinessIds: string[];
+  now: Date;
+}): PilotData {
+  const firstLaunch: Record<string, string> = {};
+  for (const row of launchedRows) if (!firstLaunch[row.business_id] || row.launched_at < firstLaunch[row.business_id]) firstLaunch[row.business_id] = row.launched_at;
+  const day7Answers: PilotData["day7Answers"] = {};
+  for (const event of [...pilotEvents].sort((a, b) => a.created_at.localeCompare(b.created_at))) {
+    const answer = event.attributes?.answer;
+    if (event.name === "pilot_day7" && event.business_id && (answer === "yes" || answer === "maybe" || answer === "no")) day7Answers[event.business_id] = answer;
+  }
+  return {
+    prospectBusinessIds: [...new Set(prospectCreatives.map((row) => row.business_id))],
+    handedOverBusinessIds: [...new Set(pilotEvents.filter((event) => event.name === PROSPECT_HANDED_OVER && event.business_id).map((event) => event.business_id as string))],
+    firstLaunch, day7Answers, excludedBusinessIds, now,
+  };
+}
+
+/**
+ * #1697 (CPO #1685): the pilot funnel, counts only and cumulative: prepared (still with the rep, or handed over) →
+ * handed over → live (a handed-over business with a Go live) → Day 7 → its answers; plus how many reach Day 7 in
+ * the next 48 h so the rep can book the visit. No names; nothing until the first pilot.
+ */
+export function pilotRows(data: PilotData): ScoreRow[] {
+  const excluded = new Set(data.excludedBusinessIds);
+  const handedOver = new Set(data.handedOverBusinessIds.filter((id) => !excluded.has(id)));
+  const prepared = new Set([...data.prospectBusinessIds.filter((id) => !excluded.has(id)), ...handedOver]);
+  if (!prepared.size) return [];
+  const live = [...handedOver].filter((id) => data.firstLaunch[id]);
+  const age = (id: string) => data.now.getTime() - Date.parse(data.firstLaunch[id]);
+  const day7 = live.filter((id) => age(id) >= 7 * DAY);
+  const due = live.filter((id) => age(id) < 7 * DAY && age(id) >= 5 * DAY).length;
+  const answers = { yes: 0, maybe: 0, no: 0 };
+  for (const id of day7) { const answer = data.day7Answers[id]; if (answer) answers[answer] += 1; }
+  return [
+    {
+      step: "Pilots",
+      now: `${prepared.size} prepared → ${handedOver.size} handed over → ${live.length} live → ${day7.length} at Day 7 (answers: yes ${answers.yes}, maybe ${answers.maybe}, no ${answers.no})`,
+      target: "3 pilots live (#1315)",
+      met: null,
+    },
+    { step: "Pilots: Day 7 due in 48 h", now: String(due), target: "book the Day 7 visit", met: null },
+  ];
 }
 
 const IST_MS = 5.5 * 3_600_000;

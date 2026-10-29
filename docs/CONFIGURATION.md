@@ -300,7 +300,7 @@ exported in your shell are still inherited; this is not a network sandbox.
 | `dev` | `npm run dev` on port 3939 |
 | `build`, `oauth-check`, `workspace`, `connect`, `e2e`, `recovery`, `draft-connect`, `draft-lifecycle`, `connection-recovery` | Runs the mapped build, check script or Playwright spec against the local project |
 | `oauth-dev` | Copies the real `META_APP_ID`/`META_APP_SECRET`/`META_LOGIN_CONFIG_ID` from `.env.local` and redacts them from output; real Meta consent work |
-| `payments-dev` | Reads Razorpay test credentials from `.env`, enables test checkout and the dev auth bypass, derives a webhook secret if absent, disables product logging and binds 127.0.0.1:3939 |
+| `payments-dev` | Reads Razorpay test credentials from `.env.local` (the `RAZORPAY_TEST_*` pair, or a standard pair only if it is `rzp_test_`; live keys are refused), enables test checkout and the dev auth bypass, derives a webhook secret if absent, disables product logging and binds 127.0.0.1:3939 |
 
 Each mode runs immediately; none is an environment inspector. Stop only the
 servers and fixtures you started.

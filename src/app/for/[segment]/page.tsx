@@ -7,6 +7,8 @@ import { SEGMENTS, segmentBySlug, segmentWhatsAppHref, type Segment } from "@/li
 import styles from "./segment.module.css";
 
 // #1565: static per segment, no auth or database read, so the leave-behind link opens fast on a phone.
+// #1944: naming Solaride publicly waits on the CEO (#1937); flip this once they say yes.
+const SHOW_SOLARIDE_PROOF = false;
 export const dynamicParams = false;
 export function generateStaticParams() {
   return SEGMENTS.map(({ slug }) => ({ segment: slug }));
@@ -63,6 +65,19 @@ export default async function SegmentPage({ params }: { params: Promise<{ segmen
           <Chat segment={segment} />
         </section>
 
+        {SHOW_SOLARIDE_PROOF && segment.proof ? (
+          <section className={styles.block} aria-labelledby="proof-title">
+            <h2 id="proof-title">{segment.proof.heading}</h2>
+            <p className={styles.proof}>{segment.proof.body}</p>
+            <p className={styles.hinglish} lang="hi-Latn">{segment.proof.hinglish}</p>
+            <p className={styles.note}>{segment.proof.smallPrint}</p>
+          </section>
+        ) : segment.firstThree ? (
+          <section className={styles.block} aria-label="Early pilots">
+            <p className={styles.proof}>{segment.firstThree}</p>
+          </section>
+        ) : null}
+
         <section className={styles.block} aria-labelledby="offer-title">
           <h2 id="offer-title">Your first campaign, set up with you for free</h2>
           <ul className={styles.list}>
@@ -77,7 +92,7 @@ export default async function SegmentPage({ params }: { params: Promise<{ segmen
           <ol className={styles.steps}>
             <li>Tell AdBrain your business, where you work and one real offer.</li>
             <li>AdBrain makes 3 ads. For {segment.trade} they can lead with: {segment.angles.join("; ")}. You pick the ones you like.</li>
-            <li>You set the daily amount and go live. Meta checks your ads first, usually within a day.</li>
+            <li>You set the daily amount and go live. Meta checks your ads first, usually within a few hours and up to a day.</li>
           </ol>
         </section>
 

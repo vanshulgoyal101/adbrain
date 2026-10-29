@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { adAccountBlocker } from "@/lib/meta/account-status";
+import { appSecretProof } from "@/lib/meta/appsecret-proof";
 import { GRAPH } from "@/lib/meta/graph-version";
 import type { Capabilities, Capability, SelectedAssets } from "./connect-contracts";
 import { ConnectionAccessError } from "./connection-access-error";
@@ -24,7 +26,9 @@ export async function verifyMetaCapabilities(token: string, selected: SelectedAs
   async function readOnce(path: string, accessToken: string): Promise<unknown> {
     let response: Response;
     try {
-      response = await fetch(`${GRAPH}/${path}`, {
+      // #1696: the proof for this read's own token, so Connect keeps working with Meta's 'Require app secret' on.
+      const proof = appSecretProof(accessToken);
+      response = await fetch(`${GRAPH}/${path}${proof ? `${path.includes("?") ? "&" : "?"}appsecret_proof=${proof}` : ""}`, {
         method: "GET", headers: { Authorization: `Bearer ${accessToken}` }, cache: "no-store",
         signal: AbortSignal.timeout(15_000),
       });
@@ -71,7 +75,11 @@ export async function verifyMetaCapabilities(token: string, selected: SelectedAs
   const page = pagesResult.value.data.find(candidate => candidate.id === selected.pageId);
   const canAdvertise = account.user_tasks?.some(task => ["ADVERTISE", "MANAGE"].includes(task))
     && page?.tasks?.some(task => ["ADVERTISE", "MANAGE"].includes(task));
-  if (account.id !== selected.adAccountId || account.account_status !== 1 || account.currency !== "INR"
+  const restricted = account.id === selected.adAccountId ? adAccountBlocker(account.account_status, selected.adAccountId) : null;
+  if (restricted) {
+    // #1943: a disabled, unpaid, in-review or closed account says so in plain words and blocks Go live.
+    result.canCreatePaused = result.canActivate = { state: "blocked", blockers: [restricted] };
+  } else if (account.id !== selected.adAccountId || account.account_status !== 1 || account.currency !== "INR"
     || account.currency !== selected.currency || !account.timezone_name || account.timezone_name !== selected.timezoneName) {
     result.canCreatePaused = result.canActivate = unavailable("Verify the selected account status, currency, and timezone in Meta.");
   } else if (!canAdvertise || !scopes.has("ads_management") || !scopes.has("pages_manage_ads")) {
