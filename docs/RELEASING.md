@@ -16,8 +16,11 @@ The release process ([AGENTS.md](../AGENTS.md)).
    ([core-approval.yml](../.github/workflows/core-approval.yml), #926): a PR that
    touches `src/lib/meta/`, `src/lib/campaign/`, the Meta, campaign, managed,
    payments or spend-limit APIs, money paths or `db/migrations/` stays pending until
-   a QA verdict, `Reviewer review of <sha>: **approved**` or `CTO review of <sha>:
-   **approved**` names its head (or an earlier head with the same patch). The deploy
+   a QA verdict, `Reviewer: review of <sha>: **approved**` or `CTO: review of <sha>:
+   **approved**` names its head (or an earlier head with the same patch). Legacy
+   space-only role prefixes still work; a later negative verdict at that head
+   overrides either format. Money/migrations still need QA plus CTO/Reviewer.
+   The deploy
    train and a revert labelled `rollback` pass. Hold with `gh pr merge <n>
    --disable-auto`. `audit` and `docs` also run but do not block. A change to generation, validation, prompts, models, timeouts, the
    planner, Meta calls or CSP adds or updates a `test:core` test with recorded real
