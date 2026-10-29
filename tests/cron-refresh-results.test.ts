@@ -173,6 +173,19 @@ describe("GET /api/cron/refresh-results (#258)", () => {
       expect(mocks.saveCampaignHealth).toHaveBeenCalledWith(expect.anything(), "c1", expect.anything());
     });
 
+    it("leaves a row the owner changed after Meta was read to the next refresh: no budget write, no alert", async () => {
+      const updates: unknown[] = [];
+      mocks.saveCampaignBudget.mockImplementation(async (_actor, id, mirror: (row: Record<string, unknown>) => unknown) => {
+        updates.push(mirror({ status: "active", daily_budget: 300, raw: { health: { flags: [] } } }));
+        return { data: { id }, error: null };
+      });
+      mocks.campaigns = [{ ...bound("c1", "m1"), daily_budget: 500 }];
+      mocks.insights.mockResolvedValue({ ...insights, metaState: state("ACTIVE", "80000") });
+      const { body } = await call();
+      expect(body).toMatchObject({ ok: true, refreshed: 1, alerts: [] });
+      expect(updates).toEqual([{ raw: { health: { flags: [] } } }]);
+    });
+
     it("writes nothing when Meta matches the row", async () => {
       mocks.campaigns = [{ ...bound("c1", "m1"), daily_budget: 500 }];
       mocks.insights.mockResolvedValue({ ...insights, metaState: state("ACTIVE", "50000") });
