@@ -1,4 +1,4 @@
-import { isRomanHindi } from "@/lib/creative/interview";
+import { isRomanHindi } from "@/lib/creative/roman-hindi";
 
 export type WhatsAppGreeting = { autofill: string; greeting: string };
 
