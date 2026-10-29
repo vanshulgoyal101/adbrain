@@ -27,7 +27,7 @@ ad money from every captured payment adds up. The same approved terms apply
 with the chosen amount filled in. An unpaid order of another amount is replaced
 (kept, marked superseded, no Pay button); a paid order is never touched, and a
 late payment on a replaced order is credited once. See
-[configuration](CONFIGURATION.md#customer-chosen-annual-amount).
+[configuration](operations/configuration-payments.md#customer-chosen-annual-amount).
 
 Use a versioned operator-managed policy in server/config/SQL, not fake funding
 evidence or rewritten old terms. New checkout must work without an automatic
@@ -319,7 +319,7 @@ platform for this narrowed scope.
 
 ## 9. Implementation Receipt
 
-[API Reference](api/README.md), [Configuration](CONFIGURATION.md) and
+[API Reference](api/README.md), [Configuration](operations/configuration.md) and
 [Testing](TESTING.md) own current commands/contracts; historical commands are not
 unconditional setup instructions.
 
@@ -331,5 +331,5 @@ and all Vercel environments are rejected. The test order amount is fixed at
 
 ## 10. Primary References
 
-- [Roadmap](ROADMAP.md).
+- [Roadmap](roadmap.md).
 - [Release and environment authority](RELEASING.md).

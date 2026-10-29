@@ -212,6 +212,40 @@ describe("Reviewer verdicts (#575)", () => {
     expect(ctoApproval(r, (sha: string) => sha === "c30aaba").approved).toBe(true);
     expect(ctoReviews([{ body: "Dev: Reviewer review of c30aaba: **approved**.", createdAt: "2026-10-25T11:00:00Z", url: "u" }])).toHaveLength(0);
   });
+
+  it.each([
+    ["Reviewer: review of f784739f36d8e2957ccd0497f349c32fe4431a48: **approved** (core-approval).", "f784739f36d8e2957ccd0497f349c32fe4431a48"],
+    ["Reviewer: review of 1362ef78fd50276525d8165934d56273e37bf975: **approved** (core-approval).", "1362ef78fd50276525d8165934d56273e37bf975"],
+    ["CTO: re-review of 1111111 → c30aaba: **approved**.", "c30aaba"],
+  ])("recognizes the required signed verdict %s (#2054)", (body, sha) => {
+    const reviews = ctoReviews([comment(body, "2026-10-29T06:00:00Z")]);
+    expect(reviews).toMatchObject([{ sha, approved: true }]);
+    expect(ctoApproval(reviews, (candidate: string) => candidate === sha).approved).toBe(true);
+  });
+
+  it("lets a signed withdrawal supersede a legacy approval and vice versa", () => {
+    for (const [first, last] of [
+      ["Reviewer review of c30aaba: **approved**.", "Reviewer: review of c30aaba: **changes requested**."],
+      ["Reviewer: review of c30aaba: **approved**.", "Reviewer review of c30aaba: **changes requested**."],
+    ]) {
+      const reviews = ctoReviews([
+        comment(first, "2026-10-29T06:00:00Z"),
+        comment(last, "2026-10-29T06:01:00Z"),
+      ]);
+      expect(ctoApproval(reviews, (sha: string) => sha === "c30aaba").approved).toBe(false);
+    }
+  });
+
+  it.each([
+    "Reviewer: review of c30aaba: **not approved**.",
+    "Reviewer: review of c30aaba: **approved** but blocked.",
+    "Reviewer: review of c30aaba: not approved.",
+    "Reviewer: review of c30aaba: ready for a verdict.",
+    "CTO: → Reviewer: review of c30aaba: **approved**.",
+    "Dev: Reviewer: review of c30aaba: **approved**.",
+  ])("does not turn a signed rejection, handoff or non-verdict into approval: %s", (body) => {
+    expect(ctoApproval(ctoReviews([comment(body, "2026-10-29T06:00:00Z")]), (sha: string) => sha === "c30aaba").approved).toBe(false);
+  });
 });
 
 describe("same changes despite moved context (#567)", () => {

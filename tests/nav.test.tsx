@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Nav } from "@/components/nav";
 import { WorkspaceShell } from "@/components/workspace-shell";
+import { namespaceMessages } from "@/i18n/locale";
 
 const pathname = vi.fn();
 const linkState = vi.hoisted(() => ({ pending: false }));
@@ -237,5 +238,16 @@ describe("Help on WhatsApp (#796)", () => {
     render(<WorkspaceShell email={null} businessName="Fixture" ownerId="owner" businessId="business"><p>Onboarding</p></WorkspaceShell>);
     expect(screen.getByText("Get started", { selector: "strong" })).toBeInTheDocument();
     expect(screen.queryByText("Workspace", { selector: "strong" })).toBeNull();
+  });
+});
+
+// #1877: with Hindi chosen, the app bar and the menu use the CPO's words.
+describe("Hindi app bar and menu (#1877)", () => {
+  it("names the section and every menu item in Hindi", () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ count: 0 })));
+    render(<WorkspaceShell email={null} businessName="Fixture" ownerId="owner" businessId="business" labels={namespaceMessages("hi", "shell")}><p>Workspace</p></WorkspaceShell>);
+    expect(screen.getByRole("banner")).toHaveTextContent("होम");
+    const menu = within(screen.getByRole("complementary", { name: "Main sidebar" })).getByRole("navigation", { name: "Workspace navigation" });
+    expect(within(menu).getAllByRole("link").map((link) => link.textContent)).toEqual(["होम", "विज्ञापन बनाएँ", "विज्ञापन जाँचें", "कैंपेन", "पूछताछ", "बिज़नेस", "फ़ोटो", "सेटिंग"]);
   });
 });

@@ -175,18 +175,19 @@ async function ConnectionSettings({ businessId, searchParams, whatsapp }: {
 }) {
   // #759: payment shows only where AdBrain holds ad money; an unreadable mode shows none.
   const mode = await fundingMode(businessId).catch(() => null);
-  const [result, params, initialBalance] = await Promise.all([
+  const [result, params, initialBalance, locale] = await Promise.all([
     getMetaConnection(businessId).then(connection => ({ connection })).catch(() => ({ connection: null })),
     searchParams,
     mode === "managed" && isProductionPaymentConfigured()
       ? requireOwnedBusiness(businessId).then(getCustomerBalance).then(toCustomerBalanceView).catch(() => null)
       : Promise.resolve(null),
+    requestLocale(),
   ]);
   return (
     <>
       {result.connection ? (
         <MetaConnectionPanel businessId={businessId} connection={result.connection}
-          oauthConfigured={metaOAuthConfigured()} notice={noticeFrom(params)} fundingMode={mode} />
+          oauthConfigured={metaOAuthConfigured()} notice={noticeFrom(params)} fundingMode={mode} locale={locale} />
       ) : (
         <Alert variant="error">
           Meta connection status is temporarily unavailable. Your campaign draft is preserved.
@@ -200,7 +201,7 @@ async function ConnectionSettings({ businessId, searchParams, whatsapp }: {
         </Suspense>
       )}
       {whatsapp}
-      <BillingSection mode={mode} connection={result.connection} testBusinessId={isRazorpayTestEnabled() ? businessId : undefined}
+      <BillingSection mode={mode} locale={locale} connection={result.connection} testBusinessId={isRazorpayTestEnabled() ? businessId : undefined}
         liveBusinessId={isProductionPaymentConfigured() ? businessId : undefined} initialBalance={initialBalance}
         billingTab={typeof params.billing === "string" ? params.billing : null} />
     </>

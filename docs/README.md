@@ -14,12 +14,13 @@ feature branch or a passing local test.
 
 | Reader | Read first | Then read |
 | --- | --- | --- |
-| Owner or coordinating worker | [Worker orchestration](ORCHESTRATION.md) | [Roadmap](ROADMAP.md) |
+| Pilot, sales or new team role | [How AdBrain works](product/how-adbrain-works.md) | [Features and workflows](product/README.md) |
+| Owner or coordinating worker | [Worker orchestration](ORCHESTRATION.md) | [Roadmap](roadmap.md) |
 | New developer | [Quick start](QUICK_START.md) | [Architecture](ARCHITECTURE.md) |
-| Product or support | [Features and workflows](product/README.md) | [Roadmap](ROADMAP.md) |
-| Operator | [Deployment configuration](DEPLOY.md) | [Release policy](RELEASING.md) |
-| Debugging engineer | [Observability](OBSERVABILITY.md) | [Operations](OPERATIONS.md) |
-| Product planner | [Roadmap](ROADMAP.md) | [Payment plan](PAYMENTS-PLAN.md) |
+| Product or support | [Features and workflows](product/README.md) | [Roadmap](roadmap.md) |
+| Operator | [Deployment configuration](operations/deploy.md) | [Release policy](RELEASING.md) |
+| Debugging engineer | [Observability](operations/observability.md) | [Operations](operations/README.md) |
+| Product planner | [Roadmap](roadmap.md) | [Payment plan](PAYMENTS-PLAN.md) |
 
 ## Reference Library
 
@@ -28,16 +29,16 @@ feature branch or a passing local test.
 | [Worker orchestration](ORCHESTRATION.md) | Who owns each packet/file/resource, what blocks it, and what evidence permits integration? |
 | [Features and workflows](product/README.md) | What can owners do, and where are the limits? |
 | [API reference](api/README.md) | Which routes/actions exist, which parameters are accepted, and what do failures mean? |
-| [Configuration](CONFIGURATION.md) | Which variables are required, what are their defaults, and which changes cost money or require a restart? |
+| [Configuration](operations/configuration.md) | Which variables are required, what are their defaults, and which changes cost money or require a restart? |
 | [Architecture](ARCHITECTURE.md) | Where is behavior owned, and how do requests cross trust boundaries? |
 | [Architecture decisions](architecture/README.md) | Which cross-cutting decisions (ADRs) bind the code, and how do we record a new one? |
 | [Data model](DATA_MODEL.md) | Which tables, relationships, grants, RPCs, buckets and migrations support the app? |
 | [AI pipeline](AI_PIPELINE.md) | How do interviews, concepts, images, composition, retries, cache and accounting work? |
 | [Meta connection](META_CONNECT.md) | How do consent, selection, capabilities, paused creation and activation work, and what does Meta's App Review need? |
 | [Testing](TESTING.md) | Which commands are safe locally and what does each verification layer prove? |
-| [Operations](OPERATIONS.md) | How do we diagnose partial work, stale spend, provider failures and retention problems? |
-| [Observability](OBSERVABILITY.md) | What is logged, how is it correlated, and what must never be collected? |
-| [Deployment](DEPLOY.md) | How is a target environment configured and smoke-tested? |
+| [Operations](operations/README.md) | How do we diagnose partial work, stale spend, provider failures and retention problems? |
+| [Observability](operations/observability.md) | What is logged, how is it correlated, and what must never be collected? |
+| [Deployment](operations/deploy.md) | How is a target environment configured and smoke-tested? |
 | [Release policy](RELEASING.md) | What approvals and checks govern remote changes? |
 | [Meta approval readiness](META_APPROVAL_ACTION_PLAN.md) | What external review evidence must be prepared and verified? |
 | [Payment plan and readiness](PAYMENTS-PLAN.md) | What are the agreed economics, implemented payment boundaries and remaining live-rollout requirements? |
@@ -45,7 +46,7 @@ feature branch or a passing local test.
 
 ## Plans and Records
 
-[Roadmap](ROADMAP.md) and the [payment plan](PAYMENTS-PLAN.md) hold intent and
+[Roadmap](roadmap.md) and the [payment plan](PAYMENTS-PLAN.md) hold intent and
 decisions; the [worker dispatch](ORCHESTRATION.md) holds current assignments.
 Consolidate guidance into its owning reference instead of adding dated documents.
 
@@ -59,6 +60,11 @@ last move.
 | --- | --- |
 | `API_REFERENCE.md` | [api/](api/README.md): one page per route group |
 | `FEATURES.md` | [product/](product/README.md): one page per product area |
+| `OPERATIONS.md` | [operations/](operations/README.md) and [operations/runbooks/](operations/runbooks/README.md) |
+| `DEPLOY.md` | [operations/deploy.md](operations/deploy.md) |
+| `OBSERVABILITY.md` | [operations/observability.md](operations/observability.md) and [operations/observability-queries.md](operations/observability-queries.md) |
+| `CONFIGURATION.md` | [operations/configuration.md](operations/configuration.md) and [operations/configuration-payments.md](operations/configuration-payments.md) (live checkout) |
+| `ROADMAP.md` | [roadmap.md](roadmap.md) (lower case, like the folders) |
 
 ## Terminology
 

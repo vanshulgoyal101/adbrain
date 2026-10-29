@@ -149,7 +149,7 @@ checks intended children again, then mirrors a **requested** active state locall
 Effective delivery/eligibility is not certified. #49 reservation remains uncertain
 when the parent request or post-request verification is ambiguous; reconcile
 before retrying. Creation idempotency does not make activation atomic with Meta.
-[Operations](OPERATIONS.md) owns incident procedures and
+[Operations](operations/README.md) owns incident procedures and
 [Release Policy](RELEASING.md) owns authorization for live changes.
 
 ## Lead Import and Follow-Up
@@ -256,7 +256,7 @@ remote check; it relies on stored binding and current connection fences.
 Deletion confirms the Meta operation before deleting the local mirror; external
 success and local persistence are not a distributed transaction. Sync imports
 supported ACTIVE/PAUSED campaigns page by page, reports skips, and does not prune
-all local rows absent from a page. Use [Operations](OPERATIONS.md) for incidents.
+all local rows absent from a page. Use [Operations](operations/README.md) for incidents.
 
 ## App Review (#156)
 
@@ -280,6 +280,11 @@ none can be dropped without breaking the core loop.
 | `pages_read_engagement` | Read lead forms and the Page's WhatsApp number for the ad destination | `/campaigns` → lead form dropdown; WhatsApp destination |
 | `pages_manage_ads` | Run ads and lead forms on behalf of the selected Page | `/campaigns` → Launch with the selected Page |
 | `business_management` | Read the owning Business of each ad account and Page so only valid account/Page pairs are offered | `/settings` → Connect Meta → paired account/Page choices |
+
+Beyond the seven permissions, the submission also covers the **Marketing API Access Tier**
+feature (Meta's new name for *Ads Management Standard Access*). Limited allows about 60 points per
+5 minutes per ad account, and one campaign build uses about half of that; Full needs 500 calls in
+15 days plus this review. Current status: [channels/meta.md](architecture/channels/meta.md).
 
 ### App Dashboard URLs
 
