@@ -13,7 +13,8 @@ export function creativeFailureMessage(error: unknown): string {
     return "Your product photo needs our paid pictures, and this month's AI allowance is used. Ads without the product photo still work.";
   }
   if (error instanceof CreativeImageError && error.cause instanceof ReferencePhotoPausedError) {
-    return "Your product photo needs our paid pictures, which are paused right now. Try again in 15 minutes.";
+    // #2222: the pause lasts until the credit is topped up, so no retry time; with a product photo the ad uses it as is.
+    return "This ad needs our paid pictures to draw your product, and they're paused right now. Add a photo of your product in Brand and AdBrain uses it in the ad as it is.";
   }
   if (error instanceof CreativeImageError && error.imageAttempts.some((attempt) => attempt.errorCode === "IMAGE_CREDIT_EXHAUSTED")) {
     return "This picture couldn't be made: AdBrain's paid image credit has run out and the free image model is busy. Try again in a few minutes.";

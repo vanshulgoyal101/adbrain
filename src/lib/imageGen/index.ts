@@ -185,7 +185,7 @@ export async function generateImage(
 async function fallbackImage(fallback: ImageProvider, from: ImageProvider, req: ImageRequest, startedAt: number,
   reason: "paused" | "allowance" = "paused", waitLikeFree = false): Promise<GeneratedImage> {
   // #1593: the free pictures can't use the owner's product photo; an unrelated product would misrepresent what they sell.
-  if (req.referenceImages?.length && FREE_PROVIDERS.includes(fallback.name)) throw new ReferencePhotoPausedError(reason);
+  if (req.referenceImages?.length && FREE_PROVIDERS.includes(fallback.name)) throw new ReferencePhotoPausedError(reason, from.name);
   try {
     req.onFallback?.();
   } catch {
