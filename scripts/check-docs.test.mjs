@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
-import { appCopy, checkDocumentation, missingLabels, mirrorDrift, scheduleDrift, stampMirror } from "./check-docs.mjs";
+import { appCopy, checkDocumentation, environmentDrift, mirrorDrift, missingLabels, scheduleDrift, scriptEnvironment, stampMirror } from "./check-docs.mjs";
 
 function fixture(context, files = {}) {
   const root = mkdtempSync(resolve(tmpdir(), "adbrain-docs-check-"));
@@ -211,4 +211,20 @@ test("a Hindi page names its stale English page until it is refreshed and stampe
   writeFileSync(resolve(root, "docs/product/go.md"), "# Go\n\nTap \"Go live now\".\n");
   assert.match(mirrorDrift(hindi, readFileSync(hindi, "utf8")), /\.\.\/go\.md changed since this translation/);
   assert.ok(checkDocumentation(root, { files: ["docs/product/hi/go.md"] }).diagnostics.some(item => item.severity === "error" && /changed since this translation/.test(item.message)));
+});
+
+test("configuration docs list every variable scripts read, and nothing that is never read", context => {
+  const root = fixture(context, {
+    "scripts/smoke.mjs": "const { SMOKE_EMAIL: email } = process.env; const t = process.env.VERCEL_TOKEN ?? process.env[\"GH_REPO\"]; process.env.GITHUB_OUTPUT;\n",
+    "scripts/doctor.sh": 'echo "${APP_URL:-}" "$LOCAL_ONLY"\n',
+    "next.config.ts": "export default { env: { sha: process.env.VERCEL_GIT_COMMIT_SHA } };\n",
+  });
+  const scripts = scriptEnvironment(root);
+  assert.deepEqual([...scripts].sort(), ["APP_URL", "GH_REPO", "GITHUB_OUTPUT", "SMOKE_EMAIL", "VERCEL_GIT_COMMIT_SHA", "VERCEL_TOKEN"]);
+  const pages = [{ file: "docs/operations/configuration.md", text: "| `SMOKE_EMAIL` | x |\n| `APP_URL` | x |\n| `OLD_KEY` | gone |\n| `GET` | a verb |\n| `META_APP_ID` | x |\n" }];
+  assert.deepEqual(environmentDrift(["META_APP_ID"], scripts, pages).map(({ line, message }) => `${line} ${message}`), [
+    "1 Environment key read by scripts but not documented: GH_REPO",
+    "1 Environment key read by scripts but not documented: VERCEL_TOKEN",
+    "3 Documented environment key nothing reads: OLD_KEY",
+  ]);
 });
