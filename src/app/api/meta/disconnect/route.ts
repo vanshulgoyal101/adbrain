@@ -57,7 +57,7 @@ async function handlePOST(request?: Request) {
       p_user_id: user.id,
     });
     if (error || !disconnected) {
-      return NextResponse.json({ error: "Could not disconnect the Meta connection." }, { status: 500 });
+      return NextResponse.json({ error: "Facebook is still connected. Try again in a minute." }, { status: 500 });
     }
 
     await logEvent({
@@ -72,6 +72,6 @@ async function handlePOST(request?: Request) {
     const status = error instanceof ConnectionAccessError
       ? { UNAUTHENTICATED: 401, NOT_FOUND: 404, FORBIDDEN: 403, CONFLICT: 409, UNAVAILABLE: 503 }[error.code]
       : 503;
-    return NextResponse.json({ error: error instanceof ConnectionAccessError ? error.message : "Could not disconnect the Meta connection." }, { status });
+    return NextResponse.json({ error: error instanceof ConnectionAccessError ? error.message : "Facebook is still connected. Try again in a minute." }, { status });
   }
 }

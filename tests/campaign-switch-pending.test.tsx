@@ -60,6 +60,17 @@ beforeEach(() => {
 });
 
 describe("core: turn-on refused while a new audience waits (#1571, #1539)", () => {
+  // #1588 (Designer): a card holding a pending decision owns the screen's one solid button; New campaign steps down.
+  it("drops New campaign to outline while a new audience waits for the owner's decision", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ campaigns: [], nextCursor: null })));
+    const { unmount } = render(<Campaigns business={business} approved={[creative]} initialCampaigns={[campaign]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady={false} adAccountId="act_1" />);
+    expect(screen.getByRole("link", { name: "New campaign" }).className).toContain("bg-primary");
+    unmount();
+    mocks.waiting = [{ id: "op-1", campaign_id: campaign.id, sanitized_error: null }];
+    render(<Campaigns business={business} approved={[creative]} initialCampaigns={[campaign]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady={false} adAccountId="act_1" />);
+    await waitFor(() => expect(screen.getByRole("link", { name: "New campaign" }).className).not.toContain("bg-primary"));
+  });
+
   it("control: another refusal shows its own words, not the switch line", async () => {
     await turnOn({ status: 409, body: { error: "Meta is busy with this campaign. Try again in a minute.", code: "busy" } });
     expect(await screen.findByText("Meta is busy with this campaign. Try again in a minute.")).toBeInTheDocument();

@@ -16,20 +16,25 @@ type QueueBusiness = Pick<
   "name" | "description" | "brand_voice" | "target_audience" | "locations"
 >;
 
-type BrandField = "description" | "voice" | "audience" | "areas";
+/**
+ * #1630 (CPO, #1604): the ₹999 plan's status, as #1442's `readPlan` returns it, or null while PLAN_BILLING_ENABLED is
+ * off or the business isn't on the plan. Home is where a pilot owner lives, so the free month's end shows there.
+ */
+export type QueuePlan =
+  | { state: "exempt" }
+  | { state: "trial_not_started" }
+  | { state: "free" | "paid"; until: string; dueSoon: boolean }
+  | { state: "unpaid"; since: string };
 
-function missingFields(business: QueueBusiness): BrandField[] {
-  return ([
-    !business.description?.trim() && "description",
-    !business.brand_voice?.trim() && "voice",
-    !business.target_audience?.trim() && "audience",
-    !business.locations.some((location) => location.trim()) && "areas",
-  ] as const).filter((field): field is BrandField => Boolean(field));
-}
-
-export function missingBrandContext(business: QueueBusiness, locale: AppLocale = "en"): string[] {
+function planItem(plan: QueuePlan | null | undefined, locale: AppLocale): WorkItem | null {
   const t = translator(locale, "workQueue");
-  return missingFields(business).map((field) => t(`field.${field}`));
+  if (plan?.state === "unpaid")
+    return { id: "plan", title: t("planDueTitle"), detail: t("planDueDetail"), href: "/settings#plan-title", action: t("planPayAction"), tone: "attention" };
+  if (plan?.state === "free" && plan.dueSoon) {
+    const date = new Intl.DateTimeFormat(locale === "hi" ? "hi-IN" : "en-IN", { day: "numeric", month: "long", timeZone: "Asia/Kolkata" }).format(new Date(plan.until));
+    return { id: "plan", title: t("planFreeEndsTitle", { date }), detail: t("planFreeEndsDetail"), href: "/settings#plan-title", action: t("planPayAction"), tone: "work" };
+  }
+  return null;
 }
 
 export function buildWorkQueue({
@@ -39,6 +44,8 @@ export function buildWorkQueue({
   metaReady,
   now = Date.now(),
   locale = "en",
+  unloggedChats = 0,
+  plan = null,
 }: {
   business: QueueBusiness | null;
   creatives: (Pick<Creative, "id" | "status"> & Partial<Pick<Creative, "created_at" | "variant_group">>)[];
@@ -47,6 +54,10 @@ export function buildWorkQueue({
   now?: number;
   /** #1438: the owner's app language. */
   locale?: AppLocale;
+  /** #1624: WhatsApp chats with no real enquiry or customer logged yet (`unloggedChats`). */
+  unloggedChats?: number;
+  /** #1630: the ₹999 plan, when billing is on (see `QueuePlan`). */
+  plan?: QueuePlan | null;
 }): WorkItem[] {
   const t = translator(locale, "workQueue");
   if (!business)
@@ -75,7 +86,6 @@ export function buildWorkQueue({
   const unusedApproved = creatives.filter(
     (creative) => creative.status === "approved" && !usedIds.has(creative.id),
   ).length;
-  const missing = missingBrandContext(business, locale);
   const paused = campaigns.filter(
     (campaign) => campaign.status === "paused",
   ).length;
@@ -92,14 +102,14 @@ export function buildWorkQueue({
       action: t("reviewAction"),
       tone: "work",
     });
-  if (missing.length)
+  if (unloggedChats > 0)
     queue.push({
-      id: "context",
-      title: t("contextTitle"),
-      detail: t("contextDetail", { fields: missing.join(", ") }),
-      href: "/brand",
-      action: t("contextAction"),
-      tone: "attention",
+      id: "chats",
+      title: t("chatsTitle", { n: unloggedChats }),
+      detail: t("chatsDetail"),
+      href: "/leads",
+      action: t("chatsAction"),
+      tone: "work",
     });
   if (!creatives.length)
     queue.push({
@@ -157,5 +167,8 @@ export function buildWorkQueue({
       action: t("campaignsAction"),
       tone: "work",
     });
+  // #1630: the plan comes first; an unpaid plan stops new ads and campaigns.
+  const due = planItem(plan, locale);
+  if (due) queue.unshift(due);
   return queue;
 }

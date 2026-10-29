@@ -17,7 +17,7 @@ export function WhatsAppEnquiries({ campaignId, spend, enquiries, onLogged, onCu
   enquiries: number;
   onLogged: (count: number) => void;
   /** #798: the campaign's customer count after "+1 customer" or its Undo. */
-  onCustomers?: (customers: number, enquiries: number) => void;
+  onCustomers?: (customers: number, enquiries: number, booked?: number) => void;
   /** #1260: Enquiries' quiet WhatsApp strip: only the two actions, the strip's sentence says the rest. */
   compact?: boolean;
 }) {
@@ -39,10 +39,10 @@ export function WhatsAppEnquiries({ campaignId, spend, enquiries, onLogged, onCu
       const response = undo
         ? await fetch(`/api/campaigns/${campaignId}/enquiries?lead=${encodeURIComponent(undo)}`, { method: "DELETE" })
         : await fetch(`/api/campaigns/${campaignId}/enquiries`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ customer: true }) });
-      const data = await response.json().catch(() => ({})) as { id?: string; enquiries?: number | null; customers?: number | null; error?: string };
+      const data = await response.json().catch(() => ({})) as { id?: string; enquiries?: number | null; customers?: number | null; booked?: number | null; error?: string };
       if (!response.ok) throw new Error(data.error ?? "That couldn't be saved. Try again.");
       if (typeof data.enquiries === "number") onLogged(data.enquiries);
-      if (typeof data.customers === "number" && typeof data.enquiries === "number") onCustomers?.(data.customers, data.enquiries);
+      if (typeof data.customers === "number" && typeof data.enquiries === "number") onCustomers?.(data.customers, data.enquiries, typeof data.booked === "number" ? data.booked : undefined);
       setCustomer(undo ? { id: undo, undone: true } : data.id ? { id: data.id } : null);
       setSaved(false);
     } catch (reason) {

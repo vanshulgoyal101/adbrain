@@ -1,8 +1,8 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { activeRun, agentArgs, didWork, firstPrompt, lastWakes, lastWords, liveRoles, pickRole, prompt, restartPrompt, roleFromPrompt, runsToday, scheduledJobsDue, exportDue, exportsToPrune, loadSkip, machineLoad } from "../scripts/team-supervisor.mjs";
+import { activeRun, agentArgs, didWork, firstPrompt, lastWakes, lastWords, liveRoles, pickRole, prompt, restartPrompt, roleFromPrompt, runsToday, scheduledJobsDue, exportDue, exportsToPrune, encryptExport, loadSkip, machineLoad } from "../scripts/team-supervisor.mjs";
 
 const dir = mkdtempSync(join(tmpdir(), "supervisor-"));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
@@ -28,6 +28,7 @@ describe("team-supervisor (#573 A1)", () => {
     expect(roleFromPrompt("You are AdBrain's Competitive Intelligence Analyst. Your pre")).toBe("analyst");
     expect(roleFromPrompt("You are AdBrain's Dev 4 (owner of the pre-launch Review step)")).toBe("dev4");
     expect(roleFromPrompt("You are AdBrain's CPO (product research and the ranked roadmap)")).toBe("cpo");
+    expect(roleFromPrompt("You are AdBrain's **Docs** worker (technical writer)")).toBe("docs");
     expect(roleFromPrompt("You are AdBrain's CTO helper for epic #744")).toBeNull();
   });
 
@@ -179,5 +180,32 @@ describe("headless limits in code (#1513)", () => {
     for (const script of ["scripts/release.mjs", "scripts/migrate-db.mjs"]) {
       expect(readFileSync(script, "utf8"), script).toMatch(/refuseHeadless\("(release\.mjs|migrate-db --apply)"\)/);
     }
+  });
+});
+
+describe("nightly export encryption (#1762)", () => {
+  it("prunes encrypted and legacy exports together, newest kept", () => {
+    const names = ["2026-10-20T20-10Z", "2026-10-21T20-10Z.tar.gz.cms", "2026-10-22T20-10Z.tar.gz.cms", "notes.txt", "2026-10-22T20-10Z.tar.gz"];
+    expect(exportsToPrune(names, 2)).toEqual(["2026-10-20T20-10Z"]);
+  });
+  it("seals the export to the backup certificate and leaves no plaintext", () => {
+    const folder = join(dir, "2026-10-28T20-08Z");
+    mkdirSync(folder);
+    writeFileSync(join(folder, "leads.json"), '[{"phone":"+910000000000"}]');
+    expect(encryptExport(folder)).toBe(true);
+    expect(existsSync(folder)).toBe(false);
+    expect(existsSync(`${folder}.tar.gz`)).toBe(false);
+    const sealed = readFileSync(`${folder}.tar.gz.cms`);
+    expect(sealed.length).toBeGreaterThan(100);
+    expect(sealed.includes(Buffer.from("+910000000000"))).toBe(false);
+  });
+  it("still deletes the plaintext when encryption fails", () => {
+    const folder = join(dir, "2026-10-29T20-08Z");
+    mkdirSync(folder);
+    writeFileSync(join(folder, "leads.json"), "[]");
+    const run = (command: string) => ({ status: command === "tar" ? 0 : 1 });
+    expect(encryptExport(folder, run as never)).toBe(false);
+    expect(existsSync(folder)).toBe(false);
+    expect(existsSync(`${folder}.tar.gz.cms`)).toBe(false);
   });
 });

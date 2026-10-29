@@ -3,6 +3,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { CampaignVerdict } from "@/components/campaign-verdict";
 import { cardVerdictInput, lastCampaignComparison } from "@/lib/campaign/card-verdict";
+import hi from "../messages/hi.json";
 import { verdict, type VerdictInput } from "@/lib/campaign/verdict";
 
 vi.mock("next/link", () => ({ default: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => <a href={href} {...rest}>{children}</a> }));
@@ -16,9 +17,16 @@ function card(change: Partial<VerdictInput>, props: Partial<React.ComponentProps
   return render(<CampaignVerdict verdict={verdict(input)} whatsapp={input.destination === "whatsapp"} results={input.results} spend={input.spend}
     details={<p>Impressions 5,000</p>} adsManagerUrl="https://adsmanager.facebook.com/x" {...props} />);
 }
-const region = () => within(screen.getByRole("region", { name: "How it's going" }));
+const region = () => within(screen.getByRole("group", { name: "How it's going" }));
 
 describe("<CampaignVerdict> (#1274)", () => {
+  // #1274 walk: a page lists many cards, so each card's parts are labelled groups, not landmarks repeated per card (axe landmark-unique).
+  it("is a labelled group, not a page landmark", () => {
+    card({});
+    expect(screen.getByRole("group", { name: "How it's going" })).toBeInTheDocument();
+    expect(screen.queryAllByRole("region")).toHaveLength(0);
+  });
+
   it("measured: the number and spend, no judgement and no action; figures folded under Details", () => {
     card({});
     expect(region().getByText("Each chat costs ₹150.")).toBeInTheDocument();
@@ -33,13 +41,13 @@ describe("<CampaignVerdict> (#1274)", () => {
 
   it("never says '₹0 spent' (a zero-spend card says so once, #173)", () => {
     card({ impressions: 0, results: 0, spend: 0, liveSince: "2026-10-28T10:00:00Z" });
-    expect(region().getByText("Meta is checking your ads. They usually start showing within a day.")).toBeInTheDocument();
+    expect(region().getByText("Meta checks your ads first. This usually takes a few hours, sometimes up to a day.")).toBeInTheDocument();
     expect(region().queryByText(/spent/)).not.toBeInTheDocument();
   });
 
   it("early days: the count, no action", () => {
     card({ results: 0, spend: 120 });
-    expect(region().getByText("Early days: no chats yet.")).toBeInTheDocument();
+    expect(region().getByText("Your ads have been shown 5,000 times so far. No chats yet; many people message in the evening.")).toBeInTheDocument();
     expect(region().getByText("0")).toBeInTheDocument();
     expect(region().getByText(/chats · ₹120 spent/)).toBeInTheDocument();
   });
@@ -102,5 +110,19 @@ describe("card verdict inputs (#1274)", () => {
     const results = { old: result(25, 5000), "old-form": { ...result(0, 900), leads: 30, destination: "instant_form" }, later: result(3, 300) };
     expect(lastCampaignComparison(campaigns[2] as never, campaigns as never, results as never)).toEqual({ kind: "own", results: 25, typical: 200 });
     expect(lastCampaignComparison(campaigns[1] as never, campaigns as never, results as never)).toBeNull();
+  });
+});
+
+// #1438: with the owner's Hindi words, the card's own lines are Hindi too (CPO Screen 2).
+describe("<CampaignVerdict> in Hindi (#1438)", () => {
+  it("names the group, the number line, the action and Details in Hindi", () => {
+    const words = { locale: "hi" as const, messages: hi.verdict };
+    const input = { ...base, waiting: 1 };
+    render(<CampaignVerdict verdict={verdict(input, words)} words={words} whatsapp results={input.results} spend={input.spend} details={<p>x</p>} />);
+    const group = within(screen.getByRole("group", { name: "कैसा चल रहा है" }));
+    expect(group.getByText(/^1 व्यक्ति आपके जवाब का इंतज़ार कर रहा है। हर चैट ₹150 की पड़ रही है।$/)).toBeInTheDocument();
+    expect(group.getByText("प्रति चैट · 10 चैट, ₹1,500 खर्च")).toBeInTheDocument();
+    expect(group.getByRole("link", { name: "अभी जवाब दें" })).toHaveAttribute("href", "/leads");
+    expect(group.getByText("पूरी जानकारी")).toBeInTheDocument();
   });
 });

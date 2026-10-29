@@ -19,7 +19,7 @@ jobs:
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       GH_TOKEN: ${{ github.token }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Main equals production
         shell: bash
         run: |
@@ -34,4 +34,4 @@ jobs:
           open=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search "in:title \"$title\"" --json number --jq length)
           [ "$open" = "0" ] || exit 0
           gh issue create -R "$GITHUB_REPOSITORY" -l core -l bug -l owner:devops -t "$title" \
-            -b "$(printf '%s\n\nRun: %s/%s/actions/runs/%s\nRecovery: docs/RELEASING.md#production-guard\n' "$(cat drift.txt 2>/dev/null)" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+            -b "$(printf '%s\n\nRun: %s/%s/actions/runs/%s\nRecovery: docs/operations/releasing-recovery.md#production-guard\n' "$(cat drift.txt 2>/dev/null)" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"

@@ -105,9 +105,22 @@ export function sourceInventory(root) {
   return { commands: Object.keys(packageJson.scripts ?? {}).sort(), routes, environment: [...environment].sort(), migrations, tables: [...tables].sort() };
 }
 
+// Layered docs (#1851): pages stay short, every folder has an index, and only these sit directly in docs/.
+export const MAX_LINES = 300;
+export const TOP_LEVEL = new Set(["docs/README.md", "docs/roadmap.md"]);
+const CODE_DIRS = ["src", "scripts", "db", ".github"];
+const CODE_FILES = ["AGENTS.md", ".env.example", "package.json"];
+
+/** Route-inventory rows (`| GET/POST | \`/api/x?q\` | …`) in one page: path without query, with line. */
+export function routeRows(text) {
+  return [...text.matchAll(/^\|\s*[A-Z]+(?:\/[A-Z]+)*\s*\|\s*`(\/api\/[^`?\s]+)[^`]*`/gm)]
+    .map(match => ({ path: match[1], line: text.slice(0, match.index).split("\n").length }));
+}
+
 export function checkDocumentation(root, options = {}) {
   root = resolve(root);
-  const files = [...(existsSync(resolve(root, "README.md")) ? [resolve(root, "README.md")] : []), ...walk(resolve(root, "docs")).filter(file => file.endsWith(".md"))];
+  const moduleReadmes = walk(resolve(root, "src")).filter(file => file.endsWith(`${sep}README.md`));
+  const files = [...["README.md", "AGENTS.md"].map(file => resolve(root, file)).filter(existsSync), ...walk(resolve(root, "docs")).filter(file => file.endsWith(".md")), ...moduleReadmes];
   const inventory = files.map(path => ({ file: relative(root, path).split(sep).join("/"), role: classification(relative(root, path).split(sep).join("/")) }));
   const selected = options.files?.length ? options.files.map(file => resolve(root, file)) : files.filter(file => options.all || classification(relative(root, file).split(sep).join("/")) === "current");
   const source = sourceInventory(root);
@@ -162,9 +175,67 @@ export function checkDocumentation(root, options = {}) {
     }
   }
   const textOf = file => existsSync(resolve(root, file)) ? readFileSync(resolve(root, file), "utf8") : "";
-  const apiText = textOf("docs/API_REFERENCE.md");
-  const configText = textOf("docs/CONFIGURATION.md");
-  const dataText = textOf("docs/DATA_MODEL.md");
+  const docFiles = inventory.filter(entry => entry.role === "current" && entry.file.startsWith("docs/")).map(entry => entry.file);
+  const pages = (folder, legacy, match = () => true) => {
+    const found = docFiles.filter(file => file.startsWith(folder) && !file.slice(folder.length).includes("/") && match(file));
+    return found.length ? found : existsSync(resolve(root, legacy)) ? [legacy] : [];
+  };
+  const fail = (file, line, message) => diagnostics.push({ severity: "error", file, line, message });
+  const configPages = docFiles.filter(file => /^docs\/operations\/configuration[^/]*\.md$/.test(file)).sort((a, b) => a.length - b.length);
+  const configText = configPages.map(textOf).join("\n");
+  const dataText = textOf("docs/architecture/migrations.md");
+
+  // API: every handler has exactly one inventory row, on one api/ page, and every row has a handler.
+  const apiPages = pages("docs/api/", "docs/API_REFERENCE.md");
+  const rows = apiPages.flatMap(file => routeRows(textOf(file)).map(row => ({ ...row, file })));
+  const routePaths = new Set(source.routes.map(route => route.path));
+  if (apiPages.length) {
+    for (const route of source.routes) {
+      const homes = [...new Set(rows.filter(row => row.path === route.path).map(row => row.file))];
+      if (!homes.length) fail(apiPages[0], 1, `API route has no inventory row: ${route.path}`);
+      else if (homes.length > 1) fail(homes[1], 1, `API route listed on more than one api page: ${route.path} (${homes.join(", ")})`);
+    }
+    for (const row of rows) if (!routePaths.has(row.path)) fail(row.file, row.line, `Inventory row for a route with no handler: ${row.path}`);
+  }
+
+  // Configuration: every environment key is documented.
+  if (configPages.length) for (const name of source.environment) if (!configText.includes(name)) fail(configPages[0], 1, `Environment key not documented: ${name}`);
+
+  // Shape: short pages, an index per folder that links each page, nothing new loose in docs/.
+  for (const file of docFiles) {
+    const lines = textOf(file).split("\n").length - 1;
+    if (lines > MAX_LINES) fail(file, MAX_LINES + 1, `Page has ${lines} lines; split it (limit ${MAX_LINES})`);
+    if (!file.slice("docs/".length).includes("/") && !TOP_LEVEL.has(file)) fail(file, 1, "Put pages in a docs/ subfolder (product, architecture, api, operations, team, plans)");
+    // A plan is current or deleted: its status (active, or done and due for deletion) sits under the title.
+    if (file.startsWith("docs/plans/") && file !== "docs/plans/README.md" && !/^\*\*Status:\*\* (active|done)\b/m.test(textOf(file).split("\n").slice(0, 6).join("\n"))) fail(file, 1, "Plan needs a `**Status:** active` or `**Status:** done` line under its title");
+  }
+  const folders = new Set([...docFiles.length ? ["docs/"] : [], ...docFiles.map(file => file.slice(0, file.lastIndexOf("/") + 1))]);
+  for (const folder of [...folders].filter(folder => folder !== "docs/")) {
+    for (let parent = folder.slice(0, folder.slice(0, -1).lastIndexOf("/") + 1); parent.length > "docs/".length; parent = parent.slice(0, parent.slice(0, -1).lastIndexOf("/") + 1)) folders.add(parent);
+  }
+  for (const folder of folders) {
+    const index = `${folder}README.md`;
+    if (!existsSync(resolve(root, index))) { fail(folder.slice(0, -1), 1, `Folder has no README.md index`); continue; }
+    const linked = new Set(load(resolve(root, index)).links.map(({ href }) => {
+      try { return relative(root, resolve(root, "." + decodeURIComponent(new URL(href, `https://docs.invalid/${index}`).pathname))).split(sep).join("/"); } catch { return ""; }
+    }));
+    const children = [...docFiles.filter(file => file.startsWith(folder) && !file.slice(folder.length).includes("/") && file !== index),
+      ...[...folders].filter(other => other !== folder && other.startsWith(folder) && !other.slice(folder.length, -1).includes("/")).map(other => `${other}README.md`)];
+    for (const child of children) if (!linked.has(child)) fail(index, 1, `Index does not link ${child}`);
+  }
+
+  // Code, scripts and workflows that name a doc must name one that exists (applied migrations are immutable, so skipped).
+  const codeFiles = [...CODE_DIRS.flatMap(dir => walk(resolve(root, dir))), ...CODE_FILES.map(file => resolve(root, file)).filter(existsSync)]
+    .filter(path => !/\.test\.[cm]?[jt]sx?$/.test(path) && !path.includes(`${sep}.github${sep}skills${sep}`) && !path.includes(`${sep}db${sep}migrations${sep}`) && path !== fileURLToPath(import.meta.url) && !/\.(?:png|jpe?g|gif|webp|ico|woff2?|zip|pdf)$/i.test(path));
+  for (const path of codeFiles) {
+    const file = relative(root, path).split(sep).join("/");
+    const text = readFileSync(path, "utf8");
+    for (const match of text.matchAll(/(?<![\w./-])docs\/[A-Za-z0-9_./-]+?\.md\b/g)) {
+      if (!existsSync(resolve(root, match[0]))) fail(file, text.slice(0, match.index).split("\n").length, `Names a missing doc: ${match[0]}`);
+    }
+  }
+
+  const apiText = apiPages.map(textOf).join("\n");
   const coverage = {
     routesNotMentioned: source.routes.filter(route => !apiText.includes(route.path)).map(route => route.path),
     environmentNotMentioned: source.environment.filter(name => !configText.includes(name)),

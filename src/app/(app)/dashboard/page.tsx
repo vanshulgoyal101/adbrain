@@ -1,13 +1,32 @@
 import { Suspense, type ReactNode } from "react";
+import { cookies } from "next/headers";
+import { unstable_rethrow } from "next/navigation";
+import { BrandMeterCard } from "@/components/brand-meter-card";
+import { BRAND_METER_SNOOZE_COOKIE, brandMeter } from "@/lib/brand/meter";
+import { segmentForCategory } from "@/lib/segments";
 import Link from "next/link";
 import { Alert } from "@/components/ui/alert";
 import { SpendStatusBanner } from "@/components/spend-status";
 import { RecentActivity, WorkspaceHome } from "@/components/workspace-home";
 import { requestLocale } from "@/i18n/request-locale";
 import { SetupResumeCard } from "@/components/setup-resume-card";
+import { ClaimBusiness } from "@/components/claim-business";
+import { myPendingTransfer } from "@/lib/prospect/transfer-server";
+import { createClient } from "@/lib/supabase/server";
+import { CheckCircle2 } from "lucide-react";
+import { madeForSetup } from "@/lib/creative/setup-picks";
 import { setupResumeStep } from "@/lib/setup/resume";
 import { getMetaConnection } from "@/lib/meta/credentials";
 import { HomeRejectedAds } from "@/components/home-rejected-ads";
+import { HomeWeekCard } from "@/components/home-week-card";
+import { loadWeekSummary } from "@/lib/home/week-summary-load";
+import { PilotDay7Card } from "@/components/pilot-day7-card";
+import { homeCustomers, homeResults } from "@/lib/campaign/home-results";
+import { pilotDay7Visible } from "@/lib/feedback/pilot-day7";
+import { pilotDay7Facts } from "@/lib/feedback/pilot-day7-store";
+import { ResultsCardOffer } from "@/components/results-card-offer";
+import { resultsCardFacts, resultsCardLines, type ResultsCardFacts } from "@/lib/results-card/store";
+import { translator, type AppLocale } from "@/i18n/locale";
 import { adResultsEnabled } from "@/lib/campaign/ad-results-store";
 import { homeAdReview, newestLiveCampaign } from "@/lib/campaign/home-ad-review";
 import { inboxSummary, newestWaitingEnquiry, recentReplyMinutes } from "@/lib/leads/reply-time";
@@ -15,16 +34,35 @@ import {
   getCampaigns,
   getCreativePreviews,
   getAdStatuses,
+  getApprovedCreatives,
   getAuditLog,
-  getLatestResults,
+  getLatestResultsWithEnquiries,
   getPrimaryBusiness,
   getSpendEvaluation,
 } from "@/lib/supabase/queries";
 
 export const metadata = { title: "Dashboard" };
 
-export default async function DashboardPage() {
-  const [business, locale] = await Promise.all([getPrimaryBusiness(), requestLocale()]);
+/** #2032: Not now on the Brand meter, read on the server so a hidden card never renders; unreadable shows it. */
+async function brandMeterSnoozed(): Promise<boolean> {
+  try {
+    return (await cookies()).has(BRAND_METER_SNOOZE_COOKIE);
+  } catch (error) {
+    unstable_rethrow(error);
+    return false;
+  }
+}
+
+export default async function DashboardPage({ searchParams }: { searchParams?: Promise<Record<string, string | string[] | undefined>> } = {}) {
+  const [business, locale, params] = await Promise.all([getPrimaryBusiness(), requestLocale(), searchParams ?? Promise.resolve({} as Record<string, string | string[] | undefined>)]);
+  // #1670 (CTO): a new owner with a business AdBrain prepared for them is asked first, before WS1 starts an empty one.
+  if (!business) {
+    const claim = await myPendingTransfer().catch(() => null);
+    if (claim) {
+      const email = await createClient().then((supabase) => supabase.auth.getUser()).then(({ data }) => data.user?.email ?? null, () => null);
+      return <ClaimBusiness claim={claim} email={email} />;
+    }
+  }
   const spendStatus = business ? getSpendEvaluation(business.id).then<ReactNode, ReactNode>(
     ({ evaluation }) => evaluation.status === "approaching" || evaluation.status === "over"
       ? <SpendStatusBanner evaluation={evaluation} /> : null,
@@ -32,7 +70,7 @@ export default async function DashboardPage() {
   ) : null;
   const activity = business ? getAuditLog(business.id, 8).then<ReactNode, ReactNode>(
     (audit) => <RecentActivity audit={audit} locale={locale} />,
-    () => <Alert variant="error">Recent activity could not be loaded.</Alert>,
+    () => <Alert variant="error">We couldn&apos;t load your recent activity. Reload the page.</Alert>,
   ) : null;
   const [creatives, campaigns, metaConnection] = business
     ? await Promise.all([
@@ -43,12 +81,22 @@ export default async function DashboardPage() {
     : [[], [], null];
   // #1272 (#1251 WS1): until a first campaign has gone live, Home is the one resume card.
   const resume = setupResumeStep({ business, creatives, campaigns });
-  if (resume) return <SetupResumeCard step={resume} />;
+  if (resume) {
+    // #1712: at step 3, the ads Go live will use (made from today's step 1, #1432); unreadable shows the plain card.
+    const ready = resume === 3 && business
+      ? await getApprovedCreatives(business.id).then((rows) => rows.filter((row) => madeForSetup(row, business)), () => [])
+      : [];
+    return <>
+      {params.handed === "1" && <HandedOverNotice />}
+      <SetupResumeCard step={resume} ready={ready} locale={locale} />
+    </>;
+  }
   // #764: the Home results row; an unreadable result leaves the row out, never the page.
   const launched = campaigns.filter((campaign) => campaign.meta_campaign_id).map((campaign) => campaign.id);
   const newest = newestLiveCampaign(campaigns);
-  const [results, replyMinutes, waiting, firstEnquiry, newestAdStatuses] = await Promise.all([
-    launched.length ? getLatestResults(launched).catch(() => ({})) : {},
+  const [results, replyMinutes, waiting, firstEnquiry, newestAdStatuses, week] = await Promise.all([
+    // #1624: with the logged real enquiries and customers, so Home can ask which chats were real.
+    launched.length ? getLatestResultsWithEnquiries(launched).catch(() => ({})) : {},
     // #1049: an unreadable reply time leaves the line out, never the page.
     business ? recentReplyMinutes(business.id).catch(() => null) : null,
     // #1274: people waiting for a reply (the inbox's Waiting count, #1260) lead Home's sentence; unreadable means none shown.
@@ -57,8 +105,26 @@ export default async function DashboardPage() {
     business ? newestWaitingEnquiry(business.id).catch(() => null) : null,
     // #1469: the stored per-ad statuses (no Meta call); unreadable means no review line.
     newest && adResultsEnabled() ? getAdStatuses(newest.id).catch(() => null) : [],
+    // #1668: last week's card, read beside the rest; unreadable, empty or slower than 600 ms leaves it out, never the page.
+    business && launched.length ? Promise.race([
+      loadWeekSummary(business.id, campaigns).catch(() => null),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 600)),
+    ]) : null,
   ]);
   const adReview = newest && newestAdStatuses ? homeAdReview([newest], { [newest.id]: newestAdStatuses }, results) : null;
+  // #1650: after the first week, one question for the pricing call (#718); unreadable means not shown.
+  // #2036: after a week with 5+ logged enquiries, a card for the owner's WhatsApp Status; unreadable means not shown.
+  const everLaunched = Boolean(business && campaigns.some((campaign) => campaign.launched_at));
+  const [pilotFacts, cardFacts] = await Promise.all([
+    everLaunched && business ? pilotDay7Facts(business.id).catch(() => null) : null,
+    everLaunched && business ? resultsCardFacts(business.id).catch(() => null) : null,
+  ]);
+  const askPilot = Boolean(pilotFacts && pilotDay7Visible({ ...pilotFacts, now: new Date() }));
+  const resultsCard = cardFacts?.offered && business ? resultsCardOffer(business.id, cardFacts, locale) : null;
+  // #2032: the next missing Brand fact, unless the owner said Not now in the last 7 days.
+  const meter = business && !(await brandMeterSnoozed()) ? brandMeter(business) : null;
+  // #2026: the card repeats Home's customer line above the ₹999 question; nothing when none is marked.
+  const customerLine = askPilot ? homeCustomers(homeResults(campaigns, results)) : null;
 
   return (
     <WorkspaceHome
@@ -70,11 +136,17 @@ export default async function DashboardPage() {
       waiting={waiting}
       firstEnquiry={firstEnquiry}
       adReview={adReview}
+      brandMeter={business && meter?.next ? (
+        <BrandMeterCard businessId={business.id} meter={meter} segment={segmentForCategory(business.vertical)?.slug ?? null} locale={locale} />
+      ) : null}
+      pilotQuestion={askPilot && business ? <PilotDay7Card businessId={business.id} locale={locale} customers={customerLine?.kind === "line" ? customerLine : null} /> : null}
+      resultsCard={resultsCard}
       rejectedAds={adReview?.kind === "rejected" && newest && (
         <Suspense fallback={null}>
-          <HomeRejectedAds campaign={newest} spend={(results as Record<string, { spend?: number }>)[newest.id]?.spend ?? 0} />
+          <HomeRejectedAds campaign={newest} vertical={business?.vertical} spend={(results as Record<string, { spend?: number }>)[newest.id]?.spend ?? 0} />
         </Suspense>
       )}
+      weekSummary={week && <HomeWeekCard summary={week} locale={locale} />}
       locale={locale}
       audit={[]}
       spend={null}
@@ -99,4 +171,22 @@ async function SpendNotice({ result }: { result: Promise<ReactNode> }) {
 
 async function Activity({ result }: { result: Promise<ReactNode> }) {
   return await result;
+}
+
+/** #1670 (Designer #1736 frame 4): the owner just made the prepared business theirs. */
+function HandedOverNotice() {
+  return (
+    <p role="status" className="mx-auto mb-4 flex max-w-xl items-start gap-2 rounded-lg bg-green-50 p-4 text-sm text-slate-900">
+      <CheckCircle2 size={18} className="mt-0.5 shrink-0 text-primary" aria-hidden="true" />
+      It&apos;s yours. The &apos;Sample&apos; mark is off your ads. Nothing runs until you tap Go live.
+    </p>
+  );
+}
+
+function resultsCardOffer(businessId: string, facts: ResultsCardFacts, locale: AppLocale) {
+  const t = translator(locale, "resultsCard");
+  const lines = resultsCardLines(facts);
+  const words = { title: t("title"), body: t("body", { n: facts.enquiries }), share: t("share"), skip: t("skip"),
+    footerToggle: t("footerToggle"), shareFailed: t("shareFailed"), preview: t("preview") };
+  return <ResultsCardOffer businessId={businessId} caption={[lines.main, lines.contact].filter(Boolean).join("\n")} words={words} />;
 }

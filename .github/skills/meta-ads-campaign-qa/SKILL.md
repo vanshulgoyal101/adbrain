@@ -3,7 +3,7 @@ name: meta-ads-campaign-qa
 description: "Use before any change to what AdBrain sends Meta (campaigns, ad sets, targeting, creatives, ads, budgets, placements) and before launching or changing a campaign: dry-run every object with Meta's validate_only, keep the recorded launch gate green, and check the plan against new-advertiser guidance. Never edit a live run."
 ---
 
-<!-- AdBrain's own skill (#419), written in this repo. AGENTS.md and docs/ORCHESTRATION.md win on any conflict. -->
+<!-- AdBrain's own skill (#419), written in this repo. AGENTS.md and docs/team/orchestration.md win on any conflict. -->
 
 # Meta ads campaign QA
 

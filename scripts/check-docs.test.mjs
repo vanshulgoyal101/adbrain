@@ -23,8 +23,10 @@ function fixture(context, files = {}) {
 
 test("parses reference links, parentheses, encoded paths and GitHub duplicate headings", context => {
   const root = fixture(context, {
-    "README.md": "# Start\n[Guide][guide]\n[Source](src/app/(app)/sample.ts#L2)\n[Named](docs/My%20Guide.md#named)\n[Second](docs/My%20Guide.md#same-1)\n\n[guide]: docs/My%20Guide.md#same\n",
-    "docs/My Guide.md": '# Same\n# Same\n<a id="named"></a>\n',
+    "README.md": "# Start\n[Guide][guide]\n[Source](src/app/(app)/sample.ts#L2)\n[Named](docs/team/My%20Guide.md#named)\n[Second](docs/team/My%20Guide.md#same-1)\n\n[guide]: docs/team/My%20Guide.md#same\n",
+    "docs/README.md": "# Docs\n[Team](team/README.md)\n",
+    "docs/team/README.md": "# Team\n[Guide](My%20Guide.md)\n",
+    "docs/team/My Guide.md": '# Same\n# Same\n<a id="named"></a>\n',
     "src/app/(app)/sample.ts": "export const value = 1;\nexport const next = 2;\n",
   });
   assert.equal(checkDocumentation(root).errors, 0);
@@ -89,4 +91,77 @@ test("reports unclosed fences without rejecting closed quoted or longer fences",
   const result = checkDocumentation(root);
   assert.equal(result.errors, 1);
   assert.equal(result.diagnostics[0].message, "Unclosed fenced code block");
+});
+const route = 'export async function GET() {}\n';
+const messages = result => result.diagnostics.filter(item => item.severity === "error").map(item => `${item.file} ${item.message}`);
+
+test("layered docs: every API handler has exactly one inventory row on one api page (#1851)", context => {
+  const root = fixture(context, {
+    "README.md": "# Start\n",
+    "src/app/api/a/route.ts": route, "src/app/api/b/[id]/route.ts": route, "src/app/api/c/route.ts": route,
+    "docs/README.md": "# Docs\n[API](api/README.md)\n",
+    "docs/api/README.md": "# API\n[One](one.md) [Two](two.md)\n",
+    "docs/api/one.md": "# One\n| GET | `/api/a` | x | y |\n| GET/POST | `/api/b/[id]?q=1` | x | y |\n| GET | `/api/gone` | x | y |\n",
+    "docs/api/two.md": "# Two\n| GET | `/api/a` | x | y |\nProse may mention `/api/c` freely.\n",
+  });
+  assert.deepEqual(messages(checkDocumentation(root)).sort(), [
+    "docs/api/README.md API route has no inventory row: /api/c",
+    "docs/api/one.md Inventory row for a route with no handler: /api/gone",
+    "docs/api/two.md API route listed on more than one api page: /api/a (docs/api/one.md, docs/api/two.md)",
+  ]);
+});
+
+test("layered docs: every environment key is in a configuration page (#1851)", context => {
+  const root = fixture(context, {
+    "README.md": "# Start\n",
+    "src/lib/x.ts": "process.env.DOCUMENTED_KEY; process.env.MISSING_KEY;\n",
+    "docs/README.md": "# Docs\n[Ops](operations/README.md)\n",
+    "docs/operations/README.md": "# Ops\n[Config](configuration.md) [Pay](configuration-payments.md)\n",
+    "docs/operations/configuration.md": "# Config\n",
+    "docs/operations/configuration-payments.md": "# Pay\n`DOCUMENTED_KEY`\n",
+  });
+  assert.deepEqual(messages(checkDocumentation(root)), ["docs/operations/configuration.md Environment key not documented: MISSING_KEY"]);
+});
+
+test("layered docs: short pages, an index per folder linking each page, nothing new loose in docs/ (#1851)", context => {
+  const long = "# Long\n" + "line\n".repeat(300);
+  const root = fixture(context, {
+    "README.md": "# Start\n",
+    "docs/README.md": "# Docs\n[Product](product/README.md) [Roadmap](roadmap.md) [Loose](loose.md)\n",
+    "docs/roadmap.md": "# Roadmap\n",
+    "docs/loose.md": "# Loose\n",
+    "docs/product/README.md": "# Product\n[Brand](brand.md)\n",
+    "docs/product/brand.md": long,
+    "docs/product/create.md": "# Create\n",
+    "docs/operations/runbooks/one.md": "# One\n",
+    "docs/plans/README.md": "# Plans\n[Live](live.md) [Stale](stale.md)\n",
+    "docs/plans/live.md": "# Live\n\n**Status:** active: building it (#1).\n",
+    "docs/plans/stale.md": "# Stale\n\nNo status.\n",
+  });
+  assert.deepEqual(messages(checkDocumentation(root)).sort(), [
+    "docs/README.md Index does not link docs/operations/README.md",
+    "docs/README.md Index does not link docs/plans/README.md",
+    "docs/loose.md Put pages in a docs/ subfolder (product, architecture, api, operations, team, plans)",
+    "docs/operations Folder has no README.md index",
+    "docs/operations/runbooks Folder has no README.md index",
+    "docs/plans/stale.md Plan needs a `**Status:** active` or `**Status:** done` line under its title",
+    "docs/product/README.md Index does not link docs/product/create.md",
+    "docs/product/brand.md Page has 301 lines; split it (limit 300)",
+  ]);
+});
+
+test("layered docs: code, scripts and workflows name only docs that exist (#1851)", context => {
+  const root = fixture(context, {
+    "README.md": "# Start\n",
+    "docs/README.md": "# Docs\n",
+    "scripts/x.mjs": "// see docs/README.md#docs and docs/MOVED.md\n// https://supabase.com/docs/guides/api.md is external\n",
+    ".github/workflows/y.yml": "# docs/operations/gone.md\n",
+    ".github/skills/z/SKILL.md": "docs/third-party.md\n",
+    "tests/x.test.ts": "'docs/sample.md'\n",
+    "AGENTS.md": "# Agents\n[Docs](docs/README.md)\n",
+  });
+  assert.deepEqual(messages(checkDocumentation(root)).sort(), [
+    ".github/workflows/y.yml Names a missing doc: docs/operations/gone.md",
+    "scripts/x.mjs Names a missing doc: docs/MOVED.md",
+  ]);
 });

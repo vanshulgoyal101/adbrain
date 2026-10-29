@@ -35,9 +35,9 @@ export function MetaSetupChecklist({ rows }: { rows: SetupRow[] | null }) {
               {row.action && <div className="mt-1 space-y-1">
                 <p className="text-slate-700">{row.action.en}</p>
                 <p lang="hi" className="text-slate-600">{row.action.hi}</p>
-                <a href={row.action.href} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-10 items-center gap-1 font-medium text-blue-700 underline">
+                {row.action.href && <a href={row.action.href} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-10 items-center gap-1 font-medium text-blue-700 underline">
                   {row.action.label}<ExternalLink aria-hidden="true" className="h-4 w-4" /><span className="sr-only">(opens Meta in a new tab)</span>
-                </a>
+                </a>}
               </div>}
             </div>
           </li>)}

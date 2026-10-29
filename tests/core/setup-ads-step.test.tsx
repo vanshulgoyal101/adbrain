@@ -6,11 +6,13 @@ import { setupAdCost, setupBatch, setupGoal, setupPicks } from "@/lib/creative/s
 import type { Business, Creative } from "@/lib/types";
 
 // #1270 (#1251 WS1 slice 3): step 2 makes 3 ads with the existing Create calls and pre-picks the best 2.
-const mocks = vi.hoisted(() => ({ push: vi.fn(), setCreativeStatus: vi.fn(), downloadBlob: vi.fn() }));
+const mocks = vi.hoisted(() => ({ push: vi.fn(), setCreativeStatus: vi.fn(), downloadBlob: vi.fn(), saveAdLanguage: vi.fn(async () => ({ ok: true })) }));
 vi.mock("@/lib/download", () => ({ downloadBlob: mocks.downloadBlob }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: mocks.push }) }));
 vi.mock("@/app/(app)/studio/actions", () => ({ setCreativeStatus: mocks.setCreativeStatus }));
+vi.mock("@/app/(app)/brand/actions", () => ({ saveAdLanguage: mocks.saveAdLanguage }));
 import { SetupAdsStep, storyFor } from "@/components/setup-ads-step";
+import hi from "../../messages/hi.json";
 
 const business = { id: "11111111-1111-4111-8111-111111111111", name: "SunPeak Solar", vertical: "Rooftop solar", locations: ["Jaipur"],
   offers: ["Free site survey"], phone: "9876543210", languages: [] } as unknown as Business;
@@ -110,7 +112,8 @@ describe("core: <SetupAdsStep> (#1270)", () => {
     const assistantBodies = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.filter(([url]) => url === "/api/creatives/assistant").map(([, init]) => JSON.parse(String(init.body)));
     expect(assistantBodies[1].answers[0]).toMatchObject({ question: "Which offer?", answer: "Let the AI decide the best option based on the brand." });
     expect(generate).toHaveBeenCalledTimes(1);
-    expect(generate.mock.calls[0][0]).toMatchObject({ businessId: business.id, brief: "Rooftop solar brief", count: 3, language: "en" });
+    // #1681 (CPO #1669): a solar business with no Brand language gets Hinglish ads by default.
+    expect(generate.mock.calls[0][0]).toMatchObject({ businessId: business.id, brief: "Rooftop solar brief", count: 3, language: "hinglish" });
     expect(screen.getByRole("button", { name: /Ad b/ })).toHaveAttribute("aria-pressed", "false");
     // The run's id is gone; only its result stays, for other tabs (#1534), and expires like the id.
     expect(localStorage.getItem(`setup-generation:${business.id}`)).toBeNull();
@@ -132,6 +135,52 @@ describe("core: <SetupAdsStep> (#1270)", () => {
     await act(async () => fireEvent.click(bar().getByRole("button", { name: "Make 3 ads" })));
     expect(await screen.findByRole("heading", { name: "Your ads are ready" })).toBeInTheDocument();
     expect(generate).toHaveBeenCalledTimes(1);
+  });
+
+  it("#1681: before Make 3 ads, 'Ads in' picks the batch's language and saves it; the row is gone once making starts", async () => {
+    const generate = vi.fn();
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "/api/creatives/assistant") return Response.json({ ready: true, brief: "b" });
+      generate(JSON.parse(String(init?.body)));
+      return new Promise<Response>(() => {});
+    }));
+    render(<SetupAdsStep business={business} initialAds={[]} earlier />);
+    expect(screen.getByRole("button", { name: "Hinglish" })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByRole("button", { name: "हिंदी" }));
+    expect(mocks.saveAdLanguage).toHaveBeenCalledWith(business.id, "hi");
+    await act(async () => fireEvent.click(bar().getByRole("button", { name: "Make 3 ads" })));
+    await waitFor(() => expect(generate).toHaveBeenCalledTimes(1));
+    expect(generate.mock.calls[0][0]).toMatchObject({ language: "hi" });
+    expect(screen.queryByRole("group", { name: "Your ads will be in" })).toBeNull();
+  });
+
+  it("#1934: a returning owner's step 2 starts a batch once from step 1's tap; a reload or Back shows Make 3 ads", async () => {
+    const generate = vi.fn();
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "/api/creatives/assistant") return Response.json({ ready: true, brief: "b" });
+      generate(JSON.parse(String(init?.body)));
+      return Response.json({ creatives: [ad("a"), ad("b"), ad("c")] });
+    }));
+    const { markMakeTap } = await import("@/lib/setup/steps");
+    markMakeTap(business.id);
+    const first = render(<SetupAdsStep business={business} initialAds={[]} earlier again />);
+    expect(await screen.findByRole("heading", { name: "Your ads are ready" })).toBeInTheDocument();
+    expect(generate).toHaveBeenCalledTimes(1);
+    first.unmount();
+    localStorage.clear();
+    render(<SetupAdsStep business={business} initialAds={[]} earlier again />);
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
+    expect(generate).toHaveBeenCalledTimes(1);
+    expect(bar().getByRole("button", { name: "Make 3 ads" })).toBeInTheDocument();
+  });
+
+  it("#1934: an old tap (over 2 minutes) doesn't start a batch", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({})));
+    sessionStorage.setItem(`setup-make-tap:${business.id}`, String(Date.now() - 3 * 60 * 1000));
+    render(<SetupAdsStep business={business} initialAds={[]} earlier again />);
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
+    expect(fetch).not.toHaveBeenCalled();
+    expect(sessionStorage.getItem(`setup-make-tap:${business.id}`)).toBeNull();
   });
 
   it("#1475: earlier ads but a batch already running (another tab) resumes it, still never a new one", async () => {
@@ -168,7 +217,7 @@ describe("core: <SetupAdsStep> (#1270)", () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(new Blob(["zip"]))));
     render(<SetupAdsStep business={business} initialAds={[ad("a", 2), ad("b"), ad("c")]} sample />);
     for (const name of [/Ad a/, /Ad b/, /Ad c/]) expect(screen.getByRole("button", { name })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByText(/All of them go in the sample pack, each marked 'Sample: not live'/)).toBeInTheDocument();
+    expect(screen.getByText(/All of them go in the sample pack, each marked 'Sample ad: not live yet'/)).toBeInTheDocument();
     await act(async () => fireEvent.click(bar().getByRole("button", { name: "Download sample pack (3)" })));
     await waitFor(() => expect(mocks.downloadBlob).toHaveBeenCalledWith(expect.any(Blob), "adbrain-sample-pack.zip"));
     expect(mocks.setCreativeStatus.mock.calls).toEqual([["a", "approved"], ["b", "approved"], ["c", "approved"]]);
@@ -184,7 +233,7 @@ describe("core: <SetupAdsStep> (#1270)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Show full screen" }));
     const viewer = within(screen.getByRole("dialog", { name: "Sample ads" }));
     expect(viewer.getAllByRole("img").map((img) => img.getAttribute("src"))).toEqual(["/ads/a.png", "/ads/c.png"]);
-    expect(viewer.getAllByText("Sample: not live")).toHaveLength(2);
+    expect(viewer.getAllByText("Sample ad: not live yet")).toHaveLength(2);
     expect(viewer.getByText("1 of 2")).toBeInTheDocument();
     expect(viewer.getByRole("button", { name: "Close" })).toHaveFocus();
     fireEvent.keyDown(document, { key: "Escape" });
@@ -233,6 +282,16 @@ describe("core: <SetupAdsStep> (#1270)", () => {
     expect(await screen.findByRole("heading", { name: "Your ads are ready" })).toBeInTheDocument();
     expect(bar().getByRole("button", { name: /^Continue with/ })).toBeEnabled();
     vi.useRealTimers();
+  });
+
+  it("#1934: in returning mode Continue goes to Go live with again=1 and Back to the offer step", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+    render(<SetupAdsStep business={business} initialAds={[ad("a"), ad("b")]} again />);
+    await act(async () => fireEvent.click(bar().getByRole("button", { name: /^Continue with/ })));
+    await waitFor(() => expect(mocks.push).toHaveBeenCalledWith(expect.stringMatching(/^\/campaigns\?again=1&creatives=/)));
+    mocks.push.mockClear();
+    await act(async () => fireEvent.click(bar().getByRole("button", { name: "Back" })));
+    await waitFor(() => expect(mocks.push).toHaveBeenCalledWith("/brand?again=1"));
   });
 
   it("a failed approve keeps the owner on the step and says so", async () => {
@@ -335,4 +394,31 @@ describe("core: step 2 batches (#1402)", () => {
     expect(old.ads.map((creative) => creative.id)).toEqual(["c"]);
     expect(setupBatch([])).toEqual({ ads: [], newest: null });
   });
+
+describe("#1901: each ad says whose picture it is", () => {
+  it("labels the owner's photo and the AI picture, in Hindi too", () => {
+    const yours = { ...ad("a"), generation: { image: { provider: "owner-photo" } } } as unknown as Creative;
+    const ai = { ...ad("b"), generation: { image: { provider: "cloudflare" } } } as unknown as Creative;
+    const { unmount } = render(<SetupAdsStep business={business} initialAds={[yours, ai]} />);
+    expect(screen.getByText("Your photo")).toBeInTheDocument();
+    expect(screen.getByText("AI picture")).toBeInTheDocument();
+    unmount();
+    render(<SetupAdsStep business={business} initialAds={[yours, ai]} words={{ locale: "hi", messages: hi.setup }} />);
+    expect(screen.getByText("आपकी फ़ोटो")).toBeInTheDocument();
+    expect(screen.getByText("AI तस्वीर")).toBeInTheDocument();
+  });
+});
+
+describe("#1438: step 2 in Hindi (CPO #1251, #1707)", () => {
+  it("says ready, picked and Continue in the CPO's words", () => {
+    render(<SetupAdsStep business={business} initialAds={[ad("a"), ad("b"), ad("c")]} words={{ locale: "hi", messages: hi.setup }} />);
+    expect(screen.getByRole("heading", { name: "आपके विज्ञापन तैयार हैं" })).toBeInTheDocument();
+    expect(screen.getByText(/^हमने सबसे अच्छे 2 चुने हैं।/)).toBeInTheDocument();
+    expect(screen.getAllByText("चुना गया")).toHaveLength(2);
+    expect(screen.getByText("चुनने के लिए टैप करें")).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: /के शब्द बदलें$/ })).toHaveLength(3);
+    expect(screen.getByRole("button", { name: "2 विज्ञापन के साथ आगे बढ़ें" })).toBeInTheDocument();
+    expect(screen.queryByText(/Continue with|Picked|Tap to pick/)).toBeNull();
+  });
+});
 });
