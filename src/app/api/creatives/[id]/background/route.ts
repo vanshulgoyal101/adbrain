@@ -49,6 +49,7 @@ async function handlePOST(req: Request, { params }: { params: Promise<{ id: stri
   }
   const instruction = "instruction" in parsed.data ? parsed.data.instruction : null;
   const ownerPhoto = "photoUrl" in parsed.data ? parsed.data.photoUrl : null;
+  const photoFit = "photoUrl" in parsed.data ? parsed.data.fit : undefined;
 
   const limited = await rateLimitResponse(`regenerate:${user.id}`, { limit: 30, windowMs: 5 * 60_000 });
   if (limited) return limited;
@@ -159,7 +160,8 @@ async function handlePOST(req: Request, { params }: { params: Promise<{ id: stri
     // Re-read after the slow image call so text or picture words edited meanwhile are kept.
     const { data: fresh } = await supabase.from("creatives").select("generation").eq("id", id).maybeSingle();
     const latest = isRecord(fresh?.generation) ? fresh.generation : isRecord(creative.generation) ? creative.generation : {};
-    const design = pictureDesign({ ...creative, generation: latest as Json }, business);
+    // #1904: an owner photo keeps the fit the owner chose; a new AI picture is made for the frame, so no fit.
+    const design = { ...pictureDesign({ ...creative, generation: latest as Json }, business), backgroundFit: photoFit };
     const photoUrl = await persistCreativeImage(supabase, business.id, group, angle.id, image.url);
     const imageUrl = await renderAndPersistDesign(supabase, business.id, group, angle.id, design, photoUrl, image.url);
 

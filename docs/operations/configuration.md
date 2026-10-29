@@ -32,7 +32,7 @@ not isolation.
 
 Generate and store secrets outside chat and command history. Production
 settings, credentials and encryption keys are DevOps-owned changes; see the
-[release policy](../RELEASING.md#startup-fast-path).
+[release policy](releasing.md#startup-fast-path).
 
 ## Core Services
 
@@ -170,7 +170,7 @@ may require additional guards; inspect the exact script before execution.
 `APP_URL` / `ADBRAIN_URL` are script-origin overrides, not aliases for
 `NEXT_PUBLIC_SITE_URL`. The migration runner uses `PGHOST`, `PGPORT` (default
 5432), `PGDATABASE`, `PGUSER`, `PGPASSWORD` and optional `PGSSLROOTCERT`; see
-[Release Workflow](../RELEASING.md#database-and-credential-safety).
+[Release Workflow](releasing.md#database-and-credential-safety).
 
 `npm run env:doctor` and `npm run env:doctor:strict` run
 [env-doctor.sh](../../scripts/env-doctor.sh), which only reports whether the

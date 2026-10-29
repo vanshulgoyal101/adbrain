@@ -1,0 +1,82 @@
+# Data Model: Migrations
+
+Part of [Architecture](README.md). [Tables and relationships](data-model.md) · [Leads, authority, RPCs and storage](data-model-access.md) · [Migrations](migrations.md).
+
+## Migration Map
+
+Apply only missing, reviewed migrations for the verified target. Filename order
+alone is not a safe deployment plan.
+
+| Migration | Scope / prerequisite |
+| --- | --- |
+| [001_harden_meta_credentials.sql](../../db/migrations/001_harden_meta_credentials.sql) | Historical legacy credential privilege hardening; inspect applicability to existing legacy table/readers |
+| [20260906_creative_generation.sql](../../db/migrations/20260906_creative_generation.sql) | Creative generation receipts and usage persistence |
+| [20260907_meta_instant_connect.sql](../../db/migrations/20260907_meta_instant_connect.sql) | Private token/attempt storage, connection metadata and RPCs |
+| [20260907_campaign_connect.sql](../../db/migrations/20260907_campaign_connect.sql) | Requires connection schema; drafts, durable operations, campaign bindings and fences |
+| [20260916_trusted_usage_and_rate_limits.sql](../../db/migrations/20260916_trusted_usage_and_rate_limits.sql) | Trusted usage privileges, quota aggregate, atomic shared limiter |
+| [20260918_product_events.sql](../../db/migrations/20260918_product_events.sql) | Structured event table/retention; enable database logging only after application |
+| [20260918_whatsapp_results.sql](../../db/migrations/20260918_whatsapp_results.sql) | Nullable conversation metrics; required before callers write WhatsApp results |
+| [20260919_campaign_reporting_identity.sql](../../db/migrations/20260919_campaign_reporting_identity.sql) | Destination/period columns and campaign-list index; historical values stay `unknown`/null |
+| [20260919_campaign_worker.sql](../../db/migrations/20260919_campaign_worker.sql) | Requires campaign operations; service enqueue/claim RPCs before worker mode |
+| [20260924_managed_billing.sql](../../db/migrations/20260924_managed_billing.sql) | Billing profiles, funding evidence and revocations |
+| [20260924_meta_billing_events.sql](../../db/migrations/20260924_meta_billing_events.sql) | Billing observation/conflict storage; managed billing first |
+| [20260926_campaign_integrity.sql](../../db/migrations/20260926_campaign_integrity.sql) | Requires WhatsApp metrics and reporting identity; `NOT VALID` checks and same-business FKs |
+| [20260926_validate_campaign_integrity.sql](../../db/migrations/20260926_validate_campaign_integrity.sql) | Validates those constraints; only after the preflight and approved repair |
+| [20260926_draft_authority.sql](../../db/migrations/20260926_draft_authority.sql) | Draft insert trigger and RPC-only update/delete; deploy with compatible callers |
+| [20260926_trusted_campaign_writes.sql](../../db/migrations/20260926_trusted_campaign_writes.sql) | Revokes owner campaign/result/audit writes; adds verified audit RPC; deploy with server callers |
+| [20260926_lead_sync_progress.sql](../../db/migrations/20260926_lead_sync_progress.sql) | `lead_sync_runs` and service-only sync RPCs; before resumable lead sync |
+| [20260926_lead_follow_up.sql](../../db/migrations/20260926_lead_follow_up.sql) | Lead workflow status/note, inbox indexes and `get_lead_page`; before the enquiry inbox routes |
+| [20260926_razorpay_test_orders.sql](../../db/migrations/20260926_razorpay_test_orders.sql) | Local test orders/events and service RPCs; never live activation |
+| [20260930_declared_preferences.sql](../../db/migrations/20260930_declared_preferences.sql) | Additive opt-in personal/business memory; apply before exposing Settings controls or relying on retrieval |
+| [20261001_creative_regeneration_claims.sql](../../db/migrations/20261001_creative_regeneration_claims.sql) | Service-only paid regeneration fence; apply before serving the updated route and verify private grants |
+| [20261021_creative_generation_settle_holds.sql](../../db/migrations/20261021_creative_generation_settle_holds.sql) | Same-signature progress RPC; settled partial runs release unused holds (#138); apply before serving the updated route |
+| [20261022_payment_webhook_health.sql](../../db/migrations/20261022_payment_webhook_health.sql) | Service-only `production_payment_webhook_health` counts (#178); apply before serving `/api/cron/payment-health` |
+| [20261022_meta_revoke_subject_scope.sql](../../db/migrations/20261022_meta_revoke_subject_scope.sql) | Same-signature service-only `meta_revoke_subject`; deauthorize clears only connections using that Meta user's token (#181) |
+| [20261023_meta_cost_settle.sql](../../db/migrations/20261023_meta_cost_settle.sql) | Service-only `customer_ad_settle_costs` and `customer_ad_settling_businesses`, evidence campaign index, balance no longer held by a settling run's stale evidence (#221); apply before serving the updated `enforce-spend` sweep |
+| [20261024_scheduler_pg_cron.sql](../../db/migrations/20261024_scheduler_pg_cron.sql) | `pg_cron` + `pg_net` jobs calling the cron routes on time (#274): enforce-spend, sync-leads and refresh-results every 15 min (refresh-results reads each campaign at most every 14 min, #992); owner-only `private.call_cron_route` reads `adbrain_cron_secret` from Vault and is a no-op without it; skipped where `pg_cron`/`pg_net` are not preloaded |
+| [20261024_security_advisors.sql](../../db/migrations/20261024_security_advisors.sql) | Advisor hardening (#359): `owns_business` becomes SECURITY INVOKER (same answer), `handle_new_user` trigger not executable by API roles, fixed `set_updated_at` search path, 8 RLS policies use `(select auth.uid())` (same predicates), indexes on lead/operation/connection tenant foreign keys |
+| [20261024_whatsapp_opens.sql](../../db/migrations/20261024_whatsapp_opens.sql) | Additive nullable `campaign_results.whatsapp_opens` (>= 0, #493); release before the code that writes it |
+| [20261025_managed_meta_accounts.sql](../../db/migrations/20261025_managed_meta_accounts.sql) | #519 2-Tier ledger: `managed_meta_accounts` (state machine trigger, fixed Meta IDs, owner-read RLS, service-role writes) and append-only `managed_meta_account_events` |
+| [20261025_managed_provision_lease.sql](../../db/migrations/20261025_managed_provision_lease.sql) | #521 wiring: `managed_meta_accounts.manager_user_id`/`manager_token_id` (composite FK to the same business's `meta_tokens`), provisioning lease and service-only claim/release RPCs |
+| [20261025_managed_spend_caps.sql](../../db/migrations/20261025_managed_spend_caps.sql) | #522: `private.managed_spend_caps` writer lease and last decision per managed child ad account, and service-role functions to claim, run, finish or abandon a pass, read the gate state and the tenant's attributed media per ad account |
+| [20261025_managed_whatsapp_page_link.sql](../../db/migrations/20261025_managed_whatsapp_page_link.sql) | #524 v1: `managed_meta_accounts.whatsapp_number_e164` (the Page-linked, Meta-verified number); `whatsapp_linked` needs it or the Embedded Signup IDs; one active customer per number |
+| [20261025_whatsapp_number_bindings.sql](../../db/migrations/20261025_whatsapp_number_bindings.sql) | #253 number boundary: `whatsapp_number_bindings` (owner-read RLS, service-role writes) |
+| [20261026_campaign_learnings.sql](../../db/migrations/20261026_campaign_learnings.sql) | #588 learning ledger: `campaign_learnings` (owner-read RLS, service-role writes) |
+| [20261026_campaign_edit_operations.sql](../../db/migrations/20261026_campaign_edit_operations.sql) | #773: `campaign_edit_operations` (owner-read RLS, service-role writes) |
+| [20261026_campaign_edit_operations_ad_creative.sql](../../db/migrations/20261026_campaign_edit_operations_ad_creative.sql) | #775: `campaign_edit_operations.kind` also allows `ad_creative` (an ad's words edited through a new creative); ad and creative ids live in `before`/`change`/`result`; additive, after #835 |
+| [20261027_campaign_edit_operations_switch.sql](../../db/migrations/20261027_campaign_edit_operations_switch.sql) | #765 (b): `state` adds `awaiting_switch` and `cancelled`, `phase` adds `copy` and `switch`; partial unique index `campaign_edit_operations_one_switch` (one waiting copy per campaign); additive |
+| [20261026_campaign_ads_ad_results.sql](../../db/migrations/20261026_campaign_ads_ad_results.sql) | #783/#789 results per ad: `campaign_ads` (ad → Meta creative / AdBrain creative, variant and position; written at Launch) and `ad_results` (Meta ad name and status, lifetime-to-date impressions, link clicks, chats, leads and spend in paise per ad; `delivered=false` rows for ads Meta hasn't shown; unique per campaign, ad and period with nulls not distinct). Both owner-read RLS, service-role writes, `(business_id, campaign_id)` FK to `campaigns(business_id, id)` (adds that key if missing), cascade on campaign delete. No lead data; additive, any release order |
+| [20261026_lead_customer_status.sql](../../db/migrations/20261026_lead_customer_status.sql) | #798: `leads.workflow_status` also allows `customer` ("Became a customer", counted for ₹ per customer) and `get_lead_page` filters by it; same function signature; constraint swap guarded on the column existing; additive, release before the app change that sends it |
+| [20261026_meta_token_search_path.sql](../../db/migrations/20261026_meta_token_search_path.sql) | #625: `meta_token_insert`/`get`/`delete` run with `search_path = ''` (#359 standard); bodies already fully qualified, behaviour unchanged |
+| [20261026_lead_campaign_link.sql](../../db/migrations/20261026_lead_campaign_link.sql) | Same-signature `lead_sync_checkpoint` links synced leads to their campaign by Meta campaign id and backfills empty links (#680); either release order works (the old function ignores the new key) |
+| [20261028_lead_sync_shared_page.sql](../../db/migrations/20261028_lead_sync_shared_page.sql) | Same-signature `lead_sync_checkpoint`: when the Page is also bound to another business (`meta_connections.page_id`), only leads from this business's own campaigns are imported (#1775); a business that alone has its Page imports all its Page's leads as before. Function body only |
+| [20261026_business_whatsapp_template.sql](../../db/migrations/20261026_business_whatsapp_template.sql) | #840: nullable `businesses.whatsapp_template` jsonb (object, ≤ 4 KB), the business's WhatsApp opening (greeting + pre-typed message with optional Call now, or ≤ 3 questions; the app validates it with zod in #840 step 3); covered by the owner policy; additive, any release order |
+| [20261026_meta_deletion_requests.sql](../../db/migrations/20261026_meta_deletion_requests.sql) | #730: `privacy_requests` gains `source`, `confirmation_code`, `meta_subject_id` (nullable `owner_id` only for callback rows); service-only `meta_deletion_request_record` files the callback's deletion request, idempotent per open code and owner |
+| [20261026_legacy_credentials_bucket_limits.sql](../../db/migrations/20261026_legacy_credentials_bucket_limits.sql) | #731: revoke browser access to legacy `meta_credentials` (when present); `brand-assets` 10 MB and `creatives` 20 MB, PNG/JPEG/WebP only |
+| [20261026_meta_connection_reauth.sql](../../db/migrations/20261026_meta_connection_reauth.sql) | #757: service-only `meta_connection_mark_reauth(business, generation)` marks a `connected` connection `reauth_required` after a Graph 190, only at the generation that failed |
+| [20261027_owner_whatsapp_alerts.sql](../../db/migrations/20261027_owner_whatsapp_alerts.sql) | #701 slice 1: `owner_alert_prefs` (per business: lead-alert and daily-results switches, `en`/`hi`, the owner's WhatsApp number once confirmed by "START <code>", opt-out time) and the append-only `owner_alert_consent_events` (event, method, time). Owners read their own rows; `owner_alert_prefs_set` and `owner_alert_start_verification` are owner-checked; service-only `owner_alert_confirm` (10-character code, 15 min) and `owner_alert_stop` (STOP turns both off; only a new START from that phone lifts it, never Settings). Nothing is sent from here |
+| [20261027_lead_first_contacted.sql](../../db/migrations/20261027_lead_first_contacted.sql) | #1049: `leads.first_contacted_at` (nullable; set once when the owner first taps WhatsApp them or Call on the enquiry card) and a partial index for Home's median time to first reply. Owners update their own leads under the existing policy; `get_lead_page` returns it with the row |
+| [20261027_owner_whatsapp_alerts_sends.sql](../../db/migrations/20261027_owner_whatsapp_alerts_sends.sql) | #701 slice 2: `owner_alert_sends` (one row per alert: a lead id or an IST date; `pending`/`sent`/`failed`/`retry`/`unknown`, so a lead is alerted at most once and an `unknown` send is never repeated), `owner_alert_template_blocks` (templates Meta moved out of UTILITY) and `send_failures`/`paused_at` on `owner_alert_prefs`. Service-only `owner_alert_claim` (verified, not opted out, switch on, not paused, template not blocked; the monthly cap, counted over all businesses, pauses only the daily line; locks the prefs row), `owner_alert_settle` (3 counted failures pause alerts; a sent one resets) and `owner_alert_template_block`; a new START clears the pause. Owners read their own sends |
+| [20261028_monthly_ai_cost.sql](../../db/migrations/20261028_monthly_ai_cost.sql) | #1717: `monthly_ai_cost_usd(p_business_id, p_since)`: the business's summed `llm_usage_events.estimated_cost_usd` since `p_since` (security invoker, so RLS scopes it; authenticated and service_role). For `AI_MONTHLY_COST_LIMIT_USD`. |
+| [20261029_plan_periods.sql](../../db/migrations/20261029_plan_periods.sql) | #718 slice 2: `plan_periods`, one row per paid ₹999 month (`open` while its Razorpay Payment Link waits, `paid`, `expired`; one open row per business). The first month after the first Go live is free and has no row. `plan_period_open`/`_set_link`/`_paid`/`_expire` are service-only; `_paid` locks the business, starts a month at the later of paid-through and payment, and also credits a payment that lands after its link expired. Owners read their own rows. |
+| [20261029_meta_token_purge.sql](../../db/migrations/20261029_meta_token_purge.sql) | #1648: revoking a Meta token (`meta_disconnect`, `meta_revoke_subject`, any path) wipes its ciphertext/nonce/tag via a trigger; backfills tokens already revoked; check keeps all three on live rows and none on revoked; `meta_token_get` masks secrets of revoked rows; #1649: `meta_token_revocation_target(business)` (service role) returns the connection's live token id, Meta subject, kind and `shared` (another business holds a live token for the same subject) so disconnect revokes the Meta grant only when it's safe |
+| [20261029_lead_erase.sql](../../db/migrations/20261029_lead_erase.sql) | #1761 (DPDP erasure, #1758): `leads_erase(business, lead \| campaign)` hard-deletes an enquiry or a campaign's enquiries as the caller and writes `lead_tombstones` (business + SHA-256 of Meta's lead id, no personal data) in the same statement; `lead_sync_checkpoint` never re-imports a tombstoned lead. Owners read and insert their own tombstones only |
+
+Payment, allowance and quote migrations are described above. The map is not a
+replay script: a fresh database starts from the canonical schema, and
+already-represented incremental files must not be blindly reapplied. The
+[migration runner](../../scripts/database-migrations.mjs) needs explicit connection
+settings (an exact `--target` and verified TLS for remote hosts), serializes
+runs with an advisory lock, records each SHA-256 checksum and rejects a changed
+already-applied file.
+
+For each upgrade: inventory deployed objects and grants, review existing data,
+test fresh/repeated-upgrade/concurrency paths locally, prepare backup and code
+compatibility, get remote-migration authorization, apply transactionally as
+appropriate, verify grants/RPCs, and reload PostgREST schema cache if needed.
+An additive migration can still change permissions and break old code.
+
+Code rollback does not reverse database writes or decrypt tokens with a different
+key. Preserve encrypted-key access, operation history, and existing binding facts.
+There is no general automated destructive down-migration workflow. Follow
+[Release Workflow](../operations/releasing.md) for environment changes.

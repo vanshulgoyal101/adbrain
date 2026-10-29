@@ -37,7 +37,7 @@ the words on the picture and the background. Details: [Create and review ads](cr
 ## 3. Review and go live
 
 The owner connects their Facebook Page and Meta ad account, chooses a daily
-budget (₹300, ₹500 or ₹1,000 a day for two days) and sees the most it can spend,
+budget (₹300, ₹500 or ₹1,000 a day) for 2 days or, for pilots, 7 days, and sees the most it can spend,
 Meta's GST included. AdBrain shows the areas, the WhatsApp welcome message and the
 weekly spending cap, then checks everything before anything is created. If a check
 fails, it says what to fix and nothing is created. Otherwise one tap creates the
@@ -55,7 +55,10 @@ background and when the page opens. A running campaign with a problem (Meta
 rejected an ad, no one has seen it after 6 hours, or its end date has passed)
 shows **Needs attention** with the reason. The owner can pause any campaign, set
 a weekly spending cap (with auto-pause on, AdBrain pauses the ads when the week's
-spend reaches it), and share results on WhatsApp. **New campaign** runs the same three steps again,
+spend reaches it), and share results on WhatsApp. After a week with 5 or more enquiries the
+owner logged, Home offers a results card for their WhatsApp Status: the
+business, how many people in their area enquired, their best ad and their
+WhatsApp number, never money. **New campaign** runs the same three steps again,
 asking only what changed. Details: [Manage](manage.md), [Settings](settings.md).
 
 ## Enquiries: reply to customers
@@ -74,4 +77,5 @@ results count it. Details: [Manage: sync, results and leads](manage.md).
 | Meta | Reviews and shows the ads, charges the ad money to the owner's ad account |
 
 The app also works in Hindi (Settings → App language): the menu, app bar and
-Home, including Recent activity, which shows only the Hindi label for each event.
+Home, including Recent activity, which shows only the Hindi label for each event,
+and each campaign's "How it's going" sentence and buttons, on Home and Campaigns (#1438).

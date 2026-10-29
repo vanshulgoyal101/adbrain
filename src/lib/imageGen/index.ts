@@ -52,6 +52,10 @@ async function executeImage(provider: ImageProvider, req: ImageRequest): Promise
 const FREE_IMAGE_WAIT_CAP_MS = 90_000;
 const FREE_IMAGE_DEFAULT_WAIT_MS = 15_000;
 const FREE_IMAGE_MIN_WAIT_MS = 15_000;
+// #2153: a picture busy past the 90 s cap parks the free pictures for 2 min per instance, so the rest of the batch fails at
+// once (about 90 s, not 3 × 90 s). A paid fallback's one-retry busy-out doesn't park: its next picture may get the next slot.
+const FREE_BUSY_PARK_MS = 2 * 60_000;
+let freeBusyUntil = 0;
 let freeImageQueue: Promise<unknown> = Promise.resolve();
 
 /** `retries`: how many busy answers to wait out; internal accounts wait up to the cap, a paid fallback once (#1422). */
@@ -78,6 +82,7 @@ async function freeImage(req: ImageRequest, retries = Number.POSITIVE_INFINITY):
 }
 
 async function freeImageWithRetry(provider: ImageProvider, req: ImageRequest, retries: number): Promise<GeneratedImage> {
+  if (freeBusyUntil > Date.now()) throw new FreeImageBusyError();
   const started = Date.now();
   for (let attempt = 0; ; attempt += 1) {
     req.signal?.throwIfAborted();
@@ -89,7 +94,10 @@ async function freeImageWithRetry(provider: ImageProvider, req: ImageRequest, re
       if (!busy) throw error;
       if (attempt >= retries) throw new FreeImageBusyError();
       const wait = Math.max(FREE_IMAGE_MIN_WAIT_MS, error.retryAfterMs ?? FREE_IMAGE_DEFAULT_WAIT_MS);
-      if (Date.now() - started + wait > FREE_IMAGE_WAIT_CAP_MS) throw new FreeImageBusyError();
+      if (Date.now() - started + wait > FREE_IMAGE_WAIT_CAP_MS) {
+        freeBusyUntil = Date.now() + FREE_BUSY_PARK_MS;
+        throw new FreeImageBusyError();
+      }
       await new Promise<void>((resolve, reject) => {
         const onAbort = () => { clearTimeout(timer); reject(req.signal?.reason); };
         const timer = setTimeout(() => { req.signal?.removeEventListener("abort", onAbort); resolve(); }, wait);

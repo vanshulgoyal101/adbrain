@@ -1,5 +1,5 @@
 import { reconnectByLabel } from "@/lib/meta/token-expiry";
-import { setupWords } from "@/i18n/request-locale";
+import { requestWords, setupWords } from "@/i18n/request-locale";
 import { Alert } from "@/components/ui/alert";
 import { clientCreative } from "@/lib/creative/client-receipt";
 import { madeForSetup } from "@/lib/creative/setup-picks";
@@ -162,6 +162,7 @@ export default async function CampaignsPage({
           whatsappLedger={ledger?.whatsapp ? { chats: ledger.whatsapp.results, spendRupees: ledger.whatsapp.spendRupees } : null}
           adAccountId={connection.adAccountId ?? ""}
           weeklyCap={weeklyCap}
+          verdictWords={await requestWords("verdict")}
           newCampaign={params.new === "1" ? { creativeIds: requested, review: params.review === "1", budget: chosenBudget } : undefined}
         />}
       </div>
