@@ -118,8 +118,9 @@ business that doesn't recruit, so a shop's 'EMI available' or an interiors offer
 blocks a launch; a lender, property seller or recruiter keeps the block (#1671).
 Lending and property checks use the business vertical (advisers, wealth, chit funds,
 trading, realtors, land and townships count), not offers mentioning its bank,
-credit-card EMI or flat interiors; an offer selling a loan, insurance, SIP or
-investment keeps the financial block. Education terms match whole words;
+credit-card EMI or flat interiors; an offer selling a loan, insurance, a SIP, a mutual
+fund, an investment plan or an insurance policy keeps the financial block, while a
+return policy or 'investment for your home' doesn't (#2097). Education terms match whole words;
 recruiting in either the vertical or offers keeps the employment block. A missing
 or blank vertical preserves the planner's category.
 The `campaign.interview` workflow event records fixed no-progress/limit codes,

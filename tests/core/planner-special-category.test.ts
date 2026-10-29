@@ -75,4 +75,27 @@ describe("core: an interiors or 'EMI available' offer never becomes a special ca
     expect(effectiveSpecialCategory("financial_products_services", { vertical: "Rooftop solar", offers: ["Solar loan in 48 hours"] })).toBe("financial_products_services");
     expect(effectiveSpecialCategory("financial_products_services", { vertical: "Solar", offers: ["EMI on credit cards", "HDFC Bank EMI"] })).toBe("none");
   });
+
+  // #2097: an offer that only mentions a policy, an investment or "sip" sells no financial product.
+  it.each([
+    ["Electronics shop", "No-cost EMI, 7-day return policy"],
+    ["Mobile store", "Easy exchange policy"],
+    ["Home interiors", "Smart investment for your home"],
+    ["Art cafe", "Sip and paint workshop"],
+    ["Juice bar", "sip a fresh juice for ₹49"],
+  ])("a '%s' offering '%s' is not financial", (vertical, offer) => {
+    expect(effectiveSpecialCategory("financial_products_services", { vertical, offers: [offer] })).toBe("none");
+  });
+
+  it.each([
+    ["Tax consultant", "Start a SIP in mutual funds"],
+    ["Tax consultant", "SIPs from ₹500 a month"],
+    ["Tax consultant", "LIC policy at your doorstep"],
+    ["Tax consultant", "Term policies for your family"],
+    ["Tax consultant", "Health insurance policy renewal"],
+    ["Tax consultant", "Investment plans for retirement"],
+    ["Tax consultant", "Fixed deposit at 8%"],
+  ])("a '%s' offering '%s' keeps the financial block", (vertical, offer) => {
+    expect(effectiveSpecialCategory("financial_products_services", { vertical, offers: [offer] })).toBe("financial_products_services");
+  });
 });
