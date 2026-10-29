@@ -191,7 +191,7 @@ export function MediaUploadSheet({ open, onOpenChange, uploads, businessId, vert
           {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
           {progress && (
             <p role="status" className="text-sm text-slate-700">
-              {progress} <span className="text-slate-500">You can close this. Keep this page open until it finishes.</span>
+              {progress} <span className="text-slate-500">You can close this box. Stay on this page until it finishes.</span>
             </p>
           )}
           <button type="button" onClick={() => void next()} disabled={!ready.length || saving || busy}
