@@ -37,7 +37,7 @@
     "metaReview": "Meta review",
     "chats": "Chats",
     "perChat": "Per chat",
-    "weekTitle": "Last week: {chats, plural, one {# chat} other {# chats}}, {enquiries, plural, one {# real enquiry} other {# real enquiries}}, ₹{spend} spent",
+    "weekTitle": "Last week: {chats, plural, one {# chat} other {# chats}}, {enquiries, plural, one {# real enquiry} other {# real enquiries}}, {spend} spent",
     "weekBest": "Best ad so far: ''{name}''.",
     "weekQuickQuestions": "Few people who open WhatsApp send a message. Try quick questions on your next run.",
     "weekAddEnquiries": "Add which chats were real enquiries, so you can see what each one costs.",

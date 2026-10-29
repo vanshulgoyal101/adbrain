@@ -4,7 +4,8 @@ import { useState } from "react";
 import Link from "next/link";
 import { X } from "lucide-react";
 import { translator, type AppLocale } from "@/i18n/locale";
-import { WEEK_DISMISS_ACTION, WEEK_SUGGESTION_HREF, type WeekSummary } from "@/lib/home/week-summary";
+import { formatMoney } from "@/lib/format";
+import { WEEK_SUGGESTION_HREF, type WeekSummary } from "@/lib/home/week-summary";
 
 const SUGGESTION = { quick_questions: "weekQuickQuestions", add_enquiries: "weekAddEnquiries", run_again: "weekRunAgain" } as const;
 const ACTION = { quick_questions: "weekOpenCampaigns", add_enquiries: "weekAddEnquiriesAction", run_again: "weekRunAgainAction" } as const;
@@ -14,7 +15,7 @@ export function HomeWeekCard({ summary, locale = "en" }: { summary: WeekSummary;
   const [hidden, setHidden] = useState(false);
   if (hidden) return null;
   const t = translator(locale, "home");
-  const spend = Math.round(summary.spend).toLocaleString("en-IN");
+  const spend = formatMoney(Math.round(summary.spend));
   return (
     <section aria-labelledby="week-title" className="relative rounded-lg border border-slate-200 bg-white p-4 pr-12">
       <h2 id="week-title" className="text-base font-semibold text-slate-900">
@@ -29,7 +30,7 @@ export function HomeWeekCard({ summary, locale = "en" }: { summary: WeekSummary;
           </Link>
         </div>
       )}
-      <button type="button" aria-label={t("weekDismiss")} data-product-event={WEEK_DISMISS_ACTION} onClick={() => setHidden(true)}
+      <button type="button" aria-label={t("weekDismiss")} data-product-event="home.week_summary_dismiss" onClick={() => setHidden(true)}
         className="absolute right-1 top-1 inline-flex h-11 w-11 items-center justify-center rounded-md text-slate-500 hover:bg-slate-50">
         <X className="h-4 w-4" aria-hidden="true" />
       </button>

@@ -37,7 +37,7 @@
     "metaReview": "Meta जांच",
     "chats": "चैट",
     "perChat": "हर चैट",
-    "weekTitle": "पिछला हफ़्ता: {chats} चैट, {enquiries} असली पूछताछ, ₹{spend} खर्च",
+    "weekTitle": "पिछला हफ़्ता: {chats} चैट, {enquiries} असली पूछताछ, {spend} खर्च",
     "weekBest": "अब तक का सबसे अच्छा विज्ञापन: ''{name}''।",
     "weekQuickQuestions": "WhatsApp खोलने वालों में से कम लोग मैसेज भेजते हैं। अगली बार क्विक सवाल आज़माएँ।",
     "weekAddEnquiries": "बताइए कौन-सी चैट असली पूछताछ थीं, ताकि हर पूछताछ का खर्च दिखे।",
