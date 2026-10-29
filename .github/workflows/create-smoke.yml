@@ -2,16 +2,19 @@ name: Create smoke
 # #2145: every 2 hours the smoke account changes one ad's background in production (`--picture`), so dead free
 # pictures fail a check instead of waiting for someone to walk into them. That run spends $0: a template prompt,
 # no text model, and smoke-core.mjs refuses before the request unless the account makes free pictures.
-# A dispatched `create` runs the full Create (3 ads); its words use the paid text models (record it in #88).
+# #2230: daily at 08:47Z (after Gemini's free quota resets at midnight Pacific) `--prepare` plans one audience on
+# free text only, $0.
+# A dispatched `create` runs the full Create (3 ads); the smoke login's words use free text only (#2230).
 on:
   schedule:
     - cron: "17 */2 * * *"
+    - cron: "47 8 * * *"
   workflow_dispatch:
     inputs:
       mode:
-        description: "picture: free, $0. create: 3 ads with paid text (record in #88)."
+        description: "picture: free, $0. prepare: one audience plan on free text, $0. create: 3 ads (free text)."
         type: choice
-        options: [picture, create]
+        options: [picture, prepare, create]
         default: picture
 permissions:
   contents: read
@@ -31,9 +34,9 @@ jobs:
     defaults:
       run:
         shell: bash
-    # The dispatch input reaches the shell only as this variable, mapped to a fixed flag by `case`.
+    # The dispatch input and the schedule reach the shell only as variables, mapped to a fixed flag by `case`.
     env:
-      REQUESTED_MODE: ${{ inputs.mode }}
+      REQUESTED_MODE: ${{ inputs.mode || (github.event.schedule == '47 8 * * *' && 'prepare') || 'picture' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         timeout-minutes: 3
@@ -53,8 +56,8 @@ jobs:
           timeout -k 30s 8m npx playwright install --with-deps chromium && exit 0
           echo "::warning::playwright install --with-deps did not finish in 8 min; installing Chromium without OS packages"
           timeout -k 30s 4m npx playwright install chromium
-      # No retry: a create attempt is another paid text run. Each mode deletes what it replaced or made after a PASS.
-      - name: Smoke (free picture, or a dispatched Create)
+      # No retry: a second attempt only spends more of the free tiers. Each mode deletes what it replaced or made after a PASS.
+      - name: Smoke (free picture, free-text Prepare, or a dispatched Create)
         timeout-minutes: 15
         env:
           SMOKE_EMAIL: ${{ secrets.SMOKE_EMAIL }}
@@ -63,6 +66,7 @@ jobs:
         run: |
           case "${REQUESTED_MODE:-picture}" in
             picture) flag=--picture ;;
+            prepare) flag=--prepare ;;
             create) flag=--create ;;
             *) echo "FAIL unknown mode" | tee smoke.txt; exit 1 ;;
           esac
@@ -79,8 +83,10 @@ jobs:
           smoke=$(grep -E '^(PASS|FAIL|NOTE)' smoke.txt 2>/dev/null || echo "smoke did not run; see the run log")
           if grep -q '^FAIL Picture' smoke.txt 2>/dev/null; then
             cause="Free pictures are failing in production: the scheduled check could not save a new background from a free provider (#2145). It spent nothing."
-          elif [ "${REQUESTED_MODE:-picture}" = picture ]; then
-            cause="The scheduled free-picture check failed outside the picture step; see the lines above (#2145)."
+          elif grep -q '^FAIL Prepare plan' smoke.txt 2>/dev/null; then
+            cause="Prepare's plan failed in production on free text (#2230): keys, a retired model, the prompt or validation. The receipts above say which; it spent nothing."
+          elif [ "${REQUESTED_MODE:-picture}" != create ]; then
+            cause="The scheduled \$0 check ($REQUESTED_MODE) failed outside its own step; see the lines above (#2145)."
           else
             cause="Free pictures are the usual cause (#2145). A FAIL Create with saved ads keeps them in the smoke workspace; a FAIL Cleanup leaves the ads of that run in Review."
           fi
@@ -101,4 +107,4 @@ jobs:
           open=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search 'in:title "Create smoke failed"' --json number --jq '.[0].number // empty')
           [ -n "$open" ] || exit 0
           last=$(gh issue view "$open" -R "$GITHUB_REPOSITORY" --json comments --jq '.comments[-1].body // ""')
-          [[ "$last" == "Create smoke passed again"* ]] || gh issue comment "$open" -R "$GITHUB_REPOSITORY" -b "Create smoke passed again: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          [[ "$last" == "Create smoke passed again"* ]] || gh issue comment "$open" -R "$GITHUB_REPOSITORY" -b "Create smoke passed again ($REQUESTED_MODE): $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"

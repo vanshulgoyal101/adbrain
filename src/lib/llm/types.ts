@@ -143,7 +143,7 @@ export class LLMError extends Error {
   }
 }
 
-export type ProviderFailureReason = "CREDIT_EXHAUSTED" | "RATE_LIMIT" | "PROVIDER_SERVER" | "PROVIDER_CLIENT" | "TRANSPORT" | "TIMEOUT" | "TRUNCATED" | "UNKNOWN" | "MIXED" | "COOLDOWN";
+export type ProviderFailureReason = "CREDIT_EXHAUSTED" | "RATE_LIMIT" | "PROVIDER_SERVER" | "PROVIDER_CLIENT" | "TRANSPORT" | "TIMEOUT" | "TRUNCATED" | "UNKNOWN" | "MIXED" | "COOLDOWN" | "FREE_TEXT_UNAVAILABLE";
 
 export class AllLLMProvidersFailedError extends Error {
   constructor(readonly reason: ProviderFailureReason, providerCount: number) {
