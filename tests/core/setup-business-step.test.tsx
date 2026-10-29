@@ -138,6 +138,35 @@ describe("core: <SetupBusinessStep> (#1269)", () => {
   const type = (label: string, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
   const makeMyAds = () => within(screen.getByRole("navigation", { name: "Setup steps" })).getByRole("button", { name: "Make my ads" });
 
+  it("#1934: returning mode asks only for the new offer (last one as placeholder); the rest folds into 'Same as last time'", async () => {
+    const launched = { ...business, vertical: "Rooftop solar", locations: ["Mohali", "Kharar"], offers: ["Diwali 10% off"], phone: "9876543210" } as unknown as Business;
+    const { SetupBusinessStep } = await import("@/components/setup-business-step");
+    render(<SetupBusinessStep business={launched} returning />);
+    expect(screen.getByRole("heading", { name: "What's new this time?" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Your offer")).toHaveValue("");
+    expect(screen.getByLabelText("Your offer")).toHaveAttribute("placeholder", "Diwali 10% off");
+    for (const label of ["Business name", "What you sell", "Where you serve", "WhatsApp number"]) expect(screen.queryByLabelText(label)).toBeNull();
+    expect(screen.getByText(/Same as last time: Rooftop solar · Mohali, Kharar · 9876543210\./)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Fill it from my website/ })).toBeNull();
+    // Nothing typed: it stays and says what's missing.
+    await act(async () => fireEvent.click(makeMyAds()));
+    expect(screen.getByText("Add one offer, like a free visit or a first-time price.")).toBeInTheDocument();
+    expect(mocks.push).not.toHaveBeenCalled();
+    type("Your offer", "Free site survey this week");
+    await act(async () => fireEvent.click(makeMyAds()));
+    await waitFor(() => expect(mocks.push).toHaveBeenCalledWith("/create?again=1"));
+    expect(mocks.saveSetupBusiness.mock.calls.at(-1)![1]).toMatchObject({ offer: "Free site survey this week", vertical: "Rooftop solar" });
+  });
+
+  it("#1934: 'Change' opens the folded fields", async () => {
+    const launched = { ...business, vertical: "Rooftop solar", locations: ["Mohali"], offers: ["Diwali 10% off"], phone: "9876543210" } as unknown as Business;
+    const { SetupBusinessStep } = await import("@/components/setup-business-step");
+    render(<SetupBusinessStep business={launched} returning />);
+    fireEvent.click(screen.getByRole("button", { name: "Change" }));
+    expect(screen.getByLabelText("Where you serve")).toHaveValue("Mohali");
+    expect(screen.queryByText(/Same as last time/)).toBeNull();
+  });
+
   it("#1853: after हिंदी, the note stays for this visit even when the cookie's re-render turns the offer off", async () => {
     const setAppLanguage = vi.fn(async () => ({ ok: true }));
     vi.doMock("@/app/(app)/settings/language-actions", () => ({ setAppLanguage }));

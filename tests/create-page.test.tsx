@@ -137,6 +137,15 @@ describe("Create page for a first-timer (#1270)", () => {
     expect(setupProps.mock.lastCall?.[0]).toMatchObject({ initialAds: [], earlier: false });
   });
 
+  it("#1934: after a launch, ?again=1 runs step 2 again (the owner just tapped Make my ads), never 'earlier'", async () => {
+    getPrimaryBusiness.mockResolvedValue(usable);
+    hasLaunchedCampaign.mockResolvedValue(true);
+    getSetupCreativeBatch.mockResolvedValue({ ads: [{ id: "old", generation: { sourceFacts: ["older details"] } }], newest: null } as never);
+    const { default: CreatePage } = await import("@/app/(app)/create/page");
+    render(await CreatePage({ searchParams: Promise.resolve({ again: "1" }) }));
+    expect(setupProps.mock.lastCall?.[0]).toMatchObject({ initialAds: [], earlier: false, again: true });
+  });
+
   it("+ lands here; a first-timer without the five facts resumes at step 1 (#1272)", async () => {
     getPrimaryBusiness.mockResolvedValue(sparse);
     hasLaunchedCampaign.mockResolvedValue(false);

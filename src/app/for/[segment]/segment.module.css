@@ -32,6 +32,8 @@
 .block h2 { font-size: 22px; line-height: 1.25; font-weight: 700; }
 .list, .steps { margin-top: 14px !important; padding-left: 20px; display: grid; gap: 10px; font-size: 16px; line-height: 1.55; }
 .steps li::marker { font-weight: 700; color: var(--wa); }
+.proof { margin-top: 14px !important; font-size: 16px; line-height: 1.55; max-width: 60ch; }
+.block > .proof:first-child { margin-top: 0 !important; }
 .note { margin-top: 14px !important; font-size: 15px; color: var(--muted); }
 
 .footer { margin-top: auto; display: flex; flex-wrap: wrap; gap: 12px 20px; justify-content: space-between; padding: 24px 20px; border-top: 1px solid var(--border); font-size: 14px; color: var(--muted); }

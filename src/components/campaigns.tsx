@@ -498,6 +498,9 @@ function BusinessCampaigns({
   // #1588 (Designer, 390): search and the status filter earn their place only on a long list (or one that pages).
   const showListTools = campaigns.filter(campaign => !goneInMeta(campaign)).length >= 6 || Boolean(initialNextCursor || nextListCursor) || Boolean(campaignQuery) || statusFilter !== "all";
   const goneCampaigns = visibleCampaigns.filter(folded);
+  // #1926: deleted campaigns and saved drafts aren't running; with any of them the header keeps its New campaign.
+  const liveCount = campaigns.filter(campaign => !goneInMeta(campaign)).length;
+  const hasHistory = campaigns.length > 0 || savedDrafts.length > 0;
   const totalDailyBudget = effectiveDailyBudget(budget, abTest ? 2 : 1);
   // #1342: live campaigns other than `exceptId`, the server's list updated by what this page has since turned on or off.
   function otherLiveBudgets(exceptId?: string): CampaignSpend[] {
@@ -721,7 +724,7 @@ function BusinessCampaigns({
   }, [showComposer]);
   function toggleComposer() {
     if (preparing || creating) return;
-    if (showComposer) { focusEmptyRef.current = campaigns.length === 0; setShowComposer(false); return; }
+    if (showComposer) { focusEmptyRef.current = !hasHistory; setShowComposer(false); return; }
     focusOnOpenRef.current = true;
     setShowComposer(true);
   }
@@ -1560,8 +1563,10 @@ function BusinessCampaigns({
       {confirmDialog}
         <p className="text-sm text-slate-500">{campaigns.filter(campaign => campaign.status === "active").length} {OWNER_WORDS.running.toLowerCase()} <span className="mx-2 text-slate-300">/</span> {campaigns.filter(campaign => campaign.status === "paused").length} paused</p>
         <div className="flex flex-wrap items-center gap-2">
-          {/* #1588: the zero state carries its own New campaign; a pending audience decision owns the one solid button. */}
-          {(showComposer || campaigns.length > 0) && <Button variant={showComposer || pendingDecision ? "outline" : "primary"} onClick={toggleComposer} aria-expanded={showComposer} aria-controls="campaign-composer">{showComposer ? <X className="h-4 w-4" aria-hidden="true" /> : <Plus className="h-4 w-4" aria-hidden="true" />}{showComposer ? "Close campaign setup" : "New campaign"}</Button>}
+          {/* #1588: the zero state carries its own New campaign; a pending audience decision owns the one solid button.
+              #1934 (CPO): New campaign is the guided 3 steps everywhere; this composer stays as a quiet More options. */}
+          {hasHistory && !showComposer && <Link href="/brand?again=1" className={`inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-md px-4 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${pendingDecision ? "border border-slate-300 bg-white text-slate-900 hover:bg-slate-50" : "bg-primary text-primary-foreground hover:bg-primary-hover"}`}><Plus className="h-4 w-4" aria-hidden="true" />New campaign</Link>}
+          {(showComposer || hasHistory) && <Button variant={showComposer ? "outline" : "quiet"} onClick={toggleComposer} aria-expanded={showComposer} aria-controls="campaign-composer">{showComposer && <X className="h-4 w-4" aria-hidden="true" />}{showComposer ? "Close campaign setup" : "More options"}</Button>}
         </div>
       </div>
       {error && <Alert variant="error">{error}</Alert>}
@@ -2298,12 +2303,12 @@ function BusinessCampaigns({
           <h2 className="text-lg font-semibold text-slate-900">
             Your campaigns{" "}
             <span className="font-normal text-slate-400">
-              ({campaigns.filter(campaign => !goneInMeta(campaign)).length})
+              ({liveCount})
             </span>
           </h2>
           {metaReady && (
             <div className="flex flex-wrap items-center gap-2">
-              {campaigns.length > 0 && (
+              {liveCount > 0 && (
                 <DropdownMenu>
                   <DropdownMenuTrigger aria-label="More list actions"
                     className="inline-flex size-11 items-center justify-center rounded-md text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
@@ -2346,13 +2351,16 @@ function BusinessCampaigns({
           <div className="flex min-w-0 flex-1 basis-40 items-center gap-2 rounded-md border border-slate-300 px-3"><Search size={16} className="shrink-0 text-slate-400" aria-hidden="true" /><input type="search" aria-label="Search campaigns" placeholder="Search campaigns" value={campaignQuery} onChange={event => setCampaignQuery(event.target.value)} className="h-[42px] w-full min-w-0 bg-transparent text-sm outline-none" /></div>
           <select aria-label="Campaign status" value={statusFilter} onChange={event => setStatusFilter(event.target.value)} className="h-11 rounded-md border border-slate-300 bg-white px-3 text-sm"><option value="all">All statuses</option><option value="active">{OWNER_WORDS.running}</option><option value="paused">Paused</option><option value="draft">Draft</option><option value="completed">Completed</option></select>
         </div>}
-        {campaigns.length === 0 && !campaignQuery && statusFilter === "all" ? (
+        {liveCount === 0 && !campaignQuery && statusFilter === "all" && (
           <div className="flex flex-col items-center gap-3 border-y border-slate-200 py-12 text-center">
-            <h3 className="font-semibold text-slate-900">No campaigns yet</h3>
-            <p className="max-w-sm text-sm text-slate-600">Pick your approved ads and a daily budget. Nothing spends until you go live.</p>
-            {!showComposer && <Button id="campaigns-empty-new" onClick={toggleComposer} aria-controls="campaign-composer"><Plus className="h-4 w-4" aria-hidden="true" />New campaign</Button>}
+            <h3 className="font-semibold text-slate-900">{hasHistory ? "None running" : "No campaigns yet"}</h3>
+            <p className="max-w-sm text-sm text-slate-600">{savedDrafts.length
+              ? `Your ${savedDrafts.length} saved ${savedDrafts.length === 1 ? "draft is" : "drafts are"} below.`
+              : "Pick your approved ads and a daily budget. Nothing spends until you go live."}</p>
+            {!showComposer && !hasHistory && <Button id="campaigns-empty-new" onClick={toggleComposer} aria-controls="campaign-composer"><Plus className="h-4 w-4" aria-hidden="true" />New campaign</Button>}
           </div>
-        ) : visibleCampaigns.length === 0 ? <div className="flex flex-col items-center gap-3 border-y border-slate-200 py-12"><Search aria-hidden="true" className="text-slate-400" /><h3 className="font-semibold">No matching campaigns</h3><Button variant="outline" onClick={() => { setCampaignQuery(""); setStatusFilter("all"); }}>Clear filters</Button></div> : (
+        )}
+        {campaigns.length === 0 && !campaignQuery && statusFilter === "all" ? null : visibleCampaigns.length === 0 ? <div className="flex flex-col items-center gap-3 border-y border-slate-200 py-12"><Search aria-hidden="true" className="text-slate-400" /><h3 className="font-semibold">No matching campaigns</h3><Button variant="outline" onClick={() => { setCampaignQuery(""); setStatusFilter("all"); }}>Clear filters</Button></div> : (
           <div className="flex flex-col border-t border-slate-200">
             {audienceEdit && (
               <EditAudienceDialog
@@ -2616,7 +2624,7 @@ function BusinessCampaigns({
               );
             });
             return folded
-              ? list.length > 0 && <details key="gone" className="group border-b border-slate-200"><summary className="flex min-h-11 cursor-pointer items-center text-sm font-medium text-slate-600">Deleted ({list.length})</summary>{cards}</details>
+              ? list.length > 0 && <details key="gone" className="group border-b border-slate-200"><summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 text-sm font-medium text-slate-600 [&::-webkit-details-marker]:hidden"><ChevronRight className="h-4 w-4 text-slate-500 transition-transform group-open:rotate-90" aria-hidden="true" />Deleted ({list.length})</summary>{cards}</details>
               : cards;
             })}
           </div>
