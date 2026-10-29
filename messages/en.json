@@ -270,6 +270,8 @@
       "budget": "Budget",
       "budgetLine": "{daily} a day for {days} days, {total} at most including Meta's GST",
       "dailyBudget": "Daily budget",
+      "runDays": "How many days",
+      "dayChoice": "{days} days",
       "perDay": "{amount} a day",
       "where": "Where",
       "whereFallback": "Where your business serves",
