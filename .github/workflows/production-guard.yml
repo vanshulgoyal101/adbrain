@@ -64,6 +64,19 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/production-guard.mjs served "$SHA" | tee smoke.txt
+      - name: Capture the authorized drill deployment before the forced smoke
+        id: drill
+        if: inputs.drill && env.VERCEL_TOKEN != ''
+        run: |
+          current=$(node scripts/production-guard.mjs live)
+          sha=$(jq -er '.sha' <<< "$current")
+          deployment=$(jq -er '.id' <<< "$current")
+          if ! [[ "$sha" =~ ^[0-9a-f]{40}$ && "$deployment" =~ ^dpl_[A-Za-z0-9]+$ ]]; then
+            echo "::error::Drill refused: production deployment identity is unknown or invalid"
+            exit 1
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "deployment=$deployment" >> "$GITHUB_OUTPUT"
       - name: Read-only core smoke (one retry)
         id: smoke
         if: steps.wait.outputs.superseded != 'true' && steps.served.outputs.superseded != 'true'
@@ -93,8 +106,11 @@ jobs:
           { echo '### WS1 walk'; echo '```'; cat ws1.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
           exit "$rc"
       - name: Roll production back
-        if: failure() && steps.smoke.outcome == 'failure' && steps.install.outputs.deps != 'missing' && (github.event_name == 'deployment_status' || inputs.drill) && env.VERCEL_TOKEN != ''
-        run: node scripts/production-guard.mjs rollback "$SHA" 2>&1 | tee rollback.txt
+        if: failure() && steps.smoke.outcome == 'failure' && steps.install.outputs.deps != 'missing' && (github.event_name == 'deployment_status' || inputs.drill) && (!inputs.drill || steps.drill.outcome == 'success') && env.VERCEL_TOKEN != ''
+        env:
+          FAILED_SHA: ${{ steps.drill.outputs.sha || env.SHA }}
+          FAILED_DEPLOYMENT: ${{ steps.drill.outputs.deployment }}
+        run: node scripts/production-guard.mjs rollback "$FAILED_SHA" "$FAILED_DEPLOYMENT" 2>&1 | tee rollback.txt
       - name: Open core bug
         if: failure() && !inputs.force_fail
         env:

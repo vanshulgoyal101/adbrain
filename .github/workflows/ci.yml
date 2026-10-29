@@ -118,6 +118,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run test:core
+      - name: Offline production-guard regressions (#2030)
+        run: node --experimental-vm-modules --test scripts/production-guard.test.mjs
       # Generation quota holds on real Postgres: settled partial runs must not lock Create (#138).
       - run: META_TEST_PG_BIN="$(pg_config --bindir)" npm run test:meta-db -- --generation-only
 
