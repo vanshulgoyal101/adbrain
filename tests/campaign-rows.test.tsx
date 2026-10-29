@@ -237,6 +237,27 @@ describe("Campaigns rows (#403 S5)", () => {
       expect(screen.getByText("Deleted (2)").closest("details")).not.toBeNull();
     });
 
+    // #2150 (Designer, #1793 walk): "below" pointed at Deleted, and a deleted WhatsApp campaign brought the reply tips.
+    it("reads None running → Saved drafts → Deleted, with no WhatsApp tips for deleted campaigns", async () => {
+      mocks.drafts.mockResolvedValue(drafts);
+      const gone = (id: string) => ({ ...deleted(id), destination: "whatsapp" }) as Campaign;
+      render(<Campaigns business={business} approved={[]} initialCampaigns={[gone("campaign-8"), gone("campaign-9")]} initialResults={{}}
+        initialDrafts={drafts as never} leadForms={[]} leadFormError={null} metaReady adAccountId="act_999" />);
+      const none = await screen.findByRole("heading", { name: "None running" });
+      const saved = screen.getByRole("group", { name: "Saved drafts" });
+      const fold = screen.getByText("Deleted (2)").closest("details")!;
+      expect(none.compareDocumentPosition(saved) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(saved.compareDocumentPosition(fold) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(screen.getAllByRole("group", { name: "Saved drafts" })).toHaveLength(1);
+      expect(screen.queryByText(/tips to get more replies/)).toBeNull();
+    });
+
+    it("keeps the WhatsApp tips while a WhatsApp campaign is live, next to a deleted one", async () => {
+      render(<Campaigns business={business} approved={[]} initialCampaigns={[deleted("campaign-8"), { ...paused, destination: "whatsapp" } as Campaign]} initialResults={{}}
+        leadForms={[]} leadFormError={null} metaReady adAccountId="act_999" />);
+      expect(await screen.findByText(/tips to get more replies/)).toBeInTheDocument();
+    });
+
     it("without drafts, says what to do next", async () => {
       render(<Campaigns business={business} approved={[]} initialCampaigns={[deleted("campaign-8")]} initialResults={{}}
         leadForms={[]} leadFormError={null} metaReady adAccountId="act_999" />);

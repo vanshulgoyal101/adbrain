@@ -2350,7 +2350,7 @@ function BusinessCampaigns({
           {syncError ? <span className="font-medium text-danger">{syncError}</span> : lastSynced && !syncing ? tc("header.synced", { age: ageText(verdictTranslator(verdictWords), lastSynced.toISOString()) }) : null}
         </p>}
         {(() => {
-          const ready = !(showComposer && destination === "whatsapp") && campaigns.some((c) => campaignDestination(c, results[c.id]) === "whatsapp");
+          const ready = !(showComposer && destination === "whatsapp") && campaigns.some((c) => !goneInMeta(c) && campaignDestination(c, results[c.id]) === "whatsapp");
           return ready && <div className="mb-4"><WhatsAppReadyChecklist businessId={business.id} /></div>;
         })()}
         {showListTools && <div className="mb-5 flex flex-wrap gap-2">
@@ -2636,8 +2636,8 @@ function BusinessCampaigns({
                 </article>
               );
             });
-            return folded
-              ? list.length > 0 && <details key="gone" className="group border-b border-slate-200"><summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 text-sm font-medium text-slate-600 [&::-webkit-details-marker]:hidden"><ChevronRight className="h-4 w-4 text-slate-500 transition-transform group-open:rotate-90" aria-hidden="true" />{tc("list.deleted", { n: list.length })}</summary>{cards}</details>
+            return folded // #2150: Saved drafts (actionable) come before the Deleted fold (history).
+              ? list.length > 0 && [!showComposer && savedDraftsBlock && <div key="drafts" className="mt-6">{savedDraftsBlock}</div>, <details key="gone" className="group border-b border-slate-200"><summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 text-sm font-medium text-slate-600 [&::-webkit-details-marker]:hidden"><ChevronRight className="h-4 w-4 text-slate-500 transition-transform group-open:rotate-90" aria-hidden="true" />{tc("list.deleted", { n: list.length })}</summary>{cards}</details>]
               : cards;
             })}
           </div>
@@ -2648,7 +2648,7 @@ function BusinessCampaigns({
             {tc(listLoading ? "list.loading" : "list.loadMore")}
           </Button>
         </div>}
-        {!showComposer && savedDraftsBlock && <div className="mt-6">{savedDraftsBlock}</div>}
+        {!showComposer && savedDraftsBlock && goneCampaigns.length === 0 && <div className="mt-6">{savedDraftsBlock}</div>}
       </div>
     </div>
   );
