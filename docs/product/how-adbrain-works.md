@@ -87,5 +87,7 @@ So do the errors from changing an ad's background, words or version, the assista
 Download (#2324).
 So do the refusals when you turn a campaign on, pause it or delete it (spend cap, Meta funds,
 Meta access, a pause Meta didn't confirm) (#2312).
-Errors from Enquiries and connecting Facebook come in Hindi too (#2327).
+Errors from Enquiries and connecting Facebook come in Hindi too (#2327), as do the Day 7
+question, privacy requests and the lead-form picker (#2335).
+Errors from Brand's website or text autofill and from preparing a campaign plan come in Hindi too (#2330).
 So do the errors from saving your spend limits and preferences in Settings (#2334).
