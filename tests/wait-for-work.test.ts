@@ -262,6 +262,10 @@ describe("next item (#364: idle with a full queue)", () => {
     // Standing channels and umbrellas (#364, #418) are never "your next item".
     expect(nextItem([issue(364, "standing"), issue(400, "core")], [])?.number).toBe(400);
   });
+  it("owned PRs count toward a queue (#2122: QA's reviews are its work)", () => {
+    const prs = [1, 2, 3].map((n) => ({ ...issue(n, "owner:qa"), pull_request: {} }));
+    expect(lowQueues(prs).map((l) => l.role)).not.toContain("qa");
+  });
   it("parked items don't count toward a queue", () => {
     expect(lowQueues([issue(1, "owner:dev"), issue(2, "owner:dev", "parked")]).map((l) => l.role)).toContain("dev");
   });
