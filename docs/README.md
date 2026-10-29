@@ -15,7 +15,7 @@ feature branch or a passing local test.
 | Reader | Read first | Then read |
 | --- | --- | --- |
 | Pilot, sales or new team role | [How AdBrain works](product/how-adbrain-works.md) | [Features and workflows](product/README.md) |
-| Owner or coordinating worker | [Worker orchestration](ORCHESTRATION.md) | [Roadmap](roadmap.md) |
+| Owner or coordinating worker | [Worker orchestration](team/orchestration.md) | [Roadmap](roadmap.md) |
 | New developer | [Quick start](team/quick-start.md) | [Architecture](ARCHITECTURE.md) |
 | Product or support | [Features and workflows](product/README.md) | [Roadmap](roadmap.md) |
 | Operator | [Deployment configuration](operations/deploy.md) | [Release policy](operations/releasing.md) |
@@ -26,7 +26,7 @@ feature branch or a passing local test.
 
 | Guide | Questions it answers |
 | --- | --- |
-| [Worker orchestration](ORCHESTRATION.md) | Who owns each packet/file/resource, what blocks it, and what evidence permits integration? |
+| [Worker orchestration](team/orchestration.md) | Who owns each packet/file/resource, what blocks it, and what evidence permits integration? |
 | [Features and workflows](product/README.md) | What can owners do, and where are the limits? |
 | [API reference](api/README.md) | Which routes/actions exist, which parameters are accepted, and what do failures mean? |
 | [Configuration](operations/configuration.md) | Which variables are required, what are their defaults, and which changes cost money or require a restart? |
@@ -47,7 +47,7 @@ feature branch or a passing local test.
 ## Plans and Records
 
 [Roadmap](roadmap.md) and the [payment plan](PAYMENTS-PLAN.md) hold intent and
-decisions; the [worker dispatch](ORCHESTRATION.md) holds current assignments.
+decisions; the [worker dispatch](team/orchestration.md) holds current assignments.
 Consolidate guidance into its owning reference instead of adding dated documents.
 
 ## Moved (#1851)
@@ -70,6 +70,7 @@ last move.
 | `AI_PIPELINE.md` | [architecture/ai-pipeline.md](architecture/ai-pipeline.md), [-variants](architecture/ai-pipeline-variants.md) and [-routing](architecture/ai-pipeline-routing.md) |
 | `DATA_MODEL.md` | [architecture/data-model.md](architecture/data-model.md), [data-model-access.md](architecture/data-model-access.md) and [migrations.md](architecture/migrations.md) |
 | `QUICK_START.md` | [team/quick-start.md](team/quick-start.md) |
+| `ORCHESTRATION.md` | [team/orchestration.md](team/orchestration.md) |
 | `RELEASING.md` | [operations/releasing.md](operations/releasing.md) and [operations/releasing-recovery.md](operations/releasing-recovery.md) (backups, rollback, production guard) |
 
 ## Terminology

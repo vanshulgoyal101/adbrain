@@ -4,7 +4,7 @@ Current payment decisions and implementation boundaries, reconciled September 26
 2026. Owner explicitly requests live collection as soon as possible with
 operator-managed Meta payments. Repaired payment code is integrated on dev
 through PR46; this is not yet enabled production collection. Rollout authority
-lives in [the dispatch](https://github.com/vanshulgoyal101/adbrain/blob/dev/docs/ORCHESTRATION.md).
+lives in [the dispatch](team/orchestration.md).
 
 ## Current Funding Boundary
 
