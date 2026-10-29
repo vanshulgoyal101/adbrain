@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="only light">
+<title>Media library grid states · #2006</title>
+<style>
+  @font-face { font-family: "DM Sans"; src: url("../node_modules/@fontsource-variable/dm-sans/files/dm-sans-latin-wght-normal.woff2") format("woff2"); font-weight: 100 900; font-display: swap; }
+  :root { color-scheme: only light; --canvas: #f6f7f4; --ink: #1b2420; --muted: #5a6660; --line: #e2e6df; --leaf: #13784a; --amber: #a15c07; --red: #b42318; --ghost: #eef0ec; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--canvas); color: var(--ink); font: 15px/1.5 "DM Sans", "Noto Sans Devanagari", "Kohinoor Devanagari", sans-serif; }
+  :lang(hi) { line-height: 1.6; }
+  h1, h2, h3, p, ul, ol { margin: 0; }
+  h1 { font-size: 24px; line-height: 1.25; font-weight: 600; }
+  h2 { font-size: 17px; line-height: 1.4; font-weight: 600; }
+  .meta { font-size: 13px; color: var(--muted); }
+  .intro { padding: 24px; max-width: 760px; }
+  .intro p { margin-top: 8px; color: var(--muted); }
+  .boards { display: grid; grid-template-columns: repeat(auto-fit, 390px); gap: 24px; padding: 0 24px 24px; align-items: start; }
+  .frame { background: white; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .caption { padding: 12px 16px; background: var(--ink); color: white; font-size: 13px; }
+  .bar { min-height: 56px; padding: 8px 16px; display: flex; align-items: center; border-bottom: 1px solid var(--line); font-weight: 600; }
+  .content { padding: 20px 16px 24px; }
+  .content > * + * { margin-top: 16px; }
+  .heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .button { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; padding: 10px 14px; border: 1px solid var(--line); border-radius: 8px; font-weight: 600; text-align: center; background: white; }
+  .primary { color: white; background: var(--leaf); border-color: var(--leaf); }
+  .full { display: flex; width: 100%; }
+  .tabs { display: flex; gap: 4px; flex-wrap: wrap; }
+  .tab { min-height: 44px; display: flex; align-items: center; padding: 8px 12px; border: 1px solid var(--line); border-radius: 24px; font-size: 13px; }
+  .tab.selected { background: var(--ink); color: white; border-color: var(--ink); }
+  .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 6px; list-style: none; padding: 0; }
+  .tile { min-width: 0; }
+  .thumb { aspect-ratio: 1; background: var(--ghost); border-radius: 8px; display: flex; align-items: center; justify-content: center; position: relative; color: var(--muted); overflow: hidden; }
+  .thumb svg.ph { width: 30px; height: 30px; }
+  .badge { position: absolute; top: 4px; left: 4px; background: white; padding: 0 5px; border-radius: 4px; font-size: 11px; line-height: 18px; }
+  .greyed .thumb > svg, .greyed .badge { opacity: .45; }
+  .bar6 { position: absolute; left: 6px; right: 6px; bottom: 6px; height: 4px; border-radius: 4px; background: rgba(255,255,255,.9); }
+  .bar6 i { display: block; height: 100%; width: 58%; border-radius: 4px; background: var(--leaf); }
+  .tile .name { font-size: 13px; padding: 4px 2px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .status { display: flex; gap: 4px; align-items: baseline; font-size: 13px; font-weight: 600; padding: 0 2px; }
+  .status::before { content: ""; flex: 0 0 8px; height: 8px; border-radius: 50%; transform: translateY(-1px); }
+  .ready { color: var(--leaf); } .ready::before { background: var(--leaf); }
+  .busy { color: var(--muted); } .busy::before { border: 2px solid var(--muted); }
+  .warn { color: var(--amber); } .warn::before { background: var(--amber); border-radius: 2px; }
+  .blocked { color: var(--red); } .blocked::before { background: var(--red); border-radius: 0; transform: translateY(-1px) rotate(45deg) scale(.85); }
+  .edge-warn .thumb { box-shadow: inset 0 0 0 2px var(--amber); }
+  .edge-blocked .thumb { box-shadow: inset 0 0 0 2px var(--red); }
+  .skel .thumb { background: linear-gradient(90deg, var(--ghost) 0 40%, #f6f7f4 50%, var(--ghost) 60% 100%) var(--ghost); background-size: 300% 100%; }
+  .skel .line { height: 10px; margin: 8px 2px 0; border-radius: 4px; background: var(--ghost); }
+  .skel .line.short { width: 55%; margin-top: 6px; }
+  .panel { padding: 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--canvas); }
+  .panel > * + * { margin-top: 8px; }
+  .tips { padding-left: 0; list-style: none; counter-reset: tip; }
+  .tips li { counter-increment: tip; display: grid; grid-template-columns: 24px 1fr; gap: 8px; font-size: 14px; }
+  .tips li + li { margin-top: 10px; }
+  .tips li::before { content: counter(tip); width: 24px; height: 24px; border-radius: 50%; background: white; border: 1px solid var(--line); display: grid; place-items: center; font-size: 12px; font-weight: 600; }
+  .empty-art { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .empty-art span { aspect-ratio: 1; border: 1.5px dashed var(--line); border-radius: 8px; }
+  .alert { border-left: 2px solid var(--red); padding-left: 12px; }
+  .alert .head { color: var(--red); font-weight: 600; }
+  .alert .button { margin-top: 12px; }
+  .live { font-size: 13px; color: var(--muted); }
+  .note { color: var(--muted); font-size: 13px; border-top: 1px dashed var(--line); padding-top: 12px; }
+  .note b { color: var(--ink); }
+  .proposed { background: #fff6e5; border-radius: 3px; padding: 0 2px; }
+  svg { fill: none; stroke: currentColor; stroke-width: 1.5; }
+  @media (max-width: 437px) { .intro { padding: 20px 16px; } .boards { grid-template-columns: minmax(0, 1fr); padding: 0; } .frame { border-radius: 0; } }
+</style>
+<svg aria-hidden="true" width="0" height="0" style="position:absolute"><defs><symbol id="photo" viewBox="0 0 32 32"><rect x="3" y="5" width="26" height="22" rx="3"/><circle cx="11" cy="12" r="2"/><path d="m4 24 8-7 5 4 5-7 7 10"/></symbol><symbol id="video" viewBox="0 0 32 32"><rect x="3" y="7" width="26" height="18" rx="3"/><path d="m13 12 7 4-7 4z"/></symbol></defs></svg>
+<header class="intro">
+  <h1 data-k="intro.title"></h1>
+  <p data-k="intro.body"></p>
+</header>
+<main class="boards">
+
+  <section class="frame" aria-labelledby="f1">
+    <p class="caption" data-k="cap.empty"></p>
+    <div class="bar">AdBrain</div>
+    <div class="content">
+      <h1 id="f1" data-k="library.title"></h1>
+      <div class="empty-art" aria-hidden="true"><span></span><span></span><span></span></div>
+      <p data-k="library.empty"></p>
+      <span class="button primary full" data-k="library.emptyAction"></span>
+      <p class="meta" data-k="library.ownWorkOnly"></p>
+      <div class="panel">
+        <h2 data-k="library.tips.title"></h2>
+        <ol class="tips"><li data-k="library.tips.clear"></li><li data-k="library.tips.straight"></li><li data-k="library.tips.whole"></li></ol>
+      </div>
+      <p class="note" data-k="note.empty"></p>
+    </div>
+  </section>
+
+  <section class="frame" aria-labelledby="f2">
+    <p class="caption" data-k="cap.loading"></p>
+    <div class="bar">AdBrain</div>
+    <div class="content" aria-busy="true">
+      <div class="heading"><h1 id="f2" data-k="library.title"></h1><span class="button" data-k="add"></span></div>
+      <div class="tabs" data-tabs></div>
+      <ul class="grid" aria-hidden="true">
+        <li class="tile skel"><div class="thumb"></div><div class="line"></div><div class="line short"></div></li>
+        <li class="tile skel"><div class="thumb"></div><div class="line"></div><div class="line short"></div></li>
+        <li class="tile skel"><div class="thumb"></div><div class="line"></div><div class="line short"></div></li>
+        <li class="tile skel"><div class="thumb"></div><div class="line"></div><div class="line short"></div></li>
+        <li class="tile skel"><div class="thumb"></div><div class="line"></div><div class="line short"></div></li>
+        <li class="tile skel"><div class="thumb"></div><div class="line"></div><div class="line short"></div></li>
+      </ul>
+      <p class="note" data-k="note.loading"></p>
+    </div>
+  </section>
+
+  <section class="frame" aria-labelledby="f3">
+    <p class="caption" data-k="cap.checking"></p>
+    <div class="bar">AdBrain</div>
+    <div class="content">
+      <div class="heading"><h1 id="f3" data-k="library.title"></h1><span class="button" data-k="add"></span></div>
+      <div class="tabs" data-tabs></div>
+      <ul class="grid">
+        <li class="tile greyed"><div class="thumb"><svg class="ph" aria-hidden="true"><use href="#photo"/></svg><span class="badge" data-k="yourPhoto"></span><span class="bar6"><i></i></span></div><p class="name">Bedroom.jpg</p><span class="status busy" data-k="tile.uploading"></span></li>
+        <li class="tile greyed"><div class="thumb"><svg class="ph" aria-hidden="true"><use href="#photo"/></svg><span class="badge" data-k="yourPhoto"></span></div><p class="name">Living-room.jpg</p><span class="status busy" data-k="tile.checking"></span></li>
+        <li class="tile"><div class="thumb"><svg class="ph" aria-hidden="true"><use href="#photo"/></svg><span class="badge" data-k="yourPhoto"></span></div><p class="name">Kitchen.jpg</p><span class="status ready" data-k="tile.ready"></span></li>
+        <li class="tile"><div class="thumb"><svg class="ph" aria-hidden="true"><use href="#photo"/></svg><span class="badge" data-k="aiPicture"></span></div><p class="name">Diwali offer</p><span class="status ready" data-k="tile.ready"></span></li>
+        <li class="tile"><div class="thumb"><svg class="ph" aria-hidden="true"><use href="#photo"/></svg><span class="badge" data-k="yourPhoto"></span></div><p class="name">Shop-front.jpg</p><span class="status ready" data-k="tile.ready"></span></li>
+        <li class="tile"><div class="thumb"><svg class="ph" aria-hidden="true"><use href="#photo"/></svg><span class="badge" data-k="aiPicture"></span></div><p class="name">Modular kitchen</p><span class="status ready" data-k="tile.ready"></span></li>
+      </ul>
+      <p class="live" role="status" data-k="check.slow"></p>
+      <span class="button primary full" data-k="makeAd"></span>
+      <p class="note" data-k="note.checking"></p>
+    </div>
+  </section>
+
+  <section class="frame" aria-labelledby="f4">
+    <p class="caption" data-k="cap.loadFailed"></p>
+    <div class="bar">AdBrain</div>
+    <div class="content">
+      <div class="heading"><h1 id="f4" data-k="library.title"></h1><span class="button" data-k="add"></span></div>
+      <div class="alert" role="alert">
+        <p class="head"><span class="proposed" data-k="library.loadFailed"></span></p>
+        <span class="button" data-k="tryAgain"></span>
+      </div>
+      <p class="note" data-k="note.loadFailed"></p>
+    </div>
+  </section>
+
+  <section class="frame" aria-labelledby="f5">
+    <p class="caption" data-k="cap.tileErrors"></p>
+    <div class="bar">AdBrain</div>
+    <div class="content">
+      <div class="heading"><h1 id="f5" data-k="library.title"></h1><span class="button" data-k="add"></span></div>
+      <div class="tabs" data-tabs></div>
+      <ul class="grid">
+        <li class="tile edge-blocked"><div class="thumb"><svg class="ph" aria-hidden="true"><use href="#photo"/></svg><span class="badge" data-k="yourPhoto"></span></div><p class="name">Bathroom.jpg</p><span class="status blocked" data-k="tile.failed"></span></li>
+        <li class="tile edge-blocked"><div class="thumb"><svg class="ph" aria-hidden="true"><use href="#photo"/></svg><span class="badge" data-k="yourPhoto"></span></div><p class="name">Screenshot.png</p><span class="status blocked" data-k="tile.blocked"></span></li>
+        <li class="tile edge-warn"><div class="thumb"><svg class="ph" aria-hidden="true"><use href="#photo"/></svg><span class="badge" data-k="yourPhoto"></span></div><p class="name">IMG-20261020-WA0012.jpg</p><span class="status warn" data-k="tile.warn"></span></li>
+        <li class="tile edge-warn"><div class="thumb"><svg class="ph" aria-hidden="true"><use href="#photo"/></svg><span class="badge" data-k="yourPhoto"></span></div><p class="name">Living-room.jpg</p><span class="status warn" data-k="tile.unchecked"></span></li>
+        <li class="tile"><div class="thumb"><svg class="ph" aria-hidden="true"><use href="#photo"/></svg><span class="badge" data-k="yourPhoto"></span></div><p class="name">Kitchen.jpg</p><span class="status ready" data-k="tile.ready"></span></li>
+        <li class="tile"><div class="thumb"><svg class="ph" aria-hidden="true"><use href="#photo"/></svg><span class="badge" data-k="aiPicture"></span></div><p class="name">Diwali offer</p><span class="status ready" data-k="tile.ready"></span></li>
+      </ul>
+      <div class="panel">
+        <p class="meta" data-k="sheet.hint"></p>
+        <h2 data-k="sheet.title"></h2>
+        <p data-k="upload.failed"></p><span class="button" data-k="tryAgain"></span>
+      </div>
+      <p class="note" data-k="note.tileErrors"></p>
+    </div>
+  </section>
+</main>
+<script>
+const P = (s) => s; // proposed words are marked in the note, styled by .proposed where shown
+const W = {
+  en: {
+    "intro.title": "Photos & videos: empty, loading, checking and error states",
+    "intro.body": "#2006 for #778, at 390 (Hindi at 360). Static frames with grey placeholder images. Words are the CPO's keys from #744 (#1868, #1978, the AI-pictures fix on #778). Highlighted words are new and need the CPO's OK.",
+    "cap.empty": "1 · Empty: first visit",
+    "cap.loading": "2 · Loading: skeleton, same grid",
+    "cap.checking": "3 · Checking: uploads in progress",
+    "cap.loadFailed": "4 · Error: the library didn't load",
+    "cap.tileErrors": "5 · Error: problems on single tiles",
+    "library.title": "Photos & videos",
+    "library.empty": "No photos or videos yet. Add your own work: finished jobs, your shop, your team.",
+    "library.emptyAction": "Add photos & videos",
+    "library.ownWorkOnly": "Only photos of work you did. Catalogue, stock or AI pictures don't count: your ads would promise work that isn't yours.",
+    "library.tips.title": "3 tips for photos that get chats",
+    "library.tips.clear": "Clear it and light it: move bags, tools and boxes out, keep people out, turn every light on.",
+    "library.tips.straight": "Hold the phone straight at chest height, on 1× (not 0.5×), and line edges up with the grid.",
+    "library.tips.whole": "Phone upright: the whole job with a little space around it, plus one close-up of the finish.",
+    "add": "+ Add",
+    "tabs": ["All", "Your photos", "AI pictures", "Videos"],
+    "yourPhoto": "Your photo", "aiPicture": "AI picture",
+    "tile.uploading": "Uploading…", "tile.checking": "Checking…", "tile.ready": "Ready",
+    "tile.failed": "Didn't upload", "tile.blocked": "Can't use", "tile.warn": "Check it", "tile.unchecked": "Not checked",
+    "check.slow": "Still checking. You can keep going; we'll mark it when it's ready.",
+    "makeAd": "Make an ad",
+    "library.loadFailed": "Your photos didn't load. Check your connection and tap Try again.",
+    "tryAgain": "Try again",
+    "sheet.hint": "Tapping a red or amber tile opens its sheet:",
+    "sheet.title": "Bathroom.jpg",
+    "upload.failed": "This didn't upload. Check your connection and tap Try again.",
+    "note.empty": "No filter tabs, grid or '+ Add' in the header while the library is empty: one primary action. The tips stay open here; once there are photos they fold into a collapsible above the picker. Only the business's own work counts, so the empty state never shows sample photos.",
+    "note.loading": "Six skeleton tiles in the real 3-column grid, with name and status lines, so nothing jumps when photos arrive (no layout shift). '+ Add' works during loading; tabs show but filter only after load. The grid has aria-busy and is hidden from screen readers; one polite 'Loading photos' status. Shimmer off under prefers-reduced-motion. After 10 s with no answer, show state 4: never a skeleton without words.",
+    "note.checking": "The status sits under every tile in words plus a shape (dot, ring, square, diamond), so colour is never the only signal. Uploading and Checking tiles are greyed and can't be picked; Make an ad uses the ready ones. The 10-second line is one polite live region for the whole grid, not one per tile; no focus moves.",
+    "note.loadFailed": "Replaces the grid; header and '+ Add' stay, because uploading doesn't need the list. Not the empty state: never say 'No photos yet' when we only failed to fetch them. Try again re-fetches the list without a page reload.",
+    "note.tileErrors": "Red edge plus diamond means the photo can't go in an ad: 'Didn't upload' (Try again) or 'Can't use' (too small, wrong type, a banned claim). Amber edge plus square means a warning: 'Check it' (square, WhatsApp copy, text in the safe zone) or 'Not checked' (our check failed). Both can be used after 'Use anyway'. Tapping any tile opens its sheet with the full #1868 line and its fix (Fit frame in 1222/photo-states.html). Short tile words are new: tile.failed, tile.blocked, tile.warn, tile.unchecked and library.loadFailed. → CPO."
+  },
+  hi: {
+    "intro.title": "फ़ोटो और वीडियो: खाली, लोड हो रहा, जाँच और गड़बड़ी",
+    "intro.body": "#2006, 360 पर हिंदी। शब्द CPO की #744 कुंजियाँ हैं। पीले निशान वाले शब्द नए हैं।",
+    "cap.empty": "1 · खाली", "cap.loading": "2 · लोड हो रहा", "cap.checking": "3 · जाँच", "cap.loadFailed": "4 · लाइब्रेरी लोड नहीं हुई", "cap.tileErrors": "5 · एक-एक फ़ोटो की दिक्कत",
+    "library.title": "फ़ोटो और वीडियो",
+    "library.empty": "अभी कोई फ़ोटो या वीडियो नहीं। अपना असली काम जोड़ें: पूरे हुए काम, आपकी दुकान, आपकी टीम।",
+    "library.emptyAction": "फ़ोटो और वीडियो जोड़ें",
+    "library.ownWorkOnly": "सिर्फ़ आपके किए काम की फ़ोटो। कैटलॉग, स्टॉक या AI तस्वीरें नहीं: वरना विज्ञापन ऐसा काम दिखाएगा जो आपका नहीं है।",
+    "library.tips.title": "ऐसी फ़ोटो के 3 टिप्स जिनसे चैट आती हैं",
+    "library.tips.clear": "जगह साफ़ करें, रोशनी करें: बैग, औज़ार और डिब्बे हटाएँ, लोगों को फ़ोटो से बाहर रखें, सारी लाइटें जलाएँ।",
+    "library.tips.straight": "फ़ोन सीने की ऊँचाई पर सीधा रखें, 1× पर (0.5× नहीं), और किनारों को ग्रिड से मिलाएँ।",
+    "library.tips.whole": "फ़ोन खड़ा रखें: पूरा काम, आसपास थोड़ी जगह के साथ, और फ़िनिश की एक क़रीबी फ़ोटो।",
+    "add": "+ जोड़ें",
+    "tabs": ["सभी", "आपकी फ़ोटो", "AI तस्वीरें", "वीडियो"],
+    "yourPhoto": "आपकी फ़ोटो", "aiPicture": "AI तस्वीर",
+    "tile.uploading": "अपलोड हो रही…", "tile.checking": "जाँच रहे हैं…", "tile.ready": "तैयार",
+    "tile.failed": "अपलोड नहीं हुई", "tile.blocked": "नहीं चलेगी", "tile.warn": "देख लें", "tile.unchecked": "जाँच नहीं हुई",
+    "check.slow": "अभी जाँच चल रही है। आप आगे बढ़ सकते हैं; तैयार होते ही बता देंगे।",
+    "makeAd": "विज्ञापन बनाएँ",
+    "library.loadFailed": "आपकी फ़ोटो लोड नहीं हुईं। इंटरनेट देखें और फिर से कोशिश करें दबाएँ।",
+    "tryAgain": "फिर से कोशिश करें",
+    "sheet.hint": "लाल या पीली टाइल दबाने पर यह खुलता है:",
+    "sheet.title": "Bathroom.jpg",
+    "upload.failed": "यह अपलोड नहीं हुआ। इंटरनेट देखें और फिर से कोशिश करें दबाएँ।",
+    "note.empty": "", "note.loading": "", "note.checking": "", "note.loadFailed": "", "note.tileErrors": ""
+  }
+};
+const lang = new URLSearchParams(location.search).get("lang") === "hi" ? "hi" : "en";
+const t = W[lang];
+document.documentElement.lang = lang;
+const NEW = new Set(["tile.failed", "tile.blocked", "tile.warn", "tile.unchecked", "library.loadFailed"]);
+document.querySelectorAll("[data-k]").forEach((el) => {
+  const k = el.dataset.k; const v = t[k] ?? W.en[k];
+  if (!v) { el.remove(); return; }
+  el.textContent = v;
+  if (NEW.has(k)) el.classList.add("proposed");
+});
+document.querySelectorAll("[data-tabs]").forEach((el) => {
+  t.tabs.forEach((name, i) => { const s = document.createElement("span"); s.className = "tab" + (i ? "" : " selected"); s.textContent = name; el.append(s); });
+});
+</script>
+</html>
