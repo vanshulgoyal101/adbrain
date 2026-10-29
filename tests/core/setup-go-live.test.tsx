@@ -37,6 +37,15 @@ describe("core: <SetupGoLive> (#1271)", () => {
     expect(screen.getByRole("link", { name: "Change who sees it" })).toHaveAttribute("href", "/campaigns?all=1&new=1&creatives=a,b");
   });
 
+  it("#1934: returning, payment shows done for the last campaign, the budget starts at the last amount, no first-month line", () => {
+    render(<SetupGoLive business={business} ads={ads} pageConnected funding="own" returning initialDaily={500}
+      whatsappNumber="+91 ••••• 3210" weeklyCap={{ capRupees: null, active: [] }} />);
+    expect(screen.getByText("Set up for your last campaign")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Add payment in Meta" })).toBeNull();
+    expect(screen.getByText(/₹500 a day for 2 days/)).toBeInTheDocument();
+    expect(screen.queryByText(/first month of AdBrain is free/)).toBeNull();
+  });
+
   it("a chip changes the daily amount, the total and the primary", () => {
     goLive();
     fireEvent.click(screen.getByRole("button", { name: "₹1,000 a day" }));
@@ -179,4 +188,13 @@ describe("core: Go live's total is activation's own cap + GST (#1251 CPO/Dev 2)"
     // Dev 2's payment helper still funds exactly that total (#1374 numbers unchanged).
     expect([300, 500, 1000].map((dailyRupees) => paymentToCoverPaise({ dailyRupees, days: 2, availablePaise: 0 }))).toEqual([88_500, 147_500, 295_000]);
   });
+
+describe("#1901: Go live says whose picture each ad is", () => {
+  it("labels each picked ad's picture", () => {
+    render(<SetupGoLive business={business} pageConnected funding="managed" whatsappNumber="+91 ••••• 3210" weeklyCap={{ capRupees: null, active: [] }}
+      ads={[{ ...ads[0], generation: { image: { provider: "owner-photo" } } }, { ...ads[1], generation: { image: { provider: "openrouter" } } }] as Creative[]} />);
+    expect(screen.getByText("Your photo")).toBeInTheDocument();
+    expect(screen.getByText("AI picture")).toBeInTheDocument();
+  });
+});
 });

@@ -167,6 +167,43 @@ describe("Campaigns rows (#403 S5)", () => {
     expect(screen.getByRole("button", { name: "Close campaign setup" })).toBeInTheDocument();
   });
 
+  // #1926 (Designer, QA's #1656 walk): 0 live with deleted ones or drafts said 'Your campaigns (0)' over nothing.
+  describe("none running (#1926)", () => {
+    const deleted = (id: string) => ({ ...paused, id, name: "Rooftop solar old", status: "completed", raw: { ...paused.raw as object, metaStatus: "DELETED" } }) as unknown as Campaign;
+    const draft = (id: string) => ({ draftId: id, version: 1, expiresAt: "2026-11-01T00:00:00.000Z",
+      input: { businessId: business.id, name: `Draft ${id.slice(0, 4)}`, mode: "manual", creativeIds: [], dailyBudgetRupees: 300, abTest: false, destination: "instant_form", targeting: {} } });
+    const drafts = ["90d1d2bb-466c-4889-9af2-edb533e82531", "a0d1d2bb-466c-4889-9af2-edb533e82531"].map(draft);
+
+    it("says none running, points to the saved drafts, keeps one New campaign and no lone ⋯", async () => {
+      mocks.drafts.mockResolvedValue(drafts);
+      render(<Campaigns business={business} approved={[]} initialCampaigns={[deleted("campaign-8"), deleted("campaign-9")]} initialResults={{}}
+        initialDrafts={drafts as never} leadForms={[]} leadFormError={null} metaReady adAccountId="act_999" />);
+      expect(await screen.findByRole("heading", { name: "None running" })).toBeInTheDocument();
+      expect(screen.getByText("Your 2 saved drafts are below.")).toBeInTheDocument();
+      // #1934: the header's New campaign is the guided flow (a link); the composer is the quiet More options.
+      expect(screen.getAllByRole("link", { name: "New campaign" }).map((link) => link.getAttribute("href"))).toEqual(["/brand?again=1"]);
+      expect(screen.queryByRole("button", { name: "New campaign" })).toBeNull();
+      expect(screen.getByRole("button", { name: "More options" })).toHaveAttribute("aria-controls", "campaign-composer");
+      expect(screen.queryByRole("button", { name: "More list actions" })).toBeNull();
+      expect(screen.getByText("Deleted (2)").closest("details")).not.toBeNull();
+    });
+
+    it("without drafts, says what to do next", async () => {
+      render(<Campaigns business={business} approved={[]} initialCampaigns={[deleted("campaign-8")]} initialResults={{}}
+        leadForms={[]} leadFormError={null} metaReady adAccountId="act_999" />);
+      expect(await screen.findByRole("heading", { name: "None running" })).toBeInTheDocument();
+      expect(screen.getByText("Pick your approved ads and a daily budget. Nothing spends until you go live.")).toBeInTheDocument();
+    });
+
+    it("gives Deleted (n) the same chevron as Saved drafts", async () => {
+      render(<Campaigns business={business} approved={[]} initialCampaigns={[deleted("campaign-8"), active]} initialResults={{}}
+        leadForms={[]} leadFormError={null} metaReady adAccountId="act_999" />);
+      const summary = (await screen.findByText("Deleted (1)")).closest("summary")!;
+      expect(summary).toHaveClass("list-none");
+      expect(summary.querySelector("svg")).not.toBeNull();
+    });
+  });
+
   it("shows how many opened WhatsApp and how many messaged (#493)", async () => {
     const whatsapp = { ...active, id: "campaign-3", name: "Solar WhatsApp", raw: { destination: "whatsapp" } } as unknown as Campaign;
     render(<Campaigns business={business} approved={[]} initialCampaigns={[whatsapp]} leadForms={[]} leadFormError={null} metaReady={false} adAccountId="act_999"
