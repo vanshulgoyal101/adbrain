@@ -5,7 +5,7 @@ Part of [Features and workflows](README.md). Step of [Prepare a Campaign](launch
 ### Review, Create, Activate
 
 A first-timer with approved ads and no campaign yet, who can connect Meta, gets
-setup step 3 "Go live" on `/campaigns` (#1251 WS1, #1271): the picked ads, a daily
+setup step 3 "Go live" on `/campaigns` (#1251 WS1, #1271; in Hindi too, #1438): the picked ads, a daily
 budget (₹300/₹500/₹1,000 a day) for 2 days with the most it can spend including
 Meta's GST (`capWithGstPaise`, the activation reserve's own formula), the areas,
 the WhatsApp chat with the welcome Go live sends (#1529: `setupWelcome`, Review's own

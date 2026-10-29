@@ -55,7 +55,7 @@ export function RejectedAds({ reviews, spend, running = false, vertical = null, 
     }
   };
   return (
-    <section aria-label="Ads Meta didn't approve" className={cn("flex flex-col gap-2 border-l-2 border-amber-500 pl-3", className)}>
+    <div role="group" aria-label="Ads Meta didn't approve" className={cn("flex flex-col gap-2 border-l-2 border-amber-500 pl-3", className)}>
       <p className="text-sm leading-snug text-slate-900">{rejectedAdsSentence(copy, { rejected: rejected.length, total: reviews.length, spent: spend, running })}</p>
       <div className="flex flex-wrap gap-2">{copy.actions.map(action)}</div>
       {ownDetails && (
@@ -64,6 +64,6 @@ export function RejectedAds({ reviews, spend, running = false, vertical = null, 
           <p className="wrap-break-word text-slate-700">Meta&apos;s message: &ldquo;{copy.message}&rdquo;</p>
         </details>
       )}
-    </section>
+    </div>
   );
 }

@@ -22,7 +22,7 @@ In Production it is applied at SHA-256
 `02a409069475caff00872c9de31296771d0669bf852f5e5034f7f876a47d972c`, with one
 owner-confirmed operator registered and zero requests at readback. This does not
 verify the application request workflow; see
-[Privacy request operations](OPERATIONS.md#privacy-request-operations).
+[Privacy request operations](operations/privacy-requests.md#privacy-request-operations).
 
 The source-only [configurable quote migration](../db/migrations/20260927_configurable_payment_quotes.sql)
 depends on the original payment, operator policy and
@@ -45,7 +45,7 @@ Annual refund allocation and service earnings are bounded by the stored quote.
 Private tables and service-only RPC authority are unchanged. Apply once through
 the checksum ledger, not by replaying the canonical schema. After a nondefault
 order exists, rollback must retain a quote-aware runtime; see
-[pricing operations](CONFIGURATION.md#configurable-live-amounts).
+[pricing operations](operations/configuration-payments.md#configurable-live-amounts).
 
 ## Relationships
 
@@ -229,7 +229,7 @@ depends only on the existing product-event table and replaces its pruning functi
 without changing the caller contract. It aggregates and deletes up to 10,000 raw
 events older than 90 days atomically, preserves aggregate totals for 730 UTC days,
 and bounds old-aggregate cleanup. Migration application itself deletes no events.
-Use the [observability guide](OBSERVABILITY.md#retention-and-health) for metrics,
+Use the [observability guide](operations/observability.md#retention-and-health) for metrics,
 privacy, retention limitations and queries spanning raw and aggregate data.
 
 Leads use duplicate-ignore inserts, so later provider edits do not update an
@@ -321,7 +321,7 @@ before serving the updated regeneration route.
 
 Product events are server-only (no browser read/write policy), with bounded JSON
 attributes and a 90-day retention target. Pruning deletes at most 10000 old rows
-per call. See [Observability](OBSERVABILITY.md) for exceptions and retention backlog.
+per call. See [Observability](operations/observability.md) for exceptions and retention backlog.
 
 ### Effective Authority
 
@@ -465,6 +465,7 @@ alone is not a safe deployment plan.
 | [20261027_owner_whatsapp_alerts.sql](../db/migrations/20261027_owner_whatsapp_alerts.sql) | #701 slice 1: `owner_alert_prefs` (per business: lead-alert and daily-results switches, `en`/`hi`, the owner's WhatsApp number once confirmed by "START <code>", opt-out time) and the append-only `owner_alert_consent_events` (event, method, time). Owners read their own rows; `owner_alert_prefs_set` and `owner_alert_start_verification` are owner-checked; service-only `owner_alert_confirm` (10-character code, 15 min) and `owner_alert_stop` (STOP turns both off; only a new START from that phone lifts it, never Settings). Nothing is sent from here |
 | [20261027_lead_first_contacted.sql](../db/migrations/20261027_lead_first_contacted.sql) | #1049: `leads.first_contacted_at` (nullable; set once when the owner first taps WhatsApp them or Call on the enquiry card) and a partial index for Home's median time to first reply. Owners update their own leads under the existing policy; `get_lead_page` returns it with the row |
 | [20261027_owner_whatsapp_alerts_sends.sql](../db/migrations/20261027_owner_whatsapp_alerts_sends.sql) | #701 slice 2: `owner_alert_sends` (one row per alert: a lead id or an IST date; `pending`/`sent`/`failed`/`retry`/`unknown`, so a lead is alerted at most once and an `unknown` send is never repeated), `owner_alert_template_blocks` (templates Meta moved out of UTILITY) and `send_failures`/`paused_at` on `owner_alert_prefs`. Service-only `owner_alert_claim` (verified, not opted out, switch on, not paused, template not blocked; the monthly cap, counted over all businesses, pauses only the daily line; locks the prefs row), `owner_alert_settle` (3 counted failures pause alerts; a sent one resets) and `owner_alert_template_block`; a new START clears the pause. Owners read their own sends |
+| [20261029_plan_periods.sql](../db/migrations/20261029_plan_periods.sql) | #718 slice 2: `plan_periods`, one row per paid ₹999 month (`open` while its Razorpay Payment Link waits, `paid`, `expired`; one open row per business). The first month after the first Go live is free and has no row. `plan_period_open`/`_set_link`/`_paid`/`_expire` are service-only; `_paid` locks the business, starts a month at the later of paid-through and payment, and also credits a payment that lands after its link expired. Owners read their own rows. |
 | [20261029_meta_token_purge.sql](../db/migrations/20261029_meta_token_purge.sql) | #1648: revoking a Meta token (`meta_disconnect`, `meta_revoke_subject`, any path) wipes its ciphertext/nonce/tag via a trigger; backfills tokens already revoked; check keeps all three on live rows and none on revoked; `meta_token_get` masks secrets of revoked rows; #1649: `meta_token_revocation_target(business)` (service role) returns the connection's live token id, Meta subject, kind and `shared` (another business holds a live token for the same subject) so disconnect revokes the Meta grant only when it's safe |
 | [20261029_reserve_spend_cap_minimum.sql](../db/migrations/20261029_reserve_spend_cap_minimum.sql) | #1799: `customer_ad_reserve` gains optional `p_min_media_limit_paise` (Meta's live campaign spend_cap minimum); an uncapped reserve under it raises before any insert, so nothing is held. Backward compatible; apply before serving the updated activation route |
 
