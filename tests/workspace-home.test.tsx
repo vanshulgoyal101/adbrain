@@ -523,7 +523,10 @@ describe("Home results row (#764)", () => {
     const lead = within(row).getByRole("link", { name: "WhatsApp run" }).closest("p");
     expect(lead).toHaveTextContent("Each chat costs ₹168. WhatsApp run");
     const campaignsList = screen.getByRole("region", { name: "Campaigns" });
-    expect(within(campaignsList).getAllByText("Live")).not.toHaveLength(0);
+    // #1795: 'Live' and 'Ended' only restate the status, so the row shows no word ('Paused · Live' contradicted it).
+    expect(within(campaignsList).queryByText("Live")).not.toBeInTheDocument();
+    rerender(<WorkspaceHome {...empty} business={business} campaigns={[{ ...chats, status: "completed" } as Campaign, forms]} results={results} now={now} />);
+    expect(within(screen.getByRole("region", { name: "Campaigns" })).getAllByText("Ended")).toHaveLength(1);
     rerender(<WorkspaceHome {...empty} business={business} campaigns={[chats, forms]} results={results} waiting={2} now={now} />);
     expect(within(screen.getByRole("region", { name: "Results so far" })).getByRole("link", { name: "WhatsApp run" }).closest("p")).toHaveTextContent(/^2 people are waiting for your reply\. /);
     // With #1292's named line on Home, the count isn't repeated.
