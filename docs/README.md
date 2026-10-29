@@ -16,7 +16,7 @@ feature branch or a passing local test.
 | --- | --- | --- |
 | Pilot, sales or new team role | [How AdBrain works](product/how-adbrain-works.md) | [Features and workflows](product/README.md) |
 | Owner or coordinating worker | [Worker orchestration](ORCHESTRATION.md) | [Roadmap](roadmap.md) |
-| New developer | [Quick start](QUICK_START.md) | [Architecture](ARCHITECTURE.md) |
+| New developer | [Quick start](team/quick-start.md) | [Architecture](ARCHITECTURE.md) |
 | Product or support | [Features and workflows](product/README.md) | [Roadmap](roadmap.md) |
 | Operator | [Deployment configuration](operations/deploy.md) | [Release policy](RELEASING.md) |
 | Debugging engineer | [Observability](operations/observability.md) | [Operations](operations/README.md) |
@@ -67,6 +67,7 @@ last move.
 | `ROADMAP.md` | [roadmap.md](roadmap.md) (lower case, like the folders) |
 | `META_CONNECT.md` | [architecture/channels/meta-connect.md](architecture/channels/meta-connect.md) and [meta-app-review.md](architecture/channels/meta-app-review.md) |
 | `TESTING.md` | [team/testing.md](team/testing.md) and [team/testing-verification.md](team/testing-verification.md) |
+| `QUICK_START.md` | [team/quick-start.md](team/quick-start.md) |
 
 ## Terminology
 
