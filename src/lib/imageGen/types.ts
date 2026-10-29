@@ -38,6 +38,13 @@ export interface GeneratedImage {
   providerFinalStatus?: "completed" | "failed" | "unknown";
 }
 
+/** Free picture providers (no charge, no reference images). */
+export const FREE_IMAGE_PROVIDERS = ["pollinations", "cloudflare"];
+export const freeImageAttempt = (attempt: Pick<ImageAttempt, "provider">) => FREE_IMAGE_PROVIDERS.includes(attempt.provider);
+/** #2219: a free picture or a provider-confirmed failure costs nothing, so no charge is left unknown. */
+export const imageAttemptCostsNothing = (attempt: Pick<ImageAttempt, "provider" | "status" | "providerFinalStatus">) =>
+  freeImageAttempt(attempt) || (attempt.status === "error" && attempt.providerFinalStatus === "failed");
+
 export class ImageProviderError extends Error {
   constructor(message: string, public readonly providerRequestId?: string,
     public readonly providerFinalStatus: "completed" | "failed" | "unknown" = "unknown",

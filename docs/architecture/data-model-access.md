@@ -107,7 +107,11 @@ adds one private claim per creative, bound to the current business, owner and
 request UUID. Service-only RPCs atomically admit one paid regeneration at a time
 across server instances and release the claim after a confirmed save or known
 pre-provider failure. An uncertain paid outcome stays `unresolved`; it cannot
-auto-expire or be cleared by an authenticated client. This is not a provider
+auto-expire or be cleared by an authenticated client. A free-provider picture
+failure is a known $0 outcome and is released. After the
+[stale-claim migration](../../db/migrations/20261029_creative_regeneration_stale_claims.sql),
+a `processing` claim untouched for 15 minutes belongs to a killed request and the
+next claim takes it over (#2219). This is not a provider
 idempotency key or a substitute for external outcome evidence. Apply the migration
 before serving the updated regeneration route.
 

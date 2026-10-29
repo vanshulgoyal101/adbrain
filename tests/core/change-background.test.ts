@@ -132,6 +132,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
+  vi.doUnmock("@/lib/security/ssrf");
 });
 
 async function post(instruction: unknown = "Rooftop at sunset, warm light", body: unknown = { instruction }) {
@@ -197,6 +198,38 @@ describe("core: change only the background on a recorded run-4 ad", () => {
 
     const again = await post();
     expect(again).toEqual({ status: 409, body: { error: "A previous paid change to this ad needs a check before trying again." } });
+    expect(imageBodies).toHaveLength(1);
+  });
+
+  // #2219: AbortSignal.timeout's own error, as a slow provider throws it.
+  const timeout = () => new DOMException("The operation was aborted due to timeout", "TimeoutError");
+
+  it("releases the ad when a free picture times out: nothing was charged (#2219)", async () => {
+    vi.stubEnv("IMAGE_PROVIDER", "pollinations");
+    vi.doMock("@/lib/security/ssrf", async (original) => ({
+      ...(await original<typeof import("@/lib/security/ssrf")>()),
+      fetchPublicUrl: async () => { throw timeout(); },
+    }));
+    const res = await post();
+    expect(res).toEqual({ status: 502, body: { error: "Couldn't make a new background this time. Your ad is unchanged; try again." } });
+    expect(mocks.usage).toEqual([expect.objectContaining({ provider: "pollinations", usageKind: "image", status: "error", providerFinalStatus: "unknown" })]);
+    expect(mocks.updates).toEqual([]);
+    expect(mocks.claims.has(CREATIVE)).toBe(false);
+  });
+
+  it("still holds the ad when a paid picture times out: the charge is unknown (#2219)", async () => {
+    const replay = vi.mocked(fetch).getMockImplementation()!;
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (requestUrl(input) === "https://openrouter.ai/api/v1/images") {
+        imageBodies.push(requestBody(init));
+        throw timeout();
+      }
+      return replay(input, init);
+    }));
+    const res = await post();
+    expect(res.status).toBe(502);
+    expect(mocks.usage).toEqual([expect.objectContaining({ provider: "openrouter-image", providerFinalStatus: "unknown", status: "error" })]);
+    expect(mocks.claims.get(CREATIVE)?.state).toBe("unresolved");
     expect(imageBodies).toHaveLength(1);
   });
 
