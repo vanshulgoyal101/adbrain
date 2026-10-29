@@ -2,7 +2,7 @@ import { getEnv } from "@/lib/env";
 import { createPollinationsProvider } from "./providers/pollinations";
 import { createOpenRouterProvider } from "./providers/openrouter";
 import { CLOUDFLARE_IMAGE_MODEL, cloudflareConfigured, createCloudflareProvider } from "./providers/cloudflare";
-import { FreeImageBusyError, FreeImageDailyLimitError, ImageProviderError, ReferencePhotoPausedError, type GeneratedImage, type ImageProvider, type ImageRequest } from "./types";
+import { FreeImageBusyError, FreeImageDailyLimitError, ImageProviderError, ReferencePhotoPausedError, type GeneratedImage, type ImageProvider, type ImageRequest, FREE_IMAGE_PROVIDERS as FREE_PROVIDERS } from "./types";
 import { MAX_IMAGE_BYTES, readBoundedResponse, validateRaster } from "./raster";
 import { fetchPublicUrl, SafeFetchError } from "@/lib/security/ssrf";
 import { costCapped, freeImagesOnly } from "@/lib/llm/spend-policy";
@@ -30,9 +30,6 @@ function getFallbackProvider(): ImageProvider | null {
   return freeImagesOnly() || !env.IMAGE_PROVIDER_FALLBACK || env.IMAGE_PROVIDER_FALLBACK === "none"
     ? null : getProvider(env.IMAGE_PROVIDER_FALLBACK);
 }
-
-/** Providers that take no reference images. */
-const FREE_PROVIDERS = ["pollinations", "cloudflare"];
 
 async function executeImage(provider: ImageProvider, req: ImageRequest): Promise<GeneratedImage> {
   if (FREE_PROVIDERS.includes(provider.name) && req.referenceImages?.length) throw new Error(`${provider.name} does not support product references. Select a reference-capable image provider.`);

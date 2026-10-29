@@ -15,6 +15,8 @@ const customerAllowanceMigration = await readFile(join(root, "db/migrations/2026
 const creativeIntentMigration = await readFile(join(root, "db/migrations/20260927_creative_generation_intents.sql"), "utf8");
 const creativeReconcileMigration = await readFile(join(root, "db/migrations/20260930_creative_generation_reconcile.sql"), "utf8");
 const creativeSettleMigration = await readFile(join(root, "db/migrations/20261021_creative_generation_settle_holds.sql"), "utf8");
+const regenerationClaimsMigration = await readFile(join(root, "db/migrations/20261001_creative_regeneration_claims.sql"), "utf8");
+const regenerationStaleMigration = await readFile(join(root, "db/migrations/20261029_creative_regeneration_stale_claims.sql"), "utf8");
 const configurablePaymentMigration = await readFile(join(root, "db/migrations/20260927_configurable_payment_quotes.sql"), "utf8");
 const webhookHealthMigration = await readFile(join(root, "db/migrations/20261022_payment_webhook_health.sql"), "utf8");
 const cappedBoundMigration = await readFile(join(root, "db/migrations/20261023_capped_reservation_bound.sql"), "utf8");
@@ -2786,6 +2788,58 @@ async function verifyOperatorFunded(db, database) {
   });
 }
 
+// #2219: a dead request's `processing` claim is taken over after 15 minutes; `unresolved` (unknown paid charge) never is.
+async function verifyRegenerationClaims(db, database) {
+  await db.query(regenerationClaimsMigration);
+  await db.query(regenerationStaleMigration);
+  await db.query(regenerationStaleMigration);
+  const owner = randomUUID();
+  const business = randomUUID();
+  await db.query("insert into auth.users(id,email) values ($1,'regenerate@example.invalid')", [owner]);
+  await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Regenerate')", [business,owner]);
+  const creative = async () => (await db.query("insert into public.creatives(business_id,brief) values ($1,'Brief') returning id",[business])).rows[0].id;
+  async function service(sql, values) {
+    const session = client(database);
+    await session.connect();
+    try {
+      await session.query("set role service_role");
+      return (await session.query(sql,values)).rows[0]?.result;
+    } finally { await session.end(); }
+  }
+  const claim=(id, attempt) => service("select public.creative_regeneration_claim($1,$2,$3,$4) as result",[id,business,owner,attempt]);
+  const finish=(id, attempt, unresolved) => service("select public.creative_regeneration_finish($1,$2,$3,$4,$5) as result",[id,business,owner,attempt,unresolved]);
+  const age=(id, minutes) => db.query("update private.creative_regeneration_claims set created_at=clock_timestamp()-make_interval(mins=>$2),updated_at=clock_timestamp()-make_interval(mins=>$2) where creative_id=$1",[id,minutes]);
+  await check(`${database}: a killed regeneration's claim is taken over after 15 minutes, and its late finish is refused`, async () => {
+    const id=await creative();
+    const dead=randomUUID();
+    assert.equal((await claim(id,dead)).action,'start');
+    await age(id,14);
+    assert.deepEqual(await claim(id,randomUUID()),{ action:'busy', status:'processing' });
+    await age(id,16);
+    const next=randomUUID();
+    assert.deepEqual(await claim(id,next),{ action:'start', tookOver:true });
+    assert.deepEqual(await claim(id,randomUUID()),{ action:'busy', status:'processing' });
+    assert.equal((await finish(id,dead,false)).status,'missing');
+    assert.equal((await finish(id,next,false)).status,'released');
+    assert.equal((await claim(id,randomUUID())).action,'start');
+  });
+  await check(`${database}: an unresolved (unknown paid charge) claim is never taken over`, async () => {
+    const id=await creative();
+    const attempt=randomUUID();
+    assert.equal((await claim(id,attempt)).action,'start');
+    assert.equal((await finish(id,attempt,true)).status,'unresolved');
+    await age(id,60*24*30);
+    assert.deepEqual(await claim(id,randomUUID()),{ action:'busy', status:'unresolved' });
+  });
+  await check(`${database}: the regeneration claim stays service-only`, async () => {
+    const { rows } = await db.query(`select
+      has_function_privilege('authenticated','public.creative_regeneration_claim(uuid,uuid,uuid,uuid)','EXECUTE') as user_claim,
+      has_function_privilege('anon','public.creative_regeneration_claim(uuid,uuid,uuid,uuid)','EXECUTE') as anon_claim,
+      has_function_privilege('service_role','public.creative_regeneration_claim(uuid,uuid,uuid,uuid)','EXECUTE') as service_claim`);
+    assert.deepEqual(rows, [{ user_claim: false, anon_claim: false, service_claim: true }]);
+  });
+}
+
 async function verifyCreativeGenerationAdmission(db, database) {
   const owner = randomUUID();
   const otherOwner = randomUUID();
@@ -3055,6 +3109,7 @@ async function verify(database, source, integrityMigration, customerOnly = false
       await db.query(creativeSettleMigration);
       await db.query(creativeSettleMigration);
       await verifyCreativeGenerationAdmission(db, database);
+      await verifyRegenerationClaims(db, database);
       return;
     }
     await db.query(operatorPaymentMigration);

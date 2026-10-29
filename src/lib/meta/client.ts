@@ -1589,6 +1589,27 @@ export class MetaClient {
     return { campaigns: result.data, nextCursor: result.paging?.next ? result.paging.cursors!.after! : null };
   }
 
+  /** #2268: this account's campaigns Meta deleted or archived (the listing above leaves them out). 100 per read, ≤ 5 reads. */
+  async listGoneCampaigns(): Promise<Map<string, "DELETED" | "ARCHIVED">> {
+    const gone = new Map<string, "DELETED" | "ARCHIVED">();
+    let after: string | undefined;
+    for (let read = 0; read < 5; read++) {
+      // Graph v26 refuses `?ids=` and a bare `effective_status` param; `filtering` is the read QA verified live (#2279).
+      const query = new URLSearchParams({ fields: "id,status,effective_status", limit: "100",
+        filtering: JSON.stringify([{ field: "effective_status", operator: "IN", value: ["DELETED", "ARCHIVED"] }]) });
+      if (after) query.set("after", after);
+      const result = await this.graph<{ data?: Array<{ id?: string; status?: string; effective_status?: string }>; paging?: { next?: string; cursors?: { after?: string } } }>(`${this.creds.adAccountId}/campaigns?${query}`);
+      if (!Array.isArray(result.data)) throw new MetaError("Campaign listing is incomplete.");
+      for (const campaign of result.data) {
+        const status = [campaign.effective_status, campaign.status].find((value) => value === "DELETED" || value === "ARCHIVED");
+        if (campaign.id && (status === "DELETED" || status === "ARCHIVED")) gone.set(campaign.id, status);
+      }
+      after = result.paging?.next ? result.paging.cursors?.after : undefined;
+      if (!after) break;
+    }
+    return gone;
+  }
+
   /** The campaign's daily-budget binding to this account and Page, or why sync must leave it unchanged (#671). */
   async readBoundCampaign(campaign: MetaCampaignSummary & { account_id: string; lifetime_budget?: string }, cappedAdSetIds: readonly string[] = []): Promise<{ dailyBudgetRupees: number; adSetId: string; destination: CampaignDestination } | { skip: CampaignSkipReason }> {
     if (campaign.account_id !== this.creds.adAccountId.replace(/^act_/, "")) return { skip: "other_account" };

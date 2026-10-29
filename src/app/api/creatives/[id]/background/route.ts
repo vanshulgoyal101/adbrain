@@ -10,7 +10,7 @@ import { pictureDesign } from "@/lib/creative/picture-words";
 import { creativeReferences } from "@/lib/creative/references";
 import { failedVariantUsage, imageUsageEvents, savedGenerationSettings } from "@/lib/creative/receipt";
 import { generateImage } from "@/lib/imageGen";
-import type { ImageAttempt } from "@/lib/imageGen/types";
+import { freeImageAttempt, imageAttemptCostsNothing, type ImageAttempt } from "@/lib/imageGen/types";
 import { configuredMonthlyTokenLimit, monthlyTokenUsage, persistLLMUsage } from "@/lib/llm/persist";
 import { rateLimitResponse } from "@/lib/security/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -117,10 +117,12 @@ async function handlePOST(req: Request, { params }: { params: Promise<{ id: stri
   let paidAttemptStarted = false;
   let unresolved = false;
   let response: NextResponse;
+  const imageAttempts: ImageAttempt[] = [];
+  // #2219: only a paid picture can leave a charge unknown; a free one (Pollinations, Cloudflare) never holds the ad.
+  const paidPicture = () => paidAttemptStarted && !imageAttempts.every(freeImageAttempt);
   try {
     const { format } = savedGenerationSettings(creative.generation);
     const dims = formatDimensions(format);
-    const imageAttempts: ImageAttempt[] = [];
     let prompt = "[No image prompt: this ad uses the business's own photo from Brand assets.]";
     let image: { url: string; provider: string; model?: string; estimatedCostUsd?: number; latencyMs?: number; width?: number; height?: number;
       fallbackFrom?: string; providerRequestId?: string; providerFinalStatus?: "completed" | "failed" | "unknown" } =
@@ -184,7 +186,7 @@ async function handlePOST(req: Request, { params }: { params: Promise<{ id: stri
       .maybeSingle();
     if (error || !updated) {
       // Paid and stored, but not attached to the ad: hold the claim for a check.
-      unresolved = paidAttemptStarted;
+      unresolved = paidPicture();
       response = NextResponse.json({ error: "The new background was made but couldn't be saved to this ad. It needs a check before trying again." }, { status: 502 });
     } else {
       const { data: live } = await supabase
@@ -207,15 +209,14 @@ async function handlePOST(req: Request, { params }: { params: Promise<{ id: stri
       });
     }
   } catch (err) {
-    // The provider said every attempt failed and we recorded them: the spend is known and nothing changed.
-    const knownFailure = err instanceof CreativeImageError && err.imageAttempts.length > 0 &&
-      err.imageAttempts.every((attempt) => attempt.status === "error" && attempt.providerFinalStatus === "failed");
-    unresolved = paidAttemptStarted;
+    // Every attempt was free or the provider said it failed, and we recorded them: the spend is known and nothing changed.
+    const knownFailure = imageAttempts.every(imageAttemptCostsNothing);
+    unresolved = paidPicture();
     try {
       const recorded = await persistLLMUsage(failedVariantUsage(err, usageContext));
       if (knownFailure && recorded) unresolved = false;
     } catch {
-      unresolved = paidAttemptStarted;
+      unresolved = paidPicture();
     }
     response = NextResponse.json(
       {

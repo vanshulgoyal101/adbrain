@@ -3,8 +3,9 @@ import { applyMonthlyCostCap } from "@/lib/llm/cost-cap";
 import { NextResponse } from "next/server";
 import { serverError } from "@/lib/api";
 import { logEvent } from "@/lib/audit";
-import { CreativeValidationError, generateOneVariant } from "@/lib/creative/generate";
+import { CreativeImageError, CreativeValidationError, generateOneVariant } from "@/lib/creative/generate";
 import { pausedPhotoFor } from "@/lib/creative/owner-photos";
+import { imageAttemptCostsNothing } from "@/lib/imageGen/types";
 import {
   persistCreativeImage,
   renderAndPersistDesign,
@@ -225,6 +226,10 @@ async function handlePOST(
     // Every text attempt finished and our fact check refused it: nothing was saved and the spend is known.
     const rejection = err instanceof CreativeValidationError && err.stage !== "provider" && err.usage.length > 0 &&
       err.usage.every((entry) => entry.providerFinalStatus === "completed") ? err : null;
+    // #2219: the copy finished and the picture failed free (or the provider refused it): every charge is known once recorded.
+    const pictureFailed = err instanceof CreativeImageError &&
+      err.usage.every((entry) => entry.providerFinalStatus === "completed" || entry.providerFinalStatus === "failed") &&
+      err.imageAttempts.every(imageAttemptCostsNothing);
     unresolved = paidAttemptStarted && !(err instanceof NoLLMKeysError);
     try {
       const recorded = await persistLLMUsage(failedVariantUsage(err, {
@@ -234,7 +239,7 @@ async function handlePOST(
         requestId: attemptId,
         creativeId: id,
       }));
-      if (rejection && recorded) unresolved = false;
+      if ((rejection || pictureFailed) && recorded) unresolved = false;
     } catch {
       unresolved = paidAttemptStarted;
     }
@@ -242,6 +247,8 @@ async function handlePOST(
       response = NextResponse.json({ error: err.message }, { status: 400 });
     else if (rejection && !unresolved)
       response = NextResponse.json({ error: rejectionMessage(rejection.issues) }, { status: 422 });
+    else if (!unresolved)
+      response = NextResponse.json({ error: "Couldn't make a new version this time. Your current ad is unchanged; try again." }, { status: 502 });
     else response = NextResponse.json(
       {
         error: "Regeneration could not be completed. This attempt needs a check before the ad can be regenerated again.",
