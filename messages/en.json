@@ -389,7 +389,8 @@
       "notConnected": "Not connected",
       "payMeta": "Payment on Meta",
       "payLast": "Set up for your last campaign",
-      "payAdd": "Add a card or UPI in Meta",
+      "payAdd": "Add a card, or pay by UPI or net banking",
+      "payHow": "Card: Meta charges it after the ads run. UPI or net banking: add money first, at least {runTotal}, or the ads stop when it runs out.",
       "payLink": "Add payment in Meta",
       "stopsAt": "Stops at {total}",
       "stopsDetail": "{days} days at {daily} a day, including Meta's GST",
@@ -407,6 +408,7 @@
       },
       "live": "You're live. Meta is checking your ads; they usually start within a day.",
       "fixInReview": "Fix in campaign review",
+      "billingRequired": "Meta needs a way to pay first: a card, or money added by UPI or net banking. Add it in Meta, then tap Go live again. Nothing was spent.",
       "savedPaused": "Your campaign is saved, paused. Nothing was spent.",
       "openCampaigns": "Open Campaigns"
     }
