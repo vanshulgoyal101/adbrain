@@ -149,7 +149,7 @@ checks intended children again, then mirrors a **requested** active state locall
 Effective delivery/eligibility is not certified. #49 reservation remains uncertain
 when the parent request or post-request verification is ambiguous; reconcile
 before retrying. Creation idempotency does not make activation atomic with Meta.
-[Operations](OPERATIONS.md) owns incident procedures and
+[Operations](operations/README.md) owns incident procedures and
 [Release Policy](RELEASING.md) owns authorization for live changes.
 
 ## Lead Import and Follow-Up
@@ -256,7 +256,7 @@ remote check; it relies on stored binding and current connection fences.
 Deletion confirms the Meta operation before deleting the local mirror; external
 success and local persistence are not a distributed transaction. Sync imports
 supported ACTIVE/PAUSED campaigns page by page, reports skips, and does not prune
-all local rows absent from a page. Use [Operations](OPERATIONS.md) for incidents.
+all local rows absent from a page. Use [Operations](operations/README.md) for incidents.
 
 ## App Review (#156)
 

@@ -19,7 +19,7 @@ feature branch or a passing local test.
 | New developer | [Quick start](QUICK_START.md) | [Architecture](ARCHITECTURE.md) |
 | Product or support | [Features and workflows](product/README.md) | [Roadmap](roadmap.md) |
 | Operator | [Deployment configuration](DEPLOY.md) | [Release policy](RELEASING.md) |
-| Debugging engineer | [Observability](OBSERVABILITY.md) | [Operations](OPERATIONS.md) |
+| Debugging engineer | [Observability](OBSERVABILITY.md) | [Operations](operations/README.md) |
 | Product planner | [Roadmap](roadmap.md) | [Payment plan](PAYMENTS-PLAN.md) |
 
 ## Reference Library
@@ -36,7 +36,7 @@ feature branch or a passing local test.
 | [AI pipeline](AI_PIPELINE.md) | How do interviews, concepts, images, composition, retries, cache and accounting work? |
 | [Meta connection](META_CONNECT.md) | How do consent, selection, capabilities, paused creation and activation work, and what does Meta's App Review need? |
 | [Testing](TESTING.md) | Which commands are safe locally and what does each verification layer prove? |
-| [Operations](OPERATIONS.md) | How do we diagnose partial work, stale spend, provider failures and retention problems? |
+| [Operations](operations/README.md) | How do we diagnose partial work, stale spend, provider failures and retention problems? |
 | [Observability](OBSERVABILITY.md) | What is logged, how is it correlated, and what must never be collected? |
 | [Deployment](DEPLOY.md) | How is a target environment configured and smoke-tested? |
 | [Release policy](RELEASING.md) | What approvals and checks govern remote changes? |
@@ -60,6 +60,7 @@ last move.
 | --- | --- |
 | `API_REFERENCE.md` | [api/](api/README.md): one page per route group |
 | `FEATURES.md` | [product/](product/README.md): one page per product area |
+| `OPERATIONS.md` | [operations/](operations/README.md) and [operations/runbooks/](operations/runbooks/README.md) |
 | `ROADMAP.md` | [roadmap.md](roadmap.md) (lower case, like the folders) |
 
 ## Terminology

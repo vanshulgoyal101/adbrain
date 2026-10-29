@@ -142,7 +142,7 @@ exclude entire test directories or suppress uninvestigated findings.
   never resends the SQL. Rerunning skips migrations already in the ledger.
 - The local campaign hardening changes require the reporting-identity migration
    before the new web code, and the worker migration before enabling worker mode.
-   See [worker rollout](OPERATIONS.md#campaign-worker-rollout). Neither new migration
+   See [worker rollout](operations/runbooks/campaigns.md#campaign-worker-rollout). Neither new migration
    nor a worker deployment is authorized merely by publishing code.
 - Credential backfills and encryption-key changes require explicit planning.
   Do not replace an encryption key without preserving access to existing tokens.
@@ -203,7 +203,7 @@ The Supabase free plan keeps no backups (owner, Oct 27: no Pro), so we keep our 
 - **Before every migration:** `scripts/release.mjs` requires a successful backup that finished
   less than an hour ago, and dispatches one and waits if needed.
 - **Second copy:** the supervisor's nightly JSON export into `~/.adbrain-backups`, encrypted to the same certificate (`.tar.gz.cms`)
-  ([Operations](OPERATIONS.md#data-safety-and-recovery)).
+  ([Operations](operations/backups.md#data-safety-and-recovery)).
 - **Storage:** the same run mirrors the owners' uploads (`brand-assets`: logos, product photos;
   names from the database, files from their public URLs) into a separate `<name>-uploads` artifact, encrypted
   the same way. Generated ad images (`creatives`, ~830 MB) are left out because they can be
