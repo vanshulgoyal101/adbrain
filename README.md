@@ -14,7 +14,7 @@ Start at the [documentation index](docs/README.md).
 
 | Goal | Guide |
 | --- | --- |
-| Install and run safely | [Developer quick start](docs/QUICK_START.md) |
+| Install and run safely | [Developer quick start](docs/team/quick-start.md) |
 | Understand the product | [Features and workflows](docs/product/README.md) |
 | Learn the codebase | [Architecture](docs/ARCHITECTURE.md) |
 | Integrate or debug requests | [API reference](docs/api/README.md) |
@@ -41,7 +41,7 @@ See the [architecture guide](docs/ARCHITECTURE.md) for ownership and trust bound
 
 ## Local Development
 
-Start with the [quick start](docs/QUICK_START.md), then the
+Start with the [quick start](docs/team/quick-start.md), then the
 [configuration reference](docs/operations/configuration.md). Use isolated credentials and
 confirm the database target before starting the application. An existing
 `.env.local` may point to production; do not overwrite it or copy it into a test
