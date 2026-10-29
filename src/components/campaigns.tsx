@@ -111,7 +111,7 @@ import {
   spendHealth,
 } from "@/lib/campaign/budget";
 import { effectiveDailyBudget, weeklyCapNotice, type CampaignSpend } from "@/lib/campaign/spend";
-import { accountFundingSchema, activationConfirmationPayload, campaignDeliverySnapshotSchema, reviewableCampaign } from "@/lib/campaign/activation";
+import { accountFundingSchema, activationConfirmationPayload, campaignDeliverySnapshotSchema, reviewableCampaign, runningNow } from "@/lib/campaign/activation";
 import { WHATSAPP_LINK_URL, WHATSAPP_UNVERIFIED_STEP } from "@/lib/meta/setup-checklist";
 import { activationWarnings, QUOTED_ASK_WITH_QUESTIONS, WHATSAPP_PICTURE_ON_FORM } from "@/lib/campaign/plan-check";
 import { cardVerdictInput, lastCampaignComparison } from "@/lib/campaign/card-verdict";
@@ -1556,7 +1556,7 @@ function BusinessCampaigns({
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-4">
       {confirmDialog}
-        <p className="text-sm text-slate-500">{tc("header.running", { n: campaigns.filter(campaign => campaign.status === "active").length })} <span className="mx-2 text-slate-300">/</span> {tc("header.paused", { n: campaigns.filter(campaign => campaign.status === "paused").length })}</p>
+        <p className="text-sm text-slate-500">{tc("header.running", { n: campaigns.filter(campaign => runningNow(campaign)).length })} <span className="mx-2 text-slate-300">/</span> {tc("header.paused", { n: campaigns.filter(campaign => campaign.status === "paused").length })}</p>
         <div className="flex flex-wrap items-center gap-2">
           {/* #1588: the zero state carries its own New campaign; a pending audience decision owns the one solid button.
               #1934 (CPO): New campaign is the guided 3 steps everywhere; this composer stays as a quiet More options. */}

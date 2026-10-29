@@ -56,6 +56,11 @@ export function cappedRunEnded(raw: unknown, now = Date.now()): boolean {
   return parsed.success && Date.parse(parsed.data.cap.endTime) <= now;
 }
 
+/** #2281: delivering now. A capped run past its end time isn't, even before the sweep moves its status off 'active'. */
+export function runningNow(campaign: Pick<Campaign, "status" | "raw">, now = Date.now()): boolean {
+  return campaign.status === "active" && !cappedRunEnded(campaign.raw, now);
+}
+
 export function intendedCampaignChildren(campaign: Pick<Campaign, "meta_campaign_id" | "meta_adset_id" | "meta_ad_ids" | "raw">) {
   const parsed = storedChildrenSchema.safeParse(campaign.raw);
   if (!parsed.success) return null;

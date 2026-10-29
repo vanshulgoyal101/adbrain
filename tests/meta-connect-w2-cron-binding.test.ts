@@ -361,6 +361,29 @@ describe("scheduled spend binding boundary", () => {
     expect(mocks.updateCampaignStatus).not.toHaveBeenCalled();
   });
 
+  // #2281: the Solaride arm (own account, no reservation) stayed 'active' after its end time.
+  const endedCap = { cap: { adSetId: "capped-1", endTime: new Date(Date.now() - 30 * 60_000).toISOString(), days: 2 } };
+  it.each([["own-account", true], ["managed", false]])("stops an ended capped run with no reservation (%s, #2281)", async (_mode, own) => {
+    configureAdmin([{ ...boundCampaign, raw: endedCap }], [{ business_id: "business-1", weekly_cap_rupees: null, alert_pct: 80, auto_pause: false }]);
+    mocks.ownAccount = own;
+    const { GET } = await import("@/app/api/cron/enforce-spend/route");
+    const response = await GET(new Request("http://localhost/api/cron/enforce-spend", { headers: { authorization: "Bearer cron-secret" } }));
+    expect(response.status).toBe(200);
+    expect(mocks.updateCampaignStatus).toHaveBeenCalledWith("meta-campaign-1", "PAUSED");
+    expect(mocks.confirmCustomerCampaign).not.toHaveBeenCalled();
+    expect((await response.json()).swept).toEqual([{ businessId: "business-1", paused: ["campaign-1"] }]);
+  });
+
+  it("leaves a capped run running before its end time (#2281)", async () => {
+    const future = { cap: { adSetId: "capped-1", endTime: new Date(Date.now() + 3_600_000).toISOString(), days: 2 } };
+    configureAdmin([{ ...boundCampaign, raw: future }], [{ business_id: "business-1", weekly_cap_rupees: null, alert_pct: 80, auto_pause: false }]);
+    mocks.ownAccount = true;
+    const { GET } = await import("@/app/api/cron/enforce-spend/route");
+    const response = await GET(new Request("http://localhost/api/cron/enforce-spend", { headers: { authorization: "Bearer cron-secret" } }));
+    expect(response.status).toBe(200);
+    expect(mocks.updateCampaignStatus).not.toHaveBeenCalled();
+  });
+
   it("still applies the weekly cap to an operator-funded run (#245)", async () => {
     mocks.isOperatorFunded.mockResolvedValue(true);
     const { GET } = await import("@/app/api/cron/enforce-spend/route");
