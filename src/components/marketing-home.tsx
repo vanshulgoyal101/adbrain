@@ -48,7 +48,7 @@ export function MarketingHome() {
               <Link href="/login" className={styles.primary}>Make my first ad free <ArrowRight aria-hidden="true" size={18} /></Link>
               <a href="#cycle" className={styles.heroSecondary}>See how it works <ArrowDown aria-hidden="true" size={17} /></a>
             </div>
-            <p className={styles.heroNote}>Making ads is free. You pay only when you choose to run one.</p>
+            <p className={styles.heroNote}>Free to try. ₹999 a month after your first month. Your ad money goes to Meta, not to us.</p>
           </div>
           <p className={styles.heroCaption}>Made by AdBrain for example businesses</p>
         </section>
@@ -87,7 +87,7 @@ export function MarketingHome() {
           <ul>
             <li><Check aria-hidden="true" /><div><h3>Approve every ad</h3><p>Check the picture, the words and every claim before an ad is used.</p></div></li>
             <li><CirclePause aria-hidden="true" /><div><h3>Your limit, your pause button</h3><p>Campaigns start paused with the daily limit you set. Pause any time; Meta&apos;s own review still applies.</p></div></li>
-            <li><IndianRupee aria-hidden="true" /><div><h3>Pay as you go, in rupees</h3><p>Making ads is free. To run them, top up any amount from ₹500.</p></div></li>
+            <li><IndianRupee aria-hidden="true" /><div><h3>Simple pricing</h3><p>₹999 a month for AdBrain, first month free. You pay Meta for your ads directly, with a limit you set. No auto-debit, stop any time.</p></div></li>
             <li><MapPin aria-hidden="true" /><div><h3>Your own Page, your customers</h3><p>Ads run from your Facebook Page and Instagram, and customers message your WhatsApp directly.</p></div></li>
           </ul>
         </section>

@@ -138,6 +138,13 @@ export function usageErrorCode(event: Pick<LLMUsageEvent, "failure" | "errorCode
   return event.failure ? `LLM_${event.failure}` : event.errorCode ?? null;
 }
 
+/** #1468: what usage events cost (USD, the same estimate the rows store), text and images apart. */
+export function usageCostUsd(events: LLMUsageEvent[]): { text: number; image: number } {
+  const cost = { text: 0, image: 0 };
+  for (const event of events) cost[event.usageKind ?? "text"] += event.estimatedCostUsd ?? estimatedCost(event.model, event.usage);
+  return cost;
+}
+
 /** Best-effort persistence; callers admitting paid work can retain a hold on failure. */
 export async function persistLLMUsage(events: LLMUsageEvent[]): Promise<boolean> {
   if (!events.length) return true;

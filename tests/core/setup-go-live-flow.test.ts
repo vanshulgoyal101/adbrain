@@ -222,3 +222,24 @@ describe("core: setup Go live one tap (#1271 4b) on recorded Meta answers", () =
     expect(calls).toEqual([]);
   });
 });
+
+describe("core: step 3's welcome preview (#1529)", () => {
+  it("is Review's own message, from Go live's own draft: the saved one, else AdBrain's", async () => {
+    const { setupWelcome } = await import("@/lib/campaign/setup-welcome");
+    const { setupDraftInput } = await import("@/lib/campaign/setup-go-live-flow");
+    const { campaignWhatsAppMessage } = await import("@/lib/campaign/campaign-whatsapp-message");
+    const rows = [
+      { id: "a", headline: "Free site survey in Mohali", primary_text: "Cut your power bill. Tap, then press Send: \"I'd like a free site survey\"", image_url: "/a.png", generation: null },
+      { id: "x", headline: null, primary_text: "No picture yet", image_url: null, generation: null },
+    ];
+    const brand = { id: "b1", name: "Solaride", offers: ["Free site survey"], locations: ["Mohali"] };
+    const saved = { greeting: "Hi from Solaride!", opening: { kind: "prefill", prefill: "I'd like a free site survey", callButton: true }, language: "en" };
+    expect(setupWelcome({ ...brand, whatsapp_template: saved }, rows)).toEqual({
+      source: "saved", language: "en", greeting: "Hi from Solaride!", autofill: "I'd like a free site survey", callButton: true,
+    });
+    const suggested = setupWelcome({ ...brand, whatsapp_template: null }, rows);
+    const draft = setupDraftInput({ businessId: "b1", name: "any", adIds: ["a"], dailyBudgetRupees: 500, whatsappNumber: "+919876543210" });
+    const review = campaignWhatsAppMessage({ draft, business: { ...brand, whatsapp_template: null }, creatives: [rows[0]] });
+    expect(suggested).toMatchObject({ source: "suggested", greeting: review.opening.greeting, autofill: review.opening.autofill });
+  });
+});

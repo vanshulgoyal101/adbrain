@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { activationConfirmationPayload, campaignDeliverySnapshotSchema } from "@/lib/campaign/activation";
-import { createCampaignRequestSchema, type CreateCampaignRequest, type OperationDTO } from "@/lib/campaign/connect-contracts";
+import { createCampaignRequestSchema, type CreateCampaignRequest, type DraftInput, type OperationDTO } from "@/lib/campaign/connect-contracts";
 import { campaignNameDate, defaultCampaignName } from "@/lib/campaign/draft-name";
 import { defaultTargeting, targetingFromEditor } from "@/lib/campaign/editor-targeting";
 import { buildManualDraftInput, pickWhatsAppNumber } from "@/lib/campaign/manual-draft-input";
@@ -8,6 +8,18 @@ import { parseWhatsAppStatus } from "@/lib/meta/whatsapp-status-shared";
 import type { MetaConnectClient } from "@/lib/meta-connect-ui/client";
 import { buildActivationPatch, buildCreateCampaignRequest, isTerminalOperation } from "@/lib/meta-connect-ui/campaign-flow";
 import type { Campaign } from "@/lib/types";
+
+/**
+ * #1529: Go live's draft: the composer's defaults (WhatsApp, default targeting, no A/B, the saved or AdBrain's
+ * message). Step 3 previews its welcome from this same draft, so what it shows is what launches.
+ */
+export function setupDraftInput(input: { businessId: string; name: string; adIds: string[]; dailyBudgetRupees: number; whatsappNumber: string }): DraftInput {
+  return buildManualDraftInput({
+    businessId: input.businessId, name: input.name, goal: input.name, mode: "manual", creativeIds: input.adIds,
+    dailyBudgetRupees: input.dailyBudgetRupees, destination: "whatsapp", leadFormId: "", whatsappNumber: input.whatsappNumber,
+    whatsappLanguage: "ad", whatsappMessage: null, targeting: targetingFromEditor(defaultTargeting, [], []), abTest: false,
+  });
+}
 
 /**
  * #1271 (#1251 WS1 step 3) slice 4b: setup's one-tap "Go live", through the same routes the Campaigns page uses:
@@ -105,12 +117,9 @@ export async function goLive(deps: GoLiveDeps, input: GoLiveInput, onStep: (step
         headline: input.ads[0]?.headline, businessName: input.businessName, destination: "whatsapp",
         date: campaignNameDate(deps.now?.() ?? new Date()),
       });
-      const draft = await client.saveDraft(buildManualDraftInput({
-        businessId: input.businessId, name, goal: name, mode: "manual", creativeIds: input.ads.map((ad) => ad.id),
-        dailyBudgetRupees: input.dailyBudgetRupees, destination: "whatsapp", leadFormId: "",
+      const draft = await client.saveDraft(setupDraftInput({
+        businessId: input.businessId, name, adIds: input.ads.map((ad) => ad.id), dailyBudgetRupees: input.dailyBudgetRupees,
         whatsappNumber: pickWhatsAppNumber(whatsapp.state === "ready" ? whatsapp.numbers : [], ""),
-        whatsappLanguage: "ad", whatsappMessage: null,
-        targeting: targetingFromEditor(defaultTargeting, [], []), abTest: false,
       }));
       const review = await client.preflight(input.businessId, draft.draftId, draft.version);
       if (!review.canCreatePaused || review.blockers.length || !review.planHash) {

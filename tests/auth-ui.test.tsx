@@ -191,7 +191,7 @@ describe("<LoginForm> failed callback", () => {
   it("explains when the provider bounced the user back with an error", () => {
     params = new URLSearchParams("error=access_denied");
     render(<LoginForm />);
-    expect(screen.getByText(/sign-in failed/i)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Sign-in didn't finish" })).toBeInTheDocument();
   });
 });
 

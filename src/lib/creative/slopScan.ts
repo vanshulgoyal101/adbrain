@@ -137,10 +137,48 @@ export const MEDICAL_BANNED_CLAIMS = [
 export const HEALTH_VERTICAL = /chiro|dental|dentist|clinic|medical|doctor|physio|health|wellness|therapy|hospital|ayurved|derma/i;
 
 /**
- * Banned claims for a business's industry. Non-health verticals get none, so
+ * Banned claims for a business's industry (health, #1609 education). Other verticals get none, so
  * existing customers' copy is unaffected.
  */
+/** #1609 (CPO, #1500): IELTS, study-abroad and visa businesses can't promise a band, a visa or a success rate. */
+export const EDUCATION_VERTICAL = /ielts|pte|toefl|celpip|duolingo english|study abroad|overseas education|immigration|visa|spoken english|coaching/i;
+
+export const EDUCATION_BANNED_CLAIMS = [
+  "guaranteed",
+  "guarantee",
+  "assured",
+  "sure shot",
+  "sure-shot",
+  "100% visa",
+  "100% success",
+  "100% selection",
+  "100% result",
+  "visa success rate",
+  "success rate",
+  "no refusal",
+  "zero refusal",
+  "guaranteed band",
+  "band guarantee",
+  "guaranteed admission",
+  "guaranteed job",
+  "pr guaranteed",
+  // CPO (Analyst #1514 ② ④): fixed visa timelines and document fraud. "No IELTS needed" stays allowed (some waive it).
+  "visa in ", // with its space: "visa interview practice" is fine
+  "fake",
+  "arranged offer letter",
+  "backdated",
+  "experience certificate",
+  "गारंटी",
+  "ਗਾਰੰਟੀ",
+  "पक्का वीज़ा",
+  "ਪੱਕਾ ਵੀਜ਼ਾ",
+];
+
 export function bannedClaimsForVertical(vertical?: string | null): string[] {
-  return HEALTH_VERTICAL.test(vertical ?? "") ? [...MEDICAL_BANNED_CLAIMS] : [];
+  const text = vertical ?? "";
+  return [
+    ...(HEALTH_VERTICAL.test(text) ? MEDICAL_BANNED_CLAIMS : []),
+    ...(EDUCATION_VERTICAL.test(text) ? EDUCATION_BANNED_CLAIMS : []),
+  ];
 }
 

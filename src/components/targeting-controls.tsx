@@ -411,7 +411,7 @@ export function TargetingControls({
               <LocationPicker
                 value={value.included}
                 onChange={(included) => set({ included })}
-                placeholder="e.g. Jaipur, Rajasthan…"
+                placeholder="e.g. Mohali, Punjab…"
                 tone="include"
               />
             </div>

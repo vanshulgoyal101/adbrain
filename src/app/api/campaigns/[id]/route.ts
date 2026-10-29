@@ -27,6 +27,7 @@ import { recordLaunchCap } from "@/lib/campaign/learnings";
 import { lacksAreaExclusions } from "@/lib/meta/service-area";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { campaignOwnedElsewhere, ownerRefusal } from "@/lib/campaign/campaign-owner";
+import { CampaignEditError, refuseWhileSwitchPending } from "@/lib/campaign/edit-service";
 
 
 export const runtime = "nodejs";
@@ -182,6 +183,8 @@ async function handlePATCH(
   try {
     if (action === "active") {
       await recheckMetaConnection(context, storedBinding.metaConnectionGeneration);
+      // #1518: a waiting new-audience copy would run beside a capped copy of the old ad set; switch or cancel it first.
+      await refuseWhileSwitchPending(createAdminClient(), id);
     }
     await withMetaConnection(
       context,
@@ -329,6 +332,7 @@ async function handlePATCH(
   } catch (err) {
     if (err instanceof CustomerBalanceError) return apiError(err.message, 409);
     if (err instanceof CampaignDeliveryError) return apiError(err.message, 409);
+    if (err instanceof CampaignEditError) return NextResponse.json({ error: err.message, code: err.code, retryable: err.retryable }, { status: err.status });
     if (err instanceof ConnectionAccessError) {
       return apiError(
         err.message,

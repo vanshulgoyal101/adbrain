@@ -39,4 +39,14 @@ describe("Meta recorder write gate (#1324)", () => {
     await fetch("https://graph.facebook.com/v26.0/act_1/ads", { method: "POST" });
     expect(underlying).toHaveBeenCalledTimes(1);
   });
+
+  it("refuses a Graph write in a headless supervisor run even with the flag set (#1513)", async () => {
+    vi.stubEnv("ADBRAIN_ALLOW_META_WRITES", "1");
+    vi.stubEnv("ADBRAIN_HEADLESS", "1");
+    const { underlying, fetch } = await gatedFetch();
+    await expect(fetch("https://graph.facebook.com/v26.0/act_1/ads", { method: "POST" })).rejects.toThrow("headless");
+    expect(underlying).not.toHaveBeenCalled();
+    await fetch("https://graph.facebook.com/v26.0/act_1?fields=id");
+    expect(underlying).toHaveBeenCalledTimes(1);
+  });
 });

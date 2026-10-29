@@ -14,3 +14,9 @@ export const CREATE_IDLE_NO_HEARTBEAT_MS = 330_000;
 export const CREATE_TOP_UP_START_MS = 60_000;
 /** ...and is cut off after this long: one concept, one repair and one image (paid batches take ~43 s). */
 export const CREATE_TOP_UP_BUDGET_MS = 45_000;
+/**
+ * #1547: a sales visit's (+prospect) free pictures retry until this long after the request started, leaving room to
+ * save before the route's 300 s limit, and only if at least one free picture slot (about 45 s) is left.
+ */
+export const PROSPECT_PICTURE_RETRY_END_MS = 250_000;
+export const PROSPECT_PICTURE_RETRY_MIN_MS = 45_000;
