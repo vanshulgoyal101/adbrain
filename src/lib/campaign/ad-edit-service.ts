@@ -21,6 +21,7 @@ import { CampaignEditError, refuseWhileSwitchPending } from "./edit-service";
 
 export { BACK_TO_REVIEW } from "./ad-edit-copy";
 import { BACK_TO_REVIEW } from "./ad-edit-copy";
+import { OWNER_ERRORS } from "@/lib/copy/owner-words";
 const AD_RATE_LIMITED = "Meta needs 30 seconds between ad changes. Try again in a moment.";
 
 const words = (max: number) => z.string().trim().min(1).max(max);
@@ -46,7 +47,7 @@ export async function editAdCopy(
   const database = createAdminClient() as unknown as SupabaseClient;
   const supabase = await createClient();
   const { data: campaign } = await supabase.from("campaigns").select("*").eq("id", campaignId).eq("business_id", context.businessId).maybeSingle();
-  if (!campaign) throw new CampaignEditError("Campaign not found", 404);
+  if (!campaign) throw new CampaignEditError(OWNER_ERRORS.campaignNotFound, 404);
 
   const requestHash = sha256(JSON.stringify(["ad_creative", campaignId, adId, change.headline ?? null, change.message ?? null, change.description ?? null]));
   const { data: existing, error: readError } = await database.from("campaign_edit_operations").select("*")

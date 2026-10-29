@@ -1410,7 +1410,7 @@ function BusinessCampaigns({
 
   async function buildActivationDigest(campaign: Campaign, connection: ConnectionDTO, delivery: CampaignDeliverySnapshot, days?: number): Promise<string> {
     const payload = activationConfirmationPayload(campaign, connection, delivery, days);
-    if (!crypto.subtle) throw new Error("Activation confirmation is unavailable in this browser.");
+    if (!crypto.subtle) throw new Error("This browser can't confirm the launch. Open AdBrain in Chrome or Safari and try again.");
     const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(payload));
     return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
   }

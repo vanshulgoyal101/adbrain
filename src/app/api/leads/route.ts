@@ -6,6 +6,7 @@ import { getLeadPage } from "@/lib/leads/queries";
 import { observeRoute } from "@/lib/observability/logger";
 import { logEvent } from "@/lib/audit";
 import { rateLimitResponse } from "@/lib/security/rate-limit";
+import { OWNER_ERRORS } from "@/lib/copy/owner-words";
 
 export const GET = observeRoute("/api/leads", "GET", async (request: Request) => {
   try {
@@ -34,7 +35,7 @@ export const DELETE = observeRoute("/api/leads", "DELETE", async (request: Reque
   const business = await getPrimaryBusiness();
   if (!business) return NextResponse.json({ error: "Business not found." }, { status: 404 });
   const { data: campaign } = await database.from("campaigns").select("id").eq("id", campaignId.data).eq("business_id", business.id).maybeSingle();
-  if (!campaign) return NextResponse.json({ error: "Campaign not found." }, { status: 404 });
+  if (!campaign) return NextResponse.json({ error: OWNER_ERRORS.campaignNotFound }, { status: 404 });
   const { data, error } = await database.rpc("leads_erase", { p_business_id: business.id, p_campaign_id: campaignId.data });
   if (error) return NextResponse.json({ error: "The enquiries couldn't be deleted. Try again." }, { status: 503 });
   await logEvent({ businessId: business.id, action: "leads.deleted", entityType: "campaign", entityId: campaignId.data, details: { count: data ?? 0 } });

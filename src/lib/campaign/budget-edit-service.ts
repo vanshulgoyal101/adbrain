@@ -18,6 +18,7 @@ import { getCampaignSpend, getSpendLimits } from "@/lib/supabase/queries";
 import { createClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/types";
 import { CampaignEditError, refuseWhileSwitchPending } from "./edit-service";
+import { OWNER_ERRORS } from "@/lib/copy/owner-words";
 
 /**
  * #774: edit a launched campaign's daily budget, total cap or end date, in the same `campaign_edit_operations`
@@ -118,7 +119,7 @@ export async function editCampaignBudget(context: AuthorizedBusiness, campaignId
 export async function editCampaignBudget(context: AuthorizedBusiness, campaignId: string, change: BudgetChange, options: Options): Promise<BudgetEditPreview | (BudgetEditResult & { replay: boolean })> {
   const database = createAdminClient() as unknown as SupabaseClient;
   const { data: campaign } = await (await createClient()).from("campaigns").select("*").eq("id", campaignId).eq("business_id", context.businessId).maybeSingle();
-  if (!campaign) throw new CampaignEditError("Campaign not found", 404);
+  if (!campaign) throw new CampaignEditError(OWNER_ERRORS.campaignNotFound, 404);
 
   const requestHash = sha256(JSON.stringify(["budget", campaignId, change.dailyRupees ?? null, change.capRupees ?? null, change.endTime ? new Date(change.endTime).toISOString() : null]));
   let row: Row | null = null;

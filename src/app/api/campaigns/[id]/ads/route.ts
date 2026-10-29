@@ -4,6 +4,7 @@ import { apiError } from "@/lib/api";
 import { adCreativeLinks, adResultsEnabled, adResultViews, type AdCreative, type StoredAdResult } from "@/lib/campaign/ad-results-store";
 import { observeRoute } from "@/lib/observability/logger";
 import { createClient } from "@/lib/supabase/server";
+import { OWNER_ERRORS } from "@/lib/copy/owner-words";
 
 export const runtime = "nodejs";
 
@@ -21,7 +22,7 @@ export const GET = observeRoute("/api/campaigns/[id]/ads", "GET", async (
   // RLS scopes every read to the owner's own campaigns and creatives.
   const { data: campaign } = await supabase.from("campaigns")
     .select("id, destination, creative_ids, meta_campaign_id, meta_adset_id, meta_ad_ids, raw").eq("id", id).maybeSingle();
-  if (!campaign) return apiError("Campaign not found", 404);
+  if (!campaign) return apiError(OWNER_ERRORS.campaignNotFound, 404);
   const { data, error } = await (supabase as unknown as SupabaseClient).from("ad_results")
     .select("meta_ad_id, ad_name, effective_status, delivered, impressions, link_clicks, conversations, leads, spend_paise, synced_at")
     .eq("campaign_id", id).is("period_start", null).is("period_end", null).limit(100);

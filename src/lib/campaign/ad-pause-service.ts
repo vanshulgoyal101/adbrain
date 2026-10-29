@@ -10,6 +10,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/types";
 import { CampaignEditError, refuseWhileSwitchPending } from "./edit-service";
+import { OWNER_ERRORS } from "@/lib/copy/owner-words";
 
 export type AdPauseAction = "pause" | "undo";
 export type AdPauseResult = { adId: string; status: string | null; effectiveStatus: string | null; changed: boolean };
@@ -27,7 +28,7 @@ function adPauses(raw: unknown): AdPauseEntry[] {
 export async function setAdDelivery(context: AuthorizedBusiness, campaignId: string, adId: string, action: AdPauseAction, reason?: string): Promise<AdPauseResult> {
   const supabase = await createClient();
   const { data: campaign } = await supabase.from("campaigns").select("*").eq("id", campaignId).eq("business_id", context.businessId).maybeSingle();
-  if (!campaign) throw new CampaignEditError("Campaign not found", 404);
+  if (!campaign) throw new CampaignEditError(OWNER_ERRORS.campaignNotFound, 404);
   if (String(campaign.status).toLowerCase() !== "active") throw new CampaignEditError("Only a running campaign's ads can be paused here.", 409);
   const review = reviewableCampaign(campaign);
   if (!review || !campaign.meta_campaign_id) throw new CampaignEditError("AdBrain can only change campaigns it launched.", 409);

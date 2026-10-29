@@ -82,7 +82,7 @@ async function handlePOST(req: Request) {
   const audienceDraft = parsed.data.audienceDraft;
   const destination = audienceDraft?.destination ?? parsed.data.destination ?? "instant_form";
   if (audienceDraft && audienceDraft.businessId !== business.id) {
-    return NextResponse.json({ error: "Business access is not allowed." }, { status: 403 });
+    return NextResponse.json({ error: "You can't plan campaigns for this business. Switch to your own business and try again." }, { status: 403 });
   }
 
   const approved = await getApprovedCreatives(business.id);
@@ -317,7 +317,7 @@ async function handlePOST(req: Request) {
         return NextResponse.json({ error: "You have too many unfinished campaigns. Finish or remove one, then try again." }, { status: 409 });
       }
     } catch {
-      return NextResponse.json({ error: "Saved draft operations could not be checked." }, { status: 503 });
+      return NextResponse.json({ error: "We couldn't check your saved draft just now. Try again in a minute." }, { status: 503 });
     }
   }
   const { data: row, error } = await supabase

@@ -7,6 +7,7 @@ import { ConnectionAccessError, requireOwnedBusiness } from "@/lib/meta/connecti
 import { observeRoute } from "@/lib/observability/logger";
 import { createClient } from "@/lib/supabase/server";
 import { ownerRefusal } from "@/lib/campaign/campaign-owner";
+import { OWNER_ERRORS } from "@/lib/copy/owner-words";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -29,7 +30,7 @@ export const PATCH = observeRoute("/api/campaigns/[id]/ads/[adId]", "PATCH", asy
 
   // RLS scopes this to the user's own campaigns.
   const { data: campaign } = await supabase.from("campaigns").select("business_id,meta_campaign_id").eq("id", id).maybeSingle();
-  if (!campaign) return apiError("Campaign not found", 404);
+  if (!campaign) return apiError(OWNER_ERRORS.campaignNotFound, 404);
   const refused = await ownerRefusal(campaign.business_id, campaign.meta_campaign_id);
   if (refused) return refused;
 

@@ -6,6 +6,7 @@ import { draftInputSchema } from "@/lib/campaign/connect-contracts";
 import { bestCreativeId, rerunPrefill } from "@/lib/campaign/rerun";
 import { observeRoute } from "@/lib/observability/logger";
 import { createClient } from "@/lib/supabase/server";
+import { OWNER_ERRORS } from "@/lib/copy/owner-words";
 
 export const runtime = "nodejs";
 
@@ -25,7 +26,7 @@ export const GET = observeRoute("/api/campaigns/[id]/rerun", "GET", async (
   // RLS scopes every read to the owner's own business.
   const { data: campaign } = await supabase.from("campaigns")
     .select("id, business_id, name, creative_ids, daily_budget, destination").eq("id", id).maybeSingle();
-  if (!campaign) return apiError("Campaign not found", 404);
+  if (!campaign) return apiError(OWNER_ERRORS.campaignNotFound, 404);
 
   const { data: operation } = await supabase.from("campaign_operations")
     .select("draft_id").eq("campaign_id", id).eq("state", "succeeded")

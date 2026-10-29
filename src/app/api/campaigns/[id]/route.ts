@@ -29,6 +29,7 @@ import { lacksAreaExclusions } from "@/lib/meta/service-area";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { campaignOwnedElsewhere, ownerRefusal } from "@/lib/campaign/campaign-owner";
 import { CampaignEditError, refuseWhileSwitchPending } from "@/lib/campaign/edit-service";
+import { OWNER_ERRORS } from "@/lib/copy/owner-words";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -42,7 +43,7 @@ export const GET = observeRoute("/api/campaigns/[id]", "GET", async (
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return apiError("Unauthorized", 401);
   const { data: campaign } = await supabase.from("campaigns").select("*").eq("id", id).maybeSingle();
-  if (!campaign) return apiError("Campaign not found", 404);
+  if (!campaign) return apiError(OWNER_ERRORS.campaignNotFound, 404);
   try {
     const context = await requireOwnedBusiness(campaign.business_id);
     const review = reviewableCampaign(campaign);
@@ -105,7 +106,7 @@ async function handlePATCH(
     .select("*")
     .eq("id", id)
     .maybeSingle();
-  if (!campaign) return apiError("Campaign not found", 404);
+  if (!campaign) return apiError(OWNER_ERRORS.campaignNotFound, 404);
   const refused = await ownerRefusal(campaign.business_id, campaign.meta_campaign_id);
   if (refused) return refused;
 
@@ -393,12 +394,12 @@ async function handleDELETE(
     .eq("id", id)
     .maybeSingle();
   if (!campaign) {
-    return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
+    return NextResponse.json({ error: OWNER_ERRORS.campaignNotFound }, { status: 404 });
   }
 
   // #1138: a duplicate of another business's Meta campaign is removed from AdBrain only.
   const elsewhere = await campaignOwnedElsewhere(campaign.business_id, campaign.meta_campaign_id).catch(() => null);
-  if (elsewhere === null) return NextResponse.json({ error: "Campaign storage unavailable. Try again." }, { status: 503 });
+  if (elsewhere === null) return NextResponse.json({ error: OWNER_ERRORS.campaignStorageBusy }, { status: 503 });
 
   let metaDeleted = false;
   if (!elsewhere) {
@@ -409,7 +410,7 @@ async function handleDELETE(
       storedBinding.metaConnectionGeneration === null
     ) {
       return NextResponse.json(
-        { error: "This campaign needs account reconciliation before it can be deleted." },
+        { error: "AdBrain needs to check this campaign's ad account before it can be deleted. Message support if this doesn't clear within a day." },
         { status: 409 },
       );
     }
@@ -437,7 +438,7 @@ async function handleDELETE(
         return NextResponse.json({ error: err.message }, { status: err.code === "CONFLICT" ? 409 : 400 });
       }
       return NextResponse.json(
-        { error: "Meta deletion could not be confirmed. The campaign remains in AdBrain so you can check its status." },
+        { error: "We couldn't confirm Meta deleted this campaign, so it stays in AdBrain. Check it in Ads Manager, then try again." },
         { status: 502 },
       );
     }

@@ -15,7 +15,7 @@ export const GET = observeRoute("/api/campaigns/list", "GET", async (request: Re
   const { data: { user } } = await database.auth.getUser();
   if (!user) return NextResponse.json({ error: "Sign in required." }, { status: 401 });
   const parsed = querySchema.safeParse(Object.fromEntries(new URL(request.url).searchParams));
-  if (!parsed.success) return NextResponse.json({ error: "Invalid campaign filters." }, { status: 400 });
+  if (!parsed.success) return NextResponse.json({ error: "We couldn't use those filters. Clear them and try again." }, { status: 400 });
   try {
     const actor = await requireOwnedBusiness(parsed.data.businessId);
     const page = await getCampaignPage(actor.businessId, parsed.data);

@@ -42,7 +42,7 @@ export async function runCampaignJob(database: CampaignSupabase, row: OperationR
     });
   } catch (error) {
     if (executionStarted) throw error;
-    const failed = markFailed(operation, "Queued campaign could not pass current ownership and review checks. Review again before creating.");
+    const failed = markFailed(operation, "This campaign didn't pass its checks again before sending. Tap Check my campaign again, then Send to Meta.");
     const saved = await createOperationCheckpoint(database, operation).checkpoint(failed);
     if (!saved) throw new Error("Worker could not persist the rejected operation.");
     return { kind: "failed" as const, operation: saved };

@@ -18,6 +18,7 @@ import { resultsStale } from "@/lib/campaign/results-freshness";
 import { createClient } from "@/lib/supabase/server";
 import { saveCampaign, saveCampaignResult } from "@/lib/campaign/trusted-write";
 import { saveOutsideChanges } from "@/lib/campaign/outside-changes";
+import { OWNER_ERRORS } from "@/lib/copy/owner-words";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -43,7 +44,7 @@ async function handlePOST(
     .eq("id", id)
     .maybeSingle();
   if (!campaign) {
-    return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
+    return NextResponse.json({ error: OWNER_ERRORS.campaignNotFound }, { status: 404 });
   }
   if (!campaign.meta_campaign_id) {
     return NextResponse.json(
@@ -62,7 +63,7 @@ async function handlePOST(
     storedBinding.metaConnectionGeneration === null
   ) {
     return NextResponse.json(
-      { error: "This campaign needs account reconciliation before it can refresh." },
+      { error: "AdBrain needs to check this campaign's ad account before it can refresh. Message support if this doesn't clear within a day." },
       { status: 409 },
     );
   }

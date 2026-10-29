@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { campaignsOwnedElsewhere, type CampaignClaim } from "@/lib/campaign/sync-ownership";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { OWNER_ERRORS } from "@/lib/copy/owner-words";
 
 export const OWNED_ELSEWHERE = "This campaign belongs to another of your AdBrain businesses. Change it from that business; deleting it here only removes this copy.";
 
@@ -35,5 +36,5 @@ export async function ownerRefusal(businessId: string, metaCampaignId: string | 
   if (elsewhere === false) return null;
   return elsewhere
     ? NextResponse.json({ error: OWNED_ELSEWHERE, code: "owned_elsewhere" }, { status: 409 })
-    : NextResponse.json({ error: "Campaign storage unavailable. Try again.", retryable: true }, { status: 503 });
+    : NextResponse.json({ error: OWNER_ERRORS.campaignStorageBusy, retryable: true }, { status: 503 });
 }

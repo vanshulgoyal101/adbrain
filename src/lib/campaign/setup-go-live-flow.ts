@@ -79,7 +79,7 @@ export const GO_LIVE_STALE = "This campaign changed after it was checked. Nothin
 const isConflict = (reason: unknown) => typeof reason === "object" && reason !== null && (reason as { code?: unknown }).code === "CONFLICT";
 
 async function sha256Hex(payload: string): Promise<string> {
-  if (!globalThis.crypto?.subtle) throw new Error("Activation confirmation is unavailable in this browser.");
+  if (!globalThis.crypto?.subtle) throw new Error("This browser can't confirm the launch. Open AdBrain in Chrome or Safari and try again.");
   const digest = await globalThis.crypto.subtle.digest("SHA-256", new TextEncoder().encode(payload));
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }

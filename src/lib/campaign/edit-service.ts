@@ -13,6 +13,7 @@ import { recordProductEvent } from "@/lib/observability/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { Campaign, Json } from "@/lib/types";
+import { OWNER_ERRORS } from "@/lib/copy/owner-words";
 
 /** #773: the shared path for editing a launched campaign. Audience now; Dev 4 adds budgets (#774) as another kind. */
 
@@ -162,7 +163,7 @@ export async function editCampaignAudience(
 export async function editCampaignAudience(context: AuthorizedBusiness, campaignId: string, change: AudienceChange, options: Options) {
   const database = createAdminClient() as unknown as SupabaseClient;
   const { data: campaign } = await (await createClient()).from("campaigns").select("*").eq("id", campaignId).eq("business_id", context.businessId).maybeSingle();
-  if (!campaign) throw new CampaignEditError("Campaign not found", 404);
+  if (!campaign) throw new CampaignEditError(OWNER_ERRORS.campaignNotFound, 404);
 
   const requestHash = sha256(JSON.stringify(["audience", campaignId, audienceChangeDigest(change)]));
   let row: Row | null = null;
@@ -375,7 +376,7 @@ const SWITCH_IN_PROGRESS = "This new audience is already being switched. Try aga
 export async function switchCampaignAudience(context: AuthorizedBusiness, campaignId: string, operationId: string, action: "switch" | "cancel"): Promise<AudienceSwitchResult> {
   const database = createAdminClient() as unknown as SupabaseClient;
   const { data: campaign } = await (await createClient()).from("campaigns").select("*").eq("id", campaignId).eq("business_id", context.businessId).maybeSingle();
-  if (!campaign) throw new CampaignEditError("Campaign not found", 404);
+  if (!campaign) throw new CampaignEditError(OWNER_ERRORS.campaignNotFound, 404);
   const { data, error } = await database.from("campaign_edit_operations").select("*")
     .eq("id", operationId).eq("business_id", context.businessId).eq("campaign_id", campaignId).eq("kind", "audience").maybeSingle();
   if (error) throw new CampaignEditError("Campaign edits are unavailable. Try again.", 503, true);

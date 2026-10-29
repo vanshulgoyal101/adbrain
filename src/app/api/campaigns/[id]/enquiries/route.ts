@@ -5,6 +5,7 @@ import { recordCustomerMark } from "@/lib/leads/customer-event";
 import { observeRoute } from "@/lib/observability/logger";
 import { rateLimitResponse } from "@/lib/security/rate-limit";
 import { createClient } from "@/lib/supabase/server";
+import { OWNER_ERRORS } from "@/lib/copy/owner-words";
 
 const optionalText = (max: number) => z.string().trim().max(max).optional();
 // #798: `customer: true` logs a chat that became a customer in one tap (no details needed).
@@ -42,7 +43,7 @@ export const POST = observeRoute("/api/campaigns/[id]/enquiries", "POST", async 
   if (limited) return limited;
 
   const { data: campaign } = await database.from("campaigns").select("*").eq("id", id).maybeSingle();
-  if (!campaign) return NextResponse.json({ error: "Campaign not found." }, { status: 404 });
+  if (!campaign) return NextResponse.json({ error: OWNER_ERRORS.campaignNotFound }, { status: 404 });
   if (campaignDestination(campaign) !== "whatsapp") {
     return NextResponse.json({ error: "Real enquiries can be logged on WhatsApp campaigns only." }, { status: 400 });
   }
