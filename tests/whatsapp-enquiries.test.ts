@@ -47,7 +47,7 @@ vi.mock("@/lib/supabase/server", () => ({
 vi.mock("@/lib/security/rate-limit", () => ({
   rateLimitResponse: async () => (db.limited ? Response.json({ error: "Too many requests." }, { status: 429 }) : null),
 }));
-vi.mock("@/lib/observability/logger", () => ({ observeRoute: (_path: string, _method: string, handler: unknown) => handler }));
+vi.mock("@/lib/observability/logger", () => ({ observeRoute: (_path: string, _method: string, handler: unknown) => handler, recordProductEvent: () => {} }));
 
 const WHATSAPP = "30000000-0000-4000-8000-000000000001";
 const FORM = "30000000-0000-4000-8000-000000000002";

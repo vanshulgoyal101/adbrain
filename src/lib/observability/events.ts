@@ -70,6 +70,10 @@ export const productEventSchema = z.object({
     metaUserTitle: z.string().max(160).optional(),
     fbtraceId: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/).optional(),
     metaPath: label.optional(),
+    /** #2026: `lead.customer_marked`, saved when a lead becomes a customer or stops being one (undone). */
+    source: z.enum(["inbox", "whatsapp"]).optional(),
+    campaignId: identifier.optional(),
+    undone: z.boolean().optional(),
   }),
 });
 
