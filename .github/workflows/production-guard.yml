@@ -133,7 +133,7 @@ jobs:
           rollback=$(cat rollback.txt 2>/dev/null || echo "not attempted (scheduled run, install or wait failed, Chromium OS packages missing, or no VERCEL_TOKEN)")
           # Public repo: never post anything token-shaped (#413).
           rollback=$(sed -E 's/\b(vc[a-z])_[A-Za-z0-9]{16,}/\1_[redacted]/g; s/--token[= ][^ ]+/--token [redacted]/g' <<<"$rollback")
-          body="$(printf 'Run: %s\n\nSmoke:\n```\n%s\n```\nRollback:\n```\n%s\n```\nRecovery: docs/RELEASING.md#production-guard\n' "$run" "$smoke" "$rollback")"
+          body="$(printf 'Run: %s\n\nSmoke:\n```\n%s\n```\nRollback:\n```\n%s\n```\nRecovery: docs/operations/releasing-recovery.md#production-guard\n' "$run" "$smoke" "$rollback")"
           # One open alert at a time: a repeat failure comments on it instead of opening another.
           open=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search "in:title \"${PREFIX}Production smoke failed on\"" --json number --jq '.[0].number // empty')
           if [ -n "$open" ]; then

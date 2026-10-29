@@ -36,7 +36,16 @@
     "metaChecking": "Meta is checking your ads. This usually takes minutes to a few hours, and up to a day.",
     "metaReview": "Meta review",
     "chats": "Chats",
-    "perChat": "Per chat"
+    "perChat": "Per chat",
+    "weekTitle": "Last week: {chats, plural, one {# chat} other {# chats}}, {enquiries, plural, one {# real enquiry} other {# real enquiries}}, {spend} spent",
+    "weekBest": "Best ad so far: ''{name}''.",
+    "weekQuickQuestions": "Few people who open WhatsApp send a message. Try quick questions on your next run.",
+    "weekAddEnquiries": "Add which chats were real enquiries, so you can see what each one costs.",
+    "weekRunAgain": "Nothing is running. Run your best ad again?",
+    "weekOpenCampaigns": "Open Campaigns",
+    "weekAddEnquiriesAction": "Add enquiries",
+    "weekRunAgainAction": "Run it again",
+    "weekDismiss": "Hide last week's summary"
   },
   "workQueue": {
     "brandTitle": "Set up your business",
@@ -45,15 +54,6 @@
     "reviewTitle": "{n, plural, one {# ad needs review} other {# ads need review}}",
     "reviewDetail": "Check the picture and words before you approve them.",
     "reviewAction": "Review ads",
-    "contextTitle": "Finish your business details",
-    "contextDetail": "Missing: {fields}.",
-    "contextAction": "Update brand",
-    "field": {
-      "description": "business description",
-      "voice": "brand voice",
-      "audience": "target audience",
-      "areas": "service areas"
-    },
     "createTitle": "Make your first ads",
     "createDetail": "Who do you want to reach, and what would you like them to do?",
     "createAction": "Start creating",
@@ -80,7 +80,100 @@
     "planFreeEndsDetail": "Then it's ₹999 a month. No auto-debit; you pay when you choose.",
     "planDueTitle": "Your ₹999 plan payment is due",
     "planDueDetail": "Running ads keep running. New ads and campaigns wait until you pay.",
-    "planPayAction": "Pay ₹999"
+    "planPayAction": "Pay ₹999",
+    "meter": {
+      "title": "Your ads know {n} of {total} things about you",
+      "offer": "Make your offer specific: add a price or a free first step.",
+      "proof": "Add one number people can trust: years in business, jobs done or your warranty.",
+      "why": "Why do customers pick you? One line makes your ads sound like you, not like everyone else.",
+      "audience": "Who are your best customers?",
+      "example": "Like “{example}”.",
+      "add": "Add",
+      "notNow": "Not now",
+      "save": "Save",
+      "cancel": "Cancel",
+      "nextCreate": "Your next ads will use this. Running ads don't change.",
+      "saved": "Saved. Your next ads will use this.",
+      "label": {
+        "offer": "Your offer",
+        "proof": "A number people can trust",
+        "why": "Why customers pick you",
+        "audience": "Your best customers"
+      },
+      "examples": {
+        "solar": {
+          "offer": "Free site survey",
+          "audience": "homeowners in Mohali with monthly power bills over ₹3,000"
+        },
+        "interiors": {
+          "offer": "Free design visit",
+          "audience": "families moving into a new flat"
+        },
+        "ielts": {
+          "offer": "Free demo class",
+          "audience": "Class 12 students planning to study abroad"
+        }
+      },
+      "needs": {
+        "offer": "Add a price or a free first step, like a starting price or a free visit.",
+        "proof": "Add a number your ads can quote, like 10 years in business or 200 homes done."
+      }
+    }
+  },
+  "verdict": {
+    "label": {
+      "working": "Working",
+      "aboutAverage": "About average",
+      "costly": "Costly",
+      "early": "Early days",
+      "notShowing": "Not showing yet",
+      "noChats": "No chats yet",
+      "noEnquiries": "No enquiries yet",
+      "live": "Live",
+      "ended": "Ended"
+    },
+    "chats": "{n, plural, one {# chat} other {# chats}}",
+    "enquiries": "{n, plural, one {# enquiry} other {# enquiries}}",
+    "chat": "chat",
+    "enquiry": "enquiry",
+    "noChats": "no chats",
+    "noEnquiries": "no enquiries",
+    "less": "less than",
+    "same": "about the same as",
+    "more": "more than",
+    "againstOwn": ", {word} your last campaign ({cost} each)",
+    "againstRange": ", {word} usual for {category} ads AdBrain has run ({low}–{high})",
+    "againstTypical": ", {word} usual for {category} ads AdBrain has run (about {typical} each)",
+    "endedNone": "It ended with {chats}, too few to judge.",
+    "endedFew": "It ended with {chats}, too few to judge yet. Run it again for longer?",
+    "endedMeasured": "It ended with {chats} at {cost} each.",
+    "endedWorked": "{chats} at {cost} each. Run it again with the best ad first?",
+    "endedCostlyChats": "It didn't bring chats at a good price. Try new ads?",
+    "endedCostlyEnquiries": "It didn't bring enquiries at a good price. Try new ads?",
+    "weakAd": "One ad costs {k} times as much per {chat} as your others. Pausing it leaves more of your budget for the ones that work.",
+    "weakAdNone": "One ad has spent {amount} with {none} while your others bring them. Pausing it leaves more of your budget for the ones that work.",
+    "opens": " {opens} people opened WhatsApp but didn't send the message.",
+    "noResults": "{amount} spent, {none} yet.{opens}",
+    "notShowingDay": "Your ads haven't started showing after a day. Check what Meta says.",
+    "notShowing": "Meta is checking your ads. This usually takes minutes to a few hours, and up to a day.",
+    "early": "{chats} so far. AdBrain will tell you if it's working after {min}.",
+    "earlyNoChats": "No chats yet.",
+    "earlyNoEnquiries": "No enquiries yet.",
+    "cost": "Each {chat} costs {cost}{against}.",
+    "waiting": "{n, plural, one {# person is waiting for your reply.} other {# people are waiting for your reply.}}",
+    "card": {
+      "howItsGoing": "How it's going",
+      "noun": "{n, plural, one {chat} other {chats}}",
+      "nounEnquiry": "{n, plural, one {enquiry} other {enquiries}}",
+      "perResult": "per {noun} · {results} {nouns}, {amount} spent",
+      "spent": "{nouns} · {amount} spent",
+      "reply": "Reply now",
+      "runAgain": "Run this again",
+      "newAds": "Try new ads",
+      "metaStatus": "See Meta's status",
+      "editAd": "Edit the ad",
+      "details": "Details"
+    }
   },
   "settings": {
     "language": "App language",
@@ -143,6 +236,15 @@
       "prefer_meta": "I'd rather use Meta myself",
       "other": "Something else"
     }
+  },
+  "resultsCard": {
+    "title": "Good week. Share it?",
+    "body": "{n} people enquired this week. Put this card on your WhatsApp Status so customers see you're in demand. It shows no money amounts.",
+    "share": "Share card",
+    "skip": "Not this week",
+    "footerToggle": "Show \"Made with AdBrain\"",
+    "shareFailed": "The card couldn't be made. Try again.",
+    "preview": "Your results card"
   },
   "setup": {
     "title": "Set up your first ad",
@@ -287,7 +389,8 @@
       "notConnected": "Not connected",
       "payMeta": "Payment on Meta",
       "payLast": "Set up for your last campaign",
-      "payAdd": "Add a card or UPI in Meta",
+      "payAdd": "Add a card, or pay by UPI or net banking",
+      "payHow": "Card: Meta charges it after the ads run. UPI or net banking: add money first, at least {runTotal}, or the ads stop when it runs out.",
       "payLink": "Add payment in Meta",
       "stopsAt": "Stops at {total}",
       "stopsDetail": "{days} days at {daily} a day, including Meta's GST",
@@ -305,6 +408,7 @@
       },
       "live": "You're live. Meta is checking your ads; they usually start within a day.",
       "fixInReview": "Fix in campaign review",
+      "billingRequired": "Meta needs a way to pay first: a card, or money added by UPI or net banking. Add it in Meta, then tap Go live again. Nothing was spent.",
       "savedPaused": "Your campaign is saved, paused. Nothing was spent.",
       "openCampaigns": "Open Campaigns"
     }
