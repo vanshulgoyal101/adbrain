@@ -161,11 +161,19 @@ async function requireFreshBackup(dry) {
   console.log(`    Backup ${run.url} done.`);
 }
 
+/**
+ * The guard run that judges a commit, from `gh run list` (newest first). Non-production deployment
+ * statuses fire the guard too and its job skips them; a skipped run is no verdict (#2138).
+ */
+export function guardRun(runs) {
+  return runs.find((r) => !(r.status === "completed" && r.conclusion === "skipped"));
+}
+
 async function waitForGuard(sha) {
   for (let hop = 0; hop < 3; hop++) {
     let run;
     for (let i = 0; i < 90; i++) {
-      run = ghJson("run", "list", "-R", repo, "--workflow", "production-guard.yml", "--commit", sha, "--limit", "1", "--json", "databaseId,status,conclusion,url")[0];
+      run = guardRun(ghJson("run", "list", "-R", repo, "--workflow", "production-guard.yml", "--commit", sha, "--limit", "20", "--json", "databaseId,status,conclusion,url"));
       if (run?.status === "completed") break;
       await sleep(20_000);
     }
