@@ -12,6 +12,7 @@ import {
 import { createClient } from "@/lib/supabase/server";
 import { getPrimaryBusiness } from "@/lib/supabase/queries";
 import type { Lead } from "@/lib/types";
+import { ownerError } from "@/i18n/request-locale";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -71,7 +72,7 @@ async function handlePOST(request?: Request) {
     .order("created_time", { ascending: false, nullsFirst: false })
     .limit(200)
     .abortSignal(AbortSignal.timeout(3_000));
-  if (readError) return NextResponse.json({ error: "Could not reload saved leads. Your existing enquiries are still available.", imported, failedForms, sync }, { status: 503 });
+  if (readError) return NextResponse.json({ error: await ownerError("enquiriesNotReloaded"), imported, failedForms, sync }, { status: 503 });
 
   await logEvent({
     businessId: business.id,

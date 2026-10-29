@@ -759,6 +759,17 @@
     "planRequestInvalid": "A valid goal and answers are required.",
     "interviewTooLong": "The interview is too long. Continue in the campaign editor.",
     "businessNotAllowed": "Business access is not allowed.",
-    "planFailed": "Could not prepare the campaign plan."
+    "planFailed": "Could not prepare the campaign plan.",
+    "signInRequired": "Sign in required.",
+    "businessMissing": "Business not found.",
+    "chooseCampaign": "Choose a campaign.",
+    "enquiriesNotDeleted": "The enquiries couldn't be deleted. Try again.",
+    "enquiryNotDeleted": "The enquiry couldn't be deleted. Try again.",
+    "enquiryNotFound": "Enquiry not found.",
+    "enquiriesNotReloaded": "Couldn't reload your saved enquiries. Your existing enquiries are still here.",
+    "enquiryCountUnavailable": "Enquiry count unavailable.",
+    "requestNotSent": "We couldn't send your request. Try again.",
+    "pickAccountAndPage": "Pick both an ad account and a page.",
+    "facebookStillConnected": "Facebook is still connected. Try again in a minute."
   }
 }

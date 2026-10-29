@@ -113,6 +113,18 @@ const ENGLISH: Record<OwnerErrorKey, string> = {
   interviewTooLong: "The interview is too long. Continue in the campaign editor.",
   businessNotAllowed: "Business access is not allowed.",
   planFailed: "Could not prepare the campaign plan.",
+  // #2327: Enquiries and the Facebook connect path (the leads 404 reuses #2312's campaignNotFound).
+  signInRequired: "Sign in required.",
+  businessMissing: "Business not found.",
+  chooseCampaign: "Choose a campaign.",
+  enquiriesNotDeleted: "The enquiries couldn't be deleted. Try again.",
+  enquiryNotDeleted: "The enquiry couldn't be deleted. Try again.",
+  enquiryNotFound: "Enquiry not found.",
+  enquiriesNotReloaded: "Couldn't reload your saved enquiries. Your existing enquiries are still here.",
+  enquiryCountUnavailable: "Enquiry count unavailable.",
+  requestNotSent: "We couldn't send your request. Try again.",
+  pickAccountAndPage: "Pick both an ad account and a page.",
+  facebookStillConnected: "Facebook is still connected. Try again in a minute.",
 };
 // The messages that take values, rendered with these.
 const VALUES: Partial<Record<OwnerErrorKey, Record<string, string | number>>> = {
@@ -142,7 +154,7 @@ const RENDERED: Partial<Record<OwnerErrorKey, string>> = {
 };
 const keys = Object.keys(ENGLISH) as OwnerErrorKey[];
 
-describe("owner errors (#2305, #2312, #2324, #2330)", () => {
+describe("owner errors (#2305, #2312, #2324, #2327, #2330)", () => {
   it("has the same keys in English and Hindi", () => {
     expect(Object.keys(en.errors).sort()).toEqual([...keys].sort());
     expect(Object.keys(hi.errors).sort()).toEqual([...keys].sort());

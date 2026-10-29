@@ -118,17 +118,17 @@ describe("verdict in Hindi (#1438)", () => {
   });
 
   it("people waiting, then the cost against the owner's last campaign", () => {
-    expect(h({ comparison: own, waiting: 2 })).toMatchObject({ state: "working", label: "चल रहा है", action: "reply",
+    expect(h({ comparison: own, waiting: 2 })).toMatchObject({ state: "working", label: "अच्छा चल रहा है", action: "reply",
       sentence: "2 लोग आपके जवाब का इंतज़ार कर रहे हैं। हर चैट ₹150 की पड़ रही है, आपके पिछले कैंपेन (हर एक ₹300) से कम।" });
     expect(h({ comparison: own, waiting: 1 }).sentence).toMatch(/^1 व्यक्ति आपके जवाब का इंतज़ार कर रहा है। /);
     expect(h({ comparison: null })).toMatchObject({ label: "चालू", sentence: "हर चैट ₹150 की पड़ रही है।" });
     expect(h({ comparison: { ...solar, results: 30, low: 100, high: 300 }, spend: 3500 })).toMatchObject({ label: "महंगा",
       sentence: "हर चैट ₹350 की पड़ रही है, AdBrain के चलाए solar विज्ञापनों के आम खर्च (₹100–300) से ज़्यादा।" });
-    expect(h({ spend: 2000 }).sentence).toBe("हर चैट ₹200 की पड़ रही है, AdBrain के चलाए solar विज्ञापनों के आम खर्च (लगभग ₹200 हर एक) से लगभग बराबर।");
+    expect(h({ spend: 2000 }).sentence).toBe("हर चैट ₹200 की पड़ रही है, AdBrain के चलाए solar विज्ञापनों के आम खर्च (लगभग ₹200 हर एक) से बहुत अलग नहीं।");
   });
 
   it("early days, no results with opens, not showing, and enquiries", () => {
-    expect(h({ results: 3, spend: 300 })).toMatchObject({ label: "अभी शुरुआत है", sentence: "अब तक 3 चैट। 5 के बाद AdBrain बताएगा कि यह चल रहा है या नहीं।" });
+    expect(h({ results: 3, spend: 300 })).toMatchObject({ label: "अभी शुरुआत है", sentence: "अब तक 3 चैट। 5 के बाद AdBrain बताएगा कि यह काम कर रहा है या नहीं।" });
     expect(h({ results: 0, spend: 100 }).sentence).toBe("आपके विज्ञापन अब तक 5,000 बार दिखे हैं। अभी कोई चैट नहीं; बहुत लोग शाम को मैसेज करते हैं।");
     expect(h({ results: 0, spend: 400, opens: 12, comparison: null })).toMatchObject({ label: "अभी कोई चैट नहीं",
       sentence: "₹400 खर्च हुए, अभी तक कोई चैट नहीं। 12 लोगों ने WhatsApp खोला पर मैसेज नहीं भेजा।" });
@@ -142,7 +142,7 @@ describe("verdict in Hindi (#1438)", () => {
     const expensive = { ad: ad("a2", 2, 900), reference: ad("a1", 6, 600), reason: "expensive" as const };
     expect(h({ weakAd: expensive }).sentence).toBe("एक विज्ञापन में हर चैट बाकी विज्ञापनों से 5 गुना महंगी पड़ रही है। इसे रोकने से बजट उन विज्ञापनों को मिलेगा जो चल रहे हैं।");
     expect(h({ status: "completed", destination: "instant_form", spend: 5000, opens: null })).toMatchObject({ label: "खत्म",
-      sentence: "इससे सही दाम पर पूछताछ नहीं आई। नए विज्ञापन आज़माएं?" });
+      sentence: "इससे सही दाम पर पूछताछ नहीं आई। नए विज्ञापन आज़माएँ?" });
     expect(h({ status: "completed", results: 0, spend: 100, opens: 0 }).sentence).toBe("यह 0 चैट के साथ खत्म हुआ, कुछ कहने के लिए बहुत कम।");
   });
 
