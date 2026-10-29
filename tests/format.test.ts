@@ -63,6 +63,12 @@ describe("formats (#403 S2)", () => {
     expect(formatDay("2026-10-24T18:30:00Z")).toBe("25 Oct");
   });
 
+  it("includes the year on plan due dates without changing the India calendar day", () => {
+    expect(formatDay("2026-12-09T18:30:00Z", true)).toBe("10 Dec 2026");
+    expect(formatDay("2026-12-31T18:30:00Z", true)).toBe("1 Jan 2027");
+    expect(formatDay("not a date", true)).toBe("");
+  });
+
   it("is the only place components and routes format money or time (#1290)", () => {
     const files = (dir: string): string[] => readdirSync(dir).flatMap((name) => {
       const path = join(dir, name);
