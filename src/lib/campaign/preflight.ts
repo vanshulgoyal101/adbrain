@@ -248,8 +248,9 @@ export function runPreflight(input: PreflightInput): ReviewDTO {
   const creativesProblem = creativesBlockerMessage(draft, input.creatives);
   if (creativesProblem) blockers.push(blocker("FORBIDDEN", "REVIEW_CREATIVES", creativesProblem));
   if (draft.destination === "whatsapp") {
-    if (!input.whatsappNumber || !/^\+[1-9]\d{6,14}$/.test(input.whatsappNumber)) {
-      blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_WHATSAPP_NOT_LINKED", "Connect a WhatsApp Business number to the selected Facebook Page and verify access before reviewing."));
+    // #681: without Meta access the number can't be read; the connection blocker above is the one fix.
+    if (input.connection?.canCreatePaused && (!input.whatsappNumber || !/^\+[1-9]\d{6,14}$/.test(input.whatsappNumber))) {
+      blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_WHATSAPP_NOT_LINKED", "Your Facebook Page has no WhatsApp number linked yet, so the ad's button has nowhere to open a chat. Link the number in Settings, then review again."));
     }
     if (input.whatsappMessageProblem) {
       blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_WHATSAPP_MESSAGE", `Your WhatsApp message: ${input.whatsappMessageProblem}`));
