@@ -103,6 +103,7 @@ const ROUTES: Record<string, Entry> = {
   "preferences": { kind: "session", methods: ["GET", "POST"], why: "session: RLS client (the owner's own preferences)" },
   "privacy-requests": { kind: "session", methods: ["GET", "POST"], why: "session: RLS client (the user's own requests)" },
   "privacy-requests/operator": { kind: "session", methods: ["GET", "PATCH"], why: "session: privacy_request_operator_allowed (a user-ID grant table, #1723)" },
+  "results-card": { kind: "owner", methods: ["GET", "POST"] },
   "spend-limits": { kind: "session", methods: ["POST"], why: "session: business from getPrimaryBusiness(), never from input" },
   "whatsapp/webhook": { kind: "webhook", methods: ["GET", "POST"] },
 };

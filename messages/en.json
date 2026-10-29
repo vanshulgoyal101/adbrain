@@ -237,6 +237,15 @@
       "other": "Something else"
     }
   },
+  "resultsCard": {
+    "title": "Good week. Share it?",
+    "body": "{n} people enquired this week. Put this card on your WhatsApp Status so customers see you're in demand. It shows no money amounts.",
+    "share": "Share card",
+    "skip": "Not this week",
+    "footerToggle": "Show \"Made with AdBrain\"",
+    "shareFailed": "The card couldn't be made. Try again.",
+    "preview": "Your results card"
+  },
   "setup": {
     "title": "Set up your first ad",
     "step1": "Your business",
