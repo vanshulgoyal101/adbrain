@@ -78,7 +78,7 @@ an application release.
 
 The parser does not validate live account quota or model availability. The
 monthly limit is a per-business preflight check, **not an atomic reservation,
-dollar budget, or image-cost cap**. See [AI Pipeline](../AI_PIPELINE.md).
+dollar budget, or image-cost cap**. See [AI Pipeline](../architecture/ai-pipeline.md).
 
 ## Images
 

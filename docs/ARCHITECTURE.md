@@ -121,7 +121,7 @@ before POST and reconciles GET results before offering a fresh attempt. Late
 responses may clear only their matching pending identity. This is recovery of
 saved results, not a durable generation queue, cross-tab admission lock, or
 once-only paid execution guarantee. Regeneration resets approval. See
-[AI Pipeline](AI_PIPELINE.md#variant-generation) for partial results and costs.
+[AI Pipeline](architecture/ai-pipeline-variants.md#variant-generation) for partial results and costs.
 
 ## Campaign Data Flow
 
