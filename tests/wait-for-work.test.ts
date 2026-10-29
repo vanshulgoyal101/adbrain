@@ -223,6 +223,10 @@ describe("ready pool (#573)", () => {
     expect(readyPool(lanes, "cpo").map((i) => i.number)).toEqual([21]);
     expect(readyPool(lanes, "analyst").map((i) => i.number)).toEqual([22]);
   });
+  it("never offers frozen work: `later` and `standing` stay out of the pool (#2052)", () => {
+    const pool = [issue(30, "ready", "lane:dev", "later"), issue(31, "ready", "lane:dev", "standing"), issue(32, "ready", "lane:dev")];
+    expect(readyPool(pool, "dev3").map((i) => i.number)).toEqual([32]);
+  });
 });
 
 describe("Dev 4 role", () => {

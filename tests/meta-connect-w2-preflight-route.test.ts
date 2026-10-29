@@ -156,4 +156,21 @@ describe("POST /api/campaigns/preflight", () => {
     expect(response.status).toBe(409);
     expect(mocks.withMetaConnection).not.toHaveBeenCalled();
   });
+
+  // #681: an owner reads these words as is, so they name the way out instead of "Draft not found." or "preparation".
+  it("tells the owner to reload when the draft has expired", async () => {
+    mocks.draft = { ...draftRow, expires_at: "2020-01-01T00:00:00.000Z" };
+    const { POST } = await import("@/app/api/campaigns/preflight/route");
+    const response = await POST(request({ businessId, draftId, draftVersion: 1 }));
+    expect(response.status).toBe(404);
+    expect((await response.json()).error.message).toBe("This campaign draft has expired or was removed. Reload the page and set up the campaign again. Nothing was sent to Meta.");
+  });
+
+  it("says nothing was sent and to try again when the check itself fails", async () => {
+    mocks.getConnectionStatus.mockRejectedValue(new Error("database timeout"));
+    const { POST } = await import("@/app/api/campaigns/preflight/route");
+    const response = await POST(request({ businessId, draftId, draftVersion: 1 }));
+    expect(response.status).toBe(503);
+    expect((await response.json()).error).toMatchObject({ retryable: true, message: "Couldn't check your campaign just now. Nothing was sent to Meta. Try again in a minute." });
+  });
 });
