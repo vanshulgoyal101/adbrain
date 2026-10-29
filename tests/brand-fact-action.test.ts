@@ -48,6 +48,17 @@ describe("saveBrandFact (#2032)", () => {
     expect(mocks.update).not.toHaveBeenCalled();
   });
 
+  // #2231: the scoreboard's Brand clock stops on the first save flagged usable; this save can add the last fact.
+  it("flags whether the saved Brand is now usable, for the scoreboard's Brand clock", async () => {
+    const row = { id: "b1", name: "Sun Solar", vertical: "Solar installer", phone: "+919876543210", locations: ["Mohali"] };
+    mocks.written.mockResolvedValue({ data: { ...row, offers: ["Free site survey"] }, error: null });
+    await saveBrandFact("b1", "offer", "Free site survey");
+    expect(mocks.logEvent).toHaveBeenLastCalledWith(expect.objectContaining({ action: "business.update", eventAttributes: { brandUsable: true } }));
+    mocks.written.mockResolvedValue({ data: { ...row, phone: null, offers: ["Free site survey"] }, error: null });
+    await saveBrandFact("b1", "audience", "Homeowners");
+    expect(mocks.logEvent).toHaveBeenLastCalledWith(expect.objectContaining({ eventAttributes: { brandUsable: false } }));
+  });
+
   it("says so in plain words when the write fails", async () => {
     mocks.written.mockResolvedValue({ data: null, error: { message: "permission denied for table businesses" } });
     expect(await saveBrandFact("b1", "audience", "Homeowners")).toEqual({ ok: false, error: "Your business details weren't saved. Check your connection and try again." });
