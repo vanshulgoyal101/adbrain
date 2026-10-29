@@ -356,7 +356,7 @@ export function LeadInbox({
     // #1260: one state word per row: New → Contacted in {m} → Customer.
     // #1819: Meta's test lead isn't someone waiting (the counts leave it out), so it says what it is.
     const state = isMetaTestLead(l) ? "test" : current === "customer" ? "customer" : current === "closed" ? "closed" : first ? "contacted" : current === "new" ? "new" : "other";
-    const stateLabel = state === "test" ? "Test lead" : state === "new" ? "New" : state === "contacted" ? contactedLabel(contactMinutes) : state === "closed" ? "Not interested" : STATUS_LABEL[current];
+    const stateLabel = state === "test" ? "Test from Meta" : state === "new" ? "New" : state === "contacted" ? contactedLabel(contactMinutes) : state === "closed" ? "Not interested" : STATUS_LABEL[current];
     // #1819: no WhatsApp/Call line and no Became a customer, so ⋯ sits on the name row instead of alone on a line.
     const noActions = state === "test" || state === "customer" || (state === "new" && !l.phone);
     const city = isMetaTestLead(l) ? null : l.city;

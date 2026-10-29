@@ -9,6 +9,7 @@ the PRs and issues; priorities belong in [Roadmap](../roadmap.md). Start at [the
 
 | Page | What the owner does there |
 | --- | --- |
+| [How AdBrain works](how-adbrain-works.md) | The whole loop in plain words, with a diagram: start here |
 | [Sign in and connect Meta](setup.md) | Sign in; connect a Meta ad account and Page |
 | [Brand](brand.md) | Build the Brand Brain the ads are written from |
 | [Create and review ads](create.md) | Make ads, edit them, approve them |
