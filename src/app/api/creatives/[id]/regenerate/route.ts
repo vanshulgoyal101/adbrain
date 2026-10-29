@@ -9,6 +9,7 @@ import {
 } from "@/lib/creative/persist";
 import { NoLLMKeysError } from "@/lib/llm";
 import { rateLimitResponse } from "@/lib/security/rate-limit";
+import { planGate } from "@/lib/plan/gate";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { getActiveInstructionsText } from "@/lib/supabase/queries";
@@ -77,6 +78,9 @@ async function handlePOST(
   if (!business) {
     return NextResponse.json({ error: "Business not found" }, { status: 404 });
   }
+
+  const unpaid = await planGate(business.id);
+  if (unpaid) return NextResponse.json({ error: unpaid.error, code: unpaid.code }, { status: unpaid.status });
 
   const angle = getAngleByName(creative.angle ?? "") ?? AD_ANGLES[0];
   const limit = configuredMonthlyTokenLimit(user);
