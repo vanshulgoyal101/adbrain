@@ -25,7 +25,7 @@ export interface MetaCampaignState {
   status: string;
   dailyBudget?: string;
   lifetimeBudget?: string;
-  adSets: Array<{ id: string; status?: string; dailyBudget?: string; lifetimeBudget?: string }>;
+  adSets: Array<{ id: string; status?: string; dailyBudget?: string; lifetimeBudget?: string; endTime?: string }>;
 }
 
 const amountSchema = z.string().regex(/^\d+(?:\.\d+)?$/).transform(Number)

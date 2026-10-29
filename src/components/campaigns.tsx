@@ -133,9 +133,9 @@ import { cn } from "@/lib/utils";
 import { resultsWaitLine, throttleActive } from "@/lib/campaign/meta-wait";
 import { useMounted } from "@/lib/use-mounted";
 import { refreshIfStale, staleCampaignIds } from "@/lib/campaign/results-freshness";
-import { GONE_LINES, OUTSIDE_LINES, budgetChangedInMeta, goneInMeta, madeOutsideAdBrain, pausedInMeta } from "@/lib/campaign/gone-in-meta";
+import { GONE_LINES, OUTSIDE_LINES, budgetChangedInMeta, endTimeChangedInMeta, goneInMeta, madeOutsideAdBrain, pausedInMeta } from "@/lib/campaign/gone-in-meta";
 import { CampaignTestOptions } from "@/components/campaign-test-options";
-import { formatDate, formatMoney, formatMoneyExact, formatNumber, formatPerDay } from "@/lib/format";
+import { formatDate, formatDay, formatMoney, formatMoneyExact, formatNumber, formatPerDay } from "@/lib/format";
 
 const subscribeNever = () => () => {};
 
@@ -2527,6 +2527,7 @@ function BusinessCampaigns({
                         {budgetEditable && <Button variant="outline" data-product-event="campaign.edit_budget" onClick={() => setBudgetEdit({ campaign: c, start: budgetFormStart(c)! })}>Change budget</Button>}
                       </div>
                     ) : null}
+                    {endTimeChangedInMeta(c) ? <p className="border-l-2 border-slate-300 pl-3 text-sm text-slate-700">{OUTSIDE_LINES.endTime(formatDay(endTimeChangedInMeta(c)!.now))}</p> : null}
                     <CampaignEnquiryFeedback error={cardError?.id === c.id ? cardError : undefined} adsManagerUrl={cardError?.id === c.id && cardError.adsManager ? adsLink(c) : undefined} adsManagerLabel={tc("card.openAdsManager")} />
                     {waitingSwitch[c.id] && (c.status === "active" || c.status === "paused") ? (
                       <AudienceSwitchStrip campaignId={c.id} operationId={waitingSwitch[c.id]} running={c.status === "active"} lastError={waitingError[c.id] ?? null}

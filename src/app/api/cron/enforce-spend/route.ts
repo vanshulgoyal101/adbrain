@@ -7,6 +7,8 @@ import { confirmCustomerCampaign, getCustomerBalance, listSettlingBusinesses } f
 import { refreshOpenRunCosts, settlePausedRuns } from "@/lib/payments/meta-cost-evidence";
 import { fundingMode } from "@/lib/payments/operator-funding";
 import { cappedRunEnded } from "@/lib/campaign/activation";
+import { metaCapEndTime } from "@/lib/campaign/gone-in-meta";
+import { saveOutsideChanges } from "@/lib/campaign/outside-changes";
 import {
   requireScheduledBusiness,
   withMetaConnection,
@@ -180,15 +182,26 @@ async function handleGET(request: Request) {
         incomplete = true;
         continue;
       }
+      const binding = { adAccountId: storedBinding.metaAdAccountId, pageId: storedBinding.metaPageId };
+      // #2290: paused only because the stored end time passed? The owner may have moved the end date in Ads Manager
+      // since the last refresh, so Meta's own end time decides. An unreadable answer still pauses (fail closed).
+      if (ended.has(id) && !decision.toPause.includes(id)) {
+        const extended = await withMetaConnection(context, { purpose: "read_insights", binding, expectedGeneration: storedBinding.metaConnectionGeneration },
+          meta => meta.getCampaignInsights(campaign.meta_campaign_id!))
+          .then(async ({ metaState }) => {
+            const metaEnd = metaState ? metaCapEndTime(campaign.raw, metaState) : null;
+            if (!metaEnd || Date.parse(metaEnd) <= Date.now()) return false;
+            await saveOutsideChanges(context, campaign, metaState).catch(() => null);
+            return true;
+          }).catch(() => false);
+        if (extended) continue;
+      }
       try {
         await withMetaConnection(
           context,
           {
             purpose: "pause",
-            binding: {
-              adAccountId: storedBinding.metaAdAccountId,
-              pageId: storedBinding.metaPageId,
-            },
+            binding,
             expectedGeneration: storedBinding.metaConnectionGeneration,
           },
           (meta) => meta.updateCampaignStatus(campaign.meta_campaign_id!, "PAUSED"),

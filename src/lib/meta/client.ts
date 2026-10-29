@@ -1643,7 +1643,7 @@ export class MetaClient {
     return (await this.readCampaignBinding(campaignId, false)).destination;
   }
 
-  /** The binding check; #1903: with `withState` the same two reads also carry the campaign's status and budgets. */
+  /** The binding check; #1903: with `withState` the same two reads also carry the campaign's status and budgets (#2290: and ad-set end times). */
   private async readCampaignBinding(campaignId: string, withState: boolean): Promise<{ destination: CampaignDestination; state: MetaCampaignState | null }> {
     const node = encodeURIComponent(campaignId);
     const campaign = await this.graph<{ id?: string; account_id?: string; status?: string; daily_budget?: string; lifetime_budget?: string }>(
@@ -1652,8 +1652,8 @@ export class MetaClient {
     if (campaign.id !== campaignId || campaign.account_id !== this.creds.adAccountId.replace(/^act_/, "")) {
       throw new MetaError("Campaign does not match the connected ad account.");
     }
-    const adSets = await this.graph<{ data?: Array<{ id?: string; status?: string; daily_budget?: string; lifetime_budget?: string; destination_type?: string; promoted_object?: { page_id?: string } }>; paging?: { next?: string } }>(
-      `${node}/adsets?fields=${withState ? "id,status,daily_budget,lifetime_budget," : ""}promoted_object,destination_type&limit=100`,
+    const adSets = await this.graph<{ data?: Array<{ id?: string; status?: string; daily_budget?: string; lifetime_budget?: string; end_time?: string; destination_type?: string; promoted_object?: { page_id?: string } }>; paging?: { next?: string } }>(
+      `${node}/adsets?fields=${withState ? "id,status,daily_budget,lifetime_budget,end_time," : ""}promoted_object,destination_type&limit=100`,
     );
     if (Array.isArray(adSets.data) && !adSets.data.length && !adSets.paging?.next) {
       // #721: a campaign deleted in Meta still answers, but lists no ad sets; its own status says why.
@@ -1668,7 +1668,7 @@ export class MetaClient {
     }
     const state: MetaCampaignState | null = withState && typeof campaign.status === "string" ? {
       status: campaign.status, dailyBudget: campaign.daily_budget, lifetimeBudget: campaign.lifetime_budget,
-      adSets: adSets.data.map(adSet => ({ id: String(adSet.id ?? ""), status: adSet.status, dailyBudget: adSet.daily_budget, lifetimeBudget: adSet.lifetime_budget })),
+      adSets: adSets.data.map(adSet => ({ id: String(adSet.id ?? ""), status: adSet.status, dailyBudget: adSet.daily_budget, lifetimeBudget: adSet.lifetime_budget, endTime: adSet.end_time })),
     } : null;
     return { destination: destinationFromAdSets(adSets.data), state };
   }
