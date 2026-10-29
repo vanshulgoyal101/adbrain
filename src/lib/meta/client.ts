@@ -1,3 +1,4 @@
+import { createHmac } from "node:crypto";
 import { GRAPH } from "@/lib/meta/graph-version";
 import { z } from "zod";
 import { WHATSAPP_PUBLISHER_PLATFORMS } from "@/lib/meta/placements";
@@ -857,24 +858,23 @@ export class MetaClient {
   }
 
   private async send(path: string, method: string, token: string, form: Record<string, string> | undefined, signal: AbortSignal) {
+    // #1649: the token rides in the Authorization header (never a URL or form body, which land in access logs), with
+    // `appsecret_proof` so Meta's 'Require app secret' can make a stolen token alone useless.
+    const secret = process.env.META_APP_SECRET;
+    const proof = secret ? createHmac("sha256", secret).update(token).digest("hex") : null;
+    const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
     let res: Response;
     if (method === "POST") {
-      const body = new URLSearchParams({
-        ...(form ?? {}),
-        access_token: token,
-      });
+      const body = new URLSearchParams({ ...(form ?? {}), ...(proof ? { appsecret_proof: proof } : {}) });
       res = await fetch(`${GRAPH}/${path}`, {
         method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        headers: { ...headers, "Content-Type": "application/x-www-form-urlencoded" },
         body,
         signal,
       });
     } else {
-      const sep = path.includes("?") ? "&" : "?";
-      res = await fetch(
-        `${GRAPH}/${path}${sep}access_token=${encodeURIComponent(token)}`,
-        { method, signal, cache: "no-store" },
-      );
+      const query = proof ? `${path.includes("?") ? "&" : "?"}appsecret_proof=${proof}` : "";
+      res = await fetch(`${GRAPH}/${path}${query}`, { method, headers, signal, cache: "no-store" });
     }
 
     const json = await res.json().catch(() => ({}));
@@ -888,6 +888,15 @@ export class MetaClient {
       throw new MetaError(metaErrorMessage(err, res.status), res.status, err?.code, err?.error_subcode, details);
     }
     return { status: res.status, body: json as unknown };
+  }
+
+  /**
+   * #1649: removes the app's whole grant for this Meta user (every business they connected with it). Callers check
+   * the user has no other live connection first. A write, so the smoke account (pause-only) can't send it.
+   */
+  async revokeGrant(subjectId: string): Promise<void> {
+    if (!/^\d+$/.test(subjectId)) throw new MetaError("Invalid Meta user.");
+    await this.graph(`${subjectId}/permissions`, { method: "DELETE" });
   }
 
   getPageAccessToken(): Promise<string> {

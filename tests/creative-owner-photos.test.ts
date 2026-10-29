@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ownerPhotoFor } from "@/lib/creative/generate";
+import { ownerPhotoFor } from "@/lib/creative/owner-photos";
 import { AD_ANGLES } from "@/lib/templates/ads";
 
 // #1901 (#1879 slice 1): ads 1..min(k, 3) each use a different owner photo, newest first; the rest get AI pictures.

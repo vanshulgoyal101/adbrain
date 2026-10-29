@@ -7,14 +7,35 @@ Part of [Features and workflows](README.md).
 Magic link, Google OAuth, and email/password use Supabase Auth. Provider setup and
 email delivery are external prerequisites. Pending states prevent competing form
 submissions; failures preserve the form and permit retry. Destinations must be
-safe local paths. The app has no built-in team invitation, self-service signup,
-password-reset, or subscription entitlement workflow.
+safe local paths. Signing in with a new address creates the account. The app has
+no built-in team invitation, password-reset, or subscription entitlement workflow.
 
 The sign-in page uses the workspace typography, shared form controls and brand
 asset, with persistent Home and legal navigation. Email/password share one form;
 password visibility can be toggled without submitting. Magic links validate only
 the email address. The email confirmation can return to sign-in with the address
 and safe destination preserved, focus restored, and the password cleared.
+
+### Hand-over from a rep (#1783)
+
+A rep can prepare a business and its ads on a prospect (`+prospect`) account, then
+hand it to the owner from Settings ("Hand this account to the owner",
+[prospect-hand-over.tsx](../../src/components/prospect-hand-over.tsx)). The checks
+must pass first: "No Meta account connected", "No campaigns made" and nothing else
+set up (WhatsApp alerts, payments); [transfer.ts](../../src/lib/prospect/transfer.ts)
+words each blocker. The rep types the owner's email and taps "Hand to owner",
+which opens a 30-minute transfer to that address. No link is sent, and the rep can
+"Cancel hand-over".
+
+The owner signs in with that email on their own phone. Before an empty business
+is started, Home shows "Make [business] yours?" with up to three ad thumbnails
+([claim-business.tsx](../../src/components/claim-business.tsx)). "Make it mine"
+moves the business to the owner, signs everyone else out of it and lands on Home
+with "It's yours. The 'Sample' mark is off your ads. Nothing runs until you tap Go
+live." The owner then connects their own Meta and pays Meta themselves. "This
+isn't my business" declines, and the rep sees the decline. Team accounts can't
+accept: "Sign in with the owner's own email, not a team account." Owner-facing
+steps are in [Your first ad on a phone](first-ad.md#if-someone-from-adbrain-set-it-up-for-you).
 
 ## Connect Meta
 

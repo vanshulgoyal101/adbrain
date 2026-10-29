@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { ConnectionAccessError, requireOwnedBusiness } from "@/lib/meta/connection-access";
 import { getPrimaryBusiness } from "@/lib/supabase/queries";
 import { logEvent } from "@/lib/audit";
+import { revokeBeforeDisconnect } from "@/services/meta-disconnect";
 import { z } from "zod";
 
 export const runtime = "nodejs";
@@ -41,6 +42,7 @@ async function handlePOST(request?: Request) {
     const business = requestedBusinessId
       ? await requireOwnedBusiness(businessId)
       : { businessId };
+    await revokeBeforeDisconnect(business.businessId);
     const admin = createAdminClient();
     const { data: disconnected, error } = await admin.rpc("meta_disconnect", {
       p_business_id: business.businessId,

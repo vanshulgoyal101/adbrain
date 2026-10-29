@@ -15,7 +15,9 @@ for collection, a production Vercel deployment from `main`, matching
 production block live checkout. Do not put provider secrets in the browser or
 the repository. An unset `PAYMENTS_LIVE_POLICY_JSON` uses the approved
 operator-managed terms; an explicitly supplied legacy policy still requires
-its historical Meta funding evidence. Confirm the effective policy and webhook
+its historical Meta funding evidence. The v1 terms (`operator-managed-v1`,
+`operator-managed-priced-v1`) name AdBrain's split, so they are refused for any
+new payment and kept only to read orders accepted under them (#1235). Confirm the effective policy and webhook
 registration before enabling collection. The payment schema must be migrated
 first; code publication alone is not collection authorization.
 `PAYMENTS_LIVE_REFUNDS_ENABLED=true` separately permits operator-initiated

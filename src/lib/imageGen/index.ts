@@ -151,9 +151,9 @@ export async function generateImage(
   if (free) req = { ...req, referenceImages: undefined };
   const provider = getProvider(free ? "pollinations" : undefined);
   // #1717: a business over its monthly AI cost cap gets free pictures, like a parked key (with the 'taking longer' notice).
-  if (!free && costCapped() && provider.name !== "pollinations") return fallbackImage(getProvider("pollinations"), provider, req, startedAt, "allowance");
+  if (!free && costCapped() && provider.name !== "pollinations") return fallbackImage(getProvider("pollinations"), provider, req, startedAt, "allowance", true);
   const parkedFallback = !free && isParked(provider.name) ? getFallbackProvider() ?? getProvider("pollinations") : null;
-  if (parkedFallback && parkedFallback.name !== provider.name) return fallbackImage(parkedFallback, provider, req, startedAt);
+  if (parkedFallback && parkedFallback.name !== provider.name) return fallbackImage(parkedFallback, provider, req, startedAt, "paused", true);
   try {
     const generated = {
       ...(await (free ? freeImage(req) : executeImage(provider, req))),
@@ -174,22 +174,27 @@ export async function generateImage(
     if (credit) parkedUntil.set(provider.name, Date.now() + CREDIT_PARK_MS);
     const fallback = getFallbackProvider() ?? (credit ? getProvider("pollinations") : null);
     if (!fallback || fallback.name === provider.name) throw error;
-    return fallbackImage(fallback, provider, req, startedAt);
+    return fallbackImage(fallback, provider, req, startedAt, "paused", credit);
   }
 }
 
+/**
+ * `waitLikeFree`: this customer is on free pictures for a while (paid key out of credit, or over the monthly cost cap),
+ * so Pollinations gets the free account's wait, not one retry (#2189).
+ */
 async function fallbackImage(fallback: ImageProvider, from: ImageProvider, req: ImageRequest, startedAt: number,
-  reason: "paused" | "allowance" = "paused"): Promise<GeneratedImage> {
+  reason: "paused" | "allowance" = "paused", waitLikeFree = false): Promise<GeneratedImage> {
   // #1593: the free pictures can't use the owner's product photo; an unrelated product would misrepresent what they sell.
-  if (req.referenceImages?.length && FREE_PROVIDERS.includes(fallback.name)) throw new ReferencePhotoPausedError(reason);
+  if (req.referenceImages?.length && FREE_PROVIDERS.includes(fallback.name)) throw new ReferencePhotoPausedError(reason, from.name);
   try {
     req.onFallback?.();
   } catch {
     // Advisory: a broken listener must not cost the picture.
   }
-  // #1422: Pollinations answers 404/busy right after another free picture; wait that out once, one picture at a time.
+  // #1422: Pollinations answers 404/busy right after another free picture; after a one-off paid failure, wait that out once.
+  // #2189: out of credit, wait up to the 90 s cap like a free account; one wait left 2 of a batch's 3 pictures blank.
   // #1476: the free fallback tries Cloudflare first when it is configured.
-  const run = fallback.name === "pollinations" ? freeImage(req, 1) : executeImage(fallback, req);
+  const run = fallback.name === "pollinations" ? freeImage(req, waitLikeFree ? undefined : 1) : executeImage(fallback, req);
   const generated = await run.catch((fallbackError: unknown) => {
     req.onAttempt?.({ provider: fallback.name, model: fallback.name, status: "error", errorCode: imageFailureCode(fallbackError),
       providerRequestId: fallbackError instanceof ImageProviderError ? fallbackError.providerRequestId : undefined,

@@ -132,9 +132,10 @@ function replay(fail?: (path: string) => boolean, edit?: (path: string, body: un
       return Response.json(CLOUD_ACCEPTED);
     }
     expect(url.origin + url.pathname.slice(0, 7)).toBe("https://graph.facebook.com/v26.0/");
-    if (url.searchParams.get("access_token") === "dead-token") return Response.json(graph190, { status: 400 });
+    // #1649: the token rides in the Authorization header.
+    if (new Headers(init?.headers).get("authorization")?.replace(/^Bearer /, "") === "dead-token") return Response.json(graph190, { status: 400 });
     expect(init?.method ?? "GET").toBe("GET");
-    url.searchParams.delete("access_token");
+    url.searchParams.delete("appsecret_proof");
     const path = url.pathname.replace("/v26.0/", "") + url.search;
     sent.push(path);
     if (fail?.(path)) return Response.json({ error: { message: "Service temporarily unavailable", code: 2 } }, { status: 503 });
