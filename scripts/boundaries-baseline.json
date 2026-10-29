@@ -548,6 +548,11 @@
     {
       "rule": "R1-ui-no-channels",
       "from": "src/components/home-rejected-ads.tsx",
+      "to": "src/lib/meta/ads-manager-url.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/components/home-rejected-ads.tsx",
       "to": "src/lib/meta/connection-access.ts"
     },
     {
@@ -569,6 +574,11 @@
       "rule": "R1-ui-no-channels",
       "from": "src/components/meta-setup-checklist.tsx",
       "to": "src/lib/meta/setup-checklist.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/components/pause-all-ads.tsx",
+      "to": "src/lib/meta/ads-manager-url.ts"
     },
     {
       "rule": "R1-ui-no-channels",
@@ -624,6 +634,11 @@
       "rule": "R2-client-no-server",
       "from": "src/components/meta-connection.tsx",
       "to": "src/lib/meta/token-expiry.ts"
+    },
+    {
+      "rule": "R2-client-no-server",
+      "from": "src/components/pause-all-ads.tsx",
+      "to": "src/lib/meta/ads-manager-url.ts"
     },
     {
       "rule": "R2-client-no-server",
@@ -735,7 +750,7 @@
       "rule": "C4-file-size",
       "from": "src/components/campaigns.tsx",
       "to": "> 400 lines",
-      "lines": 2751
+      "lines": 2754
     },
     {
       "rule": "C4-file-size",
@@ -813,7 +828,7 @@
       "rule": "C4-file-size",
       "from": "src/lib/observability/core-scoreboard.ts",
       "to": "> 400 lines",
-      "lines": 568
+      "lines": 578
     },
     {
       "rule": "C4-file-size",

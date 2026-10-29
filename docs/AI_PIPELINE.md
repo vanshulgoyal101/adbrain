@@ -1,7 +1,7 @@
 # AI and Creative Pipeline
 
 This guide describes model calls, image processing, retries, and accounting.
-Parameters are in [Configuration](CONFIGURATION.md) and [API Reference](api/README.md).
+Parameters are in [Configuration](operations/configuration.md) and [API Reference](api/README.md).
 Design history lives in git history; it does not override current code.
 
 ## Task Boundaries
@@ -515,7 +515,7 @@ Use pure prompt/schema tests first, then mocked route/component tests, then an
 explicitly authorized small provider evaluation with a fixed budget and saved
 artifacts. Record model/provider, prompt version, source inputs, human review,
 latency, partial failures, and cost. A JSON-valid output is not a quality score.
-See [Testing](TESTING.md) for safe commands.
+See [Testing](team/testing.md) for safe commands.
 
 To add a provider: implement the existing interface, wire selection deliberately,
 document required keys and formats/references, propagate deadlines, enforce media
