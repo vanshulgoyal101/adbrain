@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { ownerError } from "@/i18n/request-locale";
 import { z } from "zod";
 import { apiError, readJson } from "@/lib/api";
 import { adResultsEnabled } from "@/lib/campaign/ad-results-store";
@@ -40,7 +41,7 @@ export const POST = observeRoute("/api/campaigns/[id]/ads/[adId]/status", "POST"
     const result = await setAdDelivery(context, id, adId, parsed.data.action, parsed.data.reason);
     return NextResponse.json({ ok: true, result });
   } catch (error) {
-    if (error instanceof CampaignEditError) return NextResponse.json({ error: error.message, retryable: error.retryable }, { status: error.status });
+    if (error instanceof CampaignEditError) return NextResponse.json({ error: error.ownerKey ? await ownerError(error.ownerKey) : error.message, retryable: error.retryable }, { status: error.status });
     if (error instanceof ConnectionAccessError) return apiError(error.message, error.code === "CONFLICT" ? 409 : error.code === "UNAUTHENTICATED" ? 401 : 400);
     console.error("[campaign.ad_pause]", error instanceof Error ? error.name : "error");
     return apiError("Could not change the ad.", 500);

@@ -13,6 +13,7 @@ import { recordProductEvent } from "@/lib/observability/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { Campaign, Json } from "@/lib/types";
+import { ownerErrorIn, type OwnerErrorKey } from "@/i18n/locale";
 
 /** #773: the shared path for editing a launched campaign. Audience now; Dev 4 adds budgets (#774) as another kind. */
 
@@ -62,6 +63,15 @@ export class CampaignEditError extends Error {
     super(message);
     this.name = "CampaignEditError";
   }
+  /** #2314: set when the words live in `errors`, so a route can answer in the owner's language. */
+  ownerKey?: OwnerErrorKey;
+}
+
+/** #2314: a refusal the owner reads; the message is the English `errors` text, and the route translates `ownerKey`. */
+export function ownerEditError(key: OwnerErrorKey, status: number, retryable = false): CampaignEditError {
+  const error = new CampaignEditError(ownerErrorIn("en", key), status, retryable);
+  error.ownerKey = key;
+  return error;
 }
 
 type Row = { id: string; state: string; phase: string; transmitted: boolean; request_hash: string; result: Json | null; sanitized_error: string | null };
