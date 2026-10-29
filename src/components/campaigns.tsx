@@ -38,6 +38,7 @@ import { updateCreativeCopy } from "@/app/(app)/studio/actions";
 import type { EditableCopy } from "@/lib/creative/concept";
 import { suggestedQuestions } from "@/lib/campaign/whatsapp-questions";
 import { whatsappTemplateSchema, type WhatsAppTemplate } from "@/lib/campaign/whatsapp-template";
+import { redrewChatNumber } from "@/lib/creative/chat-number";
 import { CampaignWhatsAppMessageDialog } from "@/components/campaign-whatsapp-message-dialog";
 import { WhenTheyTap } from "@/components/when-they-tap";
 import { AdReviewBadge } from "@/components/ad-review-badge";
@@ -871,6 +872,7 @@ function BusinessCampaigns({
       );
       signal?.throwIfAborted();
       setPrepareReview({ status: "ready", draft, connection, review });
+      if (redrewChatNumber(review.planWarnings)) router.refresh(); // #2274: show the redrawn pictures
     } catch (reason: unknown) {
       if (signal?.aborted) throw reason;
       setPrepareReview({
