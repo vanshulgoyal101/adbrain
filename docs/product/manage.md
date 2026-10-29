@@ -37,6 +37,10 @@ run. Only a complete run reports "up to date". Opening Enquiries starts a sync w
 this browser has no recent complete sync. Zero imports can mean duplicates or no
 leads, not a broken campaign. WhatsApp conversations are not imported.
 
+When Meta counts no chats, owner-added real enquiries are still shown as
+"You added N real enquiries", not as chats. Meta's test rows are labelled
+"Test from Meta", distinct from a new customer enquiry.
+
 The inbox searches, filters (follow-up status, contact details), sorts and pages
 saved enquiries on the server, with matching totals. Owners can record a
 follow-up status (`new`, `contacted`, `qualified`, `booked`, `customer`, `closed`) and a
@@ -44,7 +48,9 @@ note up to 2000 characters; a failed save keeps the edits for retry. Follow-up i
 local record-keeping only and sends nothing. Each row also has a one-tap **Became a
 customer** button with Undo (#798). A campaign card then shows its customers and
 **Per customer** (Meta spend ÷ enquiries marked as customers, any source) once
-there is at least one.
+there is at least one. Before them it shows bookings (#1994: enquiries marked Booked or
+Customer), named for the segment: "consultations booked" (interiors), "site visits
+booked" (solar), "demo classes booked" (IELTS), otherwise "booked"; hidden at 0.
 
 The copy-ready digest summarizes the last seven days of the currently loaded
 enquiries with at most ten contacts, including email where available. It is not

@@ -281,6 +281,11 @@ none can be dropped without breaking the core loop.
 | `pages_manage_ads` | Run ads and lead forms on behalf of the selected Page | `/campaigns` → Launch with the selected Page |
 | `business_management` | Read the owning Business of each ad account and Page so only valid account/Page pairs are offered | `/settings` → Connect Meta → paired account/Page choices |
 
+Beyond the seven permissions, the submission also covers the **Marketing API Access Tier**
+feature (Meta's new name for *Ads Management Standard Access*). Limited allows about 60 points per
+5 minutes per ad account, and one campaign build uses about half of that; Full needs 500 calls in
+15 days plus this review. Current status: [channels/meta.md](architecture/channels/meta.md).
+
 ### App Dashboard URLs
 
 | Dashboard field | Value |
