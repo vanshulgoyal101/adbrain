@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
-import { appCopy, checkDocumentation, environmentDrift, mirrorDrift, missingLabels, moneyDrift, moneyFacts, scheduleDrift, scriptEnvironment, stampMirror } from "./check-docs.mjs";
+import { appCopy, checkDocumentation, codeTableDrift, environmentDrift, mirrorDrift, missingLabels, moneyDrift, moneyFacts, scheduleDrift, scriptEnvironment, stampMirror } from "./check-docs.mjs";
 
 function fixture(context, files = {}) {
   const root = mkdtempSync(resolve(tmpdir(), "adbrain-docs-check-"));
@@ -238,9 +238,10 @@ test("a ₹ amount or % in docs/product must come from a source constant or be a
     "src/lib/campaign/verdict.ts": "export const EVIDENCE_MIN_SPEND = 500;\n",
     "src/lib/meta/insights.ts": "export const BEST_AD_MARGIN = 0.3;\n",
     "src/lib/creative/design.ts": "export const STORY_SAFE = { top: 0.14, bottom: 0.35, side: 0.06 } as const;\n",
+    "src/lib/campaign/preflight.ts": "export const META_MIN_DAILY_BUDGET_RUPEES = 96;\n",
   };
   const root = fixture(context, sources);
-  const prose = [{ line: 3, text: "₹300 a day for 2 days, ₹708 at most incl. 18% GST; 7 days is ₹2,478. Then ₹999 a month. Each chat costs ₹45." }];
+  const prose = [{ line: 3, text: "₹300 a day for 2 days, ₹708 at most incl. 18% GST; 7 days is ₹2,478. Then ₹999 a month. Each chat costs ₹45. Meta needs ₹96 a day." }];
   assert.deepEqual(moneyDrift(prose, moneyFacts(root).facts), []);
   assert.deepEqual(moneyDrift([{ line: 4, text: "Only ₹1,499 and 25% off." }], moneyFacts(root).facts), [{ line: 4, amount: "₹1,499" }, { line: 4, amount: "25%" }]);
   writeFileSync(resolve(root, "src/lib/payments/allocation.ts"), "(input.taxRateBps ?? 2_800)\n");
@@ -248,4 +249,14 @@ test("a ₹ amount or % in docs/product must come from a source constant or be a
   assert.deepEqual(moneyDrift(prose, moneyFacts(root).facts).map(({ amount }) => amount), ["₹708", "18%", "₹2,478", "₹999"]);
   rmSync(resolve(root, "src/lib/meta/insights.ts"));
   assert.deepEqual(moneyFacts(root).missing, ["src/lib/meta/insights.ts BEST_AD_MARGIN = ([\\d.]+)"]);
+});
+
+test("a code table has one row per source code, both ways (#2288)", () => {
+  const row = /^\| `(REVIEW_[A-Z_]+)` \|/;
+  const page = "Intro `REVIEW_INLINE` text\n\n| Code | Says |\n| --- | --- |\n| `REVIEW_BUDGET` | x |\n| `REVIEW_GONE` | y |\n";
+  assert.deepEqual(codeTableDrift(page, ["REVIEW_BUDGET", "REVIEW_RADIUS", "REVIEW_BUDGET"], row, "preflight.ts"), [
+    { line: 1, message: "No row for REVIEW_RADIUS from preflight.ts" },
+    { line: 6, message: "Row for REVIEW_GONE, which preflight.ts no longer has" },
+  ]);
+  assert.deepEqual(codeTableDrift(page.replace("| `REVIEW_GONE` | y |\n", ""), ["REVIEW_BUDGET"], row, "preflight.ts"), []);
 });

@@ -251,6 +251,7 @@ const MONEY_SOURCES = {
   planPaise: ["src/lib/plan/status.ts", /PLAN_PRICE_PAISE = ([\d_]+)/],
   evidenceSpend: ["src/lib/campaign/verdict.ts", /EVIDENCE_MIN_SPEND = ([\d_]+)/],
   bestMargin: ["src/lib/meta/insights.ts", /BEST_AD_MARGIN = ([\d.]+)/],
+  metaMinDaily: ["src/lib/campaign/preflight.ts", /META_MIN_DAILY_BUDGET_RUPEES = ([\d_]+)/],
   storySafe: ["src/lib/creative/design.ts", /STORY_SAFE = \{ top: ([\d.]+), bottom: ([\d.]+), side: ([\d.]+) \}/],
 };
 // Illustrative figures, not prices: a cost per chat, an offer, a result read, an empty-insights read.
@@ -275,6 +276,7 @@ export function moneyFacts(root) {
   }
   for (const paise of read.planPaise) rupees(paise / 100, "PLAN_PRICE_PAISE");
   for (const spend of read.evidenceSpend) rupees(spend, "EVIDENCE_MIN_SPEND");
+  for (const daily of read.metaMinDaily) rupees(daily, "META_MIN_DAILY_BUDGET_RUPEES");
   for (const bps of read.gstBps) percent(bps / 100, "GST taxRateBps");
   for (const margin of read.bestMargin) percent(margin * 100, "BEST_AD_MARGIN");
   for (const share of read.storySafe) percent(share * 100, "STORY_SAFE");
@@ -291,6 +293,22 @@ export function moneyDrift(prose, facts) {
     }
   }
   return found;
+}
+
+// #2288: a page that explains a set of codes from one source file keeps one table row per code, both ways.
+// `codes` reads the set from the source; `row` matches a row's first cell.
+const CODE_TABLES = [
+  { pages: ["docs/product/review.md", "docs/product/hi/review.md"], source: "src/lib/campaign/preflight.ts",
+    codes: text => text.match(/\bREVIEW_[A-Z_]+\b/g) ?? [], row: /^\| `(REVIEW_[A-Z_]+)` \|/ },
+];
+export function codeTableDrift(markdown, codes, row, source) {
+  const rows = new Map();
+  markdown.split("\n").forEach((line, index) => { const match = line.match(row); if (match && !rows.has(match[1])) rows.set(match[1], index + 1); });
+  const known = new Set(codes);
+  return [
+    ...[...known].filter(code => !rows.has(code)).sort().map(code => ({ line: 1, message: `No row for ${code} from ${source}` })),
+    ...[...rows].filter(([code]) => !known.has(code)).map(([code, line]) => ({ line, message: `Row for ${code}, which ${source} no longer has` })),
+  ];
 }
 
 export function checkDocumentation(root, options = {}) {
@@ -321,6 +339,11 @@ export function checkDocumentation(root, options = {}) {
     checked.push({ file, role: historical ? "historical" : "current", sha256: createHash("sha256").update(document.text).digest("hex") });
     for (const line of document.unclosedFences) report(line, "Unclosed fenced code block");
     if (isHindiMirror(file) && !historical) { const drift = mirrorDrift(path, readFileSync(path, "utf8")); if (drift) report(1, drift); }
+    for (const table of CODE_TABLES.filter(table => table.pages.includes(file) && !historical)) {
+      const sourcePath = resolve(root, table.source);
+      const codes = existsSync(sourcePath) ? table.codes(readFileSync(sourcePath, "utf8")) : [];
+      for (const { line, message } of codeTableDrift(readFileSync(path, "utf8"), codes, table.row, table.source)) report(line, message);
+    }
     if (file === "docs/operations/scheduled-jobs.md") for (const { line, message } of scheduleDrift(root, readFileSync(path, "utf8"))) report(line, message);
     if (file.startsWith("docs/product/") && !historical) {
       for (const { line, amount } of moneyDrift(document.prose, (money ??= moneyFacts(root)).facts)) report(line, `Amount not derived from a source constant: ${amount} (fix it, add its source to MONEY_SOURCES, or add an example to MONEY_EXAMPLES)`);
