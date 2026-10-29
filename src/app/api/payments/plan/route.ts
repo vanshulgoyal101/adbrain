@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ConnectionAccessError, requireOwnedBusiness } from "@/lib/meta/connection-access";
+import { ConnectionAccessError, requireOwnedBusiness } from "@/services/business-access";
 import { getProductionPaymentConfig } from "@/lib/payments/production-config";
 import { paymentJsonBody, paymentReply } from "@/lib/payments/checkout-request";
 import { ensurePayLink, isPlanBillingEnabled, PlanNotDueError, readPlan } from "@/lib/plan/store";

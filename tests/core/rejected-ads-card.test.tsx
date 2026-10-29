@@ -5,6 +5,7 @@ import recorded from "./fixtures/meta/ad-review.json";
 import { RejectedAds, rejectedMetaMessage } from "@/components/rejected-ads";
 import { SupportLinkProvider } from "@/components/support-link";
 import { adReviewState, type AdReview } from "@/lib/meta/client";
+import hi from "../../messages/hi.json";
 
 vi.mock("next/link", () => ({ default: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => <a href={href} {...rest}>{children}</a> }));
 
@@ -62,5 +63,39 @@ describe("core: the card's rejected-ads line (#1274, #1305)", () => {
     const reviews = [adReviewState({ id: "1", effective_status: "DISAPPROVED", ad_review_feedback: { global: { "Housing": "Housing ads need a special ad category." } } })];
     render(<SupportLinkProvider url="https://wa.me/910000000000"><RejectedAds reviews={reviews} spend={0} /></SupportLinkProvider>);
     expect(region().getByRole("link", { name: "Message us" })).toHaveAttribute("href", "https://wa.me/910000000000");
+  });
+});
+
+// #1438 (CPO's Screen 2 table and #1770 addendum): the same line and fixes in Hindi; Meta's own words stay as Meta wrote them.
+describe("core: the rejected-ads line in Hindi (#1438)", () => {
+  const words = { locale: "hi" as const, messages: hi.verdict };
+  const hindi = () => within(screen.getByRole("group", { name: "जिन विज्ञापनों को Meta ने मंज़ूरी नहीं दी" }));
+
+  it("one of two ads: the CPO's sentence, and the running ad named", () => {
+    const reviews: AdReview[] = [
+      adReviewState({ id: "1", effective_status: "DISAPPROVED", ad_review_feedback: { global: { "Personal Attributes": "Ads must not assert personal attributes." } } }),
+      adReviewState({ id: "2", effective_status: "ACTIVE" }),
+    ];
+    render(<RejectedAds reviews={reviews} spend={120} running words={words} />);
+    expect(hindi().getByText("Meta ने 1 विज्ञापन मंज़ूर नहीं किया। विज्ञापन पढ़ने वाले की अपनी सेहत या परेशानी की बात करता है (\"क्या आप…?\")। Meta इसकी इजाज़त नहीं देता। आपका दूसरा विज्ञापन चल रहा है।")).toBeInTheDocument();
+  });
+
+  it("recorded fallback: Meta's message quoted as Meta wrote it, the fixes and Details in Hindi", () => {
+    render(<RejectedAds reviews={recordedReviews} spend={0} onEditAd={() => {}} adsManagerUrl="https://adsmanager.facebook.com/x" ownDetails words={words} />);
+    expect(hindi().getByText(/^Meta ने आपका विज्ञापन मंज़ूर नहीं किया। Meta ने ठीक-ठीक वजह नहीं बताई। उनका मैसेज: "It looks like your ad contains content/)).toHaveTextContent(/कोई पैसा खर्च नहीं हुआ।$/);
+    expect(hindi().getByRole("button", { name: "शब्द बदलें" })).toBeInTheDocument();
+    expect(hindi().getByRole("link", { name: "नई तस्वीर बनाएं" })).toHaveAttribute("href", "/create");
+    expect(hindi().getByRole("link", { name: "Meta से फिर से जांच करवाएं" })).toBeInTheDocument();
+    expect(hindi().getByText("पूरी जानकारी")).toBeInTheDocument();
+    expect(hindi().getByText(/^Meta का मैसेज: “It looks like your ad contains content/)).toBeInTheDocument();
+  });
+
+  it("an IELTS guarantee: the segment's Hindi, and the editor hint keeps the words to find in Latin script", () => {
+    const onEditAd = vi.fn();
+    const reviews = [adReviewState({ id: "1", effective_status: "DISAPPROVED", ad_review_feedback: { global: { "Misleading Claims": "Ads must not make unrealistic claims." } } })];
+    render(<RejectedAds reviews={reviews} spend={0} vertical="IELTS coaching" onEditAd={onEditAd} words={words} />);
+    expect(hindi().getByText(/जैसे पक्का बैंड, वीज़ा या एडमिशन।/)).toBeInTheDocument();
+    fireEvent.click(hindi().getByRole("button", { name: "शब्द बदलें" }));
+    expect(onEditAd).toHaveBeenCalledWith("'guaranteed', '100%' या बैंड, वीज़ा या एडमिशन का कोई भी वादा हटा दें।");
   });
 });

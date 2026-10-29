@@ -1,3 +1,5 @@
+import { verdictTranslator, type Words } from "@/i18n/words";
+import { formatNumber } from "@/lib/format";
 import type { PauseSuggestion } from "@/lib/campaign/ad-pause";
 
 /**
@@ -62,79 +64,88 @@ export type Verdict = {
 };
 
 const rupees = (value: number) => `₹${Math.round(value).toLocaleString("en-IN")}`;
-const capital = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+
+/** #1795: 'Live' and 'Ended' only restate a campaign's status, so a list row shows no word for them. */
+export function restatesStatus(state: VerdictState): boolean {
+  return state === "measured" || state.startsWith("ended_");
+}
 
 /**
  * #1841 (Designer): the stage word (Early days, Working, Ended) is the card's status line; the sentence starts at the fact.
+ * #1438: the words come from `messages/` (`verdict`); pass the owner's Hindi words for Hindi, English otherwise.
  */
-export function verdict(input: VerdictInput): Verdict {
-  const chat = input.destination === "whatsapp" ? "chat" : "enquiry";
-  const chats = (n: number) => `${n} ${n === 1 ? chat : input.destination === "whatsapp" ? "chats" : "enquiries"}`;
-  const noChats = input.destination === "whatsapp" ? "no chats" : "no enquiries";
+export function verdict(input: VerdictInput, words?: Words<"verdict">): Verdict {
+  const t = verdictTranslator(words);
+  const whatsapp = input.destination === "whatsapp";
+  const chat = whatsapp ? t("chat") : t("enquiry");
+  const chats = (n: number) => whatsapp ? t("chats", { n }) : t("enquiries", { n });
+  const none = whatsapp ? t("noChats") : t("noEnquiries");
   const cost = input.results > 0 ? input.spend / input.results : null;
   const number: Verdict["number"] = cost === null ? { kind: "count", value: input.results } : { kind: "cost", value: Math.round(cost) };
   const evidence = input.results >= EVIDENCE_MIN_RESULTS && input.spend >= EVIDENCE_MIN_SPEND;
   const comparison = input.comparison && input.comparison.results >= COMPARE_MIN_RESULTS && input.comparison.typical > 0 ? input.comparison : null;
   const typical = comparison?.typical ?? null;
-  const band = cost === null || typical === null ? null : cost > COSTLY_RATIO * typical ? "more than" : cost < CHEAPER_RATIO * typical ? "less than" : "about the same as";
-  const against = (word: "less than" | "about the same as" | "more than") => !comparison ? ""
-    : comparison.kind === "own" ? `, ${word} your last campaign (${rupees(comparison.typical)} each)`
+  const band = cost === null || typical === null ? null : cost > COSTLY_RATIO * typical ? "more" : cost < CHEAPER_RATIO * typical ? "less" : "same";
+  const against = (word: "less" | "same" | "more") => !comparison ? ""
+    : comparison.kind === "own" ? t("againstOwn", { word: t(word), cost: rupees(comparison.typical) })
       : comparison.results >= RANGE_MIN_RESULTS && comparison.low !== undefined && comparison.high !== undefined
-        ? `, ${word} usual for ${comparison.category} ads AdBrain has run (${rupees(comparison.low)}–${Math.round(comparison.high).toLocaleString("en-IN")})`
-        : `, ${word} usual for ${comparison.category} ads AdBrain has run (about ${rupees(comparison.typical)} each)`;
+        ? t("againstRange", { word: t(word), category: comparison.category, low: rupees(comparison.low), high: Math.round(comparison.high).toLocaleString("en-IN") })
+        : t("againstTypical", { word: t(word), category: comparison.category, typical: rupees(comparison.typical) });
 
   const base = ((): Omit<Verdict, "number"> => {
     if (input.status === "completed") {
+      const label = t("label.ended");
       // #1625 (CPO, #1603): too few to judge isn't a bad result, and these are the only ads with data; run them longer.
       // Nobody tapped at all (no result, no WhatsApp open): that's the ads, so make new ones.
       if (!evidence && input.results === 0 && (input.opens ?? 0) === 0)
-        return { state: "ended_too_few", label: "Ended", sentence: `It ended with ${chats(0)}, too few to judge.`, action: "new_ads" };
-      if (!evidence) return { state: "ended_too_few", label: "Ended", sentence: `It ended with ${chats(input.results)}, too few to judge yet. Run it again for longer?`, action: "run_again" };
+        return { state: "ended_too_few", label, sentence: t("endedNone", { chats: chats(0) }), action: "new_ads" };
+      if (!evidence) return { state: "ended_too_few", label, sentence: t("endedFew", { chats: chats(input.results) }), action: "run_again" };
       if (band === null) {
-        return { state: "ended_measured", label: "Ended", sentence: `It ended with ${chats(input.results)} at ${rupees(cost!)} each.`, action: "run_again" };
+        return { state: "ended_measured", label, sentence: t("endedMeasured", { chats: chats(input.results), cost: rupees(cost!) }), action: "run_again" };
       }
-      if (band !== "more than") {
-        return { state: "ended_worked", label: "Ended", sentence: `${capital(chats(input.results))} at ${rupees(cost!)} each. Run it again with the best ad first?`, action: "run_again" };
+      if (band !== "more") {
+        return { state: "ended_worked", label, sentence: t("endedWorked", { chats: chats(input.results), cost: rupees(cost!) }), action: "run_again" };
       }
-      return { state: "ended_costly", label: "Ended", sentence: `It didn't bring ${input.destination === "whatsapp" ? "chats" : "enquiries"} at a good price. Try new ads?`, action: "new_ads" };
+      return { state: "ended_costly", label, sentence: whatsapp ? t("endedCostlyChats") : t("endedCostlyEnquiries"), action: "new_ads" };
     }
     if (input.weakAd) {
       const { ad, reference } = input.weakAd;
       const sentence = ad.costPerResult !== null && reference.costPerResult
-        ? `One ad costs ${Math.round(ad.costPerResult / reference.costPerResult)} times as much per ${chat} as your others. Pausing it leaves more of your budget for the ones that work.`
-        : `One ad has spent ${rupees(ad.spend)} with ${noChats} while your others bring them. Pausing it leaves more of your budget for the ones that work.`;
-      return { state: "weak_ad", label: "Costly", sentence, action: "pause_ad" };
+        ? t("weakAd", { k: String(Math.round(ad.costPerResult / reference.costPerResult)), chat })
+        : t("weakAdNone", { amount: rupees(ad.spend), none });
+      return { state: "weak_ad", label: t("label.costly"), sentence, action: "pause_ad" };
     }
     if (input.results === 0 && input.spend >= Math.max(NO_RESULTS_MIN_SPEND, COSTLY_RATIO * (typical ?? 0))) {
-      const opens = input.destination === "whatsapp" && (input.opens ?? 0) >= OPENS_WORTH_MENTIONING
-        ? ` ${input.opens} people opened WhatsApp but didn't send the message.` : "";
-      return { state: "no_results", label: input.destination === "whatsapp" ? "No chats yet" : "No enquiries yet",
-        sentence: `${rupees(input.spend)} spent, ${noChats} yet.${opens}`, action: input.destination === "whatsapp" ? "edit_message" : null };
+      const opens = whatsapp && (input.opens ?? 0) >= OPENS_WORTH_MENTIONING ? t("opens", { opens: String(input.opens) }) : "";
+      return { state: "no_results", label: whatsapp ? t("label.noChats") : t("label.noEnquiries"),
+        sentence: t("noResults", { amount: rupees(input.spend), none, opens }), action: whatsapp ? "edit_message" : null };
     }
     // Only a running campaign is waiting on Meta; a paused one that never showed says so on its card (#173).
     if (input.impressions === 0 && input.status === "active") {
       const since = input.liveSince ? Date.parse(input.liveSince) : Number.NaN;
       if (Number.isFinite(since) && input.now - since >= DAY_MS) {
-        return { state: "not_showing_day", label: "Not showing yet", sentence: "Your ads haven't started showing after a day. Check what Meta says.", action: "meta_status" };
+        return { state: "not_showing_day", label: t("label.notShowing"), sentence: t("notShowingDay"), action: "meta_status" };
       }
-      return { state: "not_showing", label: "Not showing yet", sentence: "Meta is checking your ads. This usually takes minutes to a few hours, and up to a day.", action: null };
+      return { state: "not_showing", label: t("label.notShowing"), sentence: t("notShowing"), action: null };
     }
     if (!evidence) {
-      return { state: "early", label: "Early days", action: null, sentence: input.results
-        ? `${capital(chats(input.results))} so far. AdBrain will tell you if it's working after ${EVIDENCE_MIN_RESULTS}.`
-        : `${capital(noChats)} yet.` };
+      return { state: "early", label: t("label.early"), action: null, sentence: input.results
+        ? t("early", { chats: chats(input.results), min: String(EVIDENCE_MIN_RESULTS) })
+        // #1929 (CPO, #1923): shown but no chat yet reads as failure on the first evening; say how often it was shown.
+        : whatsapp && input.impressions > 0 ? t("earlyShownNoChats", { impressions: formatNumber(input.impressions) })
+          : whatsapp ? t("earlyNoChats") : t("earlyNoEnquiries") };
     }
+    const each = (word: "less" | "same" | "more" | null) => t("cost", { chat, cost: rupees(cost!), against: word ? against(word) : "" });
     // No comparison with enough results behind it: the number only, and no word on whether that's good (#1255 gates).
-    if (band === null) return { state: "measured", label: "Live", action: null, sentence: `Each ${chat} costs ${rupees(cost!)}.` };
-    if (band === "less than") return { state: "working", label: "Working", action: null, sentence: `Each ${chat} costs ${rupees(cost!)}${against("less than")}.` };
-    if (band === "about the same as") return { state: "about_average", label: "About average", action: null, sentence: `Each ${chat} costs ${rupees(cost!)}${against("about the same as")}.` };
-    return { state: "costly", label: "Costly", action: "new_ads", sentence: `Each ${chat} costs ${rupees(cost!)}${against("more than")}.` };
+    if (band === null) return { state: "measured", label: t("label.live"), action: null, sentence: each(null) };
+    if (band === "less") return { state: "working", label: t("label.working"), action: null, sentence: each("less") };
+    if (band === "same") return { state: "about_average", label: t("label.aboutAverage"), action: null, sentence: each("same") };
+    return { state: "costly", label: t("label.costly"), action: "new_ads", sentence: each("more") };
   })();
 
   // State 1 prefixes any state; its action wins only where the state has none (CPO: "Reply if #1, else none").
   if (input.waiting > 0 && input.status !== "completed") {
-    const people = `${input.waiting} ${input.waiting === 1 ? "person is" : "people are"} waiting for your reply.`;
-    return { ...base, number, sentence: `${people} ${base.sentence}`, action: base.action ?? "reply" };
+    return { ...base, number, sentence: `${t("waiting", { n: input.waiting })} ${base.sentence}`, action: base.action ?? "reply" };
   }
   return { ...base, number };
 }

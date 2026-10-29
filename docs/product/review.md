@@ -6,7 +6,8 @@ Part of [Features and workflows](README.md). Step of [Prepare a Campaign](launch
 
 A first-timer with approved ads and no campaign yet, who can connect Meta, gets
 setup step 3 "Go live" on `/campaigns` (#1251 WS1, #1271; in Hindi too, #1438): the picked ads, a daily
-budget (₹300/₹500/₹1,000 a day) for 2 days with the most it can spend including
+budget (₹300/₹500/₹1,000 a day) for 2 days (default) or 7 days (#1530: pilots, ₹2,478 at
+most at ₹300) with the most it can spend including
 Meta's GST (`capWithGstPaise`, the activation reserve's own formula), the areas,
 the WhatsApp chat with the welcome Go live sends (#1529: `setupWelcome`, Review's own
 `campaignWhatsAppMessage` on Go live's draft, so the saved message or AdBrain's), "Change
@@ -21,7 +22,7 @@ same routes the Campaigns page uses: connection status (not connected → the Me
 dialog), save the composer's default draft (the picked ads, ₹d a day, WhatsApp to
 Meta's first ready number, default targeting, no A/B), preflight, create it PAUSED
 (operation polled), then `GET /api/campaigns/{id}` and `PATCH` it active as a
-2-day capped run (`capDays: 2`, so Meta's total limit is ₹d×2; the server also
+capped run of the chosen days (`capDays: 2` or `7`, so Meta's total limit is ₹d×days; the server also
 checks the weekly cap and funding). One progress line per step. Review blockers
 are shown in their own words with "Fix in campaign review"
 (`?all=1&new=1&review=1&budget=d&creatives=…`) and nothing is created; a refused

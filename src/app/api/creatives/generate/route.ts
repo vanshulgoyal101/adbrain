@@ -1,6 +1,7 @@
 import { observeRoute, recordProductEvent, currentRequestId } from "@/lib/observability/logger";
 import { planGate } from "@/lib/plan/gate";
 import { creativeFailureMessage } from "@/lib/creative/failure-message";
+import { GENERATE_REQUEST_ERROR, generateRequestSchema } from "@/lib/creative/generate-request";
 import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { logEvent } from "@/lib/audit";
@@ -186,28 +187,8 @@ async function generate(req: Request, live?: LiveCreate) {
   });
   if (limited) return limited;
 
-  const parsed = z
-    .object({
-      businessId: z.string().trim().min(1),
-      brief: z.string().trim().min(1).max(2000),
-      count: z.number().int().min(1).max(6).default(3),
-      generationId: z.string().uuid().optional(),
-      language: z.string().optional(),
-      sourceFacts: z.array(z.string().trim().min(1).max(2000)).max(12)
-        .refine((facts) => facts.join("").length <= 6000).default([]),
-      format: z
-        .enum(["portrait", "square", "story", "landscape"])
-        .default("portrait"),
-    })
-    .safeParse(await req.json().catch(() => null));
-  if (!parsed.success)
-    return NextResponse.json(
-      {
-        error:
-          "A businessId, brief (up to 2000 characters), count (1-6), and valid format are required.",
-      },
-      { status: 400 },
-    );
+  const parsed = generateRequestSchema.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) return NextResponse.json({ error: GENERATE_REQUEST_ERROR }, { status: 400 });
   const body = parsed.data;
 
   const businessId = (body?.businessId ?? "").trim();

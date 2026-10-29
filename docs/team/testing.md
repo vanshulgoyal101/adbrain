@@ -5,7 +5,7 @@ Part of [Team](README.md). Database, browser, paid and documentation checks: [Ve
 Tests prove only the conditions they exercise. Keep local unit evidence, database
 transaction tests, browser fixtures, hosted CI, live provider checks, and production
 deployment receipts separate. Current run counts belong in the PR
-or issue, not setup promises. Start with [Quick Start](../QUICK_START.md).
+or issue, not setup promises. Start with [Quick Start](quick-start.md).
 
 ## Isolation First
 
@@ -94,7 +94,8 @@ Recorded Meta tapes go through `metaScrubber()` (`scripts/lib/scrub-meta.ts`, #1
   account's concept (the recorded Cedar Ridge reply) comes from Haiku like a customer's, and its
   image from Pollinations without references. Three images run one at a time, waiting out
   Pollinations' recorded 402 Retry-After (at least 15 s, since its 45 s free limit says
-  Retry-After: 1, and a fast 404 counts as busy, #634); a Pollinations that stays busy fails after about 90 s,
+  Retry-After: 1, and a fast 404 counts as busy, #634); a Pollinations that stays busy fails after about 90 s
+  and parks the free pictures for 2 min, so the rest of the batch fails at once (#2153),
   and one that is down fails at once, never reaching the paid image model. The reviewer, the owner
   and customers keep the paid images.
 - **Create when the AI is busy** (`create-busy`, #410): through the production order
@@ -126,6 +127,9 @@ Recorded Meta tapes go through `metaScrubber()` (`scripts/lib/scrub-meta.ts`, #1
   A Hindi concept that writes "फ्री साइट सर्वे" without quoting the Brand or naming it in English is
   cited with the Brand's "Free site survey" (#378, seen in the #418 $0 eval): Hindi and Punjabi offer
   loanwords (साइट, सर्वे, विज़िट, …) match their English fact words from an exact list.
+  The recorded Hindi "दिवाली की 10% छूट" reply rewritten in Devanagari digits ("१०% छूट") is the same claim
+  (#2166): cited by the Brand's Diwali offer and refused without it. Devanagari and Gurmukhi digits count
+  as English digits, and "499 रुपये" or "Rs 499" is the price "₹499".
 - **Prepare** (`campaign-prepare`, `campaign-prepare-transport`): the recorded Groq plan, planner handoffs, provider failure, and a hang that falls back at the 45 s planner deadline inside the route's 60 s limit. #612: every free provider answering 429 still ends in a plan on the paid last resort; after a burst that parked every provider, the next Prepare waits out the shortest cooldown (≤ 20 s) and plans with AI targeting; an audience plan that falls back to default targeting is logged `partial`, not `failed`, since the owner can still launch.
 - **Campaign** (`campaign-meta`): lead form, location and interests, launch entirely PAUSED, read-back, sync and pause against recorded Graph responses.
 - **Launch routes** (`launch-routes`, #648): `POST /api/campaigns/preflight` and `POST /api/campaigns/create`, inline and through the queued worker, on the same recorded Graph answers with only Supabase in memory (OAuth token decrypted for real). A business without a website reviews as 200 with `canCreatePaused: false`, no planHash and an `open_brand` blocker, and create refuses it. A ready review gets a planHash, and create sends only PAUSED objects on the connected account and Page and ends `succeeded` with the recorded campaign. An older draft version, connection generation or plan is refused before any Meta write. Sending the same request again replays the finished operation.
@@ -217,7 +221,7 @@ Supabase configuration and Node 24. Every job runs in parallel after its own `np
 | `test` | aggregator: fails unless `lint`, every `unit` shard and `metadb` succeeded |
 | `core` | `npm run test:core`, then `test:meta-db -- --generation-only` |
 | `audit` | `npm run audit:dependencies` (reports, does not block) |
-| `boundaries` | `npm run boundaries -- --base origin/<base>`: ADR-001 import rules (`.dependency-cruiser.mjs`) and source checks C1–C4 (Graph URLs, adapter tables, `appsecret_proof`, 400-line file budget). A new edge fails, a listed big file that grows fails; a fixed edge fails until `npm run boundaries -- --write-baseline` drops it from `scripts/boundaries-baseline.json`, which may only shrink (#2070, #2071) |
+| `boundaries` | `npm run boundaries -- --base origin/<base>`: ADR-001 import rules (`.dependency-cruiser.mjs`) and source checks C1–C4 (Graph URLs, adapter tables, `appsecret_proof`, 400-line file budget). A new edge fails, a listed big file that grows fails; a fixed edge fails until `npm run boundaries -- --write-baseline` drops it from `scripts/boundaries-baseline.json`, which may only shrink (#2070, #2071). Rules and fixes: [Boundaries](boundaries.md) |
 | `secrets` | Gitleaks |
 
 Required checks are `build`, `test`, `core` and `secrets`. `test` runs with

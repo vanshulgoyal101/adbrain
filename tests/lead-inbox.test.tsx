@@ -862,6 +862,40 @@ describe("<LeadInbox> reply in one tap (#1049)", () => {
   });
 });
 
+// #1761 (DPDP erasure): the owner can delete an enquiry for good, after a confirm that says what that means.
+describe("<LeadInbox> delete an enquiry (#1761)", () => {
+  it("asks first, then deletes it and reloads the list", async () => {
+    const calls: Array<[string, RequestInit | undefined]> = [];
+    let gone = false;
+    global.fetch = vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push([url, init]);
+      if (init?.method === "DELETE") { gone = true; return Response.json({ ok: true, deleted: 1 }); }
+      const leads = gone ? [] : [lead()];
+      return Response.json({ leads, total: leads.length, nextCursor: null });
+    }) as unknown as typeof fetch;
+    render(<LeadInbox businessName="Solaride" initialLeads={[lead()]} metaReady allTotal={1} />);
+    fireEvent.click(screen.getAllByRole("button", { name: "Delete enquiry" })[0]);
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("Delete this enquiry?");
+    expect(dialog).toHaveTextContent("Asha Verma's details and answers are removed from AdBrain for good.");
+    expect(calls.some(([, init]) => init?.method === "DELETE")).toBe(false);
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete enquiry" }));
+    await waitFor(() => expect(calls).toContainEqual(["/api/leads/l1", expect.objectContaining({ method: "DELETE" })]));
+    await waitFor(() => expect(screen.queryByText("Asha Verma")).toBeNull());
+  });
+
+  it("keeps the enquiry and says so when the delete fails", async () => {
+    global.fetch = vi.fn(async (_url: string, init?: RequestInit) => init?.method === "DELETE"
+      ? Response.json({ error: "x" }, { status: 503 })
+      : Response.json({ leads: [lead()], total: 1, nextCursor: null })) as unknown as typeof fetch;
+    render(<LeadInbox businessName="Solaride" initialLeads={[lead()]} metaReady allTotal={1} />);
+    fireEvent.click(screen.getAllByRole("button", { name: "Delete enquiry" })[0]);
+    fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Delete enquiry" }));
+    expect(await screen.findByText("Couldn't delete that enquiry. Try again.")).toBeInTheDocument();
+    expect(screen.getAllByText("Asha Verma").length).toBeGreaterThan(0);
+  });
+});
+
 describe("<LeadInbox> segment replies (#1945)", () => {
   it("opens 'Choose a first reply' with 3 WhatsApp messages; a tap records the first contact once and closes the sheet", async () => {
     const calls: string[] = [];
