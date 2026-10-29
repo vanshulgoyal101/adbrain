@@ -37,6 +37,7 @@ const adResultsMigration = await readFile(join(root, "db/migrations/20261026_cam
 const ownerAlertsMigration = await readFile(join(root, "db/migrations/20261027_owner_whatsapp_alerts.sql"), "utf8");
 const ownerAlertSendsMigration = await readFile(join(root, "db/migrations/20261027_owner_whatsapp_alerts_sends.sql"), "utf8");
 const mediaConsentsMigration = await readFile(join(root, "db/migrations/20261028_media_consents.sql"), "utf8");
+const planPeriodsMigration = await readFile(join(root, "db/migrations/20261029_plan_periods.sql"), "utf8");
 const leadCustomerMigration = await readFile(join(root, "db/migrations/20261026_lead_customer_status.sql"), "utf8");
 const leadFirstContactedMigration = await readFile(join(root, "db/migrations/20261027_lead_first_contacted.sql"), "utf8");
 const tokenSearchPathMigration = await readFile(join(root, "db/migrations/20261026_meta_token_search_path.sql"), "utf8");
@@ -46,6 +47,7 @@ const metaDeletionMigration = await readFile(join(root, "db/migrations/20261026_
 const hardeningMigration = await readFile(join(root, "db/migrations/20261026_legacy_credentials_bucket_limits.sql"), "utf8");
 const reauthMigration = await readFile(join(root, "db/migrations/20261026_meta_connection_reauth.sql"), "utf8");
 const leadCampaignLinkMigration = await readFile(join(root, "db/migrations/20261026_lead_campaign_link.sql"), "utf8");
+const leadEraseMigration = await readFile(join(root, "db/migrations/20261029_lead_erase.sql"), "utf8");
 const leadSharedPageMigration = await readFile(join(root, "db/migrations/20261028_lead_sync_shared_page.sql"), "utf8");
 const managedWhatsAppMigration = await readFile(join(root, "db/migrations/20261025_managed_whatsapp_page_link.sql"), "utf8");
 const productRollupMigration = await readFile(join(root, "db/migrations/20260928_product_event_rollups.sql"), "utf8");
@@ -1353,6 +1355,60 @@ async function verifyLeadCampaignLink(db, database) {
   });
 }
 
+async function verifyLeadErase(db, database) {
+  const owner = randomUUID(), other = randomUUID(), business = randomUUID(), campaign = randomUUID(), otherCampaign = randomUUID();
+  await db.query("insert into auth.users(id) values ($1),($2)", [owner, other]);
+  await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Erase')", [business, owner]);
+  await db.query("insert into public.campaigns(id,business_id,daily_budget,meta_campaign_id) values ($1,$2,300,'2201'),($3,$2,300,'2202')", [campaign, business, otherCampaign]);
+  await db.query("insert into public.meta_connections(business_id,generation,authorization_status,ad_account_id,page_id) values ($1,1,'connected','act_erase','page_erase')", [business]);
+  const lead = async (meta, campaignId, source = "meta_form") => (await db.query(
+    "insert into public.leads(business_id,campaign_id,meta_lead_id,source,full_name,phone) values ($1,$2,$3,$4,'Rohit','+919800000001') returning id",
+    [business, campaignId, meta, source])).rows[0].id;
+  const one = await lead("erase-1", campaign), two = await lead("erase-2", campaign), three = await lead("erase-3", otherCampaign);
+  await lead(null, campaign, "whatsapp_manual");
+  const as = async (user, run) => {
+    const session = client(database);
+    await session.connect();
+    try {
+      await session.query("begin"); await session.query("set local role authenticated");
+      await session.query("select set_config('request.jwt.claim.sub',$1,true)", [user]);
+      const result = await run(session); await session.query("commit"); return result;
+    } catch (error) { await session.query("rollback").catch(() => {}); throw error; } finally { await session.end(); }
+  };
+  const left = async () => (await db.query("select count(*)::int as n from public.leads where business_id=$1", [business])).rows[0].n;
+  await check(`${database}: an owner erases one enquiry or a campaign's, leaving a hashed tombstone and no personal data (#1761)`, async () => {
+    assert.equal(await as(other, s => s.query("select public.leads_erase($1,$2) as n", [business, one]).then(r => r.rows[0].n)), 0, "another owner erases nothing");
+    assert.equal(await as(owner, s => s.query("select public.leads_erase($1,$2) as n", [business, one]).then(r => r.rows[0].n)), 1);
+    assert.equal(await left(), 3);
+    assert.equal(await as(owner, s => s.query("select public.leads_erase($1,null,$2) as n", [business, campaign]).then(r => r.rows[0].n)), 2, "the campaign's form lead and its logged WhatsApp enquiry");
+    assert.equal(await left(), 1);
+    const tombstones = (await db.query("select meta_lead_hash from public.lead_tombstones where business_id=$1 order by 1", [business])).rows.map(r => r.meta_lead_hash);
+    assert.equal(tombstones.length, 2);
+    assert.ok(tombstones.every(hash => /^[0-9a-f]{64}$/.test(hash)) && !tombstones.join().includes("erase"), "only hashes are kept");
+    await as(owner, async s => {
+      await s.query("savepoint a");
+      await assert.rejects(s.query("select public.leads_erase($1,$2,$3)", [business, three, otherCampaign]), { code: "22023" });
+      await s.query("rollback to savepoint a");
+      await assert.rejects(s.query("delete from public.lead_tombstones"), { code: "42501" });
+    });
+    void two;
+  });
+  await check(`${database}: lead sync never re-imports an erased enquiry (#1761)`, async () => {
+    const run = (await db.query("select * from public.lead_sync_start($1,$2,null,1,'act_erase','page_erase')", [business, owner])).rows[0];
+    const saved = (await db.query(
+      "select public.lead_sync_checkpoint($1,$2,$3,1,'act_erase','page_erase',$4,$5::jsonb,$6::jsonb) as result",
+      [business, owner, run.id, run.version, JSON.stringify([
+        { meta_lead_id: "erase-1", meta_campaign_id: "2201", form_id: "f1" },
+        { meta_lead_id: "erase-2", meta_campaign_id: "2201", form_id: "f1" },
+        { meta_lead_id: "erase-new", meta_campaign_id: "2201", form_id: "f1" },
+      ]), JSON.stringify({ formsDone: false, pending: [] })],
+    )).rows[0].result;
+    assert.equal(saved.imported, 1);
+    const ids = (await db.query("select meta_lead_id from public.leads where business_id=$1 and meta_lead_id is not null order by 1", [business])).rows.map(r => r.meta_lead_id);
+    assert.deepEqual(ids, ["erase-3", "erase-new"]);
+  });
+}
+
 async function verifySharedPageLeads(db, database) {
   const [ownerA, ownerB, ownerC, a, b, c, campA, campB] = Array.from({ length: 8 }, () => randomUUID());
   await db.query("insert into auth.users(id) values ($1),($2),($3)", [ownerA, ownerB, ownerC]);
@@ -1579,6 +1635,77 @@ async function verifyEditAdCreativeKind(db, database) {
       [business, campaign, hash, JSON.stringify({ ad_id: "120253710068180526", previous_creative_id: "2421940755245471" }), JSON.stringify({ message: "New words" })]);
     await assert.rejects(db.query("insert into public.campaign_edit_operations(business_id,campaign_id,kind,idempotency_key,request_hash) values ($1,$2,'other','ad-edit-key-2',$3)", [business, campaign, hash]), { code: "23514" });
     assert.equal((await db.query("select count(*)::int as n from public.campaign_edit_operations where campaign_id=$1 and kind='ad_creative'", [campaign])).rows[0].n, 1);
+  });
+}
+
+async function verifyPlanPeriods(db, database) {
+  const owner = randomUUID(), other = randomUUID(), business = randomUUID();
+  await db.query("insert into auth.users(id) values ($1),($2)", [owner, other]);
+  await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Plan')", [business, owner]);
+  await db.query("insert into public.campaigns(id,business_id,daily_budget,launched_at) values ($1,$2,300,'2026-10-10T09:00:00Z')", [randomUUID(), business]);
+  const service = async (sql, params) => {
+    const session = client(database);
+    await session.connect();
+    try {
+      await session.query("begin"); await session.query("set local role service_role");
+      const result = (await session.query(sql, params)).rows[0]; await session.query("commit"); return result;
+    } catch (error) { await session.query("rollback").catch(() => {}); throw error; } finally { await session.end(); }
+  };
+  const open = async () => (await service("select public.plan_period_open($1) as r", [business])).r;
+  const link = (period, id) => service("select public.plan_period_set_link($1,$2,'https://rzp.io/i/x') as r", [period, id]);
+  const paid = async (id, payment, at) => (await service("select public.plan_period_paid($1,$2,$3) as r", [id, payment, at])).r;
+  const months = async () => (await db.query("select to_char(starts_at at time zone 'UTC','YYYY-MM-DD') as s, to_char(ends_at at time zone 'UTC','YYYY-MM-DD') as e from public.plan_periods where business_id=$1 and state='paid' order by starts_at", [business])).rows;
+  await check(`${database}: plan periods: one open month, paid once, early pay stacks after the free month, late pay starts at payment, paid-after-expiry credited (#718)`, async () => {
+    const first = await open();
+    assert.equal((await open()).periodId, first.periodId);
+    assert.equal((await link(first.periodId, "plink_A")).r, true);
+    assert.equal((await link(first.periodId, "plink_B")).r, false);
+    assert.equal(await paid("plink_Unknown", "pay_X", "2026-11-05T00:00:00Z"), "ignored");
+    assert.equal(await paid("plink_A", "pay_A", "2026-11-05T00:00:00Z"), "paid");
+    assert.equal(await paid("plink_A", "pay_A", "2026-11-05T00:00:00Z"), "duplicate");
+    assert.equal(await paid("plink_A", "pay_Other", "2026-11-06T00:00:00Z"), "ignored");
+    assert.deepEqual(await months(), [{ s: "2026-11-10", e: "2026-12-10" }]);
+    const second = await open();
+    assert.notEqual(second.periodId, first.periodId);
+    await link(second.periodId, "plink_C");
+    assert.equal(await paid("plink_C", "pay_C", "2027-01-31T10:00:00Z"), "paid");
+    assert.deepEqual(await months(), [{ s: "2026-11-10", e: "2026-12-10" }, { s: "2027-01-31", e: "2027-02-28" }]);
+    const third = await open();
+    await link(third.periodId, "plink_D");
+    assert.equal((await service("select public.plan_period_expire('plink_D') as r")).r, true);
+    // A payment that lands after its link expired still buys its month (Reviewer, #1430): starts after Feb 28.
+    assert.equal(await paid("plink_D", "pay_D", "2027-02-01T00:00:00Z"), "paid");
+    assert.equal(await paid("plink_D", "pay_D", "2027-02-01T00:00:00Z"), "duplicate");
+    assert.deepEqual((await months()).at(-1), { s: "2027-02-28", e: "2027-03-28" });
+    assert.equal((await service("select public.plan_period_expire('plink_D') as r")).r, false);
+  });
+  await check(`${database}: plan periods: owners read only their own, nobody writes them directly (#718)`, async () => {
+    const as = async (role, user, run) => {
+      const session = client(database);
+      await session.connect();
+      try {
+        await session.query("begin"); await session.query(`set local role ${role}`);
+        if (user) await session.query("select set_config('request.jwt.claim.sub',$1,true)", [user]);
+        return await run(session);
+      } finally { await session.query("rollback").catch(() => {}); await session.end(); }
+    };
+    await as("authenticated", owner, async (session) => {
+      assert.equal((await session.query("select count(*)::int as n from public.plan_periods")).rows[0].n, 3);
+      await session.query("savepoint s");
+      await assert.rejects(session.query("select public.plan_period_open($1)", [business]), { code: "42501" });
+      await session.query("rollback to savepoint s");
+      await assert.rejects(session.query("update public.plan_periods set state='paid'"), { code: "42501" });
+    });
+    await as("authenticated", other, async (session) => {
+      assert.equal((await session.query("select count(*)::int as n from public.plan_periods")).rows[0].n, 0);
+    });
+    await as("anon", null, async (session) => {
+      await assert.rejects(session.query("select 1 from public.plan_periods"), { code: "42501" });
+    });
+    await assert.rejects(db.query("insert into public.plan_periods(business_id,amount_paise) values ($1,100)", [business]), { code: "23514" });
+    // QA (#1430): paid months are receipts (GST, disputes), so deleting the business can't silently erase them.
+    // RESTRICT reports 23001 (restrict_violation); NO ACTION-style checks report 23503. Either means refused.
+    await assert.rejects(db.query("delete from public.businesses where id=$1", [business]), { code: /^(23001|23503)$/ });
   });
 }
 
@@ -2854,6 +2981,9 @@ async function verify(database, source, integrityMigration, customerOnly = false
       await db.query(mediaConsentsMigration);
       await db.query(mediaConsentsMigration);
       await verifyMediaConsents(db,database);
+      await db.query(planPeriodsMigration);
+      await db.query(planPeriodsMigration);
+      await verifyPlanPeriods(db,database);
       await db.query(leadCustomerMigration);
       await db.query(leadCustomerMigration);
       if ((await db.query("select exists(select 1 from information_schema.columns where table_schema='public' and table_name='leads' and column_name='workflow_status') as installed")).rows[0].installed) {
@@ -2886,8 +3016,12 @@ async function verify(database, source, integrityMigration, customerOnly = false
         await db.query(leadCampaignLinkMigration);
         await db.query(leadSharedPageMigration);
         await db.query(leadSharedPageMigration);
+        // #1761 (QA): the erase migration redefines the checkpoint last, so every check below runs on the final function.
+        await db.query(leadEraseMigration);
+        await db.query(leadEraseMigration);
         await verifyLeadCampaignLink(db,database);
         await verifySharedPageLeads(db,database);
+        await verifyLeadErase(db,database);
       }
       if (database === "customer_fresh") await verifyAdvisorHardening(db,database);
       await verifyBusinessTransfer(db,database);

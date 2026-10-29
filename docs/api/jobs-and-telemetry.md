@@ -38,7 +38,7 @@ launch-path `page` (`/create`, `/studio`, `/campaigns`); `page.engagement`
 requires integer `durationMs` between 1000 and 3600000. Unknown fields, arbitrary
 labels and client identity overrides are rejected. No request/field content is
 captured. DNT/GPC, 2 KiB body limits, rate limiting and 204 responses are preserved.
-Action intent is not authoritative success. See [collection and retention](../OBSERVABILITY.md)
+Action intent is not authoritative success. See [collection and retention](../operations/observability.md)
 for the fixed action catalog, privacy controls and operator-only analytics queries.
 
 ## Jobs and Telemetry

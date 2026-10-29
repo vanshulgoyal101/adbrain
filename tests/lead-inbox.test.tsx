@@ -862,17 +862,99 @@ describe("<LeadInbox> reply in one tap (#1049)", () => {
   });
 });
 
+// #1761 (DPDP erasure): the owner can delete an enquiry for good, after a confirm that says what that means.
+describe("<LeadInbox> delete an enquiry (#1761)", () => {
+  it("asks first, then deletes it and reloads the list", async () => {
+    const calls: Array<[string, RequestInit | undefined]> = [];
+    let gone = false;
+    global.fetch = vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push([url, init]);
+      if (init?.method === "DELETE") { gone = true; return Response.json({ ok: true, deleted: 1 }); }
+      const leads = gone ? [] : [lead()];
+      return Response.json({ leads, total: leads.length, nextCursor: null });
+    }) as unknown as typeof fetch;
+    render(<LeadInbox businessName="Solaride" initialLeads={[lead()]} metaReady allTotal={1} />);
+    fireEvent.click(screen.getAllByRole("button", { name: "Delete enquiry" })[0]);
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("Delete this enquiry?");
+    expect(dialog).toHaveTextContent("Asha Verma's details and answers are removed from AdBrain for good.");
+    expect(calls.some(([, init]) => init?.method === "DELETE")).toBe(false);
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete enquiry" }));
+    await waitFor(() => expect(calls).toContainEqual(["/api/leads/l1", expect.objectContaining({ method: "DELETE" })]));
+    await waitFor(() => expect(screen.queryByText("Asha Verma")).toBeNull());
+  });
+
+  it("keeps the enquiry and says so when the delete fails", async () => {
+    global.fetch = vi.fn(async (_url: string, init?: RequestInit) => init?.method === "DELETE"
+      ? Response.json({ error: "x" }, { status: 503 })
+      : Response.json({ leads: [lead()], total: 1, nextCursor: null })) as unknown as typeof fetch;
+    render(<LeadInbox businessName="Solaride" initialLeads={[lead()]} metaReady allTotal={1} />);
+    fireEvent.click(screen.getAllByRole("button", { name: "Delete enquiry" })[0]);
+    fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Delete enquiry" }));
+    expect(await screen.findByText("Couldn't delete that enquiry. Try again.")).toBeInTheDocument();
+    expect(screen.getAllByText("Asha Verma").length).toBeGreaterThan(0);
+  });
+});
+
+describe("<LeadInbox> segment replies (#1945)", () => {
+  it("opens 'Choose a first reply' with 3 WhatsApp messages; a tap records the first contact once and closes the sheet", async () => {
+    const calls: string[] = [];
+    global.fetch = vi.fn(async (url: string) => { calls.push(url); return { ok: true, json: async () => ({}) }; }) as unknown as typeof fetch;
+    render(<LeadInbox businessName="Solaride" offer="Free solar site survey" vertical="Rooftop solar" initialLeads={[lead({ phone: "98765 43210" })]} metaReady />);
+    expect(screen.queryByRole("link", { name: "WhatsApp them" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "WhatsApp them" }));
+    const sheet = await screen.findByRole("dialog", { name: "Choose a first reply" });
+    const choices = within(sheet).getAllByRole("link");
+    expect(choices).toHaveLength(3);
+    const text = "Hi Asha, this is Solaride. Thanks for asking about free solar site survey! Can we book your free site survey? Is tomorrow or the day after better?";
+    expect(choices[1]).toHaveTextContent(text);
+    expect(choices[1]).toHaveAttribute("href", `https://wa.me/919876543210?text=${encodeURIComponent(text)}`);
+    expect(choices[1]).toHaveAttribute("target", "_blank");
+    choices[1].addEventListener("click", (event) => event.preventDefault());
+    fireEvent.click(choices[1]);
+    expect(calls.filter((url) => url === "/api/leads/l1")).toHaveLength(1);
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(await screen.findByText(/^Replied .* after the enquiry$/)).toBeInTheDocument();
+  });
+
+  it("after first contact, ⋯ WhatsApp them offers the follow-ups instead", async () => {
+    render(<LeadInbox businessName="Solaride" vertical="solar" language="hinglish" initialLeads={[lead({ phone: "98765 43210", first_contacted_at: "2026-08-20T10:12:00.000Z" })]} metaReady />);
+    const menu = screen.getByLabelText("More for Asha Verma").closest("details")!;
+    fireEvent.click(within(menu).getByRole("button", { name: "WhatsApp them" }));
+    const sheet = await screen.findByRole("dialog", { name: "Follow up" });
+    expect(within(sheet).getAllByRole("link").map((link) => link.textContent)).toEqual([
+      "Hi Asha, free site survey is hafte book kar dein?",
+      "Hi Asha, agar sawaal price ka hai to aapke bill se rough estimate bhej doon?",
+    ]);
+  });
+
+  it("offers interiors' photo follow-up only with the owner's own photos, and the wide pane opens the same sheet", async () => {
+    const contacted = lead({ phone: "98765 43210", first_contacted_at: "2026-08-20T10:12:00.000Z" });
+    const { unmount } = render(<LeadInbox businessName="Nest" vertical="Interior designer" initialLeads={[contacted]} metaReady />);
+    fireEvent.click(within(screen.getByLabelText("More for Asha Verma").closest("details")!).getByRole("button", { name: "WhatsApp them" }));
+    expect(within(await screen.findByRole("dialog", { name: "Follow up" })).getAllByRole("link")).toHaveLength(1);
+    unmount();
+    vi.stubGlobal("matchMedia", (query: string) => ({ matches: query === "(min-width: 1280px)", addEventListener: vi.fn(), removeEventListener: vi.fn() }));
+    render(<LeadInbox businessName="Nest" vertical="Interior designer" ownPhotos initialLeads={[contacted]} metaReady />);
+    const pane = screen.getByRole("complementary", { name: "Enquiry from Asha Verma" });
+    expect(within(pane).queryByText("Opens WhatsApp with:")).toBeNull();
+    fireEvent.click(within(pane).getByRole("button", { name: "WhatsApp them" }));
+    expect(within(await screen.findByRole("dialog", { name: "Follow up" })).getAllByRole("link")[1]).toHaveTextContent("photos of kitchens we've finished nearby");
+    vi.unstubAllGlobals();
+  });
+});
+
 // #1819 (Designer, 390): a Meta test lead isn't a waiting enquiry, so its row says so instead of 'New' (the counts
 // already leave it out); and a row with no contact actions keeps its ⋯ on the name row, not alone on a second line.
 describe("<LeadInbox> rows without actions (#1819)", () => {
-  it("labels a Meta test lead 'Test lead', not New, and marks rows with no row actions", () => {
+  it("labels a Meta test lead 'Test from Meta', not New, and marks rows with no row actions", () => {
     const testLead = lead({ id: "t1", full_name: "<test lead: dummy data for full_name>", phone: "<test lead: dummy data for phone_number>", email: null, city: null });
     const noPhone = lead({ id: "n1", full_name: "Ravi", phone: null, email: "ravi@example.com" });
     const callable = lead({ id: "c1", full_name: "Asha Verma" });
     render(<LeadInbox businessName="Solaride" initialLeads={[testLead, noPhone, callable]} metaReady allTotal={3} />);
     const row = (id: string) => document.querySelector(`tr[data-lead="${id}"]`) as HTMLElement;
     // The state badge (the follow-up editor keeps its own status words).
-    expect(row("t1").querySelector("span[data-state]")).toHaveTextContent(/^Test lead$/);
+    expect(row("t1").querySelector("span[data-state]")).toHaveTextContent(/^Test from Meta$/);
     expect(row("n1").querySelector("span[data-state]")).toHaveTextContent(/^New$/);
     expect(row("t1")).toHaveAttribute("data-actions", "none");
     expect(row("n1")).toHaveAttribute("data-actions", "none");
