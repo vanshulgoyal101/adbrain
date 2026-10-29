@@ -9,6 +9,9 @@ export function creativeFailureMessage(error: unknown): string {
   if (error instanceof AllLLMProvidersFailedError && error.reason === "CREDIT_EXHAUSTED") {
     return "AdBrain's paid AI credit has run out and no free model could write this ad. Try again in a few minutes; AdBrain has been told.";
   }
+  if (error instanceof CreativeImageError && error.cause instanceof ReferencePhotoPausedError && error.cause.reason === "allowance") {
+    return "Your product photo needs our paid pictures, and this month's AI allowance is used. Ads without the product photo still work.";
+  }
   if (error instanceof CreativeImageError && error.cause instanceof ReferencePhotoPausedError) {
     return "Your product photo needs our paid pictures, which are paused right now. Try again in 15 minutes.";
   }
