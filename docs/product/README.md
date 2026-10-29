@@ -101,7 +101,7 @@ first month free) and trust lines, with "Start my free campaign" → `/login`. T
 `NEXT_PUBLIC_SUPPORT_WHATSAPP`) is set at build time (#796). No margin, no promised results.
 
 Owner activity records, AI usage events, and structured product telemetry serve
-different purposes. See [Observability](../OBSERVABILITY.md) for privacy, access, and
+different purposes. See [Observability](../operations/observability.md) for privacy, access, and
 best-effort persistence; do not call an owner-insertable audit log tamper-proof.
 
 ## Known Limits

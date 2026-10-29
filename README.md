@@ -21,7 +21,7 @@ Start at the [documentation index](docs/README.md).
 | Configure providers and limits | [Configuration](docs/CONFIGURATION.md) |
 | Understand storage and upgrades | [Data model](docs/DATA_MODEL.md) |
 | Validate changes | [Testing](docs/TESTING.md) |
-| Diagnose production | [Operations](docs/operations/README.md) and [observability](docs/OBSERVABILITY.md) |
+| Diagnose production | [Operations](docs/operations/README.md) and [observability](docs/operations/observability.md) |
 | Release safely | [Release workflow](docs/RELEASING.md) |
 
 ## Stack

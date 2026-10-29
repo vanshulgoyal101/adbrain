@@ -274,7 +274,7 @@ it merely to validate these docs: it can execute real campaign operations.
 Owner audit history, trusted AI usage, and structured product events are separate
 stores. Product telemetry uses request-local async context and safe metadata;
 database logging is opt-in after migration and best effort. See
-[Observability](OBSERVABILITY.md) for exact limits and privacy. Logs are evidence
+[Observability](operations/observability.md) for exact limits and privacy. Logs are evidence
 for diagnosis, not proof that every side effect was durably recorded.
 
 ## Where to Make Changes

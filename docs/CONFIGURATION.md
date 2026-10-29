@@ -262,7 +262,7 @@ Spend enforcement is not a real-time budget stop.
 | `VERCEL_GIT_COMMIT_SHA` | Release identifier, accepted only as a bounded hexadecimal SHA |
 | `NODE_ENV` | Framework environment controlling production safeguards |
 
-See [Observability](OBSERVABILITY.md) for event contracts, privacy, retention, and
+See [Observability](operations/observability.md) for event contracts, privacy, retention, and
 database-sink prerequisites. Do not enable the sink before the migration.
 
 ## Script Configuration
