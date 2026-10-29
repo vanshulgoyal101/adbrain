@@ -73,10 +73,10 @@ async function handleGET(req: Request) {
     const lookup = await createAdminClient().rpc("creative_generation_status", {
       p_business_id: businessId, p_user_id: user.id, p_generation_id: generationId,
     });
-    if (lookup.error || !lookup.data) return NextResponse.json({ error: "Generation status is unavailable." }, { status: 503 });
+    if (lookup.error || !lookup.data) return NextResponse.json({ error: "We couldn't check on your ads just now. Try again in a minute." }, { status: 503 });
     intent = lookup.data;
   } catch {
-    return NextResponse.json({ error: "Generation status is unavailable." }, { status: 503 });
+    return NextResponse.json({ error: "We couldn't check on your ads just now. Try again in a minute." }, { status: 503 });
   }
   if (intent.status === "unknown") return NextResponse.json({ error: "Generation not found." }, { status: 404 });
   const expectedCount = Number(intent.expectedCount);
@@ -89,7 +89,7 @@ async function handleGET(req: Request) {
     .eq("business_id", businessId)
     .eq("variant_group", generationId)
     .order("created_at", { ascending: true });
-  if (error) return NextResponse.json({ error: "Generation status is unavailable." }, { status: 503 });
+  if (error) return NextResponse.json({ error: "We couldn't check on your ads just now. Try again in a minute." }, { status: 503 });
 
   const saved = (creatives ?? []) as Creative[];
   let status: string = intent.status === "complete" && saved.length < expectedCount ? "unresolved" :
@@ -159,7 +159,7 @@ async function handlePOST(req: Request): Promise<Response> {
   beat();
   void result
     .then(async (response) => write({ type: "result", status: response.status, body: await response.json() }))
-    .catch(() => write({ type: "result", status: 502, body: { error: "Creative generation could not be completed. Check saved results before trying again." } }))
+    .catch(() => write({ type: "result", status: 502, body: { error: "Your ads didn't finish. Some may already be saved: tap Check saved results before you try again." } }))
     .finally(() => {
       clearTimeout(heartbeat);
       writer.close().catch(() => {});
@@ -282,7 +282,7 @@ async function generate(req: Request, live?: LiveCreate) {
     if (admission.action !== "start") {
       if (admission.action === "missing") return NextResponse.json({ error: "Generation not found." }, { status: 404 });
       if (admission.action === "conflict") return NextResponse.json({ error: "Generation ID was already used for different inputs." }, { status: 409 });
-      if (admission.action === "quota") return NextResponse.json({ error: "This business has reached its monthly AI generation limit.", code: "LLM_MONTHLY_QUOTA_EXCEEDED" }, { status: 429 });
+      if (admission.action === "quota") return NextResponse.json({ error: "You've used this month's AI allowance for this business. Ask AdBrain to raise it.", code: "LLM_MONTHLY_QUOTA_EXCEEDED" }, { status: 429 });
       return NextResponse.json({ variantGroup, status: admission.status, creatives: [], count: 0, expectedCount: count }, { status: 202 });
     }
     admitted = true;
@@ -425,7 +425,7 @@ async function generate(req: Request, live?: LiveCreate) {
       );
     }
     return NextResponse.json(
-      { error: "Creative generation could not be completed. Check saved results before trying again." },
+      { error: "Your ads didn't finish. Some may already be saved: tap Check saved results before you try again." },
       { status: 502 },
     );
   }
