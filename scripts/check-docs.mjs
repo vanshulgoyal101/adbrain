@@ -38,6 +38,7 @@ function parseDocument(file) {
   const links = [];
   const examples = [];
   const unclosedFences = [];
+  const prose = [];
   const inspect = (items, parentLine = 1) => {
     for (let index = 0; index < items.length; index++) {
       const token = items[index];
@@ -56,11 +57,12 @@ function parseDocument(file) {
         const lastLine = text.split("\n")[token.map[1] - 1]?.trim().replace(/^(?:>\s*)+/, "") ?? "";
         if (!lastLine.startsWith(token.markup) || lastLine.split(token.markup[0]).join("").trim()) unclosedFences.push(line);
       }
+      if (token.type === "inline") prose.push({ line, text: token.children.map(child => /break$/.test(child.type) ? " " : child.type === "code_inline" ? "" : child.type === "html_inline" ? parseHtml(child.content).text : child.content).join("") });
       if (token.children) inspect(token.children, line);
     }
   };
   inspect(tokens);
-  return { text, anchors, links, examples, unclosedFences };
+  return { text, anchors, links, examples, unclosedFences, prose };
 }
 
 export function sourceInventory(root) {
@@ -117,6 +119,42 @@ export function routeRows(text) {
     .map(match => ({ path: match[1], line: text.slice(0, match.index).split("\n").length }));
 }
 
+// #2252: a "quoted" label in docs/product must exist in the app (src, messages, db/migrations). Compared as word
+// trigrams: an app slot ({x}, ${x}) matches one word; a doc placeholder (…, N, n, X, Y, [x], {x}, numbers) is skipped.
+// "Owner says:" lines quote customers; LABEL_PROSE lists example text that isn't app copy.
+export const LABEL_PROSE = new Set(["Cures back pain", "Hi, I want info", "Can I get PM Surya Ghar subsidy help?", "fresh direction", "ignore preferences",
+  // setup-go-live.tsx renders hintBefore + <strong>adBrain</strong> + hintAfter.
+  "Facebook is still reviewing AdBrain. Until then, your Facebook account needs our invite: open your invites and accept adBrain, then tap Connect."]);
+const SLOT = "§";
+const words = text => (text.replace(/[‘’]/g, "'").replace(/&apos;|&rsquo;|&#39;/g, "'").toLowerCase().match(/[\p{L}\p{M}\p{N}'§]+/gu) ?? [])
+  .map(word => word.replace(/^'+|'+$/g, "")).filter(Boolean).map(word => /^\d+[a-z]{0,2}$/.test(word) || /^[nxy]$/.test(word) ? SLOT : word);
+export function appCopy(root) {
+  const files = [...walk(resolve(root, "src")).filter(file => /\.(?:tsx?|json)$/.test(file) && !/\.test\./.test(file)), ...walk(resolve(root, "messages")), ...walk(resolve(root, "db/migrations"))];
+  const grams = new Set();
+  for (const file of files) {
+    const list = words(readFileSync(file, "utf8").replace(/\$\{[^{}`]*\}|\{[\w.]{1,40}\}|#/g, ` ${SLOT} `));
+    list.forEach((word, index) => { for (let size = 1; size <= 3 && index + size <= list.length; size++) grams.add(list.slice(index, index + size).join(" ")); });
+  }
+  return grams;
+}
+const known = (gram, grams) => [-1, ...gram.keys()].some(slot => grams.has(gram.map((word, index) => index === slot ? SLOT : word).join(" ")));
+export function missingLabels(texts, grams) {
+  const missing = [];
+  for (const { line, text } of texts) {
+    if (/^\s*Owner says:/.test(text)) continue;
+    // Quotes after "reply:" are support's words, and labels without Latin letters are customer words or Hindi.
+    for (const [, before, label] of text.replace(/“[^”]*”/g, ` ${SLOT} `).matchAll(/([^\s"]*\s?)"([^"]{1,200})"/g)) {
+      if (LABEL_PROSE.has(label.trim()) || /(?:reply|दें):\s?$/i.test(before) || !/[a-z]/i.test(label) || /[\u0900-\u097F]/.test(label)) continue;
+      // "·" and sentence ends usually separate UI elements, so each piece is checked on its own.
+      const pieces = label.replace(/…|\.\.\.|\[[^\]]*\]|\{[^}]*\}/g, ` ${SLOT} `).split(/·|[.?!;:](?:\s|$)/).map(words);
+      const checks = pieces.flatMap(list => list.map((_, index) => list.slice(index, index + Math.min(3, list.length)))
+        .filter(gram => gram.length === Math.min(3, list.length) && !gram.includes(SLOT)));
+      if (checks.some(gram => !known(gram, grams))) missing.push({ line, label });
+    }
+  }
+  return missing;
+}
+
 export function checkDocumentation(root, options = {}) {
   root = resolve(root);
   const moduleReadmes = walk(resolve(root, "src")).filter(file => file.endsWith(`${sep}README.md`));
@@ -131,6 +169,7 @@ export function checkDocumentation(root, options = {}) {
     return cache.get(file);
   };
   const checked = [];
+  let appText;
   for (const path of selected) {
     const file = relative(root, path).split(sep).join("/");
     if (file.startsWith("../") || !existsSync(path) || !statSync(path).isFile()) {
@@ -142,6 +181,9 @@ export function checkDocumentation(root, options = {}) {
     const report = (line, message, warning = false) => diagnostics.push({ severity: historical || warning ? "warning" : "error", file, line, message });
     checked.push({ file, role: historical ? "historical" : "current", sha256: createHash("sha256").update(document.text).digest("hex") });
     for (const line of document.unclosedFences) report(line, "Unclosed fenced code block");
+    if (file.startsWith("docs/product/") && !historical) {
+      for (const { line, label } of missingLabels(document.prose, appText ??= appCopy(root))) report(line, `Quoted label not in the app: "${label}" (fix it to the app's text, or add example text to LABEL_PROSE)`);
+    }
     for (const { href, line } of document.links) {
       if (!href || /^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(href)) continue;
       let url;

@@ -36,8 +36,9 @@
 - **स्क्रीन पर दिखता है:** काफ़ी देर तक "Making the pictures…" ("Usually about a
   minute")। Create में यह दिख सकता है: "This picture couldn't be made: AdBrain's paid
   image credit has run out and the free image model is busy. Try again in a few
-  minutes." या "Your product photo needs our paid pictures, which are paused right
-  now. Try again in 15 minutes." एक पिक्चर दोबारा बनाते समय: "Couldn't redraw the
+  minutes." या "This ad needs our paid pictures to draw your product, and they're paused
+  right now. Add a photo of your product in Brand and AdBrain uses it in the ad as it
+  is." एक पिक्चर दोबारा बनाते समय: "Couldn't redraw the
   picture. Try again."
 - **कारण:** पिक्चर फ़्री सर्विस से बनती हैं जो कभी-कभी व्यस्त रहती हैं।
 - **जवाब:**
