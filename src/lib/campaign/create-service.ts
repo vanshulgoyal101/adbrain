@@ -106,6 +106,7 @@ export async function executeReviewedCampaign(input: {
             variants: draft.input.abTest ? splitAgeRange(targeting.age?.min ?? 25, targeting.age?.max ?? 60).map(band => ({
               label: band.label, ageMin: band.ageMin, ageMax: band.ageMax, location, excludedLocation,
             })) : undefined,
+            excludeFacebookReels: draft.input.excludeFacebookReels === true,
             onCheckpoint,
             onStoryFallback: storyFallback,
             // #419 item 2(a): the exact payloads sent, checked against Meta's new-advertiser guidance.

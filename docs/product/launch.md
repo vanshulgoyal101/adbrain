@@ -133,6 +133,13 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
   passes it, and the #588 ledger records `placements: "advantage:facebook,instagram,messenger"`.
   An audience edit to a WhatsApp ad set applies the same rule; an edit to an older lead-form ad set keeps
   its placements.
+- No-Facebook-Reels test (#2273, for #680): an internal-only checkbox in the composer ("No Facebook Reels
+  (team test)", shown only to `internal-accounts.ts` users) saves `excludeFacebookReels: true` on the draft.
+  WhatsApp and lead-form ad sets then also name `facebook_positions` (every Facebook position except
+  `facebook_reels`; Meta refuses `video_feeds` as discontinued), the 9:16 creative's story rule drops
+  `facebook_reels`, the plan check calls it the no-Reels test, and the ledger records
+  `advantage:facebook,instagram,messenger -facebook_reels`. Off by default; the field is in the reviewed
+  plan only when on, so older reviews keep their hash. Re-run copies of a campaign start with it off.
 - Every launch checks the payloads it sent against Meta's new-advertiser guidance
   (Advantage+ audience and placements, one ad set, budget vs learning, 4:5 and 9:16
   images) and logs `campaign.plan_check` (#419). Review shows two plain, non-blocking warnings
