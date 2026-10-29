@@ -33,9 +33,9 @@ feature branch or a passing local test.
 | [Architecture](ARCHITECTURE.md) | Where is behavior owned, and how do requests cross trust boundaries? |
 | [Architecture decisions](architecture/README.md) | Which cross-cutting decisions (ADRs) bind the code, and how do we record a new one? |
 | [Data model](DATA_MODEL.md) | Which tables, relationships, grants, RPCs, buckets and migrations support the app? |
-| [AI pipeline](AI_PIPELINE.md) | How do interviews, concepts, images, composition, retries, cache and accounting work? |
+| [AI pipeline](architecture/ai-pipeline.md) | How do interviews, concepts, images, composition, retries, cache and accounting work? |
 | [Meta connection](architecture/channels/meta-connect.md) | How do consent, selection, capabilities, paused creation and activation work, and what does Meta's App Review need? |
-| [Testing](TESTING.md) | Which commands are safe locally and what does each verification layer prove? |
+| [Testing](team/testing.md) | Which commands are safe locally and what does each verification layer prove? ([Team](team/README.md) index) |
 | [Operations](operations/README.md) | How do we diagnose partial work, stale spend, provider failures and retention problems? |
 | [Observability](operations/observability.md) | What is logged, how is it correlated, and what must never be collected? |
 | [Deployment](operations/deploy.md) | How is a target environment configured and smoke-tested? |
@@ -66,6 +66,8 @@ last move.
 | `CONFIGURATION.md` | [operations/configuration.md](operations/configuration.md) and [operations/configuration-payments.md](operations/configuration-payments.md) (live checkout) |
 | `ROADMAP.md` | [roadmap.md](roadmap.md) (lower case, like the folders) |
 | `META_CONNECT.md` | [architecture/channels/meta-connect.md](architecture/channels/meta-connect.md) and [meta-app-review.md](architecture/channels/meta-app-review.md) |
+| `TESTING.md` | [team/testing.md](team/testing.md) and [team/testing-verification.md](team/testing-verification.md) |
+| `AI_PIPELINE.md` | [architecture/ai-pipeline.md](architecture/ai-pipeline.md), [-variants](architecture/ai-pipeline-variants.md) and [-routing](architecture/ai-pipeline-routing.md) |
 
 ## Terminology
 

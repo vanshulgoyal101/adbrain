@@ -224,6 +224,13 @@ export async function handleProductionPayments(request: Request, action: Action)
       // #718: the ₹999 plan's Payment Link events settle plan months and never touch the ad-money ledger.
       const plan = await handlePlanWebhook(event, {
         fetchPlanLink: linkId => createProductionPaymentClient(process.env, signal).fetchPlanLink(linkId),
+        // The same ownership rule `observe` applies: the order's receipt names one of our stored ad-money orders.
+        isAdMoneyPayment: async (paymentId, providerOrderId) => {
+          const client = createProductionPaymentClient(process.env, signal);
+          const order = await client.fetchOrder(providerOrderId ?? (await client.fetchPayment(paymentId)).order_id);
+          const localId = z.uuid().safeParse(order.receipt);
+          return localId.success && await stored(database.rpc("production_payment_recovery", { ...scope, p_order_id: localId.data }), recoverySchema.nullable()) !== null;
+        },
         rpc: async (name: "plan_period_paid" | "plan_period_expire", args: Record<string, string>) => {
           const { data, error } = await (name === "plan_period_paid"
             ? createAdminClient().rpc(name, args as { p_link_id: string; p_payment_id: string; p_paid_at: string })
