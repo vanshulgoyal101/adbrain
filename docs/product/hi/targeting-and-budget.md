@@ -1,5 +1,5 @@
 # कैंपेन की टारगेटिंग और बजट
-<!-- mirrors ../targeting-and-budget.md e78419bd85d2 -->
+<!-- mirrors ../targeting-and-budget.md 8f4c9d50e7dc -->
 
 यह [Campaign Targeting and Budget](../targeting-and-budget.md) का हिंदी रूप है; अंग्रेज़ी पेज बदले तो इसे भी बदलें।
 [Features and workflows](../README.md) का हिस्सा।
@@ -73,7 +73,7 @@
   शुरू होता है (#157 पर लगभग 5 मिनट)। पूरे देश वाले और भारत के बाहर के इलाकों पर अपने-आप
   कोई exclusion नहीं लगती।
 - लिखे गए इलाकों के नाम बिज़नेस के देश (India; #1555) में ढूँढे जाते हैं: जिस नाम का Meta में
-  अकेला match विदेश में हो, वह unresolved लौटता है ("Meta didn't recognise the area…"), जब
+  अकेला match विदेश में हो, वह unresolved लौटता है ("Meta didn't recognise …", इलाके के नाम के साथ), जब
   तक owner ने उसका पूरा label न लिखा हो ("Austin, Texas")। Tricity के रोज़मर्रा के जिन नामों के
   लिए Meta में कोई जगह नहीं है, उनके लिए Meta की मौजूद जगहें ढूँढी जाती हैं
   (`src/lib/meta/geo-aliases.ts`, #1556): Tricity और Zirakpur → Chandigarh, Mohali,

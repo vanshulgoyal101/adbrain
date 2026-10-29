@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { getCampaignPage, getLatestResultsWithEnquiries } from "@/lib/supabase/queries";
 import { ConnectionAccessError, requireOwnedBusiness } from "@/lib/meta/connection-access";
+import { ownerError } from "@/i18n/request-locale";
 import { observeRoute } from "@/lib/observability/logger";
 
 const querySchema = z.object({
@@ -13,9 +14,9 @@ const querySchema = z.object({
 export const GET = observeRoute("/api/campaigns/list", "GET", async (request: Request) => {
   const database = await createClient();
   const { data: { user } } = await database.auth.getUser();
-  if (!user) return NextResponse.json({ error: "Sign in required." }, { status: 401 });
+  if (!user) return NextResponse.json({ error: await ownerError("signInRequired") }, { status: 401 });
   const parsed = querySchema.safeParse(Object.fromEntries(new URL(request.url).searchParams));
-  if (!parsed.success) return NextResponse.json({ error: "Invalid campaign filters." }, { status: 400 });
+  if (!parsed.success) return NextResponse.json({ error: await ownerError("campaignFiltersInvalid") }, { status: 400 });
   try {
     const actor = await requireOwnedBusiness(parsed.data.businessId);
     const page = await getCampaignPage(actor.businessId, parsed.data);
@@ -24,6 +25,6 @@ export const GET = observeRoute("/api/campaigns/list", "GET", async (request: Re
   } catch (error) {
     const status = error instanceof z.ZodError || error instanceof SyntaxError ? 400
       : error instanceof ConnectionAccessError ? error.code === "FORBIDDEN" ? 403 : error.code === "NOT_FOUND" ? 404 : 503 : 503;
-    return NextResponse.json({ error: "We couldn't load your campaigns. Reload the page." }, { status });
+    return NextResponse.json({ error: await ownerError("campaignsNotLoaded") }, { status });
   }
 });
