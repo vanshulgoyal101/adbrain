@@ -16,7 +16,7 @@ feature branch or a passing local test.
 | --- | --- | --- |
 | Owner or coordinating worker | [Worker orchestration](ORCHESTRATION.md) | [Roadmap](ROADMAP.md) |
 | New developer | [Quick start](QUICK_START.md) | [Architecture](ARCHITECTURE.md) |
-| Product or support | [Features and workflows](FEATURES.md) | [Roadmap](ROADMAP.md) |
+| Product or support | [Features and workflows](product/README.md) | [Roadmap](ROADMAP.md) |
 | Operator | [Deployment configuration](DEPLOY.md) | [Release policy](RELEASING.md) |
 | Debugging engineer | [Observability](OBSERVABILITY.md) | [Operations](OPERATIONS.md) |
 | Product planner | [Roadmap](ROADMAP.md) | [Payment plan](PAYMENTS-PLAN.md) |
@@ -26,7 +26,7 @@ feature branch or a passing local test.
 | Guide | Questions it answers |
 | --- | --- |
 | [Worker orchestration](ORCHESTRATION.md) | Who owns each packet/file/resource, what blocks it, and what evidence permits integration? |
-| [Features and workflows](FEATURES.md) | What can owners do, and where are the limits? |
+| [Features and workflows](product/README.md) | What can owners do, and where are the limits? |
 | [API reference](api/README.md) | Which routes/actions exist, which parameters are accepted, and what do failures mean? |
 | [Configuration](CONFIGURATION.md) | Which variables are required, what are their defaults, and which changes cost money or require a restart? |
 | [Architecture](ARCHITECTURE.md) | Where is behavior owned, and how do requests cross trust boundaries? |
@@ -57,6 +57,7 @@ last move.
 | Old file | Now |
 | --- | --- |
 | `API_REFERENCE.md` | [api/](api/README.md): one page per route group |
+| `FEATURES.md` | [product/](product/README.md): one page per product area |
 
 ## Terminology
 
