@@ -16,7 +16,7 @@ feature branch or a passing local test.
 | --- | --- | --- |
 | Pilot, sales or new team role | [How AdBrain works](product/how-adbrain-works.md) | [Features and workflows](product/README.md) |
 | Owner or coordinating worker | [Worker orchestration](ORCHESTRATION.md) | [Roadmap](roadmap.md) |
-| New developer | [Quick start](team/quick-start.md) | [Architecture](ARCHITECTURE.md) |
+| New developer | [Quick start](team/quick-start.md) | [Architecture](architecture/overview.md) |
 | Product or support | [Features and workflows](product/README.md) | [Roadmap](roadmap.md) |
 | Operator | [Deployment configuration](operations/deploy.md) | [Release policy](RELEASING.md) |
 | Debugging engineer | [Observability](operations/observability.md) | [Operations](operations/README.md) |
@@ -30,7 +30,7 @@ feature branch or a passing local test.
 | [Features and workflows](product/README.md) | What can owners do, and where are the limits? |
 | [API reference](api/README.md) | Which routes/actions exist, which parameters are accepted, and what do failures mean? |
 | [Configuration](operations/configuration.md) | Which variables are required, what are their defaults, and which changes cost money or require a restart? |
-| [Architecture](ARCHITECTURE.md) | Where is behavior owned, and how do requests cross trust boundaries? |
+| [Architecture](architecture/overview.md) | Where is behavior owned, and how do requests cross trust boundaries? |
 | [Architecture decisions](architecture/README.md) | Which cross-cutting decisions (ADRs) bind the code, and how do we record a new one? |
 | [Data model](architecture/data-model.md) | Which tables, relationships, grants, RPCs, buckets and migrations support the app? |
 | [AI pipeline](architecture/ai-pipeline.md) | How do interviews, concepts, images, composition, retries, cache and accounting work? |
@@ -70,6 +70,7 @@ last move.
 | `AI_PIPELINE.md` | [architecture/ai-pipeline.md](architecture/ai-pipeline.md), [-variants](architecture/ai-pipeline-variants.md) and [-routing](architecture/ai-pipeline-routing.md) |
 | `DATA_MODEL.md` | [architecture/data-model.md](architecture/data-model.md), [data-model-access.md](architecture/data-model-access.md) and [migrations.md](architecture/migrations.md) |
 | `QUICK_START.md` | [team/quick-start.md](team/quick-start.md) |
+| `ARCHITECTURE.md` | [architecture/overview.md](architecture/overview.md), [overview-boundaries.md](architecture/overview-boundaries.md) and [ADR-001](architecture/adr-001-multi-channel.md) |
 
 ## Terminology
 
