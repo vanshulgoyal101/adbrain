@@ -1,4 +1,5 @@
 # फ़ोन पर आपका पहला ऐड
+<!-- mirrors ../first-ad.md 6d905c72aacb -->
 
 यह [Your first ad on a phone](../first-ad.md) का हिंदी रूप है; अंग्रेज़ी पेज बदले तो इसे भी बदलें।
 [Features and workflows](../README.md) का हिस्सा।
@@ -115,8 +116,9 @@ you before it's due."
   selected business" दबाएँ, फिर "Continue to review"। अब लाइन में "Connected" लिखा
   आएगा और बटन बन जाएगा "Go live · ₹300 a day"। उसे दबाएँ।
 - **कितना समय:** पहली बार करीब 10 मिनट, ज़्यादातर Facebook कनेक्ट करने में। Go live
-  दबाने के बाद दिखेगा "Checking your campaign…", "Creating it on Meta,
-  paused…", फिर "Turning it on…"। AdBrain कैंपेन पहले रुका हुआ (paused) बनाता है और
+  दबाने के बाद दिखेगा "Checking your campaign…" (AdBrain आपके ऐड के लिए उम्र और
+  ऑडियंस चुनता है, जैसे Campaigns में **Recommend audience** करता है; लगभग एक मिनट तक),
+  "Creating it on Meta, paused…", फिर "Turning it on…"। AdBrain कैंपेन पहले रुका हुआ (paused) बनाता है और
   सब कुछ ठीक निकलने पर ही उसे चालू करता है।
 - **अगर काम न करे:** कुछ भी फ़ेल हो तो कोई पैसा खर्च नहीं होता। स्क्रीन पर क्या लिखा आता है:
   - Meta कनेक्ट: "Meta has not finished yet. Complete the Meta window, then check

@@ -22,6 +22,8 @@ export function buildManualDraftInput(fields: {
   whatsappMessage: WhatsAppTemplate | null;
   targeting: TargetingInputDTO;
   abTest: boolean;
+  /** #2273: the internal-only no-Reels test. */
+  excludeFacebookReels?: boolean;
 }): DraftInput {
   const { destination, whatsappNumber, whatsappLanguage, whatsappMessage } = fields;
   return {
@@ -38,5 +40,6 @@ export function buildManualDraftInput(fields: {
     ...(destination === "whatsapp" && whatsappMessage ? { whatsappMessage } : {}),
     targeting: fields.targeting,
     abTest: fields.abTest,
+    ...(fields.excludeFacebookReels ? { excludeFacebookReels: true } : {}),
   };
 }

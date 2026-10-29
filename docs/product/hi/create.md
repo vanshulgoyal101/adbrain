@@ -1,4 +1,5 @@
 # ऐड बनाएँ और जाँचें
+<!-- mirrors ../create.md 959a4a30b18c -->
 
 यह [Create and Review Ads](../create.md) का हिंदी रूप है; अंग्रेज़ी पेज बदले तो इसे भी बदलें।
 [Features and workflows](../README.md) का हिस्सा।
