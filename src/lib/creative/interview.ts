@@ -1,7 +1,7 @@
 import { complete, parseJSON, type ChatMessage, type CompletionResult } from "@/lib/llm";
 import { LLMError, type ProviderAttempt } from "@/lib/llm/types";
 import { z } from "zod";
-import { AD_LANGUAGES } from "@/lib/languages";
+import { AD_LANGUAGES, isRomanHindi } from "@/lib/languages";
 import { formatPromptContext } from "@/lib/preferences/context";
 import { AD_ANGLES, brandIndustry, type BrandContext } from "@/lib/templates/ads";
 import { spelledCurrency } from "./currency";
@@ -87,8 +87,6 @@ const MAX_INTERVIEW_ANSWERS = 3;
 export const INTERVIEW_PROMPT_VERSION = "interview-v5";
 
 const OWNER_LANGUAGES = { hi: "Hindi in Devanagari script", pa: "Punjabi in Gurmukhi script", hinglish: "Hinglish (Hindi in Roman script)" } as const;
-const HINGLISH_WORDS = new Set(["mujhe", "humein", "hume", "chahiye", "karo", "karna", "karwa", "karwao", "banao", "banana", "hai", "hain",
-  "liye", "aur", "nahi", "nahin", "kya", "apne", "apna", "apni", "mera", "meri", "hamara", "zyada", "jyada", "mein", "wala", "wale", "kaise", "abhi"]);
 
 /** The language the owner types in: Devanagari Hindi, Gurmukhi Punjabi or Roman-script Hindi (#290). */
 export function ownerLanguage(input: Pick<InterviewInput, "goal" | "answers">): keyof typeof OWNER_LANGUAGES | undefined {
@@ -97,12 +95,6 @@ export function ownerLanguage(input: Pick<InterviewInput, "goal" | "answers">): 
   if (/\p{Script=Devanagari}/u.test(text)) return "hi";
   if (/\p{Script=Gurmukhi}/u.test(text)) return "pa";
   return isRomanHindi(text) ? "hinglish" : undefined;
-}
-
-/** Hindi written in Roman script: at least two common Hindi words ("mujhe … chahiye"). */
-export function isRomanHindi(text: string): boolean {
-  const words = new Set(text.toLowerCase().match(/[a-z]+/g) ?? []);
-  return [...HINGLISH_WORDS].filter((word) => words.has(word)).length >= 2;
 }
 
 const text = (max: number) => z.string().trim().min(1).max(max);
