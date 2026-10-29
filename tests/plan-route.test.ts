@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({ owned: vi.fn(), readPlan: vi.fn(), ensurePayLink: vi.fn(), enabled: vi.fn(), rateLimit: vi.fn() }));
-vi.mock("@/lib/meta/connection-access", async (importOriginal) => ({ ...(await importOriginal<object>()), requireOwnedBusiness: mocks.owned }));
+vi.mock("@/services/business-access", async (importOriginal) => ({ ...(await importOriginal<object>()), requireOwnedBusiness: mocks.owned }));
 vi.mock("@/lib/security/rate-limit", () => ({ rateLimitResponse: mocks.rateLimit }));
 vi.mock("@/lib/payments/production-config", () => ({ getProductionPaymentConfig: () => ({ origin: "https://adbrain.vanshul.com" }) }));
 vi.mock("@/lib/plan/store", async (importOriginal) => ({
@@ -9,7 +9,7 @@ vi.mock("@/lib/plan/store", async (importOriginal) => ({
 }));
 
 import { GET, POST } from "@/app/api/payments/plan/route";
-import { ConnectionAccessError } from "@/lib/meta/connection-access";
+import { ConnectionAccessError } from "@/services/business-access";
 import { PlanNotDueError } from "@/lib/plan/store";
 
 const businessId = "55555555-5555-4555-8555-555555555555";
