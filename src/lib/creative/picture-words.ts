@@ -147,3 +147,19 @@ export async function findStoredBackground(
   const chosen = usable[0];
   return chosen ? supabase.storage.from("creatives").getPublicUrl(chosen.path).data.publicUrl : null;
 }
+
+/** The background to redraw an ad's words over: its saved photo when it's in this business's own storage, else the stored original. */
+export async function savedBackground(
+  supabase: SupabaseClient<Database>,
+  creative: { id: string; business_id: string; variant_group: string | null; image_url: string | null },
+  generation: Record<string, unknown>,
+  angleId: string,
+): Promise<string | null> {
+  // The receipt is owner-writable under RLS, so only trust a background in this business's own storage.
+  const ownStorage = supabase.storage.from("creatives").getPublicUrl(`${creative.business_id}/`).data.publicUrl;
+  const savedPhoto = typeof generation.photoUrl === "string" && generation.photoUrl.startsWith(ownStorage)
+    && !generation.photoUrl.slice(ownStorage.length).includes("..")
+    ? generation.photoUrl
+    : null;
+  return savedPhoto ?? findStoredBackground(supabase, `${creative.business_id}/${creative.variant_group ?? creative.id}`, angleId, creative.image_url);
+}
