@@ -1,7 +1,7 @@
 import { RejectedAds } from "@/components/rejected-ads";
 import { readStoredCampaignBinding } from "@/lib/campaign/binding";
 import { requireOwnedBusiness, withMetaConnection } from "@/lib/meta/connection-access";
-import { adsManagerUrl } from "@/lib/meta/ads-manager-url";
+import { adsManagerUrl } from "@/lib/campaign/ads-manager-url";
 import type { Campaign } from "@/lib/types";
 
 
