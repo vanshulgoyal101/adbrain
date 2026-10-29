@@ -155,6 +155,37 @@ export function missingLabels(texts, grams) {
   return missing;
 }
 
+// #2267: scheduled-jobs.md lists every schedule: a table row naming the source (workflow file, vercel.json path or
+// pg_cron job) and its cron in code spans. Sources: `cron:` lines in workflows, vercel.json crons, and the last
+// cron.schedule/unschedule per job across db/migrations in file order.
+const CRON = /^[\d*,/-]+(?: [\d*,/-]+){4}$/;
+export function scheduleDrift(root, markdown) {
+  const actual = new Set();
+  const workflows = resolve(root, ".github/workflows");
+  for (const path of walk(workflows).filter(file => /\.ya?ml$/.test(file))) {
+    for (const [, cron] of readFileSync(path, "utf8").matchAll(/^\s*-?\s*cron:\s*["']([^"']+)["']/gm)) actual.add(`${relative(workflows, path)} ${cron}`);
+  }
+  if (existsSync(resolve(root, "vercel.json"))) {
+    for (const { path, schedule } of JSON.parse(readFileSync(resolve(root, "vercel.json"), "utf8")).crons ?? []) actual.add(`${path} ${schedule}`);
+  }
+  const jobs = new Map();
+  for (const path of walk(resolve(root, "db/migrations")).filter(file => file.endsWith(".sql")).sort()) {
+    for (const [, name, cron] of readFileSync(path, "utf8").matchAll(/cron\.(?:un)?schedule\(\s*'([^']+)'(?:\s*,\s*'([^']+)')?/g)) cron ? jobs.set(name, cron) : jobs.delete(name);
+  }
+  for (const [name, cron] of jobs) actual.add(`${name} ${cron}`);
+  const documented = new Map();
+  markdown.split("\n").forEach((text, index) => {
+    if (!text.startsWith("|")) return;
+    const spans = [...text.matchAll(/`([^`]+)`/g)].map(match => match[1]);
+    const key = spans.find(span => /\.ya?ml$|^\/api\/cron\/|^adbrain-/.test(span));
+    for (const cron of spans.filter(span => CRON.test(span))) if (key) documented.set(`${key} ${cron}`, index + 1);
+  });
+  return [
+    ...[...actual].filter(entry => !documented.has(entry)).map(entry => ({ line: 1, message: `Schedule missing from the table: \`${entry}\`` })),
+    ...[...documented].filter(([entry]) => !actual.has(entry)).map(([entry, line]) => ({ line, message: `Documented schedule no longer exists: \`${entry}\`` })),
+  ];
+}
+
 export function checkDocumentation(root, options = {}) {
   root = resolve(root);
   const moduleReadmes = walk(resolve(root, "src")).filter(file => file.endsWith(`${sep}README.md`));
@@ -181,6 +212,7 @@ export function checkDocumentation(root, options = {}) {
     const report = (line, message, warning = false) => diagnostics.push({ severity: historical || warning ? "warning" : "error", file, line, message });
     checked.push({ file, role: historical ? "historical" : "current", sha256: createHash("sha256").update(document.text).digest("hex") });
     for (const line of document.unclosedFences) report(line, "Unclosed fenced code block");
+    if (file === "docs/operations/scheduled-jobs.md") for (const { line, message } of scheduleDrift(root, readFileSync(path, "utf8"))) report(line, message);
     if (file.startsWith("docs/product/") && !historical) {
       for (const { line, label } of missingLabels(document.prose, appText ??= appCopy(root))) report(line, `Quoted label not in the app: "${label}" (fix it to the app's text, or add example text to LABEL_PROSE)`);
     }

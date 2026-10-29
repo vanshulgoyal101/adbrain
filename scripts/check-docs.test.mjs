@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
-import { appCopy, checkDocumentation, missingLabels } from "./check-docs.mjs";
+import { appCopy, checkDocumentation, missingLabels, scheduleDrift } from "./check-docs.mjs";
 
 function fixture(context, files = {}) {
   const root = mkdtempSync(resolve(tmpdir(), "adbrain-docs-check-"));
@@ -178,4 +178,20 @@ test("flags quoted labels the app never shows, allowing filled templates and sup
     { line: 4, text: 'Then reply: "We are on it." The owner may write "पिक्चर नहीं आई".' },
   ];
   assert.deepEqual(missingLabels(texts, appCopy(root)).map(({ line, label }) => `${line} ${label}`), ["2 Go live now please", "2 Launch it"]);
+});
+
+test("scheduled-jobs.md must list every cron and nothing that is gone", context => {
+  const root = fixture(context, {
+    ".github/workflows/nightly.yml": 'on:\n  schedule:\n    - cron: "30 21 * * *"\n    - cron: \'0 5 * * 1\'\n',
+    "vercel.json": JSON.stringify({ crons: [{ path: "/api/cron/keepalive", schedule: "0 6 * * *" }] }),
+    "db/migrations/1_jobs.sql": "select cron.schedule('adbrain-a', '*/15 * * * *', 'x'); select cron.schedule('adbrain-b', '1 * * * *', 'x');",
+    "db/migrations/2_jobs.sql": "select cron.unschedule('adbrain-b'); select cron.schedule('adbrain-a', '*/5 * * * *', 'x');",
+  });
+  const doc = "| Source | Schedule |\n| --- | --- |\n| `nightly.yml` | `30 21 * * *` |\n| `/api/cron/keepalive` | `0 6 * * *` |\n| `adbrain-a` | `*/15 * * * *` |\n| `adbrain-b` | `1 * * * *` |\n";
+  assert.deepEqual(scheduleDrift(root, doc).map(({ line, message }) => `${line} ${message}`), [
+    "1 Schedule missing from the table: `nightly.yml 0 5 * * 1`",
+    "1 Schedule missing from the table: `adbrain-a */5 * * * *`",
+    "5 Documented schedule no longer exists: `adbrain-a */15 * * * *`",
+    "6 Documented schedule no longer exists: `adbrain-b 1 * * * *`",
+  ]);
 });
