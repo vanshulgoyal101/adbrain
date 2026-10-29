@@ -34,7 +34,7 @@ describe("public product example", () => {
   it("positions the product around customers without a solar identity or promised results", () => {
     const { container } = render(<MarketingHome />);
     expect(screen.getByText("Ad banao, customers paao, seedha WhatsApp par.")).toHaveAttribute("lang", "hi-Latn");
-    expect(screen.getByText("Free to try. ₹999 a month after your first campaign. Your ad money goes to Meta, not to us.")).toBeInTheDocument();
+    expect(screen.getByText("Free to try. ₹999 a month after your first month. Your ad money goes to Meta, not to us.")).toBeInTheDocument();
     // Solaride appears only as a labelled example further down, never in the hero.
     expect(container.querySelector("#hero-title")!.closest("section")!.textContent).not.toMatch(/solar/i);
     expect(container.textContent).not.toMatch(/run ads|guaranteed customers/i);

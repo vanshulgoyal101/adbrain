@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import recorded from "./fixtures/meta/ad-review.json";
+import segments from "./fixtures/meta/ad-review-segments.json";
 import { adReviewState, MetaClient } from "@/lib/meta/client";
 import { rejectedAdsSentence, rejectionCopy } from "@/lib/meta/rejection-copy";
 
@@ -72,5 +73,54 @@ describe("core: rejected ads in plain words (#1305)", () => {
 
   it("reads issues_info as reasons without a policy", () => {
     expect(adReviewState({ id: "1", effective_status: "WITH_ISSUES", issues_info: [{ error_message: "Payment failed" }] }).feedback).toEqual([{ policy: null, message: "Payment failed" }]);
+  });
+});
+
+// #1645 (CPO, #1622): the IELTS and interiors pilots' likely rejections, in their own words, with the fix.
+
+describe("core: rejections in the segment's own words (#1645)", () => {
+  const IELTS = "IELTS coaching", INTERIORS = "Modular kitchens and interiors", SOLAR = "Solar installer";
+  const LICENCE = "Add your licence number as the last line, e.g. 'Punjab licence no. 123'.";
+  // #1770 (QA, CPO): a licence number doesn't take a guarantee out; that row's hint names what to remove.
+  const NO_PROMISE = "Take out 'guaranteed', '100%' or any promised band, visa or admission.";
+
+  it("misleading: the example fits the business", () => {
+    const misleading = [{ policy: "Misleading Claims", message: "Unrealistic outcomes." }];
+    expect(rejectionCopy([segments.ielts.misleading], { vertical: IELTS })).toMatchObject({ row: "misleading", actions: ["edit_words"], editHint: NO_PROMISE,
+      sentence: "It promises a result Meta thinks can't be proven, like a guaranteed band, visa or admission." });
+    expect(rejectionCopy([segments.interiors.misleading], { vertical: INTERIORS })?.sentence).toBe("It promises a result Meta thinks can't be proven, like the lowest price or a fixed handover date.");
+    expect(rejectionCopy(misleading, { vertical: SOLAR })?.sentence).toBe("It promises a result Meta thinks can't be proven, like a guaranteed saving.");
+    expect(rejectionCopy(misleading, { vertical: "Dental clinic" })?.sentence).toBe("It promises a result Meta thinks can't be proven, like a guaranteed result.");
+    expect(rejectionCopy(misleading)?.editHint).toBeUndefined();
+  });
+
+  it("personal attributes: the reader's own result, by policy key or by Meta's words", () => {
+    // #1770: no quoted example the ad may not have used.
+    const sentence = "The ad talks about the reader's own result, like a past test score or a visa refusal. Meta doesn't allow that. Talk about your classes instead.";
+    expect(rejectionCopy([segments.ielts.personal], { vertical: IELTS })).toMatchObject({ row: "personal_attributes", sentence, actions: ["edit_words"] });
+    expect(rejectionCopy([segments.ielts.personal_words_only], { vertical: IELTS })).toMatchObject({ row: "personal_attributes", sentence });
+  });
+
+  it("job or visa offer (IELTS only), before special categories", () => {
+    const sentence = "Meta read this as a job or visa offer. Keep it about the course and add your licence number as the last line.";
+    for (const item of [segments.ielts.job_policy, segments.ielts.job_words_only]) {
+      expect(rejectionCopy([item], { vertical: IELTS })).toMatchObject({ row: "job_or_visa_offer", sentence, actions: ["edit_words"], editHint: LICENCE });
+    }
+    expect(rejectionCopy([{ policy: "Employment", message: "Job ads need the Employment special ad category." }], { vertical: IELTS })?.row).toBe("job_or_visa_offer");
+    expect(rejectionCopy([{ policy: "Employment", message: "Job ads need the Employment special ad category." }], { vertical: SOLAR })?.row).toBe("special_category");
+  });
+
+  it("interiors: a property-ad reading is fixed by editing the words, not by messaging us", () => {
+    expect(rejectionCopy([segments.interiors.housing], { vertical: INTERIORS })).toMatchObject({ row: "special_category", actions: ["edit_words"],
+      sentence: "Meta read this as a property ad. Talk about kitchens and design, not flats, projects or prices per square foot." });
+    expect(rejectionCopy([segments.interiors.housing], { vertical: SOLAR })).toMatchObject({ row: "special_category", actions: ["message_us"] });
+  });
+
+  it("every other row reads the same for a solar business as with no business type", () => {
+    for (const policy of ["Personal Attributes", "Personal Health and Appearance", "Social Issues, Elections or Politics", "Special Ad Categories",
+      "Non-Functional Landing Page", "Low Quality or Disruptive Content", "Brand Usage in Ads", "Prohibited Content", "Adult Content", "Lead Ads"]) {
+      const feedback = [{ policy, message: "Meta's words." }];
+      expect(rejectionCopy(feedback, { vertical: SOLAR }), policy).toEqual(rejectionCopy(feedback));
+    }
   });
 });

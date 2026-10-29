@@ -1,8 +1,10 @@
 # Deployment Setup
 
+Part of [Operations](README.md).
+
 Use this runbook to prepare a target and verify a deployment. Authorization and
-promotion rules live in [Release Workflow](RELEASING.md); configuration defaults
-live in [Configuration](CONFIGURATION.md). AdBrain requires a dynamic Node/Next.js
+promotion rules live in [Release Workflow](../RELEASING.md); configuration defaults
+live in [Configuration](../CONFIGURATION.md). AdBrain requires a dynamic Node/Next.js
 host and Supabase Auth/Postgres/Storage, not a static export.
 
 Production is `main`, deployed by Vercel to `https://adbrain.vanshul.com` (Node 24.x,
@@ -133,7 +135,7 @@ Choose one path before running SQL. Neither path loads `.env.local` automaticall
 | Approved incremental application | Same named command with `--apply` and, for remote targets, exact `--target` | Connects, serializes changes and records the immutable checksum |
 | Disposable SQL verification | `npm run test:meta-db` | Starts its own PostgreSQL harness for fresh and ordered-upgrade checks, not the configured production database |
 
-For fresh local setup, review [schema.sql](../db/schema.sql), confirm the target
+For fresh local setup, review [schema.sql](../../db/schema.sql), confirm the target
 is genuinely disposable and supply `PGHOST`, `PGDATABASE`, `PGUSER`, the actual
 `PGPORT` and private authentication. `PGPORT` defaults to 5432 when omitted;
 set it explicitly to avoid ambiguity. The full-schema tool rejects remote hosts,
@@ -141,7 +143,7 @@ but cannot detect a loopback tunnel to production. Repeated DDL can change grant
 policies and functions even when tables already exist; do not use it for upgrades.
 
 For an existing target, compare actual schema and `private.schema_migrations`
-with the [migration map](DATA_MODEL.md#migration-map). Historical objects may
+with the [migration map](../DATA_MODEL.md#migration-map). Historical objects may
 predate the ledger. Missing ledger entries do not authorize replaying the folder.
 Preview the one reviewed file first. Application is a separate approved action:
 
@@ -165,9 +167,9 @@ known. DB-A grant revocations and trusted-write callers require coordinated
 deployment/quiescence; do not apply one side while incompatible callers run.
 Documentation work does not approve this rollout.
 
-Sources: [full-schema tool](../scripts/apply-schema.mjs),
-[migration CLI](../scripts/migrate-db.mjs),
-[target/transaction guards](../scripts/database-migrations.mjs).
+Sources: [full-schema tool](../../scripts/apply-schema.mjs),
+[migration CLI](../../scripts/migrate-db.mjs),
+[target/transaction guards](../../scripts/database-migrations.mjs).
 
 Verify quota aggregation and trusted rate-limit RPCs, encrypted connection
 storage, campaign operations, generation receipts, and public media buckets.
@@ -176,7 +178,7 @@ missing quota read is not treated as permission for unlimited generation.
 
 ## 3. Configure Secrets and Public Values
 
-[Configuration](CONFIGURATION.md) is the complete variable/default reference.
+[Configuration](../CONFIGURATION.md) is the complete variable/default reference.
 Minimum deployment groups:
 
 | Group | Required decision |
@@ -211,7 +213,7 @@ required by Supabase's provider setup, not an invented direct application route.
 
 In Meta, configure the exact `/api/meta/oauth/callback`, appropriate application
 domains, privacy/deletion URLs, Login for Business settings and permissions. Follow
-[Meta Connect](META_CONNECT.md), including its [App Review](META_CONNECT.md#app-review-156) section, and [Approval Readiness](META_APPROVAL_ACTION_PLAN.md).
+[Meta Connect](../META_CONNECT.md), including its [App Review](../META_CONNECT.md#app-review-156) section, and [Approval Readiness](../META_APPROVAL_ACTION_PLAN.md).
 An AdBrain login smoke test does not verify this second authorization flow.
 
 ## 5. Validate and Promote
@@ -247,7 +249,7 @@ Supabase `pg_cron` calls enforce-spend, lead sync and the results refresh every
 15 minutes; Vercel also runs keepalive and enforce-spend daily at
 06:00 UTC. Enforcement uses stored spend and can pause ads; keepalive can prune
 old product events.
-See [Operations](OPERATIONS.md#scheduled-jobs) for authentication, timing limits,
+See [Operations](scheduled-jobs.md#scheduled-jobs) for authentication, timing limits,
 partial results, and monitoring. A cron declaration does not prove a job ran.
 
 Choose a previously verified compatible build for rollback. Preserve schema and

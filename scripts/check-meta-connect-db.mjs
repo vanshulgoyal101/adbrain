@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir, userInfo } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -36,14 +36,17 @@ const editAdCreativeMigration = await readFile(join(root, "db/migrations/2026102
 const adResultsMigration = await readFile(join(root, "db/migrations/20261026_campaign_ads_ad_results.sql"), "utf8");
 const ownerAlertsMigration = await readFile(join(root, "db/migrations/20261027_owner_whatsapp_alerts.sql"), "utf8");
 const ownerAlertSendsMigration = await readFile(join(root, "db/migrations/20261027_owner_whatsapp_alerts_sends.sql"), "utf8");
+const planPeriodsMigration = await readFile(join(root, "db/migrations/20261029_plan_periods.sql"), "utf8");
 const leadCustomerMigration = await readFile(join(root, "db/migrations/20261026_lead_customer_status.sql"), "utf8");
 const leadFirstContactedMigration = await readFile(join(root, "db/migrations/20261027_lead_first_contacted.sql"), "utf8");
 const tokenSearchPathMigration = await readFile(join(root, "db/migrations/20261026_meta_token_search_path.sql"), "utf8");
+const tokenPurgeMigration = await readFile(join(root, "db/migrations/20261029_meta_token_purge.sql"), "utf8");
 const whatsappTemplateMigration = await readFile(join(root, "db/migrations/20261026_business_whatsapp_template.sql"), "utf8");
 const metaDeletionMigration = await readFile(join(root, "db/migrations/20261026_meta_deletion_requests.sql"), "utf8");
 const hardeningMigration = await readFile(join(root, "db/migrations/20261026_legacy_credentials_bucket_limits.sql"), "utf8");
 const reauthMigration = await readFile(join(root, "db/migrations/20261026_meta_connection_reauth.sql"), "utf8");
 const leadCampaignLinkMigration = await readFile(join(root, "db/migrations/20261026_lead_campaign_link.sql"), "utf8");
+const leadSharedPageMigration = await readFile(join(root, "db/migrations/20261028_lead_sync_shared_page.sql"), "utf8");
 const managedWhatsAppMigration = await readFile(join(root, "db/migrations/20261025_managed_whatsapp_page_link.sql"), "utf8");
 const productRollupMigration = await readFile(join(root, "db/migrations/20260928_product_event_rollups.sql"), "utf8");
 const bin = process.env.META_TEST_PG_BIN ?? "/opt/homebrew/opt/postgresql@17/bin";
@@ -1173,6 +1176,69 @@ async function verifyTokenSearchPath(db, database) {
   });
 }
 
+/** #1648: seeds a token revoked before the migration (backfill), then applies it twice. */
+async function verifyMetaTokenPurge(db, database) {
+  const owner = randomUUID(), business = randomUUID(), revoked = randomUUID(), live = randomUUID();
+  await db.query("insert into auth.users(id) values ($1)", [owner]);
+  await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Token purge')", [business, owner]);
+  for (const token of [revoked, live]) {
+    await db.query(`select public.meta_token_insert($1,$2,$3,'s-purge','user',$4,$5,$6,'k1','v1',array['ads_management'],'[]'::jsonb,null,now(),null)`,
+      [token, business, owner, "\\x01", `\\x${"00".repeat(12)}`, `\\x${"00".repeat(16)}`]);
+  }
+  await db.query("update private.meta_tokens set revoked_at = now() where id = $1", [revoked]);
+  await db.query(tokenPurgeMigration);
+  await db.query(tokenPurgeMigration);
+  await check(`${database}: a revoked Meta token keeps no secret, a live one keeps all of it (#1648)`, async () => {
+    const secrets = async (id) => (await db.query("select ciphertext, nonce, auth_tag, revoked_at from private.meta_tokens where id = $1", [id])).rows[0];
+    const old = await secrets(revoked);
+    assert.ok(old.revoked_at);
+    assert.deepEqual([old.ciphertext, old.nonce, old.auth_tag], [null, null, null]);
+    assert.deepEqual([...(await secrets(live)).ciphertext], [1]);
+    const [read] = (await db.query("select * from public.meta_token_get($1,$2)", [revoked, business])).rows;
+    assert.ok(read.revoked_at);
+    assert.equal(read.ciphertext, null);
+    assert.equal((await db.query("select public.meta_disconnect($1,$2) as ok", [business, owner])).rows[0].ok, true);
+    assert.deepEqual(Object.values(await secrets(live)).slice(0, 3), [null, null, null]);
+    await db.query("update private.meta_tokens set ciphertext = $2, nonce = $3, auth_tag = $4 where id = $1", [live, Buffer.from([1]), Buffer.alloc(12), Buffer.alloc(16)]);
+    assert.equal((await secrets(live)).ciphertext, null);
+    await assert.rejects(db.query("update private.meta_tokens set revoked_at = null where id = $1", [live]), { code: "23514" });
+  });
+}
+
+/** #1649: which live token disconnect may revoke at Meta, and whether that Meta user is shared with another business. */
+async function verifyMetaRevocationTarget(db, database) {
+  await check(`${database}: revocation target: unshared, shared, system user, already revoked (#1649)`, async () => {
+    const owner = randomUUID();
+    const [a, b, c, d] = [randomUUID(), randomUUID(), randomUUID(), randomUUID()];
+    const target = async (business) => (await db.query("select * from public.meta_token_revocation_target($1)", [business])).rows;
+    await db.query("begin");
+    try {
+      await db.query("insert into auth.users(id) values ($1)", [owner]);
+      const connect = async (business, subject, kind) => {
+        const token = randomUUID();
+        await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Revoke target')", [business, owner]);
+        await db.query(`select public.meta_token_insert($1,$2,$3,$4,$5,$6,$7,$8,'k1','v1',array['ads_management'],'[]'::jsonb,null,now(),null)`,
+          [token, business, owner, subject, kind, "\\x01", `\\x${"00".repeat(12)}`, `\\x${"00".repeat(16)}`]);
+        await db.query("insert into public.meta_connections(business_id,generation,authorization_status,ad_account_id,page_id,token_id) values ($1,1,'connected','act_123','123',$2)", [business, token]);
+        return token;
+      };
+      const tokenA = await connect(a, "4242", "user");
+      assert.deepEqual(await target(a), [{ token_id: tokenA, subject_id: "4242", token_kind: "user", shared: false }]);
+      await connect(b, "4242", "user");
+      assert.equal((await target(a))[0].shared, true);
+      await connect(c, "9001", "business_system_user");
+      assert.deepEqual((await target(c)).map((r) => [r.token_kind, r.shared]), [["business_system_user", false]]);
+      await connect(d, "7777", "user");
+      await db.query("update private.meta_tokens set revoked_at = now() where business_id = $1", [d]);
+      assert.equal((await target(d)).length, 0);
+      await db.query("update private.meta_tokens set revoked_at = now() where business_id = $1", [b]);
+      assert.equal((await target(a))[0].shared, false);
+      await db.query("set local role authenticated");
+      await assert.rejects(db.query("select * from public.meta_token_revocation_target($1)", [a]), { code: "42501" });
+    } finally { await db.query("rollback"); }
+  });
+}
+
 async function verifyConnectionReauth(db, database) {
   await check(`${database}: a Graph 190 marks only the failing connection generation reauth_required, service role only (#757)`, async () => {
     const owner = randomUUID(), business = randomUUID();
@@ -1284,6 +1350,38 @@ async function verifyLeadCampaignLink(db, database) {
     assert.equal(third.imported, 1);
     const links = Object.fromEntries((await db.query("select meta_lead_id, campaign_id from public.leads where business_id=$1", [business])).rows.map(row => [row.meta_lead_id, row.campaign_id]));
     assert.deepEqual(links, { "ad-lead": campaign, "test-lead": null, foreign: null, "late-link": campaign, "new-lead": campaign, twice: campaign });
+  });
+}
+
+async function verifySharedPageLeads(db, database) {
+  const [ownerA, ownerB, ownerC, a, b, c, campA, campB] = Array.from({ length: 8 }, () => randomUUID());
+  await db.query("insert into auth.users(id) values ($1),($2),($3)", [ownerA, ownerB, ownerC]);
+  await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Shared A'),($3,$4,'Shared B'),($5,$6,'Solo C')", [a, ownerA, b, ownerB, c, ownerC]);
+  await db.query("insert into public.campaigns(id,business_id,daily_budget,meta_campaign_id) values ($1,$2,300,'1301'),($3,$4,300,'1302')", [campA, a, campB, b]);
+  await db.query(`insert into public.meta_connections(business_id,generation,authorization_status,ad_account_id,page_id)
+    values ($1,1,'connected','act_shared_a','page_shared'),($2,1,'connected','act_shared_b','page_shared'),($3,1,'connected','act_solo','page_solo')`, [a, b, c]);
+  const sync = async (business, owner, account, page, rows) => {
+    const run = (await db.query("select * from public.lead_sync_start($1,$2,null,1,$3,$4)", [business, owner, account, page])).rows[0];
+    return (await db.query("select public.lead_sync_checkpoint($1,$2,$3,1,$4,$5,$6,$7::jsonb,$8::jsonb) as result",
+      [business, owner, run.id, account, page, run.version, JSON.stringify(rows), JSON.stringify({ formsDone: true, pending: [] })])).rows[0].result;
+  };
+  const leadsOf = async (business) => (await db.query("select meta_lead_id from public.leads where business_id=$1 order by 1", [business])).rows.map(row => row.meta_lead_id);
+  await check(`${database}: on a Page two businesses share, a lead goes only to the business whose campaign it came from (#1775)`, async () => {
+    const rows = [
+      { meta_lead_id: "from-b", meta_campaign_id: "1302", form_id: "f" },
+      { meta_lead_id: "from-a", meta_campaign_id: "1301", form_id: "f" },
+      { meta_lead_id: "outside", meta_campaign_id: "9999", form_id: "f" },
+      { meta_lead_id: "no-campaign", meta_campaign_id: null, form_id: "f" },
+    ];
+    assert.equal((await sync(b, ownerB, "act_shared_b", "page_shared", rows)).imported, 1);
+    assert.deepEqual(await leadsOf(b), ["from-b"]);
+    assert.equal((await sync(a, ownerA, "act_shared_a", "page_shared", rows)).imported, 1);
+    assert.deepEqual(await leadsOf(a), ["from-a"]);
+  });
+  await check(`${database}: a business that alone has its Page still imports all of its Page's leads (#680, #1775)`, async () => {
+    const rows = [{ meta_lead_id: "boost", meta_campaign_id: "8888", form_id: "f" }, { meta_lead_id: "test", meta_campaign_id: null, form_id: "f" }];
+    assert.equal((await sync(c, ownerC, "act_solo", "page_solo", rows)).imported, 2);
+    assert.deepEqual(await leadsOf(c), ["boost", "test"]);
   });
 }
 
@@ -1481,6 +1579,227 @@ async function verifyEditAdCreativeKind(db, database) {
       [business, campaign, hash, JSON.stringify({ ad_id: "120253710068180526", previous_creative_id: "2421940755245471" }), JSON.stringify({ message: "New words" })]);
     await assert.rejects(db.query("insert into public.campaign_edit_operations(business_id,campaign_id,kind,idempotency_key,request_hash) values ($1,$2,'other','ad-edit-key-2',$3)", [business, campaign, hash]), { code: "23514" });
     assert.equal((await db.query("select count(*)::int as n from public.campaign_edit_operations where campaign_id=$1 and kind='ad_creative'", [campaign])).rows[0].n, 1);
+  });
+}
+
+async function verifyPlanPeriods(db, database) {
+  const owner = randomUUID(), other = randomUUID(), business = randomUUID();
+  await db.query("insert into auth.users(id) values ($1),($2)", [owner, other]);
+  await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Plan')", [business, owner]);
+  await db.query("insert into public.campaigns(id,business_id,daily_budget,launched_at) values ($1,$2,300,'2026-10-10T09:00:00Z')", [randomUUID(), business]);
+  const service = async (sql, params) => {
+    const session = client(database);
+    await session.connect();
+    try {
+      await session.query("begin"); await session.query("set local role service_role");
+      const result = (await session.query(sql, params)).rows[0]; await session.query("commit"); return result;
+    } catch (error) { await session.query("rollback").catch(() => {}); throw error; } finally { await session.end(); }
+  };
+  const open = async () => (await service("select public.plan_period_open($1) as r", [business])).r;
+  const link = (period, id) => service("select public.plan_period_set_link($1,$2,'https://rzp.io/i/x') as r", [period, id]);
+  const paid = async (id, payment, at) => (await service("select public.plan_period_paid($1,$2,$3) as r", [id, payment, at])).r;
+  const months = async () => (await db.query("select to_char(starts_at at time zone 'UTC','YYYY-MM-DD') as s, to_char(ends_at at time zone 'UTC','YYYY-MM-DD') as e from public.plan_periods where business_id=$1 and state='paid' order by starts_at", [business])).rows;
+  await check(`${database}: plan periods: one open month, paid once, early pay stacks after the free month, late pay starts at payment, paid-after-expiry credited (#718)`, async () => {
+    const first = await open();
+    assert.equal((await open()).periodId, first.periodId);
+    assert.equal((await link(first.periodId, "plink_A")).r, true);
+    assert.equal((await link(first.periodId, "plink_B")).r, false);
+    assert.equal(await paid("plink_Unknown", "pay_X", "2026-11-05T00:00:00Z"), "ignored");
+    assert.equal(await paid("plink_A", "pay_A", "2026-11-05T00:00:00Z"), "paid");
+    assert.equal(await paid("plink_A", "pay_A", "2026-11-05T00:00:00Z"), "duplicate");
+    assert.equal(await paid("plink_A", "pay_Other", "2026-11-06T00:00:00Z"), "ignored");
+    assert.deepEqual(await months(), [{ s: "2026-11-10", e: "2026-12-10" }]);
+    const second = await open();
+    assert.notEqual(second.periodId, first.periodId);
+    await link(second.periodId, "plink_C");
+    assert.equal(await paid("plink_C", "pay_C", "2027-01-31T10:00:00Z"), "paid");
+    assert.deepEqual(await months(), [{ s: "2026-11-10", e: "2026-12-10" }, { s: "2027-01-31", e: "2027-02-28" }]);
+    const third = await open();
+    await link(third.periodId, "plink_D");
+    assert.equal((await service("select public.plan_period_expire('plink_D') as r")).r, true);
+    // A payment that lands after its link expired still buys its month (Reviewer, #1430): starts after Feb 28.
+    assert.equal(await paid("plink_D", "pay_D", "2027-02-01T00:00:00Z"), "paid");
+    assert.equal(await paid("plink_D", "pay_D", "2027-02-01T00:00:00Z"), "duplicate");
+    assert.deepEqual((await months()).at(-1), { s: "2027-02-28", e: "2027-03-28" });
+    assert.equal((await service("select public.plan_period_expire('plink_D') as r")).r, false);
+  });
+  await check(`${database}: plan periods: owners read only their own, nobody writes them directly (#718)`, async () => {
+    const as = async (role, user, run) => {
+      const session = client(database);
+      await session.connect();
+      try {
+        await session.query("begin"); await session.query(`set local role ${role}`);
+        if (user) await session.query("select set_config('request.jwt.claim.sub',$1,true)", [user]);
+        return await run(session);
+      } finally { await session.query("rollback").catch(() => {}); await session.end(); }
+    };
+    await as("authenticated", owner, async (session) => {
+      assert.equal((await session.query("select count(*)::int as n from public.plan_periods")).rows[0].n, 3);
+      await session.query("savepoint s");
+      await assert.rejects(session.query("select public.plan_period_open($1)", [business]), { code: "42501" });
+      await session.query("rollback to savepoint s");
+      await assert.rejects(session.query("update public.plan_periods set state='paid'"), { code: "42501" });
+    });
+    await as("authenticated", other, async (session) => {
+      assert.equal((await session.query("select count(*)::int as n from public.plan_periods")).rows[0].n, 0);
+    });
+    await as("anon", null, async (session) => {
+      await assert.rejects(session.query("select 1 from public.plan_periods"), { code: "42501" });
+    });
+    await assert.rejects(db.query("insert into public.plan_periods(business_id,amount_paise) values ($1,100)", [business]), { code: "23514" });
+    // QA (#1430): paid months are receipts (GST, disputes), so deleting the business can't silently erase them.
+    // RESTRICT reports 23001 (restrict_violation); NO ACTION-style checks report 23503. Either means refused.
+    await assert.rejects(db.query("delete from public.businesses where id=$1", [business]), { code: /^(23001|23503)$/ });
+  });
+}
+
+/**
+ * #1700 (QA red tests for #1670: CTO design 18:55Z + Reviewer's 7 points, 19:06Z). A rep hands a `+prospect` business to
+ * its owner: the owner's own new account claims it with a single-use link; nothing of the staff login carries over.
+ * Skips until a `db/migrations/*business_transfer*.sql` exists (META_TEST_TRANSFER_SQL points at another file to try).
+ * Contract these cases pin (rename freely, keep the behaviour):
+ *   private.business_transfers(id, business_id, from_user_id, target_email, token_hash, state, expires_at, ...)
+ *   public.business_transfer_start(p_business_id uuid, p_from_user_id uuid, p_target_email text, p_token_hash text)
+ *     returns uuid, service_role only, 30-min expiry; refuses unless p_from_user_id owns the business with a
+ *     `+prospect@<team domain>` address and the pre-checks pass (no live Meta connection, no campaigns, no payments).
+ *   public.business_transfer_claim(p_token_hash text) returns uuid (the business), for `authenticated`: the session's
+ *     confirmed email (case-insensitive) must be the target; pre-checks re-run under lock; single use; refuses a target
+ *     that already owns a business; moves owner_id on businesses, campaign_drafts, preference_settings and
+ *     declared_preferences; writes one audit_log row naming both users.
+ */
+async function verifyBusinessTransfer(db, database) {
+  const files = (await readdir(join(root, "db/migrations"))).filter((file) => /business_transfer/.test(file)).sort();
+  const override = process.env.META_TEST_TRANSFER_SQL;
+  if (!files.length && !override) { console.log(`SKIP ${database}: business transfer (#1670) is not built yet`); return; }
+  // The move covers every owner_id table (Reviewer, #1670); a database whose chain lacks one can't test it.
+  const missing = (await db.query("select t from unnest(array['public.campaign_drafts','public.preference_settings','public.declared_preferences','public.audit_log']) t where to_regclass(t) is null")).rows.map((row) => row.t);
+  if (missing.length) { console.log(`SKIP ${database}: business transfer (#1670) needs ${missing.join(", ")}`); return; }
+  // Supabase has these; the bootstrap's auth stub doesn't.
+  await db.query("alter table auth.users add column if not exists email_confirmed_at timestamptz");
+  await db.query(`create or replace function auth.jwt() returns jsonb language sql stable as
+    $$ select coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb $$`);
+  await db.query("grant execute on function auth.jwt() to authenticated, service_role");
+  for (const file of files) { const sql = await readFile(join(root, "db/migrations", file), "utf8"); await db.query(sql); await db.query(sql); }
+  if (override) await db.query(await readFile(override, "utf8"));
+
+  const hash = (token) => createHash("sha256").update(token).digest("hex");
+  const session = async (role, claims, run) => {
+    const s = client(database);
+    await s.connect();
+    try {
+      await s.query("begin"); await s.query(`set local role ${role}`);
+      if (claims) {
+        await s.query("select set_config('request.jwt.claim.sub',$1,true)", [claims.sub]);
+        await s.query("select set_config('request.jwt.claims',$1,true)", [JSON.stringify(claims)]);
+      }
+      const result = await run(s); await s.query("commit"); return result;
+    } catch (error) { await s.query("rollback").catch(() => {}); throw error; } finally { await s.end(); }
+  };
+  const start = (business, from, email, token) => session("service_role", null,
+    async (s) => (await s.query("select public.business_transfer_start($1,$2,$3,$4) as id", [business, from, email, hash(token)])).rows[0].id);
+  const claim = (user, email, token) => session("authenticated", { sub: user, email, role: "authenticated" },
+    async (s) => (await s.query("select public.business_transfer_claim($1) as business_id", [hash(token)])).rows[0].business_id);
+  const ownerOf = async (business) => (await db.query("select owner_id from public.businesses where id=$1", [business])).rows[0].owner_id;
+  const seed = async ({ staffEmail, ownerConfirmed = true } = {}) => {
+    const staff = randomUUID(), owner = randomUUID(), business = randomUUID();
+    const ownerEmail = `owner-${owner.slice(0, 8)}@example.com`;
+    await db.query("insert into auth.users(id,email,email_confirmed_at) values ($1,$2,now()),($3,$4,$5)",
+      [staff, staffEmail ?? `qa+prospect-${staff.slice(0, 8)}@adbrain.vanshul.com`, owner, ownerEmail, ownerConfirmed ? new Date() : null]);
+    await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Prospect bakery')", [business, staff]);
+    return { staff, owner, business, ownerEmail };
+  };
+
+  await check(`${database}: business transfer: the owner's own account claims it once; drafts and preferences move; audited (#1670)`, async () => {
+    const { staff, owner, business, ownerEmail } = await seed();
+    await db.query("insert into public.preference_settings(business_id,owner_id,enabled) values ($1,$2,true)", [business, staff]);
+    await db.query("insert into public.declared_preferences(business_id,owner_id,category,value) values ($1,$2,'tone','warm')", [business, staff]);
+    await db.query("insert into public.campaign_drafts(business_id,owner_id,input,expires_at) values ($1,$2,'{}',now()+interval '1 day')", [business, staff]);
+    await start(business, staff, ownerEmail, "token-happy");
+    // Case-insensitive: the owner's mail app may capitalise.
+    assert.equal(await claim(owner, ownerEmail.toUpperCase(), "token-happy"), business);
+    assert.equal(await ownerOf(business), owner);
+    for (const table of ["campaign_drafts", "preference_settings", "declared_preferences"]) {
+      const rows = (await db.query(`select owner_id from public.${table} where business_id=$1`, [business])).rows;
+      assert.ok(rows.length && rows.every((row) => row.owner_id === owner), `${table} moved to the owner`);
+    }
+    const audit = (await db.query("select details::text as details, actor_id from public.audit_log where business_id=$1", [business])).rows;
+    assert.ok(audit.some((row) => `${row.details} ${row.actor_id}`.includes(staff) && `${row.details} ${row.actor_id}`.includes(owner)), "one audit row names both users");
+    await assert.rejects(claim(owner, ownerEmail, "token-happy"), "a used link is refused");
+  });
+
+  await check(`${database}: business transfer: expired, wrong email, unconfirmed email and an unknown link are refused (#1670)`, async () => {
+    const expired = await seed();
+    await start(expired.business, expired.staff, expired.ownerEmail, "token-expired");
+    await db.query("update private.business_transfers set expires_at = now() - interval '1 minute' where token_hash=$1", [hash("token-expired")]);
+    await assert.rejects(claim(expired.owner, expired.ownerEmail, "token-expired"));
+    assert.equal(await ownerOf(expired.business), expired.staff);
+
+    const wrong = await seed();
+    await start(wrong.business, wrong.staff, wrong.ownerEmail, "token-wrong");
+    const stranger = randomUUID();
+    await db.query("insert into auth.users(id,email,email_confirmed_at) values ($1,'stranger@example.com',now())", [stranger]);
+    await assert.rejects(claim(stranger, "stranger@example.com", "token-wrong"));
+    // The JWT's email claim alone isn't proof: it must be this user's confirmed address.
+    await assert.rejects(claim(stranger, wrong.ownerEmail, "token-wrong"));
+    assert.equal(await ownerOf(wrong.business), wrong.staff);
+
+    const unconfirmed = await seed({ ownerConfirmed: false });
+    await start(unconfirmed.business, unconfirmed.staff, unconfirmed.ownerEmail, "token-unconfirmed");
+    await assert.rejects(claim(unconfirmed.owner, unconfirmed.ownerEmail, "token-unconfirmed"));
+    assert.equal(await ownerOf(unconfirmed.business), unconfirmed.staff);
+
+    await assert.rejects(claim(wrong.owner, wrong.ownerEmail, "token-never-issued"));
+  });
+
+  await check(`${database}: business transfer: pre-checks block at start and again at claim (Meta connected, a campaign) (#1670)`, async () => {
+    const atStart = await seed();
+    await db.query("insert into public.meta_connections(business_id,authorization_status) values ($1,'connected')", [atStart.business]);
+    await assert.rejects(start(atStart.business, atStart.staff, atStart.ownerEmail, "token-meta-start"));
+
+    // Staff connect Meta after the link went out: the claim re-checks under lock.
+    const atClaim = await seed();
+    await start(atClaim.business, atClaim.staff, atClaim.ownerEmail, "token-meta-claim");
+    await db.query("insert into public.meta_connections(business_id,authorization_status) values ($1,'connected')", [atClaim.business]);
+    await assert.rejects(claim(atClaim.owner, atClaim.ownerEmail, "token-meta-claim"));
+    assert.equal(await ownerOf(atClaim.business), atClaim.staff);
+
+    const campaign = await seed();
+    await start(campaign.business, campaign.staff, campaign.ownerEmail, "token-campaign");
+    await db.query("insert into public.campaigns(id,business_id,daily_budget) values ($1,$2,300)", [randomUUID(), campaign.business]);
+    await assert.rejects(claim(campaign.owner, campaign.ownerEmail, "token-campaign"));
+    assert.equal(await ownerOf(campaign.business), campaign.staff);
+  });
+
+  await check(`${database}: business transfer: only a +prospect owner can start; a target who already owns a business is refused (#1670)`, async () => {
+    for (const staffEmail of ["qa@adbrain.vanshul.com", "owner@example.com"]) {
+      const notProspect = await seed({ staffEmail: staffEmail.replace("@", `-${randomUUID().slice(0, 6)}@`) });
+      await assert.rejects(start(notProspect.business, notProspect.staff, notProspect.ownerEmail, `token-np-${staffEmail}`), staffEmail);
+    }
+    const notOwner = await seed();
+    await assert.rejects(start(notOwner.business, notOwner.owner, notOwner.ownerEmail, "token-not-owner"), "the starter must own the business");
+
+    const taken = await seed();
+    await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Their own shop')", [randomUUID(), taken.owner]);
+    await start(taken.business, taken.staff, taken.ownerEmail, "token-taken");
+    await assert.rejects(claim(taken.owner, taken.ownerEmail, "token-taken"));
+    assert.equal(await ownerOf(taken.business), taken.staff);
+  });
+
+  await check(`${database}: business transfer: two simultaneous claims, exactly one wins (#1670)`, async () => {
+    const race = await seed();
+    await start(race.business, race.staff, race.ownerEmail, "token-race");
+    const results = await Promise.allSettled([claim(race.owner, race.ownerEmail, "token-race"), claim(race.owner, race.ownerEmail, "token-race")]);
+    assert.equal(results.filter((result) => result.status === "fulfilled").length, 1);
+    assert.equal(await ownerOf(race.business), race.owner);
+  });
+
+  await check(`${database}: business transfer: browsers can't start one or read the transfers; anon can't claim (#1670)`, async () => {
+    const roles = await seed();
+    await assert.rejects(session("authenticated", { sub: roles.staff, email: "x", role: "authenticated" },
+      (s) => s.query("select public.business_transfer_start($1,$2,$3,$4)", [roles.business, roles.staff, roles.ownerEmail, hash("token-browser")])), { code: "42501" });
+    await assert.rejects(session("authenticated", { sub: roles.staff, email: "x", role: "authenticated" },
+      (s) => s.query("select 1 from private.business_transfers")), { code: "42501" });
+    await assert.rejects(session("anon", null, (s) => s.query("select public.business_transfer_claim($1)", [hash("token-anon")])), { code: "42501" });
   });
 }
 
@@ -2557,6 +2876,9 @@ async function verify(database, source, integrityMigration, customerOnly = false
       await db.query(ownerAlertSendsMigration);
       await db.query(ownerAlertSendsMigration);
       await verifyOwnerAlertSends(db,database);
+      await db.query(planPeriodsMigration);
+      await db.query(planPeriodsMigration);
+      await verifyPlanPeriods(db,database);
       await db.query(leadCustomerMigration);
       await db.query(leadCustomerMigration);
       if ((await db.query("select exists(select 1 from information_schema.columns where table_schema='public' and table_name='leads' and column_name='workflow_status') as installed")).rows[0].installed) {
@@ -2568,6 +2890,8 @@ async function verify(database, source, integrityMigration, customerOnly = false
       await db.query(tokenSearchPathMigration);
       await db.query(tokenSearchPathMigration);
       await verifyTokenSearchPath(db,database);
+      await verifyMetaTokenPurge(db,database);
+      await verifyMetaRevocationTarget(db,database);
       await db.query(whatsappTemplateMigration);
       await db.query(whatsappTemplateMigration);
       await verifyWhatsAppTemplate(db,database);
@@ -2585,9 +2909,13 @@ async function verify(database, source, integrityMigration, customerOnly = false
       if ((await db.query("select to_regclass('public.lead_sync_runs') is not null as installed")).rows[0].installed) {
         await db.query(leadCampaignLinkMigration);
         await db.query(leadCampaignLinkMigration);
+        await db.query(leadSharedPageMigration);
+        await db.query(leadSharedPageMigration);
         await verifyLeadCampaignLink(db,database);
+        await verifySharedPageLeads(db,database);
       }
       if (database === "customer_fresh") await verifyAdvisorHardening(db,database);
+      await verifyBusinessTransfer(db,database);
       return;
     }
     if (integrityMigration) {

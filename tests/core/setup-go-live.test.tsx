@@ -8,7 +8,10 @@ import type { Business, Creative } from "@/lib/types";
 const mocks = vi.hoisted(() => ({ push: vi.fn(), refresh: vi.fn(), goLive: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: mocks.push, refresh: mocks.refresh }) }));
 vi.mock("@/components/meta-connect/meta-connect-dialog", () => ({
-  MetaConnectDialog: ({ onConnected }: { onConnected: () => void }) => <button type="button" onClick={onConnected}>Meta dialog: connected</button>,
+  MetaConnectDialog: ({ onConnected, onClose }: { onConnected: () => void; onClose: () => void }) => <>
+    <button type="button" onClick={onConnected}>Meta dialog: connected</button>
+    <button type="button" onClick={onClose}>Meta dialog: closed</button>
+  </>,
 }));
 vi.mock("@/lib/campaign/setup-go-live-flow", () => ({ goLive: mocks.goLive }));
 vi.mock("@/lib/meta-connect-ui/client", () => ({ createMetaConnectClient: () => ({}) }));
@@ -37,6 +40,15 @@ describe("core: <SetupGoLive> (#1271)", () => {
     expect(screen.getByRole("link", { name: "Change who sees it" })).toHaveAttribute("href", "/campaigns?all=1&new=1&creatives=a,b");
   });
 
+  it("#1934: returning, payment shows done for the last campaign, the budget starts at the last amount, no first-month line", () => {
+    render(<SetupGoLive business={business} ads={ads} pageConnected funding="own" returning initialDaily={500}
+      whatsappNumber="+91 ••••• 3210" weeklyCap={{ capRupees: null, active: [] }} />);
+    expect(screen.getByText("Set up for your last campaign")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Add payment in Meta" })).toBeNull();
+    expect(screen.getByText(/₹500 a day for 2 days/)).toBeInTheDocument();
+    expect(screen.queryByText(/first month of AdBrain is free/)).toBeNull();
+  });
+
   it("a chip changes the daily amount, the total and the primary", () => {
     goLive();
     fireEvent.click(screen.getByRole("button", { name: "₹1,000 a day" }));
@@ -45,9 +57,22 @@ describe("core: <SetupGoLive> (#1271)", () => {
     expect(bar().getByRole("button", { name: "Go live · ₹1,000 a day" })).toBeEnabled();
   });
 
+  it("#1587: one solid primary; 'a day' once so the chips fit a row; the total isn't said three times", () => {
+    goLive();
+    const chips = within(screen.getByRole("group", { name: "Daily budget" })).getAllByRole("button");
+    expect(chips.map((chip) => chip.textContent)).toEqual(["₹300 a day", "₹500", "₹1,000"]);
+    expect(chips[0]).toHaveAttribute("aria-pressed", "true");
+    expect(chips[0].className).toContain("bg-primary/10");
+    expect(chips[0].className).not.toMatch(/(^|\s)bg-primary(\s|$)/);
+    expect(screen.getByText("Meta checks your ads first, usually within a few hours and up to a day.")).toBeInTheDocument();
+    expect(screen.getAllByText(/₹708/)).toHaveLength(2);
+  });
+
   it("Page not connected: the primary connects it first, then the page refreshes", () => {
     goLive({ pageConnected: false });
     expect(screen.getByText("Not connected")).toBeInTheDocument();
+    // #1529: before Connect, the full composer is the pre-access dead end, so the link isn't offered.
+    expect(screen.queryByRole("link", { name: "Change who sees it" })).toBeNull();
     fireEvent.click(bar().getByRole("button", { name: "Connect Facebook Page" }));
     fireEvent.click(screen.getByRole("button", { name: "Meta dialog: connected" }));
     expect(mocks.refresh).toHaveBeenCalled();
@@ -149,11 +174,98 @@ describe("core: <SetupGoLive> (#1271)", () => {
   });
 });
 
+describe("core: step 3 shows the WhatsApp welcome Go live sends (#1529)", () => {
+  it("the welcome and what's ready to send, read-only", () => {
+    render(<SetupGoLive business={business} ads={ads} pageConnected={false} funding="own" whatsappNumber="+91 ••••• 3210" weeklyCap={null}
+      welcome={{ source: "saved", language: "en", greeting: "Hi! Thanks for asking about a free site survey.", autofill: "I'd like a free site survey", callButton: true }} />);
+    expect(screen.getByText("“Hi! Thanks for asking about a free site survey.”")).toBeInTheDocument();
+    expect(screen.getByText("Customers see your welcome, a Call now button, and 'I'd like a free site survey' ready to send.")).toBeInTheDocument();
+  });
+
+});
+
 describe("core: Go live's total is activation's own cap + GST (#1251 CPO/Dev 2)", () => {
   it("₹300/₹500/₹1,000 a day for 2 days → ₹708/₹1,180/₹2,360, the amount the reserve check needs", async () => {
     const { capWithGstPaise, paymentToCoverPaise } = await import("@/lib/payments/allocation");
     expect([300, 500, 1000].map((dailyRupees) => capWithGstPaise({ dailyRupees, days: 2 }))).toEqual([70_800, 118_000, 236_000]);
     // Dev 2's payment helper still funds exactly that total (#1374 numbers unchanged).
     expect([300, 500, 1000].map((dailyRupees) => paymentToCoverPaise({ dailyRupees, days: 2, availablePaise: 0 }))).toEqual([88_500, 147_500, 295_000]);
+  });
+
+describe("#1901: Go live says whose picture each ad is", () => {
+  it("labels each picked ad's picture", () => {
+    render(<SetupGoLive business={business} pageConnected funding="managed" whatsappNumber="+91 ••••• 3210" weeklyCap={{ capRupees: null, active: [] }}
+      ads={[{ ...ads[0], generation: { image: { provider: "owner-photo" } } }, { ...ads[1], generation: { image: { provider: "openrouter" } } }] as Creative[]} />);
+    expect(screen.getByText("Your photo")).toBeInTheDocument();
+    expect(screen.getByText("AI picture")).toBeInTheDocument();
+  });
+});
+});
+
+// #1989 (CPO #1983): until App Review passes (#156) only Testers can log in to the app; anyone else gets Meta's
+// "app not available" page inside the Facebook dialog, which AdBrain can't see. Step 3 says so before and after.
+describe("core: step 3 asks a not-yet-Tester owner to accept the invite (#1989)", () => {
+  const hint = /Facebook is still reviewing AdBrain/;
+  const retry = /Didn't connect\? If Facebook said the app isn't available/;
+  function step3({ pageConnected = false, appReviewPending = true, locale = "en" as "en" | "hi" } = {}) {
+    render(<SetupGoLive business={business} ads={ads} pageConnected={pageConnected} funding="own" appReviewPending={appReviewPending}
+      locale={locale} whatsappNumber="+91 ••••• 3210" weeklyCap={{ capRupees: null, active: [] }} />);
+  }
+  beforeEach(() => { cleanup(); window.sessionStorage.clear(); });
+
+  it("flag on, before the first tap: the invite hint and 'Open my invites' in a new tab", () => {
+    step3();
+    expect(screen.getByText(hint)).toBeInTheDocument();
+    const link = screen.getByRole("link", { name: "Open my invites" });
+    expect(link).toHaveAttribute("href", "https://developers.facebook.com/requests");
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(screen.queryByText(retry)).toBeNull();
+  });
+
+  it("back from Facebook with nothing connected: the retry block; Try again reopens Connect", () => {
+    step3();
+    fireEvent.click(bar().getByRole("button", { name: "Connect Facebook Page" }));
+    fireEvent.click(screen.getByRole("button", { name: "Meta dialog: closed" }));
+    expect(screen.getByText(retry)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open my invites" })).toHaveAttribute("href", "https://developers.facebook.com/requests");
+    expect(screen.queryByText(hint)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(screen.getByRole("button", { name: "Meta dialog: connected" })).toBeInTheDocument();
+  });
+
+  it("back on step 3 after Facebook in this tab (oauth_cancelled, or 'app not available'): the retry block", () => {
+    step3();
+    fireEvent.click(bar().getByRole("button", { name: "Connect Facebook Page" }));
+    cleanup();
+    step3();
+    expect(screen.getByText(retry)).toBeInTheDocument();
+  });
+
+  it("connected: today's ✓ row and no hint, even after a try", () => {
+    window.sessionStorage.setItem("adbrain.setup.connectTried", "1");
+    step3({ pageConnected: true });
+    expect(screen.getByText("Connected")).toBeInTheDocument();
+    expect(screen.queryByText(hint)).toBeNull();
+    expect(screen.queryByText(retry)).toBeNull();
+    expect(screen.queryByRole("link", { name: "Open my invites" })).toBeNull();
+  });
+
+  it("flag off (after App Review): no hint and no retry block anywhere", () => {
+    step3({ appReviewPending: false });
+    expect(screen.queryByText(hint)).toBeNull();
+    fireEvent.click(bar().getByRole("button", { name: "Connect Facebook Page" }));
+    fireEvent.click(screen.getByRole("button", { name: "Meta dialog: closed" }));
+    expect(screen.queryByText(retry)).toBeNull();
+    expect(screen.queryByRole("link", { name: "Open my invites" })).toBeNull();
+  });
+
+  it("Hindi: the CPO's words", () => {
+    step3({ locale: "hi" });
+    expect(screen.getByText(/Facebook अभी AdBrain की जाँच कर रहा है/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "मेरे इनवाइट खोलें" })).toBeInTheDocument();
+    fireEvent.click(bar().getByRole("button", { name: "Connect Facebook Page" }));
+    fireEvent.click(screen.getByRole("button", { name: "Meta dialog: closed" }));
+    expect(screen.getByText(/जुड़ा नहीं\? अगर Facebook ने कहा कि ऐप उपलब्ध नहीं है/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "फिर से कोशिश करें" })).toBeInTheDocument();
   });
 });

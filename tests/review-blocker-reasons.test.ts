@@ -63,6 +63,16 @@ describe("Review blockers carry their own reason (#688)", () => {
     expect(blockers[0].message).not.toMatch(/\b(explicit|resolve|preparation|unexpectedly)\b/i);
   });
 
+  // #1799 (Analyst): Meta's INR minimum is ₹95.46 a day per ad set; under ₹96 Review says so instead of Meta refusing.
+  it("refuses a daily budget under Meta's ₹96 minimum, and accepts ₹96", () => {
+    const low = input();
+    low.draft.dailyBudgetRupees = 95;
+    expect(runPreflight(low).blockers).toMatchObject([{ reason: "REVIEW_BUDGET", message: "Meta needs at least ₹96 a day. Set a daily budget of ₹96 or more." }]);
+    const floor = input();
+    floor.draft.dailyBudgetRupees = 96;
+    expect(runPreflight(floor).blockers).toEqual([]);
+  });
+
   it("the reasons are distinct and fit the campaign.review event", () => {
     const reasons = cases.map(([reason]) => reason);
     expect(new Set(reasons).size).toBe(reasons.length);

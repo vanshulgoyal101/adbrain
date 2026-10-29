@@ -4,7 +4,7 @@
 .page a:focus-visible { outline: 3px solid var(--primary); outline-offset: 3px; border-radius: 6px; }
 
 .header { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; max-width: 1080px; width: 100%; margin: 0 auto; }
-.logo { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; font-size: 18px; color: var(--foreground); text-decoration: none; }
+.logo { min-height: 44px; display: inline-flex; align-items: center; gap: 8px; font-weight: 700; font-size: 18px; color: var(--foreground); text-decoration: none; }
 .signIn { min-height: 44px; display: inline-flex; align-items: center; font-weight: 600; color: var(--foreground); }
 
 .hero { display: grid; gap: 32px; padding: 16px 20px 40px; max-width: 1080px; width: 100%; margin: 0 auto; }
@@ -12,11 +12,10 @@
 .lede { margin-top: 16px !important; font-size: 17px; line-height: 1.55; color: var(--muted); max-width: 52ch; }
 .hinglish { margin-top: 8px !important; font-size: 15px; line-height: 1.5; color: var(--muted); }
 .actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 24px; }
-.primary, .secondary { min-height: 48px; display: inline-flex; align-items: center; gap: 8px; padding: 0 20px; border-radius: 999px; font-weight: 650; font-size: 16px; text-decoration: none; }
+.primary { min-height: 48px; display: inline-flex; align-items: center; gap: 8px; padding: 0 20px; border-radius: 999px; font-weight: 650; font-size: 16px; text-decoration: none; }
 .primary { background: var(--wa); color: #fff; }
 .primary:hover { background: #17633e; }
-.secondary { color: var(--foreground); border: 1px solid var(--border); }
-.secondary:hover { background: #f8fafc; }
+.textLink { min-height: 44px; display: inline-flex; align-items: center; font-weight: 600; font-size: 16px; color: var(--foreground); text-decoration: underline; text-underline-offset: 3px; }
 
 .phone { justify-self: center; width: min(100%, 320px); border: 7px solid #1e293b; border-radius: 30px; overflow: hidden; background: var(--wall); }
 .chatTop { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: #fff; font-weight: 600; font-size: 15px; border-bottom: 1px solid #e9edef; }
@@ -26,10 +25,35 @@
 .in { background: #fff; border-top-left-radius: 0; }
 .out { justify-self: end; background: var(--sent); border-top-right-radius: 0; font-weight: 600; }
 
-.block { max-width: 680px; width: 100%; margin: 0 auto; padding: 28px 20px; border-top: 1px solid var(--border); }
+/* Same left edge as the hero at every width; the text column stays under ~70 characters. */
+.block { max-width: 1080px; width: 100%; margin: 0 auto; padding: 28px 20px; border-top: 1px solid var(--border); }
+.block > * { max-width: 640px; }
 .block h2 { font-size: 22px; line-height: 1.25; font-weight: 700; }
-.list, .steps { margin-top: 14px !important; padding-left: 20px; display: grid; gap: 10px; font-size: 16px; line-height: 1.55; }
-.steps li::marker { font-weight: 700; color: var(--wa); }
+.list { margin-top: 14px !important; padding-left: 0; display: grid; gap: 10px; font-size: 16px; line-height: 1.55; }
+/* #1632: a real numbered sequence; tinted circles so WhatsApp stays the one solid element. */
+.steps { margin-top: 16px !important; padding: 0; list-style: none; counter-reset: step; display: grid; gap: 14px; font-size: 16px; line-height: 1.55; }
+.steps li { counter-increment: step; display: grid; grid-template-columns: 32px 1fr; gap: 12px; align-items: start; }
+.steps li::before { content: counter(step); width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: #e7f3ec; color: var(--wa); font-weight: 700; font-size: 15px; margin-top: -2px; }
+
+/* #1632: the three costs as scannable rows: key, value, then the sentence. */
+.costs { margin: 16px 0 0; border: 1px solid var(--border); border-radius: 12px; padding: 0 16px; }
+.costs > div { display: grid; grid-template-columns: 76px 1fr; gap: 4px 16px; padding: 14px 0; }
+.costs > div + div { border-top: 1px solid var(--border); }
+.costs dt { font-size: 14px; font-weight: 600; color: var(--muted); line-height: 1.6; }
+.costs dd { margin: 0; font-size: 15px; line-height: 1.5; color: var(--muted); }
+.costs dd strong { display: block; font-size: 17px; font-weight: 700; color: var(--foreground); }
+
+/* #1632: 4:5 sample ads. Phones scroll sideways with the next tile peeking; 3 across from 860px. */
+.block > .tiles { max-width: none; margin: 16px -20px 0; padding: 0 20px 4px; }
+.tiles { list-style: none; display: grid; grid-auto-flow: column; grid-auto-columns: 70%; gap: 12px; overflow-x: auto; scroll-snap-type: x mandatory; scroll-padding-inline: 20px; }
+.tiles:focus-visible { outline: 3px solid var(--primary); outline-offset: 3px; }
+.tiles li { scroll-snap-align: start; }
+.tileFrame { position: relative; aspect-ratio: 4 / 5; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); background: #f1f5f9; }
+.tileFrame img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.sample { position: absolute; top: 8px; right: 8px; padding: 3px 8px; border-radius: 999px; background: rgba(15, 23, 42, 0.78); color: #fff; font-size: 12px; font-weight: 600; letter-spacing: 0.02em; }
+.tiles figcaption { margin-top: 8px; font-size: 15px; line-height: 1.4; color: var(--muted); }
+.proof { margin-top: 14px !important; font-size: 16px; line-height: 1.55; max-width: 60ch; }
+.block > .proof:first-child { margin-top: 0 !important; }
 .note { margin-top: 14px !important; font-size: 15px; color: var(--muted); }
 
 .footer { margin-top: auto; display: flex; flex-wrap: wrap; gap: 12px 20px; justify-content: space-between; padding: 24px 20px; border-top: 1px solid var(--border); font-size: 14px; color: var(--muted); }
@@ -39,4 +63,5 @@
 @media (min-width: 860px) {
   .hero { grid-template-columns: 1.2fr 0.8fr; align-items: center; padding-top: 48px; padding-bottom: 64px; }
   .heroText h1 { font-size: 48px; }
+  .block > .tiles { margin: 16px 0 0; padding: 0; max-width: 960px; grid-auto-flow: row; grid-template-columns: repeat(3, 1fr); gap: 20px; overflow: visible; }
 }

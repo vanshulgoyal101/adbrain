@@ -2,7 +2,7 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { WhatsAppChats } from "@/components/whatsapp-chats";
-import { whatsappChatRows } from "@/lib/campaign/real-enquiries";
+import { enquiriesTitle, whatsappChatRows } from "@/lib/campaign/real-enquiries";
 import type { Campaign, CampaignResult } from "@/lib/types";
 
 // #764 (2/2): CPO's walk: Enquiries listed only form leads, while WhatsApp chats (the main result) lived
@@ -39,6 +39,18 @@ describe("WhatsApp chats on Enquiries (#764)", () => {
     expect(screen.getByRole("article")).toHaveTextContent("No chats started yet from “Solaride | WhatsApp”.");
   });
 
+  it.each([{ count: 1, noun: "enquiry" }, { count: 3, noun: "enquiries" }])("counts $count owner-added real enquiries separately when Meta counted no chats", ({ count, noun }) => {
+    render(<WhatsAppChats rows={[{ id: "c-wa", name: "Solaride | WhatsApp", chats: 0, spend: 0, realEnquiries: count }]} />);
+    expect(screen.getByRole("article")).toHaveTextContent(`You added ${count} real ${noun} from “Solaride | WhatsApp”.`);
+    expect(screen.getByRole("article")).not.toHaveTextContent("No chats started yet");
+  });
+
+  it("calls the list plain Enquiries once a WhatsApp chat is logged in it", () => {
+    expect(enquiriesTitle([])).toBe("Enquiries");
+    expect(enquiriesTitle([{ id: "c-wa", name: "WA", chats: 3, spend: 0, realEnquiries: 0 }])).toBe("Form enquiries");
+    expect(enquiriesTitle([{ id: "c-wa", name: "WA", chats: 0, spend: 0, realEnquiries: 1 }])).toBe("Enquiries");
+  });
+
   it("shows nothing when no WhatsApp campaign has results", () => {
     const { container } = render(<WhatsAppChats rows={[]} />);
     expect(container).toBeEmptyDOMElement();
@@ -64,6 +76,15 @@ describe("Enquiries order (#1223)", () => {
     const { container } = render(<EnquiriesSections chatRows={whatsappChatRows([chats], results)} formTotal={3}><p>form table</p></EnquiriesSections>);
     expect(container.querySelector("details")).toBeNull();
     expect(screen.getByRole("region", { name: "WhatsApp chats" }).compareDocumentPosition(screen.getByText("form table")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  // #1597: nothing has come in anywhere: no chat strip and no "(0)" fold, only the inbox's one empty block.
+  it("with no enquiries at all, shows only the inbox (no chat strips, no fold)", async () => {
+    const { EnquiriesSections } = await import("@/components/enquiries-sections");
+    const { container } = render(<EnquiriesSections chatRows={whatsappChatRows([chats], results)} formTotal={0} empty><p>form table</p></EnquiriesSections>);
+    expect(container.querySelector("details")).toBeNull();
+    expect(screen.queryByRole("region", { name: "WhatsApp chats" })).toBeNull();
+    expect(screen.getByText("form table")).toBeVisible();
   });
 
   it("with no WhatsApp chats, the form table is the page, as before", async () => {
