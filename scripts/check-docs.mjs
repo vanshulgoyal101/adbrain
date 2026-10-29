@@ -212,6 +212,35 @@ export function stampMirror(path) {
   writeFileSync(path, MIRROR.test(markdown) ? markdown.replace(MIRROR, line) : markdown.replace(/^(# .*\n)/, `$1${line}\n`));
 }
 
+// #2276: scripts and next.config read environment too, and a documented name nothing reads is set for nothing.
+// Platform-provided names need no row.
+const PLATFORM_ENV = /^(?:HOME|PATH|CI|NODE_ENV|NEXT_RUNTIME|(?:GITHUB|RUNNER)_[A-Z0-9_]+|VERCEL_(?!TOKEN$)[A-Z0-9_]+)$/;
+export function scriptEnvironment(root) {
+  const names = new Set();
+  const files = [...walk(resolve(root, "scripts")), ...readdirSync(root).filter(file => /^next\.config\./.test(file)).map(file => resolve(root, file))];
+  for (const path of files.filter(file => /\.(?:[cm]?[jt]sx?|sh)$/.test(file) && !/\.test\./.test(file))) {
+    const text = readFileSync(path, "utf8");
+    const reads = path.endsWith(".sh") ? [...text.matchAll(/\$\{([A-Z][A-Z0-9_]+):?-/g)].map(match => match[1])
+      : [...text.matchAll(/process\.env(?:\.([A-Z][A-Z0-9_]+)|\[\s*["']([A-Z][A-Z0-9_]+)["']\s*\])/g)].map(match => match[1] ?? match[2])
+        .concat([...text.matchAll(/\{([^{}]+)\}\s*=\s*process\.env\b/g)].flatMap(match => match[1].match(/\b[A-Z][A-Z0-9_]+\b/g) ?? []));
+    for (const name of reads) names.add(name);
+  }
+  return names;
+}
+export function environmentDrift(source, scripts, pages) {
+  const documented = new Map();
+  for (const { file, text } of pages) text.split("\n").forEach((line, index) => {
+    for (const [, name] of line.matchAll(/`([A-Z][A-Z0-9_]*[A-Z0-9])`/g)) if (!documented.has(name)) documented.set(name, { file, line: index + 1 });
+  });
+  const read = new Set([...source, ...scripts]);
+  return [
+    ...[...scripts].filter(name => !source.includes(name) && !documented.has(name) && !PLATFORM_ENV.test(name)).sort()
+      .map(name => ({ file: pages[0].file, line: 1, message: `Environment key read by scripts but not documented: ${name}` })),
+    ...[...documented].filter(([name]) => name.includes("_") && !read.has(name) && !PLATFORM_ENV.test(name))
+      .map(([name, { file, line }]) => ({ file, line, message: `Documented environment key nothing reads: ${name}` })),
+  ];
+}
+
 export function checkDocumentation(root, options = {}) {
   root = resolve(root);
   const moduleReadmes = walk(resolve(root, "src")).filter(file => file.endsWith(`${sep}README.md`));
@@ -301,6 +330,7 @@ export function checkDocumentation(root, options = {}) {
 
   // Configuration: every environment key is documented.
   if (configPages.length) for (const name of source.environment) if (!configText.includes(name)) fail(configPages[0], 1, `Environment key not documented: ${name}`);
+  if (configPages.length) for (const item of environmentDrift(source.environment, scriptEnvironment(root), configPages.map(file => ({ file, text: textOf(file) })))) fail(item.file, item.line, item.message);
 
   // Shape: short pages, an index per folder that links each page, nothing new loose in docs/.
   for (const file of docFiles) {
