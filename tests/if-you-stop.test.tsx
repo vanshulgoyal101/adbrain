@@ -4,6 +4,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { BillingSection } from "@/components/managed-billing";
 import { MetaConnectionPanel } from "@/components/meta-connection";
 import type { MetaConnection } from "@/lib/meta/credentials";
+import { pausableCampaigns } from "@/lib/campaign/gone-in-meta";
+import type { Campaign } from "@/lib/types";
 
 const { refresh } = vi.hoisted(() => ({ refresh: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
@@ -96,5 +98,30 @@ describe("If you stop (#1916)", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ businessId }),
     });
+  });
+});
+
+describe("Pause all in Settings (#1968, frame 7)", () => {
+  const campaign = (id: string, status: Campaign["status"], raw: Campaign["raw"] = {}) =>
+    ({ id, name: `Ad ${id}`, status, raw, meta_ad_account_id: "act_999", meta_campaign_id: `12${id}` }) as Campaign;
+
+  it("keeps only campaigns still running in Meta, in the shape Pause all takes", () => {
+    expect(pausableCampaigns([campaign("1", "active"), campaign("2", "paused"), campaign("3", "active", { metaStatus: "DELETED" })]))
+      .toEqual([{ id: "1", name: "Ad 1", meta_ad_account_id: "act_999", meta_campaign_id: "121" }]);
+  });
+
+  it("offers the same sheet under If you stop while a campaign runs, and opens the confirm", () => {
+    render(<BillingSection mode="own" connection={null} runningCampaigns={pausableCampaigns([campaign("1", "active")])} />);
+    const section = screen.getByRole("region", { name: "Billing" });
+    fireEvent.click(within(section).getByRole("button", { name: "Pause all ads" }));
+    expect(within(screen.getByRole("dialog")).getByText("Pause all your ads?")).toBeInTheDocument();
+  });
+
+  it("hides it while nothing runs, and on plans without If you stop", () => {
+    const { unmount } = render(<BillingSection mode="own" connection={null} runningCampaigns={[]} />);
+    expect(screen.queryByRole("button", { name: "Pause all ads" })).toBeNull();
+    unmount();
+    render(<BillingSection mode="operator" connection={null} runningCampaigns={pausableCampaigns([campaign("1", "active")])} />);
+    expect(screen.queryByRole("button", { name: "Pause all ads" })).toBeNull();
   });
 });

@@ -18,7 +18,7 @@ import type { AuditLog, Business, Campaign, CampaignResult, CreativePreview } fr
 import { campaignAttention } from "@/lib/campaign/health";
 import { formatReplyTime } from "@/lib/leads/first-reply";
 import { campaignStatus, Status } from "@/components/ui/status";
-import { goneInMeta, recentlyDeletedInMeta } from "@/lib/campaign/gone-in-meta";
+import { goneInMeta, pausableCampaigns, recentlyDeletedInMeta } from "@/lib/campaign/gone-in-meta";
 import type { HomeAdReview } from "@/lib/campaign/home-ad-review";
 import { timeAgoIn, translator, type AppLocale } from "@/i18n/locale";
 
@@ -243,8 +243,7 @@ export function WorkspaceHome({
                 </p>
               )}
               {/* #1968: a quiet secondary stop while anything runs; each campaign resumes from its own card. */}
-              <PauseAllAds locale={locale} campaigns={campaigns.filter((campaign) => campaign.status === "active" && !goneInMeta(campaign))
-                .map(({ id, name, meta_ad_account_id, meta_campaign_id }) => ({ id, name, meta_ad_account_id, meta_campaign_id }))} />
+              <PauseAllAds locale={locale} campaigns={pausableCampaigns(campaigns)} />
             </section>
           )}
         </div>
