@@ -2,6 +2,16 @@
 
 Part of [Features and workflows](README.md).
 
+## Stopping and Disconnecting
+
+Own-account billing explains in English and Hindi that stopping payment leaves
+running Meta ads, results and enquiries intact; new ads and campaigns wait for
+payment. Disconnecting Facebook does not pause ads and prevents AdBrain from
+pausing them or updating their results. The disconnect confirmation repeats that
+warning and offers **Keep connected**. Data deletion uses **Privacy and data
+requests**; campaigns remain in the owner's Meta account. Managed, operator and
+unknown funding modes do not show the own-account billing promises.
+
 ## Spend Guardrails
 
 Settings accept a positive whole-rupee weekly cap or explicit `null` for no cap,
