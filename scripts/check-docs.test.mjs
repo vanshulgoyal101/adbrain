@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
-import { checkDocumentation } from "./check-docs.mjs";
+import { appCopy, checkDocumentation, missingLabels } from "./check-docs.mjs";
 
 function fixture(context, files = {}) {
   const root = mkdtempSync(resolve(tmpdir(), "adbrain-docs-check-"));
@@ -164,4 +164,18 @@ test("layered docs: code, scripts and workflows name only docs that exist (#1851
     ".github/workflows/y.yml Names a missing doc: docs/operations/gone.md",
     "scripts/x.mjs Names a missing doc: docs/MOVED.md",
   ]);
+});
+
+test("flags quoted labels the app never shows, allowing filled templates and support words", context => {
+  const root = fixture(context, {
+    "src/components/card.tsx": 'export const Card = () => <p>{`Each ${chat} costs ${cost}.`}<button>Go live</button></p>;\n',
+    "messages/en.json": JSON.stringify({ waiting: "{n, plural, one {# person is waiting for your reply.} other {# people are waiting.}}" }),
+  });
+  const texts = [
+    { line: 1, text: 'Tap "Go live". It says "Each chat costs ₹45." and "1 person is waiting for your reply."' },
+    { line: 2, text: 'Tap "Go live now please" or "Launch it".' },
+    { line: 3, text: 'Owner says: "it is broken"' },
+    { line: 4, text: 'Then reply: "We are on it." The owner may write "पिक्चर नहीं आई".' },
+  ];
+  assert.deepEqual(missingLabels(texts, appCopy(root)).map(({ line, label }) => `${line} ${label}`), ["2 Go live now please", "2 Launch it"]);
 });
