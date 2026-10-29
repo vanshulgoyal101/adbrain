@@ -16,7 +16,7 @@ feature branch or a passing local test.
 | --- | --- | --- |
 | Pilot, sales or new team role | [How AdBrain works](product/how-adbrain-works.md) | [Features and workflows](product/README.md) |
 | Owner or coordinating worker | [Worker orchestration](ORCHESTRATION.md) | [Roadmap](roadmap.md) |
-| New developer | [Quick start](QUICK_START.md) | [Architecture](ARCHITECTURE.md) |
+| New developer | [Quick start](team/quick-start.md) | [Architecture](ARCHITECTURE.md) |
 | Product or support | [Features and workflows](product/README.md) | [Roadmap](roadmap.md) |
 | Operator | [Deployment configuration](operations/deploy.md) | [Release policy](operations/releasing.md) |
 | Debugging engineer | [Observability](operations/observability.md) | [Operations](operations/README.md) |
@@ -69,6 +69,7 @@ last move.
 | `TESTING.md` | [team/testing.md](team/testing.md) and [team/testing-verification.md](team/testing-verification.md) |
 | `AI_PIPELINE.md` | [architecture/ai-pipeline.md](architecture/ai-pipeline.md), [-variants](architecture/ai-pipeline-variants.md) and [-routing](architecture/ai-pipeline-routing.md) |
 | `DATA_MODEL.md` | [architecture/data-model.md](architecture/data-model.md), [data-model-access.md](architecture/data-model-access.md) and [migrations.md](architecture/migrations.md) |
+| `QUICK_START.md` | [team/quick-start.md](team/quick-start.md) |
 | `RELEASING.md` | [operations/releasing.md](operations/releasing.md) and [operations/releasing-recovery.md](operations/releasing-recovery.md) (backups, rollback, production guard) |
 
 ## Terminology
