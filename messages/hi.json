@@ -8,6 +8,8 @@
     "resultsSoFar": "अब तक के नतीजे",
     "newCampaign": "नया कैंपेन",
     "deletedInMeta": "Meta में डिलीट हुआ है। अगर अब भी चाहिए, तो Campaigns से फिर से चलाएँ।",
+    "pausedInMeta": "Meta में रोका गया है। कोई खर्च नहीं हो रहा।",
+    "budgetRaisedInMeta": "रोज़ का बजट Meta Ads Manager में बदला गया: अब {now} रोज़ (पहले {was})।",
     "enquiries": "पूछताछ",
     "spent": "खर्च",
     "perEnquiry": "हर पूछताछ पर",

@@ -130,7 +130,7 @@ import { HelpOnWhatsApp } from "@/components/support-link";
 import { cn, timeAgo } from "@/lib/utils";
 import { useMounted } from "@/lib/use-mounted";
 import { refreshIfStale, staleCampaignIds } from "@/lib/campaign/results-freshness";
-import { GONE_LINES, goneInMeta } from "@/lib/campaign/gone-in-meta";
+import { GONE_LINES, OUTSIDE_LINES, budgetChangedInMeta, goneInMeta, pausedInMeta } from "@/lib/campaign/gone-in-meta";
 import { formatDate, formatMoney, formatMoneyExact, formatNumber, formatPerDay } from "@/lib/format";
 
 
@@ -528,10 +528,9 @@ function BusinessCampaigns({
         const data = await refreshIfStale(id);
         if (data?.result) setResults((previous) => ({ ...previous, [id]: data.result! }));
         if (data?.summary) setSummaries((previous) => ({ ...previous, [id]: data.summary! }));
-        if (data?.gone && data.campaign) {
-          setEndedHere((ids) => new Set(ids).add(id));
-          setCampaigns((list) => list.map((item) => (item.id === id ? data.campaign! : item)));
-        }
+        if (data?.gone && data.campaign) setEndedHere((ids) => new Set(ids).add(id));
+        // #721 deleted, #1903 paused or budget changed in Meta Ads Manager: the route returns the updated row.
+        if (data?.campaign) setCampaigns((list) => list.map((item) => (item.id === id ? data.campaign! : item)));
         setUpdatingIds((list) => list.filter((item) => item !== id));
       }
     })();
@@ -1329,6 +1328,8 @@ function BusinessCampaigns({
         setCardNotice({ id, message: data.error ?? "This campaign is no longer in Meta." });
       } else if (res.ok) {
         if (data.result) setResults((p) => ({ ...p, [id]: data.result! }));
+        // #1903: Refresh found it paused or its budget changed in Meta Ads Manager.
+        if (data.campaign) setCampaigns((list) => list.map((item) => (item.id === id ? data.campaign! : item)));
         setCardNotice({ id, message: refreshNotice(previous, data.result) });
         if (data.summary) setSummaries((p) => ({ ...p, [id]: data.summary! }));
         if (data.review) setReviews((p) => ({ ...p, [id]: data.review! }));
@@ -2417,7 +2418,10 @@ function BusinessCampaigns({
               const outcome = campaignDestination(c, r);
               const attention = campaignAttention(c);
               // #662: only a campaign AdBrain launched can be reviewed and resumed here.
-              const resumeElsewhere = c.status === "paused" && !!c.meta_campaign_id && !reviewableCampaign(c);
+              // #1903: paused in Meta Ads Manager is resumed there too.
+              const resumeElsewhere = (c.status === "paused" && !!c.meta_campaign_id && !reviewableCampaign(c)) || pausedInMeta(c);
+              const budgetChange = budgetChangedInMeta(c);
+              const budgetEditable = !!c.meta_campaign_id && (c.status === "paused" || (c.status === "active" && budgetFormStart(c)?.capped)) && !!reviewableCampaign(c) && !!budgetFormStart(c) && !waitingSwitch[c.id];
               return (
                 <article key={c.id} aria-labelledby={`campaign-${c.id}-name`} className="flex flex-col gap-3 border-b border-slate-200 py-5">
                     <div className="flex flex-wrap items-center justify-between gap-2">
@@ -2441,7 +2445,7 @@ function BusinessCampaigns({
                         {/* #1588: the card says it has no numbers yet, under its budget, not a line after the list. */}
                         {!r && c.meta_campaign_id && !folded && <span className="basis-full text-sm text-slate-500">No results yet. Refresh to get Meta&apos;s latest numbers.</span>}
                         {resumeElsewhere ? (
-                          <a href={adsLink(c)} target="_blank" rel="noopener noreferrer" title={RESUME_IN_ADS_MANAGER}
+                          <a href={adsLink(c)} target="_blank" rel="noopener noreferrer" title={pausedInMeta(c) ? undefined : RESUME_IN_ADS_MANAGER}
                             className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 text-sm font-medium text-slate-900 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
                             <ExternalLink className="h-4 w-4" aria-hidden="true" />
                             Resume in Ads Manager
@@ -2513,7 +2517,7 @@ function BusinessCampaigns({
                                 <Users className="h-4 w-4" aria-hidden="true" /> Edit audience
                               </DropdownMenuItem>
                             )}
-                            {c.meta_campaign_id && (c.status === "paused" || (c.status === "active" && budgetFormStart(c)?.capped)) && reviewableCampaign(c) && budgetFormStart(c) && !waitingSwitch[c.id] && (
+                            {budgetEditable && (
                               <DropdownMenuItem data-product-event="campaign.edit_budget" onSelect={() => setBudgetEdit({ campaign: c, start: budgetFormStart(c)! })}>
                                 <IndianRupee className="h-4 w-4" aria-hidden="true" /> Edit budget
                               </DropdownMenuItem>
@@ -2534,6 +2538,14 @@ function BusinessCampaigns({
                     {attention ? <p className="text-sm font-medium text-red-800">{attention}</p> : null}
                     {/* #1600 (CPO #1601): said only once Meta reports it deleted; results up to then stay below. */}
                     {goneInMeta(c) === "Deleted in Meta" ? <p className="text-sm text-slate-700">{GONE_LINES.deleted}</p> : null}
+                    {/* #1903 (CPO #1601, Designer #1633): changes made in Meta Ads Manager; amber only when the budget went up. */}
+                    {pausedInMeta(c) ? <p className="text-sm text-slate-700">{OUTSIDE_LINES.paused}</p> : null}
+                    {budgetChange ? (
+                      <div className={cn("flex flex-wrap items-center gap-x-4 gap-y-2 border-l-2 pl-3", budgetChange.raised ? "border-warning" : "border-slate-300")}>
+                        <p className="text-sm text-slate-700">{OUTSIDE_LINES.budget(formatMoney(budgetChange.nowRupees), formatMoney(budgetChange.wasRupees))}</p>
+                        {budgetEditable && <Button variant="outline" data-product-event="campaign.edit_budget" onClick={() => setBudgetEdit({ campaign: c, start: budgetFormStart(c)! })}>Change budget</Button>}
+                      </div>
+                    ) : null}
                     {cardError?.id === c.id ? <p role="alert" className="text-sm font-medium text-red-800">
                       {cardError.message}
                       {cardError.adsManager ? <> <a href={adsLink(c)} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center gap-1 underline underline-offset-4"><ExternalLink className="h-4 w-4" aria-hidden="true" />Open in Ads Manager</a></> : null}
@@ -2586,7 +2598,7 @@ function BusinessCampaigns({
                         onLogged={(count) => setResults((p) => (p[c.id] ? { ...p, [c.id]: { ...p[c.id], real_enquiries: count } } : p))}
                         onCustomers={(customers, count, booked) => setResults((p) => (p[c.id] ? { ...p, [c.id]: { ...p[c.id], customers, real_enquiries: count, ...(booked === undefined ? {} : { booked }) } } : p))} />
                     )}
-                    {r && outcome === "instant_form" && !(r.spend > 0) && (
+                    {r && outcome === "instant_form" && !(r.spend > 0) && !pausedInMeta(c) && (
                       <p className="text-sm text-slate-600">
                         {c.status === "paused" ? `Paused — nothing has spent.${resumeElsewhere || waitingSwitch[c.id] ? "" : " Resume when you're ready."}`
                           : c.status === "active" ? "Waiting for Meta to start delivery."

@@ -110,7 +110,7 @@ jobs:
           # One issue per new problem (rejected ad, no delivery, ended run), even if the refresh was partial.
           for row in $(jq -r '.alerts[]? | "\(.kind):\(.key)"' results.json 2>/dev/null); do
             kind=${row%%:*}; key=${row#*:}
-            [[ "$kind" =~ ^(rejected|not_delivering|ended)$ && "$key" =~ ^[a-f0-9]{12}$ ]] || continue
+            [[ "$kind" =~ ^(rejected|not_delivering|ended|budget_raised)$ && "$key" =~ ^[a-f0-9]{12}$ ]] || continue
             seen=$(gh issue list -R "$GITHUB_REPOSITORY" --state all --search "in:title $key" --json number --jq length)
             [ "$seen" = 0 ] || continue
             gh issue create -R "$GITHUB_REPOSITORY" -l core -l bug -l owner:dev3 -t "Campaign needs attention: $kind ($key)" \

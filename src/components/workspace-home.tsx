@@ -18,7 +18,7 @@ import type { AuditLog, Business, Campaign, CampaignResult, CreativePreview } fr
 import { campaignAttention } from "@/lib/campaign/health";
 import { formatReplyTime } from "@/lib/leads/first-reply";
 import { campaignStatus, Status } from "@/components/ui/status";
-import { goneInMeta, pausableCampaigns, recentlyDeletedInMeta } from "@/lib/campaign/gone-in-meta";
+import { goneInMeta, pausableCampaigns, pausedInMeta, recentlyDeletedInMeta, recentlyRaisedInMeta } from "@/lib/campaign/gone-in-meta";
 import type { HomeAdReview } from "@/lib/campaign/home-ad-review";
 import { timeAgoIn, translator, type AppLocale } from "@/i18n/locale";
 
@@ -220,6 +220,9 @@ export function WorkspaceHome({
                     const attention = campaignAttention(campaign);
                     const judged = verdicts?.labels.get(campaign.id);
                     const deleted = goneInMeta(campaign) === "Deleted in Meta";
+                    // #1903: paused in Meta takes the status line; a budget raised in Meta shows for a week (a lower one stays on Campaigns).
+                    const paused = pausedInMeta(campaign);
+                    const raised = recentlyRaisedInMeta(campaign, now);
                     return (
                       <li key={campaign.id} className="py-3 sm:flex sm:items-center sm:justify-between sm:gap-6">
                         <div className="min-w-0">
@@ -227,8 +230,9 @@ export function WorkspaceHome({
                             {campaign.name || t("untitledCampaign")}
                           </Link>
                           {attention && <p className="mt-1 text-xs font-medium text-danger">Needs attention: {attention}</p>}
+                          {raised && <p className="mt-1 border-l-2 border-warning pl-2 text-xs text-slate-700">{t("budgetRaisedInMeta", { now: formatMoney(raised.nowRupees), was: formatMoney(raised.wasRupees) })}</p>}
                         </div>
-                        {deleted ? <p className="mt-1 text-sm text-slate-700 sm:mt-0 sm:max-w-xs">{t("deletedInMeta")}</p> : <p className="mt-1 flex shrink-0 gap-x-4 text-xs text-slate-600 sm:mt-0">
+                        {deleted || paused ? <p className="mt-1 text-sm text-slate-700 sm:mt-0 sm:max-w-xs">{t(deleted ? "deletedInMeta" : "pausedInMeta")}</p> : <p className="mt-1 flex shrink-0 gap-x-4 text-xs text-slate-600 sm:mt-0">
                           <Status tone={status.tone}>{status.label}</Status>
                           {judged && <span>{judged}</span>}
                           {campaign.daily_budget != null && <span className="sm:w-24 sm:text-right">{formatPerDay(campaign.daily_budget)}</span>}

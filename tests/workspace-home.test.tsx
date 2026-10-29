@@ -131,6 +131,32 @@ describe("Home workspace", () => {
     expect(screen.getByText("Meta में डिलीट हुआ है। अगर अब भी चाहिए, तो Campaigns से फिर से चलाएँ।")).toBeInTheDocument();
   });
 
+  it("#1903 (CPO #1601): paused in Meta takes the status line; a budget raised in Meta shows for a week, a lower one stays on Campaigns (EN and HI)", () => {
+    const now = Date.parse("2026-10-29T18:00:00Z");
+    const run = (id: string, daily: number, raw: object) => ({ id, name: `Run ${id}`, status: "active", daily_budget: daily, raw }) as unknown as Campaign;
+    const change = (was: number, then: number, at: string) => ({ metaBudgetChange: { wasRupees: was, nowRupees: then, at } });
+    const campaigns = [
+      run("paused", 300, { metaPausedAt: "2026-10-29T08:00:00Z" }),
+      run("raised", 800, change(500, 800, "2026-10-29T08:00:00Z")),
+      run("lowered", 300, change(500, 300, "2026-10-29T08:00:00Z")),
+    ];
+    const { unmount } = render(<WorkspaceHome {...empty} business={business} now={now} campaigns={campaigns} />);
+    const list = screen.getByRole("heading", { name: "Campaigns" }).closest("section")!;
+    const row = (name: string) => within(list).getByRole("link", { name }).closest("li")!;
+    expect(within(row("Run paused")).getByText("Paused in Meta. Nothing is spending.")).toBeInTheDocument();
+    const raised = within(row("Run raised")).getByText("The daily budget was changed in Meta Ads Manager: now ₹800 a day (was ₹500).");
+    expect(raised.className).toContain("border-warning");
+    expect(within(row("Run lowered")).queryByText(/changed in Meta Ads Manager/)).toBeNull();
+    unmount();
+    const week = render(<WorkspaceHome {...empty} business={business} now={now} campaigns={[run("raised-old", 800, change(500, 800, "2026-10-21T08:00:00Z"))]} />);
+    expect(screen.getByRole("link", { name: "Run raised-old" })).toBeInTheDocument();
+    expect(screen.queryByText(/changed in Meta Ads Manager/)).toBeNull();
+    week.unmount();
+    render(<WorkspaceHome {...empty} business={business} now={now} campaigns={campaigns} locale="hi" />);
+    expect(screen.getByText("Meta में रोका गया है। कोई खर्च नहीं हो रहा।")).toBeInTheDocument();
+    expect(screen.getByText("रोज़ का बजट Meta Ads Manager में बदला गया: अब ₹800 रोज़ (पहले ₹500)।")).toBeInTheDocument();
+  });
+
   it("#1393: the workspace shell opens the Storage connection before the page streams in", async () => {
     queries.getUser.mockReturnValue(new Promise(() => {}));
     const { default: AppLayout } = await import("@/app/(app)/layout");

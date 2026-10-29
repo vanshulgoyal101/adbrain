@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { AdReview } from "@/lib/meta/client";
+import { pausedInMeta } from "@/lib/campaign/gone-in-meta";
 
 const HEALTH_KINDS = ["rejected", "not_delivering", "ended"] as const;
 export type HealthKind = (typeof HEALTH_KINDS)[number];
@@ -76,7 +77,8 @@ export function assessCampaignHealth(input: {
 
 /** "Needs attention" text for an active campaign, or null (#258). */
 export function campaignAttention(campaign: { status: string; raw: unknown }): string | null {
-  if (campaign.status !== "active") return null;
+  // #1903: paused in Meta Ads Manager, so "Nothing is spending" says it; no stale delivery flag beside it.
+  if (campaign.status !== "active" || pausedInMeta({ status: campaign.status, raw: campaign.raw as never })) return null;
   const flags = readCampaignHealth(campaign.raw)?.flags ?? [];
   return flags.length ? flags.map(flag => flag.reason).join(" ") : null;
 }

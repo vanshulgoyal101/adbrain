@@ -7,7 +7,7 @@ import { fetchPublicUrl } from "@/lib/security/ssrf";
 import { readBoundedResponse } from "@/lib/imageGen/raster";
 import { destinationFromAdSets, type CampaignDestination } from "@/lib/campaign/outcomes";
 import type { CampaignSkipReason } from "@/lib/campaign/sync-skips";
-import { decodeAdResults, decodeCampaignInsights, decodeLifetimeSpendPaise, type AdResult, type CampaignInsights } from "./insights";
+import { decodeAdResults, decodeCampaignInsights, decodeLifetimeSpendPaise, type AdResult, type CampaignInsights, type MetaCampaignState } from "./insights";
 import { maskWhatsAppNumber, maskedWhatsAppNumberPattern } from "./whatsapp-status-shared";
 import { graphEndpoint, graphEntity, graphErrorCode, graphOutcome } from "./graph-event";
 import { recordProductEvent } from "@/lib/observability/logger";
@@ -15,7 +15,7 @@ import { ConnectionAccessError } from "./connection-access-error";
 import { EXCLUDABLE_CITIES, INDIA_REGION_KEYS, mergeExclusions, serviceAreaExclusions, TargetingExclusionsMissingError, type IncludedPlace } from "./service-area";
 import { AD_LANGUAGE_KEYS, storedLocales } from "./locales";
 import { expandPlaceAliases } from "./geo-aliases";
-export type { AdResult, CampaignInsights } from "./insights";
+export type { AdResult, CampaignInsights, MetaCampaignState } from "./insights";
 
 
 export interface MetaCredentials {
@@ -1723,13 +1723,20 @@ export class MetaClient {
   }
 
   private async verifyCampaignBinding(campaignId: string): Promise<CampaignDestination> {
+    return (await this.readCampaignBinding(campaignId, false)).destination;
+  }
+
+  /** The binding check; #1903: with `withState` the same two reads also carry the campaign's status and budgets. */
+  private async readCampaignBinding(campaignId: string, withState: boolean): Promise<{ destination: CampaignDestination; state: MetaCampaignState | null }> {
     const node = encodeURIComponent(campaignId);
-    const campaign = await this.graph<{ id?: string; account_id?: string }>(`${node}?fields=id,account_id`);
+    const campaign = await this.graph<{ id?: string; account_id?: string; status?: string; daily_budget?: string; lifetime_budget?: string }>(
+      `${node}?fields=id,account_id${withState ? ",status,daily_budget,lifetime_budget" : ""}`,
+    );
     if (campaign.id !== campaignId || campaign.account_id !== this.creds.adAccountId.replace(/^act_/, "")) {
       throw new MetaError("Campaign does not match the connected ad account.");
     }
-    const adSets = await this.graph<{ data?: Array<{ destination_type?: string; promoted_object?: { page_id?: string } }>; paging?: { next?: string } }>(
-      `${node}/adsets?fields=promoted_object,destination_type&limit=100`,
+    const adSets = await this.graph<{ data?: Array<{ id?: string; status?: string; daily_budget?: string; lifetime_budget?: string; destination_type?: string; promoted_object?: { page_id?: string } }>; paging?: { next?: string } }>(
+      `${node}/adsets?fields=${withState ? "id,status,daily_budget,lifetime_budget," : ""}promoted_object,destination_type&limit=100`,
     );
     if (Array.isArray(adSets.data) && !adSets.data.length && !adSets.paging?.next) {
       // #721: a campaign deleted in Meta still answers, but lists no ad sets; its own status says why.
@@ -1742,14 +1749,19 @@ export class MetaClient {
       || adSets.data.some(adSet => adSet.promoted_object?.page_id !== this.creds.pageId)) {
       throw new MetaError("Campaign Page binding could not be verified. Review the campaign in Meta.");
     }
-    return destinationFromAdSets(adSets.data);
+    const state: MetaCampaignState | null = withState && typeof campaign.status === "string" ? {
+      status: campaign.status, dailyBudget: campaign.daily_budget, lifetimeBudget: campaign.lifetime_budget,
+      adSets: adSets.data.map(adSet => ({ id: String(adSet.id ?? ""), status: adSet.status, dailyBudget: adSet.daily_budget, lifetimeBudget: adSet.lifetime_budget })),
+    } : null;
+    return { destination: destinationFromAdSets(adSets.data), state };
   }
 
   async getCampaignInsights(campaignId: string, options?: { weekly?: boolean }): Promise<CampaignInsights> {
-    const destination = await this.verifyCampaignBinding(campaignId);
+    const { destination, state } = await this.readCampaignBinding(campaignId, true);
     // #404: without a preset Meta reads last_30d, which leaves out today, so a new campaign read ₹0. Results are lifetime.
     const data = await this.graph<unknown>(`${encodeURIComponent(campaignId)}/insights?fields=impressions,clicks,spend,actions,date_start,date_stop&date_preset=${options?.weekly ? "this_week_mon_today" : "maximum"}`);
-    return decodeCampaignInsights(data, destination, { requireSpend: options?.weekly });
+    const insights = decodeCampaignInsights(data, destination, { requireSpend: options?.weekly });
+    return state ? { ...insights, metaState: state } : insights;
   }
 
   /**
