@@ -21,7 +21,7 @@ import {
   getAdStatuses,
   getApprovedCreatives,
   getAuditLog,
-  getLatestResults,
+  getLatestResultsWithEnquiries,
   getPrimaryBusiness,
   getSpendEvaluation,
 } from "@/lib/supabase/queries";
@@ -59,7 +59,8 @@ export default async function DashboardPage() {
   const launched = campaigns.filter((campaign) => campaign.meta_campaign_id).map((campaign) => campaign.id);
   const newest = newestLiveCampaign(campaigns);
   const [results, replyMinutes, waiting, firstEnquiry, newestAdStatuses] = await Promise.all([
-    launched.length ? getLatestResults(launched).catch(() => ({})) : {},
+    // #1624: with the logged real enquiries and customers, so Home can ask which chats were real.
+    launched.length ? getLatestResultsWithEnquiries(launched).catch(() => ({})) : {},
     // #1049: an unreadable reply time leaves the line out, never the page.
     business ? recentReplyMinutes(business.id).catch(() => null) : null,
     // #1274: people waiting for a reply (the inbox's Waiting count, #1260) lead Home's sentence; unreadable means none shown.
