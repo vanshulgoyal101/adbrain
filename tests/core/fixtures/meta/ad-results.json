@@ -304,7 +304,7 @@
     },
     {
       "method": "GET",
-      "path": "120253709994100526/adsets?fields=id%2Cstatus%2Cdaily_budget%2Clifetime_budget%2Cpromoted_object%2Cdestination_type&limit=100",
+      "path": "120253709994100526/adsets?fields=id%2Cstatus%2Cdaily_budget%2Clifetime_budget%2Cend_time%2Cpromoted_object%2Cdestination_type&limit=100",
       "status": 200,
       "body": {
         "data": [
@@ -313,6 +313,7 @@
             "status": "PAUSED",
             "daily_budget": "0",
             "lifetime_budget": "90000",
+            "end_time": "2026-10-29T16:49:20+0530",
             "promoted_object": {
               "page_id": "900000000000002",
               "smart_pse_enabled": false,
@@ -344,5 +345,5 @@
       }
     }
   ],
-  "stateRecordedAt": "2026-10-29T07:00:00.000Z"
+  "stateRecordedAt": "2026-10-29T16:37:39.864Z"
 }
