@@ -10,6 +10,24 @@ Part of [Operations](../README.md). One page per incident type or hand-over; the
 - [Pilots](pilots.md): setup call and day-7 answers
 - [Prospect account hand-over](prospect-handover.md)
 
+## Runbook Index
+
+Every runbook, who runs it and when it was last drilled or tested (as of 2026-10-29).
+**Never drilled** means no recorded run exists; treat its steps as unproven until DevOps
+drills them. Update the row whenever a drill or a real run happens.
+
+| Runbook | Owner | Last drill or test | Page |
+| --- | --- | --- | --- |
+| Roll back a bad deploy | DevOps | Automatic rollback drilled Oct 22 (#167). The manual `vercel promote` path, the only one while CI's `VERCEL_TOKEN` is missing (#1746): **never drilled**, and it failed in a real incident on Oct 28 (#1745) | [Rollback and incident handling](../../RELEASING.md#rollback-and-incident-handling) |
+| Restore a backup | DevOps | Weekly drill PASS Oct 28 (#884); restore by hand Oct 28 (#1230) | [Backups](../backups.md#data-safety-and-recovery), [restore steps](../../RELEASING.md#backups-and-restore) |
+| Prospect account hand-over | DevOps executes, QA reviews | **Never drilled** | [Prospect hand-over](prospect-handover.md) |
+| Meta data-deletion request | DevOps | **Never drilled**; the purge RPC is still open (#1734) | [Privacy requests](../privacy-requests.md#meta-data-deletion-request-1734) |
+| Data breach notice | Not assigned | **No runbook yet**: the wording waits on the CEO decision #1763 | None |
+| Creative generation reconciliation | DevOps (authorized operator) | **Never drilled** | [Creative generation](creative-generation.md) |
+| Campaign creation reconciliation | DevOps (authorized operator) | **Never drilled** | [Campaign creation](campaigns.md) |
+| Pilot setup call | DevOps (SQL steps) | Dry run on the demo business Oct 28 | [Pilots](pilots.md) |
+| Activation funnel read | Any role (read-only) | Not a recovery step; nothing to drill | [Activation funnel](activation-funnel.md) |
+
 ## Incident Playbooks
 
 | Symptom | Inspect | Recovery / avoid |

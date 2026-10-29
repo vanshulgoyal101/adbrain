@@ -123,17 +123,6 @@ test("layered docs: every environment key is in a configuration page (#1851)", c
   assert.deepEqual(messages(checkDocumentation(root)), ["docs/operations/configuration.md Environment key not documented: MISSING_KEY"]);
 });
 
-test("layered docs: environment keys still checked in the flat CONFIGURATION.md while operations/ has other pages (#1851)", context => {
-  const root = fixture(context, {
-    "README.md": "# Start\n",
-    "src/lib/x.ts": "process.env.DOCUMENTED_KEY; process.env.MISSING_KEY;\n",
-    "docs/README.md": "# Docs\n[Ops](operations/README.md) [Config](CONFIGURATION.md)\n",
-    "docs/operations/README.md": "# Ops\n",
-    "docs/CONFIGURATION.md": "# Config\n`DOCUMENTED_KEY`\n",
-  });
-  assert.deepEqual(messages(checkDocumentation(root)), ["docs/CONFIGURATION.md Environment key not documented: MISSING_KEY"]);
-});
-
 test("layered docs: short pages, an index per folder linking each page, nothing new loose in docs/ (#1851)", context => {
   const long = "# Long\n" + "line\n".repeat(300);
   const root = fixture(context, {

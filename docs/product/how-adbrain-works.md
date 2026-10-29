@@ -73,4 +73,5 @@ results count it. Details: [Manage: sync, results and leads](manage.md).
 | AdBrain | Writes and draws the ads, checks the campaign, creates and watches it, pauses at the cap when auto-pause is on |
 | Meta | Reviews and shows the ads, charges the ad money to the owner's ad account |
 
-The app also works in Hindi (Settings → App language).
+The app also works in Hindi (Settings → App language): the menu, app bar and
+Home, including Recent activity, which shows only the Hindi label for each event.

@@ -18,7 +18,7 @@ These are deliberately different baselines:
 | Current development source | Includes DB integrity/trusted-write changes and test-payment work excluded from that release; source presence does not establish applied production migrations |
 | Enquiry candidates | [#34 / PR #37](https://github.com/vanshulgoyal101/adbrain/pull/37) adds resumable import; [#35 / PR #38](https://github.com/vanshulgoyal101/adbrain/pull/38) adds saved follow-up/listing. Neither is part of this baseline or the cited production release |
 
-Use [Meta Connection](META_CONNECT.md#lead-import-and-follow-up) for the candidate
+Use [Meta Connection](architecture/channels/meta-connect.md#lead-import-and-follow-up) for the candidate
 boundary and concrete migration handoff. Documentation is not deployment approval.
 
 ## System Overview
@@ -121,7 +121,7 @@ before POST and reconciles GET results before offering a fresh attempt. Late
 responses may clear only their matching pending identity. This is recovery of
 saved results, not a durable generation queue, cross-tab admission lock, or
 once-only paid execution guarantee. Regeneration resets approval. See
-[AI Pipeline](AI_PIPELINE.md#variant-generation) for partial results and costs.
+[AI Pipeline](architecture/ai-pipeline-variants.md#variant-generation) for partial results and costs.
 
 ## Campaign Data Flow
 
@@ -274,7 +274,7 @@ it merely to validate these docs: it can execute real campaign operations.
 Owner audit history, trusted AI usage, and structured product events are separate
 stores. Product telemetry uses request-local async context and safe metadata;
 database logging is opt-in after migration and best effort. See
-[Observability](OBSERVABILITY.md) for exact limits and privacy. Logs are evidence
+[Observability](operations/observability.md) for exact limits and privacy. Logs are evidence
 for diagnosis, not proof that every side effect was durably recorded.
 
 ## Where to Make Changes
@@ -295,7 +295,7 @@ uncommitted work in a shared checkout is ready to publish together.
 
 For verification, start with [connection access tests](../tests/meta-connection-access.test.ts),
 [Studio recovery tests](../tests/studio.test.tsx), and the owning module's existing
-suite; [Testing](TESTING.md) owns execution commands and environment isolation.
+suite; [Testing](team/testing.md) owns execution commands and environment isolation.
 
 ## Multi-Channel Architecture (ADR-001, #1792)
 
@@ -346,10 +346,18 @@ parts of `src/lib/campaign` → `channels/meta`, the channel-neutral parts → `
 export type Channel = "meta" | "google" | "tiktok" | "x";
 export type ExternalRef = { channel: Channel; kind: string; id: string }; // opaque outside the adapter
 
+export interface CapMechanism {                  // how a channel can bound total spend (#2048)
+  kind: "campaign_cap" | "lifetime_budget" | "total_budget";
+  guarantee: "native" | "service_enforced";      // native: the provider stops delivery; else our watchdog does
+  minMinor: Record<string, number>;              // per currency, e.g. Meta campaign_cap ≥ ₹5,000
+  requiresEndTime: boolean;
+}
+
 export interface ChannelCapabilities {
   objectives: ("enquiries" | "chats" | "calls" | "traffic")[];
   formats: ("image_4x5" | "image_1x1" | "story_9x16" | "video")[];
-  leadForms: boolean; messaging: boolean; spendCapPerCampaign: boolean;
+  leadForms: boolean; messaging: boolean;
+  capMechanisms: CapMechanism[];                 // empty → the service refuses activation
   audienceEditInPlace: boolean; // false → edits need a copy-and-switch (Meta today)
   minDailyBudgetMinor: Record<string, number>; // per currency
 }
@@ -366,6 +374,16 @@ export interface WriteContext extends ChannelContext { // every write method tak
 export type WriteOutcome<T> =
   | { status: "done"; value: T }
   | { status: "uncertain"; refs: ExternalRef[] }; // → needs_reconciliation, never auto-replayed
+
+export interface ResultSnapshot {                // #2050; the card renders this with no channel branch
+  ref: ExternalRef; period: Period; timezone: string; currency: string;
+  dateBasis: "interaction" | "conversion" | "reported";
+  spendMinor: number; impressions: number;
+  clicks: number; clickKind: "link" | "all";   // Meta link clicks, Google all clicks
+  results: { value: number; resultType: string }[]; // value may be fractional (Google conversions)
+  unsupported: { field: string; reason: string }[]; // unsupported is never 0
+  complete: boolean;                             // false → missing rows are not zeros
+}
 
 export interface ChannelAdapter {
   readonly channel: Channel;
@@ -391,10 +409,25 @@ Every write method above takes a `WriteContext` (the `ctx` of `launch`, `activat
 `editAudience`, `editCreative`, `enforceSpendCap`, `cleanup`, `revoke`).
 
 **Contracts every adapter must pass** (a shared contract test suite, Meta's recorded tapes first):
-- **Capped activation:** `activate` writes the channel's hard cap, **reads it back** (cap, end time, no
-  uncapped daily budget), and only then turns delivery on; any other path returns `uncertain`. A channel
-  with `spendCapPerCampaign: false` is refused activation **by the service**.
-- **Idempotency:** the same `idempotencyKey` never creates a second object.
+- **Capped activation:** `validate` picks one `capMechanism` for the plan's amount (Meta today: `campaign_cap`,
+  native, from ₹5,000; below that `lifetime_budget`, service-enforced; Google `total_budget`, native, only once a
+  `validate_only` create succeeds for that campaign type and bid strategy). `activate` writes the cap, **reads it
+  back** (cap, end time, no uncapped daily budget), and only then turns delivery on; any other path returns
+  `uncertain`. A `service_enforced` mechanism activates only once `enforceSpendCap` is scheduled for the ref.
+  **There is never a fallback to a daily or uncapped budget:** if no mechanism validates, the service refuses
+  activation, never substitutes.
+- **Idempotency:** neither provider honours an idempotency key, so the service guarantees it. The key is
+  persisted before transport, with one in-flight write per key and connection generation. A transport-ambiguous
+  create returns `uncertain`; reconciliation looks for an object carrying the key's marker. Exactly one match is
+  adopted; zero or several stay `uncertain` and are never re-created automatically (zero matches does not prove
+  the create failed).
+- **Partial failure:** Google launch objects go in one `GoogleAdsService.Mutate` with `partial_failure=false`
+  (all or nothing). Meta has no transaction: every `launch` step is PAUSED and `cleanup` removes partial trees.
+- **Schedules** are in the provider account's timezone, stored with the ref. UI duration minimums are not
+  validation rules; the `validate_only` call decides.
+- **Results:** `result_type` comes only from an explicit per-action mapping in the adapter (raw Google
+  `conversions` stays `google_conversion` until a mapped action says otherwise). Money converts to minor units
+  inside the adapter (Google `cost_micros` via the ISO 4217 exponent, aggregated before one documented rounding).
 - **Generation:** a write whose generation no longer matches the stored connection is refused before transport.
 - **Disconnect:** `revoke` revokes the grant at the provider (best effort); the service then purges the
   credential (deleted, not only marked revoked: #1648, #1734).
@@ -426,7 +459,7 @@ spec checks happen inside `validate`/`launch`, driven by `capabilities.formats`.
 | Add `channel text not null default 'meta'` | `campaigns`, `campaign_ads`, `campaign_results`, `ad_results`, `leads`, `lead_sync_runs`, `campaign_edit_operations`, `private.customer_ad_reservations`, `private.customer_ad_costs` | Default backfills every row in one statement |
 | Add `external_id`, `external_status` | `campaigns`, `campaign_ads`, `ad_results`, `leads` | Backfill from `meta_campaign_id`, `meta_ad_id`, `effective_status`, `meta_lead_id` |
 | New uniques beside the old ones | `(business_id, channel, external_id)` on campaigns and leads; `(campaign_id, channel, external_id, period)` on ad_results | Old Meta uniques stay until their columns are unread |
-| Normalised result columns | `campaign_results`, `ad_results` | `results`, `result_type`, `cost_per_result`, `clicks` (from `link_clicks`), money in minor units |
+| Normalised result columns | `campaign_results`, `ad_results` | `results` **numeric** (Google conversions are fractional), `result_type`, `cost_per_result`, `clicks` + `click_kind` (`link` for Meta, `all` for Google), money in minor units |
 | New `channel_connections` | `(business_id, channel)` primary key, `external_account_id`, `status`, `generation`, `capabilities` | Backfilled from `meta_connections`, which becomes Meta-private |
 | Credentials stay per channel | `private.meta_tokens` stays; each new channel gets its own private token table | Credential shapes differ; one generic table would hide risk |
 
@@ -449,7 +482,8 @@ tests cover every new column and table before release.
 | **5. Second-channel proof** | Google Ads read-only spike: connect, list campaigns, fetch results into the same card through the same service | CTO + Analyst |
 
 **Exit test for the design:** Phase 5 shows Google results on a campaign card with no change to `services/results`
-or the card. If the interface needs a Meta word or a Google special case in a service, the ADR is revised
+or the card. The card renders `unsupported` fields and fractional results without a Google branch, and provider
+query languages (GAQL, Graph fields) stay inside the adapter. If the interface needs a Meta word or a Google special case in a service, the ADR is revised
 before more slices land.
 
 ### Rules for every slice
@@ -463,7 +497,10 @@ before more slices land.
 - One path per PR, at most ~400 changed lines; move code and switch callers in the same PR, so there is
   never a second copy.
 - Recorded core tests stay byte-for-byte; a slice that needs a fixture change is not behaviour-preserving.
-- No new code may add to the boundary baseline once Phase 1 lands.
+- No new code may add to the boundary baseline once Phase 1 lands. The CI `boundaries` job enforces R1–R6
+  (`.dependency-cruiser.mjs`) and the source checks C1–C4 (Graph URLs only in Meta's adapter, adapters touch
+  only their own tables/RPCs, `appsecret_proof` on every Graph call, files ≤ 400 lines with listed big files
+  capped at their size), all against `scripts/boundaries-baseline.json`, and prints each slice's −N (#2070, #2071).
 
 ### Provider access prerequisites
 

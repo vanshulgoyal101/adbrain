@@ -16,8 +16,11 @@ The release process ([AGENTS.md](../AGENTS.md)).
    ([core-approval.yml](../.github/workflows/core-approval.yml), #926): a PR that
    touches `src/lib/meta/`, `src/lib/campaign/`, the Meta, campaign, managed,
    payments or spend-limit APIs, money paths or `db/migrations/` stays pending until
-   a QA verdict, `Reviewer review of <sha>: **approved**` or `CTO review of <sha>:
-   **approved**` names its head (or an earlier head with the same patch). The deploy
+   a QA verdict, `Reviewer: review of <sha>: **approved**` or `CTO: review of <sha>:
+   **approved**` names its head (or an earlier head with the same patch). Legacy
+   space-only role prefixes still work; a later negative verdict at that head
+   overrides either format. Money/migrations still need QA plus CTO/Reviewer.
+   The deploy
    train and a revert labelled `rollback` pass. Hold with `gh pr merge <n>
    --disable-auto`. `audit` and `docs` also run but do not block. A change to generation, validation, prompts, models, timeouts, the
    planner, Meta calls or CSP adds or updates a `test:core` test with recorded real
@@ -283,8 +286,11 @@ check are skipped. Steps run in `bash` with pipefail, so `| tee` cannot turn a
 failed smoke green (#153). To prove that, run the workflow manually with
 `force_fail`: it must end red, without a rollback or an issue.
 The rollback drill input `drill` forces the same FAIL, then really rolls
-production back and opens a `[DRILL]` core bug; restore with the recovery steps
-below.
+production back and opens a `[DRILL]` core bug. It captures the served commit and
+deployment ID **before** the forced smoke, rather than assuming the workflow ref
+is live; rollback must still match that captured deployment. Run a real drill only
+with separate authorization and after token restoration (#1746); this fix does not
+enable rollback or restore secrets. Restore with the recovery steps below.
 
 **Without `VERCEL_TOKEN` (CEO, Oct 24, #413):** after each production deploy the guard
 waits until the domain's `X-AdBrain-Release` header (the build's commit, #1457) is that
@@ -299,7 +305,24 @@ Revisit if a bad deploy ever stays live longer than an hour.
 Recovery after an automatic rollback: the guard rolls back by **promoting** the
 last good deployment (#390), so Vercel keeps auto-promoting later deploys; each new
 deploy gets its own guard. Fix forward or revert through a PR; when the fix is live
-and its guard passes, close the issue. While one `Production smoke failed` issue is
+and its guard passes, close the issue.
+
+**Superseded rollback (#2030):** a failed smoke does not authorize replacing an
+unrelated release. The guard checks the served commit and deployment ID, requires
+that exact failed deployment in READY history, then rechecks serving identity
+immediately before invoking promotion. If production changed, it logs
+`Superseded: rollback skipped` and makes no promotion; the original smoke failure
+still opens/comments on the incident. Check the newer deployment's own guard
+before deciding whether recovery is needed. Unknown serving identity or a missing
+failed deployment refuses rollback rather than guessing an earlier target; investigate
+the run and deployment history instead of retrying against the unrelated current
+release. The final API read and CLI promotion are not an atomic compare-and-swap;
+stop competing promotions during an explicitly authorized recovery/drill.
+Offline regression check (Node, Bash and jq; no credentials or network):
+`node --experimental-vm-modules --test scripts/production-guard.test.mjs`;
+the required CI `core` job runs it explicitly (Vitest only includes `tests/**/*.test.{ts,tsx}`).
+
+While one `Production smoke failed` issue is
 open, further failures comment on it instead of opening more. A rollback done by
 hand with `vercel rollback` (or the dashboard) does turn auto-promotion off. **Never end
 an incident there (#1457):** once the fix is merged, promote the deployment of **main
