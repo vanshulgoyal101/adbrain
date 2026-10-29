@@ -163,6 +163,7 @@ Recorded Meta tapes go through `metaScrubber()` (`scripts/lib/scrub-meta.ts`, #1
 - **Campaign stop** (`campaign-stop`): the paused-run settle check (#221) that the whole Meta tree is stopped, from two real Solaride campaigns (a fully PAUSED tree, and ACTIVE children under a paused campaign), recorded read-only by `scripts/record-meta-stop-fixtures.ts`.
 - **Launch gate** (`launch-validate`, #419): every object the launch code creates (campaign, ad set, creative, ad) for a lead-form and a WhatsApp campaign must equal a payload Meta accepted with `validate_only`. Recorded by [`record-meta-launch-validate.ts`](../scripts/record-meta-launch-validate.ts), which runs the real `createLeadCampaign`: ads are only validated, and the PAUSED campaign, empty ad set and creative it needs exist briefly and are deleted. A deliberate change to what we send Meta fails this test until the tape is re-recorded and Meta's answers reviewed.
 - **Managed provisioning walk** (`test:meta-db`, #521): a fixture tenant replays, as the service role on the real migrations, every write provisioning makes: Page link, lease, a failed child step and its resume, ad account, the child system user's encrypted token reference (and a re-mint), grant, release. The owner then reads their row and 7 step events.
+- **Smoke data guard** (`smoke-data-guard`, #1809): the production smoke business's saved inputs (`fixtures/smoke-business.json`) go through Prepare's own checks (`resolveDraftTargeting` over Meta's recorded place search in `geo-smoke.json`, then `runPreflight`). A rule change that breaks the smoke's data fails CI, not the production guard (#1745). Change the snapshot and the production row together; re-record with `scripts/record-meta-geo-smoke.ts` (read-only).
 - **Meta call events** (`meta-call-events`, #451 L2): replays Meta's recorded Advantage+ refusal (subcode 1870189) through a real launch; every Graph call must log one `meta.graph` event with the endpoint template, status and `META_100_1870189`, and no token, ID or query value. #615: a recorded refusal also puts Meta's code, subcode, user title, `fbtrace_id` and endpoint on the `meta.<purpose>` workflow event.
 - **Review warnings** (`review-warnings`, #419 2b): the live #157 run's recorded lifetime read, stored for its campaign row and read back through Create's results store, prices a chat at ₹10.69; on the launch gate's recorded ₹280 WhatsApp plan Review warns only that the ad has no 9:16, and at ₹50 a day also that Meta can't learn (about 32 chats a week). Neither blocks or changes the plan hash. On activation (#419 item 2), at the same ₹10.69 a ₹280 × 3-day capped run (about 78 chats) gets no note, ₹50 × 3 days (about 14) gets the new-ad-set learning note, and resuming after a 10-day pause gets the restart note; 3 days paused gets none.
 - **Plan check** (`plan-check`, #419): `npx tsx scripts/plan-check.ts [--cost-per-result 69] [plan.json]` checks a planned campaign offline against Meta's new-advertiser guidance (Advantage+ audience and placements, one ad set, budget vs the ~50 results a week learning threshold, 4:5 and 9:16 images). With no file it checks the launch gate's payloads; it exits 1 when a rule fails. Every launch also runs it on the payloads it sent (`onPlanned`): `launch-validate` pins that the check sees exactly the accepted forms, and `story-placement` that it sees the creative each ad runs on (the single image when Meta refused the placement ad), never the token.
@@ -381,9 +382,21 @@ node --test scripts/check-docs.test.mjs
 on broken local links/anchors or source-line links, unclosed fences, invalid JSON
 examples, missing `node scripts/...` files and unknown `npm run` names. Historical
 records (`docs/qa/`, `docs/releases/`, dated history files) are checked only with
-`--all`, as warnings. `--json` also lists API routes, environment keys and
-migrations not mentioned in their owning guides; these are review leads, not
-contract validation. `--root <worktree>` inspects another checkout. It does not
+`--all`, as warnings. It also checks `AGENTS.md` and module READMEs under `src/`.
+
+Structure rules (#1851) fail the check too: every handler in `src/app/api` has
+exactly one route-inventory row (`| GET | \`/api/…\` |`) across the API pages, and
+every row has a handler; every environment key appears in a configuration page;
+current pages stay at most 300 lines; every folder under `docs/` has a `README.md`
+that links each page and subfolder in it; new pages go in a subfolder
+(`product`, `architecture`, `api`, `operations`, `team`), not loose in `docs/`;
+and any `docs/….md` path named in `src/`, `scripts/`, `db/`, `.github/`,
+`AGENTS.md` or `.env.example` must exist. Flat guides not yet moved are listed in
+`LEGACY_FLAT` in the checker and exempt from the size and layout rules.
+In CI the `docs` job runs the checker and its tests; the required `test` check
+fails when `docs` does (#1918), so a PR with a docs gap can't merge.
+`--json` also lists migrations not mentioned in the data model guide; these are
+review leads, not contract validation. `--root <worktree>` inspects another checkout. It does not
 fetch external links, run snippets, load `.env` or validate route schemas.
 
 When changing a route, environment field, migration, or lifecycle, update the

@@ -6,6 +6,7 @@
     "newestEnquiry": "Newest enquiry",
     "openEnquiries": "Open Enquiries",
     "resultsSoFar": "Results so far",
+    "newCampaign": "New campaign",
     "deletedInMeta": "Deleted in Meta. Run it again from Campaigns if you still want it.",
     "enquiries": "Enquiries",
     "spent": "Spent",
@@ -15,6 +16,7 @@
     "contactTime": "You usually contact people within <strong>{time}</strong> (last 30 days).",
     "seeEnquiries": "See enquiries",
     "seeCampaigns": "See campaigns",
+    "updated": "Updated {ago}",
     "nextStep": "Next step",
     "upToDate": "You're up to date",
     "nothingWaiting": "Nothing is waiting for you.",
@@ -28,7 +30,7 @@
     "needsReview": "Needs review",
     "approved": "Approved",
     "setAside": "Set aside",
-    "metaChecking": "Meta is checking your ads. They usually start showing within a day.",
+    "metaChecking": "Meta is checking your ads. This usually takes minutes to a few hours, and up to a day.",
     "metaReview": "Meta review"
   },
   "workQueue": {
@@ -75,7 +77,12 @@
   "settings": {
     "language": "App language",
     "languageHint": "Home shows in Hindi now; more screens follow.",
-    "saveFailed": "Couldn't save your language. Try again."
+    "saveFailed": "Couldn't save your language. Try again.",
+    "alertsIntro": "A short WhatsApp message from AdBrain when something needs you. Customer chats from your ads already arrive in your WhatsApp Business app.",
+    "alertsDaily": "Yesterday's results, 9 am",
+    "alertsDailyDetail": "One line: spent, chats and enquiries, and what each enquiry cost.",
+    "alertsForm": "New form enquiry",
+    "alertsFormDetail": "Only for ads with a form: name, phone and which ad, with a tap to call."
   },
   "pilotDay7": {
     "question": "One question after your first week: would you pay ₹999 a month to keep using AdBrain?",
@@ -96,5 +103,98 @@
       "prefer_meta": "I'd rather use Meta myself",
       "other": "Something else"
     }
+  },
+  "setup": {
+    "title": "Set up your first ad",
+    "step1": "Your business",
+    "step2": "Your ads",
+    "step3": "Go live",
+    "stepOf": "Step {n} of 3",
+    "help": "Help",
+    "back": "Back",
+    "backTo": "Back to {step}",
+    "saving": "Saving…",
+    "saved": "Saved",
+    "saveFailed": "Not saved. Check your connection.",
+    "resume": {
+      "title": "Your first ad",
+      "continue": "Continue",
+      "readyOne": "Your ad is ready",
+      "readyMany": "Your {n} ads are ready",
+      "next": "Next: connect your Facebook Page and go live. It takes about 10 minutes, and nothing spends until you tap Go live.",
+      "connect": "Connect and go live"
+    },
+    "business": {
+      "title": "Tell us about your business",
+      "helper": "Five things. Your ads are made from these, and you can change them any time.",
+      "website": "Your website (optional)",
+      "fillWebsite": "Fill it from my website",
+      "pasteToggle": "No website? Paste a bio or listing",
+      "pasteLabel": "Instagram bio, Google listing or catalogue text",
+      "pastePlaceholder": "Paste what the business says about itself.",
+      "fillText": "Fill from this text",
+      "needWebsite": "Add your website first, like yourbusiness.com.",
+      "filledWebsite": "Filled from your website. Check each line.",
+      "filledText": "Filled from your text. Check each line.",
+      "websiteFailed": "We couldn't read that website. Fill it in yourself; it takes about a minute.",
+      "textFailed": "We couldn't read that text. Try again, or fill it in yourself; it takes about a minute.",
+      "primary": "Make my ads",
+      "included": "Making ads is included. Nothing goes live until you say so.",
+      "more": "More about your business",
+      "againTitle": "What's new this time?",
+      "sameAsLast": "Same as last time: {summary}.",
+      "change": "Change",
+      "proof": {
+        "label": "Why do customers pick you? (optional)",
+        "placeholder": "e.g. Same-day visits in Mohali",
+        "fillBlanks": "Fill in each blank, using only what is true for your business.",
+        "chips": {
+          "solarTeam": "Our own installation team, no subcontractors",
+          "solarHomes": "'{n}' homes installed in '{area}'",
+          "ieltsSize": "Batches of at most '{n}' students",
+          "ieltsMock": "A full mock test every '{week/fortnight}'",
+          "ieltsEvening": "Evening batches for working students",
+          "interiorsDesign": "3D design before you pay",
+          "interiorsWorkshop": "Our own workshop in '{area}'",
+          "interiorsKitchens": "'{n}' kitchens finished in '{area}'"
+        }
+      },
+      "fields": {
+        "name": {
+          "label": "Business name",
+          "placeholder": "e.g. SunPeak Solar"
+        },
+        "vertical": {
+          "label": "What you sell",
+          "placeholder": "e.g. Rooftop solar for homes"
+        },
+        "locations": {
+          "label": "Where you serve",
+          "placeholder": "e.g. Mohali\nKharar",
+          "helper": "Your ads show only here. One city or area per line."
+        },
+        "offer": {
+          "label": "Your offer",
+          "placeholder": "e.g. Free site survey",
+          "helper": "One thing customers get for messaging you. Only what you really offer."
+        },
+        "phone": {
+          "label": "WhatsApp number",
+          "placeholder": "98765 43210",
+          "helper": "Customers message you here."
+        }
+      },
+      "errors": {
+        "name": "Add your business name.",
+        "vertical": "Say what you sell, in a few words.",
+        "locations": "Add at least one city or area.",
+        "offer": "Add one offer, like a free visit or a first-time price.",
+        "phone": "Enter a 10-digit mobile number."
+      }
+    }
+  },
+  "creative": {
+    "yourPhoto": "Your photo",
+    "aiPicture": "AI picture"
   }
 }

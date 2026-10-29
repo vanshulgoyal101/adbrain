@@ -157,7 +157,7 @@ export function AdAssistant({ business, opening = null, occasions = [], onFlowSt
   const [prepared, setPrepared] = useState<PreparedBrief | undefined>();
   const [recentGoals, setRecentGoals] = useState<string[]>([]);
   const [referenceBrief, setReferenceBrief] = useState<string | undefined>();
-  const [language, setLanguage] = useState<CreateLanguageId>(() => defaultAdLanguage(business.languages));
+  const [language, setLanguage] = useState<CreateLanguageId>(() => defaultAdLanguage(business.languages, business.vertical));
   // An explicit pick wins over the language the interview suggests.
   const [languagePicked, setLanguagePicked] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -311,7 +311,7 @@ export function AdAssistant({ business, opening = null, occasions = [], onFlowSt
         error?: string;
       };
       if (!res.ok) {
-        setError(data.error ?? "The assistant had trouble. Please try again.");
+        setError(data.error ?? "That reply didn't come through. Send your last answer again.");
         return;
       }
       if (data.ready && data.brief) {
@@ -327,7 +327,7 @@ export function AdAssistant({ business, opening = null, occasions = [], onFlowSt
         quickStartRef.current = false;
         setTurns((t) => [...t, { role: "question", question: data.question! }]);
       } else {
-        setError("The assistant had trouble. Please try again.");
+        setError("That reply didn't come through. Send your last answer again.");
       }
     } catch {
       setError("Couldn't reach the assistant — check your connection.");
@@ -446,7 +446,7 @@ export function AdAssistant({ business, opening = null, occasions = [], onFlowSt
         setGenerationId(null);
         setError(
           data.error ??
-            `Couldn't create the ad (server returned ${status}). Please try again.`,
+            "Your ads couldn't be made just now. Try again in a minute.",
         );
         setPhase("chat");
         return;
@@ -1034,11 +1034,11 @@ function ResultCard({
         const res = await setCreativeStatus(creative.id, next ? "approved" : "draft");
         if (!res.ok) {
           setApproved(!next);
-          setSaveError("Couldn't save — try again.");
+          setSaveError("Your choice wasn't saved. Tap it again.");
         }
       } catch {
         setApproved(!next);
-        setSaveError("Couldn't save — try again.");
+        setSaveError("Your choice wasn't saved. Tap it again.");
       }
     });
   }

@@ -319,7 +319,7 @@ platform for this narrowed scope.
 
 ## 9. Implementation Receipt
 
-[API Reference](API_REFERENCE.md), [Configuration](CONFIGURATION.md) and
+[API Reference](api/README.md), [Configuration](CONFIGURATION.md) and
 [Testing](TESTING.md) own current commands/contracts; historical commands are not
 unconditional setup instructions.
 

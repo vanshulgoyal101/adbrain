@@ -3,7 +3,7 @@
 This reference describes the existing product identity, not a redesign or proof
 of deployment. Use it when adding a screen, changing icons, or reviewing public
 metadata. Source baseline: `672eb13`. Product behavior belongs in
-[Features](FEATURES.md).
+[Features](product/README.md).
 
 ## Name and Mark
 

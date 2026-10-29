@@ -8,6 +8,7 @@
       "name": "Solaride"
     },
     "accountActive": true,
+    "accountStatus": 1,
     "currency": "INR",
     "paymentMethod": true,
     "pageListed": true,

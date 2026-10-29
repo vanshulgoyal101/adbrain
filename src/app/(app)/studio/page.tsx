@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { requestLocale } from "@/i18n/request-locale";
 import { Suspense } from "react";
 import { Building2 } from "lucide-react";
 import { Studio } from "@/components/studio";
@@ -78,6 +79,7 @@ export default async function StudioPage({
           initialCreativeId={params.creative ?? null}
           showInternals={operator}
           sample={await isProspectSession()}
+          locale={await requestLocale()}
         />
         {usage && <Suspense fallback={null}><StudioUsage usage={usage} /></Suspense>}
       </div>

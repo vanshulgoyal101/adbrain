@@ -103,6 +103,18 @@ function boundedBrand(brand: BrandContext): BrandContext {
   };
 }
 
+/** Ads that use the owner's own photos before AI pictures (#1901). */
+const OWNER_PHOTO_ADS = 3;
+
+/**
+ * #1901: ads 1..min(k, 3) each use a different owner photo (newest first); the rest get AI pictures.
+ * Tied to the angle's place, so a retried ad keeps its own photo.
+ */
+export function ownerPhotoFor(angle: AdAngle, photos: readonly string[] | undefined): string | undefined {
+  const place = AD_ANGLES.findIndex((item) => item.id === angle.id);
+  return place >= 0 && place < OWNER_PHOTO_ADS ? photos?.[place] : undefined;
+}
+
 export async function generateVariants(params: {
   brand: BrandContext;
   brief: string;
@@ -165,9 +177,9 @@ export async function generateVariants(params: {
   let planning = Promise.resolve();
   let startNext = Promise.resolve();
   const outcomes = await Promise.allSettled(
-    angles.map(async (angle, index) => {
+    angles.map(async (angle) => {
       try {
-        const ownerPhoto = index === 0 ? params.ownerPhotos?.[0] : undefined;
+        const ownerPhoto = ownerPhotoFor(angle, params.ownerPhotos);
         const input: ConceptInput = { brand, brief, angle, instructions, language, format, referenceImages, advisoryPreferences, sourceFacts, ...(ownerPhoto ? { ownerPhoto } : {}) };
         const waitForTurn = parallel ? Promise.resolve() : startNext;
         let notifyNext!: () => void;
