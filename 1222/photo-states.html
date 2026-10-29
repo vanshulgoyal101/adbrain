@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="only light">
+<title>Photo library states · #1222 design supplement</title>
+<style>
+  @font-face { font-family: "DM Sans"; src: url("../node_modules/@fontsource-variable/dm-sans/files/dm-sans-latin-wght-normal.woff2") format("woff2"); font-weight: 100 900; font-display: swap; }
+  :root { color-scheme: only light; --canvas: #f6f7f4; --ink: #1b2420; --muted: #5a6660; --line: #e2e6df; --leaf: #13784a; --amber: #a15c07; --red: #b42318; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--canvas); color: var(--ink); font: 15px/1.5 "DM Sans", "Noto Sans Devanagari", "Kohinoor Devanagari", sans-serif; }
+  h1, h2, h3, p { margin: 0; }
+  h1 { font-size: 24px; line-height: 1.25; font-weight: 600; text-wrap: balance; }
+  h2 { font-size: 17px; line-height: 1.4; font-weight: 600; }
+  h3 { font-size: 15px; font-weight: 600; }
+  small, .meta { font-size: 13px; color: var(--muted); }
+  .intro { padding: 24px; max-width: 760px; }
+  .intro p { margin-top: 8px; color: var(--muted); }
+  .boards { display: grid; grid-template-columns: repeat(auto-fit, 390px); gap: 24px; padding: 0 24px 24px; align-items: start; }
+  .frame { background: white; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; min-height: 820px; }
+  .caption { padding: 12px 16px; background: var(--ink); color: white; font-size: 13px; }
+  .bar { min-height: 60px; padding: 8px 16px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line); }
+  .content { padding: 20px 16px; }
+  .content > * + * { margin-top: 16px; }
+  .heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .button { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; padding: 10px 14px; border: 1px solid var(--line); border-radius: 8px; font-weight: 600; text-align: center; }
+  .primary { color: white; background: var(--leaf); border-color: var(--leaf); }
+  .disabled { background: #eef0ec; color: var(--muted); }
+  .full { display: flex; width: 100%; }
+  .tabs { display: flex; gap: 4px; flex-wrap: wrap; }
+  .tab { min-height: 44px; display: flex; align-items: center; padding: 8px 10px; border: 1px solid var(--line); border-radius: 24px; font-size: 13px; }
+  .tab.selected { background: var(--ink); color: white; border-color: var(--ink); }
+  .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+  .tile { min-width: 0; }
+  .thumb { aspect-ratio: 1; background: #eef0ec; border-radius: 8px; display: flex; align-items: center; justify-content: center; position: relative; color: var(--muted); }
+  .thumb svg { width: 32px; height: 32px; }
+  .pending .thumb { opacity: .5; }
+  .tile p { font-size: 13px; padding: 6px 2px 0; overflow-wrap: anywhere; }
+  .badge { position: absolute; bottom: 4px; left: 4px; background: white; padding: 1px 5px; border-radius: 4px; font-size: 11px; }
+  .status { display: block; font-size: 13px; font-weight: 600; }
+  .ready { color: var(--leaf); }
+  .warning { color: var(--amber); }
+  .error { color: var(--red); }
+  .panel { padding: 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--canvas); }
+  .panel p + p { margin-top: 8px; }
+  .row { display: flex; gap: 12px; align-items: flex-start; padding: 16px 0; border-bottom: 1px solid var(--line); }
+  .row .thumb { width: 52px; flex: 0 0 52px; }
+  .details { min-width: 0; flex: 1; }
+  .details p { overflow-wrap: anywhere; }
+  .details .button { margin-top: 12px; }
+  progress { display: block; width: 100%; height: 6px; margin: 12px 0; accent-color: var(--leaf); }
+  .rule { margin-top: 8px; padding-left: 10px; border-left: 2px solid var(--amber); }
+  .rule.blocked { border-color: var(--red); }
+  .foot { padding: 16px; border-top: 1px solid var(--line); }
+  .foot p { margin-bottom: 12px; }
+  .sheet { margin-top: 48px; border-top: 1px solid var(--line); border-radius: 16px 16px 0 0; }
+  .handle { width: 40px; height: 4px; border-radius: 4px; background: var(--line); margin: 12px auto 0; }
+  .rights { display: flex; gap: 12px; align-items: flex-start; }
+  .check { flex: 0 0 22px; height: 22px; background: white; border: 1px solid var(--muted); border-radius: 4px; margin-top: 2px; }
+  .preview { aspect-ratio: 4/5; width: 132px; margin: 16px auto; }
+  .preview svg { width: 48px; height: 48px; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .note { margin-top: 20px; color: var(--muted); font-size: 13px; }
+  svg { fill: none; stroke: currentColor; stroke-width: 1.5; }
+  @media (max-width: 437px) { .intro { padding: 20px 16px; } .boards { grid-template-columns: minmax(0, 1fr); padding: 0; gap: 24px; } .frame { border-radius: 0; min-height: 0; } }
+  @media print { .intro { padding: 0 0 16px; } .boards { padding: 0; } }
+</style>
+<svg aria-hidden="true" width="0" height="0" style="position:absolute"><defs><symbol id="photo" viewBox="0 0 32 32"><rect x="3" y="5" width="26" height="22" rx="3"/><circle cx="11" cy="12" r="2"/><path d="m4 24 8-7 5 4 5-7 7 10"/></symbol></defs></svg>
+<header class="intro">
+  <h1>Photos: what happens after you pick them</h1>
+  <p>#1222 supplement for #778. Static design frames, not a working uploader. Grey images are placeholders, not sample ads. The earlier empty-library and picker frames still apply. Photos only; video editing is a later slice.</p>
+</header>
+<main class="boards">
+  <section class="frame" aria-labelledby="library-title">
+    <p class="caption">Library · mixed sources and readiness</p>
+    <div class="bar"><span>AdBrain</span><span class="meta">Photos &amp; videos</span></div>
+    <div class="content">
+      <div class="heading"><h1 id="library-title">Photos &amp; videos</h1><span class="button">+ Add</span></div>
+      <div class="tabs"><span class="tab selected">All</span><span class="tab">Photos</span><span class="tab">Videos</span><span class="tab">Made by AdBrain</span></div>
+      <div class="grid">
+        <div class="tile"><div class="thumb"><svg aria-hidden="true"><use href="#photo"/></svg><span class="badge">Your photo</span></div><p>Finished kitchen</p><span class="status ready">✓ Ready</span></div>
+        <div class="tile pending"><div class="thumb"><svg aria-hidden="true"><use href="#photo"/></svg><span class="badge">Your photo</span></div><p>Living room</p><span class="status">Checking…</span></div>
+        <div class="tile"><div class="thumb"><svg aria-hidden="true"><use href="#photo"/></svg><span class="badge">AdBrain</span></div><p>Kitchen ad</p><span class="status ready">✓ Ready</span></div>
+      </div>
+      <div class="panel">
+        <h2>One photo is still being checked</h2>
+        <p>You can use the ready ones now. We’ll mark the other photo when it’s ready.</p>
+      </div>
+      <span class="button primary full">Make an ad</span>
+      <p class="note">Only ready or explicitly accepted warning/check-unavailable photos can be selected. Uploading, checking and blocked tiles cannot be added to an ad. Source and status are separate; an AI-made ad is not an owner photo.</p>
+    </div>
+  </section>
+  <section class="frame" aria-labelledby="rights-title">
+    <p class="caption">First upload · consent before any upload</p>
+    <div class="bar"><span>AdBrain</span><span class="meta">Photos &amp; videos</span></div>
+    <div class="sheet">
+      <div class="handle"></div>
+      <div class="content">
+        <h1 id="rights-title">Add 2 photos</h1>
+        <div class="panel rights"><span class="check" aria-hidden="true"></span><p>I own these photos and videos, or have permission to use them, including any music and the people shown.</p></div>
+        <p class="meta">Once per business. Final rights wording comes from #784.</p>
+        <div class="row"><div class="thumb"><svg aria-hidden="true"><use href="#photo"/></svg></div><div class="details"><h3>Finished-kitchen.jpg</h3><span class="status ready">✓ Ready for upload</span><p class="meta">The server checks it again after upload.</p></div></div>
+        <div class="row"><div class="thumb"><svg aria-hidden="true"><use href="#photo"/></svg></div><div class="details"><h3>Living-room.jpg</h3><span class="status ready">✓ Ready for upload</span><p class="meta">The server checks it again after upload.</p></div></div>
+      </div>
+      <div class="foot"><p class="meta">Tick the box above to add your photos.</p><span class="button disabled full">Add 2 photos</span></div>
+    </div>
+  </section>
+  <section class="frame" aria-labelledby="progress-title">
+    <p class="caption">Upload · progress and a recoverable failure</p>
+    <div class="bar"><span>AdBrain</span><span class="meta">Photos &amp; videos</span></div>
+    <div class="content">
+      <h1 id="progress-title">Adding your photos</h1>
+      <p>You can keep going. Photos are ready to use after their checks finish.</p>
+      <div class="row"><div class="thumb"><svg aria-hidden="true"><use href="#photo"/></svg></div><div class="details"><h3>Finished-kitchen.jpg</h3><span class="status ready">✓ Ready</span></div></div>
+      <div class="row"><div class="thumb"><svg aria-hidden="true"><use href="#photo"/></svg></div><div class="details"><h3>Living-room.jpg</h3><p>Uploading… 58%</p><progress value="58" max="100" aria-label="Living room upload">58%</progress></div></div>
+      <div class="row"><div class="thumb"><svg aria-hidden="true"><use href="#photo"/></svg></div><div class="details"><h3>Bedroom.jpg</h3><div class="rule blocked"><p class="error">Upload didn’t finish.</p><p>Check your connection and try again.</p></div><span class="button">Try again</span></div></div>
+      <span class="button primary full">Back to photos</span>
+      <p class="note">Retry acts on the failed file only; keep completed uploads. Never call bytes received “Ready”. Leaving this sheet is not cancelling; actual background/resume support is the uploader’s contract, not a promise this mock can prove.</p>
+    </div>
+  </section>
+  <section class="frame" aria-labelledby="checking-title">
+    <p class="caption">Checks · normal, delayed, unavailable</p>
+    <div class="bar"><span>AdBrain</span><span class="meta">Photos &amp; videos</span></div>
+    <div class="content">
+      <h1 id="checking-title">Checking your photo</h1>
+      <div class="thumb preview"><svg aria-hidden="true"><use href="#photo"/></svg></div>
+      <h2>Living-room.jpg</h2>
+      <p class="status">Checking…</p>
+      <p class="meta" lang="hi">जाँच रहे हैं…</p>
+      <div class="panel"><h3>After 10 seconds</h3><p>Still checking. You can keep going; we’ll mark it when it’s ready.</p><p lang="hi">अभी जाँच चल रही है। आप आगे बढ़ सकते हैं; तैयार होते ही बता देंगे।</p></div>
+      <div class="panel"><h3>If our check fails</h3><p>We couldn’t check this one. You can still use it; Meta reviews every ad anyway.</p><div class="actions"><span class="button">Try again</span><span class="button">Use anyway</span></div></div>
+      <p class="note">These are alternative states, not stacked alerts in the product. A check-service failure is not an upload failure or a pass. “Use anyway” accepts only this photo. File validity, rights and blocked-claim rules still apply. Announce state changes politely; don’t move focus.</p>
+    </div>
+  </section>
+  <section class="frame" aria-labelledby="fit-title">
+    <p class="caption">Fit · warning can proceed; blocked cannot</p>
+    <div class="bar"><span>AdBrain</span><span class="meta">Photos &amp; videos</span></div>
+    <div class="content">
+      <h1 id="fit-title">Check the fit</h1>
+      <div class="row"><div class="thumb"><svg aria-hidden="true"><use href="#photo"/></svg></div><div class="details"><h3>Living-room.jpg</h3><div class="rule"><p class="warning">Square photo</p><p>Fine for Feed. Make a tall version for Stories and Reels.</p></div><span class="button">Make a tall version</span><span class="button">Use anyway</span><p class="meta" lang="hi">फिर भी इस्तेमाल करें</p></div></div>
+      <div class="row"><div class="thumb"><svg aria-hidden="true"><use href="#photo"/></svg></div><div class="details"><h3>WhatsApp-photo.jpg</h3><div class="rule blocked"><p class="error">This photo is too small.</p><p>Use the original photo, not a screenshot or a WhatsApp copy.</p></div><span class="button">Choose another photo</span></div></div>
+      <div class="panel"><h2>One clear next step</h2><p>Fix the photo or accept this warning, then return to the library. A blocked file never gets “Use anyway”.</p></div>
+      <p class="note">Keep the photo’s fit guidance after acceptance. No green “passed” badge for an accepted warning. Numeric limits and placement rules come from #751, not this mock. Use #1868’s EN/HI keys; do not copy English into the locale files.</p>
+    </div>
+  </section>
+</main>
+</html>
