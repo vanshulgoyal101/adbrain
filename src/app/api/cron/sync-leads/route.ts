@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { getEnv } from "@/lib/env";
 import { LeadSyncError, syncMetaLeads } from "@/lib/leads/sync";
 import { friendlyMetaError, MetaThrottledError } from "@/lib/meta/client";
-import { appThrottledUntil, recordThrottle, throttledBusinesses } from "@/lib/meta/throttle-store";
+import { appThrottledUntil, recordThrottle, throttledBusinesses } from "@/services/meta-throttle";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireScheduledBusiness, withMetaConnection } from "@/lib/meta/connection-access";
 import { isTokenFailure, reauthEntry, recordMetaErrors, type ReauthEntry } from "@/lib/meta/reauth";

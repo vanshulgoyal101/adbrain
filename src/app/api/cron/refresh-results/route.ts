@@ -11,7 +11,7 @@ import { isTokenFailure, reauthEntry, type ReauthEntry } from "@/lib/meta/reauth
 import { readStoredCampaignBinding } from "@/lib/campaign/binding";
 import { saveCampaign, saveCampaignHealth, saveCampaignResult } from "@/lib/campaign/trusted-write";
 import { CampaignGoneError, MetaError, MetaThrottledError, metaErrorCode } from "@/lib/meta/client";
-import { appThrottledUntil, recordThrottle, throttledBusinesses } from "@/lib/meta/throttle-store";
+import { appThrottledUntil, recordThrottle, throttledBusinesses } from "@/services/meta-throttle";
 import { ConnectionAccessError } from "@/lib/meta/connection-access-error";
 import { assessCampaignHealth, readCampaignHealth, type CampaignHealth } from "@/lib/campaign/health";
 import { PAUSE_ACTIONS, pausedResultsReadDue } from "@/lib/campaign/paused-results";
