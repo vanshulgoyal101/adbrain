@@ -1,5 +1,10 @@
-import { describe, expect, it } from "vitest";
-import { readyPool, boardRow, systemicFailures, snoozedUntil, latestWord, linkedIssues, lowQueues, matchers, nextItem, freshComments, offTrack, roleCard, unsavedWork, waitingOnMe } from "../scripts/wait-for-work.mjs";
+import { describe, expect, it, vi } from "vitest";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { createGitHubApi, readyPool, boardRow, systemicFailures, snoozedUntil, latestWord, linkedIssues, lowQueues, matchers, nextItem, freshComments, offTrack, rateBackoffMs, roleCard, unsavedWork, waitingOnMe } from "../scripts/wait-for-work.mjs";
 
 describe("PR reviews count as the latest word (#423)", () => {
   it("picks a review posted after the last comment, and ignores empty approvals", () => {
@@ -283,5 +288,148 @@ describe("waiter fixes (#1478)", () => {
     const pool = [issue(1228, "core", "ready", "lane:qa", "declined:qa2"), issue(1230, "core", "ready", "lane:qa")];
     expect(readyPool(pool, "qa2").map((i) => i.number)).toEqual([1230]);
     expect(readyPool(pool, "qa").map((i) => i.number)).toEqual([1228, 1230]);
+  });
+});
+
+describe("shared GitHub budget (#2021)", () => {
+  const now = Date.parse("2026-10-28T21:40:00Z");
+  const response = (status: number, headers: Record<string, string>, body = "") =>
+    `HTTP/2.0 ${status}\r\n${Object.entries(headers).map(([k, v]) => `${k}: ${v}\r\n`).join("")}\r\n${body}`;
+
+  it("revalidates each URL with its ETag and reuses the body only on 304", async () => {
+    const request = vi.fn()
+      .mockReturnValueOnce(response(200, { ETag: '"one"' }, '[{"number":2021}]'))
+      .mockReturnValueOnce(response(200, { ETag: '"other"' }, "[]"))
+      .mockReturnValueOnce(response(304, {}))
+      .mockReturnValueOnce(response(200, { ETag: '"two"' }, '[{"number":2022}]'))
+      .mockReturnValueOnce(response(304, {}));
+    const client = createGitHubApi({ request });
+    expect(await client.get("issues")).toEqual([{ number: 2021 }]);
+    expect(await client.get("pulls")).toEqual([]);
+    expect(await client.get("issues")).toEqual([{ number: 2021 }]);
+    expect(await client.get("issues")).toEqual([{ number: 2022 }]);
+    expect(await client.get("issues")).toEqual([{ number: 2022 }]);
+    expect(request.mock.calls).toEqual([
+      [["api", "--include", "issues"]],
+      [["api", "--include", "pulls"]],
+      [["api", "--include", "issues", "-H", 'If-None-Match: "one"']],
+      [["api", "--include", "issues", "-H", 'If-None-Match: "one"']],
+      [["api", "--include", "issues", "-H", 'If-None-Match: "two"']],
+    ]);
+  });
+
+  it.each([403, 429])("retries HTTP %i after x-ratelimit-reset, including gh's nonzero exit", async (status) => {
+    let clock = now;
+    const failure = Object.assign(new Error("gh failed"), {
+      stdout: response(status, { "x-ratelimit-remaining": "0", "x-ratelimit-reset": String(now / 1000 + 120) }, '{"message":"API rate limit exceeded"}'),
+    });
+    const request = vi.fn().mockImplementationOnce(() => { throw failure; })
+      .mockImplementation(() => {
+        expect(clock).toBeGreaterThanOrEqual(now + 125_000);
+        return response(200, {}, '[{"number":2021}]');
+      });
+    const sleep = vi.fn(async (ms: number) => { clock += ms; });
+    const warn = vi.fn();
+    const client = createGitHubApi({ request, sleep, now: () => clock, warn });
+    expect(await client.get("issues")).toEqual([{ number: 2021 }]);
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("rate limit"));
+  });
+
+  it("honours Retry-After for secondary limits and backs off when headers are missing", async () => {
+    let clock = now;
+    const request = vi.fn()
+      .mockReturnValueOnce(response(429, { "Retry-After": "180" }, '{"message":"slow down"}'))
+      .mockReturnValueOnce(response(403, {}, '{"message":"secondary rate limit"}'))
+      .mockImplementation(() => {
+        expect(clock).toBeGreaterThanOrEqual(now + 240_000);
+        return response(200, {}, "[]");
+      });
+    const client = createGitHubApi({ request, sleep: async (ms: number) => { clock += ms; }, now: () => clock, warn: vi.fn() });
+    expect(await client.get("issues")).toEqual([]);
+    expect(request).toHaveBeenCalledTimes(3);
+  });
+
+  it("surfaces non-rate-limit 403s without retrying", async () => {
+    const sleep = vi.fn();
+    const client = createGitHubApi({
+      request: () => response(403, {}, '{"message":"Resource not accessible"}'),
+      sleep,
+    });
+    await expect(client.get("issues")).rejects.toThrow("Resource not accessible");
+    expect(sleep).not.toHaveBeenCalled();
+  });
+
+  it("does not retry before the primary reset when Retry-After is shorter", async () => {
+    let clock = now;
+    const request = vi.fn()
+      .mockReturnValueOnce(response(403, {
+        "retry-after": "1", "x-ratelimit-remaining": "0", "x-ratelimit-reset": String(now / 1000 + 120),
+      }, '{"message":"API rate limit exceeded"}'))
+      .mockImplementation(() => {
+        expect(clock).toBeGreaterThanOrEqual(now + 125_000);
+        return response(200, {}, "[]");
+      });
+    const client = createGitHubApi({ request, sleep: async (ms: number) => { clock += ms; }, now: () => clock, warn: vi.fn() });
+    expect(await client.get("issues")).toEqual([]);
+  });
+
+  it("falls back to a real delay for malformed Retry-After instead of a tight retry loop", async () => {
+    const sleep = vi.fn(async (ms: number) => { expect(Number.isFinite(ms)).toBe(true); });
+    const request = vi.fn()
+      .mockReturnValueOnce(response(429, { "retry-after": "invalid" }))
+      .mockReturnValueOnce(response(200, {}, "[]"));
+    const client = createGitHubApi({ request, sleep, warn: vi.fn() });
+    expect(await client.get("issues")).toEqual([]);
+    expect(sleep.mock.calls[0][0]).toBeGreaterThanOrEqual(60_000);
+  });
+
+  it("drops the old ETag when a changed response stops supplying one", async () => {
+    const request = vi.fn()
+      .mockReturnValueOnce(response(200, { ETag: '"one"' }, "[1]"))
+      .mockReturnValueOnce(response(200, {}, "[2]"))
+      .mockReturnValueOnce(response(200, {}, "[3]"));
+    const client = createGitHubApi({ request });
+    await client.get("issues");
+    expect(await client.get("issues")).toEqual([2]);
+    expect(await client.get("issues")).toEqual([3]);
+    expect(request.mock.calls[2]).toEqual([["api", "--include", "issues"]]);
+  });
+
+  it("exits an expired foreground probe instead of sleeping past its deadline on a real gh failure", () => {
+    const dir = mkdtempSync(join(tmpdir(), "waiter-rate-test-"));
+    try {
+      writeFileSync(join(dir, "gh"), `#!/usr/bin/env node
+console.log('HTTP/2.0 429 Too Many Requests\\r\\nx-ratelimit-remaining: 0\\r\\nx-ratelimit-reset: ' + (Math.floor(Date.now() / 1000) + 3600) + '\\r\\n\\r\\n{"message":"API rate limit exceeded"}');
+process.exit(1);
+`, { mode: 0o755 });
+      const result = spawnSync(process.execPath, [
+        fileURLToPath(new URL("../scripts/wait-for-work.mjs", import.meta.url)), "--me", "cto", "--probe",
+      ], { env: { ...process.env, PATH: `${dir}:${process.env.PATH}` }, encoding: "utf8", timeout: 5_000 });
+      expect(result.error).toBeUndefined();
+      expect(result.status).toBe(3);
+      expect(result.stderr).toContain("Wait deadline reached during GitHub rate-limit backoff");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("uses response headers to slow polling without a rate_limit request", async () => {
+    const request = vi.fn().mockReturnValue(response(200, {
+      "x-ratelimit-remaining": "800", "x-ratelimit-reset": String(now / 1000 + 120),
+    }, "[]"));
+    const client = createGitHubApi({ request, now: () => now });
+    await client.get("issues");
+    expect(client.pollDelay(300_000)).toBe(900_000);
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
+  it("waits for the reset when the budget is spent, slows down when it's low, else adds nothing", () => {
+    const reset = now / 1000 + 120;
+    const spent = rateBackoffMs({ remaining: 0, reset }, 90_000, now);
+    expect(spent).toBeGreaterThanOrEqual(125_000);
+    expect(spent).toBeLessThan(155_000);
+    expect(rateBackoffMs({ remaining: 800, reset }, 90_000, now)).toBe(180_000);
+    expect(rateBackoffMs({ remaining: 4_000, reset }, 90_000, now)).toBe(0);
   });
 });

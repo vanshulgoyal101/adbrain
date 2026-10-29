@@ -1,7 +1,7 @@
 "use client";
 
 import { CompactAppLanguage } from "@/components/app-language";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Wand2 } from "lucide-react";
 import { saveAdLanguage, saveSetupBusiness } from "@/app/(app)/brand/actions";
@@ -18,15 +18,21 @@ import {
 } from "@/lib/brand/setup-fields";
 import type { BrandExtraction } from "@/lib/templates/ads";
 import type { Business } from "@/lib/types";
+import { segmentForCategory } from "@/lib/segments";
 import { setupTranslator, type SetupWords } from "@/i18n/setup-words";
 
 const AUTOSAVE_MS = 800;
 
 /** Fields with a helper line under them (the CPO's #1251 words; text in messages `setup.business.fields`). */
-const HAS_HELPER: Record<SetupField, boolean> = { name: false, vertical: false, locations: true, offer: true, phone: true };
+const HAS_HELPER: Record<Exclude<SetupField, "usp">, boolean> = { name: false, vertical: false, locations: true, offer: true, phone: true };
+const PROOF_CHIPS = {
+  solar: ["solarTeam", "solarHomes"],
+  ielts: ["ieltsSize", "ieltsMock", "ieltsEvening"],
+  interiors: ["interiorsDesign", "interiorsWorkshop", "interiorsKitchens"],
+} as const;
 
 /**
- * #1269 (#1251 WS1 step 1): a first-timer's business in five fields, saved as they type.
+ * #1269 (#1251 WS1 step 1): five required fields and an optional selling point (#1966), saved as they type.
  * Everything else on the Brand stays on the full page ("More about your business").
  */
 export function SetupBusinessStep({ business, chooseLanguage = false, returning = false, words }: {
@@ -61,8 +67,20 @@ export function SetupBusinessStep({ business, chooseLanguage = false, returning 
   const queueRef = useRef<Promise<unknown>>(Promise.resolve());
   const dirtyRef = useRef(false);
   const inputRefs = useRef<Partial<Record<SetupField, HTMLInputElement | HTMLTextAreaElement | null>>>({});
+  const proofSelectionRef = useRef<string | null>(null);
+  const segment = segmentForCategory(fields.vertical)?.slug;
+  const proofChips = segment === "solar" || segment === "ielts" || segment === "interiors" ? PROOF_CHIPS[segment] : [];
 
   useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current); }, []);
+  useLayoutEffect(() => {
+    const template = proofSelectionRef.current;
+    if (template === null) return;
+    proofSelectionRef.current = null;
+    const field = inputRefs.current.usp;
+    field?.focus();
+    const blank = /\{[^}]*\}/.exec(template);
+    if (blank) field?.setSelectionRange(blank.index, blank.index + blank[0].length);
+  });
 
   /** Saves the latest fields once any save in flight is done; rejects when it fails. */
   function saveNow(): Promise<void> {
@@ -71,6 +89,12 @@ export function SetupBusinessStep({ business, chooseLanguage = false, returning 
     const run = queueRef.current.catch(() => undefined).then(async () => {
       if (!dirtyRef.current) return;
       const snapshot = fieldsRef.current;
+      const uspError = setupFieldErrors(snapshot).usp;
+      if (uspError) {
+        setErrors((current) => ({ ...current, usp: uspError }));
+        setSaved(null);
+        throw new Error("incomplete");
+      }
       // A new business needs its name before the first save.
       if (!idRef.current && !snapshot.name.trim()) return;
       dirtyRef.current = false;
@@ -108,7 +132,7 @@ export function SetupBusinessStep({ business, chooseLanguage = false, returning 
 
   async function beforeLeave() {
     const found = setupFieldErrors(fieldsRef.current);
-    const first = SETUP_FIELDS.find((key) => found[key]);
+    const first = SETUP_FIELDS.find((key) => found[key]) ?? (found.usp ? "usp" : undefined);
     if (first) {
       // A folded field that's now incomplete opens, so the owner sees what to fix.
       if (first !== "offer") setExpanded(true);
@@ -228,6 +252,27 @@ export function SetupBusinessStep({ business, chooseLanguage = false, returning 
           );
         })}
       </div>
+
+      {expanded && <div className="mt-5 flex flex-col gap-1.5">
+        <label htmlFor="setup-usp" className="text-sm font-medium text-slate-900">{t("business.proof.label")}</label>
+        <Input id="setup-usp" value={fields.usp ?? ""}
+          placeholder={t("business.proof.placeholder")} ref={(node) => { inputRefs.current.usp = node; }}
+          aria-invalid={errors.usp ? true : undefined} aria-describedby={errors.usp ? "setup-usp-error" : undefined}
+          onChange={(event) => set("usp", event.target.value)} />
+        {proofChips.length > 0 && <div className="flex flex-wrap gap-2">
+          {proofChips.map((key) => {
+            const template = t(`business.proof.chips.${key}`);
+            return <button key={key} type="button" className="min-h-11 max-w-full rounded-lg border border-slate-300 px-3 py-2 text-left text-sm text-slate-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+              onClick={() => {
+                proofSelectionRef.current = template;
+                set("usp", template);
+              }}>{template}</button>;
+          })}
+        </div>}
+        {errors.usp && <p id="setup-usp-error" className="text-sm font-medium text-red-800">
+          {t("business.proof.fillBlanks")}
+        </p>}
+      </div>}
 
       {!expanded && (
         <p className="mt-4 text-sm text-slate-600">
