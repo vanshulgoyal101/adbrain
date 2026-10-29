@@ -71,11 +71,8 @@ export function buildCampaignPreflightLoaders(
     findWhatsAppNumber: async (_actor, requested) => {
       const connection = await status();
       if (connection.capabilities.canCreatePaused.state !== "available") return null;
-      try {
-        return await withMetaConnection(authorizedBusiness, { purpose: "create_paused" }, (meta) => whatsappNumberForBusiness(authorizedBusiness.businessId, meta, requested ?? null));
-      } catch {
-        return null;
-      }
+      // #681: a failed read throws (Review says try again); swallowing it told the owner to link a number they had linked.
+      return withMetaConnection(authorizedBusiness, { purpose: "create_paused" }, (meta) => whatsappNumberForBusiness(authorizedBusiness.businessId, meta, requested ?? null));
     },
     findWhatsAppMessage: async (actor, draft) => {
       const [{ data: business, error }, { data: creatives }] = await Promise.all([
