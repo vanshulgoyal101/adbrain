@@ -331,5 +331,5 @@ and all Vercel environments are rejected. The test order amount is fixed at
 
 ## 10. Primary References
 
-- [Roadmap](ROADMAP.md).
+- [Roadmap](roadmap.md).
 - [Release and environment authority](RELEASING.md).
