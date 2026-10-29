@@ -136,6 +136,12 @@ describe("core: an ad from the owner's product photo never silently becomes a ge
 // #1422 (CTO, production 11:26Z): openrouter-image ran out of credit, then Pollinations answered 404 in the same ms and the
 // ad was lost; every later ad asked the exhausted key again. Now: the key is parked, and the free picture waits out one busy.
 describe("core: an exhausted image key is parked and the free picture waits out one busy answer (#1422)", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.doUnmock("@/lib/security/ssrf");
+    process.env.IMAGE_PROVIDER_FALLBACK = "none";
+  });
+
   it("exhausted → Pollinations 404 → one wait → saved; the next picture skips the exhausted key", async () => {
     vi.resetModules();
     vi.useFakeTimers({ shouldAdvanceTime: true });
@@ -177,36 +183,66 @@ describe("core: an exhausted image key is parked and the free picture waits out 
     vi.doUnmock("@/lib/security/ssrf");
   });
 
-  it("a second busy answer fails that picture instead of waiting longer", async () => {
-    vi.resetModules();
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    process.env.IMAGE_PROVIDER = "openrouter";
-    process.env.IMAGE_PROVIDER_FALLBACK = "none";
-    const sharp = (await import("sharp")).default;
-    const png = await sharp({ create: { width: 1024, height: 1024, channels: 3, background: "#e8f0e8" } }).png().toBuffer();
-    const { SafeFetchError } = await import("@/lib/security/ssrf");
-    let busy = true;
-    vi.doMock("@/lib/security/ssrf", async (original) => ({
-      ...(await original<typeof import("@/lib/security/ssrf")>()),
-      fetchPublicUrl: async () => {
-        if (busy) throw new SafeFetchError("status", 404);
-        return new Response(new Uint8Array(png), { headers: { "content-type": "image/png" } });
-      },
-    }));
-    global.fetch = vi.fn(async (input: string | URL | Request) => {
-      const url = String(input instanceof Request ? input.url : input);
-      if (url.includes("/images/models/")) return Response.json({ endpoints: [{ supported_parameters: { input_references: { max: 3 } } }] });
-      return Response.json(recorded.body, { status: recorded.status });
-    }) as unknown as typeof fetch;
-    const { generateImage } = await import("@/lib/imageGen");
+  // #2189 (production, Oct 28 15:28-15:31Z): with the key parked, a paid customer's pictures got one busy wait each, so
+  // Pollinations' one-image-per-45 s left 3 of 6 ads blank while free accounts (which wait to the cap) got 3/3.
+  it("while the key is out of credit, the free picture waits like a free account's: busy ×3, then saved", async () => {
+    const { generateImage, downloads } = await busyThen(3, recorded);
+    const pending = generateImage({ prompt: "rooftop solar", width: 1024, height: 1024 });
+    await vi.advanceTimersByTimeAsync(60_000);
+    await expect(pending).resolves.toMatchObject({ provider: "pollinations", fallbackFrom: "openrouter-image" });
+    expect(downloads()).toBe(4);
+    // Parked: the next picture skips the key and gets the same patience.
+    const next = generateImage({ prompt: "a family on their roof", width: 1024, height: 1024 });
+    await vi.advanceTimersByTimeAsync(60_000);
+    await expect(next).resolves.toMatchObject({ provider: "pollinations", fallbackFrom: "openrouter-image" });
+  });
+
+  it("still busy at the 90 s cap fails that picture (#2153 parks the free pictures)", async () => {
+    const { generateImage } = await busyThen(Number.POSITIVE_INFINITY, recorded);
+    const pending = generateImage({ prompt: "rooftop solar", width: 1024, height: 1024 });
+    const outcome = expect(pending).rejects.toThrow(/busy/i);
+    await vi.advanceTimersByTimeAsync(120_000);
+    await outcome;
+  });
+
+  it("a one-off paid failure (not credit) still waits out only one busy answer, then tries the next picture", async () => {
+    process.env.IMAGE_PROVIDER_FALLBACK = "pollinations";
+    const { generateImage, release } = await busyThen(Number.POSITIVE_INFINITY, { status: 500, body: { error: { message: "Internal error" } } });
     const pending = generateImage({ prompt: "rooftop solar", width: 1024, height: 1024 });
     const outcome = expect(pending).rejects.toThrow(/busy/i);
     await vi.advanceTimersByTimeAsync(20_000);
     await outcome;
-    // #2153: a customer's one-retry busy-out doesn't park the free pictures (only the 90 s cap does); the next one is tried.
-    busy = false;
-    await expect(generateImage({ prompt: "a family on their roof", width: 1024, height: 1024 })).resolves.toMatchObject({ provider: "pollinations" });
-    vi.useRealTimers();
-    vi.doUnmock("@/lib/security/ssrf");
+    // #2153: a one-retry busy-out doesn't park the free pictures (only the 90 s cap does); the next one is tried.
+    release();
+    const next = generateImage({ prompt: "a family on their roof", width: 1024, height: 1024 });
+    await vi.advanceTimersByTimeAsync(1_000);
+    await expect(next).resolves.toMatchObject({ provider: "pollinations" });
   });
 });
+
+/** OpenRouter answers `paidAnswer`; Pollinations is busy (404) for the first `busy` downloads, then returns a picture. */
+async function busyThen(busy: number, paidAnswer: { status: number; body: unknown }) {
+  vi.resetModules();
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  process.env.IMAGE_PROVIDER = "openrouter";
+  const sharp = (await import("sharp")).default;
+  const png = await sharp({ create: { width: 1024, height: 1024, channels: 3, background: "#e8f0e8" } }).png().toBuffer();
+  const { SafeFetchError } = await import("@/lib/security/ssrf");
+  let count = 0;
+  let limit = busy;
+  vi.doMock("@/lib/security/ssrf", async (original) => ({
+    ...(await original<typeof import("@/lib/security/ssrf")>()),
+    fetchPublicUrl: async () => {
+      count += 1;
+      if (count <= limit) throw new SafeFetchError("status", 404);
+      return new Response(new Uint8Array(png), { headers: { "content-type": "image/png" } });
+    },
+  }));
+  global.fetch = vi.fn(async (input: string | URL | Request) => {
+    const url = String(input instanceof Request ? input.url : input);
+    if (url.includes("/images/models/")) return Response.json({ endpoints: [{ supported_parameters: { input_references: { max: 3 } } }] });
+    return Response.json(paidAnswer.body, { status: paidAnswer.status });
+  }) as unknown as typeof fetch;
+  const { generateImage } = await import("@/lib/imageGen");
+  return { generateImage, downloads: () => count, release: () => { limit = 0; } };
+}
