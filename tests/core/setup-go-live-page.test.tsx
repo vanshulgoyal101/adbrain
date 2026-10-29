@@ -13,7 +13,7 @@ const m = vi.hoisted(() => ({
 vi.mock("@/lib/supabase/queries", () => m);
 vi.mock("@/lib/meta/credentials", () => ({ getMetaConnection: m.getMetaConnection }));
 vi.mock("@/lib/payments/operator-funding", () => ({ fundingMode: m.fundingMode }));
-vi.mock("@/lib/meta/pilot-access", () => ({ canUseMetaConnect: m.canUseMetaConnect }));
+vi.mock("@/lib/meta/pilot-access", () => ({ canUseMetaConnect: m.canUseMetaConnect, metaAppReviewPending: () => true }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ auth: { getUser: async () => ({ data: { user: { id: "u1" } } }) } }) }));
 vi.mock("@/lib/meta/connection-access", () => ({ requireOwnedBusiness: async () => { throw new Error("skip drafts"); } }));
 vi.mock("@/components/setup-go-live", () => ({ SetupGoLive: (props: unknown) => { m.goLive(props); return <div>Go live step</div>; } }));
@@ -45,7 +45,7 @@ describe("core: Campaigns → Go live for a first-timer (#1271)", () => {
     expect(screen.getByText("Go live step")).toBeInTheDocument();
     expect(m.goLive.mock.calls[0][0]).toMatchObject({
       ads: [{ id: "b" }, { id: "c" }], pageConnected: true, funding: "managed", whatsappNumber: "+91 ••••• 3210",
-      weeklyCap: { capRupees: 2000, active: [] },
+      weeklyCap: { capRupees: 2000, active: [] }, appReviewPending: true,
     });
   });
 
