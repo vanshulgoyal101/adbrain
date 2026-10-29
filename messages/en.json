@@ -770,6 +770,15 @@
     "enquiryCountUnavailable": "Enquiry count unavailable.",
     "requestNotSent": "We couldn't send your request. Try again.",
     "pickAccountAndPage": "Pick both an ad account and a page.",
-    "facebookStillConnected": "Facebook is still connected. Try again in a minute."
+    "facebookStillConnected": "Facebook is still connected. Try again in a minute.",
+    "chooseAnswer": "Choose one of the answers.",
+    "questionNotOpen": "This question isn't open.",
+    "answerNotSaved": "Your answer couldn't be saved. Try again.",
+    "privacyUnavailable": "Privacy requests are temporarily unavailable.",
+    "chooseExportOrDeletion": "Choose export or deletion.",
+    "reloadPage": "Reload the page and try again.",
+    "openRequestExists": "An open request of this type already exists.",
+    "setUpBrandFirst": "Set up your Brand first, then connect Facebook in Settings.",
+    "leadFormsUnavailable": "Could not load lead forms. Try again."
   }
 }

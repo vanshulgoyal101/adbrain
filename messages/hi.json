@@ -770,6 +770,15 @@
     "enquiryCountUnavailable": "पूछताछ की गिनती अभी नहीं मिल पाई।",
     "requestNotSent": "आपका अनुरोध भेजा नहीं जा सका। फिर से कोशिश करें।",
     "pickAccountAndPage": "एक ऐड अकाउंट और एक पेज, दोनों चुनें।",
-    "facebookStillConnected": "Facebook अभी भी जुड़ा हुआ है। एक मिनट बाद फिर से कोशिश करें।"
+    "facebookStillConnected": "Facebook अभी भी जुड़ा हुआ है। एक मिनट बाद फिर से कोशिश करें।",
+    "chooseAnswer": "जवाबों में से एक चुनें।",
+    "questionNotOpen": "यह सवाल अभी खुला नहीं है।",
+    "answerNotSaved": "आपका जवाब सेव नहीं हो सका। फिर से कोशिश करें।",
+    "privacyUnavailable": "प्राइवेसी अनुरोध कुछ देर के लिए उपलब्ध नहीं हैं।",
+    "chooseExportOrDeletion": "एक्सपोर्ट या डिलीट में से एक चुनें।",
+    "reloadPage": "पेज रिफ़्रेश करें और फिर से कोशिश करें।",
+    "openRequestExists": "इस तरह का एक अनुरोध पहले से खुला है।",
+    "setUpBrandFirst": "पहले अपना Brand सेट करें, फिर Settings में Facebook जोड़ें।",
+    "leadFormsUnavailable": "लीड फ़ॉर्म लोड नहीं हो सके। फिर से कोशिश करें।"
   }
 }
