@@ -164,6 +164,7 @@ try {
   let generationCount = 0;
   let generationRequest = null;
   let campaignSetup = false;
+  let goLiveSetup = false;
   let campaignReviewed = false;
   let campaignCreateCount = 0;
   let campaignSyncAllowed = false;
@@ -177,6 +178,7 @@ try {
   let preflightCount = 0;
   let savedDraft = null;
   let draftDeleteCount = 0;
+  let removingDraft = null;
   let pictureAllowed = null;
   page.on("pageerror", (error) => errors.push(error.name === "EvalError" ? "CSP eval error" : `page error (${error.name})`));
   page.on("console", (message) => {
@@ -223,7 +225,7 @@ try {
       pictureAllowed = null;
       return route.continue();
     }
-    if (campaignSetup && ["POST", "PUT"].includes(request.method()) && url.origin === origin) {
+    if ((campaignSetup || goLiveSetup) && ["POST", "PUT"].includes(request.method()) && url.origin === origin) {
       // #497: choosing an ad starts a background plan, and Prepare may plan again. Both are read-only.
       if (url.pathname === "/api/campaigns/plan" && planCount++ < 2) return route.continue();
       // #1151: Prepare updates (PUT) a saved draft with the same ads instead of adding one; either save is the
@@ -238,8 +240,8 @@ try {
       }
       if (url.pathname === "/api/campaigns/preflight" && preflightCount++ === 0) return route.continue();
     }
-    if (!modes.has("--campaign") && savedDraft && request.method() === "DELETE" && url.origin === origin
-      && url.pathname === `/api/campaign-drafts/${savedDraft.id}` && draftDeleteCount++ === 0) return route.continue();
+    if (!modes.has("--campaign") && removingDraft && request.method() === "DELETE" && url.origin === origin
+      && url.pathname === `/api/campaign-drafts/${removingDraft}` && draftDeleteCount++ === 0) return route.continue();
     if (modes.has("--campaign") && url.origin === origin) {
       if (campaignReviewed && request.method() === "POST" && url.pathname === "/api/campaigns/create" && campaignCreateCount++ === 0) return route.continue();
       if (campaignId && url.pathname === `/api/campaigns/${campaignId}`) {
@@ -294,6 +296,24 @@ try {
       process.exitCode = 1;
     }
   }
+  // The saved draft of Prepare or Go live, as the owner (the route allows one DELETE of it).
+  async function removeDraft(label, what) {
+    if (!savedDraft) return;
+    const draft = savedDraft;
+    savedDraft = null;
+    removingDraft = draft.id;
+    draftDeleteCount = 0;
+    const removed = await page.evaluate(async ({ id, version }) => {
+      const result = await fetch(`/api/campaign-drafts/${id}?version=${version}`, { method: "DELETE" });
+      return result.status;
+    }, draft).catch(() => 0);
+    if (removed === 200) console.log(`PASS Remove ${label}`);
+    else {
+      console.log(`FAIL Remove ${label}: HTTP ${removed}; remove ${what} from Saved drafts`);
+      process.exitCode = 1;
+    }
+  }
+  const viewsFailed = Boolean(process.exitCode);
   // --picture and --prepare skip the preflight Prepare: neither reads Meta's review.
   if (!modes.has("--campaign") && !modes.has("--picture") && !modes.has("--prepare")) {
     // Every deploy: Prepare one paused-campaign review, never send it, then delete its draft.
@@ -342,17 +362,47 @@ try {
       process.exitCode = 1;
     } finally {
       campaignSetup = false;
-      if (savedDraft) {
-        const removed = await page.evaluate(async ({ id, version }) => {
-          const result = await fetch(`/api/campaign-drafts/${id}?version=${version}`, { method: "DELETE" });
-          return result.status;
-        }, savedDraft).catch(() => 0);
-        if (removed === 200) console.log("PASS Remove preflight draft");
-        else {
-          console.log(`FAIL Remove preflight draft: HTTP ${removed}; remove "${name}" from Saved drafts`);
-          process.exitCode = 1;
-        }
-      }
+      await removeDraft("preflight draft", `"${name}"`);
+    }
+
+    // #2260: the pilot kit's one-tap Go live (#1271) saves its own draft and reviews it; #2257 failed only there.
+    // Returning mode (`?again=1`) opens setup step 3 for an account that has had campaigns. Its plan, draft save
+    // and preflight are allowed; the create and the activation stay blocked, so nothing reaches Meta.
+    try {
+      assert.ok(!viewsFailed, "Read-only views failed; Go live was not started");
+      errors.length = 0;
+      await page.goto(`${origin}/campaigns?again=1`);
+      const tap = page.getByRole("button", { name: /^Go live · ₹300 a day$/ });
+      await page.getByRole("group", { name: "Daily budget" }).getByRole("button", { name: "₹300 a day" }).click();
+      await page.getByRole("group", { name: "How many days" }).getByRole("button", { name: "2 days" }).click();
+      await tap.waitFor({ state: "visible" });
+      planCount = 0;
+      draftCount = 0;
+      preflightCount = 0;
+      savedDraft = null;
+      goLiveSetup = true;
+      const preflight = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/campaigns/preflight" && response.request().method() === "POST", { timeout: 90_000 });
+      preflight.catch(() => undefined);
+      await tap.click();
+      const response = await preflight.catch(async (error) => {
+        const alert = page.getByRole("alert").first();
+        const message = await alert.isVisible() ? (await alert.innerText()).trim() : "";
+        throw message ? new Error(`Go live stopped before its review: ${message}`) : error;
+      });
+      goLiveSetup = false;
+      assert.equal(response.status(), 200, `Preflight returned HTTP ${response.status()}`);
+      const review = (await response.json().catch(() => null))?.data;
+      const blockers = review?.blockers ?? [];
+      const unexpected = blockers.filter((blocker) => blocker.reason !== "REVIEW_NO_WEBSITE" && !blocker.message?.startsWith("Add your business website"));
+      assert.equal(unexpected.length, 0, `Preflight blocked: ${unexpected.map((blocker) => blocker.reason ?? blocker.code).join(", ")}`);
+      assert.ok(blockers.length || review?.canCreatePaused === true, "Preflight can't create the campaign paused, with no blocker named");
+      console.log(`PASS Go live preflight (WhatsApp, ₹300 a day, 2 days; ${blockers.length ? "held only by the missing business website" : "ready to create paused"}; nothing sent to Meta)`);
+    } catch (error) {
+      console.log(`FAIL Go live preflight: ${error instanceof Error ? error.message.split("\n")[0].slice(0, 180) : "Unknown error"}; nothing sent to Meta`);
+      process.exitCode = 1;
+    } finally {
+      goLiveSetup = false;
+      await removeDraft("Go live draft", "the newest Go live draft");
     }
   }
   if (modes.has("--create")) {
