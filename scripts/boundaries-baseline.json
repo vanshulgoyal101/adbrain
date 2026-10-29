@@ -715,7 +715,7 @@
       "rule": "C4-file-size",
       "from": "src/components/campaigns.tsx",
       "to": "> 400 lines",
-      "lines": 2727
+      "lines": 2704
     },
     {
       "rule": "C4-file-size",
