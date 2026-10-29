@@ -87,6 +87,9 @@ The stream includes:
   upload/delete, follow-up save, payment quote/checkout, Meta connect controls and
   `meta.access_request` (a new owner asking for Facebook access before App Review),
   the audience edit (`campaign.edit_audience`), and Help on WhatsApp (`help.whatsapp`, #1284).
+- `lead.customer_marked` (#2026), `kind=action`, server-side: an enquiry crossing to or from
+  "customer" in the inbox or a campaign's WhatsApp chats. Attributes: `source` (inbox|whatsapp),
+  `campaignId` when known, `undone` (true when unmarked).
 - `ui.tap` (#1242): one per tap on an enabled control (button, link, tab, checkbox, select) on the
   launch path (`/create`, `/studio`, `/campaigns`), page only, never which control or what was typed;
   it counts #1226's "taps from Create to live". Same switch, Do Not Track and 45-a-minute cap.
