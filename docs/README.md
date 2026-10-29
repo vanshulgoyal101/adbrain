@@ -18,7 +18,7 @@ feature branch or a passing local test.
 | New developer | [Quick start](QUICK_START.md) | [Architecture](ARCHITECTURE.md) |
 | Product or support | [Features and workflows](product/README.md) | [Roadmap](roadmap.md) |
 | Operator | [Deployment configuration](operations/deploy.md) | [Release policy](RELEASING.md) |
-| Debugging engineer | [Observability](OBSERVABILITY.md) | [Operations](operations/README.md) |
+| Debugging engineer | [Observability](operations/observability.md) | [Operations](operations/README.md) |
 | Product planner | [Roadmap](roadmap.md) | [Payment plan](PAYMENTS-PLAN.md) |
 
 ## Reference Library
@@ -36,7 +36,7 @@ feature branch or a passing local test.
 | [Meta connection](META_CONNECT.md) | How do consent, selection, capabilities, paused creation and activation work, and what does Meta's App Review need? |
 | [Testing](TESTING.md) | Which commands are safe locally and what does each verification layer prove? |
 | [Operations](operations/README.md) | How do we diagnose partial work, stale spend, provider failures and retention problems? |
-| [Observability](OBSERVABILITY.md) | What is logged, how is it correlated, and what must never be collected? |
+| [Observability](operations/observability.md) | What is logged, how is it correlated, and what must never be collected? |
 | [Deployment](operations/deploy.md) | How is a target environment configured and smoke-tested? |
 | [Release policy](RELEASING.md) | What approvals and checks govern remote changes? |
 | [Meta approval readiness](META_APPROVAL_ACTION_PLAN.md) | What external review evidence must be prepared and verified? |
@@ -61,6 +61,7 @@ last move.
 | `FEATURES.md` | [product/](product/README.md): one page per product area |
 | `OPERATIONS.md` | [operations/](operations/README.md) and [operations/runbooks/](operations/runbooks/README.md) |
 | `DEPLOY.md` | [operations/deploy.md](operations/deploy.md) |
+| `OBSERVABILITY.md` | [operations/observability.md](operations/observability.md) and [operations/observability-queries.md](operations/observability-queries.md) |
 | `ROADMAP.md` | [roadmap.md](roadmap.md) (lower case, like the folders) |
 
 ## Terminology

@@ -3,7 +3,7 @@
 
 Use this guide for diagnosis, not as blanket authorization for remote changes.
 [Release policy](../RELEASING.md) governs publication/migrations/credentials;
-[Observability](../OBSERVABILITY.md) defines safe logs and operator queries.
+[Observability](observability.md) defines safe logs and operator queries.
 
 ## Pages
 
@@ -15,6 +15,8 @@ Use this guide for diagnosis, not as blanket authorization for remote changes.
 | [Scheduled jobs](scheduled-jobs.md) | What runs when, and how to check it |
 | [Backups and data safety](backups.md) | Retention, backups, restore |
 | [Deployment setup](deploy.md) | Prepare a target, configure it, smoke-test and promote |
+| [Observability](observability.md) | What is logged, privacy, enablement, retention |
+| [Observability queries](observability-queries.md) | Read-only operator SQL and verification |
 
 ## Before Taking Action
 
