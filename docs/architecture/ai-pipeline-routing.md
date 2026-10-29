@@ -21,9 +21,10 @@ never falling back to the paid image model (#449, #466). When `CLOUDFLARE_ACCOUN
 `CLOUDFLARE_AI_TOKEN` are set, the free picture comes from Cloudflare Workers AI FLUX-1-schnell
 ([cloudflare.ts](../../src/lib/imageGen/providers/cloudflare.ts), #1476): 4 steps, prompt capped at
 2048 characters, $0 within the daily free allowance. It returns a square JPEG (no size option); the
-poster covers its frame, so a 4:5 ad crops the sides. A 429, 5xx or error 4006 (daily allowance
-used) is recorded as `IMAGE_FREE_BUSY`, any other failure as `IMAGE_PROVIDER`, and the picture falls
-to Pollinations, which stays last. Pollinations answers
+poster covers its frame, so a 4:5 ad crops the sides. A 429 (including 3040, out of capacity) or 5xx
+is recorded as `IMAGE_FREE_BUSY` and asked once more a second later; error 3036 or 4006 (daily allowance used)
+is recorded as `IMAGE_FREE_DAILY_LIMIT` and skips Cloudflare on that instance until 00:00 UTC (#2145). Any other
+failure is `IMAGE_PROVIDER`. Then the picture falls to Pollinations, which stays last. Pollinations answers
 402/429/503 past its free limit of one image per 45 s per address, while its Retry-After says 1 s;
 from production it also answered a fast 404 in the same spot (#634). So free images run one at a
 time per server instance, treat 402/404/429/503 as busy, wait the longer of Retry-After and 15 s,

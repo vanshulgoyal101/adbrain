@@ -140,7 +140,7 @@ group by 1 order by rejections desc;
 
 A failed image attempt's usage row and `ai.completion` event carry a short reason in
 `errorCode`: `IMAGE_HTTP_<status>`, `IMAGE_FREE_BUSY` (an internal account's Pollinations stayed
-busy past ~90 s), `IMAGE_INVALID` (the answer was not a usable picture), `IMAGE_FETCH_<code>`,
+busy past ~90 s, or Cloudflare was busy), `IMAGE_FREE_DAILY_LIMIT` (Cloudflare's daily free allowance is used up), `IMAGE_INVALID` (the answer was not a usable picture), `IMAGE_FETCH_<code>`,
 `IMAGE_TIMEOUT`, `IMAGE_PROVIDER` or `IMAGE_OTHER` (#451).
 
 Create's assistant and the campaign planner (`campaigns.plan`, #378) also log each

@@ -1,13 +1,14 @@
 import { getEnv } from "@/lib/env";
 import { MAX_IMAGE_BYTES, readBoundedResponse } from "../raster";
-import { FreeImageBusyError, ImageProviderError, type GeneratedImage, type ImageProvider, type ImageRequest } from "../types";
+import { FreeImageBusyError, FreeImageDailyLimitError, ImageProviderError, type GeneratedImage, type ImageProvider, type ImageRequest } from "../types";
 
 export const CLOUDFLARE_IMAGE_MODEL = "@cf/black-forest-labs/flux-1-schnell";
 // FLUX-1-schnell takes at most 8 steps; 4 is its documented sweet spot. Prompts are capped at 2048 characters.
 const STEPS = 4;
 const MAX_PROMPT = 2048;
-// Cloudflare's "daily free allocation used up" error code.
-const DAILY_LIMIT = 4006;
+// "Daily free allocation used up": 3036 per developers.cloudflare.com/workers-ai/platform/errors; the REST API has
+// also answered 4006. Out of capacity (3040) and any other 429 or 5xx are busy, worth one more try.
+const DAILY_LIMIT = [3036, 4006];
 
 export function cloudflareConfigured(): boolean {
   const env = getEnv();
@@ -42,8 +43,8 @@ export function createCloudflareProvider(): ImageProvider {
         if (response.status === 429 || response.status >= 500) throw new FreeImageBusyError();
         throw new ImageProviderError(`Cloudflare image HTTP ${response.status}: invalid response`, requestId);
       }
-      if (response.status === 429 || response.status >= 500 || payload.errors?.some((error) => error.code === DAILY_LIMIT))
-        throw new FreeImageBusyError();
+      if (payload.errors?.some((error) => DAILY_LIMIT.includes(error.code ?? 0))) throw new FreeImageDailyLimitError();
+      if (response.status === 429 || response.status >= 500) throw new FreeImageBusyError();
       if (!response.ok || payload.success === false)
         throw new ImageProviderError(`Cloudflare image HTTP ${response.status}: request failed`, requestId, "failed");
       if (!payload.result?.image) throw new ImageProviderError("Cloudflare returned no image.", requestId);
