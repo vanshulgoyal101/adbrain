@@ -3,6 +3,7 @@
 import { startTransition, useCallback, useEffect, useEffectEvent, useReducer, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { flushSync } from "react-dom";
 import { useConfirm } from "@/components/ui/confirm-dialog";
+import { CampaignEnquiryDeleteItem, CampaignEnquiryFeedback } from "@/components/enquiry-erasure";
 import { useCampaignList } from "@/lib/meta-connect-ui/use-campaign-list";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -1521,25 +1522,6 @@ function BusinessCampaigns({
     }
   }
 
-  // #1761 (DPDP erasure): every enquiry this campaign brought in (form leads and logged chats) goes for good.
-  async function deleteEnquiries(c: Campaign) {
-    if (!(await askConfirm({
-      title: "Delete this campaign's enquiries?",
-      description: `Every enquiry from "${c.name ?? "this campaign"}" is removed from AdBrain for good, including chats you added. Meta keeps its own copy in your Page's leads. Your ads aren't affected.`,
-      confirmLabel: "Delete enquiries", tone: "danger",
-    }))) return;
-    setCardError(null);
-    try {
-      const response = await fetch(`/api/leads?campaignId=${encodeURIComponent(c.id)}`, { method: "DELETE" });
-      const data = (await response.json().catch(() => ({}))) as { deleted?: number; error?: string };
-      if (!response.ok) { setCardError({ id: c.id, message: data.error ?? "Couldn't delete the enquiries. Try again." }); return; }
-      const n = data.deleted ?? 0;
-      setCardNotice({ id: c.id, message: n ? `Deleted ${n} ${n === 1 ? "enquiry" : "enquiries"} from this campaign.` : "This campaign had no enquiries to delete." });
-    } catch {
-      setCardError({ id: c.id, message: "Couldn't delete the enquiries — check your connection." });
-    }
-  }
-
   async function deleteCampaign(c: Campaign) {
     if (!(await askConfirm({ title: `Delete "${c.name ?? "this campaign"}"?`, description: "This removes it from Meta and can't be undone.", confirmLabel: "Delete campaign", tone: "danger" }))) {
       return;
@@ -2546,9 +2528,7 @@ function BusinessCampaigns({
                               </DropdownMenuItem>
                             )}
                             {c.meta_campaign_id && <DropdownMenuSeparator />}
-                            {c.status !== "draft" && <DropdownMenuItem variant="danger" onSelect={() => void deleteEnquiries(c)}>
-                              <Trash2 className="h-4 w-4" aria-hidden="true" /> Delete its enquiries
-                            </DropdownMenuItem>}
+                            {c.status !== "draft" && <CampaignEnquiryDeleteItem campaign={c} askConfirm={askConfirm} onError={setCardError} onNotice={setCardNotice} />}
                             <DropdownMenuItem variant="danger" onSelect={() => void deleteCampaign(c)}>
                               <Trash2 className="h-4 w-4" aria-hidden="true" /> Delete campaign
                             </DropdownMenuItem>
@@ -2559,10 +2539,7 @@ function BusinessCampaigns({
                     {attention ? <p className="text-sm font-medium text-red-800">{attention}</p> : null}
                     {/* #1600 (CPO #1601): said only once Meta reports it deleted; results up to then stay below. */}
                     {goneInMeta(c) === "Deleted in Meta" ? <p className="text-sm text-slate-700">{GONE_LINES.deleted}</p> : null}
-                    {cardError?.id === c.id ? <p role="alert" className="text-sm font-medium text-red-800">
-                      {cardError.message}
-                      {cardError.adsManager ? <> <a href={adsLink(c)} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center gap-1 underline underline-offset-4"><ExternalLink className="h-4 w-4" aria-hidden="true" />Open in Ads Manager</a></> : null}
-                    </p> : null}
+                    <CampaignEnquiryFeedback error={cardError?.id === c.id ? cardError : undefined} adsManagerUrl={cardError?.id === c.id && cardError.adsManager ? adsLink(c) : undefined} />
                     {waitingSwitch[c.id] && (c.status === "active" || c.status === "paused") ? (
                       <AudienceSwitchStrip campaignId={c.id} operationId={waitingSwitch[c.id]} running={c.status === "active"} lastError={waitingError[c.id] ?? null}
                         onDone={(message) => {
@@ -2571,7 +2548,7 @@ function BusinessCampaigns({
                           void refresh(c.id);
                         }} />
                     ) : null}
-                    {cardNotice?.id === c.id && cardError?.id !== c.id ? <p role="status" className="text-sm text-slate-600">{cardNotice.message}</p> : null}
+                    <CampaignEnquiryFeedback notice={cardNotice?.id === c.id && cardError?.id !== c.id ? cardNotice : undefined} />
 
                     {/* CPO (#1255): a weak ad outranks 1-of-N rejected (it costs money; a rejected ad doesn't). */}
                     {reviews[c.id]?.length && !(weakAdCards.includes(c.id) && reviews[c.id].some((review) => review.state !== "rejected")) ? (
