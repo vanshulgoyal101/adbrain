@@ -91,8 +91,13 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 	The waiter enforces this (#2122): if you own any item not labelled `waiting-owner`,
 	`blocked`, `parked`, `decision`, `later` or `standing`, it prints the top 3 and exits 6
 	instead of waiting.
-	The CTO keeps every worker at ≥ 3 actionable items and the ready pool at ≥ 10 across
-	lanes; the CEO checks hourly which workers sit in the waiter and wakes them. Stop only if the CEO says so or the Mac is shutting down. Never end a turn with anything running in
+	**Outcome first, not activity (owner, Oct 30: 1,071 contributions on Oct 29 moved
+	the core very little).** The CTO keeps every worker on the next item that passes the
+	#580 filter (core loop works in production, an outside pilot goes live, or cost
+	per enquiry drops), not on a ticket count; when none exists, the worker runs the
+	waiter instead of opening docs, wording, translation, refactor or process tickets.
+	One coherent customer fix is one PR with one writer, not split across files. The
+	CEO checks hourly that workers are on that outcome and wakes them. Stop only if the CEO says so or the Mac is shutting down. Never end a turn with anything running in
 	the background (waiters, dev servers, watchers, test databases), and close
 	finished terminals.
 - When you close an issue, add one `Lesson:` line if you learned something reusable
