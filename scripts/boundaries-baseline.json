@@ -548,11 +548,6 @@
     {
       "rule": "R1-ui-no-channels",
       "from": "src/components/home-rejected-ads.tsx",
-      "to": "src/lib/meta/ads-manager-url.ts"
-    },
-    {
-      "rule": "R1-ui-no-channels",
-      "from": "src/components/home-rejected-ads.tsx",
       "to": "src/lib/meta/connection-access.ts"
     },
     {
@@ -574,11 +569,6 @@
       "rule": "R1-ui-no-channels",
       "from": "src/components/meta-setup-checklist.tsx",
       "to": "src/lib/meta/setup-checklist.ts"
-    },
-    {
-      "rule": "R1-ui-no-channels",
-      "from": "src/components/pause-all-ads.tsx",
-      "to": "src/lib/meta/ads-manager-url.ts"
     },
     {
       "rule": "R1-ui-no-channels",
@@ -634,11 +624,6 @@
       "rule": "R2-client-no-server",
       "from": "src/components/meta-connection.tsx",
       "to": "src/lib/meta/token-expiry.ts"
-    },
-    {
-      "rule": "R2-client-no-server",
-      "from": "src/components/pause-all-ads.tsx",
-      "to": "src/lib/meta/ads-manager-url.ts"
     },
     {
       "rule": "R2-client-no-server",
@@ -703,26 +688,6 @@
       "to": "table:campaigns"
     },
     {
-      "rule": "C3-appsecret-proof",
-      "from": "src/lib/alerts/sender.ts",
-      "to": "appSecretProof"
-    },
-    {
-      "rule": "C3-appsecret-proof",
-      "from": "src/lib/meta/client.ts",
-      "to": "appSecretProof"
-    },
-    {
-      "rule": "C3-appsecret-proof",
-      "from": "src/lib/meta/oauth.ts",
-      "to": "appSecretProof"
-    },
-    {
-      "rule": "C3-appsecret-proof",
-      "from": "src/lib/meta/parent.ts",
-      "to": "appSecretProof"
-    },
-    {
       "rule": "C4-file-size",
       "from": "src/app/api/campaigns/[id]/route.ts",
       "to": "> 400 lines",
@@ -750,19 +715,19 @@
       "rule": "C4-file-size",
       "from": "src/components/campaigns.tsx",
       "to": "> 400 lines",
-      "lines": 2754
+      "lines": 2703
     },
     {
       "rule": "C4-file-size",
       "from": "src/components/creative-copy-editor.tsx",
       "to": "> 400 lines",
-      "lines": 579
+      "lines": 564
     },
     {
       "rule": "C4-file-size",
       "from": "src/components/lead-inbox.tsx",
       "to": "> 400 lines",
-      "lines": 675
+      "lines": 667
     },
     {
       "rule": "C4-file-size",
@@ -774,7 +739,7 @@
       "rule": "C4-file-size",
       "from": "src/components/setup-ads-step.tsx",
       "to": "> 400 lines",
-      "lines": 448
+      "lines": 439
     },
     {
       "rule": "C4-file-size",
@@ -798,7 +763,7 @@
       "rule": "C4-file-size",
       "from": "src/lib/creative/concept.ts",
       "to": "> 400 lines",
-      "lines": 709
+      "lines": 664
     },
     {
       "rule": "C4-file-size",
@@ -816,13 +781,13 @@
       "rule": "C4-file-size",
       "from": "src/lib/meta/client.ts",
       "to": "> 400 lines",
-      "lines": 2481
+      "lines": 2471
     },
     {
       "rule": "C4-file-size",
       "from": "src/lib/meta/oauth.ts",
       "to": "> 400 lines",
-      "lines": 426
+      "lines": 423
     },
     {
       "rule": "C4-file-size",

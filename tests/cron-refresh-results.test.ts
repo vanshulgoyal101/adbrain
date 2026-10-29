@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   // #1838 slice 2: throttles remembered by earlier runs.
   rpc: vi.fn(),
   throttledConnections: [] as Array<{ business_id: string; throttled_until: string }>,
+  saveCampaignBudget: vi.fn(),
 }));
 
 vi.mock("@/lib/env", () => ({ getEnv: () => ({ CRON_SECRET: mocks.secret }) }));
@@ -38,6 +39,7 @@ vi.mock("@/lib/campaign/trusted-write", () => ({
   saveCampaign: mocks.saveCampaign,
   saveCampaignResult: mocks.saveCampaignResult,
   saveCampaignHealth: mocks.saveCampaignHealth,
+  saveCampaignBudget: mocks.saveCampaignBudget,
 }));
 vi.mock("@/lib/meta/connection-access", () => ({
   requireScheduledBusiness: async (id: string) => ({ businessId: id, userId: "owner-1" }),
@@ -159,6 +161,68 @@ describe("GET /api/cron/refresh-results (#258)", () => {
     for (const write of [mocks.pause, mocks.updateStatus, mocks.saveCampaign]) expect(write).not.toHaveBeenCalled();
   });
 
+  describe("#1903: paused or daily budget changed in Meta Ads Manager", () => {
+    const state = (status: string, dailyBudget: string) => ({ status, adSets: [{ id: "as1", status: "ACTIVE", dailyBudget }] });
+    const write = () => mocks.saveCampaignBudget.mock.calls.map(([actor, id, mirror]) => ({ actor, id,
+      update: (mirror as (row: Record<string, unknown>) => Record<string, unknown>)({ status: "active", daily_budget: 500, raw: {} }) }));
+    // As the real write: the mirror runs on the row as it is at write time.
+    beforeEach(() => {
+      mocks.saveCampaignBudget.mockImplementation(async (_actor, id, mirror: (row: Record<string, unknown>) => unknown) => {
+        mirror({ status: "active", daily_budget: 500, raw: {} });
+        return { data: { id }, error: null };
+      });
+    });
+
+    it("a raise is saved on the row (status kept) and alerts once, by a key from when it was seen", async () => {
+      mocks.campaigns = [{ ...bound("c1", "m1"), daily_budget: 500 }];
+      mocks.insights.mockResolvedValue({ ...insights, metaState: state("ACTIVE", "80000") });
+      const { status, body } = await call();
+      expect(status).toBe(200);
+      const [saved] = write();
+      expect(saved).toMatchObject({ id: "c1", update: { daily_budget: 800, raw: { metaBudgetChange: { wasRupees: 500, nowRupees: 800 } } } });
+      expect(saved.update).not.toHaveProperty("status");
+      const at = (saved.update.raw as { metaBudgetChange: { at: string } }).metaBudgetChange.at;
+      const key = (await import("node:crypto")).createHash("sha256").update(`c1:budget_raised:${at}`).digest("hex").slice(0, 12);
+      expect(body.alerts).toEqual([{ kind: "budget_raised", key }]);
+      for (const other of [mocks.pause, mocks.updateStatus, mocks.saveCampaign]) expect(other).not.toHaveBeenCalled();
+    });
+
+    it("a lower budget is saved without an alert; a pause in Meta is marked, with no delivery health or alert", async () => {
+      mocks.campaigns = [{ ...bound("c1", "m1"), daily_budget: 500 }, { ...bound("c2", "m2"), daily_budget: 500 }];
+      mocks.insights.mockImplementation(async (id: string) => ({ ...insights, impressions: 0,
+        metaState: id === "m1" ? state("ACTIVE", "30000") : state("PAUSED", "50000") }));
+      const { body } = await call();
+      expect(body).toMatchObject({ ok: true, refreshed: 2, alerts: [] });
+      const [lower, paused] = write();
+      expect(lower).toMatchObject({ id: "c1", update: { daily_budget: 300 } });
+      expect(paused).toMatchObject({ id: "c2", update: { raw: { metaPausedAt: expect.any(String) } } });
+      expect(paused.update).not.toHaveProperty("daily_budget");
+      expect(mocks.saveCampaignHealth).toHaveBeenCalledTimes(1);
+      expect(mocks.saveCampaignHealth).toHaveBeenCalledWith(expect.anything(), "c1", expect.anything());
+    });
+
+    it("leaves a row the owner changed after Meta was read to the next refresh: no budget write, no alert", async () => {
+      const updates: unknown[] = [];
+      mocks.saveCampaignBudget.mockImplementation(async (_actor, id, mirror: (row: Record<string, unknown>) => unknown) => {
+        updates.push(mirror({ status: "active", daily_budget: 300, raw: { health: { flags: [] } } }));
+        return { data: { id }, error: null };
+      });
+      mocks.campaigns = [{ ...bound("c1", "m1"), daily_budget: 500 }];
+      mocks.insights.mockResolvedValue({ ...insights, metaState: state("ACTIVE", "80000") });
+      const { body } = await call();
+      expect(body).toMatchObject({ ok: true, refreshed: 1, alerts: [] });
+      expect(updates).toEqual([{ raw: { health: { flags: [] } } }]);
+    });
+
+    it("writes nothing when Meta matches the row", async () => {
+      mocks.campaigns = [{ ...bound("c1", "m1"), daily_budget: 500 }];
+      mocks.insights.mockResolvedValue({ ...insights, metaState: state("ACTIVE", "50000") });
+      const { body } = await call();
+      expect(body).toMatchObject({ ok: true, refreshed: 1, alerts: [] });
+      expect(mocks.saveCampaignBudget).not.toHaveBeenCalled();
+    });
+  });
+
   it("skips a campaign refreshed in the last 14 min and one without a stored binding", async () => {
     mocks.latest = { fetched_at: new Date(Date.now() - 13 * 60_000).toISOString() };
     mocks.campaigns = [bound("c1", "m1"), { ...bound("c2", "m2"), meta_ad_account_id: null }];
@@ -213,6 +277,8 @@ describe("campaignAttention", () => {
   it("shows the reason for an active campaign only", () => {
     expect(campaignAttention({ status: "active", raw })).toBe("This run's end date has passed. Pause it, or start a new run.");
     expect(campaignAttention({ status: "paused", raw })).toBeNull();
+    // #1903: paused in Meta Ads Manager; "Nothing is spending" says it, no stale delivery flag beside it.
+    expect(campaignAttention({ status: "active", raw: { ...(raw as object), metaPausedAt: "2026-10-29T08:00:00Z" } })).toBeNull();
     expect(campaignAttention({ status: "active", raw: null })).toBeNull();
   });
 

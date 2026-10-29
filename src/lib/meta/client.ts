@@ -1,13 +1,12 @@
+import { createHmac } from "node:crypto";
 import { GRAPH } from "@/lib/meta/graph-version";
-import { jpegIfWebp } from "@/lib/imageGen/encode";
 import { z } from "zod";
 import { WHATSAPP_PUBLISHER_PLATFORMS } from "@/lib/meta/placements";
 import type { SetupReads } from "@/lib/meta/setup-checklist";
-import { fetchPublicUrl } from "@/lib/security/ssrf";
-import { readBoundedResponse } from "@/lib/imageGen/raster";
 import { destinationFromAdSets, type CampaignDestination } from "@/lib/campaign/outcomes";
 import type { CampaignSkipReason } from "@/lib/campaign/sync-skips";
-import { decodeAdResults, decodeCampaignInsights, decodeLifetimeSpendPaise, type AdResult, type CampaignInsights } from "./insights";
+import { minCampaignSpendCapPaise, type SpendCapMinimumAccount } from "@/lib/campaign/spend-cap-minimum";
+import { decodeAdResults, decodeCampaignInsights, decodeLifetimeSpendPaise, type AdResult, type CampaignInsights, type MetaCampaignState } from "./insights";
 import { maskWhatsAppNumber, maskedWhatsAppNumberPattern } from "./whatsapp-status-shared";
 import { graphEndpoint, graphEntity, graphErrorCode, graphOutcome } from "./graph-event";
 import { recordProductEvent } from "@/lib/observability/logger";
@@ -15,8 +14,10 @@ import { ConnectionAccessError } from "./connection-access-error";
 import { EXCLUDABLE_CITIES, INDIA_REGION_KEYS, mergeExclusions, serviceAreaExclusions, TargetingExclusionsMissingError, type IncludedPlace } from "./service-area";
 import { AD_LANGUAGE_KEYS, storedLocales } from "./locales";
 import { expandPlaceAliases } from "./geo-aliases";
-export type { AdResult, CampaignInsights } from "./insights";
-
+import { fetchAdImage, readAdVideo, startAdVideo, uploadAdImageBytes, type AdVideoState } from "./media";
+import { buildGeoLocations, clampRadiusKm, geoLabel, hasGeo, pickBestGeoMatch } from "./geo";
+export { buildGeoLocations, geoItemsToTargeting, hasGeo, pickBestGeoMatch } from "./geo";
+export type { AdResult, CampaignInsights, MetaCampaignState } from "./insights";
 
 export interface MetaCredentials {
   adAccountId: string;
@@ -365,7 +366,6 @@ export class MetaCreateRolledBackError extends MetaError {
 export type MetaErrorDetails = { userTitle?: string; fbtraceId?: string; path?: string };
 
 type GraphErrorBody = { message?: string; error_user_msg?: string; error_user_title?: string; code?: number; error_subcode?: number; fbtrace_id?: string };
-
 
 const META_SUBCODE_MESSAGES: Record<number, (userMessage: string) => string> = {
   2446307: userMessage =>
@@ -767,112 +767,6 @@ export function splitAgeRange(
   ];
 }
 
-/** Meta city-radius bounds (kilometers). */
-const RADIUS_MIN_KM = 5;
-const RADIUS_MAX_KM = 80;
-
-function clampRadiusKm(km: number): number {
-  if (!Number.isFinite(km)) return 25;
-  return Math.min(Math.max(Math.round(km), RADIUS_MIN_KM), RADIUS_MAX_KM);
-}
-
-/**
- * Pick the best adgeolocation match for a typed place name. Meta returns
- * Exact names and qualified city/region labels take precedence. Otherwise keep
- * Meta's relevance order within the requested country and preferred place type.
- * #1555: with a country, a place abroad counts only when the owner typed its
- * qualified label ("Austin, Texas"); a bare namesake ('Tricity' → Tri-City,
- * Oregon) is no match, so it comes back unresolved instead of spending abroad.
- */
-export function pickBestGeoMatch(
-  matches: GeoSearchResult[],
-  query: string,
-  preferCountry = "",
-): GeoSearchResult | null {
-  const normalizedQuery = query.trim().toLowerCase();
-  const qualified = (match: GeoSearchResult) => Boolean(match.region) && geoLabel(match).trim().toLowerCase() === normalizedQuery;
-  const exact = matches.filter((match) => match.name.trim().toLowerCase() === normalizedQuery || qualified(match));
-  const byType = (pool: GeoSearchResult[]) => ["city", "region", "country"]
-    .map((type) => pool.find((m) => m.type === type)).find(Boolean) ?? pool[0] ?? null;
-  if (!preferCountry) return byType(exact.length ? exact : matches);
-  const home = (match: GeoSearchResult) => !match.country_code || match.country_code === preferCountry;
-  const homeExact = exact.filter(home);
-  if (homeExact.length) return byType(homeExact);
-  const namedAbroad = exact.filter(qualified);
-  if (namedAbroad.length) return byType(namedAbroad);
-  return byType(matches.filter(home));
-}
-
-/**
- * Build the targeting `geo_locations` object, falling back to whole countries
- * when no city/region/country resolved.
- */
-export function buildGeoLocations(
-  geo: GeoTargeting | undefined,
-  fallbackCountries: string[],
-): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  if (geo?.cities?.length) out.cities = geo.cities;
-  if (geo?.regions?.length) out.regions = geo.regions;
-  if (geo?.countries?.length) out.countries = geo.countries;
-  if (!out.cities && !out.regions && !out.countries) {
-    out.countries = fallbackCountries;
-  }
-  return out;
-}
-
-/** Short human label for a resolved geo match (e.g. "Jaipur (city)"). */
-function geoLabel(m: GeoSearchResult): string {
-  const region = m.region ? `, ${m.region}` : "";
-  return `${m.name}${region}`;
-}
-
-/**
- * Convert user-picked places (each already carrying a Meta key) into a
- * `GeoTargeting` spec. Cities get a radius (their own, else the default);
- * regions and countries are exact. Duplicates are removed. Pure — no network.
- */
-export function geoItemsToTargeting(
-  items: GeoItem[],
-  defaultRadiusKm = 25,
-  cityScope: "city_only" | "radius" = "radius",
-): GeoTargeting {
-  const cities: NonNullable<GeoTargeting["cities"]> = [];
-  const regions: NonNullable<GeoTargeting["regions"]> = [];
-  const countries: string[] = [];
-  const seen = new Set<string>();
-  for (const item of items ?? []) {
-    const key = (item?.key ?? "").trim();
-    if (!key) continue;
-    const dedupe = `${item.type}:${key}`;
-    if (seen.has(dedupe)) continue;
-    seen.add(dedupe);
-    if (item.type === "city") {
-      cities.push({
-        key,
-        ...(cityScope === "radius" ? {
-          radius: clampRadiusKm(item.radiusKm ?? defaultRadiusKm),
-          distance_unit: "kilometer",
-        } : {}),
-      });
-    } else if (item.type === "region") {
-      regions.push({ key });
-    } else if (item.type === "country") {
-      countries.push(key);
-    }
-  }
-  const geo: GeoTargeting = {};
-  if (cities.length) geo.cities = cities;
-  if (regions.length) geo.regions = regions;
-  if (countries.length) geo.countries = countries;
-  return geo;
-}
-
-/** True when a targeting spec has at least one place. */
-export function hasGeo(geo: GeoTargeting | undefined): boolean {
-  return !!(geo?.cities?.length || geo?.regions?.length || geo?.countries?.length);
-}
-
 /**
  * Meta Marketing API wrapper (Graph, version in graph-version.ts). Creates Advantage+ lead campaigns in
  * PAUSED state (no spend until activated) and reads insights. Validated against
@@ -964,24 +858,23 @@ export class MetaClient {
   }
 
   private async send(path: string, method: string, token: string, form: Record<string, string> | undefined, signal: AbortSignal) {
+    // #1649: the token rides in the Authorization header (never a URL or form body, which land in access logs), with
+    // `appsecret_proof` so Meta's 'Require app secret' can make a stolen token alone useless.
+    const secret = process.env.META_APP_SECRET;
+    const proof = secret ? createHmac("sha256", secret).update(token).digest("hex") : null;
+    const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
     let res: Response;
     if (method === "POST") {
-      const body = new URLSearchParams({
-        ...(form ?? {}),
-        access_token: token,
-      });
+      const body = new URLSearchParams({ ...(form ?? {}), ...(proof ? { appsecret_proof: proof } : {}) });
       res = await fetch(`${GRAPH}/${path}`, {
         method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        headers: { ...headers, "Content-Type": "application/x-www-form-urlencoded" },
         body,
         signal,
       });
     } else {
-      const sep = path.includes("?") ? "&" : "?";
-      res = await fetch(
-        `${GRAPH}/${path}${sep}access_token=${encodeURIComponent(token)}`,
-        { method, signal, cache: "no-store" },
-      );
+      const query = proof ? `${path.includes("?") ? "&" : "?"}appsecret_proof=${proof}` : "";
+      res = await fetch(`${GRAPH}/${path}${query}`, { method, headers, signal, cache: "no-store" });
     }
 
     const json = await res.json().catch(() => ({}));
@@ -995,6 +888,15 @@ export class MetaClient {
       throw new MetaError(metaErrorMessage(err, res.status), res.status, err?.code, err?.error_subcode, details);
     }
     return { status: res.status, body: json as unknown };
+  }
+
+  /**
+   * #1649: removes the app's whole grant for this Meta user (every business they connected with it). Callers check
+   * the user has no other live connection first. A write, so the smoke account (pause-only) can't send it.
+   */
+  async revokeGrant(subjectId: string): Promise<void> {
+    if (!/^\d+$/.test(subjectId)) throw new MetaError("Invalid Meta user.");
+    await this.graph(`${subjectId}/permissions`, { method: "DELETE" });
   }
 
   getPageAccessToken(): Promise<string> {
@@ -1280,37 +1182,20 @@ export class MetaClient {
 
   /** Upload an image to the ad account and return its hash. */
   async uploadAdImage(imageUrl: string): Promise<string> {
-    let parsed: URL;
-    try {
-      parsed = new URL(imageUrl);
-    } catch {
-      throw new MetaError("Creative image URL is invalid.");
-    }
-    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-      throw new MetaError("Creative image URL must use HTTP or HTTPS.");
-    }
-    let imgRes: Response;
-    try {
-      imgRes = await fetchPublicUrl(parsed.toString(), { timeoutMs: 30_000, signal: this.executionSignal });
-    } catch {
-      throw new MetaError("Could not fetch the creative image.");
-    }
-    if (!imgRes.ok) {
-      throw new MetaError(`Could not fetch creative image (${imgRes.status}).`);
-    }
-    return this.uploadAdImageBytes(await readBoundedResponse(imgRes));
+    return this.uploadAdImageBytes(await fetchAdImage(imageUrl, this.executionSignal));
   }
 
-  async uploadAdImageBytes(bytes: Uint8Array): Promise<string> {
-    // #1897: stored ads are WebP; Meta's ad images are sent as JPEG.
-    const b64 = Buffer.from((await jpegIfWebp(bytes)).bytes).toString("base64");
-    const data = await this.graph<{ images: Record<string, { hash: string }> }>(
-      `${this.creds.adAccountId}/adimages`,
-      { method: "POST", form: { bytes: b64 } },
-    );
-    const first = Object.values(data.images ?? {})[0];
-    if (!first?.hash) throw new MetaError("Image upload returned no hash.");
-    return first.hash;
+  uploadAdImageBytes(bytes: Uint8Array): Promise<string> {
+    return uploadAdImageBytes((path, opts) => this.graph(path, opts), this.creds.adAccountId, bytes);
+  }
+
+  /** #749: start an owner's video upload by URL (Meta pulls it); poll `readAdVideo` until it's ready. */
+  startAdVideo(input: { fileUrl: () => string | Promise<string>; name: string; title: string }): Promise<string> {
+    return startAdVideo((path, opts) => this.graph(path, opts), this.creds.adAccountId, input);
+  }
+
+  readAdVideo(videoId: string): Promise<AdVideoState> {
+    return readAdVideo((path, opts) => this.graph(path, opts), videoId);
   }
 
   /**
@@ -1723,13 +1608,20 @@ export class MetaClient {
   }
 
   private async verifyCampaignBinding(campaignId: string): Promise<CampaignDestination> {
+    return (await this.readCampaignBinding(campaignId, false)).destination;
+  }
+
+  /** The binding check; #1903: with `withState` the same two reads also carry the campaign's status and budgets. */
+  private async readCampaignBinding(campaignId: string, withState: boolean): Promise<{ destination: CampaignDestination; state: MetaCampaignState | null }> {
     const node = encodeURIComponent(campaignId);
-    const campaign = await this.graph<{ id?: string; account_id?: string }>(`${node}?fields=id,account_id`);
+    const campaign = await this.graph<{ id?: string; account_id?: string; status?: string; daily_budget?: string; lifetime_budget?: string }>(
+      `${node}?fields=id,account_id${withState ? ",status,daily_budget,lifetime_budget" : ""}`,
+    );
     if (campaign.id !== campaignId || campaign.account_id !== this.creds.adAccountId.replace(/^act_/, "")) {
       throw new MetaError("Campaign does not match the connected ad account.");
     }
-    const adSets = await this.graph<{ data?: Array<{ destination_type?: string; promoted_object?: { page_id?: string } }>; paging?: { next?: string } }>(
-      `${node}/adsets?fields=promoted_object,destination_type&limit=100`,
+    const adSets = await this.graph<{ data?: Array<{ id?: string; status?: string; daily_budget?: string; lifetime_budget?: string; destination_type?: string; promoted_object?: { page_id?: string } }>; paging?: { next?: string } }>(
+      `${node}/adsets?fields=${withState ? "id,status,daily_budget,lifetime_budget," : ""}promoted_object,destination_type&limit=100`,
     );
     if (Array.isArray(adSets.data) && !adSets.data.length && !adSets.paging?.next) {
       // #721: a campaign deleted in Meta still answers, but lists no ad sets; its own status says why.
@@ -1742,14 +1634,19 @@ export class MetaClient {
       || adSets.data.some(adSet => adSet.promoted_object?.page_id !== this.creds.pageId)) {
       throw new MetaError("Campaign Page binding could not be verified. Review the campaign in Meta.");
     }
-    return destinationFromAdSets(adSets.data);
+    const state: MetaCampaignState | null = withState && typeof campaign.status === "string" ? {
+      status: campaign.status, dailyBudget: campaign.daily_budget, lifetimeBudget: campaign.lifetime_budget,
+      adSets: adSets.data.map(adSet => ({ id: String(adSet.id ?? ""), status: adSet.status, dailyBudget: adSet.daily_budget, lifetimeBudget: adSet.lifetime_budget })),
+    } : null;
+    return { destination: destinationFromAdSets(adSets.data), state };
   }
 
   async getCampaignInsights(campaignId: string, options?: { weekly?: boolean }): Promise<CampaignInsights> {
-    const destination = await this.verifyCampaignBinding(campaignId);
+    const { destination, state } = await this.readCampaignBinding(campaignId, true);
     // #404: without a preset Meta reads last_30d, which leaves out today, so a new campaign read ₹0. Results are lifetime.
     const data = await this.graph<unknown>(`${encodeURIComponent(campaignId)}/insights?fields=impressions,clicks,spend,actions,date_start,date_stop&date_preset=${options?.weekly ? "this_week_mon_today" : "maximum"}`);
-    return decodeCampaignInsights(data, destination, { requireSpend: options?.weekly });
+    const insights = decodeCampaignInsights(data, destination, { requireSpend: options?.weekly });
+    return state ? { ...insights, metaState: state } : insights;
   }
 
   /**
@@ -1779,11 +1676,14 @@ export class MetaClient {
     return decodeLifetimeSpendPaise(await this.graph<unknown>(`${node}/insights?fields=spend&date_preset=maximum`));
   }
 
+  /** #1799: Meta's smallest campaign spend_cap for this INR account (paise), or null; see campaign/spend-cap-minimum. */
+  async readMinCampaignSpendCapPaise(): Promise<number | null> {
+    return minCampaignSpendCapPaise(await this.graph<SpendCapMinimumAccount>(`${encodeURIComponent(this.creds.adAccountId)}?fields=id,currency,min_campaign_group_spend_cap`), this.creds.adAccountId);
+  }
+
   /** Live ad account funding (#245): Meta's account spending limit and amount spent, both media paise excluding GST. */
   async readAccountFunding(): Promise<AccountFunding> {
-    const account = await this.graph<{ id?: string; currency?: string; spend_cap?: string; amount_spent?: string; is_prepay_account?: boolean }>(
-      `${encodeURIComponent(this.creds.adAccountId)}?fields=id,spend_cap,amount_spent,is_prepay_account,currency`,
-    );
+    const account = await this.graph<{ id?: string; currency?: string; spend_cap?: string; amount_spent?: string; is_prepay_account?: boolean }>(`${encodeURIComponent(this.creds.adAccountId)}?fields=id,spend_cap,amount_spent,is_prepay_account,currency`);
     const paise = /^\d{1,15}$/;
     if (account.id !== this.creds.adAccountId || account.currency !== "INR"
       || !paise.test(account.spend_cap ?? "0") || !paise.test(account.amount_spent ?? "")) {
@@ -1962,9 +1862,7 @@ export class MetaClient {
       const updated = await this.graph<{ success?: boolean }>(encodeURIComponent(campaignId), { method: "POST", form: { spend_cap: String(target) } });
       if (updated.success !== true) throw new MetaError("Campaign spending limit is unconfirmed. Reconcile before activation.");
     }
-    const confirmed = await this.graph<{ id: string; account_id: string; spend_cap?: string }>(
-      `${encodeURIComponent(campaignId)}?fields=id,account_id,spend_cap`,
-    );
+    const confirmed = await this.graph<{ id: string; account_id: string; spend_cap?: string }>(`${encodeURIComponent(campaignId)}?fields=id,account_id,spend_cap`);
     if (confirmed.id !== campaignId || confirmed.account_id !== current.account_id || !/^\d+$/.test(confirmed.spend_cap ?? "")
       || Number(confirmed.spend_cap) !== target) throw new MetaError("Campaign spending limit changed. Keep the campaign paused.");
   }

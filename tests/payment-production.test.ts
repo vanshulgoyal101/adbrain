@@ -1,7 +1,8 @@
 import { createRequire } from "node:module";
 import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { getProductionCollectionPolicy, getProductionPaymentConfig, OPERATOR_MANAGED_POLICY, PRICING_V2_APPROVED_AT, quoteForPaymentPolicy } from "@/lib/payments/production-config";
+import { getProductionCollectionPolicy, getProductionPaymentConfig, OPERATOR_MANAGED_POLICY, PRICING_APPROVAL_REFERENCE, PRICING_APPROVED_AT, PRICING_V2_APPROVED_AT, productionPaymentPolicySchema, quoteForPaymentPolicy } from "@/lib/payments/production-config";
+import { createAnnualPaymentQuote } from "@/lib/payments/allocation";
 import { getRazorpayTestConfig } from "@/lib/payments/razorpay-test";
 import { createProductionPaymentClient } from "@/lib/payments/razorpay-production";
 
@@ -116,6 +117,17 @@ describe("production payment boundaries", () => {
     { fundingMode: "automatic" }, { serviceScope: "Different scope" }])("rejects unapproved operator-policy changes: %j", override => {
     expect(() => getProductionCollectionPolicy({ ...collection, PAYMENTS_LIVE_POLICY_JSON: JSON.stringify({ ...OPERATOR_MANAGED_POLICY, ...override }) },
       Date.parse(OPERATOR_MANAGED_POLICY.approvedAt))).toThrow("approved");
+  });
+  // #1235 (owner: never show AdBrain's margin): the v1 terms name the service/advertising split. They stay readable for
+  // orders accepted under them, but no override can offer them for a new payment.
+  it("never offers the v1 split terms for a new payment, while orders accepted under them still parse (#1235)", () => {
+    const pricedV1 = { version: "operator-managed-priced-v1", fundingMode: "operator_managed", approvalReference: PRICING_APPROVAL_REFERENCE,
+      approvedAt: PRICING_APPROVED_AT, serviceScope: OPERATOR_MANAGED_POLICY.serviceScope, invoiceTerms: OPERATOR_MANAGED_POLICY.invoiceTerms,
+      refundTerms: OPERATOR_MANAGED_POLICY.refundTerms, quote: createAnnualPaymentQuote() };
+    for (const v1 of [OPERATOR_MANAGED_POLICY, pricedV1]) {
+      expect(productionPaymentPolicySchema.safeParse(v1).success, v1.version).toBe(true);
+      expect(() => getProductionCollectionPolicy({ ...collection, PAYMENTS_LIVE_POLICY_JSON: JSON.stringify(v1) }, Date.parse(PRICING_V2_APPROVED_AT)), v1.version).toThrow("approved");
+    }
   });
   it("defaults disabled and preserves the independent local test gate", () => {
     expect(() => getProductionPaymentConfig({})).toThrow("disabled");

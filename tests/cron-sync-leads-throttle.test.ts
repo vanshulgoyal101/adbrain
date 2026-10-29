@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // #1838: when Meta throttles an account the lead sync tries it again on a later run, and an app-wide limit stops the run.
-const m = vi.hoisted(() => ({ connect: vi.fn(), rpc: vi.fn(), still: [] as Array<{ business_id: string; throttled_until: string }> }));
-vi.mock("@/lib/observability/logger", () => ({ observeRoute: (_r: string, _m: string, handler: unknown) => handler }));
+const m = vi.hoisted(() => ({ connect: vi.fn(), rpc: vi.fn(), event: vi.fn(), queryError: null as null | { message: string }, still: [] as Array<{ business_id: string; throttled_until: string }> }));
+vi.mock("@/lib/observability/logger", () => ({ observeRoute: (_r: string, _m: string, handler: unknown) => handler, recordProductEvent: m.event }));
 vi.mock("@/lib/env", () => ({ getEnv: () => ({ CRON_SECRET: "cron-secret" }) }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => {
-  const query = { select: () => query, in: () => query, gt: () => query, then: (resolve: (value: unknown) => unknown) => resolve({ data: m.still, error: null }) };
+  const query = { select: () => query, in: () => query, gt: () => query, then: (resolve: (value: unknown) => unknown) => resolve(m.queryError ? { data: null, error: m.queryError } : { data: m.still, error: null }) };
   return { rpc: m.rpc, from: () => query };
 } }));
 vi.mock("@/lib/supabase/queries", () => ({ readAllByCursor: async () => [{ business_id: "b1" }, { business_id: "b2" }, { business_id: "b3" }] }));
@@ -23,7 +23,7 @@ const run = async () => {
 };
 const synced = { imported: 2, sync: { id: "s", state: "complete", hasMore: false }, failedForms: [] };
 
-beforeEach(() => { vi.clearAllMocks(); m.still = []; m.rpc.mockResolvedValue({ data: null, error: null }); });
+beforeEach(() => { vi.clearAllMocks(); m.still = []; m.queryError = null; m.rpc.mockResolvedValue({ data: null, error: null }); });
 
 describe("GET /api/cron/sync-leads under Meta throttling (#1838)", () => {
   it("a throttled account is listed as throttled, not failed; the others sync", async () => {
@@ -64,5 +64,25 @@ describe("GET /api/cron/sync-leads under Meta throttling (#1838)", () => {
     expect(status).toBe(200);
     expect(m.connect).toHaveBeenCalledTimes(1);
     expect(body.businesses.map((business: { throttled?: { scope: string } }) => business.throttled?.scope)).toEqual(["app", "app", "app"]);
+  });
+
+  it("QA #1950: a throttle store that returns an error is logged, and the run still goes ahead (fail open)", async () => {
+    const { MetaThrottledError } = await import("@/lib/meta/client");
+    m.rpc.mockResolvedValue({ data: null, error: { message: "function meta_throttle_record does not exist" } });
+    m.queryError = { message: "column throttled_until does not exist" };
+    m.connect.mockImplementation(async (id: string) => {
+      if (id === "b1") throw new MetaThrottledError("(#17) User request limit reached", 400, 17, 2446079, "account", 600_000);
+      return synced;
+    });
+    const { status, body } = await run();
+    expect(status).toBe(200);
+    expect(body.ok).toBe(true);
+    expect(m.connect.mock.calls.map(([id]) => id)).toEqual(["b1", "b2", "b3"]);
+    const codes = m.event.mock.calls.map(([event]) => [event.name, event.outcome, event.attributes?.errorCode, event.businessId]);
+    expect(codes).toEqual(expect.arrayContaining([
+      ["meta.throttle_store", "failed", "THROTTLE_APP_READ_FAILED", undefined],
+      ["meta.throttle_store", "failed", "THROTTLE_READ_FAILED", undefined],
+      ["meta.throttle_store", "failed", "THROTTLE_WRITE_FAILED", "b1"],
+    ]));
   });
 });

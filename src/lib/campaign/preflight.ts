@@ -124,6 +124,35 @@ function reviewedMessage({ source, opening, language }: ResolvedWhatsAppMessage)
   };
 }
 
+function adName(creative: PreflightCreative): string {
+  const headline = (creative.headline ?? "").trim();
+  if (!headline) return "you chose";
+  // Whole characters, so a Hindi matra or an emoji is never split.
+  const graphemes = Array.from(new Intl.Segmenter("en", { granularity: "grapheme" }).segment(headline), (part) => part.segment);
+  if (graphemes.length <= 40) return `"${headline}"`;
+  const cut = graphemes.slice(0, 40).join("");
+  return `"${(cut.lastIndexOf(" ") > 20 ? cut.slice(0, cut.lastIndexOf(" ")) : cut).trimEnd()}…"`;
+}
+
+/** #681: which chosen ad is wrong and what to do about it, not one sentence for every fault. */
+function creativesBlockerMessage(draft: PreflightInput["draft"], creatives: PreflightCreative[]): string | null {
+  if (draft.creativeIds.length === 0) return "Choose at least one ad to send to Meta.";
+  const unique = new Set(draft.creativeIds).size === draft.creativeIds.length;
+  const found = creatives.filter((creative) => creative.businessId === draft.businessId && draft.creativeIds.includes(creative.id));
+  if (!unique || new Set(creatives.map((creative) => creative.id)).size !== creatives.length || found.length !== creatives.length || found.length !== draft.creativeIds.length) {
+    return "One of the ads you chose isn't available any more. Choose your ads again.";
+  }
+  const problems = found.flatMap((creative) => {
+    if (!creative.headline) return ["An ad you chose has no headline. Take it out of this campaign and choose another ad."];
+    if (!creative.approved) return [`The ad ${adName(creative)} isn't approved yet. Approve it on the Review page, or take it out of this campaign.`];
+    if (!creative.imageUrl) return [`The ad ${adName(creative)} has no picture yet. Take it out of this campaign and choose another ad.`];
+    return [];
+  });
+  if (!problems.length) return null;
+  const more = problems.length - 1;
+  return more ? `${problems[0]} ${more} more ${more === 1 ? "ad needs" : "ads need"} fixing too.` : problems[0];
+}
+
 /** #740: name what Meta didn't recognise, so the owner knows which line to fix. */
 function named(names: string[]): string {
   const shown = names.slice(0, 5).map((name) => `"${name}"`);
@@ -213,22 +242,8 @@ export function runPreflight(input: PreflightInput): ReviewDTO {
     blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_META_ACCESS", "Meta hasn't confirmed AdBrain can create campaigns in this ad account. Connect Facebook again and allow every permission it asks for."));
   }
 
-  if (
-    draft.creativeIds.length === 0 ||
-    new Set(draft.creativeIds).size !== draft.creativeIds.length ||
-    new Set(input.creatives.map((creative) => creative.id)).size !== input.creatives.length ||
-    input.creatives.length !== draft.creativeIds.length ||
-    input.creatives.some(
-      (creative) =>
-        creative.businessId !== draft.businessId ||
-        !creative.approved ||
-        !creative.imageUrl ||
-        !creative.headline ||
-        !draft.creativeIds.includes(creative.id),
-    )
-  ) {
-    blockers.push(blocker("FORBIDDEN", "REVIEW_CREATIVES", "Choose only approved ads from this business that have an image and a headline."));
-  }
+  const creativesProblem = creativesBlockerMessage(draft, input.creatives);
+  if (creativesProblem) blockers.push(blocker("FORBIDDEN", "REVIEW_CREATIVES", creativesProblem));
   if (draft.destination === "whatsapp") {
     if (!input.whatsappNumber || !/^\+[1-9]\d{6,14}$/.test(input.whatsappNumber)) {
       blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_WHATSAPP_NOT_LINKED", "Connect a WhatsApp Business number to the selected Facebook Page and verify access before reviewing."));

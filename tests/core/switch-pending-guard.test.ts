@@ -25,6 +25,7 @@ const OTHER_WRITERS: Record<string, string> = {
   createLeadCampaign: "launch builds a new campaign; no copy can wait on it yet",
   uploadAdImage: "the ad account's image library, not the live tree",
   uploadAdImageBytes: "the ad account's image library, not the live tree",
+  startAdVideo: "the ad account's video library, not the live tree",
   deleteObject: "deletes a draft or a failed launch",
   switchAdSet: "the switch itself",
   deleteAdSetCopy: "cancels or cleans up the waiting copy",
@@ -32,14 +33,16 @@ const OTHER_WRITERS: Record<string, string> = {
   pauseCampaignTree: "stopping spend must always work",
   // Its turn-on call sits behind the activation guard above; its pause calls (spend enforcement) must never wait.
   updateCampaignStatus: "stopping spend must always work",
+  revokeGrant: "#1649: revokes the app's grant for a user on disconnect; never touches a campaign",
 };
 
 const READS = new Set([
+  "readAdVideo",
   "getPageAccessToken", "getPageInstagramId", "getWhatsAppNumber", "setupReads", "whatsappNumbers", "listLeadForms", "readActiveLeadForm",
   "listLeadFormsPage", "listLeadsForForm", "listLeadsForFormPage", "searchGeoLocations", "serviceAreaExclusionsFor",
   "resolveGeoTargeting", "resolveAudienceInterests", "listCampaigns", "listCampaignsPage", "readBoundCampaign",
   "getCampaignInsights", "getAdResults", "readLifetimeSpendPaise", "readAccountFunding", "readLiveCappedRuns",
-  "readCampaignStopped", "readCampaignDelivery", "verifyCampaignActivation", "readAdSetBudget", "adSources", "readAdReview",
+  "readCampaignStopped", "readMinCampaignSpendCapPaise", "readCampaignDelivery", "verifyCampaignActivation", "readAdSetBudget", "adSources", "readAdReview",
 ]);
 
 const CLIENT = "src/lib/meta/client.ts";

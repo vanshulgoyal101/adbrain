@@ -32,7 +32,7 @@ not isolation.
 
 Generate and store secrets outside chat and command history. Production
 settings, credentials and encryption keys are DevOps-owned changes; see the
-[release policy](../RELEASING.md#startup-fast-path).
+[release policy](releasing.md#startup-fast-path).
 
 ## Core Services
 
@@ -75,6 +75,7 @@ an application release.
 | `CREATIVE_CONCEPT_SCHEDULE` | `serial` | `serial` or `parallel`. `parallel` starts all Create concept calls at once; each still validates against earlier concepts (repeated headline/opening → normal repair). #142 measure on Haiku, 3 briefs × 2: p50 60.1 s → 28.2 s, first-attempt pass 12/18 → 16/18, judge 3.88 → 4.39 |
 | `GEMINI_THINKING_HEADROOM` | `3000` | Nonnegative integer extra output headroom |
 | `LLM_MONTHLY_TOKEN_LIMIT` | `2000000` | Nonnegative integer; 0 disables quota checking. Internal accounts in [internal-accounts.json](../../src/lib/internal-accounts.json) (confirmed team-domain emails, listed owner ids) have no limit (#398) |
+| `AI_MONTHLY_COST_LIMIT_USD` | Unset | #1717: a business's monthly AI spend in USD (text and paid pictures, `llm_usage_events.estimated_cost_usd`, IST calendar month). At or over it, or if the spend can't be read, that business's pictures come from the free providers with the 'taking longer' notice, and a product-photo ad fails honestly. Internal accounts are exempt. Unset means no cap and no read. The token cap still applies to text. The value is the CEO's (#1722). |
 
 The parser does not validate live account quota or model availability. The
 monthly limit is a per-business preflight check, **not an atomic reservation,
@@ -169,7 +170,7 @@ may require additional guards; inspect the exact script before execution.
 `APP_URL` / `ADBRAIN_URL` are script-origin overrides, not aliases for
 `NEXT_PUBLIC_SITE_URL`. The migration runner uses `PGHOST`, `PGPORT` (default
 5432), `PGDATABASE`, `PGUSER`, `PGPASSWORD` and optional `PGSSLROOTCERT`; see
-[Release Workflow](../RELEASING.md#database-and-credential-safety).
+[Release Workflow](releasing.md#database-and-credential-safety).
 
 `npm run env:doctor` and `npm run env:doctor:strict` run
 [env-doctor.sh](../../scripts/env-doctor.sh), which only reports whether the

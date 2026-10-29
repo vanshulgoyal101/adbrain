@@ -24,7 +24,7 @@ describe("creativeFailureMessage (#449)", () => {
     const error = new CreativeImageError(new ReferencePhotoPausedError(), [], [
       { provider: "openrouter-image", model: "x", status: "error", errorCode: "IMAGE_CREDIT_EXHAUSTED" },
     ] as never);
-    expect(creativeFailureMessage(error)).toBe("Your product photo needs our paid pictures, which are paused right now. Try again in 15 minutes.");
+    expect(creativeFailureMessage(error)).toBe("This ad needs our paid pictures to draw your product, and they're paused right now. Add a photo of your product in Brand and AdBrain uses it in the ad as it is.");
   });
 
   it("keeps the generic message otherwise", () => {

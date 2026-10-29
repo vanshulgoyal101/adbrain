@@ -18,11 +18,11 @@ import type { AuditLog, Business, Campaign, CampaignResult, CreativePreview } fr
 import { campaignAttention } from "@/lib/campaign/health";
 import { formatReplyTime } from "@/lib/leads/first-reply";
 import { campaignStatus, Status } from "@/components/ui/status";
-import { goneInMeta, pausableCampaigns, recentlyDeletedInMeta } from "@/lib/campaign/gone-in-meta";
+import { goneInMeta, pausableCampaigns, pausedInMeta, recentlyDeletedInMeta, recentlyRaisedInMeta } from "@/lib/campaign/gone-in-meta";
 import type { HomeAdReview } from "@/lib/campaign/home-ad-review";
 import { durationIn } from "@/i18n/duration";
-import { timeAgoIn, translator, type AppLocale } from "@/i18n/locale";
-import { ageMs, throttleActive } from "@/lib/meta/throttle-words";
+import { namespaceMessages, timeAgoIn, translator, type AppLocale } from "@/i18n/locale";
+import { ageMs, throttleActive } from "@/lib/campaign/meta-wait";
 
 export interface WorkspaceHomeProps {
   business: Business | null;
@@ -45,8 +45,14 @@ export interface WorkspaceHomeProps {
   adReview?: HomeAdReview | null;
   /** #1469: the streamed rejected-ads section, shown when `adReview` is "rejected". */
   rejectedAds?: ReactNode;
+  /** #2032: the Brand meter card, after the next step; left out when the Brand is complete or snoozed. */
+  brandMeter?: ReactNode;
+  /** #1668: the streamed Monday "last week" card. */
+  weekSummary?: ReactNode;
   /** #1650: the day-7 'would you pay ₹999 a month?' card, when it's due. */
   pilotQuestion?: ReactNode;
+  /** #2036: the weekly results card for WhatsApp Status, when it's offered. */
+  resultsCard?: ReactNode;
   now?: number;
   /** #1838: until when Meta asked us to wait before checking again; the results line says the numbers may be old. */
   metaWaitUntil?: string | null;
@@ -74,7 +80,10 @@ export function WorkspaceHome({
   firstEnquiry = null,
   adReview = null,
   rejectedAds,
+  weekSummary,
   pilotQuestion,
+  resultsCard,
+  brandMeter,
   now,
   metaWaitUntil = null,
   locale = "en",
@@ -84,7 +93,7 @@ export function WorkspaceHome({
   const liveCampaigns = campaigns.filter((campaign) => !goneInMeta(campaign) || recentlyDeletedInMeta(campaign, now));
   const summary = business ? homeResults(campaigns, results) : null;
   // #1292's line already names the newest person waiting, so the verdict doesn't say it twice.
-  const verdicts = business ? homeVerdicts(campaigns, results, { now, waiting: firstEnquiry ? 0 : waiting }) : null;
+  const verdicts = business ? homeVerdicts(campaigns, results, { now, waiting: firstEnquiry ? 0 : waiting, words: { locale, messages: namespaceMessages(locale, "verdict") } }) : null;
   const leadCampaign = verdicts?.lead ? campaigns.find((campaign) => campaign.id === verdicts.lead?.campaignId) : null;
   const stale = business ? staleCampaignIds(campaigns, results, now) : [];
   const unlogged = business ? unloggedChats(campaigns, results) : 0;
@@ -125,6 +134,8 @@ export function WorkspaceHome({
         <p role="status" aria-label={t("metaReview")} className="text-sm text-slate-900">{t("metaChecking")}</p>
       )}
       {adReview?.kind === "rejected" && rejectedAds}
+      {weekSummary}
+      {resultsCard}
       {pilotQuestion}
 
       {stale.length > 0 && <StaleResultsRefresher campaignIds={stale} />}
@@ -218,6 +229,8 @@ export function WorkspaceHome({
             )}
           </section>
 
+          {brandMeter}
+
           {business && (
             <section aria-labelledby="campaigns-title" className="min-w-0">
               <div className="flex items-center justify-between gap-3">
@@ -236,6 +249,9 @@ export function WorkspaceHome({
                     const attention = campaignAttention(campaign);
                     const judged = verdicts?.labels.get(campaign.id);
                     const deleted = goneInMeta(campaign) === "Deleted in Meta";
+                    // #1903: paused in Meta takes the status line; a budget raised in Meta shows for a week (a lower one stays on Campaigns).
+                    const paused = pausedInMeta(campaign);
+                    const raised = recentlyRaisedInMeta(campaign, now);
                     return (
                       <li key={campaign.id} className="py-3 sm:flex sm:items-center sm:justify-between sm:gap-6">
                         <div className="min-w-0">
@@ -243,8 +259,9 @@ export function WorkspaceHome({
                             {campaign.name || t("untitledCampaign")}
                           </Link>
                           {attention && <p className="mt-1 text-xs font-medium text-danger">Needs attention: {attention}</p>}
+                          {raised && <p className="mt-1 border-l-2 border-warning pl-2 text-xs text-slate-700">{t("budgetRaisedInMeta", { now: formatMoney(raised.nowRupees), was: formatMoney(raised.wasRupees) })}</p>}
                         </div>
-                        {deleted ? <p className="mt-1 text-sm text-slate-700 sm:mt-0 sm:max-w-xs">{t("deletedInMeta")}</p> : <p className="mt-1 flex shrink-0 gap-x-4 text-xs text-slate-600 sm:mt-0">
+                        {deleted || paused ? <p className="mt-1 text-sm text-slate-700 sm:mt-0 sm:max-w-xs">{t(deleted ? "deletedInMeta" : "pausedInMeta")}</p> : <p className="mt-1 flex shrink-0 gap-x-4 text-xs text-slate-600 sm:mt-0">
                           <Status tone={status.tone}>{status.label}</Status>
                           {judged && <span>{judged}</span>}
                           {campaign.daily_budget != null && <span className="sm:w-24 sm:text-right">{formatPerDay(campaign.daily_budget)}</span>}

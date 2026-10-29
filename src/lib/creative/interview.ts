@@ -418,6 +418,9 @@ export async function runInterview(
     const completion = await complete(messages, {
       routing: "budget",
       task: "creative brief interview",
+      // #2249: a hanging Gemini once used the whole 45 s and the paid fallback never ran. Its slowest success in 14 days
+      // took 22.2 s; 25 s keeps those and leaves 20 s for OpenRouter (slowest 11.9 s).
+      providerAttemptTimeoutMs: { google: 25_000 },
       promptVersion: INTERVIEW_PROMPT_VERSION,
       json: true,
       responseSchema: resultSchema,

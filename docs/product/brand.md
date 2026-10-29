@@ -45,6 +45,16 @@ reads "Continue your first ad" and `/create` sends a first-timer without the fiv
 facts to `/brand`. A campaign counts as having gone live once it has `launched_at`
 or is active or completed.
 
+After setup, Home shows the **Brand meter** (#2032, `src/lib/brand/meter.ts`) while a fact
+is missing: "Your ads know {n} of 4 things about you" and one ask, in this order: a specific
+offer (a price, ₹ or a free first step such as a survey or demo, English or Hindi), a
+number people can trust (read from selling points and the description with the same
+`proofFacts` as Review's proof warning), why customers pick you, and your best customers.
+**Add** saves one line (up to 200 characters, no `{…}` blanks) to the Brand: the offer
+replaces the first offer, proof and why join the selling points, audience replaces the
+target audience. Only the next ads use it; running ads don't change. **Not now** hides the
+card for 7 days.
+
 Website autofill fetches a public website and proposes extracted facts. On a Brand with
 nothing filled in yet it runs by itself when the owner leaves the Website field (once per
 address, #1025); otherwise the "Autofill from website" button runs it. It proposes up to 5
@@ -72,4 +82,4 @@ Real photos are reference hints for image generation, not the ad image itself.
 Instruction files have a title, Markdown body, and active flag. Active instructions
 are included by generation/planning call sites; an instruction is guidance to a
 model, not deterministic enforcement. Never put credentials or sensitive lead
-details in prompts. See [Data Model](../DATA_MODEL.md) and [AI Pipeline](../architecture/ai-pipeline.md).
+details in prompts. See [Data Model](../architecture/data-model.md) and [AI Pipeline](../architecture/ai-pipeline.md).

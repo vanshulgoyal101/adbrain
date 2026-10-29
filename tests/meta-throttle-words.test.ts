@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { durationIn } from "@/i18n/duration";
-import { checkLaterLine, throttleActive } from "@/lib/meta/throttle-words";
-import { ownerThrottledUntil } from "@/lib/meta/throttle-store";
+import { checkLaterLine, throttleActive } from "@/lib/campaign/meta-wait";
+import { ownerThrottledUntil } from "@/services/meta-throttle";
 
 describe("#1838 slice 2b: throttle words", () => {
   it("says a span the way 'Updated … ago' does, without 'ago'", () => {

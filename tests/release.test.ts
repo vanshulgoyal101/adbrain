@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { managementMigrationSql, migrationChecksum } from "../scripts/database-migrations.mjs";
-import { changedLines, ctoApproval, ctoReviews, failingChecks, moneyPath, qaApproval, releaseMigrations, reviewVerdicts, smokeCounts, supersededBy, backupFresh, commitStatuses } from "../scripts/release.mjs";
+import { changedLines, ctoApproval, releaseGate, ctoReviews, failingChecks, moneyPath, qaApproval, releaseMigrations, reviewVerdicts, smokeCounts, supersededBy, backupFresh, commitStatuses, guardRun } from "../scripts/release.mjs";
 
 const head = "c30aabaf55338d92d4f0ac9ca01eac027190aceb";
 const comment = (body: string, createdAt: string) => ({ body, createdAt, url: `https://example.test/${createdAt}` });
@@ -256,6 +256,15 @@ describe("same changes despite moved context (#567)", () => {
     expect(changedLines(diff(10, "a"))).not.toBe(changedLines(diff(10, "a").replace("+create table lease (id int);\n-drop view v;", "-drop view v;\n+create table lease (id int);")));
     expect(changedLines("")).toBe("");
   });
+
+  it("ignores Markdown, so a docs move in a base merge keeps the approvals (#2147)", () => {
+    const docs = (file: string, row: string) => `diff --git a/${file} b/${file}\n--- a/${file}\n+++ b/${file}\n@@ -5,1 +5,2 @@\n ctx\n+${row}\n`;
+    const before = diff(10, "a") + docs("docs/DATA_MODEL.md", "| [x.sql](../db/x.sql) |");
+    const after = diff(10, "a") + docs("docs/architecture/migrations.md", "| [x.sql](../../db/x.sql) |");
+    expect(changedLines(before)).toBe(changedLines(after));
+    expect(changedLines(docs("README.md", "only docs"))).toBe("");
+    expect(changedLines(after)).not.toBe(changedLines(after.replace("lease", "leases")));
+  });
 });
 
 describe("fresh backup before a migration (#884)", () => {
@@ -279,5 +288,44 @@ describe("required commit statuses (#926 core-approval)", () => {
     expect(failingChecks(["build", "core-approval"], [...runs, ...statuses])).toEqual([]);
     expect(failingChecks(["core-approval"], commitStatuses([{ context: "core-approval", state: "pending", created_at: "2026-10-27T12:00:00Z" }]))).toEqual(["core-approval"]);
     expect(failingChecks(["core-approval"], runs)).toEqual(["core-approval"]);
+  });
+});
+
+describe("production guard run for a commit (#2138)", () => {
+  const run = (databaseId: number, status: string, conclusion: string) => ({ databaseId, status, conclusion, url: `https://example.test/${databaseId}` });
+
+  it("skips runs whose job was skipped (non-production deployment statuses)", () => {
+    expect(guardRun([run(3, "completed", "skipped"), run(2, "completed", "success"), run(1, "completed", "skipped")])?.databaseId).toBe(2);
+    expect(guardRun([run(2, "completed", "skipped"), run(1, "completed", "failure")])?.conclusion).toBe("failure");
+  });
+
+  it("keeps waiting while only skipped runs exist, or the newest real one is still running", () => {
+    expect(guardRun([run(2, "completed", "skipped"), run(1, "completed", "skipped")])).toBeUndefined();
+    expect(guardRun([])).toBeUndefined();
+    expect(guardRun([run(2, "in_progress", ""), run(1, "completed", "success")])?.status).toBe("in_progress");
+  });
+});
+
+describe("release gate re-check (#2187)", () => {
+  const isHead = (sha: string) => head.startsWith(sha);
+  const qaOk = comment("**QA verdict at c30aaba: approved.**\n- Migration sha256 `35fa7d21`", "2026-10-28T11:30:00Z");
+  const reviewerOk = comment("Reviewer review of c30aaba: **approved.**", "2026-10-28T11:40:00Z");
+
+  it("passes when QA and the Reviewer still approve the head", () => {
+    expect(releaseGate({ comments: [qaOk, reviewerOk], head, samePatch: isHead, needsCto: true }).missing).toEqual([]);
+  });
+
+  it("names the Reviewer when the approval is withdrawn after preflight", () => {
+    const withdrawn = comment("Reviewer review of c30aaba: changes requested. generate/route.ts grew 473→476 lines.", "2026-10-28T11:48:17Z");
+    expect(releaseGate({ comments: [qaOk, reviewerOk, withdrawn], head, samePatch: isHead, needsCto: true }).missing).toEqual(["Reviewer/CTO"]);
+  });
+
+  it("names QA when QA's latest verdict is no longer an approval", () => {
+    const qaNo = comment("**QA verdict at c30aaba: changes requested.**", "2026-10-28T11:49:00Z");
+    expect(releaseGate({ comments: [qaOk, reviewerOk, qaNo], head, samePatch: isHead, needsCto: true }).missing).toEqual(["QA"]);
+  });
+
+  it("does not ask for a Reviewer on a PR without money paths or migrations", () => {
+    expect(releaseGate({ comments: [qaOk], head, samePatch: isHead, needsCto: false }).missing).toEqual([]);
   });
 });

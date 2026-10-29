@@ -22,7 +22,19 @@ in issues.
    Assets tile's Download, Copy link and Open are hidden on a `+prospect` account, so no clean
    picture leaves before hand-over. After hand-over they come back on their own.
 
-**Hand over (DevOps executes, QA reviews; a tenant step):**
+**Hand over (self-serve on the visit, #1670; once `20261028_business_transfer.sql` is live):**
+1. On the prospect account, **Settings → Hand this account to the owner**: type the owner's email
+   (read it back with them) and tap **Hand to owner**. The rows must both show ✓ (no Meta account,
+   no campaigns); anything else set up blocks too, in plain words. It waits 30 minutes; **Cancel
+   hand-over** stops it.
+2. On the owner's own phone: `adbrain.vanshul.com/login`, **Continue with Google** or **Email me a
+   sign-in link** with that email, then **Make it mine** on Home. No link comes from AdBrain; the sign-in
+   proves the address. The business (Brand, picked ads, drafts, preferences) moves to their own new login
+   in one transaction; sales `ad_instructions` are deleted; one `audit_log` row names both users. Their
+   monthly AI allowance starts at the hand-over. 'This isn't my business' shows on the rep's Settings.
+3. The prospect login keeps no access to it. A target email that already owns a business is refused.
+
+**Hand over by runbook (fallback until the migration is live; DevOps executes, QA reviews; a tenant step):**
 1. Read-only checks, all must hold:
    `select authorization_status, token_id from public.meta_connections where business_id='<business id>';`
    returns no row, or `disconnected`/`revoked` with `token_id` null;

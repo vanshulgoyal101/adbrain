@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { INTERNAL_DOMAINS, INTERNAL_USER_IDS, internalUserIdsSql, isInternalUserSql } from "../scripts/lib/internal-accounts.mjs";
+import { INTERNAL_DOMAINS, INTERNAL_USER_IDS, internalUserIdsSql, isInternalUserSql, makesFreePictures } from "../scripts/lib/internal-accounts.mjs";
+import internal from "@/lib/internal-accounts.json";
+import { isExemptFromFreeProviders, isInternalUser } from "@/lib/internal-accounts";
 import { eventsSql } from "../scripts/product-events.mjs";
 
 describe("internal accounts (#379)", () => {
@@ -15,6 +17,28 @@ describe("internal accounts (#379)", () => {
     expect(sql).toContain("lower(coalesce(u.email, '')) = any(array['smoke@example.com','o''brien@example.com']::text[])");
     expect(isInternalUserSql("x", [])).toContain("array[]::text[]");
     expect(internalUserIdsSql([])).toMatch(/^select u\.id from auth\.users u where /);
+  });
+});
+
+describe("smoke Create free-pictures check (#2145)", () => {
+  const confirmed = "2026-10-01T00:00:00Z";
+  const identities = [
+    ...internal.smokeUserIds.map((id) => ({ id, email: "smoke@adbrain.vanshul.com", email_confirmed_at: confirmed })),
+    ...internal.exemptFromFreeProviders.map(({ userId }) => ({ id: userId, email: "x@adbrain.vanshul.com", email_confirmed_at: confirmed })),
+    ...internal.userIds.map((id) => ({ id, email: null, email_confirmed_at: null })),
+    { id: "00000000-0000-4000-8000-000000000001", email: "QA@AdBrain.vanshul.com ", email_confirmed_at: confirmed },
+    { id: "00000000-0000-4000-8000-000000000002", email: "qa@adbrain.vanshul.com", email_confirmed_at: null },
+    { id: "00000000-0000-4000-8000-000000000003", email: "owner@example.com", email_confirmed_at: confirmed },
+  ];
+
+  it.each(identities)("agrees with the app's freeImagesOnly rule for %o", (user) => {
+    expect(makesFreePictures(user)).toBe(isInternalUser(user) && !isExemptFromFreeProviders(user));
+  });
+
+  it("refuses an unknown identity and never treats an exempt or customer account as free", () => {
+    expect(makesFreePictures(null)).toBe(false);
+    expect(makesFreePictures({ email: "qa@adbrain.vanshul.com", email_confirmed_at: confirmed })).toBe(false);
+    for (const { userId } of internal.exemptFromFreeProviders) expect(makesFreePictures({ id: userId, email: "x@adbrain.vanshul.com", email_confirmed_at: confirmed })).toBe(false);
   });
 });
 

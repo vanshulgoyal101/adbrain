@@ -13,7 +13,7 @@ describe("core: ad account status in plain words (#1943)", () => {
     [2, "Meta has disabled this ad account, so ads can't run. You can ask Meta to review it.", "Ask Meta to review", QUALITY],
     [3, "Meta couldn't charge your card or UPI. Pay the balance in Meta and your ads can run again.", "Pay in Meta", "billing_hub"],
     [8, "Meta couldn't charge your card or UPI. Pay the balance in Meta and your ads can run again.", "Pay in Meta", "billing_hub"],
-    [9, "Meta couldn't charge your card or UPI. Pay it soon to keep your ads running.", "Pay in Meta", "billing_hub"],
+    [9, "Meta couldn't charge your card or UPI. Pay the balance in Meta to go live and keep your ads running.", "Pay in Meta", "billing_hub"],
     [7, "Meta is checking this new ad account. Ads can start once it's done; there's nothing to do now.", null, null],
     [100, "This ad account is closed in Meta. Connect a different ad account.", "Connect another account", null],
     [101, "This ad account is closed in Meta. Connect a different ad account.", "Connect another account", null],

@@ -12,6 +12,7 @@ import { AdLanguageChips } from "@/components/ad-language-chips";
 import { applyCreateLine, readCreateResponse, type LiveAd } from "@/components/create-progress";
 import { SampleViewer } from "@/components/sample-viewer";
 import { SetupSpine } from "@/components/setup-spine";
+import { takeMakeTap } from "@/lib/setup/steps";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
@@ -135,8 +136,8 @@ export function SetupAdsStep({ business, initialAds, sample = false, earlier = f
 
   useEffect(() => {
     if (startedRef.current || initialAds.length) return;
-    // #1475: a batch already running (another tab) is still picked up; a new one waits for the tap.
-    if (earlier && !readKept(business.id)) return;
+    // #1475: a batch already running (another tab) is still picked up; a new one waits for the tap (#1934: or step 1's).
+    if (earlier && !readKept(business.id) && !(again && takeMakeTap(business.id))) return;
     startedRef.current = true;
     void makeAds(FULL_BATCH);
     // Runs once per visit; makeAds reads only stable props.
@@ -242,11 +243,7 @@ export function SetupAdsStep({ business, initialAds, sample = false, earlier = f
     if (kept) {
       const saved = await savedBatch(kept.id, kept.count);
       if (saved?.length) return finish(saved, kept.count, false);
-      if (saved === null) {
-        setMaking(false);
-        setError("busy");
-        return;
-      }
+      if (saved === null) { setMaking(false); setError("busy"); return; }
       forget(business.id);
     }
     let generationId = "";

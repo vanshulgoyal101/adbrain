@@ -1,4 +1,4 @@
-import { metaWaitFor } from "@/lib/meta/throttle-owner";
+import { metaWaitFor } from "@/services/meta-throttle";
 import { Building2 } from "lucide-react";
 import Link from "next/link";
 import { LeadInbox } from "@/components/lead-inbox";

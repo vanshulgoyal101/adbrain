@@ -1,0 +1,13 @@
+{
+  "recordedAt": "2026-10-28T20:50:00Z",
+  "note": "#1799 QA: Meta validate_only campaign creates on the system-user INR account (v26.0); nothing persisted. Error text is in the token user's language, so the subcode decides. Ids scrubbed.",
+  "account": { "currency": "INR", "min_campaign_group_spend_cap": "500000" },
+  "tape": [
+    { "objective": "OUTCOME_ENGAGEMENT", "spend_cap": 400000, "status": 400 },
+    { "objective": "OUTCOME_ENGAGEMENT", "spend_cap": 499999, "status": 400 },
+    { "objective": "OUTCOME_ENGAGEMENT", "spend_cap": 500000, "status": 200 },
+    { "objective": "OUTCOME_LEADS", "spend_cap": 400000, "status": 400 },
+    { "objective": "OUTCOME_LEADS", "spend_cap": 500000, "status": 200 }
+  ],
+  "error": { "error": { "code": 100, "error_subcode": 2446307, "type": "OAuthException", "message": "Invalid parameter", "error_user_title": "अभियान की खर्च सीमा बहुत कम है", "error_user_msg": "इस मुद्रा के लिए अभियान की खर्च सीमा कम से कम ₹5,000.00 होनी चाहिए." } }
+}

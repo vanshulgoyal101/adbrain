@@ -74,7 +74,7 @@ same identity; do not change a key or clear local recovery data to force progres
 | --- | --- |
 | [Creatives](creatives.md) | `/api/brand/*`, `/api/creatives/*` |
 | [Campaigns](campaigns.md) | `/api/campaign-drafts/*`, `/api/campaigns/*` (except enquiries) |
-| [Leads, results and settings](leads-and-settings.md) | `/api/leads/*`, campaign enquiries, `/api/spend-limits`, `/api/preferences`, `/api/privacy-requests/*` |
+| [Leads, results and settings](leads-and-settings.md) | `/api/leads/*`, campaign enquiries, `/api/results-card`, `/api/spend-limits`, `/api/preferences`, `/api/privacy-requests/*`, `/api/prospect/*` |
 | [Meta connection](meta.md) | `/api/meta/*`, `/api/managed/*`, `/api/whatsapp/webhook` |
 | [Payments](payments.md) | `/api/payments/*` |
 | [Authentication](auth.md) | `/api/auth/*`, `/auth/*` |
@@ -120,5 +120,5 @@ These are React/Next server actions, not stable manually callable REST endpoints
 Actions return `{ok:boolean,error?:string}` and revalidate relevant pages.
 Brand field validation lives in [validation](../../src/lib/brand/validation.ts);
 list parsing preserves commas in place names. Asset upload/delete and selection
-also use browser Supabase/Storage APIs under RLS; see [Data Model](../DATA_MODEL.md).
+also use browser Supabase/Storage APIs under RLS; see [Data Model](../architecture/data-model.md).
 Do not document an invented upload REST route.

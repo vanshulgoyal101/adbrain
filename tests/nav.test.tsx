@@ -250,4 +250,24 @@ describe("Hindi app bar and menu (#1877)", () => {
     const menu = within(screen.getByRole("complementary", { name: "Main sidebar" })).getByRole("navigation", { name: "Workspace navigation" });
     expect(within(menu).getAllByRole("link").map((link) => link.textContent)).toEqual(["होम", "विज्ञापन बनाएँ", "विज्ञापन जाँचें", "कैंपेन", "पूछताछ", "बिज़नेस", "फ़ोटो", "सेटिंग"]);
   });
+
+  // #1895: the root <html lang> stays "en" (static pages, mostly English app); the Hindi parts say so themselves (WCAG 3.1.2).
+  it("marks the Hindi menu words, section name and business label lang='hi', and nothing else", () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ count: 0 })));
+    render(<WorkspaceShell email={null} businessName="Fixture" ownerId="owner" businessId="business" labels={namespaceMessages("hi", "shell")} locale="hi"><p>Workspace</p></WorkspaceShell>);
+    const sidebar = screen.getByRole("complementary", { name: "Main sidebar" });
+    const menu = within(sidebar).getByRole("navigation", { name: "Workspace navigation" });
+    expect(menu).not.toHaveAttribute("lang");
+    expect(within(menu).getAllByRole("link").map((link) => link.querySelector("[lang]")?.getAttribute("lang"))).toEqual(Array(8).fill("hi"));
+    expect(within(screen.getByRole("banner")).getByText("होम")).toHaveAttribute("lang", "hi");
+    expect(within(sidebar).getByText("बिज़नेस", { selector: "small" })).toHaveAttribute("lang", "hi");
+    expect(within(sidebar).getByText("Fixture")).not.toHaveAttribute("lang");
+    expect(screen.getByRole("main")).not.toHaveAttribute("lang");
+  });
+
+  it("adds no lang attribute in English", () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ count: 0 })));
+    const { container } = render(<WorkspaceShell email={null} businessName="Fixture" ownerId="owner" businessId="business"><p>Workspace</p></WorkspaceShell>);
+    expect(container.querySelector("[lang]")).toBeNull();
+  });
 });
