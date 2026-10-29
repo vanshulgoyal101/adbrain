@@ -10,6 +10,7 @@ import { setupResumeStep } from "@/lib/setup/resume";
 import { getMetaConnection } from "@/lib/meta/credentials";
 import { HomeRejectedAds } from "@/components/home-rejected-ads";
 import { PilotDay7Card } from "@/components/pilot-day7-card";
+import { homeCustomers, homeResults } from "@/lib/campaign/home-results";
 import { pilotDay7Visible } from "@/lib/feedback/pilot-day7";
 import { pilotDay7Facts } from "@/lib/feedback/pilot-day7-store";
 import { ResultsCardOffer } from "@/components/results-card-offer";
@@ -83,6 +84,8 @@ export default async function DashboardPage() {
   ]);
   const askPilot = Boolean(pilotFacts && pilotDay7Visible({ ...pilotFacts, now: new Date() }));
   const resultsCard = cardFacts?.offered && business ? resultsCardOffer(business.id, cardFacts, locale) : null;
+  // #2026: the card repeats Home's customer line above the ₹999 question; nothing when none is marked.
+  const customerLine = askPilot ? homeCustomers(homeResults(campaigns, results)) : null;
 
   return (
     <WorkspaceHome
@@ -94,7 +97,7 @@ export default async function DashboardPage() {
       waiting={waiting}
       firstEnquiry={firstEnquiry}
       adReview={adReview}
-      pilotQuestion={askPilot && business ? <PilotDay7Card businessId={business.id} locale={locale} /> : null}
+      pilotQuestion={askPilot && business ? <PilotDay7Card businessId={business.id} locale={locale} customers={customerLine?.kind === "line" ? customerLine : null} /> : null}
       resultsCard={resultsCard}
       rejectedAds={adReview?.kind === "rejected" && newest && (
         <Suspense fallback={null}>

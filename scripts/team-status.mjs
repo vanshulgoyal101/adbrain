@@ -8,7 +8,8 @@ import { fileURLToPath } from "node:url";
 import { NAMES } from "./wait-for-work.mjs";
 
 const waiter = join(dirname(fileURLToPath(import.meta.url)), "wait-for-work.mjs");
-const STATES = { 0: "has-work", 3: "no-work", 4: "waiting" };
+// 6: refused to wait because the role owns actionable items (#364).
+const STATES = { 0: "has-work", 3: "no-work", 4: "waiting", 6: "has-work" };
 
 /** One role's probe → { state, items }. Exit 4 = its waiter is running, so the chat is healthy. */
 export function parseProbe(status, stdout) {

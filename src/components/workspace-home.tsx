@@ -9,7 +9,7 @@ import { describeAuditEvent, isBackgroundAuditAction } from "@/lib/audit-labels"
 import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
 import { formatClock, formatDate, formatMoney, formatPerDay } from "@/lib/format";
 import { firstEnquiryLine } from "@/lib/trust-lines";
-import { homeResults, unloggedChats } from "@/lib/campaign/home-results";
+import { homeCustomers, homeResults, unloggedChats } from "@/lib/campaign/home-results";
 import { homeVerdicts } from "@/lib/campaign/card-verdict";
 import { staleCampaignIds } from "@/lib/campaign/results-freshness";
 import { StaleResultsRefresher } from "@/components/stale-results-refresher";
@@ -20,7 +20,7 @@ import { formatReplyTime } from "@/lib/leads/first-reply";
 import { campaignStatus, Status } from "@/components/ui/status";
 import { goneInMeta, pausableCampaigns, recentlyDeletedInMeta } from "@/lib/campaign/gone-in-meta";
 import type { HomeAdReview } from "@/lib/campaign/home-ad-review";
-import { timeAgoIn, translator, type AppLocale } from "@/i18n/locale";
+import { namespaceMessages, timeAgoIn, translator, type AppLocale } from "@/i18n/locale";
 
 export interface WorkspaceHomeProps {
   business: Business | null;
@@ -82,10 +82,12 @@ export function WorkspaceHome({
   const liveCampaigns = campaigns.filter((campaign) => !goneInMeta(campaign) || recentlyDeletedInMeta(campaign, now));
   const summary = business ? homeResults(campaigns, results) : null;
   // #1292's line already names the newest person waiting, so the verdict doesn't say it twice.
-  const verdicts = business ? homeVerdicts(campaigns, results, { now, waiting: firstEnquiry ? 0 : waiting }) : null;
+  const verdicts = business ? homeVerdicts(campaigns, results, { now, waiting: firstEnquiry ? 0 : waiting, words: { locale, messages: namespaceMessages(locale, "verdict") } }) : null;
   const leadCampaign = verdicts?.lead ? campaigns.find((campaign) => campaign.id === verdicts.lead?.campaignId) : null;
   const stale = business ? staleCampaignIds(campaigns, results, now) : [];
-  const [next, ...later] = buildWorkQueue({ business, creatives, campaigns, metaReady, now, locale, unloggedChats: business ? unloggedChats(campaigns, results) : 0 });
+  const unlogged = business ? unloggedChats(campaigns, results) : 0;
+  const [next, ...later] = buildWorkQueue({ business, creatives, campaigns, metaReady, now, locale, unloggedChats: unlogged });
+  const customers = homeCustomers(summary, unlogged);
   const setAside = setAsideIds(creatives, now);
   const reviewLabel = (creative: CreativePreview) => creative.status === "approved" ? t("approved") : setAside.has(creative.id) ? t("setAside") : t("needsReview");
   const places = business?.locations.length ? business.locations.join(", ") : null;
@@ -154,6 +156,10 @@ export function WorkspaceHome({
               </div>
             ))}
           </dl>
+          {customers?.kind === "line" && <p className="mt-3 text-sm text-slate-700">{t("customersLine", { n: customers.customers, cost: formatMoney(customers.perCustomer) })}</p>}
+          {customers?.kind === "ask" && <p className="mt-3 text-sm text-slate-700">
+            {t("customersAsk")}{" "}<Link href="/leads" className={linkClass}>{t("markCustomers")}</Link>
+          </p>}
           {replyMinutes !== null && <p className="mt-3 text-sm text-slate-700">
             {/* #1443: the number is the owner's first WhatsApp/Call tap, not a reply AdBrain can see. */}
             {t.rich("contactTime", { time: formatReplyTime(replyMinutes), strong: (chunks) => <strong className="font-medium">{chunks}</strong> })}{" "}

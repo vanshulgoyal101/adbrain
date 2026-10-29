@@ -120,5 +120,5 @@ These are React/Next server actions, not stable manually callable REST endpoints
 Actions return `{ok:boolean,error?:string}` and revalidate relevant pages.
 Brand field validation lives in [validation](../../src/lib/brand/validation.ts);
 list parsing preserves commas in place names. Asset upload/delete and selection
-also use browser Supabase/Storage APIs under RLS; see [Data Model](../DATA_MODEL.md).
+also use browser Supabase/Storage APIs under RLS; see [Data Model](../architecture/data-model.md).
 Do not document an invented upload REST route.
