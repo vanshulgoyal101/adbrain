@@ -155,9 +155,10 @@ function replay(...recorded: Exchange[][]) {
   vi.spyOn(globalThis, "fetch").mockClear().mockImplementation(async (input, init) => {
     const url = new URL(String(input));
     const body = new URLSearchParams(init?.body instanceof URLSearchParams ? init.body : undefined);
-    const access = url.searchParams.get("access_token") ?? body.get("access_token");
-    url.searchParams.delete("access_token");
-    body.delete("access_token");
+    // #1649: the token rides in the Authorization header; the proof is stripped for matching.
+    const access = new Headers(init?.headers).get("authorization")?.replace(/^Bearer /, "") ?? null;
+    url.searchParams.delete("appsecret_proof");
+    body.delete("appsecret_proof");
     const method = init?.method ?? "GET";
     const path = url.pathname.replace("/v26.0/", "") + url.search;
     graph.sent.push({ method, path, form: Object.fromEntries(body), access });
