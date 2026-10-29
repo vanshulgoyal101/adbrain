@@ -46,7 +46,7 @@ globalThis.fetch = async (input, init) => {
 };
 
 async function graphGet<T>(path: string): Promise<T> {
-  const response = await fetch(`https://graph.facebook.com/v21.0/${path}${path.includes("?") ? "&" : "?"}access_token=${token}`);
+  const response = await fetch(`https://graph.facebook.com/v26.0/${path}${path.includes("?") ? "&" : "?"}access_token=${token}`);
   return response.json() as Promise<T>;
 }
 
@@ -76,7 +76,7 @@ async function main() {
   } finally {
     name = "cleanup";
     for (const id of created) {
-      await fetch(`https://graph.facebook.com/v21.0/${id}?access_token=${token}`, { method: "DELETE" }).catch(console.error);
+      await fetch(`https://graph.facebook.com/v26.0/${id}?access_token=${token}`, { method: "DELETE" }).catch(console.error);
     }
   }
 
