@@ -54,6 +54,30 @@ describe("describeAuditEvent", () => {
   });
 });
 
+// #2321: an automatic pause says why, in both languages, without the internal "(cron sweep)" note.
+describe("describeAuditEvent for automatic pauses", () => {
+  const cases: [string, string, string][] = [
+    ["Weekly spend cap of ₹5000 reached (cron sweep)", "Campaign paused: your weekly cap of ₹5,000 was reached", "कैंपेन रुका: हफ़्ते की ₹5,000 की खर्च सीमा पूरी हुई"],
+    ["Weekly spend cap of ₹5000 reached", "Campaign paused: your weekly cap of ₹5,000 was reached", "कैंपेन रुका: हफ़्ते की ₹5,000 की खर्च सीमा पूरी हुई"],
+    ["Weekly spend observation could not be verified (cron sweep)", "Campaign paused: this week's spend couldn't be checked", "कैंपेन रुका: इस हफ़्ते का खर्च जाँचा नहीं जा सका"],
+    ["Customer advertising funds or attributed costs require reconciliation (cron sweep)", "Campaign paused: your AdBrain balance needs a check", "कैंपेन रुका: आपके AdBrain बैलेंस की जाँच होनी है"],
+    ["Customer advertising funds require reconciliation (managed ad account stopped)", "Campaign paused: your AdBrain balance needs a check", "कैंपेन रुका: आपके AdBrain बैलेंस की जाँच होनी है"],
+    ["No advertising allowance left (managed ad account stopped)", "Campaign paused: your AdBrain balance ran out", "कैंपेन रुका: आपका AdBrain बैलेंस खत्म हो गया"],
+    ["Capped run reached its end time (cron sweep)", "Campaign paused: its run reached the end date", "कैंपेन रुका: रन अपनी आख़िरी तारीख तक पहुँच गया"],
+  ];
+
+  it.each(cases)("%s", (reason, english, hindi) => {
+    expect(describeAuditEvent("spend.auto_paused", reason)).toBe(english);
+    expect(describeAuditEvent("spend.auto_paused", reason, "hi")).toBe(hindi);
+  });
+
+  it("keeps today's label for an unknown or missing reason", () => {
+    expect(describeAuditEvent("spend.auto_paused", "Something new")).toBe("Campaigns auto-paused at your cap — Something new");
+    expect(describeAuditEvent("spend.auto_paused", null)).toBe("Campaigns auto-paused at your cap");
+    expect(describeAuditEvent("spend.auto_paused", "Something new", "hi")).toBe("आपकी खर्च सीमा पूरी होने पर कैंपेन अपने-आप रुक गए");
+  });
+});
+
 describe("page titles", () => {
   const appDir = join(process.cwd(), "src", "app");
 

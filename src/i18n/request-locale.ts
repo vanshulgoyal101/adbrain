@@ -31,8 +31,8 @@ export async function requestLocale(): Promise<AppLocale> {
 }
 
 /** #2305: an API route's error in the owner's language (the same cookie as pages); English outside a request. */
-export async function ownerError(key: OwnerErrorKey): Promise<string> {
-  return ownerErrorIn(await requestLocale(), key);
+export async function ownerError(key: OwnerErrorKey, values?: Record<string, string | number>): Promise<string> {
+  return ownerErrorIn(await requestLocale(), key, values);
 }
 
 /** #1438: the first-ad setup's words in the owner's language, for the three step pages to pass to their client step. */

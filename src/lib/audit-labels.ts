@@ -97,9 +97,40 @@ export function describeAuditEvent(
   reason: string | null | undefined,
   locale: "en" | "hi" = "en",
 ): string {
+  if (action === "spend.auto_paused") {
+    const why = autoPauseLabel(reason, locale);
+    if (why) return why;
+  }
   const label = auditActionLabel(action, locale);
   if (locale === "hi") return label;
   const note = (reason ?? "").trim();
   if (!note || note.length > MAX_REASON_LENGTH || note === label) return label;
   return `${label} — ${note}`;
+}
+
+/**
+ * #2321: `spend.auto_paused` is written for several reasons (enforce-spend, spend-enforce, managed
+ * funding); each row names one campaign. Matched on the writers' stable reason prefixes.
+ */
+function autoPauseLabel(reason: string | null | undefined, locale: "en" | "hi"): string | null {
+  const note = (reason ?? "").trim();
+  if (note.startsWith("Weekly spend cap of")) {
+    const rupees = Number(/₹(\d+(?:\.\d+)?)/.exec(note)?.[1]);
+    const cap = Number.isFinite(rupees) && rupees > 0 ? `₹${rupees.toLocaleString("en-IN")}` : null;
+    if (locale === "hi") return cap ? `कैंपेन रुका: हफ़्ते की ${cap} की खर्च सीमा पूरी हुई` : "कैंपेन रुका: हफ़्ते की खर्च सीमा पूरी हुई";
+    return cap ? `Campaign paused: your weekly cap of ${cap} was reached` : "Campaign paused: your weekly cap was reached";
+  }
+  if (note.startsWith("Weekly spend observation could not")) {
+    return locale === "hi" ? "कैंपेन रुका: इस हफ़्ते का खर्च जाँचा नहीं जा सका" : "Campaign paused: this week's spend couldn't be checked";
+  }
+  if (note.startsWith("Customer advertising funds")) {
+    return locale === "hi" ? "कैंपेन रुका: आपके AdBrain बैलेंस की जाँच होनी है" : "Campaign paused: your AdBrain balance needs a check";
+  }
+  if (note.startsWith("No advertising allowance left")) {
+    return locale === "hi" ? "कैंपेन रुका: आपका AdBrain बैलेंस खत्म हो गया" : "Campaign paused: your AdBrain balance ran out";
+  }
+  if (note.startsWith("Capped run reached its end time")) {
+    return locale === "hi" ? "कैंपेन रुका: रन अपनी आख़िरी तारीख तक पहुँच गया" : "Campaign paused: its run reached the end date";
+  }
+  return null;
 }
