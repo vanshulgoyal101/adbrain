@@ -23,7 +23,8 @@ import { setupChecklistEnabled } from "@/lib/meta/setup-checklist";
 import { readSetupChecklist } from "@/lib/meta/setup-status";
 import { getMetaConnection } from "@/lib/meta/credentials";
 import { metaOAuthConfigured } from "@/lib/meta/oauth";
-import { getPrimaryBusiness, getSpendEvaluation } from "@/lib/supabase/queries";
+import { getCampaigns, getPrimaryBusiness, getSpendEvaluation } from "@/lib/supabase/queries";
+import { pausableCampaigns } from "@/lib/campaign/gone-in-meta";
 import { isRazorpayTestEnabled } from "@/lib/payments/razorpay-test";
 import { isProductionPaymentConfigured } from "@/lib/payments/production-config";
 import { getCustomerBalance } from "@/lib/payments/customer-balance";
@@ -161,18 +162,21 @@ async function ConnectionSettings({ businessId, searchParams, whatsapp }: {
   const mode = await fundingMode(businessId).catch(() => null);
   // #718 slice 2: an own-account owner's ₹999 plan (off until PLAN_BILLING_ENABLED); a read failure just hides it.
   const plan = mode === "own" && isPlanBillingEnabled() ? await readPlan(businessId).catch(() => null) : null;
-  const [result, params, initialBalance] = await Promise.all([
+  const [result, params, initialBalance, locale, campaigns] = await Promise.all([
     getMetaConnection(businessId).then(connection => ({ connection })).catch(() => ({ connection: null })),
     searchParams,
     mode === "managed" && isProductionPaymentConfigured()
       ? requireOwnedBusiness(businessId).then(getCustomerBalance).then(toCustomerBalanceView).catch(() => null)
       : Promise.resolve(null),
+    requestLocale(),
+    // #1968: Pause all sits under "If you stop", which only an own-account owner sees.
+    mode === "own" ? getCampaigns(businessId).catch(() => []) : Promise.resolve([]),
   ]);
   return (
     <>
       {result.connection ? (
         <MetaConnectionPanel businessId={businessId} connection={result.connection}
-          oauthConfigured={metaOAuthConfigured()} notice={noticeFrom(params)} fundingMode={mode} />
+          oauthConfigured={metaOAuthConfigured()} notice={noticeFrom(params)} fundingMode={mode} locale={locale} />
       ) : (
         <Alert variant="error">
           Meta connection status is temporarily unavailable. Your campaign draft is preserved.
@@ -186,7 +190,7 @@ async function ConnectionSettings({ businessId, searchParams, whatsapp }: {
         </Suspense>
       )}
       {whatsapp}
-      <BillingSection mode={mode} connection={result.connection} testBusinessId={isRazorpayTestEnabled() ? businessId : undefined}
+      <BillingSection mode={mode} locale={locale} runningCampaigns={pausableCampaigns(campaigns)} connection={result.connection} testBusinessId={isRazorpayTestEnabled() ? businessId : undefined}
         liveBusinessId={isProductionPaymentConfigured() ? businessId : undefined} initialBalance={initialBalance}
         plan={plan} planBusinessId={businessId}
         billingTab={typeof params.billing === "string" ? params.billing : null} />

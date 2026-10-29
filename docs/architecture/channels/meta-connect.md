@@ -1,9 +1,11 @@
 # Meta Connection and Publishing
 
+Part of [Channels](README.md). Meta's App Review packet: [Meta App Review](meta-app-review.md).
+
 AdBrain binds each local business to one selected Meta ad account and Facebook
 Page. Application login and Meta authorization are separate. A Google login to
 AdBrain does not grant access to Facebook assets, and matching email addresses
-do not establish ownership. See [API Reference](api/README.md) for exact bodies.
+do not establish ownership. See [API Reference](../../api/README.md) for exact bodies.
 
 ## Prerequisites
 
@@ -22,7 +24,7 @@ do not establish ownership. See [API Reference](api/README.md) for exact bodies.
 Do not populate global `META_SYSTEM_USER_TOKEN`, `META_AD_ACCOUNT_ID`, or
 `META_PAGE_ID` and assume a tenant is connected. Current publishing resolves the
 business-bound encrypted credential. Public customer access also depends on Meta's
-external review process; see [App Review](#app-review-156).
+external review process; see [App Review](meta-app-review.md#app-review-156).
 
 ## Attempt Lifecycle
 
@@ -101,7 +103,7 @@ in Meta; the current workflow does not automatically provision accounts or forms
 
 ## Token Security
 
-[Token storage](../src/lib/meta/token-store.ts) uses AES-256-GCM, a fresh 12-byte
+[Token storage](../../../src/lib/meta/token-store.ts) uses AES-256-GCM, a fresh 12-byte
 nonce and 16-byte tag. The base64 environment key must decode to 32 bytes.
 Authenticated additional data binds ciphertext to `v1:tokenId:businessId`, so
 moving it to another row/business cannot decrypt successfully. Key ID is currently
@@ -138,9 +140,9 @@ randomized A/B testing integration. Actual remote billing remains controlled by 
 
 Draft version, attempt revision, connection generation, review hash, activation
 digest, and idempotency key are different controls. Never substitute one for
-another or recompute server hashes in an integration. See [Architecture](ARCHITECTURE.md).
+another or recompute server hashes in an integration. See [Architecture](../../ARCHITECTURE.md).
 
-[Activation review and PATCH](../src/app/api/campaigns/[id]/route.ts) verify
+[Activation review and PATCH](../../../src/app/api/campaigns/[id]/route.ts) verify
 stored child IDs, binding, generation, account/Page/budget and current Meta
 campaign, ad-set and ad settings. A fresh delivery snapshot joins the
 confirmation digest; changed, paused or unexpected children block #49 reservation
@@ -149,15 +151,15 @@ checks intended children again, then mirrors a **requested** active state locall
 Effective delivery/eligibility is not certified. #49 reservation remains uncertain
 when the parent request or post-request verification is ambiguous; reconcile
 before retrying. Creation idempotency does not make activation atomic with Meta.
-[Operations](OPERATIONS.md) owns incident procedures and
-[Release Policy](RELEASING.md) owns authorization for live changes.
+[Operations](../../operations/README.md) owns incident procedures and
+[Release Policy](../../RELEASING.md) owns authorization for live changes.
 
 ## Lead Import and Follow-Up
 
 Import covers accessible instant-form enquiries on the selected Page, not WhatsApp
-conversations, call logs or other Pages. The [sync route](../src/app/api/leads/sync/route.ts)
+conversations, call logs or other Pages. The [sync route](../../../src/app/api/leads/sync/route.ts)
 requires `read_leads` connection access and runs the resumable importer
-`syncMetaLeads` in [lead sync](../src/lib/leads/sync.ts).
+`syncMetaLeads` in [lead sync](../../../src/lib/leads/sync.ts).
 
 An empty POST resumes the newest unfinished run for the current binding or starts
 a new one; `{"syncId":"11111111-1111-4111-8111-111111111111"}` resumes that run.
@@ -182,27 +184,27 @@ concurrent writer returns 409; after reconnecting, an empty POST starts a fresh
 run. Other checkpoint failures return 503; retry to resume. Keep the sync ID and
 saved rows rather than clearing the inbox after a partial or uncertain result.
 
-[Scheduled lead sync](../src/app/api/cron/sync-leads/route.ts) runs the same import
+[Scheduled lead sync](../../../src/app/api/cron/sync-leads/route.ts) runs the same import
 for every business with a connected account and Page, without a `syncId`. It
 requires the `CRON_SECRET` bearer, allows 20 seconds per business within a
 45-second run, and returns per-business outcomes (503 if any failed). Supabase
 `pg_cron` calls it every 15 minutes (#274); the
-[scheduled jobs workflow](../.github/workflows/scheduled-jobs.yml) is the backup.
+[scheduled jobs workflow](../../../.github/workflows/scheduled-jobs.yml) is the backup.
 
 The saved inbox (`GET /api/leads`) pages up to 100 enquiries with search, status,
 contact and sort filters. `PATCH /api/leads/[id]` saves `workflow_status` (`new`,
 `contacted`, `qualified`, `booked`, `closed`) and/or a `follow_up_note` of at most
-2000 characters. See [API Reference](api/leads-and-settings.md#sync-insights-leads-and-settings).
-The [lead sync migration](../db/migrations/20260926_lead_sync_progress.sql) adds
+2000 characters. See [API Reference](../../api/leads-and-settings.md#sync-insights-leads-and-settings).
+The [lead sync migration](../../../db/migrations/20260926_lead_sync_progress.sql) adds
 `lead_sync_runs`, `lead_sync_start` and `lead_sync_checkpoint`, granted only to the
-service role; the [follow-up migration](../db/migrations/20260926_lead_follow_up.sql)
+service role; the [follow-up migration](../../../db/migrations/20260926_lead_follow_up.sql)
 adds the follow-up columns and `get_lead_page`. Both are in the fresh schema.
 
 ## Managed Accounts (2-Tier, #518)
 
 Behind `MANAGED_ACCOUNTS_ENABLED`. AdBrain provisions each customer a child business under
 Solaride, tracked in `managed_meta_accounts` (#519). The customer links a Page they administer
-(#523). [`provisionManagedAccount`](../src/lib/meta/managed-provision.ts) (#521) then creates the
+(#523). [`provisionManagedAccount`](../../../src/lib/meta/managed-provision.ts) (#521) then creates the
 child business (`POST /{parent}/owned_businesses` with `shared_page_id`, `page_permitted_tasks`,
 timezone 71 and `child_business_external_id` = the AdBrain business ID) and its INR ad account
 (`POST /{child}/adaccount`, `end_advertiser` = the Page), then assigns the managing system user
@@ -256,41 +258,4 @@ remote check; it relies on stored binding and current connection fences.
 Deletion confirms the Meta operation before deleting the local mirror; external
 success and local persistence are not a distributed transaction. Sync imports
 supported ACTIVE/PAUSED campaigns page by page, reports skips, and does not prune
-all local rows absent from a page. Use [Operations](OPERATIONS.md) for incidents.
-
-## App Review (#156)
-
-Serving businesses outside the app's roles needs Meta's App Review (advanced access per
-permission, #156) and Access Verification as a Tech Provider (#517). Submission status, the
-screencast script and the owner's dashboard checklist live on #156. Approval is Meta's decision:
-no call volume, elapsed time or own-account success substitutes for it, so don't create
-disposable campaigns to raise API activity.
-
-Login uses Facebook Login, Graph `GRAPH_VERSION` (src/lib/meta/graph-version.ts, v26.0), redirect
-`https://adbrain.vanshul.com/api/meta/oauth/callback`. Scopes come from
-`META_LOGIN_SCOPES` in [oauth.ts](../src/lib/meta/oauth.ts). All seven are used;
-none can be dropped without breaking the core loop.
-
-| Permission | Why AdBrain needs it | Where the reviewer sees it |
-| --- | --- | --- |
-| `ads_management` | Upload images, create creatives, create the campaign/ad set/ads paused, pause and sync | `/campaigns` → Send to Meta (paused), Pause, Sync from Meta |
-| `ads_read` | List ad accounts (`me/adaccounts`) and read campaign insights | `/settings` → Connect Meta → ad account picker; `/campaigns` results |
-| `leads_retrieval` | Read the leads submitted to the customer's own lead forms | `/leads` → Check for enquiries |
-| `pages_show_list` | List the Pages the user manages (`me/accounts`) | `/settings` → Connect Meta → Page picker |
-| `pages_read_engagement` | Read lead forms and the Page's WhatsApp number for the ad destination | `/campaigns` → lead form dropdown; WhatsApp destination |
-| `pages_manage_ads` | Run ads and lead forms on behalf of the selected Page | `/campaigns` → Launch with the selected Page |
-| `business_management` | Read the owning Business of each ad account and Page so only valid account/Page pairs are offered | `/settings` → Connect Meta → paired account/Page choices |
-
-### App Dashboard URLs
-
-| Dashboard field | Value |
-| --- | --- |
-| Privacy Policy URL | `https://adbrain.vanshul.com/privacy` |
-| Terms of Service URL | `https://adbrain.vanshul.com/terms` |
-| Data deletion callback URL | `https://adbrain.vanshul.com/api/meta/deauthorize` (returns `{url, confirmation_code}`) |
-| Deauthorize callback URL (Facebook Login settings) | `https://adbrain.vanshul.com/api/meta/deauthorize` |
-| Valid OAuth redirect URI | `https://adbrain.vanshul.com/api/meta/oauth/callback` |
-| App domain / site URL | `adbrain.vanshul.com` / `https://adbrain.vanshul.com` |
-
-If the dashboard prefers an instructions URL instead of a callback, use
-`https://adbrain.vanshul.com/data-deletion`. All four pages are public.
+all local rows absent from a page. Use [Operations](../../operations/README.md) for incidents.

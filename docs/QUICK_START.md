@@ -53,13 +53,13 @@ model, Meta and payment keys absent until their workflow is authorized. The imag
 setting selects an adapter; it does not make generation free. Keep `.env.local`
 out of Git. The public key relies on
 RLS; the service-role key bypasses RLS and must never reach a browser. Review
-[Configuration](CONFIGURATION.md) before adding provider credentials. Configuring
+[Configuration](operations/configuration.md) before adding provider credentials. Configuring
 image generation does not prove it is free or available.
 
 ## Prepare the Database
 
 For a **fresh, disposable** development project, review
-[the schema](../db/schema.sql) and the [database procedure](DEPLOY.md).
+[the schema](../db/schema.sql) and the [database procedure](operations/deploy.md).
 For an existing database, review incremental migrations and its actual migration
 ledger. Do not replay the fresh schema or infer missing migrations from filenames.
 The [data model](DATA_MODEL.md) explains the objects; [release policy](RELEASING.md)
@@ -133,5 +133,5 @@ read [Testing](TESTING.md) before invoking them.
 | Meta disabled in production | Explicit rollout and app configuration; unset rollout fails closed |
 | Connected but cannot read leads | Lead capability, Page token, form access, `leads_retrieval` |
 
-See [Operations](OPERATIONS.md) for incidents and [Release Workflow](RELEASING.md)
+See [Operations](operations/README.md) for incidents and [Release Workflow](RELEASING.md)
 for publication. Do not use a direct production CLI deploy as a setup shortcut.
