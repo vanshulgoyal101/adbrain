@@ -209,22 +209,9 @@ async function generate(req: Request, live?: LiveCreate) {
       { status: 400 },
     );
   const body = parsed.data;
-
-  const businessId = (body?.businessId ?? "").trim();
-  const brief = (body?.brief ?? "").trim();
-  const rawCount = Number(body?.count ?? 3);
-  const count = Number.isFinite(rawCount)
-    ? Math.min(Math.max(Math.floor(rawCount), 1), 6)
-    : 3;
-  const language = languagePromptName(body?.language);
-  const sourceFacts = body.sourceFacts;
-
-  if (!businessId || !brief) {
-    return NextResponse.json(
-      { error: "businessId and brief are required" },
-      { status: 400 },
-    );
-  }
+  // The schema already trims and bounds these (count 1-6, default 3).
+  const { businessId, brief, count, sourceFacts } = body;
+  const language = languagePromptName(body.language);
 
   // RLS ensures the user can only read their own business.
   const { data: business } = await supabase
@@ -237,7 +224,6 @@ async function generate(req: Request, live?: LiveCreate) {
   }
 
   const monthlyLimit = configuredMonthlyTokenLimit(user);
-  // #1717: over the monthly AI cost cap, this Create's pictures are free (text keeps the token cap).
   await applyMonthlyCostCap(businessId, user);
   const { error: schemaError } = await supabase
     .from("creatives")
