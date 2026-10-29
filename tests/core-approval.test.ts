@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { coreApproval, coreFiles } from "../scripts/core-approval.mjs";
+import { coreApproval, coreFiles, syncExempt } from "../scripts/core-approval.mjs";
 
 const head = "7612817abcdef0123456789abcdef0123456789";
 const at = (body: string, createdAt = "2026-10-27T10:00:00Z") => ({ body, createdAt, url: "u" });
@@ -115,5 +115,36 @@ describe("money and migrations need QA and the CTO/Reviewer (#1083)", () => {
       state: "success", description: "QA and Reviewer approved 7612817 (money/migration)",
     });
     expect(coreApproval({ ...pr, comments: [reviewer, qaNo] }).state).toBe("pending");
+  });
+});
+
+describe("a main → next sync merge isn't held on main's own gated files (#2147)", () => {
+  const pr = { files: ["db/migrations/20261029_lead_erase.sql", "docs/architecture/migrations.md"], head, headRef: "devops/sync-main-next", comments: [] };
+
+  it("passes when every core file equals main's copy", () => {
+    expect(coreApproval({ ...pr, onMain: () => true })).toMatchObject({ state: "success", description: expect.stringContaining("identical to main") });
+  });
+
+  it("still holds a core file that differs from main, and applies the money/migration rule to it alone", () => {
+    const both = { ...pr, files: [...pr.files, "src/lib/meta/client.ts"] };
+    const verdict = coreApproval({ ...both, onMain: (f: string) => f.startsWith("db/") });
+    expect(verdict.state).toBe("pending");
+    expect(verdict.description).toContain("src/lib/meta/client.ts");
+    expect(verdict.description).not.toContain("Money/migration");
+    expect(coreApproval({ ...pr, onMain: () => false }).description).toContain("Money/migration");
+  });
+
+  it("exempts a file only if next hasn't changed it since the merge base", () => {
+    // main-only file (e.g. a released migration that isn't on next or the base): exempt
+    expect(syncExempt({ head: "m", main: "m", next: null, base: null })).toBe(true);
+    // main changed it, next didn't: taking main's copy drops nothing
+    expect(syncExempt({ head: "m", main: "m", next: "b", base: "b" })).toBe(true);
+    // next changed it and the head took main's copy: a gated next change would be dropped
+    expect(syncExempt({ head: "m", main: "m", next: "n", base: "b" })).toBe(false);
+    // both changed it (a real merge): gated
+    expect(syncExempt({ head: "x", main: "m", next: "n", base: "b" })).toBe(false);
+    // deleted at head: gated
+    expect(syncExempt({ head: null, main: null, next: null, base: null })).toBe(false);
+    expect(syncExempt({ head: null, main: "m", next: "b", base: "b" })).toBe(false);
   });
 });

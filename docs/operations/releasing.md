@@ -25,7 +25,9 @@ The release process ([AGENTS.md](../../AGENTS.md)).
    space-only role prefixes still work; a later negative verdict at that head
    overrides either format. Money/migrations still need QA plus CTO/Reviewer.
    The deploy train (this repo's `next` → `main` only, never a fork's `next`) and a
-   revert labelled `rollback` pass. Hold with `gh pr merge <n>
+   revert labelled `rollback` pass, and so does a main → next sync merge (head contains
+   main, next doesn't) whose core files equal main's and are unchanged on next since the
+   merge base (#2147). Hold with `gh pr merge <n>
    --disable-auto`. `audit` and `docs` also run but do not block. A change to generation, validation, prompts, models, timeouts, the
    planner, Meta calls or CSP adds or updates a `test:core` test with recorded real
    responses. Update the matching doc in the same PR.

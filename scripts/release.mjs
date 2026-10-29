@@ -46,9 +46,15 @@ export function qaApproval(comments, headSha, samePatch = /** @type {(sha: strin
 /**
  * A diff's changed lines in order, per file, without context or hunk positions. Equal for two heads whose
  * own edits are byte-identical even when a merge of the base moved the surrounding lines (git patch-id differs; #567).
+ * Markdown is skipped (#2147): docs need no approval, and a base merge that moves a docs row must not reset the
+ * approvals of a migration whose code is unchanged.
  */
 export function changedLines(diff) {
-  const out = diff.split("\n").filter((l) => l.startsWith("diff --git ") || (/^[+-]/.test(l) && !/^(\+\+\+|---) /.test(l)));
+  let docs = false;
+  const out = diff.split("\n").filter((l) => {
+    if (l.startsWith("diff --git ")) docs = /\.md$/i.test(l);
+    return !docs && (l.startsWith("diff --git ") || (/^[+-]/.test(l) && !/^(\+\+\+|---) /.test(l)));
+  });
   return out.some((l) => !l.startsWith("diff --git ")) ? out.join("\n") : "";
 }
 
