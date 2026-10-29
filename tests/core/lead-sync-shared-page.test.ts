@@ -21,7 +21,10 @@ function keepsSharedPageFilter(sql: string): boolean {
   const shared = /(\w+) := exists \(select 1 from public\.meta_connections (\w+) where (?=[^)]*\b\2\.page_id = p_page_id\b)(?=[^)]*\b\2\.business_id (?:<>|!=) p_business_id\b)/.exec(sql);
   const join = /left join public\.campaigns (\w+) on (?=[^]*?\b\1\.business_id = p_business_id\b)(?=[^]*?\b\1\.meta_campaign_id = incoming\.meta_campaign_id\b)/.exec(sql);
   if (!shared || !join) return false;
-  return new RegExp(`where not ${shared[1]} or ${join[1]}\\.id is not null`).test(sql);
+  // #1789: an extra condition needs the parentheses, since without them `and` binds tighter than `or` and only applies
+  // to a shared Page's leads. Unparenthesised is fine only when nothing follows before `order by`.
+  const filter = `not ${shared[1]} or ${join[1]}\\.id is not null`;
+  return new RegExp(`where (?:\\(${filter}\\)|${filter} (?=order by))`).test(sql);
 }
 
 describe("lead sync keeps a shared Page's leads in their own business (#1775, #2022)", () => {
@@ -39,5 +42,14 @@ describe("lead sync keeps a shared Page's leads in their own business (#1775, #2
 
   it("control: the pre-#1775 definition (20261026) fails the check", () => {
     expect(keepsSharedPageFilter(body("20261026_lead_campaign_link.sql"))).toBe(false);
+  });
+
+  it("control: 20261028's unparenthesised filter passes, but adding `and …` without parentheses fails", () => {
+    const shared = body("20261028_lead_sync_shared_page.sql");
+    expect(keepsSharedPageFilter(shared)).toBe(true);
+    const precedenceBug = shared.replace(/(campaign\.id is not null) order by/, "$1 and not exists (select 1) order by");
+    expect(precedenceBug).not.toBe(shared);
+    expect(keepsSharedPageFilter(precedenceBug)).toBe(false);
+    expect(keepsSharedPageFilter(body(latest).replace(/where \((not \w+ or \w+\.id is not null)\)/, "where $1"))).toBe(false);
   });
 });
