@@ -163,6 +163,7 @@ export default async function CampaignsPage({
           adAccountId={connection.adAccountId ?? ""}
           weeklyCap={weeklyCap}
           verdictWords={await requestWords("verdict")}
+          campaignWords={await requestWords("campaigns")}
           newCampaign={params.new === "1" ? { creativeIds: requested, review: params.review === "1", budget: chosenBudget } : undefined}
         />}
       </div>

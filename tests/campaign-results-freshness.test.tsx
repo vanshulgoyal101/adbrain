@@ -107,5 +107,9 @@ describe("results freshness (#1003)", () => {
     expect(live.getByRole("group", { name: "कैसा चल रहा है" })).toBeTruthy();
     expect(live.queryByRole("group", { name: "How it's going" })).toBeNull();
     expect(live.getAllByText(/चैट/).length).toBeGreaterThan(0);
+    // The figures under Details too.
+    expect(live.getByText("कितनी बार दिखा")).toBeTruthy();
+    expect(live.getByText("खर्च / चैट")).toBeTruthy();
+    expect(live.queryByText("Impressions")).toBeNull();
   });
 });

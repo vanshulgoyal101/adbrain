@@ -12,9 +12,9 @@ vi.mock("@/lib/observability/logger", async (actual) => ({
   ...(await actual<object>()),
   recordProductEvent: (event: (typeof h.recorded)[number]) => h.recorded.push(event),
 }));
-vi.mock("@/lib/meta/connection-access", () => ({
+vi.mock("@/services/business-access", async () => ({
   requireOwnedBusiness: h.owned,
-  ConnectionAccessError: class extends Error { constructor(public code: string, message: string) { super(message); } },
+  ConnectionAccessError: (await import("@/lib/meta/connection-access-error")).ConnectionAccessError,
 }));
 vi.mock("@/lib/security/rate-limit", () => ({ rateLimitResponse: async () => h.limited }));
 vi.mock("@/lib/results-card/store", () => ({
@@ -30,7 +30,7 @@ const post = async (body: unknown) => (await route()).POST(new Request("https://
 
 beforeEach(async () => {
   h.recorded = []; h.offered = true; h.footer = []; h.limited = null;
-  const { ConnectionAccessError } = await import("@/lib/meta/connection-access");
+  const { ConnectionAccessError } = await import("@/services/business-access");
   h.owned.mockReset().mockImplementation(async (id: string) => {
     if (id !== businessId) throw new ConnectionAccessError("NOT_FOUND", "Business not found");
     return { businessId: id, userId: "owner" };

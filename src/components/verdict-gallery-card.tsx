@@ -33,7 +33,7 @@ export function VerdictGalleryCard({ card, words }: { card: GalleryCard; words?:
         <AudienceSwitchStrip campaignId="00000000-0000-4000-8000-000000001841" operationId="00000000-0000-4000-8000-000000001842"
           running={card.input.status === "active"} onDone={nothing} />
       )}
-      {card.reviews && <RejectedAds reviews={card.reviews} spend={card.input.spend} running={card.input.status === "active"} vertical={card.vertical ?? null}
+      {card.reviews && <RejectedAds reviews={card.reviews} spend={card.input.spend} running={card.input.status === "active"} vertical={card.vertical ?? null} words={words}
         onEditAd={(editHint) => setHint(editHint ?? "")} />}
       {hint !== null && <p role="status" className="text-sm text-slate-700">Opens the words editor{hint ? ` with: ${hint}` : "."}</p>}
       <CampaignVerdict verdict={judged} words={words} whatsapp={whatsapp} results={card.input.results} spend={card.input.spend}

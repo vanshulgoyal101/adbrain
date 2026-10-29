@@ -92,7 +92,7 @@ function suspenseBoundaries(node: any): any[] {
 
 describe("Home workspace", () => {
   // #1469: between launch and first delivery Home says Meta is checking, once.
-  const CHECKING = "Meta is checking your ads. This usually takes minutes to a few hours, and up to a day.";
+  const CHECKING = "Meta checks your ads first. This usually takes a few hours, sometimes up to a day.";
   it("says Meta is checking while the newest campaign's ads are in review (#1469)", () => {
     const live = { id: "c-new", name: "Solar", status: "active", daily_budget: 300, raw: {}, meta_campaign_id: "1" } as unknown as Campaign;
     render(<WorkspaceHome {...empty} business={business} campaigns={[live]} adReview={{ kind: "checking", campaignId: "c-new" }} />);
@@ -103,7 +103,7 @@ describe("Home workspace", () => {
     const live = { id: "c-new", name: "Solar", status: "active", daily_budget: 300, raw: {}, meta_campaign_id: "1", launched_at: new Date().toISOString() } as unknown as Campaign;
     const result = { campaign_id: "c-new", impressions: 0, clicks: 0, spend: 0, leads: 0, conversations: 0, fetched_at: new Date().toISOString(), raw: {} } as unknown as CampaignResult;
     render(<WorkspaceHome {...empty} business={business} campaigns={[live]} results={{ "c-new": result }} adReview={{ kind: "checking", campaignId: "c-new" }} />);
-    expect(screen.getAllByText(/Meta is checking your ads/)).toHaveLength(1);
+    expect(screen.getAllByText(/Meta checks your ads first/)).toHaveLength(1);
     expect(screen.queryByRole("status", { name: "Meta review" })).toBeNull();
   });
 
@@ -395,7 +395,7 @@ describe("Home workspace", () => {
     const { default: DashboardPage } = await import("@/app/(app)/dashboard/page");
     render(await DashboardPage());
     expect(queries.getAdStatuses).toHaveBeenCalledWith("c-new");
-    expect(screen.getByRole("status", { name: "Meta review" })).toHaveTextContent("Meta is checking your ads");
+    expect(screen.getByRole("status", { name: "Meta review" })).toHaveTextContent(CHECKING);
     vi.unstubAllEnvs();
   });
 
