@@ -33,7 +33,7 @@ tools beyond Node; inspect their prerequisites before executing.
 | `start` | Serves an existing production build; real routes remain live |
 | `lint` | ESLint, no automatic fixes by default |
 | `typecheck` | TypeScript no-emit check; Next generated types may need a build first |
-| `docs:check` | Read-only Markdown links/anchors, fences, JSON examples, command names and source inventories; no application imports or external requests |
+| `docs:check` | Read-only Markdown links/anchors, fences, JSON examples, command names, source inventories and quoted labels in `docs/product` (must appear in app copy; examples go in `LABEL_PROSE`), and every cron (workflows, `vercel.json`, pg_cron) listed in `docs/operations/scheduled-jobs.md`, and each `docs/product/hi` page's `<!-- mirrors -->` stamp matching its English page's headings and quoted labels (restamp after a refresh: `npm run docs:check -- --stamp docs/product/hi/x.md`); no application imports or external requests |
 | `audit:dependencies` | npm registry advisory check; fails at high severity for runtime dependencies and critical for dev tooling (unpatched `braces` advisory GHSA-vfj7-8cjw-p6xm in ESLint tooling, #102); requires network |
 | `test` | One Vitest run in Node, components opt into jsdom |
 | `test:watch` | Persistent Vitest watcher; stop it when finished |

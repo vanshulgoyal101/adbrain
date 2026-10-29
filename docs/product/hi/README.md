@@ -2,7 +2,7 @@
 
 [Features and workflows](../README.md) का हिस्सा। ये अंग्रेज़ी पेजों के हिंदी रूप हैं, रिप्रेज़ेंटेटिव
 और सपोर्ट के लिए। स्क्रीन के शब्द अंग्रेज़ी में ही रखे गए हैं। अंग्रेज़ी पेज बदले तो हिंदी
-पेज भी उसी PR में बदलें।
+पेज भी उसी PR में बदलें। हर पेज के ऊपर `<!-- mirrors -->` वाली लाइन बताती है कि वह अंग्रेज़ी पेज के किस रूप का अनुवाद है; अंग्रेज़ी के शीर्षक या स्क्रीन के शब्द बदलें तो `docs:check` हिंदी पेज का नाम बताता है। अनुवाद ठीक करके `npm run docs:check -- --stamp docs/product/hi/<पेज>.md` चलाएँ।
 
 | पेज | अंग्रेज़ी पेज |
 | --- | --- |
@@ -16,3 +16,5 @@
 | [जाँचें और लाइव करें](review.md) | [Review and Go Live](../review.md) |
 | [कैंपेन टारगेटिंग और बजट](targeting-and-budget.md) | [Campaign Targeting and Budget](../targeting-and-budget.md) |
 | [Go live के बाद आपका पहला हफ़्ता](first-week.md) | [Your first week after Go live](../first-week.md) |
+| [AdBrain कैसे काम करता है](how-adbrain-works.md) | [How AdBrain Works](../how-adbrain-works.md) |
+| [सेटिंग्स: खर्च की सीमा और आपकी पसंद](settings.md) | [Settings: Spend Guardrails and Preferences](../settings.md) |

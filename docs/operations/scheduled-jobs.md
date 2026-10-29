@@ -79,3 +79,26 @@ Meta and requires authorization, even though the method is GET.
 Keepalive is not a promise that a provider will never pause a project. For an
 outage, inspect provider status and restore through the authorized dashboard.
 Do not infer every DNS/TLS failure is an inactivity pause.
+
+### Every Schedule
+
+All times are UTC. `docs:check` fails when a cron in `.github/workflows/`, `vercel.json` or a
+`cron.schedule` migration is missing from this table, or when a row names one that no longer exists.
+GitHub's schedules are best effort and often fire hours late, so the jobs that matter are also
+dispatched (team supervisor, pushes) or run by pg_cron.
+
+| Source | Schedule | What runs |
+| --- | --- | --- |
+| pg_cron `adbrain-enforce-spend` | `*/15 * * * *` | `/api/cron/enforce-spend` |
+| pg_cron `adbrain-sync-leads` | `5,20,35,50 * * * *` | `/api/cron/sync-leads` |
+| pg_cron `adbrain-refresh-results` | `10,25,40,55 * * * *` | `/api/cron/refresh-results` |
+| pg_cron `adbrain-cron-history-cleanup` | `40 3 * * *` | Deletes `cron.job_run_details` older than 7 days |
+| Workflow `scheduled-jobs.yml` | `7,22,37,52 * * * *` | The backup scheduler and alerts above |
+| Workflow `create-smoke.yml` | `17 */2 * * *`, `47 8 * * *` | Picture smoke every 2 hours and a daily `--prepare` smoke, both $0 (#2145, #2230) |
+| Workflow `production-guard.yml` | `30 3 * * *` | Daily read-only core smoke ([Production guard](releasing-recovery.md#production-guard)) |
+| Workflow `production-drift.yml` | `*/15 * * * *` | Fails when main HEAD isn't live 15 minutes after it landed (also on every main push) |
+| Workflow `deploy-train.yml` | `11,41 * * * *` | Promotes a green `next` to `main` (#461; also on every `next` push) |
+| Workflow `db-backup.yml` | `30 21 * * *` | Nightly database backup (#884; [Backups](backups.md)) |
+| Workflow `model-review-reminder.yml` | `17 4 * * 1` | Weekly; opens a model review issue once the last is 21 days old (#388) |
+| Vercel `/api/cron/keepalive` | `0 6 * * *` | Keepalive (Hobby allows daily at most) |
+| Vercel `/api/cron/enforce-spend` | `0 6 * * *` | Daily enforce-spend |
