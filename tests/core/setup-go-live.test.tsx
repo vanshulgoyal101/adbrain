@@ -104,7 +104,8 @@ describe("core: <SetupGoLive> (#1271)", () => {
     expect(chips[0].className).toContain("bg-primary/10");
     expect(chips[0].className).not.toMatch(/(^|\s)bg-primary(\s|$)/);
     expect(screen.getByText("Meta checks your ads first, usually within a few hours and up to a day.")).toBeInTheDocument();
-    expect(screen.getAllByText(/₹708/)).toHaveLength(2);
+    // The budget line and 'Stops at'; #1990's payment helper names it once more, for UPI top-ups.
+    expect(screen.getAllByText(/₹708/)).toHaveLength(3);
   });
 
   it("Page not connected: the primary connects it first, then the page refreshes", () => {
@@ -185,6 +186,14 @@ describe("core: <SetupGoLive> (#1271)", () => {
     expect(screen.getByRole("link", { name: "Open Campaigns" })).toHaveAttribute("href", "/campaigns?all=1");
   });
 
+  it("#1990: blocked on Meta billing: says how to pay in the owner's words, links to Meta's payment page, no review link", async () => {
+    const run = tapGoLive();
+    await run.finish({ kind: "blocked", messages: [], billing: true });
+    expect(screen.getByRole("alert")).toHaveTextContent("Meta needs a way to pay first: a card, or money added by UPI or net banking. Add it in Meta, then tap Go live again. Nothing was spent.");
+    expect(within(screen.getByRole("alert")).getByRole("link", { name: "Add payment in Meta" })).toHaveAttribute("href", "https://business.facebook.com/billing_hub/payment_settings");
+    expect(screen.queryByRole("link", { name: "Fix in campaign review" })).toBeNull();
+  });
+
   it("not connected any more: the tap opens the Meta dialog", async () => {
     const run = tapGoLive();
     await run.finish({ kind: "connect" });
@@ -198,6 +207,29 @@ describe("core: <SetupGoLive> (#1271)", () => {
     expect(bar().getByRole("button", { name: "Go live · ₹300 a day" })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "₹1,000 a day" }));
     expect(bar().getByRole("button", { name: "Go live · ₹1,000 a day" })).toBeDisabled();
+  });
+
+  it("#1990: a new owner is told card or UPI, and that UPI needs the run's total added first; it follows the 2/7-day choice", () => {
+    goLive({ funding: "own" });
+    expect(screen.getByText("Add a card, or pay by UPI or net banking")).toBeInTheDocument();
+    const how = "Card: Meta charges it after the ads run. UPI or net banking: add money first, at least TOTAL, or the ads stop when it runs out.";
+    expect(screen.getByText(how.replace("TOTAL", "₹708"))).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "7 days" }));
+    expect(screen.getByText(how.replace("TOTAL", "₹2,478"))).toBeInTheDocument();
+  });
+
+  it("#1990: the payment helper and the billing refusal in Hindi", () => {
+    render(<SetupGoLive business={business} ads={ads} pageConnected funding="own" words={{ locale: "hi", messages: hi.setup }}
+      whatsappNumber="+91 ••••• 3210" weeklyCap={{ capRupees: null, active: [] }} />);
+    expect(screen.getByText("कार्ड जोड़ें, या UPI या नेट बैंकिंग से भुगतान करें")).toBeInTheDocument();
+    expect(screen.getByText("कार्ड: विज्ञापन चलने के बाद Meta पैसे काटता है। UPI या नेट बैंकिंग: पहले पैसे डालें, कम से कम ₹708, वरना पैसे खत्म होते ही विज्ञापन रुक जाएँगे।")).toBeInTheDocument();
+    expect(hi.setup.goLive.billingRequired).toBe("Meta को पहले पेमेंट का तरीका चाहिए: कार्ड, या UPI या नेट बैंकिंग से डाले गए पैसे। Meta में जोड़ें, फिर से लाइव करें दबाएँ। कोई पैसा खर्च नहीं हुआ।");
+  });
+
+  it("#1990: a returning owner doesn't get the payment helper", () => {
+    render(<SetupGoLive business={business} ads={ads} pageConnected funding="own" returning
+      whatsappNumber="+91 ••••• 3210" weeklyCap={{ capRupees: null, active: [] }} />);
+    expect(screen.queryByText(/UPI or net banking: add money first/)).toBeNull();
   });
 
   it("money row (#1251 CEO): only the own-ad-account row; AdBrain's 'Ad money' row stays hidden for every funding mode", () => {

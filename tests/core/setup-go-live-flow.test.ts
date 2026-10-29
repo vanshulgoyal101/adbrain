@@ -215,6 +215,20 @@ describe("core: setup Go live one tap (#1271 4b) on recorded Meta answers", () =
     expect(bodies["POST /api/campaigns/create"]).toEqual(request);
   });
 
+  it("#1990: no way to pay in Meta: 'blocked' with billing (step 3 words it), other blockers kept, nothing created", async () => {
+    const { deps, calls } = await api();
+    // The blocker capability-verification.ts returns when the account has no funding_source_details.id.
+    const billing = { code: "BILLING_REQUIRED" as const, message: "Meta billing must be verified before activation.", action: null };
+    const other = { code: "MISSING_PERMISSION" as const, message: "Meta advertising permission is required.", action: null };
+    deps.client = { ...deps.client, status: async () => ({ ...connection, capabilities: { ...connection.capabilities, canActivate: { state: "blocked", blockers: [billing] } } }) };
+    await expect(goLive(deps, input)).resolves.toEqual({ kind: "blocked", messages: [], billing: true });
+    deps.client = { ...deps.client, status: async () => ({ ...connection, capabilities: { ...connection.capabilities, canActivate: { state: "blocked", blockers: [billing, other] } } }) };
+    await expect(goLive(deps, input)).resolves.toEqual({ kind: "blocked", messages: [other.message], billing: true });
+    deps.client = { ...deps.client, status: async () => ({ ...connection, capabilities: { ...connection.capabilities, canActivate: { state: "blocked", blockers: [other] } } }) };
+    await expect(goLive(deps, input)).resolves.toEqual({ kind: "blocked", messages: [other.message] });
+    expect(calls).toEqual([]);
+  });
+
   it("not connected: asks to connect and calls nothing else", async () => {
     const { deps, calls } = await api();
     deps.client = { ...deps.client, status: async () => ({ ...connection, authorization: "reauth_required" }) };
