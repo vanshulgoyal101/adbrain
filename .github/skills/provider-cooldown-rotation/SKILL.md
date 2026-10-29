@@ -3,7 +3,7 @@ name: provider-cooldown-rotation
 description: "When a product calls multiple external providers, models, accounts, or API keys for the same operation."
 ---
 
-<!-- Generated from vanshulgoyal101/skills@fb8f6e0 skills/provider-cooldown-rotation.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
+<!-- Generated from vanshulgoyal101/skills@b877c32 skills/provider-cooldown-rotation.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
 
 # Provider Cooldown Rotation
 
@@ -80,3 +80,8 @@ October 2026 evidence and status per item is in
 failure codes, typed exhaustion and deadline classification verified in
 production; 5xx key-skip and capped `Retry-After` verified in CI; shared-limit
 wait still open.
+
+## AdBrain lesson (Oct 29)
+
+- When a free provider saturates, park it for a short window after the first capped
+  timeout instead of making every request pay the full timeout (#2153).
