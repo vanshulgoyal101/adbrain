@@ -13,6 +13,7 @@ the PRs and issues; priorities belong in [Roadmap](../roadmap.md). Start at [the
 | [Sign in and connect Meta](setup.md) | Sign in; connect a Meta ad account and Page |
 | [Your first ad on a phone](first-ad.md) | Owner help: sign-up to results on a phone, step by step |
 | [Support replies](support-replies.md) | For the support WhatsApp: the owner's words, the screen, the cause and a reply for the pilot's top failures |
+| [Your first week after Go live](first-week.md) | Owner help: Meta review, what's normal early on, enquiries, rejections, pausing, the money lines |
 | [Brand](brand.md) | Build the Brand Brain the ads are written from |
 | [Create and review ads](create.md) | Make ads, edit them, approve them |
 | [Prepare a campaign](launch.md) | Start a campaign draft, WhatsApp campaigns |
