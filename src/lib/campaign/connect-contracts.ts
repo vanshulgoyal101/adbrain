@@ -70,6 +70,8 @@ export const draftInputSchema = z
     whatsappMessage: whatsappTemplateSchema.optional(),
     targeting: targetingInputSchema,
     abTest: z.boolean(),
+    /** #2273 (#680 placement test): leave Facebook Reels out. Internal-only control; absent means automatic. */
+    excludeFacebookReels: z.boolean().optional(),
   })
   .strict();
 export type DraftInput = z.infer<typeof draftInputSchema>;

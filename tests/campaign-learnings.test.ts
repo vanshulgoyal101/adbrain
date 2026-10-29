@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildLaunchSnapshot, recordLaunchCap, saveLaunchSnapshot } from "@/lib/campaign/learnings";
 import createTape from "./core/fixtures/meta/create.json";
 import launchTape from "./core/fixtures/meta/launch-validate.json";
+import noReelsTape from "./core/fixtures/meta/no-facebook-reels-validate.json";
 
 // The real create.json tape (recorded before #334, so it sent advantage_audience 0).
 const recorded = createTape as unknown as { path: string; form?: Record<string, string>; body: { id?: string } }[];
@@ -37,6 +38,10 @@ describe("learning ledger snapshot (#588)", () => {
     const automatic = sent("instant_form").map((targeting) => { const { publisher_platforms: _dropped, ...rest } = JSON.parse(targeting); void _dropped; return JSON.stringify(rest); });
     expect(buildLaunchSnapshot({ ...base, sentTargetings: automatic }).placements).toBe("advantage");
     expect(buildLaunchSnapshot({ ...base, sentTargetings: [...sent("whatsapp"), ...automatic] }).placements).toBe("mixed");
+    // #2273: the no-Reels test, as Meta accepted it.
+    const noReels = (noReelsTape.tape as unknown as { destination: string; kind: string; form: Record<string, string> }[])
+      .filter(e => e.destination === "whatsapp" && e.kind === "adsets").map(e => e.form.targeting);
+    expect(buildLaunchSnapshot({ ...base, sentTargetings: noReels }).placements).toBe("advantage:facebook,instagram,messenger -facebook_reels");
   });
 
   it("#672 v2: records Advantage+ as sent and Meta's creative ids from the recorded create tape", () => {

@@ -133,6 +133,7 @@ import { cn } from "@/lib/utils";
 import { useMounted } from "@/lib/use-mounted";
 import { refreshIfStale, staleCampaignIds } from "@/lib/campaign/results-freshness";
 import { GONE_LINES, OUTSIDE_LINES, budgetChangedInMeta, goneInMeta, pausedInMeta } from "@/lib/campaign/gone-in-meta";
+import { CampaignTestOptions } from "@/components/campaign-test-options";
 import { formatDate, formatMoney, formatMoneyExact, formatNumber, formatPerDay } from "@/lib/format";
 
 const subscribeNever = () => () => {};
@@ -227,6 +228,8 @@ type CampaignsProps = {
   verdictWords?: Words<"verdict">;
   /** #1438: the list header, filters and sync lines in the owner's language. */
   campaignWords?: Words<"campaigns">;
+  /** #2273: the team's own accounts see the no-Facebook-Reels test control (internal-accounts.ts). */
+  internal?: boolean;
 };
 
 const BACKGROUND_PLAN_DELAY_MS = 1500;
@@ -288,6 +291,7 @@ function BusinessCampaigns({
   weeklyCap = null,
   verdictWords,
   campaignWords,
+  internal = false,
   scope,
   initialSetup,
   onSetupChange,
@@ -340,6 +344,7 @@ function BusinessCampaigns({
   const [includedNames, setIncludedNames] = useState(initialSetup?.includedNames ?? "");
   const [excludedNames, setExcludedNames] = useState(initialSetup?.excludedNames ?? "");
   const [abTest, setAbTest] = useState(initialSetup?.abTest ?? false);
+  const [noFacebookReels, setNoFacebookReels] = useState(false);
   // #1155: who sees the ads folds under one line; it starts open only for a setup that already changed it.
   const [whoOpen, setWhoOpen] = useState(() => abTest || targeting.locationMode === "manual" || targeting.ageMode === "manual"
     || targeting.gender !== "all" || targeting.cityScope !== "city_only" || Boolean(targeting.audience) || Boolean(initialSetup?.excludedNames || initialSetup?.includedNames));
@@ -555,6 +560,7 @@ function BusinessCampaigns({
     setWhatsAppMessage(input.whatsappMessage ?? null);
     destinationChosenRef.current = true;
     setAbTest(input.abTest);
+    setNoFacebookReels(input.excludeFacebookReels === true);
     setCreationMode("manual");
     setDraftGoal(input.goal);
     setIncludedNames((input.targeting.location?.includedNames ?? []).join("\n"));
@@ -738,6 +744,7 @@ function BusinessCampaigns({
     setSelected(new Set());
     setBudget(200);
     setAbTest(false);
+    setNoFacebookReels(false);
     setTargeting(defaultTargeting);
     setIncludedNames("");
     setExcludedNames("");
@@ -953,6 +960,7 @@ function BusinessCampaigns({
       whatsappMessage,
       targeting: targetingFromEditor(targeting, plannedAreas, plannedExclusions),
       abTest,
+      excludeFacebookReels: internal && noFacebookReels,
     });
   }
 
@@ -2222,22 +2230,8 @@ function BusinessCampaigns({
                   </div>}
                 </div>
 
-                <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-slate-200 p-3">
-                  <input
-                    type="checkbox"
-                    checked={abTest}
-                    onChange={(e) => setAbTest(e.target.checked)}
-                    className="mt-0.5 h-4 w-4 accent-blue-600"
-                  />
-                  <span className="text-sm">
-                    <span className="font-medium text-slate-800">
-                      A/B test the audience by age
-                    </span>
-                    <span className="block text-xs text-slate-500">
-                      Two ad sets, each with the entered daily budget. Total daily budget: {formatMoney(totalDailyBudget)}.
-                    </span>
-                  </span>
-                </label>
+                <CampaignTestOptions abTest={abTest} onAbTest={setAbTest} totalDailyBudget={totalDailyBudget}
+                  {...(internal ? { noFacebookReels, onNoFacebookReels: setNoFacebookReels } : {})} />
                 </div>
                 </details>
 
