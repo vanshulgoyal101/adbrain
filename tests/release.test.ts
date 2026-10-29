@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { managementMigrationSql, migrationChecksum } from "../scripts/database-migrations.mjs";
-import { changedLines, ctoApproval, ctoReviews, failingChecks, moneyPath, qaApproval, releaseMigrations, reviewVerdicts, smokeCounts, supersededBy, backupFresh, commitStatuses, guardRun } from "../scripts/release.mjs";
+import { changedLines, ctoApproval, releaseGate, ctoReviews, failingChecks, moneyPath, qaApproval, releaseMigrations, reviewVerdicts, smokeCounts, supersededBy, backupFresh, commitStatuses, guardRun } from "../scripts/release.mjs";
 
 const head = "c30aabaf55338d92d4f0ac9ca01eac027190aceb";
 const comment = (body: string, createdAt: string) => ({ body, createdAt, url: `https://example.test/${createdAt}` });
@@ -303,5 +303,29 @@ describe("production guard run for a commit (#2138)", () => {
     expect(guardRun([run(2, "completed", "skipped"), run(1, "completed", "skipped")])).toBeUndefined();
     expect(guardRun([])).toBeUndefined();
     expect(guardRun([run(2, "in_progress", ""), run(1, "completed", "success")])?.status).toBe("in_progress");
+  });
+});
+
+describe("release gate re-check (#2187)", () => {
+  const isHead = (sha: string) => head.startsWith(sha);
+  const qaOk = comment("**QA verdict at c30aaba: approved.**\n- Migration sha256 `35fa7d21`", "2026-10-28T11:30:00Z");
+  const reviewerOk = comment("Reviewer review of c30aaba: **approved.**", "2026-10-28T11:40:00Z");
+
+  it("passes when QA and the Reviewer still approve the head", () => {
+    expect(releaseGate({ comments: [qaOk, reviewerOk], head, samePatch: isHead, needsCto: true }).missing).toEqual([]);
+  });
+
+  it("names the Reviewer when the approval is withdrawn after preflight", () => {
+    const withdrawn = comment("Reviewer review of c30aaba: changes requested. generate/route.ts grew 473→476 lines.", "2026-10-28T11:48:17Z");
+    expect(releaseGate({ comments: [qaOk, reviewerOk, withdrawn], head, samePatch: isHead, needsCto: true }).missing).toEqual(["Reviewer/CTO"]);
+  });
+
+  it("names QA when QA's latest verdict is no longer an approval", () => {
+    const qaNo = comment("**QA verdict at c30aaba: changes requested.**", "2026-10-28T11:49:00Z");
+    expect(releaseGate({ comments: [qaOk, reviewerOk, qaNo], head, samePatch: isHead, needsCto: true }).missing).toEqual(["QA"]);
+  });
+
+  it("does not ask for a Reviewer on a PR without money paths or migrations", () => {
+    expect(releaseGate({ comments: [qaOk], head, samePatch: isHead, needsCto: false }).missing).toEqual([]);
   });
 });
