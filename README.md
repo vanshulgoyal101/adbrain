@@ -14,14 +14,14 @@ Start at the [documentation index](docs/README.md).
 
 | Goal | Guide |
 | --- | --- |
-| Install and run safely | [Developer quick start](docs/QUICK_START.md) |
-| Understand the product | [Features and workflows](docs/FEATURES.md) |
+| Install and run safely | [Developer quick start](docs/team/quick-start.md) |
+| Understand the product | [Features and workflows](docs/product/README.md) |
 | Learn the codebase | [Architecture](docs/ARCHITECTURE.md) |
-| Integrate or debug requests | [API reference](docs/API_REFERENCE.md) |
-| Configure providers and limits | [Configuration](docs/CONFIGURATION.md) |
-| Understand storage and upgrades | [Data model](docs/DATA_MODEL.md) |
-| Validate changes | [Testing](docs/TESTING.md) |
-| Diagnose production | [Operations](docs/OPERATIONS.md) and [observability](docs/OBSERVABILITY.md) |
+| Integrate or debug requests | [API reference](docs/api/README.md) |
+| Configure providers and limits | [Configuration](docs/operations/configuration.md) |
+| Understand storage and upgrades | [Data model](docs/architecture/data-model.md) |
+| Validate changes | [Testing](docs/team/testing.md) |
+| Diagnose production | [Operations](docs/operations/README.md) and [observability](docs/operations/observability.md) |
 | Release safely | [Release workflow](docs/RELEASING.md) |
 
 ## Stack
@@ -41,13 +41,13 @@ See the [architecture guide](docs/ARCHITECTURE.md) for ownership and trust bound
 
 ## Local Development
 
-Start with the [quick start](docs/QUICK_START.md), then the
-[configuration reference](docs/CONFIGURATION.md). Use isolated credentials and
+Start with the [quick start](docs/team/quick-start.md), then the
+[configuration reference](docs/operations/configuration.md). Use isolated credentials and
 confirm the database target before starting the application. An existing
 `.env.local` may point to production; do not overwrite it or copy it into a test
 worktree. The repository's shared development environment is not a sandbox.
 
-The [testing guide](docs/TESTING.md) owns validation commands and safe test
+The [testing guide](docs/team/testing.md) owns validation commands and safe test
 environments. The [release guide](docs/RELEASING.md) owns branch, migration and
 deployment procedures. Follow those guides instead of using production setup
 commands as installation checks.
@@ -65,13 +65,13 @@ checks. Do not commit credentials or generated private artifacts.
   confirmation are distinct stages. Repeated POSTs are not a recovery strategy.
 - Lead sync and report exports exist. Resumable imports and saved follow-up work
   have separate feature candidates and database prerequisites; consult the
-  [roadmap](docs/ROADMAP.md) and exact release receipt before claiming deployment.
+  [roadmap](docs/roadmap.md) and exact release receipt before claiming deployment.
 - Razorpay account activation and website approval are verified, but AdBrain's
   test checkout is not a live payment-to-ad-funding workflow. See
   [payment readiness](docs/PAYMENTS-PLAN.md#verified-razorpay-account-status).
 - Automatic WhatsApp delivery, team roles, Google Ads and general autonomous
   optimisation are not established product workflows.
-- Read [known limitations](docs/FEATURES.md#known-limits) before making availability,
+- Read [known limitations](docs/product/README.md#known-limits) before making availability,
   spend-control, or provider-readiness claims.
 
 ## Working on AdBrain

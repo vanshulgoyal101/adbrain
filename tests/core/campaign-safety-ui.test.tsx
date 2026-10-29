@@ -111,6 +111,11 @@ describe("core: a campaign deleted in Meta shows as deleted after Refresh (#721)
     expect(await within(card).findByText("Deleted in Meta")).toBeTruthy();
     expect(within(card).getByText(message)).toBeTruthy();
     expect(within(card).queryByText("paused")).toBeNull();
+    // #1600 (CPO #1601): the card's own line, which stays after the notice.
+    expect(within(card).getByText("This campaign was deleted in Meta Ads Manager, so it can't run or be changed here. Nothing more will spend. Its results up to then stay below.")).toBeTruthy();
+    // Designer #1633: nothing to fetch any more, so no Refresh; ⋯ stays.
+    expect(within(card).queryByRole("button", { name: /Refresh results/ })).toBeNull();
+    expect(within(card).getByRole("button", { name: /More actions/ })).toBeTruthy();
   });
 });
 
@@ -136,11 +141,11 @@ describe("core: a weak ad outranks 1-of-N rejected on the card (#1274)", () => {
   it("1 of 2 rejected with a weak ad: the pause offer leads, the rejection waits", async () => {
     show([rejected, { id: "a2", effective_status: "ACTIVE" }]);
     expect(await screen.findByRole("button", { name: "Pause this ad" })).toBeTruthy();
-    await waitFor(() => expect(screen.queryByRole("region", { name: "Ads Meta didn't approve" })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole("group", { name: "Ads Meta didn't approve" })).toBeNull());
   });
 
   it("every ad rejected: the rejection shows", async () => {
     show([rejected]);
-    expect(await screen.findByRole("region", { name: "Ads Meta didn't approve" })).toBeTruthy();
+    expect(await screen.findByRole("group", { name: "Ads Meta didn't approve" })).toBeTruthy();
   });
 });

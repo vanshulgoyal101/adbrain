@@ -1,3 +1,4 @@
+import { adAccountState } from "@/lib/meta/account-status";
 /**
  * #1016 (#795 slice 1): after Connect, five things an owner needs before a launch can deliver, each
  * ✓ or one action with a Meta link and a Hindi/English line. Read-only; nothing here changes Meta.
@@ -12,6 +13,8 @@ export type SetupReads = {
   /** The ad account's business portfolio, or null when the account isn't in one. */
   portfolio: { id: string; name: string | null } | null;
   accountActive: boolean;
+  /** #1943: Meta's raw account_status (1 = active), for the plain-words line; null when Meta didn't say. */
+  accountStatus?: number | null;
   currency: string | null;
   /** Meta has a card, UPI or prepaid balance on the ad account (`funding_source_details`). */
   paymentMethod: boolean;
@@ -22,8 +25,17 @@ export type SetupReads = {
 };
 
 export type SetupRowKey = "portfolio" | "adAccount" | "page" | "whatsapp" | "payment";
-export type SetupAction = { label: string; href: string; en: string; hi: string };
+/** No label/href: a line with nothing to do yet (#1943, Meta still checking a new account). */
+export type SetupAction = { label?: string; href?: string; en: string; hi: string };
 export type SetupRow = { key: SetupRowKey; label: string; done: boolean; detail?: string; action?: SetupAction };
+
+/** #1943: the account row's line and one action, from Meta's account_status. */
+function accountStateAction(status: number | null | undefined, account: string): SetupAction {
+  const state = adAccountState(status === 1 ? undefined : status, account)!;
+  // The checklist sits beside Settings' connect controls, so "Connect another account" needs no link here.
+  const action = state.action?.kind === "open_meta" ? state.action : null;
+  return { en: state.en, hi: state.hi, ...(action ? { label: action.label, href: action.url } : {}) };
+}
 
 export function setupChecklistEnabled(env: Record<string, string | undefined> = process.env): boolean {
   return env.META_SETUP_CHECKLIST === "true";
@@ -44,10 +56,10 @@ export function setupChecklist(reads: SetupReads, ids: { adAccountId: string }):
     {
       key: "adAccount", label: "Ad account in rupees", done: reads.accountActive && inRupees,
       detail: reads.accountActive && inRupees ? "Your own ad account; Meta bills you directly" : undefined,
-      action: reads.accountActive && inRupees ? undefined : {
-        label: inRupees ? "Check your ad account" : "Use an ad account in rupees", href: `https://adsmanager.facebook.com/adsmanager/manage/accounts?act=${account}`,
-        en: inRupees ? "Meta has this ad account turned off. Open it in Meta to see why." : "This ad account isn't in Indian rupees (₹). Connect one that is.",
-        hi: inRupees ? "Meta ने यह विज्ञापन खाता बंद किया है। कारण देखने के लिए इसे Meta में खोलिए।" : "यह विज्ञापन खाता भारतीय रुपये (₹) में नहीं है। रुपये वाला खाता कनेक्ट कीजिए।",
+      action: reads.accountActive && inRupees ? undefined : !reads.accountActive ? accountStateAction(reads.accountStatus, account) : {
+        label: "Use an ad account in rupees", href: `https://adsmanager.facebook.com/adsmanager/manage/accounts?act=${account}`,
+        en: "This ad account isn't in Indian rupees (₹). Connect one that is.",
+        hi: "यह विज्ञापन खाता भारतीय रुपये (₹) में नहीं है। रुपये वाला खाता कनेक्ट कीजिए।",
       },
     },
     {

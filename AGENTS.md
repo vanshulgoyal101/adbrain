@@ -88,6 +88,9 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 	members). Between waits, pull the next item from your board row or an unowned `core`
 	issue in your area. **Never run the waiter while you own an item you can act on**
 	(owner, Oct 28): having posted last on it doesn't make it done. Close it, or work it.
+	The waiter enforces this (#2122): if you own any item not labelled `waiting-owner`,
+	`blocked`, `parked`, `decision`, `later` or `standing`, it prints the top 3 and exits 6
+	instead of waiting.
 	The CTO keeps every worker at ≥ 3 actionable items and the ready pool at ≥ 10 across
 	lanes; the CEO checks hourly which workers sit in the waiter and wakes them. Stop only if the CEO says so or the Mac is shutting down. Never end a turn with anything running in
 	the background (waiters, dev servers, watchers, test databases), and close
@@ -109,6 +112,11 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 	branches. Before deleting any branch or worktree, `git cherry origin/main <branch>`
 	shows no `+` lines (or the work is in an open PR or #1258), and uncommitted edits
 	are pushed to a branch first. Removed product features go in #1173.
+- **Two env files only** (owner, Oct 29: neat repo). Secrets go in `.env.local`, every
+	test login in `.env.smoke` (in the owner's checkout), and the committed template is
+	`.env.example`. Never create another `.env.*` file or leave files in the owner's
+	checkout root. Evidence, screenshots, recordings and one-time sign-in links go in the
+	issue or PR (private data in vbrain-private), never in a file in the repo folder.
 
 ## Execution speed
 
@@ -123,6 +131,11 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## Subagents
 
+- **Copilot Fusion, high intelligence** (owner, Oct 29). Role chats run on Copilot
+	Fusion (the default; 30% cheaper), which routes each request by difficulty. Work at a
+	high level of intelligence so Fusion routes you to its stronger models: think
+	carefully, reason through edge cases and verify before claiming. Brief every subagent
+	or helper chat the same way ("use a high level of intelligence"); don't pin a model.
 - **Use subagents to go faster** (owner, Oct 21). Split an issue into independent
 	parts and run them in parallel: research, CI logs, running tests, reviewing your
 	own diff, a red test, a small adjacent fix, the doc update.
@@ -209,6 +222,38 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 	issue. Every removal PR tags the last commit that still has it
 	(`removed/<name>`), adds its row to the pinned log #1173, and never drops a
 	column or table.
+- **Build it properly, from the ground up (owner, Oct 29: no makeshift updates).**
+	Speed comes from small slices, not from shortcuts. Every feature or fix:
+	1. **Design first** when it touches more than one layer: a short plan on the issue
+		(data model, API, service, UI, tests, docs, rollout) before code. It must fit the
+		target architecture (#1792): core domain stays channel-neutral, platform calls only
+		in that channel's adapter.
+	2. **Change every layer it needs**, in the right place: types, DB migration,
+		service, API route, UI, words, tests and the matching doc. No patching a
+		symptom in the UI when the cause is in the service, no copy-pasted logic, and no
+		special cases bolted on with `if (businessId === …)`.
+	3. **Leave the code better than you found it:** reuse or extend the existing
+		module instead of adding a parallel one; split a file you grow past ~400 lines;
+		delete what your change makes dead.
+	4. **No temporary hacks without an owner and date.** A shortcut that must ship
+		needs a `TODO(#issue)` and a follow-up issue in the same PR; otherwise do it
+		properly.
+	5. **Tests at the right level:** a unit test for the rule, a core test with
+		recorded real responses for core paths, and an e2e check for user flows.
+	Reviewers block PRs that skip a layer, duplicate logic or add a hack without
+	an issue.
+- **Refactor continuously, without slowing anyone down (owner, Oct 29).**
+	- Small refactors (rename, extract a function, split a file you're touching)
+		ride along in the feature PR. Anything bigger is its **own** small PR
+		(≤ ~400 changed lines), behaviour-unchanged and proven by existing tests, so
+		it reviews in minutes and auto-merges on green CI.
+	- Never hold a feature, fix or release for a refactor, and never mix a
+		refactor with a money or migration change in one PR.
+	- When you hit messy code, log it on #1792 (one line: file, problem, fix) and
+		keep going; the CTO slots it into a phase.
+	- Speed is measured, not guessed: the CTO watches PR cycle time, CI duration,
+		release frequency and the waiter (idle time) weekly, and posts any slowdown
+		on #364 with its fix.
 
 ## Branches and deployments
 

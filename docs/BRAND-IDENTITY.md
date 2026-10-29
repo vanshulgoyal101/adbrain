@@ -3,7 +3,7 @@
 This reference describes the existing product identity, not a redesign or proof
 of deployment. Use it when adding a screen, changing icons, or reviewing public
 metadata. Source baseline: `672eb13`. Product behavior belongs in
-[Features](FEATURES.md).
+[Features](product/README.md).
 
 ## Name and Mark
 
@@ -108,4 +108,4 @@ alter sibling sites or their favicons as an incidental AdBrain change.
 For documentation-only changes, run `npm run docs:check`; do not regenerate
 assets or replay browser/provider suites. For an actual brand change, run the
 affected icon tests and required CI, then inspect favicon, social raster and
-desktop/mobile surfaces under the [Testing](TESTING.md) isolation rules.
+desktop/mobile surfaces under the [Testing](team/testing.md) isolation rules.

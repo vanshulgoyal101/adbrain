@@ -33,14 +33,13 @@ Object.assign(env, {
 });
 const mode = process.argv[2];
 if (mode === "payments-dev") {
-  const paymentFile = new URL("../.env", import.meta.url);
-  const payments = existsSync(paymentFile) ? parseEnv(readFileSync(paymentFile, "utf8")) : {};
-  const standardKeys = Boolean(payments.RAZORPAY_KEY_ID || payments.RAZORPAY_KEY_SECRET);
-  const legacyKeys = Boolean(payments.RAZORPAY_TEST_KEY_ID || payments.RAZORPAY_TEST_KEY_SECRET);
-  assert.ok(!standardKeys || !legacyKeys || (payments.RAZORPAY_KEY_ID === payments.RAZORPAY_TEST_KEY_ID
-    && payments.RAZORPAY_KEY_SECRET === payments.RAZORPAY_TEST_KEY_SECRET), "Conflicting Razorpay key pairs.");
-  const keyId = standardKeys ? payments.RAZORPAY_KEY_ID : payments.RAZORPAY_TEST_KEY_ID;
-  const keySecret = standardKeys ? payments.RAZORPAY_KEY_SECRET : payments.RAZORPAY_TEST_KEY_SECRET;
+  // The old root `.env` was merged into `.env.local` (CEO, Oct 29), which may also hold live keys: prefer the test pair,
+  // take the standard pair only when it is itself a test key. The rzp_test_ check below still refuses anything live.
+  const payments = inherited;
+  const useTestPair = Boolean(payments.RAZORPAY_TEST_KEY_ID || payments.RAZORPAY_TEST_KEY_SECRET)
+    || !(payments.RAZORPAY_KEY_ID ?? "").startsWith("rzp_test_");
+  const keyId = useTestPair ? payments.RAZORPAY_TEST_KEY_ID : payments.RAZORPAY_KEY_ID;
+  const keySecret = useTestPair ? payments.RAZORPAY_TEST_KEY_SECRET : payments.RAZORPAY_KEY_SECRET;
   assert.ok(/^rzp_test_[A-Za-z0-9]+$/.test(keyId ?? "") && keySecret?.trim(), "Razorpay test credentials required.");
   assert.ok(/^acc_[A-Za-z0-9]+$/.test(payments.RAZORPAY_TEST_ACCOUNT_ID ?? ""), "Verified Razorpay merchant account ID required.");
   Object.assign(env, {

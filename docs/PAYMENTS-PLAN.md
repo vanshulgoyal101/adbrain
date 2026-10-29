@@ -27,7 +27,7 @@ ad money from every captured payment adds up. The same approved terms apply
 with the chosen amount filled in. An unpaid order of another amount is replaced
 (kept, marked superseded, no Pay button); a paid order is never touched, and a
 late payment on a replaced order is credited once. See
-[configuration](CONFIGURATION.md#customer-chosen-annual-amount).
+[configuration](operations/configuration-payments.md#customer-chosen-annual-amount).
 
 Use a versioned operator-managed policy in server/config/SQL, not fake funding
 evidence or rewritten old terms. New checkout must work without an automatic
@@ -147,7 +147,7 @@ consent. An account ID is not funding evidence, and a displayed limit is not a
 count of unused slots. Never create portfolios/accounts to evade restrictions.
 
 Existing-account connection remains available through the documented
-[Meta workflow](META_CONNECT.md). Proposed agency ownership, access and offboarding
+[Meta workflow](architecture/channels/meta-connect.md). Proposed agency ownership, access and offboarding
 terms must be explicit; do not promise ownership transfer or silently rebind
 existing accounts. Preserve uncertainty after a provisioning timeout rather than
 blindly creating another account.
@@ -168,7 +168,7 @@ The [production payment migration](../db/migrations/20260926_production_payment_
 is applied in production (live orders are recorded). The optional [test-order migration](../db/migrations/20260926_razorpay_test_orders.sql)
 and [billing](../db/migrations/20260924_managed_billing.sql)/[event](../db/migrations/20260924_meta_billing_events.sql)
 migrations exist in source; check the migration ledger before relying on them in a
-target. Follow [Data Model](DATA_MODEL.md) and
+target. Follow [Data Model](architecture/data-model.md) and
 [Releasing](RELEASING.md) for target-specific prerequisites and approval.
 
 Live order/capture/webhook/reconciliation/refund behavior and the three identified
@@ -319,8 +319,8 @@ platform for this narrowed scope.
 
 ## 9. Implementation Receipt
 
-[API Reference](API_REFERENCE.md), [Configuration](CONFIGURATION.md) and
-[Testing](TESTING.md) own current commands/contracts; historical commands are not
+[API Reference](api/README.md), [Configuration](operations/configuration.md) and
+[Testing](team/testing.md) own current commands/contracts; historical commands are not
 unconditional setup instructions.
 
 Current source requires `PAYMENTS_TEST_ENABLED=true`, a loopback Supabase URL,
@@ -331,5 +331,5 @@ and all Vercel environments are rejected. The test order amount is fixed at
 
 ## 10. Primary References
 
-- [Roadmap](ROADMAP.md).
+- [Roadmap](roadmap.md).
 - [Release and environment authority](RELEASING.md).

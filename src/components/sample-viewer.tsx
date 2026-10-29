@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { SAMPLE_LABEL } from "@/lib/creative/sample-label";
+import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
 
 type SampleAd = { id: string; headline: string | null; image_url: string | null };
 
@@ -43,8 +44,10 @@ export function SampleViewer({ ads, onClose }: { ads: SampleAd[]; onClose: () =>
         {shown.map((ad) => (
           <div key={ad.id} className="flex w-full shrink-0 snap-center items-center justify-center px-3">
             <figure className="relative max-h-full select-none [-webkit-touch-callout:none]" onContextMenu={(event) => event.preventDefault()}>
+              {/* The thumbnail step 2 already loaded fills in while the full picture arrives on mobile data. */}
               <img src={ad.image_url!} alt={ad.headline ?? "Sample ad"} draggable={false}
-                className="pointer-events-none block max-h-[calc(100svh-8.5rem)] w-auto max-w-full object-contain" />
+                style={{ backgroundImage: `url("${creativeThumbnailUrl(ad.image_url!)}")` }}
+                className="pointer-events-none block max-h-[calc(100svh-8.5rem)] w-auto max-w-full bg-cover bg-center object-contain" />
               <figcaption className="absolute bottom-[4%] left-[4%] inline-flex items-center gap-1.5 rounded-full bg-white/95 px-3 py-1.5 text-xs font-semibold text-slate-950">
                 <span className="size-1.5 rounded-full bg-amber-500" aria-hidden="true" />
                 {SAMPLE_LABEL}

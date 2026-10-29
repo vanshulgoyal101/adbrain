@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
 import internal from "@/lib/internal-accounts.json";
 import { getEnv } from "@/lib/env";
-import { isExemptFromFreeProviders, isInternalUser, isScoreboardExcluded } from "@/lib/internal-accounts";
+import { isExemptFromFreeProviders, isInternalUser, isProspectAccount, isScoreboardExcluded } from "@/lib/internal-accounts";
+import { PILOT_DAY7_EVENT } from "@/lib/feedback/pilot-day7";
 import {
   buildScoreboard,
   newestResults,
+  pilotData,
+  PROSPECT_HANDED_OVER,
   SCOREBOARD_AI_ROUTES,
   SCOREBOARD_EVENT_NAMES,
   SCOREBOARD_PLAN_ROUTE,
@@ -153,6 +156,19 @@ async function handleGET(request: Request) {
     // #1543: earlier runs' Manage snapshots for the 7-day row; unreadable leaves the row out, never the board.
     const { data: manageHistory } = await db.from("product_events").select("created_at, attributes")
       .eq("name", MANAGE_SNAPSHOT).gte("created_at", sevenDays).order("created_at").abortSignal(signal());
+    // #1697: the pilot funnel (counts only): prospect-owned businesses with an ad, hand-overs, Go lives, Day 7 answers.
+    const prospectOwners = new Set(identities.filter((user) => isProspectAccount(user)).map((user) => user.id));
+    const prospectOwned = businesses.filter((business) => prospectOwners.has(business.owner_id)).map((business) => business.id);
+    const [prospectCreatives, pilotEvents, launchedRows] = await Promise.all([
+      prospectOwned.length ? pages<{ business_id: string }>((from, to) => db.from("creatives").select("business_id")
+        .in("business_id", prospectOwned).order("business_id").range(from, to).abortSignal(signal())) : [],
+      pages<{ business_id: string | null; name: string; attributes: { answer?: string } | null; created_at: string }>((from, to) => db.from("product_events")
+        .select("business_id, name, attributes, created_at").in("name", [PROSPECT_HANDED_OVER, PILOT_DAY7_EVENT])
+        .order("created_at").range(from, to).abortSignal(signal())),
+      pages<{ business_id: string; launched_at: string }>((from, to) => db.from("campaigns").select("business_id, launched_at")
+        .not("launched_at", "is", null).order("launched_at").range(from, to).abortSignal(signal())),
+    ]);
+    const pilots = pilotData({ prospectCreatives, pilotEvents, launchedRows, leads, excludedBusinessIds: (owned as Array<{ id: string }>).map((row) => row.id), now: until });
     const board = buildScoreboard({
       events: [...events, ...planRequests],
       aiCalls,
@@ -164,6 +180,7 @@ async function handleGET(request: Request) {
       brandOwners,
       excludedBusinessIds: (owned as Array<{ id: string }>).map((row) => row.id),
       northStar,
+      pilots,
       manageHistory: Array.isArray(manageHistory) ? manageHistory as ScoreManageSnapshot[] : [],
       since: new Date(since),
       until,

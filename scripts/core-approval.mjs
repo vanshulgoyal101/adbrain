@@ -47,7 +47,7 @@ export function coreApproval({ files, head, headRef, headRepo = repo, baseRef = 
   const list = core.length > 2 ? `${core.slice(0, 2).join(", ")} +${core.length - 2}` : core.join(", ");
   // A QA verdict on this head that isn't an approval ("changes requested") holds the PR, whoever else approved.
   if (qa.latest && !qa.approved) return { state: "pending", description: `QA requested changes at ${short}`, url: qa.latest.url };
-  const who = reviewer?.approved ? reviewer.body.split(" ")[0].replace(/[*_]/g, "") : "QA";
+  const who = reviewer?.approved ? reviewer.body.split(" ")[0].replace(/[*_:]/g, "") : "QA";
   // Money and migrations need QA and the CTO or Reviewer (AGENTS, ORCHESTRATION item 5); #1083 merged on one.
   if (files.some((f) => moneyPath.test(f) || MIGRATION.test(f))) {
     if (qa.approved && reviewer?.approved) return { state: "success", description: `QA and ${who} approved ${short} (money/migration)`, url: reviewer.url };
@@ -81,12 +81,16 @@ async function main() {
 
   // Same patch: an approval of an earlier head still counts after a clean merge of the base (as in release.mjs).
   const diffOf = (sha) => gh(["api", "-H", "Accept: application/vnd.github.diff", `repos/${repo}/compare/${pr.base.ref}...${sha}`]);
-  const headLines = changedLines(gh(["pr", "diff", String(n), "-R", repo]));
+  // Lazy and fail-safe: GitHub refuses diffs over 300 files (HTTP 406). Then only a verdict on the exact head counts.
+  let headLines;
   const memo = new Map();
   const samePatch = (sha) => {
     if (head.toLowerCase().startsWith(sha.toLowerCase())) return true;
     if (!memo.has(sha)) {
-      try { memo.set(sha, changedLines(diffOf(sha)) === headLines); } catch { memo.set(sha, false); }
+      try {
+        headLines ??= changedLines(diffOf(head));
+        memo.set(sha, changedLines(diffOf(sha)) === headLines);
+      } catch { memo.set(sha, false); }
     }
     return memo.get(sha);
   };

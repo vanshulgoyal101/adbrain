@@ -18,9 +18,12 @@ The release process ([AGENTS.md](../AGENTS.md)).
    payments or spend-limit APIs, money paths (including the ₹999 plan, `src/lib/plan/`),
    tenant/auth boundaries (`/api/cron`, `/api/whatsapp`, privacy requests,
    `src/lib/security/`, `src/lib/alerts/`, `internal-accounts`) or `db/migrations/` stays pending until
-   a QA verdict, `Reviewer review of <sha>: **approved**` or `CTO review of <sha>:
-   **approved**` names its head (or an earlier head with the same patch). The deploy
-   train (this repo's `next` → `main` only, never a fork's `next`) and a revert labelled `rollback` pass. Hold with `gh pr merge <n>
+   a QA verdict, `Reviewer: review of <sha>: **approved**` or `CTO: review of <sha>:
+   **approved**` names its head (or an earlier head with the same patch). Legacy
+   space-only role prefixes still work; a later negative verdict at that head
+   overrides either format. Money/migrations still need QA plus CTO/Reviewer.
+   The deploy train (this repo's `next` → `main` only, never a fork's `next`) and a
+   revert labelled `rollback` pass. Hold with `gh pr merge <n>
    --disable-auto`. `audit` and `docs` also run but do not block. A change to generation, validation, prompts, models, timeouts, the
    planner, Meta calls or CSP adds or updates a `test:core` test with recorded real
    responses. Update the matching doc in the same PR.
@@ -53,6 +56,11 @@ These controls are split between [.github/workflows/ci.yml](../.github/workflows
 [vercel.json](../vercel.json), and GitHub branch-protection settings. Direct CLI
 deployments are not blocked by Git branch protection; never use `vercel --prod` to
 skip review.
+
+**Action updates (#1772):** [dependabot.yml](../.github/dependabot.yml) opens one grouped `github-actions`
+PR into `next` every Monday; [dependabot-automerge.yml](../.github/workflows/dependabot-automerge.yml) enables
+auto-merge only when Dependabot is the author and every changed file is under `.github/workflows/`. Required
+checks still gate the merge. Anything else Dependabot opens waits for a person.
 
 **The corrected checked-in wildcard disables slash-containing Git branches.** Earlier
 single-star configurations did not.
@@ -112,6 +120,9 @@ exclude entire test directories or suppress uninvestigated findings.
   advisors (read-only) and exits 1 on any WARN or ERROR outside its reviewed
   `ACCEPTED` list. A new finding blocks the release until it is fixed or accepted
   in that list with a reason, through a PR.
+  The owner alert preference and verification RPCs from #974 are accepted only for
+  authenticated execution: both check `auth.uid()` and business ownership inside,
+  fix `search_path`, and keep anonymous execution and direct owner writes denied.
 - **Tenant or money PRs without a migration target `next`** (#461): `release.mjs --pr <n>` runs the same
   QA (and, for money paths including `src/lib/managed/`, CTO) checks, merges into `next`, and prints
   a receipt; the next deploy train ships it and smokes it. Migrations still release to `main`.
@@ -136,7 +147,7 @@ exclude entire test directories or suppress uninvestigated findings.
   never resends the SQL. Rerunning skips migrations already in the ledger.
 - The local campaign hardening changes require the reporting-identity migration
    before the new web code, and the worker migration before enabling worker mode.
-   See [worker rollout](OPERATIONS.md#campaign-worker-rollout). Neither new migration
+   See [worker rollout](operations/runbooks/campaigns.md#campaign-worker-rollout). Neither new migration
    nor a worker deployment is authorized merely by publishing code.
 - Credential backfills and encryption-key changes require explicit planning.
   Do not replace an encryption key without preserving access to existing tokens.
@@ -173,7 +184,10 @@ Vercel Hobby allows 100 production deploys a day, and every push to `main` is on
   commit. A run with **0 jobs** is GitHub's merge ref not being ready yet (#878): it reruns that run
   once and keeps retrying for up to 10 minutes. A PR CI failure that ran jobs stops the train at once.
 - A red or stuck `next` opens one `Deploy train stuck` issue for DevOps. Fix `next`
-  with a PR to it; production keeps the last train.
+  with a PR to it; production keeps the last train. The promote step's own 93-minute
+  limit leaves its alert time to run. A newer push cancels a waiting train, and a
+  cancelled run alerts nothing, so the scheduled watchdog job opens the same issue
+  (once) when a change has waited on `next` for 120 minutes (#2029).
 - [pr-base.yml](../.github/workflows/pr-base.yml) retargets PRs opened against `main`
   to `next`, except the train itself, PRs labelled `hotfix` or `ready-to-ship`, and PRs
   that add `db/migrations/` (released to `main` by DevOps with `release.mjs`).
@@ -186,7 +200,7 @@ The Supabase free plan keeps no backups (owner, Oct 27: no Pro), so we keep our 
 - **Nightly encrypted dump:** [db-backup.yml](../.github/workflows/db-backup.yml) runs `pg_dump`
   of the `public`, `private` and `auth` schemas (data and schema; `private` holds the encrypted Meta tokens, payment orders and the migration ledger) as the read-only role `backup_reader`
   (`BYPASSRLS`, `default_transaction_read_only`). It connects through the session pooler using the
-  Actions secret `BACKUP_DATABASE_URL` (the only place its password lives). The dump is gzipped
+  `BACKUP_DATABASE_URL` secret of the `production-secrets` environment (`main` only, #1893; the only place its password lives; rotate with a SCRAM verifier, `alter role backup_reader password 'SCRAM-SHA-256$…'`, and allow ~2 min for the pooler's cache). The dump is gzipped
   and encrypted (openssl CMS, AES-256) to the public certificate
   [.github/backup/backup-cert.crt](../.github/backup/backup-cert.crt), then kept as a 14-day
   workflow artifact. Only the private key decrypts it; it lives in DevOps's keychain
@@ -196,8 +210,8 @@ The Supabase free plan keeps no backups (owner, Oct 27: no Pro), so we keep our 
   over 23 h old.
 - **Before every migration:** `scripts/release.mjs` requires a successful backup that finished
   less than an hour ago, and dispatches one and waits if needed.
-- **Second copy:** the supervisor's nightly JSON export into `~/.adbrain-backups`
-  ([Operations](OPERATIONS.md#data-safety-and-recovery)).
+- **Second copy:** the supervisor's nightly JSON export into `~/.adbrain-backups`, encrypted to the same certificate (`.tar.gz.cms`)
+  ([Operations](operations/backups.md#data-safety-and-recovery)).
 - **Storage:** the same run mirrors the owners' uploads (`brand-assets`: logos, product photos;
   names from the database, files from their public URLs) into a separate `<name>-uploads` artifact, encrypted
   the same way. Generated ad images (`creatives`, ~830 MB) are left out because they can be
@@ -263,8 +277,10 @@ anyone watching (owner-approved automatic rollback, #111):
   `Production is not main HEAD` issue if that commit is not live. A run whose
   commit is no longer main HEAD passes and leaves the check to the newer run.
 
-Every step is bounded below the 45-minute job limit, because a cancelled job
-opens no issue (#210). `playwright install --with-deps` gets 8 minutes; the
+Every step has its own `timeout-minutes`, and together they fit inside the 95-minute
+job limit, because a timed-out job opens no issue (#210, #2029; a step timeout still
+does). `tests/workflow-time-budgets.test.ts` enforces that sum for the guard and the
+deploy train. `playwright install --with-deps` gets 8 minutes; the
 Ubuntu apt mirror has stalled for 11-15 minutes. After that the guard installs
 Chromium without OS packages and still runs the smoke, but a failure then only
 opens the issue and does not roll back. If the browser install also fails, the
@@ -277,8 +293,11 @@ check are skipped. Steps run in `bash` with pipefail, so `| tee` cannot turn a
 failed smoke green (#153). To prove that, run the workflow manually with
 `force_fail`: it must end red, without a rollback or an issue.
 The rollback drill input `drill` forces the same FAIL, then really rolls
-production back and opens a `[DRILL]` core bug; restore with the recovery steps
-below.
+production back and opens a `[DRILL]` core bug. It captures the served commit and
+deployment ID **before** the forced smoke, rather than assuming the workflow ref
+is live; rollback must still match that captured deployment. Run a real drill only
+with separate authorization and after token restoration (#1746); this fix does not
+enable rollback or restore secrets. Restore with the recovery steps below.
 
 **Without `VERCEL_TOKEN` (CEO, Oct 24, #413):** after each production deploy the guard
 waits until the domain's `X-AdBrain-Release` header (the build's commit, #1457) is that
@@ -293,7 +312,24 @@ Revisit if a bad deploy ever stays live longer than an hour.
 Recovery after an automatic rollback: the guard rolls back by **promoting** the
 last good deployment (#390), so Vercel keeps auto-promoting later deploys; each new
 deploy gets its own guard. Fix forward or revert through a PR; when the fix is live
-and its guard passes, close the issue. While one `Production smoke failed` issue is
+and its guard passes, close the issue.
+
+**Superseded rollback (#2030):** a failed smoke does not authorize replacing an
+unrelated release. The guard checks the served commit and deployment ID, requires
+that exact failed deployment in READY history, then rechecks serving identity
+immediately before invoking promotion. If production changed, it logs
+`Superseded: rollback skipped` and makes no promotion; the original smoke failure
+still opens/comments on the incident. Check the newer deployment's own guard
+before deciding whether recovery is needed. Unknown serving identity or a missing
+failed deployment refuses rollback rather than guessing an earlier target; investigate
+the run and deployment history instead of retrying against the unrelated current
+release. The final API read and CLI promotion are not an atomic compare-and-swap;
+stop competing promotions during an explicitly authorized recovery/drill.
+Offline regression check (Node, Bash and jq; no credentials or network):
+`node --experimental-vm-modules --test scripts/production-guard.test.mjs`;
+the required CI `core` job runs it explicitly (Vitest only includes `tests/**/*.test.{ts,tsx}`).
+
+While one `Production smoke failed` issue is
 open, further failures comment on it instead of opening more. A rollback done by
 hand with `vercel rollback` (or the dashboard) does turn auto-promotion off. **Never end
 an incident there (#1457):** once the fix is merged, promote the deployment of **main

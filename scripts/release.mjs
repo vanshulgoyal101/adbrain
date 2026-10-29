@@ -64,12 +64,12 @@ export function releaseMigrations(files) {
 // #1740: `lib/plan` (the ₹999 plan: crediting, gate, links) and its cron are money too.
 export const moneyPath = /^src\/(lib\/payments\/|lib\/managed\/|lib\/plan\/|app\/api\/payments\/|app\/api\/cron\/(enforce-spend|payment-health|plan-links)\/|lib\/campaign\/(spend|activation|budget|funding))/;
 
-// "CTO review of <sha>", "CTO post-release review of <sha>" or the Reviewer's "Reviewer review of <sha>" (#575);
+// CTO/Reviewer "review of <sha>" verdicts accept the required "Role:" signature and legacy space-only form;
 // in "<old> → <new>" the last sha is the one reviewed.
 export function ctoReviews(comments) {
   return comments.flatMap((c) => {
     const line = c.body.split("\n")[0];
-    const sha = line.match(/^[*_\s]*(?:CTO|Reviewer) (?:post-release )?review of (?:[0-9a-f]{7,40}\s*(?:→|->)\s*)*([0-9a-f]{7,40})\b/i)?.[1];
+    const sha = line.match(/^[*_\s]*(?:CTO|Reviewer):? (?:post-release |re-)?review of (?:[0-9a-f]{7,40}\s*(?:→|->)\s*)*([0-9a-f]{7,40})\b/i)?.[1];
     if (!sha) return [];
     const verdict = verdictSentence(c.body);
     const approved = /\*\*approved\.?\*\*/i.test(verdict) && !/\b(not approved|changes requested|request(ed)? changes|withdrawn|blocked)\b/i.test(verdict);
@@ -87,8 +87,11 @@ export function supersededBy(log) {
   return log.match(/Superseded: production serves newer ([0-9a-f]{7,40})/)?.[1] ?? null;
 }
 
+/** The smoke retries once: count from its last attempt (the last "Sign in" line), so a flake it recovered from doesn't stop a release. */
 export function smokeCounts(log) {
-  return { pass: (log.match(/\dZ PASS /g) ?? []).length, fail: (log.match(/\dZ FAIL /g) ?? []).length };
+  const starts = [...log.matchAll(/\dZ (?:PASS|FAIL) Sign in\b/g)];
+  const last = starts.length ? log.slice(starts.at(-1).index) : log;
+  return { pass: (last.match(/\dZ PASS /g) ?? []).length, fail: (last.match(/\dZ FAIL /g) ?? []).length };
 }
 
 /** #884: a migration needs a database backup that finished less than an hour ago. */
