@@ -22,8 +22,10 @@ import { whenTheyTapLine } from "@/components/when-they-tap";
 import type { Business, Creative } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-/** #1251: the first run is 2 days, so the most it can spend is shown with the daily amount. */
+/** #1251: the first run is 2 days by default, so the most it can spend is shown with the daily amount. */
 export const SETUP_RUN_DAYS = 2;
+/** #1530 (CEO): 2 days stays the self-serve default; pilots pick 7 (₹300 a day, ₹2,478 at most with GST). */
+export const SETUP_RUN_DAY_CHOICES = [SETUP_RUN_DAYS, 7] as const;
 
 export type SetupFunding = "operator" | "managed" | "own";
 
@@ -104,9 +106,9 @@ function TesterInviteHint({ tried, locale, onRetry }: { tried: boolean; locale: 
 }
 
 /**
- * #1271 (#1251 WS1 step 3): what will run, the budget for 2 days, and a checklist whose one primary walks
- * Connect Facebook Page → Go live. Go live is one tap (4b): save the draft, review it, create it paused, then turn
- * it on as a 2-day capped run (setup-go-live-flow). Nothing is spent before that tap; the server enforces the cap.
+ * #1271 (#1251 WS1 step 3): what will run, the budget for 2 or 7 days (#1530), and a checklist whose one primary
+ * walks Connect Facebook Page → Go live. Go live is one tap (4b): save the draft, review it, create it paused, then
+ * turn it on as a capped run of the chosen days (setup-go-live-flow). Nothing is spent before that tap; the server enforces the cap.
  */
 export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNumber, weeklyCap, welcome = null, returning = false, initialDaily, locale = "en", appReviewPending = false }: {
   business: Pick<Business, "id" | "name" | "locations">;
@@ -129,6 +131,7 @@ export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNum
 }) {
   const router = useRouter();
   const [daily, setDaily] = useState<number>(initialDaily ?? BUDGET_PRESETS[0]);
+  const [days, setDays] = useState<number>(SETUP_RUN_DAYS);
   const [connectOpen, setConnectOpenState] = useState(false);
   const showInviteHint = appReviewPending && !pageConnected;
   // #1989: this tab's storage, so the server (and hydration) render the before-the-tap hint.
@@ -147,7 +150,7 @@ export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNum
   const [result, setResult] = useState<GoLiveResult | null>(null);
   const running = useRef(false);
   // #1251 CPO/Dev 2: the most it can cost includes Meta's GST, worked out as activation's reserve check does.
-  const total = capWithGstPaise({ dailyRupees: daily, days: SETUP_RUN_DAYS }) / 100;
+  const total = capWithGstPaise({ dailyRupees: daily, days }) / 100;
   const cap = weeklyCap ? weeklyCapNotice(weeklyCap.active, daily, weeklyCap.capRupees) : null;
   const areas = (business.locations ?? []).filter((place) => place.trim()).join(", ");
   const ids = ads.map((ad) => ad.id).join(",");
@@ -167,7 +170,7 @@ export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNum
     try {
       const outcome = await goLive(
         { client: createMetaConnectClient(), fetch: (...args) => fetch(...args), storage: sessionStore() },
-        { businessId: business.id, businessName: business.name, ads, dailyBudgetRupees: daily, capDays: SETUP_RUN_DAYS },
+        { businessId: business.id, businessName: business.name, ads, dailyBudgetRupees: daily, capDays: days },
         setStep,
       );
       if (outcome.kind === "connect") setConnectOpen(true);
@@ -207,7 +210,7 @@ export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNum
         </div>
         <div>
           <dt className="text-slate-500">Budget</dt>
-          <dd className="mt-1 font-medium text-slate-950">{formatMoney(daily)} a day for {SETUP_RUN_DAYS} days, {formatMoney(total)} at most including Meta&apos;s GST</dd>
+          <dd className="mt-1 font-medium text-slate-950">{formatMoney(daily)} a day for {days} days, {formatMoney(total)} at most including Meta&apos;s GST</dd>
           <dd className="mt-2"><div className="flex flex-wrap gap-2" role="group" aria-label="Daily budget">
             {BUDGET_PRESETS.map((amount, index) => (
               <button key={amount} type="button" aria-pressed={daily === amount} aria-label={`${formatMoney(amount)} a day`} disabled={step !== null || result?.kind === "live"}
@@ -216,6 +219,16 @@ export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNum
                   daily === amount ? "border-primary bg-primary/10 text-primary" : "border-slate-300 bg-white text-slate-700")}>
                 {/* #1587: one solid primary on the step; 'a day' once, so the chips fit one row at 390. */}
                 {index === 0 ? `${formatMoney(amount)} a day` : formatMoney(amount)}
+              </button>
+            ))}
+          </div></dd>
+          <dd className="mt-2"><div className="flex flex-wrap gap-2" role="group" aria-label="How many days">
+            {SETUP_RUN_DAY_CHOICES.map((choice) => (
+              <button key={choice} type="button" aria-pressed={days === choice} disabled={step !== null || result?.kind === "live"}
+                onClick={() => { setDays(choice); setResult(null); }}
+                className={cn("min-h-11 rounded-full border px-4 text-sm font-medium",
+                  days === choice ? "border-primary bg-primary/10 text-primary" : "border-slate-300 bg-white text-slate-700")}>
+                {choice} days
               </button>
             ))}
           </div></dd>
@@ -254,7 +267,7 @@ export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNum
           <Row done={false} title="Ad money" status="Pay by UPI or card"
             action={<Link href="/settings" className="inline-flex min-h-11 items-center text-sm font-medium text-primary underline underline-offset-4">Add money</Link>} />
         )}
-        <Row done title={`Stops at ${formatMoney(total)}`} status={`${SETUP_RUN_DAYS} days at ${formatMoney(daily)} a day, including Meta's GST`} />
+        <Row done title={`Stops at ${formatMoney(total)}`} status={`${days} days at ${formatMoney(daily)} a day, including Meta's GST`} />
       </ul>
       <p className="mt-4 text-sm text-slate-600">Meta checks your ads first, usually within a few hours and up to a day.</p>
       {/* #718 (CEO, path A): AdBrain's own price, said before the first Go live. */}
