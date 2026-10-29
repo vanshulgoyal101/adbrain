@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   settleCustomerCosts: vi.fn(),
   listSettlingBusinesses: vi.fn(),
   sweepManaged: vi.fn(),
+  saveOutsideChanges: vi.fn(),
   failedTable: "",
   failedPageAfter: "",
   updateError: null as { message: string } | null,
@@ -50,6 +51,7 @@ vi.mock("@/lib/payments/operator-funding", () => ({
   fundingMode: async (id: string) => (await mocks.isOperatorFunded(id)) ? "operator" : mocks.ownAccount ? "own" : "managed",
 }));
 vi.mock("@/lib/managed/spend-cap-wiring", () => ({ sweepManagedSpendCaps: mocks.sweepManaged }));
+vi.mock("@/lib/campaign/outside-changes", () => ({ saveOutsideChanges: mocks.saveOutsideChanges }));
 vi.mock("@/lib/meta/managed-account", async (original) => ({ ...await original<object>(), getManagedAccount: async () => null }));
 vi.mock("@/lib/meta/connection-access", () => ({
   ConnectionAccessError: class ConnectionAccessError extends Error {},
@@ -373,6 +375,38 @@ describe("scheduled spend binding boundary", () => {
     expect(mocks.updateCampaignStatus).toHaveBeenCalledWith("meta-campaign-1", "PAUSED");
     expect(mocks.confirmCustomerCampaign).not.toHaveBeenCalled();
     expect((await response.json()).swept).toEqual([{ businessId: "business-1", paused: ["campaign-1"] }]);
+  });
+
+  // #2290: the owner moved the end date in Ads Manager after the last refresh; Meta's time decides, not the stored one.
+  const metaState = (endTime: string) => ({ status: "ACTIVE", adSets: [{ id: "capped-1", status: "ACTIVE", lifetimeBudget: "90000", endTime }] });
+  it("keeps running an ended capped run whose end date Meta now holds later, and stores Meta's time (#2290)", async () => {
+    configureAdmin([{ ...boundCampaign, raw: endedCap }], [{ business_id: "business-1", weekly_cap_rupees: null, alert_pct: 80, auto_pause: false }]);
+    mocks.ownAccount = true;
+    const state = metaState(new Date(Date.now() + 86_400_000).toISOString().replace(/\.\d{3}Z$/, "+0000"));
+    mocks.getCampaignInsights.mockResolvedValue({ spend: 0, metaState: state });
+    mocks.saveOutsideChanges.mockResolvedValue({ changed: true, raised: false });
+    const { GET } = await import("@/app/api/cron/enforce-spend/route");
+    const response = await GET(new Request("http://localhost/api/cron/enforce-spend", { headers: { authorization: "Bearer cron-secret" } }));
+    expect(response.status).toBe(200);
+    expect(mocks.getCampaignInsights).toHaveBeenCalledWith("meta-campaign-1");
+    expect(mocks.updateCampaignStatus).not.toHaveBeenCalled();
+    expect(mocks.saveOutsideChanges).toHaveBeenCalledWith(expect.objectContaining({ businessId: "business-1" }), expect.objectContaining({ id: "campaign-1" }), state);
+    expect((await response.json()).swept).toEqual([]);
+  });
+
+  it.each([
+    ["Meta holds the same past end time", () => ({ spend: 0, metaState: metaState(endedCap.cap.endTime) })],
+    ["Meta's answer has no end time", () => ({ spend: 0, metaState: { status: "ACTIVE", adSets: [] } })],
+    ["Meta can't be read", () => Promise.reject(new Error("Meta unavailable"))],
+  ])("still stops an ended capped run when %s (#2290)", async (_case, insights) => {
+    configureAdmin([{ ...boundCampaign, raw: endedCap }], [{ business_id: "business-1", weekly_cap_rupees: null, alert_pct: 80, auto_pause: false }]);
+    mocks.ownAccount = true;
+    mocks.getCampaignInsights.mockImplementation(async () => insights());
+    const { GET } = await import("@/app/api/cron/enforce-spend/route");
+    const response = await GET(new Request("http://localhost/api/cron/enforce-spend", { headers: { authorization: "Bearer cron-secret" } }));
+    expect(response.status).toBe(200);
+    expect(mocks.updateCampaignStatus).toHaveBeenCalledWith("meta-campaign-1", "PAUSED");
+    expect(mocks.saveOutsideChanges).not.toHaveBeenCalled();
   });
 
   // #2301: an ended run stops whole (campaign, ad sets, ads), so its card can turn it on capped again.
