@@ -3,7 +3,7 @@ name: provider-cooldown-rotation
 description: "When a product calls multiple external providers, models, accounts, or API keys for the same operation."
 ---
 
-<!-- Generated from vanshulgoyal101/skills@b877c32 skills/provider-cooldown-rotation.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
+<!-- Generated from vanshulgoyal101/skills@eb9e65d skills/provider-cooldown-rotation.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
 
 # Provider Cooldown Rotation
 
@@ -85,3 +85,6 @@ wait still open.
 
 - When a free provider saturates, park it for a short window after the first capped
   timeout instead of making every request pay the full timeout (#2153).
+- When a success rate misses by one request, group usage events by request id with
+  `HAVING NOT bool_or(status = 'success')` to get the failed request's whole provider
+  chain in one query (#2242).

@@ -3,7 +3,7 @@ name: security-boundary-contracts
 description: "Use this skill when a feature crosses authentication, tenant ownership, URL fetching, browser automation, storage, database policy, external APIs, or privileged operations."
 ---
 
-<!-- Generated from vanshulgoyal101/skills@b877c32 skills/security-boundary-contracts.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
+<!-- Generated from vanshulgoyal101/skills@eb9e65d skills/security-boundary-contracts.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
 
 # Security Boundary Contracts
 
