@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { serverError } from "@/lib/api";
 import { logEvent } from "@/lib/audit";
 import { CreativeImageError, CreativeValidationError, generateOneVariant } from "@/lib/creative/generate";
+import { pausedPhotoFor } from "@/lib/creative/owner-photos";
 import { imageAttemptCostsNothing } from "@/lib/imageGen/types";
 import {
   persistCreativeImage,
@@ -27,7 +28,7 @@ import {
   variantUsageEvents,
   failedVariantUsage,
 } from "@/lib/creative/receipt";
-import { creativeReferences, recentCreativeCopy } from "@/lib/creative/references";
+import { creativeAssets, recentCreativeCopy } from "@/lib/creative/references";
 import { preferenceContext } from "@/lib/preferences/store";
 
 export const runtime = "nodejs";
@@ -131,9 +132,9 @@ async function handlePOST(
   let unresolved = false;
   let response: NextResponse;
   try {
-    const [instructions, referenceImages, recentCopy] = await Promise.all([
+    const [instructions, { references: referenceImages, photos }, recentCopy] = await Promise.all([
       getActiveInstructionsText(business.id),
-      creativeReferences(supabase, business.id),
+      creativeAssets(supabase, business.id),
       recentCreativeCopy(supabase, business.id),
     ]);
     const settings = savedGenerationSettings(creative.generation);
@@ -151,6 +152,7 @@ async function handlePOST(
       [{ headline: creative.headline ?? "", primary_text: creative.primary_text ?? "" }, ...recentCopy].slice(0, 12),
       advisoryPreferences,
       settings.sourceFacts,
+      pausedPhotoFor(angle, photos),
     );
     const recorded = await persistLLMUsage(
       variantUsageEvents(variant, {

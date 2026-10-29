@@ -58,7 +58,8 @@ historical input. Returns either `{ready:false, question, promptVersion}` or
 `{ready:true, brief, language?, angleId?, recommendations?, promptVersion}`.
 Questions carry `id`, `field`, `question`, optional help, options and input flags.
 When no AI provider answers because of load (rate limits, provider 5xx, timeouts or
-the 45 s deadline), it returns `503 {error, code: "AI_BUSY"}` with `Retry-After: 10`;
+the 45 s deadline), it returns `503 {error, code: "AI_BUSY"}` with `Retry-After: 10`.
+Gemini gets at most 25 s of that, so a hanging Gemini still leaves the paid fallback time (#2249);
 the page shows the message with a one-tap Try again (#410). A refused key or request
 (401, 403, 400, such as a key over its spending limit, #449) stays a 500 so it alerts.
 Optional recommendations contain 2-3 distinct `{label,prompt}` records.

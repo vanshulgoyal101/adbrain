@@ -27,7 +27,7 @@ const PAUSE_PATHS = ["src/app/api/campaigns/[id]/route.ts", "src/app/api/cron/en
 function throttleReaders(files: string[]): string[] {
   return files.filter((path) => {
     const text = read(path);
-    return /["']@\/lib\/meta\/throttle-store["']/.test(text) || /\b(appThrottledUntil|throttledBusinesses)\s*\(/.test(text);
+    return /["']@\/services\/meta-throttle["']/.test(text) || /\b(appThrottledUntil|throttledBusinesses)\s*\(/.test(text);
   });
 }
 
@@ -52,7 +52,7 @@ function switchGuards(file: ts.SourceFile): { line: number; activationOnly: bool
 
 describe("core: a campaign pause is never refused by the throttle memory or the switch guard (#1961)", () => {
   it("only the read-only crons read the throttle memory (#1838)", () => {
-    const readers = throttleReaders(sources("src")).filter((path) => !path.endsWith("src/lib/meta/throttle-store.ts"));
+    const readers = throttleReaders(sources("src")).filter((path) => !path.endsWith("src/services/meta-throttle.ts"));
     expect(readers.filter((path) => !THROTTLE_READERS.has(path))).toEqual([]);
     for (const path of PAUSE_PATHS) if (existsSync(join(ROOT, path))) expect(throttleReaders([path])).toEqual([]);
   });

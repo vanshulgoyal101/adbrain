@@ -3,7 +3,7 @@ name: budget-aware-provider-routing
 description: "Use this when a product calls paid LLM or image providers for tasks with different value, latency, or quality requirements, or when it has per-tenant AI quotas, concurrent variants or uncertain reservation lifetime."
 ---
 
-<!-- Generated from vanshulgoyal101/skills@fb8f6e0 skills/budget-aware-provider-routing.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
+<!-- Generated from vanshulgoyal101/skills@b877c32 skills/budget-aware-provider-routing.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
 
 # Budget-Aware Provider Routing
 
@@ -85,3 +85,12 @@ One provider order makes low-value summaries or extraction burn premium tokens. 
 ## Evidence
 
 AdBrain added low-risk budget routing, a paid-usage ledger, monthly quotas, and prompt-cost guards in `16f00e9`, `228a453`, and `bb858ff`.
+
+
+## AdBrain lessons (Oct 28)
+
+- Before comparing vendors, read your own usage events per provider and status: the
+  outage was credit, not price (paid image ≈ $0.017), and the free fallback failed 19%
+  of calls with a 54 s median (#1419).
+- Alert at $1 left, not after credit runs out; and watch first-pass success and top-ups
+  per batch, not just final counts (#1035).

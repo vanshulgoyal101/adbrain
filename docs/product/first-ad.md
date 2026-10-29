@@ -9,6 +9,29 @@ offer. Nothing spends until you tap Go live, and you can stop at any step.
 "Your first month of AdBrain is free. After that it's ₹999 a month; we'll remind
 you before it's due."
 
+## If someone from AdBrain set it up for you
+
+On a visit, the person from AdBrain may make your business details and ads on
+their phone, then type your email to hand them to you. No link or message is sent:
+you sign in yourself, on your own phone, within 30 minutes.
+
+- **Tap:** open adbrain.vanshul.com/login, then "Continue with Google" or "Email
+  me a sign-in link", using the same email you gave them.
+- **You see:** "Make [your business] yours?" and "AdBrain set this up for you on
+  today's visit: your business details and 3 ads. Making it yours signs everyone
+  else out of it." Tap "Make it mine". If it isn't yours, tap "This isn't my
+  business".
+- **Then:** Home says "It's yours. The 'Sample' mark is off your ads. Nothing runs
+  until you tap Go live." with "Your 3 ads are ready" and "Connect and go live".
+  Carry on from [Step 3: Go live](#step-3-go-live). They can't have connected
+  Facebook or made a campaign for you, so you connect your own Page and ad account.
+  You pay Meta for the ads yourself, on your own card or UPI.
+- **If it fails:** a team email gets "Sign in with the owner's own email, not a
+  team account." If your email already has an AdBrain business (say you signed
+  up before the visit), you see "This email already has an AdBrain business; use
+  another email or ask AdBrain". After 30 minutes the hand-over ends; ask them to
+  start it again.
+
 ## Sign in
 
 - **You see:** on a phone, a card first: "From your business to WhatsApp chats".
@@ -45,15 +68,16 @@ with "Continue"; once your ads are made it shows "Your 3 ads are ready" with
 
 ## Step 2: Your ads
 
-- **You see:** "Making your ads…", then lines such as "Writing 3 ads in English…"
-  and "Making the pictures…". When done: "Your ads are ready". AdBrain has picked
-  the strongest; tap an ad to change your pick ("Tap to pick" / "Picked"), or the
+- **You see:** "Making your ads…", then lines such as "Writing 3 ads in English…",
+  "Making the pictures…" and "Almost ready…". When done: "Your ads are ready".
+  AdBrain has picked the strongest; tap an ad to change your pick ("Tap to pick" / "Picked"), or the
   pencil to change its words.
 - **Tap:** "Continue with 1 ad" (the number matches how many you picked).
 - **Made ads before?** You may see "Make ads from your details": "Your earlier ads
   were made from older details or in Studio, so they aren't used here. Making ads
   is included." Tap "Make 3 ads" for fresh ones, or "Use your earlier ads".
-- **Takes:** "Usually about a minute". Nothing is published at this step.
+- **Takes:** "Usually about a minute"; up to about 2 minutes when the picture
+  services are busy. Nothing is published at this step.
 - **If it fails:** making pictures uses free picture services that are sometimes
   busy. Then some ads may not arrive: "1 ad couldn't be made." with "Make another",
   or none: "We couldn't make your ads this time." with "Try again". Wait a minute,
@@ -66,13 +90,16 @@ with "Continue"; once your ads are made it shows "Your 3 ads are ready" with
   "Before you go live":
   - Budget: choose "₹300 a day" (or ₹500, ₹1,000) and "2 days" or "7 days". The
     line above sums it up: "₹300 a day for 2 days, ₹708 at most including Meta's GST".
-  - "When they tap": "They message you on WhatsApp at …" (your number).
+  - "Where": the areas your ads show in.
+  - "When they tap": "They message you on WhatsApp at …" (your number), with the
+    first message they get, in quotes.
   - "Facebook Page": "Not connected" until you connect it.
   - "Payment on Meta": "Add a card, or pay by UPI or net banking". "Card: Meta
     charges it after the ads run. UPI or net banking: add money first, at least
     ₹708, or the ads stop when it runs out." Tap "Add payment in Meta" to do it
     on Meta.
   - "Stops at ₹708": the most this run can ever cost.
+  - "Your Page, your ad account, your card. AdBrain never holds your ad money."
 - **Tap:** while Facebook is still reviewing AdBrain, the Facebook Page row says
   "Facebook is still reviewing AdBrain. Until then, your Facebook account needs our
   invite: open your invites and accept adBrain, then tap Connect." Tap "Open my
@@ -81,9 +108,10 @@ with "Continue"; once your ads are made it shows "Your 3 ads are ready" with
   selected business", then "Continue to review". The row now says "Connected"
   and the button becomes "Go live · ₹300 a day". Tap it.
 - **Takes:** about 10 minutes the first time, mostly connecting Facebook. After
-  you tap Go live you see "Checking your campaign…", "Creating it on Meta,
-  paused…", then "Turning it on…". AdBrain creates the campaign paused first and
-  only switches it on once everything checks out.
+  you tap Go live you see "Checking your campaign…" (AdBrain picks the age range
+  and audience for your ads, as **Recommend audience** does in Campaigns, up to
+  about a minute), "Creating it on Meta, paused…", then "Turning it on…". AdBrain
+  creates the campaign paused first and only switches it on once everything checks out.
 - **If it fails:** nothing is spent when something fails. What the screen says:
   - Meta connect: "Meta has not finished yet. Complete the Meta window, then check
     again. Your draft is saved." Finish in the Meta window, then tap "Check again".
@@ -112,8 +140,8 @@ day." Tap "Open your campaign" to see it.
   day."
 - Customers who tap your ad message you straight on your WhatsApp. Reply there.
 - **Home** shows your results: "Chats" (or "Enquiries"), "Spent" and "Per chat".
-- **Enquiries** lists the people who reached you (tap "See enquiries" on Home).
-  On each one tap "WhatsApp them" for a ready-written first reply, or "Call". Home
+- **Enquiries** (open the menu, then "Enquiries"; or "See enquiries" on Home): form enquiries arrive on their own;
+  WhatsApp chats show there once you add them. On each one tap "WhatsApp them" for a ready-written first reply, or "Call". Home
   shows how quickly you usually contact people, so reply fast.
 - Did someone buy? Tap "Mark customers" so you can see what a customer costs.
 - To stop: on **Campaigns**, tap "Pause" on the campaign; to stop everything at
@@ -121,6 +149,7 @@ day." Tap "Open your campaign" to see it.
   nothing more will be spent once Meta stops them (usually within minutes)." Tap
   "Resume" to turn a campaign back on.
 - The run stops by itself at the total you chose. To run again, tap "New campaign".
+- What to expect day by day: [Your first week after Go live](first-week.md).
 - Stuck at any step? Tap "Help" at the top of the setup screen to message us on
   WhatsApp. (It shows only once AdBrain's support number is set up; until then,
   message the person who gave you AdBrain.)

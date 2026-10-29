@@ -3,7 +3,7 @@ name: multi-worker-delivery
 description: "Use when independent coding agents share repositories, split implementation and review, hand off idle workers, or prepare a release from several feature branches."
 ---
 
-<!-- Generated from vanshulgoyal101/skills@fb8f6e0 skills/multi-worker-delivery.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
+<!-- Generated from vanshulgoyal101/skills@b877c32 skills/multi-worker-delivery.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
 
 # Multi-Worker Delivery
 
@@ -136,6 +136,132 @@ repair or integrate the same file while the user sees a growing local backlog.
 34. Before "make delivery faster", time each stage. CI was 59 s and the post-deploy
    guard 100 s; the real losses were reviews waiting, environment friction and a
    brittle smoke that froze deploys.
+35. Treat a reloaded editor as a dead team. After a restart the old chats reject messages
+   ("Unknown chat owner") and return empty transcripts. Recover by starting one fresh chat
+   per role from a stored restart prompt (role, dispatch, label queue, today's P0, waiter).
+   All eight roles resumed within two minutes, with GitHub as the memory (#573).
+36. Check that a worker is alive by reading its chat's latest turn, not by counting its
+   recent issue comments. Workers stuck on a dead tool call look identical to workers
+   waiting for work in both the UI and the comment log; only the turn shows which.
+37. Steer a busy chat; queue for an idle one. A steer to an idle chat is refused, so
+   fall back to queueing the message, then confirm the chat picked it up.
+38. Rank the queue by its value to customers, from production data, at least daily.
+   An agent team fills empty queues with internal tooling (metrics, flaky-test
+   quarantine, skill programs). One production query showing no outside customers
+   re-ranked the whole team toward the core loop and first pilots (#679, #681).
+39. Give a core-focus sprint one owner per product step and a production baseline per
+   step. "Prepare: 0 of 89 runs fully succeeded" sets the order better than a walk alone.
+40. Refill idle queues from production failure data (top error codes per route), not
+   from a wishlist. Each item then arrives with a target and a recorded response.
+41. A role is live only when its wake script accepts it on the deployed branch. A new
+   role merged to a staging branch failed `--me <role>` on main with a usage error, and
+   the worker sat idle for hours (#575).
+42. A decision posted as a PR review is invisible to a waiter that polls only issue
+   comments. Either poll reviews too or mirror the verdict in a comment (#390).
+43. A handoff on an item the next owner doesn't own is invisible. Make the waiter check
+   who spoke last on every owned item, not only new events (#354).
+44. When an owner-only step needs a browser, open the page yourself and tell the owner
+   which tab to use. "Sign in to the shared browser" means nothing when no tab exists.
+45. A waiter that exits after N idle minutes must be followed by running it again, not
+   by stopping. A rule of "when it exits, stop" shut down every role after one quiet
+   half-hour. Print "run me again" in the waiter's own exit message, so even workers you
+   can't message see it.
+46. "Idle" usually means an empty queue, not a stuck worker. Compare actionable items per
+   role, rebalance from the busiest, and file work for the empty ones; waiters woke 9 of
+   10 roles within two minutes once items were labelled.
+47. Give every long-lived role its own session. Chats nested in one coordinator session
+   share its direct-message cap (100 per process) and its fate, and chats can't be
+   deleted from inside the session that owns them.
+48. Use direct chat messages only to wake an idle chat or stop harm. A message queued
+   to a busy chat sits unread until its turn ends; a steered one is folded into the
+   running turn and looks lost. GitHub is the work channel.
+49. A machine-local team stops when the machine sleeps. A laptop on battery went dark
+   for 12 hours twice; nothing in software fixes a power setting. Check `pmset -g log`
+   before debugging a silent team.
+50. Supervisors that start headless one-shot runs leave a finished session behind each
+   time; delete them in the same tick, or the owner's sidebar fills with dozens.
+51. A hold comment doesn't cancel auto-merge. Leave auto-merge off on a PR that needs a
+   verdict, run `gh pr merge <n> --disable-auto` to hold one, and make the approval a
+   required check on core paths so the rule is mechanical.
+52. A required check must also be satisfiable by bot-opened PRs (a train's sync and
+   promotion PRs trigger no workflows), or the train stops.
+53. Ask each role's restart prompt to re-read the issue's latest state and check for
+   existing objects before any external write. A restarted worker with a stale plan is
+   how duplicates get made.
+54. Prefer the owner's stated experience over a one-run test when they conflict and the
+   test hasn't spent yet ("WhatsApp always beats lead forms" ended a ₹0 arm).
+55. Keep a single register of paused work, with what was built and the event that
+   restarts it, and label it `parked`. "Delete as you go" otherwise deletes paused
+   branches. Before deleting any branch or worktree, `git cherry origin/main <branch>`
+   must show no `+` lines. GitHub keeps every PR's commits at `pull/<n>/head` after
+   branch deletion, so closed PRs are recoverable.
+56. When the priority order changes, remove `ready` from parked items in the same pass.
+   Otherwise the pool still offers them and workers build paused work (two devs built
+   upload slices for an hour after the owner put core and UI first).
+57. A worker silent for 2+ hours on a P0 after two pings is stuck, not busy. Compare
+   per-role comment counts against the queue, and restart with a direct, ordered brief.
+58. A pool of 10 is not enough if every item is one lane. Count the ready pool
+   per lane (dev, design, product, research, qa, ops) at every review.
+59. When pinging about a red PR, ping the branch's author (`dev3/...`), not only the
+   issue's owner. Otherwise both wait for the other.
+60. Check the owner's latest scope before a cleanup PR. A lean-codebase pass deleted a doc
+   the owner had just said to keep, and it had to be restored.
+61. Research briefs belong on the issue, not as docs in git.
+62. Before approving a test that needs Meta writes, check the test workspace is
+   actually Meta-connected. A tab that is already signed in can replace an owner step.
+63. A "next item" waiter is not enough: a worker that posted last on an item is never
+   woken for it. The waiter must hand each worker its oldest actionable owned item
+   before waiting, and keep a floor of ≥ 3 actionable items for **every** role, not only
+   devs. Probe every role's waiter output after changing it.
+64. When you pause a worker's activity, say in the same message when it resumes. A
+   careful worker stops and waits for an all-clear that never comes.
+65. Check process state, not comment counts: `ps` for waiters, and the chat's live
+   transcript. A role with a recent comment can still be stalled.
+66. Before each review pass, list everything addressed to the coordinator (→ CEO,
+   `decision` labels). A deliverable waited 1.5 h for review because only worker
+   activity was being checked.
+67. Before approving anything the owner will see, check it against the owner's exact
+   words point by point and against what's live now. Show the owner 3 samples before
+   the full set (30 "artistic" ads shared one style and were rejected).
+68. Size the team to the machine: 12 agent chats on 8 GB pushed load to 140. Restart in
+   batches of 3–4, measure load and free memory between batches, and set limits:
+   targeted tests only, no local builds or full suites, browsers only for QA roles,
+   closed after each check.
+69. A team kill switch must stop only the team. The supervisor's OFF switch also
+   stopped production's scheduled jobs; keep production dispatch separate.
+70. After a pause or restart, check `gh pr list --head <branch> --state all` before
+   rebuilding anything; it may have shipped. `git branch -vv` `[gone]` doesn't mean
+   merged.
+71. Keep secrets to two env files (app secrets, test logins). One-off env files per
+   test account multiply fast and leak into the owner's checkout.
+72. Write engineering standards into the handbook *and* the PR template ("build every
+   layer properly; refactor in its own small PR; never hold a release for a refactor"),
+   so reviewers can block on them.
+73. Before closing an issue as done, check `gh pr view <n> --json state` and
+   `git cherry origin/next <branch>`, and grep main for the final string if a label was
+   renamed mid-PR; memory and the PR title don't prove it shipped (#1740, #1641). A
+   mockup issue closes when its last build slice is live; name that PR on it (#1251).
+74. Before starting a refilled brief, read the issue's latest comments and `git grep`
+   main for its number; one had shipped a day earlier, another already had a used
+   summary (#1136, #1514).
+75. Verify every quote in a helper's or researcher's draft yourself: a sentence marked
+   "unverified" was in the official guide, and checking a research rule list against
+   the code found a real bug (#2050, #1782).
+76. Ask research to end in copy-ready replacement text for the decision record; it then
+   lands as one docs PR (#2048).
+77. Put review verdicts on the slice PRs; an umbrella tracker only adds re-check pings
+   (#872).
+78. Conflict recipes: when a stacked PR's base was squash-merged, take the target
+   wholesale for files the PR never touched and keep only your hunks; when a docs split
+   lands under an open PR, merge the target and move the paragraph (a rebase discards
+   the approved head); when copy collides with an in-flight translation PR, take the
+   target's `t()` lines and add new keys to every locale with a test (#1920, #1627,
+   #1530).
+79. Budget a shared API token across all workers together: authenticated conditional
+   requests, read the rate-limit headers, and type-check any imported JS contract as
+   well as running it (#2021).
+80. Before filing a bug against a team tool, check which branch it runs from; the waiter
+   ran `main`, which trailed `next` by hours while the train was blocked (#2162).
 
 ## Discriminating checks
 
@@ -224,6 +350,25 @@ repair or integrate the same file while the user sees a growing local backlog.
    default in every product query.
 - Giving every target a date but no owner, or an owner but no date: idle workers sat next
    to a full backlog. Pair each open item with both, in one place.
+- Re-approving a byte-identical rebased patch by hand: a two-hour wait for a one-line
+   re-approval blocked three releases. Compare the PR's own changed lines
+   (`git diff -U0` against its merge base) and carry the approval when they match (#524).
+- Deleting branches by pattern in a shared-`.git` worktree setup: delete only branches
+   you created, by exact name (#390).
+- Starting a rebalanced issue without checking `gh pr list --search <n>` and the
+   previous owner's worktree: work gets done twice (#470).
+- Carrying a change across branches with `git checkout <branch> -- <dir>`: it copies
+   whole directories. Use `git diff <base> <tip> | git apply` and check the PR's file
+   list before enabling auto-merge (#372).
+- Two workers in one worktree: a commit landed on the other's branch. Check
+   `git branch --show-current` and `git status` right before every commit.
+- Pushing review fixes after the PR already auto-merged: the fixes never ship. Check
+   `gh pr view <n> --json state` first, and open a follow-up PR if it's merged.
+- A squash from a stale branch silently reverting someone else's tests: read
+   `git diff --stat origin/next...HEAD` for unexpected deletions before merging. Bring a
+   red test over with cherry-pick, never by checking out a whole file.
+- Committing research write-ups or prospect lists to a public repo: findings go on the
+   issue; outreach data goes to a private store.
 
 ## Related methods
 

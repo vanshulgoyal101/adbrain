@@ -65,7 +65,7 @@ vi.mock("@/lib/supabase/server", () => ({
   }),
 }));
 vi.mock("@/lib/supabase/queries", () => ({ getActiveInstructionsText: async () => recorded.instructions }));
-vi.mock("@/lib/creative/references", () => ({ creativeReferences: async () => [], recentCreativeCopy: async () => recent }));
+vi.mock("@/lib/creative/references", () => ({ creativeAssets: async () => ({ references: [], photos: [] }), recentCreativeCopy: async () => recent }));
 vi.mock("@/lib/preferences/store", () => ({ preferenceContext: async () => "" }));
 vi.mock("@/lib/creative/persist", () => ({
   persistCreativeImage: async () => "https://core-test.supabase.co/storage/v1/object/public/creatives/photo.webp",

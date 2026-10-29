@@ -4,6 +4,7 @@ import { startTransition, useCallback, useEffect, useEffectEvent, useReducer, us
 import { flushSync } from "react-dom";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { CampaignEnquiryDeleteItem, CampaignEnquiryFeedback } from "@/components/enquiry-erasure";
+import { HowItWorks, Stat } from "@/components/campaign-parts";
 import { useCampaignList } from "@/lib/meta-connect-ui/use-campaign-list";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -90,7 +91,7 @@ import type {
   OperationDTO,
   ReviewDTO,
 } from "@/lib/campaign/connect-contracts";
-import { targetingInputSchema } from "@/lib/campaign/connect-contracts";
+import { fetchAudiencePlan, needsAudiencePlan, plannedTargeting, type AudiencePlanReply } from "@/lib/campaign/audience-plan";
 import { campaignNameDate, defaultCampaignName, draftForSelection } from "@/lib/campaign/draft-name";
 import { REVIEW_AND_SPEND, whatsappExpectation } from "@/lib/campaign/expectations";
 import { campaignDestination } from "@/lib/campaign/outcomes";
@@ -228,22 +229,8 @@ type CampaignsProps = {
   campaignWords?: Words<"campaigns">;
 };
 
-type PlanReply = {
-  response: Response;
-  data: { ready?: boolean; fallback?: boolean; targeting?: unknown; error?: string; questions?: { question: string }[]; handoff?: { message: string } };
-};
 const BACKGROUND_PLAN_DELAY_MS = 1500;
 const MAX_BACKGROUND_PLANS = 3;
-
-async function fetchAudiencePlan(input: DraftInput, signal: AbortSignal): Promise<PlanReply> {
-  const response = await fetch("/api/campaigns/plan", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ goal: input.goal, audienceDraft: input }),
-    signal,
-  });
-  return { response, data: await response.json() as PlanReply["data"] };
-}
 
 type AudiencePlanInput = Pick<DraftInput, "goal" | "creativeIds" | "targeting" | "destination">;
 
@@ -263,10 +250,6 @@ function refreshNotice(previous: CampaignResult | undefined, next: CampaignResul
   if (!next) return t("notices.checkedNone");
   if (!previous || keys.some(key => (previous[key] ?? null) !== (next[key] ?? null))) return t("notices.updatedNow");
   return t("notices.checkedSince", { since: formatDate(previous.fetched_at) });
-}
-
-function needsAudiencePlan(input: AudiencePlanInput): boolean {
-  return input.targeting.age?.mode === "ai" || !input.targeting.audience;
 }
 
 /**
@@ -974,7 +957,7 @@ function BusinessCampaigns({
   }
 
   // #366: plan the audience in the background once ads are chosen, so Prepare usually doesn't wait for the AI.
-  const backgroundPlanRef = useRef<{ key: string; reply: Promise<PlanReply>; controller: AbortController } | null>(null);
+  const backgroundPlanRef = useRef<{ key: string; reply: Promise<AudiencePlanReply>; controller: AbortController } | null>(null);
   const backgroundPlansRef = useRef(0);
   function backgroundKeyFor(input: DraftInput): string {
     return audiencePlanKey({ ...input, goal: draftGoal });
@@ -1001,7 +984,7 @@ function BusinessCampaigns({
     backgroundPlansRef.current += 1;
     backgroundPlanRef.current?.controller.abort();
     const controller = new AbortController();
-    const reply = fetchAudiencePlan(input, controller.signal);
+    const reply = fetchAudiencePlan((...args) => fetch(...args), input, controller.signal);
     reply.catch(() => {});
     backgroundPlanRef.current = { key, reply, controller };
   });
@@ -1013,7 +996,7 @@ function BusinessCampaigns({
   useEffect(() => () => backgroundPlanRef.current?.controller.abort(), []);
 
   /** The background reply for exactly this input, used once; null if there is none or it failed. */
-  function takeBackgroundPlan(input: DraftInput, signal: AbortSignal): Promise<PlanReply | null> | null {
+  function takeBackgroundPlan(input: DraftInput, signal: AbortSignal): Promise<AudiencePlanReply | null> | null {
     const planned = backgroundPlanRef.current;
     if (!planned) return null;
     backgroundPlanRef.current = null;
@@ -1031,12 +1014,10 @@ function BusinessCampaigns({
   async function recommendAudience(input: DraftInput, signal: AbortSignal, reuseBackground = false): Promise<DraftInput> {
     setPreparationStage(signal, "Recommending audience...");
     const background = reuseBackground ? takeBackgroundPlan(input, signal) : null;
-    const { response, data } = (background && await background) || await fetchAudiencePlan(input, signal);
+    const reply = (background && await background) || await fetchAudiencePlan((...args) => fetch(...args), input, signal);
     signal.throwIfAborted();
-    if (!response.ok || !data.ready) throw new Error(data.error ?? data.handoff?.message ?? (data.questions?.map((question) => question.question).join(" ") || "We couldn't suggest who should see your ads. Try again, or choose the area yourself."));
-    const recommended = { ...targetingInputSchema.parse(data.targeting), gender: input.targeting.gender ?? "all" as const };
-    if (data.fallback && recommended.audience) setNotice(recommended.audience.rationale);
-    else if (!recommended.audience?.interestNames.length) throw new Error("The detailed targeting recommendation is incomplete. Try again.");
+    const { targeting: recommended, notice } = plannedTargeting(input, reply);
+    if (notice) setNotice(notice);
     setTargeting(targetingToEditor(recommended));
     setIncludedNames((recommended.location?.includedNames ?? []).join("\n"));
     setExcludedNames((recommended.location?.excludedNames ?? []).join("\n"));
@@ -2350,7 +2331,7 @@ function BusinessCampaigns({
           {syncError ? <span className="font-medium text-danger">{syncError}</span> : lastSynced && !syncing ? tc("header.synced", { age: ageText(verdictTranslator(verdictWords), lastSynced.toISOString()) }) : null}
         </p>}
         {(() => {
-          const ready = !(showComposer && destination === "whatsapp") && campaigns.some((c) => campaignDestination(c, results[c.id]) === "whatsapp");
+          const ready = !(showComposer && destination === "whatsapp") && campaigns.some((c) => !goneInMeta(c) && campaignDestination(c, results[c.id]) === "whatsapp");
           return ready && <div className="mb-4"><WhatsAppReadyChecklist businessId={business.id} /></div>;
         })()}
         {showListTools && <div className="mb-5 flex flex-wrap gap-2">
@@ -2636,8 +2617,8 @@ function BusinessCampaigns({
                 </article>
               );
             });
-            return folded
-              ? list.length > 0 && <details key="gone" className="group border-b border-slate-200"><summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 text-sm font-medium text-slate-600 [&::-webkit-details-marker]:hidden"><ChevronRight className="h-4 w-4 text-slate-500 transition-transform group-open:rotate-90" aria-hidden="true" />{tc("list.deleted", { n: list.length })}</summary>{cards}</details>
+            return folded // #2150: Saved drafts (actionable) come before the Deleted fold (history).
+              ? list.length > 0 && [!showComposer && savedDraftsBlock && <div key="drafts" className="-mt-px">{savedDraftsBlock}</div>, <details key="gone" className="group border-b border-slate-200"><summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 text-sm font-medium text-slate-600 [&::-webkit-details-marker]:hidden"><ChevronRight className="h-4 w-4 text-slate-500 transition-transform group-open:rotate-90" aria-hidden="true" />{tc("list.deleted", { n: list.length })}</summary>{cards}</details>]
               : cards;
             })}
           </div>
@@ -2648,7 +2629,7 @@ function BusinessCampaigns({
             {tc(listLoading ? "list.loading" : "list.loadMore")}
           </Button>
         </div>}
-        {!showComposer && savedDraftsBlock && <div className="mt-6">{savedDraftsBlock}</div>}
+        {!showComposer && savedDraftsBlock && goneCampaigns.length === 0 && <div className="-mt-px">{savedDraftsBlock}</div>}
       </div>
     </div>
   );
@@ -2700,40 +2681,4 @@ function CardResults({ campaign, result: r, outcome, comparison, waiting, onRunA
   return <CampaignVerdict verdict={judged} words={words} whatsapp={input.destination === "whatsapp"} results={input.results} spend={input.spend}
     details={figures} onRunAgain={onRunAgain} runAgainBusy={runAgainBusy} adsManagerUrl={adsManagerUrl} onEditAd={onEditAd}
     pauseOffer={weakAd && <PauseOffer campaignId={campaign.id} suggestion={weakAd} whatsapp={input.destination === "whatsapp"} onKeep={clearWeakAd} words={words} />} />;
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <p className="text-lg font-bold text-slate-900">{value}</p>
-      <p className="text-xs text-slate-500">{label}</p>
-    </div>
-  );
-}
-
-const HOW_IT_WORKS_STEPS = [
-  "We create the campaign paused — nothing spends yet.",
-  "Open it in Meta Ads Manager to review the ads and audience.",
-  "Flip it on when you're happy; leads start coming in.",
-  "Come back and hit “Refresh results” to see leads and cost per lead in plain English.",
-];
-
-function HowItWorks() {
-  return (
-    <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-        What happens next
-      </p>
-      <ol className="mt-2 flex flex-col gap-1.5">
-        {HOW_IT_WORKS_STEPS.map((step, i) => (
-          <li key={i} className="flex gap-2 text-sm text-slate-600">
-            <span className="flex h-5 w-5 flex-none items-center justify-center rounded-full bg-blue-100 text-xs font-bold text-blue-700">
-              {i + 1}
-            </span>
-            <span>{step}</span>
-          </li>
-        ))}
-      </ol>
-    </div>
-  );
 }
