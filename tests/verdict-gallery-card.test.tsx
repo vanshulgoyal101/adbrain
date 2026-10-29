@@ -27,6 +27,13 @@ describe("walk page cards (#1841)", () => {
     expect(screen.getByText("2 chats so far. AdBrain will tell you if it's working after 5.")).toBeInTheDocument();
   });
 
+  it("#1795: no 'Ended · Ended' or 'Paused · Live': a word that only restates the status is dropped", () => {
+    render(<><VerdictGalleryCard card={card("Ended, it worked")} /><VerdictGalleryCard card={card("New audience waiting")} /></>);
+    expect(screen.getByText("Ended")).toBeInTheDocument();
+    expect(screen.getByText("Paused")).toBeInTheDocument();
+    expect(screen.queryByText(/· (Live|Ended)$/)).not.toBeInTheDocument();
+  });
+
   it("the newer states: deleted in Meta, and a new audience waiting", () => {
     const { unmount } = render(<VerdictGalleryCard card={card("Deleted in Meta")} />);
     expect(screen.getByText(/deleted in Meta Ads Manager, so it can't run or be changed here/)).toBeInTheDocument();

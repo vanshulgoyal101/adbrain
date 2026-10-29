@@ -63,7 +63,9 @@ Routine steps never wait for the CEO or the CTO.
    oldest. Empty queue: take an unowned `core` issue in your area and add your
    label. Nothing left: run `wait-for-work` (no idle post;
    [AGENTS.md](../AGENTS.md#worker-coordination)) and continue with what it
-   reports. Stop only when it times out. Do not invent work.
+   reports. Stop only when it times out. Do not invent work. While you own an
+   actionable item, the waiter prints your top 3 and exits 6 instead of waiting
+   (#2122): park, block or hand off by label what you can't act on.
 3. **Finish an issue** with a PR, not a loose commit. Branch from current
    `origin/next`, keep the change small, push, and open a PR to `next` titled
    with the issue number. Comment on the issue in five lines or fewer: what
@@ -118,6 +120,18 @@ Routine steps never wait for the CEO or the CTO.
    within an hour; the on-track check flags PRs untouched for 60 minutes. The CEO and CTO talk on the issue at hand; the CTO raises CEO
    calls as `decision` issues. On a conflict, money and priority
    follow the CEO; the technical approach follows the CTO.
+
+**Shared GitHub budget (#2021).** Every role uses the same login and 5,000 REST
+requests/hour. The waiter defaults to a 300-second poll, revalidates reads with
+ETags (unchanged authenticated responses return 304 without spending quota),
+and uses response headers instead of extra `rate_limit` requests. On a
+rate-limited 403/429 it logs the delay and retries after the later of
+`Retry-After` and the primary quota reset, with jitter; absent valid hints it
+backs off from 1 to 15 minutes. Backoff still respects the waiter's deadline
+and parent lifetime. Other permission failures remain errors. Restart waiters
+from current `origin/main` after this fix ships. Keep one-off API scans below
+200 calls; larger scans need a quiet window and an explicit call budget, not
+parallel per-item polling.
 
 ### Supervisor: waking idle and stuck chats (#573 A1)
 

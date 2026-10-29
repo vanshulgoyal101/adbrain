@@ -3,7 +3,7 @@ import JSZip from "jszip";
 import { NextResponse } from "next/server";
 import { apiError, MAX_BATCH_IDS } from "@/lib/api";
 import { downloadImage } from "@/lib/imageGen";
-import { jpegIfWebp } from "@/lib/imageGen/encode";
+import { downloadJpeg } from "@/lib/imageGen/encode";
 import { createClient } from "@/lib/supabase/server";
 import { rateLimitResponse } from "@/lib/security/rate-limit";
 import { z } from "zod";
@@ -71,17 +71,15 @@ async function handlePOST(req: Request) {
         const downloaded = await downloadImage(creative.image_url, signal);
         // A picture that can't be marked is left out, never shipped unmarked.
         const marked = sample ? await sampleWatermark(downloaded.bytes) : downloaded;
-        // #1897: stored ads are WebP; an owner's download is a JPEG any app takes.
-        const jpeg = await jpegIfWebp(marked.bytes);
-        const { bytes, contentType } = jpeg.converted ? { bytes: jpeg.bytes, contentType: "image/jpeg" } : marked;
+        // #1897: downloadImage hands back PNG whatever is stored; the pack ships JPEG.
+        const bytes = await downloadJpeg(marked.bytes);
         if (totalBytes + bytes.byteLength > maximumBytes) {
           exhausted = true;
           skipped++;
           continue;
         }
         totalBytes += bytes.byteLength;
-        const ext = contentType.includes("png") ? "png" : contentType.includes("webp") ? "webp" : "jpg";
-        zip.file(`${label}.${ext}`, bytes);
+        zip.file(`${label}.jpg`, bytes);
       } catch {
         // Skip an image that failed to download; copy is still exported.
         skipped++;

@@ -42,7 +42,7 @@ export function AppLanguage({ initial, labels }: { initial: AppLocale; labels: {
   </section>;
 }
 
-const HI_NOTE = "अभी सिर्फ़ होम हिंदी में है; बाकी स्क्रीन एक-एक करके जुड़ेंगी।";
+const HI_NOTE = "कुछ स्क्रीन अब हिंदी में हैं; बाकी एक-एक करके जुड़ेंगी।";
 
 /**
  * #1641 (CPO #1621): WS1 step 1's chooser, shown only until a language is chosen. Labelled in both scripts and

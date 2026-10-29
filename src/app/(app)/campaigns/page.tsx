@@ -1,6 +1,6 @@
 import { metaWaitFor } from "@/lib/meta/throttle-owner";
 import { reconnectByLabel } from "@/lib/meta/token-expiry";
-import { requestLocale } from "@/i18n/request-locale";
+import { setupWords } from "@/i18n/request-locale";
 import { Alert } from "@/components/ui/alert";
 import { clientCreative } from "@/lib/creative/client-receipt";
 import { madeForSetup } from "@/lib/creative/setup-picks";
@@ -14,7 +14,7 @@ import { BUDGET_PRESETS } from "@/lib/campaign/budget";
 import { setupPhone } from "@/lib/brand/setup-fields";
 import { maskWhatsAppNumber } from "@/lib/meta/whatsapp-status-shared";
 import { fundingMode } from "@/lib/payments/operator-funding";
-import { canUseMetaConnect } from "@/lib/meta/pilot-access";
+import { canUseMetaConnect, metaAppReviewPending } from "@/lib/meta/pilot-access";
 import { adResultsEnabled } from "@/lib/campaign/ad-results-store";
 import { ledgerTotals } from "@/lib/campaign/ledger";
 import { draftDtoSchema, type DraftDTO } from "@/lib/campaign/connect-contracts";
@@ -129,7 +129,7 @@ export default async function CampaignsPage({
     const initialDaily = lastDaily === null ? undefined
       : BUDGET_PRESETS.reduce((best, amount) => Math.abs(amount - lastDaily) < Math.abs(best - lastDaily) ? amount : best);
     return <SetupGoLive business={business} ads={ads} pageConnected={metaReady} funding={funding} returning={again} initialDaily={initialDaily}
-      whatsappNumber={masked ? maskWhatsAppNumber(`+91${masked}`) : null} weeklyCap={weeklyCap} welcome={welcome} locale={await requestLocale()} />;
+      whatsappNumber={masked ? maskWhatsAppNumber(`+91${masked}`) : null} weeklyCap={weeklyCap} welcome={welcome} words={await setupWords()} appReviewPending={metaAppReviewPending()} />;
   }
 
   return (

@@ -1,21 +1,21 @@
 "use client";
 
-import { OWNER_WORDS } from "@/lib/copy/owner-words";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Brain, Building2, ChevronRight, Menu, Plus, X } from "lucide-react";
-import { Nav } from "@/components/nav";
+import { Nav, type ShellLabels } from "@/components/nav";
+import en from "../../messages/en.json";
 import { SignOutButton } from "@/components/sign-out-button";
 import { HelpOnWhatsApp, SupportLinkProvider } from "@/components/support-link";
 import { LEGAL_LINKS } from "@/lib/legal-links";
 import { usePoll } from "@/lib/use-poll";
 import styles from "./workspace-shell.module.css";
 
-const sections: Record<string, string> = {
-  dashboard: "Home", create: "Create ads", studio: "Review",
-  campaigns: "Campaigns", leads: "Enquiries", brand: OWNER_WORDS.business,
-  assets: "Assets", settings: "Settings", onboarding: "Get started",
+const sections: Record<string, keyof ShellLabels> = {
+  dashboard: "home", create: "create", studio: "review",
+  campaigns: "campaigns", leads: "enquiries", brand: "business",
+  assets: "assets", settings: "settings", onboarding: "getStarted",
 };
 
 function readViewedAt(key: string): string | null {
@@ -28,7 +28,9 @@ function saveViewedAt(key: string, time: string) {
 
 const UNSEEN_POLL_MS = 120_000;
 
-export function WorkspaceShell({ children, email, ownerId, businessId, businessName, supportUrl = null, firstAd = false }: {
+export function WorkspaceShell({ children, email, ownerId, businessId, businessName, supportUrl = null, firstAd = false, labels = en.shell }: {
+  /** #1877: the app bar and menu in the owner's language. */
+  labels?: ShellLabels;
   /** #1272: no campaign has gone live yet, so + continues the setup (/create resumes the saved step). */
   firstAd?: boolean;
   children: ReactNode;
@@ -40,7 +42,8 @@ export function WorkspaceShell({ children, email, ownerId, businessId, businessN
 }) {
   const pathname = usePathname();
   const drawer = useRef<HTMLDialogElement>(null);
-  const section = sections[pathname.split("/")[1]] ?? "Workspace";
+  const sectionKey = sections[pathname.split("/")[1]];
+  const section = sectionKey ? labels[sectionKey] : "Workspace";
   const [unseen, setUnseen] = useState<{ key: string; since: string; count: number } | null>(null);
   const viewedKey = businessId ? `lead-viewed:${ownerId}:${businessId}` : null;
   const inInbox = pathname === "/leads" || pathname.startsWith("/leads/");
@@ -75,7 +78,7 @@ export function WorkspaceShell({ children, email, ownerId, businessId, businessN
 
   const identity = <Link href="/brand" className={styles.business}>
     <span className={styles.businessIcon}><Building2 size={17} aria-hidden="true" /></span>
-    <span><strong>{businessName || OWNER_WORDS.business}</strong><small>{businessName ? OWNER_WORDS.business : "Set up your business"}</small></span>
+    <span><strong>{businessName || labels.business}</strong><small>{businessName ? labels.business : "Set up your business"}</small></span>
     <ChevronRight size={14} aria-hidden="true" />
   </Link>;
 
@@ -86,7 +89,7 @@ export function WorkspaceShell({ children, email, ownerId, businessId, businessN
     <aside className={styles.sidebar} aria-label="Main sidebar">
       <Link href="/dashboard" className={styles.logo}><Brain size={20} aria-hidden="true" />AdBrain</Link>
       {identity}
-      <Nav unseenCount={unseenCount} />
+      <Nav unseenCount={unseenCount} labels={labels} />
       {account}
     </aside>
     <div className={styles.body}>
@@ -103,7 +106,7 @@ export function WorkspaceShell({ children, email, ownerId, businessId, businessN
     }}>
       <div className={styles.drawerBody}>
         <div className={styles.drawerHeading}><Link href="/dashboard" className={styles.logo}><Brain size={20} aria-hidden="true" />AdBrain</Link><button type="button" title="Close navigation" aria-label="Close navigation" onClick={() => drawer.current?.close()}><X size={21} aria-hidden="true" /></button></div>
-        {identity}<Nav unseenCount={unseenCount} />{account}
+        {identity}<Nav unseenCount={unseenCount} labels={labels} />{account}
       </div>
     </dialog>
   </div></SupportLinkProvider>;

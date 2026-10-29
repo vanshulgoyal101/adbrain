@@ -1,5 +1,6 @@
 import Razorpay from "razorpay";
 import { z } from "zod";
+import { PLAN_PRICE_PAISE } from "@/lib/plan/status";
 import { DEFAULT_ANNUAL_PAYMENT_PAISE, productionPaymentQuoteSchema, type ProductionPaymentQuote } from "./allocation";
 import { getProductionCollectionPolicy, getProductionPaymentConfig, ProductionPaymentError, quoteForPaymentPolicy, type PaymentSubject } from "./production-config";
 import { razorpayTestOrderSchema as orderSchema, razorpayTestPaymentSchema as paymentSchema } from "./razorpay-test";
@@ -13,6 +14,13 @@ const refundSchema = z.object({
 const collectionSchema = <Schema extends z.ZodType>(schema: Schema, maximum = 100) => z.object({
   entity: z.literal("collection"), count: z.number().int().nonnegative().max(maximum), items: z.array(schema).max(maximum),
 }).refine(value => value.count === value.items.length);
+
+// #718 slice 2: the ₹999/month plan is a Payment Link per period (no auto-debit, no mandate).
+const planLinkSchema = z.object({
+  id: identifier("plink"), amount: z.literal(PLAN_PRICE_PAISE), currency: z.literal("INR"), reference_id: z.string(),
+  status: z.enum(["created", "partially_paid", "expired", "cancelled", "paid"]), short_url: z.url(),
+  payments: z.array(z.object({ payment_id: identifier("pay"), status: z.string(), amount: z.number().int() })).nullable().optional(),
+});
 
 function validated<Schema extends z.ZodType>(schema: Schema, input: unknown): z.output<Schema> {
   const parsed = schema.safeParse(input);
@@ -48,6 +56,25 @@ export function createProductionPaymentClient(environment: Readonly<Record<strin
       if (order.receipt !== receipt || order.amount !== quote.totalPaise || order.amount_paid !== 0
         || order.amount_due !== quote.totalPaise || order.status !== "created") throw new ProductionPaymentError("INVALID_PROVIDER_RESPONSE");
       return order;
+    },
+    async createPlanLink(input: { periodId: string; businessId: string; email: string | null; phone: string | null; expireBy: number }) {
+      z.uuid().parse(input.periodId);
+      z.uuid().parse(input.businessId);
+      const customer = { ...(input.email ? { email: input.email } : {}), ...(input.phone ? { contact: input.phone } : {}) };
+      const link = validated(planLinkSchema, await request(sdk => sdk.paymentLink.create({
+        amount: PLAN_PRICE_PAISE, currency: "INR", accept_partial: false, reference_id: input.periodId, expire_by: input.expireBy,
+        description: "AdBrain plan, one month", reminder_enable: true, customer, notify: { email: Boolean(input.email), sms: Boolean(input.phone) },
+        notes: { purpose: "adbrain_plan", business_id: input.businessId, period_id: input.periodId },
+      })));
+      if (link.reference_id !== input.periodId || link.status !== "created") throw new ProductionPaymentError("INVALID_PROVIDER_RESPONSE");
+      return { id: link.id, shortUrl: link.short_url };
+    },
+    async fetchPlanLink(linkId: string) {
+      identifier("plink").parse(linkId);
+      const link = validated(planLinkSchema, await request(sdk => sdk.paymentLink.fetch(linkId)));
+      if (link.id !== linkId) throw new ProductionPaymentError("INVALID_PROVIDER_RESPONSE");
+      const captured = (link.payments ?? []).find(payment => payment.status === "captured" && payment.amount === PLAN_PRICE_PAISE);
+      return { id: link.id, status: link.status, amountPaise: link.amount, referenceId: link.reference_id, paymentId: captured?.payment_id ?? null };
     },
     async fetchOrder(orderId: string) {
       identifier("order").parse(orderId);
