@@ -240,9 +240,9 @@ export async function getLatestResultsWithEnquiries(campaignIds: string[]): Prom
   const ids = Object.keys(results);
   if (!ids.length) return results;
   const supabase = await createClient();
-  // #798: one read for logged WhatsApp enquiries and enquiries (any source) that became customers.
+  // #798/#1994: one read for logged WhatsApp enquiries and enquiries (any source) that were booked or became customers.
   const { data, error } = await supabase.from("leads").select("campaign_id, source, workflow_status")
-    .in("campaign_id", ids).or("source.eq.whatsapp_manual,workflow_status.eq.customer").limit(10_000);
+    .in("campaign_id", ids).or("source.eq.whatsapp_manual,workflow_status.eq.booked,workflow_status.eq.customer").limit(10_000);
   return error || !data ? results : attachRealEnquiries(results, data);
 }
 
