@@ -15,13 +15,13 @@ Start at the [documentation index](docs/README.md).
 | Goal | Guide |
 | --- | --- |
 | Install and run safely | [Developer quick start](docs/QUICK_START.md) |
-| Understand the product | [Features and workflows](docs/FEATURES.md) |
+| Understand the product | [Features and workflows](docs/product/README.md) |
 | Learn the codebase | [Architecture](docs/ARCHITECTURE.md) |
-| Integrate or debug requests | [API reference](docs/API_REFERENCE.md) |
+| Integrate or debug requests | [API reference](docs/api/README.md) |
 | Configure providers and limits | [Configuration](docs/CONFIGURATION.md) |
 | Understand storage and upgrades | [Data model](docs/DATA_MODEL.md) |
 | Validate changes | [Testing](docs/TESTING.md) |
-| Diagnose production | [Operations](docs/OPERATIONS.md) and [observability](docs/OBSERVABILITY.md) |
+| Diagnose production | [Operations](docs/operations/README.md) and [observability](docs/OBSERVABILITY.md) |
 | Release safely | [Release workflow](docs/RELEASING.md) |
 
 ## Stack
@@ -65,13 +65,13 @@ checks. Do not commit credentials or generated private artifacts.
   confirmation are distinct stages. Repeated POSTs are not a recovery strategy.
 - Lead sync and report exports exist. Resumable imports and saved follow-up work
   have separate feature candidates and database prerequisites; consult the
-  [roadmap](docs/ROADMAP.md) and exact release receipt before claiming deployment.
+  [roadmap](docs/roadmap.md) and exact release receipt before claiming deployment.
 - Razorpay account activation and website approval are verified, but AdBrain's
   test checkout is not a live payment-to-ad-funding workflow. See
   [payment readiness](docs/PAYMENTS-PLAN.md#verified-razorpay-account-status).
 - Automatic WhatsApp delivery, team roles, Google Ads and general autonomous
   optimisation are not established product workflows.
-- Read [known limitations](docs/FEATURES.md#known-limits) before making availability,
+- Read [known limitations](docs/product/README.md#known-limits) before making availability,
   spend-control, or provider-readiness claims.
 
 ## Working on AdBrain

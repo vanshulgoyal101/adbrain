@@ -167,6 +167,15 @@ export async function getBrandAssets(
   return data ?? [];
 }
 
+/** #1945/#1617: the owner has at least one of their own photos (a `product_photo` brand asset). */
+export async function hasOwnPhoto(businessId: string): Promise<boolean> {
+  const supabase = await createClient();
+  const { count, error } = await supabase.from("brand_assets").select("id", { count: "exact", head: true })
+    .eq("business_id", businessId).eq("type", "product_photo");
+  if (error) throw new Error("Photos could not be checked.");
+  return (count ?? 0) > 0;
+}
+
 /** Approved creatives for a business, newest first. */
 export async function getApprovedCreatives(
   businessId: string,
@@ -240,9 +249,9 @@ export async function getLatestResultsWithEnquiries(campaignIds: string[]): Prom
   const ids = Object.keys(results);
   if (!ids.length) return results;
   const supabase = await createClient();
-  // #798: one read for logged WhatsApp enquiries and enquiries (any source) that became customers.
+  // #798/#1994: one read for logged WhatsApp enquiries and enquiries (any source) that were booked or became customers.
   const { data, error } = await supabase.from("leads").select("campaign_id, source, workflow_status")
-    .in("campaign_id", ids).or("source.eq.whatsapp_manual,workflow_status.eq.customer").limit(10_000);
+    .in("campaign_id", ids).or("source.eq.whatsapp_manual,workflow_status.eq.booked,workflow_status.eq.customer").limit(10_000);
   return error || !data ? results : attachRealEnquiries(results, data);
 }
 

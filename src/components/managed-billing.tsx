@@ -1,4 +1,5 @@
 import { WalletCards } from "lucide-react";
+import { translator, type AppLocale } from "@/i18n/locale";
 import type { MetaConnection } from "@/lib/meta/credentials";
 import { TestCheckout } from "@/components/test-checkout";
 import { ProductionCheckout } from "@/components/production-checkout";
@@ -63,7 +64,7 @@ export function ManagedBilling({ connection, testBusinessId, liveBusinessId, ini
  * directly and an operator-funded business is paid by the operator, so neither is asked to pay; nor is anyone
  * while the funding mode can't be read.
  */
-export function BillingSection({ mode, ...billing }: { mode: "managed" | "own" | "operator" | null } & Parameters<typeof ManagedBilling>[0]) {
+export function BillingSection({ mode, locale = "en", ...billing }: { mode: "managed" | "own" | "operator" | null; locale?: AppLocale } & Parameters<typeof ManagedBilling>[0]) {
   if (mode === "managed") return <ManagedBilling {...billing} />;
   if (mode !== "own") return null;
   return (
@@ -72,7 +73,21 @@ export function BillingSection({ mode, ...billing }: { mode: "managed" | "own" |
         <WalletCards aria-hidden="true" className="h-5 w-5 text-blue-600" />
         Billing
       </h2>
-      <p className="text-sm leading-6 text-slate-600">You pay Meta directly from your ad account. AdBrain&apos;s pilot is free.</p>
+      <p className="text-sm leading-6 text-slate-600">You pay Meta directly from your ad account. Your first month of AdBrain is free; after that it&apos;s ₹999 a month.</p>
+      <IfYouStop locale={locale} />
     </section>
+  );
+}
+
+/** #1916 (CPO, #1880): what happens if an own-account owner stops paying, disconnects or deletes. Copy only. */
+function IfYouStop({ locale }: { locale: AppLocale }) {
+  const t = translator(locale, "settings");
+  const rows = [["payingLead", "paying"], ["disconnectLead", "disconnect"], ["deleteLead", "delete"]] as const;
+  return (
+    <ul aria-label={t("ifYouStop.title")} className="space-y-1.5 text-sm leading-6 text-slate-600">
+      {rows.map(([lead, text]) => (
+        <li key={lead}><strong className="font-medium text-slate-900">{t(`ifYouStop.${lead}`)}</strong> {t(`ifYouStop.${text}`)}</li>
+      ))}
+    </ul>
   );
 }

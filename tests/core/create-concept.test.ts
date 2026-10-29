@@ -54,6 +54,9 @@ describe("core: Create concept validation on a recorded production concept", () 
       .toEqual(expect.arrayContaining(["guaranteed", "guaranteed band"]));
     // The same words pass for a business outside education and health.
     expect(adPolicyHits([{ id: "c1", headline: promise.headline, primaryText: promise.primary_text }], "solar energy")).toEqual([]);
+    // CPO (#1910): "crack it in 1st attempt" is the same promise without the word "guaranteed".
+    const firstAttempt = validateConcept({ ...promise, primary_text: `${recorded.concept.primary_text.split("\n")[0]}\nCrack IELTS in 1st attempt.` }, ielts);
+    expect(firstAttempt.success ? [] : conceptValidationRules(firstAttempt.issues).join(" ")).toMatch(/banned-claim/);
   });
 
   // #1617 (CPO, #1501): a generated picture can't be called the business's own work; the owner's photo can.
@@ -66,6 +69,16 @@ describe("core: Create concept validation on a recorded production concept", () 
       return result.success ? [] : result.issues;
     })())).not.toContain("work-claim");
     expect(rules(line("Modular kitchens in Mohali, free consultation."))).not.toContain("work-claim");
+  });
+
+  // #1822 (Reviewer): a pasted bio's third-party number and link are refused (the repair rewrites them); the
+  // business's own phone is allowed.
+  it("refuses a third-party phone and link copied from a pasted bio, allows the business's own phone", () => {
+    const line = (text: string) => ({ ...recorded.concept, primary_text: `${recorded.concept.primary_text.split("\n")[0]}\n${text}` });
+    expect(rules(line("Call 98765 43210 or book at otherclinic.in."))).toContain("contact-in-copy");
+    const withPhone: ConceptInput = { ...input, brand: { ...recorded.brand, phone: "+91 98290 12345" } };
+    const result = validateConcept(line("Call 98290 12345 to book."), withPhone);
+    expect(result.success ? [] : conceptValidationRules(result.issues)).not.toContain("contact-in-copy");
   });
 
   it("clips an over-long link description instead of discarding the concept", () => {

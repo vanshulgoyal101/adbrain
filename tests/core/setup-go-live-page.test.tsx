@@ -13,7 +13,7 @@ const m = vi.hoisted(() => ({
 vi.mock("@/lib/supabase/queries", () => m);
 vi.mock("@/lib/meta/credentials", () => ({ getMetaConnection: m.getMetaConnection }));
 vi.mock("@/lib/payments/operator-funding", () => ({ fundingMode: m.fundingMode }));
-vi.mock("@/lib/meta/pilot-access", () => ({ canUseMetaConnect: m.canUseMetaConnect }));
+vi.mock("@/lib/meta/pilot-access", () => ({ canUseMetaConnect: m.canUseMetaConnect, metaAppReviewPending: () => true }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ auth: { getUser: async () => ({ data: { user: { id: "u1" } } }) } }) }));
 vi.mock("@/lib/meta/connection-access", () => ({ requireOwnedBusiness: async () => { throw new Error("skip drafts"); } }));
 vi.mock("@/components/setup-go-live", () => ({ SetupGoLive: (props: unknown) => { m.goLive(props); return <div>Go live step</div>; } }));
@@ -45,7 +45,7 @@ describe("core: Campaigns → Go live for a first-timer (#1271)", () => {
     expect(screen.getByText("Go live step")).toBeInTheDocument();
     expect(m.goLive.mock.calls[0][0]).toMatchObject({
       ads: [{ id: "b" }, { id: "c" }], pageConnected: true, funding: "managed", whatsappNumber: "+91 ••••• 3210",
-      weeklyCap: { capRupees: 2000, active: [] },
+      weeklyCap: { capRupees: 2000, active: [] }, appReviewPending: true,
     });
   });
 
@@ -75,6 +75,17 @@ describe("core: Campaigns → Go live for a first-timer (#1271)", () => {
     m.getApprovedCreatives.mockResolvedValue([ad("old", "Get WhatsApp enquiries for rooftop solar in Mohali"), ad("new")]);
     await page({});
     expect(m.goLive.mock.calls[0][0].ads).toEqual([expect.objectContaining({ id: "new" })]);
+  });
+
+  it("#1934: ?again=1 opens Go live even with campaigns, budget nearest the last one's; no current ads goes back to step 2 again", async () => {
+    m.getCampaignPage.mockResolvedValue({ campaigns: [
+      { id: "old", status: "paused", daily_budget: 2000, created_at: "2026-09-01T00:00:00Z" },
+      { id: "last", status: "completed", daily_budget: 480, created_at: "2026-10-20T00:00:00Z" },
+    ], nextCursor: null });
+    await page({ again: "1", creatives: "a" });
+    expect(m.goLive.mock.calls[0][0]).toMatchObject({ returning: true, initialDaily: 500, ads: [{ id: "a" }] });
+    m.getApprovedCreatives.mockResolvedValue([ad("old", "Get WhatsApp enquiries for rooftop solar in Mohali")]);
+    await expect(page({ again: "1" })).rejects.toThrow("redirect:/create?again=1");
   });
 
   it("a business with a campaign keeps the Campaigns page", async () => {
