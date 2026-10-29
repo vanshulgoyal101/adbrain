@@ -14,7 +14,7 @@ export function replyLanguage(languages: string[] | null | undefined): ReplyLang
 }
 
 /** "Diwali offer: 10% off rooftop solar" → "10% off rooftop solar"; first letter lower-cased mid-sentence unless it's an acronym. */
-function offerWords(offer: string | null | undefined): string | null {
+export function offerWords(offer: string | null | undefined): string | null {
   const trimmed = offer?.trim().replace(/:+$/, "").trim();
   if (!trimmed) return null;
   const phrase = (trimmed.split(":").pop() ?? "").trim() || trimmed;

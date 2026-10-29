@@ -14,7 +14,7 @@ function fileName(creative: Shareable, type: string): string {
     .replace(/[^\p{L}\p{N}]+/gu, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 40);
-  return `${slug || "adbrain-ad"}.${type.includes("png") ? "png" : type.includes("webp") ? "webp" : "jpg"}`;
+  return `${slug || "adbrain-ad"}.${type.includes("png") ? "png" : "jpg"}`;
 }
 
 /** Fetches the full-size picture as a File, ready for the share sheet. */
@@ -22,7 +22,28 @@ export async function creativeImageFile(creative: Shareable): Promise<File> {
   if (!creative.image_url) throw new Error("This ad has no picture yet.");
   const res = await fetch(creative.image_url);
   if (!res.ok) throw new Error(`Image HTTP ${res.status}`);
-  const blob = await res.blob();
+  let blob = await res.blob();
+  if (blob.type === "image/webp") {
+    const image = await createImageBitmap(blob);
+    try {
+      const canvas = document.createElement("canvas");
+      canvas.width = image.width;
+      canvas.height = image.height;
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("Cannot prepare a JPEG picture.");
+      context.fillStyle = "#fff";
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.drawImage(image, 0, 0);
+      blob = await new Promise<Blob>((resolve, reject) => {
+        canvas.toBlob((jpeg) => {
+          if (!jpeg || jpeg.type !== "image/jpeg") reject(new Error("Cannot encode a JPEG picture."));
+          else resolve(jpeg);
+        }, "image/jpeg", 0.92);
+      });
+    } finally {
+      image.close();
+    }
+  }
   const type = blob.type || "image/png";
   return new File([blob], fileName(creative, type), { type });
 }

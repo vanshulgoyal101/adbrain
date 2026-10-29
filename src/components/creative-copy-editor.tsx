@@ -465,7 +465,7 @@ function BackgroundEditor({
       )}
       <div className="flex flex-col gap-1">
         <div className="flex items-center justify-between">
-          <Label htmlFor={id}>Use an AI picture instead</Label>
+          <Label htmlFor={id}>Or describe an AI picture</Label>
           <span className="text-xs tabular-nums text-slate-400">{instruction.length}/300</span>
         </div>
         <Textarea
@@ -478,7 +478,6 @@ function BackgroundEditor({
             setInstruction(e.target.value);
             setPhoto(null);
           }}
-          autoFocus
         />
       </div>
       {error && (
