@@ -14,6 +14,7 @@ the PRs and issues; priorities belong in [Roadmap](../roadmap.md). Start at [the
 | [Your first ad on a phone](first-ad.md) | Owner help: sign-up to results on a phone, step by step |
 | [Support replies](support-replies.md) | For the support WhatsApp: the owner's words, the screen, the cause and a reply for the pilot's top failures |
 | [हिंदी पेज](hi/README.md): [पहला ऐड](hi/first-ad.md) · [सपोर्ट के जवाब](hi/support-replies.md) | Hindi versions of the two pages above, for the rep and support (on-screen labels stay in English) |
+| [Answer the chats your ad brings](answer-chats.md) | Owner help: what the customer saw, three saved answers, reply within 5 minutes |
 | [Your first week after Go live](first-week.md) | Owner help: Meta review, what's normal early on, enquiries, rejections, pausing, the money lines |
 | [Brand](brand.md) | Build the Brand Brain the ads are written from |
 | [Create and review ads](create.md) | Make ads, edit them, approve them |

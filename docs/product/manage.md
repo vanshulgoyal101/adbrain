@@ -41,7 +41,8 @@ rows. Each request is bounded and checkpointed; when more pages or failed forms
 remain, the UI reports the sync as incomplete and the next Sync continues the same
 run. Only a complete run reports "up to date". Opening Enquiries starts a sync when
 this browser has no recent complete sync. Zero imports can mean duplicates or no
-leads, not a broken campaign. WhatsApp conversations are not imported.
+leads, not a broken campaign. WhatsApp conversations are not imported; the owner
+answers them in WhatsApp Business ([Answer the chats your ad brings](answer-chats.md)).
 
 When Meta counts no chats, owner-added real enquiries are still shown as
 "You added N real enquiries", not as chats. Meta's test rows are labelled
