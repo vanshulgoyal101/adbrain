@@ -90,13 +90,14 @@ jobs:
 
   # Required check name stays `test` (#226). `if: always()` matters: without it a
   # failed or cancelled job skips `test`, and a skipped required check counts as passing.
+  # `docs` gates too (#1918): an undocumented route or env key can't merge.
   test:
-    needs: [lint, unit, metadb]
+    needs: [lint, unit, metadb, docs]
     if: always()
     runs-on: ubuntu-latest
     steps:
       - run: |
-          for r in "${{ needs.lint.result }}" "${{ needs.unit.result }}" "${{ needs.metadb.result }}"; do
+          for r in "${{ needs.lint.result }}" "${{ needs.unit.result }}" "${{ needs.metadb.result }}" "${{ needs.docs.result }}"; do
             [ "$r" = success ] || { echo "a test job did not succeed: $r"; exit 1; }
           done
 
@@ -182,7 +183,8 @@ jobs:
           persist-credentials: false
       - id: changed
         run: |
-          if git diff --name-only "origin/$BASE_REF...HEAD" | grep -qE '^(src/(app|components)/|scripts/ui-gate\.mjs$|\.github/workflows/ci\.yml$)'; then
+          # #1850: dependency and Next config changes can grow the first-load JS too.
+          if git diff --name-only "origin/$BASE_REF...HEAD" | grep -qE '^(src/(app|components)/|scripts/(ui-gate|first-load-js)\.mjs$|\.github/workflows/ci\.yml$|package(-lock)?\.json$|next\.config\.[a-z]+$)'; then
             echo "ui=true" >> "$GITHUB_OUTPUT"
           else
             echo "ui=false" >> "$GITHUB_OUTPUT"
@@ -208,12 +210,17 @@ jobs:
           timeout -k 30s 4m npx playwright install chromium
       - name: Compare public pages (base → this PR)
         if: steps.changed.outputs.ui == 'true'
+        env:
+          # #1850: intended growth; the label takes effect on a re-run of this job.
+          BUNDLE_GROWTH_OK: ${{ contains(github.event.pull_request.labels.*.name, 'bundle-growth-ok') }}
         run: |
           (cd ../base && npx next start -p 3001 > ../base.log 2>&1 &)
           npx next start -p 3002 > ../head.log 2>&1 &
           for port in 3001 3002; do
             for _ in $(seq 60); do curl -sf -o /dev/null "http://localhost:$port/login" && break; sleep 1; done
           done
+          # #1850: first-load JS of /, /login and /for/* may grow at most 10% (gzipped scripts each page loads).
+          node scripts/first-load-js.mjs --base http://localhost:3001 --head http://localhost:3002 $([ "$BUNDLE_GROWTH_OK" = true ] && echo --allow)
           # The same (this PR's) gate script measures both, so only the app differs.
           node scripts/ui-gate.mjs --public-only --origin http://localhost:3001 --out ui-gate/base
           node scripts/ui-gate.mjs --public-only --origin http://localhost:3002 --compare ui-gate/base --out ui-gate/head
