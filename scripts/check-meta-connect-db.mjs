@@ -1910,6 +1910,26 @@ async function verifyBusinessTransfer(db, database) {
     await assert.rejects(claim(asked.owner, asked.ownerEmail, askedId));
     assert.equal(await ownerOf(asked.business), asked.staff);
   });
+
+  const costFiles = (await readdir(join(root, "db/migrations"))).filter((file) => /monthly_ai_cost/.test(file)).sort();
+  const hasCost = (await db.query("select 1 from information_schema.columns where table_schema='public' and table_name='llm_usage_events' and column_name='estimated_cost_usd'")).rowCount;
+  if (!costFiles.length || !hasCost) { console.log(`SKIP ${database}: monthly AI cost after a hand-over (#1997) needs monthly_ai_cost_usd`); return; }
+  for (const file of costFiles) { const sql = await readFile(join(root, "db/migrations", file), "utf8"); await db.query(sql); await db.query(sql); }
+  await check(`${database}: business transfer: the owner's monthly AI cost starts at the hand-over (#1997)`, async () => {
+    const usage = (business, user, usd, at) => db.query("insert into public.llm_usage_events(business_id,user_id,route,provider,model,total_tokens,estimated_cost_usd,created_at) values ($1,$2,'creatives.generate','fixture','fixture',10,$3,$4)", [business, user, usd, at]);
+    const cost = (user, business) => session("authenticated", { sub: user, email: "x", role: "authenticated" },
+      async (s) => Number((await s.query("select public.monthly_ai_cost_usd($1, now() - interval '1 day') as usd", [business])).rows[0].usd));
+    const moved = await seed();
+    await usage(moved.business, moved.staff, 2.5, new Date(Date.now() - 3_600_000));
+    assert.equal(await cost(moved.staff, moved.business), 2.5, "before the hand-over the rep's paid pictures count");
+    assert.equal(await claim(moved.owner, moved.ownerEmail, await start(moved.business, moved.staff, moved.ownerEmail)), moved.business);
+    const { transferred_at: at } = (await db.query("select transferred_at from public.businesses where id=$1", [moved.business])).rows[0];
+    await usage(moved.business, moved.owner, 0.75, new Date(at.getTime() + 60_000));
+    assert.equal(await cost(moved.owner, moved.business), 0.75, "only the owner's own spend counts after the hand-over");
+    const kept = await seed();
+    await usage(kept.business, kept.staff, 1.25, new Date(Date.now() - 3_600_000));
+    assert.equal(await cost(kept.staff, kept.business), 1.25, "a business never handed over counts from p_since");
+  });
 }
 
 async function verifyOwnerAlertSends(db, database) {
