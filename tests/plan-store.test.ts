@@ -118,6 +118,14 @@ describe("plan store (#718)", () => {
       expect(mocks.createPlanLink).not.toHaveBeenCalled();
     });
 
+    it("frees a link cancelled early at any age and makes this month's fresh link (#2074)", async () => {
+      mocks.tables.plan_periods = [{ ...stale, created_at: "2026-11-01T00:00:00Z" }];
+      mocks.fetchPlanLink.mockResolvedValue(link("cancelled"));
+      await expect(ensurePayLink(businessId, now)).resolves.toBe("https://rzp.io/i/a");
+      expect(mocks.rpc).toHaveBeenCalledWith("plan_period_expire", { p_link_id: "plink_Old" });
+      expect(mocks.createPlanLink).toHaveBeenCalledOnce();
+    });
+
     it("doesn't reconcile a young link before payment is due, and surfaces a failed stale check", async () => {
       mocks.tables.campaigns = [{ launched_at: "2026-10-25T09:00:00.000Z" }];
       mocks.tables.plan_periods = [{ ...stale, created_at: "2026-10-20T00:00:00Z" }];

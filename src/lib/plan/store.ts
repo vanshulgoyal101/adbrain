@@ -33,8 +33,8 @@ const readPeriods = (db: ReturnType<typeof createAdminClient>, businessId: strin
 
 /**
  * #1583 (Reviewer): the month only leaves `open` through the payment_link webhook. If that delivery was lost, the link
- * is dead (or paid) while the gate still blocks new ads. Reconcile payable links immediately; only expiry waits for
- * LINK_LIFETIME_S. Settings and the cron do this work, never the core gate.
+ * is dead (or paid) while the gate still blocks new ads. Reconcile payable links immediately (paid or cancelled); only
+ * `expired` waits for LINK_LIFETIME_S. Settings and the cron do this work, never the core gate.
  */
 async function reconcileOpenLink(db: ReturnType<typeof createAdminClient>, periods: PeriodRow[], now: Date, payable: boolean): Promise<boolean> {
   const open = periods.find((period) => period.state === "open" && period.payment_link_id);
@@ -43,7 +43,8 @@ async function reconcileOpenLink(db: ReturnType<typeof createAdminClient>, perio
   if (!payable && !stale) return false;
   const link = await createProductionPaymentClient().fetchPlanLink(open.payment_link_id);
   const event = link.status === "paid" ? "payment_link.paid"
-    : stale && (link.status === "expired" || link.status === "cancelled") ? "payment_link.expired" : null;
+    // #2074: a cancelled link is final at any age; `expired` keeps the lifetime rule.
+    : link.status === "cancelled" || (stale && link.status === "expired") ? "payment_link.expired" : null;
   if (!event) return false;
   const result = await handlePlanWebhook({ event, payload: { payment_link: { entity: { id: link.id } } } }, {
     fetchPlanLink: async () => link,
