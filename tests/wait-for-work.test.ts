@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { spawn, spawnSync } from "node:child_process";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { createGitHubApi, readyPool, boardRow, systemicFailures, snoozedUntil, latestWord, linkedIssues, lowQueues, matchers, nextItem, freshComments, offTrack, rateBackoffMs, roleCard, unsavedWork, waitingOnMe } from "../scripts/wait-for-work.mjs";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { actionableOwned, OWNS_WORK, createGitHubApi, readyPool, boardRow, systemicFailures, snoozedUntil, latestWord, linkedIssues, lowQueues, matchers, nextItem, freshComments, offTrack, rateBackoffMs, roleCard, unsavedWork, waitingOnMe } from "../scripts/wait-for-work.mjs";
 
 describe("PR reviews count as the latest word (#423)", () => {
   it("picks a review posted after the last comment, and ignores empty approvals", () => {
@@ -414,6 +414,60 @@ process.exit(1);
     }
   });
 
+  // #2051: a chat that dies while its waiter sleeps out an hour-long rate limit must not leave the waiter (or its
+  // role lock) behind. The test kills the waiter's direct parent, which works whatever the orphan is re-parented to.
+  it("exits 5 and releases only its own role lock when its parent dies during rate-limit backoff", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "waiter-parent-test-"));
+    const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catch { return false; } };
+    const until = async (check: () => boolean, ms: number) => {
+      for (const end = Date.now() + ms; Date.now() < end; await new Promise((r) => setTimeout(r, 100))) if (check()) return true;
+      return check();
+    };
+    let parentPid = 0;
+    let waiterPid = 0;
+    try {
+      writeFileSync(join(dir, "gh"), `#!/usr/bin/env node
+console.log('HTTP/2.0 429 Too Many Requests\\r\\nx-ratelimit-remaining: 0\\r\\nx-ratelimit-reset: ' + (Math.floor(Date.now() / 1000) + 3600) + '\\r\\n\\r\\n{"message":"API rate limit exceeded"}');
+process.exit(1);
+`, { mode: 0o755 });
+      // Nobody can read an orphan's exit status, so the waiter records its own.
+      writeFileSync(join(dir, "exit-code.mjs"), `import { writeFileSync } from "node:fs";
+process.on("exit", (code) => writeFileSync(${JSON.stringify(join(dir, "exit-code"))}, String(code)));
+`);
+      const otherLock = join(dir, "adbrain-wait-for-work-qa.pid");
+      writeFileSync(otherLock, String(process.pid));
+      const lock = join(dir, "adbrain-wait-for-work-cto.pid");
+      const log = join(dir, "waiter.log");
+      const waiter = [fileURLToPath(new URL("../scripts/wait-for-work.mjs", import.meta.url)), "--me", "cto"];
+      const parent = spawn(process.execPath, ["-e", `
+const { spawn } = require("node:child_process");
+const { openSync } = require("node:fs");
+const out = openSync(${JSON.stringify(log)}, "a");
+const child = spawn(process.execPath, ["--import", ${JSON.stringify(pathToFileURL(join(dir, "exit-code.mjs")).href)}, ...${JSON.stringify(waiter)}], { stdio: ["ignore", out, out] });
+console.log(child.pid);
+setInterval(() => {}, 60_000);
+`], { env: { ...process.env, TMPDIR: dir, PATH: `${dir}:${process.env.PATH}` }, stdio: ["ignore", "pipe", "inherit"] });
+      parentPid = parent.pid!;
+      waiterPid = await new Promise<number>((resolve, reject) => {
+        parent.stdout!.once("data", (chunk) => resolve(Number.parseInt(String(chunk), 10)));
+        parent.once("exit", () => reject(new Error("parent exited early")));
+      });
+      const read = (file: string) => { try { return readFileSync(file, "utf8"); } catch { return ""; } };
+      expect(await until(() => read(log).includes("GitHub rate limit") && read(lock) === String(waiterPid), 10_000), read(log)).toBe(true);
+
+      process.kill(parentPid, "SIGKILL");
+      // The backoff wakes at least every 5 s to check its parent.
+      expect(await until(() => !alive(waiterPid), 12_000), "waiter outlived its parent").toBe(true);
+      expect(read(join(dir, "exit-code"))).toBe("5");
+      expect(read(log)).toContain("The chat that started this waiter is gone; exiting.");
+      expect(existsSync(lock)).toBe(false);
+      expect(read(otherLock)).toBe(String(process.pid));
+    } finally {
+      for (const pid of [waiterPid, parentPid]) if (pid && alive(pid)) process.kill(pid, "SIGKILL");
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 30_000);
+
   it("uses response headers to slow polling without a rate_limit request", async () => {
     const request = vi.fn().mockReturnValue(response(200, {
       "x-ratelimit-remaining": "800", "x-ratelimit-reset": String(now / 1000 + 120),
@@ -431,5 +485,26 @@ process.exit(1);
     expect(spent).toBeLessThan(155_000);
     expect(rateBackoffMs({ remaining: 800, reset }, 90_000, now)).toBe(180_000);
     expect(rateBackoffMs({ remaining: 4_000, reset }, 90_000, now)).toBe(0);
+  });
+});
+
+describe("never wait while you own actionable work (#364, CEO Oct 29)", () => {
+  const issue = (number: number, ...labels: string[]) => ({ number, title: `item ${number}`, labels: labels.map((name) => ({ name })) });
+  it("counts owned items except held, snoozed and co-owned-not-your-turn ones; your turns first, then core, then oldest", () => {
+    const items = [
+      issue(40, "owner:dev"), issue(30, "owner:dev", "core"), issue(50, "owner:dev"),
+      issue(11, "owner:dev", "parked"), issue(12, "owner:dev", "blocked"), issue(13, "owner:dev", "waiting-owner"),
+      issue(14, "owner:dev", "decision"), issue(15, "owner:dev", "later"), issue(16, "owner:dev", "standing"),
+      issue(17, "owner:dev"), // scheduled check not yet due
+      issue(18, "owner:dev", "owner:qa"), // co-owned, QA's turn
+      issue(19, "owner:dev", "owner:qa"), // co-owned, your turn
+    ];
+    const got = actionableOwned(items, { snoozed: new Set([17]), myTurn: new Set([19, 50]) }).map((i) => i.number);
+    expect(got).toEqual([19, 50, 30, 40]);
+  });
+  it("a handed-off item still counts while its owner label is yours, and nothing owned means you may wait", () => {
+    expect(actionableOwned([issue(7, "owner:dev2")]).map((i) => i.number)).toEqual([7]);
+    expect(actionableOwned([])).toEqual([]);
+    expect(OWNS_WORK).not.toBe(0);
   });
 });

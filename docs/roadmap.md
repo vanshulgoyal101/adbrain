@@ -64,8 +64,9 @@ live ad or Meta object is changed by the ranking itself.
 
 ## Pilots and Money
 
-- Pilot businesses use **their own** Meta ad account and Page and pay Meta directly. AdBrain sets up the first campaign free. **Price (CEO, [#718](https://github.com/vanshulgoyal101/adbrain/issues/718)):** ₹999 a month, first month free, no auto-debit; the first 10 customers use the own-ad-account path only.
-- Go live's first run is 2 days today (₹300 a day, stops at ₹708 including Meta's GST). Whether pilots get a 7-day choice is a CEO decision ([#1530](https://github.com/vanshulgoyal101/adbrain/issues/1530)).
+- Pilot businesses use **their own** Meta ad account and Page and pay Meta directly. AdBrain sets up the first campaign free. **Price (CEO, [#718](https://github.com/vanshulgoyal101/adbrain/issues/718)):** ₹999 a month, first month free, no auto-debit; the first 10 customers use the own-ad-account path only. **Refund (CEO, [#1629](https://github.com/vanshulgoyal101/adbrain/issues/1629)):** the full ₹999 on request if no new campaign went live that month; once one does, that month isn't refunded.
+- **Run length (CEO, [#1530](https://github.com/vanshulgoyal101/adbrain/issues/1530)):** self-serve Go live stays 2 days (₹300 a day, ₹708 at most including Meta's GST); WS1 step 3 gets a 2 days / 7 days choice, and pilots run 7 days at ₹300 a day (₹2,478 at most including Meta's GST).
+- **Referrals (CEO, [#1653](https://github.com/vanshulgoyal101/adbrain/issues/1653)):** asked in person only after a Good Day 7; the referrer gets one free month (credit, never cash) when the referred business goes live, at most 3 a year. No app UI yet.
 - Until Meta's App Review ([#156](https://github.com/vanshulgoyal101/adbrain/issues/156)) is approved, each pilot owner connects as an app Tester.
 - AdBrain's own checkout and per-customer ad balances exist in source behind flags ([Payments plan](PAYMENTS-PLAN.md)). Whether they go live or are removed is a CEO decision due November 11, 2026 ([#1171](https://github.com/vanshulgoyal101/adbrain/issues/1171)).
 - Numbers shown to owners come from AdBrain's own ledger with the sample size, never from industry benchmarks. A comparison sentence needs at least 20 pooled results for that kind of business ([#1255](https://github.com/vanshulgoyal101/adbrain/issues/1255)).

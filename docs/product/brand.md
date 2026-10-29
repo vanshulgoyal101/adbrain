@@ -16,8 +16,15 @@ failed saves leave the draft available for retry. The full form has no autosave.
 Until a business has a campaign that went live (or is on now), `/brand` is setup
 step 1 of 3 (#1251 WS1, #1269): the five `brandUsable` fields (name, what you
 sell, places one per line, one offer, a 10-digit WhatsApp number) plus "Fill it
-from my website", which fills only empty fields. It autosaves only those columns
-(`saveSetupBusiness`; other offers and Brand fields are kept) and "Make my ads"
+from my website", which fills only empty fields. An optional **Why do customers
+pick you?** field (#1966, EN/HI) saves the first selling point (`usps[0]`).
+Solar, IELTS and interiors offer suggestion chips; templates select their first
+blank, and neither autosave nor Continue accepts unresolved braces. Suggestions
+are never prefilled. The registered-vendor suggestion stays hidden until a
+vendor-confirmation question exists. Other categories have no chips.
+It autosaves those columns (`saveSetupBusiness`; other offers, selling points
+and Brand fields are kept). An empty optional box leaves saved selling points
+untouched; remove them on the full Brand page. "Make my ads"
 checks all five, then goes to `/create`. `/brand?all=1` opens the full page.
 
 After a launch, **New campaign** on Home and in the Campaigns header (`/brand?again=1`, #1934;
@@ -65,4 +72,4 @@ Real photos are reference hints for image generation, not the ad image itself.
 Instruction files have a title, Markdown body, and active flag. Active instructions
 are included by generation/planning call sites; an instruction is guidance to a
 model, not deterministic enforcement. Never put credentials or sensitive lead
-details in prompts. See [Data Model](../DATA_MODEL.md) and [AI Pipeline](../AI_PIPELINE.md).
+details in prompts. See [Data Model](../DATA_MODEL.md) and [AI Pipeline](../architecture/ai-pipeline.md).

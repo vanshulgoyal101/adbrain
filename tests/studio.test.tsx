@@ -726,14 +726,24 @@ describe("<Studio> live picture preview while editing (#387)", () => {
   });
 
   // #1901 item 3 (CPO words): the swap offers the owner's photos first, then an AI picture; neither re-writes the words.
-  it("offers 'Use another photo' first, then 'Use an AI picture instead'", async () => {
+  it("does not focus the AI description when opening the background choices", async () => {
+    const user = userEvent.setup();
+    h.photos = ["https://cdn.example/brand-assets/b1/roof.jpg"];
+    render(<Studio business={business} initialCreatives={[creative()]} />);
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    await user.click(screen.getByRole("tab", { name: "Background" }));
+    expect(await screen.findByPlaceholderText("e.g. Rooftop at sunset with solar panels")).not.toHaveFocus();
+    expect(screen.getByRole("group", { name: "Use another photo" })).toBeVisible();
+  });
+
+  it("offers 'Use another photo' first, then 'Or describe an AI picture'", async () => {
     const user = userEvent.setup();
     h.photos = ["https://cdn.example/brand-assets/b1/roof.jpg"];
     render(<Studio business={business} initialCreatives={[creative()]} />);
     await user.click(screen.getByRole("button", { name: "Edit" }));
     await user.click(screen.getByRole("tab", { name: "Background" }));
     const photos = await screen.findByRole("group", { name: "Use another photo" });
-    const ai = screen.getByLabelText("Use an AI picture instead");
+    const ai = screen.getByLabelText("Or describe an AI picture");
     expect(photos.compareDocumentPosition(ai) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.getByRole("form", { name: "Change the picture" })).toHaveTextContent("Your text and the words on the picture stay.");
   });
@@ -823,7 +833,7 @@ describe("<Studio> change only the background (#280)", () => {
     const form = screen.getByRole("form", { name: "Change the picture" });
     expect(within(form).getByRole("button", { name: "Make background" })).toBeDisabled();
     expect(within(form).getByText(/uses one AI\s+image, like Regenerate/)).toBeInTheDocument();
-    await user.type(within(form).getByLabelText("Use an AI picture instead"), "Rooftop at sunset");
+    await user.type(within(form).getByLabelText("Or describe an AI picture"), "Rooftop at sunset");
     await user.click(within(form).getByRole("button", { name: "Make background" }));
 
     await waitFor(() => expect(global.fetch).toHaveBeenCalledWith("/api/creatives/c1/background", expect.objectContaining({ method: "POST" })));
@@ -858,7 +868,7 @@ describe("<Studio> change only the background (#280)", () => {
     render(<Studio business={business} initialCreatives={[creative()]} />);
     await user.click(screen.getByRole("button", { name: "Edit" }));
     await user.click(screen.getByRole("tab", { name: "Background" }));
-    await user.type(screen.getByLabelText("Use an AI picture instead"), "Rooftop at sunset");
+    await user.type(screen.getByLabelText("Or describe an AI picture"), "Rooftop at sunset");
     await user.click(screen.getByRole("button", { name: "Make background" }));
     expect(await screen.findByText(/Your ad is unchanged; try again/)).toBeInTheDocument();
     expect(screen.getByRole("form", { name: "Change the picture" })).toBeInTheDocument();
@@ -993,6 +1003,8 @@ describe("<Studio> review board", () => {
     expect(second).toHaveAttribute("aria-pressed", "true");
     expect(within(screen.getByRole("region", { name: "Ad details" })).getByText("First concept copy.")).toBeInTheDocument();
 
+    // #1287: 44 px tap target on phones (it was 40).
+    expect(screen.getByRole("searchbox", { name: "Search ads" })).toHaveClass("h-11");
     await user.type(screen.getByRole("searchbox", { name: "Search ads" }), "Second concept copy.");
     expect(first).toHaveAttribute("aria-pressed", "true");
     expect(board.getAllByRole("button", { name: "Same offer Needs review" })).toHaveLength(1);
