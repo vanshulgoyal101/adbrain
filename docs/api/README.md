@@ -72,7 +72,7 @@ same identity; do not change a key or clear local recovery data to force progres
 
 | Page | Routes |
 | --- | --- |
-| [Creatives](creatives.md) | `/api/brand/*`, `/api/creatives/*` |
+| [Creatives](creatives.md) | `/api/brand/*`, `/api/creatives/*`, `/api/media/*` |
 | [Campaigns](campaigns.md) | `/api/campaign-drafts/*`, `/api/campaigns/*` (except enquiries) |
 | [Leads, results and settings](leads-and-settings.md) | `/api/leads/*`, campaign enquiries, `/api/spend-limits`, `/api/preferences`, `/api/privacy-requests/*` |
 | [Meta connection](meta.md) | `/api/meta/*`, `/api/managed/*`, `/api/whatsapp/webhook` |
