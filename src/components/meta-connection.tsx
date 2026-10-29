@@ -1,6 +1,7 @@
 "use client";
 
 import { reconnectByLabel } from "@/lib/meta/token-expiry";
+import { translator, type AppLocale } from "@/i18n/locale";
 import { useState } from "react";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { useRouter } from "next/navigation";
@@ -19,6 +20,7 @@ export function MetaConnectionPanel({
   oauthConfigured,
   notice,
   fundingMode = null,
+  locale = "en",
 }: {
   businessId?: string;
   connection: MetaConnection;
@@ -26,6 +28,8 @@ export function MetaConnectionPanel({
   notice?: { kind: "success" | "error"; message: string };
   /** #1292: who holds the ad money decides the trust line; unknown shows none. */
   fundingMode?: FundingMode | null;
+  /** #1916: the disconnect question's language. */
+  locale?: AppLocale;
 }) {
   const router = useRouter();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -35,7 +39,9 @@ export function MetaConnectionPanel({
 
   async function disconnect() {
     if (!businessId || disconnecting) return;
-    if (!(await confirm({ title: "Disconnect this Meta business?", description: "This doesn't pause ads already running in Meta.", confirmLabel: "Disconnect", tone: "danger" }))) return;
+    // #1916 (CPO): disconnecting never pauses ads in Meta, so the question says so.
+    const t = translator(locale, "settings");
+    if (!(await confirm({ title: t("disconnect.title"), description: t("disconnect.body"), confirmLabel: t("disconnect.confirm"), cancelLabel: t("disconnect.cancel"), tone: "danger" }))) return;
     setDisconnecting(true);
     setDisconnectError(null);
     try {
@@ -46,11 +52,11 @@ export function MetaConnectionPanel({
       });
       const result = await response.json();
       if (!response.ok || result?.ok !== true) {
-        throw new Error(typeof result?.error === "string" ? result.error : "Could not disconnect the Meta connection.");
+        throw new Error(typeof result?.error === "string" ? result.error : "Facebook is still connected. Try again in a minute.");
       }
       router.refresh();
     } catch (error) {
-      setDisconnectError(error instanceof Error ? error.message : "Could not disconnect the Meta connection.");
+      setDisconnectError(error instanceof Error ? error.message : "Facebook is still connected. Try again in a minute.");
     } finally {
       setDisconnecting(false);
     }

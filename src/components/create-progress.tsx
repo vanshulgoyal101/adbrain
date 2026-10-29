@@ -34,7 +34,7 @@ export async function readCreateResponse(
   const read = () => new Promise<ReadableStreamReadResult<string>>((resolve, reject) => {
     const timer = setTimeout(() => {
       reader.cancel().catch(() => {});
-      reject(new Error("The Create stream went silent."));
+      reject(new Error("We lost contact while making your ads. Open Studio to see what was saved."));
     }, heartbeats ? CREATE_IDLE_MS : CREATE_IDLE_NO_HEARTBEAT_MS);
     reader.read().then(
       (chunk) => { clearTimeout(timer); resolve(chunk); },
@@ -60,7 +60,7 @@ export async function readCreateResponse(
       }
       onLine(line);
     }
-    if (done) throw new Error("The Create stream ended without a result.");
+    if (done) throw new Error("Your ads didn't finish. Open Studio to see what was saved, then try again.");
   }
 }
 

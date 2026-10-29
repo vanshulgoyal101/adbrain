@@ -1,4 +1,6 @@
 "use client";
+import { PictureSourceBadge } from "@/components/picture-source-badge";
+import type { AppLocale } from "@/i18n/locale";
 import { formatDate } from "@/lib/format";
 import { AD_FLOW, Stepper } from "@/components/ui/stepper";
 import { useConfirm } from "@/components/ui/confirm-dialog";
@@ -82,9 +84,12 @@ export function Studio({
   initialFilter = "all",
   initialCreativeId = null,
   sample = false,
+  locale = "en",
 }: {
   business: Business;
   initialCreatives: Creative[];
+  /** #1901: the picture badge's language. */
+  locale?: AppLocale;
   /** #1317: a prospect's ads are samples: no Share, so no clean picture leaves AdBrain. */
   sample?: boolean;
   /** Operators see model names and generation costs; owners don't (#403). */
@@ -579,7 +584,7 @@ export function Studio({
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search ads"
-              className="h-10 w-full rounded-md border border-slate-300 pl-9 pr-3 text-sm sm:w-60"
+              className="h-11 w-full rounded-md border border-slate-300 pl-9 pr-3 text-sm sm:w-60"
             />
           </label>
         </div>
@@ -631,6 +636,7 @@ export function Studio({
           >
             <CreativeCard
               key={selectedCreative.id}
+              locale={locale}
               business={business}
               showInternals={showInternals}
               sample={sample}
@@ -684,6 +690,7 @@ export function Studio({
 
 function CreativeCard({
   business,
+  locale = "en",
   showInternals = false,
   sample = false,
   onImageSettled,
@@ -693,6 +700,7 @@ function CreativeCard({
   onPreview,
 }: {
   business: Business;
+  locale?: AppLocale;
   showInternals?: boolean;
   sample?: boolean;
   onImageSettled?: () => void;
@@ -817,6 +825,7 @@ function CreativeCard({
             }}
           />
         )}
+        {creative.image_url && !imgError && <PictureSourceBadge generation={creative.generation} locale={locale} className="absolute left-2 top-2" />}
         {(!creative.image_url || imgError) && (
           <div className="absolute inset-0 flex items-center justify-center">
             <span className="flex items-center gap-2 text-sm text-slate-500">

@@ -85,7 +85,11 @@ export function verdict(input: VerdictInput): Verdict {
 
   const base = ((): Omit<Verdict, "number"> => {
     if (input.status === "completed") {
-      if (!evidence) return { state: "ended_too_few", label: "Ended", sentence: `It ended with ${chats(input.results)}, too few to judge.`, action: "new_ads" };
+      // #1625 (CPO, #1603): too few to judge isn't a bad result, and these are the only ads with data; run them longer.
+      // Nobody tapped at all (no result, no WhatsApp open): that's the ads, so make new ones.
+      if (!evidence && input.results === 0 && (input.opens ?? 0) === 0)
+        return { state: "ended_too_few", label: "Ended", sentence: `It ended with ${chats(0)}, too few to judge.`, action: "new_ads" };
+      if (!evidence) return { state: "ended_too_few", label: "Ended", sentence: `It ended with ${chats(input.results)}, too few to judge yet. Run it again for longer?`, action: "run_again" };
       if (band === null) {
         return { state: "ended_measured", label: "Ended", sentence: `It ended with ${chats(input.results)} at ${rupees(cost!)} each.`, action: "run_again" };
       }
@@ -113,7 +117,7 @@ export function verdict(input: VerdictInput): Verdict {
       if (Number.isFinite(since) && input.now - since >= DAY_MS) {
         return { state: "not_showing_day", label: "Not showing yet", sentence: "Your ads haven't started showing after a day. Check what Meta says.", action: "meta_status" };
       }
-      return { state: "not_showing", label: "Not showing yet", sentence: "Meta is checking your ads. They usually start showing within a day.", action: null };
+      return { state: "not_showing", label: "Not showing yet", sentence: "Meta is checking your ads. This usually takes minutes to a few hours, and up to a day.", action: null };
     }
     if (!evidence) {
       return { state: "early", label: "Early days", action: null, sentence: input.results

@@ -36,6 +36,7 @@ const editAdCreativeMigration = await readFile(join(root, "db/migrations/2026102
 const adResultsMigration = await readFile(join(root, "db/migrations/20261026_campaign_ads_ad_results.sql"), "utf8");
 const ownerAlertsMigration = await readFile(join(root, "db/migrations/20261027_owner_whatsapp_alerts.sql"), "utf8");
 const ownerAlertSendsMigration = await readFile(join(root, "db/migrations/20261027_owner_whatsapp_alerts_sends.sql"), "utf8");
+const planPeriodsMigration = await readFile(join(root, "db/migrations/20261029_plan_periods.sql"), "utf8");
 const leadCustomerMigration = await readFile(join(root, "db/migrations/20261026_lead_customer_status.sql"), "utf8");
 const leadFirstContactedMigration = await readFile(join(root, "db/migrations/20261027_lead_first_contacted.sql"), "utf8");
 const tokenSearchPathMigration = await readFile(join(root, "db/migrations/20261026_meta_token_search_path.sql"), "utf8");
@@ -1581,6 +1582,77 @@ async function verifyEditAdCreativeKind(db, database) {
   });
 }
 
+async function verifyPlanPeriods(db, database) {
+  const owner = randomUUID(), other = randomUUID(), business = randomUUID();
+  await db.query("insert into auth.users(id) values ($1),($2)", [owner, other]);
+  await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Plan')", [business, owner]);
+  await db.query("insert into public.campaigns(id,business_id,daily_budget,launched_at) values ($1,$2,300,'2026-10-10T09:00:00Z')", [randomUUID(), business]);
+  const service = async (sql, params) => {
+    const session = client(database);
+    await session.connect();
+    try {
+      await session.query("begin"); await session.query("set local role service_role");
+      const result = (await session.query(sql, params)).rows[0]; await session.query("commit"); return result;
+    } catch (error) { await session.query("rollback").catch(() => {}); throw error; } finally { await session.end(); }
+  };
+  const open = async () => (await service("select public.plan_period_open($1) as r", [business])).r;
+  const link = (period, id) => service("select public.plan_period_set_link($1,$2,'https://rzp.io/i/x') as r", [period, id]);
+  const paid = async (id, payment, at) => (await service("select public.plan_period_paid($1,$2,$3) as r", [id, payment, at])).r;
+  const months = async () => (await db.query("select to_char(starts_at at time zone 'UTC','YYYY-MM-DD') as s, to_char(ends_at at time zone 'UTC','YYYY-MM-DD') as e from public.plan_periods where business_id=$1 and state='paid' order by starts_at", [business])).rows;
+  await check(`${database}: plan periods: one open month, paid once, early pay stacks after the free month, late pay starts at payment, paid-after-expiry credited (#718)`, async () => {
+    const first = await open();
+    assert.equal((await open()).periodId, first.periodId);
+    assert.equal((await link(first.periodId, "plink_A")).r, true);
+    assert.equal((await link(first.periodId, "plink_B")).r, false);
+    assert.equal(await paid("plink_Unknown", "pay_X", "2026-11-05T00:00:00Z"), "ignored");
+    assert.equal(await paid("plink_A", "pay_A", "2026-11-05T00:00:00Z"), "paid");
+    assert.equal(await paid("plink_A", "pay_A", "2026-11-05T00:00:00Z"), "duplicate");
+    assert.equal(await paid("plink_A", "pay_Other", "2026-11-06T00:00:00Z"), "ignored");
+    assert.deepEqual(await months(), [{ s: "2026-11-10", e: "2026-12-10" }]);
+    const second = await open();
+    assert.notEqual(second.periodId, first.periodId);
+    await link(second.periodId, "plink_C");
+    assert.equal(await paid("plink_C", "pay_C", "2027-01-31T10:00:00Z"), "paid");
+    assert.deepEqual(await months(), [{ s: "2026-11-10", e: "2026-12-10" }, { s: "2027-01-31", e: "2027-02-28" }]);
+    const third = await open();
+    await link(third.periodId, "plink_D");
+    assert.equal((await service("select public.plan_period_expire('plink_D') as r")).r, true);
+    // A payment that lands after its link expired still buys its month (Reviewer, #1430): starts after Feb 28.
+    assert.equal(await paid("plink_D", "pay_D", "2027-02-01T00:00:00Z"), "paid");
+    assert.equal(await paid("plink_D", "pay_D", "2027-02-01T00:00:00Z"), "duplicate");
+    assert.deepEqual((await months()).at(-1), { s: "2027-02-28", e: "2027-03-28" });
+    assert.equal((await service("select public.plan_period_expire('plink_D') as r")).r, false);
+  });
+  await check(`${database}: plan periods: owners read only their own, nobody writes them directly (#718)`, async () => {
+    const as = async (role, user, run) => {
+      const session = client(database);
+      await session.connect();
+      try {
+        await session.query("begin"); await session.query(`set local role ${role}`);
+        if (user) await session.query("select set_config('request.jwt.claim.sub',$1,true)", [user]);
+        return await run(session);
+      } finally { await session.query("rollback").catch(() => {}); await session.end(); }
+    };
+    await as("authenticated", owner, async (session) => {
+      assert.equal((await session.query("select count(*)::int as n from public.plan_periods")).rows[0].n, 3);
+      await session.query("savepoint s");
+      await assert.rejects(session.query("select public.plan_period_open($1)", [business]), { code: "42501" });
+      await session.query("rollback to savepoint s");
+      await assert.rejects(session.query("update public.plan_periods set state='paid'"), { code: "42501" });
+    });
+    await as("authenticated", other, async (session) => {
+      assert.equal((await session.query("select count(*)::int as n from public.plan_periods")).rows[0].n, 0);
+    });
+    await as("anon", null, async (session) => {
+      await assert.rejects(session.query("select 1 from public.plan_periods"), { code: "42501" });
+    });
+    await assert.rejects(db.query("insert into public.plan_periods(business_id,amount_paise) values ($1,100)", [business]), { code: "23514" });
+    // QA (#1430): paid months are receipts (GST, disputes), so deleting the business can't silently erase them.
+    // RESTRICT reports 23001 (restrict_violation); NO ACTION-style checks report 23503. Either means refused.
+    await assert.rejects(db.query("delete from public.businesses where id=$1", [business]), { code: /^(23001|23503)$/ });
+  });
+}
+
 /**
  * #1700 (QA red tests for #1670: CTO design 18:55Z + Reviewer's 7 points, 19:06Z). A rep hands a `+prospect` business to
  * its owner: the owner's own new account claims it with a single-use link; nothing of the staff login carries over.
@@ -2804,6 +2876,9 @@ async function verify(database, source, integrityMigration, customerOnly = false
       await db.query(ownerAlertSendsMigration);
       await db.query(ownerAlertSendsMigration);
       await verifyOwnerAlertSends(db,database);
+      await db.query(planPeriodsMigration);
+      await db.query(planPeriodsMigration);
+      await verifyPlanPeriods(db,database);
       await db.query(leadCustomerMigration);
       await db.query(leadCustomerMigration);
       if ((await db.query("select exists(select 1 from information_schema.columns where table_schema='public' and table_name='leads' and column_name='workflow_status') as installed")).rows[0].installed) {

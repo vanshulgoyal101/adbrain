@@ -54,6 +54,9 @@ describe("core: Create concept validation on a recorded production concept", () 
       .toEqual(expect.arrayContaining(["guaranteed", "guaranteed band"]));
     // The same words pass for a business outside education and health.
     expect(adPolicyHits([{ id: "c1", headline: promise.headline, primaryText: promise.primary_text }], "solar energy")).toEqual([]);
+    // CPO (#1910): "crack it in 1st attempt" is the same promise without the word "guaranteed".
+    const firstAttempt = validateConcept({ ...promise, primary_text: `${recorded.concept.primary_text.split("\n")[0]}\nCrack IELTS in 1st attempt.` }, ielts);
+    expect(firstAttempt.success ? [] : conceptValidationRules(firstAttempt.issues).join(" ")).toMatch(/banned-claim/);
   });
 
   // #1617 (CPO, #1501): a generated picture can't be called the business's own work; the owner's photo can.

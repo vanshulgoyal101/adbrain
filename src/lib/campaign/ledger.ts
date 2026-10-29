@@ -88,8 +88,3 @@ async function excludedBusinesses(admin: ReturnType<typeof createAdminClient>, b
   return new Set([...businessIds.filter((id) => !known.has(id)),
     ...(businesses ?? []).filter((business) => owners.get(business.owner_id) !== false).map((business) => business.id)]);
 }
-
-/** For tests: forget the hourly read. */
-export function resetLedgerCache() {
-  cached = null;
-}
