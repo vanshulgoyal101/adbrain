@@ -29,17 +29,10 @@ import { lacksAreaExclusions } from "@/lib/meta/service-area";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { campaignOwnedElsewhere, ownerRefusal } from "@/lib/campaign/campaign-owner";
 import { CampaignEditError, refuseWhileSwitchPending } from "@/lib/campaign/edit-service";
-import { ownerErrorIn, type OwnerErrorKey, type OwnerErrorValues } from "@/i18n/locale";
-import { requestLocale } from "@/i18n/request-locale";
+import { ownerWords } from "@/i18n/request-locale";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
-
-/** #2312: the owner's-language errors for one request; statuses and codes stay as they were. */
-async function ownerWords() {
-  const locale = await requestLocale();
-  return (key: OwnerErrorKey, values?: OwnerErrorValues) => ownerErrorIn(locale, key, values);
-}
 
 export const GET = observeRoute("/api/campaigns/[id]", "GET", async (
   _req: Request,
@@ -147,10 +140,7 @@ async function handlePATCH(
     if (!projection.verified) return apiError(say("budgetsUnverified"), 503);
     const { exceeds, projectedAfter } = projection;
     if (exceeds) {
-      return apiError(
-        say("overWeeklyCap", { projected: formatMoney(Math.round(projectedAfter)), cap: formatMoney(Math.round(limits.weeklyCapRupees!)) }),
-        422,
-      );
+      return apiError(say("overWeeklyCap", { projected: formatMoney(Math.round(projectedAfter)), cap: formatMoney(Math.round(limits.weeklyCapRupees!)) }), 422);
     }
   }
 
@@ -251,9 +241,7 @@ async function handlePATCH(
             const short = fundingShortfall({ mode, neededPaise: capPaise, account: funding });
             if (short?.kind === "no_limit") throw new CustomerBalanceError(say("setSpendingLimit"));
             if (short?.kind === "short") {
-              throw new CustomerBalanceError(say("metaFundsShort", {
-                room: formatMoneyExact(short.roomPaise / 100), committed: committedWords(short.committed, formatMoneyExact, say), needed: formatMoneyExact(short.neededPaise / 100),
-              }));
+              throw new CustomerBalanceError(say("metaFundsShort", { room: formatMoneyExact(short.roomPaise / 100), committed: committedWords(short.committed, formatMoneyExact, say), needed: formatMoneyExact(short.neededPaise / 100) }));
             }
           } else {
             // #216: AdBrain records Meta's lifetime spend itself; the reserve below stays the gate.
@@ -421,10 +409,7 @@ async function handleDELETE(
       !storedBinding.metaPageId ||
       storedBinding.metaConnectionGeneration === null
     ) {
-      return NextResponse.json(
-        { error: say("reconcileBeforeDelete") },
-        { status: 409 },
-      );
+      return NextResponse.json({ error: say("reconcileBeforeDelete") }, { status: 409 });
     }
 
     // Remove it from Meta first (best-effort — it may already be gone there).
@@ -449,10 +434,7 @@ async function handleDELETE(
       if (err instanceof ConnectionAccessError) {
         return NextResponse.json({ error: err.message }, { status: err.code === "CONFLICT" ? 409 : 400 });
       }
-      return NextResponse.json(
-        { error: say("metaDeleteUnconfirmed") },
-        { status: 502 },
-      );
+      return NextResponse.json({ error: say("metaDeleteUnconfirmed") }, { status: 502 });
     }
   }
 

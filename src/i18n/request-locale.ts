@@ -35,6 +35,12 @@ export async function ownerError(key: OwnerErrorKey, values?: OwnerErrorValues):
   return ownerErrorIn(await requestLocale(), key, values);
 }
 
+/** #2312: a synchronous `ownerError` for one request, for routes that refuse from inside callbacks. */
+export async function ownerWords(): Promise<(key: OwnerErrorKey, values?: OwnerErrorValues) => string> {
+  const locale = await requestLocale();
+  return (key, values) => ownerErrorIn(locale, key, values);
+}
+
 /** #1438: the first-ad setup's words in the owner's language, for the three step pages to pass to their client step. */
 export function setupWords(): Promise<SetupWords> {
   return requestWords("setup");
