@@ -217,7 +217,7 @@ Supabase configuration and Node 24. Every job runs in parallel after its own `np
 | `test` | aggregator: fails unless `lint`, every `unit` shard and `metadb` succeeded |
 | `core` | `npm run test:core`, then `test:meta-db -- --generation-only` |
 | `audit` | `npm run audit:dependencies` (reports, does not block) |
-| `boundaries` | `npm run boundaries -- --base origin/<base>`: ADR-001 import rules (`.dependency-cruiser.mjs`). A new edge fails; a fixed edge fails until `npm run boundaries -- --write-baseline` drops it from `scripts/boundaries-baseline.json`, which may only shrink (#2070) |
+| `boundaries` | `npm run boundaries -- --base origin/<base>`: ADR-001 import rules (`.dependency-cruiser.mjs`) and source checks C1–C4 (Graph URLs, adapter tables, `appsecret_proof`, 400-line file budget). A new edge fails, a listed big file that grows fails; a fixed edge fails until `npm run boundaries -- --write-baseline` drops it from `scripts/boundaries-baseline.json`, which may only shrink (#2070, #2071) |
 | `secrets` | Gitleaks |
 
 Required checks are `build`, `test`, `core` and `secrets`. `test` runs with
