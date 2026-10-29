@@ -12,6 +12,7 @@ import { HomeRejectedAds } from "@/components/home-rejected-ads";
 import { HomeWeekCard } from "@/components/home-week-card";
 import { loadWeekSummary } from "@/lib/home/week-summary-load";
 import { PilotDay7Card } from "@/components/pilot-day7-card";
+import { homeCustomers, homeResults } from "@/lib/campaign/home-results";
 import { pilotDay7Visible } from "@/lib/feedback/pilot-day7";
 import { pilotDay7Facts } from "@/lib/feedback/pilot-day7-store";
 import { adResultsEnabled } from "@/lib/campaign/ad-results-store";
@@ -23,7 +24,7 @@ import {
   getAdStatuses,
   getApprovedCreatives,
   getAuditLog,
-  getLatestResults,
+  getLatestResultsWithEnquiries,
   getPrimaryBusiness,
   getSpendEvaluation,
 } from "@/lib/supabase/queries";
@@ -39,7 +40,7 @@ export default async function DashboardPage() {
   ) : null;
   const activity = business ? getAuditLog(business.id, 8).then<ReactNode, ReactNode>(
     (audit) => <RecentActivity audit={audit} locale={locale} />,
-    () => <Alert variant="error">Recent activity could not be loaded.</Alert>,
+    () => <Alert variant="error">We couldn&apos;t load your recent activity. Reload the page.</Alert>,
   ) : null;
   const [creatives, campaigns, metaConnection] = business
     ? await Promise.all([
@@ -55,13 +56,14 @@ export default async function DashboardPage() {
     const ready = resume === 3 && business
       ? await getApprovedCreatives(business.id).then((rows) => rows.filter((row) => madeForSetup(row, business)), () => [])
       : [];
-    return <SetupResumeCard step={resume} ready={ready} />;
+    return <SetupResumeCard step={resume} ready={ready} locale={locale} />;
   }
   // #764: the Home results row; an unreadable result leaves the row out, never the page.
   const launched = campaigns.filter((campaign) => campaign.meta_campaign_id).map((campaign) => campaign.id);
   const newest = newestLiveCampaign(campaigns);
   const [results, replyMinutes, waiting, firstEnquiry, newestAdStatuses, week] = await Promise.all([
-    launched.length ? getLatestResults(launched).catch(() => ({})) : {},
+    // #1624: with the logged real enquiries and customers, so Home can ask which chats were real.
+    launched.length ? getLatestResultsWithEnquiries(launched).catch(() => ({})) : {},
     // #1049: an unreadable reply time leaves the line out, never the page.
     business ? recentReplyMinutes(business.id).catch(() => null) : null,
     // #1274: people waiting for a reply (the inbox's Waiting count, #1260) lead Home's sentence; unreadable means none shown.
@@ -80,6 +82,8 @@ export default async function DashboardPage() {
   // #1650: after the first week, one question for the pricing call (#718); unreadable means not shown.
   const pilotFacts = business && campaigns.some((campaign) => campaign.launched_at) ? await pilotDay7Facts(business.id).catch(() => null) : null;
   const askPilot = Boolean(pilotFacts && pilotDay7Visible({ ...pilotFacts, now: new Date() }));
+  // #2026: the card repeats Home's customer line above the ₹999 question; nothing when none is marked.
+  const customerLine = askPilot ? homeCustomers(homeResults(campaigns, results)) : null;
 
   return (
     <WorkspaceHome
@@ -91,7 +95,7 @@ export default async function DashboardPage() {
       waiting={waiting}
       firstEnquiry={firstEnquiry}
       adReview={adReview}
-      pilotQuestion={askPilot && business ? <PilotDay7Card businessId={business.id} locale={locale} /> : null}
+      pilotQuestion={askPilot && business ? <PilotDay7Card businessId={business.id} locale={locale} customers={customerLine?.kind === "line" ? customerLine : null} /> : null}
       rejectedAds={adReview?.kind === "rejected" && newest && (
         <Suspense fallback={null}>
           <HomeRejectedAds campaign={newest} vertical={business?.vertical} spend={(results as Record<string, { spend?: number }>)[newest.id]?.spend ?? 0} />

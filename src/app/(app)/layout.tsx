@@ -7,6 +7,8 @@ import { getPrimaryBusiness, getUser, hasLaunchedCampaign } from "@/lib/supabase
 import Loading from "./loading";
 import { getEnv } from "@/lib/env";
 import { supportWhatsAppUrl } from "@/lib/support";
+import { namespaceMessages } from "@/i18n/locale";
+import { requestLocale } from "@/i18n/request-locale";
 
 export const metadata = {
   robots: { index: false, follow: false, googleBot: { index: false, follow: false } },
@@ -31,5 +33,6 @@ async function AuthenticatedWorkspace({ children }: { children: React.ReactNode 
   const supportUrl = supportWhatsAppUrl(getEnv().SUPPORT_WHATSAPP, business?.name ?? null);
   // #1272: until a first campaign has gone live, + continues the setup instead of starting over; unknown counts as not.
   const firstAd = business ? !(await hasLaunchedCampaign(business.id).catch(() => true)) : true;
-  return <WorkspaceShell email={user.email} ownerId={user.id} businessId={business?.id ?? null} businessName={business?.name ?? null} supportUrl={supportUrl} firstAd={firstAd}><ProductTelemetry />{children}</WorkspaceShell>;
+  const labels = namespaceMessages(await requestLocale(), "shell");
+  return <WorkspaceShell labels={labels} email={user.email} ownerId={user.id} businessId={business?.id ?? null} businessName={business?.name ?? null} supportUrl={supportUrl} firstAd={firstAd}><ProductTelemetry />{children}</WorkspaceShell>;
 }

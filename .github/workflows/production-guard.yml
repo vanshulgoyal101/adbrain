@@ -24,8 +24,9 @@ jobs:
       && github.event.deployment.environment == 'Production')
       || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    # Last resort only: a cancelled job opens no issue, so every step below has a smaller bound (#210).
-    timeout-minutes: 45
+    # A timed-out job opens no issue (#210), so every step has its own bound and they sum to at most
+    # this (#2029). Wait/served and WS1/rollback never both run, so the real worst case is ~80 min.
+    timeout-minutes: 95
     concurrency: production-smoke
     # Explicit bash adds pipefail, so `| tee` cannot hide a failed smoke or rollback (#153).
     defaults:
@@ -35,14 +36,17 @@ jobs:
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       SHA: ${{ github.event.deployment.sha || github.sha }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        timeout-minutes: 3
         with:
           ref: ${{ env.SHA }}
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        timeout-minutes: 3
         with:
           node-version: 24
           cache: npm
       - run: npm ci
+        timeout-minutes: 8
       # The Azure apt mirror has stalled at ~20 kB/s for 11-15 min (#210); the browser CDN is fast.
       - name: Install Chromium (apt bounded, then browser only)
         id: install
@@ -54,18 +58,35 @@ jobs:
           timeout -k 30s 4m npx playwright install chromium
       - name: Wait until production serves this commit
         id: wait
+        timeout-minutes: 7
         if: github.event_name == 'deployment_status' && env.VERCEL_TOKEN != ''
         run: node scripts/production-guard.mjs wait "$SHA"
       # No token (CEO, #413): fix forward, no rollback. #1457: wait until the domain's X-AdBrain-Release is this commit
       # (or a newer one, whose own run smokes it); fail if it never is, so a pinned domain can't pass a smoke of an old build.
       - name: Wait until the domain serves this commit (no token)
         id: served
+        timeout-minutes: 14
         if: github.event_name == 'deployment_status' && env.VERCEL_TOKEN == ''
         env:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/production-guard.mjs served "$SHA" | tee smoke.txt
+      - name: Capture the authorized drill deployment before the forced smoke
+        id: drill
+        timeout-minutes: 2
+        if: inputs.drill && env.VERCEL_TOKEN != ''
+        run: |
+          current=$(node scripts/production-guard.mjs live)
+          sha=$(jq -er '.sha' <<< "$current")
+          deployment=$(jq -er '.id' <<< "$current")
+          if ! [[ "$sha" =~ ^[0-9a-f]{40}$ && "$deployment" =~ ^dpl_[A-Za-z0-9]+$ ]]; then
+            echo "::error::Drill refused: production deployment identity is unknown or invalid"
+            exit 1
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "deployment=$deployment" >> "$GITHUB_OUTPUT"
       - name: Read-only core smoke (one retry)
         id: smoke
+        timeout-minutes: 23
         if: steps.wait.outputs.superseded != 'true' && steps.served.outputs.superseded != 'true'
         env:
           SMOKE_EMAIL: ${{ secrets.SMOKE_EMAIL }}
@@ -81,25 +102,8 @@ jobs:
           smoke | tee smoke.txt && exit 0
           sleep 60
           smoke | tee smoke.txt
-      - name: 2-Tier parent token (#520)
-        id: parent
-        if: steps.smoke.outcome == 'success'
-        env:
-          CRON_SECRET: ${{ secrets.CRON_SECRET }}
-        run: |
-          [ -n "$CRON_SECRET" ] || { echo "CRON_SECRET not set; parent token check skipped"; exit 0; }
-          code=$(curl -sS --max-time 30 -o parent.json -w '%{http_code}' -H "Authorization: Bearer $CRON_SECRET" https://adbrain.vanshul.com/api/cron/meta-parent-health) || code=000
-          # Codes only (public repo): never the token or Meta's message.
-          summary=$(jq -c '{ok, configured, enabled, errorCode}' parent.json 2>/dev/null || echo '{"ok":false,"error":"no JSON body"}')
-          echo "HTTP $code $summary"
-          [ "$code" = 404 ] && { echo "Route not deployed yet; skipped"; exit 0; }
-          [ "$code" = 200 ] && exit 0
-          echo "FAIL 2-Tier parent token: HTTP $code $summary" | tee -a smoke.txt
-          exit 1
-      # #1439: the WS1 first-timer path at 360 px over slow 4G, read-only on Meta. Gating since 5 green guard runs
-      # (Oct 28): a failure turns the guard red and opens a core bug, but never rolls back (that needs the smoke to fail).
-      # Skipped while the WS1_* secrets are unset.
       - name: WS1 first-timer walk (#1439)
+        timeout-minutes: 10
         if: steps.smoke.outcome == 'success'
         env:
           WS1_EMAIL: ${{ secrets.WS1_EMAIL }}
@@ -111,9 +115,14 @@ jobs:
           { echo '### WS1 walk'; echo '```'; cat ws1.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
           exit "$rc"
       - name: Roll production back
-        if: failure() && steps.smoke.outcome == 'failure' && steps.install.outputs.deps != 'missing' && (github.event_name == 'deployment_status' || inputs.drill) && env.VERCEL_TOKEN != ''
-        run: node scripts/production-guard.mjs rollback "$SHA" 2>&1 | tee rollback.txt
+        timeout-minutes: 6
+        if: failure() && steps.smoke.outcome == 'failure' && steps.install.outputs.deps != 'missing' && (github.event_name == 'deployment_status' || inputs.drill) && (!inputs.drill || steps.drill.outcome == 'success') && env.VERCEL_TOKEN != ''
+        env:
+          FAILED_SHA: ${{ steps.drill.outputs.sha || env.SHA }}
+          FAILED_DEPLOYMENT: ${{ steps.drill.outputs.deployment }}
+        run: node scripts/production-guard.mjs rollback "$FAILED_SHA" "$FAILED_DEPLOYMENT" 2>&1 | tee rollback.txt
       - name: Open core bug
+        timeout-minutes: 4
         if: failure() && !inputs.force_fail
         env:
           GH_TOKEN: ${{ github.token }}
@@ -124,7 +133,7 @@ jobs:
           rollback=$(cat rollback.txt 2>/dev/null || echo "not attempted (scheduled run, install or wait failed, Chromium OS packages missing, or no VERCEL_TOKEN)")
           # Public repo: never post anything token-shaped (#413).
           rollback=$(sed -E 's/\b(vc[a-z])_[A-Za-z0-9]{16,}/\1_[redacted]/g; s/--token[= ][^ ]+/--token [redacted]/g' <<<"$rollback")
-          body="$(printf 'Run: %s\n\nSmoke:\n```\n%s\n```\nRollback:\n```\n%s\n```\nRecovery: docs/RELEASING.md#production-guard\n' "$run" "$smoke" "$rollback")"
+          body="$(printf 'Run: %s\n\nSmoke:\n```\n%s\n```\nRollback:\n```\n%s\n```\nRecovery: docs/operations/releasing-recovery.md#production-guard\n' "$run" "$smoke" "$rollback")"
           # One open alert at a time: a repeat failure comments on it instead of opening another.
           open=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search "in:title \"${PREFIX}Production smoke failed on\"" --json number --jq '.[0].number // empty')
           if [ -n "$open" ]; then

@@ -16,10 +16,25 @@ describe("card states gallery (#1255)", () => {
       "Not showing after a day": "not_showing_day",
       "1 of 3 ads rejected": "early",
       "Ended, it worked": "ended_worked",
+      "IELTS: promised a band or visa": "early",
+      "IELTS: talked about the reader's result": "early",
+      "IELTS: read as a job or visa offer": "early",
+      "Interiors: read as a property ad": "early",
+      "Interiors: lowest price, fixed handover": "early",
+      "Deleted in Meta": "ended_measured",
+      "New audience waiting": "measured",
       "People waiting": "measured",
     });
     const rejected = cards.find((card) => card.reviews)!;
     expect(rejectionCopy(rejected.reviews!.flatMap((review) => review.feedback))?.row).toBe("misleading");
     expect(verdict(cards.at(-1)!.input).sentence).toMatch(/^2 people are waiting for your reply\./);
+    // #1854 (QA): each pilot segment's rejection is on the page with its business type, so #1690's words can be walked.
+    expect(cards.filter((card) => card.vertical).map((card) => [card.name, rejectionCopy(card.reviews!.flatMap((review) => review.feedback), { vertical: card.vertical })?.row])).toEqual([
+      ["IELTS: promised a band or visa", "misleading"], ["IELTS: talked about the reader's result", "personal_attributes"],
+      ["IELTS: read as a job or visa offer", "job_or_visa_offer"], ["Interiors: read as a property ad", "special_category"],
+      ["Interiors: lowest price, fixed handover", "misleading"],
+    ]);
+    // #1841 (Designer): the newer card states are on the page too, so walks cover them.
+    expect(cards.filter((card) => card.extra).map((card) => [card.name, card.extra])).toEqual([["Deleted in Meta", "deleted_in_meta"], ["New audience waiting", "audience_waiting"]]);
   });
 });

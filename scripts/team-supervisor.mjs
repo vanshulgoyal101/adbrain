@@ -12,9 +12,9 @@
 // night exports production to ~/.adbrain-backups and restore-drills it (#884).
 // Kill switch for role runs: touch ~/.adbrain-supervisor/OFF (scheduled-job dispatch and the nightly backup keep running). Log: ~/.adbrain-supervisor/supervisor.log.
 import { execFileSync as rawExecFileSync, spawn, spawnSync } from "node:child_process";
-import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, chmodSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { cpus, freemem, homedir, loadavg, totalmem } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { NAMES } from "./wait-for-work.mjs";
@@ -221,17 +221,48 @@ export function exportDue(newest, now = new Date()) {
   return !newest || Date.parse(newest) < cutoff;
 }
 
-/** Export folders are named by their ISO time; keep the newest `keep`. */
+/** Exports are named by their ISO time: an encrypted `<time>.tar.gz.cms` (#1762) or a legacy plaintext folder. */
+export const EXPORT_NAME = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}Z(\.tar\.gz\.cms)?$/;
+
+/** Keep the newest `keep` exports. */
 export function exportsToPrune(names, keep = BACKUP_KEEP) {
-  return names.filter((n) => /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}Z$/.test(n)).sort().reverse().slice(keep);
+  return names.filter((n) => EXPORT_NAME.test(n)).sort().reverse().slice(keep);
+}
+
+const OPENSSL = ["/opt/homebrew/opt/openssl@3/bin/openssl", "/usr/local/opt/openssl@3/bin/openssl"].find((p) => existsSync(p)) ?? "openssl";
+
+/** #1762: tar the drilled export, CMS-encrypt it to the backup certificate (the private key stays in the keychain), then delete the plaintext. */
+export function encryptExport(dir, run = spawnSync) {
+  const tarball = `${dir}.tar.gz`, sealed = `${dir}.tar.gz.cms`;
+  const tar = run("tar", ["-czf", tarball, "-C", dirname(dir), basename(dir)], { encoding: "utf8" });
+  const cms = tar.status === 0 ? run(OPENSSL, ["cms", "-encrypt", "-binary", "-aes256", "-outform", "DER", "-in", tarball, "-out", sealed,
+    join(WT, ".github/backup/backup-cert.crt")], { encoding: "utf8" }) : null;
+  rmSync(tarball, { force: true });
+  rmSync(dir, { recursive: true, force: true });
+  if (cms?.status === 0 && existsSync(sealed)) {
+    chmodSync(sealed, 0o600);
+    return true;
+  }
+  rmSync(sealed, { force: true });
+  return false;
 }
 
 const folderTime = (name) => `${name.slice(0, 13)}:${name.slice(14, 16)}:00Z`;
 
+/** #1857: once a UTC day, warn 90 days before the Meta API version we call is retired (scripts/graph-sunset.mjs). */
+function dailyGraphSunsetCheck(dry) {
+  const stamp = join(STATE_DIR, `graph-sunset-${new Date().toISOString().slice(0, 10)}`);
+  if (existsSync(stamp)) return;
+  if (dry) return console.log("would check the Meta API version's retirement date");
+  const result = spawnSync(process.execPath, ["scripts/graph-sunset.mjs"], { cwd: WT, encoding: "utf8", timeout: 60_000 });
+  log(`graph sunset: ${`${result.stdout ?? ""}${result.stderr ?? ""}`.trim().split("\n").join(" | ").slice(0, 240)}`);
+  if (result.status === 0) writeFileSync(stamp, "");
+}
+
 /** Nightly free-plan backup (#884): export, restore-drill it, prune, and open one issue when it fails. */
 function nightlyExport(dry) {
   mkdirSync(BACKUP_DIR, { recursive: true, mode: 0o700 });
-  const names = readdirSync(BACKUP_DIR).filter((n) => /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}Z$/.test(n)).sort();
+  const names = readdirSync(BACKUP_DIR).filter((n) => EXPORT_NAME.test(n)).sort();
   const newest = names.at(-1);
   if (!exportDue(newest ? folderTime(newest) : null)) return;
   if (dry) return console.log(`would export production to ${BACKUP_DIR} (newest ${newest ?? "none"})`);
@@ -240,7 +271,9 @@ function nightlyExport(dry) {
   const run = (command) => spawnSync(process.execPath, ["scripts/db-export.mjs", command, dir], { cwd: WT, encoding: "utf8", timeout: 15 * 60_000 });
   const exported = run("export");
   const restored = exported.status === 0 ? run("restore") : null;
-  const ok = exported.status === 0 && restored?.status === 0;
+  // Encrypt whatever the drill says: plaintext never stays on the shared Mac (#1762).
+  const sealed = exported.status === 0 && encryptExport(dir);
+  const ok = exported.status === 0 && restored?.status === 0 && sealed;
   // The error line first (stacks end in "Node.js vNN"), never anything that looks like a credential.
   const tail = (r) => {
     if (!r) return "not run";
@@ -250,20 +283,33 @@ function nightlyExport(dry) {
   };
   if (ok) {
     log(`nightly export ${name}: ${tail(restored).slice(0, 200)}`);
-    for (const old of exportsToPrune([...names, name])) rmSync(join(BACKUP_DIR, old), { recursive: true, force: true });
+    // #1891: after a good backup, drop the core smoke's old unreferenced images so Storage stays under the free plan.
+    const pruned = spawnSync(process.execPath, ["scripts/prune-smoke-storage.mjs", "--apply"], { cwd: WT, encoding: "utf8", timeout: 5 * 60_000 });
+    log(`smoke storage prune: ${tail(pruned).slice(0, 200)}`);
+    for (const old of exportsToPrune([...names, `${name}.tar.gz.cms`])) rmSync(join(BACKUP_DIR, old), { recursive: true, force: true });
     return;
   }
   rmSync(dir, { recursive: true, force: true });
-  log(`nightly export ${name} FAILED: export ${exported.status}, restore ${restored?.status ?? "-"}`);
+  log(`nightly export ${name} FAILED: export ${exported.status}, restore ${restored?.status ?? "-"}, encrypted ${sealed}`);
   try {
     const title = "Nightly production export failed";
     const open = JSON.parse(execFileSync("gh", ["issue", "list", "-R", REPO, "--state", "open", "--search", `in:title "${title}"`, "--json", "number"], { encoding: "utf8" }));
     if (open.length) return;
     execFileSync("gh", ["issue", "create", "-R", REPO, "-l", "core", "-l", "bug", "-l", "owner:devops", "-t", title, "-b",
-      `The supervisor's nightly export (#884) failed at ${name}. Export exit ${exported.status}; restore drill exit ${restored?.status ?? "not run"}.\nLast lines: ${tail(restored ?? exported).slice(0, 300)}\n\nRerun by hand: \`node scripts/db-export.mjs export ~/.adbrain-backups/<now>\` then \`restore\` (docs/OPERATIONS.md#data-safety-and-recovery). Until an export succeeds, no destructive migration.`], { stdio: "ignore" });
+      `The supervisor's nightly export (#884) failed at ${name}. Export exit ${exported.status}; restore drill exit ${restored?.status ?? "not run"}; encrypted ${sealed}.\nLast lines: ${tail(restored ?? exported).slice(0, 300)}\n\nRerun by hand: \`node scripts/db-export.mjs export ~/.adbrain-backups/<now>\` then \`restore\` (docs/operations/backups.md#data-safety-and-recovery). Until an export succeeds, no destructive migration.`], { stdio: "ignore" });
   } catch (error) {
     log(`nightly export alert failed: ${String(error?.message ?? error).split("\n")[0].slice(0, 160)}`);
   }
+}
+
+/** #1856: once a UTC day, alert at 80% of a Supabase free-plan quota (scripts/plan-usage.mjs opens or updates one issue). */
+function dailyUsageCheck(dry) {
+  const stamp = join(STATE_DIR, `usage-${new Date().toISOString().slice(0, 10)}`);
+  if (existsSync(stamp)) return;
+  if (dry) return console.log("would check Supabase free-plan usage");
+  const result = spawnSync(process.execPath, ["scripts/plan-usage.mjs"], { cwd: WT, encoding: "utf8", timeout: 2 * 60_000 });
+  log(`plan usage: ${`${result.stdout ?? ""}${result.stderr ?? ""}`.trim().split("\n").join(" | ").slice(0, 240)}`);
+  if (result.status === 0) writeFileSync(stamp, "");
 }
 
 /** The nightly encrypted pg_dump (#884): GitHub's schedule is best effort, so dispatch it when its newest run is over 23 h old. */
@@ -416,8 +462,10 @@ async function main() {
   // OFF stops only the headless role runs (#1525): production's scheduled jobs and the nightly backup depend on these dispatches.
   dispatchScheduledJobs(values["dry-run"]);
   dispatchBackup(values["dry-run"]);
+  dailyGraphSunsetCheck(values["dry-run"]);
   const fresh = values["dry-run"] ? true : refresh();
   nightlyExport(values["dry-run"]);
+  dailyUsageCheck(values["dry-run"]);
   // A detached run (#766) finishes the run it was given and records it; the tick that started it has long returned.
   if (values["run-role"]) return finishRun(values["run-role"], values["run-start"], runMin, values.credits);
   if (existsSync(join(STATE_DIR, "OFF"))) return values["dry-run"] ? console.log("no role runs: OFF switch") : log("tick: no role runs (OFF switch)");

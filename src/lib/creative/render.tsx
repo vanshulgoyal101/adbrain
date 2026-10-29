@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { fitPhoto } from "@/lib/creative/fit-photo";
 import path from "node:path";
 import type { ReactElement } from "react";
 import { ImageResponse } from "next/og";
@@ -20,11 +21,13 @@ export { AdComposite, adMetrics, isOfferLine, logoTileWidth, type ShapedWords };
 export async function renderCompositeAd(spec: AdDesignSpec): Promise<Uint8Array> {
   let logoRatio = 1;
   const [backgroundUrl, logoUrl] = await Promise.all(
-    [spec.backgroundUrl, spec.logoUrl].map(async (url) => {
+    [spec.backgroundUrl, spec.logoUrl].map(async (url, index) => {
       if (!url) return null;
       const image = await downloadImage(url);
-      if (url === spec.logoUrl) logoRatio = await aspectRatio(image.bytes);
-      return `data:image/png;base64,${Buffer.from(image.bytes).toString("base64")}`;
+      if (index === 1) logoRatio = await aspectRatio(image.bytes);
+      // #1904: the background is fitted to the ad's exact frame first, so a phone photo's face isn't cut off.
+      const bytes = index === 0 ? await fitPhoto(image.bytes, spec.width, spec.height, spec.backgroundFit ?? "attention").catch(() => Buffer.from(image.bytes)) : image.bytes;
+      return `data:image/png;base64,${Buffer.from(bytes).toString("base64")}`;
     }),
   );
   const shaped = await shapeIndicText(spec, logoRatio);

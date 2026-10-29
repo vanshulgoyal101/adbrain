@@ -13,6 +13,7 @@ import { bannedClaimsForVertical, capitalWords, HEALTH_VERTICAL, MEDICAL_BANNED_
 import { policyFindings } from "@/lib/creative/policy-rules";
 import { emptyScene } from "@/lib/creative/visual-rules";
 import { spelledAmountIndex, spelledCurrency } from "./currency";
+import { contactsInCopy } from "./contact-in-copy";
 
 export const CONCEPT_VERSION = "creative-concept-v3";
 // Primary text Meta shows on mobile before "See more" (#194).
@@ -207,7 +208,7 @@ export function conceptValidationRules(issues: string[]): string[] {
     "sourceQuotes", "unsupported-commercial-claim", "repeated-headline", "repeated-opening",
     "cliche", "em-dash-overuse", "exclamation-spam", "all-caps", "too-long", "banned-claim",
     "hook-length", "offer-below-fold", "price-unit", "personal-attribute", "unsupported-superlative", "exaggerated-result", "no-subject",
-    "work-claim",
+    "work-claim", "contact-in-copy",
   ]);
   return [...new Set(issues.map((issue) => {
     if (issue.startsWith("schema:")) return issue.slice(0, issue.indexOf(": "));
@@ -557,6 +558,11 @@ export function validateConcept(
     for (const claim of workClaims([concept.headline, concept.primary_text, concept.supportingText, concept.description].filter(Boolean).join("\n"))) {
       issues.push(`work-claim: "${claim}" says the picture is the business's own work, but the picture is generated; say what the business offers instead`);
     }
+  }
+  // #1822: no link or phone number the brand didn't give as its own; the ad's button already reaches the business.
+  for (const contact of contactsInCopy([concept.headline, concept.primary_text, concept.supportingText, concept.description].filter(Boolean).join("\n"),
+    { website: input.brand.website, phone: input.brand.phone })) {
+    issues.push(`contact-in-copy: "${contact.slice(0, 60)}" is a link or phone number the brand didn't give as its own; remove it (the ad's button already reaches the business)`);
   }
   const empty = emptyScene(concept.visual.direction);
   if (empty) {

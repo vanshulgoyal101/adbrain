@@ -1,7 +1,8 @@
 import type { PauseSuggestion } from "@/lib/campaign/ad-pause";
 import { readCampaignHealth } from "@/lib/campaign/health";
 import { campaignDestination } from "@/lib/campaign/outcomes";
-import { verdict, type Comparison, type Verdict, type VerdictInput } from "@/lib/campaign/verdict";
+import type { Words } from "@/i18n/words";
+import { restatesStatus, verdict, type Comparison, type Verdict, type VerdictInput } from "@/lib/campaign/verdict";
 import type { Campaign, CampaignResult } from "@/lib/types";
 
 type CardCampaign = Pick<Campaign, "id" | "status" | "created_at" | "raw" | "destination" | "objective">;
@@ -46,9 +47,9 @@ const HOME_ORDER: string[] = ["working", "about_average", "measured", "early", "
 
 /**
  * Home's one sentence and number: the best running campaign's verdict, with the account's waiting enquiries in front,
- * plus each listed campaign's one-word verdict. Null when no running campaign has results.
+ * plus each listed campaign's one-word verdict (none when it would only repeat the status). Null when no running campaign has results.
  */
-export function homeVerdicts(campaigns: Array<CardCampaign & { id: string }>, results: Record<string, CardResult | undefined>, extra: { now?: number; waiting: number }) {
+export function homeVerdicts(campaigns: Array<CardCampaign & { id: string }>, results: Record<string, CardResult | undefined>, extra: { now?: number; waiting: number; words?: Words<"verdict"> }) {
   const now = extra.now ?? Date.now();
   const labels = new Map<string, string>();
   const live: Array<{ id: string; verdict: Verdict; input: VerdictInput }> = [];
@@ -57,10 +58,11 @@ export function homeVerdicts(campaigns: Array<CardCampaign & { id: string }>, re
     if (!result) continue;
     const input = cardVerdictInput(campaign, result, { now, waiting: 0, weakAd: null, comparison: lastCampaignComparison(campaign, campaigns, results) });
     if (!input) continue;
-    const judged = verdict(input);
-    labels.set(campaign.id, judged.label);
+    const judged = verdict(input, extra.words);
+    // #1795: 'Live' and 'Ended' restate the row's status ('Ended · Ended', 'Paused · Live'), so the row shows no word.
+    if (!restatesStatus(judged.state)) labels.set(campaign.id, judged.label);
     if (campaign.status === "active") live.push({ id: campaign.id, verdict: judged, input });
   }
   const best = live.sort((a, b) => HOME_ORDER.indexOf(a.verdict.state) - HOME_ORDER.indexOf(b.verdict.state))[0];
-  return { labels, lead: best ? { campaignId: best.id, verdict: verdict({ ...best.input, waiting: extra.waiting }), input: best.input } : null };
+  return { labels, lead: best ? { campaignId: best.id, verdict: verdict({ ...best.input, waiting: extra.waiting }, extra.words), input: best.input } : null };
 }

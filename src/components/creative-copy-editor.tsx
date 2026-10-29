@@ -7,6 +7,7 @@ import { updateCreativeCopy, type CopyEditResult } from "@/app/(app)/studio/acti
 import { Button } from "@/components/ui/button";
 import { Input, Label, Textarea } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import type { PhotoFit } from "@/lib/creative/fit-photo";
 import { editableCopySchema, savedCreativeDescription, type EditableCopy } from "@/lib/creative/concept";
 import { pictureDesign, pictureWordsOf, pictureWordsSchema, withPictureWords, type PictureWords } from "@/lib/creative/picture-words";
 import { createClient } from "@/lib/supabase/client";
@@ -367,6 +368,17 @@ function PictureWordsEditor({
   );
 }
 
+const PHOTO_FITS: { fit: PhotoFit; label: string }[] = [
+  { fit: "attention", label: "Fill the frame" },
+  { fit: "blur", label: "Show whole photo" },
+];
+
+const formatRatio = (width: number, height: number) => {
+  const gcd = (a: number, b: number): number => (b ? gcd(b, a % b) : a);
+  const d = gcd(width, height);
+  return `${width / d}:${height / d}`;
+};
+
 /** A new picture behind the same words (#280 slice 3). One paid AI image, like Regenerate. */
 function BackgroundEditor({
   creative,
@@ -386,6 +398,7 @@ function BackgroundEditor({
   const [instruction, setInstruction] = useState("");
   const [photos, setPhotos] = useState<string[]>([]);
   const [photo, setPhoto] = useState<string | null>(null);
+  const [fit, setFit] = useState<PhotoFit>("attention");
   // A picked photo shows behind the same words at once (#387).
   const { headline, primary_text, cta, angle, generation } = creative;
   const base = useMemo(
@@ -393,8 +406,8 @@ function BackgroundEditor({
     [headline, primary_text, cta, angle, generation, brand],
   );
   useEffect(() => {
-    onPreview?.(photo ? { spec: { ...base, backgroundUrl: photo } } : null);
-  }, [photo, base, onPreview]);
+    onPreview?.(photo ? { spec: { ...base, backgroundUrl: photo, backgroundFit: fit } } : null);
+  }, [photo, fit, base, onPreview]);
   useEffect(() => () => onPreview?.(null), [onPreview]);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -426,7 +439,7 @@ function BackgroundEditor({
       const res = await fetch(`/api/creatives/${creative.id}/background`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(photo ? { photoUrl: photo } : { instruction }),
+        body: JSON.stringify(photo ? { photoUrl: photo, fit } : { instruction }),
       });
       const data = (await res.json().catch(() => ({}))) as { creative?: Creative; liveNotice?: string; error?: string };
       if (res.ok && data.creative) onSaved({ ...creative, ...data.creative }, { warnings: [], liveNotice: data.liveNotice });
@@ -438,29 +451,81 @@ function BackgroundEditor({
     }
   }
 
-  return (
-    <form aria-label="Change the background" onSubmit={save} className="flex flex-col gap-3">
-      <div className="flex flex-col gap-1">
-        <div className="flex items-center justify-between">
-          <Label htmlFor={id}>New background</Label>
-          <span className="text-xs tabular-nums text-slate-400">{instruction.length}/300</span>
+  if (photo) {
+    // #1904: the owner sees how their photo fits the frame, and picks crop or whole photo, before anything renders.
+    const fitUrl = (shape: "ad" | "square") =>
+      `/api/creatives/${creative.id}/photo-fit?${new URLSearchParams({ photo, fit, shape })}`;
+    const { width, height } = base;
+    return (
+      <form aria-label="Check how your photo fits" onSubmit={save} className="flex flex-col gap-3">
+        <div>
+          <h3 className="text-base font-semibold text-slate-900">Check how your photo fits</h3>
+          <p className="text-sm text-slate-600">
+            {fit === "attention"
+              ? "This is how it shows in Feed. Faces and the main subject are kept."
+              : "This is how it shows in Feed. The whole photo, with soft edges to fill the frame."}
+          </p>
         </div>
-        <Textarea
-          id={id}
-          value={instruction}
-          maxLength={300}
-          rows={3}
-          placeholder="e.g. Rooftop at sunset with solar panels"
-          onChange={(e) => {
-            setInstruction(e.target.value);
+        <div className="relative mx-auto w-[260px] max-w-full overflow-hidden rounded-lg bg-slate-100" style={{ aspectRatio: `${width} / ${height}` }}>
+          <img key={fitUrl("ad")} src={fitUrl("ad")} alt="Your photo in the ad's frame" className="h-full w-full object-cover" />
+          <span className="absolute right-2 top-2 rounded-full bg-white/90 px-2 py-0.5 text-xs font-medium text-slate-900">
+            {formatRatio(width, height)}
+          </span>
+        </div>
+        <div className="flex items-center justify-center gap-2 text-xs text-slate-600">
+          <img key={fitUrl("square")} src={fitUrl("square")} alt="" className="size-12 rounded bg-slate-100 object-cover" />
+          Square (1:1) version
+        </div>
+        <div role="group" aria-label="How the photo fits" className="grid grid-cols-2 gap-1 rounded-lg border border-slate-200 p-1">
+          {PHOTO_FITS.map((choice) => (
+            <button
+              key={choice.fit}
+              type="button"
+              aria-pressed={fit === choice.fit}
+              disabled={saving}
+              onClick={() => setFit(choice.fit)}
+              className={cn(
+                "min-h-11 rounded-md border text-sm font-medium disabled:opacity-60",
+                fit === choice.fit ? "border-primary bg-primary/10 text-primary" : "border-transparent text-slate-700 hover:bg-slate-50",
+              )}
+            >
+              {choice.label}
+            </button>
+          ))}
+        </div>
+        <p className="text-center text-xs text-slate-500">
+          {fit === "attention" ? "Something important cut off? Show the whole photo." : "Best for group photos and wide shots."}
+        </p>
+        {error && (
+          <p className="text-xs text-red-600" role="alert">
+            {error}
+          </p>
+        )}
+        <Button type="submit" size="sm" variant="primary" disabled={saving} className="h-11 w-full">
+          {saving ? "Making it…" : "Use this photo"}
+        </Button>
+        <button
+          type="button"
+          disabled={saving}
+          onClick={() => {
             setPhoto(null);
+            setFit("attention");
+            setError(null);
           }}
-          autoFocus
-        />
-      </div>
+          className="min-h-11 text-sm font-medium text-slate-700 hover:text-slate-900 disabled:opacity-60"
+        >
+          Pick another photo
+        </button>
+      </form>
+    );
+  }
+
+  return (
+    <form aria-label="Change the picture" onSubmit={save} className="flex flex-col gap-3">
+      {/* #1901: the owner's photos first, then an AI picture; neither changes the words. */}
       {photos.length > 0 && (
         <fieldset className="flex flex-col gap-1.5">
-          <legend className="mb-1.5 text-sm font-medium text-slate-700">Or use one of your photos</legend>
+          <legend className="mb-1.5 text-sm font-medium text-slate-700">Use another photo</legend>
           <div className="grid grid-cols-4 gap-2">
             {photos.map((url, index) => (
               <button
@@ -480,6 +545,23 @@ function BackgroundEditor({
           </div>
         </fieldset>
       )}
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center justify-between">
+          <Label htmlFor={id}>Or describe an AI picture</Label>
+          <span className="text-xs tabular-nums text-slate-400">{instruction.length}/300</span>
+        </div>
+        <Textarea
+          id={id}
+          value={instruction}
+          maxLength={300}
+          rows={3}
+          placeholder="e.g. Rooftop at sunset with solar panels"
+          onChange={(e) => {
+            setInstruction(e.target.value);
+            setPhoto(null);
+          }}
+        />
+      </div>
       {error && (
         <p className="text-xs text-red-600" role="alert">
           {error}

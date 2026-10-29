@@ -42,7 +42,7 @@ export function AppLanguage({ initial, labels }: { initial: AppLocale; labels: {
   </section>;
 }
 
-const HI_NOTE = "अभी सिर्फ़ होम हिंदी में है; बाकी स्क्रीन एक-एक करके जुड़ेंगी।";
+const HI_NOTE = "कुछ स्क्रीन अब हिंदी में हैं; बाकी एक-एक करके जुड़ेंगी।";
 
 /**
  * #1641 (CPO #1621): WS1 step 1's chooser, shown only until a language is chosen. Labelled in both scripts and
@@ -66,7 +66,7 @@ export function CompactAppLanguage() {
   if (chosen) return null;
   return <div className="flex flex-col items-end gap-1">
     <div role="group" aria-labelledby="setup-language-label" className="flex flex-wrap items-center justify-end gap-2">
-      <span id="setup-language-label" className="text-sm text-slate-600">Language / <span lang="hi">भाषा</span></span>
+      <span id="setup-language-label" className="text-sm text-slate-600">App language / <span lang="hi">ऐप की भाषा</span></span>
       {CHOICES.map((choice) => (
         <button key={choice.locale} type="button" lang={choice.locale} aria-pressed={false} disabled={pending}
           onClick={() => choose(choice.locale)}

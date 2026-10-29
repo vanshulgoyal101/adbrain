@@ -2,7 +2,7 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import recorded from "./fixtures/meta/ad-review.json";
-import { RejectedAds } from "@/components/rejected-ads";
+import { RejectedAds, rejectedMetaMessage } from "@/components/rejected-ads";
 import { SupportLinkProvider } from "@/components/support-link";
 import { adReviewState, type AdReview } from "@/lib/meta/client";
 
@@ -13,10 +13,10 @@ vi.mock("next/link", () => ({ default: ({ href, children, ...rest }: { href: str
 type Exchange = { path: string; body: unknown };
 const adsBody = (recorded.tape as Exchange[]).find((exchange) => exchange.path.includes("/ads?"))!.body as { data: Parameters<typeof adReviewState>[0][] };
 const recordedReviews = adsBody.data.map(adReviewState);
-const region = () => within(screen.getByRole("region", { name: "Ads Meta didn't approve" }));
+const region = () => within(screen.getByRole("group", { name: "Ads Meta didn't approve" }));
 
 describe("core: the card's rejected-ads line (#1274, #1305)", () => {
-  it("recorded 'Lead Ads' rejection: Meta's words quoted, the three fallback fixes, Meta's message under Details", () => {
+  it("recorded 'Lead Ads' rejection: Meta's words quoted, the three fallback fixes; no Details of its own (#1841)", () => {
     const onEditAd = vi.fn();
     render(<RejectedAds reviews={recordedReviews} spend={0} onEditAd={onEditAd} adsManagerUrl="https://adsmanager.facebook.com/x" />);
     expect(region().getByText(/^Meta didn't approve your ad\. Meta didn't say exactly why\. Here's their message: "It looks like your ad contains content/)).toHaveTextContent(/Nothing was spent\.$/);
@@ -24,7 +24,11 @@ describe("core: the card's rejected-ads line (#1274, #1305)", () => {
     expect(onEditAd).toHaveBeenCalledTimes(1);
     expect(region().getByRole("link", { name: "Make a new picture" })).toHaveAttribute("href", "/create");
     expect(region().getByRole("link", { name: "Ask Meta to review again" })).toHaveAttribute("href", "https://adsmanager.facebook.com/x");
-    expect(region().getByText(/^Meta's message: “It looks like your ad contains content/)).toBeInTheDocument();
+    // #1841 (Designer): the card has one Details; Meta's message goes there (rejectedMetaMessage).
+    expect(region().queryByText("Details")).toBeNull();
+    expect(rejectedMetaMessage(recordedReviews)).toMatch(/^It looks like your ad contains content/);
+    // #1633's quiet notice: a rule, not a filled box; nothing is broken when the other ads run.
+    expect(screen.getByRole("group", { name: "Ads Meta didn't approve" }).className).not.toMatch(/\bbg-/);
   });
 
   it("a matched policy says the CPO's sentence and its own fix; a spent campaign doesn't say nothing was spent", () => {

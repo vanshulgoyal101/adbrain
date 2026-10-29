@@ -6,8 +6,9 @@ import { revalidatePath } from "next/cache";
 import { logEvent } from "@/lib/audit";
 import { fieldList, fieldStr } from "@/lib/brand/fields";
 import { brandUsable } from "@/lib/brand/usable";
-import { SETUP_FIELDS, SETUP_FIELD_LIMITS, setupFieldsFrom, setupLocations, setupPhone, type SetupBusinessFields } from "@/lib/brand/setup-fields";
+import { SETUP_FIELDS, SETUP_FIELD_LIMITS, setupFieldErrors, setupFieldsFrom, setupLocations, setupPhone, type SetupBusinessFields } from "@/lib/brand/setup-fields";
 import { normalizeWebsite, validateBrandFields } from "@/lib/brand/validation";
+import { BRAND_LANGUAGE_NAME, CREATE_LANGUAGES } from "@/lib/languages";
 import { createClient } from "@/lib/supabase/server";
 import type { BusinessInsert } from "@/lib/types";
 
@@ -92,9 +93,9 @@ export async function saveBusiness(
 export type SetupSaveResult = { ok: true; id: string; usable: boolean } | { ok: false; error: string };
 
 /**
- * #1269 (WS1 step 1): autosave of the five setup fields only, so nothing else on the Brand is touched.
+ * #1269 (WS1 step 1): autosave of the five setup fields and optional selling point (#1966).
  * A blank name never overwrites a saved one (a new business needs one first); an unfinished phone isn't
- * written; the first offer is replaced and any others kept.
+ * written; the first offer and optional USP are replaced and any others kept.
  */
 export async function saveSetupBusiness(id: string | null, input: SetupBusinessFields): Promise<SetupSaveResult> {
   return observeAction("server.saveSetupBusiness", async () => {
@@ -102,6 +103,9 @@ export async function saveSetupBusiness(id: string | null, input: SetupBusinessF
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { ok: false, error: "Not authenticated." };
     const fields = Object.fromEntries(SETUP_FIELDS.map((key) => [key, String(input?.[key] ?? "").slice(0, SETUP_FIELD_LIMITS[key])])) as SetupBusinessFields;
+    const usp = String(input?.usp ?? "").trim();
+    const uspError = setupFieldErrors({ ...fields, usp }).usp;
+    if (uspError) return { ok: false, error: uspError };
     const name = fields.name.trim();
     const phone = setupPhone(fields.phone) ? fields.phone.trim() : undefined;
     const columns = "id, name, vertical, phone, locations, offers";
@@ -112,6 +116,7 @@ export async function saveSetupBusiness(id: string | null, input: SetupBusinessF
       const { data, error } = await supabase.from("businesses").insert({
         owner_id: user.id, name, vertical: fields.vertical.trim() || undefined, phone: phone ?? null,
         locations: setupLocations(fields.locations), offers: offer ? [offer] : [],
+        ...(usp ? { usps: [usp] } : {}),
       }).select(columns).single();
       if (error || !data) {
         // #1657: the owner sees plain words; the database's own message goes to the logs only.
@@ -124,10 +129,12 @@ export async function saveSetupBusiness(id: string | null, input: SetupBusinessF
     const offer = fields.offer.trim();
     // #1401: a blank box (mid-retype) never touches saved offers; a typed one replaces only the first.
     let offers: string[] | undefined;
-    if (offer) {
-      const { data: current, error: readError } = await supabase.from("businesses").select("offers").eq("id", id).single();
+    let usps: string[] | undefined;
+    if (offer || usp) {
+      const { data: current, error: readError } = await supabase.from("businesses").select("offers, usps").eq("id", id).single();
       if (readError || !current) return { ok: false, error: "We couldn't find your business details. Reload the page." };
-      offers = [offer, ...(current.offers ?? []).slice(1)];
+      if (offer) offers = [offer, ...(current.offers ?? []).slice(1)];
+      if (usp) usps = [usp, ...(current.usps ?? []).slice(1)];
     }
     const { data, error } = await supabase.from("businesses").update({
       ...(name ? { name } : {}),
@@ -135,6 +142,7 @@ export async function saveSetupBusiness(id: string | null, input: SetupBusinessF
       ...(phone !== undefined || !fields.phone.trim() ? { phone: phone ?? null } : {}),
       locations: setupLocations(fields.locations),
       ...(offers ? { offers } : {}),
+      ...(usps ? { usps } : {}),
     }).eq("id", id).select(columns).single();
     if (error || !data) {
       console.error("[business.update]", error?.message ?? "no row");
@@ -151,4 +159,21 @@ export async function saveSetupBusiness(id: string | null, input: SetupBusinessF
     revalidatePath("/dashboard");
     return { ok: true, id: row.id, usable };
   }
+}
+
+/** #1681: the ad language picked before a first batch goes first in the Brand's languages, so later batches use it. */
+export async function saveAdLanguage(id: string, language: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  return observeAction("server.saveAdLanguage", async () => {
+    const choice = CREATE_LANGUAGES.find((item) => item.id === language)?.id;
+    if (!choice) return { ok: false, error: "Pick a language." };
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { ok: false, error: "Not authenticated." };
+    const { data: current, error: readError } = await supabase.from("businesses").select("languages").eq("id", id).eq("owner_id", user.id).single();
+    if (readError || !current) return { ok: false, error: "We couldn't find your business details. Reload the page." };
+    const name = BRAND_LANGUAGE_NAME[choice];
+    const rest = (current.languages ?? []).filter((item) => item.trim().toLowerCase() !== name.toLowerCase());
+    const { error } = await supabase.from("businesses").update({ languages: [name, ...rest] }).eq("id", id).eq("owner_id", user.id);
+    return error ? { ok: false, error: "Your language wasn't saved. Try again." } : { ok: true };
+  });
 }

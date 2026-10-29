@@ -69,7 +69,7 @@ export function useCampaignList(input: {
       signal.throwIfAborted();
       if (!response.ok || !data || !Array.isArray(data.campaigns) || !data.results || typeof data.results !== "object" ||
         Array.isArray(data.results) || (data.nextCursor !== null && typeof data.nextCursor !== "string")) {
-        throw new Error(data?.error ?? "Campaign list could not be loaded.");
+        throw new Error(data?.error ?? "We couldn't load your campaigns. Reload the page.");
       }
       return data;
     },
