@@ -689,22 +689,7 @@
     },
     {
       "rule": "C3-appsecret-proof",
-      "from": "src/lib/alerts/sender.ts",
-      "to": "appSecretProof"
-    },
-    {
-      "rule": "C3-appsecret-proof",
       "from": "src/lib/meta/client.ts",
-      "to": "appSecretProof"
-    },
-    {
-      "rule": "C3-appsecret-proof",
-      "from": "src/lib/meta/oauth.ts",
-      "to": "appSecretProof"
-    },
-    {
-      "rule": "C3-appsecret-proof",
-      "from": "src/lib/meta/parent.ts",
       "to": "appSecretProof"
     },
     {
@@ -735,13 +720,13 @@
       "rule": "C4-file-size",
       "from": "src/components/campaigns.tsx",
       "to": "> 400 lines",
-      "lines": 2753
+      "lines": 2727
     },
     {
       "rule": "C4-file-size",
       "from": "src/components/creative-copy-editor.tsx",
       "to": "> 400 lines",
-      "lines": 579
+      "lines": 564
     },
     {
       "rule": "C4-file-size",
@@ -759,7 +744,7 @@
       "rule": "C4-file-size",
       "from": "src/components/setup-ads-step.tsx",
       "to": "> 400 lines",
-      "lines": 442
+      "lines": 439
     },
     {
       "rule": "C4-file-size",
@@ -801,13 +786,13 @@
       "rule": "C4-file-size",
       "from": "src/lib/meta/client.ts",
       "to": "> 400 lines",
-      "lines": 2481
+      "lines": 2462
     },
     {
       "rule": "C4-file-size",
       "from": "src/lib/meta/oauth.ts",
       "to": "> 400 lines",
-      "lines": 426
+      "lines": 423
     },
     {
       "rule": "C4-file-size",
