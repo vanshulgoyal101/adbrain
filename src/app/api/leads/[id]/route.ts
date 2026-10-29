@@ -38,7 +38,7 @@ export const PATCH = observeRoute("/api/leads/[id]", "PATCH", async (
     return NextResponse.json({ lead: data }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
     const invalid = error instanceof z.ZodError || error instanceof SyntaxError;
-    return NextResponse.json({ error: invalid ? "Invalid follow-up." : "Follow-up could not be saved." }, { status: invalid ? 400 : 503 });
+    return NextResponse.json({ error: invalid ? "Invalid follow-up." : "Your status and note weren't saved. Try again." }, { status: invalid ? 400 : 503 });
   }
 });
 

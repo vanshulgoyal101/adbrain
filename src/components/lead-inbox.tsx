@@ -96,7 +96,7 @@ export function LeadInbox({
   initialNextCursor?: string | null;
   metaReady: boolean;
   syncScope?: string;
-  /** #1223: "Form enquiries" when WhatsApp chats are shown above. */
+  /** #1223/#1835: "Form enquiries" when WhatsApp chats are shown above and none is logged here. */
   title?: string;
   /** #1260: people waiting for a first contact, and the 30-day median minutes to contact (null under 3). */
   summary?: { waiting: number | null; replyMinutes: number | null } | null;
@@ -142,6 +142,7 @@ export function LeadInbox({
   // #1260: Waiting (default when anyone waits) · All (search and filters) · Customers.
   const [view, setView] = useState<InboxView>(summary?.waiting ? "waiting" : "all");
   const [openedAt] = useState(() => Date.now());
+  const [emptyOnArrival] = useState(() => chatsEmpty && initialLeads.length === 0 && (allTotal ?? 0) === 0);
   const wide = useWide();
   const [pickedId, setPickedId] = useState<string | null>(null);
   const [contactedAt, setContactedAt] = useState<Record<string, string>>({});
@@ -361,13 +362,16 @@ export function LeadInbox({
     const contactMinutes = first ? (Date.parse(first) - Date.parse(l.created_time ?? l.created_at)) / 60_000 : NaN;
     const current = statusOf(l);
     // #1260: one state word per row: New → Contacted in {m} → Customer.
-    const state = current === "customer" ? "customer" : current === "closed" ? "closed" : first ? "contacted" : current === "new" ? "new" : "other";
-    const stateLabel = state === "new" ? "New" : state === "contacted" ? contactedLabel(contactMinutes) : state === "closed" ? "Not interested" : STATUS_LABEL[current];
+    // #1819: Meta's test lead isn't someone waiting (the counts leave it out), so it says what it is.
+    const state = isMetaTestLead(l) ? "test" : current === "customer" ? "customer" : current === "closed" ? "closed" : first ? "contacted" : current === "new" ? "new" : "other";
+    const stateLabel = state === "test" ? "Test from Meta" : state === "new" ? "New" : state === "contacted" ? contactedLabel(contactMinutes) : state === "closed" ? "Not interested" : STATUS_LABEL[current];
+    // #1819: no WhatsApp/Call line and no Became a customer, so ⋯ sits on the name row instead of alone on a line.
+    const noActions = state === "test" || state === "customer" || (state === "new" && !l.phone);
     const city = isMetaTestLead(l) ? null : l.city;
     const meta = [l.created_time ? whenLabel(l.created_time) : null, l.source === "whatsapp_manual" ? "WhatsApp chat" : null, city].filter(Boolean).join(" · ");
     const replyText = firstReplyText({ leadName: leadName(l), businessName, offer, language });
     const whatsapp = isMetaTestLead(l) ? null : whatsappReplyLink(l.phone, replyText);
-    return { first, contactMinutes, current, state, stateLabel, meta, name: leadName(l) ?? "this enquiry", replyText, whatsapp };
+    return { first, contactMinutes, current, state, stateLabel, meta, name: leadName(l) ?? "this enquiry", replyText, whatsapp, noActions };
   }
   const selectedLead = wide ? leads.find((lead) => lead.id === pickedId) ?? leads[0] ?? null : null;
   const detail = selectedLead ? rowInfo(selectedLead) : null;
@@ -375,21 +379,22 @@ export function LeadInbox({
 
   // #1597 (Designer, #1463): no enquiries anywhere: one block (title, line, one action) instead of banner, count, tabs,
   // search and a card that repeats it. The checking above keeps running, so the first enquiry brings the inbox back.
-  if (chatsEmpty && page.total === 0 && (allTotal ?? 0) === 0 && leads.length === 0 && !page.loading && !page.error) {
+  // #1810: decided from the unfiltered first load (test leads included), never from a tab's filtered result.
+  if (emptyOnArrival && page.total === 0 && leads.length === 0 && !page.loading && !page.error) {
     const solid = !metaReady || offerAlerts;
     return (
       <section aria-labelledby="enquiries-empty-title" className="mt-4 flex max-w-xl flex-col items-start gap-2">
         <h2 id="enquiries-empty-title" className="text-[17px] font-semibold leading-6 text-slate-900">No enquiries yet</h2>
         <p className="text-[15px] leading-[22px] text-slate-600">
           {metaReady
-            ? "People who message you from an ad show up here. Reply fast: they often pick the first business that answers."
-            : "Connect Meta so people who tap your ads can reach you here."}
+            ? "Enquiries from your ads show up here: form enquiries on their own, WhatsApp chats when you add them. Reply fast: people often pick the first business that answers."
+            : "Connect your Facebook Page to run ads. Enquiries from them show up here."}
         </p>
         <Link href={!metaReady ? "/settings" : offerAlerts ? "/settings#whatsapp-alerts-title" : "/campaigns"}
           className={`mt-2 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md px-4 text-sm font-medium sm:w-auto ${solid
             ? "bg-[var(--primary)] text-white"
             : "border border-slate-300 text-slate-800 hover:bg-slate-50"}`}>
-          {!metaReady ? "Connect Meta" : offerAlerts ? "Get a WhatsApp alert for each one" : "See your campaigns"}
+          {!metaReady ? "Connect Facebook Page" : offerAlerts ? "Get a WhatsApp alert for form enquiries" : "See your campaigns"}
         </Link>
         {metaReady && addEnquiryFor && (adding
           ? <WhatsAppEnquiries compact campaignId={addEnquiryFor.campaignId} spend={addEnquiryFor.spend} enquiries={addEnquiryFor.enquiries}
@@ -525,9 +530,9 @@ export function LeadInbox({
             </thead>
             <tbody className="divide-y divide-slate-100">
               {leads.map((l) => {
-                const { first, contactMinutes, current, state, stateLabel, meta, name, whatsapp } = rowInfo(l);
+                const { first, contactMinutes, current, state, stateLabel, meta, name, whatsapp, noActions } = rowInfo(l);
                 return (
-                <tr role="row" key={l.id} className="hover:bg-slate-50" data-state={state} data-selected={selectedLead?.id === l.id || undefined}>
+                <tr role="row" key={l.id} className="hover:bg-slate-50" data-lead={l.id} data-state={state} data-actions={noActions ? "none" : undefined} data-selected={selectedLead?.id === l.id || undefined}>
                   <td role="cell" className={styles.person}>
                     <span className={styles.avatar} aria-hidden="true">{initials(leadName(l))}</span>
                     {wide ? <button type="button" className={styles.name} aria-pressed={selectedLead?.id === l.id} onClick={() => setPickedId(l.id)}>{leadName(l) ?? "—"}</button>

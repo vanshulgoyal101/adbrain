@@ -1,5 +1,7 @@
 "use client";
 
+import { PictureSourceBadge } from "@/components/picture-source-badge";
+import type { AppLocale } from "@/i18n/locale";
 import { useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -58,7 +60,7 @@ function sessionStore(): Storage | null {
  * Connect Facebook Page → Go live. Go live is one tap (4b): save the draft, review it, create it paused, then turn
  * it on as a 2-day capped run (setup-go-live-flow). Nothing is spent before that tap; the server enforces the cap.
  */
-export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNumber, weeklyCap, welcome = null }: {
+export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNumber, weeklyCap, welcome = null, returning = false, initialDaily, locale = "en" }: {
   business: Pick<Business, "id" | "name" | "locations">;
   ads: Creative[];
   pageConnected: boolean;
@@ -68,9 +70,15 @@ export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNum
   weeklyCap: { capRupees: number | null; active: CampaignSpend[] } | null;
   /** #1529: the WhatsApp welcome Go live sends (as Review works it out); null if it couldn't be read. */
   welcome?: SetupWelcome | null;
+  /** #1934: a returning owner's new campaign: payment was set up for the last one, and Back keeps the mode. */
+  returning?: boolean;
+  /** #1934: the offered amount nearest the last campaign's daily budget. */
+  initialDaily?: number;
+  /** #1901: the picture badge's language. */
+  locale?: AppLocale;
 }) {
   const router = useRouter();
-  const [daily, setDaily] = useState<number>(BUDGET_PRESETS[0]);
+  const [daily, setDaily] = useState<number>(initialDaily ?? BUDGET_PRESETS[0]);
   const [connectOpen, setConnectOpen] = useState(false);
   const [step, setStep] = useState<GoLiveStep | null>(null);
   const [result, setResult] = useState<GoLiveResult | null>(null);
@@ -118,16 +126,19 @@ export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNum
         };
 
   return (
-    <SetupSpine step={3} primary={primary}>
+    <SetupSpine step={3} primary={primary} again={returning}>
       {/* #1587: a readable column at 1440, not the full width. */}
       <div className="max-w-2xl">
       <h2 className="text-xl font-semibold text-slate-950">Go live</h2>
       <dl className="mt-4 flex flex-col gap-4 text-sm">
         <div>
           <dt className="text-slate-500">Ads: {ads.length} picked</dt>
-          <dd className="mt-2 flex gap-2">
+          <dd className="mt-2 flex flex-wrap gap-2">
             {ads.map((ad) => ad.image_url && (
-              <img key={ad.id} src={creativeThumbnailUrl(ad.image_url)} alt={ad.headline ?? "Your ad"} className="h-16 w-16 rounded-md bg-slate-100 object-cover" />
+              <figure key={ad.id} className="flex flex-col items-start gap-1">
+                <img src={creativeThumbnailUrl(ad.image_url)} alt={ad.headline ?? "Your ad"} className="h-16 w-16 rounded-md bg-slate-100 object-cover" />
+                <PictureSourceBadge generation={ad.generation} locale={locale} />
+              </figure>
             ))}
           </dd>
         </div>
@@ -172,7 +183,7 @@ export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNum
       <ul aria-label="Before you go live" className="mt-4 divide-y divide-slate-200 border-y border-slate-200">
         <Row done={pageConnected} title="Facebook Page" status={pageConnected ? "Connected" : "Not connected"} />
         {payMetaRow ? (
-          <Row done={false} title="Payment on Meta" status="Add a card or UPI in Meta"
+          returning ? <Row done title="Payment on Meta" status="Set up for your last campaign" /> : <Row done={false} title="Payment on Meta" status="Add a card or UPI in Meta"
             action={<a href="https://business.facebook.com/billing_hub/payment_settings" target="_blank" rel="noopener noreferrer"
               className="inline-flex min-h-11 items-center text-sm font-medium text-primary underline underline-offset-4">Add payment in Meta</a>} />
         ) : (
@@ -181,9 +192,9 @@ export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNum
         )}
         <Row done title={`Stops at ${formatMoney(total)}`} status={`${SETUP_RUN_DAYS} days at ${formatMoney(daily)} a day, including Meta's GST`} />
       </ul>
-      <p className="mt-4 text-sm text-slate-600">Meta checks your ads first, usually within a day.</p>
+      <p className="mt-4 text-sm text-slate-600">Meta checks your ads first, usually within a few hours and up to a day.</p>
       {/* #718 (CEO, path A): AdBrain's own price, said before the first Go live. */}
-      {ownAccount && <p className="mt-3 text-sm text-slate-600">Your first month of AdBrain is free. After that it&apos;s ₹999 a month; we&apos;ll remind you before it&apos;s due.</p>}
+      {ownAccount && !returning && <p className="mt-3 text-sm text-slate-600">Your first month of AdBrain is free. After that it&apos;s ₹999 a month; we&apos;ll remind you before it&apos;s due.</p>}
       {/* #1292: the Connect moment's trust line, next to the Connect Facebook Page primary. */}
       {!pageConnected && funding && <p className="mt-3 text-sm font-medium text-slate-800">{connectTrustLine(funding)}</p>}
 

@@ -119,6 +119,10 @@ describe("release inputs", () => {
       "smoke\tRead-only core smoke\t2026-10-23T13:43:16.78Z PASS Dashboard",
     ].join("\n");
     expect(smokeCounts(log)).toEqual({ pass: 2, fail: 0 });
+    const retried = ["2026-10-28T21:17:00.1Z PASS Sign in", "2026-10-28T21:18:44.1Z FAIL Prepare preflight: Sign in required",
+      "2026-10-28T21:19:46.1Z PASS Sign in", "2026-10-28T21:20:06.1Z PASS Prepare preflight", "2026-10-28T21:20:38.1Z PASS Step 1"].join("\n");
+    expect(smokeCounts(retried)).toEqual({ pass: 3, fail: 0 });
+    expect(smokeCounts(`${retried}\n2026-10-28T21:21:00.1Z FAIL Step 2 LCP`)).toEqual({ pass: 3, fail: 1 });
     expect(supersededBy("2026-10-23T13:02:08.45Z Superseded: production serves newer d34d32d; skipping smoke for 4202350")).toBe("d34d32d");
     expect(supersededBy(log)).toBeNull();
   });
@@ -154,6 +158,11 @@ describe("CTO review (#259)", () => {
     ]);
     expect(reviews.map((r: { sha: string; approved: boolean }) => [r.sha, r.approved])).toEqual([["c30aaba", true], ["bc45602", false], ["c5d69ab", false]]);
     expect(ctoApproval(reviews, isHead(head)).approved).toBe(true);
+  });
+
+  it("reads a CTO re-review like a review", () => {
+    const [review] = ctoReviews([comment("CTO re-review of 56e5af36 (migration sha256 58395f36…): **approved**. Matches the spec.", "2026-10-28T19:25:00Z")]);
+    expect([review.sha, review.approved]).toEqual(["56e5af36", true]);
   });
 
   it("lets a later review of the same patch withdraw an approval", () => {
@@ -202,6 +211,40 @@ describe("Reviewer verdicts (#575)", () => {
     expect(r).toHaveLength(1);
     expect(ctoApproval(r, (sha: string) => sha === "c30aaba").approved).toBe(true);
     expect(ctoReviews([{ body: "Dev: Reviewer review of c30aaba: **approved**.", createdAt: "2026-10-25T11:00:00Z", url: "u" }])).toHaveLength(0);
+  });
+
+  it.each([
+    ["Reviewer: review of f784739f36d8e2957ccd0497f349c32fe4431a48: **approved** (core-approval).", "f784739f36d8e2957ccd0497f349c32fe4431a48"],
+    ["Reviewer: review of 1362ef78fd50276525d8165934d56273e37bf975: **approved** (core-approval).", "1362ef78fd50276525d8165934d56273e37bf975"],
+    ["CTO: re-review of 1111111 → c30aaba: **approved**.", "c30aaba"],
+  ])("recognizes the required signed verdict %s (#2054)", (body, sha) => {
+    const reviews = ctoReviews([comment(body, "2026-10-29T06:00:00Z")]);
+    expect(reviews).toMatchObject([{ sha, approved: true }]);
+    expect(ctoApproval(reviews, (candidate: string) => candidate === sha).approved).toBe(true);
+  });
+
+  it("lets a signed withdrawal supersede a legacy approval and vice versa", () => {
+    for (const [first, last] of [
+      ["Reviewer review of c30aaba: **approved**.", "Reviewer: review of c30aaba: **changes requested**."],
+      ["Reviewer: review of c30aaba: **approved**.", "Reviewer review of c30aaba: **changes requested**."],
+    ]) {
+      const reviews = ctoReviews([
+        comment(first, "2026-10-29T06:00:00Z"),
+        comment(last, "2026-10-29T06:01:00Z"),
+      ]);
+      expect(ctoApproval(reviews, (sha: string) => sha === "c30aaba").approved).toBe(false);
+    }
+  });
+
+  it.each([
+    "Reviewer: review of c30aaba: **not approved**.",
+    "Reviewer: review of c30aaba: **approved** but blocked.",
+    "Reviewer: review of c30aaba: not approved.",
+    "Reviewer: review of c30aaba: ready for a verdict.",
+    "CTO: → Reviewer: review of c30aaba: **approved**.",
+    "Dev: Reviewer: review of c30aaba: **approved**.",
+  ])("does not turn a signed rejection, handoff or non-verdict into approval: %s", (body) => {
+    expect(ctoApproval(ctoReviews([comment(body, "2026-10-29T06:00:00Z")]), (sha: string) => sha === "c30aaba").approved).toBe(false);
   });
 });
 

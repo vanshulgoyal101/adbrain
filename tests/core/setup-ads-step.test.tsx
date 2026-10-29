@@ -150,7 +150,7 @@ describe("core: <SetupAdsStep> (#1270)", () => {
     await act(async () => fireEvent.click(bar().getByRole("button", { name: "Make 3 ads" })));
     await waitFor(() => expect(generate).toHaveBeenCalledTimes(1));
     expect(generate.mock.calls[0][0]).toMatchObject({ language: "hi" });
-    expect(screen.queryByRole("group", { name: "Ads in" })).toBeNull();
+    expect(screen.queryByRole("group", { name: "Your ads will be in" })).toBeNull();
   });
 
   it("#1475: earlier ads but a batch already running (another tab) resumes it, still never a new one", async () => {
@@ -254,6 +254,16 @@ describe("core: <SetupAdsStep> (#1270)", () => {
     vi.useRealTimers();
   });
 
+  it("#1934: in returning mode Continue goes to Go live with again=1 and Back to the offer step", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+    render(<SetupAdsStep business={business} initialAds={[ad("a"), ad("b")]} again />);
+    await act(async () => fireEvent.click(bar().getByRole("button", { name: /^Continue with/ })));
+    await waitFor(() => expect(mocks.push).toHaveBeenCalledWith(expect.stringMatching(/^\/campaigns\?again=1&creatives=/)));
+    mocks.push.mockClear();
+    await act(async () => fireEvent.click(bar().getByRole("button", { name: "Back" })));
+    await waitFor(() => expect(mocks.push).toHaveBeenCalledWith("/brand?again=1"));
+  });
+
   it("a failed approve keeps the owner on the step and says so", async () => {
     vi.stubGlobal("fetch", vi.fn());
     mocks.setCreativeStatus.mockResolvedValue({ ok: false, error: "offline" });
@@ -354,4 +364,18 @@ describe("core: step 2 batches (#1402)", () => {
     expect(old.ads.map((creative) => creative.id)).toEqual(["c"]);
     expect(setupBatch([])).toEqual({ ads: [], newest: null });
   });
+
+describe("#1901: each ad says whose picture it is", () => {
+  it("labels the owner's photo and the AI picture, in Hindi too", () => {
+    const yours = { ...ad("a"), generation: { image: { provider: "owner-photo" } } } as unknown as Creative;
+    const ai = { ...ad("b"), generation: { image: { provider: "cloudflare" } } } as unknown as Creative;
+    const { unmount } = render(<SetupAdsStep business={business} initialAds={[yours, ai]} />);
+    expect(screen.getByText("Your photo")).toBeInTheDocument();
+    expect(screen.getByText("AI picture")).toBeInTheDocument();
+    unmount();
+    render(<SetupAdsStep business={business} initialAds={[yours, ai]} locale="hi" />);
+    expect(screen.getByText("आपकी फ़ोटो")).toBeInTheDocument();
+    expect(screen.getByText("AI तस्वीर")).toBeInTheDocument();
+  });
+});
 });

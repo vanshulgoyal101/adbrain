@@ -36,9 +36,11 @@ const editAdCreativeMigration = await readFile(join(root, "db/migrations/2026102
 const adResultsMigration = await readFile(join(root, "db/migrations/20261026_campaign_ads_ad_results.sql"), "utf8");
 const ownerAlertsMigration = await readFile(join(root, "db/migrations/20261027_owner_whatsapp_alerts.sql"), "utf8");
 const ownerAlertSendsMigration = await readFile(join(root, "db/migrations/20261027_owner_whatsapp_alerts_sends.sql"), "utf8");
+const planPeriodsMigration = await readFile(join(root, "db/migrations/20261029_plan_periods.sql"), "utf8");
 const leadCustomerMigration = await readFile(join(root, "db/migrations/20261026_lead_customer_status.sql"), "utf8");
 const leadFirstContactedMigration = await readFile(join(root, "db/migrations/20261027_lead_first_contacted.sql"), "utf8");
 const tokenSearchPathMigration = await readFile(join(root, "db/migrations/20261026_meta_token_search_path.sql"), "utf8");
+const tokenPurgeMigration = await readFile(join(root, "db/migrations/20261029_meta_token_purge.sql"), "utf8");
 const whatsappTemplateMigration = await readFile(join(root, "db/migrations/20261026_business_whatsapp_template.sql"), "utf8");
 const metaDeletionMigration = await readFile(join(root, "db/migrations/20261026_meta_deletion_requests.sql"), "utf8");
 const hardeningMigration = await readFile(join(root, "db/migrations/20261026_legacy_credentials_bucket_limits.sql"), "utf8");
@@ -1175,6 +1177,69 @@ async function verifyTokenSearchPath(db, database) {
   });
 }
 
+/** #1648: seeds a token revoked before the migration (backfill), then applies it twice. */
+async function verifyMetaTokenPurge(db, database) {
+  const owner = randomUUID(), business = randomUUID(), revoked = randomUUID(), live = randomUUID();
+  await db.query("insert into auth.users(id) values ($1)", [owner]);
+  await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Token purge')", [business, owner]);
+  for (const token of [revoked, live]) {
+    await db.query(`select public.meta_token_insert($1,$2,$3,'s-purge','user',$4,$5,$6,'k1','v1',array['ads_management'],'[]'::jsonb,null,now(),null)`,
+      [token, business, owner, "\\x01", `\\x${"00".repeat(12)}`, `\\x${"00".repeat(16)}`]);
+  }
+  await db.query("update private.meta_tokens set revoked_at = now() where id = $1", [revoked]);
+  await db.query(tokenPurgeMigration);
+  await db.query(tokenPurgeMigration);
+  await check(`${database}: a revoked Meta token keeps no secret, a live one keeps all of it (#1648)`, async () => {
+    const secrets = async (id) => (await db.query("select ciphertext, nonce, auth_tag, revoked_at from private.meta_tokens where id = $1", [id])).rows[0];
+    const old = await secrets(revoked);
+    assert.ok(old.revoked_at);
+    assert.deepEqual([old.ciphertext, old.nonce, old.auth_tag], [null, null, null]);
+    assert.deepEqual([...(await secrets(live)).ciphertext], [1]);
+    const [read] = (await db.query("select * from public.meta_token_get($1,$2)", [revoked, business])).rows;
+    assert.ok(read.revoked_at);
+    assert.equal(read.ciphertext, null);
+    assert.equal((await db.query("select public.meta_disconnect($1,$2) as ok", [business, owner])).rows[0].ok, true);
+    assert.deepEqual(Object.values(await secrets(live)).slice(0, 3), [null, null, null]);
+    await db.query("update private.meta_tokens set ciphertext = $2, nonce = $3, auth_tag = $4 where id = $1", [live, Buffer.from([1]), Buffer.alloc(12), Buffer.alloc(16)]);
+    assert.equal((await secrets(live)).ciphertext, null);
+    await assert.rejects(db.query("update private.meta_tokens set revoked_at = null where id = $1", [live]), { code: "23514" });
+  });
+}
+
+/** #1649: which live token disconnect may revoke at Meta, and whether that Meta user is shared with another business. */
+async function verifyMetaRevocationTarget(db, database) {
+  await check(`${database}: revocation target: unshared, shared, system user, already revoked (#1649)`, async () => {
+    const owner = randomUUID();
+    const [a, b, c, d] = [randomUUID(), randomUUID(), randomUUID(), randomUUID()];
+    const target = async (business) => (await db.query("select * from public.meta_token_revocation_target($1)", [business])).rows;
+    await db.query("begin");
+    try {
+      await db.query("insert into auth.users(id) values ($1)", [owner]);
+      const connect = async (business, subject, kind) => {
+        const token = randomUUID();
+        await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Revoke target')", [business, owner]);
+        await db.query(`select public.meta_token_insert($1,$2,$3,$4,$5,$6,$7,$8,'k1','v1',array['ads_management'],'[]'::jsonb,null,now(),null)`,
+          [token, business, owner, subject, kind, "\\x01", `\\x${"00".repeat(12)}`, `\\x${"00".repeat(16)}`]);
+        await db.query("insert into public.meta_connections(business_id,generation,authorization_status,ad_account_id,page_id,token_id) values ($1,1,'connected','act_123','123',$2)", [business, token]);
+        return token;
+      };
+      const tokenA = await connect(a, "4242", "user");
+      assert.deepEqual(await target(a), [{ token_id: tokenA, subject_id: "4242", token_kind: "user", shared: false }]);
+      await connect(b, "4242", "user");
+      assert.equal((await target(a))[0].shared, true);
+      await connect(c, "9001", "business_system_user");
+      assert.deepEqual((await target(c)).map((r) => [r.token_kind, r.shared]), [["business_system_user", false]]);
+      await connect(d, "7777", "user");
+      await db.query("update private.meta_tokens set revoked_at = now() where business_id = $1", [d]);
+      assert.equal((await target(d)).length, 0);
+      await db.query("update private.meta_tokens set revoked_at = now() where business_id = $1", [b]);
+      assert.equal((await target(a))[0].shared, false);
+      await db.query("set local role authenticated");
+      await assert.rejects(db.query("select * from public.meta_token_revocation_target($1)", [a]), { code: "42501" });
+    } finally { await db.query("rollback"); }
+  });
+}
+
 async function verifyConnectionReauth(db, database) {
   await check(`${database}: a Graph 190 marks only the failing connection generation reauth_required, service role only (#757)`, async () => {
     const owner = randomUUID(), business = randomUUID();
@@ -1569,6 +1634,77 @@ async function verifyEditAdCreativeKind(db, database) {
       [business, campaign, hash, JSON.stringify({ ad_id: "120253710068180526", previous_creative_id: "2421940755245471" }), JSON.stringify({ message: "New words" })]);
     await assert.rejects(db.query("insert into public.campaign_edit_operations(business_id,campaign_id,kind,idempotency_key,request_hash) values ($1,$2,'other','ad-edit-key-2',$3)", [business, campaign, hash]), { code: "23514" });
     assert.equal((await db.query("select count(*)::int as n from public.campaign_edit_operations where campaign_id=$1 and kind='ad_creative'", [campaign])).rows[0].n, 1);
+  });
+}
+
+async function verifyPlanPeriods(db, database) {
+  const owner = randomUUID(), other = randomUUID(), business = randomUUID();
+  await db.query("insert into auth.users(id) values ($1),($2)", [owner, other]);
+  await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Plan')", [business, owner]);
+  await db.query("insert into public.campaigns(id,business_id,daily_budget,launched_at) values ($1,$2,300,'2026-10-10T09:00:00Z')", [randomUUID(), business]);
+  const service = async (sql, params) => {
+    const session = client(database);
+    await session.connect();
+    try {
+      await session.query("begin"); await session.query("set local role service_role");
+      const result = (await session.query(sql, params)).rows[0]; await session.query("commit"); return result;
+    } catch (error) { await session.query("rollback").catch(() => {}); throw error; } finally { await session.end(); }
+  };
+  const open = async () => (await service("select public.plan_period_open($1) as r", [business])).r;
+  const link = (period, id) => service("select public.plan_period_set_link($1,$2,'https://rzp.io/i/x') as r", [period, id]);
+  const paid = async (id, payment, at) => (await service("select public.plan_period_paid($1,$2,$3) as r", [id, payment, at])).r;
+  const months = async () => (await db.query("select to_char(starts_at at time zone 'UTC','YYYY-MM-DD') as s, to_char(ends_at at time zone 'UTC','YYYY-MM-DD') as e from public.plan_periods where business_id=$1 and state='paid' order by starts_at", [business])).rows;
+  await check(`${database}: plan periods: one open month, paid once, early pay stacks after the free month, late pay starts at payment, paid-after-expiry credited (#718)`, async () => {
+    const first = await open();
+    assert.equal((await open()).periodId, first.periodId);
+    assert.equal((await link(first.periodId, "plink_A")).r, true);
+    assert.equal((await link(first.periodId, "plink_B")).r, false);
+    assert.equal(await paid("plink_Unknown", "pay_X", "2026-11-05T00:00:00Z"), "ignored");
+    assert.equal(await paid("plink_A", "pay_A", "2026-11-05T00:00:00Z"), "paid");
+    assert.equal(await paid("plink_A", "pay_A", "2026-11-05T00:00:00Z"), "duplicate");
+    assert.equal(await paid("plink_A", "pay_Other", "2026-11-06T00:00:00Z"), "ignored");
+    assert.deepEqual(await months(), [{ s: "2026-11-10", e: "2026-12-10" }]);
+    const second = await open();
+    assert.notEqual(second.periodId, first.periodId);
+    await link(second.periodId, "plink_C");
+    assert.equal(await paid("plink_C", "pay_C", "2027-01-31T10:00:00Z"), "paid");
+    assert.deepEqual(await months(), [{ s: "2026-11-10", e: "2026-12-10" }, { s: "2027-01-31", e: "2027-02-28" }]);
+    const third = await open();
+    await link(third.periodId, "plink_D");
+    assert.equal((await service("select public.plan_period_expire('plink_D') as r")).r, true);
+    // A payment that lands after its link expired still buys its month (Reviewer, #1430): starts after Feb 28.
+    assert.equal(await paid("plink_D", "pay_D", "2027-02-01T00:00:00Z"), "paid");
+    assert.equal(await paid("plink_D", "pay_D", "2027-02-01T00:00:00Z"), "duplicate");
+    assert.deepEqual((await months()).at(-1), { s: "2027-02-28", e: "2027-03-28" });
+    assert.equal((await service("select public.plan_period_expire('plink_D') as r")).r, false);
+  });
+  await check(`${database}: plan periods: owners read only their own, nobody writes them directly (#718)`, async () => {
+    const as = async (role, user, run) => {
+      const session = client(database);
+      await session.connect();
+      try {
+        await session.query("begin"); await session.query(`set local role ${role}`);
+        if (user) await session.query("select set_config('request.jwt.claim.sub',$1,true)", [user]);
+        return await run(session);
+      } finally { await session.query("rollback").catch(() => {}); await session.end(); }
+    };
+    await as("authenticated", owner, async (session) => {
+      assert.equal((await session.query("select count(*)::int as n from public.plan_periods")).rows[0].n, 3);
+      await session.query("savepoint s");
+      await assert.rejects(session.query("select public.plan_period_open($1)", [business]), { code: "42501" });
+      await session.query("rollback to savepoint s");
+      await assert.rejects(session.query("update public.plan_periods set state='paid'"), { code: "42501" });
+    });
+    await as("authenticated", other, async (session) => {
+      assert.equal((await session.query("select count(*)::int as n from public.plan_periods")).rows[0].n, 0);
+    });
+    await as("anon", null, async (session) => {
+      await assert.rejects(session.query("select 1 from public.plan_periods"), { code: "42501" });
+    });
+    await assert.rejects(db.query("insert into public.plan_periods(business_id,amount_paise) values ($1,100)", [business]), { code: "23514" });
+    // QA (#1430): paid months are receipts (GST, disputes), so deleting the business can't silently erase them.
+    // RESTRICT reports 23001 (restrict_violation); NO ACTION-style checks report 23503. Either means refused.
+    await assert.rejects(db.query("delete from public.businesses where id=$1", [business]), { code: /^(23001|23503)$/ });
   });
 }
 
@@ -2795,6 +2931,9 @@ async function verify(database, source, integrityMigration, customerOnly = false
       await db.query(ownerAlertSendsMigration);
       await db.query(ownerAlertSendsMigration);
       await verifyOwnerAlertSends(db,database);
+      await db.query(planPeriodsMigration);
+      await db.query(planPeriodsMigration);
+      await verifyPlanPeriods(db,database);
       await db.query(leadCustomerMigration);
       await db.query(leadCustomerMigration);
       if ((await db.query("select exists(select 1 from information_schema.columns where table_schema='public' and table_name='leads' and column_name='workflow_status') as installed")).rows[0].installed) {
@@ -2806,6 +2945,8 @@ async function verify(database, source, integrityMigration, customerOnly = false
       await db.query(tokenSearchPathMigration);
       await db.query(tokenSearchPathMigration);
       await verifyTokenSearchPath(db,database);
+      await verifyMetaTokenPurge(db,database);
+      await verifyMetaRevocationTarget(db,database);
       await db.query(whatsappTemplateMigration);
       await db.query(whatsappTemplateMigration);
       await verifyWhatsAppTemplate(db,database);

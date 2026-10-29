@@ -11,6 +11,7 @@ import { CREATE_HEARTBEAT_MS, CREATE_IDLE_MS } from "@/lib/creative/stream";
 
 const SUPABASE = "https://core-test.supabase.co";
 const OWNER_PHOTO = `${SUPABASE}/storage/v1/object/public/brand-assets/cedar-ridge/front-desk.jpg`;
+const SECOND_PHOTO = `${SUPABASE}/storage/v1/object/public/brand-assets/cedar-ridge/treatment-room.jpg`;
 const IMAGE_MODEL = "openai/gpt-image-2.5-flare";
 const mocks = vi.hoisted(() => ({
   inserts: [] as Record<string, unknown>[],
@@ -152,7 +153,7 @@ function stubProviders(replay: Replay = {}) {
     const body = requestBody(init);
     calls.push({ url, body });
     const provider = (Object.keys(TEXT_URLS) as TextProvider[]).find((name) => url.startsWith(TEXT_URLS[name]));
-    if (url === OWNER_PHOTO) {
+    if (url === OWNER_PHOTO || url === SECOND_PHOTO) {
       return mocks.ownerPhotoStatus === 200
         ? new Response(Buffer.from(png, "base64"), { headers: { "content-type": "image/png" } })
         : new Response("Not found", { status: mocks.ownerPhotoStatus });
@@ -451,6 +452,15 @@ describe("core: Create route on recorded run 4", () => {
     const imageEvents = mocks.usage.filter((event) => event.usageKind === "image");
     expect(imageEvents).toHaveLength(2);
     expect(imageEvents.every((event) => event.provider !== "owner-photo")).toBe(true);
+  });
+
+  it("#1901: with two owner photos, two ads each use a different one and only the third makes an AI picture", async () => {
+    mocks.ownerPhotos = [OWNER_PHOTO, SECOND_PHOTO];
+    stubProviders();
+    await expectThreeSavedAds(await (await postCreate())());
+    expect(calls.filter(({ url }) => url === "https://openrouter.ai/api/v1/images")).toHaveLength(1);
+    const photosUsed = mocks.inserts.map((row) => (row.generation as { ownerPhoto?: string | null }).ownerPhoto ?? null);
+    expect(photosUsed.filter(Boolean).sort()).toEqual([OWNER_PHOTO, SECOND_PHOTO].sort());
   });
 
   it("generates the image as usual when the owner's photo can't be read", async () => {

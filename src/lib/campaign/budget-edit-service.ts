@@ -210,7 +210,7 @@ export async function editCampaignBudget(context: AuthorizedBusiness, campaignId
       budgets = await Promise.all(targets.map(adSetId => meta.readAdSetBudget(review.metaCampaignId, adSetId)));
       if (capped ? budgets[0].lifetimeBudgetPaise <= 0 : budgets.some(budget => budget.dailyBudgetPaise <= 0)
         || budgets.reduce((sum, budget) => sum + budget.dailyBudgetPaise, 0) !== toPaise(review.dailyBudgetRupees)) {
-        throw new CampaignDeliveryError("The budget changed in Meta. Refresh the campaign, then try again.");
+        throw new CampaignDeliveryError("The budget was changed on Meta after you opened this. Reload the page, then try again.");
       }
       before = stateOf(budgets, capped, review.dailyBudgetRupees);
       // #1094: the room left after the account's other live runs; this run's own ad set is the one being raised.

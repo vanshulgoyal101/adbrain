@@ -59,6 +59,7 @@ const ROUTES: Record<string, Entry> = {
   "cron/meta-parent-health": { kind: "cron", methods: ["GET"] },
   "cron/owner-daily-results": { kind: "cron", methods: ["GET"] },
   "cron/payment-health": { kind: "cron", methods: ["GET"] },
+  "cron/pilot-readiness": { kind: "cron", methods: ["GET"] },
   "cron/refresh-results": { kind: "cron", methods: ["GET"] },
   "cron/scheduler-health": { kind: "cron", methods: ["GET"] },
   "cron/sync-leads": { kind: "cron", methods: ["GET"] },
