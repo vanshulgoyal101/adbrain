@@ -57,7 +57,7 @@ export function CampaignVerdict({ verdict, whatsapp, results, spend, details, on
     }
   })();
   return (
-    <section aria-label="How it's going" className="flex flex-col gap-2">
+    <div role="group" aria-label="How it's going" className="flex flex-col gap-2">
       <p className="text-[17px] leading-snug text-slate-900">{verdict.sentence}</p>
       <p className="flex flex-wrap items-baseline gap-x-2">
         <span className="text-[32px] font-semibold leading-none tabular-nums text-slate-950">
@@ -73,6 +73,6 @@ export function CampaignVerdict({ verdict, whatsapp, results, spend, details, on
         <summary className="inline-flex min-h-11 cursor-pointer items-center font-medium text-slate-700 [&::-webkit-details-marker]:hidden">Details</summary>
         <div className="flex flex-col gap-3 pt-1">{details}</div>
       </details>
-    </section>
+    </div>
   );
 }

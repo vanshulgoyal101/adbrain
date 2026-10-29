@@ -25,7 +25,7 @@ export function VerdictGalleryCard({ card }: { card: GalleryCard }) {
     <li className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4 sm:p-6">
       <div className="flex flex-wrap items-center gap-2">
         <h2 className="font-semibold text-slate-900">{card.name}</h2>
-        <span className="text-sm text-slate-600">{card.extra === "deleted_in_meta" ? "Deleted in Meta" : `${card.status} · ${judged.label}`}</span>
+        <span className="text-sm text-slate-600">{card.extra === "deleted_in_meta" ? "Deleted in Meta" : judged.label === "Live" || judged.label === "Ended" ? card.status : `${card.status} · ${judged.label}`}</span>
       </div>
       {card.extra === "deleted_in_meta" && <p className="text-sm text-slate-700">{GONE_LINES.deleted}</p>}
       {card.extra === "audience_waiting" && (

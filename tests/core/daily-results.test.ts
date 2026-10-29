@@ -32,10 +32,10 @@ describe("core: the daily WhatsApp results line (#1022)", () => {
     expect(ads).toHaveLength(6);
     const params = dailyResultsParams({ businessName: "Solaride", day: recorded.day, campaigns: [{ whatsapp: true, ads }] }, "en")!;
     const best = ads.find((ad) => ad.results === 1)!;
-    expect(params).toEqual(["Solaride", "Mon 26 Oct", "112", "1", "₹112 each", `'${best.name}' (1 enquiry)`]);
+    expect(params).toEqual(["Solaride", "Mon 26 Oct", "112", "1", "₹112 each", `'${best.name}' (1 person)`]);
     const hi = dailyResultsParams({ businessName: "Solaride", day: recorded.day, campaigns: [{ whatsapp: true, ads }] }, "hi")!;
-    expect(hi[4]).toBe("₹112 प्रति पूछताछ");
-    expect(hi[5]).toBe(`'${best.name}' (1 पूछताछ)`);
+    expect(hi[4]).toBe("₹112 प्रति व्यक्ति");
+    expect(hi[5]).toBe(`'${best.name}' (1 व्यक्ति)`);
     for (const param of [...params, ...hi]) expect(param).not.toMatch(/[\n\t]/);
   });
 
