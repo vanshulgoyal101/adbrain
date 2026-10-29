@@ -12,6 +12,9 @@ import { HomeRejectedAds } from "@/components/home-rejected-ads";
 import { PilotDay7Card } from "@/components/pilot-day7-card";
 import { pilotDay7Visible } from "@/lib/feedback/pilot-day7";
 import { pilotDay7Facts } from "@/lib/feedback/pilot-day7-store";
+import { ResultsCardOffer } from "@/components/results-card-offer";
+import { resultsCardFacts, resultsCardLines, type ResultsCardFacts } from "@/lib/results-card/store";
+import { translator, type AppLocale } from "@/i18n/locale";
 import { adResultsEnabled } from "@/lib/campaign/ad-results-store";
 import { homeAdReview, newestLiveCampaign } from "@/lib/campaign/home-ad-review";
 import { inboxSummary, newestWaitingEnquiry, recentReplyMinutes } from "@/lib/leads/reply-time";
@@ -72,8 +75,14 @@ export default async function DashboardPage() {
   ]);
   const adReview = newest && newestAdStatuses ? homeAdReview([newest], { [newest.id]: newestAdStatuses }, results) : null;
   // #1650: after the first week, one question for the pricing call (#718); unreadable means not shown.
-  const pilotFacts = business && campaigns.some((campaign) => campaign.launched_at) ? await pilotDay7Facts(business.id).catch(() => null) : null;
+  // #2036: after a week with 5+ logged enquiries, a card for the owner's WhatsApp Status; unreadable means not shown.
+  const everLaunched = Boolean(business && campaigns.some((campaign) => campaign.launched_at));
+  const [pilotFacts, cardFacts] = await Promise.all([
+    everLaunched && business ? pilotDay7Facts(business.id).catch(() => null) : null,
+    everLaunched && business ? resultsCardFacts(business.id).catch(() => null) : null,
+  ]);
   const askPilot = Boolean(pilotFacts && pilotDay7Visible({ ...pilotFacts, now: new Date() }));
+  const resultsCard = cardFacts?.offered && business ? resultsCardOffer(business.id, cardFacts, locale) : null;
 
   return (
     <WorkspaceHome
@@ -86,6 +95,7 @@ export default async function DashboardPage() {
       firstEnquiry={firstEnquiry}
       adReview={adReview}
       pilotQuestion={askPilot && business ? <PilotDay7Card businessId={business.id} locale={locale} /> : null}
+      resultsCard={resultsCard}
       rejectedAds={adReview?.kind === "rejected" && newest && (
         <Suspense fallback={null}>
           <HomeRejectedAds campaign={newest} vertical={business?.vertical} spend={(results as Record<string, { spend?: number }>)[newest.id]?.spend ?? 0} />
@@ -115,4 +125,12 @@ async function SpendNotice({ result }: { result: Promise<ReactNode> }) {
 
 async function Activity({ result }: { result: Promise<ReactNode> }) {
   return await result;
+}
+
+function resultsCardOffer(businessId: string, facts: ResultsCardFacts, locale: AppLocale) {
+  const t = translator(locale, "resultsCard");
+  const lines = resultsCardLines(facts);
+  const words = { title: t("title"), body: t("body", { n: facts.enquiries }), share: t("share"), skip: t("skip"),
+    footerToggle: t("footerToggle"), shareFailed: t("shareFailed"), preview: t("preview") };
+  return <ResultsCardOffer businessId={businessId} caption={[lines.main, lines.contact].filter(Boolean).join("\n")} words={words} />;
 }

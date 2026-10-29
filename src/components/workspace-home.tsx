@@ -45,6 +45,8 @@ export interface WorkspaceHomeProps {
   rejectedAds?: ReactNode;
   /** #1650: the day-7 'would you pay ₹999 a month?' card, when it's due. */
   pilotQuestion?: ReactNode;
+  /** #2036: the weekly results card for WhatsApp Status, when it's offered. */
+  resultsCard?: ReactNode;
   now?: number;
   /** #1438: the owner's app language (Settings); English by default. */
   locale?: AppLocale;
@@ -71,6 +73,7 @@ export function WorkspaceHome({
   adReview = null,
   rejectedAds,
   pilotQuestion,
+  resultsCard,
   now,
   locale = "en",
 }: WorkspaceHomeProps) {
@@ -118,6 +121,7 @@ export function WorkspaceHome({
         <p role="status" aria-label={t("metaReview")} className="text-sm text-slate-900">{t("metaChecking")}</p>
       )}
       {adReview?.kind === "rejected" && rejectedAds}
+      {resultsCard}
       {pilotQuestion}
 
       {stale.length > 0 && <StaleResultsRefresher campaignIds={stale} />}

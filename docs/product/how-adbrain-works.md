@@ -55,7 +55,10 @@ background and when the page opens. A running campaign with a problem (Meta
 rejected an ad, no one has seen it after 6 hours, or its end date has passed)
 shows **Needs attention** with the reason. The owner can pause any campaign, set
 a weekly spending cap (with auto-pause on, AdBrain pauses the ads when the week's
-spend reaches it), and share results on WhatsApp. **New campaign** runs the same three steps again,
+spend reaches it), and share results on WhatsApp. After a week with 5 or more enquiries the
+owner logged, Home offers a results card for their WhatsApp Status: the
+business, how many people in their area enquired, their best ad and their
+WhatsApp number, never money. **New campaign** runs the same three steps again,
 asking only what changed. Details: [Manage](manage.md), [Settings](settings.md).
 
 ## Enquiries: reply to customers
