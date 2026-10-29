@@ -8,6 +8,11 @@ still [ARCHITECTURE.md](../ARCHITECTURE.md) until #1851 moves it into this folde
 [Interview and boundaries](ai-pipeline.md), [variant generation](ai-pipeline-variants.md) and
 [text routing, images, reliability and cost](ai-pipeline-routing.md).
 
+## Data Model
+
+[Tables and relationships](data-model.md), [leads, authority, RPCs and storage](data-model-access.md)
+and the [migration map](migrations.md).
+
 ## Channels
 
 [Channels](channels/README.md): one page of current facts per ad channel, starting with [Meta](channels/meta.md).

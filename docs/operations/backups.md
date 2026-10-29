@@ -55,4 +55,4 @@ deduplicate across businesses solely because Meta IDs match.
 Storage is public delivery; access policies on metadata do not make downloaded
 URLs private. Row deletion is not complete media deletion. Privacy requests may
 require separate database, Storage, provider, and log-retention handling. See
-[Data Model](../DATA_MODEL.md) for cascade behavior and current limits.
+[Data Model](../architecture/data-model.md) for cascade behavior and current limits.
