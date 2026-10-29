@@ -90,6 +90,31 @@ describe("GET /api/cron/refresh-results (#258)", () => {
     expect(mocks.saveCampaignResult).toHaveBeenCalledTimes(1);
   });
 
+  // #1838: a throttled account gets no more calls this run; the app-wide limit stops the run. Neither is a failure.
+  it("#1838: Meta throttling one account skips that business's other campaigns; the run stays green", async () => {
+    const { MetaThrottledError } = await import("@/lib/meta/client");
+    mocks.campaigns = [{ ...bound("t1", "m-t1"), business_id: "business-busy" }, { ...bound("t2", "m-t2"), business_id: "business-busy" }, bound("c1", "m1")];
+    mocks.insights.mockImplementation(async (id: string) => {
+      if (id === "m-t1") throw new MetaThrottledError("(#17) User request limit reached", 400, 17, 2446079, "account", 37 * 60_000);
+      return insights;
+    });
+    const result = await call();
+    expect(result.status).toBe(200);
+    expect(result.body).toMatchObject({ ok: true, failed: 0, refreshed: 1 });
+    expect(result.body.throttled).toEqual([{ key: expect.stringMatching(/^[0-9a-f]{12}$/), scope: "account", retryAfterMs: 37 * 60_000 }]);
+    expect(mocks.insights.mock.calls.map(([id]) => id)).toEqual(["m-t1", "m1"]);
+  });
+
+  it("#1838: the app-wide limit (code 4) stops the run: no more Meta calls for anyone", async () => {
+    const { MetaThrottledError } = await import("@/lib/meta/client");
+    mocks.campaigns = [{ ...bound("t1", "m-t1"), business_id: "business-a" }, bound("c1", "m1"), bound("c2", "m2")];
+    mocks.insights.mockRejectedValueOnce(new MetaThrottledError("(#4) Application request limit reached", 400, 4, undefined, "app", 15 * 60_000));
+    const result = await call();
+    expect(result.body).toMatchObject({ ok: true, failed: 0, refreshed: 0 });
+    expect(result.body.throttled).toEqual([expect.objectContaining({ scope: "app" })]);
+    expect(mocks.insights).toHaveBeenCalledTimes(1);
+  });
+
   it("still fails the run on a real Meta failure", async () => {
     mocks.insights.mockRejectedValueOnce(new Error("Service temporarily unavailable"));
     const { status, body } = await call();
@@ -100,7 +125,7 @@ describe("GET /api/cron/refresh-results (#258)", () => {
   it("saves a result row and health per campaign and never pauses or changes a campaign", async () => {
     const { status, body } = await call();
     expect(status).toBe(200);
-    expect(body).toEqual({ ok: true, refreshed: 2, pausedReads: 0, skipped: 0, failed: 0, hasMore: false, alerts: [], reauth: [], failures: [], ended: [], unbound: [] });
+    expect(body).toEqual({ ok: true, refreshed: 2, pausedReads: 0, skipped: 0, failed: 0, hasMore: false, alerts: [], reauth: [], failures: [], ended: [], unbound: [], throttled: [] });
     expect(mocks.saveCampaignResult).toHaveBeenCalledWith({ businessId: "business-1", userId: "owner-1" }, expect.objectContaining({ campaign_id: "c1", impressions: 120, leads: 1 }));
     expect(mocks.saveCampaignHealth).toHaveBeenCalledWith(expect.anything(), "c1", expect.objectContaining({ flags: [] }));
     for (const write of [mocks.pause, mocks.updateStatus, mocks.saveCampaign]) expect(write).not.toHaveBeenCalled();
@@ -174,21 +199,24 @@ describe("campaignAttention", () => {
       const { status, body } = await call();
       expect(status).toBe(200);
       expect(body).toMatchObject({ ok: true, refreshed: 1, failed: 0, ended: [await key("gone")], failures: [] });
+      // #1600: one 'ended' alert for the workflow, by opaque key.
+      expect(body.alerts).toEqual([{ kind: "ended", key: await key("gone") }]);
       expect(mocks.saveCampaign).toHaveBeenCalledWith({ businessId: "business-1", userId: "owner-1" },
-        { status: "completed", raw: { cap: { days: 2 }, metaStatus: "DELETED" } }, "gone");
+        { status: "completed", raw: { cap: { days: 2 }, metaStatus: "DELETED", metaGoneAt: expect.any(String) } }, "gone");
     });
 
-    it("Meta's recorded 'object does not exist' (100/33) is ended as MISSING", async () => {
+    it("#1678: Meta's recorded 100/33 ('does not exist, or missing permissions') never ends a campaign: listed as unbound", async () => {
       const tape = (await import("./core/fixtures/meta/create-cleanup-refusals.json")).default as unknown as Array<{ status: number; body?: { error?: { message: string; code: number; error_subcode: number } } }>;
       const graph = tape.map((entry) => entry.body?.error).find((error) => error?.code === 100 && error.error_subcode === 33)!;
+      expect(graph.message).toMatch(/does not exist, cannot be loaded due to missing permissions/);
       const { MetaError } = await import("@/lib/meta/client");
       mocks.campaigns = [bound("missing", "m-missing")];
       mocks.insights.mockRejectedValue(new MetaError(graph.message, 400, graph.code, graph.error_subcode));
-      mocks.saveCampaign.mockResolvedValue({ data: {}, error: null });
       const { status, body } = await call();
       expect(status).toBe(200);
-      expect(body).toMatchObject({ ok: true, failed: 0, ended: [await key("missing")] });
-      expect(mocks.saveCampaign.mock.calls[0][1]).toMatchObject({ status: "completed", raw: { metaStatus: "MISSING" } });
+      expect(body).toMatchObject({ ok: true, failed: 0, ended: [], unbound: [await key("missing")], alerts: [] });
+      // It stays active, so enforce-spend keeps guarding it.
+      expect(mocks.saveCampaign).not.toHaveBeenCalled();
     });
 
     it("assets that no longer match the connection (CONFLICT) are listed, not failed", async () => {

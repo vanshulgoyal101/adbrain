@@ -405,8 +405,8 @@ async function generate(req: Request, live?: LiveCreate) {
         ...run,
         angleIds: retry.map((angle) => angle.id),
         count: retry.length,
-        // The business's photo belongs to the first ad only, so it is reused only when that ad is retried.
-        ownerPhotos: retry[0].id === firstPass[0]?.id ? ownerPhotos : undefined,
+        // #1901: each owner photo belongs to one of ads 1-3 by place, so a retried ad gets its own photo back.
+        ownerPhotos,
         recentCopy: [...inserted.map((creative) => ({ headline: creative.headline ?? "", primary_text: creative.primary_text ?? "" })), ...recentCopy].slice(0, 12),
         signal: AbortSignal.timeout(CREATE_TOP_UP_BUDGET_MS),
       });

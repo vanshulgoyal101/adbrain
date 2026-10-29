@@ -62,7 +62,11 @@ export type Verdict = {
 };
 
 const rupees = (value: number) => `₹${Math.round(value).toLocaleString("en-IN")}`;
+const capital = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 
+/**
+ * #1841 (Designer): the stage word (Early days, Working, Ended) is the card's status line; the sentence starts at the fact.
+ */
 export function verdict(input: VerdictInput): Verdict {
   const chat = input.destination === "whatsapp" ? "chat" : "enquiry";
   const chats = (n: number) => `${n} ${n === 1 ? chat : input.destination === "whatsapp" ? "chats" : "enquiries"}`;
@@ -86,7 +90,7 @@ export function verdict(input: VerdictInput): Verdict {
         return { state: "ended_measured", label: "Ended", sentence: `It ended with ${chats(input.results)} at ${rupees(cost!)} each.`, action: "run_again" };
       }
       if (band !== "more than") {
-        return { state: "ended_worked", label: "Ended", sentence: `It worked: ${chats(input.results)} at ${rupees(cost!)} each. Run it again with the best ad first?`, action: "run_again" };
+        return { state: "ended_worked", label: "Ended", sentence: `${capital(chats(input.results))} at ${rupees(cost!)} each. Run it again with the best ad first?`, action: "run_again" };
       }
       return { state: "ended_costly", label: "Ended", sentence: `It didn't bring ${input.destination === "whatsapp" ? "chats" : "enquiries"} at a good price. Try new ads?`, action: "new_ads" };
     }
@@ -109,16 +113,16 @@ export function verdict(input: VerdictInput): Verdict {
       if (Number.isFinite(since) && input.now - since >= DAY_MS) {
         return { state: "not_showing_day", label: "Not showing yet", sentence: "Your ads haven't started showing after a day. Check what Meta says.", action: "meta_status" };
       }
-      return { state: "not_showing", label: "Not showing yet", sentence: "Meta is checking your ads. They usually start showing within a day.", action: null };
+      return { state: "not_showing", label: "Not showing yet", sentence: "Meta is checking your ads. This usually takes minutes to a few hours, and up to a day.", action: null };
     }
     if (!evidence) {
       return { state: "early", label: "Early days", action: null, sentence: input.results
-        ? `Early days: ${chats(input.results)} so far. AdBrain will tell you if it's working after ${EVIDENCE_MIN_RESULTS}.`
-        : `Early days: ${noChats} yet.` };
+        ? `${capital(chats(input.results))} so far. AdBrain will tell you if it's working after ${EVIDENCE_MIN_RESULTS}.`
+        : `${capital(noChats)} yet.` };
     }
     // No comparison with enough results behind it: the number only, and no word on whether that's good (#1255 gates).
     if (band === null) return { state: "measured", label: "Live", action: null, sentence: `Each ${chat} costs ${rupees(cost!)}.` };
-    if (band === "less than") return { state: "working", label: "Working", action: null, sentence: `Working: each ${chat} costs ${rupees(cost!)}${against("less than")}.` };
+    if (band === "less than") return { state: "working", label: "Working", action: null, sentence: `Each ${chat} costs ${rupees(cost!)}${against("less than")}.` };
     if (band === "about the same as") return { state: "about_average", label: "About average", action: null, sentence: `Each ${chat} costs ${rupees(cost!)}${against("about the same as")}.` };
     return { state: "costly", label: "Costly", action: "new_ads", sentence: `Each ${chat} costs ${rupees(cost!)}${against("more than")}.` };
   })();

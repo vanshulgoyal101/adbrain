@@ -186,6 +186,7 @@ matter, but never override factual constraints. Use the requested language for a
 function claimClass(term: string): string {
   if (/^(?:free|no[- ]cost)$/i.test(term)) return "free";
   if (/^guaranteed?$/i.test(term)) return "guarantee";
+  if (SUBSIDY_WORD.test(term)) return "subsidy";
   return term.includes("%") ? "percent" : "currency";
 }
 
@@ -199,6 +200,27 @@ export function workClaims(text: string): string[] {
   return [...new Set((text.normalize("NFC").match(WORK_CLAIM) ?? []).map((claim) => claim.toLowerCase()))];
 }
 
+/**
+ * #1822 (Reviewer, #1816): Brand text and pasted bios feed the prompt as facts and quotes are copied verbatim, so a
+ * third party's number or link could ship in the ad's words. Links, domains, wa.me and 8+ digit numbers are refused
+ * unless they are the business's own website or phone. (The ad's click destination never comes from the copy.)
+ */
+const LINK_IN_COPY = /\b(?:https?:\/\/|www\.)[^\s,)]+|\bwa\.me\/[^\s,)]*|\b[a-z0-9][a-z0-9-]{1,62}\.(?:co\.in|com|in|net|org|io|biz|info|shop|store|online|site|app|me|co)\b(?:\/[^\s,)]*)?/giu;
+const PHONE_IN_COPY = /\+?\d[\d\s-]{6,}\d/g;
+
+const hostOf = (link: string) => link.toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").split(/[/?#]/)[0];
+const lastTenDigits = (text: string) => text.replace(/\D/g, "").slice(-10);
+
+export function contactsInCopy(text: string, own: { website?: string | null; phone?: string | null }): string[] {
+  const ownHost = own.website ? hostOf(own.website.trim()) : null;
+  const ownPhone = own.phone ? lastTenDigits(own.phone) : null;
+  const links = (text.match(LINK_IN_COPY) ?? []).filter((link) => !ownHost || (hostOf(link) !== ownHost && !hostOf(link).endsWith(`.${ownHost}`)));
+  // A number inside a link (wa.me/91…) is that link's, not a separate phone.
+  const phones = (text.replace(LINK_IN_COPY, " ").match(PHONE_IN_COPY) ?? []).map((phone) => phone.trim())
+    .filter((phone) => phone.replace(/\D/g, "").length >= 8 && (!ownPhone || ownPhone.length < 8 || lastTenDigits(phone) !== ownPhone));
+  return [...new Set([...links, ...phones])];
+}
+
 export const WORK_CLAIM_WARNING = "This picture wasn't taken by you. Say what you offer, not 'our work', or use your own photo.";
 
 export function conceptValidationRules(issues: string[]): string[] {
@@ -206,7 +228,7 @@ export function conceptValidationRules(issues: string[]): string[] {
     "sourceQuotes", "unsupported-commercial-claim", "repeated-headline", "repeated-opening",
     "cliche", "em-dash-overuse", "exclamation-spam", "all-caps", "too-long", "banned-claim",
     "hook-length", "offer-below-fold", "price-unit", "personal-attribute", "unsupported-superlative", "exaggerated-result", "no-subject",
-    "work-claim",
+    "work-claim", "contact-in-copy",
   ]);
   return [...new Set(issues.map((issue) => {
     if (issue.startsWith("schema:")) return issue.slice(0, issue.indexOf(": "));
@@ -336,10 +358,14 @@ const GUARANTEE_WORD = /(?<![\p{L}\p{M}])(?:गारंटी|ਗਾਰੰਟ�
 const NEGATION = /\b(?:no|not|never|without|avoid)\b|(?<![\p{L}\p{M}])(?:नहीं|बिना|ਨਹੀਂ|ਬਿਨਾਂ)(?![\p{L}\p{M}])/iu;
 
 // "text-free" is the visual the prompt asks for, not a free offer. Match on NFC text.
-const COMMERCIAL_TERMS = new RegExp(
-  `(?<!\\btext-)\\bfree\\b|\\bno[- ]cost\\b|\\bguaranteed?\\b|\\d+(?:\\.\\d+)?\\s*%|[$\\u00a3\\u20ac\\u20b9]\\s*\\d+(?:[.,]\\d+)*|${FREE_WORD.source}|${GUARANTEE_WORD.source}`,
-  "giu",
-);
+const OFFER_TERMS_SOURCE =
+  `(?<!\\btext-)\\bfree\\b|\\bno[- ]cost\\b|\\bguaranteed?\\b|\\d+(?:\\.\\d+)?\\s*%|[$\\u00a3\\u20ac\\u20b9]\\s*\\d+(?:[.,]\\d+)*|${FREE_WORD.source}|${GUARANTEE_WORD.source}`;
+/**
+ * #1676 (Analyst #1514): a PM Surya Ghar subsidy line needs a Brand fact (a registered vendor says so), like "free".
+ * It's a claim, not an offer, so the above-the-fold offer rule ignores it.
+ */
+const SUBSIDY_WORD = /\bsubsid(?:y|ies|ised|ized)\b|\bPM Surya Ghar\b|(?<![\p{L}\p{M}])(?:सब्सिडी|ਸਬਸਿਡੀ)(?![\p{L}\p{M}])/iu;
+const COMMERCIAL_TERMS = new RegExp(`${OFFER_TERMS_SOURCE}|${SUBSIDY_WORD.source}`, "giu");
 
 /** The commercial terms text states, skipping negated ones. */
 function claimedTerms(text: string): string[] {
@@ -358,6 +384,7 @@ function citesTerm(quote: string, term: string): boolean {
   // "No-cost" is the same offer as "free" (#378).
   if (/^(?:free|no[- ]cost)$/i.test(term) || FREE_WORD.test(term)) return /free|no[- ]cost/i.test(quote) || FREE_WORD.test(quote);
   if (GUARANTEE_WORD.test(term)) return quote.toLowerCase().includes("guarantee") || GUARANTEE_WORD.test(quote);
+  if (SUBSIDY_WORD.test(term)) return SUBSIDY_WORD.test(quote);
   if (!/\d/.test(term)) return quote.toLowerCase().includes(term.toLowerCase()) || (/^guarantee/i.test(term) && GUARANTEE_WORD.test(quote));
   const amount = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   return new RegExp(`(?<![\\d.,])${amount}(?![\\d]|[.,]\\d)`, "i").test(quote) || spelledCurrency(term, quote);
@@ -371,9 +398,12 @@ function citesTerm(quote: string, term: string): boolean {
 function affirmedCitation(quote: string, term: string, negation: RegExp): boolean {
   const pattern = /^(?:free|no[- ]cost)$/i.test(term) ? /free|no[- ]cost/gi
     : /^guarantee/i.test(term) ? /guarantee/gi
+      : SUBSIDY_WORD.test(term) ? new RegExp(SUBSIDY_WORD.source, "giu")
       : new RegExp(`(?<![\\d.,])${term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\d]|[.,]\\d)`, "gi");
   const matches = [...quote.matchAll(pattern)];
   if (!matches.length) return !negation.test(quote);
+  // #1676: "not a PM Surya Ghar subsidy vendor" negates the whole fact, so every subsidy mention must be affirmed.
+  if (SUBSIDY_WORD.test(term)) return matches.every((match) => affirmedInFact(quote, match.index, match[0]));
   return matches.some((match) => affirmedInFact(quote, match.index, match[0]));
 }
 
@@ -549,6 +579,11 @@ export function validateConcept(
       issues.push(`work-claim: "${claim}" says the picture is the business's own work, but the picture is generated; say what the business offers instead`);
     }
   }
+  // #1822: no link or phone number the brand didn't give as its own; the ad's button already reaches the business.
+  for (const contact of contactsInCopy([concept.headline, concept.primary_text, concept.supportingText, concept.description].filter(Boolean).join("\n"),
+    { website: input.brand.website, phone: input.brand.phone })) {
+    issues.push(`contact-in-copy: "${contact.slice(0, 60)}" is a link or phone number the brand didn't give as its own; remove it (the ad's button already reaches the business)`);
+  }
   const empty = emptyScene(concept.visual.direction);
   if (empty) {
     issues.push(`no-subject: visual.direction shows an "${empty}" scene; give the image a clear subject (the people the business serves, its team at work, or its product), not an empty space`);
@@ -557,7 +592,6 @@ export function validateConcept(
   if (firstLine.length > FOLD_CHARACTERS) {
     issues.push(`hook-length: the first line of primary_text is ${firstLine.length} characters; keep the hook and offer within ${FOLD_CHARACTERS} and move the rest to short lines after \n`);
   }
-  const commercialTerms = COMMERCIAL_TERMS;
   const cites = citesTerm;
   const negation = NEGATION;
   const visualClaims = concept.visual.direction
@@ -575,10 +609,10 @@ export function validateConcept(
     concept.rationale,
     visualClaims,
   ].join(" ").normalize("NFC");
-  const supported = (term: string) => concept.sourceQuotes.some((quote) => {
-    const text = quote.normalize("NFC");
-    return cites(text, term) && affirmedCitation(text, term, negation);
-  });
+  const affirms = (text: string, term: string) => cites(text, term) && affirmedCitation(text, term, negation);
+  // #1676: a subsidy line stands when any Brand fact states it affirmatively (a registered vendor), quoted or not.
+  const supported = (term: string) => concept.sourceQuotes.some((quote) => affirms(quote.normalize("NFC"), term))
+    || (SUBSIDY_WORD.test(term) && sources.some((fact) => affirms(fact.normalize("NFC"), term)));
   // #281 (CTO): an offer the copy states without citing it is cited with the one supplied fact that
   // contains it. None or several matching facts leave it uncited; nothing is invented.
   const facts = [...new Set(sources.map((source) => source.normalize("NFC").trim()).filter(Boolean))];
@@ -602,7 +636,7 @@ export function validateConcept(
   }
   issues.push(...rateDropIssues([concept.headline, concept.primary_text, concept.supportingText, concept.description].filter(Boolean).join("\n"), facts));
   const primaryText = concept.primary_text.normalize("NFC");
-  const offer = new RegExp(commercialTerms.source, "iu").exec(primaryText);
+  const offer = new RegExp(OFFER_TERMS_SOURCE, "iu").exec(primaryText);
   // "10,000 rupaye per kW" leading the first line is the same amount as "₹10,000/kW" (#418).
   const spelled = spelledAmountIndex(primaryText);
   if (offer && offer.index >= FOLD_CHARACTERS && !(spelled >= 0 && spelled < FOLD_CHARACTERS)) {

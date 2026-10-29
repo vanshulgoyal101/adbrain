@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { brandUsable } from "@/lib/brand/usable";
 import { setupFieldErrors, setupFieldsFrom, setupLocations, setupPhone } from "@/lib/brand/setup-fields";
@@ -9,6 +9,7 @@ import type { Business } from "@/lib/types";
 const mocks = vi.hoisted(() => ({
   push: vi.fn(),
   saveSetupBusiness: vi.fn(),
+  saveAdLanguage: vi.fn(async () => ({ ok: true })),
   getUser: vi.fn(),
   insert: vi.fn(),
   update: vi.fn(),
@@ -126,16 +127,82 @@ describe("core: <SetupBusinessStep> (#1269)", () => {
   beforeEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
-    vi.doMock("@/app/(app)/brand/actions", () => ({ saveSetupBusiness: mocks.saveSetupBusiness }));
+    vi.doMock("@/app/(app)/brand/actions", () => ({ saveSetupBusiness: mocks.saveSetupBusiness, saveAdLanguage: mocks.saveAdLanguage }));
     mocks.saveSetupBusiness.mockImplementation(async (id: string | null) => ({ ok: true, id: id ?? "b-new", usable: true }));
   });
 
-  async function step(initial: Business | null = business) {
+  async function step(initial: Business | null = business, chooseLanguage = false) {
     const { SetupBusinessStep } = await import("@/components/setup-business-step");
-    render(<SetupBusinessStep business={initial} />);
+    render(<SetupBusinessStep business={initial} chooseLanguage={chooseLanguage} />);
   }
   const type = (label: string, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
   const makeMyAds = () => within(screen.getByRole("navigation", { name: "Setup steps" })).getByRole("button", { name: "Make my ads" });
+
+  it("#1934: returning mode asks only for the new offer (last one as placeholder); the rest folds into 'Same as last time'", async () => {
+    const launched = { ...business, vertical: "Rooftop solar", locations: ["Mohali", "Kharar"], offers: ["Diwali 10% off"], phone: "9876543210" } as unknown as Business;
+    const { SetupBusinessStep } = await import("@/components/setup-business-step");
+    render(<SetupBusinessStep business={launched} returning />);
+    expect(screen.getByRole("heading", { name: "What's new this time?" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Your offer")).toHaveValue("");
+    expect(screen.getByLabelText("Your offer")).toHaveAttribute("placeholder", "Diwali 10% off");
+    for (const label of ["Business name", "What you sell", "Where you serve", "WhatsApp number"]) expect(screen.queryByLabelText(label)).toBeNull();
+    expect(screen.getByText(/Same as last time: Rooftop solar · Mohali, Kharar · 9876543210\./)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Fill it from my website/ })).toBeNull();
+    // Nothing typed: it stays and says what's missing.
+    await act(async () => fireEvent.click(makeMyAds()));
+    expect(screen.getByText("Add one offer, like a free visit or a first-time price.")).toBeInTheDocument();
+    expect(mocks.push).not.toHaveBeenCalled();
+    type("Your offer", "Free site survey this week");
+    await act(async () => fireEvent.click(makeMyAds()));
+    await waitFor(() => expect(mocks.push).toHaveBeenCalledWith("/create?again=1"));
+    expect(mocks.saveSetupBusiness.mock.calls.at(-1)![1]).toMatchObject({ offer: "Free site survey this week", vertical: "Rooftop solar" });
+  });
+
+  it("#1934: 'Change' opens the folded fields", async () => {
+    const launched = { ...business, vertical: "Rooftop solar", locations: ["Mohali"], offers: ["Diwali 10% off"], phone: "9876543210" } as unknown as Business;
+    const { SetupBusinessStep } = await import("@/components/setup-business-step");
+    render(<SetupBusinessStep business={launched} returning />);
+    fireEvent.click(screen.getByRole("button", { name: "Change" }));
+    expect(screen.getByLabelText("Where you serve")).toHaveValue("Mohali");
+    expect(screen.queryByText(/Same as last time/)).toBeNull();
+  });
+
+  it("#1853: after हिंदी, the note stays for this visit even when the cookie's re-render turns the offer off", async () => {
+    const setAppLanguage = vi.fn(async () => ({ ok: true }));
+    vi.doMock("@/app/(app)/settings/language-actions", () => ({ setAppLanguage }));
+    const { SetupBusinessStep } = await import("@/components/setup-business-step");
+    const { rerender } = render(<SetupBusinessStep business={business} chooseLanguage />);
+    fireEvent.click(within(screen.getByRole("group", { name: "App language / ऐप की भाषा" })).getByRole("button", { name: "हिंदी" }));
+    await waitFor(() => expect(setAppLanguage).toHaveBeenCalledWith("hi"));
+    // The server action sets the cookie and the route re-renders with chooseLanguage false.
+    rerender(<SetupBusinessStep business={business} chooseLanguage={false} />);
+    expect(await screen.findByText("अभी सिर्फ़ होम हिंदी में है; बाकी स्क्रीन एक-एक करके जुड़ेंगी।")).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "App language / ऐप की भाषा" })).toBeNull();
+  });
+
+  it("#1641: offers English / हिंदी only until a language is chosen", async () => {
+    vi.doMock("@/app/(app)/settings/language-actions", () => ({ setAppLanguage: vi.fn(async () => ({ ok: true })) }));
+    await step(business, true);
+    expect(screen.getByRole("group", { name: "App language / ऐप की भाषा" })).toBeInTheDocument();
+    cleanup();
+    await step(business, false);
+    expect(screen.queryByRole("group", { name: "App language / ऐप की भाषा" })).toBeNull();
+  });
+
+  it("#1681: 'Ads in' follows what they sell (solar → Hinglish); a picked language is saved before step 2", async () => {
+    await step();
+    type("What you sell", "Rooftop solar");
+    expect(screen.getByRole("button", { name: "Hinglish" })).toHaveAttribute("aria-pressed", "true");
+    type("What you sell", "Modular kitchens");
+    expect(screen.getByRole("button", { name: "English" })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByRole("button", { name: "ਪੰਜਾਬੀ" }));
+    type("Where you serve", complete.locations);
+    type("Your offer", complete.offer);
+    type("WhatsApp number", complete.phone);
+    await act(async () => fireEvent.click(makeMyAds()));
+    await waitFor(() => expect(mocks.push).toHaveBeenCalledWith("/create"));
+    expect(mocks.saveAdLanguage).toHaveBeenCalledWith("b1", "pa");
+  });
 
   it("is step 1 of 3 with the five fields, no Back, and the free note", async () => {
     await step();

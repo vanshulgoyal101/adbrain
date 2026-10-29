@@ -4,6 +4,7 @@ import { renderToString } from "react-dom/server";
 import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useMounted } from "@/lib/use-mounted";
+import { isWebp } from "@/lib/imageGen/encode";
 import { LLMError } from "@/lib/llm/types";
 
 const complete = vi.fn();
@@ -462,18 +463,22 @@ describe("persistCreativeImage", () => {
     expect(url).toBe("https://cdn.example/stored.jpg");
   });
 
-  it("stores a smaller public thumbnail beside the original without changing export bytes", async () => {
+  // #1897: the stored original is a smaller WebP (Meta uploads and downloads convert it back to JPEG).
+  it("stores a smaller public thumbnail beside a smaller WebP original", async () => {
     const original = readFileSync("public/solar-example.jpg");
     const upload = vi.fn().mockResolvedValue({ error: null });
     const client = { storage: { from: () => ({ upload, getPublicUrl: (path: string) => ({ data: { publicUrl: `https://cdn.example/storage/v1/object/public/creatives/${path}` } }) }) } };
     const { persistCreativeImageBytes } = await import("@/lib/creative/persist");
     const url = await persistCreativeImageBytes(client as never, "b1", "grp", "value", original, "image/jpeg");
 
-    expect(url).toMatch(/\/creatives\/b1\/grp\/originals-v1\/value-.*\.jpg$/);
+    expect(url).toMatch(/\/creatives\/b1\/grp\/originals-v1\/value-.*\.webp$/);
     expect(upload).toHaveBeenCalledTimes(2);
     expect(upload.mock.calls[0][0]).toMatch(/\/thumbnails-v1\/value-.*\.webp$/);
     expect(upload.mock.calls[0][1].length).toBeLessThan(original.length);
-    expect(upload.mock.calls[1][1]).toEqual(original);
+    const stored = upload.mock.calls[1][1] as Uint8Array;
+    expect(isWebp(stored)).toBe(true);
+    expect(stored.length).toBeLessThan(original.length);
+    expect(upload.mock.calls[1][2]).toMatchObject({ contentType: "image/webp" });
   });
 
   it("keeps the original available when a thumbnail upload is rejected", async () => {
@@ -486,7 +491,7 @@ describe("persistCreativeImage", () => {
 
     expect(url).not.toContain("originals-v1");
     expect(upload).toHaveBeenCalledTimes(2);
-    expect(upload.mock.calls[1][1]).toEqual(readFileSync("public/solar-example.jpg"));
+    expect(isWebp(upload.mock.calls[1][1] as Uint8Array)).toBe(true);
   });
 
   it("removes the derivative when saving the original fails", async () => {

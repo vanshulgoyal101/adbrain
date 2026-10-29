@@ -16,7 +16,7 @@ const queries = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/supabase/queries", () => queries);
 vi.mock("@/lib/prospect-session", () => ({ isProspectSession: async () => false }));
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }), redirect: vi.fn() }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }), redirect: vi.fn(), unstable_rethrow: vi.fn() }));
 vi.mock("@/app/(app)/studio/actions", () => ({ setCreativeStatus: vi.fn() }));
 vi.mock("@/lib/download", () => ({ downloadBlob: vi.fn() }));
 

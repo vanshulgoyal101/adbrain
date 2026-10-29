@@ -57,7 +57,7 @@ describe("WhatsApp ready? checklist (#493)", () => {
 
   it("shows once in campaign setup when WhatsApp chat is chosen", async () => {
     view([whatsapp]);
-    const newCampaign = screen.queryByRole("button", { name: "New campaign" });
+    const newCampaign = screen.queryByRole("button", { name: "More options" });
     if (newCampaign) fireEvent.click(newCampaign);
     fireEvent.click(await screen.findByRole("radio", { name: "Instant form" }));
     fireEvent.click(screen.getByRole("radio", { name: "WhatsApp chat (recommended)" }));
