@@ -1,0 +1,443 @@
+{
+  "recordedAt": "2026-10-29T06:16:00.957Z",
+  "clipUrl": "https://raw.githubusercontent.com/mdn/learning-area/main/html/multimedia-and-embedding/video-and-audio-content/rabbit320.mp4",
+  "unreachableUrl": "https://raw.githubusercontent.com/mdn/learning-area/main/adbrain-749-missing.mp4",
+  "videoId": "9000000000000001",
+  "existingVideoId": "900000000000002",
+  "creds": {
+    "adAccountId": "act_9000000000000003",
+    "pageId": "900000000000004"
+  },
+  "tape": [
+    {
+      "name": "list-existing",
+      "method": "GET",
+      "path": "act_9000000000000003/advideos?fields=id&limit=1",
+      "form": null,
+      "status": 200,
+      "body": {
+        "data": [
+          {
+            "id": "900000000000002"
+          }
+        ],
+        "paging": {
+          "cursors": {
+            "before": "CURSOR",
+            "after": "CURSOR"
+          }
+        }
+      }
+    },
+    {
+      "name": "read-existing-video",
+      "method": "GET",
+      "path": "900000000000002?fields=status%2Clength%2Cis_instagram_eligible%2Cformat%7Bwidth%2Cheight%2Cfilter%7D%2Cpicture%2Cthumbnails%7Buri%2Cwidth%2Cheight%2Cis_preferred%7D",
+      "form": null,
+      "status": 200,
+      "body": {
+        "status": {
+          "video_status": "ready",
+          "uploading_phase": {
+            "status": "complete"
+          },
+          "processing_phase": {
+            "status": "complete"
+          },
+          "publishing_phase": {
+            "status": "complete",
+            "publish_status": "published",
+            "publish_time": "2026-01-04T11:53:00+0000"
+          }
+        },
+        "length": 41,
+        "is_instagram_eligible": true,
+        "format": [
+          {
+            "width": 130,
+            "height": 163,
+            "filter": "130x130"
+          },
+          {
+            "width": 480,
+            "height": 600,
+            "filter": "480x480"
+          },
+          {
+            "width": 720,
+            "height": 900,
+            "filter": "720x720"
+          },
+          {
+            "width": 1024,
+            "height": 1280,
+            "filter": "native"
+          }
+        ],
+        "picture": "https://scontent.example/media.jpg",
+        "thumbnails": {
+          "data": [
+            {
+              "uri": "https://scontent.example/media.jpg",
+              "width": 1024,
+              "height": 1280,
+              "is_preferred": false,
+              "id": "9000000000000005"
+            },
+            {
+              "uri": "https://scontent.example/media.jpg",
+              "width": 1024,
+              "height": 1280,
+              "is_preferred": false,
+              "id": "9000000000000006"
+            },
+            {
+              "uri": "https://scontent.example/media.jpg",
+              "width": 1024,
+              "height": 1280,
+              "is_preferred": false,
+              "id": "9000000000000007"
+            },
+            {
+              "uri": "https://scontent.example/media.jpg",
+              "width": 1024,
+              "height": 1280,
+              "is_preferred": false,
+              "id": "9000000000000008"
+            },
+            {
+              "uri": "https://scontent.example/media.jpg",
+              "width": 1024,
+              "height": 1280,
+              "is_preferred": false,
+              "id": "9000000000000009"
+            },
+            {
+              "uri": "https://scontent.example/media.jpg",
+              "width": 1024,
+              "height": 1280,
+              "is_preferred": false,
+              "id": "9000000000000010"
+            },
+            {
+              "uri": "https://scontent.example/media.jpg",
+              "width": 1024,
+              "height": 1280,
+              "is_preferred": false,
+              "id": "9000000000000011"
+            },
+            {
+              "uri": "https://scontent.example/media.jpg",
+              "width": 1024,
+              "height": 1280,
+              "is_preferred": true,
+              "id": "9000000000000012"
+            },
+            {
+              "uri": "https://scontent.example/media.jpg",
+              "width": 1024,
+              "height": 1280,
+              "is_preferred": false,
+              "id": "9000000000000013"
+            },
+            {
+              "uri": "https://scontent.example/media.jpg",
+              "width": 1024,
+              "height": 1280,
+              "is_preferred": false,
+              "id": "9000000000000014"
+            },
+            {
+              "uri": "https://scontent.example/media.jpg",
+              "width": 1024,
+              "height": 1280,
+              "is_preferred": false,
+              "id": "9000000000000015"
+            },
+            {
+              "uri": "https://scontent.example/media.jpg",
+              "width": 1024,
+              "height": 1280,
+              "is_preferred": false,
+              "id": "9000000000000016"
+            },
+            {
+              "uri": "https://scontent.example/media.jpg",
+              "width": 1024,
+              "height": 1280,
+              "is_preferred": false,
+              "id": "9000000000000017"
+            },
+            {
+              "uri": "https://scontent.example/media.jpg",
+              "width": 1024,
+              "height": 1280,
+              "is_preferred": false,
+              "id": "9000000000000018"
+            },
+            {
+              "uri": "https://scontent.example/media.jpg",
+              "width": 1024,
+              "height": 1280,
+              "is_preferred": false,
+              "id": "9000000000000019"
+            }
+          ]
+        },
+        "id": "900000000000002"
+      }
+    },
+    {
+      "name": "start-unreachable",
+      "method": "POST",
+      "path": "act_9000000000000003/advideos",
+      "form": {
+        "file_url": "https://raw.githubusercontent.com/mdn/learning-area/main/adbrain-749-missing.mp4",
+        "name": "missing.mp4",
+        "title": "Missing"
+      },
+      "status": 400,
+      "body": {
+        "error": {
+          "message": "Unable to fetch video file from URL.",
+          "type": "OAuthException",
+          "code": 389,
+          "error_subcode": 1363057,
+          "is_transient": false,
+          "error_user_title": "URL से वीडियो फ़ाइल लाने में असमर्थ",
+          "error_user_msg": "URL से वीडियो फ़ाइल लाने में असमर्थ.",
+          "fbtrace_id": "Avgj5-XEhvH6VZfcmpka0Xr"
+        }
+      }
+    },
+    {
+      "name": "start-unreachable",
+      "method": "POST",
+      "path": "act_9000000000000003/advideos",
+      "form": {
+        "file_url": "https://raw.githubusercontent.com/mdn/learning-area/main/adbrain-749-missing.mp4",
+        "name": "missing.mp4",
+        "title": "Missing"
+      },
+      "status": 400,
+      "body": {
+        "error": {
+          "message": "Unable to fetch video file from URL.",
+          "type": "OAuthException",
+          "code": 389,
+          "error_subcode": 1363057,
+          "is_transient": false,
+          "error_user_title": "URL से वीडियो फ़ाइल लाने में असमर्थ",
+          "error_user_msg": "URL से वीडियो फ़ाइल लाने में असमर्थ.",
+          "fbtrace_id": "Ay5_rdBkj7TvFX2hgPyL28G"
+        }
+      }
+    },
+    {
+      "name": "start-video",
+      "method": "POST",
+      "path": "act_9000000000000003/advideos",
+      "form": {
+        "file_url": "https://raw.githubusercontent.com/mdn/learning-area/main/html/multimedia-and-embedding/video-and-audio-content/rabbit320.mp4",
+        "name": "owner-clip.mp4",
+        "title": "Owner clip"
+      },
+      "status": 200,
+      "body": {
+        "id": "9000000000000001"
+      }
+    },
+    {
+      "name": "poll-video",
+      "method": "GET",
+      "path": "9000000000000001?fields=status%2Clength%2Cis_instagram_eligible%2Cformat%7Bwidth%2Cheight%2Cfilter%7D%2Cpicture%2Cthumbnails%7Buri%2Cwidth%2Cheight%2Cis_preferred%7D",
+      "form": null,
+      "status": 200,
+      "body": {
+        "status": {
+          "video_status": "processing",
+          "processing_progress": 0,
+          "uploading_phase": {
+            "status": "complete"
+          },
+          "processing_phase": {
+            "status": "in_progress"
+          },
+          "publishing_phase": {
+            "status": "not_started"
+          }
+        },
+        "length": 0,
+        "is_instagram_eligible": false,
+        "format": [
+          {
+            "width": 0,
+            "height": 0,
+            "filter": "native"
+          }
+        ],
+        "picture": "https://scontent.example/media.jpg",
+        "id": "9000000000000001"
+      }
+    },
+    {
+      "name": "poll-video",
+      "method": "GET",
+      "path": "9000000000000001?fields=status%2Clength%2Cis_instagram_eligible%2Cformat%7Bwidth%2Cheight%2Cfilter%7D%2Cpicture%2Cthumbnails%7Buri%2Cwidth%2Cheight%2Cis_preferred%7D",
+      "form": null,
+      "status": 200,
+      "body": {
+        "status": {
+          "video_status": "processing",
+          "processing_progress": 0,
+          "uploading_phase": {
+            "status": "complete"
+          },
+          "processing_phase": {
+            "status": "in_progress"
+          },
+          "publishing_phase": {
+            "status": "not_started"
+          }
+        },
+        "length": 7.8,
+        "is_instagram_eligible": false,
+        "format": [
+          {
+            "width": 130,
+            "height": 98,
+            "filter": "130x130"
+          },
+          {
+            "width": 320,
+            "height": 240,
+            "filter": "native"
+          }
+        ],
+        "picture": "https://scontent.example/media.jpg",
+        "id": "9000000000000001"
+      }
+    },
+    {
+      "name": "poll-video",
+      "method": "GET",
+      "path": "9000000000000001?fields=status%2Clength%2Cis_instagram_eligible%2Cformat%7Bwidth%2Cheight%2Cfilter%7D%2Cpicture%2Cthumbnails%7Buri%2Cwidth%2Cheight%2Cis_preferred%7D",
+      "form": null,
+      "status": 200,
+      "body": {
+        "status": {
+          "video_status": "ready",
+          "uploading_phase": {
+            "status": "complete"
+          },
+          "processing_phase": {
+            "status": "complete"
+          },
+          "publishing_phase": {
+            "status": "complete",
+            "publish_status": "published",
+            "publish_time": "2026-10-29T06:15:45+0000"
+          }
+        },
+        "length": 7.8,
+        "is_instagram_eligible": false,
+        "format": [
+          {
+            "width": 130,
+            "height": 98,
+            "filter": "130x130"
+          },
+          {
+            "width": 320,
+            "height": 240,
+            "filter": "native"
+          }
+        ],
+        "picture": "https://scontent.example/media.jpg",
+        "thumbnails": {
+          "data": [
+            {
+              "uri": "https://scontent.example/media.jpg",
+              "width": 320,
+              "height": 240,
+              "is_preferred": false,
+              "id": "9000000000000020"
+            },
+            {
+              "uri": "https://scontent.example/media.jpg",
+              "width": 320,
+              "height": 240,
+              "is_preferred": false,
+              "id": "9000000000000021"
+            },
+            {
+              "uri": "https://scontent.example/media.jpg",
+              "width": 320,
+              "height": 240,
+              "is_preferred": false,
+              "id": "9000000000000022"
+            },
+            {
+              "uri": "https://scontent.example/media.jpg",
+              "width": 320,
+              "height": 240,
+              "is_preferred": true,
+              "id": "9000000000000023"
+            },
+            {
+              "uri": "https://scontent.example/media.jpg",
+              "width": 320,
+              "height": 240,
+              "is_preferred": false,
+              "id": "9000000000000024"
+            },
+            {
+              "uri": "https://scontent.example/media.jpg",
+              "width": 320,
+              "height": 240,
+              "is_preferred": false,
+              "id": "9000000000000025"
+            },
+            {
+              "uri": "https://scontent.example/media.jpg",
+              "width": 320,
+              "height": 240,
+              "is_preferred": false,
+              "id": "9000000000000026"
+            },
+            {
+              "uri": "https://scontent.example/media.jpg",
+              "width": 320,
+              "height": 240,
+              "is_preferred": false,
+              "id": "9000000000000027"
+            },
+            {
+              "uri": "https://scontent.example/media.jpg",
+              "width": 320,
+              "height": 240,
+              "is_preferred": false,
+              "id": "9000000000000028"
+            }
+          ]
+        },
+        "id": "9000000000000001"
+      }
+    },
+    {
+      "name": "cleanup",
+      "method": "DELETE",
+      "path": "9000000000000001",
+      "form": null,
+      "status": 403,
+      "body": {
+        "error": {
+          "message": "(#200) The permission(s) pages_manage_posts are not available. It could because either they are deprecated or need to be approved by App Review.",
+          "type": "OAuthException",
+          "code": 200,
+          "fbtrace_id": "AMdjEteeroZRjkBQIsqxx30"
+        }
+      }
+    }
+  ]
+}
