@@ -72,11 +72,11 @@ describe("If you stop (#1916)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Disconnect" }));
     const dialog = await screen.findByRole("dialog", { name: copy.title });
     expect(dialog).toHaveAccessibleDescription(copy.body);
-    expect(within(dialog).getByRole("button", { name: copy.confirm, exact: true })).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: copy.confirm })).toBeInTheDocument();
     expect(request).not.toHaveBeenCalled();
-    fireEvent.click(within(dialog).getByRole("button", { name: copy.cancel, exact: true }));
+    fireEvent.click(within(dialog).getByRole("button", { name: copy.cancel }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-    expect(screen.getByRole("button", { name: "Disconnect", exact: true })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Disconnect" })).toBeEnabled();
     expect(request).not.toHaveBeenCalled();
     expect(refresh).not.toHaveBeenCalled();
   });
@@ -88,7 +88,7 @@ describe("If you stop (#1916)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Disconnect" }));
     const dialog = await screen.findByRole("dialog", { name: copy.title });
     expect(request).not.toHaveBeenCalled();
-    fireEvent.click(within(dialog).getByRole("button", { name: copy.confirm, exact: true }));
+    fireEvent.click(within(dialog).getByRole("button", { name: copy.confirm }));
     await waitFor(() => expect(refresh).toHaveBeenCalledOnce());
     expect(request).toHaveBeenCalledOnce();
     expect(request).toHaveBeenCalledWith("/api/meta/disconnect", {
