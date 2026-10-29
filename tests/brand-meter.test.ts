@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { brandMeter, specificOffer } from "@/lib/brand/meter";
+import { brandMeter, meterCounts, specificOffer } from "@/lib/brand/meter";
 
 const thin = { offers: ["Best service"], usps: [], description: null, target_audience: null };
 
@@ -52,5 +52,15 @@ describe("brandMeter (#2032)", () => {
   it("ignores blank lines", () => {
     expect(brandMeter({ offers: ["Free demo"], usps: ["  "], description: " ", target_audience: " " }))
       .toEqual({ known: 1, total: 4, next: "proof" });
+  });
+
+  it("meterCounts: the same rule the meter uses, for one typed line (#2032)", () => {
+    expect(meterCounts("offer", "Free site survey")).toBe(true);
+    expect(meterCounts("offer", "Best service")).toBe(false);
+    expect(meterCounts("proof", "12 years in business")).toBe(true);
+    expect(meterCounts("proof", "10 साल से काम")).toBe(true);
+    expect(meterCounts("proof", "Trusted by many")).toBe(false);
+    expect(meterCounts("why", "Own installation team")).toBe(true);
+    expect(meterCounts("audience", "  ")).toBe(false);
   });
 });

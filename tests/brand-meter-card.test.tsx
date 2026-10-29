@@ -52,6 +52,30 @@ describe("Home's Brand meter card (#2032)", () => {
     expect(screen.getByRole("textbox").getAttribute("aria-invalid")).toBe("true");
   });
 
+  it("doesn't say Saved for a line the meter wouldn't count: asks for the number or price instead", async () => {
+    render(<BrandMeterCard businessId="b1" meter={{ known: 1, total: 4, next: "proof" }} segment={null} />);
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "Trusted by many happy families" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(screen.getByText("Add a number your ads can quote, like 10 years in business or 200 homes done.")).toBeTruthy();
+    expect(screen.getByRole("textbox").getAttribute("aria-invalid")).toBe("true");
+    expect(mocks.save).not.toHaveBeenCalled();
+  });
+
+  it("asks for a price or a free first step when the offer has neither", () => {
+    render(<BrandMeterCard businessId="b1" meter={{ known: 0, total: 4, next: "offer" }} segment={null} locale="hi" />);
+    fireEvent.click(screen.getByRole("button", { name: "जोड़ें" }));
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "सबसे अच्छी सर्विस" } });
+    fireEvent.click(screen.getByRole("button", { name: "सेव करें" }));
+    expect(screen.getByText("दाम या मुफ़्त पहला कदम जोड़ें, जैसे ₹999 या मुफ़्त विज़िट।")).toBeTruthy();
+    expect(mocks.save).not.toHaveBeenCalled();
+  });
+
+  it("says 1 thing in Hindi in the singular", () => {
+    render(<BrandMeterCard businessId="b1" meter={{ known: 1, total: 4, next: "proof" }} segment={null} locale="hi" />);
+    expect(screen.getByRole("heading").textContent).toBe("आपके विज्ञापन आपके बारे में 4 में से 1 बात जानते हैं");
+  });
+
   it("Not now hides the card for 7 days", () => {
     render(<BrandMeterCard businessId="b1" meter={{ known: 2, total: 4, next: "why" }} segment={null} />);
     fireEvent.click(screen.getByRole("button", { name: "Not now" }));

@@ -101,6 +101,10 @@
           "offer": "Free demo class",
           "audience": "Class 12 students going abroad"
         }
+      },
+      "needs": {
+        "offer": "Add a price or a free first step, like ₹999 or a free visit.",
+        "proof": "Add a number your ads can quote, like 10 years in business or 200 homes done."
       }
     }
   },

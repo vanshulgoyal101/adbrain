@@ -6,7 +6,7 @@ import { saveBrandFact } from "@/app/(app)/brand/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { translator, type AppLocale } from "@/i18n/locale";
-import { BRAND_METER_SNOOZE_COOKIE, type BrandMeter } from "@/lib/brand/meter";
+import { BRAND_METER_SNOOZE_COOKIE, meterCounts, type BrandMeter } from "@/lib/brand/meter";
 import { PROOF_CHIPS } from "@/lib/brand/setup-fields";
 import { proofFacts } from "@/lib/creative/proof-line";
 
@@ -49,6 +49,11 @@ export function BrandMeterCard({ businessId, meter, segment, locale = "en" }: {
   }
 
   function save() {
+    // Unfilled #1966 blanks get the server's own words; anything else the meter wouldn't count is asked for here.
+    if (!/[{}]/.test(value) && value.trim() && (fact === "offer" || fact === "proof") && !meterCounts(fact, value)) {
+      setError(t(`meter.needs.${fact}`));
+      return;
+    }
     startSaving(async () => {
       const result = await saveBrandFact(businessId, fact!, value);
       if (result.ok) setState("saved");

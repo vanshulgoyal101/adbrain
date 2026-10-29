@@ -27,6 +27,13 @@ export function specificOffer(offer: string | null | undefined): boolean {
 
 const filled = (value: string | null | undefined) => Boolean(value?.trim());
 
+/** Whether one typed line would fill this fact, so the card never says Saved while the meter still asks. */
+export function meterCounts(fact: BrandFact, value: string): boolean {
+  if (fact === "offer") return specificOffer(value);
+  if (fact === "proof") return proofFacts([value]).length > 0;
+  return filled(value);
+}
+
 export function brandMeter(business: MeterBusiness): BrandMeter {
   const usps = business.usps ?? [];
   const has: Record<BrandFact, boolean> = {
