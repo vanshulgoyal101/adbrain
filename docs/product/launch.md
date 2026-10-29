@@ -24,6 +24,9 @@ again updates their saved draft instead of adding another (#1151). If that draft
 expired or was removed in another tab, the owner's current choices are saved as a
 new draft instead, and a tab whose remembered draft is gone forgets it on load
 (unless a creation was in flight) rather than showing "Draft not found." (#681).
+Review and Send to Meta answer in the owner's app language (#2333). If the draft has expired
+when the owner sends it, Send to Meta says so, says nothing was sent to Meta, and says to reload,
+as Review does.
 
 Starting a replacement review invalidates the old send action immediately.
 A failed validation, save, or reconnect does not erase a confirmed operation's

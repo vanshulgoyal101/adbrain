@@ -833,12 +833,6 @@
     },
     {
       "rule": "C5-english-errors",
-      "from": "src/app/api/campaigns/create/route.ts",
-      "to": "English error literals",
-      "lines": 24
-    },
-    {
-      "rule": "C5-english-errors",
       "from": "src/app/api/campaigns/lead-forms/route.ts",
       "to": "English error literals",
       "lines": 2
@@ -860,12 +854,6 @@
       "from": "src/app/api/campaigns/plan/route.ts",
       "to": "English error literals",
       "lines": 8
-    },
-    {
-      "rule": "C5-english-errors",
-      "from": "src/app/api/campaigns/preflight/route.ts",
-      "to": "English error literals",
-      "lines": 5
     },
     {
       "rule": "C5-english-errors",
