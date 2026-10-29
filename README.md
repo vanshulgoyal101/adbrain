@@ -68,7 +68,7 @@ checks. Do not commit credentials or generated private artifacts.
   [roadmap](docs/roadmap.md) and exact release receipt before claiming deployment.
 - Razorpay account activation and website approval are verified, but AdBrain's
   test checkout is not a live payment-to-ad-funding workflow. See
-  [payment readiness](docs/PAYMENTS-PLAN.md#verified-razorpay-account-status).
+  [payment readiness](docs/plans/payments.md#verified-razorpay-account-status).
 - Automatic WhatsApp delivery, team roles, Google Ads and general autonomous
   optimisation are not established product workflows.
 - Read [known limitations](docs/product/README.md#known-limits) before making availability,

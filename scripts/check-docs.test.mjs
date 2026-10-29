@@ -135,12 +135,17 @@ test("layered docs: short pages, an index per folder linking each page, nothing 
     "docs/product/brand.md": long,
     "docs/product/create.md": "# Create\n",
     "docs/operations/runbooks/one.md": "# One\n",
+    "docs/plans/README.md": "# Plans\n[Live](live.md) [Stale](stale.md)\n",
+    "docs/plans/live.md": "# Live\n\n**Status:** active: building it (#1).\n",
+    "docs/plans/stale.md": "# Stale\n\nNo status.\n",
   });
   assert.deepEqual(messages(checkDocumentation(root, { legacyFlat: new Set(["docs/OLD.md"]) })).sort(), [
     "docs/README.md Index does not link docs/operations/README.md",
-    "docs/loose.md Put pages in a docs/ subfolder (product, architecture, api, operations, team)",
+    "docs/README.md Index does not link docs/plans/README.md",
+    "docs/loose.md Put pages in a docs/ subfolder (product, architecture, api, operations, team, plans)",
     "docs/operations Folder has no README.md index",
     "docs/operations/runbooks Folder has no README.md index",
+    "docs/plans/stale.md Plan needs a `**Status:** active` or `**Status:** done` line under its title",
     "docs/product/README.md Index does not link docs/product/create.md",
     "docs/product/brand.md Page has 301 lines; split it (limit 300)",
   ]);
