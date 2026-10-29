@@ -47,7 +47,8 @@
   .row .thumb { width: 52px; flex: 0 0 52px; }
   .details { min-width: 0; flex: 1; }
   .details p { overflow-wrap: anywhere; }
-  .details .button { margin-top: 12px; }
+  .details .button, .details .actions { margin-top: 12px; }
+  .details .actions .button { margin-top: 0; }
   progress { display: block; width: 100%; height: 6px; margin: 12px 0; accent-color: var(--leaf); }
   .rule { margin-top: 8px; padding-left: 10px; border-left: 2px solid var(--amber); }
   .rule.blocked { border-color: var(--red); }
@@ -128,7 +129,7 @@
       <p class="status">Checking…</p>
       <p class="meta" lang="hi">जाँच रहे हैं…</p>
       <div class="panel"><h3>After 10 seconds</h3><p>Still checking. You can keep going; we’ll mark it when it’s ready.</p><p lang="hi">अभी जाँच चल रही है। आप आगे बढ़ सकते हैं; तैयार होते ही बता देंगे।</p></div>
-      <div class="panel"><h3>If our check fails</h3><p>We couldn’t check this one. You can still use it; Meta reviews every ad anyway.</p><div class="actions"><span class="button">Try again</span><span class="button">Use anyway</span></div></div>
+      <div class="panel"><h3>If our check fails</h3><p>We couldn’t check this one. You can try again, or use it as it is.</p><div class="actions"><span class="button">Try again</span><span class="button">Use anyway</span></div></div>
       <p class="note">These are alternative states, not stacked alerts in the product. A check-service failure is not an upload failure or a pass. “Use anyway” accepts only this photo. File validity, rights and blocked-claim rules still apply. Announce state changes politely; don’t move focus.</p>
     </div>
   </section>
@@ -137,7 +138,7 @@
     <div class="bar"><span>AdBrain</span><span class="meta">Photos &amp; videos</span></div>
     <div class="content">
       <h1 id="fit-title">Check the fit</h1>
-      <div class="row"><div class="thumb"><svg aria-hidden="true"><use href="#photo"/></svg></div><div class="details"><h3>Living-room.jpg</h3><div class="rule"><p class="warning">Square photo</p><p>Fine for Feed. Make a tall version for Stories and Reels.</p></div><span class="button">Make a tall version</span><span class="button">Use anyway</span><p class="meta" lang="hi">फिर भी इस्तेमाल करें</p></div></div>
+      <div class="row"><div class="thumb"><svg aria-hidden="true"><use href="#photo"/></svg></div><div class="details"><h3>Living-room.jpg</h3><div class="rule"><p class="warning">Square photo</p><p>Fine for Feed. Make a tall version for Stories and Reels.</p></div><div class="actions"><span class="button">Make a tall version</span><span class="button">Use anyway</span></div><p class="meta">HI: <span lang="hi">लंबा वर्ज़न बनाएँ · फिर भी इस्तेमाल करें</span></p></div></div>
       <div class="row"><div class="thumb"><svg aria-hidden="true"><use href="#photo"/></svg></div><div class="details"><h3>WhatsApp-photo.jpg</h3><div class="rule blocked"><p class="error">This photo is too small.</p><p>Use the original photo, not a screenshot or a WhatsApp copy.</p></div><span class="button">Choose another photo</span></div></div>
       <div class="panel"><h2>One clear next step</h2><p>Fix the photo or accept this warning, then return to the library. A blocked file never gets “Use anyway”.</p></div>
       <p class="note">Keep the photo’s fit guidance after acceptance. No green “passed” badge for an accepted warning. Numeric limits and placement rules come from #751, not this mock. Use #1868’s EN/HI keys; do not copy English into the locale files.</p>
