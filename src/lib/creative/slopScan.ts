@@ -44,6 +44,9 @@ export function capitalWords(text: string): string[] {
   return [...new Set(text.split(/[\s/-]+/).map(bareWord).filter((w) => w === w.toUpperCase() && /\p{Lu}.*\p{Lu}/u.test(w)))];
 }
 
+/** #1609 (CPO): "वीज़ा" is typed precomposed, decomposed or without the nukta, so claims compare without it. */
+export const foldClaimText = (text: string) => text.toLowerCase().normalize("NFD").replace(/[\u093C\u0A3C]/g, "");
+
 /** Return every quality problem found in `text`. Empty array = clean. */
 export function scanAdCopy(text: string, opts: SlopScanOptions = {}): SlopFinding[] {
   const findings: SlopFinding[] = [];
@@ -74,10 +77,11 @@ export function scanAdCopy(text: string, opts: SlopScanOptions = {}): SlopFindin
     findings.push({ rule: "too-long", detail: `${words.length}/${opts.maxWords}` });
   }
 
+  const folded = foldClaimText(text);
   for (const claim of opts.bannedClaims ?? []) {
-    const term = claim.toLowerCase();
+    const term = foldClaimText(claim);
     // "heal" (heals, healed, healing) is a health claim; "health" is not.
-    const found = term === "heal" ? /heal(?!th)/.test(lower) : lower.includes(term);
+    const found = term === "heal" ? /heal(?!th)/.test(folded) : folded.includes(term);
     if (claim && found) {
       findings.push({ rule: "banned-claim", detail: claim });
     }
@@ -175,6 +179,11 @@ export const EDUCATION_BANNED_CLAIMS = [
   "ਗਾਰੰਟੀ",
   "पक्का वीज़ा",
   "ਪੱਕਾ ਵੀਜ਼ਾ",
+  "वीज़ा पक्का",
+  "ਵੀਜ਼ਾ ਪੱਕਾ",
+  "100% वीज़ा",
+  "pakka visa",
+  "visa pakka",
 ];
 
 export function bannedClaimsForVertical(vertical?: string | null): string[] {

@@ -11,6 +11,7 @@ the PRs and issues; priorities belong in [Roadmap](../roadmap.md). Start at [the
 | --- | --- |
 | [How AdBrain works](how-adbrain-works.md) | The whole loop in plain words, with a diagram: start here |
 | [Sign in and connect Meta](setup.md) | Sign in; connect a Meta ad account and Page |
+| [Your first ad on a phone](first-ad.md) | Owner help: sign-up to results on a phone, step by step |
 | [Brand](brand.md) | Build the Brand Brain the ads are written from |
 | [Create and review ads](create.md) | Make ads, edit them, approve them |
 | [Prepare a campaign](launch.md) | Start a campaign draft, WhatsApp campaigns |

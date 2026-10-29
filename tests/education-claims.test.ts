@@ -14,6 +14,23 @@ describe("education banned claims (#1609)", () => {
     expect(flagged("ਪੱਕਾ ਵੀਜ਼ਾ", "Canada visa consultant")).toContain("ਪੱਕਾ ਵੀਜ਼ਾ");
   });
 
+  // CPO (#1609, Oct 29): owners type the nukta precomposed, decomposed or not at all, and in Hinglish.
+  it.each([
+    ["पक्का वी\u091C\u093Cा", "पक्का वीज़ा"], // ज + nukta
+    ["पक्का वी\u095Bा मिलेगा", "पक्का वीज़ा"], // precomposed ज़
+    ["पक्का वीजा मिलेगा", "पक्का वीज़ा"], // no nukta
+    ["ਪੱਕਾ ਵੀਜਾ", "ਪੱਕਾ ਵੀਜ਼ਾ"],
+    ["ਪੱਕਾ ਵੀ\u0A5Bਾ", "ਪੱਕਾ ਵੀਜ਼ਾ"],
+    ["Pakka visa milega", "pakka visa"],
+    ["Visa pakka, apply today", "visa pakka"],
+    ["वीजा पक्का समझो", "वीज़ा पक्का"],
+    ["ਵੀ\u0A1C\u0A3Cਾ ਪੱਕਾ", "ਵੀਜ਼ਾ ਪੱਕਾ"],
+    ["100% वी\u095Bा", "100% वीज़ा"],
+  ])("flags %s whichever way the nukta is typed", (text, term) => {
+    expect(flagged(text, "study abroad consultants")).toContain(term);
+    expect(adPolicyHits([{ id: "a", headline: text }], "study abroad consultants").map((hit) => hit.term)).toContain(term);
+  });
+
   it("flags fixed visa timelines and document fraud (CPO, Analyst #1514)", () => {
     expect(flagged("Visa in 30 days", "study abroad")).toContain("visa in ");
     expect(flagged("Visa interview practice every Saturday", "study abroad")).toEqual([]);
