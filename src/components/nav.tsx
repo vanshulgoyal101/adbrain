@@ -1,6 +1,5 @@
 "use client";
 
-import { OWNER_WORDS } from "@/lib/copy/owner-words";
 import Link, { useLinkStatus } from "next/link";
 import { useState } from "react";
 import { usePathname } from "next/navigation";
@@ -17,19 +16,23 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import en from "../../messages/en.json";
 
-const primaryItems = [
-  { href: "/dashboard", label: "Home", icon: LayoutDashboard },
-  { href: "/create", label: "Create ads", icon: Wand2 },
-  { href: "/studio", label: "Review", icon: Sparkles },
-  { href: "/campaigns", label: "Campaigns", icon: Megaphone },
-  { href: "/leads", label: "Enquiries", icon: Inbox },
+/** #1877: the menu and app-bar words in the owner's language (`shell` in messages/); English by default. */
+export type ShellLabels = typeof en.shell;
+
+const primaryItems: { href: string; key: keyof ShellLabels; icon: LucideIcon }[] = [
+  { href: "/dashboard", key: "home", icon: LayoutDashboard },
+  { href: "/create", key: "create", icon: Wand2 },
+  { href: "/studio", key: "review", icon: Sparkles },
+  { href: "/campaigns", key: "campaigns", icon: Megaphone },
+  { href: "/leads", key: "enquiries", icon: Inbox },
 ];
 
-const workspaceItems = [
-  { href: "/brand", label: OWNER_WORDS.business, icon: Building2 },
-  { href: "/assets", label: "Assets", icon: ImageIcon },
-  { href: "/settings", label: "Settings", icon: Settings },
+const workspaceItems: typeof primaryItems = [
+  { href: "/brand", key: "business", icon: Building2 },
+  { href: "/assets", key: "assets", icon: ImageIcon },
+  { href: "/settings", key: "settings", icon: Settings },
 ];
 
 const navClass = (active: boolean) =>
@@ -69,9 +72,11 @@ function NavItem({ href, label, icon, active, unseenCount = 0 }: {
 export function Nav({
   orientation = "vertical",
   unseenCount = 0,
+  labels = en.shell,
 }: {
   orientation?: "vertical" | "horizontal";
   unseenCount?: number;
+  labels?: ShellLabels;
 }) {
   const pathname = usePathname();
   return (
@@ -84,17 +89,17 @@ export function Nav({
           : "scrollbar-none flex-row overflow-x-auto",
       )}
     >
-      {primaryItems.map(({ href, label, icon: Icon }) => {
+      {primaryItems.map(({ href, key, icon: Icon }) => {
         const active = pathname === href || pathname.startsWith(href + "/");
         return (
-          <NavItem key={href} href={href} label={label} icon={Icon} active={active} unseenCount={href === "/leads" ? unseenCount : 0} />
+          <NavItem key={href} href={href} label={labels[key]} icon={Icon} active={active} unseenCount={href === "/leads" ? unseenCount : 0} />
         );
       })}
       {orientation === "vertical" && <div className="h-4" aria-hidden="true" />}
-      {workspaceItems.map(({ href, label, icon: Icon }) => {
+      {workspaceItems.map(({ href, key, icon: Icon }) => {
         const active = pathname === href || pathname.startsWith(href + "/");
         return (
-          <NavItem key={href} href={href} label={label} icon={Icon} active={active} />
+          <NavItem key={href} href={href} label={labels[key]} icon={Icon} active={active} />
         );
       })}
     </nav>

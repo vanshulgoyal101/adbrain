@@ -25,7 +25,7 @@ export function WhatsAppChats({ rows }: { rows: WhatsAppChatRow[] }) {
             <span className="min-w-0 break-words">{row.chats > 0
               ? `${formatNumber(row.chats)} ${row.chats === 1 ? "chat" : "chats"} started from “${row.name}” on WhatsApp. The messages are in your WhatsApp Business app. Add the real enquiries here to see which ad brings customers.`
               : loggedCount > 0
-                ? `${formatNumber(loggedCount)} ${loggedCount === 1 ? "chat" : "chats"} logged from “${row.name}”.`
+                ? `You added ${formatNumber(loggedCount)} real ${loggedCount === 1 ? "enquiry" : "enquiries"} from “${row.name}”.`
                 : `No chats started yet from “${row.name}”.`}</span>
           </p>
           <WhatsAppEnquiries compact campaignId={row.id} spend={row.spend} enquiries={loggedCount}

@@ -42,7 +42,7 @@ zero service/ad allocation and a `verificationAllocationPaise` equal to the tota
 The eligible owner may refresh a verification quote before creating an order,
 but an existing order cannot be repriced or replaced while unresolved. Captures
 and refunds use saved amounts, and the one-time verification order remains visible
-ahead of recent annual orders. See [configuration and restoration](../CONFIGURATION.md#configurable-live-amounts).
+ahead of recent annual orders. See [configuration and restoration](../operations/configuration-payments.md#configurable-live-amounts).
 
 For an eligible pilot without a saved verification order, GET returns
 `verificationAmountRange: {minPaise:100,maxPaise:<configured ceiling>}`; otherwise
