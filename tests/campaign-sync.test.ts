@@ -17,7 +17,7 @@ vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({
   auth: { getUser: async () => ({ data: { user: { id: "owner" } } }) },
   from: () => {
     const query = {
-      select: () => query, eq: () => query, maybeSingle: async () => ({ data: mocks.existing, error: null }),
+      select: () => query, eq: () => query, in: () => query, maybeSingle: async () => ({ data: mocks.existing, error: null }),
       order: async () => ({ data: [], error: null }),
       insert: mocks.insert, update: (value: unknown) => { mocks.update(value); return query; },
       then: (resolve: (value: unknown) => unknown) => Promise.resolve({ error: null }).then(resolve),

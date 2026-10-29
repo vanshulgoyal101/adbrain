@@ -1578,6 +1578,24 @@ export class MetaClient {
     return { campaigns: result.data, nextCursor: result.paging?.next ? result.paging.cursors!.after! : null };
   }
 
+  /** #2268: which of these stored campaigns Meta deleted or archived (the listing above leaves them out). ≤ 50 per read. */
+  async readGoneCampaigns(campaignIds: readonly string[]): Promise<Map<string, "DELETED" | "ARCHIVED">> {
+    const gone = new Map<string, "DELETED" | "ARCHIVED">();
+    const account = this.creds.adAccountId.replace(/^act_/, "");
+    for (let offset = 0; offset < campaignIds.length; offset += 50) {
+      const ids = campaignIds.slice(offset, offset + 50);
+      const query = new URLSearchParams({ ids: ids.join(","), fields: "id,account_id,status,effective_status" });
+      const nodes = await this.graph<Record<string, { id?: string; account_id?: string; status?: string; effective_status?: string } | undefined>>(`?${query}`);
+      for (const id of ids) {
+        const node = nodes[id];
+        if (node?.id !== id || node.account_id !== account) continue;
+        const status = [node.effective_status, node.status].find((value) => value === "DELETED" || value === "ARCHIVED");
+        if (status === "DELETED" || status === "ARCHIVED") gone.set(id, status);
+      }
+    }
+    return gone;
+  }
+
   /** The campaign's daily-budget binding to this account and Page, or why sync must leave it unchanged (#671). */
   async readBoundCampaign(campaign: MetaCampaignSummary & { account_id: string; lifetime_budget?: string }, cappedAdSetIds: readonly string[] = []): Promise<{ dailyBudgetRupees: number; adSetId: string; destination: CampaignDestination } | { skip: CampaignSkipReason }> {
     if (campaign.account_id !== this.creds.adAccountId.replace(/^act_/, "")) return { skip: "other_account" };

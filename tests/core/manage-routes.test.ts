@@ -632,4 +632,46 @@ describe("core: manage routes against recorded Graph responses (#649)", () => {
     expect(store.state.tables.campaigns.find(row => row.id === STORED)?.status).not.toBe("paused");
     expect(graph.sent.every(call => call.method === "GET")).toBe(true);
   });
+
+  // #2268 (QA on #2261): Meta's /campaigns listing leaves deleted campaigns out, so Sync never revisited a stored paused
+  // row deleted in Ads Manager and Manage kept saying "Paused". Sync now reads the unlisted stored rows in one `?ids=` GET.
+  // The batch answer is Graph's `?ids=` envelope around recorded bodies: campaign-deleted.json's status read (DELETED)
+  // and sync.json's listing entry for a campaign still PAUSED.
+  const DELETED = "120253706331870526", STILL_PAUSED = "120253164673180526";
+  const statusRead = (body: Row, status = 200): Exchange => ({
+    method: "GET", path: `?${new URLSearchParams({ ids: `${DELETED},${STILL_PAUSED}`, fields: "id,account_id,status,effective_status" })}`, status, body,
+  });
+  const recordedStatuses = () => {
+    const deleted = (deletedTape.tape as Exchange[])[2].body as Row;
+    const paused = ((syncTape as Exchange[])[0].body as { data: Row[] }).data.find(campaign => campaign.id === STILL_PAUSED)!;
+    return {
+      [DELETED]: { id: deleted.id, account_id: deleted.account_id, status: deleted.status, effective_status: deleted.effective_status },
+      [STILL_PAUSED]: { id: paused.id, account_id: paused.account_id, status: paused.status, effective_status: paused.status },
+    };
+  };
+
+  it("sync: a stored paused campaign deleted in Meta is ended as deleted; one still paused in Meta is left alone", async () => {
+    storeCampaign({ meta_campaign_id: DELETED, status: "paused" });
+    const kept = storeCampaign({ id: "00000000-0000-4000-8000-000000000005", meta_campaign_id: STILL_PAUSED, status: "paused" });
+    replay(tapes.sync([SYNCED]), [statusRead(recordedStatuses())]);
+    const response = await sync();
+    expect(response.status).toBe(200);
+    const ended = store.state.tables.campaigns.find(row => row.meta_campaign_id === DELETED)!;
+    expect(ended).toMatchObject({ status: "completed", raw: { metaStatus: "DELETED", metaGoneAt: expect.any(String) } });
+    expect(store.state.tables.campaigns.find(row => row.meta_campaign_id === STILL_PAUSED)).toEqual(kept);
+    const { goneInMeta } = await import("@/lib/campaign/gone-in-meta");
+    expect(goneInMeta(ended as never)).toBe("Deleted in Meta");
+    expect(graph.sent.every(call => call.method === "GET" && call.access === ACCESS)).toBe(true);
+    expect(graph.pending).toEqual([]);
+  });
+
+  it("sync: when Meta refuses the status read, every stored row is kept and the sync still succeeds", async () => {
+    const before = [storeCampaign({ meta_campaign_id: DELETED, status: "paused" }),
+      storeCampaign({ id: "00000000-0000-4000-8000-000000000005", meta_campaign_id: STILL_PAUSED, status: "paused" })];
+    replay(tapes.sync([SYNCED]), [statusRead({ error: { message: "Unsupported get request.", type: "GraphMethodException", code: 100 } }, 400)]);
+    const response = await sync();
+    expect(response.status).toBe(200);
+    expect(store.state.tables.campaigns.filter(row => row.meta_campaign_id !== SYNCED)).toEqual(before);
+    expect(graph.pending).toEqual([]);
+  });
 });
