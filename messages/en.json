@@ -494,5 +494,64 @@
     "assets": "Assets",
     "settings": "Settings",
     "getStarted": "Get started"
+  },
+  "campaigns": {
+    "header": {
+      "running": "{n} running",
+      "paused": "{n} paused",
+      "newCampaign": "New campaign",
+      "closeSetup": "Close campaign setup",
+      "moreOptions": "More options",
+      "notConnected": "Meta isn’t connected yet. Connect an existing business to continue, or keep this campaign as a draft.",
+      "connect": "Connect Business",
+      "openSettings": "Open Settings",
+      "title": "Your campaigns",
+      "listActions": "More list actions",
+      "exportReport": "Export report",
+      "syncing": "Syncing…",
+      "sync": "Sync from Meta",
+      "synced": "Synced {age}"
+    },
+    "filters": {
+      "search": "Search campaigns",
+      "status": "Campaign status",
+      "all": "All statuses",
+      "active": "Running",
+      "paused": "Paused",
+      "draft": "Draft",
+      "completed": "Completed",
+      "noMatch": "No matching campaigns",
+      "clear": "Clear filters"
+    },
+    "empty": {
+      "noneRunning": "None running",
+      "none": "No campaigns yet",
+      "drafts": "{n, plural, one {Your # saved draft is below.} other {Your # saved drafts are below.}}",
+      "start": "Pick your approved ads and a daily budget. Nothing spends until you go live."
+    },
+    "list": {
+      "deleted": "Deleted ({n})",
+      "loading": "Loading campaigns...",
+      "loadMore": "Load more campaigns"
+    },
+    "sync": {
+      "more": "More campaigns are available. Sync again to continue.",
+      "done": "Campaign sync completed.",
+      "failed": "Couldn't sync from Meta. Your campaigns below are from the last sync; try Sync from Meta again.",
+      "offline": "Couldn't reach Meta. Check your connection, then try Sync from Meta again.",
+      "named": "\"{name}\" was left unchanged: {reason}.",
+      "unnamed": "A campaign was left unchanged: {reason}.",
+      "rest": "{n, plural, one {# more campaign was left unchanged.} other {# more campaigns were left unchanged.}}",
+      "reasons": {
+        "not_running": "it's archived or deleted in Meta",
+        "other_account": "it belongs to a different ad account",
+        "other_page": "it advertises a different Facebook Page",
+        "other_connection": "it was launched from a different ad account or Page",
+        "other_business": "it's managed in another AdBrain business on this ad account",
+        "lifetime_budget": "it uses a lifetime budget set in Meta, which AdBrain doesn't manage",
+        "capped": "it runs on a spend cap AdBrain manages, so sync leaves it as is",
+        "unsupported": "its ad sets or budget aren't a setup AdBrain can manage"
+      }
+    }
   }
 }

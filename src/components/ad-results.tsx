@@ -6,9 +6,8 @@ import type { AdResultView } from "@/lib/campaign/ad-results-store";
 import { KEEP_HIDES_MS, pauseSuggestion, type PauseSuggestion } from "@/lib/campaign/ad-pause";
 import { formatMoney, formatNumber } from "@/lib/format";
 import { Button } from "@/components/ui/button";
-import { ageParts } from "@/lib/leads/digest";
 import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
-import { verdictTranslator, type Words } from "@/i18n/words";
+import { ageText, verdictTranslator, type Words } from "@/i18n/words";
 
 const SHOWN = 3;
 
@@ -55,11 +54,6 @@ function Row({ ad, unit, t }: { ad: AdResultView; unit: Unit; t: T }) {
     </li>
   );
 }
-
-const updatedAge = (t: T, iso: string) => {
-  const age = ageParts(iso, new Date());
-  return !age || age.unit === "now" ? t("ads.age.now") : t(`ads.age.${age.unit}`, { n: age.n });
-};
 
 const keepKey = (campaignId: string, adId: string) => `adbrain.keepAd.${campaignId}.${adId}`;
 const named = (ad: Named, t: T) => `“${adLabel(ad, t)}”`;
@@ -204,7 +198,7 @@ export function AdResults({ campaignId, whatsapp = false, onRunAgain, runAgainBu
           {loaded.ads.length > SHOWN && !all && (
             <button type="button" className="mt-1 min-h-11 font-medium text-blue-700 underline-offset-4 hover:underline" onClick={() => setAll(true)}>{t("ads.all", { n: loaded.ads.length })}</button>
           )}
-          {loaded.syncedAt && <p className="pt-2 text-xs text-slate-500">{t("ads.updated", { age: updatedAge(t, loaded.syncedAt) })}</p>}
+          {loaded.syncedAt && <p className="pt-2 text-xs text-slate-500">{t("ads.updated", { age: ageText(t, loaded.syncedAt) })}</p>}
           {canRunAgain && onRunAgain && (
             <div className="pt-3">
               <button type="button" disabled={runAgainBusy} onClick={onRunAgain}
