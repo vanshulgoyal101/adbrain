@@ -147,7 +147,7 @@ consent. An account ID is not funding evidence, and a displayed limit is not a
 count of unused slots. Never create portfolios/accounts to evade restrictions.
 
 Existing-account connection remains available through the documented
-[Meta workflow](META_CONNECT.md). Proposed agency ownership, access and offboarding
+[Meta workflow](architecture/channels/meta-connect.md). Proposed agency ownership, access and offboarding
 terms must be explicit; do not promise ownership transfer or silently rebind
 existing accounts. Preserve uncertainty after a provisioning timeout rather than
 blindly creating another account.
@@ -320,7 +320,7 @@ platform for this narrowed scope.
 ## 9. Implementation Receipt
 
 [API Reference](api/README.md), [Configuration](operations/configuration.md) and
-[Testing](TESTING.md) own current commands/contracts; historical commands are not
+[Testing](team/testing.md) own current commands/contracts; historical commands are not
 unconditional setup instructions.
 
 Current source requires `PAYMENTS_TEST_ENABLED=true`, a loopback Supabase URL,

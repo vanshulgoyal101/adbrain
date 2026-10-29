@@ -23,7 +23,8 @@ import { readSetupChecklist } from "@/lib/meta/setup-status";
 import { getMetaConnection } from "@/lib/meta/credentials";
 import { metaOAuthConfigured } from "@/lib/meta/oauth";
 import { createClient } from "@/lib/supabase/server";
-import { getApprovedCreatives, getPrimaryBusiness, getSpendEvaluation } from "@/lib/supabase/queries";
+import { getApprovedCreatives, getCampaigns, getPrimaryBusiness, getSpendEvaluation } from "@/lib/supabase/queries";
+import { pausableCampaigns } from "@/lib/campaign/gone-in-meta";
 import { ProspectHandOver } from "@/components/prospect-hand-over";
 import { isProspectAccount } from "@/lib/internal-accounts";
 import { transferChecks } from "@/lib/prospect/transfer";
@@ -175,13 +176,15 @@ async function ConnectionSettings({ businessId, searchParams, whatsapp }: {
 }) {
   // #759: payment shows only where AdBrain holds ad money; an unreadable mode shows none.
   const mode = await fundingMode(businessId).catch(() => null);
-  const [result, params, initialBalance, locale] = await Promise.all([
+  const [result, params, initialBalance, locale, campaigns] = await Promise.all([
     getMetaConnection(businessId).then(connection => ({ connection })).catch(() => ({ connection: null })),
     searchParams,
     mode === "managed" && isProductionPaymentConfigured()
       ? requireOwnedBusiness(businessId).then(getCustomerBalance).then(toCustomerBalanceView).catch(() => null)
       : Promise.resolve(null),
     requestLocale(),
+    // #1968: Pause all sits under "If you stop", which only an own-account owner sees.
+    mode === "own" ? getCampaigns(businessId).catch(() => []) : Promise.resolve([]),
   ]);
   return (
     <>
@@ -201,7 +204,7 @@ async function ConnectionSettings({ businessId, searchParams, whatsapp }: {
         </Suspense>
       )}
       {whatsapp}
-      <BillingSection mode={mode} locale={locale} connection={result.connection} testBusinessId={isRazorpayTestEnabled() ? businessId : undefined}
+      <BillingSection mode={mode} locale={locale} runningCampaigns={pausableCampaigns(campaigns)} connection={result.connection} testBusinessId={isRazorpayTestEnabled() ? businessId : undefined}
         liveBusinessId={isProductionPaymentConfigured() ? businessId : undefined} initialBalance={initialBalance}
         billingTab={typeof params.billing === "string" ? params.billing : null} />
     </>

@@ -14,6 +14,7 @@ import { setupResumeStep } from "@/lib/setup/resume";
 import { getMetaConnection } from "@/lib/meta/credentials";
 import { HomeRejectedAds } from "@/components/home-rejected-ads";
 import { PilotDay7Card } from "@/components/pilot-day7-card";
+import { homeCustomers, homeResults } from "@/lib/campaign/home-results";
 import { pilotDay7Visible } from "@/lib/feedback/pilot-day7";
 import { pilotDay7Facts } from "@/lib/feedback/pilot-day7-store";
 import { adResultsEnabled } from "@/lib/campaign/ad-results-store";
@@ -89,6 +90,8 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
   // #1650: after the first week, one question for the pricing call (#718); unreadable means not shown.
   const pilotFacts = business && campaigns.some((campaign) => campaign.launched_at) ? await pilotDay7Facts(business.id).catch(() => null) : null;
   const askPilot = Boolean(pilotFacts && pilotDay7Visible({ ...pilotFacts, now: new Date() }));
+  // #2026: the card repeats Home's customer line above the ₹999 question; nothing when none is marked.
+  const customerLine = askPilot ? homeCustomers(homeResults(campaigns, results)) : null;
 
   return (
     <WorkspaceHome
@@ -100,7 +103,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
       waiting={waiting}
       firstEnquiry={firstEnquiry}
       adReview={adReview}
-      pilotQuestion={askPilot && business ? <PilotDay7Card businessId={business.id} locale={locale} /> : null}
+      pilotQuestion={askPilot && business ? <PilotDay7Card businessId={business.id} locale={locale} customers={customerLine?.kind === "line" ? customerLine : null} /> : null}
       rejectedAds={adReview?.kind === "rejected" && newest && (
         <Suspense fallback={null}>
           <HomeRejectedAds campaign={newest} vertical={business?.vertical} spend={(results as Record<string, { spend?: number }>)[newest.id]?.spend ?? 0} />

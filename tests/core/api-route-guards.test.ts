@@ -102,6 +102,8 @@ const ROUTES: Record<string, Entry> = {
   "preferences": { kind: "session", methods: ["GET", "POST"], why: "session: RLS client (the owner's own preferences)" },
   "privacy-requests": { kind: "session", methods: ["GET", "POST"], why: "session: RLS client (the user's own requests)" },
   "privacy-requests/operator": { kind: "session", methods: ["GET", "PATCH"], why: "session: privacy_request_operator_allowed (a user-ID grant table, #1723)" },
+  "prospect/claim": { kind: "session", methods: ["POST"], why: "session client; business_transfer_claim/decline check auth.uid() is the invited, confirmed email" },
+  "prospect/transfer": { kind: "session", methods: ["DELETE", "POST"], why: "prospect account + owner_id = caller via RLS client; the admin RPCs re-check owner_id = p_from_user_id" },
   "spend-limits": { kind: "session", methods: ["POST"], why: "session: business from getPrimaryBusiness(), never from input" },
   "whatsapp/webhook": { kind: "webhook", methods: ["GET", "POST"] },
 };

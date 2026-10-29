@@ -17,3 +17,9 @@ export function recentlyDeletedInMeta(campaign: Pick<Campaign, "raw">, now: numb
   const at = Date.parse(String((campaign.raw as { metaGoneAt?: unknown }).metaGoneAt ?? ""));
   return Number.isFinite(at) && now - at < 7 * 86_400_000;
 }
+
+/** #1968: the campaigns Pause all stops (running and still in Meta), in the shape Home and Settings both pass it. */
+export function pausableCampaigns<T extends Pick<Campaign, "id" | "name" | "status" | "raw" | "meta_ad_account_id" | "meta_campaign_id">>(campaigns: T[]) {
+  return campaigns.filter((campaign) => campaign.status === "active" && !goneInMeta(campaign))
+    .map(({ id, name, meta_ad_account_id, meta_campaign_id }) => ({ id, name, meta_ad_account_id, meta_campaign_id }));
+}
