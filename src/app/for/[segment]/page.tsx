@@ -117,8 +117,9 @@ export default async function SegmentPage({ params }: { params: Promise<{ segmen
           <dl className={styles.costs}>
             <div><dt>Setup</dt><dd><strong>Free</strong><span>We make your ads and set up your first campaign with you, in about 20 minutes.</span></dd></div>
             <div><dt>Ads</dt><dd><strong>You pay Meta directly</strong><span>From your own ad account. We suggest ₹300 a day for 7 days (₹2,100 plus Meta&apos;s GST). Stop any time.</span></dd></div>
-            <div><dt>AdBrain</dt><dd><strong>₹999 a month</strong><span>First month free. No auto-debit, no lock-in.</span></dd></div>
+            <div><dt>AdBrain</dt><dd><strong>₹999 a month</strong><span>First month free. No auto-debit, stop any time, and a full refund for any month you pay but don&apos;t start a new campaign.</span></dd></div>
           </dl>
+          <p className={styles.note}><Link href="/#pricing" className={styles.pricingLink}>Questions about pricing</Link></p>
         </section>
 
         <section className={styles.block} aria-labelledby="steps-title">

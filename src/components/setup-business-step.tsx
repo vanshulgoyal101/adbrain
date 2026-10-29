@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import {
-  SETUP_FIELDS, SETUP_FIELD_LIMITS, setupFieldErrors, setupFieldsFrom, setupLocations,
+  PROOF_CHIPS, SETUP_FIELDS, SETUP_FIELD_LIMITS, setupFieldErrors, setupFieldsFrom, setupLocations,
   type SetupBusinessFields, type SetupField,
 } from "@/lib/brand/setup-fields";
 import type { BrandExtraction } from "@/lib/templates/ads";
@@ -25,11 +25,6 @@ const AUTOSAVE_MS = 800;
 
 /** Fields with a helper line under them (the CPO's #1251 words; text in messages `setup.business.fields`). */
 const HAS_HELPER: Record<Exclude<SetupField, "usp">, boolean> = { name: false, vertical: false, locations: true, offer: true, phone: true };
-const PROOF_CHIPS = {
-  solar: ["solarTeam", "solarHomes"],
-  ielts: ["ieltsSize", "ieltsMock", "ieltsEvening"],
-  interiors: ["interiorsDesign", "interiorsWorkshop", "interiorsKitchens"],
-} as const;
 
 /**
  * #1269 (#1251 WS1 step 1): five required fields and an optional selling point (#1966), saved as they type.

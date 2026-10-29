@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildWorkQueue, missingBrandContext } from "@/lib/work-queue";
+import { buildWorkQueue } from "@/lib/work-queue";
 
 const business = {
   name: "Test business",
@@ -18,21 +18,9 @@ describe("workspace work queue", () => {
     expect(buildWorkQueue(base).map((item) => item.id)).toEqual(["create"]);
   });
 
-  it("does not call an incomplete business ready", () => {
-    const incomplete = {
-      ...business,
-      description: " ",
-      locations: [""],
-      target_audience: null,
-    };
-    expect(missingBrandContext(incomplete)).toEqual([
-      "business description",
-      "target audience",
-      "service areas",
-    ]);
-    expect(buildWorkQueue({ ...base, business: incomplete })[0].id).toBe(
-      "context",
-    );
+  it("leaves the Brand nudge to Home's meter: no unranked list of missing fields (#2032)", () => {
+    const incomplete = { ...business, description: " ", brand_voice: null, locations: [""], target_audience: null };
+    expect(buildWorkQueue({ ...base, business: incomplete }).map((item) => item.id)).toEqual(["create"]);
   });
 
   it("routes review directly to drafts", () => {

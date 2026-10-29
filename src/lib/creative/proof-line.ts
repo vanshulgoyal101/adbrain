@@ -8,7 +8,8 @@ export type ProofFact = { fact: string; keys: string[] };
 const CREDENTIAL = /\b(?:IIT(?:\s+[A-Z][a-z]+)?|NIT(?:\s+[A-Z][a-z]+)?|IIM(?:\s+[A-Z][a-z]+)?|PEC(?:\s+[A-Z][a-z]+)?|AIIMS|MBBS|BDS|MDS|MD|MNRE|ISO\s?\d{3,5}|BIS|NABH|NABL|CA|CFA|RERA|BEE)\b/g;
 const NAMED_AWARD = /\b(?:certified|licensed|accredited|registered|award(?:ed)?|approved)\b/i;
 const YEARS = /\b(\d{1,3})\+?\s*(?:years?|yrs?)\b|\bsince\s+((?:19|20)\d{2})\b|(\d{1,3})\+?\s*(?:साल|वर्ष)/giu;
-const JOBS = /\b(\d[\d,]*)\s*\+?\s*(?:homes?|houses?|installations?|customers?|clients?|patients?|projects?|families|jobs|systems?|students?|kW|MW|rooftops?)\b/gi;
+// #2120: Hindi job nouns too; `\b` doesn't work next to Devanagari, so the noun ends where no letter or vowel sign follows.
+const JOBS = /\b(\d[\d,]*)['’"]?\s*\+?\s*(?:homes?|houses?|installations?|customers?|clients?|patients?|projects?|families|jobs|systems?|students?|kitchens?|kW|MW|rooftops?|घरों|घर|ग्राहकों|ग्राहक|छात्रों|छात्र|परिवारों|परिवार|प्रोजेक्ट|सिस्टम|किचन)(?![\p{L}\p{M}\p{N}])/giu;
 const WARRANTY = /\b(\d{1,2})[- ]?(?:year|yr)s?\b[^.]{0,30}\bwarrant(?:y|ies)\b|\bwarrant(?:y|ies)\b[^.]{0,30}\b(\d{1,2})[- ]?(?:year|yr)s?\b/gi;
 
 /** The Brand facts that are proof, each with the words an ad must repeat to cite it. */

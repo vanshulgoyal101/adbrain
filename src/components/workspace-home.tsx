@@ -20,7 +20,7 @@ import { formatReplyTime } from "@/lib/leads/first-reply";
 import { campaignStatus, Status } from "@/components/ui/status";
 import { goneInMeta, pausableCampaigns, recentlyDeletedInMeta } from "@/lib/campaign/gone-in-meta";
 import type { HomeAdReview } from "@/lib/campaign/home-ad-review";
-import { timeAgoIn, translator, type AppLocale } from "@/i18n/locale";
+import { namespaceMessages, timeAgoIn, translator, type AppLocale } from "@/i18n/locale";
 
 export interface WorkspaceHomeProps {
   business: Business | null;
@@ -43,8 +43,14 @@ export interface WorkspaceHomeProps {
   adReview?: HomeAdReview | null;
   /** #1469: the streamed rejected-ads section, shown when `adReview` is "rejected". */
   rejectedAds?: ReactNode;
+  /** #2032: the Brand meter card, after the next step; left out when the Brand is complete or snoozed. */
+  brandMeter?: ReactNode;
+  /** #1668: the streamed Monday "last week" card. */
+  weekSummary?: ReactNode;
   /** #1650: the day-7 'would you pay ₹999 a month?' card, when it's due. */
   pilotQuestion?: ReactNode;
+  /** #2036: the weekly results card for WhatsApp Status, when it's offered. */
+  resultsCard?: ReactNode;
   now?: number;
   /** #1438: the owner's app language (Settings); English by default. */
   locale?: AppLocale;
@@ -70,7 +76,10 @@ export function WorkspaceHome({
   firstEnquiry = null,
   adReview = null,
   rejectedAds,
+  weekSummary,
   pilotQuestion,
+  resultsCard,
+  brandMeter,
   now,
   locale = "en",
 }: WorkspaceHomeProps) {
@@ -79,7 +88,7 @@ export function WorkspaceHome({
   const liveCampaigns = campaigns.filter((campaign) => !goneInMeta(campaign) || recentlyDeletedInMeta(campaign, now));
   const summary = business ? homeResults(campaigns, results) : null;
   // #1292's line already names the newest person waiting, so the verdict doesn't say it twice.
-  const verdicts = business ? homeVerdicts(campaigns, results, { now, waiting: firstEnquiry ? 0 : waiting }) : null;
+  const verdicts = business ? homeVerdicts(campaigns, results, { now, waiting: firstEnquiry ? 0 : waiting, words: { locale, messages: namespaceMessages(locale, "verdict") } }) : null;
   const leadCampaign = verdicts?.lead ? campaigns.find((campaign) => campaign.id === verdicts.lead?.campaignId) : null;
   const stale = business ? staleCampaignIds(campaigns, results, now) : [];
   const unlogged = business ? unloggedChats(campaigns, results) : 0;
@@ -120,6 +129,8 @@ export function WorkspaceHome({
         <p role="status" aria-label={t("metaReview")} className="text-sm text-slate-900">{t("metaChecking")}</p>
       )}
       {adReview?.kind === "rejected" && rejectedAds}
+      {weekSummary}
+      {resultsCard}
       {pilotQuestion}
 
       {stale.length > 0 && <StaleResultsRefresher campaignIds={stale} />}
@@ -207,6 +218,8 @@ export function WorkspaceHome({
               </div>
             )}
           </section>
+
+          {brandMeter}
 
           {business && (
             <section aria-labelledby="campaigns-title" className="min-w-0">
