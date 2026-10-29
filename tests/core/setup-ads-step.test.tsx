@@ -6,10 +6,11 @@ import { setupAdCost, setupBatch, setupGoal, setupPicks } from "@/lib/creative/s
 import type { Business, Creative } from "@/lib/types";
 
 // #1270 (#1251 WS1 slice 3): step 2 makes 3 ads with the existing Create calls and pre-picks the best 2.
-const mocks = vi.hoisted(() => ({ push: vi.fn(), setCreativeStatus: vi.fn(), downloadBlob: vi.fn() }));
+const mocks = vi.hoisted(() => ({ push: vi.fn(), setCreativeStatus: vi.fn(), downloadBlob: vi.fn(), saveAdLanguage: vi.fn(async () => ({ ok: true })) }));
 vi.mock("@/lib/download", () => ({ downloadBlob: mocks.downloadBlob }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: mocks.push }) }));
 vi.mock("@/app/(app)/studio/actions", () => ({ setCreativeStatus: mocks.setCreativeStatus }));
+vi.mock("@/app/(app)/brand/actions", () => ({ saveAdLanguage: mocks.saveAdLanguage }));
 import { SetupAdsStep, storyFor } from "@/components/setup-ads-step";
 
 const business = { id: "11111111-1111-4111-8111-111111111111", name: "SunPeak Solar", vertical: "Rooftop solar", locations: ["Jaipur"],
@@ -110,7 +111,8 @@ describe("core: <SetupAdsStep> (#1270)", () => {
     const assistantBodies = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.filter(([url]) => url === "/api/creatives/assistant").map(([, init]) => JSON.parse(String(init.body)));
     expect(assistantBodies[1].answers[0]).toMatchObject({ question: "Which offer?", answer: "Let the AI decide the best option based on the brand." });
     expect(generate).toHaveBeenCalledTimes(1);
-    expect(generate.mock.calls[0][0]).toMatchObject({ businessId: business.id, brief: "Rooftop solar brief", count: 3, language: "en" });
+    // #1681 (CPO #1669): a solar business with no Brand language gets Hinglish ads by default.
+    expect(generate.mock.calls[0][0]).toMatchObject({ businessId: business.id, brief: "Rooftop solar brief", count: 3, language: "hinglish" });
     expect(screen.getByRole("button", { name: /Ad b/ })).toHaveAttribute("aria-pressed", "false");
     // The run's id is gone; only its result stays, for other tabs (#1534), and expires like the id.
     expect(localStorage.getItem(`setup-generation:${business.id}`)).toBeNull();
@@ -132,6 +134,23 @@ describe("core: <SetupAdsStep> (#1270)", () => {
     await act(async () => fireEvent.click(bar().getByRole("button", { name: "Make 3 ads" })));
     expect(await screen.findByRole("heading", { name: "Your ads are ready" })).toBeInTheDocument();
     expect(generate).toHaveBeenCalledTimes(1);
+  });
+
+  it("#1681: before Make 3 ads, 'Ads in' picks the batch's language and saves it; the row is gone once making starts", async () => {
+    const generate = vi.fn();
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "/api/creatives/assistant") return Response.json({ ready: true, brief: "b" });
+      generate(JSON.parse(String(init?.body)));
+      return new Promise<Response>(() => {});
+    }));
+    render(<SetupAdsStep business={business} initialAds={[]} earlier />);
+    expect(screen.getByRole("button", { name: "Hinglish" })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByRole("button", { name: "हिंदी" }));
+    expect(mocks.saveAdLanguage).toHaveBeenCalledWith(business.id, "hi");
+    await act(async () => fireEvent.click(bar().getByRole("button", { name: "Make 3 ads" })));
+    await waitFor(() => expect(generate).toHaveBeenCalledTimes(1));
+    expect(generate.mock.calls[0][0]).toMatchObject({ language: "hi" });
+    expect(screen.queryByRole("group", { name: "Your ads will be in" })).toBeNull();
   });
 
   it("#1475: earlier ads but a batch already running (another tab) resumes it, still never a new one", async () => {

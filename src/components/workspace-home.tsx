@@ -12,15 +12,14 @@ import { homeResults } from "@/lib/campaign/home-results";
 import { homeVerdicts } from "@/lib/campaign/card-verdict";
 import { staleCampaignIds } from "@/lib/campaign/results-freshness";
 import { StaleResultsRefresher } from "@/components/stale-results-refresher";
-import { timeAgo } from "@/lib/utils";
 import type { SpendEvaluation } from "@/lib/campaign/spend";
 import type { AuditLog, Business, Campaign, CampaignResult, CreativePreview } from "@/lib/types";
 import { campaignAttention } from "@/lib/campaign/health";
 import { formatReplyTime } from "@/lib/leads/first-reply";
 import { campaignStatus, Status } from "@/components/ui/status";
-import { goneInMeta } from "@/lib/campaign/gone-in-meta";
+import { goneInMeta, recentlyDeletedInMeta } from "@/lib/campaign/gone-in-meta";
 import type { HomeAdReview } from "@/lib/campaign/home-ad-review";
-import { translator, type AppLocale } from "@/i18n/locale";
+import { timeAgoIn, translator, type AppLocale } from "@/i18n/locale";
 
 export interface WorkspaceHomeProps {
   business: Business | null;
@@ -43,6 +42,8 @@ export interface WorkspaceHomeProps {
   adReview?: HomeAdReview | null;
   /** #1469: the streamed rejected-ads section, shown when `adReview` is "rejected". */
   rejectedAds?: ReactNode;
+  /** #1650: the day-7 'would you pay ₹999 a month?' card, when it's due. */
+  pilotQuestion?: ReactNode;
   now?: number;
   /** #1438: the owner's app language (Settings); English by default. */
   locale?: AppLocale;
@@ -68,11 +69,13 @@ export function WorkspaceHome({
   firstEnquiry = null,
   adReview = null,
   rejectedAds,
+  pilotQuestion,
   now,
   locale = "en",
 }: WorkspaceHomeProps) {
   const t = translator(locale, "home");
-  const liveCampaigns = campaigns.filter((campaign) => !goneInMeta(campaign));
+  // #1600 (Designer #1633): a campaign deleted in Meta keeps its Home row for a week, with the CPO's line as its status.
+  const liveCampaigns = campaigns.filter((campaign) => !goneInMeta(campaign) || recentlyDeletedInMeta(campaign, now));
   const summary = business ? homeResults(campaigns, results) : null;
   // #1292's line already names the newest person waiting, so the verdict doesn't say it twice.
   const verdicts = business ? homeVerdicts(campaigns, results, { now, waiting: firstEnquiry ? 0 : waiting }) : null;
@@ -114,6 +117,7 @@ export function WorkspaceHome({
         <p role="status" aria-label={t("metaReview")} className="text-sm text-slate-900">{t("metaChecking")}</p>
       )}
       {adReview?.kind === "rejected" && rejectedAds}
+      {pilotQuestion}
 
       {stale.length > 0 && <StaleResultsRefresher campaignIds={stale} />}
       {summary && (
@@ -147,7 +151,7 @@ export function WorkspaceHome({
             <Link href="/leads" className={linkClass}>{t("seeEnquiries")}</Link>
           </p>}
           <p className="mt-3 text-xs text-slate-500">
-            Updated {timeAgo(new Date(summary.oldestFetchedAt), now === undefined ? undefined : new Date(now))} ·{" "}
+            {t("updated", { ago: timeAgoIn(locale, new Date(summary.oldestFetchedAt), now === undefined ? undefined : new Date(now)) })} ·{" "}
             <Link href="/campaigns" className={linkClass}>{t("seeCampaigns")}</Link>
           </p>
         </section>
@@ -181,7 +185,7 @@ export function WorkspaceHome({
                 )}
               </>
             ) : (
-              <div className="flex items-start gap-3 rounded-lg border border-slate-200 p-4 sm:p-6">
+              <div className="flex items-start gap-3 py-4">
                 <CheckCircle2 size={20} className="mt-0.5 shrink-0 text-blue-700" aria-hidden="true" />
                 <div>
                   <h3 className="text-lg font-semibold text-slate-950">{t("upToDate")}</h3>
@@ -210,6 +214,7 @@ export function WorkspaceHome({
                     const status = campaignStatus(campaign);
                     const attention = campaignAttention(campaign);
                     const judged = verdicts?.labels.get(campaign.id);
+                    const deleted = goneInMeta(campaign) === "Deleted in Meta";
                     return (
                       <li key={campaign.id} className="py-3 sm:flex sm:items-center sm:justify-between sm:gap-6">
                         <div className="min-w-0">
@@ -218,11 +223,11 @@ export function WorkspaceHome({
                           </Link>
                           {attention && <p className="mt-1 text-xs font-medium text-danger">Needs attention: {attention}</p>}
                         </div>
-                        <p className="mt-1 flex shrink-0 gap-x-4 text-xs text-slate-600 sm:mt-0">
+                        {deleted ? <p className="mt-1 text-sm text-slate-700 sm:mt-0 sm:max-w-xs">{t("deletedInMeta")}</p> : <p className="mt-1 flex shrink-0 gap-x-4 text-xs text-slate-600 sm:mt-0">
                           <Status tone={status.tone}>{status.label}</Status>
                           {judged && <span>{judged}</span>}
                           {campaign.daily_budget != null && <span className="sm:w-24 sm:text-right">{formatPerDay(campaign.daily_budget)}</span>}
-                        </p>
+                        </p>}
                       </li>
                     );
                   })}

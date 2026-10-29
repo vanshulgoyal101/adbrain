@@ -4,7 +4,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { preload } from "react-dom";
 import Link from "next/link";
 import { Check, Loader2, Maximize2, Pencil } from "lucide-react";
+import { saveAdLanguage } from "@/app/(app)/brand/actions";
 import { setCreativeStatus } from "@/app/(app)/studio/actions";
+import { AdLanguageChips } from "@/components/ad-language-chips";
 import { applyCreateLine, readCreateResponse, type LiveAd } from "@/components/create-progress";
 import { SampleViewer } from "@/components/sample-viewer";
 import { SetupSpine } from "@/components/setup-spine";
@@ -13,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
 import { downloadBlob } from "@/lib/download";
 import { SETUP_PICKS, setupGoal, setupPicks } from "@/lib/creative/setup-picks";
-import { CREATE_LANGUAGES, defaultAdLanguage } from "@/lib/languages";
+import { CREATE_LANGUAGES, defaultAdLanguage, type CreateLanguageId } from "@/lib/languages";
 import type { Business, Creative } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -107,7 +109,8 @@ export function SetupAdsStep({ business, initialAds, sample = false, earlier = f
   /** #1407: a sales prospect's account takes its picks away as the marked sample pack, without Review or Go live. */
   sample?: boolean;
 }) {
-  const language = defaultAdLanguage(business.languages);
+  // #1681: Brand language first, else the segment's default (solar → Hinglish); the chips before a tapped batch change it.
+  const [language, setLanguage] = useState<CreateLanguageId>(() => defaultAdLanguage(business.languages, business.vertical));
   const languageLabel = CREATE_LANGUAGES.find((item) => item.id === language)?.label ?? "English";
   const [ads, setAds] = useState<Creative[]>(initialAds);
   // #1407: a sales visit takes all of them; an owner starts with the best 2.
@@ -365,7 +368,8 @@ export function SetupAdsStep({ business, initialAds, sample = false, earlier = f
       ) : waiting ? (
         <div className="flex flex-col items-start gap-2 py-6">
           <h2 className="text-xl font-semibold text-slate-950">Make ads from your details</h2>
-          <p className="text-sm text-slate-600">Your earlier ads were made from older details or in Studio, so they aren&apos;t used here. Making ads is free.</p>
+          <p className="text-sm text-slate-600">Your earlier ads were made from older details or in Studio, so they aren&apos;t used here. Making ads is included.</p>
+          <AdLanguageChips value={language} onChange={(next) => { setLanguage(next); void saveAdLanguage(business.id, next).catch(() => undefined); }} />
           <Link href="/campaigns?all=1" className="inline-flex min-h-11 items-center text-sm font-medium text-primary underline underline-offset-4">Use your earlier ads</Link>
         </div>
       ) : error && !ads.length ? (

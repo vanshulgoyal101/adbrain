@@ -235,7 +235,7 @@ export function BrandForm({ business, photoCount = 0 }: { business: Business | n
         error?: string;
       };
       if (!res.ok) {
-        setAutofillError(data.error ?? "Autofill failed.");
+        setAutofillError(data.error ?? "We couldn't read that page. Type the details in, or try another link.");
         return;
       }
       if (pasted === undefined && revision !== websiteRevision.current) {
@@ -269,7 +269,7 @@ export function BrandForm({ business, photoCount = 0 }: { business: Business | n
       });
       setAutofillNote(autofillSummary(extracted, fields, pasted !== undefined));
     } catch {
-      setAutofillError(pasted === undefined ? "Autofill failed — could not reach the site." : "Autofill failed. Try again in a moment.");
+      setAutofillError(pasted === undefined ? "We couldn't read that page. Type the details in, or try another link." : "We couldn't read that text. Try again in a moment.");
     } finally {
       setAutofilling(false);
     }

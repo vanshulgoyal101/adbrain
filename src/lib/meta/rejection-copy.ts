@@ -36,14 +36,16 @@ const ROWS: Row[] = [
   { row: "personal_attributes", policy: /personal attribute/i,
     words: /\bare you (?:suffering|struggling)|\byour (?:weight|debt|condition|illness)|failed (?:your )?(?:ielts|pte|exam)|low band|weak (?:in )?english|visa (?:was |got )?(?:refused|rejected)/i,
     sentence: "The ad talks about the reader's own health or problem (\"Are you…?\"). Meta doesn't allow that.", actions: ["edit_words"],
-    bySegment: { ielts: { sentence: "The ad talks about the reader's own result (\"Failed IELTS?\"). Meta doesn't allow that. Talk about your classes instead." } } },
+    // #1770: no quoted example; Meta may have objected to other words.
+    bySegment: { ielts: { sentence: "The ad talks about the reader's own result, like a past test score or a visa refusal. Meta doesn't allow that. Talk about your classes instead." } } },
   { row: "health_appearance", policy: /personal health|appearance|body image/i, words: /before[- ]and[- ]after|before\/after|body image/i,
     sentence: "The picture or words compare \"before and after\" or focus on someone's body.", actions: ["change_picture", "edit_words"] },
   { row: "misleading", policy: /misleading|unrealistic|deceptive|false/i, words: /\bguarantee|\b100%|unrealistic/i,
     sentence: `${UNPROVABLE} a guaranteed result.`, actions: ["edit_words"],
     bySegment: {
       solar: { sentence: `${UNPROVABLE} a guaranteed saving.` },
-      ielts: { sentence: `${UNPROVABLE} a guaranteed band, visa or admission.`, editHint: LICENCE_HINT },
+      // #1770: a licence line doesn't take a guarantee out; name what to remove.
+      ielts: { sentence: `${UNPROVABLE} a guaranteed band, visa or admission.`, editHint: "Take out 'guaranteed', '100%' or any promised band, visa or admission." },
       interiors: { sentence: `${UNPROVABLE} the lowest price or a fixed handover date.` },
     } },
   { row: "political", policy: /social issue|election|politic/i, words: /\bpolitical\b|social issues?/i,

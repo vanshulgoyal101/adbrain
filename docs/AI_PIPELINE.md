@@ -56,6 +56,9 @@ adds the term's class, never the term: `unsupported-commercial-claim:free`, `:pe
 `:currency` or `:guarantee` (#613). A Brand fact supports a term unless that term itself
 is negated or withdrawn ("no free survey", "isn't free", "don't offer free", "Free survey no longer
 offered"); a negation about something else ("Free survey, no obligation") doesn't count.
+A subsidy line (`subsidy`, `PM Surya Ghar`, `सब्सिडी`, `ਸਬਸਿਡੀ`; class `:subsidy`, #1676) needs a Brand
+fact that states it with no negated mention ("Not a subsidy vendor" refuses it); any such fact counts, quoted
+or not. It is a claim, not an offer, so the above-the-fold offer rule ignores it.
 
 ### Campaign Interview
 
@@ -232,11 +235,16 @@ feedback to assess unnecessary questions, abandonment and time to a useful draft
    `supportingText` becomes the one Brand offer fact (up to 64 characters) that states
    it. No repair and no new words; Hindi and Punjabi copy keeps its own picture line.
 4. Generate an image from the validated concept and up to three reference images.
-   When the business has uploaded product photos (Brand assets), the first ad
-   uses the newest one as its image instead (#195): no image call or image cost,
+   When the business has uploaded product photos (Brand assets), ads 1 to
+   min(k, 3) each use a different one, newest first (#195, #1901); a retried ad keeps
+   its own photo. The rest get generated images. An owner-photo ad makes no image call and has no image cost,
    its concept is told the image is the owner's unseen photo, and the receipt
    records `ownerPhoto`. If that photo can't be downloaded or validated, the ad
    gets a generated image as usual.
+   The renderer fits every background to the ad's exact frame first
+   (`fitPhoto`, #1904): EXIF orientation, then sharp's `attention` saliency crop
+   so a phone photo's face isn't cut off, or `backgroundFit: "blur"` (the whole
+   photo on a blurred copy of itself) for group shots.
 5. Download and validate the raster, persist the source image, render the designed
    poster when enabled, persist the final image, then insert a draft creative row.
    The poster's contact bar asks for a WhatsApp message (chat icon, no number) for a business whose

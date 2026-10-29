@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Campaigns } from "@/components/campaigns";
@@ -130,17 +130,75 @@ describe("Campaigns rows (#403 S5)", () => {
     expect(firstCampaign.compareDocumentPosition(drafts) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it("says when a row has no results yet, and shows them when it has", async () => {
+  it("says when a row has no results yet inside that card, and shows them when it has (#1588)", async () => {
     view({ [active.id]: result });
     const pausedRow = (await screen.findByRole("heading", { name: "Rooftop solar" })).closest("article") as HTMLElement;
     const activeRow = screen.getByRole("heading", { name: "Solar EMI" }).closest("article") as HTMLElement;
-    // #847: one line for the list instead of a sentence on each row.
-    expect(within(pausedRow).queryByText(/No results yet/)).toBeNull();
-    expect(screen.getAllByText(/No results yet for 1 of these campaigns/)).toHaveLength(1);
-    // #847 CLS: the note follows the cards, so results arriving never push them down.
-    expect(activeRow.compareDocumentPosition(screen.getByText(/No results yet for 1 of these campaigns/)) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // Designer (#1588): the line belongs to its card, not under the list or 'Deleted (n)'.
+    expect(within(pausedRow).getByText("No results yet. Refresh to get Meta's latest numbers.")).toBeInTheDocument();
+    expect(screen.queryByText(/No results yet for/)).toBeNull();
     expect(within(activeRow).queryByText(/No results yet/)).toBeNull();
     expect(within(activeRow).getByText("1,200")).toBeInTheDocument();
+  });
+
+  // #1588 (Designer, 390): for a short list the cards come first; search and filter appear at 6+ campaigns and the
+  // list's Export sits in its ⋯ menu.
+  it("hides search and the status filter below 6 campaigns, and keeps Export in the list's menu", async () => {
+    const { unmount } = render(<Campaigns business={business} approved={[]} initialCampaigns={[paused, active]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady adAccountId="act_999" />);
+    await screen.findByRole("heading", { name: "Rooftop solar" });
+    expect(screen.queryByRole("searchbox", { name: "Search campaigns" })).toBeNull();
+    expect(screen.queryByRole("combobox", { name: "Campaign status" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Export report" })).toBeNull();
+    expect(screen.getByRole("button", { name: "More list actions" })).toBeInTheDocument();
+    unmount();
+    const many = Array.from({ length: 6 }, (_, index) => ({ ...paused, id: `campaign-${index}`, name: `Campaign ${index}` }) as Campaign);
+    render(<Campaigns business={business} approved={[]} initialCampaigns={many} initialResults={{}} leadForms={[]} leadFormError={null} metaReady adAccountId="act_999" />);
+    expect(await screen.findByRole("searchbox", { name: "Search campaigns" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Campaign status" })).toBeInTheDocument();
+  });
+
+  it("shows the empty pattern with one New campaign when there are no campaigns (#1588, #1463)", async () => {
+    render(<Campaigns business={business} approved={[]} initialCampaigns={[]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady={false} adAccountId="act_999" />);
+    fireEvent.click(screen.getByRole("button", { name: "Close campaign setup" }));
+    expect(screen.getByRole("heading", { name: "No campaigns yet" })).toBeInTheDocument();
+    expect(screen.getByText("Pick your approved ads and a daily budget. Nothing spends until you go live.")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "New campaign" })).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "New campaign" }));
+    expect(screen.getByRole("button", { name: "Close campaign setup" })).toBeInTheDocument();
+  });
+
+  // #1926 (Designer, QA's #1656 walk): 0 live with deleted ones or drafts said 'Your campaigns (0)' over nothing.
+  describe("none running (#1926)", () => {
+    const deleted = (id: string) => ({ ...paused, id, name: "Rooftop solar old", status: "completed", raw: { ...paused.raw as object, metaStatus: "DELETED" } }) as unknown as Campaign;
+    const draft = (id: string) => ({ draftId: id, version: 1, expiresAt: "2026-11-01T00:00:00.000Z",
+      input: { businessId: business.id, name: `Draft ${id.slice(0, 4)}`, mode: "manual", creativeIds: [], dailyBudgetRupees: 300, abTest: false, destination: "instant_form", targeting: {} } });
+    const drafts = ["90d1d2bb-466c-4889-9af2-edb533e82531", "a0d1d2bb-466c-4889-9af2-edb533e82531"].map(draft);
+
+    it("says none running, points to the saved drafts, keeps one New campaign and no lone ⋯", async () => {
+      mocks.drafts.mockResolvedValue(drafts);
+      render(<Campaigns business={business} approved={[]} initialCampaigns={[deleted("campaign-8"), deleted("campaign-9")]} initialResults={{}}
+        initialDrafts={drafts as never} leadForms={[]} leadFormError={null} metaReady adAccountId="act_999" />);
+      expect(await screen.findByRole("heading", { name: "None running" })).toBeInTheDocument();
+      expect(screen.getByText("Your 2 saved drafts are below.")).toBeInTheDocument();
+      expect(screen.getAllByRole("button", { name: "New campaign" })).toHaveLength(1);
+      expect(screen.queryByRole("button", { name: "More list actions" })).toBeNull();
+      expect(screen.getByText("Deleted (2)").closest("details")).not.toBeNull();
+    });
+
+    it("without drafts, says what to do next", async () => {
+      render(<Campaigns business={business} approved={[]} initialCampaigns={[deleted("campaign-8")]} initialResults={{}}
+        leadForms={[]} leadFormError={null} metaReady adAccountId="act_999" />);
+      expect(await screen.findByRole("heading", { name: "None running" })).toBeInTheDocument();
+      expect(screen.getByText("Pick your approved ads and a daily budget. Nothing spends until you go live.")).toBeInTheDocument();
+    });
+
+    it("gives Deleted (n) the same chevron as Saved drafts", async () => {
+      render(<Campaigns business={business} approved={[]} initialCampaigns={[deleted("campaign-8"), active]} initialResults={{}}
+        leadForms={[]} leadFormError={null} metaReady adAccountId="act_999" />);
+      const summary = (await screen.findByText("Deleted (1)")).closest("summary")!;
+      expect(summary).toHaveClass("list-none");
+      expect(summary.querySelector("svg")).not.toBeNull();
+    });
   });
 
   it("shows how many opened WhatsApp and how many messaged (#493)", async () => {

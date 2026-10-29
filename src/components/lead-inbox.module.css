@@ -109,6 +109,10 @@ button.name:hover { text-decoration: underline; }
   /* The waiting row's replies stop before ⋯ (`.contact` alone would span the whole row and push ⋯ down). */
   tr[data-state="new"] .contact { grid-column: 1 / 3; }
   tr[data-state="new"] .followUp { grid-column: 3; }
+  /* #1819: a row with no contact actions keeps ⋯ on the name row, beside the state, not alone on a second line. */
+  tr[data-actions="none"] .person { grid-column: 1 / 3; }
+  tr[data-actions="none"] .contact { display: none !important; }
+  tr[data-actions="none"] .followUp { grid-column: 3; grid-row: 1; align-self: start; }
   tr:not([data-state="new"]) .followUp { grid-column: 2 / -1; }
   tr:not([data-state="new"]) .contact { display: none !important; }
 }
@@ -145,6 +149,9 @@ button.name:hover { text-decoration: underline; }
   /* The waiting row's replies stop before ⋯ (`.contact` alone would span the whole row and push ⋯ down). */
   .panes tr[data-state="new"] .contact { grid-column: 1 / 3; }
   .panes tr[data-state="new"] .followUp { grid-column: 3; }
+  .panes tr[data-actions="none"] .person { grid-column: 1 / 3; }
+  .panes tr[data-actions="none"] .contact { display: none !important; }
+  .panes tr[data-actions="none"] .followUp { grid-column: 3; grid-row: 1; align-self: start; }
   .panes tr:not([data-state="new"]) .followUp { grid-column: 2 / -1; }
   .panes tr:not([data-state="new"]) .contact { display: none !important; }
 }

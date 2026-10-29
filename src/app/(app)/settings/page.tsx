@@ -134,7 +134,7 @@ async function PreferenceAndPrivacySettings({ businessId }: { businessId: string
     {/* #1438: Home follows this choice; other screens follow screen by screen. */}
     <AppLanguage key={locale} initial={locale} labels={{ language: t("language"), hint: t("languageHint"), saveFailed: t("saveFailed") }} />
     {/* #701: shown once AdBrain's alerts number is set (ALERTS_WHATSAPP). */}
-    {alerts && <WhatsAppAlerts businessId={businessId} initial={alerts} />}
+    {alerts && <WhatsAppAlerts businessId={businessId} initial={alerts} locale={locale} />}
     <PreferenceSettings key={businessId} businessId={businessId} initialState={preferences} />
     <PrivacyRequests initialRequests={requests} initialOperatorAvailable={operator} />
   </>;

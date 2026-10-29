@@ -27,8 +27,8 @@ const scrollIntoView = vi.fn();
 let forms: { id: string; name: string; status: string }[];
 
 // As in production: the composer opens before the Page's forms arrive.
-function view() {
-  return render(<Campaigns business={business} approved={[creative]} initialCampaigns={[]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady adAccountId="" />);
+function view(extra: Partial<React.ComponentProps<typeof Campaigns>> = {}) {
+  return render(<Campaigns business={business} approved={[creative]} initialCampaigns={[]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady adAccountId="" {...extra} />);
 }
 
 // #1171: WhatsApp chat is the default; lead-form behaviour needs Instant form chosen.
@@ -53,6 +53,11 @@ beforeEach(() => {
 afterEach(() => { Reflect.deleteProperty(HTMLElement.prototype, "scrollIntoView"); vi.unstubAllGlobals(); });
 
 describe("launch composer defaults and plain words (#761)", () => {
+  it("#1307: quotes AdBrain's live pooled runs when the ledger is readable", async () => {
+    view({ whatsappLedger: { chats: 9, spendRupees: 1_640 } });
+    expect(await screen.findByText(/^What to expect: AdBrain's WhatsApp ads so far got 9 chats for about ₹1,600, about ₹180 each\. That's too few to predict yours\./)).toBeInTheDocument();
+  });
+
   it("starts at ₹300 a day, says what to expect and that the check spends nothing, with no 'pending' age", async () => {
     view();
     expect(await screen.findByLabelText("Daily budget (₹)")).toHaveValue(300);
