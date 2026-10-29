@@ -8,6 +8,7 @@ import tokenRevoked from "./fixtures/meta/token-revoked.json";
 import deliveryTape from "./fixtures/meta/delivery.json";
 import fundingTape from "./fixtures/meta/account-funding-live-runs.json";
 import deletedTape from "./fixtures/meta/campaign-deleted.json";
+import goneFixture from "./fixtures/meta/campaigns-gone.json";
 
 // #649: the manage loop (pause, sync, refresh, activation review and refusals) through the real route
 // handlers, connection access, MetaClient, trusted writes, spend enforcement and audit, on an OAuth
@@ -631,5 +632,45 @@ describe("core: manage routes against recorded Graph responses (#649)", () => {
     expect(JSON.stringify(body)).toMatch(/deleted/i);
     expect(store.state.tables.campaigns.find(row => row.id === STORED)?.status).not.toBe("paused");
     expect(graph.sent.every(call => call.method === "GET")).toBe(true);
+  });
+
+  // #2268 (QA on #2261): Meta's /campaigns listing leaves deleted campaigns out, so Sync never revisited a stored paused
+  // row deleted in Ads Manager and Manage kept saying "Paused". Sync now reads the account's gone campaigns.
+  // campaigns-gone.json: the real read-only `filtering` read (Graph v26 refuses `?ids=`), recorded through the client.
+  const goneTape = goneFixture.tape as Exchange[];
+  const goneList = (goneTape[0].body as { data: Array<{ id: string; effective_status: string }> }).data;
+  const [DELETED_ID, OTHER_ACCOUNT_ID] = goneList.filter(campaign => campaign.effective_status === "DELETED").map(campaign => campaign.id);
+  const ARCHIVED_ID = goneList.find(campaign => campaign.effective_status === "ARCHIVED")!.id;
+  const STILL_PAUSED = "120253164673180526";
+  const goneRows = () => [
+    storeCampaign({ id: "00000000-0000-4000-8000-000000000011", meta_campaign_id: DELETED_ID, status: "paused", meta_ad_account_id: null, raw: { source: "sync" } }),
+    storeCampaign({ id: "00000000-0000-4000-8000-000000000012", meta_campaign_id: ARCHIVED_ID, status: "active" }),
+    storeCampaign({ id: "00000000-0000-4000-8000-000000000013", meta_campaign_id: STILL_PAUSED, status: "paused" }),
+    storeCampaign({ id: "00000000-0000-4000-8000-000000000014", meta_campaign_id: OTHER_ACCOUNT_ID, status: "paused", meta_ad_account_id: "act_1000000000000001" }),
+  ];
+  const row = (id: string) => store.state.tables.campaigns.find(campaign => campaign.meta_campaign_id === id);
+
+  it("sync: stored live campaigns Meta deleted or archived end as gone, legacy rows with no account id included", async () => {
+    const [, , stillPaused, otherAccount] = goneRows();
+    replay(tapes.sync([SYNCED]), goneTape);
+    const response = await sync();
+    expect(response.status).toBe(200);
+    expect(row(DELETED_ID)).toMatchObject({ status: "completed", raw: { source: "sync", metaStatus: "DELETED", metaGoneAt: expect.any(String) } });
+    expect(row(ARCHIVED_ID)).toMatchObject({ status: "completed", raw: { metaStatus: "ARCHIVED" } });
+    const { goneInMeta } = await import("@/lib/campaign/gone-in-meta");
+    expect([goneInMeta(row(DELETED_ID) as never), goneInMeta(row(ARCHIVED_ID) as never)]).toEqual(["Deleted in Meta", "Archived in Meta"]);
+    // Still paused in Meta, or bound to another ad account: left exactly as they were.
+    expect([row(STILL_PAUSED), row(OTHER_ACCOUNT_ID)]).toEqual([stillPaused, otherAccount]);
+    expect(graph.sent.every(call => call.method === "GET" && call.access === ACCESS)).toBe(true);
+    expect(graph.pending).toEqual([]);
+  });
+
+  it("sync: when Meta refuses the gone-campaigns read, every stored row is kept and the sync still succeeds", async () => {
+    const before = goneRows();
+    replay(tapes.sync([SYNCED]), [{ ...goneTape[0], status: 400, body: { error: { message: "Invalid parameter", type: "OAuthException", code: 100 } } }]);
+    const response = await sync();
+    expect(response.status).toBe(200);
+    expect(store.state.tables.campaigns.filter(campaign => campaign.meta_campaign_id !== SYNCED)).toEqual(before);
+    expect(graph.pending).toEqual([]);
   });
 });
