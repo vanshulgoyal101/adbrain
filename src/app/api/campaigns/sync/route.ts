@@ -76,13 +76,15 @@ async function handlePOST(request?: Request) {
         const saved = await saveCampaign(context, row, existing?.id);
         if (saved.error) throw new Error("Campaign save failed.");
       }
-      // #2268: Meta's listing leaves deleted/archived campaigns out, so on the last page the business's stored live rows it
-      // didn't return are read by status and a gone one ends as Refresh does (#721). Best effort: a failed read changes nothing.
+      // #2268: Meta's listing leaves deleted/archived campaigns out, so on the last page the account's gone campaigns are read
+      // and a stored live row among them ends as Refresh does (#721). Meta lists only the connected account's campaigns, so a
+      // legacy row with no stored account id is matched by campaign id too. Best effort: a failed read changes nothing.
       if (!page.nextCursor) {
-        const { data: stored } = await supabase.from("campaigns").select("id,meta_campaign_id,raw")
-          .eq("business_id", context.businessId).eq("meta_ad_account_id", connection.selected.adAccountId).in("status", ["active", "paused"]);
-        const unlisted = (stored ?? []).filter((row) => row.meta_campaign_id && !ids.includes(row.meta_campaign_id));
-        const gone = unlisted.length ? await meta.readGoneCampaigns(unlisted.map((row) => row.meta_campaign_id!)).catch(() => null) : null;
+        const { data: stored } = await supabase.from("campaigns").select("id,meta_campaign_id,meta_ad_account_id,raw")
+          .eq("business_id", context.businessId).in("status", ["active", "paused"]);
+        const unlisted = (stored ?? []).filter((row) => row.meta_campaign_id && !ids.includes(row.meta_campaign_id)
+          && (!row.meta_ad_account_id || row.meta_ad_account_id === connection.selected?.adAccountId));
+        const gone = unlisted.length ? await meta.listGoneCampaigns().catch(() => null) : null;
         for (const row of unlisted) {
           const metaStatus = gone?.get(row.meta_campaign_id!);
           const raw = row.raw && typeof row.raw === "object" && !Array.isArray(row.raw) ? row.raw : {};

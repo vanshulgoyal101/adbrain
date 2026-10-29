@@ -1578,20 +1578,23 @@ export class MetaClient {
     return { campaigns: result.data, nextCursor: result.paging?.next ? result.paging.cursors!.after! : null };
   }
 
-  /** #2268: which of these stored campaigns Meta deleted or archived (the listing above leaves them out). ≤ 50 per read. */
-  async readGoneCampaigns(campaignIds: readonly string[]): Promise<Map<string, "DELETED" | "ARCHIVED">> {
+  /** #2268: this account's campaigns Meta deleted or archived (the listing above leaves them out). 100 per read, ≤ 5 reads. */
+  async listGoneCampaigns(): Promise<Map<string, "DELETED" | "ARCHIVED">> {
     const gone = new Map<string, "DELETED" | "ARCHIVED">();
-    const account = this.creds.adAccountId.replace(/^act_/, "");
-    for (let offset = 0; offset < campaignIds.length; offset += 50) {
-      const ids = campaignIds.slice(offset, offset + 50);
-      const query = new URLSearchParams({ ids: ids.join(","), fields: "id,account_id,status,effective_status" });
-      const nodes = await this.graph<Record<string, { id?: string; account_id?: string; status?: string; effective_status?: string } | undefined>>(`?${query}`);
-      for (const id of ids) {
-        const node = nodes[id];
-        if (node?.id !== id || node.account_id !== account) continue;
-        const status = [node.effective_status, node.status].find((value) => value === "DELETED" || value === "ARCHIVED");
-        if (status === "DELETED" || status === "ARCHIVED") gone.set(id, status);
+    let after: string | undefined;
+    for (let read = 0; read < 5; read++) {
+      // Graph v26 refuses `?ids=` and a bare `effective_status` param; `filtering` is the read QA verified live (#2279).
+      const query = new URLSearchParams({ fields: "id,status,effective_status", limit: "100",
+        filtering: JSON.stringify([{ field: "effective_status", operator: "IN", value: ["DELETED", "ARCHIVED"] }]) });
+      if (after) query.set("after", after);
+      const result = await this.graph<{ data?: Array<{ id?: string; status?: string; effective_status?: string }>; paging?: { next?: string; cursors?: { after?: string } } }>(`${this.creds.adAccountId}/campaigns?${query}`);
+      if (!Array.isArray(result.data)) throw new MetaError("Campaign listing is incomplete.");
+      for (const campaign of result.data) {
+        const status = [campaign.effective_status, campaign.status].find((value) => value === "DELETED" || value === "ARCHIVED");
+        if (campaign.id && (status === "DELETED" || status === "ARCHIVED")) gone.set(campaign.id, status);
       }
+      after = result.paging?.next ? result.paging.cursors?.after : undefined;
+      if (!after) break;
     }
     return gone;
   }
