@@ -800,6 +800,210 @@
       "from": "src/lib/supabase/queries.ts",
       "to": "> 400 lines",
       "lines": 424
+    },
+    {
+      "rule": "C5-english-errors",
+      "from": "src/app/api/brand/autofill/route.ts",
+      "to": "English error literals",
+      "lines": 9
+    },
+    {
+      "rule": "C5-english-errors",
+      "from": "src/app/api/campaign-drafts/[id]/route.ts",
+      "to": "English error literals",
+      "lines": 14
+    },
+    {
+      "rule": "C5-english-errors",
+      "from": "src/app/api/campaigns/[id]/enquiries/route.ts",
+      "to": "English error literals",
+      "lines": 9
+    },
+    {
+      "rule": "C5-english-errors",
+      "from": "src/app/api/campaigns/[id]/refresh/route.ts",
+      "to": "English error literals",
+      "lines": 6
+    },
+    {
+      "rule": "C5-english-errors",
+      "from": "src/app/api/campaigns/[id]/route.ts",
+      "to": "English error literals",
+      "lines": 1
+    },
+    {
+      "rule": "C5-english-errors",
+      "from": "src/app/api/campaigns/create/route.ts",
+      "to": "English error literals",
+      "lines": 24
+    },
+    {
+      "rule": "C5-english-errors",
+      "from": "src/app/api/campaigns/lead-forms/route.ts",
+      "to": "English error literals",
+      "lines": 2
+    },
+    {
+      "rule": "C5-english-errors",
+      "from": "src/app/api/campaigns/list/route.ts",
+      "to": "English error literals",
+      "lines": 3
+    },
+    {
+      "rule": "C5-english-errors",
+      "from": "src/app/api/campaigns/operations/[id]/route.ts",
+      "to": "English error literals",
+      "lines": 4
+    },
+    {
+      "rule": "C5-english-errors",
+      "from": "src/app/api/campaigns/plan/route.ts",
+      "to": "English error literals",
+      "lines": 8
+    },
+    {
+      "rule": "C5-english-errors",
+      "from": "src/app/api/campaigns/preflight/route.ts",
+      "to": "English error literals",
+      "lines": 5
+    },
+    {
+      "rule": "C5-english-errors",
+      "from": "src/app/api/campaigns/sync/route.ts",
+      "to": "English error literals",
+      "lines": 3
+    },
+    {
+      "rule": "C5-english-errors",
+      "from": "src/app/api/creatives/[id]/background/route.ts",
+      "to": "English error literals",
+      "lines": 1
+    },
+    {
+      "rule": "C5-english-errors",
+      "from": "src/app/api/creatives/[id]/photo-fit/route.ts",
+      "to": "English error literals",
+      "lines": 1
+    },
+    {
+      "rule": "C5-english-errors",
+      "from": "src/app/api/creatives/[id]/picture/route.ts",
+      "to": "English error literals",
+      "lines": 1
+    },
+    {
+      "rule": "C5-english-errors",
+      "from": "src/app/api/creatives/[id]/regenerate/route.ts",
+      "to": "English error literals",
+      "lines": 2
+    },
+    {
+      "rule": "C5-english-errors",
+      "from": "src/app/api/creatives/generate/route.ts",
+      "to": "English error literals",
+      "lines": 7
+    },
+    {
+      "rule": "C5-english-errors",
+      "from": "src/app/api/feedback/pilot-day7/route.ts",
+      "to": "English error literals",
+      "lines": 3
+    },
+    {
+      "rule": "C5-english-errors",
+      "from": "src/app/api/leads/[id]/route.ts",
+      "to": "English error literals",
+      "lines": 1
+    },
+    {
+      "rule": "C5-english-errors",
+      "from": "src/app/api/leads/sync/route.ts",
+      "to": "English error literals",
+      "lines": 3
+    },
+    {
+      "rule": "C5-english-errors",
+      "from": "src/app/api/leads/unseen/route.ts",
+      "to": "English error literals",
+      "lines": 1
+    },
+    {
+      "rule": "C5-english-errors",
+      "from": "src/app/api/meta/accounts/route.ts",
+      "to": "English error literals",
+      "lines": 3
+    },
+    {
+      "rule": "C5-english-errors",
+      "from": "src/app/api/meta/connect/route.ts",
+      "to": "English error literals",
+      "lines": 2
+    },
+    {
+      "rule": "C5-english-errors",
+      "from": "src/app/api/meta/connections/change/route.ts",
+      "to": "English error literals",
+      "lines": 6
+    },
+    {
+      "rule": "C5-english-errors",
+      "from": "src/app/api/meta/connections/start/route.ts",
+      "to": "English error literals",
+      "lines": 8
+    },
+    {
+      "rule": "C5-english-errors",
+      "from": "src/app/api/meta/deauthorize/route.ts",
+      "to": "English error literals",
+      "lines": 3
+    },
+    {
+      "rule": "C5-english-errors",
+      "from": "src/app/api/meta/disconnect/route.ts",
+      "to": "English error literals",
+      "lines": 4
+    },
+    {
+      "rule": "C5-english-errors",
+      "from": "src/app/api/meta/geo-search/route.ts",
+      "to": "English error literals",
+      "lines": 2
+    },
+    {
+      "rule": "C5-english-errors",
+      "from": "src/app/api/meta/whatsapp/route.ts",
+      "to": "English error literals",
+      "lines": 1
+    },
+    {
+      "rule": "C5-english-errors",
+      "from": "src/app/api/payments/customer-balance/route.ts",
+      "to": "English error literals",
+      "lines": 4
+    },
+    {
+      "rule": "C5-english-errors",
+      "from": "src/app/api/preferences/route.ts",
+      "to": "English error literals",
+      "lines": 7
+    },
+    {
+      "rule": "C5-english-errors",
+      "from": "src/app/api/privacy-requests/route.ts",
+      "to": "English error literals",
+      "lines": 5
+    },
+    {
+      "rule": "C5-english-errors",
+      "from": "src/app/api/results-card/route.ts",
+      "to": "English error literals",
+      "lines": 4
+    },
+    {
+      "rule": "C5-english-errors",
+      "from": "src/app/api/spend-limits/route.ts",
+      "to": "English error literals",
+      "lines": 4
     }
   ]
 }
