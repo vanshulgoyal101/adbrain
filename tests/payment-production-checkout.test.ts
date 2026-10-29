@@ -405,12 +405,35 @@ describe("live checkout service with synthetic provider evidence", () => {
     expect(mocks.createOrder).not.toHaveBeenCalled();
   });
   // #718: the ₹999 plan's payments never enter the ad-money ledger.
-  it("skips a captured plan payment before the ad-money ledger sees it", async () => {
+  it("skips a captured plan payment once our records show no ad-money order owns it", async () => {
+    mocks.fetchOrder.mockImplementation(async (id: string) => id === "order_Plan1"
+      ? { ...remoteOrder, id: "order_Plan1", receipt: "44444444-4444-4444-8444-444444444444" } : remoteOrder);
     const response = await webhook(notification({ payload: { payment: { entity: { id: "pay_Plan1", order_id: "order_Plan1", notes: { purpose: "adbrain_plan" } } } } }));
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ received: true, ignored: true, plan: "ignored" });
+    expect(mocks.fetchOrder).toHaveBeenCalledWith("order_Plan1");
+    expect(mocks.rpc).toHaveBeenCalledWith("production_payment_recovery", expect.objectContaining({ p_order_id: "44444444-4444-4444-8444-444444444444" }));
     expect(mocks.rpc.mock.calls.map(([name]) => name)).not.toContain("production_payment_event_receive");
     expect(mocks.scheduleSpendCap).not.toHaveBeenCalled();
+  });
+  // #1433 review: Standard Checkout copies the browser's notes onto the payment, so a payer can forge the plan note.
+  it.each([
+    ["payment.dispute.created", { dispute: { entity: { payment_id: "pay_fixture" } } }, "dispute"],
+    ["refund.processed", { refund: { entity: { id: "rfnd_fixture", payment_id: "pay_fixture" } } }, "refund"],
+  ] as const)("still sends an ad-money %s with a forged plan note to the ledger's holds", async (event, extra, kind) => {
+    const response = await webhook(notification({ event, payload: {
+      payment: { entity: { id: "pay_fixture", order_id: "order_fixture", notes: { purpose: "adbrain_plan" } } }, ...extra,
+    } }));
+    expect(await response.json()).not.toHaveProperty("plan");
+    expect(mocks.rpc).toHaveBeenCalledWith("production_payment_event_receive", expect.objectContaining({ p_payment_id: "pay_fixture", p_kind: kind }));
+  });
+  it("fails a plan-noted event whose order Razorpay can't confirm right now, so Razorpay retries it", async () => {
+    mocks.fetchOrder.mockRejectedValue(new Error("down"));
+    const response = await webhook(notification({ event: "payment.dispute.created", payload: {
+      payment: { entity: { id: "pay_fixture", order_id: "order_fixture", notes: { purpose: "adbrain_plan" } } }, dispute: { entity: { payment_id: "pay_fixture" } },
+    } }));
+    expect(response.status).toBeGreaterThanOrEqual(500);
+    expect(mocks.rpc.mock.calls.map(([name]) => name)).not.toContain("production_payment_event_receive");
   });
   it("settles a paid plan link from Razorpay's answer and skips the ad-money ledger", async () => {
     const original = mocks.rpc.getMockImplementation()!;

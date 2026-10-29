@@ -63,7 +63,9 @@ Routine steps never wait for the CEO or the CTO.
    oldest. Empty queue: take an unowned `core` issue in your area and add your
    label. Nothing left: run `wait-for-work` (no idle post;
    [AGENTS.md](../AGENTS.md#worker-coordination)) and continue with what it
-   reports. Stop only when it times out. Do not invent work.
+   reports. Stop only when it times out. Do not invent work. While you own an
+   actionable item, the waiter prints your top 3 and exits 6 instead of waiting
+   (#2122): park, block or hand off by label what you can't act on.
 3. **Finish an issue** with a PR, not a loose commit. Branch from current
    `origin/next`, keep the change small, push, and open a PR to `next` titled
    with the issue number. Comment on the issue in five lines or fewer: what

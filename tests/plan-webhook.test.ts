@@ -3,10 +3,11 @@ import { handlePlanWebhook, type PlanWebhookDeps } from "@/lib/plan/webhook";
 
 const linkId = "plink_Fixture123";
 const paidLink: { id: string; status: string; amountPaise: number; referenceId: string; paymentId: string | null } = { id: linkId, status: "paid", amountPaise: 99_900, referenceId: "44444444-4444-4444-8444-444444444444", paymentId: "pay_Plan1" };
-function deps(link = paidLink, rpcResult: unknown = "paid") {
+function deps(link = paidLink, rpcResult: unknown = "paid", adMoney = false) {
   const rpc = vi.fn(async () => rpcResult);
   const fetchPlanLink = vi.fn(async () => link);
-  return { deps: { fetchPlanLink, rpc } as unknown as PlanWebhookDeps, rpc, fetchPlanLink };
+  const isAdMoneyPayment = vi.fn(async () => adMoney);
+  return { deps: { fetchPlanLink, rpc, isAdMoneyPayment } as unknown as PlanWebhookDeps, rpc, fetchPlanLink, isAdMoneyPayment };
 }
 const linkEvent = (event: string, createdAt = 1_793_000_000) => ({
   event, payload: { payment_link: { entity: { id: linkId, status: "paid" } }, payment: { entity: { id: "pay_Plan1", created_at: createdAt } } },
@@ -27,6 +28,20 @@ describe("plan webhook (#718)", () => {
     }
     expect(rpc).not.toHaveBeenCalled();
     expect(fetchPlanLink).not.toHaveBeenCalled();
+  });
+  it("sends a plan-noted payment that our records tie to an ad-money order back to the ledger (#1433 forged note)", async () => {
+    const { deps: d, rpc, isAdMoneyPayment } = deps(paidLink, "paid", true);
+    const forged = { payment: { entity: { id: "pay_Ad1", order_id: "order_Ad1", notes: { purpose: "adbrain_plan" } } } };
+    for (const name of ["payment.dispute.created", "refund.processed", "payment.captured"]) {
+      expect(await handlePlanWebhook({ event: name, payload: forged }, d)).toBeNull();
+    }
+    expect(isAdMoneyPayment).toHaveBeenCalledWith("pay_Ad1", "order_Ad1");
+    expect(rpc).not.toHaveBeenCalled();
+  });
+  it("throws when ownership can't be checked, so Razorpay retries instead of the event being skipped", async () => {
+    const { deps: d, isAdMoneyPayment } = deps();
+    isAdMoneyPayment.mockRejectedValue(new Error("down"));
+    await expect(handlePlanWebhook({ event: "payment.dispute.created", payload: { payment: { entity: { id: "pay_Ad1", notes: { purpose: "adbrain_plan" } } } } }, d)).rejects.toThrow("down");
   });
 
   it("marks the month paid from Razorpay's own answer, at the payment's time", async () => {
