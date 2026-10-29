@@ -58,7 +58,7 @@ describe("core: <SetupGoLive> (#1271)", () => {
   });
 
   it("says the pacing line in Hindi (#2007)", () => {
-    render(<SetupGoLive business={business} ads={ads} pageConnected funding="managed" locale="hi"
+    render(<SetupGoLive business={business} ads={ads} pageConnected funding="managed" words={{ locale: "hi", messages: hi.setup }}
       whatsappNumber="+91 ••••• 3210" weeklyCap={{ capRupees: null, active: [] }} />);
     expect(screen.getByText("Meta इसे दिनों में बाँटता है, इसलिए किसी दिन ₹300 से थोड़ा ज़्यादा और किसी दिन कम लग सकता है। कुल खर्च ऊपर लिखी सीमा से ज़्यादा कभी नहीं होगा।")).toBeInTheDocument();
   });
