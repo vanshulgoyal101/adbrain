@@ -72,6 +72,10 @@ function readPending(storage: GoLiveDeps["storage"], key: string, businessId: st
 
 const errorText = (reason: unknown, fallback: string) => reason instanceof Error && reason.message ? reason.message : fallback;
 
+/** #2046: Go live has no "Check my campaign" or "Refresh review" button; tapping Go live again checks it afresh. */
+export const GO_LIVE_STALE = "This campaign changed after it was checked. Nothing was spent. Tap Go live again.";
+const isConflict = (reason: unknown) => typeof reason === "object" && reason !== null && (reason as { code?: unknown }).code === "CONFLICT";
+
 async function sha256Hex(payload: string): Promise<string> {
   if (!globalThis.crypto?.subtle) throw new Error("Activation confirmation is unavailable in this browser.");
   const digest = await globalThis.crypto.subtle.digest("SHA-256", new TextEncoder().encode(payload));
@@ -130,7 +134,17 @@ export async function goLive(deps: GoLiveDeps, input: GoLiveInput, onStep: (step
       storage?.setItem(key, JSON.stringify({ request }));
     }
     onStep("create");
-    if (!operation) operation = await client.createCampaign(request);
+    if (!operation) {
+      try {
+        operation = await client.createCampaign(request);
+      } catch (reason) {
+        // #2046: the server refused this saved request as stale (the review, draft or Meta connection changed since
+        // it was checked). Unless it's already running, the next tap starts over instead of resending it.
+        if (!isConflict(reason) || await client.operationForRequest(input.businessId, request.idempotencyKey)) throw reason;
+        forget();
+        return { kind: "failed", message: GO_LIVE_STALE };
+      }
+    }
     for (let poll = 0; !isTerminalOperation(operation) && poll < POLLS; poll += 1) {
       await sleep(POLL_MS);
       operation = await client.operation(operation.operationId);

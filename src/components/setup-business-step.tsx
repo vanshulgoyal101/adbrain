@@ -281,7 +281,7 @@ export function SetupBusinessStep({ business, chooseLanguage = false, returning 
         </p>
       )}
       {/* #1681 (CPO #1669): the language the first 3 ads are written in, defaulting by what they sell. */}
-      <div className="mt-6"><AdLanguageChips value={adLanguage ?? defaultAdLanguage(business?.languages, fields.vertical)} onChange={setAdLanguage} /></div>
+      <div className="mt-6"><AdLanguageChips value={adLanguage ?? defaultAdLanguage(business?.languages, fields.vertical)} onChange={setAdLanguage} label={t("business.adLanguage")} /></div>
       <p className="mt-4 text-sm text-slate-600">{t("business.included")}</p>
       <Link href="/brand?all=1" onClick={() => void saveNow().catch(() => undefined)} className="mt-2 inline-flex min-h-11 items-center text-sm font-medium text-slate-700 underline underline-offset-4">
         {t("business.more")}

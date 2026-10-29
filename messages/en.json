@@ -30,7 +30,7 @@
     "needsReview": "Needs review",
     "approved": "Approved",
     "setAside": "Set aside",
-    "metaChecking": "Meta is checking your ads. This usually takes minutes to a few hours, and up to a day.",
+    "metaChecking": "Meta checks your ads first. This usually takes a few hours, sometimes up to a day.",
     "metaReview": "Meta review"
   },
   "workQueue": {
@@ -157,6 +157,7 @@
       "included": "Making ads is included. Nothing goes live until you say so.",
       "more": "More about your business",
       "againTitle": "What's new this time?",
+      "adLanguage": "Your ads will be in",
       "sameAsLast": "Same as last time: {summary}.",
       "change": "Change",
       "proof": {

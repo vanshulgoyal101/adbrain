@@ -64,7 +64,7 @@ describe("core: <SetupGoLive> (#1271)", () => {
     expect(chips[0]).toHaveAttribute("aria-pressed", "true");
     expect(chips[0].className).toContain("bg-primary/10");
     expect(chips[0].className).not.toMatch(/(^|\s)bg-primary(\s|$)/);
-    expect(screen.getByText("Meta checks your ads first, usually within a few hours and up to a day.")).toBeInTheDocument();
+    expect(screen.getByText("Meta checks your ads first. This usually takes a few hours, sometimes up to a day.")).toBeInTheDocument();
     expect(screen.getAllByText(/₹708/)).toHaveLength(2);
   });
 
