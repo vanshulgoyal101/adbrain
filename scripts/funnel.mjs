@@ -1,5 +1,5 @@
 // Activation funnel (#338): where each sign-up of the last N days stopped. Read-only: one
-// statement through the Supabase Management API inside BEGIN READ ONLY (docs/ORCHESTRATION.md
+// statement through the Supabase Management API inside BEGIN READ ONLY (docs/team/orchestration.md
 // "Access"). Prints user-id prefixes only, never emails or names, and leaves out internal
 // accounts (scripts/lib/internal-accounts.mjs).
 // Usage: node scripts/funnel.mjs [--days 14] [--include-internal]
