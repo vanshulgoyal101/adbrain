@@ -3,7 +3,7 @@
 
 Current source behavior, reviewed 2026-09-18. This guide replaces the older mixed
 inventory of shipped features and proposals. Deployment evidence lives in
-the PRs and issues; priorities belong in [Roadmap](../ROADMAP.md). Start at [the documentation index](../README.md).
+the PRs and issues; priorities belong in [Roadmap](../roadmap.md). Start at [the documentation index](../README.md).
 
 ## Pages
 
