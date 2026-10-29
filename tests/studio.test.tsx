@@ -993,6 +993,8 @@ describe("<Studio> review board", () => {
     expect(second).toHaveAttribute("aria-pressed", "true");
     expect(within(screen.getByRole("region", { name: "Ad details" })).getByText("First concept copy.")).toBeInTheDocument();
 
+    // #1287: 44 px tap target on phones (it was 40).
+    expect(screen.getByRole("searchbox", { name: "Search ads" })).toHaveClass("h-11");
     await user.type(screen.getByRole("searchbox", { name: "Search ads" }), "Second concept copy.");
     expect(first).toHaveAttribute("aria-pressed", "true");
     expect(board.getAllByRole("button", { name: "Same offer Needs review" })).toHaveLength(1);
@@ -1243,4 +1245,11 @@ describe("<Studio> the newest batch on return (#1261)", () => {
     await act(async () => {});
     expect(statusCalls()).toHaveLength(0);
   });
+
+describe("#1901: the Studio tile says whose picture it is", () => {
+  it("shows Your photo on an owner-photo ad", () => {
+    render(<Studio business={business} initialCreatives={[creative({ generation: { image: { provider: "owner-photo" } } })]} />);
+    expect(screen.getByText("Your photo")).toBeInTheDocument();
+  });
+});
 });

@@ -495,6 +495,11 @@ describe("Home results row (#764)", () => {
     expect(within(row).getByRole("link", { name: /See campaigns/ })).toHaveAttribute("href", "/campaigns");
   });
 
+  it("#1934: a launched owner starts a new campaign from Home in the guided returning mode", () => {
+    render(<WorkspaceHome {...empty} business={business} campaigns={[chats, forms]} results={results} now={now} />);
+    expect(within(screen.getByRole("region", { name: "Results so far" })).getByRole("link", { name: "New campaign" })).toHaveAttribute("href", "/brand?again=1");
+  });
+
   // #1774 (QA): in Hindi the freshness line was the one English phrase left in the row.
   it("#1774: in Hindi, says how fresh in Hindi; English keeps '10m ago'", () => {
     const old = { ...results, "c-form": { ...results["c-form"], fetched_at: new Date(now - 2 * 86_400_000).toISOString() } } as Record<string, CampaignResult>;

@@ -74,13 +74,18 @@ describe("verdict (#1255)", () => {
     expect(v({ status: "completed", results: 10, spend: 3010 })).toMatchObject({ state: "ended_costly", action: "new_ads", sentence: "It didn't bring chats at a good price. Try new ads?" });
     // CPO: no comparison, no judgement; Run this again once there are 5+ chats (#1050 picks the best ad).
     expect(v({ status: "completed", results: 14, spend: 1344, comparison: null })).toMatchObject({ state: "ended_measured", action: "run_again", sentence: "It ended with 14 chats at ₹96 each." });
-    expect(v({ status: "completed", results: 1, spend: 33 })).toMatchObject({ state: "ended_too_few", action: "new_ads", sentence: "It ended with 1 chat, too few to judge." });
+    // #1625 (CPO): too few to judge isn't bad; run the only ads with data again for longer.
+    expect(v({ status: "completed", results: 1, spend: 33 })).toMatchObject({ state: "ended_too_few", action: "run_again", sentence: "It ended with 1 chat, too few to judge yet. Run it again for longer?" });
+    expect(v({ status: "completed", results: 0, spend: 300, opens: 12 })).toMatchObject({ state: "ended_too_few", action: "run_again", sentence: "It ended with 0 chats, too few to judge yet. Run it again for longer?" });
+    // Nobody tapped at all: the ads, so new ones.
+    expect(v({ status: "completed", results: 0, spend: 300, opens: 0 })).toMatchObject({ state: "ended_too_few", action: "new_ads", sentence: "It ended with 0 chats, too few to judge." });
+    expect(v({ status: "completed", results: 0, spend: 300, opens: null, destination: "instant_form" })).toMatchObject({ action: "new_ads" });
   });
 
   it("people waiting prefix any live state, and Reply is the action only where the state has none", () => {
     expect(v({ waiting: 2 })).toMatchObject({ state: "about_average", action: "reply", sentence: "2 people are waiting for your reply. Each chat costs ₹150, about the same as usual for solar ads AdBrain has run (about ₹200 each)." });
     expect(v({ waiting: 1, results: 0, spend: 400, comparison: null })).toMatchObject({ action: "edit_message", sentence: "1 person is waiting for your reply. ₹400 spent, no chats yet. 40 people opened WhatsApp but didn't send the message." });
-    expect(v({ waiting: 3, status: "completed", results: 1, spend: 33 }).sentence).toBe("It ended with 1 chat, too few to judge.");
+    expect(v({ waiting: 3, status: "completed", results: 1, spend: 33 }).sentence).toBe("It ended with 1 chat, too few to judge yet. Run it again for longer?");
   });
 
   it("QA 2's Solaride numbers (#1133): the Jan WhatsApp run (1 chat, ₹32.63) and today's live run (0 chats, ₹40)", () => {

@@ -124,6 +124,10 @@ export function WorkspaceHome({
       {summary && (
         <section aria-labelledby="results-title">
           <h2 id="results-title" className="sr-only">{t("resultsSoFar")}</h2>
+          {/* #1934 (CPO #1924): a new offer re-runs the 3 steps in returning mode. */}
+          <Link href="/brand?again=1" className="float-right ml-4 inline-flex min-h-11 items-center rounded-md border border-slate-300 bg-white px-4 text-sm font-medium text-slate-900 hover:bg-slate-50">
+            {t("newCampaign")}
+          </Link>
           {verdicts?.lead && leadCampaign && (
             <p className="mb-4 max-w-2xl text-[17px] leading-snug text-slate-900">
               {verdicts.lead.verdict.sentence}{" "}
