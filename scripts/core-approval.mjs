@@ -17,19 +17,25 @@ export const CONTEXT = "core-approval";
 const MIGRATION = /^db\/migrations\//;
 
 export const corePath = /^(src\/lib\/meta\/|src\/lib\/campaign\/|src\/app\/api\/(meta|campaigns|managed|payments|spend-limits)\/|db\/migrations\/)/;
+/**
+ * #1740: tenant and auth boundaries: cron routes write across every business with the admin client, the WhatsApp
+ * webhook binds phones to businesses, and `security`/`internal-accounts` decide who may do what.
+ */
+export const tenantPath = /^src\/(app\/api\/(cron|whatsapp|privacy-requests)\/|lib\/(security|alerts)\/|lib\/internal-accounts\.(ts|json)$|lib\/privacy-requests\.ts$)/;
 
 export function coreFiles(files) {
-  return files.filter((f) => corePath.test(f) || moneyPath.test(f));
+  return files.filter((f) => corePath.test(f) || tenantPath.test(f) || moneyPath.test(f));
 }
 
 /**
  * @typedef {{ body: string, createdAt: string, url?: string }} Verdict
- * @param {{ files: string[], head: string, headRef: string, labels?: string[], title?: string, comments: Verdict[], samePatch?: (sha: string) => boolean }} pr
+ * @param {{ files: string[], head: string, headRef: string, headRepo?: string, baseRef?: string, labels?: string[], title?: string, comments: Verdict[], samePatch?: (sha: string) => boolean }} pr
  * The verdict for one PR. `comments` are issue comments and PR reviews ({ body, createdAt, url }), oldest first.
  * `samePatch(sha)` says whether an earlier head has the same changes as the current one.
  */
-export function coreApproval({ files, head, headRef, labels = [], title = "", comments, samePatch = (sha) => head.toLowerCase().startsWith(sha.toLowerCase()) }) {
-  if (headRef === "next") return { state: "success", description: "Deploy train: its PRs were gated into next" };
+export function coreApproval({ files, head, headRef, headRepo = repo, baseRef = "main", labels = [], title = "", comments, samePatch = (sha) => head.toLowerCase().startsWith(sha.toLowerCase()) }) {
+  // #1740: only this repo's own next → main is the train; a fork's (public repo) or any other base's `next` isn't.
+  if (headRef === "next" && headRepo === repo && baseRef === "main") return { state: "success", description: "Deploy train: its PRs were gated into next" };
   const core = coreFiles(files);
   if (!core.length) return { state: "success", description: "No core launch/Meta/money/migration files" };
   // Rollbacks come first (AGENTS): a labelled revert ships without waiting for a verdict.
@@ -89,7 +95,7 @@ async function main() {
     return memo.get(sha);
   };
 
-  const verdict = coreApproval({ files, head, headRef: pr.head.ref, labels: pr.labels.map((l) => l.name), title: pr.title, comments, samePatch });
+  const verdict = coreApproval({ files, head, headRef: pr.head.ref, headRepo: pr.head.repo?.full_name ?? "", baseRef: pr.base.ref, labels: pr.labels.map((l) => l.name), title: pr.title, comments, samePatch });
   console.log(`#${n} ${head.slice(0, 7)}: ${verdict.state} · ${verdict.description}`);
   if (values["dry-run"]) return;
   const args = ["api", "-X", "POST", `repos/${repo}/statuses/${head}`, "-f", `state=${verdict.state}`, "-f", `context=${CONTEXT}`, "-f", `description=${verdict.description}`];

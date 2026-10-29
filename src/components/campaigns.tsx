@@ -1,7 +1,6 @@
 "use client";
 
-import { startTransition, useCallback, useEffect, useEffectEvent, useReducer, useRef, useState, useSyncExternalStore } from "react";
-import type { ReactNode } from "react";
+import { startTransition, useCallback, useEffect, useEffectEvent, useReducer, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { flushSync } from "react-dom";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { useCampaignList } from "@/lib/meta-connect-ui/use-campaign-list";
@@ -100,7 +99,6 @@ import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
 import { useCampaignPreparation } from "@/lib/meta-connect-ui/use-campaign-preparation";
 import { targetingFromEditor, targetingToEditor } from "@/lib/campaign/editor-targeting";
 import { buildManualDraftInput, pickWhatsAppNumber } from "@/lib/campaign/manual-draft-input";
-import type { LeadForm } from "@/lib/meta/client";
 import { maskWhatsAppNumber, maskedWhatsAppNumberPattern, parseWhatsAppStatus, type WhatsAppStatus } from "@/lib/meta/whatsapp-status-shared";
 import type { ConnectIntent, ConnectionDTO } from "@/lib/meta/connect-contracts";
 import type { Business, Campaign, CampaignResult, Creative, Json } from "@/lib/types";
@@ -125,7 +123,7 @@ import { bookedLabel, costPerCustomer } from "@/lib/campaign/real-enquiries";
 import { describeSkippedCampaigns, type SkippedCampaign } from "@/lib/campaign/sync-skips";
 import type { RerunPrefill } from "@/lib/campaign/rerun";
 import { activateTrustLine } from "@/lib/trust-lines";
-import type { AdReview, CampaignDeliverySnapshot } from "@/lib/meta/client";
+import type { AdReview, CampaignDeliverySnapshot, LeadForm } from "@/lib/meta/client";
 import { committedWords, freeRoomPaise, type AccountFunding } from "@/lib/campaign/funding-check";
 import { readCampaignRecovery, recoveryStorageKey, writeCampaignRecovery, type CampaignRecovery } from "@/lib/meta-connect-ui/recovery";
 import { HelpOnWhatsApp } from "@/components/support-link";
@@ -134,7 +132,6 @@ import { useMounted } from "@/lib/use-mounted";
 import { refreshIfStale, staleCampaignIds } from "@/lib/campaign/results-freshness";
 import { GONE_LINES, goneInMeta } from "@/lib/campaign/gone-in-meta";
 import { formatDate, formatMoney, formatMoneyExact, formatNumber, formatPerDay } from "@/lib/format";
-
 
 const subscribeNever = () => () => {};
 
@@ -229,7 +226,6 @@ type CampaignsProps = {
   /** #1438: the list header, filters and sync lines in the owner's language. */
   campaignWords?: Words<"campaigns">;
 };
-
 
 type PlanReply = {
   response: Response;
@@ -1524,6 +1520,25 @@ function BusinessCampaigns({
     }
   }
 
+  // #1761 (DPDP erasure): every enquiry this campaign brought in (form leads and logged chats) goes for good.
+  async function deleteEnquiries(c: Campaign) {
+    if (!(await askConfirm({
+      title: "Delete this campaign's enquiries?",
+      description: `Every enquiry from "${c.name ?? "this campaign"}" is removed from AdBrain for good, including chats you added. Meta keeps its own copy in your Page's leads. Your ads aren't affected.`,
+      confirmLabel: "Delete enquiries", tone: "danger",
+    }))) return;
+    setCardError(null);
+    try {
+      const response = await fetch(`/api/leads?campaignId=${encodeURIComponent(c.id)}`, { method: "DELETE" });
+      const data = (await response.json().catch(() => ({}))) as { deleted?: number; error?: string };
+      if (!response.ok) { setCardError({ id: c.id, message: data.error ?? "Couldn't delete the enquiries. Try again." }); return; }
+      const n = data.deleted ?? 0;
+      setCardNotice({ id: c.id, message: n ? `Deleted ${n} ${n === 1 ? "enquiry" : "enquiries"} from this campaign.` : "This campaign had no enquiries to delete." });
+    } catch {
+      setCardError({ id: c.id, message: "Couldn't delete the enquiries — check your connection." });
+    }
+  }
+
   async function deleteCampaign(c: Campaign) {
     if (!(await askConfirm({ title: tc("notices.deleteTitle", { name: c.name ?? tc("card.thisCampaign") }), description: tc("notices.deleteBody"), confirmLabel: tc("card.delete"), tone: "danger" }))) {
       return;
@@ -2528,6 +2543,9 @@ function BusinessCampaigns({
                               </DropdownMenuItem>
                             )}
                             {c.meta_campaign_id && <DropdownMenuSeparator />}
+                            {c.status !== "draft" && <DropdownMenuItem variant="danger" onSelect={() => void deleteEnquiries(c)}>
+                              <Trash2 className="h-4 w-4" aria-hidden="true" /> Delete its enquiries
+                            </DropdownMenuItem>}
                             <DropdownMenuItem variant="danger" onSelect={() => void deleteCampaign(c)}>
                               <Trash2 className="h-4 w-4" aria-hidden="true" /> {tc("card.delete")}
                             </DropdownMenuItem>
@@ -2660,8 +2678,7 @@ function CardResults({ campaign, result: r, outcome, comparison, waiting, onRunA
   metaMessage?: string | null;
   waiting: number; onRunAgain: () => void; runAgainBusy: boolean; adsManagerUrl?: string; onEditAd?: () => void;
   /** #783's per-ad rows are on; a running campaign with enough results reads them for the weak-ad state. */
-  perAd: boolean; onWeakAd: (campaignId: string, shown: boolean) => void;
-  words?: Words<"verdict">;
+  perAd: boolean; onWeakAd: (campaignId: string, shown: boolean) => void; words?: Words<"verdict">;
 }) {
   const [now] = useState(() => Date.now());
   const enough = (outcome === "whatsapp" ? r.conversations ?? 0 : r.leads) >= BEST_AD_MIN_RESULTS;

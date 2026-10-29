@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { managementMigrationSql, migrationChecksum } from "../scripts/database-migrations.mjs";
-import { changedLines, ctoApproval, ctoReviews, failingChecks, moneyPath, qaApproval, releaseMigrations, reviewVerdicts, smokeCounts, supersededBy, backupFresh, commitStatuses } from "../scripts/release.mjs";
+import { changedLines, ctoApproval, ctoReviews, failingChecks, moneyPath, qaApproval, releaseMigrations, reviewVerdicts, smokeCounts, supersededBy, backupFresh, commitStatuses, guardRun } from "../scripts/release.mjs";
 
 const head = "c30aabaf55338d92d4f0ac9ca01eac027190aceb";
 const comment = (body: string, createdAt: string) => ({ body, createdAt, url: `https://example.test/${createdAt}` });
@@ -279,5 +279,20 @@ describe("required commit statuses (#926 core-approval)", () => {
     expect(failingChecks(["build", "core-approval"], [...runs, ...statuses])).toEqual([]);
     expect(failingChecks(["core-approval"], commitStatuses([{ context: "core-approval", state: "pending", created_at: "2026-10-27T12:00:00Z" }]))).toEqual(["core-approval"]);
     expect(failingChecks(["core-approval"], runs)).toEqual(["core-approval"]);
+  });
+});
+
+describe("production guard run for a commit (#2138)", () => {
+  const run = (databaseId: number, status: string, conclusion: string) => ({ databaseId, status, conclusion, url: `https://example.test/${databaseId}` });
+
+  it("skips runs whose job was skipped (non-production deployment statuses)", () => {
+    expect(guardRun([run(3, "completed", "skipped"), run(2, "completed", "success"), run(1, "completed", "skipped")])?.databaseId).toBe(2);
+    expect(guardRun([run(2, "completed", "skipped"), run(1, "completed", "failure")])?.conclusion).toBe("failure");
+  });
+
+  it("keeps waiting while only skipped runs exist, or the newest real one is still running", () => {
+    expect(guardRun([run(2, "completed", "skipped"), run(1, "completed", "skipped")])).toBeUndefined();
+    expect(guardRun([])).toBeUndefined();
+    expect(guardRun([run(2, "in_progress", ""), run(1, "completed", "success")])?.status).toBe("in_progress");
   });
 });

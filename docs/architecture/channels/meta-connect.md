@@ -140,7 +140,7 @@ randomized A/B testing integration. Actual remote billing remains controlled by 
 
 Draft version, attempt revision, connection generation, review hash, activation
 digest, and idempotency key are different controls. Never substitute one for
-another or recompute server hashes in an integration. See [Architecture](../../ARCHITECTURE.md).
+another or recompute server hashes in an integration. See [Architecture](../overview.md).
 
 [Activation review and PATCH](../../../src/app/api/campaigns/[id]/route.ts) verify
 stored child IDs, binding, generation, account/Page/budget and current Meta

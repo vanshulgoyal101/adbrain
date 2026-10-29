@@ -5,6 +5,7 @@ import { observeAction } from "@/lib/observability/logger";
 import { revalidatePath } from "next/cache";
 import { logEvent } from "@/lib/audit";
 import { fieldList, fieldStr } from "@/lib/brand/fields";
+import { BRAND_FACTS, type BrandFact } from "@/lib/brand/meter";
 import { brandUsable } from "@/lib/brand/usable";
 import { SETUP_FIELDS, SETUP_FIELD_LIMITS, setupFieldErrors, setupFieldsFrom, setupLocations, setupPhone, type SetupBusinessFields } from "@/lib/brand/setup-fields";
 import { normalizeWebsite, validateBrandFields } from "@/lib/brand/validation";
@@ -159,6 +160,40 @@ export async function saveSetupBusiness(id: string | null, input: SetupBusinessF
     revalidatePath("/dashboard");
     return { ok: true, id: row.id, usable };
   }
+}
+
+/** #2032: Home's Brand meter saves one fact to its existing column; the owner's own session and RLS scope the write. */
+export async function saveBrandFact(id: string, fact: BrandFact, input: string): Promise<SaveState> {
+  return observeAction("server.saveBrandFact", async () => {
+    const value = String(input ?? "").trim().slice(0, 200);
+    if (!(BRAND_FACTS as readonly string[]).includes(fact)) return { ok: false, error: "That can't be saved here." };
+    if (!value) return { ok: false, error: "Type something first." };
+    if (/[{}]/.test(value)) return { ok: false, error: "Fill in each blank, using only what is true for your business." };
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { ok: false, error: "Not authenticated." };
+
+    let update: Partial<Pick<BusinessInsert, "offers" | "usps" | "target_audience">>;
+    if (fact === "audience") update = { target_audience: value };
+    else {
+      const { data: current, error: readError } = await supabase.from("businesses").select("offers, usps").eq("id", id).single();
+      if (readError || !current) return { ok: false, error: "We couldn't find your business details. Reload the page." };
+      if (fact === "offer") update = { offers: [value, ...(current.offers ?? []).slice(1)] };
+      else {
+        const usps = (current.usps ?? []).filter((line: string) => line.trim());
+        update = { usps: usps.includes(value) ? usps : [...usps, value] };
+      }
+    }
+    const { data, error } = await supabase.from("businesses").update(update).eq("id", id).select("id").single();
+    if (error || !data) {
+      console.error("[business.fact]", error?.message ?? "no row");
+      return { ok: false, error: "Your business details weren't saved. Check your connection and try again." };
+    }
+    await logEvent({ businessId: id, action: "business.update", entityType: "business", entityId: id });
+    revalidatePath("/brand");
+    revalidatePath("/dashboard");
+    return { ok: true };
+  });
 }
 
 /** #1681: the ad language picked before a first batch goes first in the Brand's languages, so later batches use it. */

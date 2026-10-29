@@ -39,7 +39,7 @@ decides what is available (`src/lib/meta/capability-verification.ts`): insights 
 
 | Fact | Value | Source |
 | --- | --- | --- |
-| Limited tier budget | 60 points per ad account per 5 minutes; a write costs 3 | [Provider access prerequisites](../../ARCHITECTURE.md#provider-access-prerequisites) |
+| Limited tier budget | 60 points per ad account per 5 minutes; a write costs 3 | [Provider access prerequisites](../adr-001-multi-channel.md#provider-access-prerequisites) |
 | Throttle codes | `4` app; `17`, `613`, `80000`–`80014` user or ad account; `32` Page | `isThrottleCode` in `src/lib/meta/client.ts` |
 | Wait | Meta's estimate from `x-business-use-case-usage` (minutes) or `x-ad-account-usage` (seconds), else 15 minutes | `throttleWaitMs`, same file; tape from `scripts/record-meta-throttle-headers.ts` |
 | Behaviour | `MetaThrottledError` (`reason: "rate_limited"`, scope app/account/page). The results-refresh and lead-sync crons skip a throttled account and stop on an app throttle; a person's pause or activation is still tried | `src/app/api/cron/refresh-results/route.ts`, `src/app/api/cron/sync-leads/route.ts` |
@@ -77,4 +77,4 @@ the text follows the token owner's locale (#185).
 ADR-001 (#1805, proposed) moves these calls behind a channel adapter. Today they live in
 `src/lib/meta/`; `MetaThrottledError.reason` already maps to the adapter's
 `ChannelError` code `rate_limited`
-([Architecture](../../ARCHITECTURE.md)).
+([Architecture](../overview.md)).

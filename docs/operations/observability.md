@@ -86,7 +86,8 @@ The stream includes:
   regeneration/export, campaign create/review/activate/pause/sync, Brand save,
   upload/delete, follow-up save, payment quote/checkout, Meta connect controls and
   `meta.access_request` (a new owner asking for Facebook access before App Review),
-  the audience edit (`campaign.edit_audience`), and Help on WhatsApp (`help.whatsapp`, #1284).
+  the audience edit (`campaign.edit_audience`), Help on WhatsApp (`help.whatsapp`, #1284), and hiding
+  Home's "last week" card (`home.week_summary_dismiss`, #1668; Home reads it to keep the card hidden that week).
 - `lead.customer_marked` (#2026), `kind=action`, server-side: an enquiry crossing to or from
   "customer" in the inbox or a campaign's WhatsApp chats. Attributes: `source` (inbox|whatsapp),
   `campaignId` when known, `undone` (true when unmarked).

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { MarketingHome } from "@/components/marketing-home";
 import { LEGAL_LINKS } from "@/lib/legal-links";
@@ -16,8 +16,16 @@ describe("public product example", () => {
     expect(screen.getAllByRole("img", { name: /^An AdBrain ad for a / }).length).toBeGreaterThan(0);
     expect(screen.getByRole("heading", { name: "You approve every rupee." })).toBeInTheDocument();
     // #718 (CEO, path A): the price the owner sees, and the ad money goes to Meta.
-    expect(screen.getByRole("heading", { name: "Simple pricing" })).toBeInTheDocument();
-    expect(screen.getByText("₹999 a month for AdBrain, first month free. You pay Meta for your ads directly, with a limit you set. No auto-debit, stop any time.")).toBeInTheDocument();
+    // #1652: the pricing block and its 5 questions, at /#pricing.
+    const pricing = screen.getByRole("region", { name: "Pricing" });
+    expect(pricing).toHaveAttribute("id", "pricing");
+    expect(within(pricing).getByText("Then ₹999 a month for AdBrain.")).toBeInTheDocument();
+    expect(within(pricing).getByText(/Meta adds 18% GST to your ad spend; that's Meta's charge, not ours\./)).toBeInTheDocument();
+    expect(pricing.querySelectorAll("details")).toHaveLength(5);
+    // CEO (#1652): no GST claim on the ₹999 plan until #1845 closes; GST is only ever Meta's.
+    for (const line of pricing.querySelectorAll("li, details")) {
+      if (/999/.test(line.textContent ?? "")) expect(line.textContent).not.toMatch(/GST/);
+    }
     // #1235 (owner): AdBrain's split or margin is never shown to customers.
     expect(document.body.textContent).not.toMatch(/\b(80|20)\s?%|service (fee|allocation)|margin/i);
     expect(screen.queryByText(/partner/i)).toBeNull();
