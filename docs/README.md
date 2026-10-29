@@ -14,12 +14,12 @@ feature branch or a passing local test.
 
 | Reader | Read first | Then read |
 | --- | --- | --- |
-| Owner or coordinating worker | [Worker orchestration](ORCHESTRATION.md) | [Roadmap](ROADMAP.md) |
+| Owner or coordinating worker | [Worker orchestration](ORCHESTRATION.md) | [Roadmap](roadmap.md) |
 | New developer | [Quick start](QUICK_START.md) | [Architecture](ARCHITECTURE.md) |
-| Product or support | [Features and workflows](product/README.md) | [Roadmap](ROADMAP.md) |
+| Product or support | [Features and workflows](product/README.md) | [Roadmap](roadmap.md) |
 | Operator | [Deployment configuration](DEPLOY.md) | [Release policy](RELEASING.md) |
 | Debugging engineer | [Observability](OBSERVABILITY.md) | [Operations](OPERATIONS.md) |
-| Product planner | [Roadmap](ROADMAP.md) | [Payment plan](PAYMENTS-PLAN.md) |
+| Product planner | [Roadmap](roadmap.md) | [Payment plan](PAYMENTS-PLAN.md) |
 
 ## Reference Library
 
@@ -45,7 +45,7 @@ feature branch or a passing local test.
 
 ## Plans and Records
 
-[Roadmap](ROADMAP.md) and the [payment plan](PAYMENTS-PLAN.md) hold intent and
+[Roadmap](roadmap.md) and the [payment plan](PAYMENTS-PLAN.md) hold intent and
 decisions; the [worker dispatch](ORCHESTRATION.md) holds current assignments.
 Consolidate guidance into its owning reference instead of adding dated documents.
 
@@ -59,6 +59,7 @@ last move.
 | --- | --- |
 | `API_REFERENCE.md` | [api/](api/README.md): one page per route group |
 | `FEATURES.md` | [product/](product/README.md): one page per product area |
+| `ROADMAP.md` | [roadmap.md](roadmap.md) (lower case, like the folders) |
 
 ## Terminology
 

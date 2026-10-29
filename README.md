@@ -65,7 +65,7 @@ checks. Do not commit credentials or generated private artifacts.
   confirmation are distinct stages. Repeated POSTs are not a recovery strategy.
 - Lead sync and report exports exist. Resumable imports and saved follow-up work
   have separate feature candidates and database prerequisites; consult the
-  [roadmap](docs/ROADMAP.md) and exact release receipt before claiming deployment.
+  [roadmap](docs/roadmap.md) and exact release receipt before claiming deployment.
 - Razorpay account activation and website approval are verified, but AdBrain's
   test checkout is not a live payment-to-ad-funding workflow. See
   [payment readiness](docs/PAYMENTS-PLAN.md#verified-razorpay-account-status).
