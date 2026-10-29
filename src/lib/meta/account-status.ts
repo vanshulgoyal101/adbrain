@@ -33,7 +33,7 @@ export function adAccountState(status: number | null | undefined, adAccountId?: 
     case 8:
       return state(`${UNPAID_EN} Pay the balance in Meta and your ads can run again.`, `${UNPAID_HI} Meta में बकाया भरें, फिर विज्ञापन दोबारा चल सकेंगे।`, pay);
     case 9:
-      return state(`${UNPAID_EN} Pay it soon to keep your ads running.`, `${UNPAID_HI} विज्ञापन चालू रखने के लिए जल्दी भरें।`, pay);
+      return state(`${UNPAID_EN} Pay the balance in Meta to go live and keep your ads running.`, `${UNPAID_HI} लाइव करने और विज्ञापन चालू रखने के लिए Meta में बकाया भरें।`, pay);
     case 7:
       return state("Meta is checking this new ad account. Ads can start once it's done; there's nothing to do now.",
         "Meta इस नए विज्ञापन खाते की जाँच कर रहा है। जाँच पूरी होते ही विज्ञापन शुरू हो सकते हैं; अभी कुछ करने की ज़रूरत नहीं।", null);
