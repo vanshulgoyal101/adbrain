@@ -15,7 +15,7 @@ export function isExemptFromFreeProviders(user: AccountIdentity): boolean {
   return Boolean(user && internal.exemptFromFreeProviders.some((entry) => entry.userId === user.id));
 }
 
-/** #1317: a sales prospect's account: an internal team address with `+prospect` (docs/OPERATIONS.md, Prospect accounts). */
+/** #1317: a sales prospect's account: an internal team address with `+prospect` (docs/operations/runbooks/prospect-handover.md). */
 export function isProspectAccount(user: AccountIdentity): boolean {
   const local = user?.email?.trim().toLowerCase().split("@")[0] ?? "";
   return isInternalUser(user) && /\+prospect(?:-|$)/.test(local);
