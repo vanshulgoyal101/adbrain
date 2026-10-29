@@ -93,13 +93,14 @@ export function fallbackAudienceTargeting(draft: DraftInput): TargetingInputDTO 
 const LENDER = /\b(?:loans?|lend(?:er|ing)|credit cards?|insurance|mutual funds?|nbfc|finance compan(?:y|ies)|financial services|bank(?:ing)?|mortgages?|invest(?:ment|ing)s?|stock ?brok|forex|crypto)\b/i;
 const PROPERTY = /\b(?:real estate|propert(?:y|ies)|builders?|developers?|flats?|apartments?|plots?|villas?|rentals?|for rent|pg|hostels?|co-?living|housing)\b/i;
 const RECRUITER = /\b(?:jobs?|recruit(?:er|ment|ing)?|placements?|hiring|staffing|manpower|work permits?)\b/i;
-const EDUCATION = /ielts|pte|toefl|celpip|study abroad|overseas education|spoken english|coaching|tuition|classes|academy|institute/i;
+const EDUCATION = /\b(?:ielts|pte|toefl|celpip|study abroad|overseas education|spoken english|coaching|tuition|classes|academy|institute)\b/i;
 
 export function effectiveSpecialCategory(category: PlannerPlanInput["special_ad_category"], business?: { vertical?: string | null; offers?: string[] | null }) {
-  if (!business) return category;
-  const about = [business.vertical, ...(business.offers ?? [])].filter(Boolean).join(" \n ");
-  if (category === "financial_products_services" && !LENDER.test(about)) return "none";
-  if (category === "housing" && !PROPERTY.test(about) && !LENDER.test(about)) return "none";
+  const vertical = business?.vertical?.trim();
+  if (!vertical) return category;
+  const about = [vertical, ...(business?.offers ?? [])].filter(Boolean).join(" \n ");
+  if (category === "financial_products_services" && !LENDER.test(vertical)) return "none";
+  if (category === "housing" && !PROPERTY.test(vertical) && !LENDER.test(vertical)) return "none";
   if (category === "employment" && EDUCATION.test(about) && !RECRUITER.test(about)) return "none";
   return category;
 }

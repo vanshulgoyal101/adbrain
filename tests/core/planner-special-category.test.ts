@@ -25,6 +25,9 @@ describe("core: an interiors or 'EMI available' offer never becomes a special ca
     ["interiors read as housing", "housing", interiors],
     ["solar 'EMI available' read as credit", "financial_products_services", solarEmi],
     ["IELTS coaching read as employment", "employment", ielts],
+    ["solar credit-card EMI read as credit", "financial_products_services", { vertical: "Solar installation", offers: ["no-cost EMI on all credit cards"] }],
+    ["kitchen bank EMI read as credit", "financial_products_services", { vertical: "Modular kitchens", offers: ["Easy EMI with HDFC Bank"] }],
+    ["flat interiors read as housing", "housing", { vertical: "Home interiors", offers: ["2BHK flat interiors"] }],
   ])("%s still prepares (no launch block)", (_case, label, business) => {
     const result = draft(label, business);
     expect(result.ok, result.ok ? "" : result.error).toBe(true);
@@ -32,6 +35,18 @@ describe("core: an interiors or 'EMI available' offer never becomes a special ca
 
   it("a lender's own loan offer keeps the financial category and its block", () => {
     const result = draft("financial_products_services", lender);
+    expect(result.ok).toBe(false);
+    expect(result.ok ? "" : result.error).toMatch(/special-category review/);
+  });
+
+  it.each([
+    ["employment", { vertical: "Domestic help agency", offers: ["UPI accepted"] }],
+    ["employment", { vertical: "Domestic help agency", offers: ["cards accepted"] }],
+    ["employment", { vertical: "IELTS coaching", offers: ["Jobs placement available"] }],
+    ["financial_products_services", { vertical: "", offers: ["EMI available"] }],
+    ["housing", { vertical: "  ", offers: ["2BHK interiors"] }],
+  ])("keeps the %s launch block without evidence that the business is exempt", (category, business) => {
+    const result = draft(category, business);
     expect(result.ok).toBe(false);
     expect(result.ok ? "" : result.error).toMatch(/special-category review/);
   });
