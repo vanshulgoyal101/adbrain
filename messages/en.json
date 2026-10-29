@@ -81,7 +81,22 @@
     "alertsDaily": "Yesterday's results, 9 am",
     "alertsDailyDetail": "One line: spent, chats and enquiries, and what each enquiry cost.",
     "alertsForm": "New form enquiry",
-    "alertsFormDetail": "Only for ads with a form: name, phone and which ad, with a tap to call."
+    "alertsFormDetail": "Only for ads with a form: name, phone and which ad, with a tap to call.",
+    "ifYouStop": {
+      "title": "If you stop",
+      "payingLead": "If you stop paying:",
+      "paying": "your running ads keep running on Meta, and your results and enquiries stay here. Making new ads and campaigns waits until you pay. Nothing is deleted.",
+      "disconnectLead": "If you disconnect Facebook:",
+      "disconnect": "your ads keep running in Meta until you pause them there. AdBrain can't pause them or update results after that.",
+      "deleteLead": "To delete your data:",
+      "delete": "use Privacy and data requests below. Your campaigns stay in your own Meta ad account."
+    },
+    "disconnect": {
+      "title": "Disconnect Facebook?",
+      "body": "Your ads keep running in Meta until you pause them there. After this, AdBrain can't pause them or update their results.",
+      "confirm": "Disconnect",
+      "cancel": "Keep connected"
+    }
   },
   "pilotDay7": {
     "question": "One question after your first week: would you pay ₹999 a month to keep using AdBrain?",
