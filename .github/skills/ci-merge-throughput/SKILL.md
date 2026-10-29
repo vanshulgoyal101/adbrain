@@ -3,7 +3,7 @@ name: ci-merge-throughput
 description: "Use when several workers merge to one main branch many times a day, when a required check blocks every PR for reasons unrelated to the change, or when a new test suite should become a required merge check."
 ---
 
-<!-- Generated from vanshulgoyal101/skills@b877c32 skills/ci-merge-throughput.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
+<!-- Generated from vanshulgoyal101/skills@eb9e65d skills/ci-merge-throughput.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
 
 # CI Merge Throughput
 

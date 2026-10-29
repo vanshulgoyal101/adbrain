@@ -3,7 +3,7 @@ name: multi-worker-delivery
 description: "Use when independent coding agents share repositories, split implementation and review, hand off idle workers, or prepare a release from several feature branches."
 ---
 
-<!-- Generated from vanshulgoyal101/skills@b877c32 skills/multi-worker-delivery.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
+<!-- Generated from vanshulgoyal101/skills@eb9e65d skills/multi-worker-delivery.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
 
 # Multi-Worker Delivery
 

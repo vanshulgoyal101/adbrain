@@ -3,7 +3,7 @@ name: hydration-determinism
 description: "Use this when server-rendered or statically rendered UI also renders on the client and output depends on time, timezone, locale, randomness, browser state, or per-request data."
 ---
 
-<!-- Generated from vanshulgoyal101/skills@b877c32 skills/hydration-determinism.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
+<!-- Generated from vanshulgoyal101/skills@eb9e65d skills/hydration-determinism.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
 
 # Hydration Determinism
 

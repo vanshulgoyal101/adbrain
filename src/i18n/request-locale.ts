@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { unstable_rethrow } from "next/navigation";
-import { LOCALE_COOKIE, namespaceMessages, ownerErrorIn, toLocale, type AppLocale, type OwnerErrorKey } from "@/i18n/locale";
+import { LOCALE_COOKIE, namespaceMessages, ownerErrorIn, toLocale, type AppLocale, type OwnerErrorKey, type OwnerErrorValues } from "@/i18n/locale";
 import type { Words } from "@/i18n/words";
 import type { SetupWords } from "@/i18n/setup-words";
 
@@ -31,8 +31,14 @@ export async function requestLocale(): Promise<AppLocale> {
 }
 
 /** #2305: an API route's error in the owner's language (the same cookie as pages); English outside a request. */
-export async function ownerError(key: OwnerErrorKey, values?: Record<string, string | number>): Promise<string> {
+export async function ownerError(key: OwnerErrorKey, values?: OwnerErrorValues): Promise<string> {
   return ownerErrorIn(await requestLocale(), key, values);
+}
+
+/** #2312: a synchronous `ownerError` for one request, for routes that refuse from inside callbacks. */
+export async function ownerWords(): Promise<(key: OwnerErrorKey, values?: OwnerErrorValues) => string> {
+  const locale = await requestLocale();
+  return (key, values) => ownerErrorIn(locale, key, values);
 }
 
 /** #1438: the first-ad setup's words in the owner's language, for the three step pages to pass to their client step. */
