@@ -155,10 +155,10 @@ exactly one route-inventory row (`| GET | \`/api/…\` |`) across the API pages,
 every row has a handler; every environment key appears in a configuration page;
 current pages stay at most 300 lines; every folder under `docs/` has a `README.md`
 that links each page and subfolder in it; new pages go in a subfolder
-(`product`, `architecture`, `api`, `operations`, `team`), not loose in `docs/`;
+(`product`, `architecture`, `api`, `operations`, `team`, `plans`), not loose in `docs/`;
+every page in `docs/plans/` states `**Status:** active` or `done` under its title;
 and any `docs/….md` path named in `src/`, `scripts/`, `db/` (not applied migrations, which are immutable), `.github/`,
-`AGENTS.md` or `.env.example` must exist. Flat guides not yet moved are listed in
-`LEGACY_FLAT` in the checker and exempt from the size and layout rules.
+`AGENTS.md` or `.env.example` must exist.
 In CI the `docs` job runs the checker and its tests; the required `test` check
 fails when `docs` does (#1918), so a PR with a docs gap can't merge.
 `--json` also lists migrations not mentioned in the data model guide; these are

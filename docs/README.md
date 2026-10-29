@@ -42,7 +42,7 @@ feature branch or a passing local test.
 | [Release policy](operations/releasing.md) | What approvals and checks govern remote changes? |
 | [Meta approval readiness](plans/meta-approval.md) | What external review evidence must be prepared and verified? |
 | [Payment plan and readiness](plans/payments.md) | What are the agreed economics, implemented payment boundaries and remaining live-rollout requirements? |
-| [Brand identity](BRAND-IDENTITY.md) | Which presentation and terminology conventions should the product follow? |
+| [Brand identity](team/brand-identity.md) | Which presentation and terminology conventions should the product follow? |
 
 ## Plans and Records
 
@@ -73,6 +73,7 @@ last move.
 | `ARCHITECTURE.md` | [architecture/overview.md](architecture/overview.md), [overview-boundaries.md](architecture/overview-boundaries.md) and [ADR-001](architecture/adr-001-multi-channel.md) |
 | `ORCHESTRATION.md` | [team/orchestration.md](team/orchestration.md) |
 | `RELEASING.md` | [operations/releasing.md](operations/releasing.md) and [operations/releasing-recovery.md](operations/releasing-recovery.md) (backups, rollback, production guard) |
+| `BRAND-IDENTITY.md` | [team/brand-identity.md](team/brand-identity.md) |
 | `META_APPROVAL_ACTION_PLAN.md` | [plans/meta-approval.md](plans/meta-approval.md) |
 | `PAYMENTS-PLAN.md` | [plans/payments.md](plans/payments.md) and [plans/payments-safety.md](plans/payments-safety.md) (funding safety, experience, delivery, receipt) |
 
@@ -96,7 +97,7 @@ last move.
 - Runtime schemas, route handlers, database constraints, and tests define the
   current contract. Documentation explains them; it does not override them.
 - [Release policy](operations/releasing.md) governs publication and production changes.
-- [Brand identity](BRAND-IDENTITY.md) covers product presentation.
+- [Brand identity](team/brand-identity.md) covers product presentation.
 
 ## Safety Before Setup
 

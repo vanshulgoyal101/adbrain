@@ -127,9 +127,8 @@ test("layered docs: short pages, an index per folder linking each page, nothing 
   const long = "# Long\n" + "line\n".repeat(300);
   const root = fixture(context, {
     "README.md": "# Start\n",
-    "docs/README.md": "# Docs\n[Product](product/README.md) [Roadmap](roadmap.md) [Old](OLD.md) [Loose](loose.md)\n",
+    "docs/README.md": "# Docs\n[Product](product/README.md) [Roadmap](roadmap.md) [Loose](loose.md)\n",
     "docs/roadmap.md": "# Roadmap\n",
-    "docs/OLD.md": long,
     "docs/loose.md": "# Loose\n",
     "docs/product/README.md": "# Product\n[Brand](brand.md)\n",
     "docs/product/brand.md": long,
@@ -139,7 +138,7 @@ test("layered docs: short pages, an index per folder linking each page, nothing 
     "docs/plans/live.md": "# Live\n\n**Status:** active: building it (#1).\n",
     "docs/plans/stale.md": "# Stale\n\nNo status.\n",
   });
-  assert.deepEqual(messages(checkDocumentation(root, { legacyFlat: new Set(["docs/OLD.md"]) })).sort(), [
+  assert.deepEqual(messages(checkDocumentation(root)).sort(), [
     "docs/README.md Index does not link docs/operations/README.md",
     "docs/README.md Index does not link docs/plans/README.md",
     "docs/loose.md Put pages in a docs/ subfolder (product, architecture, api, operations, team, plans)",
