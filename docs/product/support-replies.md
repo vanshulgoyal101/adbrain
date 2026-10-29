@@ -173,6 +173,22 @@ Once chats come, send them [Answer the chats your ad brings](answer-chats.md).
   > "Costly" means each chat costs much more than usual. If it names one ad, tap "Pause
   > this ad"; otherwise tap "Try new ads". Nothing changes your budget on its own.
 
+## 10. My ads stopped
+
+- **Owner says:** "My ads stopped", "who paused my campaign?", "it says Paused but I didn't".
+- **Screen shows:** the card says "Paused" (or "Ended") with "Resume"; Home's Recent
+  activity says "Campaigns auto-paused at your cap".
+- **Cause:** one of four: the weekly cap was reached, this week's spend couldn't be
+  checked, the AdBrain balance needs a check, or the run reached its end date. Each one,
+  with what to do, is in [Why AdBrain paused your campaign](manage.md#why-adbrain-paused-your-campaign).
+  Ask whether the run had an end date and whether a weekly cap is set in Settings.
+- **Reply:**
+
+  > AdBrain paused it to protect your money: either your weekly cap was reached, or the
+  > run reached the end date you chose. Nothing more is spending. To run again, tap
+  > "Resume" on the campaign and choose how many days, or raise your weekly cap in
+  > Settings first.
+
 ## Still stuck
 
 Ask for a screenshot and the time it happened, then open or update the GitHub issue
