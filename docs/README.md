@@ -30,6 +30,7 @@ feature branch or a passing local test.
 | [API reference](api/README.md) | Which routes/actions exist, which parameters are accepted, and what do failures mean? |
 | [Configuration](CONFIGURATION.md) | Which variables are required, what are their defaults, and which changes cost money or require a restart? |
 | [Architecture](ARCHITECTURE.md) | Where is behavior owned, and how do requests cross trust boundaries? |
+| [Architecture decisions](architecture/README.md) | Which cross-cutting decisions (ADRs) bind the code, and how do we record a new one? |
 | [Data model](DATA_MODEL.md) | Which tables, relationships, grants, RPCs, buckets and migrations support the app? |
 | [AI pipeline](AI_PIPELINE.md) | How do interviews, concepts, images, composition, retries, cache and accounting work? |
 | [Meta connection](META_CONNECT.md) | How do consent, selection, capabilities, paused creation and activation work, and what does Meta's App Review need? |
