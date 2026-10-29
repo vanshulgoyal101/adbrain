@@ -354,7 +354,7 @@ async function handlePATCH(
     if (isMetaReauthError(err)) {
       // #757: a dead token can't stop delivery, so name the manual step first while the campaign may be running.
       const message = action === "paused" || campaign.status === "active"
-        ? say("metaAccessStoppedLive", { action: action === "paused" ? "pause" : "change" })
+        ? say(action === "paused" ? "metaAccessStoppedPause" : "metaAccessStoppedChange")
         : say("metaAccessStopped");
       return NextResponse.json({ error: message, code: "META_REAUTH" }, { status: 409 });
     }

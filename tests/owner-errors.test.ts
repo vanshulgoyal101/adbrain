@@ -47,7 +47,8 @@ const ENGLISH: Record<OwnerErrorKey, string> = {
   activationUnrecordedPauseUnconfirmed: "AdBrain could not record the activation and Meta did not confirm the pause. Pause the campaign in Ads Manager now.",
   activationUnrecordedPaused: "AdBrain could not record the activation, so the campaign was paused again in Meta. Try again.",
   pauseUnconfirmed: "Meta did not confirm the pause. Pause the campaign in Ads Manager now.",
-  metaAccessStoppedLive: "Meta stopped accepting AdBrain's access, so we couldn't pause this campaign. Pause it in Ads Manager now, then reconnect Facebook in Settings.",
+  metaAccessStoppedPause: "Meta stopped accepting AdBrain's access, so we couldn't pause this campaign. Pause it in Ads Manager now, then reconnect Facebook in Settings.",
+  metaAccessStoppedChange: "Meta stopped accepting AdBrain's access, so we couldn't change this campaign. Pause it in Ads Manager now, then reconnect Facebook in Settings.",
   metaAccessStopped: "Meta stopped accepting AdBrain's access. Reconnect Facebook in Settings, then try again.",
   campaignUpdateFailed: "Could not update the campaign.",
   campaignStorageUnavailable: "Campaign storage unavailable. Try again.",
@@ -62,7 +63,6 @@ const VALUES: Partial<Record<OwnerErrorKey, OwnerErrorValues>> = {
   committedUncapped: { money: "₹40.00", adSets: 1 },
   committedBoth: { runs: "A", uncapped: "B" },
   committedUncappedOnly: { uncapped: "B" },
-  metaAccessStoppedLive: { action: "pause" },
 };
 const keys = Object.keys(ENGLISH) as OwnerErrorKey[];
 
