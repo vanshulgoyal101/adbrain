@@ -68,7 +68,7 @@ describe("AppLanguage, compact (step 1)", () => {
     vi.doMock("@/app/(app)/settings/language-actions", () => action);
     const { CompactAppLanguage } = await import("@/components/app-language");
     render(<CompactAppLanguage />);
-    const group = screen.getByRole("group", { name: "Language / भाषा" });
+    const group = screen.getByRole("group", { name: "App language / ऐप की भाषा" });
     expect(screen.getByRole("button", { name: "English" })).toHaveAttribute("aria-pressed", "false");
     expect(screen.getByRole("button", { name: "हिंदी" })).toHaveAttribute("lang", "hi");
     fireEvent.click(screen.getByRole("button", { name: "English" }));

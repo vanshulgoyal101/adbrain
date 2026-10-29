@@ -111,6 +111,11 @@ button.name:hover { text-decoration: underline; }
   tr[data-state="new"] .followUp { grid-column: 3; }
   tr:not([data-state="new"]) .followUp { grid-column: 2 / -1; }
   tr:not([data-state="new"]) .contact { display: none !important; }
+  /* #1819: a row with no contact actions keeps ⋯ on the name row, beside the state, not alone on a second line.
+     Keep these after the :not() rules above: equal specificity, so the later rule wins. */
+  tr[data-actions="none"] .person { grid-column: 1 / 3; }
+  tr[data-actions="none"] .contact { display: none !important; }
+  tr[data-actions="none"] .followUp { grid-column: 3; grid-row: 1; align-self: start; }
 }
 /* #1260 slice 4: the left pane at 1280+ uses the same rows as a phone. */
 @media (min-width: 1280px) {
@@ -147,6 +152,9 @@ button.name:hover { text-decoration: underline; }
   .panes tr[data-state="new"] .followUp { grid-column: 3; }
   .panes tr:not([data-state="new"]) .followUp { grid-column: 2 / -1; }
   .panes tr:not([data-state="new"]) .contact { display: none !important; }
+  .panes tr[data-actions="none"] .person { grid-column: 1 / 3; }
+  .panes tr[data-actions="none"] .contact { display: none !important; }
+  .panes tr[data-actions="none"] .followUp { grid-column: 3; grid-row: 1; align-self: start; }
 }
 @media (max-width: 600px) {
   /* #376: no dead space on a phone. */

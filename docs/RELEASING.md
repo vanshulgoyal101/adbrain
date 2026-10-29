@@ -52,6 +52,11 @@ These controls are split between [.github/workflows/ci.yml](../.github/workflows
 deployments are not blocked by Git branch protection; never use `vercel --prod` to
 skip review.
 
+**Action updates (#1772):** [dependabot.yml](../.github/dependabot.yml) opens one grouped `github-actions`
+PR into `next` every Monday; [dependabot-automerge.yml](../.github/workflows/dependabot-automerge.yml) enables
+auto-merge only when Dependabot is the author and every changed file is under `.github/workflows/`. Required
+checks still gate the merge. Anything else Dependabot opens waits for a person.
+
 **The corrected checked-in wildcard disables slash-containing Git branches.** Earlier
 single-star configurations did not.
 Before pushing a feature or release branch, inspect effective remote deployment
@@ -110,6 +115,9 @@ exclude entire test directories or suppress uninvestigated findings.
   advisors (read-only) and exits 1 on any WARN or ERROR outside its reviewed
   `ACCEPTED` list. A new finding blocks the release until it is fixed or accepted
   in that list with a reason, through a PR.
+  The owner alert preference and verification RPCs from #974 are accepted only for
+  authenticated execution: both check `auth.uid()` and business ownership inside,
+  fix `search_path`, and keep anonymous execution and direct owner writes denied.
 - **Tenant or money PRs without a migration target `next`** (#461): `release.mjs --pr <n>` runs the same
   QA (and, for money paths including `src/lib/managed/`, CTO) checks, merges into `next`, and prints
   a receipt; the next deploy train ships it and smokes it. Migrations still release to `main`.
@@ -184,7 +192,7 @@ The Supabase free plan keeps no backups (owner, Oct 27: no Pro), so we keep our 
 - **Nightly encrypted dump:** [db-backup.yml](../.github/workflows/db-backup.yml) runs `pg_dump`
   of the `public`, `private` and `auth` schemas (data and schema; `private` holds the encrypted Meta tokens, payment orders and the migration ledger) as the read-only role `backup_reader`
   (`BYPASSRLS`, `default_transaction_read_only`). It connects through the session pooler using the
-  Actions secret `BACKUP_DATABASE_URL` (the only place its password lives). The dump is gzipped
+  `BACKUP_DATABASE_URL` secret of the `production-secrets` environment (`main` only, #1893; the only place its password lives; rotate with a SCRAM verifier, `alter role backup_reader password 'SCRAM-SHA-256$…'`, and allow ~2 min for the pooler's cache). The dump is gzipped
   and encrypted (openssl CMS, AES-256) to the public certificate
   [.github/backup/backup-cert.crt](../.github/backup/backup-cert.crt), then kept as a 14-day
   workflow artifact. Only the private key decrypts it; it lives in DevOps's keychain

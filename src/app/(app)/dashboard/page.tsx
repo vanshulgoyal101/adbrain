@@ -37,7 +37,7 @@ export default async function DashboardPage() {
   ) : null;
   const activity = business ? getAuditLog(business.id, 8).then<ReactNode, ReactNode>(
     (audit) => <RecentActivity audit={audit} locale={locale} />,
-    () => <Alert variant="error">Recent activity could not be loaded.</Alert>,
+    () => <Alert variant="error">We couldn&apos;t load your recent activity. Reload the page.</Alert>,
   ) : null;
   const [creatives, campaigns, metaConnection] = business
     ? await Promise.all([
@@ -53,7 +53,7 @@ export default async function DashboardPage() {
     const ready = resume === 3 && business
       ? await getApprovedCreatives(business.id).then((rows) => rows.filter((row) => madeForSetup(row, business)), () => [])
       : [];
-    return <SetupResumeCard step={resume} ready={ready} />;
+    return <SetupResumeCard step={resume} ready={ready} locale={locale} />;
   }
   // #764: the Home results row; an unreadable result leaves the row out, never the page.
   const launched = campaigns.filter((campaign) => campaign.meta_campaign_id).map((campaign) => campaign.id);

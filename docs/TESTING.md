@@ -382,9 +382,21 @@ node --test scripts/check-docs.test.mjs
 on broken local links/anchors or source-line links, unclosed fences, invalid JSON
 examples, missing `node scripts/...` files and unknown `npm run` names. Historical
 records (`docs/qa/`, `docs/releases/`, dated history files) are checked only with
-`--all`, as warnings. `--json` also lists API routes, environment keys and
-migrations not mentioned in their owning guides; these are review leads, not
-contract validation. `--root <worktree>` inspects another checkout. It does not
+`--all`, as warnings. It also checks `AGENTS.md` and module READMEs under `src/`.
+
+Structure rules (#1851) fail the check too: every handler in `src/app/api` has
+exactly one route-inventory row (`| GET | \`/api/…\` |`) across the API pages, and
+every row has a handler; every environment key appears in a configuration page;
+current pages stay at most 300 lines; every folder under `docs/` has a `README.md`
+that links each page and subfolder in it; new pages go in a subfolder
+(`product`, `architecture`, `api`, `operations`, `team`), not loose in `docs/`;
+and any `docs/….md` path named in `src/`, `scripts/`, `db/`, `.github/`,
+`AGENTS.md` or `.env.example` must exist. Flat guides not yet moved are listed in
+`LEGACY_FLAT` in the checker and exempt from the size and layout rules.
+In CI the `docs` job runs the checker and its tests; the required `test` check
+fails when `docs` does (#1918), so a PR with a docs gap can't merge.
+`--json` also lists migrations not mentioned in the data model guide; these are
+review leads, not contract validation. `--root <worktree>` inspects another checkout. It does not
 fetch external links, run snippets, load `.env` or validate route schemas.
 
 When changing a route, environment field, migration, or lifecycle, update the

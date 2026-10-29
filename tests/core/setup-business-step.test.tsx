@@ -64,7 +64,7 @@ describe("core: setup fields (#1269)", () => {
 
   it("reads a saved Brand back; the column default isn't shown as what you sell", () => {
     expect(setupFieldsFrom({ name: "A", vertical: "local business", locations: ["Jaipur", "Ajmer"], offers: ["Free visit", "10% off"], phone: "9876543210" }))
-      .toEqual({ name: "A", vertical: "", locations: "Jaipur\nAjmer", offer: "Free visit", phone: "9876543210" });
+      .toEqual({ name: "A", vertical: "", locations: "Jaipur\nAjmer", offer: "Free visit", phone: "9876543210", usp: "" });
   });
 });
 
@@ -119,6 +119,49 @@ describe("core: saveSetupBusiness writes only the five fields (#1269)", () => {
     await expect(saveSetupBusiness("b1", complete)).resolves.toEqual({ ok: false, error: "Not authenticated." });
     expect(mocks.update).not.toHaveBeenCalled();
   });
+
+  it("#1966: saves the owner's first USP without replacing their other facts", async () => {
+    mocks.current.mockResolvedValue({ data: { offers: ["Old offer"], usps: ["Old fact", "Local installation team"] }, error: null });
+    mocks.written.mockResolvedValue({ data: { id: "b1", ...complete, locations: ["Jaipur"], offers: [complete.offer] }, error: null });
+    const { saveSetupBusiness } = await import("@/app/(app)/brand/actions");
+    await expect(saveSetupBusiness("b1", { ...complete, usp: "  80 homes installed in Mohali  " }))
+      .resolves.toMatchObject({ ok: true });
+    expect(mocks.update.mock.calls.at(-1)![0].usps).toEqual(["80 homes installed in Mohali", "Local installation team"]);
+  });
+
+  it("#1966: rejects unresolved or truncated chip blanks before writing", async () => {
+    const { saveSetupBusiness } = await import("@/app/(app)/brand/actions");
+    for (const usp of ["{n} homes installed in {area}", "80 homes installed in {area", "}".padStart(301, "a")]) {
+      await expect(saveSetupBusiness("b1", { ...complete, usp })).resolves.toMatchObject({ ok: false });
+    }
+    expect(mocks.insert).not.toHaveBeenCalled();
+    expect(mocks.update).not.toHaveBeenCalled();
+  });
+
+  it("#1966: includes a completed fact when the first save creates the business", async () => {
+    mocks.written.mockResolvedValue({ data: { id: "b2", ...complete, locations: ["Jaipur"], offers: [complete.offer] }, error: null });
+    const { saveSetupBusiness } = await import("@/app/(app)/brand/actions");
+    await saveSetupBusiness(null, { ...complete, usp: "Our own installation team, no subcontractors" });
+    expect(mocks.insert.mock.calls.at(-1)![0].usps).toEqual(["Our own installation team, no subcontractors"]);
+  });
+
+  it("#1966: doesn't truncate a longer existing Brand fact or block saving its other fields", async () => {
+    const usp = `${"Our own installation team. ".repeat(14)}No subcontractors.`;
+    mocks.current.mockResolvedValue({ data: { offers: [], usps: [usp] }, error: null });
+    mocks.written.mockResolvedValue({ data: { id: "b1", ...complete, locations: ["Jaipur"], offers: [] }, error: null });
+    const { saveSetupBusiness } = await import("@/app/(app)/brand/actions");
+    await expect(saveSetupBusiness("b1", { ...complete, usp })).resolves.toMatchObject({ ok: true });
+    expect(mocks.update.mock.calls.at(-1)![0].usps).toEqual([usp]);
+  });
+
+  it("#1966: an omitted or empty optional fact leaves saved facts untouched", async () => {
+    mocks.current.mockResolvedValue({ data: { offers: [], usps: ["Our own team", "Local workshop"] }, error: null });
+    mocks.written.mockResolvedValue({ data: { id: "b1", ...complete, locations: ["Jaipur"], offers: [] }, error: null });
+    const { saveSetupBusiness } = await import("@/app/(app)/brand/actions");
+    await saveSetupBusiness("b1", complete);
+    await saveSetupBusiness("b1", { ...complete, usp: " " });
+    for (const [payload] of mocks.update.mock.calls) expect(payload).not.toHaveProperty("usps");
+  });
 });
 
 describe("core: <SetupBusinessStep> (#1269)", () => {
@@ -138,13 +181,55 @@ describe("core: <SetupBusinessStep> (#1269)", () => {
   const type = (label: string, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
   const makeMyAds = () => within(screen.getByRole("navigation", { name: "Setup steps" })).getByRole("button", { name: "Make my ads" });
 
+  it("#1934: returning mode asks only for the new offer (last one as placeholder); the rest folds into 'Same as last time'", async () => {
+    const launched = { ...business, vertical: "Rooftop solar", locations: ["Mohali", "Kharar"], offers: ["Diwali 10% off"], phone: "9876543210" } as unknown as Business;
+    const { SetupBusinessStep } = await import("@/components/setup-business-step");
+    render(<SetupBusinessStep business={launched} returning />);
+    expect(screen.getByRole("heading", { name: "What's new this time?" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Your offer")).toHaveValue("");
+    expect(screen.getByLabelText("Your offer")).toHaveAttribute("placeholder", "Diwali 10% off");
+    for (const label of ["Business name", "What you sell", "Where you serve", "WhatsApp number"]) expect(screen.queryByLabelText(label)).toBeNull();
+    expect(screen.getByText(/Same as last time: Rooftop solar · Mohali, Kharar · 9876543210\./)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Fill it from my website/ })).toBeNull();
+    // Nothing typed: it stays and says what's missing.
+    await act(async () => fireEvent.click(makeMyAds()));
+    expect(screen.getByText("Add one offer, like a free visit or a first-time price.")).toBeInTheDocument();
+    expect(mocks.push).not.toHaveBeenCalled();
+    type("Your offer", "Free site survey this week");
+    await act(async () => fireEvent.click(makeMyAds()));
+    await waitFor(() => expect(mocks.push).toHaveBeenCalledWith("/create?again=1"));
+    expect(mocks.saveSetupBusiness.mock.calls.at(-1)![1]).toMatchObject({ offer: "Free site survey this week", vertical: "Rooftop solar" });
+  });
+
+  it("#1934: 'Change' opens the folded fields", async () => {
+    const launched = { ...business, vertical: "Rooftop solar", locations: ["Mohali"], offers: ["Diwali 10% off"], phone: "9876543210" } as unknown as Business;
+    const { SetupBusinessStep } = await import("@/components/setup-business-step");
+    render(<SetupBusinessStep business={launched} returning />);
+    fireEvent.click(screen.getByRole("button", { name: "Change" }));
+    expect(screen.getByLabelText("Where you serve")).toHaveValue("Mohali");
+    expect(screen.queryByText(/Same as last time/)).toBeNull();
+  });
+
+  it("#1853: after हिंदी, the note stays for this visit even when the cookie's re-render turns the offer off", async () => {
+    const setAppLanguage = vi.fn(async () => ({ ok: true }));
+    vi.doMock("@/app/(app)/settings/language-actions", () => ({ setAppLanguage }));
+    const { SetupBusinessStep } = await import("@/components/setup-business-step");
+    const { rerender } = render(<SetupBusinessStep business={business} chooseLanguage />);
+    fireEvent.click(within(screen.getByRole("group", { name: "App language / ऐप की भाषा" })).getByRole("button", { name: "हिंदी" }));
+    await waitFor(() => expect(setAppLanguage).toHaveBeenCalledWith("hi"));
+    // The server action sets the cookie and the route re-renders with chooseLanguage false.
+    rerender(<SetupBusinessStep business={business} chooseLanguage={false} />);
+    expect(await screen.findByText("अभी सिर्फ़ होम हिंदी में है; बाकी स्क्रीन एक-एक करके जुड़ेंगी।")).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "App language / ऐप की भाषा" })).toBeNull();
+  });
+
   it("#1641: offers English / हिंदी only until a language is chosen", async () => {
     vi.doMock("@/app/(app)/settings/language-actions", () => ({ setAppLanguage: vi.fn(async () => ({ ok: true })) }));
     await step(business, true);
-    expect(screen.getByRole("group", { name: "Language / भाषा" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "App language / ऐप की भाषा" })).toBeInTheDocument();
     cleanup();
     await step(business, false);
-    expect(screen.queryByRole("group", { name: "Language / भाषा" })).toBeNull();
+    expect(screen.queryByRole("group", { name: "App language / ऐप की भाषा" })).toBeNull();
   });
 
   it("#1681: 'Ads in' follows what they sell (solar → Hinglish); a picked language is saved before step 2", async () => {
@@ -173,6 +258,48 @@ describe("core: <SetupBusinessStep> (#1269)", () => {
     expect(screen.getByLabelText("Where you serve")).toHaveAttribute("placeholder", "e.g. Mohali\nKharar");
   });
 
+  it("#1966: no claim is prefilled; a chip focuses and selects its first blank", async () => {
+    await step({ ...business, vertical: "Rooftop solar" });
+    const field = screen.getByLabelText("Why do customers pick you? (optional)") as HTMLInputElement;
+    expect(field).toHaveValue("");
+    expect(screen.queryByRole("button", { name: "Registered PM Surya Ghar vendor" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "{n} homes installed in {area}" }));
+    expect(field).toHaveValue("{n} homes installed in {area}");
+    expect(field).toHaveFocus();
+    expect(field.value.slice(field.selectionStart!, field.selectionEnd!)).toBe("{n}");
+    type("What you sell", "IELTS coaching");
+    expect(screen.getByRole("button", { name: "Batches of at most {n} students" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "{n} homes installed in {area}" })).toBeNull();
+    type("What you sell", "Modular kitchens");
+    expect(screen.getByRole("button", { name: "Our own workshop in {area}" })).toBeInTheDocument();
+    type("What you sell", "Bakery");
+    expect(screen.queryByRole("button", { name: "Our own workshop in {area}" })).toBeNull();
+    expect(field).toHaveAttribute("placeholder", "e.g. Same-day visits in Mohali");
+  });
+
+  it("#1966: incomplete blanks never autosave or reach Create; completed text does", async () => {
+    await step({ ...business, vertical: complete.vertical, locations: ["Jaipur"], offers: [complete.offer], phone: complete.phone });
+    fireEvent.click(screen.getByRole("button", { name: "{n} homes installed in {area}" }));
+    await waitFor(() => expect(screen.getByLabelText("Why do customers pick you? (optional)")).toHaveAttribute("aria-invalid", "true"), { timeout: 2000 });
+    await act(async () => fireEvent.click(makeMyAds()));
+    expect(mocks.saveSetupBusiness).not.toHaveBeenCalled();
+    expect(mocks.push).not.toHaveBeenCalled();
+    type("Why do customers pick you? (optional)", "80 homes installed in Mohali");
+    await act(async () => fireEvent.click(makeMyAds()));
+    expect(mocks.saveSetupBusiness.mock.calls.at(-1)![1]).toMatchObject({ usp: "80 homes installed in Mohali" });
+    expect(mocks.push).toHaveBeenCalledWith("/create");
+  });
+
+  it("#1966: reads a saved first fact and translates the field and chips in Hindi", async () => {
+    const hi = await import("../../messages/hi.json");
+    const { SetupBusinessStep } = await import("@/components/setup-business-step");
+    render(<SetupBusinessStep business={{ ...business, vertical: "IELTS coaching", usps: ["Evening batches"] }} words={{ locale: "hi", messages: hi.setup }} />);
+    const field = screen.getByLabelText("ग्राहक आपको क्यों चुनते हैं? (ज़रूरी नहीं)");
+    expect(field).toHaveValue("Evening batches");
+    fireEvent.click(screen.getByRole("button", { name: "एक बैच में ज़्यादा से ज़्यादा {n} छात्र" }));
+    expect(field).toHaveValue("एक बैच में ज़्यादा से ज़्यादा {n} छात्र");
+  });
+
   it("completing the five fields saves them (brandUsable) and goes to Your ads", async () => {
     await step();
     type("What you sell", complete.vertical);
@@ -183,7 +310,7 @@ describe("core: <SetupBusinessStep> (#1269)", () => {
     await waitFor(() => expect(mocks.push).toHaveBeenCalledWith("/create"));
     const [id, saved] = mocks.saveSetupBusiness.mock.calls.at(-1)!;
     expect(id).toBe("b1");
-    expect(saved).toEqual(complete);
+    expect(saved).toEqual({ ...complete, usp: "" });
     expect(brandUsable({ ...saved, locations: setupLocations(saved.locations), offers: [saved.offer] })).toBe(true);
   });
 

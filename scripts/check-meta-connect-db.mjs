@@ -39,11 +39,13 @@ const ownerAlertSendsMigration = await readFile(join(root, "db/migrations/202610
 const leadCustomerMigration = await readFile(join(root, "db/migrations/20261026_lead_customer_status.sql"), "utf8");
 const leadFirstContactedMigration = await readFile(join(root, "db/migrations/20261027_lead_first_contacted.sql"), "utf8");
 const tokenSearchPathMigration = await readFile(join(root, "db/migrations/20261026_meta_token_search_path.sql"), "utf8");
+const tokenPurgeMigration = await readFile(join(root, "db/migrations/20261029_meta_token_purge.sql"), "utf8");
 const whatsappTemplateMigration = await readFile(join(root, "db/migrations/20261026_business_whatsapp_template.sql"), "utf8");
 const metaDeletionMigration = await readFile(join(root, "db/migrations/20261026_meta_deletion_requests.sql"), "utf8");
 const hardeningMigration = await readFile(join(root, "db/migrations/20261026_legacy_credentials_bucket_limits.sql"), "utf8");
 const reauthMigration = await readFile(join(root, "db/migrations/20261026_meta_connection_reauth.sql"), "utf8");
 const leadCampaignLinkMigration = await readFile(join(root, "db/migrations/20261026_lead_campaign_link.sql"), "utf8");
+const leadSharedPageMigration = await readFile(join(root, "db/migrations/20261028_lead_sync_shared_page.sql"), "utf8");
 const managedWhatsAppMigration = await readFile(join(root, "db/migrations/20261025_managed_whatsapp_page_link.sql"), "utf8");
 const productRollupMigration = await readFile(join(root, "db/migrations/20260928_product_event_rollups.sql"), "utf8");
 const bin = process.env.META_TEST_PG_BIN ?? "/opt/homebrew/opt/postgresql@17/bin";
@@ -1173,6 +1175,69 @@ async function verifyTokenSearchPath(db, database) {
   });
 }
 
+/** #1648: seeds a token revoked before the migration (backfill), then applies it twice. */
+async function verifyMetaTokenPurge(db, database) {
+  const owner = randomUUID(), business = randomUUID(), revoked = randomUUID(), live = randomUUID();
+  await db.query("insert into auth.users(id) values ($1)", [owner]);
+  await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Token purge')", [business, owner]);
+  for (const token of [revoked, live]) {
+    await db.query(`select public.meta_token_insert($1,$2,$3,'s-purge','user',$4,$5,$6,'k1','v1',array['ads_management'],'[]'::jsonb,null,now(),null)`,
+      [token, business, owner, "\\x01", `\\x${"00".repeat(12)}`, `\\x${"00".repeat(16)}`]);
+  }
+  await db.query("update private.meta_tokens set revoked_at = now() where id = $1", [revoked]);
+  await db.query(tokenPurgeMigration);
+  await db.query(tokenPurgeMigration);
+  await check(`${database}: a revoked Meta token keeps no secret, a live one keeps all of it (#1648)`, async () => {
+    const secrets = async (id) => (await db.query("select ciphertext, nonce, auth_tag, revoked_at from private.meta_tokens where id = $1", [id])).rows[0];
+    const old = await secrets(revoked);
+    assert.ok(old.revoked_at);
+    assert.deepEqual([old.ciphertext, old.nonce, old.auth_tag], [null, null, null]);
+    assert.deepEqual([...(await secrets(live)).ciphertext], [1]);
+    const [read] = (await db.query("select * from public.meta_token_get($1,$2)", [revoked, business])).rows;
+    assert.ok(read.revoked_at);
+    assert.equal(read.ciphertext, null);
+    assert.equal((await db.query("select public.meta_disconnect($1,$2) as ok", [business, owner])).rows[0].ok, true);
+    assert.deepEqual(Object.values(await secrets(live)).slice(0, 3), [null, null, null]);
+    await db.query("update private.meta_tokens set ciphertext = $2, nonce = $3, auth_tag = $4 where id = $1", [live, Buffer.from([1]), Buffer.alloc(12), Buffer.alloc(16)]);
+    assert.equal((await secrets(live)).ciphertext, null);
+    await assert.rejects(db.query("update private.meta_tokens set revoked_at = null where id = $1", [live]), { code: "23514" });
+  });
+}
+
+/** #1649: which live token disconnect may revoke at Meta, and whether that Meta user is shared with another business. */
+async function verifyMetaRevocationTarget(db, database) {
+  await check(`${database}: revocation target: unshared, shared, system user, already revoked (#1649)`, async () => {
+    const owner = randomUUID();
+    const [a, b, c, d] = [randomUUID(), randomUUID(), randomUUID(), randomUUID()];
+    const target = async (business) => (await db.query("select * from public.meta_token_revocation_target($1)", [business])).rows;
+    await db.query("begin");
+    try {
+      await db.query("insert into auth.users(id) values ($1)", [owner]);
+      const connect = async (business, subject, kind) => {
+        const token = randomUUID();
+        await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Revoke target')", [business, owner]);
+        await db.query(`select public.meta_token_insert($1,$2,$3,$4,$5,$6,$7,$8,'k1','v1',array['ads_management'],'[]'::jsonb,null,now(),null)`,
+          [token, business, owner, subject, kind, "\\x01", `\\x${"00".repeat(12)}`, `\\x${"00".repeat(16)}`]);
+        await db.query("insert into public.meta_connections(business_id,generation,authorization_status,ad_account_id,page_id,token_id) values ($1,1,'connected','act_123','123',$2)", [business, token]);
+        return token;
+      };
+      const tokenA = await connect(a, "4242", "user");
+      assert.deepEqual(await target(a), [{ token_id: tokenA, subject_id: "4242", token_kind: "user", shared: false }]);
+      await connect(b, "4242", "user");
+      assert.equal((await target(a))[0].shared, true);
+      await connect(c, "9001", "business_system_user");
+      assert.deepEqual((await target(c)).map((r) => [r.token_kind, r.shared]), [["business_system_user", false]]);
+      await connect(d, "7777", "user");
+      await db.query("update private.meta_tokens set revoked_at = now() where business_id = $1", [d]);
+      assert.equal((await target(d)).length, 0);
+      await db.query("update private.meta_tokens set revoked_at = now() where business_id = $1", [b]);
+      assert.equal((await target(a))[0].shared, false);
+      await db.query("set local role authenticated");
+      await assert.rejects(db.query("select * from public.meta_token_revocation_target($1)", [a]), { code: "42501" });
+    } finally { await db.query("rollback"); }
+  });
+}
+
 async function verifyConnectionReauth(db, database) {
   await check(`${database}: a Graph 190 marks only the failing connection generation reauth_required, service role only (#757)`, async () => {
     const owner = randomUUID(), business = randomUUID();
@@ -1284,6 +1349,38 @@ async function verifyLeadCampaignLink(db, database) {
     assert.equal(third.imported, 1);
     const links = Object.fromEntries((await db.query("select meta_lead_id, campaign_id from public.leads where business_id=$1", [business])).rows.map(row => [row.meta_lead_id, row.campaign_id]));
     assert.deepEqual(links, { "ad-lead": campaign, "test-lead": null, foreign: null, "late-link": campaign, "new-lead": campaign, twice: campaign });
+  });
+}
+
+async function verifySharedPageLeads(db, database) {
+  const [ownerA, ownerB, ownerC, a, b, c, campA, campB] = Array.from({ length: 8 }, () => randomUUID());
+  await db.query("insert into auth.users(id) values ($1),($2),($3)", [ownerA, ownerB, ownerC]);
+  await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Shared A'),($3,$4,'Shared B'),($5,$6,'Solo C')", [a, ownerA, b, ownerB, c, ownerC]);
+  await db.query("insert into public.campaigns(id,business_id,daily_budget,meta_campaign_id) values ($1,$2,300,'1301'),($3,$4,300,'1302')", [campA, a, campB, b]);
+  await db.query(`insert into public.meta_connections(business_id,generation,authorization_status,ad_account_id,page_id)
+    values ($1,1,'connected','act_shared_a','page_shared'),($2,1,'connected','act_shared_b','page_shared'),($3,1,'connected','act_solo','page_solo')`, [a, b, c]);
+  const sync = async (business, owner, account, page, rows) => {
+    const run = (await db.query("select * from public.lead_sync_start($1,$2,null,1,$3,$4)", [business, owner, account, page])).rows[0];
+    return (await db.query("select public.lead_sync_checkpoint($1,$2,$3,1,$4,$5,$6,$7::jsonb,$8::jsonb) as result",
+      [business, owner, run.id, account, page, run.version, JSON.stringify(rows), JSON.stringify({ formsDone: true, pending: [] })])).rows[0].result;
+  };
+  const leadsOf = async (business) => (await db.query("select meta_lead_id from public.leads where business_id=$1 order by 1", [business])).rows.map(row => row.meta_lead_id);
+  await check(`${database}: on a Page two businesses share, a lead goes only to the business whose campaign it came from (#1775)`, async () => {
+    const rows = [
+      { meta_lead_id: "from-b", meta_campaign_id: "1302", form_id: "f" },
+      { meta_lead_id: "from-a", meta_campaign_id: "1301", form_id: "f" },
+      { meta_lead_id: "outside", meta_campaign_id: "9999", form_id: "f" },
+      { meta_lead_id: "no-campaign", meta_campaign_id: null, form_id: "f" },
+    ];
+    assert.equal((await sync(b, ownerB, "act_shared_b", "page_shared", rows)).imported, 1);
+    assert.deepEqual(await leadsOf(b), ["from-b"]);
+    assert.equal((await sync(a, ownerA, "act_shared_a", "page_shared", rows)).imported, 1);
+    assert.deepEqual(await leadsOf(a), ["from-a"]);
+  });
+  await check(`${database}: a business that alone has its Page still imports all of its Page's leads (#680, #1775)`, async () => {
+    const rows = [{ meta_lead_id: "boost", meta_campaign_id: "8888", form_id: "f" }, { meta_lead_id: "test", meta_campaign_id: null, form_id: "f" }];
+    assert.equal((await sync(c, ownerC, "act_solo", "page_solo", rows)).imported, 2);
+    assert.deepEqual(await leadsOf(c), ["boost", "test"]);
   });
 }
 
@@ -2718,6 +2815,8 @@ async function verify(database, source, integrityMigration, customerOnly = false
       await db.query(tokenSearchPathMigration);
       await db.query(tokenSearchPathMigration);
       await verifyTokenSearchPath(db,database);
+      await verifyMetaTokenPurge(db,database);
+      await verifyMetaRevocationTarget(db,database);
       await db.query(whatsappTemplateMigration);
       await db.query(whatsappTemplateMigration);
       await verifyWhatsAppTemplate(db,database);
@@ -2735,7 +2834,10 @@ async function verify(database, source, integrityMigration, customerOnly = false
       if ((await db.query("select to_regclass('public.lead_sync_runs') is not null as installed")).rows[0].installed) {
         await db.query(leadCampaignLinkMigration);
         await db.query(leadCampaignLinkMigration);
+        await db.query(leadSharedPageMigration);
+        await db.query(leadSharedPageMigration);
         await verifyLeadCampaignLink(db,database);
+        await verifySharedPageLeads(db,database);
       }
       if (database === "customer_fresh") await verifyAdvisorHardening(db,database);
       await verifyBusinessTransfer(db,database);
