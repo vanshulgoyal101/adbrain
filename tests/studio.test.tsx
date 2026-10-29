@@ -758,8 +758,9 @@ describe("<Studio> live picture preview while editing (#387)", () => {
     const live = screen.getAllByRole("img", { name: "Preview of the edited picture" })[0];
     expect(live.querySelector('img[src="https://cdn.example/brand-assets/b1/roof.jpg"]')).not.toBeNull();
     expect(live).toHaveTextContent("Cut your power bill");
-    await user.click(screen.getByRole("button", { name: "Your photo 1" }));
+    await user.click(screen.getByRole("button", { name: "Pick another photo" }));
     expect(screen.queryAllByRole("img", { name: "Preview of the edited picture" })).toHaveLength(0);
+    expect(screen.getByRole("group", { name: "Use another photo" })).toBeVisible();
   });
 });
 
@@ -852,13 +853,30 @@ describe("<Studio> change only the background (#280)", () => {
     render(<Studio business={business} initialCreatives={[creative()]} />);
     await user.click(screen.getByRole("button", { name: "Edit" }));
     await user.click(screen.getByRole("tab", { name: "Background" }));
-    const form = screen.getByRole("form", { name: "Change the picture" });
-    await user.click(await within(form).findByRole("button", { name: "Your photo 2" }));
-    expect(within(form).getByText(/No AI and no cost/)).toBeInTheDocument();
+    await user.click(await within(screen.getByRole("form", { name: "Change the picture" })).findByRole("button", { name: "Your photo 2" }));
+    // #1904: the fit is checked before anything renders; filling the frame is the default.
+    const form = screen.getByRole("form", { name: "Check how your photo fits" });
+    const fill = within(form).getByRole("button", { name: "Fill the frame" });
+    const whole = within(form).getByRole("button", { name: "Show whole photo" });
+    expect(fill).toHaveAttribute("aria-pressed", "true");
+    expect(form).toHaveTextContent("Faces and the main subject are kept.");
+    expect(form).toHaveTextContent("Something important cut off? Show the whole photo.");
+    const preview = within(form).getByRole("img", { name: "Your photo in the ad's frame" });
+    const photo = encodeURIComponent("https://cdn.example/brand-assets/b1/roof.jpg");
+    expect(preview).toHaveAttribute("src", `/api/creatives/c1/photo-fit?photo=${photo}&fit=attention&shape=ad`);
+    expect(form).toHaveTextContent("4:5");
+    expect(form).toHaveTextContent("Square (1:1) version");
+    await user.click(whole);
+    expect(whole).toHaveAttribute("aria-pressed", "true");
+    expect(fill).toHaveAttribute("aria-pressed", "false");
+    expect(within(form).getByRole("img", { name: "Your photo in the ad's frame" })).toHaveAttribute("src", `/api/creatives/c1/photo-fit?photo=${photo}&fit=blur&shape=ad`);
+    expect(form).toHaveTextContent("The whole photo, with soft edges to fill the frame.");
+    expect(form).toHaveTextContent("Best for group photos and wide shots.");
+    expect(global.fetch).not.toHaveBeenCalled();
     await user.click(within(form).getByRole("button", { name: "Use this photo" }));
     await waitFor(() => expect(global.fetch).toHaveBeenCalledWith("/api/creatives/c1/background", expect.objectContaining({ method: "POST" })));
     const [, init] = (global.fetch as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls.find(([url]) => url === "/api/creatives/c1/background")!;
-    expect(JSON.parse(String(init.body))).toEqual({ photoUrl: "https://cdn.example/brand-assets/b1/roof.jpg" });
+    expect(JSON.parse(String(init.body))).toEqual({ photoUrl: "https://cdn.example/brand-assets/b1/roof.jpg", fit: "blur" });
     await waitFor(() => expect(document.querySelector('img[src*="with-photo"]')).not.toBeNull());
   });
 

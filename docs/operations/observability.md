@@ -145,7 +145,7 @@ privacy notice and applicable consent requirements before production rollout.
 
 1. Inspect the target's existing schema and configuration. For a new sink, apply
   [the product-event migration](../../db/migrations/20260918_product_events.sql)
-  under the [release policy](../RELEASING.md). Existing sinks need only the new
+  under the [release policy](releasing.md). Existing sinks need only the new
   [rollup migration](../../db/migrations/20260928_product_event_rollups.sql) before
   the next cleanup; do not replay old applied migrations.
 2. Deploy through the protected release workflow. Structured runtime JSON is on

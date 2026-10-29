@@ -152,7 +152,7 @@ Effective delivery/eligibility is not certified. #49 reservation remains uncerta
 when the parent request or post-request verification is ambiguous; reconcile
 before retrying. Creation idempotency does not make activation atomic with Meta.
 [Operations](../../operations/README.md) owns incident procedures and
-[Release Policy](../../RELEASING.md) owns authorization for live changes.
+[Release Policy](../../operations/releasing.md) owns authorization for live changes.
 
 ## Lead Import and Follow-Up
 

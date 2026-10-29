@@ -3,7 +3,7 @@
 Part of [Channels](README.md). Current facts as of 2026-10-29. When one changes, change
 it here and in its source in the same PR. How connecting works:
 [Meta connection](meta-connect.md); the App Review packet:
-[Meta approval plan](../../META_APPROVAL_ACTION_PLAN.md).
+[Meta approval plan](../../plans/meta-approval.md).
 
 ## API Version
 
@@ -20,7 +20,7 @@ it here and in its source in the same PR. How connecting works:
 | Marketing API Access Tier (Meta renamed "Ads Management Standard Access"; tiers Limited/Full) | Approved Aug 25; renewal in review since Oct 28 | #156 (CEO read, Oct 28), #2049 |
 | Advanced access for the 7 login permissions | "Review in progress" since Oct 28; Meta says most reviews finish within 20 days | #156 |
 | Access Verification as a Tech Provider | "In Review" (about 5 days) | #156, #517 |
-| Business verification, Data Use Checkup, app Published | Done | [Owner checklist](../../META_APPROVAL_ACTION_PLAN.md#owner-checklist-one-sitting) |
+| Business verification, Data Use Checkup, app Published | Done | [Owner checklist](../../plans/meta-approval.md#owner-checklist-one-sitting) |
 
 Until review passes, only people with a role on the app can connect. Approval is
 Meta's decision: never create campaigns or calls to raise API activity.

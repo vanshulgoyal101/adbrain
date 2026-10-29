@@ -22,7 +22,7 @@ Start at the [documentation index](docs/README.md).
 | Understand storage and upgrades | [Data model](docs/architecture/data-model.md) |
 | Validate changes | [Testing](docs/team/testing.md) |
 | Diagnose production | [Operations](docs/operations/README.md) and [observability](docs/operations/observability.md) |
-| Release safely | [Release workflow](docs/RELEASING.md) |
+| Release safely | [Release workflow](docs/operations/releasing.md) |
 
 ## Stack
 
@@ -48,7 +48,7 @@ confirm the database target before starting the application. An existing
 worktree. The repository's shared development environment is not a sandbox.
 
 The [testing guide](docs/team/testing.md) owns validation commands and safe test
-environments. The [release guide](docs/RELEASING.md) owns branch, migration and
+environments. The [release guide](docs/operations/releasing.md) owns branch, migration and
 deployment procedures. Follow those guides instead of using production setup
 commands as installation checks.
 
@@ -76,7 +76,7 @@ checks. Do not commit credentials or generated private artifacts.
 
 ## Working on AdBrain
 
-Read [AGENTS.md](AGENTS.md) and the [current dispatch](docs/ORCHESTRATION.md#current-dispatch)
+Read [AGENTS.md](AGENTS.md) and the [current dispatch](docs/team/orchestration.md#current-dispatch)
 before editing shared resources. Make focused changes at the owning abstraction,
 reuse maintained dependencies, test meaningful risks and update the corresponding
 reference guide. Documentation standards and the distinction between current

@@ -1,5 +1,7 @@
 # AdBrain Worker Orchestration
 
+Part of [Team](README.md).
+
 Updated October 23, 2026. Maintainers: the CEO (coordinator) and the CTO (worker
 table).
 Goal: our core features work first: Brand, Create, review, launch and manage a
@@ -16,7 +18,7 @@ Core features come first, always: Brand, Create 3 ads, review, launch a Meta
 campaign and manage it (sync/pause/results), working reliably in production.
 Other work (polish, speed, docs, compliance, support, analytics) waits until that
 loop is healthy or the owner asks for it. Build, ship and test in production via
-the [Startup Fast Path](RELEASING.md#startup-fast-path).
+the [Startup Fast Path](../operations/releasing.md#startup-fast-path).
 
 ### Role cards
 
@@ -57,12 +59,12 @@ Routine steps never wait for the CEO or the CTO.
    waiting for DevOps), `blocked` (needs something outside the team; the issue says
    what), `waiting-owner` (blocked on the owner; the CEO asks him) and `decision`
    (needs the CEO). Talk on the issue or PR itself; see
-   [AGENTS.md](../AGENTS.md#worker-coordination) Communication.
+   [AGENTS.md](../../AGENTS.md#worker-coordination) Communication.
 2. **Start or resume** by reading this section, then your queue:
    `gh issue list -R vanshulgoyal101/adbrain -l core -l owner:<you>`. Work the
    oldest. Empty queue: take an unowned `core` issue in your area and add your
    label. Nothing left: run `wait-for-work` (no idle post;
-   [AGENTS.md](../AGENTS.md#worker-coordination)) and continue with what it
+   [AGENTS.md](../../AGENTS.md#worker-coordination)) and continue with what it
    reports. Stop only when it times out. Do not invent work. While you own an
    actionable item, the waiter prints your top 3 and exits 6 instead of waiting
    (#2122): park, block or hand off by label what you can't act on.
@@ -182,7 +184,7 @@ it. Not for you? Add `declined:<you>` and it isn't offered to you again. QA's wa
 - **Checks.** Run the tests for what you changed plus typecheck; CI runs the rest.
   Do not rerun full suites or re-review unchanged code.
 - **Subagents.** Split your issue across subagents and do small cross-role tasks
-  yourself instead of handing them off; rules in [AGENTS.md](../AGENTS.md#subagents).
+  yourself instead of handing them off; rules in [AGENTS.md](../../AGENTS.md#subagents).
   Hand off only migrations, money, production settings, secrets and rollback
   (DevOps), independent review of high-risk changes (QA), or files someone else
   is editing right now.
