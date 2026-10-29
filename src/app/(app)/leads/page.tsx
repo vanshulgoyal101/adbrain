@@ -1,3 +1,4 @@
+import { metaWaitFor } from "@/services/meta-throttle";
 import { Building2 } from "lucide-react";
 import Link from "next/link";
 import { LeadInbox } from "@/components/lead-inbox";
@@ -90,6 +91,7 @@ export default async function LeadsPage() {
             syncScope={`${business.owner_id}:${business.id}:${metaConnection.adAccountId ?? ""}:${metaConnection.pageId ?? ""}`}
             title={enquiriesTitle(chatRows)}
             summary={waitingPage || !summary?.waiting ? summary : { ...summary, waiting: null }}
+            metaWaitUntil={metaConnection.ready ? await metaWaitFor(business.id) : null}
           />
         </EnquiriesSections>
       </div>

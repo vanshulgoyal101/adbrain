@@ -20,6 +20,8 @@ const sources = (dir: string): string[] => readdirSync(join(ROOT, dir), { withFi
 
 /** Read-only scheduled jobs that may skip a throttled account (#1838). Nothing that pauses, activates or enforces spend. */
 const THROTTLE_READERS = new Set(["src/app/api/cron/refresh-results/route.ts", "src/app/api/cron/sync-leads/route.ts"]);
+/** Server pages that only show the owner a "Meta asked us to wait" line (#2033). They import `metaWaitFor` alone. */
+const WAIT_LINE_PAGES = new Set(["src/app/(app)/campaigns/page.tsx", "src/app/(app)/dashboard/page.tsx", "src/app/(app)/leads/page.tsx"]);
 /** The owner's campaign pause/activate route and the spend enforcement that pauses on its own. */
 const PAUSE_PATHS = ["src/app/api/campaigns/[id]/route.ts", "src/app/api/cron/enforce-spend/route.ts"];
 
@@ -53,7 +55,11 @@ function switchGuards(file: ts.SourceFile): { line: number; activationOnly: bool
 describe("core: a campaign pause is never refused by the throttle memory or the switch guard (#1961)", () => {
   it("only the read-only crons read the throttle memory (#1838)", () => {
     const readers = throttleReaders(sources("src")).filter((path) => !path.endsWith("src/services/meta-throttle.ts"));
-    expect(readers.filter((path) => !THROTTLE_READERS.has(path))).toEqual([]);
+    expect(readers.filter((path) => !THROTTLE_READERS.has(path) && !WAIT_LINE_PAGES.has(path))).toEqual([]);
+    for (const path of readers.filter((reader) => WAIT_LINE_PAGES.has(reader))) {
+      expect(read(path)).toMatch(/import \{ metaWaitFor \} from "@\/services\/meta-throttle";/);
+      expect(/\b(appThrottledUntil|throttledBusinesses|ownerThrottledUntil)\b/.test(read(path))).toBe(false);
+    }
     for (const path of PAUSE_PATHS) if (existsSync(join(ROOT, path))) expect(throttleReaders([path])).toEqual([]);
   });
 

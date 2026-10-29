@@ -79,3 +79,11 @@ export function formatReplyTime(minutes: number): string {
   }
   return `${Math.round(minutes / (24 * 60))} days`;
 }
+
+/** #1260 (CPO words): 'Contacted' is the owner's first tap on WhatsApp them/Call, not a confirmed reply. */
+export function contactedLabel(minutes: number): string {
+  if (!Number.isFinite(minutes) || minutes < 0) return "Contacted";
+  if (minutes < 24 * 60) return `Contacted in ${formatReplyTime(minutes)}`;
+  const days = Math.floor(minutes / (24 * 60));
+  return `Contacted after ${days} ${days === 1 ? "day" : "days"}`;
+}

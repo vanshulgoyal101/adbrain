@@ -17,6 +17,7 @@ import { CheckCircle2 } from "lucide-react";
 import { madeForSetup } from "@/lib/creative/setup-picks";
 import { setupResumeStep } from "@/lib/setup/resume";
 import { getMetaConnection } from "@/lib/meta/credentials";
+import { metaWaitFor } from "@/services/meta-throttle";
 import { HomeRejectedAds } from "@/components/home-rejected-ads";
 import { HomeWeekCard } from "@/components/home-week-card";
 import { loadWeekSummary } from "@/lib/home/week-summary-load";
@@ -94,7 +95,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
   // #764: the Home results row; an unreadable result leaves the row out, never the page.
   const launched = campaigns.filter((campaign) => campaign.meta_campaign_id).map((campaign) => campaign.id);
   const newest = newestLiveCampaign(campaigns);
-  const [results, replyMinutes, waiting, firstEnquiry, newestAdStatuses, week] = await Promise.all([
+  const [results, replyMinutes, waiting, firstEnquiry, newestAdStatuses, week, metaWaitUntil] = await Promise.all([
     // #1624: with the logged real enquiries and customers, so Home can ask which chats were real.
     launched.length ? getLatestResultsWithEnquiries(launched).catch(() => ({})) : {},
     // #1049: an unreadable reply time leaves the line out, never the page.
@@ -110,6 +111,8 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
       loadWeekSummary(business.id, campaigns).catch(() => null),
       new Promise<null>((resolve) => setTimeout(() => resolve(null), 600)),
     ]) : null,
+    // #1838: while Meta asks us to wait, the results line says the numbers may be old.
+    business && launched.length ? metaWaitFor(business.id) : null,
   ]);
   const adReview = newest && newestAdStatuses ? homeAdReview([newest], { [newest.id]: newestAdStatuses }, results) : null;
   // #1650: after the first week, one question for the pricing call (#718); unreadable means not shown.
@@ -132,6 +135,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
       creatives={creatives}
       campaigns={campaigns}
       results={results}
+      metaWaitUntil={metaWaitUntil}
       replyMinutes={replyMinutes}
       waiting={waiting}
       firstEnquiry={firstEnquiry}

@@ -106,3 +106,9 @@ export function outsideChanges(
   }
   return changed ? { ...dailyBudget !== undefined ? { daily_budget: dailyBudget } : {}, raw: raw as Campaign["raw"], raised } : null;
 }
+
+/** #763: synced from Meta, not launched by AdBrain (no launch result on record). */
+export function madeOutsideAdBrain(campaign: Pick<Campaign, "meta_campaign_id" | "raw">): boolean {
+  const raw = campaign.raw;
+  return !!campaign.meta_campaign_id && !(raw && typeof raw === "object" && "metaResult" in raw);
+}

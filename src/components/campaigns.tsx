@@ -130,9 +130,10 @@ import { committedWords, freeRoomPaise, type AccountFunding } from "@/lib/campai
 import { readCampaignRecovery, recoveryStorageKey, writeCampaignRecovery, type CampaignRecovery } from "@/lib/meta-connect-ui/recovery";
 import { HelpOnWhatsApp } from "@/components/support-link";
 import { cn } from "@/lib/utils";
+import { resultsWaitLine, throttleActive } from "@/lib/campaign/meta-wait";
 import { useMounted } from "@/lib/use-mounted";
 import { refreshIfStale, staleCampaignIds } from "@/lib/campaign/results-freshness";
-import { GONE_LINES, OUTSIDE_LINES, budgetChangedInMeta, goneInMeta, pausedInMeta } from "@/lib/campaign/gone-in-meta";
+import { GONE_LINES, OUTSIDE_LINES, budgetChangedInMeta, goneInMeta, madeOutsideAdBrain, pausedInMeta } from "@/lib/campaign/gone-in-meta";
 import { CampaignTestOptions } from "@/components/campaign-test-options";
 import { formatDate, formatMoney, formatMoneyExact, formatNumber, formatPerDay } from "@/lib/format";
 
@@ -228,6 +229,8 @@ type CampaignsProps = {
   verdictWords?: Words<"verdict">;
   /** #1438: the list header, filters and sync lines in the owner's language. */
   campaignWords?: Words<"campaigns">;
+  /** #1838: until when Meta asked us to wait before checking again; launched cards say their numbers may be old. */
+  metaWaitUntil?: string | null;
   /** #2273: the team's own accounts see the no-Facebook-Reels test control (internal-accounts.ts). */
   internal?: boolean;
 };
@@ -291,6 +294,7 @@ function BusinessCampaigns({
   weeklyCap = null,
   verdictWords,
   campaignWords,
+  metaWaitUntil = null,
   internal = false,
   scope,
   initialSetup,
@@ -2553,6 +2557,7 @@ function BusinessCampaigns({
                       // #1003: always say how old the numbers are.
                       <p className="text-xs text-slate-500">{updatingIds.includes(c.id) ? tc("card.updating") : tc("card.updated", { age: ageText(verdictTranslator(verdictWords), r.fetched_at) })}</p>
                     )}
+                    {r && mounted && c.meta_campaign_id && throttleActive(metaWaitUntil) && <p className="text-xs text-slate-600">{resultsWaitLine(Date.now() - new Date(r.fetched_at).getTime())}</p>}
                     {adResults && r && c.meta_campaign_id && <AdResults campaignId={c.id} whatsapp={outcome === "whatsapp"} words={verdictWords} offerPause={!weakAdCards.includes(c.id)} onRunAgain={() => void runAgain(c)} runAgainBusy={rerunBusy === c.id} runAgainError={rerunError?.id === c.id ? rerunError.message : null} />}
                     {r && ((r.booked ?? 0) > 0 || (r.customers ?? 0) > 0) && (
                       // #798: what a real customer cost, beside the per-enquiry figures. #1994: bookings, the step before, come first.
@@ -2627,12 +2632,6 @@ function BusinessCampaigns({
       </div>
     </div>
   );
-}
-
-/** #763: synced from Meta, not launched by AdBrain (no launch result on record). */
-function madeOutsideAdBrain(campaign: Campaign): boolean {
-  const raw = campaign.raw;
-  return !!campaign.meta_campaign_id && !(raw && typeof raw === "object" && "metaResult" in raw);
 }
 
 /** A launched campaign's numbers: #1255's verdict for WhatsApp and form campaigns, with the figures under Details. */

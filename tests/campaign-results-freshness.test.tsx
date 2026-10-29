@@ -29,8 +29,8 @@ const result = (fetched_at: string, impressions = 1200) =>
 const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>();
 const refreshCalls = () => fetchMock.mock.calls.filter(([url]) => String(url).includes("/refresh"));
 const card = async (name: string) => within((await screen.findByRole("heading", { name })).closest("article") as HTMLElement);
-function view(results: Record<string, CampaignResult>) {
-  return render(<Campaigns business={business} approved={[]} initialCampaigns={[paused, active]} initialResults={results} leadForms={[]} leadFormError={null} metaReady={false} adAccountId="act_999" />);
+function view(results: Record<string, CampaignResult>, metaWaitUntil: string | null = null) {
+  return render(<Campaigns business={business} approved={[]} initialCampaigns={[paused, active]} initialResults={results} leadForms={[]} leadFormError={null} metaReady={false} adAccountId="act_999" metaWaitUntil={metaWaitUntil} />);
 }
 
 beforeEach(() => {
@@ -111,5 +111,15 @@ describe("results freshness (#1003)", () => {
     expect(live.getByText("कितनी बार दिखा")).toBeTruthy();
     expect(live.getByText("खर्च / चैट")).toBeTruthy();
     expect(live.queryByText("Impressions")).toBeNull();
+  });
+
+  it("#1838: while Meta asks us to wait, a launched card says its numbers may be old; after, no line", async () => {
+    const until = new Date(Date.now() + 30 * 60_000).toISOString();
+    const { unmount } = view({ "campaign-2": result(minutesAgo(40)) }, until);
+    expect(await (await card("Solar EMI")).findByText("Meta is limiting how often we can check right now, so these numbers may be up to about 40 minutes old. Your ads keep running, and pausing still works.")).toBeInTheDocument();
+    unmount();
+    view({ "campaign-2": result(minutesAgo(40)) }, minutesAgo(1));
+    await card("Solar EMI");
+    expect(screen.queryByText(/Meta is limiting/)).toBeNull();
   });
 });
