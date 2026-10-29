@@ -8,6 +8,8 @@
     "resultsSoFar": "Results so far",
     "newCampaign": "New campaign",
     "deletedInMeta": "Deleted in Meta. Run it again from Campaigns if you still want it.",
+    "pausedInMeta": "Paused in Meta. Nothing is spending.",
+    "budgetRaisedInMeta": "The daily budget was changed in Meta Ads Manager: now {now} a day (was {was}).",
     "enquiries": "Enquiries",
     "spent": "Spent",
     "perEnquiry": "Per enquiry",
