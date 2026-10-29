@@ -13,6 +13,9 @@ import { createClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 
+// #681: the owner sees this text as is, so it names the way out. A draft that's gone or not theirs has the same fix.
+const DRAFT_GONE = "This campaign draft has expired or was removed. Reload the page and set up the campaign again. Nothing was sent to Meta.";
+
 function errorResponse(
   requestId: string,
   status: number,
@@ -60,8 +63,8 @@ async function handlePOST(request: Request) {
       },
     );
 
-    if (result.kind === "not_found") return errorResponse(requestId, 404, "NOT_FOUND", "Draft not found.");
-    if (result.kind === "forbidden") return errorResponse(requestId, 403, "FORBIDDEN", "Draft access is not allowed.");
+    if (result.kind === "not_found") return errorResponse(requestId, 404, "NOT_FOUND", DRAFT_GONE);
+    if (result.kind === "forbidden") return errorResponse(requestId, 403, "FORBIDDEN", DRAFT_GONE);
     if (result.kind === "stale") return errorResponse(requestId, 409, "CONFLICT", "Draft changed in another tab. Review the latest version.", true);
     // #688: every blocker's own reason, so production can rank which fix owners need.
     const blockerCodes = result.review.blockers.map((blocker) => blocker.reason ?? blocker.code);
@@ -77,6 +80,6 @@ async function handlePOST(request: Request) {
       const status = error.code === "CONFLICT" ? 409 : error.code === "UNAUTHENTICATED" ? 401 : 503;
       return errorResponse(requestId, status, error.code === "CONFLICT" ? "CONFLICT" : error.code, error.message, status >= 500);
     }
-    return errorResponse(requestId, 503, "UNAVAILABLE", "Campaign preparation is unavailable.", true);
+    return errorResponse(requestId, 503, "UNAVAILABLE", "Couldn't check your campaign just now. Nothing was sent to Meta. Try again in a minute.", true);
   }
 }
