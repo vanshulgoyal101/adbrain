@@ -37,7 +37,7 @@ async function handlePOST(req: Request) {
   if (limited) return limited;
 
   const parsed = interviewRequestSchema.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) return apiError("Something in this request didn't look right. Refresh the page and answer the questions again.", 400);
+  if (!parsed.success) return apiError(await ownerError("requestLooksWrong"), 400);
   const { businessId, goal, answers, recentGoals, referenceBrief } = parsed.data;
 
   // RLS scopes this to the user's own business.
@@ -46,7 +46,7 @@ async function handlePOST(req: Request) {
     .select("*")
     .eq("id", businessId)
     .maybeSingle();
-  if (!business) return apiError("We couldn't find this business. Refresh the page and try again.", 404);
+  if (!business) return apiError(await ownerError("businessNotFound"), 404);
 
   const refused: string[] = [];
   try {
@@ -107,11 +107,11 @@ async function handlePOST(req: Request) {
     }
     if (failure?.busy) {
       return NextResponse.json(
-        { error: "AdBrain is busy right now. Tap Try again in a few seconds.", code: "AI_BUSY" },
+        { error: await ownerError("aiBusy"), code: "AI_BUSY" },
         { status: 503, headers: { "Retry-After": "10", "Cache-Control": "no-store" } },
       );
     }
-    return serverError("creatives.assistant", err, "The assistant had trouble — try again.");
+    return serverError("creatives.assistant", err, await ownerError("assistantTrouble"));
   }
 }
 
