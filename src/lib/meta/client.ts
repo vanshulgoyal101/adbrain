@@ -7,6 +7,7 @@ import { fetchPublicUrl } from "@/lib/security/ssrf";
 import { readBoundedResponse } from "@/lib/imageGen/raster";
 import { destinationFromAdSets, type CampaignDestination } from "@/lib/campaign/outcomes";
 import type { CampaignSkipReason } from "@/lib/campaign/sync-skips";
+import { minCampaignSpendCapPaise, type SpendCapMinimumAccount } from "@/lib/campaign/spend-cap-minimum";
 import { decodeAdResults, decodeCampaignInsights, decodeLifetimeSpendPaise, type AdResult, type CampaignInsights } from "./insights";
 import { maskWhatsAppNumber, maskedWhatsAppNumberPattern } from "./whatsapp-status-shared";
 import { graphEndpoint, graphEntity, graphErrorCode, graphOutcome } from "./graph-event";
@@ -16,7 +17,6 @@ import { EXCLUDABLE_CITIES, INDIA_REGION_KEYS, mergeExclusions, serviceAreaExclu
 import { AD_LANGUAGE_KEYS, storedLocales } from "./locales";
 import { expandPlaceAliases } from "./geo-aliases";
 export type { AdResult, CampaignInsights } from "./insights";
-
 
 export interface MetaCredentials {
   adAccountId: string;
@@ -365,7 +365,6 @@ export class MetaCreateRolledBackError extends MetaError {
 export type MetaErrorDetails = { userTitle?: string; fbtraceId?: string; path?: string };
 
 type GraphErrorBody = { message?: string; error_user_msg?: string; error_user_title?: string; code?: number; error_subcode?: number; fbtrace_id?: string };
-
 
 const META_SUBCODE_MESSAGES: Record<number, (userMessage: string) => string> = {
   2446307: userMessage =>
@@ -1779,20 +1778,14 @@ export class MetaClient {
     return decodeLifetimeSpendPaise(await this.graph<unknown>(`${node}/insights?fields=spend&date_preset=maximum`));
   }
 
-  /** #1799: Meta's smallest campaign spend_cap for this account (paise; ₹5,000 for INR on Oct 28); null if unread. */
+  /** #1799: Meta's smallest campaign spend_cap for this INR account (paise), or null; see campaign/spend-cap-minimum. */
   async readMinCampaignSpendCapPaise(): Promise<number | null> {
-    const account = await this.graph<{ id?: string; min_campaign_group_spend_cap?: string }>(
-      `${encodeURIComponent(this.creds.adAccountId)}?fields=id,min_campaign_group_spend_cap`,
-    );
-    const value = account.min_campaign_group_spend_cap;
-    return account.id === this.creds.adAccountId && value && /^\d{1,15}$/.test(value) ? Number(value) : null;
+    return minCampaignSpendCapPaise(await this.graph<SpendCapMinimumAccount>(`${encodeURIComponent(this.creds.adAccountId)}?fields=id,currency,min_campaign_group_spend_cap`), this.creds.adAccountId);
   }
 
   /** Live ad account funding (#245): Meta's account spending limit and amount spent, both media paise excluding GST. */
   async readAccountFunding(): Promise<AccountFunding> {
-    const account = await this.graph<{ id?: string; currency?: string; spend_cap?: string; amount_spent?: string; is_prepay_account?: boolean }>(
-      `${encodeURIComponent(this.creds.adAccountId)}?fields=id,spend_cap,amount_spent,is_prepay_account,currency`,
-    );
+    const account = await this.graph<{ id?: string; currency?: string; spend_cap?: string; amount_spent?: string; is_prepay_account?: boolean }>(`${encodeURIComponent(this.creds.adAccountId)}?fields=id,spend_cap,amount_spent,is_prepay_account,currency`);
     const paise = /^\d{1,15}$/;
     if (account.id !== this.creds.adAccountId || account.currency !== "INR"
       || !paise.test(account.spend_cap ?? "0") || !paise.test(account.amount_spent ?? "")) {
@@ -1971,9 +1964,7 @@ export class MetaClient {
       const updated = await this.graph<{ success?: boolean }>(encodeURIComponent(campaignId), { method: "POST", form: { spend_cap: String(target) } });
       if (updated.success !== true) throw new MetaError("Campaign spending limit is unconfirmed. Reconcile before activation.");
     }
-    const confirmed = await this.graph<{ id: string; account_id: string; spend_cap?: string }>(
-      `${encodeURIComponent(campaignId)}?fields=id,account_id,spend_cap`,
-    );
+    const confirmed = await this.graph<{ id: string; account_id: string; spend_cap?: string }>(`${encodeURIComponent(campaignId)}?fields=id,account_id,spend_cap`);
     if (confirmed.id !== campaignId || confirmed.account_id !== current.account_id || !/^\d+$/.test(confirmed.spend_cap ?? "")
       || Number(confirmed.spend_cap) !== target) throw new MetaError("Campaign spending limit changed. Keep the campaign paused.");
   }

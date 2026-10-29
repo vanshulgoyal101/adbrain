@@ -15,15 +15,17 @@ describe("core: Meta's campaign spend-cap minimum (#1799)", () => {
     expect(recorded.tape.filter((row) => row.status === 200).every((row) => row.spend_cap >= 500000)).toBe(true);
   });
 
-  it("reads a minimum other than ₹5,000, and nothing from another account or a malformed value", async () => {
+  it("reads a minimum other than ₹5,000, and nothing from another account, another currency or a malformed value", async () => {
     const read = (body: object) => {
       vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(Response.json(body));
       return client().readMinCampaignSpendCapPaise();
     };
-    expect(await read({ id: "act_9000000000000001", min_campaign_group_spend_cap: "750000" })).toBe(750000);
-    expect(await read({ id: "act_9000000000000002", min_campaign_group_spend_cap: "750000" })).toBeNull();
-    expect(await read({ id: "act_9000000000000001", min_campaign_group_spend_cap: "5000.5" })).toBeNull();
-    expect(await read({ id: "act_9000000000000001" })).toBeNull();
+    expect(await read({ id: "act_9000000000000001", currency: "INR", min_campaign_group_spend_cap: "750000" })).toBe(750000);
+    expect(String(vi.mocked(fetch).mock.calls.at(-1)?.[0])).toContain("fields=id,currency,min_campaign_group_spend_cap");
+    expect(await read({ id: "act_9000000000000002", currency: "INR", min_campaign_group_spend_cap: "750000" })).toBeNull();
+    expect(await read({ id: "act_9000000000000001", currency: "USD", min_campaign_group_spend_cap: "750000" })).toBeNull();
+    expect(await read({ id: "act_9000000000000001", currency: "INR", min_campaign_group_spend_cap: "5000.5" })).toBeNull();
+    expect(await read({ id: "act_9000000000000001", currency: "INR" })).toBeNull();
   });
 
   it("turns Meta's recorded refusal (Hindi text) into English with Meta's own minimum, or no amount when it has none", async () => {

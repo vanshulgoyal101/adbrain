@@ -17,6 +17,7 @@ import { campaignActivationPatchSchema } from "@/lib/campaign/connect-contracts"
 import { readStoredCampaignBinding } from "@/lib/campaign/binding";
 import { activationConfirmationPayload, intendedCampaignChildren, RESUME_IN_ADS_MANAGER, reviewableCampaign } from "@/lib/campaign/activation";
 import { pausedAdIds } from "@/lib/campaign/ad-pause";
+import { spendCapMinimum } from "@/lib/campaign/spend-cap-minimum";
 import { saveCampaign, deleteVerifiedCampaign } from "@/lib/campaign/trusted-write";
 import { confirmCustomerCampaign, CustomerBalanceError, getCustomerBalance, observeCustomerCosts, reserveCustomerCampaign } from "@/lib/payments/customer-balance";
 import { fundingMode, type FundingMode } from "@/lib/payments/operator-funding";
@@ -28,7 +29,6 @@ import { lacksAreaExclusions } from "@/lib/meta/service-area";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { campaignOwnedElsewhere, ownerRefusal } from "@/lib/campaign/campaign-owner";
 import { CampaignEditError, refuseWhileSwitchPending } from "@/lib/campaign/edit-service";
-
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -249,16 +249,10 @@ async function handlePATCH(
               campaignId: id, adAccountId: storedBinding.metaAdAccountId!, connectionGeneration: storedBinding.metaConnectionGeneration!, mediaPaise,
             })).catch(() => undefined);
           }
-          // #1799 (QA, recorded): an uncapped run sets the campaign's spend_cap to the reserved allowance, and Meta refuses
-          // one under the account's minimum. The reservation checks Meta's live minimum in the same transaction, so a
-          // refusal holds nothing and no Meta write happens. Unread minimum: skip it; Meta's refusal maps by subcode.
-          const minimum = mode === "managed" && !capDays
-            ? await Promise.resolve().then(() => meta.readMinCampaignSpendCapPaise()).catch(() => null)
-            : null;
           const reservation = mode !== "managed" ? null : await reserveCustomerCampaign(context, {
             campaignId: id, adAccountId: storedBinding.metaAdAccountId!,
             connectionGeneration: storedBinding.metaConnectionGeneration!, dailyBudgetRupees: campaign.daily_budget!,
-            requestKey: parsed.data.confirmationDigest, lifetimeCapPaise: capPaise, ...(minimum ? { minMediaLimitPaise: minimum } : {}),
+            requestKey: parsed.data.confirmationDigest, lifetimeCapPaise: capPaise, ...(!capDays ? await spendCapMinimum(meta) : {}),
           });
           const confirm = async (state: "active" | "paused" | "uncertain") => {
             if (reservation) await confirmCustomerCampaign(context, id, reservation.reservationId, state);
