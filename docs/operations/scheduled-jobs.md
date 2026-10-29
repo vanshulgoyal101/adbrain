@@ -35,6 +35,11 @@ the `CRON_SECRET` secret of the **`production-secrets`** environment (deployment
 red on any non-200 and opens one `Scheduled jobs failed twice in a row` `core` bug on
 two consecutive failures. Pause it with `gh workflow disable scheduled-jobs.yml`; resume
 with `gh workflow enable scheduled-jobs.yml`; run once with `gh workflow run scheduled-jobs.yml`.
+Each run also scans issue/PR bodies and comments since the previous run for customer data
+([scan-public-data.mjs](../../scripts/scan-public-data.mjs), #1627: Indian mobiles, emails, Meta ids, tokens, JWTs,
+payment ids; the team's own Solaride/app ids and fake ids are allowed). A hit adds the URL and pattern type,
+never the value, to one `Possible customer data in a public issue or PR` issue for DevOps, who edits the
+comment to an opaque key and ticks the line. A scan error is a warning, never a failed run.
 [vercel.json](../../vercel.json) also runs keepalive and enforce-spend daily at
 `0 6 * * *` (UTC), the most a Vercel Hobby cron can run.
 All cron routes require `Authorization: Bearer <CRON_SECRET>`, return 404 if unset and 401
