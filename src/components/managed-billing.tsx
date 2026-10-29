@@ -73,13 +73,14 @@ export function BillingSection({ mode, locale = "en", runningCampaigns = [], ...
 } & Parameters<typeof ManagedBilling>[0]) {
   if (mode === "managed") return <ManagedBilling {...billing} />;
   if (mode !== "own") return null;
+  const t = translator(locale, "settings");
   return (
     <section aria-labelledby="own-billing-title" className="space-y-2 border-t border-slate-200 pt-6">
       <h2 id="own-billing-title" className="flex items-center gap-2 font-semibold text-slate-900">
         <WalletCards aria-hidden="true" className="h-5 w-5 text-blue-600" />
-        Billing
+        {t("billingTitle")}
       </h2>
-      <p className="text-sm leading-6 text-slate-600">You pay Meta directly from your ad account. Your first month of AdBrain is free; after that it&apos;s ₹999 a month.</p>
+      <p className="text-sm leading-6 text-slate-600">{t("ownBilling")}</p>
       <IfYouStop locale={locale} />
       <PauseAllAds locale={locale} campaigns={runningCampaigns} />
     </section>

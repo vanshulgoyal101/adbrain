@@ -20,7 +20,7 @@ ad review are distinct. The exact applicable requirements are determined by the
 current Meta dashboard and official documentation for the intended use case.
 
 AdBrain's local capability probes check specific runtime access; they neither
-submit reviews nor override provider decisions. Read [Meta Connect](META_CONNECT.md)
+submit reviews nor override provider decisions. Read [Meta Connect](architecture/channels/meta-connect.md)
 for the implemented connection and publishing path.
 
 | Gate | Evidence to record | What does not satisfy it |
@@ -189,7 +189,7 @@ of production readiness. Do not run it without a defined diagnostic purpose.
 
 If consent fails, distinguish callback/state/configuration failures from asset
 discovery, missing tasks and provider review restrictions. Use
-[Meta recovery guidance](META_CONNECT.md#attempt-lifecycle) for the app path and
+[Meta recovery guidance](architecture/channels/meta-connect.md#attempt-lifecycle) for the app path and
 the exact provider feedback for an appeal/resubmission. Do not remove owner,
 capability, paused-creation or spending protections to make a recording succeed.
 

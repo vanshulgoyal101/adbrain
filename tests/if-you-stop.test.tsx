@@ -43,7 +43,7 @@ describe("If you stop (#1916)", () => {
     const block = screen.getByRole("list", { name: "If you stop" });
     expect(within(block).getAllByRole("listitem").map(row => row.textContent)).toMatchInlineSnapshot(`
       [
-        "If you stop paying: your running ads keep running on Meta, and your results and enquiries stay here. Making new ads and campaigns waits until you pay. Nothing is deleted.",
+        "If you stop paying: your running ads keep running on Meta, and your results and enquiries stay here. We'll remind you on Home when a payment is due. Nothing is deleted.",
         "If you disconnect Facebook: your ads keep running in Meta until you pause them there. AdBrain can't pause them or update results after that.",
         "To delete your data: use Privacy and data requests below. Your campaigns stay in your own Meta ad account.",
       ]
@@ -52,10 +52,13 @@ describe("If you stop (#1916)", () => {
 
   it("shows all three lines in Hindi", () => {
     render(<BillingSection mode="own" connection={null} locale="hi" />);
+    // #2095: the heading and price line are Hindi too, not English above Hindi lines.
+    expect(screen.getByRole("heading", { name: "बिलिंग" })).toBeInTheDocument();
+    expect(screen.getByText("आप अपने विज्ञापन खाते से सीधे Meta को भुगतान करते हैं। AdBrain का पहला महीना मुफ़्त है; उसके बाद ₹999 हर महीने।")).toBeInTheDocument();
     const block = screen.getByRole("list", { name: "अगर आप रुकें" });
     expect(within(block).getAllByRole("listitem").map(row => row.textContent)).toMatchInlineSnapshot(`
       [
-        "भुगतान बंद करने पर: आपके चल रहे विज्ञापन Meta पर चलते रहेंगे, और नतीजे व पूछताछ यहाँ रहेंगी। नए विज्ञापन और कैंपेन भुगतान के बाद बनेंगे। कुछ भी डिलीट नहीं होगा।",
+        "भुगतान बंद करने पर: आपके चल रहे विज्ञापन Meta पर चलते रहेंगे, और नतीजे व पूछताछ यहाँ रहेंगी। भुगतान बाकी होने पर हम होम पर याद दिलाएँगे। कुछ भी डिलीट नहीं होगा।",
         "Facebook हटाने पर: आपके विज्ञापन Meta में तब तक चलते रहेंगे जब तक आप उन्हें वहाँ न रोकें। उसके बाद AdBrain उन्हें रोक या नतीजे अपडेट नहीं कर पाएगा।",
         "अपना डेटा हटाने के लिए: नीचे Privacy and data requests इस्तेमाल करें। आपके कैंपेन आपके अपने Meta विज्ञापन खाते में रहेंगे।",
       ]

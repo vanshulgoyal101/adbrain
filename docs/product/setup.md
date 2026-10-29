@@ -27,7 +27,7 @@ individual capabilities after authentication succeeds.
 Capabilities are independent: read insights, read leads, create paused, activate.
 An `unknown` capability is not permission to proceed. Expired/revoked credentials
 require reconnect; other blockers may require action in Meta. Details are in
-[Meta Connection](../META_CONNECT.md).
+[Meta Connection](../architecture/channels/meta-connect.md).
 
 Behind `META_SETUP_CHECKLIST` (#1016, #795 slice 1), Settings shows "Ready to launch on Meta"
 under an owner's own connection: business portfolio, ad account in rupees (active), Facebook Page,

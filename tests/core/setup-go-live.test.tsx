@@ -49,6 +49,19 @@ describe("core: <SetupGoLive> (#1271)", () => {
     expect(screen.queryByText(/first month of AdBrain is free/)).toBeNull();
   });
 
+  it("says Meta paces the capped total across the days, so one day can be over the daily amount (#2007)", () => {
+    goLive();
+    expect(screen.getByText("Meta spreads it across the days, so one day can be a bit more than ₹300 and another less. The total never goes past the limit above.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "₹1,000 a day" }));
+    expect(screen.getByText("Meta spreads it across the days, so one day can be a bit more than ₹1,000 and another less. The total never goes past the limit above.")).toBeInTheDocument();
+  });
+
+  it("says the pacing line in Hindi (#2007)", () => {
+    render(<SetupGoLive business={business} ads={ads} pageConnected funding="managed" locale="hi"
+      whatsappNumber="+91 ••••• 3210" weeklyCap={{ capRupees: null, active: [] }} />);
+    expect(screen.getByText("Meta इसे दिनों में बाँटता है, इसलिए किसी दिन ₹300 से थोड़ा ज़्यादा और किसी दिन कम लग सकता है। कुल खर्च ऊपर लिखी सीमा से ज़्यादा कभी नहीं होगा।")).toBeInTheDocument();
+  });
+
   it("a chip changes the daily amount, the total and the primary", () => {
     goLive();
     fireEvent.click(screen.getByRole("button", { name: "₹1,000 a day" }));

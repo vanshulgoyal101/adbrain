@@ -18,7 +18,7 @@ These are deliberately different baselines:
 | Current development source | Includes DB integrity/trusted-write changes and test-payment work excluded from that release; source presence does not establish applied production migrations |
 | Enquiry candidates | [#34 / PR #37](https://github.com/vanshulgoyal101/adbrain/pull/37) adds resumable import; [#35 / PR #38](https://github.com/vanshulgoyal101/adbrain/pull/38) adds saved follow-up/listing. Neither is part of this baseline or the cited production release |
 
-Use [Meta Connection](META_CONNECT.md#lead-import-and-follow-up) for the candidate
+Use [Meta Connection](architecture/channels/meta-connect.md#lead-import-and-follow-up) for the candidate
 boundary and concrete migration handoff. Documentation is not deployment approval.
 
 ## System Overview
