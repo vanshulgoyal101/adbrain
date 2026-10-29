@@ -1,4 +1,5 @@
 import { RejectedAds } from "@/components/rejected-ads";
+import { requestWords } from "@/i18n/request-locale";
 import { readStoredCampaignBinding } from "@/lib/campaign/binding";
 import { requireOwnedBusiness, withMetaConnection } from "@/lib/meta/connection-access";
 import { adsManagerUrl } from "@/lib/meta/ads-manager-url";
@@ -17,5 +18,6 @@ export async function HomeRejectedAds({ campaign, spend, vertical = null }: { ca
     { purpose: "read_insights", binding: { adAccountId, pageId }, expectedGeneration },
     (meta) => meta.readAdReview(metaCampaignId))).catch(() => null);
   if (!reviews) return null;
-  return <RejectedAds reviews={reviews} spend={spend} running={campaign.status === "active"} vertical={vertical} adsManagerUrl={adsManagerUrl(campaign)} />;
+  return <RejectedAds reviews={reviews} spend={spend} running={campaign.status === "active"} vertical={vertical} adsManagerUrl={adsManagerUrl(campaign)}
+    words={await requestWords("verdict")} />;
 }
