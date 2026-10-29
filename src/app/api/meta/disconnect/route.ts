@@ -5,11 +5,10 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { ConnectionAccessError, requireOwnedBusiness } from "@/lib/meta/connection-access";
 import { getPrimaryBusiness } from "@/lib/supabase/queries";
 import { logEvent } from "@/lib/audit";
-import { revokeMetaGrant } from "@/lib/meta/revoke-grant";
+import { revokeBeforeDisconnect } from "@/services/meta-disconnect";
 import { z } from "zod";
 
 export const runtime = "nodejs";
-const REVOKE_WAIT_MS = 5_000;
 
 /** Remove a business's stored Meta (OAuth) connection. */
 export const POST = observeRoute("/api/meta/disconnect", "POST", handlePOST);
@@ -43,14 +42,7 @@ async function handlePOST(request?: Request) {
     const business = requestedBusinessId
       ? await requireOwnedBusiness(businessId)
       : { businessId };
-    // #1649: best effort, and only where it can't cut off anyone else; never blocks the disconnect.
-    // Waits at most 5 s; a slow revoke keeps running and logs its own outcome.
-    let bound: ReturnType<typeof setTimeout> | undefined;
-    await Promise.race([
-      revokeMetaGrant(business.businessId),
-      new Promise((resolve) => { bound = setTimeout(resolve, REVOKE_WAIT_MS); }),
-    ]);
-    clearTimeout(bound);
+    await revokeBeforeDisconnect(business.businessId);
     const admin = createAdminClient();
     const { data: disconnected, error } = await admin.rpc("meta_disconnect", {
       p_business_id: business.businessId,

@@ -1,4 +1,5 @@
 import { metaWriteMode } from "@/lib/internal-accounts";
+import { businessOwnerId } from "@/lib/business-owner";
 import { recordProductEvent } from "@/lib/observability/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { MetaClient, MetaError } from "./client";
@@ -36,13 +37,12 @@ async function attempt(businessId: string): Promise<{ result: RevokeOutcome; cod
   if (target.token_kind !== "user") return { result: "skipped_system" };
   if (target.shared) return { result: "skipped_shared" };
 
-  const [tokens, connection, business] = await Promise.all([
+  const [tokens, connection, ownerId] = await Promise.all([
     admin.rpc("meta_token_get", { p_token_id: target.token_id, p_business_id: businessId }),
     admin.from("meta_connections").select("ad_account_id, page_id").eq("business_id", businessId).maybeSingle(),
-    admin.from("businesses").select("owner_id").eq("id", businessId).maybeSingle(),
+    businessOwnerId(businessId),
   ]);
   const row = tokens.data?.[0];
-  const ownerId = (business.data as { owner_id?: string } | null)?.owner_id;
   if (tokens.error || !row || row.revoked_at || !ownerId) return { result: "failed", code: "TOKEN_UNAVAILABLE" };
   const accessToken = decryptMetaToken({
     ciphertext: fromPostgresBytea(row.ciphertext), nonce: fromPostgresBytea(row.nonce), authTag: fromPostgresBytea(row.auth_tag),

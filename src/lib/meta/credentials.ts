@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { metaWriteMode } from "@/lib/internal-accounts";
+import { businessOwnerId } from "@/lib/business-owner";
 import { MetaClient, type MetaCredentials } from "./client";
 import { decryptMetaToken, fromPostgresBytea } from "./token-store";
 import { getManagedAccount, isManagedReady, managedCredentials, type ManagedAccount } from "./managed-account";
@@ -108,9 +109,9 @@ export async function metaClientForBusiness(
   const creds = await resolveMetaCredentials(businessId, db);
   if (!creds) return null;
   // #1649: the smoke account's pause-only rule (#1324) applies here too; an unreadable owner gets no client.
-  const { data, error } = await createAdminClient().from("businesses").select("owner_id").eq("id", businessId).maybeSingle();
-  if (error || !data?.owner_id) return null;
-  return new MetaClient(creds, undefined, metaWriteMode(data.owner_id, creds.adAccountId));
+  const ownerId = await businessOwnerId(businessId);
+  if (!ownerId) return null;
+  return new MetaClient(creds, undefined, metaWriteMode(ownerId, creds.adAccountId));
 }
 
 /** Connection status for the settings UI (never includes the token). */
