@@ -40,8 +40,10 @@ export function translator<Namespace extends keyof Messages>(locale: AppLocale, 
 }
 
 export type OwnerErrorKey = keyof Messages["errors"];
+/** #2312: values for an error with placeholders (amounts, counts, a select). */
+export type OwnerErrorValues = Record<string, string | number>;
 
 /** #2305: an owner-facing API error in one language; routes keep their status codes and `code` fields unchanged. */
-export function ownerErrorIn(locale: AppLocale, key: OwnerErrorKey, values?: Record<string, string | number>): string {
+export function ownerErrorIn(locale: AppLocale, key: OwnerErrorKey, values?: OwnerErrorValues): string {
   return translator(locale, "errors")(key, values);
 }
