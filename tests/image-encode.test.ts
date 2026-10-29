@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import sharp from "sharp";
-import { isWebp, jpegIfWebp, storageWebp } from "@/lib/imageGen/encode";
+import { downloadJpeg, isWebp, jpegIfWebp, storageWebp } from "@/lib/imageGen/encode";
 
 // #1897: storage WebP only when it is smaller; downloads and Meta get JPEG.
 describe("image encode (#1897)", () => {
@@ -16,5 +16,15 @@ describe("image encode (#1897)", () => {
     const out = await jpegIfWebp(webp);
     expect(out.converted).toBe(true);
     expect((await sharp(out.bytes).metadata()).format).toBe("jpeg");
+  });
+
+  it("a download is a JPEG with transparency on white, never black", async () => {
+    const clear = await sharp({ create: { width: 8, height: 8, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } }).png().toBuffer();
+    const out = await downloadJpeg(clear);
+    const { data, info } = await sharp(out).raw().toBuffer({ resolveWithObject: true });
+    expect([info.format, info.channels]).toEqual(["raw", 3]);
+    expect((await sharp(out).metadata()).format).toBe("jpeg");
+    expect(Math.min(...data)).toBeGreaterThan(245);
+    await expect(downloadJpeg(new Uint8Array([1, 2, 3]))).rejects.toThrow();
   });
 });

@@ -24,6 +24,13 @@ describe("education banned claims (#1609)", () => {
     expect(adPolicyHits([{ id: "a", headline: "Visa interview practice" }], "study abroad")).toEqual([]);
   });
 
+  it("flags first-attempt promises (CPO, #1910 Ad Library sample)", () => {
+    expect(flagged("Crack IELTS in 1st attempt", "IELTS coaching")).toContain("1st attempt");
+    expect(flagged("Crack PTE in your First Attempt!", "PTE academy")).toContain("first attempt");
+    expect(flagged("First attempt guaranteed", "IELTS coaching")).toEqual(expect.arrayContaining(["first attempt", "guaranteed"]));
+    expect(adPolicyHits([{ id: "a", headline: "Crack it in 1st attempt" }], "IELTS coaching").map((hit) => hit.term)).toContain("1st attempt");
+  });
+
   it("passes honest education copy", () => {
     expect(flagged("Free demo class in Mohali", "IELTS coaching")).toEqual([]);
     expect(flagged("Small batches, mock tests every week", "IELTS coaching")).toEqual([]);

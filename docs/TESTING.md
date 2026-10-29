@@ -215,6 +215,7 @@ Supabase configuration and Node 24. Every job runs in parallel after its own `np
 | `test` | aggregator: fails unless `lint`, every `unit` shard and `metadb` succeeded |
 | `core` | `npm run test:core`, then `test:meta-db -- --generation-only` |
 | `audit` | `npm run audit:dependencies` (reports, does not block) |
+| `boundaries` | `npm run boundaries -- --base origin/<base>`: ADR-001 import rules (`.dependency-cruiser.mjs`). A new edge fails; a fixed edge fails until `npm run boundaries -- --write-baseline` drops it from `scripts/boundaries-baseline.json`, which may only shrink (#2070) |
 | `secrets` | Gitleaks |
 
 Required checks are `build`, `test`, `core` and `secrets`. `test` runs with
@@ -391,7 +392,7 @@ every row has a handler; every environment key appears in a configuration page;
 current pages stay at most 300 lines; every folder under `docs/` has a `README.md`
 that links each page and subfolder in it; new pages go in a subfolder
 (`product`, `architecture`, `api`, `operations`, `team`), not loose in `docs/`;
-and any `docs/….md` path named in `src/`, `scripts/`, `db/`, `.github/`,
+and any `docs/….md` path named in `src/`, `scripts/`, `db/` (not applied migrations, which are immutable), `.github/`,
 `AGENTS.md` or `.env.example` must exist. Flat guides not yet moved are listed in
 `LEGACY_FLAT` in the checker and exempt from the size and layout rules.
 In CI the `docs` job runs the checker and its tests; the required `test` check

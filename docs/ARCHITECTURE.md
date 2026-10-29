@@ -184,7 +184,7 @@ or an unawaited Vercel promise. All creation remains PAUSED.
 The existing `campaign_operations` ledger is also the queue. Service-only RPCs
 claim pending rows with `FOR UPDATE SKIP LOCKED`; expired running jobs require
 reconciliation rather than automatic mutation replay. See
-[Operations](OPERATIONS.md#campaign-worker-rollout) for leases and deployment.
+[Operations](operations/runbooks/campaigns.md#campaign-worker-rollout) for leases and deployment.
 Inline execution remains the default compatibility mode until that rollout.
 
 Campaign display reads use stable `(created_at,id)` cursors, owner-scoped filters,
@@ -252,7 +252,7 @@ when UI controls hide actions.
 Paid routes use an atomic shared database rate limiter. Production fails closed
 if enforcement is unavailable; nonproduction can fall back to process memory.
 Monthly usage is a separate non-atomic quota preflight. Neither mechanism is a
-provider billing limit. See [Operations](OPERATIONS.md).
+provider billing limit. See [Operations](operations/README.md).
 
 Meta tokens live encrypted in a private schema and are accessed through server-only
 RPCs. Browser DTOs contain selected assets/capabilities, never tokens. OAuth uses
@@ -274,7 +274,7 @@ it merely to validate these docs: it can execute real campaign operations.
 Owner audit history, trusted AI usage, and structured product events are separate
 stores. Product telemetry uses request-local async context and safe metadata;
 database logging is opt-in after migration and best effort. See
-[Observability](OBSERVABILITY.md) for exact limits and privacy. Logs are evidence
+[Observability](operations/observability.md) for exact limits and privacy. Logs are evidence
 for diagnosis, not proof that every side effect was durably recorded.
 
 ## Where to Make Changes
@@ -463,16 +463,29 @@ before more slices land.
 - One path per PR, at most ~400 changed lines; move code and switch callers in the same PR, so there is
   never a second copy.
 - Recorded core tests stay byte-for-byte; a slice that needs a fixture change is not behaviour-preserving.
-- No new code may add to the boundary baseline once Phase 1 lands.
+- No new code may add to the boundary baseline once Phase 1 lands. The CI `boundaries` job enforces R1–R6
+  (`.dependency-cruiser.mjs`, baseline `scripts/boundaries-baseline.json`) and prints each slice's −N (#2070).
 
 ### Provider access prerequisites
 
 - **Meta:** #1838's rate-limit handling precedes pilot scale. Limited access has a
   60-point/five-minute account budget (writes cost three points); parallel campaign
-  builds must share that budget, not each assume it is theirs. Dev 2 includes Ads
-  Management Standard Access in #156's App Review work; Full Access requires the
-  documented recent-call threshold as well as review. Do not generate calls just
-  to qualify.
+  builds must share that budget, not each assume it is theirs. Track four separate
+  gates in #156 (evidence: #2049), and don't let one stand in for another:
+  - **Marketing API Access Tier** (Limited/Full; Meta's new name for Ads Management
+    Standard Access). Approval is recorded historically; current Full entitlement is
+    unknown. Full requires at least 500 successful Marketing API calls in the last
+    15 days **and** an error rate under 15% over the last 500 calls. Our counters
+    are unrecorded, which means unknown, not unmet. Do not generate calls just to
+    qualify.
+  - **Per-permission Advanced access** (App Review): submitted and in review, not
+    approved. Keep the existing submission; no replacement packet.
+  - **Business Verification:** reported verified; still required.
+  - **Tech Provider Access Verification:** Meta retired it on Oct 9, 2026, but our
+    Oct 28 receipt still shows "In Review". Treat it as neither a blocker nor done
+    until the next planned owner-assisted review (CEO).
+
+  Assume pilot scale fits Limited access until Full is confirmed.
 - **Google:** #1826 supplies the Phase 5 access evidence. Developer tokens were
   sunset; access belongs to the OAuth client's Cloud project. Start the spike at
   **Test** access against test accounts, with no customer launch or production

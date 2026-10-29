@@ -122,9 +122,9 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
   undone on the card; Keep hides it for 3 days. Never automatic, never a budget change. Turning the campaign
   back on keeps that ad paused (#1055): a capped resume copies only the other ads, and the review says so.
 - **Daily results on WhatsApp** (#1022, dark behind `OWNER_ALERTS_ENABLED`): from 09:00 IST, each opted-in
-  owner gets one `adbrain_daily_results` line for yesterday (IST): ₹ spent, enquiries (form leads plus
-  WhatsApp chats, the same per-ad numbers as "Which ad worked"), ₹ each or "none yet", and the ad to name
-  (#783's best, else the most enquiries, else the most WhatsApp taps). No line on a day with no spend and
+  owner gets one `adbrain_daily_results` line for yesterday (IST): ₹ spent, how many people messaged or filled a
+  form (the same per-ad numbers as "Which ad worked"), ₹ each or "none yet", and the ad to name with its
+  people count (#783's best, else the most people, else the most WhatsApp taps; #1720 dropped "enquiries"). No line on a day with no spend and
   no enquiry; at the monthly cap only this line pauses.
 - WhatsApp and new lead-form ad sets run on Facebook, Instagram and Messenger only (#906, #680), so a
   WhatsApp vs lead-form A/B differs only in destination: `publisher_platforms`

@@ -105,6 +105,7 @@ const pilots = pilotData({
   prospectCreatives: prospectCreatives as { business_id: string }[],
   pilotEvents: pilotEvents as Parameters<typeof pilotData>[0]["pilotEvents"],
   launchedRows: launchedRows as { business_id: string; launched_at: string }[],
+  leads: leads as Array<{ business_id: string; created_at: string }>,
   excludedBusinessIds: (owned as Array<{ id: string }>).map((row) => row.id),
   now: until,
 });
