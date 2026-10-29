@@ -49,7 +49,7 @@ function meta(options: { pages?: Child[][]; accounts?: { id: string; name: strin
 
 const tokens = { customer: "customer-token", parent: "parent-token" };
 const run = (store: ProvisionStore, graph: ProvisionGraph, businessName = "Solaride Mohali") =>
-  provisionManagedAccount({ businessId: business, businessName, parentBusinessId: PARENT, store, graph, tokens, manager: { appId: "2286157145462990", save: async () => "00000000-0000-4000-8000-000000000001", load: async () => null, remove: async () => {} }, requestId: "r1" });
+  provisionManagedAccount({ businessId: business, businessName, vertical: "ENERGY_AND_UTILITIES", parentBusinessId: PARENT, store, graph, tokens, manager: { appId: "2286157145462990", save: async () => "00000000-0000-4000-8000-000000000001", load: async () => null, remove: async () => {} }, requestId: "r1" });
 
 const others = (count: number, from = 0): Child[] =>
   Array.from({ length: count }, (_, i) => ({ id: String(7100000000000 + from + i), child_business_external_id: `other-${from + i}` }));
