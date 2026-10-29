@@ -2,7 +2,7 @@
 # Operations and Troubleshooting
 
 Use this guide for diagnosis, not as blanket authorization for remote changes.
-[Release policy](../RELEASING.md) governs publication/migrations/credentials;
+[Release policy](releasing.md) governs publication/migrations/credentials;
 [Observability](observability.md) defines safe logs and operator queries.
 
 ## Pages
@@ -15,6 +15,8 @@ Use this guide for diagnosis, not as blanket authorization for remote changes.
 | [Scheduled jobs](scheduled-jobs.md) | What runs when, and how to check it |
 | [Backups and data safety](backups.md) | Retention, backups, restore |
 | [Deployment setup](deploy.md) | Prepare a target, configure it, smoke-test and promote |
+| [Release workflow](releasing.md) | Startup fast path, enforced controls, database and credential safety, deploy train |
+| [Release recovery](releasing-recovery.md) | Backups and restore, rollback, production guard |
 | [Observability](observability.md) | What is logged, privacy, enablement, retention |
 | [Observability queries](observability-queries.md) | Read-only operator SQL and verification |
 | [Configuration](configuration.md) | Every environment variable, default and restart/cost note |
@@ -41,9 +43,9 @@ Inspect durable evidence before retrying anything that can create objects or spe
 	payment or activation with a fresh key to get past an error.
 3. Start with scoped logs, saved status and read-only metadata. Compare the
 	deployed handler and schema with the [API](../api/README.md) and
-	[data](../DATA_MODEL.md) guides. A migration file is not proof its objects exist remotely.
+	[data](../architecture/data-model.md) guides. A migration file is not proof its objects exist remotely.
 4. If the core loop is broken after a deploy, roll back first and debug second
-	(see [Production guard](../RELEASING.md#production-guard)). Migrations, production
+	(see [Production guard](releasing-recovery.md#production-guard)). Migrations, production
 	settings, secrets, money and rollback are DevOps-owned; dashboard access is not
 	permission to change them.
 5. Verify the fix through the original workflow. Opening Campaigns or Leads can

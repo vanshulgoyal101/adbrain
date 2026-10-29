@@ -10,6 +10,7 @@ import { SignOutButton } from "@/components/sign-out-button";
 import { HelpOnWhatsApp, SupportLinkProvider } from "@/components/support-link";
 import { LEGAL_LINKS } from "@/lib/legal-links";
 import { usePoll } from "@/lib/use-poll";
+import type { AppLocale } from "@/i18n/locale";
 import styles from "./workspace-shell.module.css";
 
 const sections: Record<string, keyof ShellLabels> = {
@@ -28,9 +29,11 @@ function saveViewedAt(key: string, time: string) {
 
 const UNSEEN_POLL_MS = 120_000;
 
-export function WorkspaceShell({ children, email, ownerId, businessId, businessName, supportUrl = null, firstAd = false, labels = en.shell }: {
+export function WorkspaceShell({ children, email, ownerId, businessId, businessName, supportUrl = null, firstAd = false, labels = en.shell, locale = "en" }: {
   /** #1877: the app bar and menu in the owner's language. */
   labels?: ShellLabels;
+  /** #1895: marks those words with their language; the rest of the shell stays English. */
+  locale?: AppLocale;
   /** #1272: no campaign has gone live yet, so + continues the setup (/create resumes the saved step). */
   firstAd?: boolean;
   children: ReactNode;
@@ -44,6 +47,7 @@ export function WorkspaceShell({ children, email, ownerId, businessId, businessN
   const drawer = useRef<HTMLDialogElement>(null);
   const sectionKey = sections[pathname.split("/")[1]];
   const section = sectionKey ? labels[sectionKey] : "Workspace";
+  const lang = locale === "en" ? undefined : locale;
   const [unseen, setUnseen] = useState<{ key: string; since: string; count: number } | null>(null);
   const viewedKey = businessId ? `lead-viewed:${ownerId}:${businessId}` : null;
   const inInbox = pathname === "/leads" || pathname.startsWith("/leads/");
@@ -78,7 +82,7 @@ export function WorkspaceShell({ children, email, ownerId, businessId, businessN
 
   const identity = <Link href="/brand" className={styles.business}>
     <span className={styles.businessIcon}><Building2 size={17} aria-hidden="true" /></span>
-    <span><strong>{businessName || labels.business}</strong><small>{businessName ? labels.business : "Set up your business"}</small></span>
+    <span><strong lang={businessName ? undefined : lang}>{businessName || labels.business}</strong><small lang={businessName ? lang : undefined}>{businessName ? labels.business : "Set up your business"}</small></span>
     <ChevronRight size={14} aria-hidden="true" />
   </Link>;
 
@@ -89,14 +93,14 @@ export function WorkspaceShell({ children, email, ownerId, businessId, businessN
     <aside className={styles.sidebar} aria-label="Main sidebar">
       <Link href="/dashboard" className={styles.logo}><Brain size={20} aria-hidden="true" />AdBrain</Link>
       {identity}
-      <Nav unseenCount={unseenCount} labels={labels} />
+      <Nav unseenCount={unseenCount} labels={labels} lang={lang} />
       {account}
     </aside>
     <div className={styles.body}>
       <header className={styles.header}>
         <button className={styles.menu} type="button" title="Open navigation" aria-label="Open navigation" aria-haspopup="dialog" onClick={() => drawer.current?.showModal()}><Menu size={21} aria-hidden="true" /></button>
         {/* #847: phones only. On wider screens the sidebar holds Create ads and the H1 names the page. */}
-        <div className={styles.breadcrumb}><strong>{section}</strong></div>
+        <div className={styles.breadcrumb}><strong lang={sectionKey ? lang : undefined}>{section}</strong></div>
         {!pathname.startsWith("/create") && <Link className={styles.create} href="/create" aria-label={firstAd ? "Continue your first ad" : "Create ads"} title={firstAd ? "Continue your first ad" : "Create ads"}><Plus size={20} aria-hidden="true" /></Link>}
       </header>
       <main id="workspace-main" tabIndex={-1} className={styles.main}>{children}</main>
@@ -106,7 +110,7 @@ export function WorkspaceShell({ children, email, ownerId, businessId, businessN
     }}>
       <div className={styles.drawerBody}>
         <div className={styles.drawerHeading}><Link href="/dashboard" className={styles.logo}><Brain size={20} aria-hidden="true" />AdBrain</Link><button type="button" title="Close navigation" aria-label="Close navigation" onClick={() => drawer.current?.close()}><X size={21} aria-hidden="true" /></button></div>
-        {identity}<Nav unseenCount={unseenCount} labels={labels} />{account}
+        {identity}<Nav unseenCount={unseenCount} labels={labels} lang={lang} />{account}
       </div>
     </dialog>
   </div></SupportLinkProvider>;

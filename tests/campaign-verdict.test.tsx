@@ -3,6 +3,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { CampaignVerdict } from "@/components/campaign-verdict";
 import { cardVerdictInput, lastCampaignComparison } from "@/lib/campaign/card-verdict";
+import hi from "../messages/hi.json";
 import { verdict, type VerdictInput } from "@/lib/campaign/verdict";
 
 vi.mock("next/link", () => ({ default: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => <a href={href} {...rest}>{children}</a> }));
@@ -109,5 +110,19 @@ describe("card verdict inputs (#1274)", () => {
     const results = { old: result(25, 5000), "old-form": { ...result(0, 900), leads: 30, destination: "instant_form" }, later: result(3, 300) };
     expect(lastCampaignComparison(campaigns[2] as never, campaigns as never, results as never)).toEqual({ kind: "own", results: 25, typical: 200 });
     expect(lastCampaignComparison(campaigns[1] as never, campaigns as never, results as never)).toBeNull();
+  });
+});
+
+// #1438: with the owner's Hindi words, the card's own lines are Hindi too (CPO Screen 2).
+describe("<CampaignVerdict> in Hindi (#1438)", () => {
+  it("names the group, the number line, the action and Details in Hindi", () => {
+    const words = { locale: "hi" as const, messages: hi.verdict };
+    const input = { ...base, waiting: 1 };
+    render(<CampaignVerdict verdict={verdict(input, words)} words={words} whatsapp results={input.results} spend={input.spend} details={<p>x</p>} />);
+    const group = within(screen.getByRole("group", { name: "कैसा चल रहा है" }));
+    expect(group.getByText(/^1 व्यक्ति आपके जवाब का इंतज़ार कर रहा है। हर चैट ₹150 की पड़ रही है।$/)).toBeInTheDocument();
+    expect(group.getByText("प्रति चैट · 10 चैट, ₹1,500 खर्च")).toBeInTheDocument();
+    expect(group.getByRole("link", { name: "अभी जवाब दें" })).toHaveAttribute("href", "/leads");
+    expect(group.getByText("पूरी जानकारी")).toBeInTheDocument();
   });
 });

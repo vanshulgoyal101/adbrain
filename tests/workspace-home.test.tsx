@@ -27,9 +27,17 @@ const queries = vi.hoisted(() => ({
   businessLLMUsageSummary: vi.fn(),
 }));
 vi.mock("@/lib/supabase/queries", () => queries);
+// #1668: the "last week" card has its own tests; here it reads nothing.
+vi.mock("@/lib/home/week-summary-load", () => ({ loadWeekSummary: async () => null }));
 // #1650: the day-7 question's facts (exempt, first Go live, earlier answers); hidden unless a test opens it.
 const pilot = vi.hoisted(() => ({ facts: vi.fn(async (): Promise<{ exempt: boolean; firstLaunchAt: string | null; events: { name: string; created_at: string }[] }> => ({ exempt: true, firstLaunchAt: null, events: [] })) }));
 vi.mock("@/lib/feedback/pilot-day7-store", () => ({ pilotDay7Facts: pilot.facts }));
+// #2036: the weekly results card's facts; not offered unless a test offers it.
+const card = vi.hoisted(() => ({ facts: vi.fn(async () => ({ offered: false, enquiries: 0, area: null as string | null })) }));
+vi.mock("@/lib/results-card/store", () => ({
+  resultsCardFacts: card.facts,
+  resultsCardLines: () => ({ main: "6 people in Sector 70 enquired with us this week", contact: null }),
+}));
 vi.mock("@/lib/llm/persist", () => ({ businessLLMUsageSummary: queries.businessLLMUsageSummary }));
 vi.mock("@/lib/env", () => ({ getEnv: () => ({ DEMO_USER_EMAIL: "demo@example.test", NEXT_PUBLIC_SUPABASE_URL: "https://project.supabase.co" }) }));
 const operator = vi.hoisted(() => ({ allowed: true }));
@@ -409,6 +417,26 @@ describe("Home workspace", () => {
     expect(screen.queryByText(/would you pay ₹999 a month/)).toBeNull();
   });
 
+  it("offers the weekly results card only in a week it's offered (#2036)", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 503 })));
+    const live = { id: "c-new", name: "Solar", status: "active", daily_budget: 300, raw: {}, meta_campaign_id: "123", launched_at: "2026-10-01T10:00:00Z", created_at: "2026-10-01T10:00:00Z" } as unknown as Campaign;
+    queries.getPrimaryBusiness.mockResolvedValue(business);
+    queries.getCreativePreviews.mockResolvedValue([]);
+    queries.getCampaigns.mockResolvedValue([live]);
+    queries.getMetaConnection.mockResolvedValue({ ready: true });
+    queries.getSpendEvaluation.mockResolvedValue({ evaluation: { status: "healthy" } });
+    queries.getAuditLog.mockResolvedValue([]);
+    queries.getLatestResultsWithEnquiries.mockResolvedValue({});
+    card.facts.mockResolvedValueOnce({ offered: true, enquiries: 6, area: "Sector 70" });
+    const { default: DashboardPage } = await import("@/app/(app)/dashboard/page");
+    const { unmount } = render(await DashboardPage());
+    expect(screen.getByRole("region", { name: "Good week. Share it?" })).toHaveTextContent("6 people enquired this week.");
+    unmount();
+    render(await DashboardPage());
+    expect(screen.queryByText("Good week. Share it?")).toBeNull();
+    vi.unstubAllGlobals();
+  });
+
   it("keeps recent activity failures local to their section", async () => {
     queries.getPrimaryBusiness.mockResolvedValue(business);
     queries.getCreativePreviews.mockResolvedValue([]);
@@ -532,6 +560,14 @@ describe("Home results row (#764)", () => {
     // With #1292's named line on Home, the count isn't repeated.
     rerender(<WorkspaceHome {...empty} business={business} campaigns={[chats, forms]} results={results} waiting={2} firstEnquiry={{ name: "Rohit", at: "2026-10-26T04:10:00Z" }} now={now} />);
     expect(within(screen.getByRole("region", { name: "Results so far" })).getByRole("link", { name: "WhatsApp run" }).closest("p")).toHaveTextContent("Each chat costs ₹168. WhatsApp run");
+  });
+
+  // #1438: in Hindi, Home's lead sentence and the row words come from the same Hindi verdicts.
+  it("#1438: the verdict sentence and row words in Hindi", () => {
+    render(<WorkspaceHome {...empty} business={business} campaigns={[chats, forms]} results={results} now={now} locale="hi" />);
+    const row = screen.getByRole("region", { name: "अब तक के नतीजे" });
+    expect(within(row).getByRole("link", { name: "WhatsApp run" }).closest("p")).toHaveTextContent("हर चैट ₹168 की पड़ रही है। WhatsApp run");
+    expect(screen.queryByText(/Each chat costs|Early days/)).toBeNull();
   });
 
   it("#1274: no lead sentence when nothing is running", () => {

@@ -31,7 +31,8 @@ export type GoLiveStep = "check" | "create" | "activate";
 export type GoLiveResult =
   | { kind: "connect" }
   | { kind: "live"; campaignId: string }
-  | { kind: "blocked"; messages: string[] }
+  // #1990: `billing` is Meta's BILLING_REQUIRED, said in the owner's language by step 3 rather than in `messages`.
+  | { kind: "blocked"; messages: string[]; billing?: true }
   | { kind: "refused"; message: string; campaignId?: string }
   | { kind: "failed"; message: string };
 
@@ -105,7 +106,10 @@ export async function goLive(deps: GoLiveDeps, input: GoLiveInput, onStep: (step
   if (connection.authorization !== "connected" || !connection.selected) return { kind: "connect" };
   // Stop before anything is created when Meta already says this account can't run ads.
   if (connection.capabilities.canActivate.state === "blocked") {
-    return { kind: "blocked", messages: connection.capabilities.canActivate.blockers.map((blocker) => blocker.message) };
+    const { blockers } = connection.capabilities.canActivate;
+    const billing = blockers.some((blocker) => blocker.code === "BILLING_REQUIRED");
+    const messages = blockers.filter((blocker) => blocker.code !== "BILLING_REQUIRED").map((blocker) => blocker.message);
+    return billing ? { kind: "blocked", messages, billing } : { kind: "blocked", messages };
   }
 
   let operation: OperationDTO | null = null;
