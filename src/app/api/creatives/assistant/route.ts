@@ -52,8 +52,8 @@ async function handlePOST(req: Request) {
     const limit = configuredMonthlyTokenLimit(user);
     if (limit > 0) {
       const used = await monthlyTokenUsage(businessId);
-      if (used === null) return apiError("AI usage limits could not be verified. No interview was started.", 503);
-      if (used >= limit) return apiError("This business has reached its monthly AI generation limit.", 429);
+      if (used === null) return apiError("Something on our side didn't answer. Nothing was started; try again in a minute.", 503);
+      if (used >= limit) return apiError("You've used this month's AI allowance for this business. Ask AdBrain to raise it.", 429);
     }
     const [instructions, preferences, evidence] = await Promise.all([
       getActiveInstructionsText(businessId),

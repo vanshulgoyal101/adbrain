@@ -129,7 +129,7 @@ describe("creative generation recovery", () => {
     const { GET } = await import("@/app/api/creatives/generate/route");
     const response = await GET(new Request("http://localhost/api/creatives/generate?businessId=business&generationId=11111111-1111-4111-8111-111111111111"));
     expect(response.status).toBe(503);
-    await expect(response.json()).resolves.toEqual({ error: "Generation status is unavailable." });
+    await expect(response.json()).resolves.toEqual({ error: "We couldn't check on your ads just now. Try again in a minute." });
   });
 
   it.each(["0", "7", "1.5", "invalid"])("rejects an invalid expected count: %s", async (count) => {

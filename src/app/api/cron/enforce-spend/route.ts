@@ -164,9 +164,9 @@ async function handleGET(request: Request) {
       });
 
     const paused: string[] = [];
-    // A capped run whose Meta end time has passed is paused here, then settles like any paused run (#221).
-    const ended = new Set(campaigns.filter(campaign => campaign.status === "active" && cappedRunEnded(campaign.raw)
-      && customerBalance?.reservations.some(item => item.campaignId === campaign.id && item.state !== "closed")).map(campaign => campaign.id));
+    // A capped run whose Meta end time has passed is paused here, then settles like any paused run (#221),
+    // with or without a customer reservation (#2281: an own-account run has none and stayed 'active').
+    const ended = new Set(campaigns.filter(campaign => campaign.status === "active" && cappedRunEnded(campaign.raw)).map(campaign => campaign.id));
     const toPause = [...new Set([...decision.toPause, ...ended])];
     for (const id of toPause) {
       const campaign = campaigns.find((c) => c.id === id);

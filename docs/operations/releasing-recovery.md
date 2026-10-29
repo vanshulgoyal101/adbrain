@@ -66,7 +66,7 @@ anyone watching (owner-approved automatic rollback, #111):
 
 - **After each successful Production deployment** it waits until
   `adbrain.vanshul.com` serves that commit, then runs
-  `npm run smoke:core`, which views five pages read-only and then prepares one campaign review without sending it (one retry after 60 s). If the smoke still fails, it rolls
+  `npm run smoke:core`, which views five pages read-only and then prepares one campaign review without sending it, then drives one-tap Go live to its preflight with create and activation blocked (one retry after 60 s). If the smoke still fails, it rolls
   production back to the newest earlier READY production deployment and opens a
   `core` `bug` issue with the failing step.
 - **Daily at 03:30 UTC** it runs the same smoke and opens an issue on failure

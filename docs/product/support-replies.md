@@ -144,6 +144,19 @@ Meta's status" and check for a rejection (section 5) or payment (section 4).
   > Each sign-in link works once, for a short time. Tap "Send a new link" and open
   > the new email on the same phone. Or tap "Continue with Google" if you use Gmail.
 
+## 8. Review won't let me launch
+
+- **Owner says:** "It won't send to Meta", "red message on Review", "says fix this first".
+- **Screen shows:** on Review, a message with a fix button under it, such as
+  "Set the city radius between 17 and 80 km; Meta allows nothing outside that range."
+  with "Set the city radius".
+- **Cause:** a check that Meta would fail. Nothing was sent and nothing was spent.
+- **Reply:** find the message in [When Review stops you](review.md#when-review-stops-you)
+  and paste its "What to do" line, then:
+
+  > Tap the button under the message, fix that one thing, then tap "Check again".
+  > Nothing has been sent to Meta or spent yet.
+
 ## Still stuck
 
 Ask for a screenshot and the time it happened, then open or update the GitHub issue

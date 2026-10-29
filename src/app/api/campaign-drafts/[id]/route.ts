@@ -109,7 +109,7 @@ async function handlePUT(
     p_input: plan.input as unknown as Json,
     p_now: plan.updatedAt,
   });
-  if (updateError) return errorResponse(requestId, 503, "UNAVAILABLE", "Draft storage is unavailable.", true);
+  if (updateError) return errorResponse(requestId, 503, "UNAVAILABLE", "We couldn't save your campaign just now. Try again in a minute.", true);
   const updatedRow = rows?.[0];
   if (!updatedRow) return errorResponse(requestId, 409, "CONFLICT", "Draft changed in another tab. Reload before saving.", true);
   const draft = draftRecordFromRow(updatedRow);

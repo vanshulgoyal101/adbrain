@@ -20,7 +20,9 @@ import { formatReplyTime } from "@/lib/leads/first-reply";
 import { campaignStatus, Status } from "@/components/ui/status";
 import { goneInMeta, pausableCampaigns, pausedInMeta, recentlyDeletedInMeta, recentlyRaisedInMeta } from "@/lib/campaign/gone-in-meta";
 import type { HomeAdReview } from "@/lib/campaign/home-ad-review";
+import { durationIn } from "@/i18n/duration";
 import { namespaceMessages, timeAgoIn, translator, type AppLocale } from "@/i18n/locale";
+import { ageMs, throttleActive } from "@/lib/campaign/meta-wait";
 
 export interface WorkspaceHomeProps {
   business: Business | null;
@@ -52,6 +54,8 @@ export interface WorkspaceHomeProps {
   /** #2036: the weekly results card for WhatsApp Status, when it's offered. */
   resultsCard?: ReactNode;
   now?: number;
+  /** #1838: until when Meta asked us to wait before checking again; the results line says the numbers may be old. */
+  metaWaitUntil?: string | null;
   /** #1438: the owner's app language (Settings); English by default. */
   locale?: AppLocale;
 }
@@ -81,6 +85,7 @@ export function WorkspaceHome({
   resultsCard,
   brandMeter,
   now,
+  metaWaitUntil = null,
   locale = "en",
 }: WorkspaceHomeProps) {
   const t = translator(locale, "home");
@@ -176,6 +181,11 @@ export function WorkspaceHome({
             {t("updated", { ago: timeAgoIn(locale, new Date(summary.oldestFetchedAt), now === undefined ? undefined : new Date(now)) })} ·{" "}
             <Link href="/campaigns" className={linkClass}>{t("seeCampaigns")}</Link>
           </p>
+          {throttleActive(metaWaitUntil, now === undefined ? undefined : new Date(now)) && (
+            <p className="mt-1 text-xs text-slate-600">
+              {t("metaWaiting", { age: durationIn(locale, ageMs(summary.oldestFetchedAt, now)) })}
+            </p>
+          )}
         </section>
       )}
 

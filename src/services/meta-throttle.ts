@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { MetaThrottledError } from "@/lib/meta/client";
 import { recordProductEvent } from "@/lib/observability/logger";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 /**
  * #1838 slice 2: what the scheduled jobs remember about Meta's throttling (migration 20261029_meta_throttle.sql).
@@ -48,4 +49,18 @@ export async function recordThrottle(admin: Admin, businessId: string, error: Me
   } catch {
     storeFailed("THROTTLE_WRITE_FAILED", businessId);
   }
+}
+
+/** #1838 slice 2b: until when the owner's numbers can't be refreshed (their account/Page or the whole app), or null. */
+export async function ownerThrottledUntil(admin: Admin, businessId: string, now = new Date()): Promise<string | null> {
+  const [app, business] = await Promise.all([appThrottledUntil(admin), throttledBusinesses(admin, [businessId], now)]);
+  const until = [app, business.get(businessId) ?? null].filter((value): value is string => Boolean(value) && Date.parse(value!) > now.getTime());
+  return until.sort((a, b) => Date.parse(b) - Date.parse(a))[0] ?? null;
+}
+
+/** For a page that already proved the owner's business: until when Meta asked us to wait, or null. Never fails the page. */
+export function metaWaitFor(businessId: string): Promise<string | null> {
+  return Promise.resolve()
+    .then(() => ownerThrottledUntil(createAdminClient() as unknown as Admin, businessId))
+    .catch(() => null);
 }

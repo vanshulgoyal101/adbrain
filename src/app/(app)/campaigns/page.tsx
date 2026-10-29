@@ -1,3 +1,4 @@
+import { metaWaitFor } from "@/services/meta-throttle";
 import { reconnectByLabel } from "@/lib/meta/token-expiry";
 import { requestWords, setupWords } from "@/i18n/request-locale";
 import { Alert } from "@/components/ui/alert";
@@ -22,6 +23,7 @@ import { requireOwnedBusiness } from "@/lib/meta/connection-access";
 import { createClient } from "@/lib/supabase/server";
 import { ReadyAdsNextStep } from "@/components/ready-ads-next-step";
 import { isProspectSession } from "@/lib/prospect-session";
+import { isInternalUser } from "@/lib/internal-accounts";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
@@ -164,7 +166,9 @@ export default async function CampaignsPage({
           weeklyCap={weeklyCap}
           verdictWords={await requestWords("verdict")}
           campaignWords={await requestWords("campaigns")}
+          metaWaitUntil={campaigns.some((campaign) => campaign.meta_campaign_id) ? await metaWaitFor(business.id) : null}
           newCampaign={params.new === "1" ? { creativeIds: requested, review: params.review === "1", budget: chosenBudget } : undefined}
+          internal={await createClient().then((supabase) => supabase.auth.getUser()).then(({ data }) => isInternalUser(data.user)).catch(() => false)}
         />}
       </div>
     </div>

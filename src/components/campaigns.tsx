@@ -111,7 +111,7 @@ import {
   spendHealth,
 } from "@/lib/campaign/budget";
 import { effectiveDailyBudget, weeklyCapNotice, type CampaignSpend } from "@/lib/campaign/spend";
-import { accountFundingSchema, activationConfirmationPayload, campaignDeliverySnapshotSchema, reviewableCampaign } from "@/lib/campaign/activation";
+import { accountFundingSchema, activationConfirmationPayload, campaignDeliverySnapshotSchema, reviewableCampaign, runningNow } from "@/lib/campaign/activation";
 import { WHATSAPP_LINK_URL, WHATSAPP_UNVERIFIED_STEP } from "@/lib/meta/setup-checklist";
 import { activationWarnings, QUOTED_ASK_WITH_QUESTIONS, WHATSAPP_PICTURE_ON_FORM } from "@/lib/campaign/plan-check";
 import { cardVerdictInput, lastCampaignComparison } from "@/lib/campaign/card-verdict";
@@ -130,9 +130,11 @@ import { committedWords, freeRoomPaise, type AccountFunding } from "@/lib/campai
 import { readCampaignRecovery, recoveryStorageKey, writeCampaignRecovery, type CampaignRecovery } from "@/lib/meta-connect-ui/recovery";
 import { HelpOnWhatsApp } from "@/components/support-link";
 import { cn } from "@/lib/utils";
+import { resultsWaitLine, throttleActive } from "@/lib/campaign/meta-wait";
 import { useMounted } from "@/lib/use-mounted";
 import { refreshIfStale, staleCampaignIds } from "@/lib/campaign/results-freshness";
-import { GONE_LINES, OUTSIDE_LINES, budgetChangedInMeta, goneInMeta, pausedInMeta } from "@/lib/campaign/gone-in-meta";
+import { GONE_LINES, OUTSIDE_LINES, budgetChangedInMeta, goneInMeta, madeOutsideAdBrain, pausedInMeta } from "@/lib/campaign/gone-in-meta";
+import { CampaignTestOptions } from "@/components/campaign-test-options";
 import { formatDate, formatMoney, formatMoneyExact, formatNumber, formatPerDay } from "@/lib/format";
 
 const subscribeNever = () => () => {};
@@ -227,6 +229,10 @@ type CampaignsProps = {
   verdictWords?: Words<"verdict">;
   /** #1438: the list header, filters and sync lines in the owner's language. */
   campaignWords?: Words<"campaigns">;
+  /** #1838: until when Meta asked us to wait before checking again; launched cards say their numbers may be old. */
+  metaWaitUntil?: string | null;
+  /** #2273: the team's own accounts see the no-Facebook-Reels test control (internal-accounts.ts). */
+  internal?: boolean;
 };
 
 const BACKGROUND_PLAN_DELAY_MS = 1500;
@@ -288,6 +294,8 @@ function BusinessCampaigns({
   weeklyCap = null,
   verdictWords,
   campaignWords,
+  metaWaitUntil = null,
+  internal = false,
   scope,
   initialSetup,
   onSetupChange,
@@ -340,6 +348,7 @@ function BusinessCampaigns({
   const [includedNames, setIncludedNames] = useState(initialSetup?.includedNames ?? "");
   const [excludedNames, setExcludedNames] = useState(initialSetup?.excludedNames ?? "");
   const [abTest, setAbTest] = useState(initialSetup?.abTest ?? false);
+  const [noFacebookReels, setNoFacebookReels] = useState(false);
   // #1155: who sees the ads folds under one line; it starts open only for a setup that already changed it.
   const [whoOpen, setWhoOpen] = useState(() => abTest || targeting.locationMode === "manual" || targeting.ageMode === "manual"
     || targeting.gender !== "all" || targeting.cityScope !== "city_only" || Boolean(targeting.audience) || Boolean(initialSetup?.excludedNames || initialSetup?.includedNames));
@@ -555,6 +564,7 @@ function BusinessCampaigns({
     setWhatsAppMessage(input.whatsappMessage ?? null);
     destinationChosenRef.current = true;
     setAbTest(input.abTest);
+    setNoFacebookReels(input.excludeFacebookReels === true);
     setCreationMode("manual");
     setDraftGoal(input.goal);
     setIncludedNames((input.targeting.location?.includedNames ?? []).join("\n"));
@@ -738,6 +748,7 @@ function BusinessCampaigns({
     setSelected(new Set());
     setBudget(200);
     setAbTest(false);
+    setNoFacebookReels(false);
     setTargeting(defaultTargeting);
     setIncludedNames("");
     setExcludedNames("");
@@ -953,6 +964,7 @@ function BusinessCampaigns({
       whatsappMessage,
       targeting: targetingFromEditor(targeting, plannedAreas, plannedExclusions),
       abTest,
+      excludeFacebookReels: internal && noFacebookReels,
     });
   }
 
@@ -1548,7 +1560,7 @@ function BusinessCampaigns({
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-4">
       {confirmDialog}
-        <p className="text-sm text-slate-500">{tc("header.running", { n: campaigns.filter(campaign => campaign.status === "active").length })} <span className="mx-2 text-slate-300">/</span> {tc("header.paused", { n: campaigns.filter(campaign => campaign.status === "paused").length })}</p>
+        <p className="text-sm text-slate-500">{tc("header.running", { n: campaigns.filter(campaign => runningNow(campaign)).length })} <span className="mx-2 text-slate-300">/</span> {tc("header.paused", { n: campaigns.filter(campaign => campaign.status === "paused").length })}</p>
         <div className="flex flex-wrap items-center gap-2">
           {/* #1588: the zero state carries its own New campaign; a pending audience decision owns the one solid button.
               #1934 (CPO): New campaign is the guided 3 steps everywhere; this composer stays as a quiet More options. */}
@@ -2222,22 +2234,8 @@ function BusinessCampaigns({
                   </div>}
                 </div>
 
-                <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-slate-200 p-3">
-                  <input
-                    type="checkbox"
-                    checked={abTest}
-                    onChange={(e) => setAbTest(e.target.checked)}
-                    className="mt-0.5 h-4 w-4 accent-blue-600"
-                  />
-                  <span className="text-sm">
-                    <span className="font-medium text-slate-800">
-                      A/B test the audience by age
-                    </span>
-                    <span className="block text-xs text-slate-500">
-                      Two ad sets, each with the entered daily budget. Total daily budget: {formatMoney(totalDailyBudget)}.
-                    </span>
-                  </span>
-                </label>
+                <CampaignTestOptions abTest={abTest} onAbTest={setAbTest} totalDailyBudget={totalDailyBudget}
+                  {...(internal ? { noFacebookReels, onNoFacebookReels: setNoFacebookReels } : {})} />
                 </div>
                 </details>
 
@@ -2559,6 +2557,7 @@ function BusinessCampaigns({
                       // #1003: always say how old the numbers are.
                       <p className="text-xs text-slate-500">{updatingIds.includes(c.id) ? tc("card.updating") : tc("card.updated", { age: ageText(verdictTranslator(verdictWords), r.fetched_at) })}</p>
                     )}
+                    {r && mounted && c.meta_campaign_id && throttleActive(metaWaitUntil) && <p className="text-xs text-slate-600">{resultsWaitLine(Date.now() - new Date(r.fetched_at).getTime())}</p>}
                     {adResults && r && c.meta_campaign_id && <AdResults campaignId={c.id} whatsapp={outcome === "whatsapp"} words={verdictWords} offerPause={!weakAdCards.includes(c.id)} onRunAgain={() => void runAgain(c)} runAgainBusy={rerunBusy === c.id} runAgainError={rerunError?.id === c.id ? rerunError.message : null} />}
                     {r && ((r.booked ?? 0) > 0 || (r.customers ?? 0) > 0) && (
                       // #798: what a real customer cost, beside the per-enquiry figures. #1994: bookings, the step before, come first.
@@ -2633,12 +2632,6 @@ function BusinessCampaigns({
       </div>
     </div>
   );
-}
-
-/** #763: synced from Meta, not launched by AdBrain (no launch result on record). */
-function madeOutsideAdBrain(campaign: Campaign): boolean {
-  const raw = campaign.raw;
-  return !!campaign.meta_campaign_id && !(raw && typeof raw === "object" && "metaResult" in raw);
 }
 
 /** A launched campaign's numbers: #1255's verdict for WhatsApp and form campaigns, with the figures under Details. */

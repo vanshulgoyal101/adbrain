@@ -87,12 +87,12 @@ async function handlePOST(
     const used = await monthlyTokenUsage(business.id);
     if (used === null)
       return NextResponse.json(
-        { error: "AI usage limits could not be verified." },
+        { error: "Something on our side didn't answer. Nothing was started; try again in a minute." },
         { status: 503 },
       );
     if (used >= limit)
       return NextResponse.json(
-        { error: "This business has reached its monthly AI generation limit." },
+        { error: "You've used this month's AI allowance for this business. Ask AdBrain to raise it." },
         { status: 429 },
       );
   }
@@ -113,20 +113,20 @@ async function handlePOST(
   try {
     admin = createAdminClient();
   } catch {
-    return NextResponse.json({ error: "Regeneration admission is unavailable. No generation was started." }, { status: 503 });
+    return NextResponse.json({ error: "Something on our side didn't answer. Nothing was started; try again in a minute." }, { status: 503 });
   }
   const { data: claim, error: claimError } = await admin.rpc("creative_regeneration_claim", {
     p_creative_id: id, p_business_id: business.id, p_user_id: user.id, p_attempt_id: attemptId,
   });
   if (claimError || !claim)
-    return NextResponse.json({ error: "Regeneration admission is unavailable. No generation was started." }, { status: 503 });
+    return NextResponse.json({ error: "Something on our side didn't answer. Nothing was started; try again in a minute." }, { status: 503 });
   if (claim.action === "missing") return NextResponse.json({ error: "Creative not found" }, { status: 404 });
   if (claim.action === "busy")
     return NextResponse.json({ error: claim.status === "unresolved"
       ? "Previous paid regeneration needs review before retrying."
       : "Regeneration is already in progress. Refresh this creative before trying again." }, { status: 409 });
   if (claim.action !== "start")
-    return NextResponse.json({ error: "Regeneration admission is unavailable. No generation was started." }, { status: 503 });
+    return NextResponse.json({ error: "Something on our side didn't answer. Nothing was started; try again in a minute." }, { status: 503 });
 
   let paidAttemptStarted = false;
   let unresolved = false;

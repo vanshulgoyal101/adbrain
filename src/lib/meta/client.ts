@@ -1,7 +1,7 @@
 import { createHmac } from "node:crypto";
 import { GRAPH } from "@/lib/meta/graph-version";
 import { z } from "zod";
-import { WHATSAPP_PUBLISHER_PLATFORMS } from "@/lib/meta/placements";
+import { FACEBOOK_FEED_POSITIONS, FACEBOOK_POSITIONS_WITHOUT_REELS, WHATSAPP_PUBLISHER_PLATFORMS } from "@/lib/meta/placements";
 import type { SetupReads } from "@/lib/meta/setup-checklist";
 import { destinationFromAdSets, type CampaignDestination } from "@/lib/campaign/outcomes";
 import type { CampaignSkipReason } from "@/lib/campaign/sync-skips";
@@ -649,11 +649,16 @@ export function adSetTargeting(params: {
 const LISTED_AD_STATUSES = ["ACTIVE", "PAUSED", "ARCHIVED", "CAMPAIGN_PAUSED", "ADSET_PAUSED", "IN_PROCESS", "WITH_ISSUES", "PENDING_REVIEW", "DISAPPROVED", "PREAPPROVED", "PENDING_BILLING_INFO"];
 
 /** #906/#680: a WhatsApp or lead-form ad set's targeting names its platforms without Audience Network. */
-export function withoutAudienceNetwork(targeting: Record<string, unknown>): Record<string, unknown> {
+export function withoutAudienceNetwork(targeting: Record<string, unknown>, options: { noFacebookReels?: boolean } = {}): Record<string, unknown> {
   const platforms = Array.isArray(targeting.publisher_platforms) ? (targeting.publisher_platforms as unknown[]).filter(item => item !== "audience_network") : [];
   const { audience_network_positions: _dropped, ...rest } = targeting;
   void _dropped;
-  return { ...rest, publisher_platforms: platforms.length ? platforms : [...WHATSAPP_PUBLISHER_PLATFORMS] };
+  return {
+    ...rest,
+    publisher_platforms: platforms.length ? platforms : [...WHATSAPP_PUBLISHER_PLATFORMS],
+    // #2273: Facebook Reels left out; every other position stays automatic.
+    ...(options.noFacebookReels ? { facebook_positions: [...FACEBOOK_POSITIONS_WITHOUT_REELS] } : {}),
+  };
 }
 
 /** #334: every ad set runs with Advantage+ audience (area and age_min hard). The learning ledger records it (#588). */
@@ -690,7 +695,7 @@ const STORY_PLACEMENTS = {
 // Placement creatives go to WhatsApp and lead-form ads, whose ad sets leave Audience Network out (#906, #680).
 const FEED_PLACEMENTS = {
   publisher_platforms: ["facebook", "instagram", "messenger"],
-  facebook_positions: ["feed", "right_hand_column", "marketplace", "video_feeds", "search", "instream_video", "facebook_reels_overlay", "profile_feed", "notification", "biz_disco_feed"],
+  facebook_positions: FACEBOOK_FEED_POSITIONS,
   instagram_positions: ["stream", "explore", "explore_home", "profile_feed", "ig_search"],
   messenger_positions: ["messenger_home", "sponsored_messages"],
 };
@@ -712,8 +717,11 @@ export function placementCreativeSpec(p: {
   whatsappNumber?: string;
   whatsappGreeting?: WhatsAppOpening;
   leadFormId?: string;
+  /** #2273: the ad set leaves Facebook Reels out, so no rule may name it. */
+  noFacebookReels?: boolean;
 }) {
   const cta = destinationCTA(p.destination, { leadFormId: p.leadFormId, phone: p.whatsappNumber });
+  const story = p.noFacebookReels ? { ...STORY_PLACEMENTS, facebook_positions: ["story"] } : STORY_PLACEMENTS;
   return {
     object_story_spec: { page_id: p.pageId, instagram_user_id: p.instagramUserId },
     asset_feed_spec: {
@@ -733,7 +741,7 @@ export function placementCreativeSpec(p: {
       optimization_type: "PLACEMENT",
       // Every placement must match exactly one rule, by explicit position, or Meta can't show it there.
       asset_customization_rules: [
-        { customization_spec: STORY_PLACEMENTS, image_label: { name: "adbrain_story" }, priority: 1 },
+        { customization_spec: story, image_label: { name: "adbrain_story" }, priority: 1 },
         { customization_spec: FEED_PLACEMENTS, image_label: { name: "adbrain_feed" }, priority: 2 },
       ],
     },
@@ -1243,6 +1251,8 @@ export class MetaClient {
     whatsappGreeting?: WhatsAppOpening;
     phone?: string;
     variants?: AdSetVariant[];
+    /** #2273 (#680 placement test): WhatsApp and lead-form ad sets leave Facebook Reels out. Off by default. */
+    excludeFacebookReels?: boolean;
     onCheckpoint?: (checkpoint: CampaignMutationCheckpoint) => void | Promise<void>;
     /** A 9:16 couldn't be used and the ad fell back to the single 4:5 image (#333). */
     onStoryFallback?: (stage: "instagram" | "upload" | "creative" | "ad", errorCode: string) => void;
@@ -1375,7 +1385,7 @@ export class MetaClient {
         ];
 
     // Ages are validated above, so both bounds are set here.
-    const targetingFor = (v: AdSetVariant, dest: AdDestination) => JSON.stringify((hasPlacementCreative(dest) ? withoutAudienceNetwork : (t: Record<string, unknown>) => t)(adSetTargeting({
+    const targetingFor = (v: AdSetVariant, dest: AdDestination) => JSON.stringify((hasPlacementCreative(dest) ? (t: Record<string, unknown>) => withoutAudienceNetwork(t, { noFacebookReels: params.excludeFacebookReels }) : (t: Record<string, unknown>) => t)(adSetTargeting({
       location: v.location ?? params.location,
       excludedLocation: mergeExclusions(v.excludedLocation ?? params.excludedLocation, areaExclusions.get(v.location ?? params.location) ?? null),
       ageMin: (v.ageMin ?? params.ageMin)!,
@@ -1440,6 +1450,7 @@ export class MetaClient {
             pageId: this.creds.pageId, instagramUserId, feedHash: imageHash, storyHash, headline: c.headline, message: c.message,
             description: c.description ?? undefined, link: destination === "whatsapp" ? `https://wa.me/${params.whatsappNumber!.slice(1)}` : params.link,
             destination, whatsappNumber: params.whatsappNumber, whatsappGreeting: params.whatsappGreeting, leadFormId: params.leadFormId,
+            noFacebookReels: params.excludeFacebookReels,
           })
           : null;
         const singleImageForm = {
@@ -1576,6 +1587,27 @@ export class MetaClient {
     const result = await this.graph<{ data?: Array<MetaCampaignSummary & { account_id: string; lifetime_budget?: string }>; paging?: { next?: string; cursors?: { after?: string } } }>(`${this.creds.adAccountId}/campaigns?${query}`);
     if (!Array.isArray(result.data) || (result.paging?.next && !result.paging.cursors?.after)) throw new MetaError("Campaign listing is incomplete.");
     return { campaigns: result.data, nextCursor: result.paging?.next ? result.paging.cursors!.after! : null };
+  }
+
+  /** #2268: this account's campaigns Meta deleted or archived (the listing above leaves them out). 100 per read, ≤ 5 reads. */
+  async listGoneCampaigns(): Promise<Map<string, "DELETED" | "ARCHIVED">> {
+    const gone = new Map<string, "DELETED" | "ARCHIVED">();
+    let after: string | undefined;
+    for (let read = 0; read < 5; read++) {
+      // Graph v26 refuses `?ids=` and a bare `effective_status` param; `filtering` is the read QA verified live (#2279).
+      const query = new URLSearchParams({ fields: "id,status,effective_status", limit: "100",
+        filtering: JSON.stringify([{ field: "effective_status", operator: "IN", value: ["DELETED", "ARCHIVED"] }]) });
+      if (after) query.set("after", after);
+      const result = await this.graph<{ data?: Array<{ id?: string; status?: string; effective_status?: string }>; paging?: { next?: string; cursors?: { after?: string } } }>(`${this.creds.adAccountId}/campaigns?${query}`);
+      if (!Array.isArray(result.data)) throw new MetaError("Campaign listing is incomplete.");
+      for (const campaign of result.data) {
+        const status = [campaign.effective_status, campaign.status].find((value) => value === "DELETED" || value === "ARCHIVED");
+        if (campaign.id && (status === "DELETED" || status === "ARCHIVED")) gone.set(campaign.id, status);
+      }
+      after = result.paging?.next ? result.paging.cursors?.after : undefined;
+      if (!after) break;
+    }
+    return gone;
   }
 
   /** The campaign's daily-budget binding to this account and Page, or why sync must leave it unchanged (#671). */

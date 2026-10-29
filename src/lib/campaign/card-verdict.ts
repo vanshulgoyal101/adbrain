@@ -1,3 +1,4 @@
+import { cappedRunEnded } from "@/lib/campaign/activation";
 import type { PauseSuggestion } from "@/lib/campaign/ad-pause";
 import { readCampaignHealth } from "@/lib/campaign/health";
 import { campaignDestination } from "@/lib/campaign/outcomes";
@@ -21,7 +22,8 @@ export function cardVerdictInput(campaign: CardCampaign, result: CardResult, ext
   const destination = campaignDestination(campaign, result);
   if (destination !== "whatsapp" && destination !== "instant_form") return null;
   return {
-    destination, status: campaign.status, liveSince: readCampaignHealth(campaign.raw)?.activeSince ?? null,
+    // #2281: a capped run past its end time has ended, whatever its row says (results-summary agrees).
+    destination, status: campaign.status !== "draft" && cappedRunEnded(campaign.raw, extra.now) ? "completed" : campaign.status, liveSince: readCampaignHealth(campaign.raw)?.activeSince ?? null,
     impressions: result.impressions ?? 0, results: resultsOf(destination, result), spend: Number(result.spend ?? 0),
     opens: destination === "whatsapp" ? result.whatsapp_opens ?? null : null,
     waiting: extra.waiting, weakAd: extra.weakAd, comparison: extra.comparison, now: extra.now,
@@ -61,7 +63,7 @@ export function homeVerdicts(campaigns: Array<CardCampaign & { id: string }>, re
     const judged = verdict(input, extra.words);
     // #1795: 'Live' and 'Ended' restate the row's status ('Ended · Ended', 'Paused · Live'), so the row shows no word.
     if (!restatesStatus(judged.state)) labels.set(campaign.id, judged.label);
-    if (campaign.status === "active") live.push({ id: campaign.id, verdict: judged, input });
+    if (input.status === "active") live.push({ id: campaign.id, verdict: judged, input });
   }
   const best = live.sort((a, b) => HOME_ORDER.indexOf(a.verdict.state) - HOME_ORDER.indexOf(b.verdict.state))[0];
   return { labels, lead: best ? { campaignId: best.id, verdict: verdict({ ...best.input, waiting: extra.waiting }, extra.words), input: best.input } : null };

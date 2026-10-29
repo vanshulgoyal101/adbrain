@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
-import { appCopy, checkDocumentation, missingLabels, mirrorDrift, scheduleDrift, stampMirror } from "./check-docs.mjs";
+import { appCopy, checkDocumentation, codeTableDrift, environmentDrift, mirrorDrift, missingLabels, moneyDrift, moneyFacts, scheduleDrift, scriptEnvironment, stampMirror } from "./check-docs.mjs";
 
 function fixture(context, files = {}) {
   const root = mkdtempSync(resolve(tmpdir(), "adbrain-docs-check-"));
@@ -211,4 +211,52 @@ test("a Hindi page names its stale English page until it is refreshed and stampe
   writeFileSync(resolve(root, "docs/product/go.md"), "# Go\n\nTap \"Go live now\".\n");
   assert.match(mirrorDrift(hindi, readFileSync(hindi, "utf8")), /\.\.\/go\.md changed since this translation/);
   assert.ok(checkDocumentation(root, { files: ["docs/product/hi/go.md"] }).diagnostics.some(item => item.severity === "error" && /changed since this translation/.test(item.message)));
+});
+
+test("configuration docs list every variable scripts read, and nothing that is never read", context => {
+  const root = fixture(context, {
+    "scripts/smoke.mjs": "const { SMOKE_EMAIL: email } = process.env; const t = process.env.VERCEL_TOKEN ?? process.env[\"GH_REPO\"]; process.env.GITHUB_OUTPUT;\n",
+    "scripts/doctor.sh": 'echo "${APP_URL:-}" "$LOCAL_ONLY"\n',
+    "next.config.ts": "export default { env: { sha: process.env.VERCEL_GIT_COMMIT_SHA } };\n",
+  });
+  const scripts = scriptEnvironment(root);
+  assert.deepEqual([...scripts].sort(), ["APP_URL", "GH_REPO", "GITHUB_OUTPUT", "SMOKE_EMAIL", "VERCEL_GIT_COMMIT_SHA", "VERCEL_TOKEN"]);
+  const pages = [{ file: "docs/operations/configuration.md", text: "| `SMOKE_EMAIL` | x |\n| `APP_URL` | x |\n| `OLD_KEY` | gone |\n| `GET` | a verb |\n| `META_APP_ID` | x |\n" }];
+  assert.deepEqual(environmentDrift(["META_APP_ID"], scripts, pages).map(({ line, message }) => `${line} ${message}`), [
+    "1 Environment key read by scripts but not documented: GH_REPO",
+    "1 Environment key read by scripts but not documented: VERCEL_TOKEN",
+    "3 Documented environment key nothing reads: OLD_KEY",
+  ]);
+});
+
+test("a ₹ amount or % in docs/product must come from a source constant or be a listed example", context => {
+  const sources = {
+    "src/lib/campaign/budget.ts": "export const BUDGET_PRESETS = [300, 500, 1000] as const;\n",
+    "src/components/setup-go-live.tsx": "export const SETUP_RUN_DAYS = 2;\nexport const SETUP_RUN_DAY_CHOICES = [SETUP_RUN_DAYS, 7] as const;\n",
+    "src/lib/payments/allocation.ts": "return Math.ceil(capPaise * (10_000 + (input.taxRateBps ?? 1_800)) / 10_000);\n",
+    "src/lib/plan/status.ts": "export const PLAN_PRICE_PAISE = 99_900;\n",
+    "src/lib/campaign/verdict.ts": "export const EVIDENCE_MIN_SPEND = 500;\n",
+    "src/lib/meta/insights.ts": "export const BEST_AD_MARGIN = 0.3;\n",
+    "src/lib/creative/design.ts": "export const STORY_SAFE = { top: 0.14, bottom: 0.35, side: 0.06 } as const;\n",
+    "src/lib/campaign/preflight.ts": "export const META_MIN_DAILY_BUDGET_RUPEES = 96;\n",
+  };
+  const root = fixture(context, sources);
+  const prose = [{ line: 3, text: "₹300 a day for 2 days, ₹708 at most incl. 18% GST; 7 days is ₹2,478. Then ₹999 a month. Each chat costs ₹45. Meta needs ₹96 a day." }];
+  assert.deepEqual(moneyDrift(prose, moneyFacts(root).facts), []);
+  assert.deepEqual(moneyDrift([{ line: 4, text: "Only ₹1,499 and 25% off." }], moneyFacts(root).facts), [{ line: 4, amount: "₹1,499" }, { line: 4, amount: "25%" }]);
+  writeFileSync(resolve(root, "src/lib/payments/allocation.ts"), "(input.taxRateBps ?? 2_800)\n");
+  writeFileSync(resolve(root, "src/lib/plan/status.ts"), "export const PLAN_PRICE_PAISE = 1_49_900;\n");
+  assert.deepEqual(moneyDrift(prose, moneyFacts(root).facts).map(({ amount }) => amount), ["₹708", "18%", "₹2,478", "₹999"]);
+  rmSync(resolve(root, "src/lib/meta/insights.ts"));
+  assert.deepEqual(moneyFacts(root).missing, ["src/lib/meta/insights.ts BEST_AD_MARGIN = ([\\d.]+)"]);
+});
+
+test("a code table has one row per source code, both ways (#2288)", () => {
+  const row = /^\| `(REVIEW_[A-Z_]+)` \|/;
+  const page = "Intro `REVIEW_INLINE` text\n\n| Code | Says |\n| --- | --- |\n| `REVIEW_BUDGET` | x |\n| `REVIEW_GONE` | y |\n";
+  assert.deepEqual(codeTableDrift(page, ["REVIEW_BUDGET", "REVIEW_RADIUS", "REVIEW_BUDGET"], row, "preflight.ts"), [
+    { line: 1, message: "No row for REVIEW_RADIUS from preflight.ts" },
+    { line: 6, message: "Row for REVIEW_GONE, which preflight.ts no longer has" },
+  ]);
+  assert.deepEqual(codeTableDrift(page.replace("| `REVIEW_GONE` | y |\n", ""), ["REVIEW_BUDGET"], row, "preflight.ts"), []);
 });

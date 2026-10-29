@@ -1,5 +1,5 @@
 # सपोर्ट के जवाब
-<!-- mirrors ../support-replies.md 2ae1af5bad76 -->
+<!-- mirrors ../support-replies.md 89b8e93b62f5 -->
 
 यह [Support replies](../support-replies.md) का हिंदी रूप है; अंग्रेज़ी पेज बदले तो इसे भी बदलें।
 [Features and workflows](../README.md) का हिस्सा।
@@ -150,6 +150,19 @@ Meta's status" का स्क्रीनशॉट माँगें और �
 
   > हर साइन-इन लिंक सिर्फ़ एक बार और थोड़ी देर के लिए चलता है। "Send a new link" दबाइए और
   > नया ईमेल उसी फ़ोन पर खोलिए। या अगर आप Gmail इस्तेमाल करते हैं तो "Continue with Google" दबाइए।
+
+## 8. Review लॉन्च नहीं होने दे रहा
+
+- **ओनर कहते हैं:** "Meta पर नहीं जा रहा", "Review पर लाल message है", "लिखा है पहले यह ठीक करें"।
+- **स्क्रीन पर दिखता है:** Review पर एक message और उसके नीचे fix button, जैसे
+  "Set the city radius between 17 and 80 km; Meta allows nothing outside that range."
+  के साथ "Set the city radius"।
+- **कारण:** कोई ऐसी चीज़ जिसे Meta नामंज़ूर कर देता। Meta को कुछ नहीं गया और कोई पैसा खर्च नहीं हुआ।
+- **जवाब:** [जब Review आपको रोके](review.md#जब-review-आपको-रोके) में वह message ढूँढें और
+  उसकी "क्या करें" लाइन भेजें, फिर:
+
+  > Message के नीचे वाला button दबाइए, वह एक चीज़ ठीक कीजिए, फिर "Check again" दबाइए।
+  > अभी तक Meta को कुछ नहीं भेजा गया है और कोई पैसा खर्च नहीं हुआ।
 
 ## फिर भी अटके हैं
 

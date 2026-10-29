@@ -575,6 +575,18 @@ describe("Home results row (#764)", () => {
     expect(within(row).getByRole("link", { name: /See campaigns/ })).toHaveAttribute("href", "/campaigns");
   });
 
+  it("#1838: while Meta asks us to wait, says the numbers may be old (Hindi too); after it clears, no line", () => {
+    const later = new Date(now + 30 * 60_000).toISOString();
+    const { unmount } = render(<WorkspaceHome {...empty} business={business} campaigns={[chats, forms]} results={results} now={now} metaWaitUntil={later} />);
+    expect(screen.getByText("Meta is limiting how often we can check right now, so these numbers may be up to about 10 minutes old. Your ads keep running, and pausing still works.")).toBeInTheDocument();
+    unmount();
+    const hindi = render(<WorkspaceHome {...empty} business={business} campaigns={[chats, forms]} results={results} now={now} metaWaitUntil={later} locale="hi" />);
+    expect(screen.getByText(/लगभग 10 मिनट तक पुराने हो सकते हैं/)).toBeInTheDocument();
+    hindi.unmount();
+    render(<WorkspaceHome {...empty} business={business} campaigns={[chats, forms]} results={results} now={now} metaWaitUntil={new Date(now - 60_000).toISOString()} />);
+    expect(screen.queryByText(/Meta is limiting/)).toBeNull();
+  });
+
   it("#1934: a launched owner starts a new campaign from Home in the guided returning mode", () => {
     render(<WorkspaceHome {...empty} business={business} campaigns={[chats, forms]} results={results} now={now} />);
     expect(within(screen.getByRole("region", { name: "Results so far" })).getByRole("link", { name: "New campaign" })).toHaveAttribute("href", "/brand?again=1");

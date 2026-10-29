@@ -1,5 +1,5 @@
 # जाँचें और लाइव करें
-<!-- mirrors ../review.md c5def2e9eebe -->
+<!-- mirrors ../review.md 36a527027f59 -->
 
 यह [Review and Go Live](../review.md) का हिंदी रूप है; अंग्रेज़ी पेज बदले तो इसे भी बदलें।
 [Features and workflows](../README.md) का हिस्सा।
@@ -78,3 +78,30 @@ Pause और delete भी account/Page binding जाँचते हैं। 
 चाहिए, अंदाज़ा नहीं। Meta writes और local mirrors atomic नहीं हैं: provider action सफल हो सकता है
 जबकि उसके बाद का database write fail हो जाए। Record रखें और जाँच करें; HTTP failure को इस बात का
 सबूत न मानें कि remote पर कोई असर नहीं हुआ।
+
+## जब Review आपको रोके
+
+Review हर रुकावट का एक message दिखाता है और उसके नीचे एक fix button (`src/lib/campaign/preflight.ts`,
+`review-fix.ts`)। ये messages और buttons app में अंग्रेज़ी में ही दिखते हैं, इसलिए नीचे वही शब्द हैं।
+Button दबाएँ, वह एक चीज़ ठीक करें, फिर **Check again** दबाएँ। `{braces}` वाले शब्दों की जगह वह ad,
+इलाका या interest आता है जिसका नाम Meta ने लिया। Support पूरी पंक्ति का message और "क्या करें" भेज सकता है।
+
+| Code | Review का message | Fix button | क्या करें |
+| --- | --- | --- | --- |
+| `REVIEW_NO_META_CONNECTION` | "Connect Facebook and choose your Page and ad account." | "Connect Facebook" | Facebook जोड़ें, फिर इस business का Page और ad account चुनें। |
+| `REVIEW_CURRENCY` | "Choose an ad account that pays in Indian rupees (INR)." | "Choose another ad account" | रुपये वाला ad account चुनें। Meta account की currency नहीं बदलता, इसलिए INR वाला न हो तो नया बनाएँ। |
+| `REVIEW_META_ACCESS` | "Meta hasn't confirmed AdBrain can create campaigns in this ad account. Connect Facebook again and allow every permission it asks for." | "Connect Facebook again" | दोबारा जोड़ें और हर permission चालू रहने दें। |
+| `REVIEW_CREATIVES` | "Choose at least one ad to send to Meta.", "One of the ads you chose isn't available any more. Choose your ads again.", या कोई ad जो "isn't approved yet", "has no picture yet" या "has no headline" | "Choose your ads" (ad picker खुलता है) | ऐसे approved ads चुनें जिनमें picture और headline हो। |
+| `REVIEW_WHATSAPP_NOT_LINKED` | "Connect a WhatsApp Business number to the selected Facebook Page and verify access before reviewing." | "Link your WhatsApp number" (Brand खुलता है) | WhatsApp Business number को Page से जोड़ें, फिर Brand पर डालें। |
+| `REVIEW_WHATSAPP_MESSAGE` | "Your WhatsApp message: {problem}" | "Edit the WhatsApp message" | Message में जो कमी बताई है (बहुत लंबा, या खाली) उसे ठीक करें। |
+| `REVIEW_NO_LEAD_FORM` | "Choose an active lead form from your Facebook Page in the Lead form field." | "Choose a lead form" | Active form चुनें, या पहले Facebook Page पर एक बनाएँ। |
+| `REVIEW_NO_WEBSITE` | "Add your business website on the Your business page. Meta lead ads must link to the advertiser's own website, not Facebook." | "Add your website" (Brand खुलता है), या "Use WhatsApp chat instead (no website needed)" | अपनी website डालें, या WhatsApp chat ads पर जाएँ। |
+| `REVIEW_AD_POLICY` | ad में "{word}" "is a health promise Meta rejects. Edit the ad to describe the service instead." | "Edit the ad's wording" | लिखें कि सेवा क्या है, यह नहीं कि वह क्या ठीक करती है। |
+| `REVIEW_BUDGET` | "Set a daily budget above ₹0." या "Meta needs at least ₹96 a day. Set a daily budget of ₹96 or more." | "Set the daily budget" | रोज़ ₹300, ₹500 या ₹1,000 चुनें। |
+| `REVIEW_NO_AGE_RANGE` | "Choose an age range, or let AdBrain recommend one, before reviewing." | "Set the age range" | उम्र चुनें, या **Recommend audience** दबाएँ। |
+| `REVIEW_RADIUS` | "Set the city radius between 17 and 80 km; Meta allows nothing outside that range." | "Set the city radius" | 17 से 80 km के बीच radius चुनें। |
+| `REVIEW_CITY_RADIUS` | City only "came back from Meta with a radius. Choose the locations again." | "Choose the locations again" | Locations दोबारा चुनें। |
+| `REVIEW_AREAS_UNRESOLVED` | "Meta didn't recognise some of your areas. Fix or remove them, or choose nationwide targeting." (या इलाकों के नाम) | "Fix the areas" | Spelling ठीक करें, इलाका हटाएँ, या पूरा भारत चुनें। |
+| `REVIEW_NO_AUDIENCE` | "Let AdBrain recommend the audience (Recommend audience) before reviewing." | "Go to Recommend audience" | **Recommend audience** दबाएँ और सुझाव रखें या बदलें। |
+| `REVIEW_INTERESTS_UNRESOLVED` | "Meta didn't recognise some audience interests. Edit or remove them." (या उनके नाम) | "Edit the interests" | Interest हटाएँ, या Meta का सुझाया कोई चुनें। |
+| `REVIEW_CHANGED` | रुकावट नहीं: Review के बाद campaign बदला, तो **Send to Meta** कहता है "This campaign changed after you checked it. Tap Check my campaign again, then Send to Meta." | कोई नहीं | **Check my campaign** फिर से दबाएँ, फिर **Send to Meta**। |

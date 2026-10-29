@@ -74,3 +74,29 @@ Pause and delete verify account/Page binding too. Missing legacy binding require
 reconciliation, not guessing. Meta writes and local mirrors are not atomic: a
 provider action can succeed while the subsequent database write fails. Keep the
 record and investigate; do not treat an HTTP failure as proof of no remote effect.
+
+## When Review stops you
+
+Review lists what blocks the launch, one message each, with a fix button under it (`src/lib/campaign/preflight.ts`,
+`review-fix.ts`). Tap the button, fix the one thing, then **Check again**. Words in `{braces}` are filled in
+with the ad, area or interest Meta named. Support can paste the row's message and "What to do" line.
+
+| Code | Review says | Fix button | What to do |
+| --- | --- | --- | --- |
+| `REVIEW_NO_META_CONNECTION` | "Connect Facebook and choose your Page and ad account." | "Connect Facebook" | Connect, then pick this business's Page and ad account. |
+| `REVIEW_CURRENCY` | "Choose an ad account that pays in Indian rupees (INR)." | "Choose another ad account" | Pick an ad account in rupees. Meta can't change an account's currency, so make a new one in INR if you have none. |
+| `REVIEW_META_ACCESS` | "Meta hasn't confirmed AdBrain can create campaigns in this ad account. Connect Facebook again and allow every permission it asks for." | "Connect Facebook again" | Connect again and leave every permission switched on. |
+| `REVIEW_CREATIVES` | "Choose at least one ad to send to Meta.", "One of the ads you chose isn't available any more. Choose your ads again.", or an ad that "isn't approved yet", "has no picture yet" or "has no headline" | "Choose your ads" (opens the ad picker) | Choose approved ads that have a picture and a headline. |
+| `REVIEW_WHATSAPP_NOT_LINKED` | "Connect a WhatsApp Business number to the selected Facebook Page and verify access before reviewing." | "Link your WhatsApp number" (opens Brand) | Link the WhatsApp Business number to the Page, then add it on Brand. |
+| `REVIEW_WHATSAPP_MESSAGE` | "Your WhatsApp message: {problem}" | "Edit the WhatsApp message" | Fix what the message names (too long, or missing). |
+| `REVIEW_NO_LEAD_FORM` | "Choose an active lead form from your Facebook Page in the Lead form field." | "Choose a lead form" | Pick an active form, or make one on the Facebook Page first. |
+| `REVIEW_NO_WEBSITE` | "Add your business website on the Your business page. Meta lead ads must link to the advertiser's own website, not Facebook." | "Add your website" (opens Brand), or "Use WhatsApp chat instead (no website needed)" | Add your own website, or switch to WhatsApp chat ads. |
+| `REVIEW_AD_POLICY` | "{word}" in an ad "is a health promise Meta rejects. Edit the ad to describe the service instead." | "Edit the ad's wording" | Say what the service is, not what it cures. |
+| `REVIEW_BUDGET` | "Set a daily budget above ₹0." or "Meta needs at least ₹96 a day. Set a daily budget of ₹96 or more." | "Set the daily budget" | Pick ₹300, ₹500 or ₹1,000 a day. |
+| `REVIEW_NO_AGE_RANGE` | "Choose an age range, or let AdBrain recommend one, before reviewing." | "Set the age range" | Set the ages, or tap **Recommend audience**. |
+| `REVIEW_RADIUS` | "Set the city radius between 17 and 80 km; Meta allows nothing outside that range." | "Set the city radius" | Choose a radius from 17 to 80 km. |
+| `REVIEW_CITY_RADIUS` | City only "came back from Meta with a radius. Choose the locations again." | "Choose the locations again" | Pick the locations again. |
+| `REVIEW_AREAS_UNRESOLVED` | "Meta didn't recognise some of your areas. Fix or remove them, or choose nationwide targeting." (or names the areas) | "Fix the areas" | Fix the spelling, remove the area, or choose all of India. |
+| `REVIEW_NO_AUDIENCE` | "Let AdBrain recommend the audience (Recommend audience) before reviewing." | "Go to Recommend audience" | Tap **Recommend audience** and keep its suggestion or change it. |
+| `REVIEW_INTERESTS_UNRESOLVED` | "Meta didn't recognise some audience interests. Edit or remove them." (or names them) | "Edit the interests" | Remove the interest, or pick one Meta suggests. |
+| `REVIEW_CHANGED` | Not a blocker: the campaign changed after Review, so **Send to Meta** says "This campaign changed after you checked it. Tap Check my campaign again, then Send to Meta." | None | Tap **Check my campaign** again, then **Send to Meta**. |
