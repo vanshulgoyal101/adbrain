@@ -7,8 +7,9 @@
  * - a baseline entry that no longer occurs fails until it is removed (`--write-baseline`), so every fix shows as −N;
  * - with `--base <git-ref>`, a baseline entry the base branch didn't have fails (the baseline grew);
  * - C4 entries also carry a line ceiling: a listed big file may not grow past it (shrinking passes);
- * - C5 entries carry the same ceiling for a route's English-only error literals (#2337); only growth fails, so a
- *   route that drops some or all of them passes without a baseline edit.
+ * - C5 entries carry the same ceiling for a route's English-only error literals (#2337), and C6 for a screen's
+ *   English-only fallbacks (#2347); only growth fails, so a file that drops some or all of them passes without a
+ *   baseline edit.
  *
  *   node scripts/check-boundaries.mjs [--base origin/next] [--write-baseline]
  */
@@ -55,7 +56,14 @@ const OWNER_ROUTE = /^src\/app\/api\/(?!cron\/|internal\/|whatsapp\/webhook\/|pr
 /** `error: "Text"`, `` error: `${x} …` `` and `errorResponse(requestId, 400, "CODE", "Text")`. */
 const ENGLISH_ERROR = /\berror:\s*(?:["'`][A-Za-z]|`\$\{)|\berrorResponse\(\s*[^,()]+,\s*[^,()]+,\s*["'][A-Z_]+["']\s*,\s*["'`][A-Za-z]/g;
 const ENGLISH_ERRORS = "C5-english-errors";
-const CEILINGED = new Set(["C4-file-size", ENGLISH_ERRORS]);
+/** #2347: a screen's own text for when the server sends none (offline, a 5xx without JSON) comes from its words. */
+const OWNER_SCREEN = /^src\/(?:components|app\/\(app\))\/.*\.tsx$/;
+/** `?? "Text"`, `|| "Text"`, `Error("Text")`, `setError("Text")` / `onError("Text")` and `reason.message : "Text"`. */
+const ENGLISH_FALLBACK = /(?:\?\?|\|\|)\s*["'`][A-Z]|\bError\(\s*["'`][A-Z]|\b(?:setError|onError)\(\s*["'`][A-Z]|\.message\s*:\s*["'`][A-Z]/g;
+const ENGLISH_FALLBACKS = "C6-english-fallbacks";
+/** Rules where only growth fails: fewer passes, and a file at none is reported, not failed. */
+const GROWTH_ONLY = new Set([ENGLISH_ERRORS, ENGLISH_FALLBACKS]);
+const CEILINGED = new Set(["C4-file-size", ...GROWTH_ONLY]);
 /** Per channel: the tables and RPCs its adapter may touch. Everything else goes through a service. */
 /** @type {Record<string, { tables: Set<string>, rpc: RegExp }>} */
 export const CHANNEL_DATA = {
@@ -96,6 +104,8 @@ export function checkFile(file, text) {
   if (lines > FILE_LINE_BUDGET) out.push({ rule: "C4-file-size", from: file, to: `> ${FILE_LINE_BUDGET} lines`, lines });
   const english = OWNER_ROUTE.test(file) ? text.match(ENGLISH_ERROR)?.length ?? 0 : 0;
   if (english) out.push({ rule: ENGLISH_ERRORS, from: file, to: "English error literals", lines: english });
+  const fallbacks = OWNER_SCREEN.test(file) ? text.match(ENGLISH_FALLBACK)?.length ?? 0 : 0;
+  if (fallbacks) out.push({ rule: ENGLISH_FALLBACKS, from: file, to: "English fallbacks", lines: fallbacks });
   return out;
 }
 
@@ -126,8 +136,8 @@ export function compare(current, baseline, base = null) {
   const added = current.filter(v => !known.has(keyOf(v)));
   const gone = baseline.filter(v => !now.has(keyOf(v)));
   // A C5 route that dropped all its English errors only leaves a loose ceiling: report it, don't fail (#2337).
-  const fixed = gone.filter(v => v.rule !== ENGLISH_ERRORS);
-  const cleared = gone.filter(v => v.rule === ENGLISH_ERRORS);
+  const fixed = gone.filter(v => !GROWTH_ONLY.has(v.rule));
+  const cleared = gone.filter(v => GROWTH_ONLY.has(v.rule));
   const baseKeys = base ? new Set(base.map(keyOf)) : null;
   const ceiling = (list) => new Map(list.filter(v => v.lines !== undefined).map(v => [keyOf(v), v.lines]));
   const ceilings = ceiling(baseline);
@@ -156,17 +166,18 @@ export function report({ added, fixed, cleared = [], grown, swollen = [], perRul
     if (!items.length) return;
     lines.push("", `**${title} (${items.length})** ${hint}`);
     for (const v of items.slice(0, 50)) {
-      const unit = v.rule === ENGLISH_ERRORS ? "errors" : "lines";
+      const unit = v.rule === ENGLISH_ERRORS ? "errors" : v.rule === ENGLISH_FALLBACKS ? "fallbacks" : "lines";
       const size = v.was !== undefined ? ` (${v.was} → ${v.lines} ${unit})` : v.lines !== undefined ? ` (${v.lines} ${unit})` : "";
       lines.push(`- \`${v.rule}\`: \`${v.from}\` → \`${v.to}\`${size}`);
     }
     if (items.length > 50) lines.push(`- … ${items.length - 50} more`);
   };
-  const english = (v) => v.rule === ENGLISH_ERRORS;
+  const english = (v) => GROWTH_ONLY.has(v.rule);
   list("New violations", added.filter(v => !english(v)), "— route it through a service/domain module (or split the file); the baseline never grows.");
-  list("New English-only errors", [...added, ...swollen].filter(english), "— use ownerError (src/i18n/request-locale.ts): add the key to `errors` in messages/en.json and hi.json (#2337).");
+  list("New English-only errors", [...added, ...swollen].filter(v => v.rule === ENGLISH_ERRORS), "— use ownerError (src/i18n/request-locale.ts): add the key to `errors` in messages/en.json and hi.json (#2337).");
   list("Fixed, still in the baseline", fixed, `— baseline −${fixed.length}: run \`npm run boundaries -- --write-baseline\` and commit.`);
-  list("Routes with no English errors left (passes)", cleared, "— optional: `npm run boundaries -- --write-baseline` drops them.");
+  list("New English-only fallbacks", [...added, ...swollen].filter(v => v.rule === ENGLISH_FALLBACKS), "— keep the server's text first and take yours from the screen's words in messages/en.json and hi.json: `data.error ?? t(\"…\")` (#2347).");
+  list("Files with no English errors or fallbacks left (passes)", cleared, "— optional: `npm run boundaries -- --write-baseline` drops them.");
   list("Big files that grew", swollen.filter(v => !english(v)), "— a listed file may only shrink: move code out (a new module ≤ 400 lines) before adding.");
   list("Baseline grew vs base", grown, "— the baseline may only shrink.");
   return lines.join("\n");

@@ -992,6 +992,252 @@
       "from": "src/app/api/spend-limits/route.ts",
       "to": "English error literals",
       "lines": 4
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/app/(app)/settings/privacy-requests/page.tsx",
+      "to": "English fallbacks",
+      "lines": 1
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/ad-assistant.tsx",
+      "to": "English fallbacks",
+      "lines": 15
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/assets-library.tsx",
+      "to": "English fallbacks",
+      "lines": 6
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/audience-switch-strip.tsx",
+      "to": "English fallbacks",
+      "lines": 1
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/brand-assets.tsx",
+      "to": "English fallbacks",
+      "lines": 8
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/brand-form.tsx",
+      "to": "English fallbacks",
+      "lines": 4
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/campaign-chat.tsx",
+      "to": "English fallbacks",
+      "lines": 5
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/campaign-launch-review.tsx",
+      "to": "English fallbacks",
+      "lines": 1
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/campaign-whatsapp-message-dialog.tsx",
+      "to": "English fallbacks",
+      "lines": 1
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/campaigns.tsx",
+      "to": "English fallbacks",
+      "lines": 33
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/claim-business.tsx",
+      "to": "English fallbacks",
+      "lines": 2
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/create-progress.tsx",
+      "to": "English fallbacks",
+      "lines": 4
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/creative-copy-editor.tsx",
+      "to": "English fallbacks",
+      "lines": 6
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/customer-balance.tsx",
+      "to": "English fallbacks",
+      "lines": 1
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/edit-ad-dialog.tsx",
+      "to": "English fallbacks",
+      "lines": 3
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/enquiry-erasure.tsx",
+      "to": "English fallbacks",
+      "lines": 5
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/generation-details.tsx",
+      "to": "English fallbacks",
+      "lines": 1
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/instructions.tsx",
+      "to": "English fallbacks",
+      "lines": 4
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/lead-inbox.tsx",
+      "to": "English fallbacks",
+      "lines": 8
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/login-form.tsx",
+      "to": "English fallbacks",
+      "lines": 3
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/managed-billing.tsx",
+      "to": "English fallbacks",
+      "lines": 1
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/managed-page-step.tsx",
+      "to": "English fallbacks",
+      "lines": 6
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/managed/managed-onboarding-live.tsx",
+      "to": "English fallbacks",
+      "lines": 6
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/meta-connect/meta-connect-dialog.tsx",
+      "to": "English fallbacks",
+      "lines": 9
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/meta-connection.tsx",
+      "to": "English fallbacks",
+      "lines": 1
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/preference-settings.tsx",
+      "to": "English fallbacks",
+      "lines": 2
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/privacy-requests.tsx",
+      "to": "English fallbacks",
+      "lines": 4
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/production-checkout.tsx",
+      "to": "English fallbacks",
+      "lines": 5
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/prospect-hand-over.tsx",
+      "to": "English fallbacks",
+      "lines": 2
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/sample-viewer.tsx",
+      "to": "English fallbacks",
+      "lines": 1
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/setup-ads-step.tsx",
+      "to": "English fallbacks",
+      "lines": 2
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/sign-out-button.tsx",
+      "to": "English fallbacks",
+      "lines": 2
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/spend-guardrails.tsx",
+      "to": "English fallbacks",
+      "lines": 3
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/studio.tsx",
+      "to": "English fallbacks",
+      "lines": 14
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/targeting-controls.tsx",
+      "to": "English fallbacks",
+      "lines": 1
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/test-checkout.tsx",
+      "to": "English fallbacks",
+      "lines": 9
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/ui/confirm-dialog.tsx",
+      "to": "English fallbacks",
+      "lines": 1
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/whatsapp-enquiries.tsx",
+      "to": "English fallbacks",
+      "lines": 4
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/whatsapp-message-card.tsx",
+      "to": "English fallbacks",
+      "lines": 1
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/workspace-home.tsx",
+      "to": "English fallbacks",
+      "lines": 2
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/workspace-shell.tsx",
+      "to": "English fallbacks",
+      "lines": 2
     }
   ]
 }
