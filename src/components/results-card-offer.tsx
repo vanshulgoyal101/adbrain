@@ -26,17 +26,19 @@ export function ResultsCardOffer({ businessId, caption, words }: { businessId: s
 
   useEffect(() => {
     let live = true;
-    let url: string | null = null;
     fetch(`/api/results-card?businessId=${encodeURIComponent(businessId)}${footer ? "" : "&footer=0"}`)
       .then((response) => response.ok && response.headers.get("content-type") === "image/jpeg" ? response.blob() : Promise.reject(new Error("card")))
       .then((blob) => {
         if (!live) return;
-        url = URL.createObjectURL(blob);
-        setCard({ file: new File([blob], "adbrain-results.jpg", { type: "image/jpeg" }), url, footer });
+        setCard({ file: new File([blob], "adbrain-results.jpg", { type: "image/jpeg" }), url: URL.createObjectURL(blob), footer });
       })
       .catch(() => { if (live) setFailed(true); });
-    return () => { live = false; if (url) URL.revokeObjectURL(url); };
+    return () => { live = false; };
   }, [businessId, footer]);
+
+  // Revoke a card's URL only once the next card replaces it, so the preview never blanks.
+  const url = card?.url;
+  useEffect(() => () => { if (url) URL.revokeObjectURL(url); }, [url]);
 
   async function share() {
     if (!card || card.footer !== footer) return;
