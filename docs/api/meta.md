@@ -33,7 +33,7 @@ Consent, account selection, managed accounts, disconnect and the WhatsApp webhoo
 
 ## Connection API
 
-Detailed lifecycle: [Meta Connection](../META_CONNECT.md). Start requires nonempty
+Detailed lifecycle: [Meta Connection](../architecture/channels/meta-connect.md). Start requires nonempty
 `businessId` and `intent`: `{kind:"setup"}`, `{kind:"prepare_campaign",draftId,
 draftVersion}`, or `{kind:"review_activation",campaignId}`. Draft/campaign IDs are
 UUIDs and version is a nonnegative safe integer. Start returns
