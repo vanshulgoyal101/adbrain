@@ -181,12 +181,12 @@ export function checkDocumentation(root, options = {}) {
   }
   const textOf = file => existsSync(resolve(root, file)) ? readFileSync(resolve(root, file), "utf8") : "";
   const docFiles = inventory.filter(entry => entry.role === "current" && entry.file.startsWith("docs/")).map(entry => entry.file);
-  const pages = (folder, legacy) => {
-    const found = docFiles.filter(file => file.startsWith(folder) && !file.slice(folder.length).includes("/"));
+  const pages = (folder, legacy, match = () => true) => {
+    const found = docFiles.filter(file => file.startsWith(folder) && !file.slice(folder.length).includes("/") && match(file));
     return found.length ? found : existsSync(resolve(root, legacy)) ? [legacy] : [];
   };
   const fail = (file, line, message) => diagnostics.push({ severity: "error", file, line, message });
-  const configPages = pages("docs/operations/", "docs/CONFIGURATION.md").filter(file => /\/(?:configuration[^/]*|CONFIGURATION)\.md$/.test(file)).sort((a, b) => a.length - b.length);
+  const configPages = pages("docs/operations/", "docs/CONFIGURATION.md", file => /\/configuration[^/]*\.md$/.test(file)).sort((a, b) => a.length - b.length);
   const configText = configPages.map(textOf).join("\n");
   const dataText = textOf(existsSync(resolve(root, "docs/architecture/migrations.md")) ? "docs/architecture/migrations.md" : "docs/DATA_MODEL.md");
 
