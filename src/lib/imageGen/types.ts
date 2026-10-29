@@ -63,6 +63,14 @@ export class FreeImageBusyError extends Error {
   }
 }
 
+/** #2145: Cloudflare's daily free allowance is used up; it resets at 00:00 UTC, so asking again before then is wasted. */
+export class FreeImageDailyLimitError extends FreeImageBusyError {
+  constructor() {
+    super();
+    this.name = "FreeImageDailyLimitError";
+  }
+}
+
 export interface ImageProvider {
   name: string;
   generate(req: ImageRequest): Promise<GeneratedImage>;
