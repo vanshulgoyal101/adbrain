@@ -320,7 +320,7 @@ platform for this narrowed scope.
 ## 9. Implementation Receipt
 
 [API Reference](api/README.md), [Configuration](operations/configuration.md) and
-[Testing](TESTING.md) own current commands/contracts; historical commands are not
+[Testing](team/testing.md) own current commands/contracts; historical commands are not
 unconditional setup instructions.
 
 Current source requires `PAYMENTS_TEST_ENABLED=true`, a loopback Supabase URL,
