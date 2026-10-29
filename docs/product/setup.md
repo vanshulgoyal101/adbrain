@@ -25,7 +25,11 @@ must pass first: "No Meta account connected", "No campaigns made" and nothing el
 set up (WhatsApp alerts, payments); [transfer.ts](../../src/lib/prospect/transfer.ts)
 words each blocker. The rep types the owner's email and taps "Hand to owner",
 which opens a 30-minute transfer to that address. No link is sent, and the rep can
-"Cancel hand-over".
+"Cancel hand-over". After 30 minutes Settings says "The hand-over to … ended at
+…. Start again." Sending again replaces any pending hand-over, so a mistyped
+email is fixed by re-sending. An owner whose email already has a business can't
+claim: "This email already has an AdBrain business; use another email or ask
+AdBrain".
 
 The owner signs in with that email on their own phone. Before an empty business
 is started, Home shows "Make [business] yours?" with up to three ad thumbnails
