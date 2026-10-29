@@ -15,6 +15,7 @@ import { ConnectionAccessError } from "./connection-access-error";
 import { EXCLUDABLE_CITIES, INDIA_REGION_KEYS, mergeExclusions, serviceAreaExclusions, TargetingExclusionsMissingError, type IncludedPlace } from "./service-area";
 import { AD_LANGUAGE_KEYS, storedLocales } from "./locales";
 import { expandPlaceAliases } from "./geo-aliases";
+import { readAdVideo, startAdVideo, type AdVideoState } from "./media";
 export type { AdResult, CampaignInsights } from "./insights";
 
 
@@ -1311,6 +1312,15 @@ export class MetaClient {
     const first = Object.values(data.images ?? {})[0];
     if (!first?.hash) throw new MetaError("Image upload returned no hash.");
     return first.hash;
+  }
+
+  /** #749: start an owner's video upload by URL (Meta pulls it); poll `readAdVideo` until it's ready. */
+  startAdVideo(input: { fileUrl: () => string | Promise<string>; name: string; title: string }): Promise<string> {
+    return startAdVideo((path, opts) => this.graph(path, opts), this.creds.adAccountId, input);
+  }
+
+  readAdVideo(videoId: string): Promise<AdVideoState> {
+    return readAdVideo((path, opts) => this.graph(path, opts), videoId);
   }
 
   /**

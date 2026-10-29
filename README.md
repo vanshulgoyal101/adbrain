@@ -14,7 +14,7 @@ Start at the [documentation index](docs/README.md).
 
 | Goal | Guide |
 | --- | --- |
-| Install and run safely | [Developer quick start](docs/QUICK_START.md) |
+| Install and run safely | [Developer quick start](docs/team/quick-start.md) |
 | Understand the product | [Features and workflows](docs/product/README.md) |
 | Learn the codebase | [Architecture](docs/ARCHITECTURE.md) |
 | Integrate or debug requests | [API reference](docs/api/README.md) |
@@ -22,7 +22,7 @@ Start at the [documentation index](docs/README.md).
 | Understand storage and upgrades | [Data model](docs/architecture/data-model.md) |
 | Validate changes | [Testing](docs/team/testing.md) |
 | Diagnose production | [Operations](docs/operations/README.md) and [observability](docs/operations/observability.md) |
-| Release safely | [Release workflow](docs/RELEASING.md) |
+| Release safely | [Release workflow](docs/operations/releasing.md) |
 
 ## Stack
 
@@ -41,14 +41,14 @@ See the [architecture guide](docs/ARCHITECTURE.md) for ownership and trust bound
 
 ## Local Development
 
-Start with the [quick start](docs/QUICK_START.md), then the
+Start with the [quick start](docs/team/quick-start.md), then the
 [configuration reference](docs/operations/configuration.md). Use isolated credentials and
 confirm the database target before starting the application. An existing
 `.env.local` may point to production; do not overwrite it or copy it into a test
 worktree. The repository's shared development environment is not a sandbox.
 
 The [testing guide](docs/team/testing.md) owns validation commands and safe test
-environments. The [release guide](docs/RELEASING.md) owns branch, migration and
+environments. The [release guide](docs/operations/releasing.md) owns branch, migration and
 deployment procedures. Follow those guides instead of using production setup
 commands as installation checks.
 
@@ -68,7 +68,7 @@ checks. Do not commit credentials or generated private artifacts.
   [roadmap](docs/roadmap.md) and exact release receipt before claiming deployment.
 - Razorpay account activation and website approval are verified, but AdBrain's
   test checkout is not a live payment-to-ad-funding workflow. See
-  [payment readiness](docs/PAYMENTS-PLAN.md#verified-razorpay-account-status).
+  [payment readiness](docs/plans/payments.md#verified-razorpay-account-status).
 - Automatic WhatsApp delivery, team roles, Google Ads and general autonomous
   optimisation are not established product workflows.
 - Read [known limitations](docs/product/README.md#known-limits) before making availability,
@@ -76,7 +76,7 @@ checks. Do not commit credentials or generated private artifacts.
 
 ## Working on AdBrain
 
-Read [AGENTS.md](AGENTS.md) and the [current dispatch](docs/ORCHESTRATION.md#current-dispatch)
+Read [AGENTS.md](AGENTS.md) and the [current dispatch](docs/team/orchestration.md#current-dispatch)
 before editing shared resources. Make focused changes at the owning abstraction,
 reuse maintained dependencies, test meaningful risks and update the corresponding
 reference guide. Documentation standards and the distinction between current

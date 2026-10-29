@@ -1,5 +1,4 @@
 import { affirmedInFact, negatedTerm } from "./claim-support";
-import { contactsInCopy } from "./contacts-in-copy";
 import { z } from "zod";
 import type { ChatMessage } from "@/lib/llm";
 import {
@@ -14,6 +13,7 @@ import { bannedClaimsForVertical, capitalWords, HEALTH_VERTICAL, MEDICAL_BANNED_
 import { policyFindings } from "@/lib/creative/policy-rules";
 import { emptyScene } from "@/lib/creative/visual-rules";
 import { spelledAmountIndex, spelledCurrency } from "./currency";
+import { contactsInCopy } from "./contact-in-copy";
 
 export const CONCEPT_VERSION = "creative-concept-v3";
 // Primary text Meta shows on mobile before "See more" (#194).
@@ -200,8 +200,6 @@ const WORK_CLAIM = /(?<![\p{L}\p{M}])(?:our (?:work|projects?|installs?|installa
 export function workClaims(text: string): string[] {
   return [...new Set((text.normalize("NFC").match(WORK_CLAIM) ?? []).map((claim) => claim.toLowerCase()))];
 }
-
-export { contactsInCopy } from "./contacts-in-copy";
 
 export const WORK_CLAIM_WARNING = "This picture wasn't taken by you. Say what you offer, not 'our work', or use your own photo.";
 

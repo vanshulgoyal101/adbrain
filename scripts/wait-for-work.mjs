@@ -278,7 +278,7 @@ export function offTrack({ issues, comments, prs, now }) {
   return { quiet, stale };
 }
 
-/** One line from docs/ORCHESTRATION.md → Role cards ("Same as Dev" resolves to Dev's column). */
+/** One line from docs/team/orchestration.md → Role cards ("Same as Dev" resolves to Dev's column). */
 /**
  * Workflows failing on `min` or more distinct PR branches in the window: these never reach main/next pushes,
  * so without this the CTO only hears about them from the owner's inbox (#926's core-approval, Oct 27).
@@ -559,7 +559,7 @@ async function backlog() {
 }
 // #384: restart-proof start. GitHub and git are the memory: role card, in-flight work, unsaved local work.
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const card = (() => { try { return roleCard(readFileSync(join(repoRoot, "docs/ORCHESTRATION.md"), "utf8"), role); } catch { return null; } })();
+const card = (() => { try { return roleCard(readFileSync(join(repoRoot, "docs/team/orchestration.md"), "utf8"), role); } catch { return null; } })();
 // The live priorities and queues are the pinned Team board issue (#580), edited without a PR.
 const BOARD_ISSUE = 580;
 const board = async () => { try { return boardRow((await api(`repos/${repo}/issues/${BOARD_ISSUE}`)).body ?? "", role); } catch { return null; } };

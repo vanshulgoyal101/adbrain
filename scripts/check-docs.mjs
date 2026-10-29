@@ -108,10 +108,8 @@ export function sourceInventory(root) {
 // Layered docs (#1851): pages stay short, every folder has an index, and only these sit directly in docs/.
 export const MAX_LINES = 300;
 export const TOP_LEVEL = new Set(["docs/README.md", "docs/roadmap.md"]);
-// Flat files not yet moved into docs/{product,architecture,api,operations,team}/; each move PR deletes its entries.
-export const LEGACY_FLAT = new Set(["ARCHITECTURE", "BRAND-IDENTITY",
-  "META_APPROVAL_ACTION_PLAN", "ORCHESTRATION", "PAYMENTS-PLAN", "QUICK_START",
-  "RELEASING"].map(name => `docs/${name}.md`));
+// Flat files not yet moved into docs/{product,architecture,api,operations,team,plans}/; each move PR deletes its entries.
+export const LEGACY_FLAT = new Set(["ARCHITECTURE", "BRAND-IDENTITY"].map(name => `docs/${name}.md`));
 const CODE_DIRS = ["src", "scripts", "db", ".github"];
 const CODE_FILES = ["AGENTS.md", ".env.example", "package.json"];
 
@@ -210,7 +208,9 @@ export function checkDocumentation(root, options = {}) {
   for (const file of docFiles) {
     const lines = textOf(file).split("\n").length - 1;
     if (lines > MAX_LINES && !legacyFlat.has(file)) fail(file, MAX_LINES + 1, `Page has ${lines} lines; split it (limit ${MAX_LINES})`);
-    if (!file.slice("docs/".length).includes("/") && !TOP_LEVEL.has(file) && !legacyFlat.has(file)) fail(file, 1, "Put pages in a docs/ subfolder (product, architecture, api, operations, team)");
+    if (!file.slice("docs/".length).includes("/") && !TOP_LEVEL.has(file) && !legacyFlat.has(file)) fail(file, 1, "Put pages in a docs/ subfolder (product, architecture, api, operations, team, plans)");
+    // A plan is current or deleted: its status (active, or done and due for deletion) sits under the title.
+    if (file.startsWith("docs/plans/") && file !== "docs/plans/README.md" && !/^\*\*Status:\*\* (active|done)\b/m.test(textOf(file).split("\n").slice(0, 6).join("\n"))) fail(file, 1, "Plan needs a `**Status:** active` or `**Status:** done` line under its title");
   }
   const folders = new Set([...docFiles.length ? ["docs/"] : [], ...docFiles.map(file => file.slice(0, file.lastIndexOf("/") + 1))]);
   for (const folder of [...folders].filter(folder => folder !== "docs/")) {

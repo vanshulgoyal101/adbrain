@@ -16,7 +16,7 @@ another drawing. Body-copy mentions and page titles remain searchable text.
 Keep the logo distinct from customer branding. A customer's approved ad artwork,
 logo or brand colors do not change AdBrain's application identity. Do not use
 an operator's Meta account identity as the product's legal identity; the current
-operator and future arrangements are documented in [Payments](PAYMENTS-PLAN.md).
+operator and future arrangements are documented in [Payments](plans/payments.md).
 
 ## Typography and Color
 

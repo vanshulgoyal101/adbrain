@@ -161,11 +161,19 @@ async function requireFreshBackup(dry) {
   console.log(`    Backup ${run.url} done.`);
 }
 
+/**
+ * The guard run that judges a commit, from `gh run list` (newest first). Non-production deployment
+ * statuses fire the guard too and its job skips them; a skipped run is no verdict (#2138).
+ */
+export function guardRun(runs) {
+  return runs.find((r) => !(r.status === "completed" && r.conclusion === "skipped"));
+}
+
 async function waitForGuard(sha) {
   for (let hop = 0; hop < 3; hop++) {
     let run;
     for (let i = 0; i < 90; i++) {
-      run = ghJson("run", "list", "-R", repo, "--workflow", "production-guard.yml", "--commit", sha, "--limit", "1", "--json", "databaseId,status,conclusion,url")[0];
+      run = guardRun(ghJson("run", "list", "-R", repo, "--workflow", "production-guard.yml", "--commit", sha, "--limit", "20", "--json", "databaseId,status,conclusion,url"));
       if (run?.status === "completed") break;
       await sleep(20_000);
     }
@@ -173,7 +181,7 @@ async function waitForGuard(sha) {
     const log = gh("run", "view", String(run.databaseId), "-R", repo, "--log");
     const { pass, fail } = smokeCounts(log);
     const newer = supersededBy(log);
-    if (run.conclusion !== "success" || fail) stop(`Production guard failed (${run.url}). It rolls production back on a failed smoke; read the run, then follow docs/RELEASING.md#rollback-and-incident-handling. Do not undo the migration by hand.`);
+    if (run.conclusion !== "success" || fail) stop(`Production guard failed (${run.url}). It rolls production back on a failed smoke; read the run, then follow docs/operations/releasing-recovery.md#rollback-and-incident-handling. Do not undo the migration by hand.`);
     if (!newer && !pass) stop(`Production guard ${run.url} passed without running the smoke. Run \`npm run smoke:core\` and check the log.`);
     if (!newer) return { run, pass, sha };
     const full = gh("api", `repos/${repo}/commits/${newer}`, "--jq", ".sha");

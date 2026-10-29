@@ -36,7 +36,16 @@
     "metaChecking": "Meta is checking your ads. This usually takes minutes to a few hours, and up to a day.",
     "metaReview": "Meta review",
     "chats": "Chats",
-    "perChat": "Per chat"
+    "perChat": "Per chat",
+    "weekTitle": "Last week: {chats, plural, one {# chat} other {# chats}}, {enquiries, plural, one {# real enquiry} other {# real enquiries}}, {spend} spent",
+    "weekBest": "Best ad so far: ''{name}''.",
+    "weekQuickQuestions": "Few people who open WhatsApp send a message. Try quick questions on your next run.",
+    "weekAddEnquiries": "Add which chats were real enquiries, so you can see what each one costs.",
+    "weekRunAgain": "Nothing is running. Run your best ad again?",
+    "weekOpenCampaigns": "Open Campaigns",
+    "weekAddEnquiriesAction": "Add enquiries",
+    "weekRunAgainAction": "Run it again",
+    "weekDismiss": "Hide last week's summary"
   },
   "workQueue": {
     "brandTitle": "Set up your business",

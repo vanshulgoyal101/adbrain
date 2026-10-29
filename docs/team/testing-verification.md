@@ -21,7 +21,7 @@ Auth, PostgREST schema-cache, Storage delivery, or real Meta consent test.
 
 For an integrated local environment, inspect
 [scripts/local-meta-qa.mjs](../../scripts/local-meta-qa.mjs) and the existing `adbrain-qa`
-Colima profile documented in [Releasing](../RELEASING.md). The launcher asserts
+Colima profile documented in [Releasing](../operations/releasing.md). The launcher asserts
 loopback Supabase targets. Do not replace its isolated settings with production
 secrets to bypass setup problems.
 
@@ -133,7 +133,7 @@ Razorpay test-mode evidence is a separate layer: mocked responses, provider test
 captures, production merchant activation and live collection are distinct facts.
 The local test gate rejects production/Vercel and non-loopback Supabase targets;
 do not enable a test flag to exercise production payments. See the
-[payment implementation receipt](../PAYMENTS-PLAN.md#9-implementation-receipt).
+[payment implementation receipt](../plans/payments-safety.md#9-implementation-receipt).
 
 ## Documentation Checks
 
