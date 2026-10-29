@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canUseMetaConnect } from "@/lib/meta/pilot-access";
+import { canUseMetaConnect, metaAppReviewPending } from "@/lib/meta/pilot-access";
 
 describe("Meta connection pilot access", () => {
   it("defaults to closed in production", () => {
@@ -19,5 +19,13 @@ describe("Meta connection pilot access", () => {
   it("keeps local development available and requires explicit broad production enablement", () => {
     expect(canUseMetaConnect("owner", { environment: "development", rollout: undefined, pilotUserId: undefined })).toBe(true);
     expect(canUseMetaConnect("owner", { environment: "production", rollout: "enabled", pilotUserId: undefined })).toBe(true);
+  });
+});
+describe("#1989: META_APP_REVIEW_PENDING", () => {
+  it("is on until DevOps sets exactly 'false' after App Review (#156)", () => {
+    expect(metaAppReviewPending(undefined)).toBe(true);
+    expect(metaAppReviewPending("")).toBe(true);
+    expect(metaAppReviewPending("true")).toBe(true);
+    expect(metaAppReviewPending("false")).toBe(false);
   });
 });
