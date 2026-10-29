@@ -74,4 +74,5 @@ results count it. Details: [Manage: sync, results and leads](manage.md).
 | Meta | Reviews and shows the ads, charges the ad money to the owner's ad account |
 
 The app also works in Hindi (Settings → App language): the menu, app bar and
-Home, including Recent activity, which shows only the Hindi label for each event.
+Home, including Recent activity, which shows only the Hindi label for each event,
+and each campaign's "How it's going" sentence and buttons, on Home and Campaigns (#1438).
