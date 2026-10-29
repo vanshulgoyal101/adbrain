@@ -11,7 +11,7 @@ Live and test checkout and the customer advertising allowance. Conventions: [API
 | GET/POST | `/api/payments/live/orders` | Owner-scoped order read / accepted terms and idempotent create | Requires enabled production collection; no ad activation |
 | POST | `/api/payments/live/verify` | Signed provider payment proof | Reconcile capture; no ad activation |
 | GET/POST | `/api/payments/plan` | Owner (`requireOwnedBusiness`); POST same-origin | #718: GET `?businessId=` → `{plan, payUrl}` (`plan: null` while `PLAN_BILLING_ENABLED` is off); POST `{businessId}` → `{payUrl}`, the month's Payment Link made once per month (409 when nothing is due) |
-| POST | `/api/payments/live/webhook` | Signed Razorpay event | Idempotent capture/refund reconciliation. `payment_link.paid/expired/cancelled` settle a ₹999 plan month (#718, re-checked with Razorpay); payments with `notes.purpose = adbrain_plan` skip the ad-money ledger |
+| POST | `/api/payments/live/webhook` | Signed Razorpay event | Idempotent capture/refund reconciliation. `payment_link.paid/expired/cancelled` settle a ₹999 plan month (#718, re-checked with Razorpay); a payment noted `notes.purpose = adbrain_plan` skips the ad-money ledger only when its Razorpay order's receipt names none of our ad-money orders (notes are payer-controlled; an unconfirmable order returns 5xx so Razorpay retries) |
 | GET/POST | `/api/payments/live/reconcile` | Owner-scoped recovery | Reconcile uncertain provider state |
 | GET/POST | `/api/payments/live/operator` | Operator-authorized refund/review | Financial action; separate authorization required |
 | GET/POST | `/api/payments/customer-balance` | Owner balance/review or operator accounting evidence | No provider charge, refund or ad activation |
