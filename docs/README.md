@@ -34,7 +34,7 @@ feature branch or a passing local test.
 | [Architecture decisions](architecture/README.md) | Which cross-cutting decisions (ADRs) bind the code, and how do we record a new one? |
 | [Data model](DATA_MODEL.md) | Which tables, relationships, grants, RPCs, buckets and migrations support the app? |
 | [AI pipeline](AI_PIPELINE.md) | How do interviews, concepts, images, composition, retries, cache and accounting work? |
-| [Meta connection](META_CONNECT.md) | How do consent, selection, capabilities, paused creation and activation work, and what does Meta's App Review need? |
+| [Meta connection](architecture/channels/meta-connect.md) | How do consent, selection, capabilities, paused creation and activation work, and what does Meta's App Review need? |
 | [Testing](TESTING.md) | Which commands are safe locally and what does each verification layer prove? |
 | [Operations](operations/README.md) | How do we diagnose partial work, stale spend, provider failures and retention problems? |
 | [Observability](operations/observability.md) | What is logged, how is it correlated, and what must never be collected? |
@@ -65,6 +65,7 @@ last move.
 | `OBSERVABILITY.md` | [operations/observability.md](operations/observability.md) and [operations/observability-queries.md](operations/observability-queries.md) |
 | `CONFIGURATION.md` | [operations/configuration.md](operations/configuration.md) and [operations/configuration-payments.md](operations/configuration-payments.md) (live checkout) |
 | `ROADMAP.md` | [roadmap.md](roadmap.md) (lower case, like the folders) |
+| `META_CONNECT.md` | [architecture/channels/meta-connect.md](architecture/channels/meta-connect.md) and [meta-app-review.md](architecture/channels/meta-app-review.md) |
 
 ## Terminology
 

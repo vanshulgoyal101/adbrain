@@ -126,7 +126,7 @@ access; unset production rollout denies access. Register
 
 Keep the encryption key stable while encrypted tokens exist. A new key cannot
 decrypt old tokens; rotation requires a reviewed migration. See
-[Meta Connection](../META_CONNECT.md) for capabilities and recovery.
+[Meta Connection](../architecture/channels/meta-connect.md) for capabilities and recovery.
 
 ## Jobs and Internal Tools
 
