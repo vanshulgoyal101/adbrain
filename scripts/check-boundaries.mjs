@@ -17,11 +17,19 @@ import { fileURLToPath } from "node:url";
 
 export const BASELINE = "scripts/boundaries-baseline.json";
 
+/** @typedef {{ rule: string, from: string, to: string, lines?: number, was?: number }} Violation */
+
+/** @param {Violation} v */
 export const keyOf = (v) => `${v.rule}\u0000${v.from}\u0000${v.to}`;
 
+/** @param {Iterable<Violation>} list */
 const sorted = (list) => [...list].sort((a, b) => keyOf(a).localeCompare(keyOf(b)));
 
-/** dependency-cruiser JSON → [{rule, from, to}] (module-level rules only). */
+/**
+ * dependency-cruiser JSON → [{rule, from, to}] (module-level rules only).
+ * @param {any} result
+ * @returns {Violation[]}
+ */
 export function violationsOf(result) {
   const seen = new Map();
   for (const v of result?.summary?.violations ?? []) {
@@ -41,18 +49,27 @@ const GRAPH_URL = /graph\.facebook\.com|\$\{GRAPH\}|\bGRAPH\s*\+/;
 const NOT_A_GRAPH_CALL = [/^src\/lib\/meta\/graph-version\.ts$/, /^src\/lib\/security\/headers\.ts$/];
 const PROOF = /appSecretProof|appsecret_proof/;
 /** Per channel: the tables and RPCs its adapter may touch. Everything else goes through a service. */
+/** @type {Record<string, { tables: Set<string>, rpc: RegExp }>} */
 export const CHANNEL_DATA = {
   meta: {
     tables: new Set(["meta_connections", "managed_meta_accounts", "managed_meta_account_events", "whatsapp_number_bindings"]),
     rpc: /^(meta_|managed_meta_account_)/,
   },
 };
+/** @param {string} file */
 const channelOf = (file) => (/^src\/lib\/meta\//.test(file) ? "meta" : file.match(/^src\/channels\/([^/]+)\//)?.[1] ?? null);
 
+/** @param {string} text */
 export const lineCount = (text) => (text.length === 0 ? 0 : text.split("\n").length - (text.endsWith("\n") ? 1 : 0));
 
-/** One source file → C1–C4 violations, in the cruiser's {rule, from, to} shape (C4 adds `lines`). */
+/**
+ * One source file → C1–C4 violations, in the cruiser's {rule, from, to} shape (C4 adds `lines`).
+ * @param {string} file repo-relative, `/`-separated
+ * @param {string} text
+ * @returns {Violation[]}
+ */
 export function checkFile(file, text) {
+  /** @type {Violation[]} */
   const out = [];
   const callsGraph = GRAPH_URL.test(text);
   if (callsGraph && !GRAPH_URL_ALLOWED.some(re => re.test(file))) out.push({ rule: "C1-graph-urls-in-meta", from: file, to: "graph.facebook.com" });
@@ -60,7 +77,7 @@ export function checkFile(file, text) {
     out.push({ rule: "C3-appsecret-proof", from: file, to: "appSecretProof" });
   }
   if (ADAPTER.test(file)) {
-    const allowed = CHANNEL_DATA[channelOf(file)] ?? { tables: new Set(), rpc: /^$/ };
+    const allowed = CHANNEL_DATA[channelOf(file) ?? ""] ?? { tables: new Set(), rpc: /^$/ };
     const touched = new Set();
     for (const [, kind, name] of text.matchAll(/\.(from|rpc)\(\s*["'`]([A-Za-z0-9_]+)["'`]/g)) {
       if (kind === "from" ? !allowed.tables.has(name) : !allowed.rpc.test(name)) touched.add(`${kind === "from" ? "table" : "rpc"}:${name}`);
@@ -82,11 +99,17 @@ function sourceFiles(root, dir = "src") {
   return files;
 }
 
+/** @param {string} root */
 export function scanChecks(root) {
   return sorted(sourceFiles(root).flatMap(file => checkFile(file.split(sep).join("/"), readFileSync(join(root, file), "utf8"))));
 }
 
-/** Pure comparison; `base` is the base branch's baseline, or null when unknown. */
+/**
+ * Pure comparison; `base` is the base branch's baseline, or null when unknown.
+ * @param {Violation[]} current
+ * @param {Violation[]} baseline
+ * @param {Violation[] | null} [base]
+ */
 export function compare(current, baseline, base = null) {
   const now = new Set(current.map(keyOf));
   const known = new Set(baseline.map(keyOf));
@@ -109,6 +132,7 @@ export function compare(current, baseline, base = null) {
   return { ok: !added.length && !fixed.length && !grown.length && !swollen.length, added, fixed, grown, swollen, perRule };
 }
 
+/** @param {ReturnType<typeof compare>} result */
 export function report({ added, fixed, grown, swollen = [], perRule }) {
   const lines = ["### Boundaries (ADR-001, #1792)", "", "| Rule | Now | Baseline | vs base |", "| --- | --- | --- | --- |"];
   for (const r of perRule) {
@@ -131,7 +155,11 @@ export function report({ added, fixed, grown, swollen = [], perRule }) {
   return lines.join("\n");
 }
 
-/** → {cruiser, checks}; `checks` is null on a branch that predates #2071. */
+/**
+ * → {cruiser, checks}; `checks` is null on a branch that predates #2071.
+ * @param {string} text
+ * @returns {{ cruiser: Violation[], checks: Violation[] | null }}
+ */
 export function readBaseline(text) {
   const parsed = JSON.parse(text);
   if (!Array.isArray(parsed?.cruiser)) throw new Error(`${BASELINE}: expected {"cruiser": [...], "checks": [...]}`);
