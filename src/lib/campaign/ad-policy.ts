@@ -1,4 +1,4 @@
-import { bannedClaimsForVertical, scanAdCopy } from "@/lib/creative/slopScan";
+import { bannedClaimsForVertical, foldClaimText, scanAdCopy } from "@/lib/creative/slopScan";
 
 export type AdPolicyHit = { creativeId: string; headline: string | null; term: string };
 
@@ -12,10 +12,10 @@ export function adPolicyHits(creatives: Copy[], vertical: string | null | undefi
   const bannedClaims = bannedClaimsForVertical(vertical);
   return creatives.flatMap((creative) => {
     const text = [creative.headline, creative.primaryText, creative.description].filter(Boolean).join("\n").normalize("NFC");
-    const lower = text.toLowerCase();
+    const folded = foldClaimText(text);
     return scanAdCopy(text, { bannedClaims })
       // banned-claim matches substrings ("cure" in "secure"); Review only blocks the whole word.
-      .filter((finding) => finding.rule === "banned-claim" && new RegExp(`(?<![\\p{L}\\p{M}])${escape(finding.detail.toLowerCase())}(?![\\p{L}\\p{M}])`, "u").test(lower))
+      .filter((finding) => finding.rule === "banned-claim" && new RegExp(`(?<![\\p{L}\\p{M}])${escape(foldClaimText(finding.detail))}(?![\\p{L}\\p{M}])`, "u").test(folded))
       .map((finding) => ({ creativeId: creative.id, headline: creative.headline, term: finding.detail }));
   });
 }
