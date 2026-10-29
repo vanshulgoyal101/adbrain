@@ -117,7 +117,7 @@ import { cardVerdictInput, lastCampaignComparison } from "@/lib/campaign/card-ve
 import { verdict, type Comparison } from "@/lib/campaign/verdict";
 import { WAITING_COLUMNS, WAITING_DAYS, waitingByCampaign, type WaitingLeadRow } from "@/lib/leads/waiting";
 import { CampaignVerdict } from "@/components/campaign-verdict";
-import type { Words } from "@/i18n/words";
+import { verdictTranslator, type Words } from "@/i18n/words";
 import { campaignAttention } from "@/lib/campaign/health";
 import { campaignWhatsAppSummary } from "@/lib/campaign/results-summary";
 import { bookedLabel, costPerCustomer } from "@/lib/campaign/real-enquiries";
@@ -2432,7 +2432,7 @@ function BusinessCampaigns({
                         <Status tone={campaignStatus(c).tone} className="text-sm text-slate-600">
                           {campaignStatus(c).label}
                         </Status>
-                        {reviews[c.id]?.length ? <AdReviewBadge reviews={reviews[c.id]} /> : null}
+                        {reviews[c.id]?.length ? <AdReviewBadge reviews={reviews[c.id]} words={verdictWords} /> : null}
                         {attention ? <Badge className="bg-red-50 text-red-800">Needs attention</Badge> : null}
                         {madeOutsideAdBrain(c) ? <Badge className="bg-slate-100 text-slate-700">{OWNER_WORDS.madeOutside}</Badge> : null}
                       </div>
@@ -2554,7 +2554,7 @@ function BusinessCampaigns({
 
                     {/* CPO (#1255): a weak ad outranks 1-of-N rejected (it costs money; a rejected ad doesn't). */}
                     {reviews[c.id]?.length && !(weakAdCards.includes(c.id) && reviews[c.id].some((review) => review.state !== "rejected")) ? (
-                      <RejectedAds reviews={reviews[c.id]} spend={r?.spend ?? 0} running={c.status === "active"} vertical={business.vertical} adsManagerUrl={c.meta_campaign_id ? adsLink(c) : undefined} ownDetails={!r}
+                      <RejectedAds reviews={reviews[c.id]} spend={r?.spend ?? 0} running={c.status === "active"} vertical={business.vertical} adsManagerUrl={c.meta_campaign_id ? adsLink(c) : undefined} ownDetails={!r} words={verdictWords}
                         onEditAd={c.meta_campaign_id && (c.status === "paused" || c.status === "active") && reviewableCampaign(c) && (c.meta_ad_ids?.length ?? 0) > 0 && !waitingSwitch[c.id]
                           ? (hint) => { setAdEditHint(hint); setAdEdit(c); } : undefined} />
                     ) : null}
@@ -2571,7 +2571,7 @@ function BusinessCampaigns({
                       // #1003: always say how old the numbers are.
                       <p className="text-xs text-slate-500">{updatingIds.includes(c.id) ? "Updating results…" : `Updated ${timeAgo(new Date(r.fetched_at))}`}</p>
                     )}
-                    {adResults && r && c.meta_campaign_id && <AdResults campaignId={c.id} whatsapp={outcome === "whatsapp"} offerPause={!weakAdCards.includes(c.id)} onRunAgain={() => void runAgain(c)} runAgainBusy={rerunBusy === c.id} runAgainError={rerunError?.id === c.id ? rerunError.message : null} />}
+                    {adResults && r && c.meta_campaign_id && <AdResults campaignId={c.id} whatsapp={outcome === "whatsapp"} words={verdictWords} offerPause={!weakAdCards.includes(c.id)} onRunAgain={() => void runAgain(c)} runAgainBusy={rerunBusy === c.id} runAgainError={rerunError?.id === c.id ? rerunError.message : null} />}
                     {r && ((r.booked ?? 0) > 0 || (r.customers ?? 0) > 0) && (
                       // #798: what a real customer cost, beside the per-enquiry figures. #1994: bookings, the step before, come first.
                       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4" aria-label="Bookings and customers">
@@ -2669,23 +2669,24 @@ function CardResults({ campaign, result: r, outcome, comparison, waiting, onRunA
   const [now] = useState(() => Date.now());
   const enough = (outcome === "whatsapp" ? r.conversations ?? 0 : r.leads) >= BEST_AD_MIN_RESULTS;
   const [weakAd, clearWeakAd] = useWeakAd(campaign.id, perAd && campaign.status === "active" && Boolean(campaign.meta_campaign_id) && enough);
+  const t = verdictTranslator(words);
   const figures = <>
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-      <Stat label="Impressions" value={formatNumber(r.impressions)} />
-      <Stat label="Clicks" value={formatNumber(r.clicks)} />
-      <Stat label={outcome === "whatsapp" ? "WhatsApp chats" : outcome === "instant_form" ? "Leads" : "Results unavailable"} value={outcome === "whatsapp" ? (r.conversations != null ? formatNumber(r.conversations) : "—") : outcome === "instant_form" ? formatNumber(r.leads) : "—"} />
+      <Stat label={t("figures.impressions")} value={formatNumber(r.impressions)} />
+      <Stat label={t("figures.clicks")} value={formatNumber(r.clicks)} />
+      <Stat label={t(outcome === "whatsapp" ? "figures.chats" : outcome === "instant_form" ? "figures.leads" : "figures.unavailable")} value={outcome === "whatsapp" ? (r.conversations != null ? formatNumber(r.conversations) : "—") : outcome === "instant_form" ? formatNumber(r.leads) : "—"} />
       <Stat
-        label={outcome === "whatsapp" ? "Cost / chat" : outcome === "instant_form" ? "Cost / lead" : "Cost / result"}
+        label={t(outcome === "whatsapp" ? "figures.costChat" : outcome === "instant_form" ? "figures.costLead" : "figures.costResult")}
         value={outcome === "whatsapp" ? (r.conversations != null && r.cost_per_conversation != null ? formatMoney(r.cost_per_conversation) : "—") : outcome === "instant_form" && r.cpl != null ? formatMoney(r.cpl) : "—"}
       />
     </div>
     {outcome === "whatsapp" && r.whatsapp_opens != null && r.conversations != null && (
       // #493: people reach WhatsApp and leave; show the drop-off plainly.
       <p className="text-sm text-slate-700">
-        {formatNumber(r.whatsapp_opens)} opened WhatsApp, {formatNumber(r.conversations)} messaged you
+        {t("figures.opens", { opens: formatNumber(r.whatsapp_opens), conversations: formatNumber(r.conversations) })}
       </p>
     )}
-    {metaMessage && <p className="wrap-break-word text-sm text-slate-700">Meta&apos;s message about the ad it didn&apos;t approve: &ldquo;{metaMessage}&rdquo;</p>}
+    {metaMessage && <p className="wrap-break-word text-sm text-slate-700">{t("figures.metaMessage", { message: metaMessage })}</p>}
   </>;
   const input = cardVerdictInput(campaign, r, { now, waiting, weakAd, comparison });
   const judged = input ? verdict(input, words) : null;
@@ -2695,7 +2696,7 @@ function CardResults({ campaign, result: r, outcome, comparison, waiting, onRunA
   if (!input || !judged || (campaign.status !== "active" && campaign.status !== "completed" && !r.impressions)) return figures;
   return <CampaignVerdict verdict={judged} words={words} whatsapp={input.destination === "whatsapp"} results={input.results} spend={input.spend}
     details={figures} onRunAgain={onRunAgain} runAgainBusy={runAgainBusy} adsManagerUrl={adsManagerUrl} onEditAd={onEditAd}
-    pauseOffer={weakAd && <PauseOffer campaignId={campaign.id} suggestion={weakAd} unit={input.destination === "whatsapp" ? { one: "chat", many: "chats" } : { one: "enquiry", many: "enquiries" }} onKeep={clearWeakAd} />} />;
+    pauseOffer={weakAd && <PauseOffer campaignId={campaign.id} suggestion={weakAd} whatsapp={input.destination === "whatsapp"} onKeep={clearWeakAd} words={words} />} />;
 }
 
 function Stat({ label, value }: { label: string; value: string }) {
@@ -2707,24 +2708,25 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-const REVIEW_LABELS: Record<AdReview["state"], { label: string; style: string }> = {
-  rejected: { label: "Rejected by Meta", style: "bg-red-50 text-red-700" },
-  issues: { label: "Meta flagged issues", style: "bg-red-50 text-red-700" },
-  in_review: { label: "In Meta's review", style: "bg-slate-100 text-slate-700" },
-  unknown: { label: "Review status unknown", style: "bg-slate-100 text-slate-600" },
-  approved: { label: "Approved by Meta", style: "bg-emerald-50 text-emerald-700" },
+const REVIEW_STYLES: Record<AdReview["state"], string> = {
+  rejected: "bg-red-50 text-red-700",
+  issues: "bg-red-50 text-red-700",
+  in_review: "bg-slate-100 text-slate-700",
+  unknown: "bg-slate-100 text-slate-600",
+  approved: "bg-emerald-50 text-emerald-700",
 };
 
 /** The least-ready ad decides the badge; flagged issues are shown as Meta wrote them, rejections by <RejectedAds> (#1274). */
-function AdReviewBadge({ reviews }: { reviews: AdReview[] }) {
+function AdReviewBadge({ reviews, words }: { reviews: AdReview[]; words?: Words<"verdict"> }) {
+  const t = verdictTranslator(words);
   const order: AdReview["state"][] = ["rejected", "issues", "in_review", "unknown", "approved"];
   const state = order.find(candidate => reviews.some(review => review.state === candidate))!;
   const reasons = [...new Set(reviews.filter(review => review.state === state).flatMap(review => review.reasons))];
   const count = reviews.filter(review => review.state === state).length;
   return (
     <span className="inline-flex min-w-0 flex-wrap items-center gap-2">
-      <Badge className={REVIEW_LABELS[state].style}>
-        {REVIEW_LABELS[state].label}{reviews.length > 1 ? ` (${count} of ${reviews.length} ads)` : ""}
+      <Badge className={REVIEW_STYLES[state]}>
+        {t(`review.${state}`)}{reviews.length > 1 ? ` ${t("review.count", { count, total: reviews.length })}` : ""}
       </Badge>
       {reasons.length > 0 && state !== "rejected" && <span className="text-xs text-slate-600">{reasons.join(" ")}</span>}
     </span>
