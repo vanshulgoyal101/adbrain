@@ -1,10 +1,7 @@
 import { GRAPH } from "@/lib/meta/graph-version";
-import { jpegIfWebp } from "@/lib/imageGen/encode";
 import { z } from "zod";
 import { WHATSAPP_PUBLISHER_PLATFORMS } from "@/lib/meta/placements";
 import type { SetupReads } from "@/lib/meta/setup-checklist";
-import { fetchPublicUrl } from "@/lib/security/ssrf";
-import { readBoundedResponse } from "@/lib/imageGen/raster";
 import { destinationFromAdSets, type CampaignDestination } from "@/lib/campaign/outcomes";
 import type { CampaignSkipReason } from "@/lib/campaign/sync-skips";
 import { decodeAdResults, decodeCampaignInsights, decodeLifetimeSpendPaise, type AdResult, type CampaignInsights } from "./insights";
@@ -15,7 +12,7 @@ import { ConnectionAccessError } from "./connection-access-error";
 import { EXCLUDABLE_CITIES, INDIA_REGION_KEYS, mergeExclusions, serviceAreaExclusions, TargetingExclusionsMissingError, type IncludedPlace } from "./service-area";
 import { AD_LANGUAGE_KEYS, storedLocales } from "./locales";
 import { expandPlaceAliases } from "./geo-aliases";
-import { readAdVideo, startAdVideo, type AdVideoState } from "./media";
+import { fetchAdImage, readAdVideo, startAdVideo, uploadAdImageBytes, type AdVideoState } from "./media";
 export type { AdResult, CampaignInsights } from "./insights";
 
 
@@ -1281,37 +1278,11 @@ export class MetaClient {
 
   /** Upload an image to the ad account and return its hash. */
   async uploadAdImage(imageUrl: string): Promise<string> {
-    let parsed: URL;
-    try {
-      parsed = new URL(imageUrl);
-    } catch {
-      throw new MetaError("Creative image URL is invalid.");
-    }
-    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-      throw new MetaError("Creative image URL must use HTTP or HTTPS.");
-    }
-    let imgRes: Response;
-    try {
-      imgRes = await fetchPublicUrl(parsed.toString(), { timeoutMs: 30_000, signal: this.executionSignal });
-    } catch {
-      throw new MetaError("Could not fetch the creative image.");
-    }
-    if (!imgRes.ok) {
-      throw new MetaError(`Could not fetch creative image (${imgRes.status}).`);
-    }
-    return this.uploadAdImageBytes(await readBoundedResponse(imgRes));
+    return this.uploadAdImageBytes(await fetchAdImage(imageUrl, this.executionSignal));
   }
 
-  async uploadAdImageBytes(bytes: Uint8Array): Promise<string> {
-    // #1897: stored ads are WebP; Meta's ad images are sent as JPEG.
-    const b64 = Buffer.from((await jpegIfWebp(bytes)).bytes).toString("base64");
-    const data = await this.graph<{ images: Record<string, { hash: string }> }>(
-      `${this.creds.adAccountId}/adimages`,
-      { method: "POST", form: { bytes: b64 } },
-    );
-    const first = Object.values(data.images ?? {})[0];
-    if (!first?.hash) throw new MetaError("Image upload returned no hash.");
-    return first.hash;
+  uploadAdImageBytes(bytes: Uint8Array): Promise<string> {
+    return uploadAdImageBytes((path, opts) => this.graph(path, opts), this.creds.adAccountId, bytes);
   }
 
   /** #749: start an owner's video upload by URL (Meta pulls it); poll `readAdVideo` until it's ready. */

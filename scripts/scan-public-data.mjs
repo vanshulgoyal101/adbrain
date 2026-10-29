@@ -23,7 +23,7 @@ const fakeNumber = (digits) => /^(9000|1234|0000)/.test(digits) || /^(\d)\1+$/.t
 
 /** GitHub's own ids (comment, review and run numbers) live in its URLs; drop URLs before matching digits. */
 const withoutUrls = (text) => text.replace(/https?:\/\/\S+/g, " ").replace(/\b(issuecomment|pullrequestreview|discussion_r)-\d+/g, " ")
-  .replace(/\b(comment|review|run|job|pr|issue|artifact)s?\s+#?\d{6,}/gi, " ");
+  .replace(/\b(comment|review|run|job|pr|issue|artifact)s?\s+#?\d{6,}(?:(?:\s*,\s*|\s+(?:and|or)\s+)#?\d{6,})*/gi, " ");
 
 export const PATTERNS = [
   ["token", /\bEAA[A-Za-z0-9]{30,}/g],

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Inbox, Loader2, MessageCircle, Phone, RefreshCw, Search, X, Save, Pencil, ChevronDown, SlidersHorizontal, UserCheck, MoreHorizontal } from "lucide-react";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { useConfirm } from "@/components/ui/confirm-dialog";
+import { EnquiryStatusNotice, leadName, useLeadErasure } from "@/components/enquiry-erasure";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Status } from "@/components/ui/status";
@@ -38,10 +38,6 @@ function saveLeadSyncTime(key: string, completedAt: number) {
 const STATUS_LABEL: Record<WorkflowStatus, string> = {
   new: "New", contacted: "Contacted", qualified: "Qualified", booked: "Booked", customer: "Customer", closed: "Closed",
 };
-
-function leadName(lead: Pick<Lead, "full_name">): string | null {
-  return isMetaTestLead(lead) ? "Test enquiry from Meta" : lead.full_name;
-}
 
 type InboxView = "waiting" | "all" | "customers";
 
@@ -159,23 +155,10 @@ export function LeadInbox({
   const page = useLeadList({ leads: initialLeads, total: initialTotal, nextCursor: initialNextCursor }, view === "all"
     ? { query, status, contact: contactFilter, sort }
     : { query: "", status: view === "waiting" ? "new" : "customer", contact: "all", sort: "newest" });
-  // #1761 (DPDP erasure): delete one enquiry for good, after a confirm that says what that means.
-  const [askConfirm, confirmDialog] = useConfirm();
-  async function deleteLead(lead: Lead) {
-    const who = leadName(lead);
-    const confirmed = await askConfirm({
-      title: "Delete this enquiry?",
-      description: `${who ? `${who}'s` : "Their"} details and answers are removed from AdBrain for good. Meta keeps its own copy in your Page's leads.`,
-      confirmLabel: "Delete enquiry",
-      tone: "danger",
-    });
-    if (!confirmed) return;
-    setError(null);
-    const ok = await fetch(`/api/leads/${lead.id}`, { method: "DELETE" }).then((response) => response.ok, () => false);
-    if (!ok) { setError("Couldn't delete that enquiry. Try again."); return; }
+  const [deleteLead, confirmDialog] = useLeadErasure(setError, (lead) => {
     if (selected?.id === lead.id) setSelected(null);
     page.refresh();
-  }
+  });
   // A row the owner just contacted stays in Waiting this visit, showing 'Contacted in …'.
   const leads = view === "waiting" ? page.leads.filter((lead) => isWaiting(lead, openedAt) || contactedAt[`${lead.business_id}:${lead.id}`]) : page.leads;
   const contactedNow = page.leads.filter((lead) => isWaiting(lead, openedAt) && contactedAt[`${lead.business_id}:${lead.id}`]).length;
@@ -460,18 +443,7 @@ export function LeadInbox({
       </div>
       {error && <Alert variant="error">{error}</Alert>}
       {confirmDialog}
-      {customerNotice && (
-        <p role="status" className="flex flex-wrap items-center gap-2 text-sm text-slate-700">
-          {customerNotice.undone
-            ? `${leadName(customerNotice.lead) ?? "This enquiry"} is back to ${STATUS_LABEL[customerNotice.previous].toLowerCase()}.`
-            : customerNotice.status === "closed" ? `${leadName(customerNotice.lead) ?? "This enquiry"} is marked not interested.`
-              : `${leadName(customerNotice.lead) ?? "This enquiry"} became a customer.`}
-          {!customerNotice.undone && (
-            <button type="button" className="min-h-11 font-medium text-blue-700" disabled={!!marking}
-              onClick={() => void setCustomer(customerNotice.lead, customerNotice.previous, customerNotice.previous, true)}>Undo</button>
-          )}
-        </p>
-      )}
+      {customerNotice && <EnquiryStatusNotice notice={customerNotice} marking={!!marking} onUndo={() => void setCustomer(customerNotice.lead, customerNotice.previous, customerNotice.previous, true)} />}
       {/* #847: sync results are news, not alarms; the list below stays usable either way. */}
       <p aria-live="polite" className={warning || notice ? "text-sm text-slate-600" : "sr-only"}>{warning ?? notice}</p>
       {page.error && <Alert variant="error">{page.error} <button type="button" onClick={page.refresh}>Retry list</button></Alert>}
