@@ -1,4 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { createGitHubApi, readyPool, boardRow, systemicFailures, snoozedUntil, latestWord, linkedIssues, lowQueues, matchers, nextItem, freshComments, offTrack, rateBackoffMs, roleCard, unsavedWork, waitingOnMe } from "../scripts/wait-for-work.mjs";
 
 describe("PR reviews count as the latest word (#423)", () => {
@@ -370,7 +375,7 @@ describe("shared GitHub budget (#2021)", () => {
   });
 
   it("falls back to a real delay for malformed Retry-After instead of a tight retry loop", async () => {
-    const sleep = vi.fn(async (_ms: number) => {});
+    const sleep = vi.fn(async (ms: number) => { expect(Number.isFinite(ms)).toBe(true); });
     const request = vi.fn()
       .mockReturnValueOnce(response(429, { "retry-after": "invalid" }))
       .mockReturnValueOnce(response(200, {}, "[]"));
@@ -389,6 +394,24 @@ describe("shared GitHub budget (#2021)", () => {
     expect(await client.get("issues")).toEqual([2]);
     expect(await client.get("issues")).toEqual([3]);
     expect(request.mock.calls[2]).toEqual([["api", "--include", "issues"]]);
+  });
+
+  it("exits an expired foreground probe instead of sleeping past its deadline on a real gh failure", () => {
+    const dir = mkdtempSync(join(tmpdir(), "waiter-rate-test-"));
+    try {
+      writeFileSync(join(dir, "gh"), `#!/usr/bin/env node
+console.log('HTTP/2.0 429 Too Many Requests\\r\\nx-ratelimit-remaining: 0\\r\\nx-ratelimit-reset: ' + (Math.floor(Date.now() / 1000) + 3600) + '\\r\\n\\r\\n{"message":"API rate limit exceeded"}');
+process.exit(1);
+`, { mode: 0o755 });
+      const result = spawnSync(process.execPath, [
+        fileURLToPath(new URL("../scripts/wait-for-work.mjs", import.meta.url)), "--me", "cto", "--probe",
+      ], { env: { ...process.env, PATH: `${dir}:${process.env.PATH}` }, encoding: "utf8", timeout: 5_000 });
+      expect(result.error).toBeUndefined();
+      expect(result.status).toBe(3);
+      expect(result.stderr).toContain("Wait deadline reached during GitHub rate-limit backoff");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it("uses response headers to slow polling without a rate_limit request", async () => {
