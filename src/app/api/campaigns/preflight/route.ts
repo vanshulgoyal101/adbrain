@@ -11,7 +11,7 @@ import {
 } from "@/lib/meta/connection-access";
 import { BUSINESS_ACCESS_ERRORS } from "@/i18n/locale";
 import { createClient } from "@/lib/supabase/server";
-import { ownerWords } from "@/i18n/request-locale";
+import { ownerWords, requestLocale } from "@/i18n/request-locale";
 
 export const runtime = "nodejs";
 
@@ -61,6 +61,7 @@ async function handlePOST(request: Request) {
         draftId: parsed.data.draftId,
         requestedDraftVersion: parsed.data.draftVersion,
         now: new Date().toISOString(),
+        locale: await requestLocale(),
       },
     );
 

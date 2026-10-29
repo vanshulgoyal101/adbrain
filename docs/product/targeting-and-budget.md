@@ -62,7 +62,7 @@ Part of [Features and workflows](README.md). Step of [Prepare a Campaign](launch
   a targeting edit on a live ad set restarts ad review (about 5 minutes on #157).
   Country-wide and non-Indian areas get no automatic exclusions.
 - Typed area names resolve in the business's country (India; #1555): a name whose only Meta
-  match is abroad comes back unresolved ("Meta didn't recognise the area…") unless the owner typed
+  match is abroad comes back unresolved ("Meta didn't recognise …" with the area named) unless the owner typed
   its qualified label ("Austin, Texas"). Everyday Tricity names Meta has no place for search the
   places it has (`src/lib/meta/geo-aliases.ts`, #1556): Tricity and Zirakpur → Chandigarh, Mohali,
   Panchkula; Derabassi → Dera Bassi; New Chandigarh, Aerocity → Mohali; 'Sector N'/'Phase N' with

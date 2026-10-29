@@ -658,6 +658,34 @@
       "discardTitle": "यह सेटअप छोड़ दें?",
       "discardCopy": "इसकी जगह \"{name}\" की कॉपी शुरू करें। सेव किए ड्राफ़्ट बने रहेंगे।",
       "discardAndCopy": "छोड़ें और कॉपी करें"
+    },
+    "review": {
+      "title": "कैंपेन की जाँच",
+      "fixItems": "Meta को भेजने से पहले {count, plural, one {# चीज़} other {# चीज़ें}} ठीक करें",
+      "cantSendYet": "यह कैंपेन अभी Meta को नहीं भेजा जा सकता",
+      "pausedNote": "Meta को यह रुका हुआ मिलेगा। जब तक आप इसे चालू नहीं करते, कोई पैसा खर्च नहीं होगा।",
+      "appearsOnceFixed": "इसे ठीक करते ही Send to Meta (paused) दिखेगा।",
+      "checkAgain": "फिर से जाँचें",
+      "openBrand": "अपने बिज़नेस की जानकारी खोलें",
+      "useWhatsApp": "इसकी जगह WhatsApp चैट चुनें (वेबसाइट की ज़रूरत नहीं)",
+      "fix": {
+        "REVIEW_NO_META_CONNECTION": "Facebook जोड़ें",
+        "REVIEW_CURRENCY": "दूसरा विज्ञापन खाता चुनें",
+        "REVIEW_META_ACCESS": "Facebook फिर से जोड़ें",
+        "REVIEW_CREATIVES": "अपने विज्ञापन चुनें",
+        "REVIEW_WHATSAPP_NOT_LINKED": "अपना WhatsApp नंबर जोड़ें",
+        "REVIEW_NO_LEAD_FORM": "lead form चुनें",
+        "REVIEW_NO_WEBSITE": "अपनी वेबसाइट जोड़ें",
+        "REVIEW_BUDGET": "रोज़ का बजट रखें",
+        "REVIEW_NO_AGE_RANGE": "उम्र की सीमा चुनें",
+        "REVIEW_RADIUS": "शहर का दायरा रखें",
+        "REVIEW_CITY_RADIUS": "जगहें फिर से चुनें",
+        "REVIEW_AREAS_UNRESOLVED": "इलाके ठीक करें",
+        "REVIEW_NO_AUDIENCE": "Recommend audience पर जाएँ",
+        "REVIEW_AD_POLICY": "विज्ञापन के शब्द बदलें",
+        "REVIEW_INTERESTS_UNRESOLVED": "रुचियाँ बदलें",
+        "REVIEW_WHATSAPP_MESSAGE": "WhatsApp मैसेज बदलें"
+      }
     }
   },
   "errors": {
@@ -799,5 +827,33 @@
     "enquiryInvalid": "पूछताछ सही नहीं है।",
     "enquiryWhatsAppOnly": "असली पूछताछ सिर्फ़ WhatsApp कैंपेन पर दर्ज हो सकती है।",
     "enquiryNotSaved": "पूछताछ सेव नहीं हो पाई। फिर कोशिश करें।"
+  },
+  "review": {
+    "noMetaConnection": "Facebook जोड़ें और अपना Page और विज्ञापन खाता चुनें।",
+    "currency": "ऐसा विज्ञापन खाता चुनें जिसका भुगतान भारतीय रुपये (INR) में होता हो।",
+    "metaAccess": "Meta ने अभी पक्का नहीं किया है कि AdBrain इस विज्ञापन खाते में कैंपेन बना सकता है। Facebook फिर से जोड़ें और वह जो भी अनुमति माँगे, सब दें।",
+    "noAds": "Meta को भेजने के लिए कम से कम एक विज्ञापन चुनें।",
+    "adGone": "आपके चुने हुए विज्ञापनों में से एक अब उपलब्ध नहीं है। अपने विज्ञापन फिर से चुनें।",
+    "adNoHeadline": "आपके चुने हुए एक विज्ञापन में हेडलाइन नहीं है। उसे इस कैंपेन से हटाएँ और कोई दूसरा विज्ञापन चुनें।",
+    "adNotApproved": "{named, select, yes {विज्ञापन {name}} other {आपका चुना हुआ विज्ञापन}} अभी मंज़ूर नहीं हुआ है। उसे \"विज्ञापन जाँचें\" पेज पर मंज़ूर करें, या इस कैंपेन से हटाएँ।",
+    "adNoPicture": "{named, select, yes {विज्ञापन {name}} other {आपके चुने हुए विज्ञापन}} में अभी तस्वीर नहीं है। उसे इस कैंपेन से हटाएँ और कोई दूसरा विज्ञापन चुनें।",
+    "adsMore": "{first} {more} और विज्ञापन भी ठीक करने हैं।",
+    "whatsappNotLinked": "आपके Facebook Page से अभी कोई WhatsApp नंबर नहीं जुड़ा है, इसलिए विज्ञापन का बटन चैट नहीं खोल सकता। \"सेटिंग\" में नंबर जोड़ें, फिर दोबारा जाँचें।",
+    "whatsappMessage": "आपका WhatsApp मैसेज: {problem}",
+    "noLeadForm": "Lead form वाले खाने में अपने Facebook Page का कोई चालू lead form चुनें।",
+    "noWebsite": "\"बिज़नेस\" पेज पर अपने बिज़नेस की वेबसाइट जोड़ें। Meta के lead ads विज्ञापन देने वाले की अपनी वेबसाइट पर ही ले जा सकते हैं, Facebook पर नहीं।",
+    "adPolicy": "{named, select, yes {विज्ञापन \"{headline}\"} other {बिना हेडलाइन वाले विज्ञापन}} में \"{term}\" सेहत का ऐसा वादा है जिसे Meta मना कर देता है। विज्ञापन बदलकर सेवा के बारे में बताएँ।",
+    "budgetZero": "रोज़ का बजट ₹0 से ज़्यादा रखें।",
+    "budgetLow": "Meta को रोज़ कम से कम ₹{min} चाहिए। रोज़ का बजट ₹{min} या उससे ज़्यादा रखें।",
+    "noAgeRange": "जाँच से पहले उम्र की सीमा चुनें, या AdBrain से सुझाव लें।",
+    "radius": "शहर का दायरा 17 से 80 km के बीच रखें; Meta इससे बाहर का दायरा नहीं मानता।",
+    "cityRadius": "\"City only\" Meta से दायरे के साथ लौटा। जगहें फिर से चुनें।",
+    "areasNamed": "Meta {count, plural, one {यह इलाका} other {ये इलाके}} नहीं पहचान पाया: {names}। {count, plural, one {इसे} other {इन्हें}} ठीक करें या हटाएँ, या पूरे देश में विज्ञापन चलाना चुनें।",
+    "areasUnnamed": "Meta आपके कुछ इलाके नहीं पहचान पाया। उन्हें ठीक करें या हटाएँ, या पूरे देश में विज्ञापन चलाना चुनें।",
+    "noAudience": "जाँच से पहले AdBrain से ऑडियंस का सुझाव लें (Recommend audience)।",
+    "interestsNamed": "Meta {count, plural, one {यह रुचि} other {ये रुचियाँ}} नहीं पहचान पाया: {names}। {count, plural, one {इसे} other {इन्हें}} बदलें या हटाएँ।",
+    "interestsUnnamed": "Meta ऑडियंस की कुछ रुचियाँ नहीं पहचान पाया। उन्हें बदलें या हटाएँ।",
+    "listAnd": "{first} और {last}",
+    "listMore": "{names} और {more} अन्य"
   }
 }

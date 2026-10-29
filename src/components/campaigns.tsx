@@ -1721,17 +1721,17 @@ function BusinessCampaigns({
                 {prepareReview.review.canCreatePaused
                   ? <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-700" aria-hidden="true" />
                   : <TriangleAlert className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" aria-hidden="true" />}
-                {prepareReview.review.canCreatePaused ? "Campaign review"
-                  : prepareReview.review.blockers.length ? `Fix ${prepareReview.review.blockers.length} ${prepareReview.review.blockers.length === 1 ? "item" : "items"} before sending to Meta`
-                  : "This campaign can't be sent to Meta yet"}
+                {prepareReview.review.canCreatePaused ? tc("review.title")
+                  : prepareReview.review.blockers.length ? tc("review.fixItems", { count: prepareReview.review.blockers.length })
+                  : tc("review.cantSendYet")}
               </h3>
-              {prepareReview.review.canCreatePaused && <p className="mt-1 text-slate-600">Meta gets it paused. Nothing spends until you activate it.</p>}
+              {prepareReview.review.canCreatePaused && <p className="mt-1 text-slate-600">{tc("review.pausedNote")}</p>}
               {prepareReview.review.blockers.length > 0 && (
                 <ul className="mt-3 list-disc space-y-1 pl-5 text-slate-800 marker:text-amber-700">
                   {prepareReview.review.blockers.map((blocker) => {
                     const fixes = [
-                      reviewBlockerFix(blocker.reason) ?? (blocker.action?.kind === "open_brand" ? { kind: "page", label: "Open your business details", href: "/brand" } as const : null),
-                      reviewBlockerAlternative(blocker.reason),
+                      reviewBlockerFix(blocker.reason, campaignWords) ?? (blocker.action?.kind === "open_brand" ? { kind: "page", label: tc("review.openBrand"), href: "/brand" } as const : null),
+                      reviewBlockerAlternative(blocker.reason, campaignWords),
                     ].filter((fix) => fix !== null);
                     return <li key={`${blocker.code}:${blocker.message}`}>
                       {blocker.message}
@@ -1746,9 +1746,9 @@ function BusinessCampaigns({
               )}
               {!prepareReview.review.canCreatePaused && (
                 <p className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-slate-600">
-                  Send to Meta (paused) appears once this is fixed.
+                  {tc("review.appearsOnceFixed")}
                   <Button size="sm" variant="outline" onClick={() => void prepareManualCampaign()} disabled={preparing || creating} aria-disabled={selected.size === 0 || budget <= 0 || undefined}>
-                    <RefreshCw className="h-4 w-4" aria-hidden="true" />Check again
+                    <RefreshCw className="h-4 w-4" aria-hidden="true" />{tc("review.checkAgain")}
                   </Button>
                 </p>
               )}

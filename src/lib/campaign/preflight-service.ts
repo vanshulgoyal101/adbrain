@@ -1,4 +1,5 @@
 import { isDraftExpired, type DraftRecord } from "@/lib/campaign/draft-store";
+import type { AppLocale } from "@/i18n/locale";
 import {
   runPreflight,
   type PreflightConnection,
@@ -49,6 +50,8 @@ export async function prepareCampaignReview(
     draftId: string;
     requestedDraftVersion: number;
     now: string;
+    /** #2333: the blocker sentences' language; English when absent. */
+    locale?: AppLocale;
   },
 ): Promise<PreflightServiceResult> {
   const draft = await loaders.findDraft(input.actor, input.draftId);
@@ -103,6 +106,7 @@ export async function prepareCampaignReview(
       geo,
       hash: loaders.hash,
       costPerResultRupees,
+      locale: input.locale,
     }),
   };
 }
