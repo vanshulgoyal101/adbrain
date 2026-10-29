@@ -96,7 +96,7 @@ export default async function SegmentPage({ params }: { params: Promise<{ segmen
           <section className={styles.block} aria-labelledby="samples-title">
             <h2 id="samples-title">Ads AdBrain could make for you</h2>
             <p className={styles.note}>Examples AdBrain made. Yours use your own name, area and offer.</p>
-            <ul className={styles.tiles}>
+            <ul className={styles.tiles} tabIndex={0} aria-label="Sample ads">
               {segment.tiles.map((tile) => (
                 <li key={tile.src}>
                   <figure>

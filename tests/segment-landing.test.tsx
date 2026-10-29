@@ -16,7 +16,7 @@ describe("/for/[segment] (#1565)", () => {
     const { default: SegmentPage } = await import("@/app/for/[segment]/page");
     const { container } = render(await SegmentPage({ params: Promise.resolve({ segment: segment.slug }) }));
     expect(screen.getByRole("heading", { level: 1, name: segment.headline })).toBeInTheDocument();
-    expect(within(screen.getByRole("figure")).getByText(segment.ask)).toBeInTheDocument();
+    expect(within(screen.getByRole("figure", { name: `What a customer sends: ${segment.ask}` })).getByText(segment.ask)).toBeInTheDocument();
     // #1632: the costs as three scannable rows (key, value, the kit's sentence).
     const costs = screen.getByRole("region", { name: "Your first campaign, set up with you for free" });
     expect([...costs.querySelectorAll("dt")].map((term) => term.textContent)).toEqual(["Setup", "Ads", "AdBrain"]);
@@ -70,7 +70,7 @@ describe("/for/[segment] (#1565)", () => {
       render(await SegmentPage({ params: Promise.resolve({ segment: "ielts" }) }));
       expect(screen.getAllByRole("link", { name: "Message us on WhatsApp" })).toHaveLength(2);
       expect(screen.getByRole("region", { name: "Want us to set up your first campaign?" })).toBeInTheDocument();
-      expect(screen.getByRole("link", { name: "Or start on your own" })).toHaveAttribute("href", "/login");
+      for (const link of screen.getAllByRole("link", { name: "Or start on your own" })) expect(link).toHaveAttribute("href", "/login");
       expect(screen.queryByRole("link", { name: "Start my free campaign" })).toBeNull();
     } finally {
       if (before === undefined) delete process.env.SUPPORT_WHATSAPP; else process.env.SUPPORT_WHATSAPP = before;
