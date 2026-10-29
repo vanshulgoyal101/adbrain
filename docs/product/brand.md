@@ -72,4 +72,4 @@ Real photos are reference hints for image generation, not the ad image itself.
 Instruction files have a title, Markdown body, and active flag. Active instructions
 are included by generation/planning call sites; an instruction is guidance to a
 model, not deterministic enforcement. Never put credentials or sensitive lead
-details in prompts. See [Data Model](../DATA_MODEL.md) and [AI Pipeline](../architecture/ai-pipeline.md).
+details in prompts. See [Data Model](../architecture/data-model.md) and [AI Pipeline](../architecture/ai-pipeline.md).

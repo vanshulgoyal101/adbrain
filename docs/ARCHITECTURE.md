@@ -2,7 +2,7 @@
 
 Use this guide to locate the owner of a request, diagnose interrupted work, or
 change a workflow without bypassing its authorization and persistence checks.
-[API Reference](api/README.md) owns wire contracts, [Data Model](DATA_MODEL.md)
+[API Reference](api/README.md) owns wire contracts, [Data Model](architecture/data-model.md)
 owns tables/migrations, and [Features](product/README.md) owns the customer workflow.
 
 ### Source and Release Scope

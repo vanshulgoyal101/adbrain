@@ -171,7 +171,7 @@ an unresolved/failed execution result; terminal replays can return 200. Inspect
 the operation `state`, not just the HTTP status. With `CAMPAIGN_EXECUTION_MODE=worker`
 the route enqueues the persisted operation and returns 202; a queue failure is 503
 with no inline fallback, and any mode other than `inline`/`worker` is 503. Worker
-mode needs the [worker migration](../DATA_MODEL.md#migration-map) and a running
+mode needs the [worker migration](../architecture/migrations.md#migration-map) and a running
 `worker:campaigns` process.
 
 | State | Client action |
