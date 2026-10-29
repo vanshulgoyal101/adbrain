@@ -263,6 +263,17 @@ function refreshNotice(previous: CampaignResult | undefined, next: CampaignResul
  * What the audience plan depends on (#366): the owner's goal, the ads, the targeting and the destination.
  * The goal is the Campaign goal field only; a campaign name or budget typed later doesn't re-plan (#504).
  */
+// #681: a draft past its 7 days, or removed in another tab, can't be updated; the owner's current choices go into a new one.
+async function saveOverDraft(client: ReturnType<typeof createMetaConnectClient>, previous: DraftDTO | null | undefined, input: DraftInput, signal?: AbortSignal): Promise<DraftDTO> {
+  if (!previous) return client.saveDraft(input, signal);
+  try {
+    return await client.updateDraft(previous.draftId, previous.version, input, signal);
+  } catch (reason) {
+    if (!(reason instanceof MetaConnectClientError && reason.code === "NOT_FOUND")) throw reason;
+    return client.saveDraft(input, signal);
+  }
+}
+
 function audiencePlanKey(input: AudiencePlanInput): string {
   return JSON.stringify([input.goal, [...input.creativeIds].sort(), input.targeting, input.destination]);
 }
@@ -656,8 +667,18 @@ function BusinessCampaigns({
           setRecoveryPending(!found);
           setRetryAllowed(!found);
         }
-        const draft = await client.draft(saved.draft.draftId, controller.signal);
+        const draft = await client.draft(saved.draft.draftId, controller.signal).catch((reason: unknown) => {
+          // #681: a draft that expired or was removed leaves nothing to recover; without this the tab kept failing "Draft not found." on every load and Review.
+          if (saved.request || !(reason instanceof MetaConnectClientError && reason.code === "NOT_FOUND")) throw reason;
+          return null;
+        });
         if (controller.signal.aborted) return;
+        if (!draft) {
+          window.sessionStorage.removeItem(recoveryKey);
+          recoveryRef.current = null;
+          preparedDraftRef.current = null;
+          return;
+        }
         if (!hadInitialSetup || saved.request) restoreDraft(draft);
         preparedDraftRef.current = draft;
         const connection = await client.status(business.id, controller.signal);
@@ -1129,9 +1150,9 @@ function BusinessCampaigns({
       setPreparationStage(signal, "Saving draft...");
       // #1151: the same ads prepared again update their saved draft instead of adding another.
       const previous = preparedDraftRef.current ?? draftForSelection(savedDrafts, input.creativeIds);
-      const draft = previous && !recoveryRef.current?.request
-        ? await client.updateDraft(previous.draftId, previous.version, input, signal)
-        : await client.saveDraft(input, signal);
+      const over = recoveryRef.current?.request ? null : previous;
+      const draft = await saveOverDraft(client, over, input, signal);
+      if (over && over.draftId !== draft.draftId) setSavedDrafts((drafts) => drafts.filter((saved) => saved.draftId !== over.draftId));
       signal.throwIfAborted();
       saveRecovery({ draft, request: null, operationId: null });
       if (reviewAfterSave && input.destination !== "whatsapp") saveLeadFormMemory(leadFormMemoryKey, input.leadFormId);
@@ -1843,9 +1864,9 @@ function BusinessCampaigns({
               const client = createMetaConnectClient();
               const input = manualDraftInput(false);
               const previous = preparedDraftRef.current ?? draftForSelection(savedDrafts, input.creativeIds);
-              const draft = previous && !recoveryRef.current?.request
-                ? await client.updateDraft(previous.draftId, previous.version, input)
-                : await client.saveDraft(input);
+              const over = recoveryRef.current?.request ? null : previous;
+              const draft = await saveOverDraft(client, over, input);
+              if (over && over.draftId !== draft.draftId) setSavedDrafts((drafts) => drafts.filter((saved) => saved.draftId !== over.draftId));
               preparedDraftRef.current = draft;
               saveRecovery({ draft, request: null, operationId: null });
               setOperation(null);
