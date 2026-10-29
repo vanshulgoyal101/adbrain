@@ -30,7 +30,7 @@ The create request (idempotency key) is kept in sessionStorage per business, ads
 and budget, so a second tap or a reload resumes its operation
 (`operationForRequest`) instead of creating another campaign.
 
-Closing New campaign retains its unsaved brief, creatives, audience, destination
+Closing the composer (More options) retains its unsaved brief, creatives, audience, destination
 and budget in memory for the current business; returning to a business in the
 same mounted view restores its own setup. Use **Discard and start new** to clear
 it after confirmation. Unsaved edits are not durable across reload/navigation:

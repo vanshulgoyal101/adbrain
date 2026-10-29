@@ -6,6 +6,7 @@
     "newestEnquiry": "Newest enquiry",
     "openEnquiries": "Open Enquiries",
     "resultsSoFar": "Results so far",
+    "newCampaign": "New campaign",
     "deletedInMeta": "Deleted in Meta. Run it again from Campaigns if you still want it.",
     "enquiries": "Enquiries",
     "spent": "Spent",
@@ -140,6 +141,9 @@
       "primary": "Make my ads",
       "included": "Making ads is included. Nothing goes live until you say so.",
       "more": "More about your business",
+      "againTitle": "What's new this time?",
+      "sameAsLast": "Same as last time: {summary}.",
+      "change": "Change",
       "fields": {
         "name": {
           "label": "Business name",

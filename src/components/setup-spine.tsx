@@ -19,8 +19,10 @@ type Primary = { label: string; disabled?: boolean } & ({ href: string; onClick?
  * bottom bar with one primary (+ Back from step 2). Back-safe: leaving waits for the step's own save
  * (`beforeLeave`) and stays put if it fails; Back goes to the step before, never browser history.
  */
-export function SetupSpine({ step, saved = null, beforeLeave, primary, words, children }: {
+export function SetupSpine({ step, saved = null, beforeLeave, primary, again = false, words, children }: {
   step: SetupStep;
+  /** #1934: a returning owner's new campaign; Back keeps the mode. */
+  again?: boolean;
   /** #1438: the owner's app language; English without it. */
   words?: SetupWords;
   saved?: "saving" | "saved" | "failed" | null;
@@ -40,7 +42,8 @@ export function SetupSpine({ step, saved = null, beforeLeave, primary, words, ch
   const t = setupTranslator(words);
   const label = (n: SetupStep) => t(`step${n}`);
   const current = SETUP_STEPS[step - 1];
-  const previous = step > 1 ? SETUP_STEPS[step - 2] : null;
+  const before = step > 1 ? SETUP_STEPS[step - 2] : null;
+  const previous = before && again ? { ...before, href: `${before.href}?again=1` } : before;
 
   async function leave(href: string) {
     if (leaving) return;

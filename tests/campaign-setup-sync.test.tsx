@@ -752,9 +752,9 @@ describe("campaign sync feedback", () => {
     }));
     const campaign = { id: "campaign-1", name: "Saved campaign", status: "paused" } as Campaign;
     render(<Campaigns business={business} approved={[creative]} initialCampaigns={[campaign]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady adAccountId="act_1" />);
-    await screen.findByRole("button", { name: "New campaign" });
+    await screen.findByRole("button", { name: "More options" });
     expect(forms).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "New campaign" }));
+    fireEvent.click(screen.getByRole("button", { name: "More options" }));
     chooseInstantForm();
     await screen.findByText(/Page forms are temporarily unavailable/);
     fireEvent.click(screen.getByRole("button", { name: "Retry lead forms" }));
