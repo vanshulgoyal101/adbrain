@@ -12,6 +12,7 @@ import { generateImage } from "@/lib/imageGen";
 import type { ImageAttempt } from "@/lib/imageGen/types";
 import { configuredMonthlyTokenLimit, monthlyTokenUsage, persistLLMUsage } from "@/lib/llm/persist";
 import { rateLimitResponse } from "@/lib/security/rate-limit";
+import { planGate } from "@/lib/plan/gate";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { AD_ANGLES, getAngleByName } from "@/lib/templates/ads";
@@ -65,6 +66,11 @@ async function handlePOST(req: Request, { params }: { params: Promise<{ id: stri
     .eq("id", creative.business_id)
     .maybeSingle();
   if (!business) return NextResponse.json({ error: "Business not found" }, { status: 404 });
+
+  if (!ownerPhoto) {
+    const unpaid = await planGate(business.id);
+    if (unpaid) return NextResponse.json({ error: unpaid.error, code: unpaid.code }, { status: unpaid.status });
+  }
 
   if (ownerPhoto) {
     // Only the business's own product photos; never an arbitrary URL.

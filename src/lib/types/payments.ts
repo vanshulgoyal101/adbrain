@@ -1,9 +1,21 @@
 /** #1824: payments tables and functions of the `public` schema (moved from types.ts; part of `Database`). */
 import type { Json } from "./json";
 
-export type PaymentsTables = Record<never, never>;
+export type PaymentsTables = {
+  plan_periods: {
+    Row: { id: string; business_id: string; state: "open" | "paid" | "expired"; amount_paise: number; payment_link_id: string | null;
+      short_url: string | null; payment_id: string | null; starts_at: string | null; ends_at: string | null; paid_at: string | null; created_at: string };
+    Insert: never;
+    Update: never;
+    Relationships: [];
+  };
+};
 
 export type PaymentsFunctions = {
+  plan_period_open: { Args: { p_business_id: string }; Returns: { periodId: string; linkId: string | null; shortUrl: string | null } };
+  plan_period_set_link: { Args: { p_period_id: string; p_link_id: string; p_short_url: string }; Returns: boolean };
+  plan_period_paid: { Args: { p_link_id: string; p_payment_id: string; p_paid_at: string }; Returns: "paid" | "duplicate" | "ignored" };
+  plan_period_expire: { Args: { p_link_id: string }; Returns: boolean };
   razorpay_test_order_claim: {
     Args: { p_business_id: string; p_user_id: string; p_request_key: string; p_order_id: string; p_account_id: string; p_key_id: string };
     Returns: Json;

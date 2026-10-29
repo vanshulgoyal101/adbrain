@@ -20,7 +20,9 @@ const mocks = vi.hoisted(() => ({
   whatsappTemplate: null as unknown,
   description: null as string | null,
   submittedCreative: vi.fn(),
+  planGate: vi.fn(),
 }));
+vi.mock("@/lib/plan/gate", () => ({ planGate: mocks.planGate }));
 
 const businessId = "b123b123-b123-4123-8123-b123b123b123";
 const userId = "a123a123-a123-4123-8123-a123a123a123";
@@ -245,6 +247,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.draftRow = null;
   mocks.existingOperation = null;
+  mocks.planGate.mockReset().mockResolvedValue(null);
   mocks.creativeReads = 0;
   mocks.changeCreativeBeforeExecution = false;
   mocks.refuseExclusions = false;
@@ -465,6 +468,28 @@ describe("durable campaign create route", () => {
 
     expect(response.status).toBe(200);
     expect(mocks.withMetaConnection).not.toHaveBeenCalled();
+  });
+
+  // #718: an unpaid own-account plan stops a *new* campaign before any claim or Meta call, never a started one.
+  it("refuses a new campaign with PLAN_UNPAID before claiming or touching Meta", async () => {
+    const error = "Your ₹999 plan payment is due. Running ads keep running. Pay in Settings to make new ads and campaigns.";
+    mocks.planGate.mockResolvedValue({ status: 402, code: "PLAN_UNPAID", error });
+    const { POST } = await import("@/app/api/campaigns/create/route");
+    const response = await POST(post({ businessId, draftId, draftVersion: 1, planHash: reviewPlanHash(), connectionGeneration, idempotencyKey }));
+    expect(response.status).toBe(402);
+    expect((await response.json()).error).toEqual({ code: "PLAN_UNPAID", message: error, retryable: false });
+    expect(mocks.planGate).toHaveBeenCalledWith(businessId);
+    expect(mocks.rpc).not.toHaveBeenCalled();
+    expect(mocks.withMetaConnection).not.toHaveBeenCalled();
+  });
+
+  it("replays or resumes an already-started create without asking the plan gate", async () => {
+    mocks.planGate.mockResolvedValue({ status: 402, code: "PLAN_UNPAID", error: "due" });
+    mocks.existingOperation = operationSuccessRow();
+    const { POST } = await import("@/app/api/campaigns/create/route");
+    const response = await POST(post({ businessId, draftId, draftVersion: 1, planHash: reviewPlanHash(), connectionGeneration, idempotencyKey }));
+    expect(response.status).toBe(200);
+    expect(mocks.planGate).not.toHaveBeenCalled();
   });
 
   it("rejects a stale draft before operation claim", async () => {

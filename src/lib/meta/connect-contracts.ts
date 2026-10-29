@@ -23,6 +23,8 @@ const errorCodes = [
   "SETUP_REQUIRED",
   "PREFLIGHT_BLOCKED",
   "RECONCILIATION_REQUIRED",
+  // #718: the own-account ₹999 plan is unpaid, so new campaigns wait (running ones don't).
+  "PLAN_UNPAID",
 ] as const;
 
 export const errorCodeSchema = z.enum(errorCodes);

@@ -10,11 +10,11 @@ Brand autofill, the interview, generation, editing and export. Conventions, resp
 | --- | --- | --- | --- |
 | POST | `/api/brand/autofill` | `{url}` or (#1317) `{text}`: an Instagram bio, Google listing or catalogue text pasted by hand (30+ letters, ≤ 6000 chars; nothing fetched, phone read from the text). URL -> plain extraction; `name` (#1379) comes from the page's `og:site_name`/title or the text's first words, never the model | Website fetch + model call, no brand save |
 | POST | `/api/creatives/assistant` | Interview -> question/brief | Model call |
-| POST | `/api/creatives/generate` | Generation input -> saved variants/failures | Paid work + Storage/DB |
+| POST | `/api/creatives/generate` | Generation input -> saved variants/failures | Paid work + Storage/DB. 402 `{code:"PLAN_UNPAID"}` before any AI call when an own-account ₹999 plan is unpaid (#718; fails open) |
 | GET | `/api/creatives/generate` | Business/group/count -> saved status | DB lookup/unknown-ID fence, no generation |
-| POST | `/api/creatives/[id]/regenerate` | No body -> `{creative}` | Paid work, overwrite, reset approval |
+| POST | `/api/creatives/[id]/regenerate` | No body -> `{creative}` | Paid work, overwrite, reset approval; 402 `PLAN_UNPAID` before paid work when the own-account plan is unpaid (#718) |
 | POST | `/api/creatives/[id]/picture` | `{headline,subhead,phone,ctaLabel,showCta?}` -> `{creative,liveNotice?}` | Re-renders the overlay, no AI; new `image_url`, status kept. `showCta` paints the button on the picture (off for new ads, #760); omitted keeps it as is |
-| POST | `/api/creatives/[id]/background` | `{instruction}` (3-300) or `{photoUrl,fit?}` -> `{creative,liveNotice?}` | Paid image (like Regenerate) or the owner's Brand photo (free), same claim; keeps copy, overlay words and status |
+| POST | `/api/creatives/[id]/background` | `{instruction}` (3-300) or `{photoUrl,fit?}` -> `{creative,liveNotice?}` | Paid image (like Regenerate) or the owner's Brand photo (free), same claim; keeps copy, overlay words and status. An unpaid own-account plan returns 402 `PLAN_UNPAID` for a paid image; a saved Brand photo remains available (#718) |
 | GET | `/api/creatives/[id]/photo-fit` | `?photo=<Brand photo URL>&fit=attention\|blur&shape=ad\|square` -> PNG | Preview of how a Brand photo fits the ad's frame or 1:1 (#1904); no AI, nothing saved |
 | POST | `/api/creatives/export` | IDs -> ZIP; each picture is a JPEG, transparency on white (#1897); a sales prospect's account (internal `+prospect` address, #1317) gets `00-sample-note.png` first (#1471), every picture with a 'Sample ad: not live yet' pill in its bottom-left corner, and the note's sentence atop copy.txt, which ends with the WhatsApp follow-up and `/for/<segment>` link when the Brand category is solar, IELTS/study-abroad or interiors (#1582); a picture that can't be marked is left out (`X-Images-Skipped`) | Downloads selected media |
 
