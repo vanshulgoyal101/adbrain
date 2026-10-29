@@ -865,14 +865,14 @@ describe("<LeadInbox> reply in one tap (#1049)", () => {
 // #1819 (Designer, 390): a Meta test lead isn't a waiting enquiry, so its row says so instead of 'New' (the counts
 // already leave it out); and a row with no contact actions keeps its ⋯ on the name row, not alone on a second line.
 describe("<LeadInbox> rows without actions (#1819)", () => {
-  it("labels a Meta test lead 'Test lead', not New, and marks rows with no row actions", () => {
+  it("labels a Meta test lead 'Test from Meta', not New, and marks rows with no row actions", () => {
     const testLead = lead({ id: "t1", full_name: "<test lead: dummy data for full_name>", phone: "<test lead: dummy data for phone_number>", email: null, city: null });
     const noPhone = lead({ id: "n1", full_name: "Ravi", phone: null, email: "ravi@example.com" });
     const callable = lead({ id: "c1", full_name: "Asha Verma" });
     render(<LeadInbox businessName="Solaride" initialLeads={[testLead, noPhone, callable]} metaReady allTotal={3} />);
     const row = (id: string) => document.querySelector(`tr[data-lead="${id}"]`) as HTMLElement;
     // The state badge (the follow-up editor keeps its own status words).
-    expect(row("t1").querySelector("span[data-state]")).toHaveTextContent(/^Test lead$/);
+    expect(row("t1").querySelector("span[data-state]")).toHaveTextContent(/^Test from Meta$/);
     expect(row("n1").querySelector("span[data-state]")).toHaveTextContent(/^New$/);
     expect(row("t1")).toHaveAttribute("data-actions", "none");
     expect(row("n1")).toHaveAttribute("data-actions", "none");

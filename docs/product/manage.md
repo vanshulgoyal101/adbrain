@@ -42,6 +42,10 @@ run. Only a complete run reports "up to date". Opening Enquiries starts a sync w
 this browser has no recent complete sync. Zero imports can mean duplicates or no
 leads, not a broken campaign. WhatsApp conversations are not imported.
 
+When Meta counts no chats, owner-added real enquiries are still shown as
+"You added N real enquiries", not as chats. Meta's test rows are labelled
+"Test from Meta", distinct from a new customer enquiry.
+
 The inbox searches, filters (follow-up status, contact details), sorts and pages
 saved enquiries on the server, with matching totals. Owners can record a
 follow-up status (`new`, `contacted`, `qualified`, `booked`, `customer`, `closed`) and a
