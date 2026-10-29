@@ -8,6 +8,7 @@ import { SetupResumeCard } from "@/components/setup-resume-card";
 import { madeForSetup } from "@/lib/creative/setup-picks";
 import { setupResumeStep } from "@/lib/setup/resume";
 import { getMetaConnection } from "@/lib/meta/credentials";
+import { metaWaitFor } from "@/lib/meta/throttle-owner";
 import { HomeRejectedAds } from "@/components/home-rejected-ads";
 import { PilotDay7Card } from "@/components/pilot-day7-card";
 import { pilotDay7Visible } from "@/lib/feedback/pilot-day7";
@@ -58,7 +59,7 @@ export default async function DashboardPage() {
   // #764: the Home results row; an unreadable result leaves the row out, never the page.
   const launched = campaigns.filter((campaign) => campaign.meta_campaign_id).map((campaign) => campaign.id);
   const newest = newestLiveCampaign(campaigns);
-  const [results, replyMinutes, waiting, firstEnquiry, newestAdStatuses] = await Promise.all([
+  const [results, replyMinutes, waiting, firstEnquiry, newestAdStatuses, metaWaitUntil] = await Promise.all([
     launched.length ? getLatestResults(launched).catch(() => ({})) : {},
     // #1049: an unreadable reply time leaves the line out, never the page.
     business ? recentReplyMinutes(business.id).catch(() => null) : null,
@@ -68,6 +69,8 @@ export default async function DashboardPage() {
     business ? newestWaitingEnquiry(business.id).catch(() => null) : null,
     // #1469: the stored per-ad statuses (no Meta call); unreadable means no review line.
     newest && adResultsEnabled() ? getAdStatuses(newest.id).catch(() => null) : [],
+    // #1838: while Meta asks us to wait, the results line says the numbers may be old.
+    business && launched.length ? metaWaitFor(business.id) : null,
   ]);
   const adReview = newest && newestAdStatuses ? homeAdReview([newest], { [newest.id]: newestAdStatuses }, results) : null;
   // #1650: after the first week, one question for the pricing call (#718); unreadable means not shown.
@@ -80,6 +83,7 @@ export default async function DashboardPage() {
       creatives={creatives}
       campaigns={campaigns}
       results={results}
+      metaWaitUntil={metaWaitUntil}
       replyMinutes={replyMinutes}
       waiting={waiting}
       firstEnquiry={firstEnquiry}

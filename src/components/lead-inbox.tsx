@@ -1,5 +1,6 @@
 "use client";
 
+import { checkLaterLine, enquiriesWaitLine, throttleActive } from "@/lib/meta/throttle-words";
 import { useEffect, useEffectEvent, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { Inbox, Loader2, MessageCircle, Phone, RefreshCw, Search, X, Save, Pencil, ChevronDown, SlidersHorizontal, UserCheck, MoreHorizontal } from "lucide-react";
@@ -85,6 +86,7 @@ export function LeadInbox({
   offerAlerts = false,
   chatsEmpty = false,
   addEnquiryFor = null,
+  metaWaitUntil = null,
 }: {
   businessName: string;
   /** #1049: the business's first offer and language, for the pre-filled first WhatsApp reply. */
@@ -107,6 +109,8 @@ export function LeadInbox({
   chatsEmpty?: boolean;
   /** #1597: a WhatsApp campaign the empty block's 'Add an enquiry' logs to. */
   addEnquiryFor?: { campaignId: string; spend: number; enquiries: number } | null;
+  /** #1838: until when Meta asked us to wait; checks (on open and Check now) don't call Meta until then. */
+  metaWaitUntil?: string | null;
 }) {
   const [adding, setAdding] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -269,8 +273,13 @@ export function LeadInbox({
     }
   }
 
-  async function sync() {
+  async function sync(tapped = false) {
     if (syncing) return;
+    // #1838 (CPO #1870): Meta asked us to wait, so nothing is sent; a tap says when we'll check again.
+    if (throttleActive(metaWaitUntil)) {
+      if (tapped) setNotice(checkLaterLine(metaWaitUntil!));
+      return;
+    }
     setSyncing(true);
     setError(null);
     setNotice(null);
@@ -403,11 +412,16 @@ export function LeadInbox({
       {metaReady && <p className="-mt-2 flex flex-wrap items-center gap-x-2 text-xs text-slate-500">
         {/* #1260: checking runs on open; the time sits quietly here, with a small Check now for impatient owners and retries. */}
         <span aria-live="polite">{syncing ? "Checking Meta for new enquiries…" : lastSync ? `Updated ${relativeAge(new Date(lastSync).toISOString(), now)}` : null}</span>
-        <button type="button" className="inline-flex min-h-11 items-center gap-1 font-medium text-blue-700 disabled:text-slate-400" onClick={sync} disabled={syncing}>
+        <button type="button" className="inline-flex min-h-11 items-center gap-1 font-medium text-blue-700 disabled:text-slate-400" onClick={() => void sync(true)} disabled={syncing}>
           {syncing ? <Loader2 size={12} className="animate-spin" aria-hidden="true" /> : <RefreshCw size={12} aria-hidden="true" />}
           {syncId ? "Keep checking" : "Check now"}
         </button>
       </p>}
+      {metaReady && mounted && throttleActive(metaWaitUntil, now) && (
+        <p className="-mt-2 text-xs text-slate-600">
+          {enquiriesWaitLine(lastSync ? now.getTime() - lastSync : Date.parse(metaWaitUntil!) - now.getTime())}
+        </p>
+      )}
 
       {waiting !== null && <p className={styles.summary}>
         {waiting === 0 ? "Nobody is waiting." : `${waiting} ${waiting === 1 ? "person is" : "people are"} waiting for you.`}

@@ -16,6 +16,7 @@
     "seeEnquiries": "See enquiries",
     "seeCampaigns": "See campaigns",
     "updated": "Updated {ago}",
+    "metaWaiting": "Meta is limiting how often we can check right now, so these numbers may be up to {age} old. Your ads keep running, and pausing still works.",
     "nextStep": "Next step",
     "upToDate": "You're up to date",
     "nothingWaiting": "Nothing is waiting for you.",

@@ -128,6 +128,7 @@ import { committedWords, freeRoomPaise, type AccountFunding } from "@/lib/campai
 import { readCampaignRecovery, recoveryStorageKey, writeCampaignRecovery, type CampaignRecovery } from "@/lib/meta-connect-ui/recovery";
 import { HelpOnWhatsApp } from "@/components/support-link";
 import { cn, timeAgo } from "@/lib/utils";
+import { resultsWaitLine, throttleActive } from "@/lib/meta/throttle-words";
 import { useMounted } from "@/lib/use-mounted";
 import { refreshIfStale, staleCampaignIds } from "@/lib/campaign/results-freshness";
 import { GONE_LINES, goneInMeta } from "@/lib/campaign/gone-in-meta";
@@ -222,6 +223,8 @@ type CampaignsProps = {
   whatsappLedger?: { chats: number; spendRupees: number } | null;
   /** #1342: the Settings weekly cap and the live campaigns' budgets (read on the server); null when they couldn't be read. */
   weeklyCap?: { capRupees: number | null; active: CampaignSpend[] } | null;
+  /** #1838: until when Meta asked us to wait before checking again; launched cards say their numbers may be old. */
+  metaWaitUntil?: string | null;
 };
 
 
@@ -301,6 +304,7 @@ function BusinessCampaigns({
   adResults = false,
   whatsappLedger = null,
   weeklyCap = null,
+  metaWaitUntil = null,
   scope,
   initialSetup,
   onSetupChange,
@@ -2564,6 +2568,9 @@ function BusinessCampaigns({
                     {r && mounted && (
                       // #1003: always say how old the numbers are.
                       <p className="text-xs text-slate-500">{updatingIds.includes(c.id) ? "Updating results…" : `Updated ${timeAgo(new Date(r.fetched_at))}`}</p>
+                    )}
+                    {r && mounted && c.meta_campaign_id && throttleActive(metaWaitUntil) && (
+                      <p className="text-xs text-slate-600">{resultsWaitLine(Date.now() - new Date(r.fetched_at).getTime())}</p>
                     )}
                     {adResults && r && c.meta_campaign_id && <AdResults campaignId={c.id} whatsapp={outcome === "whatsapp"} offerPause={!weakAdCards.includes(c.id)} onRunAgain={() => void runAgain(c)} runAgainBusy={rerunBusy === c.id} runAgainError={rerunError?.id === c.id ? rerunError.message : null} />}
                     {r && (r.customers ?? 0) > 0 && (

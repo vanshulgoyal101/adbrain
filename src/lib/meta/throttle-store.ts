@@ -37,3 +37,10 @@ export async function recordThrottle(admin: Admin, businessId: string, error: Me
     await admin.rpc("meta_throttle_record", { p_business_id: businessId, p_scope: error.scope, p_until: new Date(now + error.retryAfterMs).toISOString() });
   } catch {}
 }
+
+/** #1838 slice 2b: until when the owner's numbers can't be refreshed (their account/Page or the whole app), or null. */
+export async function ownerThrottledUntil(admin: Admin, businessId: string, now = new Date()): Promise<string | null> {
+  const [app, business] = await Promise.all([appThrottledUntil(admin), throttledBusinesses(admin, [businessId], now)]);
+  const until = [app, business.get(businessId) ?? null].filter((value): value is string => Boolean(value) && Date.parse(value!) > now.getTime());
+  return until.sort((a, b) => Date.parse(b) - Date.parse(a))[0] ?? null;
+}

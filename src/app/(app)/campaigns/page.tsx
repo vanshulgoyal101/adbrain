@@ -1,3 +1,4 @@
+import { metaWaitFor } from "@/lib/meta/throttle-owner";
 import { reconnectByLabel } from "@/lib/meta/token-expiry";
 import { requestLocale } from "@/i18n/request-locale";
 import { Alert } from "@/components/ui/alert";
@@ -155,6 +156,7 @@ export default async function CampaignsPage({
           whatsappLedger={ledger?.whatsapp ? { chats: ledger.whatsapp.results, spendRupees: ledger.whatsapp.spendRupees } : null}
           adAccountId={connection.adAccountId ?? ""}
           weeklyCap={weeklyCap}
+          metaWaitUntil={campaigns.some((campaign) => campaign.meta_campaign_id) ? await metaWaitFor(business.id) : null}
           newCampaign={params.new === "1" ? { creativeIds: requested, review: params.review === "1", budget: chosenBudget } : undefined}
         />}
       </div>
