@@ -1731,15 +1731,18 @@ async function verifyPlanPeriods(db, database) {
  * #1700 (QA red tests for #1670: CTO design 18:55Z + Reviewer's 7 points, 19:06Z). A rep hands a `+prospect` business to
  * its owner: the owner's own new account claims it with a single-use link; nothing of the staff login carries over.
  * Skips until a `db/migrations/*business_transfer*.sql` exists (META_TEST_TRANSFER_SQL points at another file to try).
- * Contract these cases pin (rename freely, keep the behaviour):
- *   private.business_transfers(id, business_id, from_user_id, target_email, token_hash, state, expires_at, ...)
- *   public.business_transfer_start(p_business_id uuid, p_from_user_id uuid, p_target_email text, p_token_hash text)
+ * Contract these cases pin (rename freely, keep the behaviour). CTO 19:56Z: no link; the owner signs in normally and
+ * Home asks, so the claim names the transfer (no token):
+ *   private.business_transfers(id, business_id, from_user_id, target_email, state, expires_at, ...)
+ *   public.business_transfer_start(p_business_id uuid, p_from_user_id uuid, p_target_email text)
  *     returns uuid, service_role only, 30-min expiry; refuses unless p_from_user_id owns the business with a
  *     `+prospect@<team domain>` address and the pre-checks pass (no live Meta connection, no campaigns, no payments).
- *   public.business_transfer_claim(p_token_hash text) returns uuid (the business), for `authenticated`: the session's
- *     confirmed email (case-insensitive) must be the target; pre-checks re-run under lock; single use; refuses a target
- *     that already owns a business; moves owner_id on businesses, campaign_drafts, preference_settings and
- *     declared_preferences; writes one audit_log row naming both users.
+ *   public.business_transfer_claim(p_transfer_id uuid) returns uuid (the business), for `authenticated`: the user's
+ *     confirmed email in auth.users (case-insensitive) must be the target; pre-checks re-run under lock; single use;
+ *     refuses a target that already owns a business; moves owner_id on businesses, campaign_drafts,
+ *     preference_settings and declared_preferences; writes one audit_log row naming both users.
+ *   public.business_transfer_mine() / business_transfer_decline(p_transfer_id) for the owner;
+ *   public.business_transfer_status(p_business_id) for the rep (service role).
  */
 async function verifyBusinessTransfer(db, database) {
   const files = (await readdir(join(root, "db/migrations"))).filter((file) => /business_transfer/.test(file)).sort();
@@ -1756,7 +1759,6 @@ async function verifyBusinessTransfer(db, database) {
   for (const file of files) { const sql = await readFile(join(root, "db/migrations", file), "utf8"); await db.query(sql); await db.query(sql); }
   if (override) await db.query(await readFile(override, "utf8"));
 
-  const hash = (token) => createHash("sha256").update(token).digest("hex");
   const session = async (role, claims, run) => {
     const s = client(database);
     await s.connect();
@@ -1769,10 +1771,14 @@ async function verifyBusinessTransfer(db, database) {
       const result = await run(s); await s.query("commit"); return result;
     } catch (error) { await s.query("rollback").catch(() => {}); throw error; } finally { await s.end(); }
   };
-  const start = (business, from, email, token) => session("service_role", null,
-    async (s) => (await s.query("select public.business_transfer_start($1,$2,$3,$4) as id", [business, from, email, hash(token)])).rows[0].id);
-  const claim = (user, email, token) => session("authenticated", { sub: user, email, role: "authenticated" },
-    async (s) => (await s.query("select public.business_transfer_claim($1) as business_id", [hash(token)])).rows[0].business_id);
+  const start = (business, from, email) => session("service_role", null,
+    async (s) => (await s.query("select public.business_transfer_start($1,$2,$3) as id", [business, from, email])).rows[0].id);
+  const claim = (user, email, transfer) => session("authenticated", { sub: user, email, role: "authenticated" },
+    async (s) => (await s.query("select public.business_transfer_claim($1) as business_id", [transfer])).rows[0].business_id);
+  const mine = (user, email) => session("authenticated", { sub: user, email, role: "authenticated" },
+    async (s) => (await s.query("select * from public.business_transfer_mine()")).rows);
+  const status = (business) => session("service_role", null,
+    async (s) => (await s.query("select * from public.business_transfer_status($1)", [business])).rows[0]);
   const ownerOf = async (business) => (await db.query("select owner_id from public.businesses where id=$1", [business])).rows[0].owner_id;
   const seed = async ({ staffEmail, ownerConfirmed = true } = {}) => {
     const staff = randomUUID(), owner = randomUUID(), business = randomUUID();
@@ -1788,9 +1794,10 @@ async function verifyBusinessTransfer(db, database) {
     await db.query("insert into public.preference_settings(business_id,owner_id,enabled) values ($1,$2,true)", [business, staff]);
     await db.query("insert into public.declared_preferences(business_id,owner_id,category,value) values ($1,$2,'tone','warm')", [business, staff]);
     await db.query("insert into public.campaign_drafts(business_id,owner_id,input,expires_at) values ($1,$2,'{}',now()+interval '1 day')", [business, staff]);
-    await start(business, staff, ownerEmail, "token-happy");
-    // Case-insensitive: the owner's mail app may capitalise.
-    assert.equal(await claim(owner, ownerEmail.toUpperCase(), "token-happy"), business);
+    const transfer = await start(business, staff, ownerEmail.toUpperCase());
+    // Home's question: the owner's own pending hand-over, with the business's name.
+    assert.deepEqual((await mine(owner, ownerEmail)).map((row) => [row.transfer_id, row.business_name]), [[transfer, "Prospect bakery"]]);
+    assert.equal(await claim(owner, ownerEmail, transfer), business);
     assert.equal(await ownerOf(business), owner);
     for (const table of ["campaign_drafts", "preference_settings", "declared_preferences"]) {
       const rows = (await db.query(`select owner_id from public.${table} where business_id=$1`, [business])).rows;
@@ -1798,82 +1805,129 @@ async function verifyBusinessTransfer(db, database) {
     }
     const audit = (await db.query("select details::text as details, actor_id from public.audit_log where business_id=$1", [business])).rows;
     assert.ok(audit.some((row) => `${row.details} ${row.actor_id}`.includes(staff) && `${row.details} ${row.actor_id}`.includes(owner)), "one audit row names both users");
-    await assert.rejects(claim(owner, ownerEmail, "token-happy"), "a used link is refused");
+    await assert.rejects(claim(owner, ownerEmail, transfer), "a used hand-over is refused");
+    assert.equal((await status(business)).state, "claimed");
+    assert.deepEqual(await mine(owner, ownerEmail), []);
   });
 
   await check(`${database}: business transfer: expired, wrong email, unconfirmed email and an unknown link are refused (#1670)`, async () => {
     const expired = await seed();
-    await start(expired.business, expired.staff, expired.ownerEmail, "token-expired");
-    await db.query("update private.business_transfers set expires_at = now() - interval '1 minute' where token_hash=$1", [hash("token-expired")]);
-    await assert.rejects(claim(expired.owner, expired.ownerEmail, "token-expired"));
+    const expiredId = await start(expired.business, expired.staff, expired.ownerEmail);
+    await db.query("update private.business_transfers set expires_at = now() - interval '1 minute' where id=$1", [expiredId]);
+    await assert.rejects(claim(expired.owner, expired.ownerEmail, expiredId));
+    assert.deepEqual(await mine(expired.owner, expired.ownerEmail), []);
+    assert.equal((await status(expired.business)).state, "expired");
     assert.equal(await ownerOf(expired.business), expired.staff);
 
     const wrong = await seed();
-    await start(wrong.business, wrong.staff, wrong.ownerEmail, "token-wrong");
+    const wrongId = await start(wrong.business, wrong.staff, wrong.ownerEmail);
     const stranger = randomUUID();
     await db.query("insert into auth.users(id,email,email_confirmed_at) values ($1,'stranger@example.com',now())", [stranger]);
-    await assert.rejects(claim(stranger, "stranger@example.com", "token-wrong"));
+    await assert.rejects(claim(stranger, "stranger@example.com", wrongId));
     // The JWT's email claim alone isn't proof: it must be this user's confirmed address.
-    await assert.rejects(claim(stranger, wrong.ownerEmail, "token-wrong"));
+    await assert.rejects(claim(stranger, wrong.ownerEmail, wrongId));
+    assert.deepEqual(await mine(stranger, wrong.ownerEmail), []);
     assert.equal(await ownerOf(wrong.business), wrong.staff);
 
     const unconfirmed = await seed({ ownerConfirmed: false });
-    await start(unconfirmed.business, unconfirmed.staff, unconfirmed.ownerEmail, "token-unconfirmed");
-    await assert.rejects(claim(unconfirmed.owner, unconfirmed.ownerEmail, "token-unconfirmed"));
+    const unconfirmedId = await start(unconfirmed.business, unconfirmed.staff, unconfirmed.ownerEmail);
+    assert.deepEqual(await mine(unconfirmed.owner, unconfirmed.ownerEmail), []);
+    await assert.rejects(claim(unconfirmed.owner, unconfirmed.ownerEmail, unconfirmedId));
     assert.equal(await ownerOf(unconfirmed.business), unconfirmed.staff);
 
-    await assert.rejects(claim(wrong.owner, wrong.ownerEmail, "token-never-issued"));
+    await assert.rejects(claim(wrong.owner, wrong.ownerEmail, randomUUID()));
   });
 
   await check(`${database}: business transfer: pre-checks block at start and again at claim (Meta connected, a campaign) (#1670)`, async () => {
     const atStart = await seed();
     await db.query("insert into public.meta_connections(business_id,authorization_status) values ($1,'connected')", [atStart.business]);
-    await assert.rejects(start(atStart.business, atStart.staff, atStart.ownerEmail, "token-meta-start"));
+    await assert.rejects(start(atStart.business, atStart.staff, atStart.ownerEmail));
 
     // Staff connect Meta after the link went out: the claim re-checks under lock.
     const atClaim = await seed();
-    await start(atClaim.business, atClaim.staff, atClaim.ownerEmail, "token-meta-claim");
+    const atClaimId = await start(atClaim.business, atClaim.staff, atClaim.ownerEmail);
     await db.query("insert into public.meta_connections(business_id,authorization_status) values ($1,'connected')", [atClaim.business]);
-    await assert.rejects(claim(atClaim.owner, atClaim.ownerEmail, "token-meta-claim"));
+    await assert.rejects(claim(atClaim.owner, atClaim.ownerEmail, atClaimId));
     assert.equal(await ownerOf(atClaim.business), atClaim.staff);
 
     const campaign = await seed();
-    await start(campaign.business, campaign.staff, campaign.ownerEmail, "token-campaign");
+    const campaignId = await start(campaign.business, campaign.staff, campaign.ownerEmail);
     await db.query("insert into public.campaigns(id,business_id,daily_budget) values ($1,$2,300)", [randomUUID(), campaign.business]);
-    await assert.rejects(claim(campaign.owner, campaign.ownerEmail, "token-campaign"));
+    await assert.rejects(claim(campaign.owner, campaign.ownerEmail, campaignId));
     assert.equal(await ownerOf(campaign.business), campaign.staff);
   });
 
   await check(`${database}: business transfer: only a +prospect owner can start; a target who already owns a business is refused (#1670)`, async () => {
     for (const staffEmail of ["qa@adbrain.vanshul.com", "owner@example.com"]) {
       const notProspect = await seed({ staffEmail: staffEmail.replace("@", `-${randomUUID().slice(0, 6)}@`) });
-      await assert.rejects(start(notProspect.business, notProspect.staff, notProspect.ownerEmail, `token-np-${staffEmail}`), staffEmail);
+      await assert.rejects(start(notProspect.business, notProspect.staff, notProspect.ownerEmail), staffEmail);
     }
     const notOwner = await seed();
-    await assert.rejects(start(notOwner.business, notOwner.owner, notOwner.ownerEmail, "token-not-owner"), "the starter must own the business");
+    await assert.rejects(start(notOwner.business, notOwner.owner, notOwner.ownerEmail), "the starter must own the business");
+    const teamTarget = await seed();
+    await assert.rejects(start(teamTarget.business, teamTarget.staff, "qa@adbrain.vanshul.com"), "a team address would keep it internal");
 
     const taken = await seed();
     await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Their own shop')", [randomUUID(), taken.owner]);
-    await start(taken.business, taken.staff, taken.ownerEmail, "token-taken");
-    await assert.rejects(claim(taken.owner, taken.ownerEmail, "token-taken"));
+    const takenId = await start(taken.business, taken.staff, taken.ownerEmail);
+    await assert.rejects(claim(taken.owner, taken.ownerEmail, takenId));
     assert.equal(await ownerOf(taken.business), taken.staff);
   });
 
   await check(`${database}: business transfer: two simultaneous claims, exactly one wins (#1670)`, async () => {
     const race = await seed();
-    await start(race.business, race.staff, race.ownerEmail, "token-race");
-    const results = await Promise.allSettled([claim(race.owner, race.ownerEmail, "token-race"), claim(race.owner, race.ownerEmail, "token-race")]);
+    const raceId = await start(race.business, race.staff, race.ownerEmail);
+    const results = await Promise.allSettled([claim(race.owner, race.ownerEmail, raceId), claim(race.owner, race.ownerEmail, raceId)]);
     assert.equal(results.filter((result) => result.status === "fulfilled").length, 1);
     assert.equal(await ownerOf(race.business), race.owner);
+  });
+
+  // Reviewer (#1783): two DIFFERENT hand-overs to one recipient each lock only their own rows; without the recipient
+  // lock both see "owns nothing" and both commit. A slow owner_id trigger, scoped to this recipient, widens the race.
+  await check(`${database}: business transfer: two hand-overs to the same recipient claimed at once, exactly one wins (#1783)`, async () => {
+    const first = await seed();
+    const second = await seed();
+    const firstId = await start(first.business, first.staff, first.ownerEmail);
+    const secondId = await start(second.business, second.staff, first.ownerEmail);
+    await db.query(`create or replace function public.test_slow_transfer() returns trigger language plpgsql as
+      $$ begin perform pg_sleep(0.5); return new; end $$`);
+    await db.query(`create trigger test_slow_transfer before update of owner_id on public.businesses for each row
+      when (new.owner_id = '${first.owner}'::uuid) execute function public.test_slow_transfer()`);
+    try {
+      const results = await Promise.allSettled([claim(first.owner, first.ownerEmail, firstId), claim(first.owner, first.ownerEmail, secondId)]);
+      assert.deepEqual(results.map((result) => result.status).sort(), ["fulfilled", "rejected"]);
+      assert.match(String(results.find((result) => result.status === "rejected").reason?.message), /already has an AdBrain business/);
+      assert.equal((await db.query("select count(*)::int as n from public.businesses where owner_id=$1", [first.owner])).rows[0].n, 1);
+    } finally {
+      await db.query("drop trigger if exists test_slow_transfer on public.businesses");
+      await db.query("drop function if exists public.test_slow_transfer()");
+    }
   });
 
   await check(`${database}: business transfer: browsers can't start one or read the transfers; anon can't claim (#1670)`, async () => {
     const roles = await seed();
     await assert.rejects(session("authenticated", { sub: roles.staff, email: "x", role: "authenticated" },
-      (s) => s.query("select public.business_transfer_start($1,$2,$3,$4)", [roles.business, roles.staff, roles.ownerEmail, hash("token-browser")])), { code: "42501" });
+      (s) => s.query("select public.business_transfer_start($1,$2,$3)", [roles.business, roles.staff, roles.ownerEmail])), { code: "42501" });
+    await assert.rejects(session("authenticated", { sub: roles.staff, email: "x", role: "authenticated" },
+      (s) => s.query("select * from public.business_transfer_status($1)", [roles.business])), { code: "42501" });
     await assert.rejects(session("authenticated", { sub: roles.staff, email: "x", role: "authenticated" },
       (s) => s.query("select 1 from private.business_transfers")), { code: "42501" });
-    await assert.rejects(session("anon", null, (s) => s.query("select public.business_transfer_claim($1)", [hash("token-anon")])), { code: "42501" });
+    await assert.rejects(session("anon", null, (s) => s.query("select public.business_transfer_claim($1)", [randomUUID()])), { code: "42501" });
+  });
+
+  await check(`${database}: business transfer: 'This isn't my business' declines it; only the target can, and the rep sees it (#1670)`, async () => {
+    const asked = await seed();
+    const askedId = await start(asked.business, asked.staff, asked.ownerEmail);
+    const stranger = randomUUID();
+    await db.query("insert into auth.users(id,email,email_confirmed_at) values ($1,$2,now())", [stranger, `stranger-${stranger.slice(0, 8)}@example.com`]);
+    const decline = (user, transfer) => session("authenticated", { sub: user, email: "x", role: "authenticated" },
+      async (s) => (await s.query("select public.business_transfer_decline($1) as ok", [transfer])).rows[0].ok);
+    assert.equal(await decline(stranger, askedId), false);
+    assert.equal((await status(asked.business)).state, "pending");
+    assert.equal(await decline(asked.owner, askedId), true);
+    assert.equal((await status(asked.business)).state, "declined");
+    await assert.rejects(claim(asked.owner, asked.ownerEmail, askedId));
+    assert.equal(await ownerOf(asked.business), asked.staff);
   });
 }
 

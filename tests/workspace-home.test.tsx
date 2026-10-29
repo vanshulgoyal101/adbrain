@@ -27,6 +27,9 @@ const queries = vi.hoisted(() => ({
   businessLLMUsageSummary: vi.fn(),
 }));
 vi.mock("@/lib/supabase/queries", () => queries);
+// #1670: the owner's pending hand-over; none unless a test sets one.
+const transfer = vi.hoisted(() => ({ myPendingTransfer: vi.fn(async () => null as unknown) }));
+vi.mock("@/lib/prospect/transfer-server", () => ({ myPendingTransfer: transfer.myPendingTransfer, repTransferState: vi.fn() }));
 // #1668: the "last week" card has its own tests; here it reads nothing.
 vi.mock("@/lib/home/week-summary-load", () => ({ loadWeekSummary: async () => null }));
 // #1650: the day-7 question's facts (exempt, first Go live, earlier answers); hidden unless a test opens it.
@@ -379,6 +382,29 @@ describe("Home workspace", () => {
     expect(screen.getByRole("heading", { name: "Your first ad" })).toBeInTheDocument();
     expect(screen.getByText("Step 1 of 3 · Your business")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Continue" })).toHaveAttribute("href", "/brand");
+  });
+
+  // #1670 (CTO): a new owner with a prepared business waiting is asked first, before WS1 would start an empty one.
+  it("a signed-in owner with no business and a pending hand-over is asked 'Make … yours?' first (#1670)", async () => {
+    queries.getPrimaryBusiness.mockResolvedValue(null);
+    transfer.myPendingTransfer.mockResolvedValueOnce({ transferId: "11111111-1111-4111-8111-111111111111", businessName: "Nook and Grain", ads: 3, images: [] });
+    const { default: DashboardPage } = await import("@/app/(app)/dashboard/page");
+    render(await DashboardPage());
+    expect(screen.getByRole("heading", { name: "Make Nook and Grain yours?" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Your first ad" })).toBeNull();
+  });
+
+  it("after Make it mine, Home says it's theirs above the first-ad card (#1670)", async () => {
+    queries.getPrimaryBusiness.mockResolvedValue(business);
+    queries.getCreativePreviews.mockResolvedValue([creative]);
+    queries.getCampaigns.mockResolvedValue([]);
+    queries.getMetaConnection.mockResolvedValue({ ready: false });
+    queries.getSpendEvaluation.mockResolvedValue({ evaluation: { status: "healthy" } });
+    queries.getAuditLog.mockResolvedValue([]);
+    const { default: DashboardPage } = await import("@/app/(app)/dashboard/page");
+    render(await DashboardPage({ searchParams: Promise.resolve({ handed: "1" }) }));
+    expect(screen.getByRole("status")).toHaveTextContent("It's yours. The 'Sample' mark is off your ads. Nothing runs until you tap Go live.");
+    expect(transfer.myPendingTransfer).not.toHaveBeenCalled();
   });
 
   it("reads the newest live campaign's stored ad statuses for the Meta review line (#1469)", async () => {

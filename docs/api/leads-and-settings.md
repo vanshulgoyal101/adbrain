@@ -25,6 +25,9 @@ Sync, insights, enquiries, spend limits, preferences and privacy requests. Conve
 | POST | `/api/privacy-requests` | Same-origin `{kind:"export"|"delete"}` -> `{request}` (201) | Owner-scoped request; one open request per kind, no export/deletion |
 | GET | `/api/privacy-requests/operator` | No body -> `{requests}` (oldest 100 open requests); `?check=1` -> `{allowed:true}` without loading the queue | Verified privacy operator only; server-only queue read |
 | PATCH | `/api/privacy-requests/operator` | Same-origin `{id,expectedStatus,status}` -> `{request}` | Verified privacy operator only; status and handler audit, no export/deletion |
+| POST | `/api/prospect/transfer` | `{businessId, ownerEmail}` -> `{ok, ownerEmail, expiresInMinutes: 30}` | #1670: only the business's own confirmed `+prospect` session; `business_transfer_start` re-checks that and the #1486 pre-checks (409 names the one that blocks). No link is sent |
+| DELETE | `/api/prospect/transfer` | `{businessId}` -> `{ok}` | Cancels the pending hand-over (same session rule) |
+| POST | `/api/prospect/claim` | `{transferId, decision:"accept"\|"decline"}` -> `{ok[, businessId]}` | #1670: the owner's answer on Home; the DB checks their confirmed address, expiry, single use, one business per account and the pre-checks; a team login can't accept (403) |
 
 ## Sync, Insights, Leads, and Settings
 
