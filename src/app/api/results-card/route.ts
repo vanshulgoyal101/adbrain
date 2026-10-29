@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { ConnectionAccessError, requireOwnedBusiness } from "@/lib/meta/connection-access";
+import { ConnectionAccessError, requireOwnedBusiness } from "@/services/business-access";
 import { observeRoute, recordProductEvent } from "@/lib/observability/logger";
 import { RESULTS_CARD_EVENTS } from "@/lib/results-card/offer";
 import { renderResultsCard } from "@/lib/results-card/render";
