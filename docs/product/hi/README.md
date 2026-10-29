@@ -14,3 +14,5 @@
 | [ब्रांड](brand.md) | [Brand](../brand.md) |
 | [ऐड बनाएँ और जाँचें](create.md) | [Create and Review Ads](../create.md) |
 | [जाँचें और लाइव करें](review.md) | [Review and Go Live](../review.md) |
+| [कैंपेन टारगेटिंग और बजट](targeting-and-budget.md) | [Campaign Targeting and Budget](../targeting-and-budget.md) |
+| [Go live के बाद आपका पहला हफ़्ता](first-week.md) | [Your first week after Go live](../first-week.md) |
