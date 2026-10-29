@@ -90,3 +90,20 @@ describe("money and migrations need QA and the CTO/Reviewer (#1083)", () => {
     expect(coreApproval({ ...pr, comments: [reviewer, qaNo] }).state).toBe("pending");
   });
 });
+
+describe("a main → next sync merge isn't held on main's own gated files (#2147)", () => {
+  const pr = { files: ["db/migrations/20261029_lead_erase.sql", "docs/architecture/migrations.md"], head, headRef: "devops/sync-main-next", comments: [] };
+
+  it("passes when every core file equals main's copy", () => {
+    expect(coreApproval({ ...pr, onMain: () => true })).toMatchObject({ state: "success", description: expect.stringContaining("identical to main") });
+  });
+
+  it("still holds a core file that differs from main, and applies the money/migration rule to it alone", () => {
+    const both = { ...pr, files: [...pr.files, "src/lib/meta/client.ts"] };
+    const verdict = coreApproval({ ...both, onMain: (f: string) => f.startsWith("db/") });
+    expect(verdict.state).toBe("pending");
+    expect(verdict.description).toContain("src/lib/meta/client.ts");
+    expect(verdict.description).not.toContain("Money/migration");
+    expect(coreApproval({ ...pr, onMain: () => false }).description).toContain("Money/migration");
+  });
+});

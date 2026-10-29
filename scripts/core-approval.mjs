@@ -24,13 +24,17 @@ export function coreFiles(files) {
 
 /**
  * @typedef {{ body: string, createdAt: string, url?: string }} Verdict
- * @param {{ files: string[], head: string, headRef: string, labels?: string[], title?: string, comments: Verdict[], samePatch?: (sha: string) => boolean }} pr
+ * @param {{ files: string[], head: string, headRef: string, labels?: string[], title?: string, comments: Verdict[], samePatch?: (sha: string) => boolean, onMain?: (file: string) => boolean }} pr
  * The verdict for one PR. `comments` are issue comments and PR reviews ({ body, createdAt, url }), oldest first.
  * `samePatch(sha)` says whether an earlier head has the same changes as the current one.
+ * `onMain(file)` says whether the head's copy of a file equals main's: main takes only gated content, so a
+ * person's main → next sync merge (#2106) isn't held on main's own released migration (#2147).
  */
-export function coreApproval({ files, head, headRef, labels = [], title = "", comments, samePatch = (sha) => head.toLowerCase().startsWith(sha.toLowerCase()) }) {
+export function coreApproval({ files, head, headRef, labels = [], title = "", comments, samePatch = (sha) => head.toLowerCase().startsWith(sha.toLowerCase()), onMain = () => false }) {
   if (headRef === "next") return { state: "success", description: "Deploy train: its PRs were gated into next" };
-  const core = coreFiles(files);
+  const touched = coreFiles(files);
+  const core = touched.filter((f) => !onMain(f));
+  if (touched.length && !core.length) return { state: "success", description: "Core files are identical to main's (already gated there)" };
   if (!core.length) return { state: "success", description: "No core launch/Meta/money/migration files" };
   // Rollbacks come first (AGENTS): a labelled revert ships without waiting for a verdict.
   if (labels.includes("rollback") && /^revert\b/i.test(title)) return { state: "success", description: "Rollback (revert + rollback label)" };
@@ -43,7 +47,7 @@ export function coreApproval({ files, head, headRef, labels = [], title = "", co
   if (qa.latest && !qa.approved) return { state: "pending", description: `QA requested changes at ${short}`, url: qa.latest.url };
   const who = reviewer?.approved ? reviewer.body.split(" ")[0].replace(/[*_:]/g, "") : "QA";
   // Money and migrations need QA and the CTO or Reviewer (AGENTS, ORCHESTRATION item 5); #1083 merged on one.
-  if (files.some((f) => moneyPath.test(f) || MIGRATION.test(f))) {
+  if (core.some((f) => moneyPath.test(f) || MIGRATION.test(f))) {
     if (qa.approved && reviewer?.approved) return { state: "success", description: `QA and ${who} approved ${short} (money/migration)`, url: reviewer.url };
     const missing = [qa.approved ? null : "QA", reviewer?.approved ? null : "CTO/Reviewer"].filter(Boolean).join(" and ");
     return { state: "pending", description: `Money/migration: needs ${missing} approval of ${short}: ${list}`.slice(0, 140) };
@@ -89,7 +93,22 @@ async function main() {
     return memo.get(sha);
   };
 
-  const verdict = coreApproval({ files, head, headRef: pr.head.ref, labels: pr.labels.map((l) => l.name), title: pr.title, comments, samePatch });
+  // #2147: only for PRs into next; the head's blob is compared with main's (a missing file never matches).
+  const blob = (file, ref) => {
+    try { return gh(["api", `repos/${repo}/contents/${file.split("/").map(encodeURIComponent).join("/")}?ref=${ref}`, "--jq", ".sha"]).trim(); } catch { return null; }
+  };
+  // Only a sync merge qualifies: the head contains main's tip and next doesn't, so a PR that merely reverts a
+  // core file to main's copy is still gated.
+  const missingFromMain = (ref) => Number(gh(["api", `repos/${repo}/compare/main...${ref}`, "--jq", ".behind_by"]).trim());
+  let sync;
+  const onMain = (file) => {
+    sync ??= pr.base.ref === "next" && missingFromMain(head) === 0 && missingFromMain("next") > 0;
+    if (!sync) return false;
+    const atHead = blob(file, head);
+    return Boolean(atHead) && atHead === blob(file, "main");
+  };
+
+  const verdict = coreApproval({ files, head, headRef: pr.head.ref, labels: pr.labels.map((l) => l.name), title: pr.title, comments, samePatch, onMain });
   console.log(`#${n} ${head.slice(0, 7)}: ${verdict.state} · ${verdict.description}`);
   if (values["dry-run"]) return;
   const args = ["api", "-X", "POST", `repos/${repo}/statuses/${head}`, "-f", `state=${verdict.state}`, "-f", `context=${CONTEXT}`, "-f", `description=${verdict.description}`];
