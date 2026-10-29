@@ -264,9 +264,11 @@ export async function editCampaignBudget(context: AuthorizedBusiness, campaignId
       const nextCap = capped && cap ? { lifetimeBudgetPaise: toPaise(after.capRupees!), endTime: after.endTime!, days: (cap.days ?? 0) + extendedDays } : null;
       try {
         const { error } = await saveCampaignBudget({ businessId: context.businessId, userId: context.userId }, campaignId, current => {
-          const raw = current.raw && typeof current.raw === "object" && !Array.isArray(current.raw) ? current.raw as Record<string, Json | undefined> : {};
+          const raw = { ...current.raw && typeof current.raw === "object" && !Array.isArray(current.raw) ? current.raw as Record<string, Json | undefined> : {} };
+          // #1903: AdBrain's own edit replaces any "changed in Meta Ads Manager" note a refresh wrote meanwhile.
+          delete raw.metaBudgetChange;
           const currentCap = raw.cap && typeof raw.cap === "object" && !Array.isArray(raw.cap) ? raw.cap : {};
-          return nextCap ? { raw: { ...raw, cap: { ...currentCap, ...nextCap } } as Json } : { daily_budget: after.dailyRupees };
+          return nextCap ? { raw: { ...raw, cap: { ...currentCap, ...nextCap } } as Json } : { daily_budget: after.dailyRupees, raw: raw as Json };
         });
         if (error) throw error;
       } catch {

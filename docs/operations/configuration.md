@@ -75,6 +75,7 @@ an application release.
 | `CREATIVE_CONCEPT_SCHEDULE` | `serial` | `serial` or `parallel`. `parallel` starts all Create concept calls at once; each still validates against earlier concepts (repeated headline/opening → normal repair). #142 measure on Haiku, 3 briefs × 2: p50 60.1 s → 28.2 s, first-attempt pass 12/18 → 16/18, judge 3.88 → 4.39 |
 | `GEMINI_THINKING_HEADROOM` | `3000` | Nonnegative integer extra output headroom |
 | `LLM_MONTHLY_TOKEN_LIMIT` | `2000000` | Nonnegative integer; 0 disables quota checking. Internal accounts in [internal-accounts.json](../../src/lib/internal-accounts.json) (confirmed team-domain emails, listed owner ids) have no limit (#398) |
+| `AI_MONTHLY_COST_LIMIT_USD` | Unset | #1717: a business's monthly AI spend in USD (text and paid pictures, `llm_usage_events.estimated_cost_usd`, IST calendar month). At or over it, or if the spend can't be read, that business's pictures come from the free providers with the 'taking longer' notice, and a product-photo ad fails honestly. Internal accounts are exempt. Unset means no cap and no read. The token cap still applies to text. The value is the CEO's (#1722). |
 
 The parser does not validate live account quota or model availability. The
 monthly limit is a per-business preflight check, **not an atomic reservation,

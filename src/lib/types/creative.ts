@@ -125,6 +125,10 @@ export type CreativeTables = {
 };
 
 export type CreativeFunctions = {
+  monthly_ai_cost_usd: {
+    Args: { p_business_id: string; p_since: string };
+    Returns: number;
+  };
   monthly_token_usage: {
     Args: { p_business_id: string; p_since: string };
     Returns: number;

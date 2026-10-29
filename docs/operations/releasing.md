@@ -25,7 +25,9 @@ The release process ([AGENTS.md](../../AGENTS.md)).
    space-only role prefixes still work; a later negative verdict at that head
    overrides either format. Money/migrations still need QA plus CTO/Reviewer.
    The deploy train (this repo's `next` → `main` only, never a fork's `next`) and a
-   revert labelled `rollback` pass. Hold with `gh pr merge <n>
+   revert labelled `rollback` pass, and so does a main → next sync merge (head contains
+   main, next doesn't) whose core files equal main's and are unchanged on next since the
+   merge base (#2147). Hold with `gh pr merge <n>
    --disable-auto`. `audit` and `docs` also run but do not block. A change to generation, validation, prompts, models, timeouts, the
    planner, Meta calls or CSP adds or updates a `test:core` test with recorded real
    responses. Update the matching doc in the same PR.
@@ -130,6 +132,8 @@ exclude entire test directories or suppress uninvestigated findings.
   a receipt; the next deploy train ships it and smokes it. Migrations still release to `main`.
 - **Every migration needs a fresh backup:** `release.mjs` refuses to apply one without a
   successful [database backup](releasing-recovery.md#backups-and-restore) from the last hour (CEO, #884).
+  After the backup it re-reads the PR head and the QA and Reviewer/CTO verdicts, and stops before any
+  SQL if the head moved or an approval was withdrawn meanwhile (#2187).
 - **Release a money or migration PR (#228, DevOps):**
   `node scripts/release.mjs --pr <n> --dry-run`, then the same without `--dry-run`.
   Preflight is read-only: the PR targets `main` without conflicts, the required

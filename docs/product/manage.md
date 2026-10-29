@@ -58,6 +58,16 @@ there is at least one. Before them it shows bookings (#1994: enquiries marked Bo
 Customer), named for the segment: "consultations booked" (interiors), "site visits
 booked" (solar), "demo classes booked" (IELTS), otherwise "booked"; hidden at 0.
 
+**Delete an enquiry** (#1761). An owner can delete one enquiry (**Delete enquiry** in
+its row menu or detail panel) or every enquiry of one campaign, including chats they
+added (**Delete enquiries** in the campaign card's menu; not on drafts). A confirm
+step says what goes; after it, the delete is permanent: there is no Undo and no
+restore. The enquiry's details, answers, follow-up status and note leave AdBrain.
+What stays: Meta's own copy in the Page's leads (AdBrain does not delete it there),
+the ads (unaffected), a tombstone holding only a SHA-256 hash of Meta's lead id so
+Sync never imports that enquiry again, and an audit row with ids and a count, no
+contact details. Owners only, their own business; 60 deletes per 5 minutes.
+
 The copy-ready digest summarizes the last seven days of the currently loaded
 enquiries with at most ten contacts, including email where available. It is not
 a WhatsApp send, CRM, notification service, complete export, or revenue

@@ -8,6 +8,7 @@ import { saveAdLanguage, saveSetupBusiness } from "@/app/(app)/brand/actions";
 import { AdLanguageChips } from "@/components/ad-language-chips";
 import { defaultAdLanguage, type CreateLanguageId } from "@/lib/languages";
 import { SetupSpine, SETUP_STEPS } from "@/components/setup-spine";
+import { markMakeTap } from "@/lib/setup/steps";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
@@ -139,6 +140,8 @@ export function SetupBusinessStep({ business, chooseLanguage = false, returning 
     await saveNow();
     // #1681: a picked ad language is saved before step 2 starts the batch; the default needs no save (step 2 works it out).
     if (adLanguage && idRef.current) await saveAdLanguage(idRef.current, adLanguage).catch(() => undefined);
+    const id = idRef.current ?? business?.id;
+    if (returning && id) markMakeTap(id);
   }
 
   async function autofill(pasted?: string) {
@@ -276,7 +279,7 @@ export function SetupBusinessStep({ business, chooseLanguage = false, returning 
         </p>
       )}
       {/* #1681 (CPO #1669): the language the first 3 ads are written in, defaulting by what they sell. */}
-      <div className="mt-6"><AdLanguageChips value={adLanguage ?? defaultAdLanguage(business?.languages, fields.vertical)} onChange={setAdLanguage} /></div>
+      <div className="mt-6"><AdLanguageChips value={adLanguage ?? defaultAdLanguage(business?.languages, fields.vertical)} onChange={setAdLanguage} label={t("business.adLanguage")} /></div>
       <p className="mt-4 text-sm text-slate-600">{t("business.included")}</p>
       <Link href="/brand?all=1" onClick={() => void saveNow().catch(() => undefined)} className="mt-2 inline-flex min-h-11 items-center text-sm font-medium text-slate-700 underline underline-offset-4">
         {t("business.more")}

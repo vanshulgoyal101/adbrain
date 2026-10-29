@@ -224,6 +224,18 @@ describe("customer_ad_reserve refusals keep their cause (#782)", () => {
     expect(await reserve()).toMatchObject({ code: "BINDING_CHANGED", message: "This campaign's Meta connection changed since you reviewed it. Refresh the page and try again." });
   });
 
+  // #1799: Meta's live campaign spend_cap minimum goes into the same transaction as the reservation and names its amount.
+  it("an uncapped run under Meta's live spend-cap minimum: names that minimum, sent to the reservation itself", async () => {
+    refuses("Below the Meta campaign spend cap minimum");
+    const refused = await reserveCustomerCampaign(actor, { ...admission, minMediaLimitPaise: 750_000 }).catch((error: unknown) => error as CustomerBalanceError);
+    expect(refused).toMatchObject({ code: "SPEND_CAP_TOO_LOW", message: "Meta needs at least ₹7,500 as a campaign's total limit. Choose how many days to run (a run with a day limit has no such minimum), or add funds." });
+    expect(mocks.rpc).toHaveBeenCalledWith("customer_ad_reserve", expect.objectContaining({ p_review_only: false, p_min_media_limit_paise: 750_000 }));
+    mocks.rpc.mockClear();
+    refuses("something else entirely");
+    await reserve();
+    expect(mocks.rpc.mock.calls.find(([name]) => name === "customer_ad_reserve")?.[1]).not.toHaveProperty("p_min_media_limit_paise");
+  });
+
   it("an unknown or unreadable failure keeps the generic message; the balance read failing doesn't hide the cause", async () => {
     refuses("something else entirely");
     expect(await reserve()).toMatchObject({ code: "UNVERIFIED", message: "Customer advertising funds could not be verified. Payment or cost reconciliation is required." });

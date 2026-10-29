@@ -1,3 +1,5 @@
+import { campaignsTranslator, type Words } from "@/i18n/words";
+
 /** Why campaign sync left a Meta campaign unchanged (#671), so the banner can say it in plain words. */
 export type CampaignSkipReason =
   | "not_running"
@@ -11,21 +13,14 @@ export type CampaignSkipReason =
 
 export type SkippedCampaign = { name: string | null; reason: CampaignSkipReason };
 
-const SKIP_REASON_TEXT: Record<CampaignSkipReason, string> = {
-  not_running: "it's archived or deleted in Meta",
-  other_account: "it belongs to a different ad account",
-  other_page: "it advertises a different Facebook Page",
-  other_connection: "it was launched from a different ad account or Page",
-  other_business: "it's managed in another AdBrain business on this ad account",
-  lifetime_budget: "it uses a lifetime budget set in Meta, which AdBrain doesn't manage",
-  capped: "it runs on a spend cap AdBrain manages, so sync leaves it as is",
-  unsupported: "its ad sets or budget aren't a setup AdBrain can manage",
-};
-
-/** One sentence per skipped campaign, up to three, then a count of the rest. */
-export function describeSkippedCampaigns(skipped: readonly SkippedCampaign[], total = skipped.length): string {
-  const named = skipped.slice(0, 3).map(({ name, reason }) => `${name ? `"${name}"` : "A campaign"} was left unchanged: ${SKIP_REASON_TEXT[reason]}.`);
+/** One sentence per skipped campaign, up to three, then a count of the rest; reasons are `campaigns.sync.reasons` (#1438). */
+export function describeSkippedCampaigns(skipped: readonly SkippedCampaign[], total = skipped.length, words?: Words<"campaigns">): string {
+  const t = campaignsTranslator(words);
+  const named = skipped.slice(0, 3).map(({ name, reason }) => {
+    const why = t(`sync.reasons.${reason}`);
+    return name ? t("sync.named", { name, reason: why }) : t("sync.unnamed", { reason: why });
+  });
   const rest = total - named.length;
-  if (rest > 0) named.push(`${rest} more campaign${rest === 1 ? " was" : "s were"} left unchanged.`);
+  if (rest > 0) named.push(t("sync.rest", { n: rest }));
   return named.join(" ");
 }

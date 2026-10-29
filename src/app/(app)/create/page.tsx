@@ -25,7 +25,7 @@ export const metadata = {
 
 export default async function CreatePage({ searchParams }: { searchParams?: Promise<{ all?: string | string[]; again?: string | string[] }> } = {}) {
   const [business, params] = await Promise.all([getPrimaryBusiness(), searchParams ?? ({} as { all?: string | string[]; again?: string | string[] })]);
-  // #1934: a returning owner's "New campaign" (step 1 just tapped Make my ads) runs step 2 again.
+  // #1934: a returning owner's "New campaign" runs step 2 again.
   const again = params.again === "1";
 
   if (!business) {
@@ -61,7 +61,8 @@ export default async function CreatePage({ searchParams }: { searchParams?: Prom
         const ads = batch.ads.filter((ad) => madeForSetup(ad, business));
         // #1475: with earlier ads (older details, or made in Studio) the owner taps to start a paid batch; a failed
         // read counts as earlier, so nothing paid starts on its own.
-        const earlier = ads.length || again ? Promise.resolve(false) : batch.ads.length ? Promise.resolve(true)
+        // #1934: a returning owner always counts as earlier; step 2 starts on arrival only from step 1's tap.
+        const earlier = ads.length ? Promise.resolve(false) : again || batch.ads.length ? Promise.resolve(true)
           : getApprovedCreatives(business.id).then((approved) => approved.length > 0, () => true);
         // #1402: a "Make another" top-up shows beside its batch; the step checks the newest batch on arrival (#1407).
         return earlier.then((hasEarlier) => ({ ads: ads.map(clientCreative), earlier: hasEarlier }));

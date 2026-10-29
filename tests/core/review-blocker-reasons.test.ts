@@ -73,6 +73,39 @@ describe("Review blockers carry their own reason (#688)", () => {
     expect(runPreflight(floor).blockers).toEqual([]);
   });
 
+  // #681: the ads blocker names the ad and the one thing to do, not one sentence for every fault.
+  it.each([
+    ["no ads chosen", (v: PreflightInput) => { v.draft.creativeIds = []; v.creatives = []; }, "Choose at least one ad to send to Meta."],
+    ["a chosen ad was deleted", (v: PreflightInput) => { v.creatives = []; }, "One of the ads you chose isn't available any more. Choose your ads again."],
+    ["an ad from another business", (v: PreflightInput) => { v.creatives[0].businessId = "11111111-1111-4111-8111-111111111111"; }, "One of the ads you chose isn't available any more. Choose your ads again."],
+    ["not approved", (v: PreflightInput) => { v.creatives[0].approved = false; }, 'The ad "New-Patient Exam" isn\'t approved yet. Approve it on the Review page, or take it out of this campaign.'],
+    ["no picture", (v: PreflightInput) => { v.creatives[0].imageUrl = null; }, 'The ad "New-Patient Exam" has no picture yet. Take it out of this campaign and choose another ad.'],
+    ["no headline", (v: PreflightInput) => { v.creatives[0].headline = null; }, "An ad you chose has no headline. Take it out of this campaign and choose another ad."],
+  ])("ads blocker: %s", (_name, change, message) => {
+    const value = input();
+    change(value);
+    expect(runPreflight(value).blockers).toEqual([expect.objectContaining({ reason: "REVIEW_CREATIVES", message })]);
+  });
+
+  it("ads blocker: counts the other ads that need fixing and shortens a long headline", () => {
+    const value = input();
+    const second = "0b3c8f7e-3c0e-4f7a-9a51-6d2f1c0e9b11";
+    value.draft.creativeIds = [creativeId, second];
+    value.creatives = [
+      { ...value.creatives[0], approved: false, headline: "Same-day sciatica relief with a 45-minute adjustment" },
+      { ...value.creatives[0], id: second, approved: false },
+    ];
+    expect(runPreflight(value).blockers[0].message).toBe('The ad "Same-day sciatica relief with a…" isn\'t approved yet. Approve it on the Review page, or take it out of this campaign. 1 more ad needs fixing too.');
+  });
+
+  // QA on #2191: a Hindi headline is 48 UTF-16 units but 24 letters, so it fits whole instead of losing half a conjunct.
+  it("ads blocker: counts a Hindi headline in letters, not code units", () => {
+    const value = input();
+    value.creatives[0].approved = false;
+    value.creatives[0].headline = "नमस्तेनमस्तेनमस्तेनमस्तेनमस्तेनमस्तेनमस्तेनमस्ते";
+    expect(runPreflight(value).blockers[0].message).toBe('The ad "नमस्तेनमस्तेनमस्तेनमस्तेनमस्तेनमस्तेनमस्तेनमस्ते" isn\'t approved yet. Approve it on the Review page, or take it out of this campaign.');
+  });
+
   it("the reasons are distinct and fit the campaign.review event", () => {
     const reasons = cases.map(([reason]) => reason);
     expect(new Set(reasons).size).toBe(reasons.length);

@@ -1,5 +1,5 @@
 import { isExemptFromFreeProviders, isInternalUser } from "@/lib/internal-accounts";
-import { currentVerifiedActor } from "@/lib/observability/context";
+import { currentVerifiedActor, eventContext } from "@/lib/observability/context";
 
 /**
  * Internal (team, owner, test) accounts make their ad images on free Pollinations, so the paid
@@ -7,6 +7,19 @@ import { currentVerifiedActor } from "@/lib/observability/context";
  * is about $0.006 a Create and the free text tiers are too small (#466). The user ids in
  * `exemptFromFreeProviders` keep the paid path; requests without a signed-in user are paid.
  */
+// #1717: requests whose business is over its monthly AI cost cap get free pictures (per request, not per instance).
+const costCappedRequests = new WeakSet<object>();
+
+export function markCostCapped(): void {
+  const context = eventContext.getStore();
+  if (context) costCappedRequests.add(context);
+}
+
+export function costCapped(): boolean {
+  const context = eventContext.getStore();
+  return Boolean(context && costCappedRequests.has(context));
+}
+
 export function freeImagesOnly(): boolean {
   const actor = currentVerifiedActor();
   return isInternalUser(actor) && !isExemptFromFreeProviders(actor);

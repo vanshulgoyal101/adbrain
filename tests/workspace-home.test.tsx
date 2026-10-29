@@ -27,6 +27,9 @@ const queries = vi.hoisted(() => ({
   businessLLMUsageSummary: vi.fn(),
 }));
 vi.mock("@/lib/supabase/queries", () => queries);
+// #1670: the owner's pending hand-over; none unless a test sets one.
+const transfer = vi.hoisted(() => ({ myPendingTransfer: vi.fn(async () => null as unknown) }));
+vi.mock("@/lib/prospect/transfer-server", () => ({ myPendingTransfer: transfer.myPendingTransfer, repTransferState: vi.fn() }));
 // #1668: the "last week" card has its own tests; here it reads nothing.
 vi.mock("@/lib/home/week-summary-load", () => ({ loadWeekSummary: async () => null }));
 // #1650: the day-7 question's facts (exempt, first Go live, earlier answers); hidden unless a test opens it.
@@ -92,7 +95,7 @@ function suspenseBoundaries(node: any): any[] {
 
 describe("Home workspace", () => {
   // #1469: between launch and first delivery Home says Meta is checking, once.
-  const CHECKING = "Meta is checking your ads. This usually takes minutes to a few hours, and up to a day.";
+  const CHECKING = "Meta checks your ads first. This usually takes a few hours, sometimes up to a day.";
   it("says Meta is checking while the newest campaign's ads are in review (#1469)", () => {
     const live = { id: "c-new", name: "Solar", status: "active", daily_budget: 300, raw: {}, meta_campaign_id: "1" } as unknown as Campaign;
     render(<WorkspaceHome {...empty} business={business} campaigns={[live]} adReview={{ kind: "checking", campaignId: "c-new" }} />);
@@ -103,7 +106,7 @@ describe("Home workspace", () => {
     const live = { id: "c-new", name: "Solar", status: "active", daily_budget: 300, raw: {}, meta_campaign_id: "1", launched_at: new Date().toISOString() } as unknown as Campaign;
     const result = { campaign_id: "c-new", impressions: 0, clicks: 0, spend: 0, leads: 0, conversations: 0, fetched_at: new Date().toISOString(), raw: {} } as unknown as CampaignResult;
     render(<WorkspaceHome {...empty} business={business} campaigns={[live]} results={{ "c-new": result }} adReview={{ kind: "checking", campaignId: "c-new" }} />);
-    expect(screen.getAllByText(/Meta is checking your ads/)).toHaveLength(1);
+    expect(screen.getAllByText(/Meta checks your ads first/)).toHaveLength(1);
     expect(screen.queryByRole("status", { name: "Meta review" })).toBeNull();
   });
 
@@ -137,6 +140,32 @@ describe("Home workspace", () => {
     unmount();
     render(<WorkspaceHome {...empty} business={business} now={now} campaigns={campaigns} locale="hi" />);
     expect(screen.getByText("Meta में डिलीट हुआ है। अगर अब भी चाहिए, तो Campaigns से फिर से चलाएँ।")).toBeInTheDocument();
+  });
+
+  it("#1903 (CPO #1601): paused in Meta takes the status line; a budget raised in Meta shows for a week, a lower one stays on Campaigns (EN and HI)", () => {
+    const now = Date.parse("2026-10-29T18:00:00Z");
+    const run = (id: string, daily: number, raw: object) => ({ id, name: `Run ${id}`, status: "active", daily_budget: daily, raw }) as unknown as Campaign;
+    const change = (was: number, then: number, at: string) => ({ metaBudgetChange: { wasRupees: was, nowRupees: then, at } });
+    const campaigns = [
+      run("paused", 300, { metaPausedAt: "2026-10-29T08:00:00Z" }),
+      run("raised", 800, change(500, 800, "2026-10-29T08:00:00Z")),
+      run("lowered", 300, change(500, 300, "2026-10-29T08:00:00Z")),
+    ];
+    const { unmount } = render(<WorkspaceHome {...empty} business={business} now={now} campaigns={campaigns} />);
+    const list = screen.getByRole("heading", { name: "Campaigns" }).closest("section")!;
+    const row = (name: string) => within(list).getByRole("link", { name }).closest("li")!;
+    expect(within(row("Run paused")).getByText("Paused in Meta. Nothing is spending.")).toBeInTheDocument();
+    const raised = within(row("Run raised")).getByText("The daily budget was changed in Meta Ads Manager: now ₹800 a day (was ₹500).");
+    expect(raised.className).toContain("border-warning");
+    expect(within(row("Run lowered")).queryByText(/changed in Meta Ads Manager/)).toBeNull();
+    unmount();
+    const week = render(<WorkspaceHome {...empty} business={business} now={now} campaigns={[run("raised-old", 800, change(500, 800, "2026-10-21T08:00:00Z"))]} />);
+    expect(screen.getByRole("link", { name: "Run raised-old" })).toBeInTheDocument();
+    expect(screen.queryByText(/changed in Meta Ads Manager/)).toBeNull();
+    week.unmount();
+    render(<WorkspaceHome {...empty} business={business} now={now} campaigns={campaigns} locale="hi" />);
+    expect(screen.getByText("Meta में रोका गया है। कोई खर्च नहीं हो रहा।")).toBeInTheDocument();
+    expect(screen.getByText("रोज़ का बजट Meta Ads Manager में बदला गया: अब ₹800 रोज़ (पहले ₹500)।")).toBeInTheDocument();
   });
 
   it("#1393: the workspace shell opens the Storage connection before the page streams in", async () => {
@@ -381,6 +410,29 @@ describe("Home workspace", () => {
     expect(screen.getByRole("link", { name: "Continue" })).toHaveAttribute("href", "/brand");
   });
 
+  // #1670 (CTO): a new owner with a prepared business waiting is asked first, before WS1 would start an empty one.
+  it("a signed-in owner with no business and a pending hand-over is asked 'Make … yours?' first (#1670)", async () => {
+    queries.getPrimaryBusiness.mockResolvedValue(null);
+    transfer.myPendingTransfer.mockResolvedValueOnce({ transferId: "11111111-1111-4111-8111-111111111111", businessName: "Nook and Grain", ads: 3, images: [] });
+    const { default: DashboardPage } = await import("@/app/(app)/dashboard/page");
+    render(await DashboardPage());
+    expect(screen.getByRole("heading", { name: "Make Nook and Grain yours?" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Your first ad" })).toBeNull();
+  });
+
+  it("after Make it mine, Home says it's theirs above the first-ad card (#1670)", async () => {
+    queries.getPrimaryBusiness.mockResolvedValue(business);
+    queries.getCreativePreviews.mockResolvedValue([creative]);
+    queries.getCampaigns.mockResolvedValue([]);
+    queries.getMetaConnection.mockResolvedValue({ ready: false });
+    queries.getSpendEvaluation.mockResolvedValue({ evaluation: { status: "healthy" } });
+    queries.getAuditLog.mockResolvedValue([]);
+    const { default: DashboardPage } = await import("@/app/(app)/dashboard/page");
+    render(await DashboardPage({ searchParams: Promise.resolve({ handed: "1" }) }));
+    expect(screen.getByRole("status")).toHaveTextContent("It's yours. The 'Sample' mark is off your ads. Nothing runs until you tap Go live.");
+    expect(transfer.myPendingTransfer).not.toHaveBeenCalled();
+  });
+
   it("reads the newest live campaign's stored ad statuses for the Meta review line (#1469)", async () => {
     vi.stubEnv("AD_RESULTS_ENABLED", "true");
     const live = { id: "c-new", name: "Solar", status: "active", daily_budget: 300, raw: {}, meta_campaign_id: "123", launched_at: "2026-10-28T10:00:00Z", created_at: "2026-10-28T10:00:00Z" } as unknown as Campaign;
@@ -395,7 +447,7 @@ describe("Home workspace", () => {
     const { default: DashboardPage } = await import("@/app/(app)/dashboard/page");
     render(await DashboardPage());
     expect(queries.getAdStatuses).toHaveBeenCalledWith("c-new");
-    expect(screen.getByRole("status", { name: "Meta review" })).toHaveTextContent("Meta is checking your ads");
+    expect(screen.getByRole("status", { name: "Meta review" })).toHaveTextContent(CHECKING);
     vi.unstubAllEnvs();
   });
 

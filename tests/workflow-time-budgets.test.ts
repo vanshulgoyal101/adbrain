@@ -27,7 +27,7 @@ function jobBudgets(lines: string[]) {
   return jobs;
 }
 
-describe.each(["deploy-train.yml", "production-guard.yml"])("%s time budget", (name) => {
+describe.each(["create-smoke.yml", "deploy-train.yml", "production-guard.yml"])("%s time budget", (name) => {
   const jobs = jobBudgets(workflow(name));
 
   it("bounds every step so the failure alert still runs inside the job limit", () => {
@@ -128,5 +128,62 @@ describe("deploy train watchdog", () => {
     const { output, created } = runWatchdog([150], "2029");
     expect(output).toContain("Already alerted in #2029.");
     expect(created).toEqual([]);
+  });
+});
+
+// #2145: the dispatch input reaches the shell only through REQUESTED_MODE and a fixed `case`.
+describe("create smoke mode", () => {
+  const made: string[] = [];
+  afterEach(() => { for (const path of made.splice(0)) rmSync(path, { recursive: true, force: true }); });
+
+  function run(step: string, env: Record<string, string>, smoke?: string) {
+    const work = mkdtempSync(join(process.cwd(), ".create-smoke-test-"));
+    made.push(work);
+    const bin = join(work, "bin");
+    mkdirSync(bin);
+    writeFileSync(join(bin, "timeout"), "#!/bin/bash\nshift 3\nexec \"$@\"\n");
+    writeFileSync(join(bin, "node"), `#!/bin/bash\necho "node $*" >> "${work}/calls.log"\necho "PASS stub"\n`);
+    writeFileSync(join(bin, "gh"), `#!/bin/bash\nprintf '%s\\n' "$*" >> "${work}/gh.log"\nexit 0\n`);
+    for (const tool of ["timeout", "node", "gh"]) chmodSync(join(bin, tool), 0o755);
+    if (smoke !== undefined) writeFileSync(join(work, "smoke.txt"), smoke);
+    let status = 0;
+    try {
+      execFileSync("bash", ["-c", stepScript("create-smoke.yml", step)], {
+        cwd: work, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"],
+        env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, GITHUB_SERVER_URL: "https://github.com", GITHUB_REPOSITORY: "o/r", GITHUB_RUN_ID: "1", GITHUB_EVENT_NAME: "schedule", ...env },
+      });
+    } catch (error) { status = (error as { status: number }).status; }
+    const read = (file: string) => { try { return readFileSync(join(work, file), "utf8"); } catch { return ""; } };
+    return { status, calls: read("calls.log"), gh: read("gh.log") };
+  }
+
+  const smoke = "Smoke (free picture, or a dispatched Create)";
+
+  it("runs the free --picture smoke on schedule (no input) and on dispatch picture", () => {
+    expect(run(smoke, { REQUESTED_MODE: "" }).calls).toBe("node scripts/smoke-core.mjs --picture\n");
+    expect(run(smoke, { REQUESTED_MODE: "picture" }).calls).toBe("node scripts/smoke-core.mjs --picture\n");
+  });
+
+  it("runs the paid --create only when dispatched with create", () => {
+    expect(run(smoke, { REQUESTED_MODE: "create" }).calls).toBe("node scripts/smoke-core.mjs --create\n");
+  });
+
+  it("refuses any other input without running the smoke", () => {
+    const result = run(smoke, { REQUESTED_MODE: "create --campaign; touch pwned" });
+    expect(result.status).toBe(1);
+    expect(result.calls).toBe("");
+  });
+
+  it("says free pictures are failing when the picture step failed", () => {
+    const { gh } = run("Alert on failure", { REQUESTED_MODE: "" }, "PASS Sign in\nFAIL Picture: New background returned HTTP 502\n");
+    expect(gh).toContain("issue create");
+    expect(gh).toContain("Create smoke failed in production");
+    expect(gh).toContain("Free pictures are failing in production");
+  });
+
+  it("keeps the Create wording for a dispatched create", () => {
+    const { gh } = run("Alert on failure", { REQUESTED_MODE: "create" }, "FAIL Create: 1/3 saved\n");
+    expect(gh).not.toContain("Free pictures are failing");
+    expect(gh).toContain("Free pictures are the usual cause");
   });
 });
