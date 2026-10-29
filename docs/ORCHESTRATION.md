@@ -119,6 +119,18 @@ Routine steps never wait for the CEO or the CTO.
    calls as `decision` issues. On a conflict, money and priority
    follow the CEO; the technical approach follows the CTO.
 
+**Shared GitHub budget (#2021).** Every role uses the same login and 5,000 REST
+requests/hour. The waiter defaults to a 300-second poll, revalidates reads with
+ETags (unchanged authenticated responses return 304 without spending quota),
+and uses response headers instead of extra `rate_limit` requests. On a
+rate-limited 403/429 it logs the delay and retries after the later of
+`Retry-After` and the primary quota reset, with jitter; absent valid hints it
+backs off from 1 to 15 minutes. Backoff still respects the waiter's deadline
+and parent lifetime. Other permission failures remain errors. Restart waiters
+from current `origin/main` after this fix ships. Keep one-off API scans below
+200 calls; larger scans need a quiet window and an explicit call budget, not
+parallel per-item polling.
+
 ### Supervisor: waking idle and stuck chats (#573 A1)
 
 **No chat needs to stay alive.** A LaunchAgent (`in.adbrain.team-supervisor`) runs
