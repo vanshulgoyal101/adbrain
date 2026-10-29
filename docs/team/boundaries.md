@@ -73,7 +73,7 @@ The CI summary lists each failing entry as `rule: from → to`. Fix the code, no
 | `C2-adapter-own-data` | Read or write that table or RPC in a service, and pass the data to the adapter. |
 | `C3-appsecret-proof` | Add `appsecret_proof` to the Graph call, the way the existing Meta helpers do. |
 | `C4-file-size` | Move your own new lines into a sibling module (400 lines or fewer), so the file stays at or under its ceiling. The author fixes it. The baseline never goes up (#2071). |
-| `C5-english-errors` | Say the error with `ownerError("key")` from `@/i18n/request-locale` and add the key to `errors` in `messages/en.json` and `messages/hi.json` (#2305). |
+| `C5-english-errors` | Say the error with `ownerError("key")` from `@/i18n/request-locale` and add the key to `errors` in `messages/en.json` and `messages/hi.json` (#2305). A client component's own fallback (no reply, a dropped connection) uses `useNotices()` from `@/i18n/notices` and a key under `notices` (#2345). |
 
 When you fix an entry, the check goes red with "Fixed, still in the baseline". Run
 `npm run boundaries -- --write-baseline`, check the diff (below) and commit the

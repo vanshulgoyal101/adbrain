@@ -785,6 +785,63 @@
     "reloadPage": "Reload the page and try again.",
     "openRequestExists": "An open request of this type already exists.",
     "setUpBrandFirst": "Set up your Brand first, then connect Facebook in Settings.",
-    "leadFormsUnavailable": "Could not load lead forms. Try again."
+    "leadFormsUnavailable": "Could not load lead forms. Try again.",
+    "campaignFiltersInvalid": "Invalid campaign filters.",
+    "campaignsNotLoaded": "We couldn't load your campaigns. Reload the page.",
+    "enquiryInvalid": "Invalid enquiry.",
+    "enquiryWhatsAppOnly": "Real enquiries can be logged on WhatsApp campaigns only.",
+    "enquiryNotSaved": "The enquiry could not be saved. Try again."
+  },
+  "notices": {
+    "studio": {
+      "storageBlocked": "This browser won't let AdBrain save your progress, so no ads were started. Turn off private browsing or use another browser.",
+      "describeAd": "Describe what you want to advertise.",
+      "startFailed": "We couldn't start your ads. Try again in a minute.",
+      "downloadFailed": "The ad pack didn't download. Check your connection and tap Download again.",
+      "regenFailed": "Couldn't regenerate this ad. Try again.",
+      "regenOffline": "Couldn't regenerate this ad. Check your connection and try again.",
+      "approvalFailed": "Couldn't update approval. Try again.",
+      "approvalOffline": "Couldn't update approval. Check your connection and try again.",
+      "deleteFailed": "Couldn't delete this ad. Try again.",
+      "deleteOffline": "Couldn't delete this ad. Check your connection and try again."
+    },
+    "assistant": {
+      "earlierRunning": "Your earlier ads may still be being made. Check Review for saved ads before starting more.",
+      "interrupted": "The assistant's last reply was cut off. Tap Retry to carry on.",
+      "replyFailed": "That reply didn't come through. Send your last answer again.",
+      "offline": "Couldn't reach the assistant. Check your connection and send your answer again.",
+      "noSavedYet": "No saved ads found yet. Check again shortly or open Review. No new ads were started.",
+      "cantConfirmSaved": "We can't confirm your ads were saved yet. Check again shortly or open Review. No new ads were started.",
+      "makeFailed": "Your ads couldn't be made just now. Try again in a minute.",
+      "noneCameBack": "Your ads finished, but none came back here. Open Review to see what was saved.",
+      "stillMaking": "Your ads are still being made, or the server stopped responding. Open Review shortly; don't try again yet, because finished ads may already be saved.",
+      "tooManyChecks": "Too many checks in a row. Wait a few minutes before checking again, and don't start more ads yet.",
+      "finishedWhileReconnecting": "Some ads finished while we reconnected. See them in Review; no duplicate ads were started.",
+      "attemptFailed": "No ads were saved. This attempt failed. You can try again.",
+      "heldForCheck": "No ads were saved yet; this attempt is held for a check. Look in Review later, and don't start another one yet.",
+      "choiceNotSaved": "Your choice wasn't saved. Tap it again."
+    },
+    "editor": {
+      "saveFailed": "Couldn't save your changes. Try again.",
+      "saveOffline": "Couldn't save your changes. Check your connection and try again.",
+      "redrawFailed": "Couldn't redraw the picture. Try again.",
+      "redrawOffline": "Couldn't redraw the picture. Check your connection and try again.",
+      "backgroundFailed": "Couldn't make a new background. Try again.",
+      "backgroundOffline": "Couldn't make a new background. Check your connection, then refresh before trying again."
+    },
+    "brand": {
+      "chooseFile": "Choose a file first.",
+      "fileType": "Choose a PNG, JPEG or WebP image.",
+      "fileTooBig": "Choose a picture under {mb} MB.",
+      "uploadFailed": "Couldn't upload the picture. Check your connection and try again.",
+      "saveFailed": "Couldn't save the picture. Try again.",
+      "saveCleanupFailed": "Couldn't save the picture or clear its uploaded file. Message us before trying again.",
+      "logoNotSet": "Picture saved, but it couldn't be set as your logo. Set the logo link under Your business before making ads.",
+      "logoNotCleared": "Couldn't remove this picture as your logo, so it wasn't deleted. Try again.",
+      "deleteFailed": "Couldn't delete the picture. Try again.",
+      "alreadyGone": "That picture is already gone. Reload the page.",
+      "fileNotCleared": "Picture removed from your library, but its stored file couldn't be deleted. Message us and we'll clear it.",
+      "somethingWrong": "Something went wrong. Check your connection and try again."
+    }
   }
 }

@@ -144,6 +144,12 @@ const ENGLISH: Record<OwnerErrorKey, string> = {
   openRequestExists: "An open request of this type already exists.",
   setUpBrandFirst: "Set up your Brand first, then connect Facebook in Settings.",
   leadFormsUnavailable: "Could not load lead forms. Try again.",
+  // #2330: the campaign list and Enquiries routes (byte-identical).
+  campaignFiltersInvalid: "Invalid campaign filters.",
+  campaignsNotLoaded: "We couldn't load your campaigns. Reload the page.",
+  enquiryInvalid: "Invalid enquiry.",
+  enquiryWhatsAppOnly: "Real enquiries can be logged on WhatsApp campaigns only.",
+  enquiryNotSaved: "The enquiry could not be saved. Try again.",
 };
 // The messages that take values, rendered with these.
 const VALUES: Partial<Record<OwnerErrorKey, Record<string, string | number>>> = {
