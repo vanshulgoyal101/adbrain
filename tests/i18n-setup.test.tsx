@@ -23,6 +23,8 @@ describe("WS1 step 1 in Hindi", () => {
     expect(screen.getByText("आपके विज्ञापन सिर्फ़ यहीं दिखेंगे। हर लाइन में एक शहर या इलाका।")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "वेबसाइट नहीं है? बायो या लिस्टिंग पेस्ट करें" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "मेरे विज्ञापन बनाइए" })).toBeInTheDocument();
+    // #2046: the ad-language field was the one English label left on Hindi step 1.
+    expect(screen.getByRole("group", { name: "आपके विज्ञापन इस भाषा में होंगे" })).toBeInTheDocument();
     expect(document.querySelector("[lang='hi'] h1")).not.toBeNull();
   });
 
@@ -43,6 +45,7 @@ describe("WS1 step 1 in Hindi", () => {
     render(<SetupBusinessStep business={null} />);
     expect(screen.getByRole("heading", { name: "Tell us about your business" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Make my ads" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Your ads will be in" })).toBeInTheDocument();
     // The ad-language chip 'हिंदी' carries its own lang; the step itself doesn't.
     expect(document.querySelector("[lang='hi'] h1")).toBeNull();
   });

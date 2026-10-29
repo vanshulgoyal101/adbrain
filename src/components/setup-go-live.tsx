@@ -52,6 +52,7 @@ function Row({ done, title, status, action, labels }: { done: boolean; title: st
 }
 
 const linkClass = "inline-flex min-h-11 items-center text-sm font-medium text-primary underline underline-offset-4";
+const META_PAYMENT_URL = "https://business.facebook.com/billing_hub/payment_settings";
 
 function sessionStore(): Storage | null {
   try { return window.sessionStorage; } catch { return null; }
@@ -261,8 +262,7 @@ export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNum
           action={showInviteHint ? <TesterInviteHint tried={connectTried} locale={locale} onRetry={() => setConnectOpen(true)} /> : undefined} />
         {payMetaRow ? (
           returning ? <Row labels={rowLabels} done title={t("goLive.payMeta")} status={t("goLive.payLast")} /> : <Row labels={rowLabels} done={false} title={t("goLive.payMeta")} status={t("goLive.payAdd")}
-            action={<a href="https://business.facebook.com/billing_hub/payment_settings" target="_blank" rel="noopener noreferrer"
-              className="inline-flex min-h-11 items-center text-sm font-medium text-primary underline underline-offset-4">{t("goLive.payLink")}</a>} />
+            action={<><p className="mt-1 text-sm text-slate-600">{t("goLive.payHow", { runTotal: formatMoney(total) })}</p><a href={META_PAYMENT_URL} target="_blank" rel="noopener noreferrer" className={linkClass}>{t("goLive.payLink")}</a></>} />
         ) : (
           // Off until the flat-price switch (SHOW_ADBRAIN_AD_MONEY); its words get Hindi when it turns on.
           <Row labels={rowLabels} done={false} title="Ad money" status="Pay by UPI or card"
@@ -282,8 +282,12 @@ export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNum
       )}
       {result?.kind === "blocked" && (
         <div role="alert" className="mt-4 text-sm text-slate-950">
-          <ul className="list-disc pl-5">{result.messages.map((message) => <li key={message}>{message}</li>)}</ul>
-          <Link href={reviewHref} className={linkClass}>{t("goLive.fixInReview")}</Link>
+          <ul className="list-disc pl-5">
+            {result.billing && <li>{t("goLive.billingRequired")}</li>}
+            {result.messages.map((message) => <li key={message}>{message}</li>)}
+          </ul>
+          {result.billing && <a href={META_PAYMENT_URL} target="_blank" rel="noopener noreferrer" className={cn(linkClass, "mr-4")}>{t("goLive.payLink")}</a>}
+          {(!result.billing || result.messages.length > 0) && <Link href={reviewHref} className={linkClass}>{t("goLive.fixInReview")}</Link>}
         </div>
       )}
       {result?.kind === "refused" && (

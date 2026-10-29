@@ -163,7 +163,7 @@ jobs:
           title="Deploy train stuck"
           open=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search "in:title \"$title\"" --json number --jq '.[0].number // empty')
           reason=$(cat "$RUNNER_TEMP/reason" 2>/dev/null || echo "Red or slow checks on next, a merge error, or the promote step hit its time limit.")
-          body="$(printf 'next could not be promoted to main. %s\n\nRun: %s/%s/actions/runs/%s\nFix next, or ship a hotfix PR to main (DevOps/CTO). Runbook: docs/RELEASING.md#deploy-train\n' "$reason" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+          body="$(printf 'next could not be promoted to main. %s\n\nRun: %s/%s/actions/runs/%s\nFix next, or ship a hotfix PR to main (DevOps/CTO). Runbook: docs/operations/releasing.md#deploy-train\n' "$reason" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
           if [ -n "$open" ]; then gh issue comment "$open" -R "$GITHUB_REPOSITORY" -b "$body"
           else gh issue create -R "$GITHUB_REPOSITORY" -l core -l bug -l owner:devops -t "$title" -b "$body"; fi
 
@@ -197,5 +197,5 @@ jobs:
           title="Deploy train stuck"
           open=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search "in:title \"$title\"" --json number --jq '.[0].number // empty')
           if [ -n "$open" ]; then echo "Already alerted in #$open."; exit 0; fi
-          body="$(printf 'next has had changes waiting for production for %s min (no train finished). Promote runs keep being cancelled or timing out.\n\nRun: %s/%s/actions/runs/%s\nCheck the latest Deploy train runs and the checks on next. Runbook: docs/RELEASING.md#deploy-train\n' "$age" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+          body="$(printf 'next has had changes waiting for production for %s min (no train finished). Promote runs keep being cancelled or timing out.\n\nRun: %s/%s/actions/runs/%s\nCheck the latest Deploy train runs and the checks on next. Runbook: docs/operations/releasing.md#deploy-train\n' "$age" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
           gh issue create -R "$GITHUB_REPOSITORY" -l core -l bug -l owner:devops -t "$title" -b "$body"

@@ -47,6 +47,7 @@ const metaDeletionMigration = await readFile(join(root, "db/migrations/20261026_
 const hardeningMigration = await readFile(join(root, "db/migrations/20261026_legacy_credentials_bucket_limits.sql"), "utf8");
 const reauthMigration = await readFile(join(root, "db/migrations/20261026_meta_connection_reauth.sql"), "utf8");
 const leadCampaignLinkMigration = await readFile(join(root, "db/migrations/20261026_lead_campaign_link.sql"), "utf8");
+const leadEraseMigration = await readFile(join(root, "db/migrations/20261029_lead_erase.sql"), "utf8");
 const leadSharedPageMigration = await readFile(join(root, "db/migrations/20261028_lead_sync_shared_page.sql"), "utf8");
 const managedWhatsAppMigration = await readFile(join(root, "db/migrations/20261025_managed_whatsapp_page_link.sql"), "utf8");
 const productRollupMigration = await readFile(join(root, "db/migrations/20260928_product_event_rollups.sql"), "utf8");
@@ -1369,6 +1370,60 @@ async function verifyLeadCampaignLink(db, database) {
     assert.equal(third.imported, 1);
     const links = Object.fromEntries((await db.query("select meta_lead_id, campaign_id from public.leads where business_id=$1", [business])).rows.map(row => [row.meta_lead_id, row.campaign_id]));
     assert.deepEqual(links, { "ad-lead": campaign, "test-lead": null, foreign: null, "late-link": campaign, "new-lead": campaign, twice: campaign });
+  });
+}
+
+async function verifyLeadErase(db, database) {
+  const owner = randomUUID(), other = randomUUID(), business = randomUUID(), campaign = randomUUID(), otherCampaign = randomUUID();
+  await db.query("insert into auth.users(id) values ($1),($2)", [owner, other]);
+  await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Erase')", [business, owner]);
+  await db.query("insert into public.campaigns(id,business_id,daily_budget,meta_campaign_id) values ($1,$2,300,'2201'),($3,$2,300,'2202')", [campaign, business, otherCampaign]);
+  await db.query("insert into public.meta_connections(business_id,generation,authorization_status,ad_account_id,page_id) values ($1,1,'connected','act_erase','page_erase')", [business]);
+  const lead = async (meta, campaignId, source = "meta_form") => (await db.query(
+    "insert into public.leads(business_id,campaign_id,meta_lead_id,source,full_name,phone) values ($1,$2,$3,$4,'Rohit','+919800000001') returning id",
+    [business, campaignId, meta, source])).rows[0].id;
+  const one = await lead("erase-1", campaign), two = await lead("erase-2", campaign), three = await lead("erase-3", otherCampaign);
+  await lead(null, campaign, "whatsapp_manual");
+  const as = async (user, run) => {
+    const session = client(database);
+    await session.connect();
+    try {
+      await session.query("begin"); await session.query("set local role authenticated");
+      await session.query("select set_config('request.jwt.claim.sub',$1,true)", [user]);
+      const result = await run(session); await session.query("commit"); return result;
+    } catch (error) { await session.query("rollback").catch(() => {}); throw error; } finally { await session.end(); }
+  };
+  const left = async () => (await db.query("select count(*)::int as n from public.leads where business_id=$1", [business])).rows[0].n;
+  await check(`${database}: an owner erases one enquiry or a campaign's, leaving a hashed tombstone and no personal data (#1761)`, async () => {
+    assert.equal(await as(other, s => s.query("select public.leads_erase($1,$2) as n", [business, one]).then(r => r.rows[0].n)), 0, "another owner erases nothing");
+    assert.equal(await as(owner, s => s.query("select public.leads_erase($1,$2) as n", [business, one]).then(r => r.rows[0].n)), 1);
+    assert.equal(await left(), 3);
+    assert.equal(await as(owner, s => s.query("select public.leads_erase($1,null,$2) as n", [business, campaign]).then(r => r.rows[0].n)), 2, "the campaign's form lead and its logged WhatsApp enquiry");
+    assert.equal(await left(), 1);
+    const tombstones = (await db.query("select meta_lead_hash from public.lead_tombstones where business_id=$1 order by 1", [business])).rows.map(r => r.meta_lead_hash);
+    assert.equal(tombstones.length, 2);
+    assert.ok(tombstones.every(hash => /^[0-9a-f]{64}$/.test(hash)) && !tombstones.join().includes("erase"), "only hashes are kept");
+    await as(owner, async s => {
+      await s.query("savepoint a");
+      await assert.rejects(s.query("select public.leads_erase($1,$2,$3)", [business, three, otherCampaign]), { code: "22023" });
+      await s.query("rollback to savepoint a");
+      await assert.rejects(s.query("delete from public.lead_tombstones"), { code: "42501" });
+    });
+    void two;
+  });
+  await check(`${database}: lead sync never re-imports an erased enquiry (#1761)`, async () => {
+    const run = (await db.query("select * from public.lead_sync_start($1,$2,null,1,'act_erase','page_erase')", [business, owner])).rows[0];
+    const saved = (await db.query(
+      "select public.lead_sync_checkpoint($1,$2,$3,1,'act_erase','page_erase',$4,$5::jsonb,$6::jsonb) as result",
+      [business, owner, run.id, run.version, JSON.stringify([
+        { meta_lead_id: "erase-1", meta_campaign_id: "2201", form_id: "f1" },
+        { meta_lead_id: "erase-2", meta_campaign_id: "2201", form_id: "f1" },
+        { meta_lead_id: "erase-new", meta_campaign_id: "2201", form_id: "f1" },
+      ]), JSON.stringify({ formsDone: false, pending: [] })],
+    )).rows[0].result;
+    assert.equal(saved.imported, 1);
+    const ids = (await db.query("select meta_lead_id from public.leads where business_id=$1 and meta_lead_id is not null order by 1", [business])).rows.map(r => r.meta_lead_id);
+    assert.deepEqual(ids, ["erase-3", "erase-new"]);
   });
 }
 
@@ -2933,8 +2988,12 @@ async function verify(database, source, integrityMigration, customerOnly = false
         await db.query(leadCampaignLinkMigration);
         await db.query(leadSharedPageMigration);
         await db.query(leadSharedPageMigration);
+        // #1761 (QA): the erase migration redefines the checkpoint last, so every check below runs on the final function.
+        await db.query(leadEraseMigration);
+        await db.query(leadEraseMigration);
         await verifyLeadCampaignLink(db,database);
         await verifySharedPageLeads(db,database);
+        await verifyLeadErase(db,database);
       }
       if (database === "customer_fresh") await verifyAdvisorHardening(db,database);
       await verifyBusinessTransfer(db,database);

@@ -1,5 +1,9 @@
 # Meta Approval Readiness
 
+Part of [Plans](README.md).
+
+**Status:** active: App Review submission prep is #156.
+
 This is an operator checklist, not an approval guarantee. Earlier versions of this
 page prescribed daily synthetic campaign creation and promised approval after a
 fixed period. Those instructions are withdrawn: traffic volume, elapsed time,
@@ -20,7 +24,7 @@ ad review are distinct. The exact applicable requirements are determined by the
 current Meta dashboard and official documentation for the intended use case.
 
 AdBrain's local capability probes check specific runtime access; they neither
-submit reviews nor override provider decisions. Read [Meta Connect](architecture/channels/meta-connect.md)
+submit reviews nor override provider decisions. Read [Meta Connect](../architecture/channels/meta-connect.md)
 for the implemented connection and publishing path.
 
 | Gate | Evidence to record | What does not satisfy it |
@@ -71,7 +75,7 @@ activation spends money and is not required just to prove callback recovery.
 
 ## Permission Evidence
 
-[OAuth code](../src/lib/meta/oauth.ts) builds a Graph v21.0 login URL and currently
+[OAuth code](../../src/lib/meta/oauth.ts) builds a Graph v21.0 login URL and currently
 requests these scopes. The configured Login for Business flow and provider's
 current rules must be reviewed separately; this table describes source, not
 permission approval or a recommendation to request unnecessary access.
@@ -87,7 +91,7 @@ permission approval or a recommendation to request unnecessary access.
 | `business_management` | Business/asset relationship discovery |
 
 Compare requested scopes with granted scopes from token inspection and the
-[capability verifier](../src/lib/meta/capability-verification.ts). Inspect denied,
+[capability verifier](../../src/lib/meta/capability-verification.ts). Inspect denied,
 expired or unavailable scopes rather than bypassing the guard with a system-user
 token. Changing scope requests/configuration is implementation/configuration work,
 not an edit authorized by this documentation task.
@@ -107,7 +111,7 @@ the approved private channel, never in this entry or a URL query string.
 
 Login uses Facebook Login, Graph v21.0, redirect
 `https://adbrain.vanshul.com/api/meta/oauth/callback`. Scopes come from
-`META_LOGIN_SCOPES` in [oauth.ts](../src/lib/meta/oauth.ts). All seven are used;
+`META_LOGIN_SCOPES` in [oauth.ts](../../src/lib/meta/oauth.ts). All seven are used;
 none can be dropped without breaking the core loop.
 
 | Permission | Why AdBrain needs it | Where the reviewer sees it |
@@ -189,7 +193,7 @@ of production readiness. Do not run it without a defined diagnostic purpose.
 
 If consent fails, distinguish callback/state/configuration failures from asset
 discovery, missing tasks and provider review restrictions. Use
-[Meta recovery guidance](architecture/channels/meta-connect.md#attempt-lifecycle) for the app path and
+[Meta recovery guidance](../architecture/channels/meta-connect.md#attempt-lifecycle) for the app path and
 the exact provider feedback for an appeal/resubmission. Do not remove owner,
 capability, paused-creation or spending protections to make a recording succeed.
 

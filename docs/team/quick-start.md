@@ -1,5 +1,7 @@
 # Developer Quick Start
 
+Part of [Team](README.md).
+
 Install a development checkout without touching production or starting paid work.
 
 **Do not follow environment-copy instructions in the shared working checkout.**
@@ -9,14 +11,14 @@ preparation is not an installation prerequisite or proof of approval.
 
 ## Prerequisites
 
-- Node.js 24 and npm, matching the [CI runtime](../.github/workflows/ci.yml).
+- Node.js 24 and npm, matching the [CI runtime](../../.github/workflows/ci.yml).
    Next.js alone permits older Node versions; that is not the tested requirement
    for this dependency set. Use the committed lockfile, not fresh package versions.
 - An isolated Supabase project with Auth, Postgres, and Storage.
 - Optional model credentials for AI; optional Meta credentials for connections.
   Neither is needed for the mocked unit suite.
 - Local PostgreSQL binaries for database integration tests; see
-  [Testing](team/testing.md).
+  [Testing](testing.md).
 
 ## Install and Configure
 
@@ -53,16 +55,16 @@ model, Meta and payment keys absent until their workflow is authorized. The imag
 setting selects an adapter; it does not make generation free. Keep `.env.local`
 out of Git. The public key relies on
 RLS; the service-role key bypasses RLS and must never reach a browser. Review
-[Configuration](operations/configuration.md) before adding provider credentials. Configuring
+[Configuration](../operations/configuration.md) before adding provider credentials. Configuring
 image generation does not prove it is free or available.
 
 ## Prepare the Database
 
 For a **fresh, disposable** development project, review
-[the schema](../db/schema.sql) and the [database procedure](operations/deploy.md).
+[the schema](../../db/schema.sql) and the [database procedure](../operations/deploy.md).
 For an existing database, review incremental migrations and its actual migration
 ledger. Do not replay the fresh schema or infer missing migrations from filenames.
-The [data model](architecture/data-model.md) explains the objects; [release policy](RELEASING.md)
+The [data model](../architecture/data-model.md) explains the objects; [release policy](../operations/releasing.md)
 governs permission to change them. Preparing a schema is a separate mutation step,
 not an install command or approval to update production.
 
@@ -107,7 +109,7 @@ npm run build
 
 Local tests do not prove email delivery, real consent, provider quality, or
 production deployment. Browser scripts can sign in to the configured backend;
-read [Testing](team/testing.md) before invoking them.
+read [Testing](testing.md) before invoking them.
 
 ## Enable Workflows Deliberately
 
@@ -133,5 +135,5 @@ read [Testing](team/testing.md) before invoking them.
 | Meta disabled in production | Explicit rollout and app configuration; unset rollout fails closed |
 | Connected but cannot read leads | Lead capability, Page token, form access, `leads_retrieval` |
 
-See [Operations](operations/README.md) for incidents and [Release Workflow](RELEASING.md)
+See [Operations](../operations/README.md) for incidents and [Release Workflow](../operations/releasing.md)
 for publication. Do not use a direct production CLI deploy as a setup shortcut.

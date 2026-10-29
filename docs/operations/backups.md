@@ -28,7 +28,7 @@ so Supabase can't restore anything (paid backups are a CEO call, #884). Our own 
   `~/.adbrain-backups/<UTC time>` (0700, the owner's Mac) and restore-drills it. Then it seals it
   as `<UTC time>.tar.gz.cms` (0600, CMS-encrypted to `.github/backup/backup-cert.crt`, like `db-backup.yml`),
   deletes the plaintext and keeps the newest 7 (#1762). To read one: decrypt with the keychain key
-  (RELEASING.md › restore drill: `openssl cms -decrypt …`), then `tar -xzf` and
+  (releasing-recovery.md › restore drill: `openssl cms -decrypt …`), then `tar -xzf` and
   `node scripts/db-export.mjs restore <folder>`.
   After a good export it also runs `scripts/prune-smoke-storage.mjs --apply` (#1891): the core smoke's own
   creatives and `creatives`-bucket files older than 7 days that nothing references (campaigns, ads, drafts,
