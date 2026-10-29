@@ -46,8 +46,8 @@ describe("#1438 Campaigns list words", () => {
     expect(screen.getByRole("button", { name: "Meta से अपडेट करें" })).toBeTruthy();
     expect(screen.getByRole("searchbox", { name: "कैंपेन खोजें" })).toBeTruthy();
     const status = screen.getByRole("combobox", { name: "कैंपेन की स्थिति" });
-    expect([...status.querySelectorAll("option")].map(option => option.textContent)).toEqual(["सभी स्थिति", "चालू", "रुका हुआ", "ड्राफ़्ट", "पूरा हुआ"]);
-    expect(screen.getByRole("button", { name: "और कैंपेन दिखाएं" })).toBeTruthy();
+    expect([...status.querySelectorAll("option")].map(option => option.textContent)).toEqual(["सभी स्थितियाँ", "चालू", "रुका हुआ", "ड्राफ़्ट", "पूरा हुआ"]);
+    expect(screen.getByRole("button", { name: "और कैंपेन दिखाएँ" })).toBeTruthy();
     expect(screen.queryByText("Your campaigns")).toBeNull();
   });
 

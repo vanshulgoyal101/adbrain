@@ -87,3 +87,4 @@ So do the errors from changing an ad's background, words or version, the assista
 Download (#2324).
 So do the refusals when you turn a campaign on, pause it or delete it (spend cap, Meta funds,
 Meta access, a pause Meta didn't confirm) (#2312).
+Errors from Enquiries and connecting Facebook come in Hindi too (#2327).
