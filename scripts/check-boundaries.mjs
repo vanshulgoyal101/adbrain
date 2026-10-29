@@ -15,11 +15,19 @@ import { fileURLToPath } from "node:url";
 
 export const BASELINE = "scripts/boundaries-baseline.json";
 
+/** @typedef {{ rule: string, from: string, to: string }} Violation */
+
+/** @param {Violation} v */
 export const keyOf = (v) => `${v.rule}\u0000${v.from}\u0000${v.to}`;
 
+/** @param {Iterable<Violation>} list */
 const sorted = (list) => [...list].sort((a, b) => keyOf(a).localeCompare(keyOf(b)));
 
-/** dependency-cruiser JSON → [{rule, from, to}] (module-level rules only). */
+/**
+ * dependency-cruiser JSON → [{rule, from, to}] (module-level rules only).
+ * @param {any} result
+ * @returns {Violation[]}
+ */
 export function violationsOf(result) {
   const seen = new Map();
   for (const v of result?.summary?.violations ?? []) {
@@ -30,7 +38,12 @@ export function violationsOf(result) {
   return sorted(seen.values());
 }
 
-/** Pure comparison; `base` is the base branch's baseline, or null when unknown. */
+/**
+ * Pure comparison; `base` is the base branch's baseline, or null when unknown.
+ * @param {Violation[]} current
+ * @param {Violation[]} baseline
+ * @param {Violation[] | null} [base]
+ */
 export function compare(current, baseline, base = null) {
   const now = new Set(current.map(keyOf));
   const known = new Set(baseline.map(keyOf));
@@ -46,6 +59,7 @@ export function compare(current, baseline, base = null) {
   return { ok: !added.length && !fixed.length && !grown.length, added, fixed, grown, perRule };
 }
 
+/** @param {ReturnType<typeof compare>} result */
 export function report({ added, fixed, grown, perRule }) {
   const lines = ["### Boundaries (ADR-001, #1792)", "", "| Rule | Now | Baseline | vs base |", "| --- | --- | --- | --- |"];
   for (const r of perRule) {
