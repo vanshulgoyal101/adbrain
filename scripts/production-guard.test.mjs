@@ -30,8 +30,8 @@ async function rollback({ current = [served(bad), served(bad)], deployments = [n
       return { ok: true, json: async () => ({ deployments }) };
     },
   });
-  const module = new SourceTextModule(source, { context });
-  await module.link((specifier) => {
+  const guardModule = new SourceTextModule(source, { context });
+  await guardModule.link((specifier) => {
     if (specifier === "node:child_process") {
       return new SyntheticModule(["execFileSync"], function () {
         this.setExport("execFileSync", (command, args) => {
@@ -47,7 +47,7 @@ async function rollback({ current = [served(bad), served(bad)], deployments = [n
     }, { context });
   });
   let error;
-  try { await module.evaluate(); } catch (caught) { error = caught; }
+  try { await guardModule.evaluate(); } catch (caught) { error = caught; }
   return { promotions, logs: logs.join("\n"), error, exitCode: error ? 1 : process.exitCode, reads };
 }
 
