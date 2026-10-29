@@ -3,7 +3,7 @@
 This reference describes the existing product identity, not a redesign or proof
 of deployment. Use it when adding a screen, changing icons, or reviewing public
 metadata. Source baseline: `672eb13`. Product behavior belongs in
-[Features](FEATURES.md).
+[Features](product/README.md).
 
 ## Name and Mark
 
@@ -25,7 +25,10 @@ else is ink on white, says one thing once and leads to one next step.
 
 [Global CSS](../src/app/globals.css) imports the locally packaged DM Sans Variable font for body and
 display text; Hindi and Punjabi fall back to the phone's own Devanagari and Gurmukhi faces (no
-download). App type uses five sizes: 13 meta, 15 body, 17 section, 24 page title, 32 figures
+download), all in one `--font-sans` stack. Text marked `lang="hi"`, `"mr"` or `"pa"` gets taller
+lines at every size (1.65 body, 1.55 section, 1.4 titles) so vowel signs never touch the next line;
+each translated screen marks its own Hindi part, so English left in it is still read as English (#1503).
+App type uses five sizes: 13 meta, 15 body, 17 section, 24 page title, 32 figures
 (`text-xs`, `text-sm`/`text-base`, `text-lg`/`text-xl`, `text-2xl`/`text-3xl`, `text-4xl`), and three
 weights (400, 500, 600). The marketing hero alone is larger. No all-caps labels, eyebrows, numbered
 markers on things that aren't a sequence, or trailing arrows on buttons.

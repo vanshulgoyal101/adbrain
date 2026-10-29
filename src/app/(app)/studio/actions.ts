@@ -1,5 +1,6 @@
 "use server";
 
+import { pictureSource } from "@/lib/creative/picture-source";
 import { observeAction } from "@/lib/observability/logger";
 
 import { revalidatePath } from "next/cache";
@@ -88,6 +89,8 @@ export async function updateCreativeCopy(
         ...quotes,
       ],
       business.vertical,
+      // #1617: an AI picture can't be called "our work"; the owner's own photo can (#1901: the tile badge's flag).
+      { ownPicture: pictureSource(generation) === "yours" },
     );
 
     const nextGeneration = {

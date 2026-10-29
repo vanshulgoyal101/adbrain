@@ -1,4 +1,5 @@
 import type { AdReviewFeedback } from "./client";
+import { segmentForCategory } from "@/lib/segments";
 
 /**
  * #1305 (CPO's table on #1299): Meta's likeliest rejections of local-service ads in one owner sentence and one
@@ -16,21 +17,46 @@ export type RejectionCopy = {
   message: string;
   /** Further reasons beyond the first matched one ("+2 more"). */
   more: number;
+  /** #1645: a line for the words editor this row opens ("Add your licence number…"). */
+  editHint?: string;
 };
 
-type Row = { row: string; policy: RegExp; words?: RegExp; sentence: string; actions: RejectionAction[] };
+/** #1645 (CPO, #1622): the pilot segment (`segmentForCategory`) a row's words can be tailored to. */
+type Segment = "solar" | "ielts" | "interiors";
+type Wording = { sentence?: string; actions?: RejectionAction[]; editHint?: string };
+type Row = { row: string; policy: RegExp; words?: RegExp; sentence: string; actions: RejectionAction[];
+  /** Only for these segments (a row other businesses never get). */
+  only?: Segment[];
+  bySegment?: Partial<Record<Segment, Wording>> };
+
+const LICENCE_HINT = "Add your licence number as the last line, e.g. 'Punjab licence no. 123'.";
+const UNPROVABLE = "It promises a result Meta thinks can't be proven, like";
 
 const ROWS: Row[] = [
-  { row: "personal_attributes", policy: /personal attribute/i, words: /\bare you (?:suffering|struggling)|\byour (?:weight|debt|condition|illness)/i,
-    sentence: "The ad talks about the reader's own health or problem (\"Are you…?\"). Meta doesn't allow that.", actions: ["edit_words"] },
+  { row: "personal_attributes", policy: /personal attribute/i,
+    words: /\bare you (?:suffering|struggling)|\byour (?:weight|debt|condition|illness)|failed (?:your )?(?:ielts|pte|exam)|low band|weak (?:in )?english|visa (?:was |got )?(?:refused|rejected)/i,
+    sentence: "The ad talks about the reader's own health or problem (\"Are you…?\"). Meta doesn't allow that.", actions: ["edit_words"],
+    // #1770: no quoted example; Meta may have objected to other words.
+    bySegment: { ielts: { sentence: "The ad talks about the reader's own result, like a past test score or a visa refusal. Meta doesn't allow that. Talk about your classes instead." } } },
   { row: "health_appearance", policy: /personal health|appearance|body image/i, words: /before[- ]and[- ]after|before\/after|body image/i,
     sentence: "The picture or words compare \"before and after\" or focus on someone's body.", actions: ["change_picture", "edit_words"] },
   { row: "misleading", policy: /misleading|unrealistic|deceptive|false/i, words: /\bguarantee|\b100%|unrealistic/i,
-    sentence: "It promises a result Meta thinks can't be proven, like a guaranteed saving.", actions: ["edit_words"] },
+    sentence: `${UNPROVABLE} a guaranteed result.`, actions: ["edit_words"],
+    bySegment: {
+      solar: { sentence: `${UNPROVABLE} a guaranteed saving.` },
+      // #1770: a licence line doesn't take a guarantee out; name what to remove.
+      ielts: { sentence: `${UNPROVABLE} a guaranteed band, visa or admission.`, editHint: "Take out 'guaranteed', '100%' or any promised band, visa or admission." },
+      interiors: { sentence: `${UNPROVABLE} the lowest price or a fixed handover date.` },
+    } },
   { row: "political", policy: /social issue|election|politic/i, words: /\bpolitical\b|social issues?/i,
     sentence: "Meta may treat a government scheme name as a political ad, which needs extra verification.", actions: ["edit_words"] },
+  { row: "job_or_visa_offer", only: ["ielts"], policy: /employment|unacceptable business|fraud|scam/i,
+    words: /work permit|jobs? (?:abroad|in \w+)|job guarantee|\bPR\b|settle abroad/i,
+    sentence: "Meta read this as a job or visa offer. Keep it about the course and add your licence number as the last line.",
+    actions: ["edit_words"], bySegment: { ielts: { editHint: LICENCE_HINT } } },
   { row: "special_category", policy: /special ad categor|housing|credit|employment|financial products/i, words: /special ad categor|housing|credit|employment/i,
-    sentence: "Ads for property, loans or jobs need a special Meta setting AdBrain doesn't support yet.", actions: ["message_us"] },
+    sentence: "Ads for property, loans or jobs need a special Meta setting AdBrain doesn't support yet.", actions: ["message_us"],
+    bySegment: { interiors: { sentence: "Meta read this as a property ad. Talk about kitchens and design, not flats, projects or prices per square foot.", actions: ["edit_words"] } } },
   { row: "destination", policy: /landing page|destination|non[- ]functional/i, words: /landing page|broken link|destination|isn'?t working|not working/i,
     sentence: "People who tap can't reach you: the WhatsApp number or link isn't working.", actions: ["check_whatsapp"] },
   { row: "low_quality", policy: /low[- ]quality|sensational|clickbait|engagement bait/i, words: /sensational|clickbait|engagement bait/i,
@@ -43,15 +69,27 @@ const ROWS: Row[] = [
     sentence: "Meta thinks the picture shows too much skin.", actions: ["change_picture"] },
 ];
 
-const matchRow = (item: AdReviewFeedback) =>
-  ROWS.find((row) => item.policy && row.policy.test(item.policy)) ?? ROWS.find((row) => row.words?.test(item.message));
+const matchRow = (item: AdReviewFeedback, segment: Segment | null) => {
+  const rows = ROWS.filter((row) => !row.only || (segment !== null && row.only.includes(segment)));
+  return rows.find((row) => item.policy && row.policy.test(item.policy)) ?? rows.find((row) => row.words?.test(item.message));
+};
 
-/** The owner's sentence and fix for an ad's review feedback; null when Meta gave no reason at all. */
-export function rejectionCopy(feedback: AdReviewFeedback[]): RejectionCopy | null {
+/**
+ * The owner's sentence and fix for an ad's review feedback; null when Meta gave no reason at all.
+ * #1645: `vertical` (the Brand's category) tailors the words for the IELTS and interiors pilots.
+ */
+export function rejectionCopy(feedback: AdReviewFeedback[], { vertical }: { vertical?: string | null } = {}): RejectionCopy | null {
   const reasons = feedback.filter((item) => item.message.trim());
   if (!reasons.length) return null;
-  const matched = reasons.map((item) => ({ item, row: matchRow(item) })).find((entry) => entry.row);
-  if (matched?.row) return { row: matched.row.row, sentence: matched.row.sentence, actions: matched.row.actions, message: matched.item.message, more: reasons.length - 1 };
+  const segment = (segmentForCategory(vertical)?.slug ?? null) as Segment | null;
+  const matched = reasons.map((item) => ({ item, row: matchRow(item, segment) })).find((entry) => entry.row);
+  if (matched?.row) {
+    const wording = (segment && matched.row.bySegment?.[segment]) || {};
+    return {
+      row: matched.row.row, sentence: wording.sentence ?? matched.row.sentence, actions: wording.actions ?? matched.row.actions,
+      message: matched.item.message, more: reasons.length - 1, ...(wording.editHint ? { editHint: wording.editHint } : {}),
+    };
+  }
   const first = reasons[0];
   return {
     row: "other",

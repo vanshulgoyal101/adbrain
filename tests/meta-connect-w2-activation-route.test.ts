@@ -108,7 +108,9 @@ vi.mock("@/lib/payments/operator-funding", () => ({
 vi.mock("@/lib/campaign/activation-learning", () => ({ getActivationLearning: mocks.getActivationLearning }));
 vi.mock("@/lib/campaign/learnings", () => ({ recordLaunchCap: mocks.recordLaunchCap }));
 // #1138's ownership read sees no other business's row.
-vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: () => ({ select: () => ({ in: async () => ({ data: [], error: null }) }) }) }) }));
+// #1518: no new-audience copy waits (campaign_edit_operations is empty).
+const noRows = async () => ({ data: [], error: null });
+vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: () => ({ select: () => ({ in: noRows, eq: () => ({ eq: () => ({ limit: noRows }) }) }) }) }) }));
 
 function patch(body: unknown): Request {
   return new Request("http://localhost/api/campaigns/campaign-1", {

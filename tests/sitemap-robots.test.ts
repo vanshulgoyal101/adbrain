@@ -51,6 +51,9 @@ describe("sitemap", () => {
         absoluteUrl("/guides/meta-campaign-checklist"),
         absoluteUrl("/ideas"),
         ...IDEAS.map((idea) => absoluteUrl(`/ideas/${idea.slug}`)),
+        absoluteUrl("/for/solar"),
+        absoluteUrl("/for/ielts"),
+        absoluteUrl("/for/interiors"),
       ]),
     );
   });

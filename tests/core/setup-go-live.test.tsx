@@ -37,6 +37,15 @@ describe("core: <SetupGoLive> (#1271)", () => {
     expect(screen.getByRole("link", { name: "Change who sees it" })).toHaveAttribute("href", "/campaigns?all=1&new=1&creatives=a,b");
   });
 
+  it("#1934: returning, payment shows done for the last campaign, the budget starts at the last amount, no first-month line", () => {
+    render(<SetupGoLive business={business} ads={ads} pageConnected funding="own" returning initialDaily={500}
+      whatsappNumber="+91 ••••• 3210" weeklyCap={{ capRupees: null, active: [] }} />);
+    expect(screen.getByText("Set up for your last campaign")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Add payment in Meta" })).toBeNull();
+    expect(screen.getByText(/₹500 a day for 2 days/)).toBeInTheDocument();
+    expect(screen.queryByText(/first month of AdBrain is free/)).toBeNull();
+  });
+
   it("a chip changes the daily amount, the total and the primary", () => {
     goLive();
     fireEvent.click(screen.getByRole("button", { name: "₹1,000 a day" }));
@@ -45,13 +54,34 @@ describe("core: <SetupGoLive> (#1271)", () => {
     expect(bar().getByRole("button", { name: "Go live · ₹1,000 a day" })).toBeEnabled();
   });
 
+  it("#1587: one solid primary; 'a day' once so the chips fit a row; the total isn't said three times", () => {
+    goLive();
+    const chips = within(screen.getByRole("group", { name: "Daily budget" })).getAllByRole("button");
+    expect(chips.map((chip) => chip.textContent)).toEqual(["₹300 a day", "₹500", "₹1,000"]);
+    expect(chips[0]).toHaveAttribute("aria-pressed", "true");
+    expect(chips[0].className).toContain("bg-primary/10");
+    expect(chips[0].className).not.toMatch(/(^|\s)bg-primary(\s|$)/);
+    expect(screen.getByText("Meta checks your ads first, usually within a few hours and up to a day.")).toBeInTheDocument();
+    expect(screen.getAllByText(/₹708/)).toHaveLength(2);
+  });
+
   it("Page not connected: the primary connects it first, then the page refreshes", () => {
     goLive({ pageConnected: false });
     expect(screen.getByText("Not connected")).toBeInTheDocument();
+    // #1529: before Connect, the full composer is the pre-access dead end, so the link isn't offered.
+    expect(screen.queryByRole("link", { name: "Change who sees it" })).toBeNull();
     fireEvent.click(bar().getByRole("button", { name: "Connect Facebook Page" }));
     fireEvent.click(screen.getByRole("button", { name: "Meta dialog: connected" }));
     expect(mocks.refresh).toHaveBeenCalled();
     expect(mocks.push).not.toHaveBeenCalled();
+  });
+
+  it("#718: an own-account business is told AdBrain's price before Go live; others aren't", () => {
+    goLive({ funding: "own" });
+    expect(screen.getByText("Your first month of AdBrain is free. After that it's ₹999 a month; we'll remind you before it's due.")).toBeInTheDocument();
+    cleanup();
+    goLive({ funding: "managed" });
+    expect(screen.queryByText(/₹999 a month/)).not.toBeInTheDocument();
   });
 
   it("#1292: before Connect, the trust line for who holds the ad money; none once connected", () => {
@@ -128,15 +158,27 @@ describe("core: <SetupGoLive> (#1271)", () => {
     expect(bar().getByRole("button", { name: "Go live · ₹1,000 a day" })).toBeDisabled();
   });
 
-  it("money row: AdBrain ad money vs paying Meta on your own account", () => {
-    goLive({ funding: "managed" });
-    expect(screen.getByText("Ad money")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Add money" })).toHaveAttribute("href", "/settings");
-    document.body.innerHTML = "";
-    goLive({ funding: "own" });
-    expect(screen.getByText("Payment on Meta")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Add payment in Meta" })).toHaveAttribute("target", "_blank");
+  it("money row (#1251 CEO): only the own-ad-account row; AdBrain's 'Ad money' row stays hidden for every funding mode", () => {
+    for (const funding of ["managed", "operator", "own", null] as const) {
+      document.body.innerHTML = "";
+      goLive({ funding });
+      expect(screen.getByText("Payment on Meta")).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "Add payment in Meta" })).toHaveAttribute("target", "_blank");
+      expect(screen.queryByText("Ad money")).not.toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: "Add money" })).not.toBeInTheDocument();
+      expect(screen.getByText("Stops at ₹708")).toBeInTheDocument();
+    }
   });
+});
+
+describe("core: step 3 shows the WhatsApp welcome Go live sends (#1529)", () => {
+  it("the welcome and what's ready to send, read-only", () => {
+    render(<SetupGoLive business={business} ads={ads} pageConnected={false} funding="own" whatsappNumber="+91 ••••• 3210" weeklyCap={null}
+      welcome={{ source: "saved", language: "en", greeting: "Hi! Thanks for asking about a free site survey.", autofill: "I'd like a free site survey", callButton: true }} />);
+    expect(screen.getByText("“Hi! Thanks for asking about a free site survey.”")).toBeInTheDocument();
+    expect(screen.getByText("Customers see your welcome, a Call now button, and 'I'd like a free site survey' ready to send.")).toBeInTheDocument();
+  });
+
 });
 
 describe("core: Go live's total is activation's own cap + GST (#1251 CPO/Dev 2)", () => {
@@ -146,4 +188,13 @@ describe("core: Go live's total is activation's own cap + GST (#1251 CPO/Dev 2)"
     // Dev 2's payment helper still funds exactly that total (#1374 numbers unchanged).
     expect([300, 500, 1000].map((dailyRupees) => paymentToCoverPaise({ dailyRupees, days: 2, availablePaise: 0 }))).toEqual([88_500, 147_500, 295_000]);
   });
+
+describe("#1901: Go live says whose picture each ad is", () => {
+  it("labels each picked ad's picture", () => {
+    render(<SetupGoLive business={business} pageConnected funding="managed" whatsappNumber="+91 ••••• 3210" weeklyCap={{ capRupees: null, active: [] }}
+      ads={[{ ...ads[0], generation: { image: { provider: "owner-photo" } } }, { ...ads[1], generation: { image: { provider: "openrouter" } } }] as Creative[]} />);
+    expect(screen.getByText("Your photo")).toBeInTheDocument();
+    expect(screen.getByText("AI picture")).toBeInTheDocument();
+  });
+});
 });

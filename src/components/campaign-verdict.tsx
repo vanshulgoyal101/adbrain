@@ -36,7 +36,8 @@ export function CampaignVerdict({ verdict, whatsapp, results, spend, details, on
         return <Link href="/leads" className={primary}>Reply now</Link>;
       case "run_again":
         return onRunAgain ? (
-          <Button size="sm" onClick={onRunAgain} disabled={runAgainBusy}>
+          // #1841 (Designer): outline, like the deleted card's; only "Reply now" is solid.
+          <Button size="sm" variant="outline" onClick={onRunAgain} disabled={runAgainBusy}>
             {runAgainBusy && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}Run this again
           </Button>
         ) : null;

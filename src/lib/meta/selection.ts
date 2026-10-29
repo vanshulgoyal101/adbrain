@@ -1,4 +1,5 @@
 import type { MetaAdAccountOption, MetaPageOption } from "./oauth";
+import { adAccountBlocker } from "@/lib/meta/account-status";
 import type { Blocker, CandidateDTO } from "./connect-contracts";
 
 export type DiscoveryPair = {
@@ -77,7 +78,8 @@ export function buildCandidateDTOs(
     }
     const blockers: Blocker[] = [];
     if (pair.adAccount.disabled || pair.adAccount.status !== 1) {
-      blockers.push({ code: "ACCOUNT_RESTRICTED", message: "This ad account is not active.", action: null });
+      // #1943: Meta's account_status in plain words with one action.
+      blockers.push(adAccountBlocker(pair.adAccount.status === 1 ? undefined : pair.adAccount.status, pair.adAccount.id)!);
     }
     if (!pair.relationshipVerified) {
       blockers.push({ code: "SETUP_REQUIRED", message: "Meta did not verify this Page and ad account belong together.", action: null });

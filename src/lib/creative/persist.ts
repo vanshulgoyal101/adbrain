@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import sharp from "sharp";
+import { storageWebp } from "@/lib/imageGen/encode";
 import type { AdDesignSpec } from "@/lib/creative/design";
 import { renderCompositeAd } from "@/lib/creative/render";
 import { getEnv } from "@/lib/env";
@@ -33,7 +34,13 @@ export async function persistCreativeImageBytes(
   bytes: Uint8Array,
   contentType = "image/png",
 ): Promise<string> {
-  const ext = contentType.includes("png") ? "png" : "jpg";
+  // #1897: store WebP (about 3× smaller) when it is smaller; Meta uploads and downloads convert it back to JPEG.
+  const webp = await storageWebp(bytes).catch(() => null);
+  if (webp) {
+    bytes = webp;
+    contentType = "image/webp";
+  }
+  const ext = contentType.includes("webp") ? "webp" : contentType.includes("png") ? "png" : "jpg";
   const basePath = `${businessId}/${variantGroup}`;
   const filename = `${name}-${crypto.randomUUID()}`;
   const thumbnailPath = `${basePath}/thumbnails-v1/${filename}.webp`;

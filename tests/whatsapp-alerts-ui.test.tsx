@@ -14,7 +14,7 @@ describe("Settings → WhatsApp alerts (#701)", () => {
     actions.saveAlertSettings.mockResolvedValue({ ok: true, settings: { ...off, leadAlerts: true, language: "hi" } });
     render(<WhatsAppAlerts businessId="b1" initial={off} />);
     expect(screen.getByRole("button", { name: "Save alerts" })).toBeDisabled();
-    fireEvent.click(screen.getByLabelText(/Every new enquiry/));
+    fireEvent.click(screen.getByLabelText(/New form enquiry/));
     fireEvent.change(screen.getByLabelText("Language"), { target: { value: "hi" } });
     fireEvent.click(screen.getByRole("button", { name: "Save alerts" }));
     await waitFor(() => expect(actions.saveAlertSettings).toHaveBeenCalledWith({ businessId: "b1", leadAlerts: true, dailyResults: false, language: "hi" }));
@@ -24,10 +24,10 @@ describe("Settings → WhatsApp alerts (#701)", () => {
   it("puts the number step first until it's confirmed, then last (#847)", () => {
     const { unmount } = render(<WhatsAppAlerts businessId="b1" initial={off} />);
     const confirm = screen.getByRole("button", { name: "Confirm my WhatsApp number" });
-    expect(confirm.compareDocumentPosition(screen.getByLabelText(/Every new enquiry/)) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(confirm.compareDocumentPosition(screen.getByLabelText(/New form enquiry/)) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     unmount();
     render(<WhatsAppAlerts businessId="b1" initial={{ ...off, leadAlerts: true, number: "+91 ••••• 2222" }} />);
-    expect(screen.getByRole("button", { name: "Use another number" }).compareDocumentPosition(screen.getByLabelText(/Every new enquiry/)) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Use another number" }).compareDocumentPosition(screen.getByLabelText(/New form enquiry/)) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
   });
 
   it("opens WhatsApp with START ready to send, from the number that should get alerts", async () => {
@@ -43,6 +43,33 @@ describe("Settings → WhatsApp alerts (#701)", () => {
     unmount();
     render(<WhatsAppAlerts businessId="b1" initial={{ ...off, number: "+91 ••••• 2222", optedOut: true }} />);
     expect(screen.getByText(/Send START from your WhatsApp to turn them back on/)).toBeInTheDocument();
+  });
+
+  // #1720 (CPO, #1689): say what pilots actually get. The daily line comes first; form alerts are form-only.
+  it("describes the alerts honestly, daily line first", () => {
+    render(<WhatsAppAlerts businessId="b1" initial={off} />);
+    expect(screen.getByText("A short WhatsApp message from AdBrain when something needs you. Customer chats from your ads already arrive in your WhatsApp Business app.")).toBeInTheDocument();
+    const daily = screen.getByLabelText(/Yesterday's results, 9 am/);
+    const form = screen.getByLabelText(/New form enquiry/);
+    expect(daily.compareDocumentPosition(form) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByText("One line: spent, chats and enquiries, and what each enquiry cost.")).toBeInTheDocument();
+    expect(screen.getByText("Only for ads with a form: name, phone and which ad, with a tap to call.")).toBeInTheDocument();
+  });
+
+  it("before the first save offers both on, in the app's language; saving sends those", async () => {
+    actions.saveAlertSettings.mockResolvedValue({ ok: true, settings: { ...off, leadAlerts: true, dailyResults: true, language: "hi", saved: true } });
+    render(<WhatsAppAlerts businessId="b1" initial={{ ...off, saved: false }} locale="hi" />);
+    expect(screen.getByLabelText(/कल के नतीजे, सुबह 9 बजे/)).toBeChecked();
+    expect(screen.getByLabelText(/फ़ॉर्म से नई पूछताछ/)).toBeChecked();
+    expect(screen.getByLabelText("Language")).toHaveValue("hi");
+    fireEvent.click(screen.getByRole("button", { name: "Save alerts" }));
+    await waitFor(() => expect(actions.saveAlertSettings).toHaveBeenCalledWith({ businessId: "b1", leadAlerts: true, dailyResults: true, language: "hi" }));
+  });
+
+  it("keeps a saved choice (both off) as saved", () => {
+    render(<WhatsAppAlerts businessId="b1" initial={{ ...off, saved: true }} locale="hi" />);
+    expect(screen.getByLabelText(/कल के नतीजे/)).not.toBeChecked();
+    expect(screen.getByLabelText("Language")).toHaveValue("en");
   });
 
   it("a failed save stays on the card with 'Try again' (#920)", async () => {

@@ -1,0 +1,49 @@
+{
+ "recordedAt": "2026-10-28T20:26:03.068Z",
+ "note": "#1808: real /models answers (ids only), trimmed; recorded with read-only GETs",
+ "openrouter": {
+  "url": "https://openrouter.ai/api/v1/models?output_modalities=all",
+  "ids": [
+   "anthropic/claude-haiku-5.5",
+   "openai/gpt-image-2.5-flare",
+   "assemblyai/assemblyai-tts-1",
+   "particle-ai/particle-1",
+   "liquid/d1.1",
+   "~liquid/d1-ultra-latest",
+   "~liquid/d1-latest",
+   "amazon/titan-embed-image-v1",
+   "amazon/titan-embed-text-v1",
+   "amazon/titan-embed-text-v2"
+  ]
+ },
+ "groq": {
+  "url": "https://api.groq.com/openai/v1/models",
+  "ids": [
+   "openai/gpt-oss-20b",
+   "openai/gpt-oss-safeguard-20b",
+   "openai/gpt-oss-120b",
+   "meta-llama/llama-prompt-guard-2-22m",
+   "allam-2-7b",
+   "canopylabs/orpheus-v1-english",
+   "canopylabs/orpheus-arabic-saudi",
+   "qwen/qwen3.8-27b",
+   "meta-llama/llama-prompt-guard-2-86m",
+   "whisper-large-v3",
+   "whisper-large-v3-turbo"
+  ]
+ },
+ "google": {
+  "url": "https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000",
+  "ids": [
+   "models/gemini-3.6-flash",
+   "models/gemini-2.5-flash",
+   "models/gemini-2.5-pro",
+   "models/gemini-2.5-flash-preview-tts",
+   "models/gemini-2.5-pro-preview-tts",
+   "models/gemma-4-26b-a4b-it",
+   "models/gemma-4-31b-it",
+   "models/gemini-flash-latest",
+   "models/gemini-flash-lite-latest"
+  ]
+ }
+}

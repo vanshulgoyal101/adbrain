@@ -29,3 +29,14 @@ export function metaWriteMode(ownerId: string, adAccountId: string | null | unde
   if (!internal.smokeUserIds.includes(ownerId)) return "all";
   return adAccountId && (internal.testAdAccountIds as string[]).includes(adAccountId) ? "all" : "pause-only";
 }
+
+/**
+ * #1467: accounts that aren't customers or the team's own walks, left out of every scoreboard row: the production
+ * smoke, the demo workspace and sales prospects (`+prospect`, #1317).
+ */
+export function isScoreboardExcluded(user: AccountIdentity, demoEmail?: string | null): boolean {
+  if (!user) return false;
+  if (internal.smokeUserIds.includes(user.id)) return true;
+  if (demoEmail && user.email?.trim().toLowerCase() === demoEmail.trim().toLowerCase()) return true;
+  return isProspectAccount(user);
+}
