@@ -81,3 +81,5 @@ Home, including Recent activity, which shows only the Hindi label for each event
 and each campaign's "How it's going" sentence and buttons, on Home and Campaigns (#1438).
 The main errors from making ads and saving a campaign (AI allowance used, too many
 unfinished campaigns, a save or check that didn't go through) also come in Hindi (#2305).
+So do the refusals when you turn a campaign on, pause it or delete it (spend cap, Meta funds,
+Meta access, a pause Meta didn't confirm) (#2312).

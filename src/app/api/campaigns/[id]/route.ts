@@ -29,20 +29,29 @@ import { lacksAreaExclusions } from "@/lib/meta/service-area";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { campaignOwnedElsewhere, ownerRefusal } from "@/lib/campaign/campaign-owner";
 import { CampaignEditError, refuseWhileSwitchPending } from "@/lib/campaign/edit-service";
+import { ownerErrorIn, type OwnerErrorKey, type OwnerErrorValues } from "@/i18n/locale";
+import { requestLocale } from "@/i18n/request-locale";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
+
+/** #2312: the owner's-language errors for one request; statuses and codes stay as they were. */
+async function ownerWords() {
+  const locale = await requestLocale();
+  return (key: OwnerErrorKey, values?: OwnerErrorValues) => ownerErrorIn(locale, key, values);
+}
 
 export const GET = observeRoute("/api/campaigns/[id]", "GET", async (
   _req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) => {
   const { id } = await params;
+  const say = await ownerWords();
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return apiError("Unauthorized", 401);
   const { data: campaign } = await supabase.from("campaigns").select("*").eq("id", id).maybeSingle();
-  if (!campaign) return apiError("Campaign not found", 404);
+  if (!campaign) return apiError(say("campaignNotFound"), 404);
   try {
     const context = await requireOwnedBusiness(campaign.business_id);
     const review = reviewableCampaign(campaign);
@@ -68,7 +77,7 @@ export const GET = observeRoute("/api/campaigns/[id]", "GET", async (
     if (error instanceof CampaignDeliveryError) return apiError(error.message, 409);
     if (error instanceof ConnectionAccessError) return apiError(error.message, error.retryable ? 503 : error.code === "UNAUTHENTICATED" ? 401 : 409);
     if (error instanceof MetaError) return apiError(friendlyMetaError(error), error.status && error.status >= 500 ? 502 : 400);
-    return serverError("campaign.delivery", error, "Campaign delivery review is unavailable.");
+    return serverError("campaign.delivery", error, say("deliveryReviewUnavailable"));
   }
 });
 
@@ -83,6 +92,7 @@ async function handlePATCH(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
+  const say = await ownerWords();
   const supabase = await createClient();
   const {
     data: { user },
@@ -105,7 +115,7 @@ async function handlePATCH(
     .select("*")
     .eq("id", id)
     .maybeSingle();
-  if (!campaign) return apiError("Campaign not found", 404);
+  if (!campaign) return apiError(say("campaignNotFound"), 404);
   const refused = await ownerRefusal(campaign.business_id, campaign.meta_campaign_id);
   if (refused) return refused;
 
@@ -116,7 +126,7 @@ async function handlePATCH(
     if (err instanceof ConnectionAccessError) {
       return apiError(err.message, err.code === "CONFLICT" ? 409 : err.code === "UNAUTHENTICATED" ? 401 : 400);
     }
-    return serverError("campaign.status", err, "Could not update the campaign.");
+    return serverError("campaign.status", err, say("campaignUpdateFailed"));
   }
 
   // Spend guardrail: block turning a campaign on if it would push the weekly
@@ -126,7 +136,7 @@ async function handlePATCH(
       getSpendLimits(campaign.business_id),
       getCampaignSpend(campaign.business_id),
     ]).catch(() => null);
-    if (!verifiedSpend) return apiError("Spend limits could not be verified. Try again before activating.", 503);
+    if (!verifiedSpend) return apiError(say("spendLimitsUnverified"), 503);
     const [limits, spend] = verifiedSpend;
     const otherActive = spend.filter((c) => c.status === "active" && c.id !== id);
     const projection = wouldExceedCap(
@@ -134,18 +144,18 @@ async function handlePATCH(
       campaign.daily_budget ?? 0,
       limits.weeklyCapRupees,
     );
-    if (!projection.verified) return apiError("Campaign budgets or the saved cap could not be verified. Sync campaigns and review spend settings before activating.", 503);
+    if (!projection.verified) return apiError(say("budgetsUnverified"), 503);
     const { exceeds, projectedAfter } = projection;
     if (exceeds) {
       return apiError(
-        `Activating this would commit about ${formatMoney(Math.round(projectedAfter))} a week, over your ${formatMoney(Math.round(limits.weeklyCapRupees!))} a week cap. Raise the cap in Settings or pause another campaign first.`,
+        say("overWeeklyCap", { projected: formatMoney(Math.round(projectedAfter)), cap: formatMoney(Math.round(limits.weeklyCapRupees!)) }),
         422,
       );
     }
   }
 
   if (!campaign.meta_campaign_id) {
-    return apiError("This campaign isn't linked to Meta yet.", 400);
+    return apiError(say("notLinkedToMeta"), 400);
   }
 
   const storedBinding = readStoredCampaignBinding(campaign);
@@ -154,17 +164,17 @@ async function handlePATCH(
     !storedBinding.metaPageId ||
     storedBinding.metaConnectionGeneration === null
   ) {
-    return apiError("This campaign needs account reconciliation before it can be changed.", 409);
+    return apiError(say("reconcileBeforeChange"), 409);
   }
   if (
     action === "active" &&
     parsed.data.connectionGeneration !== storedBinding.metaConnectionGeneration
   ) {
-    return apiError("Meta connection changed; review the campaign again.", 409);
+    return apiError(say("metaConnectionChanged"), 409);
   }
   const children = action === "active" ? intendedCampaignChildren(campaign) : null;
   if (action === "active" && !children) {
-    return apiError("Campaign children need reconciliation before activation.", 409);
+    return apiError(say("reconcileChildren"), 409);
   }
   // #759: only a managed business spends an AdBrain-held allowance; the others are guarded by the cap on Meta.
   let mode: FundingMode = "managed";
@@ -172,7 +182,7 @@ async function handlePATCH(
     try {
       mode = await fundingMode(campaign.business_id);
     } catch {
-      return apiError("Campaign funding could not be verified. Try again before activating.", 503);
+      return apiError(say("fundingUnverified"), 503);
     }
   }
 
@@ -200,11 +210,11 @@ async function handlePATCH(
         if (action === "active" && connection.capabilities.canActivate.state !== "available") {
           // #1217: Meta's own reason; 'unknown' (couldn't check) can be tried again.
           const { state, blockers } = connection.capabilities.canActivate;
-          throw new ConnectionAccessError("UNAVAILABLE", blockers[0]?.message ?? "Meta has not confirmed campaign activation access.", { retryable: state === "unknown" });
+          throw new ConnectionAccessError("UNAVAILABLE", blockers[0]?.message ?? say("activationAccessUnconfirmed"), { retryable: state === "unknown" });
         }
         if (parsed.data.status === "active") {
           if (!Number.isFinite(campaign.daily_budget) || (campaign.daily_budget ?? 0) <= 0 || connection.selected?.currency !== "INR") {
-            throw new ConnectionAccessError("UNAVAILABLE", "Campaign budget and currency must be verified before activation.");
+            throw new ConnectionAccessError("UNAVAILABLE", say("budgetCurrencyUnverified"));
           }
           const capDays = parsed.data.capDays;
           // #1055: ads AdBrain paused from the card (and, for a capped copy, the reviewed ad it came from)
@@ -217,31 +227,33 @@ async function handlePATCH(
             });
           // #741: a tree built before the out-of-area rule must be rebuilt, never activated.
           if (delivery.adSets.some(adSet => lacksAreaExclusions(adSet.targeting))) {
-            throw new CampaignDeliveryError("This campaign was built without out-of-area exclusions, so Meta could show it far outside your area. Add them first: More → Edit audience → Leave out places outside the area. Then turn it on.");
+            throw new CampaignDeliveryError(say("areaExclusionsMissing"));
           }
           if (capDays && (delivery.adSets.some(adSet => adSet.status !== "PAUSED") || delivery.ads.some(ad => ad.status !== "PAUSED"))) {
-            throw new CampaignDeliveryError("Pause the reviewed ad sets and ads in Meta first. AdBrain turns on only the capped copy.");
+            throw new CampaignDeliveryError(say("pauseReviewedFirst"));
           }
           const keptPausedSources = new Set(pausedHere.length ? Object.values(await meta.adSources(pausedHere)) : []);
           const priorCappedAds = new Set(delivery.ads.filter(ad => children!.cappedAdSetIds.includes(ad.adSetId)).map(ad => ad.id));
           const cappedSourceAdIds = children!.adIds.filter(adId => !priorCappedAds.has(adId) && !keptPausedSources.has(adId));
-          if (capDays && !cappedSourceAdIds.length) throw new CampaignDeliveryError("Every ad in this campaign is paused from its card. Undo one of those pauses before turning the campaign on.");
+          if (capDays && !cappedSourceAdIds.length) throw new CampaignDeliveryError(say("everyAdPaused"));
           const expectedDigest = createHash("sha256").update(activationConfirmationPayload(campaign, connection, delivery, capDays)).digest("hex");
           if (parsed.data.confirmationDigest !== expectedDigest) {
-            throw new ConnectionAccessError("CONFLICT", "Campaign or child review changed; review the current Meta delivery settings again.");
+            throw new ConnectionAccessError("CONFLICT", say("reviewChanged"));
           }
           const capPaise = capDays ? Math.round(campaign.daily_budget! * 100) * capDays : undefined;
           if (mode !== "managed") {
             // #245 operator / #759 own account: paid on Meta directly; the run's total limit on Meta is the guard.
             if (!capDays || !capPaise) {
-              throw new CustomerBalanceError("This business is funded on Meta, so it runs only with a total limit. Pause the ad sets and ads in Meta and choose how many days to run.");
+              throw new CustomerBalanceError(say("fundedOnMetaNeedsDays"));
             }
             const funding = await readFunding(meta);
             // The operator must set an account spending limit; an owner's own limit, when set, must have room.
             const short = fundingShortfall({ mode, neededPaise: capPaise, account: funding });
-            if (short?.kind === "no_limit") throw new CustomerBalanceError("Set a spending limit on the Meta ad account before activating.");
+            if (short?.kind === "no_limit") throw new CustomerBalanceError(say("setSpendingLimit"));
             if (short?.kind === "short") {
-              throw new CustomerBalanceError(`Meta has ${formatMoneyExact(short.roomPaise / 100)} left under the ad account's spending limit${committedWords(short.committed)}; this run needs ${formatMoneyExact(short.neededPaise / 100)}. Add funds on Meta or choose fewer days.`);
+              throw new CustomerBalanceError(say("metaFundsShort", {
+                room: formatMoneyExact(short.roomPaise / 100), committed: committedWords(short.committed, formatMoneyExact, say), needed: formatMoneyExact(short.neededPaise / 100),
+              }));
             }
           } else {
             // #216: AdBrain records Meta's lifetime spend itself; the reserve below stays the gate.
@@ -260,7 +272,7 @@ async function handlePATCH(
           let liveTree = { adSetIds: children!.adSetIds, adIds: children!.adIds };
           try {
             if (capDays && capPaise) {
-              if (reservation && fundingShortfall({ mode, neededPaise: capPaise, account: null, allowancePaise: reservation.mediaLimitPaise })) throw new CustomerBalanceError("The approved total is more than the available advertising funds.");
+              if (reservation && fundingShortfall({ mode, neededPaise: capPaise, account: null, allowancePaise: reservation.mediaLimitPaise })) throw new CustomerBalanceError(say("approvedOverFunds"));
               const capped = await meta.createCappedAdSet(campaign.meta_campaign_id!, {
                 sourceAdSetId: children!.adSetIds[0], sourceAdIds: cappedSourceAdIds, lifetimeBudgetPaise: capPaise,
                 endTime: new Date(Date.now() + capDays * 86_400_000),
@@ -276,7 +288,7 @@ async function handlePATCH(
                   cappedAdSetIds: [...children!.cappedAdSetIds, capped.adSetId],
                 },
               }, id).catch(() => ({ error: new Error("Campaign storage unavailable.") }));
-              if (recordError) throw new CampaignDeliveryError("The capped ad set could not be recorded. Nothing was activated.");
+              if (recordError) throw new CampaignDeliveryError(say("cappedNotRecorded"));
               try {
                 cappedAfter = await meta.activateCappedTree(campaign.meta_campaign_id!, capped);
               } catch (error) {
@@ -306,10 +318,10 @@ async function handlePATCH(
             const paused = await meta.pauseCampaignTree(campaign.meta_campaign_id!, liveTree).catch(() => null);
             if (!paused?.objects.some(object => object.level === "campaign" && object.status === "PAUSED")) {
               await confirm("uncertain").catch(() => undefined);
-              throw new CampaignDeliveryError("AdBrain could not record the activation and Meta did not confirm the pause. Pause the campaign in Ads Manager now.");
+              throw new CampaignDeliveryError(say("activationUnrecordedPauseUnconfirmed"));
             }
             await confirm("paused").catch(() => undefined);
-            throw new CampaignDeliveryError("AdBrain could not record the activation, so the campaign was paused again in Meta. Try again.");
+            throw new CampaignDeliveryError(say("activationUnrecordedPaused"));
           }
           // The ledger is best effort: the run is live whether or not this is written.
           if (launchCap) await Promise.resolve().then(() => recordLaunchCap(createAdminClient(), { campaignId: id, cap: launchCap! })).catch(() => false);
@@ -324,7 +336,7 @@ async function handlePATCH(
           stopChildren ? { adSetIds: stopChildren.adSetIds, adIds: stopChildren.adIds } : { adSetIds: [], adIds: [] },
         );
         if (!pauseResult.objects.some(object => object.level === "campaign" && object.status === "PAUSED")) {
-          throw new CampaignDeliveryError("Meta did not confirm the pause. Pause the campaign in Ads Manager now.");
+          throw new CampaignDeliveryError(say("pauseUnconfirmed"));
         }
         if (reservation) await confirmCustomerCampaign(context, id, reservation.reservationId, "paused").catch(() => undefined);
       },
@@ -342,20 +354,20 @@ async function handlePATCH(
     if (isMetaReauthError(err)) {
       // #757: a dead token can't stop delivery, so name the manual step first while the campaign may be running.
       const message = action === "paused" || campaign.status === "active"
-        ? `Meta stopped accepting AdBrain's access, so we couldn't ${action === "paused" ? "pause" : "change"} this campaign. Pause it in Ads Manager now, then reconnect Facebook in Settings.`
-        : "Meta stopped accepting AdBrain's access. Reconnect Facebook in Settings, then try again.";
+        ? say("metaAccessStoppedLive", { action: action === "paused" ? "pause" : "change" })
+        : say("metaAccessStopped");
       return NextResponse.json({ error: message, code: "META_REAUTH" }, { status: 409 });
     }
     if (err instanceof MetaError) {
       return apiError(friendlyMetaError(err), err.status && err.status >= 500 ? 502 : 400);
     }
-    return serverError("campaign.status", err, "Could not update the campaign.");
+    return serverError("campaign.status", err, say("campaignUpdateFailed"));
   }
 
   const { error } = action === "active" ? { error: null } : await saveCampaign({ businessId: campaign.business_id, userId: user.id }, { status: action }, id)
     .catch(() => ({ error: new Error("Campaign storage unavailable.") }));
   if (error) {
-    return serverError("campaign.status", error, "Could not update the campaign.");
+    return serverError("campaign.status", error, say("campaignUpdateFailed"));
   }
 
   await logEvent({
@@ -385,6 +397,7 @@ async function handleDELETE(
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const say = await ownerWords();
 
   // RLS scopes this to the user's own campaigns.
   const { data: campaign } = await supabase
@@ -393,12 +406,12 @@ async function handleDELETE(
     .eq("id", id)
     .maybeSingle();
   if (!campaign) {
-    return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
+    return NextResponse.json({ error: say("campaignNotFound") }, { status: 404 });
   }
 
   // #1138: a duplicate of another business's Meta campaign is removed from AdBrain only.
   const elsewhere = await campaignOwnedElsewhere(campaign.business_id, campaign.meta_campaign_id).catch(() => null);
-  if (elsewhere === null) return NextResponse.json({ error: "Campaign storage unavailable. Try again." }, { status: 503 });
+  if (elsewhere === null) return NextResponse.json({ error: say("campaignStorageUnavailable") }, { status: 503 });
 
   let metaDeleted = false;
   if (!elsewhere) {
@@ -409,7 +422,7 @@ async function handleDELETE(
       storedBinding.metaConnectionGeneration === null
     ) {
       return NextResponse.json(
-        { error: "This campaign needs account reconciliation before it can be deleted." },
+        { error: say("reconcileBeforeDelete") },
         { status: 409 },
       );
     }
@@ -437,7 +450,7 @@ async function handleDELETE(
         return NextResponse.json({ error: err.message }, { status: err.code === "CONFLICT" ? 409 : 400 });
       }
       return NextResponse.json(
-        { error: "Meta deletion could not be confirmed. The campaign remains in AdBrain so you can check its status." },
+        { error: say("metaDeleteUnconfirmed") },
         { status: 502 },
       );
     }
@@ -446,7 +459,7 @@ async function handleDELETE(
   const { error } = await deleteVerifiedCampaign({ businessId: campaign.business_id, userId: user.id }, id)
     .catch(() => ({ error: new Error("Campaign storage unavailable.") }));
   if (error) {
-    return serverError("campaign.delete", error, "Could not delete the campaign.");
+    return serverError("campaign.delete", error, say("campaignDeleteFailed"));
   }
 
   await logEvent({
