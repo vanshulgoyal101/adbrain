@@ -127,8 +127,10 @@ function reviewedMessage({ source, opening, language }: ResolvedWhatsAppMessage)
 function adName(creative: PreflightCreative): string {
   const headline = (creative.headline ?? "").trim();
   if (!headline) return "you chose";
-  if (headline.length <= 40) return `"${headline}"`;
-  const cut = headline.slice(0, 40);
+  // Whole characters, so a Hindi matra or an emoji is never split.
+  const graphemes = Array.from(new Intl.Segmenter("en", { granularity: "grapheme" }).segment(headline), (part) => part.segment);
+  if (graphemes.length <= 40) return `"${headline}"`;
+  const cut = graphemes.slice(0, 40).join("");
   return `"${(cut.lastIndexOf(" ") > 20 ? cut.slice(0, cut.lastIndexOf(" ")) : cut).trimEnd()}…"`;
 }
 
@@ -148,7 +150,7 @@ function creativesBlockerMessage(draft: PreflightInput["draft"], creatives: Pref
   });
   if (!problems.length) return null;
   const more = problems.length - 1;
-  return more ? `${problems[0]} ${more} more ${more === 1 ? "ad needs" : "ads need"} the same check.` : problems[0];
+  return more ? `${problems[0]} ${more} more ${more === 1 ? "ad needs" : "ads need"} fixing too.` : problems[0];
 }
 
 /** #740: name what Meta didn't recognise, so the owner knows which line to fix. */
