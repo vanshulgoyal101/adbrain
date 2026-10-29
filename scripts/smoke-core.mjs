@@ -8,14 +8,15 @@ const envPath = "/Users/vanshulgoyal/Development/copilot/adbrain/.env.smoke";
 
 const origin = "https://adbrain.vanshul.com";
 const modes = new Set(process.argv.slice(2));
-if ([...modes].some((mode) => !["--create", "--campaign", "--help"].includes(mode))) {
-  throw new Error("Supported modes: --create, --campaign, --help.");
+const mutating = ["--create", "--campaign", "--picture"];
+if ([...modes].some((mode) => ![...mutating, "--help"].includes(mode))) {
+  throw new Error("Supported modes: --create, --campaign, --picture, --help.");
 }
 if (modes.has("--help")) {
-  console.log("npm run smoke:core [-- --create | -- --campaign]");
+  console.log("npm run smoke:core [-- --create | -- --campaign | -- --picture]");
   process.exit(0);
 }
-assert.ok(!(modes.has("--create") && modes.has("--campaign")), "Run only one mutating mode at a time.");
+assert.ok(mutating.filter((mode) => modes.has(mode)).length <= 1, "Run only one mutating mode at a time.");
 
 async function readCreateResponse(response) {
   const contentType = await response.headerValue("content-type");
@@ -35,25 +36,33 @@ async function readCreateResponse(response) {
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const HAS_UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+const FREE_PICTURES = ["pollinations", "cloudflare"];
+const BACKGROUND_INSTRUCTION = "plain light studio background";
 
-/**
- * #2145: the scheduled run deletes its own ads and every file under `<business>/<generation>/` in the creatives
- * bucket (the photo and composed ad, originals and thumbnails), as the signed-in owner, so a run every 2 hours
- * doesn't fill the 1 GB free Storage. Rows first: a failed file delete leaves orphan files, never broken ads.
- */
-async function removeCreateRun(auth, { businessId, generationId } = {}) {
-  assert.ok(UUID.test(businessId ?? "") && UUID.test(generationId ?? ""), "run ids unknown");
+/** Supabase REST and Storage as the signed-in owner (#2145), so RLS scopes every read and delete. */
+async function supabaseFetch(auth, path, init = {}) {
   assert.ok(auth?.apikey && auth.token, "session unknown");
-  const headers = { apikey: auth.apikey, authorization: `Bearer ${auth.token}` };
-  const rows = await fetch(`${auth.supabase}/rest/v1/creatives?business_id=eq.${businessId}&variant_group=eq.${generationId}&select=id`,
-    { method: "DELETE", headers: { ...headers, prefer: "return=representation" } });
-  assert.ok(rows.ok, `ads not deleted (HTTP ${rows.status})`);
-  const ads = (await rows.json()).length;
+  return fetch(`${auth.supabase}${path}`, {
+    ...init,
+    headers: { apikey: auth.apikey, authorization: `Bearer ${auth.token}`, "content-type": "application/json", ...init.headers },
+  });
+}
+
+async function businessAds(auth, businessId) {
+  assert.ok(UUID.test(businessId ?? ""), "business id unknown");
+  const response = await supabaseFetch(auth, `/rest/v1/creatives?business_id=eq.${businessId}&select=id,variant_group,created_at,image_url,generation`);
+  assert.ok(response.ok, `ads not read (HTTP ${response.status})`);
+  return response.json();
+}
+
+/** Every file under `<business>/<group>/` in the creatives bucket: originals, thumbnails and composed ads. */
+async function groupFiles(auth, businessId, group) {
+  assert.ok(UUID.test(businessId ?? "") && UUID.test(group ?? ""), "picture folder unknown");
   const files = [];
   async function list(folder, depth) {
-    const response = await fetch(`${auth.supabase}/storage/v1/object/list/creatives`, {
-      method: "POST", headers: { ...headers, "content-type": "application/json" },
-      body: JSON.stringify({ prefix: folder, limit: 1000, offset: 0 }),
+    const response = await supabaseFetch(auth, "/storage/v1/object/list/creatives", {
+      method: "POST", body: JSON.stringify({ prefix: folder, limit: 1000, offset: 0 }),
     });
     assert.ok(response.ok, `pictures not listed (HTTP ${response.status})`);
     for (const entry of await response.json()) {
@@ -61,14 +70,62 @@ async function removeCreateRun(auth, { businessId, generationId } = {}) {
       else if (depth < 2) await list(`${folder}/${entry.name}`, depth + 1);
     }
   }
-  await list(`${businessId}/${generationId}`, 0);
-  if (files.length) {
-    const removed = await fetch(`${auth.supabase}/storage/v1/object/creatives`, {
-      method: "DELETE", headers: { ...headers, "content-type": "application/json" }, body: JSON.stringify({ prefixes: files }),
-    });
-    assert.ok(removed.ok, `pictures not deleted (HTTP ${removed.status})`);
+  await list(`${businessId}/${group}`, 0);
+  return files;
+}
+
+async function deleteFiles(auth, files) {
+  if (!files.length) return;
+  const removed = await supabaseFetch(auth, "/storage/v1/object/creatives", { method: "DELETE", body: JSON.stringify({ prefixes: files }) });
+  assert.ok(removed.ok, `pictures not deleted (HTTP ${removed.status})`);
+}
+
+/** A stored file's name without folder or extension; `persistCreativeImageBytes` makes it `<angle>-<uuid>`. */
+const fileStem = (path) => path.split("/").pop().replace(/\.[^.]+$/, "");
+const urlStem = (url) => {
+  try { return fileStem(new URL(url).pathname); } catch { return ""; }
+};
+
+/**
+ * #2145: a dispatched `--create` deletes its own ads and their files under `<business>/<generation>/`, as the
+ * signed-in owner, so repeated runs don't fill the 1 GB free Storage. Rows first: a failed file delete leaves
+ * orphan files, never broken ads. When the run's ads are the business's only ads, the newest one stays so the
+ * scheduled `--picture` smoke has an ad to change.
+ */
+async function removeCreateRun(auth, { businessId, generationId } = {}) {
+  assert.ok(UUID.test(businessId ?? "") && UUID.test(generationId ?? ""), "run ids unknown");
+  const ads = await businessAds(auth, businessId);
+  const run = ads.filter((ad) => ad.variant_group === generationId).sort((a, b) => b.created_at.localeCompare(a.created_at));
+  const keep = run.length && run.length === ads.length ? run[0] : null;
+  const remove = run.filter((ad) => ad !== keep && UUID.test(ad.id));
+  let deleted = 0;
+  if (remove.length) {
+    const rows = await supabaseFetch(auth, `/rest/v1/creatives?business_id=eq.${businessId}&variant_group=eq.${generationId}&id=in.(${remove.map((ad) => ad.id).join(",")})&select=id`,
+      { method: "DELETE", headers: { prefer: "return=representation" } });
+    assert.ok(rows.ok, `ads not deleted (HTTP ${rows.status})`);
+    deleted = (await rows.json()).length;
   }
-  return { ads, files: files.length };
+  const kept = JSON.stringify(ads.filter((ad) => !remove.includes(ad)).map((ad) => [ad.image_url, ad.generation]));
+  const files = (await groupFiles(auth, businessId, generationId)).filter((path) => !kept.includes(fileStem(path)));
+  await deleteFiles(auth, files);
+  return { ads: deleted, files: files.length, kept: Boolean(keep) };
+}
+
+/**
+ * #2145/#1891: a new background is stored under new file names, so the scheduled run deletes the picture and
+ * composed ad it replaced (originals and thumbnails), only inside that ad's `<business>/<group>/` folder and only
+ * when no ad of the business still refers to them.
+ */
+async function removeReplacedPictures(auth, before) {
+  const group = before.variant_group ?? before.id;
+  const ads = await businessAds(auth, before.business_id);
+  const referenced = JSON.stringify(ads.map((ad) => [ad.image_url, ad.generation]));
+  const stems = new Set([before.image_url, before.generation?.photoUrl].filter((url) => typeof url === "string")
+    .map(urlStem).filter((stem) => HAS_UUID.test(stem) && !referenced.includes(stem)));
+  if (!stems.size) return 0;
+  const files = (await groupFiles(auth, before.business_id, group)).filter((path) => stems.has(fileStem(path)));
+  await deleteFiles(auth, files);
+  return files.length;
 }
 
 const { SMOKE_EMAIL: email, SMOKE_PASSWORD: password } = process.env.SMOKE_EMAIL
@@ -104,6 +161,7 @@ try {
   let preflightCount = 0;
   let savedDraft = null;
   let draftDeleteCount = 0;
+  let pictureAllowed = null;
   page.on("pageerror", (error) => errors.push(error.name === "EvalError" ? "CSP eval error" : `page error (${error.name})`));
   page.on("console", (message) => {
     if (message.type() !== "error") return;
@@ -143,6 +201,11 @@ try {
         generationCount = 1;
         return route.continue();
       }
+    }
+    // --picture: one background change per allowance, for the ad the smoke chose.
+    if (pictureAllowed && request.method() === "POST" && url.origin === origin && url.pathname === `/api/creatives/${pictureAllowed}/background`) {
+      pictureAllowed = null;
+      return route.continue();
     }
     if (campaignSetup && ["POST", "PUT"].includes(request.method()) && url.origin === origin) {
       // #497: choosing an ad starts a background plan, and Prepare may plan again. Both are read-only.
@@ -215,7 +278,8 @@ try {
       process.exitCode = 1;
     }
   }
-  if (!modes.has("--campaign")) {
+  // --picture skips Prepare: its background plan can fall back to paid text (budget routing), and that run spends $0.
+  if (!modes.has("--campaign") && !modes.has("--picture")) {
     // Every deploy: Prepare one paused-campaign review, never send it, then delete its draft.
     const name = `QA preflight smoke ${crypto.randomUUID().slice(0, 8)}`;
     try {
@@ -344,7 +408,7 @@ try {
       if (process.env.SMOKE_CREATE_CLEANUP === "1") {
         try {
           const removed = await removeCreateRun(auth, generationRequest);
-          console.log(`PASS Cleanup: deleted ${removed.ads} ads and ${removed.files} files`);
+          console.log(`PASS Cleanup: deleted ${removed.ads} ads and ${removed.files} files${removed.kept ? "; kept the newest ad for the --picture smoke" : ""}`);
         } catch (error) {
           console.log(`FAIL Cleanup: ${error instanceof Error ? error.message.split("\n")[0].slice(0, 180) : "Unknown error"}; delete this run's ads in Review`);
           process.exitCode = 1;
@@ -354,6 +418,64 @@ try {
       if (generationCount && savedCount === null) savedCount = await recoverSavedCount();
       console.log(`FAIL Create${generationCount ? `: ${savedCount ?? "unconfirmed"}/3 saved` : ""}: ${error instanceof Error ? error.message.split("\n")[0].slice(0, 180) : "Unknown error"}; ${generationCount ? "check saved work before any retry" : "no paid request sent"}`);
       process.exitCode = 1;
+    }
+  }
+  if (modes.has("--picture")) {
+    // #2145: the scheduled check. One new background (a template prompt, no text model) on a free picture provider.
+    let before = null;
+    let changed = false;
+    try {
+      assert.equal(process.exitCode ?? 0, 0, "Read-only views failed; no picture was requested");
+      assert.ok(auth?.user?.id, "Signed-in identity unknown, so free pictures aren't certain; no picture was requested");
+      assert.ok(makesFreePictures(auth.user), "This account would make paid pictures (not internal, or exempt); no picture was requested");
+      // Never touch an ad in a campaign that reached Meta.
+      const campaigns = await supabaseFetch(auth, "/rest/v1/campaigns?select=creative_ids&meta_campaign_id=not.is.null");
+      assert.ok(campaigns.ok, `campaigns not read (HTTP ${campaigns.status})`);
+      const live = new Set((await campaigns.json()).flatMap((campaign) => campaign.creative_ids ?? []));
+      const recent = await supabaseFetch(auth, "/rest/v1/creatives?select=id,business_id,variant_group,image_url,generation&image_url=not.is.null&order=created_at.desc&limit=10");
+      assert.ok(recent.ok, `ads not read (HTTP ${recent.status})`);
+      const candidates = (await recent.json()).filter((ad) => UUID.test(ad.id) && !live.has(ad.id));
+      assert.ok(candidates.length, "No ad to change; run --create once by hand (paid text, record in #88)");
+      let result = null;
+      const busy = [];
+      for (const ad of candidates) {
+        before = ad;
+        pictureAllowed = ad.id;
+        result = await page.evaluate(async ({ id, instruction }) => {
+          const response = await fetch(`/api/creatives/${id}/background`, {
+            method: "POST", headers: { "content-type": "application/json" },
+            body: JSON.stringify({ instruction }), signal: AbortSignal.timeout(330_000),
+          });
+          return { status: response.status, error: (await response.json().catch(() => null))?.error ?? null };
+        }, { id: ad.id, instruction: BACKGROUND_INSTRUCTION });
+        pictureAllowed = null;
+        // 409: an earlier change to this ad is unfinished or held for a check; nothing was started, try the next ad.
+        if (result.status !== 409) break;
+        busy.push(ad.id.slice(0, 8));
+        before = null;
+      }
+      assert.ok(before, `Every recent ad is held by an earlier unfinished change (${busy.join(", ")}); no picture was requested`);
+      assert.equal(result.status, 200, `New background returned HTTP ${result.status}${result.error ? `: ${result.error}` : ""}`);
+      changed = true;
+      const saved = await supabaseFetch(auth, `/rest/v1/creatives?id=eq.${before.id}&select=generation`);
+      assert.ok(saved.ok, `changed ad not read (HTTP ${saved.status})`);
+      const image = (await saved.json())[0]?.generation?.image;
+      assert.ok(FREE_PICTURES.includes(image?.provider), `Saved picture came from ${image?.provider ?? "an unknown provider"}, not a free one`);
+      console.log(`PASS Picture: new background from ${image.provider}${image.latencyMs ? ` in ${Math.round(image.latencyMs / 1000)} s` : ""} (ad ${before.id.slice(0, 8)}${busy.length ? `; skipped ${busy.length} held` : ""}; no text model, $0)`);
+    } catch (error) {
+      pictureAllowed = null;
+      console.log(`FAIL Picture: ${error instanceof Error ? error.message.split("\n")[0].slice(0, 180) : "Unknown error"}`);
+      process.exitCode = 1;
+    }
+    if (changed) {
+      try {
+        const removed = await removeReplacedPictures(auth, before);
+        console.log(removed ? `PASS Storage cleanup: deleted ${removed} replaced files`
+          : "NOTE Storage cleanup: the replaced pictures are still referenced by an ad, so they were kept (#1891)");
+      } catch (error) {
+        console.log(`FAIL Storage cleanup: ${error instanceof Error ? error.message.split("\n")[0].slice(0, 180) : "Unknown error"}; the replaced pictures stay in Storage`);
+        process.exitCode = 1;
+      }
     }
   }
   if (modes.has("--campaign")) {

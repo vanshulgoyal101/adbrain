@@ -1,11 +1,18 @@
 name: Create smoke
-# #2145: makes 3 ads on production every 2 hours as the smoke account, so a dead picture provider fails a check
-# instead of waiting for someone to walk into it. Free pictures only: smoke-core.mjs refuses before any paid
-# request unless the account is internal and not exempt. The words are written on the normal (paid) text models.
+# #2145: every 2 hours the smoke account changes one ad's background in production (`--picture`), so dead free
+# pictures fail a check instead of waiting for someone to walk into them. That run spends $0: a template prompt,
+# no text model, and smoke-core.mjs refuses before the request unless the account makes free pictures.
+# A dispatched `create` runs the full Create (3 ads); its words use the paid text models (record it in #88).
 on:
   schedule:
     - cron: "17 */2 * * *"
   workflow_dispatch:
+    inputs:
+      mode:
+        description: "picture: free, $0. create: 3 ads with paid text (record in #88)."
+        type: choice
+        options: [picture, create]
+        default: picture
 permissions:
   contents: read
 
@@ -17,13 +24,16 @@ jobs:
       issues: write
     # A timed-out job opens no issue (#2029): every step is bounded and they sum to at most this.
     timeout-minutes: 50
-    # Never two at once (one paid text run each); a queued run waits, never cancels the running one.
+    # Never two at once; a queued run waits, never cancels the running one.
     concurrency:
       group: create-smoke
       cancel-in-progress: false
     defaults:
       run:
         shell: bash
+    # The dispatch input reaches the shell only as this variable, mapped to a fixed flag by `case`.
+    env:
+      REQUESTED_MODE: ${{ inputs.mode }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         timeout-minutes: 3
@@ -43,15 +53,20 @@ jobs:
           timeout -k 30s 8m npx playwright install --with-deps chromium && exit 0
           echo "::warning::playwright install --with-deps did not finish in 8 min; installing Chromium without OS packages"
           timeout -k 30s 4m npx playwright install chromium
-      # No retry: each attempt is another paid text run. The run's ads and pictures are deleted after a PASS.
-      - name: Create smoke (free pictures, deletes its ads)
+      # No retry: a create attempt is another paid text run. Each mode deletes what it replaced or made after a PASS.
+      - name: Smoke (free picture, or a dispatched Create)
         timeout-minutes: 15
         env:
           SMOKE_EMAIL: ${{ secrets.SMOKE_EMAIL }}
           SMOKE_PASSWORD: ${{ secrets.SMOKE_PASSWORD }}
           SMOKE_CREATE_CLEANUP: "1"
         run: |
-          rc=0; timeout -k 30s 14m node scripts/smoke-core.mjs --create | tee smoke.txt || rc=$?
+          case "${REQUESTED_MODE:-picture}" in
+            picture) flag=--picture ;;
+            create) flag=--create ;;
+            *) echo "FAIL unknown mode" | tee smoke.txt; exit 1 ;;
+          esac
+          rc=0; timeout -k 30s 14m node scripts/smoke-core.mjs "$flag" | tee smoke.txt || rc=$?
           if [ "$rc" -eq 124 ] || [ "$rc" -eq 137 ]; then echo "FAIL smoke did not finish in 14 min" | tee -a smoke.txt; fi
           exit "$rc"
       - name: Alert on failure
@@ -62,7 +77,14 @@ jobs:
         run: |
           run="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
           smoke=$(grep -E '^(PASS|FAIL|NOTE)' smoke.txt 2>/dev/null || echo "smoke did not run; see the run log")
-          body="$(printf 'Run: %s\n\n```\n%s\n```\nFree pictures are the usual cause (#2145). A FAIL Create with saved ads keeps them in the smoke workspace; a FAIL Cleanup leaves the ads of that run in Review.\n' "$run" "$smoke")"
+          if grep -q '^FAIL Picture' smoke.txt 2>/dev/null; then
+            cause="Free pictures are failing in production: the scheduled check could not save a new background from a free provider (#2145). It spent nothing."
+          elif [ "${REQUESTED_MODE:-picture}" = picture ]; then
+            cause="The scheduled free-picture check failed outside the picture step; see the lines above (#2145)."
+          else
+            cause="Free pictures are the usual cause (#2145). A FAIL Create with saved ads keeps them in the smoke workspace; a FAIL Cleanup leaves the ads of that run in Review."
+          fi
+          body="$(printf 'Run: %s\n\n```\n%s\n```\n%s\n' "$run" "$smoke" "$cause")"
           # One open alert at a time: a repeat failure comments on it.
           open=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search 'in:title "Create smoke failed"' --json number --jq '.[0].number // empty')
           if [ -n "$open" ]; then
