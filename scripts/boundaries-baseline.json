@@ -750,7 +750,7 @@
       "rule": "C4-file-size",
       "from": "src/components/campaigns.tsx",
       "to": "> 400 lines",
-      "lines": 2754
+      "lines": 2753
     },
     {
       "rule": "C4-file-size",
@@ -762,7 +762,7 @@
       "rule": "C4-file-size",
       "from": "src/components/lead-inbox.tsx",
       "to": "> 400 lines",
-      "lines": 675
+      "lines": 668
     },
     {
       "rule": "C4-file-size",
