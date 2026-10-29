@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useState } from "react";
-import { ImagePlus } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ImagePlus, Pencil, Trash2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Status } from "@/components/ui/status";
 import { AssetTile, slugify } from "@/components/assets-library";
@@ -18,6 +18,65 @@ const TABS = [
   { id: "made", label: "Made by AdBrain" },
 ] as const;
 type Tab = (typeof TABS)[number]["id"];
+
+const UNDO_MS = 6_000;
+const iconButton = "inline-flex size-11 items-center justify-center rounded-md text-slate-600 hover:bg-slate-100 disabled:opacity-50";
+
+/** #778 slice 3c: Rename and Delete on the owner's own photo. */
+function OwnPhotoControls({ asset, request, onRenamed, onDelete }: {
+  asset: MediaView;
+  request: typeof fetch;
+  onRenamed: (asset: MediaView) => void;
+  onDelete: (asset: MediaView) => void;
+}) {
+  const label = asset.name || "Photo";
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(asset.name ?? "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function save() {
+    setSaving(true);
+    setError(null);
+    try {
+      const response = await request(`/api/media/${asset.id}`, {
+        method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: name.trim() || null }), signal: AbortSignal.timeout(15_000),
+      });
+      const body = await response.json().catch(() => ({})) as { asset?: MediaView; error?: string };
+      if (!response.ok || !body.asset) throw new Error(body.error);
+      onRenamed(body.asset);
+      setEditing(false);
+    } catch (caught) {
+      setError(caught instanceof Error && caught.message ? caught.message : "Couldn't save the change. Try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (editing) {
+    return (
+      <form className="flex flex-col gap-2" onSubmit={(event) => { event.preventDefault(); void save(); }}>
+        <input aria-label="Name" value={name} maxLength={120} onChange={(event) => setName(event.target.value)} autoFocus
+          className="min-h-11 rounded-md border border-slate-300 px-3 text-sm" />
+        <div className="flex gap-2">
+          <button type="submit" disabled={saving} className="inline-flex min-h-11 items-center rounded-md bg-blue-600 px-3 text-sm font-medium text-white disabled:opacity-50">Save</button>
+          <button type="button" onClick={() => { setEditing(false); setName(asset.name ?? ""); setError(null); }} className="inline-flex min-h-11 items-center rounded-md px-3 text-sm text-slate-700 hover:bg-slate-100">Cancel</button>
+        </div>
+        {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
+      </form>
+    );
+  }
+  return (
+    <div className="-mx-2 flex items-center">
+      <button type="button" aria-label={`Rename ${label}`} title="Rename" className={iconButton} onClick={() => setEditing(true)}>
+        <Pencil className="h-4 w-4" aria-hidden="true" />
+      </button>
+      <button type="button" aria-label={`Delete ${label}`} title="Delete" className={iconButton} onClick={() => onDelete(asset)}>
+        <Trash2 className="h-4 w-4" aria-hidden="true" />
+      </button>
+    </div>
+  );
+}
 
 const ASSET_TYPE_LABEL: Record<string, string> = { logo: "Logo", product_photo: "Product photo", past_ad: "Past ad" };
 const PAGE = 24;
@@ -50,6 +109,48 @@ export function MediaLibrary({ business, media: initialMedia, creatives, brandAs
   const [rightsDone, setRightsDone] = useState(consented);
   const onAdded = useCallback((asset: MediaView) => setMedia((current) => [asset, ...current.filter((item) => item.id !== asset.id)]), []);
   const uploads = useMediaUploads({ businessId: business.id, onAdded, deps, codec });
+  const { request } = uploads;
+  const onRenamed = useCallback((asset: MediaView) => setMedia((current) => current.map((item) => item.id === asset.id ? asset : item)), []);
+
+  // #778 slice 3c: Delete hides the photo at once with "Deleted · Undo"; the delete is sent after UNDO_MS (the
+  // server removes the stored file, so there's nothing to restore later). Refused (in a running ad) → it comes back.
+  const [deleted, setDeleted] = useState<{ asset: MediaView; index: number } | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const restore = useCallback((asset: MediaView, index: number) => setMedia((current) => {
+    const next = current.filter((item) => item.id !== asset.id);
+    next.splice(Math.min(index, next.length), 0, asset);
+    return next;
+  }), []);
+  const commit = useCallback(async (asset: MediaView, index: number) => {
+    setDeleted((current) => current?.asset.id === asset.id ? null : current);
+    try {
+      const response = await request(`/api/media/${asset.id}`, { method: "DELETE", signal: AbortSignal.timeout(30_000) });
+      if (response.ok) return;
+      const body = await response.json().catch(() => ({})) as { error?: string };
+      setDeleteError(response.status < 500 && body.error ? body.error : "Couldn't delete the photo. Try again.");
+    } catch {
+      setDeleteError("Couldn't delete the photo. Try again.");
+    }
+    restore(asset, index);
+  }, [request, restore]);
+  const onDelete = useCallback((asset: MediaView) => {
+    // A second delete sends the first one now.
+    if (timer.current) clearTimeout(timer.current);
+    if (deleted) void commit(deleted.asset, deleted.index);
+    const index = media.findIndex((item) => item.id === asset.id);
+    setDeleteError(null);
+    setMedia((current) => current.filter((item) => item.id !== asset.id));
+    setDeleted({ asset, index });
+    timer.current = setTimeout(() => { timer.current = null; void commit(asset, index); }, UNDO_MS);
+  }, [commit, deleted, media]);
+  const undo = () => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = null;
+    if (deleted) restore(deleted.asset, deleted.index);
+    setDeleted(null);
+  };
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
   const addButton = (
     <button type="button" onClick={() => setSheetOpen(true)}
       className="inline-flex min-h-11 items-center gap-2 rounded-md bg-blue-600 px-4 text-sm font-medium text-white hover:bg-blue-700">
@@ -71,7 +172,9 @@ export function MediaLibrary({ business, media: initialMedia, creatives, brandAs
     <Grid>
       {media.map((m) => (
         <AssetTile key={m.id} url={m.url} title={m.name || "Photo"} meta={m.fit?.message}
-          filename={`adbrain-${slugify(m.name ?? "photo", m.id.slice(0, 6))}.jpg`} />
+          filename={`adbrain-${slugify(m.name ?? "photo", m.id.slice(0, 6))}.jpg`}>
+          <OwnPhotoControls key={m.name ?? ""} asset={m} request={request} onRenamed={onRenamed} onDelete={onDelete} />
+        </AssetTile>
       ))}
       {brandAssets.map((a) => (
         <AssetTile key={a.id} url={a.url} title={a.notes || ASSET_TYPE_LABEL[a.type] || "Asset"}
@@ -106,6 +209,13 @@ export function MediaLibrary({ business, media: initialMedia, creatives, brandAs
   return (
     <div className="flex flex-col gap-6">
       {ownCount > 0 && <div>{addButton}</div>}
+      {deleted && (
+        <p role="status" className="flex items-center gap-2 text-sm text-slate-700">
+          Deleted
+          <button type="button" onClick={undo} className="inline-flex min-h-11 items-center rounded-md px-3 font-medium text-blue-700 hover:bg-blue-50">Undo</button>
+        </p>
+      )}
+      {deleteError && <p role="alert" className="text-sm text-red-700">{deleteError}</p>}
       {uploads.progress && !sheetOpen && (
         <p role="status" className="text-sm text-slate-700">{uploads.progress} <span className="text-slate-500">You can keep going; uploads finish in the background.</span></p>
       )}
