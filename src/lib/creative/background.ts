@@ -9,7 +9,8 @@ import type { BrandContext } from "@/lib/templates/ads";
  */
 export const backgroundRequestSchema = z.union([
   z.object({ instruction: z.string().trim().min(3).max(300) }).strict(),
-  z.object({ photoUrl: z.string().url().max(2000) }).strict(),
+  // #1904: the owner picks how their photo meets the frame; a saliency crop unless they ask for the whole photo.
+  z.object({ photoUrl: z.string().url().max(2000), fit: z.enum(["attention", "blur"]).default("attention") }).strict(),
 ]);
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
