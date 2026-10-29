@@ -463,7 +463,8 @@ before more slices land.
 - One path per PR, at most ~400 changed lines; move code and switch callers in the same PR, so there is
   never a second copy.
 - Recorded core tests stay byte-for-byte; a slice that needs a fixture change is not behaviour-preserving.
-- No new code may add to the boundary baseline once Phase 1 lands.
+- No new code may add to the boundary baseline once Phase 1 lands. The CI `boundaries` job enforces R1–R6
+  (`.dependency-cruiser.mjs`, baseline `scripts/boundaries-baseline.json`) and prints each slice's −N (#2070).
 
 ### Provider access prerequisites
 
