@@ -1,4 +1,5 @@
 import { observeRoute } from "@/lib/observability/logger";
+import { ownerError } from "@/i18n/request-locale";
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getPrimaryBusiness } from "@/lib/supabase/queries";
@@ -21,7 +22,7 @@ async function handlePOST(request: Request) {
 
   const business = await getPrimaryBusiness();
   if (!business) {
-    return NextResponse.json({ error: "No business" }, { status: 400 });
+    return NextResponse.json({ error: await ownerError("businessNotFound") }, { status: 400 });
   }
 
   const parsed = z.object({
@@ -30,7 +31,7 @@ async function handlePOST(request: Request) {
     autoPause: z.boolean(),
   }).strict().safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
-    return NextResponse.json({ error: "Provide a positive whole-rupee cap (or null for no cap), a whole-number threshold from 1 to 100, and a boolean auto-pause setting." }, { status: 422 });
+    return NextResponse.json({ error: await ownerError("spendLimitsInvalid") }, { status: 422 });
   }
   const body = parsed.data;
 
@@ -48,7 +49,7 @@ async function handlePOST(request: Request) {
     { onConflict: "business_id" },
   );
   if (error) {
-    return NextResponse.json({ error: "Could not save spend limits." }, { status: 500 });
+    return NextResponse.json({ error: await ownerError("spendLimitsNotSaved") }, { status: 500 });
   }
 
   await logEvent({

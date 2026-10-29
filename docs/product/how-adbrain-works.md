@@ -88,3 +88,4 @@ Download (#2324).
 So do the refusals when you turn a campaign on, pause it or delete it (spend cap, Meta funds,
 Meta access, a pause Meta didn't confirm) (#2312).
 Errors from Enquiries and connecting Facebook come in Hindi too (#2327).
+So do the errors from saving your spend limits and preferences in Settings (#2334).
