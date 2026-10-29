@@ -300,6 +300,8 @@ export function moneyDrift(prose, facts) {
 const CODE_TABLES = [
   { pages: ["docs/product/review.md", "docs/product/hi/review.md"], source: "src/lib/campaign/preflight.ts",
     codes: text => text.match(/\bREVIEW_[A-Z_]+\b/g) ?? [], row: /^\| `(REVIEW_[A-Z_]+)` \|/ },
+  { pages: ["docs/product/manage.md", "docs/product/hi/manage.md"], source: "src/lib/campaign/verdict.ts",
+    codes: text => text.match(/type VerdictState =([^;]*);/)?.[1].match(/[a-z_]+/g) ?? [], row: /^\| `([a-z_]+)` \|/ },
 ];
 export function codeTableDrift(markdown, codes, row, source) {
   const rows = new Map();
