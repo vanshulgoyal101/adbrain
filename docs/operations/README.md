@@ -14,6 +14,7 @@ Use this guide for diagnosis, not as blanket authorization for remote changes.
 | [Spend guardrails](spend-guardrails.md) | Caps, auto-pause, operator-funded runs |
 | [Scheduled jobs](scheduled-jobs.md) | What runs when, and how to check it |
 | [Backups and data safety](backups.md) | Retention, backups, restore |
+| [Deployment setup](deploy.md) | Prepare a target, configure it, smoke-test and promote |
 
 ## Before Taking Action
 
