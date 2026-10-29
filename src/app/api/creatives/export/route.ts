@@ -29,7 +29,7 @@ async function handlePOST(req: Request) {
   const limited = await rateLimitResponse(`creative-export:${user.id}`, { limit: 10, windowMs: 5 * 60_000 });
   if (limited) return limited;
   const parsed = z.object({ creativeIds: z.array(z.string().uuid()).min(1).max(MAX_BATCH_IDS) }).safeParse(await req.json().catch(() => null));
-  if (!parsed.success) return apiError("Choose between 1 and 50 valid creative IDs.", 400);
+  if (!parsed.success) return apiError("Pick between 1 and 50 ads to download.", 400);
   const ids = [...new Set(parsed.data.creativeIds)];
 
   // RLS scopes this to the user's own creatives.
@@ -39,7 +39,7 @@ async function handlePOST(req: Request) {
     .in("id", ids);
   if (error) return apiError("Could not load the selected creatives. Retry the export.", 503);
   if (!creatives?.length || creatives.length !== ids.length) {
-    return apiError("One or more selected creatives are missing or no longer accessible. Refresh your selection.", 404);
+    return apiError("Some ads you picked were deleted. Refresh the page and pick again.", 404);
   }
 
   // #1317: a prospect's ads are samples until the owner takes the account over; every picture says so.

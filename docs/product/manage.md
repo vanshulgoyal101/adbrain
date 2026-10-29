@@ -72,3 +72,33 @@ The copy-ready digest summarizes the last seven days of the currently loaded
 enquiries with at most ten contacts, including email where available. It is not
 a WhatsApp send, CRM, notification service, complete export, or revenue
 attribution system.
+
+## What your campaign card says
+
+Each campaign card answers one question, is it working, in one sentence, one number and at most one
+button. Home shows the one word next to the campaign. AdBrain uses fixed rules, no AI.
+It never raises your budget or changes who sees your ads.
+
+A result is a chat (WhatsApp ads) or an enquiry (form ads). The usual cost is what
+AdBrain's other ads in your kind of business paid per result, or your own last campaign,
+counted only when at least 20 results sit behind it.
+
+| State | Card says | What it means | What to do |
+| --- | --- | --- | --- |
+| `weak_ad` | "Costly" | One ad costs at least 2 times as much per result as your best ad, or has spent that much with no result while your others bring them. | Tap "Pause this ad", or "Keep" to leave it running (the offer hides for 3 days). |
+| `no_results` | "No chats yet" or "No enquiries yet" | At least ₹300 spent (or 1.5 times the usual cost, if that is more) and no result yet. | WhatsApp ads: tap "Edit the ad" to change the message. Form ads: no button; check the form and the ad words. |
+| `not_showing` | "Not showing yet" | The campaign is on but nobody has seen it yet, and it was turned on less than a day ago. Meta is still checking the ads. | Wait. This usually takes a few hours, sometimes up to a day. |
+| `not_showing_day` | "Not showing yet" | The campaign has been on for a day or more and nobody has seen it yet. | Tap "See Meta's status" and look for a rejection or a payment problem. |
+| `early` | "Early days" | Fewer than 5 results, or less than ₹500 spent. Too soon to judge. | Wait. Reply to every chat fast. |
+| `costly` | "Costly" | 5 or more results and ₹500 or more spent, and each result costs more than 1.5 times the usual cost. | Tap "Try new ads". |
+| `about_average` | "About average" | 5 or more results and ₹500 or more spent, and each result costs about the usual cost (from 0.67 to 1.5 times it). | Nothing. Let it run. |
+| `working` | "Working" | 5 or more results and ₹500 or more spent, and each result costs less than 0.67 times the usual cost. | Nothing. Let it run. |
+| `measured` | "Live" | 5 or more results and ₹500 or more spent, but there is no usual cost to compare with yet. The card shows the cost per result only. | Nothing. Home shows no word for it. |
+| `ended_worked` | "Ended" | It ended with 5 or more results and ₹500 or more spent, at or below 1.5 times the usual cost. | Tap "Run this again" (best ad first). |
+| `ended_costly` | "Ended" | It ended with 5 or more results and ₹500 or more spent, but each result cost more than 1.5 times the usual cost. | Tap "Try new ads". |
+| `ended_measured` | "Ended" | It ended with 5 or more results and ₹500 or more spent, with no usual cost to compare with. | Tap "Run this again". |
+| `ended_too_few` | "Ended" | It ended with fewer than 5 results or less than ₹500 spent. Too few to judge; that is not a bad result. | Tap "Run this again" to run it longer. If nobody tapped at all, the card offers "Try new ads". |
+
+If someone is waiting for your reply, a running card starts with how many "people are waiting for your
+reply." and offers "Reply now" when it has no other button. A run with an end date reads as ended once
+that time has passed (#2281).

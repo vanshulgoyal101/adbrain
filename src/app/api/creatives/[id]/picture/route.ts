@@ -67,13 +67,13 @@ async function handlePOST(req: Request, { params }: { params: Promise<{ id: stri
     .select("id, business_id, variant_group, angle, image_url, headline, primary_text, cta, generation")
     .eq("id", id)
     .maybeSingle();
-  if (!creative) return NextResponse.json({ error: "Creative not found" }, { status: 404 });
+  if (!creative) return NextResponse.json({ error: "We couldn't find this ad. It may have been deleted; refresh the page." }, { status: 404 });
   const { data: business } = await supabase
     .from("businesses")
     .select("*")
     .eq("id", creative.business_id)
     .maybeSingle();
-  if (!business) return NextResponse.json({ error: "Business not found" }, { status: 404 });
+  if (!business) return NextResponse.json({ error: "We couldn't find this business. Refresh the page and try again." }, { status: 404 });
 
   const generation = isRecord(creative.generation) ? creative.generation : {};
   if (generation.composition === "image-only")

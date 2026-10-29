@@ -36,7 +36,7 @@ async function handlePOST(req: Request) {
   if (limited) return limited;
 
   const parsed = interviewRequestSchema.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) return apiError("A valid business, goal and bounded answer history are required.", 400);
+  if (!parsed.success) return apiError("Something in this request didn't look right. Refresh the page and answer the questions again.", 400);
   const { businessId, goal, answers, recentGoals, referenceBrief } = parsed.data;
 
   // RLS scopes this to the user's own business.
@@ -45,7 +45,7 @@ async function handlePOST(req: Request) {
     .select("*")
     .eq("id", businessId)
     .maybeSingle();
-  if (!business) return apiError("Business not found", 404);
+  if (!business) return apiError("We couldn't find this business. Refresh the page and try again.", 404);
 
   const refused: string[] = [];
   try {

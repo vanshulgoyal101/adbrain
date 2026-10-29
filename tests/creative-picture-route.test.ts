@@ -111,7 +111,7 @@ describe("POST /api/creatives/[id]/picture", () => {
     expect((await post()).status).toBe(401);
     h.user = { id: "u1" };
     h.rows.creatives = null;
-    expect(await post()).toEqual({ status: 404, body: { error: "Creative not found" } });
+    expect(await post()).toEqual({ status: 404, body: { error: "We couldn't find this ad. It may have been deleted; refresh the page." } });
     expect(h.render).not.toHaveBeenCalled();
   });
 
