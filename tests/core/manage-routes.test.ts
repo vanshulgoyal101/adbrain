@@ -109,6 +109,9 @@ vi.mock("@/lib/supabase/server", () => ({ createClient: async () => store.client
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => store.client() }));
 vi.mock("@/lib/meta/capability-verification", () => ({ verifyMetaCapabilities: capabilities.verify }));
 vi.mock("@/lib/llm", async importOriginal => ({ ...await importOriginal<typeof import("@/lib/llm")>(), complete: llm.complete }));
+// #2312: the owner's language cookie; unset (English) unless a test sets it.
+const lang = vi.hoisted(() => ({ value: undefined as string | undefined }));
+vi.mock("next/headers", () => ({ cookies: async () => ({ get: (name: string) => (name === "adbrain_lang" && lang.value ? { value: lang.value } : undefined) }) }));
 
 const BUSINESS = "00000000-0000-4000-8000-000000000649";
 const OWNER = "00000000-0000-4000-8000-000000000001";
@@ -257,6 +260,7 @@ beforeEach(async () => {
   await connect();
 });
 afterEach(() => {
+  lang.value = undefined;
   expect(store.state.unknown).toEqual([]);
   expect(graph.unrecorded).toEqual([]);
   vi.restoreAllMocks();
@@ -330,6 +334,19 @@ describe("core: manage routes against recorded Graph responses (#649)", () => {
     expect(store.state.tables.meta_connections[0].authorization_status).toBe("reauth_required");
     const { getMetaConnection } = await import("@/lib/meta/credentials");
     expect(await getMetaConnection(BUSINESS)).toMatchObject({ expired: true, ready: false });
+  });
+
+  it("#2312: the same refusal reads in Hindi for a हिन्दी owner, with the status and code unchanged", async () => {
+    treeCampaign();
+    replay([{ ...(tapes.pause[0]), status: tokenRevoked.status, body: tokenRevoked.body }]);
+    store.state.rpc.meta_connection_mark_reauth = () => ({ data: true, error: null });
+    lang.value = "hi";
+    const response = await pause();
+    expect(response.status).toBe(409);
+    const body = await response.json();
+    expect(body.code).toBe("META_REAUTH");
+    expect(body.error).toBe("Meta ने AdBrain की पहुँच मानना बंद कर दिया, इसलिए हम यह कैंपेन रोक नहीं पाए। अभी इसे Ads Manager में रोकें, फिर सेटिंग में Facebook दोबारा जोड़ें।");
+    expect(graph.sent.filter(call => call.method !== "GET")).toEqual([]);
   });
 
   it.each([
