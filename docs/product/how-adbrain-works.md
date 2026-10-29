@@ -52,10 +52,12 @@ Details: [Connect Meta](setup.md), [Prepare a campaign](launch.md),
 The Campaigns page and Home show spend, chats or enquiries and the cost of each,
 with how fresh the numbers are ("Updated 4m ago"). AdBrain refreshes them in the
 background and when the page opens. A running campaign with a problem (Meta
-rejected an ad, no one has seen it after 6 hours, or its end date has passed)
-shows **Needs attention** with the reason. The owner can pause any campaign, set
+rejected an ad, or no one has seen it after 6 hours) shows **Needs attention** with
+the reason. A run whose end date has passed reads as ended, and AdBrain pauses it
+within 15 minutes. The owner can pause any campaign, set
 a weekly spending cap (with auto-pause on, AdBrain pauses the ads when the week's
-spend reaches it), and share results on WhatsApp. After a week with 5 or more enquiries the
+spend reaches it), and share results on WhatsApp. The four reasons AdBrain pauses a
+campaign by itself are in [Why AdBrain paused your campaign](manage.md#why-adbrain-paused-your-campaign). After a week with 5 or more enquiries the
 owner logged, Home offers a results card for their WhatsApp Status: the
 business, how many people in their area enquired, their best ad and their
 WhatsApp number, never money. **New campaign** runs the same three steps again,
