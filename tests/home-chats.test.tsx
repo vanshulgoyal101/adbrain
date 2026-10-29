@@ -1,10 +1,13 @@
 // @vitest-environment jsdom
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { homeResults, unloggedChats } from "@/lib/campaign/home-results";
 import { buildWorkQueue } from "@/lib/work-queue";
 import { WorkspaceHome } from "@/components/workspace-home";
 import type { Business, Campaign, CampaignResult } from "@/lib/types";
+
+// Home now renders Pause all ads (#1968), which needs the app router.
+vi.mock("next/navigation", async (actual) => ({ ...(await actual<typeof import("next/navigation")>()), useRouter: () => ({ refresh: () => {} }) }));
 
 // #1624 (CPO, #1603): Home's numbers for WhatsApp campaigns are Meta's chats, not real enquiries; and Home asks the
 // owner which chats were real, because ₹ per real enquiry and customers depend on it.
