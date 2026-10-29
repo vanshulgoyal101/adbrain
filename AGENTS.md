@@ -128,6 +128,11 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## Subagents
 
+- **Copilot Fusion, high intelligence** (owner, Oct 29). Role chats run on Copilot
+	Fusion (the default; 30% cheaper), which routes each request by difficulty. Work at a
+	high level of intelligence so Fusion routes you to its stronger models: think
+	carefully, reason through edge cases and verify before claiming. Brief every subagent
+	or helper chat the same way ("use a high level of intelligence"); don't pin a model.
 - **Use subagents to go faster** (owner, Oct 21). Split an issue into independent
 	parts and run them in parallel: research, CI logs, running tests, reviewing your
 	own diff, a red test, a small adjacent fix, the doc update.
