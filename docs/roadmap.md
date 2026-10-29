@@ -3,7 +3,7 @@
 What AdBrain works on next and why: outcomes, not delivery promises. The
 ranked list and its evidence live on
 [#703](https://github.com/vanshulgoyal101/adbrain/issues/703); who does what is in the
-[current dispatch](ORCHESTRATION.md#current-dispatch); what the product does today is in
+[current dispatch](team/orchestration.md#current-dispatch); what the product does today is in
 [Features](product/README.md). This page holds current truth only; git keeps the history.
 
 **The core loop comes first:** Brand → Create → Review → Launch on Meta → Manage
