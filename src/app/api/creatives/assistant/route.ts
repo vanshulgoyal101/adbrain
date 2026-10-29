@@ -16,6 +16,7 @@ import { getActiveInstructionsText } from "@/lib/supabase/queries";
 import { pastResultsBlock } from "@/lib/campaign/result-evidence";
 import { getResultEvidence } from "@/lib/campaign/result-evidence-store";
 import { preferenceContext } from "@/lib/preferences/store";
+import { ownerError } from "@/i18n/request-locale";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -52,8 +53,8 @@ async function handlePOST(req: Request) {
     const limit = configuredMonthlyTokenLimit(user);
     if (limit > 0) {
       const used = await monthlyTokenUsage(businessId);
-      if (used === null) return apiError("Something on our side didn't answer. Nothing was started; try again in a minute.", 503);
-      if (used >= limit) return apiError("You've used this month's AI allowance for this business. Ask AdBrain to raise it.", 429);
+      if (used === null) return apiError(await ownerError("somethingDidntAnswer"), 503);
+      if (used >= limit) return apiError(await ownerError("aiAllowanceUsed"), 429);
     }
     const [instructions, preferences, evidence] = await Promise.all([
       getActiveInstructionsText(businessId),

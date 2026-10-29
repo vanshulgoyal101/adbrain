@@ -13,6 +13,7 @@ import {
 import { ConnectionAccessError, requireOwnedBusiness } from "@/lib/meta/connection-access";
 import { createClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/types";
+import { ownerError } from "@/i18n/request-locale";
 
 export const runtime = "nodejs";
 
@@ -109,7 +110,7 @@ async function handlePUT(
     p_input: plan.input as unknown as Json,
     p_now: plan.updatedAt,
   });
-  if (updateError) return errorResponse(requestId, 503, "UNAVAILABLE", "We couldn't save your campaign just now. Try again in a minute.", true);
+  if (updateError) return errorResponse(requestId, 503, "UNAVAILABLE", await ownerError("draftSaveUnavailable"), true);
   const updatedRow = rows?.[0];
   if (!updatedRow) return errorResponse(requestId, 409, "CONFLICT", "Draft changed in another tab. Reload before saving.", true);
   const draft = draftRecordFromRow(updatedRow);

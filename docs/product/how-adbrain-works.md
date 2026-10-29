@@ -79,3 +79,5 @@ results count it. Details: [Manage: sync, results and leads](manage.md).
 The app also works in Hindi (Settings → App language): the menu, app bar and
 Home, including Recent activity, which shows only the Hindi label for each event,
 and each campaign's "How it's going" sentence and buttons, on Home and Campaigns (#1438).
+The main errors from making ads and saving a campaign (AI allowance used, too many
+unfinished campaigns, a save or check that didn't go through) also come in Hindi (#2305).

@@ -38,3 +38,10 @@ export function timeAgoIn(locale: AppLocale, date: Date, now: Date = new Date())
 export function translator<Namespace extends keyof Messages>(locale: AppLocale, namespace: Namespace) {
   return createTranslator({ locale, messages: MESSAGES[locale], namespace });
 }
+
+export type OwnerErrorKey = keyof Messages["errors"];
+
+/** #2305: an owner-facing API error in one language; routes keep their status codes and `code` fields unchanged. */
+export function ownerErrorIn(locale: AppLocale, key: OwnerErrorKey): string {
+  return translator(locale, "errors")(key);
+}

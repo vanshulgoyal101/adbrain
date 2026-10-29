@@ -659,5 +659,14 @@
       "discardCopy": "Start a copy of \"{name}\" instead. Saved drafts stay available.",
       "discardAndCopy": "Discard and copy"
     }
+  },
+  "errors": {
+    "draftSaveUnavailable": "We couldn't save your campaign just now. Try again in a minute.",
+    "tooManyDrafts": "You have too many unfinished campaigns. Finish or remove one, then try again.",
+    "somethingDidntAnswer": "Something on our side didn't answer. Nothing was started; try again in a minute.",
+    "backgroundDidntStart": "Something on our side didn't answer. No new background was started; try again in a minute.",
+    "aiAllowanceUsed": "You've used this month's AI allowance for this business. Ask AdBrain to raise it.",
+    "checkAdsUnavailable": "We couldn't check on your ads just now. Try again in a minute.",
+    "adsDidntFinish": "Your ads didn't finish. Some may already be saved: tap Check saved results before you try again."
   }
 }
