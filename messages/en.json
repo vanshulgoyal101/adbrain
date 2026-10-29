@@ -208,6 +208,24 @@
       }
     }
   },
+  "pauseAll": {
+    "button": "Pause all ads",
+    "title": "Pause all your ads?",
+    "body": "{n} running campaigns will pause in Meta. Nothing is deleted, and nothing more will be spent once Meta stops them (usually within minutes). You can turn each one back on from Campaigns.",
+    "confirm": "Pause all",
+    "cancel": "Keep running",
+    "pausing": "Pausing {k} of {n}…",
+    "done": "All {n} campaigns are paused. Nothing more will be spent.",
+    "partial": "{k} of {n} paused. {names} didn't pause; tap Try again, or pause {f, plural, one {it} other {them}} in Meta Ads Manager.",
+    "tryAgain": "Try again",
+    "openAdsManager": "Open in Ads Manager",
+    "row": {
+      "waiting": "Waiting",
+      "pausing": "Pausing…",
+      "paused": "Paused",
+      "failed": "Didn't pause"
+    }
+  },
   "creative": {
     "yourPhoto": "Your photo",
     "aiPicture": "AI picture"

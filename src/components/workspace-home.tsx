@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
+import { PauseAllAds } from "@/components/pause-all-ads";
 import { Building2, CheckCircle2, ChevronRight, ImageIcon } from "lucide-react";
 import { SpendStatusBanner } from "@/components/spend-status";
 import { buildWorkQueue } from "@/lib/work-queue";
@@ -241,6 +242,9 @@ export function WorkspaceHome({
                   {campaigns.length ? t("noLiveCampaigns") : t("noCampaigns")}
                 </p>
               )}
+              {/* #1968: a quiet secondary stop while anything runs; each campaign resumes from its own card. */}
+              <PauseAllAds locale={locale} campaigns={campaigns.filter((campaign) => campaign.status === "active" && !goneInMeta(campaign))
+                .map(({ id, name, meta_ad_account_id, meta_campaign_id }) => ({ id, name, meta_ad_account_id, meta_campaign_id }))} />
             </section>
           )}
         </div>

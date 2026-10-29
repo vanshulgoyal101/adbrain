@@ -584,3 +584,14 @@ describe("Recent activity", () => {
     expect(container).toBeEmptyDOMElement();
   });
 });
+
+describe("#1968: Pause all ads on Home", () => {
+  it("shows the quiet stop while a campaign runs, and not otherwise", () => {
+    const live = { id: "c-new", name: "Solar", status: "active", daily_budget: 300, raw: {}, meta_campaign_id: "1" } as unknown as Campaign;
+    const { unmount } = render(<WorkspaceHome {...empty} business={business} campaigns={[live]} />);
+    expect(screen.getByRole("button", { name: "Pause all ads" })).toBeInTheDocument();
+    unmount();
+    render(<WorkspaceHome {...empty} business={business} campaigns={[{ ...live, status: "paused" } as Campaign]} />);
+    expect(screen.queryByRole("button", { name: "Pause all ads" })).toBeNull();
+  });
+});

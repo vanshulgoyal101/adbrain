@@ -17,7 +17,8 @@ function leaves(tree: Tree, prefix = ""): Record<string, string> {
     typeof value === "string" ? [[`${prefix}${key}`, value]] : Object.entries(leaves(value, `${prefix}${key}.`))));
 }
 // ICU argument names ({n}, {time}); plural branches' own words are not arguments.
-const args = (message: string) => [...new Set([...message.matchAll(/\{\s*([a-zA-Z]+)\s*[,}]/g)].map((m) => m[1]))].sort();
+// A brace right after a selector (`one {it}`, `=0 {none}`) opens a branch, so `{it}` is a word, not an argument.
+const args = (message: string) => [...new Set([...message.matchAll(/(?<!\b(?:zero|one|two|few|many|other|=\d+)\s*)\{\s*([a-zA-Z]+)\s*[,}]/g)].map((m) => m[1]))].sort();
 
 describe("messages", () => {
   const english = leaves(en as Tree);
