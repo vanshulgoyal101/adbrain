@@ -360,6 +360,22 @@ describe("durable campaign create route", () => {
     expect(reviewed.data.blockers).toEqual([expect.objectContaining({ reason: "REVIEW_WHATSAPP_MESSAGE", message: expect.stringMatching(/^Your WhatsApp message: .*[Gg]uaranteed/) })]);
   });
 
+  it("#681: when Meta's WhatsApp read fails, Review and Send say try again (retryable 503), never 'link your number', and nothing is sent", async () => {
+    mocks.draftRow = draftRow({ input: { ...draftInput, destination: "whatsapp", leadFormId: null } });
+    const create = vi.fn();
+    mocks.withMetaConnection.mockImplementation(async (_context, _options, execute) => execute({ getWhatsAppNumber: async () => { throw new Error("Meta request failed (500)."); }, createLeadCampaign: create, readActiveLeadForm: vi.fn(), resolveGeoTargeting: vi.fn(), resolveAudienceInterests: async () => ({ interests: [{ id: "12345", name: "Solar energy" }], unresolved: [] }) }, await mocks.getConnectionStatus()));
+    const { POST: preflight } = await import("@/app/api/campaigns/preflight/route");
+    const reviewed = await preflight(post({ businessId, draftId, draftVersion: 1 }));
+    expect(reviewed.status).toBe(503);
+    expect((await reviewed.json()).error).toMatchObject({ code: "UNAVAILABLE", retryable: true, message: expect.stringMatching(/Try again in a minute/) });
+    const { POST } = await import("@/app/api/campaigns/create/route");
+    const response = await POST(post({ businessId, draftId, draftVersion: 1, planHash: reviewPlanHash(), connectionGeneration, idempotencyKey }));
+    expect(response.status).toBe(503);
+    expect((await response.json()).error).toMatchObject({ code: "UNAVAILABLE", retryable: true, message: expect.stringMatching(/Nothing was sent to Meta/) });
+    expect(create).not.toHaveBeenCalled();
+    expect(mocks.rpc).not.toHaveBeenCalled();
+  });
+
   it("sends the campaign's chosen WhatsApp language (#493)", async () => {
     mocks.draftRow = draftRow({ input: { ...draftInput, destination: "whatsapp", leadFormId: null, whatsappLanguage: "hinglish" } });
     const create = vi.fn().mockResolvedValue({ campaignId: "meta-campaign-1", adSetId: "meta-adset-1", adSetIds: ["meta-adset-1"], adIds: ["meta-ad-1"], destination: "whatsapp" });

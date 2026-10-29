@@ -20,7 +20,10 @@ restrictions.
 A new campaign is named after its first chosen ad until the owner types a name:
 headline · WhatsApp or Lead form · day, e.g. "Free 15-minute spine check · WhatsApp ·
 Oct 28" (the day appears once the browser has loaded). Preparing exactly the same ads
-again updates their saved draft instead of adding another (#1151).
+again updates their saved draft instead of adding another (#1151). If that draft has
+expired or was removed in another tab, the owner's current choices are saved as a
+new draft instead, and a tab whose remembered draft is gone forgets it on load
+(unless a creation was in flight) rather than showing "Draft not found." (#681).
 
 Starting a replacement review invalidates the old send action immediately.
 A failed validation, save, or reconnect does not erase a confirmed operation's

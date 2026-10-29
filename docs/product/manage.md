@@ -103,3 +103,21 @@ counted only when at least 20 results sit behind it.
 If someone is waiting for your reply, a running card starts with how many "people are waiting for your
 reply." and offers "Reply now" when it has no other button. A run with an end date reads as ended once
 that time has passed (#2281).
+
+## Why AdBrain paused your campaign
+
+AdBrain pauses a running campaign by itself for four reasons only. It checks every 15
+minutes. The card then says "Paused" and offers "Resume", and Home's Recent activity says
+why, for example "Campaign paused: its run reached the end date".
+
+| Reason | When it happens | What to do |
+| --- | --- | --- |
+| Weekly cap reached | Settings has a "Weekly cap (₹)" and "Auto-pause at the cap." is on, and this week's spend (Monday to today, in your ad account's time zone) has reached the cap. Every running campaign is paused. | Wait for Monday, or raise the cap in Settings, then tap "Resume". If you resume while this week's spend is still over the cap, AdBrain pauses it again at the next check. |
+| Spend couldn't be checked | The same cap and auto-pause are on, but AdBrain couldn't read this week's spend from Meta. Every running campaign is paused to be safe. | Tap "Resume" once Meta answers again. If Meta asks you to connect again, do that first. If it keeps happening, message us. |
+| Funds need a check | Only when AdBrain pays Meta for you from your AdBrain balance: the balance ran out, is on hold, or AdBrain couldn't read it. Every running campaign is paused. | If it ran out, add money to your balance. Otherwise message us. "Resume" works again once the balance is clear. |
+| The run ended | The run has a total and an end date, and the end date has passed. AdBrain pauses the campaign, its ad sets and its ads. The card says "Ended". | Tap "Run this again", or "Resume" and choose how many days to run. It runs with a total again. |
+
+Until the check pauses an ended run, its card shows **Needs attention** with "This run's end
+date has passed. Pause it, or start a new run." Code: `src/app/api/cron/enforce-spend/route.ts`
+(the pause and its reason), `src/lib/campaign/spend.ts` (`campaignsToAutoPause`,
+`weeklySpendDecision`), `src/lib/campaign/health.ts` (the ended flag).

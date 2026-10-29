@@ -7,6 +7,7 @@ import { downloadImage } from "@/lib/imageGen";
 import { observeRoute } from "@/lib/observability/logger";
 import { rateLimitResponse } from "@/lib/security/rate-limit";
 import { createClient } from "@/lib/supabase/server";
+import { ownerError } from "@/i18n/request-locale";
 
 export const runtime = "nodejs";
 
@@ -34,14 +35,14 @@ async function handleGET(req: Request, { params }: { params: Promise<{ id: strin
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const query = querySchema.safeParse(Object.fromEntries(new URL(req.url).searchParams));
-  if (!query.success) return NextResponse.json({ error: "Pick one of your Brand photos." }, { status: 400 });
+  if (!query.success) return NextResponse.json({ error: await ownerError("pickBrandPhoto") }, { status: 400 });
   const { photo, fit, shape } = query.data;
 
   const limited = await rateLimitResponse(`photo-fit:${user.id}`, { limit: 120, windowMs: 5 * 60_000 });
   if (limited) return limited;
 
   const { data: creative } = await supabase.from("creatives").select("business_id, generation").eq("id", id).maybeSingle();
-  if (!creative) return NextResponse.json({ error: "We couldn't find this ad. It may have been deleted; refresh the page." }, { status: 404 });
+  if (!creative) return NextResponse.json({ error: await ownerError("adNotFound") }, { status: 404 });
   // Only the business's own product photos; never an arbitrary URL.
   const { data: asset } = await supabase
     .from("brand_assets")
@@ -51,7 +52,7 @@ async function handleGET(req: Request, { params }: { params: Promise<{ id: strin
     .eq("url", photo)
     .limit(1)
     .maybeSingle();
-  if (!asset) return NextResponse.json({ error: "That photo isn't in your Brand assets." }, { status: 400 });
+  if (!asset) return NextResponse.json({ error: await ownerError("photoNotInBrand") }, { status: 400 });
 
   const frame = shape === "square" ? { width: 1, height: 1 } : formatDimensions(savedGenerationSettings(creative.generation).format);
   const width = PREVIEW_WIDTH[shape];
@@ -63,6 +64,6 @@ async function handleGET(req: Request, { params }: { params: Promise<{ id: strin
       headers: { "Content-Type": "image/png", "Cache-Control": "private, max-age=3600" },
     });
   } catch {
-    return NextResponse.json({ error: "Couldn't open that photo. Try another photo." }, { status: 502 });
+    return NextResponse.json({ error: await ownerError("photoUnopened") }, { status: 502 });
   }
 }

@@ -10,11 +10,15 @@ const h = vi.hoisted(() => ({
   render: vi.fn(),
   overlay: true,
   logEvent: vi.fn(),
+  lang: undefined as string | undefined,
 }));
 
 vi.mock("@/lib/observability/logger", () => ({ observeRoute: (_p: string, _m: string, fn: unknown) => fn }));
 vi.mock("@/lib/audit", () => ({ logEvent: h.logEvent }));
 vi.mock("@/lib/env", () => ({ getEnv: () => ({ AD_DESIGN_OVERLAY: h.overlay }) }));
+vi.mock("next/headers", () => ({
+  cookies: async () => ({ get: (name: string) => (name === "adbrain_lang" && h.lang ? { value: h.lang } : undefined) }),
+}));
 vi.mock("@/lib/security/rate-limit", () => ({ rateLimitResponse: async () => null }));
 vi.mock("@/lib/creative/persist", () => ({ renderAndPersistDesign: h.render }));
 const raster = vi.hoisted(() => ({ render: vi.fn() }));
@@ -123,6 +127,17 @@ describe("POST /api/creatives/[id]/picture", () => {
   ])("rejects %o before drawing anything", async (body, error) => {
     expect(await post(body)).toEqual({ status: 400, body: { error } });
     expect(h.render).not.toHaveBeenCalled();
+  });
+
+  it("answers a Hindi owner in Hindi (#2324), with the same status", async () => {
+    h.lang = "hi";
+    try {
+      expect(await post({ ...words, headline: "x".repeat(41) })).toEqual({ status: 400, body: { error: "हेडलाइन में ज़्यादा से ज़्यादा 40 अक्षर हो सकते हैं।" } });
+      h.rows.creatives = null;
+      expect(await post()).toEqual({ status: 404, body: { error: "यह विज्ञापन नहीं मिला। शायद यह हटा दिया गया है; पेज रिफ़्रेश करें।" } });
+    } finally {
+      h.lang = undefined;
+    }
   });
 
   it("redraws over the saved background with the new words, keeps approval, and saves the new spec", async () => {

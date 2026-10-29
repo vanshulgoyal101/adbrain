@@ -37,12 +37,12 @@ export const maxDuration = 300;
 
 export const POST = observeRoute("/api/creatives/[id]/regenerate", "POST", handlePOST);
 
-function rejectionMessage(issues: string[]): string {
+function rejectionMessage(issues: string[]): Promise<string> {
   const claims = [...new Set(issues.flatMap((issue) =>
     /^unsupported-commercial-claim: (.+?);/.exec(issue)?.[1].toLowerCase() ?? []))];
   return claims.length
-    ? `The new version made a claim our fact check couldn't match to your Brand (${claims.join(", ")}). Your current ad is unchanged. Try again.`
-    : "The new version didn't pass our ad checks. Your current ad is unchanged. Try again.";
+    ? ownerError("versionClaimRejected", { claims: claims.join(", ") })
+    : ownerError("versionRejected");
 }
 
 async function handlePOST(
@@ -70,7 +70,7 @@ async function handlePOST(
     .eq("id", id)
     .maybeSingle();
   if (!creative) {
-    return NextResponse.json({ error: "We couldn't find this ad. It may have been deleted; refresh the page." }, { status: 404 });
+    return NextResponse.json({ error: await ownerError("adNotFound") }, { status: 404 });
   }
 
   const { data: business } = await supabase
@@ -79,7 +79,7 @@ async function handlePOST(
     .eq("id", creative.business_id)
     .maybeSingle();
   if (!business) {
-    return NextResponse.json({ error: "We couldn't find this business. Refresh the page and try again." }, { status: 404 });
+    return NextResponse.json({ error: await ownerError("businessNotFound") }, { status: 404 });
   }
 
   const angle = getAngleByName(creative.angle ?? "") ?? AD_ANGLES[0];
@@ -121,11 +121,11 @@ async function handlePOST(
   });
   if (claimError || !claim)
     return NextResponse.json({ error: await ownerError("somethingDidntAnswer") }, { status: 503 });
-  if (claim.action === "missing") return NextResponse.json({ error: "We couldn't find this ad. It may have been deleted; refresh the page." }, { status: 404 });
+  if (claim.action === "missing") return NextResponse.json({ error: await ownerError("adNotFound") }, { status: 404 });
   if (claim.action === "busy")
     return NextResponse.json({ error: claim.status === "unresolved"
-      ? "Previous paid regeneration needs review before retrying."
-      : "Regeneration is already in progress. Refresh this creative before trying again." }, { status: 409 });
+      ? await ownerError("regenerationNeedsReview")
+      : await ownerError("regenerationBusy") }, { status: 409 });
   if (claim.action !== "start")
     return NextResponse.json({ error: await ownerError("somethingDidntAnswer") }, { status: 503 });
   // #2291: the stale attempt this replaces may have paid for a picture it never recorded; ops matches this to its usage.
@@ -214,7 +214,7 @@ async function handlePOST(
       response = serverError(
         "creative.regenerate",
         error ?? new Error("Creative update returned no row"),
-        "Could not update creative.",
+        await ownerError("creativeNotUpdated"),
       );
     } else {
       await logEvent({
@@ -251,12 +251,12 @@ async function handlePOST(
     if (err instanceof NoLLMKeysError)
       response = NextResponse.json({ error: err.message }, { status: 400 });
     else if (rejection && !unresolved)
-      response = NextResponse.json({ error: rejectionMessage(rejection.issues) }, { status: 422 });
+      response = NextResponse.json({ error: await rejectionMessage(rejection.issues) }, { status: 422 });
     else if (!unresolved)
-      response = NextResponse.json({ error: "Couldn't make a new version this time. Your current ad is unchanged; try again." }, { status: 502 });
+      response = NextResponse.json({ error: await ownerError("versionFailed") }, { status: 502 });
     else response = NextResponse.json(
       {
-        error: "This ad didn't finish remaking. AdBrain needs to check this attempt before you can remake it again.",
+        error: await ownerError("remakeNeedsCheck"),
       },
       { status: 502 },
     );
@@ -266,6 +266,6 @@ async function handlePOST(
     p_attempt_id: attemptId, p_unresolved: unresolved,
   });
   if (settleError || settled?.status !== (unresolved ? "unresolved" : "released"))
-    return NextResponse.json({ error: "We couldn't tell whether the remake finished. Refresh the page to see the ad before you try again." }, { status: 503 });
+    return NextResponse.json({ error: await ownerError("remakeUnknown") }, { status: 503 });
   return response;
 }
