@@ -19,7 +19,7 @@ const admission = { campaignId: "11111111-1111-4111-8111-111111111111", adAccoun
 /** The `raise exception` messages of the last `customer_ad_reserve` definition, in order. */
 function reserveRefusals(): string[] {
   const schema = buildSchema();
-  const start = schema.lastIndexOf("function public.customer_ad_reserve(");
+  const start = schema.lastIndexOf("create or replace function public.customer_ad_reserve(");
   const body = schema.slice(start, schema.indexOf("$$;", schema.indexOf("$$", start) + 2));
   return [...body.matchAll(/raise exception '([^']+)'/g)].map((match) => match[1]);
 }
@@ -34,6 +34,7 @@ describe("core: a pilot's Activate says why its AdBrain balance can't cover the 
       "Current attributed media and tax evidence required",
       "Existing activation must be reconciled before another attempt",
       "Insufficient customer advertising allowance",
+      "Below the Meta campaign spend cap minimum",
     ]));
     for (const message of refusals) {
       mocks.rpc.mockImplementation((name: string) => ({
@@ -41,7 +42,7 @@ describe("core: a pilot's Activate says why its AdBrain balance can't cover the 
           ? { data: balance, error: null }
           : { data: null, error: { message, code: "23514", details: null, hint: null } },
       }));
-      const error = await reserveCustomerCampaign(actor, admission).catch((caught: unknown) => caught);
+      const error = await reserveCustomerCampaign(actor, { ...admission, minMediaLimitPaise: 500_000 }).catch((caught: unknown) => caught);
       if (!(error instanceof CustomerBalanceError)) throw new Error(`${message}: expected a CustomerBalanceError`);
       expect(error.code, message).not.toBe("UNVERIFIED");
       expect(error.message, message).not.toMatch(/could not be verified/);
