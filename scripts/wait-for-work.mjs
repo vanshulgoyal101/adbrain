@@ -233,7 +233,7 @@ export function readyPool(issues, role, max = 3) {
 export const WORKERS = ["dev", "dev2", "dev3", "dev4", "qa", "qa2", "reviewer", "devops", "cpo", "analyst", "designer", "docs"];
 export const MIN_QUEUE = 3;
 
-/** Workers with fewer than MIN_QUEUE actionable open items (not parked or waiting on the CEO). The CTO refills these. */
+/** Workers with fewer than MIN_QUEUE actionable open items, owned PRs included (not parked or waiting on the CEO). The CTO refills these. */
 export function queueCounts(issues) {
   const counts = Object.fromEntries(WORKERS.map((r) => [r, 0]));
   for (const issue of issues) {
@@ -278,7 +278,7 @@ export function offTrack({ issues, comments, prs, now }) {
   return { quiet, stale };
 }
 
-/** One line from docs/ORCHESTRATION.md → Role cards ("Same as Dev" resolves to Dev's column). */
+/** One line from docs/team/orchestration.md → Role cards ("Same as Dev" resolves to Dev's column). */
 /**
  * Workflows failing on `min` or more distinct PR branches in the window: these never reach main/next pushes,
  * so without this the CTO only hears about them from the owner's inbox (#926's core-approval, Oct 27).
@@ -456,7 +456,18 @@ async function firstOwned() {
 
 const startOwned = new Set((await firstOwned()).map(item => item.number));
 // CTO only: workers about to run dry (one extra call per poll). Reported at start, then only when newly low.
-const openIssues = async () => (await api(`repos/${repo}/issues?state=open&per_page=100`)).filter(item => !item.pull_request);
+// Every open issue and PR, all pages: one page of 100 hid older owned items, so queues looked low (#2122).
+// Unchanged pages come back 304 and cost nothing (#2021).
+const openItems = async () => {
+  const all = [];
+  for (let page = 1; page <= 10; page++) {
+    const batch = await api(`repos/${repo}/issues?state=open&per_page=100&page=${page}`);
+    all.push(...batch);
+    if (batch.length < 100) break;
+  }
+  return all;
+};
+const openIssues = async () => (await openItems()).filter(item => !item.pull_request);
 const describeLow = (low) => low.map(({ role: r, count }) => `Queue low: ${NAMES[r]} has ${count} actionable item(s); refill from the CEO priorities (worker table)`);
 let startLow = new Set();
 
@@ -494,7 +505,7 @@ async function findWork() {
     }
   }
   if (role === "cto") {
-    const low = lowQueues(await openIssues());
+    const low = lowQueues(await openItems());
     const lowNow = new Set(low.map(({ role: r }) => r));
     // A refilled worker leaves the known-low set, so running dry again alerts again.
     for (const r of startLow) if (!lowNow.has(r)) startLow.delete(r);
@@ -548,7 +559,7 @@ async function backlog() {
 }
 // #384: restart-proof start. GitHub and git are the memory: role card, in-flight work, unsaved local work.
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const card = (() => { try { return roleCard(readFileSync(join(repoRoot, "docs/ORCHESTRATION.md"), "utf8"), role); } catch { return null; } })();
+const card = (() => { try { return roleCard(readFileSync(join(repoRoot, "docs/team/orchestration.md"), "utf8"), role); } catch { return null; } })();
 // The live priorities and queues are the pinned Team board issue (#580), edited without a PR.
 const BOARD_ISSUE = 580;
 const board = async () => { try { return boardRow((await api(`repos/${repo}/issues/${BOARD_ISSUE}`)).body ?? "", role); } catch { return null; } };
@@ -603,7 +614,7 @@ try {
 try {
   const waiting = await backlog();
   if (role === "cto") {
-    const low = lowQueues(await openIssues());
+    const low = lowQueues(await openItems());
     startLow = new Set(low.map(({ role: r }) => r));
     waiting.push(...describeLow(low));
   }
@@ -612,7 +623,7 @@ try {
     const top = ownedActionable.slice(0, 3).map((item) => waiting.find((line) => line.startsWith(`#${item.number} `))
       ?? `#${item.number} is yours${withSkills(item)}: ${item.title} (work it, ship it, or move its owner: label to whoever acts next)`);
     const rest = waiting.filter((line) => !/^#\d+ /.test(line));
-    console.error(`Not waiting: ${name} owns ${ownedActionable.length} actionable item(s) (#364). Work these first; park, block or hand off by label what you can't act on.`);
+    console.error(`Not waiting: ${name} owns ${ownedActionable.length} actionable item(s), so the waiter won't wait (#2122). Work these first; park, block or hand off by label what you can't act on.`);
     await report([...top, ...rest], OWNS_WORK);
   }
   if (waiting.length) await report(waiting);

@@ -25,7 +25,7 @@ const CALL_TIMEOUT_MS = 120_000;
 const execFileSync = (cmd, args, opts = {}) => rawExecFileSync(cmd, args, { timeout: CALL_TIMEOUT_MS, killSignal: "SIGKILL", ...opts });
 
 /** Handoff bottlenecks first (reviews, releases), then builders. CTO/CEO coordinate through chat tools, so they're excluded. */
-export const ORDER = ["devops", "qa", "reviewer", "qa2", "dev3", "dev", "dev2", "dev4", "cpo", "analyst", "designer"];
+export const ORDER = ["devops", "qa", "reviewer", "qa2", "dev3", "dev", "dev2", "dev4", "cpo", "analyst", "designer", "docs"];
 export const LABEL = "in.adbrain.team-supervisor";
 const HOME = homedir();
 export const STATE_DIR = join(HOME, ".adbrain-supervisor");
@@ -41,7 +41,7 @@ export function roleFromPrompt(text) {
   // the first role name in the next few words. Helpers ("CTO helper") are separate chats, not the role itself.
   const m = /You are AdBrain's ([^.,;:(\n]{1,60})/i.exec(String(text ?? ""));
   if (!m) return null;
-  const said = ` ${m[1].toLowerCase().replace(/\s+/g, " ").trim()} `;
+  const said = ` ${m[1].replace(/[*_`]/g, "").toLowerCase().replace(/\s+/g, " ").trim()} `;
   if (/ helper /.test(said)) return null;
   const names = Object.entries(NAMES).sort((a, b) => b[1].length - a[1].length);
   let best = null;
@@ -161,7 +161,7 @@ export function prompt(role, items, runMin) {
   const name = NAMES[role];
   return [
     `You are AdBrain's ${name}, started headless by the #573 A1 supervisor because no ${name} chat is alive.`,
-    `Repo: ${WT} (current origin/main). Read AGENTS.md and the ${name} role card in docs/ORCHESTRATION.md first.`,
+    `Repo: ${WT} (current origin/main). Read AGENTS.md and the ${name} role card in docs/team/orchestration.md first.`,
     `Do ONE unit of work end to end: the first item below. Edit only in your own worktree (\`bash scripts/wt.sh <issue>\`), open a PR, and hand off with the owner label plus one arrow line. Sign every GitHub comment "${name} (headless):".`,
     `Your queue (from wait-for-work):`,
     ...items.slice(0, 3).map((i) => `- ${i}`),
@@ -177,7 +177,7 @@ export function restartPrompt(role) {
   if (!name) throw new Error(`unknown role ${role}`);
   return [
     `You are AdBrain's ${name}. Your old chat was lost in a VS Code restart, so start fresh.`,
-    `Read AGENTS.md, then the Current Dispatch and your role card in docs/ORCHESTRATION.md, then your row and today's priorities on Team board #580.`,
+    `Read AGENTS.md, then the Current Dispatch and your role card in docs/team/orchestration.md, then your row and today's priorities on Team board #580.`,
     `Your queue: \`gh issue list -R vanshulgoyal101/adbrain -l owner:${role} --state open\`; work the top item of your #580 row first.`,
     `Work only in your own worktree under ~/Development/copilot/adbrain-wt/ (\`bash scripts/wt.sh <issue>\`). Run commands in the foreground only and never leave anything running. Sign your comments "${name}:".`,
     `This task never completes: do not call task_complete and do not end your turn after an item. Loop: work → \`node scripts/wait-for-work.mjs --me ${role}\` in the foreground from a worktree on current origin/main → work. Stop only when the waiter times out.`,

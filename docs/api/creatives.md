@@ -14,7 +14,8 @@ Brand autofill, the interview, generation, editing and export. Conventions, resp
 | GET | `/api/creatives/generate` | Business/group/count -> saved status | DB lookup/unknown-ID fence, no generation |
 | POST | `/api/creatives/[id]/regenerate` | No body -> `{creative}` | Paid work, overwrite, reset approval; 402 `PLAN_UNPAID` before paid work when the own-account plan is unpaid (#718) |
 | POST | `/api/creatives/[id]/picture` | `{headline,subhead,phone,ctaLabel,showCta?}` -> `{creative,liveNotice?}` | Re-renders the overlay, no AI; new `image_url`, status kept. `showCta` paints the button on the picture (off for new ads, #760); omitted keeps it as is |
-| POST | `/api/creatives/[id]/background` | `{instruction}` (3-300) or `{photoUrl}` -> `{creative,liveNotice?}` | Paid image (like Regenerate) or the owner's Brand photo (free), same claim; keeps copy, overlay words and status. An unpaid own-account plan returns 402 `PLAN_UNPAID` for a paid image; a saved Brand photo remains available (#718) |
+| POST | `/api/creatives/[id]/background` | `{instruction}` (3-300) or `{photoUrl,fit?}` -> `{creative,liveNotice?}` | Paid image (like Regenerate) or the owner's Brand photo (free), same claim; keeps copy, overlay words and status. An unpaid own-account plan returns 402 `PLAN_UNPAID` for a paid image; a saved Brand photo remains available (#718) |
+| GET | `/api/creatives/[id]/photo-fit` | `?photo=<Brand photo URL>&fit=attention\|blur&shape=ad\|square` -> PNG | Preview of how a Brand photo fits the ad's frame or 1:1 (#1904); no AI, nothing saved |
 | POST | `/api/creatives/export` | IDs -> ZIP; each picture is a JPEG, transparency on white (#1897); a sales prospect's account (internal `+prospect` address, #1317) gets `00-sample-note.png` first (#1471), every picture with a 'Sample ad: not live yet' pill in its bottom-left corner, and the note's sentence atop copy.txt, which ends with the WhatsApp follow-up and `/for/<segment>` link when the Brand category is solar, IELTS/study-abroad or interiors (#1582); a picture that can't be marked is left out (`X-Images-Skipped`) | Downloads selected media |
 
 ## Creative Requests
@@ -195,7 +196,14 @@ holds the claim as `unresolved` with a 502, exactly like Regenerate.
 With `{photoUrl}` instead, the URL must be one of the business's `product_photo`
 Brand assets (else 400 before the claim). There is no image call, no usage row and
 no monthly-limit check; the photo is copied through the guarded downloader, the
-receipt records `ownerPhoto`, and a failure releases the claim.
+receipt records `ownerPhoto`, and a failure releases the claim. `fit` (#1904) is how
+the photo meets the frame: `attention` (default, a saliency crop that keeps faces) or
+`blur` (the whole photo over a soft copy of itself). It is saved as
+`design.backgroundFit` and used by every later render of the ad (words, 9:16); a new
+AI background clears it. `GET /api/creatives/[id]/photo-fit` draws the same fit at
+preview size (520 px wide for the ad's frame, 96 px for `shape=square`) for the
+"Check how your photo fits" sheet: same Brand-photo check, own rate limit (120 per
+5 minutes), private one-hour cache.
 The claim's attempt UUID is the request ID in usage receipts. It does not expire
 automatically, and there is no customer-facing regeneration recovery endpoint.
 

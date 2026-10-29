@@ -5,7 +5,7 @@ import deliveryTape from "./fixtures/meta/delivery.json";
 import whatsappTape from "./fixtures/meta/whatsapp-number.json";
 import { activationConfirmationPayload } from "@/lib/campaign/activation";
 import type { DraftInput, OperationDTO, ReviewDTO } from "@/lib/campaign/connect-contracts";
-import { goLive, goLiveStorageKey, type GoLiveDeps, type GoLiveInput, type GoLiveStep } from "@/lib/campaign/setup-go-live-flow";
+import { GO_LIVE_STALE, goLive, goLiveStorageKey, type GoLiveDeps, type GoLiveInput, type GoLiveStep } from "@/lib/campaign/setup-go-live-flow";
 import { MetaClient, type CampaignDeliverySnapshot } from "@/lib/meta/client";
 import type { ConnectionDTO } from "@/lib/meta/connect-contracts";
 import { maskWhatsAppNumber } from "@/lib/meta/whatsapp-status-shared";
@@ -96,6 +96,8 @@ type Options = {
   created?: OperationDTO["state"];
   patch?: { status: number; body: unknown };
   existing?: OperationDTO | null;
+  /** The create route's own error envelope (`errorResponse` in campaigns/create/route.ts). */
+  createError?: { status: number; code: string; message: string; retryable: boolean };
 };
 
 async function api(options: Options = {}) {
@@ -126,7 +128,12 @@ async function api(options: Options = {}) {
           destination: "whatsapp", whatsappNumber: recordedNumber, currency: "INR", perAdSetDailyBudgetRupees: DAILY, adSetCount: 1,
           totalDailyBudgetRupees: DAILY, resolvedAreaLabel: "Austin, Texas", selected: connection.selected, ...options.review,
         } satisfies ReviewDTO);
-      case "POST /api/campaigns/create": return ok(operation("running"));
+      case "POST /api/campaigns/create":
+        if (options.createError) {
+          const { status, ...error } = options.createError;
+          return Response.json({ ok: false, error, requestId: REQUEST_ID }, { status });
+        }
+        return ok(operation("running"));
       case `GET /api/campaigns/operations/${OPERATION}`: return ok(operation(options.created ?? "succeeded"));
       case "GET /api/campaigns/operations": return ok(options.existing ?? null);
       case "GET /api/campaigns/list": return Response.json({ campaigns: [campaignRow], results: {}, nextCursor: null });
@@ -194,6 +201,23 @@ describe("core: setup Go live one tap (#1271 4b) on recorded Meta answers", () =
     expect(storage.items.has(goLiveStorageKey(input))).toBe(true);
   });
 
+  it("#2046: a stale request (409 CONFLICT, nothing running) says to tap Go live again and is forgotten, so that tap re-checks", async () => {
+    const createError = { status: 409, code: "CONFLICT", message: "Meta connection changed. Review again before creating.", retryable: true };
+    const { deps, calls, storage } = await api({ createError, existing: null });
+    await expect(goLive(deps, input)).resolves.toEqual({ kind: "failed", message: GO_LIVE_STALE });
+    expect(GO_LIVE_STALE).toBe("This campaign changed after it was checked. Nothing was spent. Tap Go live again.");
+    expect(calls).toContain("GET /api/campaigns/operations");
+    expect(storage.items.size).toBe(0);
+  });
+
+  it("#2046: a 409 for one already running keeps the request, so the next tap polls it instead of creating a second", async () => {
+    const createError = { status: 409, code: "CONFLICT", message: "This campaign operation is already running.", retryable: true };
+    const existing: OperationDTO = { operationId: OPERATION, businessId: BUSINESS, state: "running", campaignId: null, blockers: [] };
+    const { deps, storage } = await api({ createError, existing });
+    await expect(goLive(deps, input)).resolves.toEqual({ kind: "failed", message: "This campaign operation is already running." });
+    expect(storage.items.has(goLiveStorageKey(input))).toBe(true);
+  });
+
   it("resume: a stored request whose operation exists is not created again", async () => {
     const existing: OperationDTO = { operationId: OPERATION, businessId: BUSINESS, state: "succeeded", campaignId: ROW, blockers: [] };
     const { deps, calls, storage } = await api({ existing });
@@ -213,6 +237,20 @@ describe("core: setup Go live one tap (#1271 4b) on recorded Meta answers", () =
     await expect(goLive(deps, input)).resolves.toEqual({ kind: "live", campaignId: ROW });
     expect(calls.filter((call) => call === "POST /api/campaigns/create")).toHaveLength(1);
     expect(bodies["POST /api/campaigns/create"]).toEqual(request);
+  });
+
+  it("#1990: no way to pay in Meta: 'blocked' with billing (step 3 words it), other blockers kept, nothing created", async () => {
+    const { deps, calls } = await api();
+    // The blocker capability-verification.ts returns when the account has no funding_source_details.id.
+    const billing = { code: "BILLING_REQUIRED" as const, message: "Meta billing must be verified before activation.", action: null };
+    const other = { code: "MISSING_PERMISSION" as const, message: "Meta advertising permission is required.", action: null };
+    deps.client = { ...deps.client, status: async () => ({ ...connection, capabilities: { ...connection.capabilities, canActivate: { state: "blocked", blockers: [billing] } } }) };
+    await expect(goLive(deps, input)).resolves.toEqual({ kind: "blocked", messages: [], billing: true });
+    deps.client = { ...deps.client, status: async () => ({ ...connection, capabilities: { ...connection.capabilities, canActivate: { state: "blocked", blockers: [billing, other] } } }) };
+    await expect(goLive(deps, input)).resolves.toEqual({ kind: "blocked", messages: [other.message], billing: true });
+    deps.client = { ...deps.client, status: async () => ({ ...connection, capabilities: { ...connection.capabilities, canActivate: { state: "blocked", blockers: [other] } } }) };
+    await expect(goLive(deps, input)).resolves.toEqual({ kind: "blocked", messages: [other.message] });
+    expect(calls).toEqual([]);
   });
 
   it("not connected: asks to connect and calls nothing else", async () => {
