@@ -15,22 +15,22 @@ feature branch or a passing local test.
 | Reader | Read first | Then read |
 | --- | --- | --- |
 | Pilot, sales or new team role | [How AdBrain works](product/how-adbrain-works.md) | [Features and workflows](product/README.md) |
-| Owner or coordinating worker | [Worker orchestration](ORCHESTRATION.md) | [Roadmap](roadmap.md) |
-| New developer | [Quick start](team/quick-start.md) | [Architecture](ARCHITECTURE.md) |
+| Owner or coordinating worker | [Worker orchestration](team/orchestration.md) | [Roadmap](roadmap.md) |
+| New developer | [Quick start](team/quick-start.md) | [Architecture](architecture/overview.md) |
 | Product or support | [Features and workflows](product/README.md) | [Roadmap](roadmap.md) |
 | Operator | [Deployment configuration](operations/deploy.md) | [Release policy](operations/releasing.md) |
 | Debugging engineer | [Observability](operations/observability.md) | [Operations](operations/README.md) |
-| Product planner | [Roadmap](roadmap.md) | [Payment plan](PAYMENTS-PLAN.md) |
+| Product planner | [Roadmap](roadmap.md) | [Payment plan](plans/payments.md) |
 
 ## Reference Library
 
 | Guide | Questions it answers |
 | --- | --- |
-| [Worker orchestration](ORCHESTRATION.md) | Who owns each packet/file/resource, what blocks it, and what evidence permits integration? |
+| [Worker orchestration](team/orchestration.md) | Who owns each packet/file/resource, what blocks it, and what evidence permits integration? |
 | [Features and workflows](product/README.md) | What can owners do, and where are the limits? |
 | [API reference](api/README.md) | Which routes/actions exist, which parameters are accepted, and what do failures mean? |
 | [Configuration](operations/configuration.md) | Which variables are required, what are their defaults, and which changes cost money or require a restart? |
-| [Architecture](ARCHITECTURE.md) | Where is behavior owned, and how do requests cross trust boundaries? |
+| [Architecture](architecture/overview.md) | Where is behavior owned, and how do requests cross trust boundaries? |
 | [Architecture decisions](architecture/README.md) | Which cross-cutting decisions (ADRs) bind the code, and how do we record a new one? |
 | [Data model](architecture/data-model.md) | Which tables, relationships, grants, RPCs, buckets and migrations support the app? |
 | [AI pipeline](architecture/ai-pipeline.md) | How do interviews, concepts, images, composition, retries, cache and accounting work? |
@@ -40,14 +40,14 @@ feature branch or a passing local test.
 | [Observability](operations/observability.md) | What is logged, how is it correlated, and what must never be collected? |
 | [Deployment](operations/deploy.md) | How is a target environment configured and smoke-tested? |
 | [Release policy](operations/releasing.md) | What approvals and checks govern remote changes? |
-| [Meta approval readiness](META_APPROVAL_ACTION_PLAN.md) | What external review evidence must be prepared and verified? |
-| [Payment plan and readiness](PAYMENTS-PLAN.md) | What are the agreed economics, implemented payment boundaries and remaining live-rollout requirements? |
-| [Brand identity](BRAND-IDENTITY.md) | Which presentation and terminology conventions should the product follow? |
+| [Meta approval readiness](plans/meta-approval.md) | What external review evidence must be prepared and verified? |
+| [Payment plan and readiness](plans/payments.md) | What are the agreed economics, implemented payment boundaries and remaining live-rollout requirements? |
+| [Brand identity](team/brand-identity.md) | Which presentation and terminology conventions should the product follow? |
 
 ## Plans and Records
 
-[Roadmap](roadmap.md) and the [payment plan](PAYMENTS-PLAN.md) hold intent and
-decisions; the [worker dispatch](ORCHESTRATION.md) holds current assignments.
+[Roadmap](roadmap.md), the [plans](plans/README.md) and the [payment plan](plans/payments.md) hold intent and
+decisions; the [worker dispatch](team/orchestration.md) holds current assignments.
 Consolidate guidance into its owning reference instead of adding dated documents.
 
 ## Moved (#1851)
@@ -70,7 +70,12 @@ last move.
 | `AI_PIPELINE.md` | [architecture/ai-pipeline.md](architecture/ai-pipeline.md), [-variants](architecture/ai-pipeline-variants.md) and [-routing](architecture/ai-pipeline-routing.md) |
 | `DATA_MODEL.md` | [architecture/data-model.md](architecture/data-model.md), [data-model-access.md](architecture/data-model-access.md) and [migrations.md](architecture/migrations.md) |
 | `QUICK_START.md` | [team/quick-start.md](team/quick-start.md) |
+| `ARCHITECTURE.md` | [architecture/overview.md](architecture/overview.md), [overview-boundaries.md](architecture/overview-boundaries.md) and [ADR-001](architecture/adr-001-multi-channel.md) |
+| `ORCHESTRATION.md` | [team/orchestration.md](team/orchestration.md) |
 | `RELEASING.md` | [operations/releasing.md](operations/releasing.md) and [operations/releasing-recovery.md](operations/releasing-recovery.md) (backups, rollback, production guard) |
+| `BRAND-IDENTITY.md` | [team/brand-identity.md](team/brand-identity.md) |
+| `META_APPROVAL_ACTION_PLAN.md` | [plans/meta-approval.md](plans/meta-approval.md) |
+| `PAYMENTS-PLAN.md` | [plans/payments.md](plans/payments.md) and [plans/payments-safety.md](plans/payments-safety.md) (funding safety, experience, delivery, receipt) |
 
 ## Terminology
 
@@ -92,7 +97,7 @@ last move.
 - Runtime schemas, route handlers, database constraints, and tests define the
   current contract. Documentation explains them; it does not override them.
 - [Release policy](operations/releasing.md) governs publication and production changes.
-- [Brand identity](BRAND-IDENTITY.md) covers product presentation.
+- [Brand identity](team/brand-identity.md) covers product presentation.
 
 ## Safety Before Setup
 

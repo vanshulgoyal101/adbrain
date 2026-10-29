@@ -134,7 +134,7 @@ evidence of write access after a revoke. Sources:
 
 These migration-defined tables support billing evidence and local test checkout.
 They do not implement campaign activation authority; see the
-[Payment Plan](../PAYMENTS-PLAN.md).
+[Payment Plan](../plans/payments.md).
 
 | Table | Persistence / authority |
 | --- | --- |

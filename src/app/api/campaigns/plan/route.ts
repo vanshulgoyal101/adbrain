@@ -232,6 +232,7 @@ async function handlePOST(req: Request) {
 
   const draftResult = plannerPlanToDraftInput({
     businessId: business.id,
+    business: { vertical: business.vertical, offers: business.offers },
     goal,
     plan: audienceDraft ? {
       ...result.plan,

@@ -16,7 +16,7 @@ Start at the [documentation index](docs/README.md).
 | --- | --- |
 | Install and run safely | [Developer quick start](docs/team/quick-start.md) |
 | Understand the product | [Features and workflows](docs/product/README.md) |
-| Learn the codebase | [Architecture](docs/ARCHITECTURE.md) |
+| Learn the codebase | [Architecture](docs/architecture/overview.md) |
 | Integrate or debug requests | [API reference](docs/api/README.md) |
 | Configure providers and limits | [Configuration](docs/operations/configuration.md) |
 | Understand storage and upgrades | [Data model](docs/architecture/data-model.md) |
@@ -37,7 +37,7 @@ Start at the [documentation index](docs/README.md).
 | Verification | Vitest, Playwright and a disposable PostgreSQL/RPC harness |
 
 Exact dependency versions and commands live in [package.json](package.json).
-See the [architecture guide](docs/ARCHITECTURE.md) for ownership and trust boundaries.
+See the [architecture guide](docs/architecture/overview.md) for ownership and trust boundaries.
 
 ## Local Development
 
@@ -68,7 +68,7 @@ checks. Do not commit credentials or generated private artifacts.
   [roadmap](docs/roadmap.md) and exact release receipt before claiming deployment.
 - Razorpay account activation and website approval are verified, but AdBrain's
   test checkout is not a live payment-to-ad-funding workflow. See
-  [payment readiness](docs/PAYMENTS-PLAN.md#verified-razorpay-account-status).
+  [payment readiness](docs/plans/payments.md#verified-razorpay-account-status).
 - Automatic WhatsApp delivery, team roles, Google Ads and general autonomous
   optimisation are not established product workflows.
 - Read [known limitations](docs/product/README.md#known-limits) before making availability,
@@ -76,7 +76,7 @@ checks. Do not commit credentials or generated private artifacts.
 
 ## Working on AdBrain
 
-Read [AGENTS.md](AGENTS.md) and the [current dispatch](docs/ORCHESTRATION.md#current-dispatch)
+Read [AGENTS.md](AGENTS.md) and the [current dispatch](docs/team/orchestration.md#current-dispatch)
 before editing shared resources. Make focused changes at the owning abstraction,
 reuse maintained dependencies, test meaningful risks and update the corresponding
 reference guide. Documentation standards and the distinction between current

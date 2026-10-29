@@ -1,5 +1,7 @@
 # AdBrain Worker Orchestration
 
+Part of [Team](README.md).
+
 Updated October 23, 2026. Maintainers: the CEO (coordinator) and the CTO (worker
 table).
 Goal: our core features work first: Brand, Create, review, launch and manage a
@@ -16,7 +18,7 @@ Core features come first, always: Brand, Create 3 ads, review, launch a Meta
 campaign and manage it (sync/pause/results), working reliably in production.
 Other work (polish, speed, docs, compliance, support, analytics) waits until that
 loop is healthy or the owner asks for it. Build, ship and test in production via
-the [Startup Fast Path](operations/releasing.md#startup-fast-path).
+the [Startup Fast Path](../operations/releasing.md#startup-fast-path).
 
 ### Role cards
 
@@ -38,6 +40,7 @@ label it for the owner instead of doing it.
 | **CPO** | Product: research and the ranked roadmap (#703), feature proposals with evidence, cost and the smallest test (#694), labelled `owner:cpo` | Building (CTO assigns); priority and money (CEO) |
 | **Analyst** | Market and competitor research (#750), evidence-backed lessons filed as `later` issues for the CPO to rank; picks its own research when empty, labelled `owner:analyst` | Product ranking (CPO); building (CTO assigns); priority and money (CEO) |
 | **Designer** | The product's look and feel (#847): screen audits, one type/colour/spacing system, design slices built and shipped as small UI PRs with QA's 390/1440 check; labelled `owner:designer` | Feature logic and Meta/money code (the step owner); priority (CEO) |
+| **Docs** | The product's documentation (#1851): the layered `docs/` tree and its indexes, `docs:check` rules, module READMEs and the ADR index; reviews merged PRs' doc changes daily and fixes drift; labelled `owner:docs` / `lane:docs` | Code changes (the area owner); authors still update the matching doc in their own PR; private business data goes to vbrain-private |
 
 Every worker: build, test, ship and smoke your own slice end to end (low-risk PRs
 auto-merge); hand off with the label and one `→ Role:` line.
@@ -52,17 +55,17 @@ who publishes them to the skills repo.
 Routine steps never wait for the CEO or the CTO.
 
 1. **Work lives in GitHub issues.** Labels say what matters and who acts next:
-   `core` or `later` (priority), `owner:dev`, `owner:dev2`, `owner:dev3`, `owner:qa`, `owner:cpo`, `owner:analyst`, `owner:designer`,
+   `core` or `later` (priority), `owner:dev`, `owner:dev2`, `owner:dev3`, `owner:qa`, `owner:cpo`, `owner:analyst`, `owner:designer`, `owner:docs`,
    `owner:devops`, `owner:cto` (who acts next), `ready-to-ship` (committed,
    waiting for DevOps), `blocked` (needs something outside the team; the issue says
    what), `waiting-owner` (blocked on the owner; the CEO asks him) and `decision`
    (needs the CEO). Talk on the issue or PR itself; see
-   [AGENTS.md](../AGENTS.md#worker-coordination) Communication.
+   [AGENTS.md](../../AGENTS.md#worker-coordination) Communication.
 2. **Start or resume** by reading this section, then your queue:
    `gh issue list -R vanshulgoyal101/adbrain -l core -l owner:<you>`. Work the
    oldest. Empty queue: take an unowned `core` issue in your area and add your
    label. Nothing left: run `wait-for-work` (no idle post;
-   [AGENTS.md](../AGENTS.md#worker-coordination)) and continue with what it
+   [AGENTS.md](../../AGENTS.md#worker-coordination)) and continue with what it
    reports. Stop only when it times out. Do not invent work. While you own an
    actionable item, the waiter prints your top 3 and exits 6 instead of waiting
    (#2122): park, block or hand off by label what you can't act on.
@@ -167,7 +170,7 @@ or `error`.
 
 ### Ready pool (pull, don't wait)
 
-The CTO keeps 3+ briefed issues per lane labelled `ready` + `lane:<dev|qa|devops|review|design|product|research>`
+The CTO keeps 3+ briefed issues per lane labelled `ready` + `lane:<dev|qa|devops|review|design|product|research|docs>`
 (why with evidence, do, done-when, files). Anyone in the lane with nothing actionable claims
 the oldest core one (`--add-label owner:<you> --remove-label ready`); `wait-for-work` offers
 it. Not for you? Add `declined:<you>` and it isn't offered to you again. QA's walks and the Reviewer's audits file their findings straight into the pool.
@@ -182,7 +185,7 @@ it. Not for you? Add `declined:<you>` and it isn't offered to you again. QA's wa
 - **Checks.** Run the tests for what you changed plus typecheck; CI runs the rest.
   Do not rerun full suites or re-review unchanged code.
 - **Subagents.** Split your issue across subagents and do small cross-role tasks
-  yourself instead of handing them off; rules in [AGENTS.md](../AGENTS.md#subagents).
+  yourself instead of handing them off; rules in [AGENTS.md](../../AGENTS.md#subagents).
   Hand off only migrations, money, production settings, secrets and rollback
   (DevOps), independent review of high-risk changes (QA), or files someone else
   is editing right now.

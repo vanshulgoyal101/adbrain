@@ -1,7 +1,6 @@
 "use client";
 
-import { startTransition, useCallback, useEffect, useEffectEvent, useReducer, useRef, useState, useSyncExternalStore } from "react";
-import type { ReactNode } from "react";
+import { startTransition, useCallback, useEffect, useEffectEvent, useReducer, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { flushSync } from "react-dom";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { useCampaignList } from "@/lib/meta-connect-ui/use-campaign-list";
@@ -100,7 +99,6 @@ import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
 import { useCampaignPreparation } from "@/lib/meta-connect-ui/use-campaign-preparation";
 import { targetingFromEditor, targetingToEditor } from "@/lib/campaign/editor-targeting";
 import { buildManualDraftInput, pickWhatsAppNumber } from "@/lib/campaign/manual-draft-input";
-import type { LeadForm } from "@/lib/meta/client";
 import { maskWhatsAppNumber, maskedWhatsAppNumberPattern, parseWhatsAppStatus, type WhatsAppStatus } from "@/lib/meta/whatsapp-status-shared";
 import type { ConnectIntent, ConnectionDTO } from "@/lib/meta/connect-contracts";
 import type { Business, Campaign, CampaignResult, Creative, Json } from "@/lib/types";
@@ -125,7 +123,7 @@ import { bookedLabel, costPerCustomer } from "@/lib/campaign/real-enquiries";
 import { describeSkippedCampaigns, type SkippedCampaign } from "@/lib/campaign/sync-skips";
 import type { RerunPrefill } from "@/lib/campaign/rerun";
 import { activateTrustLine } from "@/lib/trust-lines";
-import type { AdReview, CampaignDeliverySnapshot } from "@/lib/meta/client";
+import type { AdReview, CampaignDeliverySnapshot, LeadForm } from "@/lib/meta/client";
 import { committedWords, freeRoomPaise, type AccountFunding } from "@/lib/campaign/funding-check";
 import { readCampaignRecovery, recoveryStorageKey, writeCampaignRecovery, type CampaignRecovery } from "@/lib/meta-connect-ui/recovery";
 import { HelpOnWhatsApp } from "@/components/support-link";
@@ -134,7 +132,6 @@ import { useMounted } from "@/lib/use-mounted";
 import { refreshIfStale, staleCampaignIds } from "@/lib/campaign/results-freshness";
 import { GONE_LINES, OUTSIDE_LINES, budgetChangedInMeta, goneInMeta, pausedInMeta } from "@/lib/campaign/gone-in-meta";
 import { formatDate, formatMoney, formatMoneyExact, formatNumber, formatPerDay } from "@/lib/format";
-
 
 const subscribeNever = () => () => {};
 
@@ -227,7 +224,6 @@ type CampaignsProps = {
   /** #1438: the results card's words in the owner's language; English without. */
   verdictWords?: Words<"verdict">;
 };
-
 
 type PlanReply = {
   response: Response;
@@ -2676,8 +2672,7 @@ function CardResults({ campaign, result: r, outcome, comparison, waiting, onRunA
   metaMessage?: string | null;
   waiting: number; onRunAgain: () => void; runAgainBusy: boolean; adsManagerUrl?: string; onEditAd?: () => void;
   /** #783's per-ad rows are on; a running campaign with enough results reads them for the weak-ad state. */
-  perAd: boolean; onWeakAd: (campaignId: string, shown: boolean) => void;
-  words?: Words<"verdict">;
+  perAd: boolean; onWeakAd: (campaignId: string, shown: boolean) => void; words?: Words<"verdict">;
 }) {
   const [now] = useState(() => Date.now());
   const enough = (outcome === "whatsapp" ? r.conversations ?? 0 : r.leads) >= BEST_AD_MIN_RESULTS;

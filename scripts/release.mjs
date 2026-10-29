@@ -61,7 +61,8 @@ export function releaseMigrations(files) {
 
 // Money code (dispatch item 5): these PRs, like migrations, need the CTO's review as well as QA's (#259).
 // lib/managed: 2-Tier child spend caps set from the customer's allowance (#522).
-export const moneyPath = /^src\/(lib\/payments\/|lib\/managed\/|app\/api\/payments\/|app\/api\/cron\/(enforce-spend|payment-health)\/|lib\/campaign\/(spend|activation|budget|funding))/;
+// #1740: `lib/plan` (the ₹999 plan: crediting, gate, links) and its cron are money too.
+export const moneyPath = /^src\/(lib\/payments\/|lib\/managed\/|lib\/plan\/|app\/api\/payments\/|app\/api\/cron\/(enforce-spend|payment-health|plan-links)\/|lib\/campaign\/(spend|activation|budget|funding))/;
 
 // CTO/Reviewer "review of <sha>" verdicts accept the required "Role:" signature and legacy space-only form;
 // in "<old> → <new>" the last sha is the one reviewed.
@@ -161,11 +162,19 @@ async function requireFreshBackup(dry) {
   console.log(`    Backup ${run.url} done.`);
 }
 
+/**
+ * The guard run that judges a commit, from `gh run list` (newest first). Non-production deployment
+ * statuses fire the guard too and its job skips them; a skipped run is no verdict (#2138).
+ */
+export function guardRun(runs) {
+  return runs.find((r) => !(r.status === "completed" && r.conclusion === "skipped"));
+}
+
 async function waitForGuard(sha) {
   for (let hop = 0; hop < 3; hop++) {
     let run;
     for (let i = 0; i < 90; i++) {
-      run = ghJson("run", "list", "-R", repo, "--workflow", "production-guard.yml", "--commit", sha, "--limit", "1", "--json", "databaseId,status,conclusion,url")[0];
+      run = guardRun(ghJson("run", "list", "-R", repo, "--workflow", "production-guard.yml", "--commit", sha, "--limit", "20", "--json", "databaseId,status,conclusion,url"));
       if (run?.status === "completed") break;
       await sleep(20_000);
     }
