@@ -41,7 +41,7 @@ describe("<CampaignVerdict> (#1274)", () => {
 
   it("never says '₹0 spent' (a zero-spend card says so once, #173)", () => {
     card({ impressions: 0, results: 0, spend: 0, liveSince: "2026-10-28T10:00:00Z" });
-    expect(region().getByText("Meta is checking your ads. This usually takes minutes to a few hours, and up to a day.")).toBeInTheDocument();
+    expect(region().getByText("Meta checks your ads first. This usually takes a few hours, sometimes up to a day.")).toBeInTheDocument();
     expect(region().queryByText(/spent/)).not.toBeInTheDocument();
   });
 
