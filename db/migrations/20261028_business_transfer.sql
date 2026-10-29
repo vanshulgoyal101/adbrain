@@ -190,6 +190,9 @@ begin
   if not found or t.state <> 'pending' or t.expires_at <= now() then
     raise invalid_parameter_value using message = 'This hand-over has expired or was already used';
   end if;
+  -- One business per recipient across different transfers (Reviewer, #1783): every claim for this user waits here, so
+  -- the count below sees a claim that committed meanwhile. Lock order: transfer row, recipient, business row.
+  perform pg_advisory_xact_lock(hashtextextended('business_transfer_recipient:' || me::text, 0));
   select lower(u.email) into my_email from auth.users u where u.id = me and u.email_confirmed_at is not null;
   if my_email is null or my_email <> t.target_email then
     raise insufficient_privilege using message = 'This hand-over is for another email address';

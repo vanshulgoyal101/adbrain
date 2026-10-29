@@ -1863,6 +1863,28 @@ async function verifyBusinessTransfer(db, database) {
     assert.equal(await ownerOf(race.business), race.owner);
   });
 
+  // Reviewer (#1783): two DIFFERENT hand-overs to one recipient each lock only their own rows; without the recipient
+  // lock both see "owns nothing" and both commit. A slow owner_id trigger, scoped to this recipient, widens the race.
+  await check(`${database}: business transfer: two hand-overs to the same recipient claimed at once, exactly one wins (#1783)`, async () => {
+    const first = await seed();
+    const second = await seed();
+    const firstId = await start(first.business, first.staff, first.ownerEmail);
+    const secondId = await start(second.business, second.staff, first.ownerEmail);
+    await db.query(`create or replace function public.test_slow_transfer() returns trigger language plpgsql as
+      $$ begin perform pg_sleep(0.5); return new; end $$`);
+    await db.query(`create trigger test_slow_transfer before update of owner_id on public.businesses for each row
+      when (new.owner_id = '${first.owner}'::uuid) execute function public.test_slow_transfer()`);
+    try {
+      const results = await Promise.allSettled([claim(first.owner, first.ownerEmail, firstId), claim(first.owner, first.ownerEmail, secondId)]);
+      assert.deepEqual(results.map((result) => result.status).sort(), ["fulfilled", "rejected"]);
+      assert.match(String(results.find((result) => result.status === "rejected").reason?.message), /already has an AdBrain business/);
+      assert.equal((await db.query("select count(*)::int as n from public.businesses where owner_id=$1", [first.owner])).rows[0].n, 1);
+    } finally {
+      await db.query("drop trigger if exists test_slow_transfer on public.businesses");
+      await db.query("drop function if exists public.test_slow_transfer()");
+    }
+  });
+
   await check(`${database}: business transfer: browsers can't start one or read the transfers; anon can't claim (#1670)`, async () => {
     const roles = await seed();
     await assert.rejects(session("authenticated", { sub: roles.staff, email: "x", role: "authenticated" },
