@@ -62,7 +62,7 @@ For a **fresh, disposable** development project, review
 [the schema](../db/schema.sql) and the [database procedure](operations/deploy.md).
 For an existing database, review incremental migrations and its actual migration
 ledger. Do not replay the fresh schema or infer missing migrations from filenames.
-The [data model](architecture/data-model.md) explains the objects; [release policy](RELEASING.md)
+The [data model](architecture/data-model.md) explains the objects; [release policy](operations/releasing.md)
 governs permission to change them. Preparing a schema is a separate mutation step,
 not an install command or approval to update production.
 
@@ -133,5 +133,5 @@ read [Testing](team/testing.md) before invoking them.
 | Meta disabled in production | Explicit rollout and app configuration; unset rollout fails closed |
 | Connected but cannot read leads | Lead capability, Page token, form access, `leads_retrieval` |
 
-See [Operations](operations/README.md) for incidents and [Release Workflow](RELEASING.md)
+See [Operations](operations/README.md) for incidents and [Release Workflow](operations/releasing.md)
 for publication. Do not use a direct production CLI deploy as a setup shortcut.
