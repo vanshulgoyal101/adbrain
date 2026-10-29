@@ -17,6 +17,8 @@ const mocks = vi.hoisted(() => ({
   claims: new Map<string, { attempt: string; state: "processing" | "unresolved" }>(),
   updates: [] as Record<string, unknown>[],
   usage: [] as Record<string, unknown>[],
+  /** #2219: the picture times out on this provider (as AbortSignal.timeout throws it). */
+  imageTimeout: null as string | null,
 }));
 
 vi.mock("@/lib/supabase/admin", () => ({
@@ -70,10 +72,16 @@ vi.mock("@/lib/creative/persist", () => ({
   renderAndPersistDesign: async () => "https://core-test.supabase.co/storage/v1/object/public/creatives/final.webp",
 }));
 vi.mock("@/lib/imageGen", () => ({
-  generateImage: async (req: { prompt: string; width: number; height: number }) => ({
-    url: "https://core-test.supabase.co/storage/v1/object/public/creatives/background.webp",
-    provider: "openrouter", model: "openai/gpt-image-2.5-flare", prompt: req.prompt, width: req.width, height: req.height,
-  }),
+  generateImage: async (req: { prompt: string; width: number; height: number; onAttempt?: (attempt: Record<string, unknown>) => void }) => {
+    if (mocks.imageTimeout) {
+      req.onAttempt?.({ provider: mocks.imageTimeout, model: mocks.imageTimeout, status: "error", errorCode: "IMAGE_TIMEOUT", providerFinalStatus: "unknown" });
+      throw new DOMException("The operation was aborted due to timeout", "TimeoutError");
+    }
+    return {
+      url: "https://core-test.supabase.co/storage/v1/object/public/creatives/background.webp",
+      provider: "openrouter", model: "openai/gpt-image-2.5-flare", prompt: req.prompt, width: req.width, height: req.height,
+    };
+  },
 }));
 vi.mock("@/lib/llm/persist", () => ({
   configuredMonthlyTokenLimit: () => 0,
@@ -117,6 +125,7 @@ beforeEach(() => {
   mocks.claims.clear();
   mocks.updates.length = 0;
   mocks.usage.length = 0;
+  mocks.imageTimeout = null;
   textCalls = 0;
   for (const [name, value] of Object.entries({
     NEXT_PUBLIC_SUPABASE_URL: "https://core-test.supabase.co",
@@ -221,5 +230,25 @@ describe("core: Regenerate route on recorded Solaride replies (#281)", () => {
     expect(body.error).toBe("The new version didn't pass our ad checks. Your current ad is unchanged. Try again.");
     expect(mocks.updates).toEqual([]);
     expect(mocks.claims.size).toBe(0);
+  });
+
+  it("releases the ad when the free picture times out after the copy finished (#2219)", async () => {
+    mocks.imageTimeout = "pollinations";
+    replay(run(0));
+    const { status, body } = await regenerate();
+    expect(status).toBe(502);
+    expect(body.error).toBe("Couldn't make a new version this time. Your current ad is unchanged; try again.");
+    expect(mocks.usage.map(({ usageKind, provider }) => [usageKind ?? "text", provider])).toEqual([["text", "openrouter"], ["image", "pollinations"]]);
+    expect(mocks.updates).toEqual([]);
+    expect(mocks.claims.size).toBe(0);
+  });
+
+  it("holds the ad when a paid picture times out: its charge is unknown (#2219)", async () => {
+    mocks.imageTimeout = "openrouter-image";
+    replay(run(0));
+    const { status, body } = await regenerate();
+    expect(status).toBe(502);
+    expect(body.error).toBe("Regeneration could not be completed. This attempt needs a check before the ad can be regenerated again.");
+    expect([...mocks.claims.values()].map(({ state }) => state)).toEqual(["unresolved"]);
   });
 });
