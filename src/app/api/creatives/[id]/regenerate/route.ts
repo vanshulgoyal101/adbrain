@@ -1,4 +1,5 @@
 import { observeRoute, currentRequestId } from "@/lib/observability/logger";
+import { applyMonthlyCostCap } from "@/lib/llm/cost-cap";
 import { NextResponse } from "next/server";
 import { serverError } from "@/lib/api";
 import { logEvent } from "@/lib/audit";
@@ -93,6 +94,8 @@ async function handlePOST(
         { status: 429 },
       );
   }
+  // #1717: over the monthly AI cost cap, the new picture is free (text keeps the token cap).
+  await applyMonthlyCostCap(business.id, user);
   const { error: schemaError } = await supabase
     .from("creatives")
     .select("generation")
