@@ -83,9 +83,9 @@ async function handlePOST(req: Request, { params }: { params: Promise<{ id: stri
   const limit = ownerPhoto ? 0 : configuredMonthlyTokenLimit(user);
   if (limit > 0) {
     const used = await monthlyTokenUsage(business.id);
-    if (used === null) return NextResponse.json({ error: "AI usage limits could not be verified." }, { status: 503 });
+    if (used === null) return NextResponse.json({ error: "Something on our side didn't answer. Nothing was started; try again in a minute." }, { status: 503 });
     if (used >= limit)
-      return NextResponse.json({ error: "This business has reached its monthly AI generation limit." }, { status: 429 });
+      return NextResponse.json({ error: "You've used this month's AI allowance for this business. Ask AdBrain to raise it." }, { status: 429 });
   }
   // #1717: over the monthly AI cost cap, the new picture is free (text keeps the token cap).
   await applyMonthlyCostCap(business.id, user);

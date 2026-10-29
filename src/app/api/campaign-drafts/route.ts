@@ -80,11 +80,11 @@ async function handlePOST(request: Request) {
     .eq("business_id", actor.businessId)
     .eq("owner_id", actor.userId)
     .gt("expires_at", now);
-  if (countError) return responseError(requestId, 503, "UNAVAILABLE", "Draft storage is unavailable.", true);
+  if (countError) return responseError(requestId, 503, "UNAVAILABLE", "We couldn't save your campaign just now. Try again in a minute.", true);
   if ((activeRows ?? []).length >= MAX_ACTIVE_DRAFTS) {
     try {
       if ((await listEditableDrafts(supabase, actor)).length >= MAX_ACTIVE_DRAFTS) {
-        return responseError(requestId, 409, "CONFLICT", "Draft limit reached. Finish or remove an existing draft first.");
+        return responseError(requestId, 409, "CONFLICT", "You have too many unfinished campaigns. Finish or remove one, then try again.");
       }
     } catch {
       return responseError(requestId, 503, "UNAVAILABLE", "Saved draft operations could not be checked.", true);
@@ -104,7 +104,7 @@ async function handlePOST(request: Request) {
     })
     .select("*")
     .single();
-  if (error || !row) return responseError(requestId, 503, "UNAVAILABLE", "Draft storage is unavailable.", true);
+  if (error || !row) return responseError(requestId, 503, "UNAVAILABLE", "We couldn't save your campaign just now. Try again in a minute.", true);
 
   const draft = draftDtoSchema.parse(draftRecordToDTO(draftRecordFromRow(row)));
   return NextResponse.json({ ok: true, data: draft, requestId });
