@@ -45,7 +45,7 @@ Annual refund allocation and service earnings are bounded by the stored quote.
 Private tables and service-only RPC authority are unchanged. Apply once through
 the checksum ledger, not by replaying the canonical schema. After a nondefault
 order exists, rollback must retain a quote-aware runtime; see
-[pricing operations](CONFIGURATION.md#configurable-live-amounts).
+[pricing operations](operations/configuration-payments.md#configurable-live-amounts).
 
 ## Relationships
 
@@ -229,7 +229,7 @@ depends only on the existing product-event table and replaces its pruning functi
 without changing the caller contract. It aggregates and deletes up to 10,000 raw
 events older than 90 days atomically, preserves aggregate totals for 730 UTC days,
 and bounds old-aggregate cleanup. Migration application itself deletes no events.
-Use the [observability guide](OBSERVABILITY.md#retention-and-health) for metrics,
+Use the [observability guide](operations/observability.md#retention-and-health) for metrics,
 privacy, retention limitations and queries spanning raw and aggregate data.
 
 Leads use duplicate-ignore inserts, so later provider edits do not update an
@@ -321,7 +321,7 @@ before serving the updated regeneration route.
 
 Product events are server-only (no browser read/write policy), with bounded JSON
 attributes and a 90-day retention target. Pruning deletes at most 10000 old rows
-per call. See [Observability](OBSERVABILITY.md) for exceptions and retention backlog.
+per call. See [Observability](operations/observability.md) for exceptions and retention backlog.
 
 ### Effective Authority
 

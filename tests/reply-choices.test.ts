@@ -29,10 +29,10 @@ describe("segment first replies and follow-ups (#1945, CPO brief #1938)", () => 
       "Hi Ravi, Solaride se. Free solar site survey ke baare mein poochne ke liye thanks! Aapka ghar kis area mein hai, aur bijli ka bill mahine ka lagbhag kitna aata hai?",
     );
     expect(replyChoices({ ...solar, language: "hi", contacted: false }).texts[1]).toBe(
-      "नमस्ते Ravi, Solaride से। Free solar site survey के बारे में पूछने के लिए धन्यवाद! फ्री साइट सर्वे बुक कर दें? कल या परसों, कब ठीक रहेगा?",
+      "नमस्ते Ravi, Solaride से। Free solar site survey के बारे में पूछने के लिए धन्यवाद! फ़्री साइट सर्वे बुक कर दें? कल या परसों, कब ठीक रहेगा?",
     );
     expect(replyChoices({ ...solar, language: "hi", contacted: true }).texts).toEqual([
-      "नमस्ते Ravi, फ्री साइट सर्वे इस हफ्ते बुक कर दें?",
+      "नमस्ते Ravi, फ़्री साइट सर्वे इस हफ़्ते बुक कर दें?",
       "नमस्ते Ravi, अगर सवाल कीमत का है तो आपके बिल से रफ़ एस्टिमेट भेज दूँ?",
     ]);
   });

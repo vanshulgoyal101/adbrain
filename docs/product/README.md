@@ -24,7 +24,7 @@ the PRs and issues; priorities belong in [Roadmap](../roadmap.md). Start at [the
 This guide describes source behavior. Source alone does not prove that a target
 database has the required migrations or that a deployment has the required
 configuration; check [Data Model](../DATA_MODEL.md#migration-map) and
-[Configuration](../CONFIGURATION.md) before demonstrating a workflow there.
+[Configuration](../operations/configuration.md) before demonstrating a workflow there.
 
 | Workflow | Availability boundary |
 | --- | --- |
@@ -50,7 +50,7 @@ ID are different identifiers. Never infer one from another.
 
 | Page | Job | Important boundary |
 | --- | --- | --- |
-| `/dashboard` | The newest enquiry from the last 24 h still waiting for a first reply ("Rohit tapped your ad at 9:40 am. Reply now; …", #1292); for the newest live campaign, "Meta is checking your ads; they usually start within a day." while every ad is in review and nothing has delivered (stored per-ad statuses, no Meta call), or the rejected-ads sentence and fixes when Meta disapproved an ad (one Meta review read, #1469); then results so far (enquiries, spent, per enquiry, oldest update; same latest results as the campaign cards, #764; the median time to the first WhatsApp/Call tap over 30 days, "You usually contact people within …", #1049/#1443), next action, onboarding progress, activity | Uses stored state (plus that one review read); not proof of live provider health |
+| `/dashboard` | The newest enquiry from the last 24 h still waiting for a first reply ("Rohit tapped your ad at 9:40 am. Reply now; …", #1292); for the newest live campaign, "Meta is checking your ads; they usually start within a day." while every ad is in review and nothing has delivered (stored per-ad statuses, no Meta call), or the rejected-ads sentence and fixes when Meta disapproved an ad (one Meta review read, #1469); then results so far (enquiries, spent, per enquiry, or **chats** and **per chat** when every campaign is WhatsApp, #1624; oldest update; same latest results as the campaign cards, #764; the median time to the first WhatsApp/Call tap over 30 days, "You usually contact people within …", #1049/#1443), next action (including 'Which of your {n} chats were real enquiries?' → Enquiries while no WhatsApp chat has been logged as a real enquiry or customer, #1624), onboarding progress, activity | Uses stored state (plus that one review read); not proof of live provider health |
 | `/brand` | Setup step 1 for first-timers; profile, assets, Markdown instructions (`?all=1`) | Saved business facts ground AI output |
 | `/create` | Guided creative interview and brief review | Reviewing a brief is distinct from paid generation; the Brand context panel names missing offers, service areas and phone before a run. Any goal, typed or from a suggestion, on a Brand with an offer or proof point, an area and a phone skips the review when the interview needs no question. The start screen says what the ads will use ('Your 3 ads will use: Mohali · offer: Free site survey'; every Brand area Create sends, the first 3 then '+N more' (#1034); a proof point is labelled 'proof:', facts cut at 40 characters) above 'Make 3 ads', with 'About 2 minutes. Nothing is published.' under it and 'Edit brief' to keep the review; afterwards the brief shows as a collapsed 'What I'll write about · Edit' line (#858, #1004). After 'Use this ad', the one primary step 'Next: set up campaign' opens `/campaigns?…&review=1`, which prepares Review on its own (#1004, #1152); 'Review ads' and 'Make another' stay in the quieter row above. Up to two 'Coming up' occasion chips (festivals and seasons for today's date in IST, `src/lib/seasonal.ts`; November adds Chhath Puja, Guru Nanak Jayanti and the winter season, and a festival comes before a long season, #1210) fill the goal in one tap with plain words ('An ad for Chhath Puja from <Business>.'); they never assert a sale, discount or deadline, and the concept prompt and claim check allow only saved offers (#700, #1153) |
 | `/studio` | Generate, inspect, approve, edit (ad text, words on picture, background); every ad tile here, in Create step 2 and on Go live says **Your photo** or **AI picture** (#1901, Hindi too), and only a Your photo ad may say "our work" (#1617); regenerate (asks first), delete, export, share approved ads (phone share sheet; desktop downloads and copies the text); "Create campaign (N)" links approved ads to Campaigns | Approval and sharing do not publish an ad on Meta |
@@ -101,7 +101,7 @@ first month free) and trust lines, with "Start my free campaign" → `/login`. T
 `NEXT_PUBLIC_SUPPORT_WHATSAPP`) is set at build time (#796). No margin, no promised results.
 
 Owner activity records, AI usage events, and structured product telemetry serve
-different purposes. See [Observability](../OBSERVABILITY.md) for privacy, access, and
+different purposes. See [Observability](../operations/observability.md) for privacy, access, and
 best-effort persistence; do not call an owner-insertable audit log tamper-proof.
 
 ## Known Limits

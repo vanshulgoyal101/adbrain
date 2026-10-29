@@ -3,7 +3,7 @@
 
 Use this guide for diagnosis, not as blanket authorization for remote changes.
 [Release policy](../RELEASING.md) governs publication/migrations/credentials;
-[Observability](../OBSERVABILITY.md) defines safe logs and operator queries.
+[Observability](observability.md) defines safe logs and operator queries.
 
 ## Pages
 
@@ -15,6 +15,10 @@ Use this guide for diagnosis, not as blanket authorization for remote changes.
 | [Scheduled jobs](scheduled-jobs.md) | What runs when, and how to check it |
 | [Backups and data safety](backups.md) | Retention, backups, restore |
 | [Deployment setup](deploy.md) | Prepare a target, configure it, smoke-test and promote |
+| [Observability](observability.md) | What is logged, privacy, enablement, retention |
+| [Observability queries](observability-queries.md) | Read-only operator SQL and verification |
+| [Configuration](configuration.md) | Every environment variable, default and restart/cost note |
+| [Payments configuration](configuration-payments.md) | Live checkout switch and payment amounts |
 
 ## Before Taking Action
 
@@ -58,7 +62,7 @@ Inspect durable evidence before retrying anything that can create objects or spe
 | Local QA `setup`, seed, backfill or migration scripts | Write their target database and possibly Auth/Storage; inspect guards and target first |
 
 Do temporary local work in your own worktree under `adbrain-wt/` with the local
-Supabase project ([launcher modes](../CONFIGURATION.md#local-launcher-modes)). Start
+Supabase project ([launcher modes](configuration.md#local-launcher-modes)). Start
 servers with `npm run dev` for its memory limit and stop them after validation.
 Never stop another worker's process, reuse its test database, delete its
 artifacts or switch the shared branch.

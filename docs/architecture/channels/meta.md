@@ -2,7 +2,7 @@
 
 Part of [Channels](README.md). Current facts as of 2026-10-29. When one changes, change
 it here and in its source in the same PR. How connecting works:
-[Meta connection](../../META_CONNECT.md); the App Review packet:
+[Meta connection](meta-connect.md); the App Review packet:
 [Meta approval plan](../../META_APPROVAL_ACTION_PLAN.md).
 
 ## API Version
@@ -30,7 +30,7 @@ Meta's decision: never create campaigns or calls to raise API activity.
 The seven `META_LOGIN_SCOPES` in `src/lib/meta/oauth.ts`: `ads_management`, `ads_read`,
 `leads_retrieval`, `pages_show_list`, `pages_read_engagement`, `pages_manage_ads`,
 `business_management`. All are used; why each one is needed:
-[App Review](../../META_CONNECT.md#app-review-156). After connect, the granted list
+[App Review](meta-app-review.md#app-review-156). After connect, the granted list
 decides what is available (`src/lib/meta/capability-verification.ts`): insights need
 `ads_read` or `ads_management`; leads need `leads_retrieval` and
 `pages_read_engagement`; advertising needs `ads_management` and `pages_manage_ads`.
