@@ -89,3 +89,4 @@ So do the refusals when you turn a campaign on, pause it or delete it (spend cap
 Meta access, a pause Meta didn't confirm) (#2312).
 Errors from Enquiries and connecting Facebook come in Hindi too (#2327), as do the Day 7
 question, privacy requests and the lead-form picker (#2335).
+Errors from Brand's website or text autofill and from preparing a campaign plan come in Hindi too (#2330).

@@ -101,6 +101,18 @@ const ENGLISH: Record<OwnerErrorKey, string> = {
   metaDeleteUnconfirmed: "Meta deletion could not be confirmed. The campaign remains in AdBrain so you can check its status.",
   campaignDeleteFailed: "Could not delete the campaign.",
   activationAccessUnconfirmed: "Meta has not confirmed campaign activation access.",
+  // #2330: Brand autofill and the launch planner; byte-identical, except siteRefused (was the raw "Site returned 403").
+  brandInputInvalid: "A website URL of at most 2048 characters, or some text about the business, is required.",
+  pasteMore: "Paste a little more about the business: what it sells, where, and how to reach it.",
+  urlNotAllowed: "That URL is not allowed",
+  siteRefused: "That website didn't open for us. Check the address, or paste some text about the business instead.",
+  siteUnreachable: "Could not fetch the site",
+  noReadableText: "No readable text found on that page",
+  brandReadFailed: "Could not extract business details. Try again later or enter them manually.",
+  planRequestInvalid: "A valid goal and answers are required.",
+  interviewTooLong: "The interview is too long. Continue in the campaign editor.",
+  businessNotAllowed: "Business access is not allowed.",
+  planFailed: "Could not prepare the campaign plan.",
   // #2327: Enquiries and the Facebook connect path (the leads 404 reuses #2312's campaignNotFound).
   signInRequired: "Sign in required.",
   businessMissing: "Business not found.",
