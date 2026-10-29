@@ -106,13 +106,14 @@ const parseResponse = (raw) => {
  * #2021: a gh api client that revalidates with ETags (a 304 doesn't spend the shared budget), waits out
  * 403/429 rate limits (x-ratelimit-reset or Retry-After) instead of crashing, and slows polling from the
  * rate headers it already has, so it never spends a call on `rate_limit`.
+ * @param {{ request: (args: string[]) => string, sleep?: (ms: number) => Promise<void>, now?: () => number, warn?: (line: string) => void }} options
  */
 export function createGitHubApi({
   request,
   sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   now = () => Date.now(),
   warn = (line) => console.error(line),
-} = {}) {
+}) {
   const cache = new Map();
   let rate = null;
   async function get(path) {
