@@ -177,6 +177,8 @@ with a 502 retry message (#2219). After the
 [stale-claim migration](../../db/migrations/20261029_creative_regeneration_stale_claims.sql),
 a `processing` claim untouched for 15 minutes (a request killed past the 300-second
 limit or by a deploy) is taken over by the next attempt; `unresolved` never is.
+A takeover writes a `creative.claim_taken_over` audit row (`details: {route, attemptId}`, #2291),
+because the killed attempt may have paid for a picture it never recorded.
 An uncertain paid failure returns 502 and retains the claim for operator review.
 
 `POST /api/creatives/[id]/picture` redraws the words printed on the picture
