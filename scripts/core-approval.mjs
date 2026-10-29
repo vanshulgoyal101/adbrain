@@ -17,21 +17,37 @@ export const CONTEXT = "core-approval";
 const MIGRATION = /^db\/migrations\//;
 
 export const corePath = /^(src\/lib\/meta\/|src\/lib\/campaign\/|src\/app\/api\/(meta|campaigns|managed|payments|spend-limits)\/|db\/migrations\/)/;
+/**
+ * #1740: tenant and auth boundaries: cron routes write across every business with the admin client, the WhatsApp
+ * webhook binds phones to businesses, and `security`/`internal-accounts` decide who may do what.
+ */
+export const tenantPath = /^src\/(app\/api\/(cron|whatsapp|privacy-requests)\/|lib\/(security|alerts)\/|lib\/internal-accounts\.(ts|json)$|lib\/privacy-requests\.ts$)/;
 
 export function coreFiles(files) {
-  return files.filter((f) => corePath.test(f) || moneyPath.test(f));
+  return files.filter((f) => corePath.test(f) || tenantPath.test(f) || moneyPath.test(f));
+}
+
+/**
+ * #2147: in a main → next sync merge, a core file is exempt only if the head's copy is main's (already gated
+ * there) and next hasn't changed it since the merge base, so taking main's side can't drop a gated change on
+ * next. Blob shas; null means the file is missing (null === null: on neither next nor the base).
+ * @param {{ head: string | null, main: string | null, next: string | null, base: string | null }} b
+ */
+export function syncExempt({ head, main, next, base }) {
+  return Boolean(head) && head === main && next === base;
 }
 
 /**
  * @typedef {{ body: string, createdAt: string, url?: string }} Verdict
- * @param {{ files: string[], head: string, headRef: string, labels?: string[], title?: string, comments: Verdict[], samePatch?: (sha: string) => boolean, onMain?: (file: string) => boolean }} pr
+ * @param {{ files: string[], head: string, headRef: string, headRepo?: string, baseRef?: string, labels?: string[], title?: string, comments: Verdict[], samePatch?: (sha: string) => boolean, onMain?: (file: string) => boolean }} pr
  * The verdict for one PR. `comments` are issue comments and PR reviews ({ body, createdAt, url }), oldest first.
  * `samePatch(sha)` says whether an earlier head has the same changes as the current one.
- * `onMain(file)` says whether the head's copy of a file equals main's: main takes only gated content, so a
+ * `onMain(file)` says whether a sync merge's file is exempt (`syncExempt`): main takes only gated content, so a
  * person's main → next sync merge (#2106) isn't held on main's own released migration (#2147).
  */
-export function coreApproval({ files, head, headRef, labels = [], title = "", comments, samePatch = (sha) => head.toLowerCase().startsWith(sha.toLowerCase()), onMain = () => false }) {
-  if (headRef === "next") return { state: "success", description: "Deploy train: its PRs were gated into next" };
+export function coreApproval({ files, head, headRef, headRepo = repo, baseRef = "main", labels = [], title = "", comments, samePatch = (sha) => head.toLowerCase().startsWith(sha.toLowerCase()), onMain = () => false }) {
+  // #1740: only this repo's own next → main is the train; a fork's (public repo) or any other base's `next` isn't.
+  if (headRef === "next" && headRepo === repo && baseRef === "main") return { state: "success", description: "Deploy train: its PRs were gated into next" };
   const touched = coreFiles(files);
   const core = touched.filter((f) => !onMain(f));
   if (touched.length && !core.length) return { state: "success", description: "Core files are identical to main's (already gated there)" };
@@ -93,22 +109,37 @@ async function main() {
     return memo.get(sha);
   };
 
-  // #2147: only for PRs into next; the head's blob is compared with main's (a missing file never matches).
+  // #2147: a 404 is a missing file (null); any other failure throws, so the status stays pending.
+  const blobs = new Map();
   const blob = (file, ref) => {
-    try { return gh(["api", `repos/${repo}/contents/${file.split("/").map(encodeURIComponent).join("/")}?ref=${ref}`, "--jq", ".sha"]).trim(); } catch { return null; }
+    const key = `${ref}:${file}`;
+    if (!blobs.has(key)) {
+      try {
+        blobs.set(key, gh(["api", `repos/${repo}/contents/${file.split("/").map(encodeURIComponent).join("/")}?ref=${ref}`, "--jq", ".sha"]).trim() || null);
+      } catch (e) {
+        if (!/HTTP 404/.test(String(e.stderr ?? e.message))) throw e;
+        blobs.set(key, null);
+      }
+    }
+    return blobs.get(key);
   };
   // Only a sync merge qualifies: the head contains main's tip and next doesn't, so a PR that merely reverts a
   // core file to main's copy is still gated.
-  const missingFromMain = (ref) => Number(gh(["api", `repos/${repo}/compare/main...${ref}`, "--jq", ".behind_by"]).trim());
+  const compare = (ref) => ghJson("api", `repos/${repo}/compare/main...${ref}`, "--jq", "{behind_by, base: .merge_base_commit.sha}");
   let sync;
+  let base;
   const onMain = (file) => {
-    sync ??= pr.base.ref === "next" && missingFromMain(head) === 0 && missingFromMain("next") > 0;
-    if (!sync) return false;
-    const atHead = blob(file, head);
-    return Boolean(atHead) && atHead === blob(file, "main");
+    if (sync === undefined) {
+      sync = false;
+      if (pr.base.ref === "next" && compare(head).behind_by === 0) {
+        const next = compare("next");
+        if (next.behind_by > 0) { sync = true; base = next.base; }
+      }
+    }
+    return sync && syncExempt({ head: blob(file, head), main: blob(file, "main"), next: blob(file, "next"), base: blob(file, base) });
   };
 
-  const verdict = coreApproval({ files, head, headRef: pr.head.ref, labels: pr.labels.map((l) => l.name), title: pr.title, comments, samePatch, onMain });
+  const verdict = coreApproval({ files, head, headRef: pr.head.ref, headRepo: pr.head.repo?.full_name ?? "", baseRef: pr.base.ref, labels: pr.labels.map((l) => l.name), title: pr.title, comments, samePatch, onMain });
   console.log(`#${n} ${head.slice(0, 7)}: ${verdict.state} · ${verdict.description}`);
   if (values["dry-run"]) return;
   const args = ["api", "-X", "POST", `repos/${repo}/statuses/${head}`, "-f", `state=${verdict.state}`, "-f", `context=${CONTEXT}`, "-f", `description=${verdict.description}`];

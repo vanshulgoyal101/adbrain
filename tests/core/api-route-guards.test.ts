@@ -67,8 +67,8 @@ const ROUTES: Record<string, Entry> = {
   "events": { kind: "session", methods: ["POST"], why: "session: business from getPrimaryBusiness(), never from input" },
   "feedback/pilot-day7": { kind: "owner", methods: ["POST"] },
   "internal/meta-traffic": { kind: "session", methods: ["POST"], why: "session: email allowlist, rate-limited, 404 in production without it (#1723)" },
-  "leads": { kind: "session", methods: ["GET"], why: "session: RLS client (the owner's own leads)" },
-  "leads/[id]": { kind: "session", methods: ["PATCH"], why: "session: RLS client (the owner's own leads)" },
+  "leads": { kind: "session", methods: ["DELETE", "GET"], why: "session: RLS client (the owner's own leads)" },
+  "leads/[id]": { kind: "session", methods: ["DELETE", "PATCH"], why: "session: RLS client (the owner's own leads); DELETE runs leads_erase as the caller (#1761)" },
   "leads/sync": { kind: "owner", methods: ["POST"] },
   "leads/unseen": { kind: "session", methods: ["GET"], why: "session: RLS client (the owner's own leads)" },
   "managed/onboarding": { kind: "owner", methods: ["GET"] },
@@ -103,6 +103,7 @@ const ROUTES: Record<string, Entry> = {
   "preferences": { kind: "session", methods: ["GET", "POST"], why: "session: RLS client (the owner's own preferences)" },
   "privacy-requests": { kind: "session", methods: ["GET", "POST"], why: "session: RLS client (the user's own requests)" },
   "privacy-requests/operator": { kind: "session", methods: ["GET", "PATCH"], why: "session: privacy_request_operator_allowed (a user-ID grant table, #1723)" },
+  "results-card": { kind: "owner", methods: ["GET", "POST"] },
   "spend-limits": { kind: "session", methods: ["POST"], why: "session: business from getPrimaryBusiness(), never from input" },
   "whatsapp/webhook": { kind: "webhook", methods: ["GET", "POST"] },
 };

@@ -1,4 +1,9 @@
 import { Suspense, type ReactNode } from "react";
+import { cookies } from "next/headers";
+import { unstable_rethrow } from "next/navigation";
+import { BrandMeterCard } from "@/components/brand-meter-card";
+import { BRAND_METER_SNOOZE_COOKIE, brandMeter } from "@/lib/brand/meter";
+import { segmentForCategory } from "@/lib/segments";
 import Link from "next/link";
 import { Alert } from "@/components/ui/alert";
 import { SpendStatusBanner } from "@/components/spend-status";
@@ -15,6 +20,9 @@ import { PilotDay7Card } from "@/components/pilot-day7-card";
 import { homeCustomers, homeResults } from "@/lib/campaign/home-results";
 import { pilotDay7Visible } from "@/lib/feedback/pilot-day7";
 import { pilotDay7Facts } from "@/lib/feedback/pilot-day7-store";
+import { ResultsCardOffer } from "@/components/results-card-offer";
+import { resultsCardFacts, resultsCardLines, type ResultsCardFacts } from "@/lib/results-card/store";
+import { translator, type AppLocale } from "@/i18n/locale";
 import { adResultsEnabled } from "@/lib/campaign/ad-results-store";
 import { homeAdReview, newestLiveCampaign } from "@/lib/campaign/home-ad-review";
 import { inboxSummary, newestWaitingEnquiry, recentReplyMinutes } from "@/lib/leads/reply-time";
@@ -30,6 +38,16 @@ import {
 } from "@/lib/supabase/queries";
 
 export const metadata = { title: "Dashboard" };
+
+/** #2032: Not now on the Brand meter, read on the server so a hidden card never renders; unreadable shows it. */
+async function brandMeterSnoozed(): Promise<boolean> {
+  try {
+    return (await cookies()).has(BRAND_METER_SNOOZE_COOKIE);
+  } catch (error) {
+    unstable_rethrow(error);
+    return false;
+  }
+}
 
 export default async function DashboardPage() {
   const [business, locale] = await Promise.all([getPrimaryBusiness(), requestLocale()]);
@@ -80,8 +98,16 @@ export default async function DashboardPage() {
   ]);
   const adReview = newest && newestAdStatuses ? homeAdReview([newest], { [newest.id]: newestAdStatuses }, results) : null;
   // #1650: after the first week, one question for the pricing call (#718); unreadable means not shown.
-  const pilotFacts = business && campaigns.some((campaign) => campaign.launched_at) ? await pilotDay7Facts(business.id).catch(() => null) : null;
+  // #2036: after a week with 5+ logged enquiries, a card for the owner's WhatsApp Status; unreadable means not shown.
+  const everLaunched = Boolean(business && campaigns.some((campaign) => campaign.launched_at));
+  const [pilotFacts, cardFacts] = await Promise.all([
+    everLaunched && business ? pilotDay7Facts(business.id).catch(() => null) : null,
+    everLaunched && business ? resultsCardFacts(business.id).catch(() => null) : null,
+  ]);
   const askPilot = Boolean(pilotFacts && pilotDay7Visible({ ...pilotFacts, now: new Date() }));
+  const resultsCard = cardFacts?.offered && business ? resultsCardOffer(business.id, cardFacts, locale) : null;
+  // #2032: the next missing Brand fact, unless the owner said Not now in the last 7 days.
+  const meter = business && !(await brandMeterSnoozed()) ? brandMeter(business) : null;
   // #2026: the card repeats Home's customer line above the ₹999 question; nothing when none is marked.
   const customerLine = askPilot ? homeCustomers(homeResults(campaigns, results)) : null;
 
@@ -95,7 +121,11 @@ export default async function DashboardPage() {
       waiting={waiting}
       firstEnquiry={firstEnquiry}
       adReview={adReview}
+      brandMeter={business && meter?.next ? (
+        <BrandMeterCard businessId={business.id} meter={meter} segment={segmentForCategory(business.vertical)?.slug ?? null} locale={locale} />
+      ) : null}
       pilotQuestion={askPilot && business ? <PilotDay7Card businessId={business.id} locale={locale} customers={customerLine?.kind === "line" ? customerLine : null} /> : null}
+      resultsCard={resultsCard}
       rejectedAds={adReview?.kind === "rejected" && newest && (
         <Suspense fallback={null}>
           <HomeRejectedAds campaign={newest} vertical={business?.vertical} spend={(results as Record<string, { spend?: number }>)[newest.id]?.spend ?? 0} />
@@ -126,4 +156,12 @@ async function SpendNotice({ result }: { result: Promise<ReactNode> }) {
 
 async function Activity({ result }: { result: Promise<ReactNode> }) {
   return await result;
+}
+
+function resultsCardOffer(businessId: string, facts: ResultsCardFacts, locale: AppLocale) {
+  const t = translator(locale, "resultsCard");
+  const lines = resultsCardLines(facts);
+  const words = { title: t("title"), body: t("body", { n: facts.enquiries }), share: t("share"), skip: t("skip"),
+    footerToggle: t("footerToggle"), shareFailed: t("shareFailed"), preview: t("preview") };
+  return <ResultsCardOffer businessId={businessId} caption={[lines.main, lines.contact].filter(Boolean).join("\n")} words={words} />;
 }

@@ -94,7 +94,8 @@ Recorded Meta tapes go through `metaScrubber()` (`scripts/lib/scrub-meta.ts`, #1
   account's concept (the recorded Cedar Ridge reply) comes from Haiku like a customer's, and its
   image from Pollinations without references. Three images run one at a time, waiting out
   Pollinations' recorded 402 Retry-After (at least 15 s, since its 45 s free limit says
-  Retry-After: 1, and a fast 404 counts as busy, #634); a Pollinations that stays busy fails after about 90 s,
+  Retry-After: 1, and a fast 404 counts as busy, #634); a Pollinations that stays busy fails after about 90 s
+  and parks the free pictures for 2 min, so the rest of the batch fails at once (#2153),
   and one that is down fails at once, never reaching the paid image model. The reviewer, the owner
   and customers keep the paid images.
 - **Create when the AI is busy** (`create-busy`, #410): through the production order
@@ -217,7 +218,7 @@ Supabase configuration and Node 24. Every job runs in parallel after its own `np
 | `test` | aggregator: fails unless `lint`, every `unit` shard and `metadb` succeeded |
 | `core` | `npm run test:core`, then `test:meta-db -- --generation-only` |
 | `audit` | `npm run audit:dependencies` (reports, does not block) |
-| `boundaries` | `npm run boundaries -- --base origin/<base>`: ADR-001 import rules (`.dependency-cruiser.mjs`) and source checks C1–C4 (Graph URLs, adapter tables, `appsecret_proof`, 400-line file budget). A new edge fails, a listed big file that grows fails; a fixed edge fails until `npm run boundaries -- --write-baseline` drops it from `scripts/boundaries-baseline.json`, which may only shrink (#2070, #2071) |
+| `boundaries` | `npm run boundaries -- --base origin/<base>`: ADR-001 import rules (`.dependency-cruiser.mjs`) and source checks C1–C4 (Graph URLs, adapter tables, `appsecret_proof`, 400-line file budget). A new edge fails, a listed big file that grows fails; a fixed edge fails until `npm run boundaries -- --write-baseline` drops it from `scripts/boundaries-baseline.json`, which may only shrink (#2070, #2071). Rules and fixes: [Boundaries](boundaries.md) |
 | `secrets` | Gitleaks |
 
 Required checks are `build`, `test`, `core` and `secrets`. `test` runs with
