@@ -64,7 +64,7 @@ For a **fresh, disposable** development project, review
 [the schema](../../db/schema.sql) and the [database procedure](../operations/deploy.md).
 For an existing database, review incremental migrations and its actual migration
 ledger. Do not replay the fresh schema or infer missing migrations from filenames.
-The [data model](../DATA_MODEL.md) explains the objects; [release policy](../RELEASING.md)
+The [data model](../architecture/data-model.md) explains the objects; [release policy](../RELEASING.md)
 governs permission to change them. Preparing a schema is a separate mutation step,
 not an install command or approval to update production.
 

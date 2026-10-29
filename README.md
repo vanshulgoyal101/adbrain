@@ -19,7 +19,7 @@ Start at the [documentation index](docs/README.md).
 | Learn the codebase | [Architecture](docs/ARCHITECTURE.md) |
 | Integrate or debug requests | [API reference](docs/api/README.md) |
 | Configure providers and limits | [Configuration](docs/operations/configuration.md) |
-| Understand storage and upgrades | [Data model](docs/DATA_MODEL.md) |
+| Understand storage and upgrades | [Data model](docs/architecture/data-model.md) |
 | Validate changes | [Testing](docs/team/testing.md) |
 | Diagnose production | [Operations](docs/operations/README.md) and [observability](docs/operations/observability.md) |
 | Release safely | [Release workflow](docs/RELEASING.md) |

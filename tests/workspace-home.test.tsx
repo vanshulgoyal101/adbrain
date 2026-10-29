@@ -534,6 +534,14 @@ describe("Home results row (#764)", () => {
     expect(within(screen.getByRole("region", { name: "Results so far" })).getByRole("link", { name: "WhatsApp run" }).closest("p")).toHaveTextContent("Each chat costs ₹168. WhatsApp run");
   });
 
+  // #1438: in Hindi, Home's lead sentence and the row words come from the same Hindi verdicts.
+  it("#1438: the verdict sentence and row words in Hindi", () => {
+    render(<WorkspaceHome {...empty} business={business} campaigns={[chats, forms]} results={results} now={now} locale="hi" />);
+    const row = screen.getByRole("region", { name: "अब तक के नतीजे" });
+    expect(within(row).getByRole("link", { name: "WhatsApp run" }).closest("p")).toHaveTextContent("हर चैट ₹168 की पड़ रही है। WhatsApp run");
+    expect(screen.queryByText(/Each chat costs|Early days/)).toBeNull();
+  });
+
   it("#1274: no lead sentence when nothing is running", () => {
     render(<WorkspaceHome {...empty} business={business} campaigns={[{ ...chats, status: "paused" } as Campaign, forms]} results={results} now={now} />);
     expect(within(screen.getByRole("region", { name: "Results so far" })).queryByRole("link", { name: "WhatsApp run" })).not.toBeInTheDocument();

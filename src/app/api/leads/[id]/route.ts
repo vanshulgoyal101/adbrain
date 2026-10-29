@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getPrimaryBusiness } from "@/lib/supabase/queries";
 import { leadUpdateSchema } from "@/lib/leads/filters";
 import { observeRoute } from "@/lib/observability/logger";
+import { recordCustomerMark } from "@/lib/leads/customer-event";
 
 export const PATCH = observeRoute("/api/leads/[id]", "PATCH", async (
   request: Request, context: { params: Promise<{ id: string }> },
@@ -27,12 +28,18 @@ export const PATCH = observeRoute("/api/leads/[id]", "PATCH", async (
         .eq("id", id).eq("business_id", business.id).eq("workflow_status", "new");
       if (first.error || status.error) throw new Error("Save failed");
     }
+    // #2026: the status before the save, so a change to or from "customer" is recorded once it's saved.
+    const before = fields.workflow_status === undefined ? null
+      : (await database.from("leads").select("workflow_status").eq("id", id).eq("business_id", business.id).maybeSingle()).data;
     const query = Object.keys(fields).length
       ? database.from("leads").update(fields).eq("id", id).eq("business_id", business.id).select("*").maybeSingle()
       : database.from("leads").select("*").eq("id", id).eq("business_id", business.id).maybeSingle();
     const { data, error } = await query;
     if (error) throw new Error("Save failed");
     if (!data) return NextResponse.json({ error: "Enquiry not found." }, { status: 404 });
+    if (before && (before.workflow_status === "customer") !== (data.workflow_status === "customer")) {
+      recordCustomerMark({ businessId: business.id, campaignId: data.campaign_id, source: "inbox", undone: data.workflow_status !== "customer" });
+    }
     return NextResponse.json({ lead: data }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
     const invalid = error instanceof z.ZodError || error instanceof SyntaxError;
