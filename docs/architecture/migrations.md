@@ -77,4 +77,4 @@ An additive migration can still change permissions and break old code.
 Code rollback does not reverse database writes or decrypt tokens with a different
 key. Preserve encrypted-key access, operation history, and existing binding facts.
 There is no general automated destructive down-migration workflow. Follow
-[Release Workflow](../RELEASING.md) for environment changes.
+[Release Workflow](../operations/releasing.md) for environment changes.

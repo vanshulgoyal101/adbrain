@@ -124,7 +124,7 @@ for diagnosis, not proof that every side effect was durably recorded.
 - A changed user workflow needs loading, empty, partial, failure, retry, and
   ambiguous-result behavior, not only the successful path.
 
-Keep deployment policy in [Release Workflow](../RELEASING.md). Do not infer that all
+Keep deployment policy in [Release Workflow](../operations/releasing.md). Do not infer that all
 uncommitted work in a shared checkout is ready to publish together.
 
 For verification, start with [connection access tests](../../tests/meta-connection-access.test.ts),
