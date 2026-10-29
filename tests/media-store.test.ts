@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { MEDIA_MONTHLY_UPLOADS, mediaFit } from "@/lib/media/rules";
 const CONFIRMED = "2026-10-28T10:00:00.000Z";
-import { deleteMedia, finalizeUpload, listMedia, monthStartIst, readVerifiedMedia, signUpload, type MediaRow } from "@/lib/media/store";
+import { deleteMedia, finalizeUpload, listMedia, monthStartIst, ownMedia, readVerifiedMedia, signUpload, type MediaRow } from "@/lib/media/store";
 
 vi.mock("@/lib/env", () => ({ getEnv: () => ({ MEDIA_UPLOADS_ENABLED: true }) }));
 
@@ -254,6 +254,12 @@ describe("media routes (#1209)", () => {
     const list = await import("@/app/api/media/route");
     expect((await list.GET(new Request(`http://localhost/api/media?businessId=${BUSINESS}`))).status).toBe(401);
     vi.doUnmock("@/lib/supabase/server");
+  });
+
+  it("answers 404, not 503, for an id that isn't a uuid, without reading", async () => {
+    const from = vi.fn();
+    await expect(ownMedia({ from } as unknown as SupabaseClient, "not-a-uuid")).rejects.toMatchObject({ status: 404, code: "MEDIA_NOT_FOUND" });
+    expect(from).not.toHaveBeenCalled();
   });
 
   it("maps a MediaError to its status and plain message", async () => {

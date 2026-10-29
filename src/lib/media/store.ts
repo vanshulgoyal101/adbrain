@@ -190,7 +190,10 @@ export async function listMedia(client: SupabaseClient, businessId: string, befo
 }
 
 /** The owner's own row (RLS read), or a 404. */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function ownMedia(client: SupabaseClient, id: string): Promise<MediaRow> {
+  if (!UUID.test(id)) throw new MediaError(404, "MEDIA_NOT_FOUND", "Photo not found.");
   const { data, error } = await client.from("media_assets").select(COLUMNS).eq("id", id).is("deleted_at", null).maybeSingle();
   if (error) throw new MediaError(503, "MEDIA_UNAVAILABLE", "Couldn't load the photo. Try again.");
   if (!data) throw new MediaError(404, "MEDIA_NOT_FOUND", "Photo not found.");
