@@ -25,7 +25,7 @@ const CALL_TIMEOUT_MS = 120_000;
 const execFileSync = (cmd, args, opts = {}) => rawExecFileSync(cmd, args, { timeout: CALL_TIMEOUT_MS, killSignal: "SIGKILL", ...opts });
 
 /** Handoff bottlenecks first (reviews, releases), then builders. CTO/CEO coordinate through chat tools, so they're excluded. */
-export const ORDER = ["devops", "qa", "reviewer", "qa2", "dev3", "dev", "dev2", "dev4", "cpo", "analyst", "designer"];
+export const ORDER = ["devops", "qa", "reviewer", "qa2", "dev3", "dev", "dev2", "dev4", "cpo", "analyst", "designer", "docs"];
 export const LABEL = "in.adbrain.team-supervisor";
 const HOME = homedir();
 export const STATE_DIR = join(HOME, ".adbrain-supervisor");
@@ -41,7 +41,7 @@ export function roleFromPrompt(text) {
   // the first role name in the next few words. Helpers ("CTO helper") are separate chats, not the role itself.
   const m = /You are AdBrain's ([^.,;:(\n]{1,60})/i.exec(String(text ?? ""));
   if (!m) return null;
-  const said = ` ${m[1].toLowerCase().replace(/\s+/g, " ").trim()} `;
+  const said = ` ${m[1].replace(/[*_`]/g, "").toLowerCase().replace(/\s+/g, " ").trim()} `;
   if (/ helper /.test(said)) return null;
   const names = Object.entries(NAMES).sort((a, b) => b[1].length - a[1].length);
   let best = null;

@@ -133,7 +133,7 @@ Razorpay test-mode evidence is a separate layer: mocked responses, provider test
 captures, production merchant activation and live collection are distinct facts.
 The local test gate rejects production/Vercel and non-loopback Supabase targets;
 do not enable a test flag to exercise production payments. See the
-[payment implementation receipt](../PAYMENTS-PLAN.md#9-implementation-receipt).
+[payment implementation receipt](../plans/payments-safety.md#9-implementation-receipt).
 
 ## Documentation Checks
 

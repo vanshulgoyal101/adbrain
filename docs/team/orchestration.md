@@ -40,6 +40,7 @@ label it for the owner instead of doing it.
 | **CPO** | Product: research and the ranked roadmap (#703), feature proposals with evidence, cost and the smallest test (#694), labelled `owner:cpo` | Building (CTO assigns); priority and money (CEO) |
 | **Analyst** | Market and competitor research (#750), evidence-backed lessons filed as `later` issues for the CPO to rank; picks its own research when empty, labelled `owner:analyst` | Product ranking (CPO); building (CTO assigns); priority and money (CEO) |
 | **Designer** | The product's look and feel (#847): screen audits, one type/colour/spacing system, design slices built and shipped as small UI PRs with QA's 390/1440 check; labelled `owner:designer` | Feature logic and Meta/money code (the step owner); priority (CEO) |
+| **Docs** | The product's documentation (#1851): the layered `docs/` tree and its indexes, `docs:check` rules, module READMEs and the ADR index; reviews merged PRs' doc changes daily and fixes drift; labelled `owner:docs` / `lane:docs` | Code changes (the area owner); authors still update the matching doc in their own PR; private business data goes to vbrain-private |
 
 Every worker: build, test, ship and smoke your own slice end to end (low-risk PRs
 auto-merge); hand off with the label and one `→ Role:` line.
@@ -54,7 +55,7 @@ who publishes them to the skills repo.
 Routine steps never wait for the CEO or the CTO.
 
 1. **Work lives in GitHub issues.** Labels say what matters and who acts next:
-   `core` or `later` (priority), `owner:dev`, `owner:dev2`, `owner:dev3`, `owner:qa`, `owner:cpo`, `owner:analyst`, `owner:designer`,
+   `core` or `later` (priority), `owner:dev`, `owner:dev2`, `owner:dev3`, `owner:qa`, `owner:cpo`, `owner:analyst`, `owner:designer`, `owner:docs`,
    `owner:devops`, `owner:cto` (who acts next), `ready-to-ship` (committed,
    waiting for DevOps), `blocked` (needs something outside the team; the issue says
    what), `waiting-owner` (blocked on the owner; the CEO asks him) and `decision`
@@ -169,7 +170,7 @@ or `error`.
 
 ### Ready pool (pull, don't wait)
 
-The CTO keeps 3+ briefed issues per lane labelled `ready` + `lane:<dev|qa|devops|review|design|product|research>`
+The CTO keeps 3+ briefed issues per lane labelled `ready` + `lane:<dev|qa|devops|review|design|product|research|docs>`
 (why with evidence, do, done-when, files). Anyone in the lane with nothing actionable claims
 the oldest core one (`--add-label owner:<you> --remove-label ready`); `wait-for-work` offers
 it. Not for you? Add `declined:<you>` and it isn't offered to you again. QA's walks and the Reviewer's audits file their findings straight into the pool.
