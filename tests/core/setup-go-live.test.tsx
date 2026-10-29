@@ -16,6 +16,7 @@ vi.mock("@/components/meta-connect/meta-connect-dialog", () => ({
 vi.mock("@/lib/campaign/setup-go-live-flow", () => ({ goLive: mocks.goLive }));
 vi.mock("@/lib/meta-connect-ui/client", () => ({ createMetaConnectClient: () => ({}) }));
 import { SetupGoLive, type SetupFunding } from "@/components/setup-go-live";
+import hi from "../../messages/hi.json";
 import type { GoLiveResult, GoLiveStep } from "@/lib/campaign/setup-go-live-flow";
 
 const business = { id: "b1", name: "Spine Care", locations: ["Jaipur", "Ajmer"] } as Pick<Business, "id" | "name" | "locations">;
@@ -209,7 +210,7 @@ describe("core: step 3 asks a not-yet-Tester owner to accept the invite (#1989)"
   const retry = /Didn't connect\? If Facebook said the app isn't available/;
   function step3({ pageConnected = false, appReviewPending = true, locale = "en" as "en" | "hi" } = {}) {
     render(<SetupGoLive business={business} ads={ads} pageConnected={pageConnected} funding="own" appReviewPending={appReviewPending}
-      locale={locale} whatsappNumber="+91 ••••• 3210" weeklyCap={{ capRupees: null, active: [] }} />);
+      words={locale === "hi" ? { locale, messages: hi.setup } : undefined} whatsappNumber="+91 ••••• 3210" weeklyCap={{ capRupees: null, active: [] }} />);
   }
   beforeEach(() => { cleanup(); window.sessionStorage.clear(); });
 
@@ -263,9 +264,24 @@ describe("core: step 3 asks a not-yet-Tester owner to accept the invite (#1989)"
     step3({ locale: "hi" });
     expect(screen.getByText(/Facebook अभी AdBrain की जाँच कर रहा है/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "मेरे इनवाइट खोलें" })).toBeInTheDocument();
-    fireEvent.click(bar().getByRole("button", { name: "Connect Facebook Page" }));
+    fireEvent.click(bar().getByRole("button", { name: "Facebook पेज जोड़ें" }));
     fireEvent.click(screen.getByRole("button", { name: "Meta dialog: closed" }));
     expect(screen.getByText(/जुड़ा नहीं\? अगर Facebook ने कहा कि ऐप उपलब्ध नहीं है/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "फिर से कोशिश करें" })).toBeInTheDocument();
+  });
+
+  it("#1438 Hindi: the summary, checklist and price in the CPO's words", () => {
+    step3({ locale: "hi", appReviewPending: false });
+    expect(screen.getByRole("heading", { name: "लाइव करें" })).toBeInTheDocument();
+    expect(screen.getByText("विज्ञापन: 2 चुने")).toBeInTheDocument();
+    expect(screen.getByText("वे आपको WhatsApp +91 ••••• 3210 पर मैसेज करेंगे")).toBeInTheDocument();
+    expect(screen.getByRole("list", { name: "लाइव करने से पहले" })).toBeInTheDocument();
+    expect(screen.getByText("Facebook पेज")).toBeInTheDocument();
+    expect(screen.getByText("जुड़ा नहीं है")).toBeInTheDocument();
+    expect(screen.getByText("Meta पर पेमेंट")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Meta में पेमेंट जोड़ें" })).toBeInTheDocument();
+    expect(screen.getByText(/^AdBrain का पहला महीना मुफ़्त है।/)).toBeInTheDocument();
+    expect(screen.getByText(/^आपका Page, आपका ऐड अकाउंट, आपका कार्ड।/)).toBeInTheDocument();
+    expect(screen.queryByText(/Before you go live|Payment on Meta|Not connected|a day for/)).toBeNull();
   });
 });
