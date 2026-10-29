@@ -16,7 +16,7 @@ Start at the [documentation index](docs/README.md).
 | --- | --- |
 | Install and run safely | [Developer quick start](docs/team/quick-start.md) |
 | Understand the product | [Features and workflows](docs/product/README.md) |
-| Learn the codebase | [Architecture](docs/ARCHITECTURE.md) |
+| Learn the codebase | [Architecture](docs/architecture/overview.md) |
 | Integrate or debug requests | [API reference](docs/api/README.md) |
 | Configure providers and limits | [Configuration](docs/operations/configuration.md) |
 | Understand storage and upgrades | [Data model](docs/architecture/data-model.md) |
@@ -37,7 +37,7 @@ Start at the [documentation index](docs/README.md).
 | Verification | Vitest, Playwright and a disposable PostgreSQL/RPC harness |
 
 Exact dependency versions and commands live in [package.json](package.json).
-See the [architecture guide](docs/ARCHITECTURE.md) for ownership and trust boundaries.
+See the [architecture guide](docs/architecture/overview.md) for ownership and trust boundaries.
 
 ## Local Development
 
