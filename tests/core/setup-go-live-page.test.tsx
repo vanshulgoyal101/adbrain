@@ -77,6 +77,17 @@ describe("core: Campaigns → Go live for a first-timer (#1271)", () => {
     expect(m.goLive.mock.calls[0][0].ads).toEqual([expect.objectContaining({ id: "new" })]);
   });
 
+  it("#1934: ?again=1 opens Go live even with campaigns, budget nearest the last one's; no current ads goes back to step 2 again", async () => {
+    m.getCampaignPage.mockResolvedValue({ campaigns: [
+      { id: "old", status: "paused", daily_budget: 2000, created_at: "2026-09-01T00:00:00Z" },
+      { id: "last", status: "completed", daily_budget: 480, created_at: "2026-10-20T00:00:00Z" },
+    ], nextCursor: null });
+    await page({ again: "1", creatives: "a" });
+    expect(m.goLive.mock.calls[0][0]).toMatchObject({ returning: true, initialDaily: 500, ads: [{ id: "a" }] });
+    m.getApprovedCreatives.mockResolvedValue([ad("old", "Get WhatsApp enquiries for rooftop solar in Mohali")]);
+    await expect(page({ again: "1" })).rejects.toThrow("redirect:/create?again=1");
+  });
+
   it("a business with a campaign keeps the Campaigns page", async () => {
     m.getCampaignPage.mockResolvedValue({ campaigns: [{ id: "c1", status: "paused" }], nextCursor: null });
     await page({});

@@ -113,7 +113,7 @@ even to the service role; the service-only `operator_funded` and
 `operator_funding_set` RPCs read and change them (operator grant required). The
 campaign guard lets such a business save `active` without a reservation. Source inclusion alone
 does not prove a target migration was applied. See the
-[allowance API](API_REFERENCE.md#customer-advertising-allowance) for admission
+[allowance API](api/payments.md#customer-advertising-allowance) for admission
 and recovery limitations.
 
 ## Table Dictionary
@@ -196,7 +196,7 @@ it is administrator-only and does not retroactively catalog earlier deployments.
 
 | Table | Important fields and access |
 | --- | --- |
-| `private.meta_tokens` | Business/authorizer/subject; token kind `user`/`business_system_user`/`page`; ciphertext, 12-byte nonce, 16-byte tag, key ID/format version; granted scopes/assets; expiration, validation, revocation timestamps |
+| `private.meta_tokens` | Business/authorizer/subject; token kind `user`/`business_system_user`/`page`; ciphertext, 12-byte nonce, 16-byte tag, key ID/format version; granted scopes/assets; expiration, validation, revocation timestamps. A revoked token keeps no secret: setting `revoked_at` wipes ciphertext, nonce and tag (trigger, #1648), and `meta_token_get` never returns them for a revoked row |
 | `private.meta_connection_attempts` | Business/user/token reference; unique state hash, browser-binding hash, status, intent, expected generation, revision, discovered assets/completeness, error code, claim/expiry/create timestamps |
 | `public.meta_connections` | One row per business; selected Meta business/account/Page, names, currency/timezone, token reference, authorization state, capability JSON, selection reason, generation and check/update times |
 
@@ -293,7 +293,7 @@ that usage plus 10,000 units per saved image; runs with unknown usage stay
 `unresolved` with their full hold. An unknown owner recovery lookup claims a
 zero-quota `abandoned` ID under the same lock, preventing a delayed POST from
 starting after the client receives a 404. This is a conservative quota fence, **not** a
-payment ledger or provider cost reconciliation. The [API contract](API_REFERENCE.md#generate-and-recover)
+payment ledger or provider cost reconciliation. The [API contract](api/creatives.md#generate-and-recover)
 defines the client-visible recovery states.
 
 The [operator reconciliation migration](../db/migrations/20260930_creative_generation_reconcile.sql)
@@ -357,7 +357,7 @@ Test order/event tables deny direct access even to the service role; only the
 `razorpay_test_order_*` RPCs reach them. Test order states are `creating`,
 `created`, `captured` and `needs_reconciliation`. A capture is not Meta funding
 or spendable credit, and installing the tables does not enable checkout; see
-[local test payments](API_REFERENCE.md#local-test-payments).
+[local test payments](api/payments.md#local-test-payments).
 
 ## RPC Ownership Boundaries
 
@@ -393,7 +393,7 @@ See [database tests](../scripts/check-meta-connect-db.mjs) before changing fence
 
 ## Storage
 
-Both `brand-assets` and `creatives` buckets are configured **public**. Object
+Both `brand-assets` and `creatives` buckets are configured **public**. The `media` bucket (#1209, owners' uploaded photos) is **private**: JPEG/PNG/WebP up to 8 MB, owners read their own folder through signed URLs, and only the server writes (signed upload URLs, so bytes go browser → Storage, never through Vercel). Object
 management is scoped by an owned business UUID as the first path segment, but a
 public delivery URL is not a private authenticated download. Do not upload
 confidential documents, lead lists, credentials, or unconsented personal media.
@@ -465,7 +465,9 @@ alone is not a safe deployment plan.
 | [20261027_owner_whatsapp_alerts.sql](../db/migrations/20261027_owner_whatsapp_alerts.sql) | #701 slice 1: `owner_alert_prefs` (per business: lead-alert and daily-results switches, `en`/`hi`, the owner's WhatsApp number once confirmed by "START <code>", opt-out time) and the append-only `owner_alert_consent_events` (event, method, time). Owners read their own rows; `owner_alert_prefs_set` and `owner_alert_start_verification` are owner-checked; service-only `owner_alert_confirm` (10-character code, 15 min) and `owner_alert_stop` (STOP turns both off; only a new START from that phone lifts it, never Settings). Nothing is sent from here |
 | [20261027_lead_first_contacted.sql](../db/migrations/20261027_lead_first_contacted.sql) | #1049: `leads.first_contacted_at` (nullable; set once when the owner first taps WhatsApp them or Call on the enquiry card) and a partial index for Home's median time to first reply. Owners update their own leads under the existing policy; `get_lead_page` returns it with the row |
 | [20261027_owner_whatsapp_alerts_sends.sql](../db/migrations/20261027_owner_whatsapp_alerts_sends.sql) | #701 slice 2: `owner_alert_sends` (one row per alert: a lead id or an IST date; `pending`/`sent`/`failed`/`retry`/`unknown`, so a lead is alerted at most once and an `unknown` send is never repeated), `owner_alert_template_blocks` (templates Meta moved out of UTILITY) and `send_failures`/`paused_at` on `owner_alert_prefs`. Service-only `owner_alert_claim` (verified, not opted out, switch on, not paused, template not blocked; the monthly cap, counted over all businesses, pauses only the daily line; locks the prefs row), `owner_alert_settle` (3 counted failures pause alerts; a sent one resets) and `owner_alert_template_block`; a new START clears the pause. Owners read their own sends |
+| [20261028_media_assets.sql](../db/migrations/20261028_media_assets.sql) | #1209 (#744 phase 1 slice A): `media_assets` (one row per uploaded photo: path under `<business_id>/`, sha256 unique per business while live, MIME/size/dimensions, `checks`/`flags` jsonb, `status` pending→ready, soft delete), (the rights confirmation `media_consents` is #1248's migration, #784), nullable `creatives.media_asset_id` and the `campaign_ads.media_asset_id` FK (both `on delete set null`), and the **private** `media` bucket with an owner read-own object policy and no client write policy. Owner-read RLS, service-role writes; additive, any release order |
 | [20261028_media_consents.sql](../db/migrations/20261028_media_consents.sql) | #784 (#744 phase 1): the append-only `media_consents` (business, user, `terms_version`, `people_confirmed`, time) that gates the owner's own photos and videos. Owners read their own rows and add one only through the owner-checked `media_consent_record`; nobody updates or deletes a row (a business deletion cascades). App side: `src/lib/media/consent.ts` (`MEDIA_TERMS_VERSION`, `hasCurrentMediaConsent`, `recordMediaConsent`; clinics, salons and coaching also confirm the people shown) and `<MediaRightsConsent>` |
+| [20261029_meta_token_purge.sql](../db/migrations/20261029_meta_token_purge.sql) | #1648: revoking a Meta token (`meta_disconnect`, `meta_revoke_subject`, any path) wipes its ciphertext/nonce/tag via a trigger; backfills tokens already revoked; check keeps all three on live rows and none on revoked; `meta_token_get` masks secrets of revoked rows; #1649: `meta_token_revocation_target(business)` (service role) returns the connection's live token id, Meta subject, kind and `shared` (another business holds a live token for the same subject) so disconnect revokes the Meta grant only when it's safe |
 
 Payment, allowance and quote migrations are described above. The map is not a
 replay script: a fresh database starts from the canonical schema, and

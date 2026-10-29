@@ -43,7 +43,7 @@ describe("core: Meta setup checklist after Connect (#1016)", () => {
     replay(recorded.tape as Exchange[]);
     const reads = await new MetaClient(creds).setupReads();
     expect(reads).toEqual(recorded.reads);
-    expect(reads).toEqual({ portfolio: { id: recorded.reads.portfolio.id, name: "Solaride" }, accountActive: true, currency: "INR", paymentMethod: true, pageListed: true, whatsapp: true });
+    expect(reads).toEqual({ portfolio: { id: recorded.reads.portfolio.id, name: "Solaride" }, accountActive: true, accountStatus: 1, currency: "INR", paymentMethod: true, pageListed: true, whatsapp: true });
     const rows = setupChecklist(reads, creds);
     expect(rows.map((row) => [row.key, row.done])).toEqual([["portfolio", true], ["adAccount", true], ["page", true], ["whatsapp", true], ["payment", true]]);
     expect(rows.every((row) => !row.action)).toBe(true);
@@ -70,6 +70,7 @@ describe("core: Meta setup checklist after Connect (#1016)", () => {
     const rows = setupChecklist({ ...base, portfolio: null, currency: "USD", pageListed: false }, creds);
     expect(rows.filter((row) => !row.done).map((row) => row.key)).toEqual(["portfolio", "adAccount", "page"]);
     expect(rows.find((row) => row.key === "adAccount")!.action!.label).toBe("Use an ad account in rupees");
-    expect(setupChecklist({ ...base, accountActive: false }, creds).find((row) => row.key === "adAccount")!.action!.label).toBe("Check your ad account");
+    // #1943: Meta's account_status picks the line and action (2 = disabled).
+    expect(setupChecklist({ ...base, accountActive: false, accountStatus: 2 }, creds).find((row) => row.key === "adAccount")!.action!.label).toBe("Ask Meta to review");
   });
 });
