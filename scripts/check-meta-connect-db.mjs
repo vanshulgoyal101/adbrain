@@ -48,6 +48,7 @@ const hardeningMigration = await readFile(join(root, "db/migrations/20261026_leg
 const reauthMigration = await readFile(join(root, "db/migrations/20261026_meta_connection_reauth.sql"), "utf8");
 const leadCampaignLinkMigration = await readFile(join(root, "db/migrations/20261026_lead_campaign_link.sql"), "utf8");
 const leadEraseMigration = await readFile(join(root, "db/migrations/20261029_lead_erase.sql"), "utf8");
+const subjectPurgeMigration = await readFile(join(root, "db/migrations/20261029_meta_subject_purge.sql"), "utf8");
 const leadSharedPageMigration = await readFile(join(root, "db/migrations/20261028_lead_sync_shared_page.sql"), "utf8");
 const managedWhatsAppMigration = await readFile(join(root, "db/migrations/20261025_managed_whatsapp_page_link.sql"), "utf8");
 const productRollupMigration = await readFile(join(root, "db/migrations/20260928_product_event_rollups.sql"), "utf8");
@@ -1744,6 +1745,57 @@ async function verifyPlanPeriods(db, database) {
  *   public.business_transfer_mine() / business_transfer_decline(p_transfer_id) for the owner;
  *   public.business_transfer_status(p_business_id) for the rep (service role).
  */
+/** #1734: a Meta deletion request purges only that person's businesses; one reconnected by someone else keeps its data. */
+async function verifyMetaSubjectPurge(db, database) {
+  await check(`${database}: Meta subject purge deletes that person's Meta data, keeps manual enquiries and other people's (#1734)`, async () => {
+    const owner = randomUUID(), [a, b, c] = [randomUUID(), randomUUID(), randomUUID()];
+    const token = async (business, subject, revoked = false) => (await db.query(`insert into private.meta_tokens(business_id,authorized_by,subject_id,token_kind,ciphertext,nonce,auth_tag,key_id,revoked_at)
+      values ($1,$2,$3,'user','\\x01',$4,$5,'k1',$6) returning id`, [business, owner, subject, `\\x${"00".repeat(12)}`, `\\x${"00".repeat(16)}`, revoked ? new Date() : null])).rows[0].id;
+    const seed = async (business, tokenId) => {
+      await db.query("insert into public.meta_connections(business_id,generation,authorization_status,ad_account_id,page_id,token_id,meta_business_id,account_name,page_name,currency) values ($1,1,'connected','act_1','11',$2,'99','Shop ads','Shop page','INR')", [business, tokenId]);
+      const campaign = randomUUID();
+      await db.query("insert into public.campaigns(id,business_id,daily_budget) values ($1,$2,200)", [campaign, business]);
+      await db.query("insert into public.campaign_results(campaign_id,spend,impressions) values ($1,10,100)", [campaign]);
+      await db.query("insert into public.ad_results(business_id,campaign_id,meta_ad_id) values ($1,$2,'1')", [business, campaign]);
+      await db.query("insert into public.leads(business_id,source,meta_lead_id,full_name,field_data) values ($1,'meta_form','m1','Synced','{}'),($1,'whatsapp_manual',null,'Walk-in','{}')", [business]);
+    };
+    const attempt = (business, tokenId, assets) => db.query(`insert into private.meta_connection_attempts(business_id,user_id,token_id,state_hash,browser_binding_hash,status,intent,discovered_assets,expires_at)
+      values ($1,$2,$3,$4,'bind','cancelled','{}',$5,now())`, [business, owner, tokenId, randomUUID(), assets]);
+    const count = async (sql, business) => Number((await db.query(sql, [business])).rows[0].n);
+    const leads = (business) => count("select count(*) n from public.leads where business_id=$1 and meta_lead_id is not null", business);
+    await db.query("begin");
+    try {
+      await db.query("insert into auth.users(id) values ($1)", [owner]);
+      await db.query("insert into public.businesses(id,owner_id,name) values ($1,$4,'Purge A'),($2,$4,'Purge B'),($3,$4,'Purge C')", [a, b, c, owner]);
+      // One person (fb-gone) on A and, earlier, on B; B has since reconnected with fb-other; C is only fb-other.
+      const goneA = await token(a, "fb-gone");
+      await token(b, "fb-gone", true);
+      const otherB = await token(b, "fb-other"), otherC = await token(c, "fb-other");
+      await seed(a, goneA); await seed(b, otherB); await seed(c, otherC);
+      await attempt(a, goneA, '{"pages":[]}'); await attempt(a, null, '{"pages":[]}'); await attempt(a, null, null);
+      await assert.rejects(db.query("savepoint s; set local role authenticated; select public.meta_subject_purge('fb-gone')"), { code: "42501" });
+      await db.query("rollback to savepoint s");
+      const result = (await db.query("select public.meta_subject_purge('fb-gone') r")).rows[0].r;
+      assert.deepEqual(result, { businesses: 2, tokens: 2, attempts: 2, connections: 1, leads: 1, campaign_results: 1, ad_results: 1, kept_businesses: [b] });
+      const connection = (await db.query("select * from public.meta_connections where business_id=$1", [a])).rows[0];
+      assert.deepEqual([connection.token_id, connection.account_name, connection.page_name, connection.meta_business_id, connection.currency, connection.authorization_status], [null, null, null, null, null, "revoked"]);
+      assert.equal(await leads(a), 0);
+      assert.equal(await count("select count(*) n from public.leads where business_id=$1 and meta_lead_id is null", a), 1);
+      assert.equal(await count("select count(*) n from public.campaign_results r join public.campaigns c on c.id=r.campaign_id where c.business_id=$1", a), 0);
+      assert.equal(await count("select count(*) n from private.meta_connection_attempts where business_id=$1", a), 1);
+      for (const kept of [b, c]) {
+        assert.equal(await leads(kept), 1);
+        assert.equal(await count("select count(*) n from public.ad_results where business_id=$1", kept), 1);
+        assert.equal((await db.query("select account_name, authorization_status from public.meta_connections where business_id=$1", [kept])).rows[0].authorization_status, "connected");
+      }
+      assert.equal(await count("select count(*) n from private.meta_tokens where subject_id='fb-gone' or business_id=$1", a), 0);
+      assert.equal(await count("select count(*) n from private.meta_tokens where subject_id='fb-other' and revoked_at is null and business_id <> $1", a), 2);
+      assert.deepEqual((await db.query("select public.meta_subject_purge('fb-gone') r")).rows[0].r, { businesses: 0, tokens: 0, attempts: 0, connections: 0, leads: 0, campaign_results: 0, ad_results: 0, kept_businesses: [] });
+      await assert.rejects(db.query("select public.meta_subject_purge(' ')"), { code: "22023" });
+    } finally { await db.query("rollback"); }
+  });
+}
+
 async function verifyBusinessTransfer(db, database) {
   const files = (await readdir(join(root, "db/migrations"))).filter((file) => /business_transfer/.test(file)).sort();
   const override = process.env.META_TEST_TRANSFER_SQL;
@@ -3048,6 +3100,9 @@ async function verify(database, source, integrityMigration, customerOnly = false
         await verifyLeadCampaignLink(db,database);
         await verifySharedPageLeads(db,database);
         await verifyLeadErase(db,database);
+        await db.query(subjectPurgeMigration);
+        await db.query(subjectPurgeMigration);
+        await verifyMetaSubjectPurge(db,database);
       }
       if (database === "customer_fresh") await verifyAdvisorHardening(db,database);
       await verifyBusinessTransfer(db,database);
