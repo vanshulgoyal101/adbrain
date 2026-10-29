@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, ImagePlus, RotateCcw, TriangleAlert } from "lucide-react";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { MediaRightsConsent, mediaConsentComplete, type MediaConsentValue } from "@/components/media-rights-consent";
@@ -21,7 +21,7 @@ const defaultDeps = (): UploadDeps => ({
 
 /**
  * #778 slice 3b: the owner's picked photos and their uploads. Lives on the library (not the sheet) so uploads
- * keep going after the sheet closes ("You can keep going; uploads finish in the background.").
+ * keep going after the sheet closes. They stop if the page closes, so the tab asks first while one runs (Designer, #1999).
  */
 export function useMediaUploads({ businessId, onAdded, deps, codec }: {
   businessId: string;
@@ -72,6 +72,14 @@ export function useMediaUploads({ businessId, onAdded, deps, codec }: {
     setBatch((current) => ({ ...current, running: current.running - 1 }));
   }, [businessId, deps, onAdded, update]);
 
+  const running = batch.running > 0;
+  useEffect(() => {
+    if (!running) return;
+    const ask = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener("beforeunload", ask);
+    return () => window.removeEventListener("beforeunload", ask);
+  }, [running]);
+
   const progress = batch.running > 0 && batch.done < batch.total ? `Uploading ${batch.done + 1} of ${batch.total}…` : null;
   const request: typeof fetch = deps?.fetch ?? ((...args) => fetch(...args));
   return { items, limitNote, progress, pick, send, request };
@@ -80,12 +88,14 @@ export function useMediaUploads({ businessId, onAdded, deps, codec }: {
 export type MediaUploads = ReturnType<typeof useMediaUploads>;
 
 function ItemLine({ item, onRetry }: { item: UploadItem; onRetry: () => void }) {
-  const tone = item.status === "refused" || item.status === "failed" ? "text-red-700" : item.status === "added" ? "text-emerald-700" : "text-slate-600";
+  const usableWithLimits = item.status === "ready" && item.prepared?.fit.level === "feed";
+  const tone = item.status === "refused" || item.status === "failed" ? "text-red-700" : item.status === "added" ? "text-emerald-700" : usableWithLimits ? "text-amber-800" : "text-slate-600";
   return (
     <li className="flex items-start gap-3 py-2">
       <span className="mt-0.5 shrink-0" aria-hidden="true">
         {item.status === "added" || item.status === "duplicate" ? <Check className="h-4 w-4 text-emerald-600" />
           : item.status === "refused" || item.status === "failed" ? <TriangleAlert className="h-4 w-4 text-red-600" />
+          : usableWithLimits ? <TriangleAlert className="h-4 w-4 text-amber-600" />
           : <ImagePlus className="h-4 w-4 text-slate-400" />}
       </span>
       <span className="min-w-0 flex-1">
@@ -181,15 +191,20 @@ export function MediaUploadSheet({ open, onOpenChange, uploads, businessId, vert
           {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
           {progress && (
             <p role="status" className="text-sm text-slate-700">
-              {progress} <span className="text-slate-500">You can keep going; uploads finish in the background.</span>
+              {progress} <span className="text-slate-500">You can close this. Keep this page open until it finishes.</span>
             </p>
           )}
           <button type="button" onClick={() => void next()} disabled={!ready.length || saving || busy}
             className="inline-flex min-h-11 items-center justify-center rounded-md bg-blue-600 px-4 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">
-            Next
+            {addLabel(ready.length)}
           </button>
         </div>
       </DialogContent>
     </Dialog>
   );
+}
+
+/** The sheet's primary button says what it does (Designer, #1999). */
+function addLabel(count: number): string {
+  return count === 1 ? "Add 1 photo" : count > 1 ? `Add ${count} photos` : "Add photos";
 }
