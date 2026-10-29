@@ -4,7 +4,7 @@ Part of [Operations](README.md).
 
 Use this runbook to prepare a target and verify a deployment. Authorization and
 promotion rules live in [Release Workflow](../RELEASING.md); configuration defaults
-live in [Configuration](../CONFIGURATION.md). AdBrain requires a dynamic Node/Next.js
+live in [Configuration](configuration.md). AdBrain requires a dynamic Node/Next.js
 host and Supabase Auth/Postgres/Storage, not a static export.
 
 Production is `main`, deployed by Vercel to `https://adbrain.vanshul.com` (Node 24.x,
@@ -178,7 +178,7 @@ missing quota read is not treated as permission for unlimited generation.
 
 ## 3. Configure Secrets and Public Values
 
-[Configuration](../CONFIGURATION.md) is the complete variable/default reference.
+[Configuration](configuration.md) is the complete variable/default reference.
 Minimum deployment groups:
 
 | Group | Required decision |

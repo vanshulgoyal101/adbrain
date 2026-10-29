@@ -109,7 +109,7 @@ export function sourceInventory(root) {
 export const MAX_LINES = 300;
 export const TOP_LEVEL = new Set(["docs/README.md", "docs/roadmap.md"]);
 // Flat files not yet moved into docs/{product,architecture,api,operations,team}/; each move PR deletes its entries.
-export const LEGACY_FLAT = new Set(["AI_PIPELINE", "ARCHITECTURE", "BRAND-IDENTITY", "CONFIGURATION", "DATA_MODEL",
+export const LEGACY_FLAT = new Set(["AI_PIPELINE", "ARCHITECTURE", "BRAND-IDENTITY", "DATA_MODEL",
   "META_APPROVAL_ACTION_PLAN", "META_CONNECT", "ORCHESTRATION", "PAYMENTS-PLAN", "QUICK_START",
   "RELEASING", "TESTING"].map(name => `docs/${name}.md`));
 const CODE_DIRS = ["src", "scripts", "db", ".github"];
@@ -186,7 +186,7 @@ export function checkDocumentation(root, options = {}) {
     return found.length ? found : existsSync(resolve(root, legacy)) ? [legacy] : [];
   };
   const fail = (file, line, message) => diagnostics.push({ severity: "error", file, line, message });
-  const configPages = pages("docs/operations/", "docs/CONFIGURATION.md", file => /\/configuration[^/]*\.md$/.test(file)).sort((a, b) => a.length - b.length);
+  const configPages = docFiles.filter(file => /^docs\/operations\/configuration[^/]*\.md$/.test(file)).sort((a, b) => a.length - b.length);
   const configText = configPages.map(textOf).join("\n");
   const dataText = textOf(existsSync(resolve(root, "docs/architecture/migrations.md")) ? "docs/architecture/migrations.md" : "docs/DATA_MODEL.md");
 

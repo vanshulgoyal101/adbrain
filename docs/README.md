@@ -29,7 +29,7 @@ feature branch or a passing local test.
 | [Worker orchestration](ORCHESTRATION.md) | Who owns each packet/file/resource, what blocks it, and what evidence permits integration? |
 | [Features and workflows](product/README.md) | What can owners do, and where are the limits? |
 | [API reference](api/README.md) | Which routes/actions exist, which parameters are accepted, and what do failures mean? |
-| [Configuration](CONFIGURATION.md) | Which variables are required, what are their defaults, and which changes cost money or require a restart? |
+| [Configuration](operations/configuration.md) | Which variables are required, what are their defaults, and which changes cost money or require a restart? |
 | [Architecture](ARCHITECTURE.md) | Where is behavior owned, and how do requests cross trust boundaries? |
 | [Architecture decisions](architecture/README.md) | Which cross-cutting decisions (ADRs) bind the code, and how do we record a new one? |
 | [Data model](DATA_MODEL.md) | Which tables, relationships, grants, RPCs, buckets and migrations support the app? |
@@ -63,6 +63,7 @@ last move.
 | `OPERATIONS.md` | [operations/](operations/README.md) and [operations/runbooks/](operations/runbooks/README.md) |
 | `DEPLOY.md` | [operations/deploy.md](operations/deploy.md) |
 | `OBSERVABILITY.md` | [operations/observability.md](operations/observability.md) and [operations/observability-queries.md](operations/observability-queries.md) |
+| `CONFIGURATION.md` | [operations/configuration.md](operations/configuration.md) and [operations/configuration-payments.md](operations/configuration-payments.md) (live checkout) |
 | `ROADMAP.md` | [roadmap.md](roadmap.md) (lower case, like the folders) |
 
 ## Terminology
