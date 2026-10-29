@@ -84,7 +84,7 @@ function suspenseBoundaries(node: any): any[] {
 
 describe("Home workspace", () => {
   // #1469: between launch and first delivery Home says Meta is checking, once.
-  const CHECKING = "Meta is checking your ads. They usually start showing within a day.";
+  const CHECKING = "Meta is checking your ads. This usually takes minutes to a few hours, and up to a day.";
   it("says Meta is checking while the newest campaign's ads are in review (#1469)", () => {
     const live = { id: "c-new", name: "Solar", status: "active", daily_budget: 300, raw: {}, meta_campaign_id: "1" } as unknown as Campaign;
     render(<WorkspaceHome {...empty} business={business} campaigns={[live]} adReview={{ kind: "checking", campaignId: "c-new" }} />);
@@ -493,6 +493,11 @@ describe("Home results row (#764)", () => {
     expect(within(row).getByText("Per enquiry").nextElementSibling).toHaveTextContent("₹143");
     expect(within(row).getByText(/Updated 10m ago/)).toBeInTheDocument();
     expect(within(row).getByRole("link", { name: /See campaigns/ })).toHaveAttribute("href", "/campaigns");
+  });
+
+  it("#1934: a launched owner starts a new campaign from Home in the guided returning mode", () => {
+    render(<WorkspaceHome {...empty} business={business} campaigns={[chats, forms]} results={results} now={now} />);
+    expect(within(screen.getByRole("region", { name: "Results so far" })).getByRole("link", { name: "New campaign" })).toHaveAttribute("href", "/brand?again=1");
   });
 
   // #1774 (QA): in Hindi the freshness line was the one English phrase left in the row.

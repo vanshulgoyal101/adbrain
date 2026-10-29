@@ -273,6 +273,9 @@ function nightlyExport(dry) {
   };
   if (ok) {
     log(`nightly export ${name}: ${tail(restored).slice(0, 200)}`);
+    // #1891: after a good backup, drop the core smoke's old unreferenced images so Storage stays under the free plan.
+    const pruned = spawnSync(process.execPath, ["scripts/prune-smoke-storage.mjs", "--apply"], { cwd: WT, encoding: "utf8", timeout: 5 * 60_000 });
+    log(`smoke storage prune: ${tail(pruned).slice(0, 200)}`);
     for (const old of exportsToPrune([...names, `${name}.tar.gz.cms`])) rmSync(join(BACKUP_DIR, old), { recursive: true, force: true });
     return;
   }
@@ -287,6 +290,16 @@ function nightlyExport(dry) {
   } catch (error) {
     log(`nightly export alert failed: ${String(error?.message ?? error).split("\n")[0].slice(0, 160)}`);
   }
+}
+
+/** #1856: once a UTC day, alert at 80% of a Supabase free-plan quota (scripts/plan-usage.mjs opens or updates one issue). */
+function dailyUsageCheck(dry) {
+  const stamp = join(STATE_DIR, `usage-${new Date().toISOString().slice(0, 10)}`);
+  if (existsSync(stamp)) return;
+  if (dry) return console.log("would check Supabase free-plan usage");
+  const result = spawnSync(process.execPath, ["scripts/plan-usage.mjs"], { cwd: WT, encoding: "utf8", timeout: 2 * 60_000 });
+  log(`plan usage: ${`${result.stdout ?? ""}${result.stderr ?? ""}`.trim().split("\n").join(" | ").slice(0, 240)}`);
+  if (result.status === 0) writeFileSync(stamp, "");
 }
 
 /** The nightly encrypted pg_dump (#884): GitHub's schedule is best effort, so dispatch it when its newest run is over 23 h old. */
@@ -441,6 +454,7 @@ async function main() {
   dispatchBackup(values["dry-run"]);
   const fresh = values["dry-run"] ? true : refresh();
   nightlyExport(values["dry-run"]);
+  dailyUsageCheck(values["dry-run"]);
   // A detached run (#766) finishes the run it was given and records it; the tick that started it has long returned.
   if (values["run-role"]) return finishRun(values["run-role"], values["run-start"], runMin, values.credits);
   if (existsSync(join(STATE_DIR, "OFF"))) return values["dry-run"] ? console.log("no role runs: OFF switch") : log("tick: no role runs (OFF switch)");
