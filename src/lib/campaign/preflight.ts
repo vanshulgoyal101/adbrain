@@ -105,6 +105,7 @@ export interface CanonicalReviewPayload {
   whatsappNumber: string | null;
   dailyBudgetRupees: number;
   abTest: boolean;
+  excludeFacebookReels?: true;
   targeting: DraftInput["targeting"];
   resolvedAreaLabel: string | null;
   audienceInterests?: ReviewDTO["audienceInterests"];
@@ -209,6 +210,8 @@ export function buildCanonicalReviewPayload(
       ? { whatsappOpening: input.whatsappMessage.opening } : {}),
     dailyBudgetRupees: input.draft.dailyBudgetRupees,
     abTest: input.draft.abTest,
+    // #2273: only when on, so plans reviewed before this field keep their hash.
+    ...(input.draft.excludeFacebookReels ? { excludeFacebookReels: true as const } : {}),
     targeting: input.draft.targeting,
     resolvedAreaLabel: input.geo.resolvedAreaLabel,
     ...(input.geo.location ? { resolvedLocation: input.geo.location } : {}),

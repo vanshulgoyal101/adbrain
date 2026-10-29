@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { fetchAudiencePlan, needsAudiencePlan, plannedTargeting } from "@/lib/campaign/audience-plan";
 import { activationConfirmationPayload, campaignDeliverySnapshotSchema } from "@/lib/campaign/activation";
 import { createCampaignRequestSchema, type CreateCampaignRequest, type DraftInput, type OperationDTO } from "@/lib/campaign/connect-contracts";
 import { campaignNameDate, defaultCampaignName } from "@/lib/campaign/draft-name";
@@ -23,7 +24,7 @@ export function setupDraftInput(input: { businessId: string; name: string; adIds
 
 /**
  * #1271 (#1251 WS1 step 3) slice 4b: setup's one-tap "Go live", through the same routes the Campaigns page uses:
- * save the draft → review it (preflight) → create it PAUSED → activate it as a capped run of `capDays` days.
+ * plan the audience → save the draft → review it (preflight) → create it PAUSED → activate it as a capped run of `capDays` days.
  * Nothing is spent before the activation PATCH, which enforces the Meta total limit, the weekly cap and funding.
  */
 export type GoLiveStep = "check" | "create" | "activate";
@@ -125,10 +126,15 @@ export async function goLive(deps: GoLiveDeps, input: GoLiveInput, onStep: (step
         headline: input.ads[0]?.headline, businessName: input.businessName, destination: "whatsapp",
         date: campaignNameDate(deps.now?.() ?? new Date()),
       });
-      const draft = await client.saveDraft(setupDraftInput({
+      let draftInput = setupDraftInput({
         businessId: input.businessId, name, adIds: input.ads.map((ad) => ad.id), dailyBudgetRupees: input.dailyBudgetRupees,
         whatsappNumber: pickWhatsAppNumber(whatsapp.state === "ready" ? whatsapp.numbers : [], ""),
-      }));
+      });
+      // #2257: Review blocks the default AI age and missing audience, so plan them first, as the composer's Prepare does.
+      if (needsAudiencePlan(draftInput)) {
+        draftInput = { ...draftInput, targeting: plannedTargeting(draftInput, await fetchAudiencePlan(deps.fetch, draftInput)).targeting };
+      }
+      const draft = await client.saveDraft(draftInput);
       const review = await client.preflight(input.businessId, draft.draftId, draft.version);
       if (!review.canCreatePaused || review.blockers.length || !review.planHash) {
         const messages = review.blockers.map((blocker) => blocker.message);

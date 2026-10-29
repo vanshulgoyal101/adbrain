@@ -91,7 +91,7 @@ import type {
   OperationDTO,
   ReviewDTO,
 } from "@/lib/campaign/connect-contracts";
-import { targetingInputSchema } from "@/lib/campaign/connect-contracts";
+import { fetchAudiencePlan, needsAudiencePlan, plannedTargeting, type AudiencePlanReply } from "@/lib/campaign/audience-plan";
 import { campaignNameDate, defaultCampaignName, draftForSelection } from "@/lib/campaign/draft-name";
 import { REVIEW_AND_SPEND, whatsappExpectation } from "@/lib/campaign/expectations";
 import { campaignDestination } from "@/lib/campaign/outcomes";
@@ -134,6 +134,7 @@ import { resultsWaitLine, throttleActive } from "@/lib/campaign/meta-wait";
 import { useMounted } from "@/lib/use-mounted";
 import { refreshIfStale, staleCampaignIds } from "@/lib/campaign/results-freshness";
 import { GONE_LINES, OUTSIDE_LINES, budgetChangedInMeta, goneInMeta, madeOutsideAdBrain, pausedInMeta } from "@/lib/campaign/gone-in-meta";
+import { CampaignTestOptions } from "@/components/campaign-test-options";
 import { formatDate, formatMoney, formatMoneyExact, formatNumber, formatPerDay } from "@/lib/format";
 
 const subscribeNever = () => () => {};
@@ -230,24 +231,12 @@ type CampaignsProps = {
   campaignWords?: Words<"campaigns">;
   /** #1838: until when Meta asked us to wait before checking again; launched cards say their numbers may be old. */
   metaWaitUntil?: string | null;
+  /** #2273: the team's own accounts see the no-Facebook-Reels test control (internal-accounts.ts). */
+  internal?: boolean;
 };
 
-type PlanReply = {
-  response: Response;
-  data: { ready?: boolean; fallback?: boolean; targeting?: unknown; error?: string; questions?: { question: string }[]; handoff?: { message: string } };
-};
 const BACKGROUND_PLAN_DELAY_MS = 1500;
 const MAX_BACKGROUND_PLANS = 3;
-
-async function fetchAudiencePlan(input: DraftInput, signal: AbortSignal): Promise<PlanReply> {
-  const response = await fetch("/api/campaigns/plan", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ goal: input.goal, audienceDraft: input }),
-    signal,
-  });
-  return { response, data: await response.json() as PlanReply["data"] };
-}
 
 type AudiencePlanInput = Pick<DraftInput, "goal" | "creativeIds" | "targeting" | "destination">;
 
@@ -267,10 +256,6 @@ function refreshNotice(previous: CampaignResult | undefined, next: CampaignResul
   if (!next) return t("notices.checkedNone");
   if (!previous || keys.some(key => (previous[key] ?? null) !== (next[key] ?? null))) return t("notices.updatedNow");
   return t("notices.checkedSince", { since: formatDate(previous.fetched_at) });
-}
-
-function needsAudiencePlan(input: AudiencePlanInput): boolean {
-  return input.targeting.age?.mode === "ai" || !input.targeting.audience;
 }
 
 /**
@@ -310,6 +295,7 @@ function BusinessCampaigns({
   verdictWords,
   campaignWords,
   metaWaitUntil = null,
+  internal = false,
   scope,
   initialSetup,
   onSetupChange,
@@ -362,6 +348,7 @@ function BusinessCampaigns({
   const [includedNames, setIncludedNames] = useState(initialSetup?.includedNames ?? "");
   const [excludedNames, setExcludedNames] = useState(initialSetup?.excludedNames ?? "");
   const [abTest, setAbTest] = useState(initialSetup?.abTest ?? false);
+  const [noFacebookReels, setNoFacebookReels] = useState(false);
   // #1155: who sees the ads folds under one line; it starts open only for a setup that already changed it.
   const [whoOpen, setWhoOpen] = useState(() => abTest || targeting.locationMode === "manual" || targeting.ageMode === "manual"
     || targeting.gender !== "all" || targeting.cityScope !== "city_only" || Boolean(targeting.audience) || Boolean(initialSetup?.excludedNames || initialSetup?.includedNames));
@@ -577,6 +564,7 @@ function BusinessCampaigns({
     setWhatsAppMessage(input.whatsappMessage ?? null);
     destinationChosenRef.current = true;
     setAbTest(input.abTest);
+    setNoFacebookReels(input.excludeFacebookReels === true);
     setCreationMode("manual");
     setDraftGoal(input.goal);
     setIncludedNames((input.targeting.location?.includedNames ?? []).join("\n"));
@@ -760,6 +748,7 @@ function BusinessCampaigns({
     setSelected(new Set());
     setBudget(200);
     setAbTest(false);
+    setNoFacebookReels(false);
     setTargeting(defaultTargeting);
     setIncludedNames("");
     setExcludedNames("");
@@ -975,11 +964,12 @@ function BusinessCampaigns({
       whatsappMessage,
       targeting: targetingFromEditor(targeting, plannedAreas, plannedExclusions),
       abTest,
+      excludeFacebookReels: internal && noFacebookReels,
     });
   }
 
   // #366: plan the audience in the background once ads are chosen, so Prepare usually doesn't wait for the AI.
-  const backgroundPlanRef = useRef<{ key: string; reply: Promise<PlanReply>; controller: AbortController } | null>(null);
+  const backgroundPlanRef = useRef<{ key: string; reply: Promise<AudiencePlanReply>; controller: AbortController } | null>(null);
   const backgroundPlansRef = useRef(0);
   function backgroundKeyFor(input: DraftInput): string {
     return audiencePlanKey({ ...input, goal: draftGoal });
@@ -1006,7 +996,7 @@ function BusinessCampaigns({
     backgroundPlansRef.current += 1;
     backgroundPlanRef.current?.controller.abort();
     const controller = new AbortController();
-    const reply = fetchAudiencePlan(input, controller.signal);
+    const reply = fetchAudiencePlan((...args) => fetch(...args), input, controller.signal);
     reply.catch(() => {});
     backgroundPlanRef.current = { key, reply, controller };
   });
@@ -1018,7 +1008,7 @@ function BusinessCampaigns({
   useEffect(() => () => backgroundPlanRef.current?.controller.abort(), []);
 
   /** The background reply for exactly this input, used once; null if there is none or it failed. */
-  function takeBackgroundPlan(input: DraftInput, signal: AbortSignal): Promise<PlanReply | null> | null {
+  function takeBackgroundPlan(input: DraftInput, signal: AbortSignal): Promise<AudiencePlanReply | null> | null {
     const planned = backgroundPlanRef.current;
     if (!planned) return null;
     backgroundPlanRef.current = null;
@@ -1036,12 +1026,10 @@ function BusinessCampaigns({
   async function recommendAudience(input: DraftInput, signal: AbortSignal, reuseBackground = false): Promise<DraftInput> {
     setPreparationStage(signal, "Recommending audience...");
     const background = reuseBackground ? takeBackgroundPlan(input, signal) : null;
-    const { response, data } = (background && await background) || await fetchAudiencePlan(input, signal);
+    const reply = (background && await background) || await fetchAudiencePlan((...args) => fetch(...args), input, signal);
     signal.throwIfAborted();
-    if (!response.ok || !data.ready) throw new Error(data.error ?? data.handoff?.message ?? (data.questions?.map((question) => question.question).join(" ") || "We couldn't suggest who should see your ads. Try again, or choose the area yourself."));
-    const recommended = { ...targetingInputSchema.parse(data.targeting), gender: input.targeting.gender ?? "all" as const };
-    if (data.fallback && recommended.audience) setNotice(recommended.audience.rationale);
-    else if (!recommended.audience?.interestNames.length) throw new Error("The detailed targeting recommendation is incomplete. Try again.");
+    const { targeting: recommended, notice } = plannedTargeting(input, reply);
+    if (notice) setNotice(notice);
     setTargeting(targetingToEditor(recommended));
     setIncludedNames((recommended.location?.includedNames ?? []).join("\n"));
     setExcludedNames((recommended.location?.excludedNames ?? []).join("\n"));
@@ -2246,22 +2234,8 @@ function BusinessCampaigns({
                   </div>}
                 </div>
 
-                <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-slate-200 p-3">
-                  <input
-                    type="checkbox"
-                    checked={abTest}
-                    onChange={(e) => setAbTest(e.target.checked)}
-                    className="mt-0.5 h-4 w-4 accent-blue-600"
-                  />
-                  <span className="text-sm">
-                    <span className="font-medium text-slate-800">
-                      A/B test the audience by age
-                    </span>
-                    <span className="block text-xs text-slate-500">
-                      Two ad sets, each with the entered daily budget. Total daily budget: {formatMoney(totalDailyBudget)}.
-                    </span>
-                  </span>
-                </label>
+                <CampaignTestOptions abTest={abTest} onAbTest={setAbTest} totalDailyBudget={totalDailyBudget}
+                  {...(internal ? { noFacebookReels, onNoFacebookReels: setNoFacebookReels } : {})} />
                 </div>
                 </details>
 
@@ -2643,7 +2617,7 @@ function BusinessCampaigns({
               );
             });
             return folded // #2150: Saved drafts (actionable) come before the Deleted fold (history).
-              ? list.length > 0 && [!showComposer && savedDraftsBlock && <div key="drafts" className="mt-6">{savedDraftsBlock}</div>, <details key="gone" className="group border-b border-slate-200"><summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 text-sm font-medium text-slate-600 [&::-webkit-details-marker]:hidden"><ChevronRight className="h-4 w-4 text-slate-500 transition-transform group-open:rotate-90" aria-hidden="true" />{tc("list.deleted", { n: list.length })}</summary>{cards}</details>]
+              ? list.length > 0 && [!showComposer && savedDraftsBlock && <div key="drafts" className="-mt-px">{savedDraftsBlock}</div>, <details key="gone" className="group border-b border-slate-200"><summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 text-sm font-medium text-slate-600 [&::-webkit-details-marker]:hidden"><ChevronRight className="h-4 w-4 text-slate-500 transition-transform group-open:rotate-90" aria-hidden="true" />{tc("list.deleted", { n: list.length })}</summary>{cards}</details>]
               : cards;
             })}
           </div>
@@ -2654,7 +2628,7 @@ function BusinessCampaigns({
             {tc(listLoading ? "list.loading" : "list.loadMore")}
           </Button>
         </div>}
-        {!showComposer && savedDraftsBlock && goneCampaigns.length === 0 && <div className="mt-6">{savedDraftsBlock}</div>}
+        {!showComposer && savedDraftsBlock && goneCampaigns.length === 0 && <div className="-mt-px">{savedDraftsBlock}</div>}
       </div>
     </div>
   );

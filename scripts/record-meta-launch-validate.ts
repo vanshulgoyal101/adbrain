@@ -8,7 +8,11 @@
  * for the recording and are deleted in `finally`. No image is uploaded: the launch code
  * gets an existing image hash from the account.
  *
- *   npx tsx --env-file=<.env.local> scripts/record-meta-launch-validate.ts
+ * #2273: `--no-facebook-reels` instead records the no-Reels test (WhatsApp and lead-form, with a
+ * 9:16 so the placement creative is sent) into no-facebook-reels-validate.json, plus a control:
+ * the default story rule, which still names facebook_reels, under the no-Reels ad set.
+ *
+ *   npx tsx --env-file=<.env.local> scripts/record-meta-launch-validate.ts [--no-facebook-reels]
  */
 import "./lib/meta-write-gate";
 import { writeFileSync } from "node:fs";
@@ -37,6 +41,8 @@ const LAUNCH_INPUTS = {
   interests: [{ id: "6003437140731", name: "Solar energy" }],
 };
 const PLACEHOLDER_PHONE = "+910000000000";
+
+const NO_FACEBOOK_REELS = process.argv.includes("--no-facebook-reels");
 
 type Exchange = { destination: AdDestination; kind: string; form: Record<string, string>; status: number; body: unknown };
 const tape: Exchange[] = [];
@@ -116,21 +122,50 @@ async function main() {
     ...LAUNCH_INPUTS,
     creatives: [{ imageUrl: "https://adbrain.vanshul.com/solar-example.jpg", ...LAUNCH_INPUTS.creative }],
   };
+  // #2273: a 9:16 (the account's second image) so the placement creative's rules are validated too.
+  const noReels = {
+    ...base,
+    name: "AdBrain #2273 validate (PAUSED, deleted after)",
+    excludeFacebookReels: true,
+    creatives: base.creatives.map((creative) => ({ ...creative, storyImage: new Uint8Array([0]) })),
+  };
   try {
-    destination = "instant_form";
-    imageUploads = 0;
-    await meta.createLeadCampaign({ ...base, destination, leadFormId: leadForm.id });
-    destination = "whatsapp";
-    imageUploads = 0;
-    await meta.createLeadCampaign({ ...base, destination, whatsappNumber: phone, boundWhatsAppNumbers: [phone] });
+    if (NO_FACEBOOK_REELS) {
+      destination = "instant_form";
+      imageUploads = 0;
+      await meta.createLeadCampaign({ ...noReels, destination, leadFormId: leadForm.id });
+      destination = "whatsapp";
+      imageUploads = 0;
+      await meta.createLeadCampaign({ ...noReels, destination, whatsappNumber: phone, boundWhatsAppNumbers: [phone] });
+      // Control: the same creative with the default story rule (facebook_reels named) under the no-Reels ad set.
+      const adSetId = created.filter((o) => o.kind === "adsets").at(-1)!.id;
+      const sent = tape.findLast((e) => e.destination === "whatsapp" && e.kind === "adcreatives")!.form;
+      const feed = JSON.parse(sent.asset_feed_spec) as { asset_customization_rules: { customization_spec: { facebook_positions: string[] } }[] };
+      feed.asset_customization_rules[0].customization_spec.facebook_positions = ["story", "facebook_reels"];
+      const form = { name: "AdBrain #2273 control", adset_id: adSetId, status: "PAUSED", creative: JSON.stringify({ object_story_spec: JSON.parse(sent.object_story_spec), asset_feed_spec: feed }) };
+      const validated = await graphPost(`${account}/ads`, { ...form, execution_options: VALIDATE });
+      tape.push({ destination, kind: "control-ads-story-rule-with-facebook-reels", form, status: validated.status, body: validated.body });
+      console.log("control", validated.status, JSON.stringify(validated.body).slice(0, 400));
+    } else {
+      destination = "instant_form";
+      imageUploads = 0;
+      await meta.createLeadCampaign({ ...base, destination, leadFormId: leadForm.id });
+      destination = "whatsapp";
+      imageUploads = 0;
+      await meta.createLeadCampaign({ ...base, destination, whatsappNumber: phone, boundWhatsAppNumbers: [phone] });
+    }
   } finally {
     for (const object of [...created].reverse().filter((o) => o.kind !== "adsets")) {
       const res = await realFetch(`${GRAPH}${object.id}?access_token=${encodeURIComponent(token)}`, { method: "DELETE" });
       console.log("delete", object.kind, res.status);
     }
   }
-  const file = join(process.cwd(), "tests/core/fixtures/meta/launch-validate.json");
-  writeFileSync(file, `${JSON.stringify(scrub({ recordedAt: new Date().toISOString(), inputs: { ...LAUNCH_INPUTS, phone: PLACEHOLDER_PHONE }, geoMeta, tape }), null, 2)}\n`);
+  for (const exchange of tape) {
+    const instagram = exchange.form.object_story_spec ? (JSON.parse(exchange.form.object_story_spec) as { instagram_user_id?: string }).instagram_user_id : undefined;
+    if (instagram) scrubs.push([instagram, "INSTAGRAM"]);
+  }
+  const file = join(process.cwd(), `tests/core/fixtures/meta/${NO_FACEBOOK_REELS ? "no-facebook-reels" : "launch"}-validate.json`);
+  writeFileSync(file, `${JSON.stringify(scrub({ recordedAt: new Date().toISOString(), inputs: { ...LAUNCH_INPUTS, ...(NO_FACEBOOK_REELS ? { name: noReels.name } : {}), phone: PLACEHOLDER_PHONE }, geoMeta, tape }), null, 2)}\n`);
   console.log(`launch-validate: ${tape.length} validated objects`);
 }
 

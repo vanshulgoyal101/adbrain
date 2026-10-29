@@ -1,4 +1,5 @@
 # सपोर्ट के जवाब
+<!-- mirrors ../support-replies.md 2ae1af5bad76 -->
 
 यह [Support replies](../support-replies.md) का हिंदी रूप है; अंग्रेज़ी पेज बदले तो इसे भी बदलें।
 [Features and workflows](../README.md) का हिस्सा।

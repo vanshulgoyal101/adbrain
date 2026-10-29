@@ -1,4 +1,5 @@
 # साइन इन करें और Meta जोड़ें
+<!-- mirrors ../setup.md 3a0fb109878b -->
 
 यह [Sign In and Connect Meta](../setup.md) का हिंदी रूप है; अंग्रेज़ी पेज बदले तो इसे भी बदलें।
 [Features and workflows](../README.md) का हिस्सा।

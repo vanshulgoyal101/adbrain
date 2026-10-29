@@ -23,6 +23,7 @@ import { requireOwnedBusiness } from "@/lib/meta/connection-access";
 import { createClient } from "@/lib/supabase/server";
 import { ReadyAdsNextStep } from "@/components/ready-ads-next-step";
 import { isProspectSession } from "@/lib/prospect-session";
+import { isInternalUser } from "@/lib/internal-accounts";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
@@ -167,6 +168,7 @@ export default async function CampaignsPage({
           campaignWords={await requestWords("campaigns")}
           metaWaitUntil={campaigns.some((campaign) => campaign.meta_campaign_id) ? await metaWaitFor(business.id) : null}
           newCampaign={params.new === "1" ? { creativeIds: requested, review: params.review === "1", budget: chosenBudget } : undefined}
+          internal={await createClient().then((supabase) => supabase.auth.getUser()).then(({ data }) => isInternalUser(data.user)).catch(() => false)}
         />}
       </div>
     </div>
