@@ -22,7 +22,9 @@ describe("/for/[segment] (#1565)", () => {
     expect([...costs.querySelectorAll("dt")].map((term) => term.textContent)).toEqual(["Setup", "Ads", "AdBrain"]);
     expect(within(costs).getByText("You pay Meta directly")).toBeInTheDocument();
     expect(within(costs).getByText("₹999 a month")).toBeInTheDocument();
-    expect(within(costs).getByText(/^First month free\. No auto-debit, no lock-in\.$/)).toBeInTheDocument();
+    expect(within(costs).getByText("First month free. No auto-debit, stop any time, and a full refund for any month you pay but don't start a new campaign.")).toBeInTheDocument();
+    // #1652: the pricing questions live on the homepage.
+    expect(within(costs).getByRole("link", { name: "Questions about pricing" })).toHaveAttribute("href", "/#pricing");
     // #1632: 'How it starts' is a real numbered sequence.
     expect(within(screen.getByRole("region", { name: "How it starts" })).getAllByRole("listitem")).toHaveLength(3);
     for (const link of screen.getAllByRole("link", { name: "Start my free campaign" })) expect(link).toHaveAttribute("href", "/login");

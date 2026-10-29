@@ -96,7 +96,8 @@ it after sign-in; the login page keeps the create-account view while it's pendin
 landings for the pilot segments (`src/lib/segments.ts`): the segment's headline, a
 WhatsApp chat showing what a customer sends, the pilot kit's offer (free first
 campaign, the owner pays Meta from their own ad account, then ₹999 a month with the
-first month free) and trust lines, with "Start my free campaign" → `/login`. The
+first month free, no auto-debit, a full refund for any month paid without a new
+campaign, and a link to the homepage's pricing questions at `/#pricing`, #1652) and trust lines, with "Start my free campaign" → `/login`. The
 "Message us on WhatsApp" button appears when `SUPPORT_WHATSAPP` (or
 `NEXT_PUBLIC_SUPPORT_WHATSAPP`) is set at build time (#796). No margin, no promised results.
 
