@@ -109,8 +109,8 @@ export function sourceInventory(root) {
 export const MAX_LINES = 300;
 export const TOP_LEVEL = new Set(["docs/README.md", "docs/roadmap.md"]);
 // Flat files not yet moved into docs/{product,architecture,api,operations,team}/; each move PR deletes its entries.
-export const LEGACY_FLAT = new Set(["AI_PIPELINE", "ARCHITECTURE", "BRAND-IDENTITY", "CONFIGURATION", "DATA_MODEL", "DEPLOY",
-  "META_APPROVAL_ACTION_PLAN", "META_CONNECT", "OBSERVABILITY", "OPERATIONS", "ORCHESTRATION", "PAYMENTS-PLAN", "QUICK_START",
+export const LEGACY_FLAT = new Set(["AI_PIPELINE", "ARCHITECTURE", "BRAND-IDENTITY", "DATA_MODEL",
+  "META_APPROVAL_ACTION_PLAN", "ORCHESTRATION", "PAYMENTS-PLAN", "QUICK_START",
   "RELEASING", "TESTING"].map(name => `docs/${name}.md`));
 const CODE_DIRS = ["src", "scripts", "db", ".github"];
 const CODE_FILES = ["AGENTS.md", ".env.example", "package.json"];
@@ -181,12 +181,12 @@ export function checkDocumentation(root, options = {}) {
   }
   const textOf = file => existsSync(resolve(root, file)) ? readFileSync(resolve(root, file), "utf8") : "";
   const docFiles = inventory.filter(entry => entry.role === "current" && entry.file.startsWith("docs/")).map(entry => entry.file);
-  const pages = (folder, legacy) => {
-    const found = docFiles.filter(file => file.startsWith(folder) && !file.slice(folder.length).includes("/"));
+  const pages = (folder, legacy, match = () => true) => {
+    const found = docFiles.filter(file => file.startsWith(folder) && !file.slice(folder.length).includes("/") && match(file));
     return found.length ? found : existsSync(resolve(root, legacy)) ? [legacy] : [];
   };
   const fail = (file, line, message) => diagnostics.push({ severity: "error", file, line, message });
-  const configPages = pages("docs/operations/", "docs/CONFIGURATION.md").filter(file => /\/(?:configuration[^/]*|CONFIGURATION)\.md$/.test(file)).sort((a, b) => a.length - b.length);
+  const configPages = docFiles.filter(file => /^docs\/operations\/configuration[^/]*\.md$/.test(file)).sort((a, b) => a.length - b.length);
   const configText = configPages.map(textOf).join("\n");
   const dataText = textOf(existsSync(resolve(root, "docs/architecture/migrations.md")) ? "docs/architecture/migrations.md" : "docs/DATA_MODEL.md");
 
@@ -227,9 +227,9 @@ export function checkDocumentation(root, options = {}) {
     for (const child of children) if (!linked.has(child)) fail(index, 1, `Index does not link ${child}`);
   }
 
-  // Code, scripts and workflows that name a doc must name one that exists.
+  // Code, scripts and workflows that name a doc must name one that exists (applied migrations are immutable, so skipped).
   const codeFiles = [...CODE_DIRS.flatMap(dir => walk(resolve(root, dir))), ...CODE_FILES.map(file => resolve(root, file)).filter(existsSync)]
-    .filter(path => !/\.test\.[cm]?[jt]sx?$/.test(path) && !path.includes(`${sep}.github${sep}skills${sep}`) && path !== fileURLToPath(import.meta.url) && !/\.(?:png|jpe?g|gif|webp|ico|woff2?|zip|pdf)$/i.test(path));
+    .filter(path => !/\.test\.[cm]?[jt]sx?$/.test(path) && !path.includes(`${sep}.github${sep}skills${sep}`) && !path.includes(`${sep}db${sep}migrations${sep}`) && path !== fileURLToPath(import.meta.url) && !/\.(?:png|jpe?g|gif|webp|ico|woff2?|zip|pdf)$/i.test(path));
   for (const path of codeFiles) {
     const file = relative(root, path).split(sep).join("/");
     const text = readFileSync(path, "utf8");

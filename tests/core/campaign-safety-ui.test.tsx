@@ -141,11 +141,11 @@ describe("core: a weak ad outranks 1-of-N rejected on the card (#1274)", () => {
   it("1 of 2 rejected with a weak ad: the pause offer leads, the rejection waits", async () => {
     show([rejected, { id: "a2", effective_status: "ACTIVE" }]);
     expect(await screen.findByRole("button", { name: "Pause this ad" })).toBeTruthy();
-    await waitFor(() => expect(screen.queryByRole("region", { name: "Ads Meta didn't approve" })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole("group", { name: "Ads Meta didn't approve" })).toBeNull());
   });
 
   it("every ad rejected: the rejection shows", async () => {
     show([rejected]);
-    expect(await screen.findByRole("region", { name: "Ads Meta didn't approve" })).toBeTruthy();
+    expect(await screen.findByRole("group", { name: "Ads Meta didn't approve" })).toBeTruthy();
   });
 });

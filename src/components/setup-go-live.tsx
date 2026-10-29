@@ -2,7 +2,7 @@
 
 import { PictureSourceBadge } from "@/components/picture-source-badge";
 import type { AppLocale } from "@/i18n/locale";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, Circle } from "lucide-react";
@@ -55,12 +55,60 @@ function sessionStore(): Storage | null {
   try { return window.sessionStorage; } catch { return null; }
 }
 
+/** #1989: set when Connect is tapped, so a return to step 3 after Facebook in this tab still counts as a try. */
+const CONNECT_TRIED_KEY = "adbrain.setup.connectTried";
+const INVITES_URL = "https://developers.facebook.com/requests";
+const noSubscription = () => () => {};
+const inviteWords = {
+  en: {
+    hintBefore: "Facebook is still reviewing AdBrain. Until then, your Facebook account needs our invite: open your invites and accept ",
+    hintAfter: ", then tap Connect.",
+    retry: "Didn't connect? If Facebook said the app isn't available, accept the invite first, then try again.",
+    open: "Open my invites",
+    again: "Try again",
+  },
+  hi: {
+    hintBefore: "Facebook अभी AdBrain की जाँच कर रहा है। तब तक आपके Facebook अकाउंट को हमारा इनवाइट चाहिए: अपने इनवाइट खोलें और ",
+    hintAfter: " स्वीकार करें, फिर Connect दबाएँ।",
+    retry: "जुड़ा नहीं? अगर Facebook ने कहा कि ऐप उपलब्ध नहीं है, तो पहले इनवाइट स्वीकार करें, फिर दोबारा कोशिश करें।",
+    open: "मेरे इनवाइट खोलें",
+    again: "फिर से कोशिश करें",
+  },
+} satisfies Record<AppLocale, Record<string, string>>;
+
+/**
+ * #1989 (CPO #1983): before App Review only Testers can log in, and anyone else gets Meta's "app not available"
+ * page inside the Facebook window, which AdBrain can't detect. Before the first tap say so; once the owner is
+ * back with nothing connected, say what to do and offer Connect again.
+ */
+function TesterInviteHint({ tried, locale, onRetry }: { tried: boolean; locale: AppLocale; onRetry: () => void }) {
+  const words = inviteWords[locale];
+  const invites = <a href={INVITES_URL} target="_blank" rel="noopener noreferrer" className={linkClass}>{words.open}</a>;
+  if (!tried) {
+    return (
+      <div className="mt-1 text-sm text-slate-700">
+        <p>{words.hintBefore}<strong>adBrain</strong>{words.hintAfter}</p>
+        {invites}
+      </div>
+    );
+  }
+  return (
+    <div role="status" className="mt-1 text-sm text-slate-950">
+      <p>{words.retry}</p>
+      <div className="flex flex-wrap gap-x-4">
+        {invites}
+        <button type="button" onClick={onRetry} className={linkClass}>{words.again}</button>
+      </div>
+    </div>
+  );
+}
+
 /**
  * #1271 (#1251 WS1 step 3): what will run, the budget for 2 days, and a checklist whose one primary walks
  * Connect Facebook Page → Go live. Go live is one tap (4b): save the draft, review it, create it paused, then turn
  * it on as a 2-day capped run (setup-go-live-flow). Nothing is spent before that tap; the server enforces the cap.
  */
-export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNumber, weeklyCap, welcome = null, returning = false, initialDaily, locale = "en" }: {
+export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNumber, weeklyCap, welcome = null, returning = false, initialDaily, locale = "en", appReviewPending = false }: {
   business: Pick<Business, "id" | "name" | "locations">;
   ads: Creative[];
   pageConnected: boolean;
@@ -76,10 +124,25 @@ export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNum
   initialDaily?: number;
   /** #1901: the picture badge's language. */
   locale?: AppLocale;
+  /** #1989: Meta App Review (#156) is pending, so only the app's Testers can connect (`META_APP_REVIEW_PENDING`). */
+  appReviewPending?: boolean;
 }) {
   const router = useRouter();
   const [daily, setDaily] = useState<number>(initialDaily ?? BUDGET_PRESETS[0]);
-  const [connectOpen, setConnectOpen] = useState(false);
+  const [connectOpen, setConnectOpenState] = useState(false);
+  const showInviteHint = appReviewPending && !pageConnected;
+  // #1989: this tab's storage, so the server (and hydration) render the before-the-tap hint.
+  const connectTried = useSyncExternalStore(noSubscription,
+    () => Boolean(sessionStore()?.getItem(CONNECT_TRIED_KEY)), () => false) && !connectOpen;
+
+  useEffect(() => {
+    if (pageConnected) sessionStore()?.removeItem(CONNECT_TRIED_KEY);
+  }, [pageConnected]);
+
+  function setConnectOpen(open: boolean) {
+    if (open) sessionStore()?.setItem(CONNECT_TRIED_KEY, "1");
+    setConnectOpenState(open);
+  }
   const [step, setStep] = useState<GoLiveStep | null>(null);
   const [result, setResult] = useState<GoLiveResult | null>(null);
   const running = useRef(false);
@@ -181,7 +244,8 @@ export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNum
       )}
 
       <ul aria-label="Before you go live" className="mt-4 divide-y divide-slate-200 border-y border-slate-200">
-        <Row done={pageConnected} title="Facebook Page" status={pageConnected ? "Connected" : "Not connected"} />
+        <Row done={pageConnected} title="Facebook Page" status={pageConnected ? "Connected" : "Not connected"}
+          action={showInviteHint ? <TesterInviteHint tried={connectTried} locale={locale} onRetry={() => setConnectOpen(true)} /> : undefined} />
         {payMetaRow ? (
           returning ? <Row done title="Payment on Meta" status="Set up for your last campaign" /> : <Row done={false} title="Payment on Meta" status="Add a card or UPI in Meta"
             action={<a href="https://business.facebook.com/billing_hub/payment_settings" target="_blank" rel="noopener noreferrer"
@@ -220,7 +284,7 @@ export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNum
       {connectOpen && (
         <MetaConnectDialog businessId={business.id} intent={{ kind: "setup" }} open={connectOpen}
           onClose={() => setConnectOpen(false)}
-          onConnected={() => { setConnectOpen(false); router.refresh(); }} />
+          onConnected={() => { sessionStore()?.removeItem(CONNECT_TRIED_KEY); setConnectOpen(false); router.refresh(); }} />
       )}
       </div>
     </SetupSpine>

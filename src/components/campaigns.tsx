@@ -119,7 +119,7 @@ import { WAITING_COLUMNS, WAITING_DAYS, waitingByCampaign, type WaitingLeadRow }
 import { CampaignVerdict } from "@/components/campaign-verdict";
 import { campaignAttention } from "@/lib/campaign/health";
 import { campaignWhatsAppSummary } from "@/lib/campaign/results-summary";
-import { costPerCustomer } from "@/lib/campaign/real-enquiries";
+import { bookedLabel, costPerCustomer } from "@/lib/campaign/real-enquiries";
 import { describeSkippedCampaigns, type SkippedCampaign } from "@/lib/campaign/sync-skips";
 import type { RerunPrefill } from "@/lib/campaign/rerun";
 import { activateTrustLine } from "@/lib/trust-lines";
@@ -2590,12 +2590,15 @@ function BusinessCampaigns({
                       <p className="text-xs text-slate-500">{updatingIds.includes(c.id) ? "Updating results…" : `Updated ${timeAgo(new Date(r.fetched_at))}`}</p>
                     )}
                     {adResults && r && c.meta_campaign_id && <AdResults campaignId={c.id} whatsapp={outcome === "whatsapp"} offerPause={!weakAdCards.includes(c.id)} onRunAgain={() => void runAgain(c)} runAgainBusy={rerunBusy === c.id} runAgainError={rerunError?.id === c.id ? rerunError.message : null} />}
-                    {r && (r.customers ?? 0) > 0 && (
-                      // #798: what a real customer cost, beside the per-enquiry figures.
-                      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4" aria-label="Customers">
-                        <Stat label={r.customers === 1 ? "Customer" : "Customers"} value={formatNumber(r.customers ?? 0)} />
-                        <Stat label="Per customer" value={(() => { const cost = costPerCustomer(r.spend, r.customers ?? 0); return cost === null ? "—" : formatMoney(cost); })()} />
-                        <p className="col-span-2 -mt-2 text-xs text-slate-500 sm:col-span-4">From customers you marked in Enquiries.</p>
+                    {r && ((r.booked ?? 0) > 0 || (r.customers ?? 0) > 0) && (
+                      // #798: what a real customer cost, beside the per-enquiry figures. #1994: bookings, the step before, come first.
+                      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4" aria-label="Bookings and customers">
+                        {(r.booked ?? 0) > 0 && <Stat label={bookedLabel(business.vertical, r.booked ?? 0).replace(/^./, (letter) => letter.toUpperCase())} value={formatNumber(r.booked ?? 0)} />}
+                        {(r.customers ?? 0) > 0 && <>
+                          <Stat label={r.customers === 1 ? "Customer" : "Customers"} value={formatNumber(r.customers ?? 0)} />
+                          <Stat label="Per customer" value={(() => { const cost = costPerCustomer(r.spend, r.customers ?? 0); return cost === null ? "—" : formatMoney(cost); })()} />
+                        </>}
+                        <p className="col-span-2 -mt-2 text-xs text-slate-500 sm:col-span-4">From enquiries you marked in Enquiries.</p>
                       </div>
                     )}
                     {/* #847: a stopped card with no chats, enquiries or customers has nothing to log. A running one always can:
@@ -2603,7 +2606,7 @@ function BusinessCampaigns({
                     {r && outcome === "whatsapp" && (c.status === "active" || r.conversations !== 0 || (r.real_enquiries ?? 0) > 0 || (r.customers ?? 0) > 0) && (
                       <WhatsAppEnquiries campaignId={c.id} spend={r.spend} enquiries={r.real_enquiries ?? 0}
                         onLogged={(count) => setResults((p) => (p[c.id] ? { ...p, [c.id]: { ...p[c.id], real_enquiries: count } } : p))}
-                        onCustomers={(customers, count) => setResults((p) => (p[c.id] ? { ...p, [c.id]: { ...p[c.id], customers, real_enquiries: count } } : p))} />
+                        onCustomers={(customers, count, booked) => setResults((p) => (p[c.id] ? { ...p, [c.id]: { ...p[c.id], customers, real_enquiries: count, ...(booked === undefined ? {} : { booked }) } } : p))} />
                     )}
                     {r && outcome === "instant_form" && !(r.spend > 0) && (
                       <p className="text-sm text-slate-600">
