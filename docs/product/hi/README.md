@@ -12,5 +12,5 @@
 | [कैंपेन लॉन्च करना](launch.md) | [Launch a Campaign](../launch.md) |
 | [कैंपेन संभालना: सिंक, नतीजे और लीड](manage.md) | [Manage: Sync, Results and Leads](../manage.md) |
 | [ब्रांड](brand.md) | [Brand](../brand.md) |
-| [ऐड बनाना और देखना](create.md) | [Create and Review Ads](../create.md) |
-| [रिव्यू और Go live](review.md) | [Review and Go Live](../review.md) |
+| [ऐड बनाएँ और जाँचें](create.md) | [Create and Review Ads](../create.md) |
+| [जाँचें और लाइव करें](review.md) | [Review and Go Live](../review.md) |
