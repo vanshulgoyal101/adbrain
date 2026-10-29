@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useEffectEvent, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useEffectEvent, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import Link from "next/link";
 import { Inbox, Loader2, MessageCircle, Phone, RefreshCw, Search, X, Save, Pencil, ChevronDown, SlidersHorizontal, UserCheck, MoreHorizontal } from "lucide-react";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Status } from "@/components/ui/status";
 import { relativeAge } from "@/lib/leads/digest";
 import { formatDate } from "@/lib/format";
@@ -13,7 +14,8 @@ import { useMounted } from "@/lib/use-mounted";
 import type { Lead } from "@/lib/types";
 import { useLeadList } from "@/lib/leads/use-lead-list";
 import { workflowStatuses, type WorkflowStatus } from "@/lib/leads/filters";
-import { firstReplyText, formatReplyTime, whatsappReplyLink, type ReplyLanguage } from "@/lib/leads/first-reply";
+import { formatReplyTime, whatsappReplyLink, type ReplyLanguage } from "@/lib/leads/first-reply";
+import { replyChoices } from "@/lib/leads/reply-choices";
 import { isMetaTestLead } from "@/lib/leads/test-lead";
 import { isWaiting } from "@/lib/leads/waiting";
 import { leadAnswers } from "@/lib/leads/answers";
@@ -74,6 +76,8 @@ export function LeadInbox({
   businessName,
   offer = null,
   language = "en",
+  vertical = null,
+  ownPhotos = false,
   initialLeads,
   initialTotal = initialLeads.filter((lead) => !isMetaTestLead(lead)).length,
   initialNextCursor = null,
@@ -90,6 +94,10 @@ export function LeadInbox({
   /** #1049: the business's first offer and language, for the pre-filled first WhatsApp reply. */
   offer?: string | null;
   language?: ReplyLanguage;
+  /** #1945: the business type; a pilot segment's "WhatsApp them" offers its 3 first replies, then 2 follow-ups. */
+  vertical?: string | null;
+  /** #1945/#1617: the owner has their own photos, so interiors may offer to share them. */
+  ownPhotos?: boolean;
   initialLeads: Lead[];
   initialTotal?: number;
   initialNextCursor?: string | null;
@@ -145,6 +153,8 @@ export function LeadInbox({
   const wide = useWide();
   const [pickedId, setPickedId] = useState<string | null>(null);
   const [contactedAt, setContactedAt] = useState<Record<string, string>>({});
+  // #1945: the enquiry whose reply sheet is open.
+  const [replyLeadId, setReplyLeadId] = useState<string | null>(null);
   const page = useLeadList({ leads: initialLeads, total: initialTotal, nextCursor: initialNextCursor }, view === "all"
     ? { query, status, contact: contactFilter, sort }
     : { query: "", status: view === "waiting" ? "new" : "customer", contact: "all", sort: "newest" });
@@ -351,10 +361,22 @@ export function LeadInbox({
     const noActions = state === "test" || state === "customer" || (state === "new" && !l.phone);
     const city = isMetaTestLead(l) ? null : l.city;
     const meta = [l.created_time ? whenLabel(l.created_time) : null, l.source === "whatsapp_manual" ? "WhatsApp chat" : null, city].filter(Boolean).join(" · ");
-    const replyText = firstReplyText({ leadName: leadName(l), businessName, offer, language });
-    const whatsapp = isMetaTestLead(l) ? null : whatsappReplyLink(l.phone, replyText);
-    return { first, contactMinutes, current, state, stateLabel, meta, name: leadName(l) ?? "this enquiry", replyText, whatsapp, noActions };
+    const choices = replyChoices({ leadName: leadName(l), businessName, offer, vertical, language, contacted: Boolean(first), ownPhotos });
+    const replyText = choices.texts[0] ?? "";
+    const whatsapp = isMetaTestLead(l) || !replyText ? null : whatsappReplyLink(l.phone, replyText);
+    return { first, contactMinutes, current, state, stateLabel, meta, name: leadName(l) ?? "this enquiry", choices, replyText, whatsapp, noActions };
   }
+  // #1945: one generic reply opens WhatsApp straight away; a segment's choices open the sheet first.
+  function whatsappAction(l: Lead, info: ReturnType<typeof rowInfo>, className: string | undefined, content: ReactNode) {
+    if (!info.whatsapp) return null;
+    if (info.choices.kind === "generic") {
+      return <a href={info.whatsapp} target="_blank" rel="noopener noreferrer" onClick={() => markContacted(l)} className={className}>{content}</a>;
+    }
+    return <button type="button" aria-haspopup="dialog" className={className}
+      onClick={event => { event.currentTarget.closest("details")?.removeAttribute("open"); setReplyLeadId(l.id); }}>{content}</button>;
+  }
+  const replyLead = replyLeadId ? leads.find((lead) => lead.id === replyLeadId) ?? null : null;
+  const replyInfo = replyLead ? rowInfo(replyLead) : null;
   const selectedLead = wide ? leads.find((lead) => lead.id === pickedId) ?? leads[0] ?? null : null;
   const detail = selectedLead ? rowInfo(selectedLead) : null;
   const answers = selectedLead && !isMetaTestLead(selectedLead) ? leadAnswers(selectedLead.field_data) : [];
@@ -511,7 +533,8 @@ export function LeadInbox({
             </thead>
             <tbody className="divide-y divide-slate-100">
               {leads.map((l) => {
-                const { first, contactMinutes, current, state, stateLabel, meta, name, whatsapp, noActions } = rowInfo(l);
+                const info = rowInfo(l);
+                const { first, contactMinutes, current, state, stateLabel, meta, name, noActions } = info;
                 return (
                 <tr role="row" key={l.id} className="hover:bg-slate-50" data-lead={l.id} data-state={state} data-actions={noActions ? "none" : undefined} data-selected={selectedLead?.id === l.id || undefined}>
                   <td role="cell" className={styles.person}>
@@ -533,9 +556,8 @@ export function LeadInbox({
                     {!isMetaTestLead(l) && l.phone && (() => {
                       const replied = contactMinutes * 60_000;
                       return <div className={`${styles.replyActions} mt-1 flex flex-wrap items-center gap-2`}>
-                        {whatsapp && <a href={whatsapp} target="_blank" rel="noopener noreferrer" onClick={() => markContacted(l)}
-                          className="inline-flex min-h-11 items-center gap-1 rounded-md bg-primary px-3 text-xs font-medium text-white hover:bg-primary-hover">
-                          <MessageCircle size={14} aria-hidden="true" />WhatsApp them</a>}
+                        {whatsappAction(l, info, "inline-flex min-h-11 items-center gap-1 rounded-md bg-primary px-3 text-xs font-medium text-white hover:bg-primary-hover",
+                          <><MessageCircle size={14} aria-hidden="true" />WhatsApp them</>)}
                         <a href={`tel:${l.phone}`} onClick={() => markContacted(l)}
                           className="inline-flex min-h-11 items-center gap-1 rounded-md border border-slate-300 px-3 text-xs font-medium text-slate-800 hover:bg-slate-50">
                           <Phone size={14} aria-hidden="true" />Call</a>
@@ -574,7 +596,7 @@ export function LeadInbox({
                         <div className={styles.moreMenu}>
                           {/* #1260: once someone isn't waiting, their row shows only Became a customer · ⋯, so the replies live here. */}
                           {state !== "new" && !isMetaTestLead(l) && <>
-                            {whatsapp && l.phone && <a href={whatsapp} target="_blank" rel="noopener noreferrer" onClick={() => markContacted(l)}>WhatsApp them</a>}
+                            {l.phone && whatsappAction(l, info, undefined, "WhatsApp them")}
                             {l.phone && <a href={`tel:${l.phone}`} onClick={() => markContacted(l)}>Call</a>}
                             {l.email && <a href={`mailto:${l.email}`}>Email</a>}
                           </>}
@@ -601,16 +623,15 @@ export function LeadInbox({
               </div>
             </div>
             {!isMetaTestLead(selectedLead) && detail.state !== "customer" && <div className="flex flex-wrap gap-2">
-              {detail.whatsapp && <a href={detail.whatsapp} target="_blank" rel="noopener noreferrer" onClick={() => markContacted(selectedLead)}
-                className="inline-flex min-h-11 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-white hover:bg-primary-hover">
-                <MessageCircle size={16} aria-hidden="true" />WhatsApp them</a>}
+              {whatsappAction(selectedLead, detail, "inline-flex min-h-11 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-white hover:bg-primary-hover",
+                <><MessageCircle size={16} aria-hidden="true" />WhatsApp them</>)}
               {selectedLead.phone && <a href={`tel:${selectedLead.phone}`} onClick={() => markContacted(selectedLead)}
                 className="inline-flex min-h-11 items-center gap-2 rounded-md border border-slate-300 px-4 text-sm font-medium text-slate-800 hover:bg-slate-50">
                 <Phone size={16} aria-hidden="true" />Call</a>}
               {detail.first && <Button type="button" variant="outline" className="min-h-11" data-product-event="lead.customer" disabled={!!marking || saving}
                 onClick={() => void setCustomer(selectedLead, "customer", detail.current)}><UserCheck size={16} aria-hidden="true" />Became a customer</Button>}
             </div>}
-            {detail.whatsapp && detail.state !== "customer" && <section>
+            {detail.whatsapp && detail.choices.kind === "generic" && detail.state !== "customer" && <section>
               <h4>Opens WhatsApp with:</h4>
               <p className={styles.detailMessage}>{detail.replyText}</p>
             </section>}
@@ -622,6 +643,26 @@ export function LeadInbox({
         )}
         </div>
       )}
+      <Dialog open={Boolean(replyInfo)} onOpenChange={(open) => { if (!open) setReplyLeadId(null); }}>
+        {replyLead && replyInfo && <DialogContent className="sm:max-w-md">
+          <div className="flex items-start justify-between gap-2 px-4 pt-4">
+            <div className="min-w-0 pt-2">
+              <DialogTitle className="text-[17px] font-semibold leading-6 text-slate-900">{replyInfo.choices.kind === "follow-up" ? "Follow up" : "Choose a first reply"}</DialogTitle>
+              <DialogDescription className="mt-1 text-sm text-slate-600">Opens WhatsApp to {replyInfo.name} with this message. You can change it there before you send.</DialogDescription>
+            </div>
+            <DialogClose aria-label="Close replies" />
+          </div>
+          <ul className="flex flex-col gap-2 p-4">
+            {replyInfo.choices.texts.map((text) => <li key={text}>
+              <a href={whatsappReplyLink(replyLead.phone, text) ?? undefined} target="_blank" rel="noopener noreferrer"
+                onClick={() => { markContacted(replyLead); setReplyLeadId(null); }}
+                className="flex min-h-11 items-start gap-2 rounded-lg border border-slate-300 px-3 py-2.5 text-[15px] leading-[22px] text-slate-800 hover:border-primary hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
+                <MessageCircle size={16} className="mt-[3px] shrink-0 text-primary" aria-hidden="true" /><span>{text}</span>
+              </a>
+            </li>)}
+          </ul>
+        </DialogContent>}
+      </Dialog>
       {page.nextCursor && <Button variant="outline" disabled={page.loading} onClick={page.loadMore}>{page.loading ? <Loader2 size={16} className="animate-spin" /> : <ChevronDown size={16} />}Load more enquiries</Button>}
     </div>
   );
