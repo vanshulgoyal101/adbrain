@@ -28,6 +28,7 @@ describe("team-supervisor (#573 A1)", () => {
     expect(roleFromPrompt("You are AdBrain's Competitive Intelligence Analyst. Your pre")).toBe("analyst");
     expect(roleFromPrompt("You are AdBrain's Dev 4 (owner of the pre-launch Review step)")).toBe("dev4");
     expect(roleFromPrompt("You are AdBrain's CPO (product research and the ranked roadmap)")).toBe("cpo");
+    expect(roleFromPrompt("You are AdBrain's **Docs** worker (technical writer)")).toBe("docs");
     expect(roleFromPrompt("You are AdBrain's CTO helper for epic #744")).toBeNull();
   });
 
