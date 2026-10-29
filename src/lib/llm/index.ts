@@ -3,6 +3,7 @@ import { createGeminiProvider } from "./providers/gemini";
 import { createOpenAICompatibleProvider } from "./providers/openai-compatible";
 import { cacheKey, withCache } from "./cache";
 import { recordUsage } from "./usage";
+import { FREE_TEXT_PROVIDERS, freeTextOnly } from "./spend-policy";
 import {
   AllLLMProvidersFailedError,
   LLMError,
@@ -48,7 +49,6 @@ export const CEREBRAS_MODEL = "llama-3.3-70b";
 const CREDIT_COOLDOWN_MS = 15 * 60_000;
 // #1568: a daily limit parks the provider until its own retry-after, up to this long.
 const DAILY_PARK_MAX_MS = 6 * 3_600_000;
-const FREE_PROVIDERS = ["google", "groq"];
 // Round-robin cursor per provider so load spreads across a key pool.
 const rrCursor = new Map<string, number>();
 
@@ -134,15 +134,21 @@ export async function complete(
   messages: ChatMessage[],
   options: CompletionOptions = {},
 ): Promise<CompletionResult> {
-  const registry = buildRegistry(options.routing, options.extraProviders, options.nextProviders);
-  if (registry.length === 0) throw new NoLLMKeysError();
+  // #2230: the smoke login never pays for text; when the free models can't answer, it fails with a clear reason.
+  const freeOnly = freeTextOnly();
+  const registry = buildRegistry(options.routing, options.extraProviders, options.nextProviders)
+    .filter(({ provider }) => !freeOnly || FREE_TEXT_PROVIDERS.includes(provider.name));
+  if (registry.length === 0) throw freeOnly ? new AllLLMProvidersFailedError("FREE_TEXT_UNAVAILABLE", 0) : new NoLLMKeysError();
 
   const startedAt = Date.now();
   const result = await withCache(
     cacheKey(messages, options),
     options.cache,
-    () => callProviders(messages, options, registry,
-      buildRegistry("standard").filter(({ provider }) => FREE_PROVIDERS.includes(provider.name) && !registry.some((entry) => entry.provider.name === provider.name))),
+    () => callProviders(messages, options, registry, freeOnly ? [] : buildRegistry("standard")
+      .filter(({ provider }) => FREE_TEXT_PROVIDERS.includes(provider.name) && !registry.some((entry) => entry.provider.name === provider.name)))
+      .catch((error: unknown) => {
+        throw freeOnly && error instanceof AllLLMProvidersFailedError ? new AllLLMProvidersFailedError("FREE_TEXT_UNAVAILABLE", registry.length) : error;
+      }),
   );
   const enriched = {
     ...result,

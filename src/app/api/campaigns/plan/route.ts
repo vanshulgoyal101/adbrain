@@ -200,7 +200,9 @@ async function handlePOST(req: Request) {
     if (fallsBack) {
       return NextResponse.json({ ready: true, fallback: true, targeting: fallbackAudienceTargeting(audienceDraft!) });
     }
-    return NextResponse.json({ error: "Could not prepare the campaign plan." }, { status: 502 });
+    // #2230: only the smoke login is held to free text; its check names the cause.
+    return NextResponse.json({ error: "Could not prepare the campaign plan.",
+      ...(failureClass === "EXHAUSTED_FREE_TEXT_UNAVAILABLE" ? { code: "FREE_TEXT_UNAVAILABLE" } : {}) }, { status: 502 });
   }
 
   // The editor cannot answer interview questions; give it usable default targeting instead.

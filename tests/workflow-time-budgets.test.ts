@@ -157,14 +157,22 @@ describe("create smoke mode", () => {
     return { status, calls: read("calls.log"), gh: read("gh.log") };
   }
 
-  const smoke = "Smoke (free picture, or a dispatched Create)";
+  const smoke = "Smoke (free picture, free-text Prepare, or a dispatched Create)";
 
   it("runs the free --picture smoke on schedule (no input) and on dispatch picture", () => {
     expect(run(smoke, { REQUESTED_MODE: "" }).calls).toBe("node scripts/smoke-core.mjs --picture\n");
     expect(run(smoke, { REQUESTED_MODE: "picture" }).calls).toBe("node scripts/smoke-core.mjs --picture\n");
   });
 
-  it("runs the paid --create only when dispatched with create", () => {
+  it("runs --prepare when the daily schedule or a dispatch asks for it (#2230)", () => {
+    expect(run(smoke, { REQUESTED_MODE: "prepare" }).calls).toBe("node scripts/smoke-core.mjs --prepare\n");
+    const text = workflow("create-smoke.yml").join("\n");
+    const daily = text.match(/- cron: "(47 8 \* \* \*)"/)?.[1];
+    expect(daily).toBeTruthy();
+    expect(text).toContain(`REQUESTED_MODE: \${{ inputs.mode || (github.event.schedule == '${daily}' && 'prepare') || 'picture' }}`);
+  });
+
+  it("runs --create only when dispatched with create", () => {
     expect(run(smoke, { REQUESTED_MODE: "create" }).calls).toBe("node scripts/smoke-core.mjs --create\n");
   });
 
@@ -179,6 +187,12 @@ describe("create smoke mode", () => {
     expect(gh).toContain("issue create");
     expect(gh).toContain("Create smoke failed in production");
     expect(gh).toContain("Free pictures are failing in production");
+  });
+
+  it("names Prepare's free-text plan when the prepare step failed", () => {
+    const { gh } = run("Alert on failure", { REQUESTED_MODE: "prepare" }, "FAIL Prepare plan: HTTP 502 FREE_TEXT_UNAVAILABLE\n");
+    expect(gh).toContain("Prepare's plan failed in production on free text");
+    expect(gh).not.toContain("Free pictures are failing");
   });
 
   it("keeps the Create wording for a dispatched create", () => {

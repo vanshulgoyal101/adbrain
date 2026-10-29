@@ -84,17 +84,23 @@ anyone watching (owner-approved automatic rollback, #111):
   no retry. It signs in, opens the read-only views and changes the background of the most recent ad that isn't
   in a campaign on Meta (`plain light studio background`). It passes only when the saved picture came from a free
   provider (Pollinations or Cloudflare). The run spends $0: the prompt is a template with no text model, it
-  skips Prepare (whose plan can fall back to paid text), and it refuses before the request if the account
+  skips Prepare, and it refuses before the request if the account
   isn't internal or is exempt. It then deletes the picture and composed ad it replaced in that ad's Storage
   folder, so 12 runs a day don't grow Storage (#1891). When an earlier failed change holds an ad (HTTP 409,
   cleared only by a database check), it tries the next of the 10 most recent ads. With no ad at all it fails
   with "run --create once by hand".
-  **Dispatch `mode: create`** runs `--create` instead: 3 ads with paid text (about $0.006 on Haiku) that count
-  against the [#88](https://github.com/vanshulgoyal101/adbrain/issues/88) approval. DevOps uses it before and
+  **Daily Prepare, 08:47Z (#2230)** (or dispatch `mode: prepare`) runs `--prepare`: it chooses an approved ad,
+  which starts one audience plan, and passes only when a free model answered, the reply has targeting and every
+  `campaigns.plan` row in `llm_usage_events` for the run costs $0 (the PASS line quotes them). Nothing is saved or
+  sent to Meta. The smoke login (`smokeUserIds`) writes on free text only (Groq, Gemini; `freeTextOnly` in
+  [spend-policy.ts](../../src/lib/llm/spend-policy.ts)); when they can't answer, the plan fails with
+  `FREE_TEXT_UNAVAILABLE` instead of paying. Once a day keeps it far inside Groq's free daily cap.
+  **Dispatch `mode: create`** runs `--create` instead: 3 ads, their words on free text too (#2230), so a busy
+  free tier fails the run rather than spending. DevOps uses it before and
   after the Cloudflare token lands. A PASS deletes those ads and their files, but keeps the newest ad when the
   smoke business has no other ad.
   A failure opens one `core` `bug` issue `Create smoke failed in production` for DevOps (`FAIL Picture` says
-  free pictures are failing). Repeat failures comment on that issue, and the first pass after it says so once.
+  free pictures are failing, `FAIL Prepare plan` that Prepare's free-text plan is). Repeat failures comment on that issue, and the first pass after it says so once.
   The check never rolls back. Pause it with `gh workflow disable create-smoke.yml`.
 - **After each push to `main`, and every 15 minutes if GitHub fires the schedule**
   [`production-drift.yml`](../../.github/workflows/production-drift.yml) waits until
