@@ -88,7 +88,7 @@ describe("updateCreativeCopy", () => {
 
   it("refuses an ad the owner can't see (RLS hides it) and saves nothing", async () => {
     h.rows.creatives = null;
-    await expect(save()).resolves.toEqual({ ok: false, error: "Creative not found or no longer accessible." });
+    await expect(save()).resolves.toEqual({ ok: false, error: "We couldn't find this ad. It may have been deleted; refresh the page." });
     expect(h.updates).toEqual([]);
   });
 

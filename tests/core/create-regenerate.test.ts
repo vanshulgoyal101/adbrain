@@ -248,7 +248,7 @@ describe("core: Regenerate route on recorded Solaride replies (#281)", () => {
     replay(run(0));
     const { status, body } = await regenerate();
     expect(status).toBe(502);
-    expect(body.error).toBe("Regeneration could not be completed. This attempt needs a check before the ad can be regenerated again.");
+    expect(body.error).toBe("This ad didn't finish remaking. AdBrain needs to check this attempt before you can remake it again.");
     expect([...mocks.claims.values()].map(({ state }) => state)).toEqual(["unresolved"]);
   });
 });

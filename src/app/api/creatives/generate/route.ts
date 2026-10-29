@@ -78,7 +78,7 @@ async function handleGET(req: Request) {
   } catch {
     return NextResponse.json({ error: "We couldn't check on your ads just now. Try again in a minute." }, { status: 503 });
   }
-  if (intent.status === "unknown") return NextResponse.json({ error: "Generation not found." }, { status: 404 });
+  if (intent.status === "unknown") return NextResponse.json({ error: "We couldn't find that ad request. Start again from Create." }, { status: 404 });
   const expectedCount = Number(intent.expectedCount);
   if (requestedCount !== null && requestedCount !== expectedCount)
     return NextResponse.json({ error: "Generation count does not match the saved request." }, { status: 409 });
@@ -220,7 +220,7 @@ async function generate(req: Request, live?: LiveCreate) {
     .eq("id", businessId)
     .maybeSingle();
   if (!business) {
-    return NextResponse.json({ error: "Business not found" }, { status: 404 });
+    return NextResponse.json({ error: "We couldn't find this business. Refresh the page and try again." }, { status: 404 });
   }
 
   const monthlyLimit = configuredMonthlyTokenLimit(user);
@@ -278,9 +278,9 @@ async function generate(req: Request, live?: LiveCreate) {
       p_image_floor_tokens: count * 10_000,
       p_monthly_limit: monthlyLimit,
     });
-    if (admissionError || !admission) return NextResponse.json({ error: "Generation admission is unavailable. No generation was started." }, { status: 503 });
+    if (admissionError || !admission) return NextResponse.json({ error: "Something on our side didn't answer. Nothing was started; try again in a minute." }, { status: 503 });
     if (admission.action !== "start") {
-      if (admission.action === "missing") return NextResponse.json({ error: "Generation not found." }, { status: 404 });
+      if (admission.action === "missing") return NextResponse.json({ error: "We couldn't find that ad request. Start again from Create." }, { status: 404 });
       if (admission.action === "conflict") return NextResponse.json({ error: "Generation ID was already used for different inputs." }, { status: 409 });
       if (admission.action === "quota") return NextResponse.json({ error: "You've used this month's AI allowance for this business. Ask AdBrain to raise it.", code: "LLM_MONTHLY_QUOTA_EXCEEDED" }, { status: 429 });
       return NextResponse.json({ variantGroup, status: admission.status, creatives: [], count: 0, expectedCount: count }, { status: 202 });
