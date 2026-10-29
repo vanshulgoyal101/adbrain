@@ -22,7 +22,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/plan/store", () => ({
   isPlanBillingEnabled: () => mocks.planUnpaid,
-  readPlan: async () => ({ status: { state: "unpaid", since: "2026-10-01T00:00:00Z" }, payUrl: null }),
+  readStoredPlan: async () => ({ status: { state: "unpaid", since: "2026-10-01T00:00:00Z" }, payUrl: null }),
 }));
 
 vi.mock("@/lib/supabase/admin", () => ({

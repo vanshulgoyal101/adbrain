@@ -2,6 +2,14 @@
 
 Part of [Features and workflows](README.md).
 
+## Own-account Plan
+
+When `PLAN_BILLING_ENABLED` is enabled, Settings shows the own-account ₹999
+monthly plan and its payment link when payable. It checks payable open links for
+lost paid webhooks using the original captured-payment timestamp. A failed
+check shows a plan-unavailable alert instead of hiding the card or claiming
+the plan is free. Managed and operator billing are unchanged.
+
 ## Spend Guardrails
 
 Settings accept a positive whole-rupee weekly cap or explicit `null` for no cap,

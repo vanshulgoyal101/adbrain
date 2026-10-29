@@ -10,14 +10,13 @@ import { recordProductEvent } from "@/lib/observability/logger";
  */
 export const PLAN_NOTES_PURPOSE = "adbrain_plan";
 
-type PlanLink = { id: string; status: string; amountPaise: number; referenceId: string; paymentId: string | null };
+type PlanLink = { id: string; status: string; amountPaise: number; referenceId: string; paymentId: string | null; paidAt?: string | null };
 export type PlanWebhookDeps = {
   fetchPlanLink: (linkId: string) => Promise<PlanLink>;
   rpc: {
     (name: "plan_period_paid", args: { p_link_id: string; p_payment_id: string; p_paid_at: string }): Promise<unknown>;
     (name: "plan_period_expire", args: { p_link_id: string }): Promise<unknown>;
   };
-  now?: () => Date;
 };
 export type PlanWebhookResult = "paid" | "duplicate" | "expired" | "ignored";
 
@@ -40,9 +39,10 @@ export async function handlePlanWebhook(event: { event: string; payload: unknown
   if (event.event === "payment_link.paid") {
     if (link.status !== "paid" || !link.paymentId) return "ignored";
     const createdAt = parsed.data.payment?.entity.created_at;
-    const paidAt = createdAt ? new Date(createdAt * 1000) : (deps.now?.() ?? new Date());
+    const paidAt = link.paidAt ?? (createdAt ? new Date(createdAt * 1000).toISOString() : null);
+    if (!paidAt) throw new Error("Plan payment capture time is unavailable.");
     const result = z.enum(["paid", "duplicate", "ignored"]).parse(await deps.rpc("plan_period_paid", {
-      p_link_id: link.id, p_payment_id: link.paymentId, p_paid_at: paidAt.toISOString(),
+      p_link_id: link.id, p_payment_id: link.paymentId, p_paid_at: z.iso.datetime().parse(paidAt),
     }));
     // #1583: Razorpay holds a captured ₹999 that no month took (a second payment, or the period is gone): refund it.
     if (result === "ignored") recordProductEvent({ kind: "workflow", name: "plan.payment_unmatched", outcome: "failed",

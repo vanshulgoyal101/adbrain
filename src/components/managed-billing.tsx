@@ -1,4 +1,5 @@
 import { WalletCards } from "lucide-react";
+import { Alert } from "@/components/ui/alert";
 import type { MetaConnection } from "@/lib/meta/credentials";
 import { TestCheckout } from "@/components/test-checkout";
 import { ProductionCheckout } from "@/components/production-checkout";
@@ -65,9 +66,9 @@ export function ManagedBilling({ connection, testBusinessId, liveBusinessId, ini
  * directly and an operator-funded business is paid by the operator, so neither is asked to pay; nor is anyone
  * while the funding mode can't be read.
  */
-export function BillingSection({ mode, plan, planBusinessId, ...billing }: { mode: "managed" | "own" | "operator" | null;
+export function BillingSection({ mode, plan, planBusinessId, planUnavailable = false, ...billing }: { mode: "managed" | "own" | "operator" | null;
   /** #718 slice 2: an own-account owner's ₹999 plan, when plan billing is on. */
-  plan?: { status: PlanStatus; payUrl: string | null } | null; planBusinessId?: string } & Parameters<typeof ManagedBilling>[0]) {
+  plan?: { status: PlanStatus; payUrl: string | null } | null; planBusinessId?: string; planUnavailable?: boolean } & Parameters<typeof ManagedBilling>[0]) {
   if (mode === "managed") return <ManagedBilling {...billing} />;
   if (mode !== "own") return null;
   return (
@@ -76,7 +77,10 @@ export function BillingSection({ mode, plan, planBusinessId, ...billing }: { mod
         <WalletCards aria-hidden="true" className="h-5 w-5 text-blue-600" />
         Billing
       </h2>
-      {plan && planBusinessId ? <>
+      {planUnavailable ? <>
+        <p className="text-sm leading-6 text-slate-600">You pay Meta directly from your ad account.</p>
+        <Alert variant="error">Your plan is unavailable right now. Refresh Settings to try again.</Alert>
+      </> : plan && planBusinessId ? <>
         <p className="text-sm leading-6 text-slate-600">You pay Meta directly from your ad account.</p>
         <PlanCard businessId={planBusinessId} status={plan.status} payUrl={plan.payUrl} />
       </> : <p className="text-sm leading-6 text-slate-600">You pay Meta directly from your ad account. Your first month of AdBrain is free; after that it&apos;s ₹999 a month.</p>}

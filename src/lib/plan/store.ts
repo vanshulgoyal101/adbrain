@@ -33,28 +33,32 @@ const readPeriods = (db: ReturnType<typeof createAdminClient>, businessId: strin
 
 /**
  * #1583 (Reviewer): the month only leaves `open` through the payment_link webhook. If that delivery was lost, the link
- * is dead (or paid) while the gate still blocks new ads. Once it has outlived LINK_LIFETIME_S, ask Razorpay and replay
- * the webhook's own checks: paid settles the month, expired/cancelled frees it for a fresh link. True when it changed.
+ * is dead (or paid) while the gate still blocks new ads. Reconcile payable links immediately; only expiry waits for
+ * LINK_LIFETIME_S. Settings and the cron do this work, never the core gate.
  */
-async function settleStaleLink(db: ReturnType<typeof createAdminClient>, periods: PeriodRow[], now: Date): Promise<boolean> {
+async function reconcileOpenLink(db: ReturnType<typeof createAdminClient>, periods: PeriodRow[], now: Date, payable: boolean): Promise<boolean> {
   const open = periods.find((period) => period.state === "open" && period.payment_link_id);
-  if (!open?.payment_link_id || Date.parse(open.created_at) + LINK_LIFETIME_S * 1000 > now.getTime()) return false;
+  if (!open?.payment_link_id) return false;
+  const stale = Date.parse(open.created_at) + LINK_LIFETIME_S * 1000 <= now.getTime();
+  if (!payable && !stale) return false;
   const link = await createProductionPaymentClient().fetchPlanLink(open.payment_link_id);
-  const event = link.status === "paid" ? "payment_link.paid" : link.status === "expired" || link.status === "cancelled" ? "payment_link.expired" : null;
+  const event = link.status === "paid" ? "payment_link.paid"
+    : stale && (link.status === "expired" || link.status === "cancelled") ? "payment_link.expired" : null;
   if (!event) return false;
   const result = await handlePlanWebhook({ event, payload: { payment_link: { entity: { id: link.id } } } }, {
     fetchPlanLink: async () => link,
     rpc: async (name: "plan_period_paid" | "plan_period_expire", args: Record<string, string>) => {
-      const { data, error } = await db.rpc(name, args as never);
+      const { data, error } = name === "plan_period_paid"
+        ? await db.rpc(name, { p_link_id: args.p_link_id, p_payment_id: args.p_payment_id, p_paid_at: args.p_paid_at })
+        : await db.rpc(name, { p_link_id: args.p_link_id });
       if (error) throw new Error("Plan is unavailable.");
       return data;
     },
-    now: () => now,
   });
-  return result === "paid" || result === "expired";
+  return result === "paid" || result === "duplicate" || result === "expired";
 }
 
-async function load(businessId: string, now: Date) {
+async function load(businessId: string, now: Date, reconcile = true) {
   const db = createAdminClient();
   const [business, launch, firstRead, mode] = await Promise.all([
     db.from("businesses").select("owner_id, phone").eq("id", businessId).maybeSingle(),
@@ -63,24 +67,32 @@ async function load(businessId: string, now: Date) {
     fundingMode(businessId),
   ]);
   if (business.error || !business.data || launch.error || firstRead.error) throw new Error("Plan is unavailable.");
-  // A failed check keeps today's answer; the next read or the daily cron tries again.
-  const settled = await settleStaleLink(db, firstRead.data as PeriodRow[], now).catch(() => false);
-  const periods = settled ? await readPeriods(db, businessId) : firstRead;
-  if (periods.error) throw new Error("Plan is unavailable.");
   const { data: owner, error } = await db.auth.admin.getUserById(business.data.owner_id);
   if (error || !owner?.user) throw new Error("Plan is unavailable.");
-  const status = planStatus({
+  const statusFor = (periods: PeriodRow[]) => planStatus({
     exempt: mode !== "own" || isInternalUser(owner.user),
     firstLaunchAt: launch.data[0]?.launched_at ?? null,
-    periods: periods.data.map((period) => ({ kind: "paid", state: period.state, startsAt: period.starts_at, endsAt: period.ends_at, paidAt: period.paid_at })),
+    periods: periods.map((period) => ({ kind: "paid", state: period.state, startsAt: period.starts_at, endsAt: period.ends_at, paidAt: period.paid_at })),
     now,
   });
+  let status = statusFor(firstRead.data);
+  const settled = reconcile && status.state !== "exempt"
+    && await reconcileOpenLink(db, firstRead.data, now, isPayable(status));
+  const periods = settled ? await readPeriods(db, businessId) : firstRead;
+  if (periods.error) throw new Error("Plan is unavailable.");
+  if (settled) status = statusFor(periods.data);
   const openUrl = periods.data.find((period) => period.state === "open")?.short_url ?? null;
   return { status, payUrl: isPayable(status) ? openUrl : null, email: owner.user.email ?? null, phone: planContact(business.data.phone) };
 }
 
 export async function readPlan(businessId: string, now = new Date()): Promise<{ status: PlanStatus; payUrl: string | null }> {
   const { status, payUrl } = await load(businessId, now);
+  return { status, payUrl };
+}
+
+/** Core admission uses stored entitlement only; provider recovery belongs to Settings and the cron. */
+export async function readStoredPlan(businessId: string, now = new Date()): Promise<{ status: PlanStatus; payUrl: string | null }> {
+  const { status, payUrl } = await load(businessId, now, false);
   return { status, payUrl };
 }
 

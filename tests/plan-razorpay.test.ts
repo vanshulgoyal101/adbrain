@@ -58,9 +58,9 @@ describe("plan payment links (#718)", () => {
   });
 
   it("reads a paid link with its captured payment", async () => {
-    respondWith(link({ status: "paid", amount_paid: 99_900, payments: [{ payment_id: "pay_Fixture1", status: "captured", amount: 99_900 }] }));
+    respondWith(link({ status: "paid", amount_paid: 99_900, payments: [{ payment_id: "pay_Fixture1", status: "captured", amount: 99_900, created_at: 1_793_000_000 }] }));
     await expect(createProductionPaymentClient(environment).fetchPlanLink("plink_Fixture123"))
-      .resolves.toEqual({ id: "plink_Fixture123", status: "paid", amountPaise: 99_900, referenceId: periodId, paymentId: "pay_Fixture1" });
+      .resolves.toEqual({ id: "plink_Fixture123", status: "paid", amountPaise: 99_900, referenceId: periodId, paymentId: "pay_Fixture1", paidAt: "2026-10-26T07:33:20.000Z" });
     await expect(createProductionPaymentClient(environment).fetchPlanLink("not-a-link")).rejects.toThrow();
   });
 

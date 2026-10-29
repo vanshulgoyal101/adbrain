@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   tables: {} as Record<string, unknown>, rpc: vi.fn(), getUserById: vi.fn(), fundingMode: vi.fn(),
@@ -17,6 +17,7 @@ vi.mock("@/lib/payments/operator-funding", () => ({ fundingMode: mocks.fundingMo
 vi.mock("@/lib/payments/razorpay-production", () => ({ createProductionPaymentClient: () => ({ createPlanLink: mocks.createPlanLink, findPlanLink: mocks.findPlanLink, fetchPlanLink: mocks.fetchPlanLink }) }));
 
 import { ensurePayLink, planContact, PlanNotDueError, readPlan } from "@/lib/plan/store";
+import { planGate } from "@/lib/plan/gate";
 
 const businessId = "55555555-5555-4555-8555-555555555555";
 const periodId = "44444444-4444-4444-8444-444444444444";
@@ -31,6 +32,7 @@ beforeEach(() => {
   mocks.rpc.mockImplementation(async (name: string) => ({ data: name === "plan_period_open" ? { periodId, linkId: null, shortUrl: null } : true, error: null }));
   mocks.createPlanLink.mockResolvedValue({ id: "plink_A", shortUrl: "https://rzp.io/i/a" });
 });
+afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs(); });
 
 describe("plan store (#718)", () => {
   it("reads the free month from the first Go live and offers payment in its last week", async () => {
@@ -73,11 +75,10 @@ describe("plan store (#718)", () => {
     expect(mocks.createPlanLink).not.toHaveBeenCalled();
   });
 
-  // #1583 (Reviewer): a lost payment_link.expired/paid webhook must not leave the owner with a dead Pay link while
-  // the gate blocks new ads. Past its lifetime, the open month's link is re-read from Razorpay and settled.
-  describe("an open month whose link has outlived its 30 days (#1583)", () => {
+  describe("recovering lost plan-link webhooks without blocking core admission (#1583)", () => {
     const stale = { state: "open", starts_at: null, ends_at: null, paid_at: null, short_url: "https://rzp.io/i/old", payment_link_id: "plink_Old", created_at: "2026-10-01T00:00:00Z" };
-    const link = (status: string, paymentId: string | null = null) => ({ id: "plink_Old", status, amountPaise: 99900, referenceId: periodId, paymentId });
+    const link = (status: string, paymentId: string | null = null) => ({ id: "plink_Old", status, amountPaise: 99900, referenceId: periodId, paymentId,
+      paidAt: paymentId ? "2026-11-04T00:00:00.000Z" : null });
     beforeEach(() => {
       mocks.tables.plan_periods = [{ ...stale }];
       mocks.rpc.mockImplementation(async (name: string) => {
@@ -109,13 +110,76 @@ describe("plan store (#718)", () => {
       expect(mocks.createPlanLink).not.toHaveBeenCalled();
     });
 
-    it("doesn't ask Razorpay about a link inside its 30 days, and a failed check keeps the old answer", async () => {
-      mocks.tables.plan_periods = [{ ...stale, created_at: "2026-10-20T00:00:00Z" }];
+    it("does not expire a young payable link or create a second payment link", async () => {
+      mocks.tables.plan_periods = [{ ...stale, created_at: "2026-11-01T00:00:00Z" }];
+      mocks.fetchPlanLink.mockResolvedValue(link("expired"));
       await expect(ensurePayLink(businessId, now)).resolves.toBe("https://rzp.io/i/old");
+      expect(mocks.rpc).not.toHaveBeenCalled();
+      expect(mocks.createPlanLink).not.toHaveBeenCalled();
+    });
+
+    it("doesn't reconcile a young link before payment is due, and surfaces a failed stale check", async () => {
+      mocks.tables.campaigns = [{ launched_at: "2026-10-25T09:00:00.000Z" }];
+      mocks.tables.plan_periods = [{ ...stale, created_at: "2026-10-20T00:00:00Z" }];
+      await readPlan(businessId, now);
       expect(mocks.fetchPlanLink).not.toHaveBeenCalled();
       mocks.tables.plan_periods = [{ ...stale }];
       mocks.fetchPlanLink.mockRejectedValue(new Error("Razorpay down"));
-      await expect(ensurePayLink(businessId, now)).resolves.toBe("https://rzp.io/i/old");
+      await expect(readPlan(businessId, now)).rejects.toThrow("Razorpay down");
+    });
+
+    it("recovers a lost paid webhook after eight days, preserves capture time and opens the gate", async () => {
+      const today = new Date("2026-11-11T00:00:00Z");
+      mocks.tables.plan_periods = [{ ...stale, created_at: "2026-11-03T00:00:00Z" }];
+      mocks.fetchPlanLink.mockResolvedValue(link("paid", "pay_Lost"));
+      mocks.rpc.mockImplementation(async (name: string) => {
+        if (name === "plan_period_paid") {
+          mocks.tables.plan_periods = [{ ...stale, state: "paid", paid_at: "2026-11-04T00:00:00.000Z",
+            starts_at: "2026-11-10T09:00:00.000Z", ends_at: "2026-12-10T09:00:00.000Z" }];
+          return { data: "paid", error: null };
+        }
+        throw new Error(`Unexpected RPC ${name}`);
+      });
+      await expect(readPlan(businessId, today)).resolves.toEqual({
+        status: { state: "paid", until: "2026-12-10T09:00:00.000Z", dueSoon: false }, payUrl: null,
+      });
+      expect(mocks.rpc).toHaveBeenCalledWith("plan_period_paid", {
+        p_link_id: "plink_Old", p_payment_id: "pay_Lost", p_paid_at: "2026-11-04T00:00:00.000Z",
+      });
+      vi.stubEnv("PLAN_BILLING_ENABLED", "true");
+      expect(await planGate(businessId, today)).toBeNull();
+    });
+
+    it("does not put a never-resolving Razorpay request on the core gate", async () => {
+      vi.useFakeTimers();
+      vi.stubEnv("PLAN_BILLING_ENABLED", "true");
+      mocks.fetchPlanLink.mockImplementation(() => new Promise(() => {}));
+      const result = Promise.race([
+        planGate(businessId, new Date("2026-11-11T00:00:00Z")),
+        new Promise(resolve => setTimeout(() => resolve("provider blocked the core"), 2000)),
+      ]);
+      await vi.advanceTimersByTimeAsync(2000);
+      await expect(result).resolves.toMatchObject({ status: 402, code: "PLAN_UNPAID" });
+      expect(mocks.fetchPlanLink).not.toHaveBeenCalled();
+    });
+
+    it("re-reads entitlement when another reconciliation already settled the payment", async () => {
+      mocks.fetchPlanLink.mockResolvedValue(link("paid", "pay_Raced"));
+      mocks.rpc.mockImplementation(async (name: string) => {
+        if (name !== "plan_period_paid") throw new Error(`Unexpected RPC ${name}`);
+        mocks.tables.plan_periods = [{ state: "paid", starts_at: "2026-11-10T09:00:00Z", ends_at: "2026-12-10T09:00:00Z",
+          paid_at: now.toISOString(), short_url: null, payment_link_id: "plink_Old", created_at: stale.created_at }];
+        return { data: "duplicate", error: null };
+      });
+      await expect(readPlan(businessId, now)).resolves.toEqual({
+        status: { state: "paid", until: "2026-12-10T09:00:00.000Z", dueSoon: false }, payUrl: null,
+      });
+    });
+
+    it.each(["managed", "operator"])("does not reconcile an exempt %s business", async mode => {
+      mocks.fundingMode.mockResolvedValue(mode);
+      await expect(readPlan(businessId, now)).resolves.toEqual({ status: { state: "exempt" }, payUrl: null });
+      expect(mocks.fetchPlanLink).not.toHaveBeenCalled();
     });
   });
 

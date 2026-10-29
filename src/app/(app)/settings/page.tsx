@@ -159,14 +159,14 @@ async function ConnectionSettings({ businessId, searchParams, whatsapp }: {
 }) {
   // #759: payment shows only where AdBrain holds ad money; an unreadable mode shows none.
   const mode = await fundingMode(businessId).catch(() => null);
-  // #718 slice 2: an own-account owner's ₹999 plan (off until PLAN_BILLING_ENABLED); a read failure just hides it.
-  const plan = mode === "own" && isPlanBillingEnabled() ? await readPlan(businessId).catch(() => null) : null;
-  const [result, params, initialBalance] = await Promise.all([
+  const planEnabled = mode === "own" && isPlanBillingEnabled();
+  const [result, params, initialBalance, plan] = await Promise.all([
     getMetaConnection(businessId).then(connection => ({ connection })).catch(() => ({ connection: null })),
     searchParams,
     mode === "managed" && isProductionPaymentConfigured()
       ? requireOwnedBusiness(businessId).then(getCustomerBalance).then(toCustomerBalanceView).catch(() => null)
       : Promise.resolve(null),
+    planEnabled ? readPlan(businessId).catch(() => null) : Promise.resolve(null),
   ]);
   return (
     <>
@@ -188,7 +188,7 @@ async function ConnectionSettings({ businessId, searchParams, whatsapp }: {
       {whatsapp}
       <BillingSection mode={mode} connection={result.connection} testBusinessId={isRazorpayTestEnabled() ? businessId : undefined}
         liveBusinessId={isProductionPaymentConfigured() ? businessId : undefined} initialBalance={initialBalance}
-        plan={plan} planBusinessId={businessId}
+        plan={plan} planBusinessId={businessId} planUnavailable={planEnabled && plan === null}
         billingTab={typeof params.billing === "string" ? params.billing : null} />
     </>
   );

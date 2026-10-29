@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({ enabled: vi.fn(), readPlan: vi.fn(), record: vi.fn() }));
-vi.mock("@/lib/plan/store", () => ({ isPlanBillingEnabled: mocks.enabled, readPlan: mocks.readPlan }));
+vi.mock("@/lib/plan/store", () => ({ isPlanBillingEnabled: mocks.enabled, readStoredPlan: mocks.readPlan }));
 vi.mock("@/lib/observability/logger", () => ({ recordProductEvent: mocks.record }));
 
 import { planGate, PLAN_UNPAID_MESSAGE } from "@/lib/plan/gate";

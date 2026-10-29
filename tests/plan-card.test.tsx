@@ -2,9 +2,17 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { PlanCard } from "@/components/plan-card";
+import { BillingSection } from "@/components/managed-billing";
 
 const businessId = "55555555-5555-4555-8555-555555555555";
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+
+it("shows a plan read failure instead of silently substituting the free-month explanation", () => {
+  render(<BillingSection mode="own" connection={null} planBusinessId={businessId} planUnavailable />);
+  expect(screen.getByText("Your plan is unavailable right now. Refresh Settings to try again.")).toBeInTheDocument();
+  expect(screen.queryByText(/Your first month of AdBrain is free/)).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Pay ₹999" })).not.toBeInTheDocument();
+});
 
 it("says the price, no auto-debit, and the free month before the first Go live, with nothing to pay", () => {
   render(<PlanCard businessId={businessId} status={{ state: "trial_not_started" }} payUrl={null} />);

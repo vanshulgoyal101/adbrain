@@ -52,7 +52,8 @@ settings, credentials and encryption keys are DevOps-owned changes; see the
 ## Live Checkout (Disabled By Default)
 
 `PLAN_BILLING_ENABLED` defaults off. Exact `true` enables the own-account
-Settings Plan card and monthly payment-link endpoint (#718), after the
+Settings Plan card, monthly payment-link endpoint and unpaid new-work gates
+(#718), after the
 `plan_periods` migration and payment-link webhook are released. Team, managed
 and operator businesses are exempt. DevOps owns enabling collection; publishing
 these routes does not authorize charges or change the flag.

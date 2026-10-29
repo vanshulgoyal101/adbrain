@@ -1,5 +1,5 @@
 import { recordProductEvent } from "@/lib/observability/logger";
-import { isPlanBillingEnabled, readPlan } from "@/lib/plan/store";
+import { isPlanBillingEnabled, readStoredPlan } from "@/lib/plan/store";
 
 export const PLAN_UNPAID_MESSAGE = "Your ₹999 plan payment is due. Running ads keep running. Pay in Settings to make new ads and campaigns.";
 
@@ -11,7 +11,7 @@ export const PLAN_UNPAID_MESSAGE = "Your ₹999 plan payment is due. Running ads
 export async function planGate(businessId: string, now = new Date()): Promise<{ status: 402; code: "PLAN_UNPAID"; error: string } | null> {
   if (!isPlanBillingEnabled()) return null;
   try {
-    const { status } = await readPlan(businessId, now);
+    const { status } = await readStoredPlan(businessId, now);
     if (status.state !== "unpaid") return null;
     recordProductEvent({ kind: "action", name: "plan.gate", outcome: "rejected", businessId, attributes: { errorCode: "PLAN_UNPAID" } });
     return { status: 402, code: "PLAN_UNPAID", error: PLAN_UNPAID_MESSAGE };

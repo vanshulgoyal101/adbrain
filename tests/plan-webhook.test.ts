@@ -43,6 +43,27 @@ describe("plan webhook (#718)", () => {
     expect(await handlePlanWebhook(linkEvent("payment_link.paid"), d)).toBe("duplicate");
   });
 
+  it("uses the captured provider timestamp during reconciliation, never the read time", async () => {
+    const { deps: d, rpc } = deps();
+    d.fetchPlanLink = async () => ({ ...paidLink, paidAt: "2026-11-04T00:00:00.000Z" });
+    await expect(handlePlanWebhook({
+      event: "payment_link.paid", payload: {
+        payment_link: { entity: { id: linkId } }, payment: { entity: { created_at: 1_793_000_000 } },
+      },
+    }, d)).resolves.toBe("paid");
+    expect(rpc).toHaveBeenCalledWith("plan_period_paid", {
+      p_link_id: linkId, p_payment_id: "pay_Plan1", p_paid_at: "2026-11-04T00:00:00.000Z",
+    });
+  });
+
+  it("refuses to invent a payment timestamp when capture and signed event have none", async () => {
+    const { deps: d, rpc } = deps();
+    await expect(handlePlanWebhook({
+      event: "payment_link.paid", payload: { payment_link: { entity: { id: linkId } } },
+    }, d)).rejects.toThrow("capture time");
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
   // #1583 (Reviewer): Razorpay confirms a captured ₹999 but no open month takes it (a second payment on a paid month,
   // or a period row that's gone). It's money with no plan month, so DevOps must hear about it.
   it("raises plan.payment_unmatched when a confirmed payment settles no month; a replay doesn't", async () => {
