@@ -66,6 +66,7 @@ jobs:
         run: node scripts/production-guard.mjs served "$SHA" | tee smoke.txt
       - name: Capture the authorized drill deployment before the forced smoke
         id: drill
+        timeout-minutes: 2
         if: inputs.drill && env.VERCEL_TOKEN != ''
         run: |
           current=$(node scripts/production-guard.mjs live)
