@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import {
-  SETUP_FIELDS, SETUP_FIELD_LIMITS, setupFieldErrors, setupFieldsFrom,
+  SETUP_FIELDS, SETUP_FIELD_LIMITS, setupFieldErrors, setupFieldsFrom, setupLocations,
   type SetupBusinessFields, type SetupField,
 } from "@/lib/brand/setup-fields";
 import type { BrandExtraction } from "@/lib/templates/ads";
@@ -29,15 +29,20 @@ const HAS_HELPER: Record<SetupField, boolean> = { name: false, vertical: false, 
  * #1269 (#1251 WS1 step 1): a first-timer's business in five fields, saved as they type.
  * Everything else on the Brand stays on the full page ("More about your business").
  */
-export function SetupBusinessStep({ business, chooseLanguage = false, words }: {
+export function SetupBusinessStep({ business, chooseLanguage = false, returning = false, words }: {
   business: Business | null;
+  /** #1934 (CPO #1924): a new campaign after one went live; only the new offer is asked, the rest is folded. */
+  returning?: boolean;
   /** #1438: the owner's app language (Settings or the chips above); English without it. */
   words?: SetupWords;
   /** #1641: no app language chosen on this browser yet, so offer English / हिंदी above the step. */
   chooseLanguage?: boolean;
 }) {
   const t = setupTranslator(words);
-  const [fields, setFields] = useState<SetupBusinessFields>(() => setupFieldsFrom(business));
+  // #1934: a returning owner types this campaign's offer fresh; the last one is the placeholder.
+  const [fields, setFields] = useState<SetupBusinessFields>(() => ({ ...setupFieldsFrom(business), ...(returning ? { offer: "" } : {}) }));
+  const lastOffer = business?.offers?.[0] ?? "";
+  const [expanded, setExpanded] = useState(!returning);
   const [errors, setErrors] = useState<Partial<Record<SetupField, string>>>({});
   const [adLanguage, setAdLanguage] = useState<CreateLanguageId | null>(null);
   // #1853: decided once per visit. Saving the choice sets the cookie and re-renders with chooseLanguage false;
@@ -105,6 +110,8 @@ export function SetupBusinessStep({ business, chooseLanguage = false, words }: {
     const found = setupFieldErrors(fieldsRef.current);
     const first = SETUP_FIELDS.find((key) => found[key]);
     if (first) {
+      // A folded field that's now incomplete opens, so the owner sees what to fix.
+      if (first !== "offer") setExpanded(true);
       setErrors(found);
       inputRefs.current[first]?.focus();
       throw new Error("incomplete");
@@ -154,12 +161,19 @@ export function SetupBusinessStep({ business, chooseLanguage = false, words }: {
   }
 
   return (
-    <SetupSpine step={1} saved={saved} beforeLeave={beforeLeave} primary={{ label: t("business.primary"), href: SETUP_STEPS[1].href }} words={words}>
+    <SetupSpine step={1} saved={saved} beforeLeave={beforeLeave} again={returning} words={words}
+      primary={{ label: t("business.primary"), href: returning ? `${SETUP_STEPS[1].href}?again=1` : SETUP_STEPS[1].href }}>
       {offerLanguage && <div className="mb-3 flex justify-end"><CompactAppLanguage /></div>}
-      <h2 className="text-xl font-semibold text-slate-950">{t("business.title")}</h2>
-      <p className="mt-1 text-sm text-slate-600">{t("business.helper")}</p>
+      {returning ? (
+        <h2 className="text-xl font-semibold text-slate-950">{t("business.againTitle")}</h2>
+      ) : (
+        <>
+          <h2 className="text-xl font-semibold text-slate-950">{t("business.title")}</h2>
+          <p className="mt-1 text-sm text-slate-600">{t("business.helper")}</p>
+        </>
+      )}
 
-      <div className="mt-5 flex flex-col gap-2">
+      {!returning && <div className="mt-5 flex flex-col gap-2">
         <label htmlFor="setup-website" className="text-sm font-medium text-slate-900">{t("business.website")}</label>
         <div className="flex flex-col gap-2 sm:flex-row">
           <Input id="setup-website" type="url" inputMode="url" placeholder="yourbusiness.com" value={website}
@@ -185,11 +199,12 @@ export function SetupBusinessStep({ business, chooseLanguage = false, words }: {
           </button>
         )}
         {autofillNote && <Alert variant={autofillNote.ok ? "info" : "error"}>{autofillNote.text}</Alert>}
-      </div>
+      </div>}
 
       <div className="mt-6 flex flex-col gap-5">
-        {SETUP_FIELDS.map((key) => {
-          const text = { label: t(`business.fields.${key}.label`), placeholder: t(`business.fields.${key}.placeholder`),
+        {SETUP_FIELDS.filter((key) => expanded || key === "offer").map((key) => {
+          const text = { label: t(`business.fields.${key}.label`),
+            placeholder: key === "offer" && returning && lastOffer ? lastOffer : t(`business.fields.${key}.placeholder`),
             helper: HAS_HELPER[key] ? t(`business.fields.${key}.helper` as "business.fields.offer.helper") : undefined };
           const id = `setup-${key}`;
           const described = [text.helper && `${id}-helper`, errors[key] && `${id}-error`].filter(Boolean).join(" ") || undefined;
@@ -214,6 +229,12 @@ export function SetupBusinessStep({ business, chooseLanguage = false, words }: {
         })}
       </div>
 
+      {!expanded && (
+        <p className="mt-4 text-sm text-slate-600">
+          {t("business.sameAsLast", { summary: [fields.vertical, setupLocations(fields.locations).join(", "), fields.phone].filter((part) => part.trim()).join(" · ") })}{" "}
+          <button type="button" onClick={() => setExpanded(true)} className="inline-flex min-h-11 items-center font-medium text-blue-700 underline underline-offset-4">{t("business.change")}</button>
+        </p>
+      )}
       {/* #1681 (CPO #1669): the language the first 3 ads are written in, defaulting by what they sell. */}
       <div className="mt-6"><AdLanguageChips value={adLanguage ?? defaultAdLanguage(business?.languages, fields.vertical)} onChange={setAdLanguage} /></div>
       <p className="mt-4 text-sm text-slate-600">{t("business.included")}</p>

@@ -127,16 +127,16 @@ test("layered docs: short pages, an index per folder linking each page, nothing 
   const long = "# Long\n" + "line\n".repeat(300);
   const root = fixture(context, {
     "README.md": "# Start\n",
-    "docs/README.md": "# Docs\n[Product](product/README.md) [Roadmap](roadmap.md) [Old](FEATURES.md) [Loose](loose.md)\n",
+    "docs/README.md": "# Docs\n[Product](product/README.md) [Roadmap](roadmap.md) [Old](OLD.md) [Loose](loose.md)\n",
     "docs/roadmap.md": "# Roadmap\n",
-    "docs/FEATURES.md": long,
+    "docs/OLD.md": long,
     "docs/loose.md": "# Loose\n",
     "docs/product/README.md": "# Product\n[Brand](brand.md)\n",
     "docs/product/brand.md": long,
     "docs/product/create.md": "# Create\n",
     "docs/operations/runbooks/one.md": "# One\n",
   });
-  assert.deepEqual(messages(checkDocumentation(root)).sort(), [
+  assert.deepEqual(messages(checkDocumentation(root, { legacyFlat: new Set(["docs/OLD.md"]) })).sort(), [
     "docs/README.md Index does not link docs/operations/README.md",
     "docs/loose.md Put pages in a docs/ subfolder (product, architecture, api, operations, team)",
     "docs/operations Folder has no README.md index",
