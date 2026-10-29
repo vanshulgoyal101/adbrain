@@ -759,6 +759,11 @@
     "enquiryCountUnavailable": "पूछताछ की गिनती अभी नहीं मिल पाई।",
     "requestNotSent": "आपका अनुरोध भेजा नहीं जा सका। फिर से कोशिश करें।",
     "pickAccountAndPage": "एक ऐड अकाउंट और एक पेज, दोनों चुनें।",
-    "facebookStillConnected": "Facebook अभी भी जुड़ा हुआ है। एक मिनट बाद फिर से कोशिश करें।"
+    "facebookStillConnected": "Facebook अभी भी जुड़ा हुआ है। एक मिनट बाद फिर से कोशिश करें।",
+    "campaignFiltersInvalid": "कैंपेन फ़िल्टर सही नहीं हैं।",
+    "campaignsNotLoaded": "आपके कैंपेन लोड नहीं हो पाए। पेज दोबारा लोड करें।",
+    "enquiryInvalid": "पूछताछ सही नहीं है।",
+    "enquiryWhatsAppOnly": "असली पूछताछ सिर्फ़ WhatsApp कैंपेन पर दर्ज हो सकती है।",
+    "enquiryNotSaved": "पूछताछ सेव नहीं हो पाई। फिर कोशिश करें।"
   }
 }

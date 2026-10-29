@@ -759,6 +759,11 @@
     "enquiryCountUnavailable": "Enquiry count unavailable.",
     "requestNotSent": "We couldn't send your request. Try again.",
     "pickAccountAndPage": "Pick both an ad account and a page.",
-    "facebookStillConnected": "Facebook is still connected. Try again in a minute."
+    "facebookStillConnected": "Facebook is still connected. Try again in a minute.",
+    "campaignFiltersInvalid": "Invalid campaign filters.",
+    "campaignsNotLoaded": "We couldn't load your campaigns. Reload the page.",
+    "enquiryInvalid": "Invalid enquiry.",
+    "enquiryWhatsAppOnly": "Real enquiries can be logged on WhatsApp campaigns only.",
+    "enquiryNotSaved": "The enquiry could not be saved. Try again."
   }
 }

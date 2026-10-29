@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { campaignDestination } from "@/lib/campaign/outcomes";
 import { recordCustomerMark } from "@/lib/leads/customer-event";
+import { ownerError } from "@/i18n/request-locale";
 import { observeRoute } from "@/lib/observability/logger";
 import { rateLimitResponse } from "@/lib/security/rate-limit";
 import { createClient } from "@/lib/supabase/server";
@@ -29,22 +30,22 @@ export const POST = observeRoute("/api/campaigns/[id]/enquiries", "POST", async 
 ) => {
   const database = await createClient();
   const { data: { user } } = await database.auth.getUser();
-  if (!user) return NextResponse.json({ error: "Sign in required." }, { status: 401 });
+  if (!user) return NextResponse.json({ error: await ownerError("signInRequired") }, { status: 401 });
   let id: string;
   let input: z.infer<typeof enquirySchema>;
   try {
     id = z.uuid().parse((await context.params).id);
     input = enquirySchema.parse(await request.json());
   } catch {
-    return NextResponse.json({ error: "Invalid enquiry." }, { status: 400 });
+    return NextResponse.json({ error: await ownerError("enquiryInvalid") }, { status: 400 });
   }
   const limited = await rateLimitResponse(`manual-enquiry:${user.id}`, { limit: 30, windowMs: 5 * 60_000 });
   if (limited) return limited;
 
   const { data: campaign } = await database.from("campaigns").select("*").eq("id", id).maybeSingle();
-  if (!campaign) return NextResponse.json({ error: "Campaign not found." }, { status: 404 });
+  if (!campaign) return NextResponse.json({ error: await ownerError("campaignNotFound") }, { status: 404 });
   if (campaignDestination(campaign) !== "whatsapp") {
-    return NextResponse.json({ error: "Real enquiries can be logged on WhatsApp campaigns only." }, { status: 400 });
+    return NextResponse.json({ error: await ownerError("enquiryWhatsAppOnly") }, { status: 400 });
   }
   const { data: saved, error } = await database.from("leads").insert({
     business_id: campaign.business_id,
@@ -56,7 +57,7 @@ export const POST = observeRoute("/api/campaigns/[id]/enquiries", "POST", async 
     created_time: new Date().toISOString(),
     ...(input.customer ? { workflow_status: "customer" as const } : {}),
   }).select("id").single();
-  if (error || !saved) return NextResponse.json({ error: "The enquiry could not be saved. Try again." }, { status: 503 });
+  if (error || !saved) return NextResponse.json({ error: await ownerError("enquiryNotSaved") }, { status: 503 });
   if (input.customer) recordCustomerMark({ businessId: campaign.business_id, campaignId: campaign.id, source: "whatsapp", undone: false });
   return NextResponse.json({ id: saved.id, ...await counts(database, campaign.id) }, { status: 201, headers: { "Cache-Control": "private, no-store" } });
 });
@@ -70,20 +71,20 @@ export const DELETE = observeRoute("/api/campaigns/[id]/enquiries", "DELETE", as
 ) => {
   const database = await createClient();
   const { data: { user } } = await database.auth.getUser();
-  if (!user) return NextResponse.json({ error: "Sign in required." }, { status: 401 });
+  if (!user) return NextResponse.json({ error: await ownerError("signInRequired") }, { status: 401 });
   let id: string, lead: string;
   try {
     id = z.uuid().parse((await context.params).id);
     lead = z.uuid().parse(new URL(request.url).searchParams.get("lead"));
   } catch {
-    return NextResponse.json({ error: "Invalid enquiry." }, { status: 400 });
+    return NextResponse.json({ error: await ownerError("enquiryInvalid") }, { status: 400 });
   }
   const limited = await rateLimitResponse(`manual-enquiry:${user.id}`, { limit: 30, windowMs: 5 * 60_000 });
   if (limited) return limited;
   const { data: removed, error } = await database.from("leads").delete()
     .eq("id", lead).eq("campaign_id", id).eq("source", "whatsapp_manual").select("id, business_id, workflow_status");
-  if (error) return NextResponse.json({ error: "The enquiry could not be removed. Try again." }, { status: 503 });
-  if (!removed?.length) return NextResponse.json({ error: "Enquiry not found." }, { status: 404 });
+  if (error) return NextResponse.json({ error: await ownerError("enquiryNotDeleted") }, { status: 503 });
+  if (!removed?.length) return NextResponse.json({ error: await ownerError("enquiryNotFound") }, { status: 404 });
   // #2026: undoing "+1 customer" removes a customer.
   if (removed[0].workflow_status === "customer") recordCustomerMark({ businessId: removed[0].business_id, campaignId: id, source: "whatsapp", undone: true });
   return NextResponse.json(await counts(database, id), { headers: { "Cache-Control": "private, no-store" } });

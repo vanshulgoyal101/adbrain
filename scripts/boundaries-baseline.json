@@ -815,12 +815,6 @@
     },
     {
       "rule": "C5-english-errors",
-      "from": "src/app/api/campaigns/[id]/enquiries/route.ts",
-      "to": "English error literals",
-      "lines": 9
-    },
-    {
-      "rule": "C5-english-errors",
       "from": "src/app/api/campaigns/[id]/refresh/route.ts",
       "to": "English error literals",
       "lines": 6
@@ -842,12 +836,6 @@
       "from": "src/app/api/campaigns/lead-forms/route.ts",
       "to": "English error literals",
       "lines": 2
-    },
-    {
-      "rule": "C5-english-errors",
-      "from": "src/app/api/campaigns/list/route.ts",
-      "to": "English error literals",
-      "lines": 3
     },
     {
       "rule": "C5-english-errors",
