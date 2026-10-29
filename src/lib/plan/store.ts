@@ -2,7 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { isInternalUser } from "@/lib/internal-accounts";
 import { fundingMode } from "@/lib/payments/operator-funding";
 import { createProductionPaymentClient } from "@/lib/payments/razorpay-production";
-import { planStatus, type PlanStatus } from "@/lib/plan/status";
+import { planStatus, type PlanPeriod, type PlanStatus } from "@/lib/plan/status";
 import { handlePlanWebhook } from "@/lib/plan/webhook";
 
 /** #718 slice 2: off until DevOps turns it on; then own-account businesses see the plan and the gate applies. */
@@ -25,7 +25,7 @@ export function planContact(phone: string | null | undefined): string | null {
   return null;
 }
 
-type PeriodRow = { state: string; starts_at: string | null; ends_at: string | null; paid_at: string | null; short_url: string | null;
+type PeriodRow = { state: PlanPeriod["state"]; starts_at: string | null; ends_at: string | null; paid_at: string | null; short_url: string | null;
   payment_link_id: string | null; created_at: string };
 
 const readPeriods = (db: ReturnType<typeof createAdminClient>, businessId: string) =>
