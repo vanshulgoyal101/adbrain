@@ -18,7 +18,7 @@ feature branch or a passing local test.
 | Owner or coordinating worker | [Worker orchestration](ORCHESTRATION.md) | [Roadmap](roadmap.md) |
 | New developer | [Quick start](QUICK_START.md) | [Architecture](ARCHITECTURE.md) |
 | Product or support | [Features and workflows](product/README.md) | [Roadmap](roadmap.md) |
-| Operator | [Deployment configuration](DEPLOY.md) | [Release policy](RELEASING.md) |
+| Operator | [Deployment configuration](operations/deploy.md) | [Release policy](RELEASING.md) |
 | Debugging engineer | [Observability](OBSERVABILITY.md) | [Operations](operations/README.md) |
 | Product planner | [Roadmap](roadmap.md) | [Payment plan](PAYMENTS-PLAN.md) |
 
@@ -38,7 +38,7 @@ feature branch or a passing local test.
 | [Testing](TESTING.md) | Which commands are safe locally and what does each verification layer prove? |
 | [Operations](operations/README.md) | How do we diagnose partial work, stale spend, provider failures and retention problems? |
 | [Observability](OBSERVABILITY.md) | What is logged, how is it correlated, and what must never be collected? |
-| [Deployment](DEPLOY.md) | How is a target environment configured and smoke-tested? |
+| [Deployment](operations/deploy.md) | How is a target environment configured and smoke-tested? |
 | [Release policy](RELEASING.md) | What approvals and checks govern remote changes? |
 | [Meta approval readiness](META_APPROVAL_ACTION_PLAN.md) | What external review evidence must be prepared and verified? |
 | [Payment plan and readiness](PAYMENTS-PLAN.md) | What are the agreed economics, implemented payment boundaries and remaining live-rollout requirements? |
@@ -61,6 +61,7 @@ last move.
 | `API_REFERENCE.md` | [api/](api/README.md): one page per route group |
 | `FEATURES.md` | [product/](product/README.md): one page per product area |
 | `OPERATIONS.md` | [operations/](operations/README.md) and [operations/runbooks/](operations/runbooks/README.md) |
+| `DEPLOY.md` | [operations/deploy.md](operations/deploy.md) |
 | `ROADMAP.md` | [roadmap.md](roadmap.md) (lower case, like the folders) |
 
 ## Terminology
