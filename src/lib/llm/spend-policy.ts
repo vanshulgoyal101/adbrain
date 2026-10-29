@@ -1,4 +1,4 @@
-import { isExemptFromFreeProviders, isInternalUser } from "@/lib/internal-accounts";
+import { isExemptFromFreeProviders, isInternalUser, isSmokeUser } from "@/lib/internal-accounts";
 import { currentVerifiedActor, eventContext } from "@/lib/observability/context";
 
 /**
@@ -23,4 +23,15 @@ export function costCapped(): boolean {
 export function freeImagesOnly(): boolean {
   const actor = currentVerifiedActor();
   return isInternalUser(actor) && !isExemptFromFreeProviders(actor);
+}
+
+/** Text providers on free tiers: the fallback when a paid key is out of credit (#449), and all the smoke login may use. */
+export const FREE_TEXT_PROVIDERS: readonly string[] = ["google", "groq"];
+
+/**
+ * #2230: the production smoke login writes on free text models only, so its scheduled Prepare spends $0. When they
+ * can't answer, the call fails with FREE_TEXT_UNAVAILABLE rather than paying. Customers and the team are unchanged.
+ */
+export function freeTextOnly(): boolean {
+  return isSmokeUser(currentVerifiedActor());
 }
