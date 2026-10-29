@@ -92,3 +92,5 @@ question, privacy requests and the lead-form picker (#2335).
 Errors from Brand's website or text autofill and from preparing a campaign plan come in Hindi too (#2330).
 When your phone loses its connection or the server sends no reply, the messages on Create, Review
 and Brand pictures still come in your language (#2345).
+A campaign that can't be found, or that AdBrain can't safely change or delete, now says what to do
+next in plain words (often: refresh, or change it in Meta Ads Manager), in English or Hindi (#2213).
