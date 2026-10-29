@@ -8,6 +8,7 @@ import {
 } from "@/lib/campaign/preflight";
 import type { DraftInput, ReviewDTO } from "@/lib/campaign/connect-contracts";
 import type { ResolvedWhatsAppMessage } from "@/lib/campaign/whatsapp-template";
+import { alignPrintedNumbers } from "@/lib/creative/chat-number";
 
 export type PreflightActor = {
   businessId: string;
@@ -28,6 +29,8 @@ export type PreflightLoaders = {
   findBrandFacts?: (actor: PreflightActor) => Promise<string[]>;
   /** #419 2(b): the business's own cost per result for this kind of campaign, or null. */
   findCostPerResult?: (actor: PreflightActor, destination: "instant_form" | "whatsapp") => Promise<number | null>;
+  /** #2274: redraws one picture's printed phone over its saved background; the new picture's URL, or null. */
+  redrawPictureNumber?: (actor: PreflightActor, creativeId: string, phone: string) => Promise<string | null>;
   getConnection: (actor: PreflightActor) => Promise<PreflightConnection | null>;
   resolveGeo: (actor: PreflightActor, draft: DraftRecord) => Promise<PreflightGeo>;
   hash: (payload: string) => string;
@@ -74,6 +77,12 @@ export async function prepareCampaignReview(
     // Only a warning depends on it, like the cost per result.
     loaders.findBrandFacts?.(input.actor).catch(() => []) ?? Promise.resolve([]),
   ]);
+  // #2274: the picture prints the chat's number, not an older Brand phone. Before the creative hash, so
+  // Review and launch both see the redrawn picture.
+  const redraw = loaders.redrawPictureNumber;
+  const aligned = draft.input.destination === "whatsapp" && whatsappNumber && /^\+[1-9]\d{6,14}$/.test(whatsappNumber) && redraw
+    ? await alignPrintedNumbers(creatives, whatsappNumber, (creative, phone) => redraw(input.actor, creative.id, phone))
+    : { creatives, notice: null };
 
   return {
     kind: "review",
@@ -82,7 +91,8 @@ export async function prepareCampaignReview(
       draftId: draft.id,
       draftVersion: draft.version,
       connection,
-      creatives,
+      creatives: aligned.creatives,
+      pictureNotice: aligned.notice,
       form,
       whatsappNumber,
       whatsappMessage: whatsappMessage?.message ?? null,

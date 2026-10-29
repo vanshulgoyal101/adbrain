@@ -127,6 +127,10 @@ async function handlePOST(
       : "Regeneration is already in progress. Refresh this creative before trying again." }, { status: 409 });
   if (claim.action !== "start")
     return NextResponse.json({ error: "Something on our side didn't answer. Nothing was started; try again in a minute." }, { status: 503 });
+  // #2291: the stale attempt this replaces may have paid for a picture it never recorded; ops matches this to its usage.
+  if (claim.tookOver)
+    await logEvent({ businessId: business.id, action: "creative.claim_taken_over", entityType: "creative", entityId: id,
+      details: { route: "creatives.regenerate", attemptId } });
 
   let paidAttemptStarted = false;
   let unresolved = false;

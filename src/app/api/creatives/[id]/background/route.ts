@@ -110,6 +110,10 @@ async function handlePOST(req: Request, { params }: { params: Promise<{ id: stri
       : "This ad is already being changed. Refresh it before trying again." }, { status: 409 });
   if (claim.action !== "start")
     return NextResponse.json({ error: "Something on our side didn't answer. No new background was started; try again in a minute." }, { status: 503 });
+  // #2291: the stale attempt this replaces may have paid for a picture it never recorded; ops matches this to its usage.
+  if (claim.tookOver)
+    await logEvent({ businessId: business.id, action: "creative.claim_taken_over", entityType: "creative", entityId: id,
+      details: { route: "creatives.background", attemptId } });
 
   const angle = getAngleByName(creative.angle ?? "") ?? AD_ANGLES[0];
   const group = creative.variant_group ?? id;

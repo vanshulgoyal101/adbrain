@@ -112,6 +112,21 @@ Costs are estimates, not invoices. Missing provider usage or failed logging can
 under-count costs. Use generation approval/rejection, partial batches and repeat
 usage as hypotheses to investigate, not proof that an audience or creative works.
 
+A Regenerate or Change background killed mid-picture (past 300 s, or by a deploy) never records its charge.
+The next attempt takes over its claim and writes `creative.claim_taken_over` (#2291). For each takeover,
+the same route's image receipts for that business in the 20 minutes before it: none means the dead
+attempt's picture (if it was paid) is missing from `llm_usage_events`.
+
+```sql
+select a.created_at, a.business_id, a.entity_id as creative_id, a.details->>'route' as route,
+       count(u.id) as image_receipts_before, sum(u.estimated_cost_usd) as recorded_usd
+from public.audit_log a
+left join public.llm_usage_events u on u.business_id = a.business_id and u.route = a.details->>'route'
+  and u.usage_kind = 'image' and u.created_at between a.created_at - interval '20 minutes' and a.created_at
+where a.action = 'creative.claim_taken_over' and a.created_at >= now() - interval '7 days'
+group by 1, 2, 3, 4 order by a.created_at desc;
+```
+
 A rejected reply's `ai.completion` event carries `validationRules`, the names of
 the checks it broke (up to 12, never the reply's text; #378). The top rules per model:
 

@@ -7,9 +7,9 @@ import sharp from "sharp";
 import { renderAndPersistDesign } from "@/lib/creative/persist";
 import { renderCompositeAd } from "@/lib/creative/render";
 import {
-  findStoredBackground,
   pictureDesign,
   pictureWordsSchema,
+  savedBackground,
   withPictureWords,
 } from "@/lib/creative/picture-words";
 import { rateLimitResponse } from "@/lib/security/rate-limit";
@@ -80,14 +80,7 @@ async function handlePOST(req: Request, { params }: { params: Promise<{ id: stri
     return NextResponse.json({ error: "This ad's picture has no words we can change." }, { status: 409 });
 
   const angle = getAngleByName(creative.angle ?? "") ?? AD_ANGLES[0];
-  const folder = `${creative.business_id}/${creative.variant_group ?? id}`;
-  // The receipt is owner-writable under RLS, so only trust a background in this business's own storage.
-  const ownStorage = supabase.storage.from("creatives").getPublicUrl(`${creative.business_id}/`).data.publicUrl;
-  const savedPhoto = typeof generation.photoUrl === "string" && generation.photoUrl.startsWith(ownStorage)
-    && !generation.photoUrl.slice(ownStorage.length).includes("..")
-    ? generation.photoUrl
-    : null;
-  const photoUrl = savedPhoto ?? await findStoredBackground(supabase, folder, angle.id, creative.image_url);
+  const photoUrl = await savedBackground(supabase, creative, generation, angle.id);
   if (!photoUrl)
     return NextResponse.json(
       { error: "We couldn't find this ad's original background, so its words can't be redrawn. Regenerate the whole ad instead.", code: "no_background" },
