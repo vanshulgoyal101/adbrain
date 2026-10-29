@@ -44,6 +44,18 @@ describe("core-approval required check (#926)", () => {
     expect(coreApproval({ ...pr, comments: earlier }).state).toBe("pending");
   });
 
+  it("consumes the recorded signed Reviewer approval at the named head (#2054)", () => {
+    const pr = { files: ["src/lib/campaign/ledger.ts"], head: "f784739f36d8e2957ccd0497f349c32fe4431a48", headRef: "work/issue-1786" };
+    const approval = at("Reviewer: review of f784739f36d8e2957ccd0497f349c32fe4431a48: **approved** (core-approval).");
+    expect(coreApproval({ ...pr, comments: [approval] })).toMatchObject({
+      state: "success", description: "Reviewer approved f784739",
+    });
+    expect(coreApproval({ ...pr, head, comments: [approval] }).state).toBe("pending");
+    expect(coreApproval({ ...pr, comments: [
+      approval, at("Reviewer: review of f784739f36d8e2957ccd0497f349c32fe4431a48: **changes requested**.", "2026-10-29T06:00:00Z"),
+    ] }).state).toBe("pending");
+  });
+
   it("lets a labelled revert through so rollback never waits", () => {
     const pr = { files: ["src/lib/campaign/create-service.ts"], head, headRef: "r", comments: [] };
     expect(coreApproval({ ...pr, labels: ["rollback"], title: "Revert #914: ice breakers" }).state).toBe("success");
@@ -68,5 +80,13 @@ describe("money and migrations need QA and the CTO/Reviewer (#1083)", () => {
   });
   it("treats migrations like money", () => {
     expect(coreApproval({ files: ["db/migrations/20261027_x.sql"], head, headRef: "b", comments: [cto] }).state).toBe("pending");
+  });
+  it("still requires QA alongside a signed Reviewer money verdict", () => {
+    const reviewer = at("Reviewer: review of 7612817: **approved** (money).");
+    expect(coreApproval({ ...pr, comments: [reviewer] }).state).toBe("pending");
+    expect(coreApproval({ ...pr, comments: [reviewer, qaOk] })).toMatchObject({
+      state: "success", description: "QA and Reviewer approved 7612817 (money/migration)",
+    });
+    expect(coreApproval({ ...pr, comments: [reviewer, qaNo] }).state).toBe("pending");
   });
 });

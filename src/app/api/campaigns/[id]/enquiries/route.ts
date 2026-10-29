@@ -9,13 +9,14 @@ const optionalText = (max: number) => z.string().trim().max(max).optional();
 // #798: `customer: true` logs a chat that became a customer in one tap (no details needed).
 const enquirySchema = z.strictObject({ name: optionalText(200), phone: optionalText(40), note: optionalText(2000), customer: z.literal(true).optional() });
 
-/** The campaign's logged WhatsApp enquiries and its customers (any source), after a change. */
+/** The campaign's logged WhatsApp enquiries, its customers and its bookings (#1994: booked or customer; any source), after a change. */
 async function counts(database: Awaited<ReturnType<typeof createClient>>, campaignId: string) {
-  const [enquiries, customers] = await Promise.all([
+  const [enquiries, customers, booked] = await Promise.all([
     database.from("leads").select("id", { count: "exact", head: true }).eq("campaign_id", campaignId).eq("source", "whatsapp_manual"),
     database.from("leads").select("id", { count: "exact", head: true }).eq("campaign_id", campaignId).eq("workflow_status", "customer"),
+    database.from("leads").select("id", { count: "exact", head: true }).eq("campaign_id", campaignId).in("workflow_status", ["booked", "customer"]),
   ]);
-  return { enquiries: enquiries.count ?? null, customers: customers.count ?? null };
+  return { enquiries: enquiries.count ?? null, customers: customers.count ?? null, booked: booked.count ?? null };
 }
 
 /**

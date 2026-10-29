@@ -10,6 +10,9 @@ import { quotedAsk, sameWords } from "@/lib/campaign/whatsapp-greeting";
 import { batchProofWarning } from "@/lib/creative/proof-line";
 import type { ResolvedWhatsAppMessage } from "@/lib/campaign/whatsapp-template";
 
+/** #1799: Meta's minimum daily budget per impression-billed ad set in INR (₹95.46, Oct 29), rounded up. */
+export const META_MIN_DAILY_BUDGET_RUPEES = 96;
+
 export interface PreflightCreative {
   id: string;
   businessId: string;
@@ -245,6 +248,10 @@ export function runPreflight(input: PreflightInput): ReviewDTO {
   }
   if (draft.dailyBudgetRupees <= 0) {
     blockers.push(blocker("INVALID_INPUT", "REVIEW_BUDGET", "Set a daily budget above ₹0."));
+  } else if (draft.dailyBudgetRupees < META_MIN_DAILY_BUDGET_RUPEES) {
+    // #1799: Meta refuses an ad set under its INR minimum (₹95.46 a day for impression-billed WhatsApp and form
+    // ad sets, read from the account on Oct 29). Each ad set gets the full daily budget, so this is the floor.
+    blockers.push(blocker("INVALID_INPUT", "REVIEW_BUDGET", `Meta needs at least ₹${META_MIN_DAILY_BUDGET_RUPEES} a day. Set a daily budget of ₹${META_MIN_DAILY_BUDGET_RUPEES} or more.`));
   }
   const age = draft.targeting.age;
   if (age?.mode === "ai" || age?.min === undefined || age.max === undefined || age.min > age.max) {

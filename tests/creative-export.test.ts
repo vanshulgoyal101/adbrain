@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ download: vi.fn(), file: vi.fn(), lookup: vi.fn(), business: vi.fn(), user: { id: "owner", email: "owner@shop.example" } as { id: string; email: string; email_confirmed_at?: string } }));
 vi.mock("@/lib/security/rate-limit", () => ({ rateLimitResponse: async () => null }));
 vi.mock("@/lib/imageGen", () => ({ downloadImage: mocks.download }));
+// Placeholder bytes stand in for pictures here; sample-watermark.test exports real ones as JPEG.
+vi.mock("@/lib/imageGen/encode", () => ({ downloadJpeg: async (bytes: Uint8Array) => bytes }));
 vi.mock("jszip", () => ({ default: class {
   file = mocks.file;
   generateAsync = async () => new ArrayBuffer(1);
@@ -38,7 +40,7 @@ describe("creative export resource budget", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("X-Images-Skipped")).toBe("3");
     expect(mocks.download).toHaveBeenCalledTimes(3);
-    expect(mocks.file.mock.calls.filter(([name]) => name.endsWith(".png"))).toHaveLength(2);
+    expect(mocks.file.mock.calls.filter(([name]) => name.endsWith(".jpg"))).toHaveLength(2);
     expect(mocks.file).toHaveBeenCalledWith("copy.txt", expect.stringContaining("exceeded export limits"));
     expect(mocks.download.mock.calls[0][1]).toBeInstanceOf(AbortSignal);
   });
@@ -67,12 +69,5 @@ describe("creative export resource budget", () => {
     mocks.business.mockResolvedValue({ data: { vertical: "dental clinic" }, error: null });
     await POST(request());
     expect(mocks.file).toHaveBeenCalledWith("copy.txt", expect.not.stringContaining("/for/"));
-  });
-
-  it("preserves WebP image extensions", async () => {
-    mocks.download.mockResolvedValue({ bytes: new Uint8Array([1]), contentType: "image/webp" });
-    const { POST } = await import("@/app/api/creatives/export/route");
-    expect((await POST(request())).status).toBe(200);
-    expect(mocks.file.mock.calls.filter(([name]) => name.endsWith(".webp"))).toHaveLength(5);
   });
 });
