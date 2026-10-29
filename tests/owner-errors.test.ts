@@ -113,6 +113,16 @@ const ENGLISH: Record<OwnerErrorKey, string> = {
   requestNotSent: "We couldn't send your request. Try again.",
   pickAccountAndPage: "Pick both an ad account and a page.",
   facebookStillConnected: "Facebook is still connected. Try again in a minute.",
+  // #2335: Day 7 answer, privacy requests and the lead-form picker.
+  chooseAnswer: "Choose one of the answers.",
+  questionNotOpen: "This question isn't open.",
+  answerNotSaved: "Your answer couldn't be saved. Try again.",
+  privacyUnavailable: "Privacy requests are temporarily unavailable.",
+  chooseExportOrDeletion: "Choose export or deletion.",
+  reloadPage: "Reload the page and try again.",
+  openRequestExists: "An open request of this type already exists.",
+  setUpBrandFirst: "Set up your Brand first, then connect Facebook in Settings.",
+  leadFormsUnavailable: "Could not load lead forms. Try again.",
 };
 // The messages that take values, rendered with these.
 const VALUES: Partial<Record<OwnerErrorKey, Record<string, string | number>>> = {
@@ -142,7 +152,7 @@ const RENDERED: Partial<Record<OwnerErrorKey, string>> = {
 };
 const keys = Object.keys(ENGLISH) as OwnerErrorKey[];
 
-describe("owner errors (#2305, #2312, #2324, #2327)", () => {
+describe("owner errors (#2305, #2312, #2324, #2327, #2335)", () => {
   it("has the same keys in English and Hindi", () => {
     expect(Object.keys(en.errors).sort()).toEqual([...keys].sort());
     expect(Object.keys(hi.errors).sort()).toEqual([...keys].sort());
