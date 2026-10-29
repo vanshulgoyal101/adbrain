@@ -18,8 +18,10 @@ const TEAM_META_IDS = new Set(["2398686420592052", "885223068001054", "228615714
 const TEAM_PHONE_HASHES = new Set(["499ae9b5c6bf1de4fc2b431874783cb29f3e0d4286874ad9d003697541cc3226"]);
 const teamPhone = (ten) => TEAM_PHONE_HASHES.has(createHash("sha256").update(ten).digest("hex"));
 
-// Fake ids the team uses on purpose: 9000…/1234…/0000… runs and repeated digits.
-const fakeNumber = (digits) => /^(9000|1234|0000)/.test(digits) || /^(\d)\1+$/.test(digits) || digits === "9876543210" || TEAM_META_IDS.has(digits);
+// Fake ids the team uses on purpose: 9000…/1234…/0000… runs, repeated digits and the documented examples
+// (9876544842 is chat-number.ts's printed-number example, quoted in reviews).
+const FAKE_PHONES = new Set(["9876543210", "9876544842"]);
+const fakeNumber = (digits) => /^(9000|1234|0000)/.test(digits) || /^(\d)\1+$/.test(digits) || FAKE_PHONES.has(digits) || TEAM_META_IDS.has(digits);
 
 /** GitHub's own ids (comment, review and run numbers) live in its URLs; drop URLs before matching digits. */
 const withoutUrls = (text) => text.replace(/https?:\/\/\S+/g, " ").replace(/\b(issuecomment|pullrequestreview|discussion_r)-\d+/g, " ")
