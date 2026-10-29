@@ -300,10 +300,10 @@ export function RecentActivity({ audit: all, locale = "en" }: { audit: AuditLog[
         {audit.map((event) => (
           <li key={event.id} className="flex flex-wrap justify-between gap-2 py-3 text-sm">
             <span className="text-slate-600">
-              {describeAuditEvent(event.action, event.reason)}
+              {describeAuditEvent(event.action, event.reason, locale)}
               {event.authority !== "server" && <span className="ml-2 text-xs text-slate-500">Unverified legacy event</span>}
             </span>
-            <time dateTime={event.created_at} className="text-xs text-slate-500">{formatDate(event.created_at)}</time>
+            <time dateTime={event.created_at} className="text-xs text-slate-500">{formatDate(event.created_at, undefined, locale)}</time>
           </li>
         ))}
       </ul>

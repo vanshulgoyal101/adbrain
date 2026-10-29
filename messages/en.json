@@ -229,5 +229,16 @@
   "creative": {
     "yourPhoto": "Your photo",
     "aiPicture": "AI picture"
+  },
+  "shell": {
+    "home": "Home",
+    "create": "Create ads",
+    "review": "Review",
+    "campaigns": "Campaigns",
+    "enquiries": "Enquiries",
+    "business": "Your business",
+    "assets": "Assets",
+    "settings": "Settings",
+    "getStarted": "Get started"
   }
 }

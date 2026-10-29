@@ -5,7 +5,9 @@ import { describe, expect, it, vi } from "vitest";
 import en from "../messages/en.json";
 import hi from "../messages/hi.json";
 import { LOCALE_COOKIE, toLocale } from "@/i18n/locale";
-import { WorkspaceHome } from "@/components/workspace-home";
+import { RecentActivity, WorkspaceHome } from "@/components/workspace-home";
+import { describeAuditEvent } from "@/lib/audit-labels";
+import { formatDate } from "@/lib/format";
 import { buildWorkQueue } from "@/lib/work-queue";
 import type { Business, Campaign, Creative } from "@/lib/types";
 
@@ -96,5 +98,35 @@ describe("work queue in Hindi", () => {
   it("keeps the English words unchanged by default", () => {
     const [one] = buildWorkQueue({ ...base, creatives: [draft, { ...draft, id: "e" }] });
     expect(one.title).toBe("2 ads need review");
+  });
+});
+
+// #1877: Recent activity in Hindi: the CPO's labels, no stored English note, and Hindi day words with Latin digits.
+describe("Hindi Recent activity (#1877)", () => {
+  const now = new Date("2026-10-29T06:00:00Z");
+  it("names each action in Hindi and drops the English note", () => {
+    expect(describeAuditEvent("creatives.generate", "Generated 3 creatives", "hi")).toBe("नए विज्ञापन बने");
+    expect(describeAuditEvent("creative.approve", null, "hi")).toBe("विज्ञापन मंज़ूर हुआ");
+    expect(describeAuditEvent("creatives.export", null, "hi")).toBe("विज्ञापन डाउनलोड किए गए");
+    expect(describeAuditEvent("something.new", null, "hi")).toBe("गतिविधि");
+    expect(describeAuditEvent("creatives.generate", "Generated 3 creatives")).toBe("New ads made — Generated 3 creatives");
+  });
+
+  it("says today and yesterday in Hindi, with Latin digits", () => {
+    expect(formatDate("2026-10-28T18:20:00Z", now, "hi")).toBe("कल, 11:50 pm");
+    expect(formatDate("2026-10-29T04:05:00Z", now, "hi")).toBe("आज, 9:35 am");
+    expect(formatDate("2026-10-20T04:05:00Z", now, "hi")).toMatch(/^20 \S+, 9:35 am$/);
+    expect(formatDate("2026-10-28T18:20:00Z", now)).toBe("yesterday, 11:50 pm");
+  });
+
+  it("renders the Hindi lines on Home", () => {
+    vi.useFakeTimers({ now, toFake: ["Date"] });
+    try {
+      render(<RecentActivity locale="hi" audit={[{ id: "1", action: "creative.approve", reason: "Ad approved", authority: "server", created_at: "2026-10-28T18:20:00Z" } as Parameters<typeof RecentActivity>[0]["audit"][number]]} />);
+      expect(screen.getByText("विज्ञापन मंज़ूर हुआ")).toBeInTheDocument();
+      expect(screen.getByText("कल, 11:50 pm")).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
