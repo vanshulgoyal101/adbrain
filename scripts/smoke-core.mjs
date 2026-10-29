@@ -8,15 +8,31 @@ const envPath = "/Users/vanshulgoyal/Development/copilot/adbrain/.env.smoke";
 
 const origin = "https://adbrain.vanshul.com";
 const modes = new Set(process.argv.slice(2));
-const mutating = ["--create", "--campaign", "--picture"];
+const mutating = ["--create", "--campaign", "--picture", "--prepare"];
 if ([...modes].some((mode) => ![...mutating, "--help"].includes(mode))) {
-  throw new Error("Supported modes: --create, --campaign, --picture, --help.");
+  throw new Error("Supported modes: --create, --campaign, --picture, --prepare, --help.");
 }
 if (modes.has("--help")) {
-  console.log("npm run smoke:core [-- --create | -- --campaign | -- --picture]");
+  console.log("npm run smoke:core [-- --create | -- --campaign | -- --picture | -- --prepare]");
   process.exit(0);
 }
 assert.ok(mutating.filter((mode) => modes.has(mode)).length <= 1, "Run only one mutating mode at a time.");
+
+/** Campaigns → open setup → the first approved ad (not yet clicked). A click before hydration is lost, so reopen until one shows. */
+async function approvedAd(page) {
+  await page.goto(`${origin}/campaigns`);
+  const toggle = page.locator('button[aria-controls="campaign-composer"]');
+  const creative = page.locator('#campaign-composer button[aria-pressed="false"]').first();
+  for (let attempt = 0; attempt < 6 && !await creative.isVisible(); attempt++) {
+    if (await toggle.getAttribute("aria-expanded") !== "true") await toggle.click();
+    await creative.waitFor({ state: "visible", timeout: 5_000 }).catch(() => undefined);
+  }
+  if (!await creative.isVisible()) {
+    const ads = await page.locator("#campaign-composer button[aria-pressed]").count();
+    throw new Error(`No selectable approved ad (setup ${await toggle.getAttribute("aria-expanded") === "true" ? "open" : "closed"}, ${ads} ads shown)`);
+  }
+  return creative;
+}
 
 async function readCreateResponse(response) {
   const contentType = await response.headerValue("content-type");
@@ -148,6 +164,7 @@ try {
   let generationCount = 0;
   let generationRequest = null;
   let campaignSetup = false;
+  let goLiveSetup = false;
   let campaignReviewed = false;
   let campaignCreateCount = 0;
   let campaignSyncAllowed = false;
@@ -161,6 +178,7 @@ try {
   let preflightCount = 0;
   let savedDraft = null;
   let draftDeleteCount = 0;
+  let removingDraft = null;
   let pictureAllowed = null;
   page.on("pageerror", (error) => errors.push(error.name === "EvalError" ? "CSP eval error" : `page error (${error.name})`));
   page.on("console", (message) => {
@@ -207,7 +225,7 @@ try {
       pictureAllowed = null;
       return route.continue();
     }
-    if (campaignSetup && ["POST", "PUT"].includes(request.method()) && url.origin === origin) {
+    if ((campaignSetup || goLiveSetup) && ["POST", "PUT"].includes(request.method()) && url.origin === origin) {
       // #497: choosing an ad starts a background plan, and Prepare may plan again. Both are read-only.
       if (url.pathname === "/api/campaigns/plan" && planCount++ < 2) return route.continue();
       // #1151: Prepare updates (PUT) a saved draft with the same ads instead of adding one; either save is the
@@ -222,8 +240,8 @@ try {
       }
       if (url.pathname === "/api/campaigns/preflight" && preflightCount++ === 0) return route.continue();
     }
-    if (!modes.has("--campaign") && savedDraft && request.method() === "DELETE" && url.origin === origin
-      && url.pathname === `/api/campaign-drafts/${savedDraft.id}` && draftDeleteCount++ === 0) return route.continue();
+    if (!modes.has("--campaign") && removingDraft && request.method() === "DELETE" && url.origin === origin
+      && url.pathname === `/api/campaign-drafts/${removingDraft}` && draftDeleteCount++ === 0) return route.continue();
     if (modes.has("--campaign") && url.origin === origin) {
       if (campaignReviewed && request.method() === "POST" && url.pathname === "/api/campaigns/create" && campaignCreateCount++ === 0) return route.continue();
       if (campaignId && url.pathname === `/api/campaigns/${campaignId}`) {
@@ -278,26 +296,33 @@ try {
       process.exitCode = 1;
     }
   }
-  // --picture skips Prepare: its background plan can fall back to paid text (budget routing), and that run spends $0.
-  if (!modes.has("--campaign") && !modes.has("--picture")) {
+  // The saved draft of Prepare or Go live, as the owner (the route allows one DELETE of it).
+  async function removeDraft(label, what) {
+    if (!savedDraft) return;
+    const draft = savedDraft;
+    savedDraft = null;
+    removingDraft = draft.id;
+    draftDeleteCount = 0;
+    const removed = await page.evaluate(async ({ id, version }) => {
+      const result = await fetch(`/api/campaign-drafts/${id}?version=${version}`, { method: "DELETE" });
+      return result.status;
+    }, draft).catch(() => 0);
+    if (removed === 200) console.log(`PASS Remove ${label}`);
+    else {
+      console.log(`FAIL Remove ${label}: HTTP ${removed}; remove ${what} from Saved drafts`);
+      process.exitCode = 1;
+    }
+  }
+  const viewsFailed = Boolean(process.exitCode);
+  // --picture and --prepare skip the preflight Prepare: neither reads Meta's review.
+  if (!modes.has("--campaign") && !modes.has("--picture") && !modes.has("--prepare")) {
     // Every deploy: Prepare one paused-campaign review, never send it, then delete its draft.
     const name = `QA preflight smoke ${crypto.randomUUID().slice(0, 8)}`;
     try {
       assert.equal(process.exitCode ?? 0, 0, "Read-only views failed; Prepare was not started");
       errors.length = 0;
-      await page.goto(`${origin}/campaigns`);
-      // A click that lands before hydration is lost, so reopen until an approved ad is offered.
-      const toggle = page.locator('button[aria-controls="campaign-composer"]');
-      const creative = page.locator('#campaign-composer button[aria-pressed="false"]').first();
-      for (let attempt = 0; attempt < 6 && !await creative.isVisible(); attempt++) {
-        if (await toggle.getAttribute("aria-expanded") !== "true") await toggle.click();
-        await creative.waitFor({ state: "visible", timeout: 5_000 }).catch(() => undefined);
-      }
-      if (!await creative.isVisible()) {
-        const ads = await page.locator("#campaign-composer button[aria-pressed]").count();
-        throw new Error(`No selectable approved ad (setup ${await toggle.getAttribute("aria-expanded") === "true" ? "open" : "closed"}, ${ads} ads shown)`);
-      }
       // Choosing the ad starts #497's background plan, so open the read-only setup allowances first (#531).
+      const creative = await approvedAd(page);
       campaignSetup = true;
       await creative.click();
       await page.getByRole("textbox", { name: "Campaign name", exact: true }).fill(name);
@@ -337,17 +362,47 @@ try {
       process.exitCode = 1;
     } finally {
       campaignSetup = false;
-      if (savedDraft) {
-        const removed = await page.evaluate(async ({ id, version }) => {
-          const result = await fetch(`/api/campaign-drafts/${id}?version=${version}`, { method: "DELETE" });
-          return result.status;
-        }, savedDraft).catch(() => 0);
-        if (removed === 200) console.log("PASS Remove preflight draft");
-        else {
-          console.log(`FAIL Remove preflight draft: HTTP ${removed}; remove "${name}" from Saved drafts`);
-          process.exitCode = 1;
-        }
-      }
+      await removeDraft("preflight draft", `"${name}"`);
+    }
+
+    // #2260: the pilot kit's one-tap Go live (#1271) saves its own draft and reviews it; #2257 failed only there.
+    // Returning mode (`?again=1`) opens setup step 3 for an account that has had campaigns. Its plan, draft save
+    // and preflight are allowed; the create and the activation stay blocked, so nothing reaches Meta.
+    try {
+      assert.ok(!viewsFailed, "Read-only views failed; Go live was not started");
+      errors.length = 0;
+      await page.goto(`${origin}/campaigns?again=1`);
+      const tap = page.getByRole("button", { name: /^Go live · ₹300 a day$/ });
+      await page.getByRole("group", { name: "Daily budget" }).getByRole("button", { name: "₹300 a day" }).click();
+      await page.getByRole("group", { name: "How many days" }).getByRole("button", { name: "2 days" }).click();
+      await tap.waitFor({ state: "visible" });
+      planCount = 0;
+      draftCount = 0;
+      preflightCount = 0;
+      savedDraft = null;
+      goLiveSetup = true;
+      const preflight = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/campaigns/preflight" && response.request().method() === "POST", { timeout: 90_000 });
+      preflight.catch(() => undefined);
+      await tap.click();
+      const response = await preflight.catch(async (error) => {
+        const alert = page.getByRole("alert").first();
+        const message = await alert.isVisible() ? (await alert.innerText()).trim() : "";
+        throw message ? new Error(`Go live stopped before its review: ${message}`) : error;
+      });
+      goLiveSetup = false;
+      assert.equal(response.status(), 200, `Preflight returned HTTP ${response.status()}`);
+      const review = (await response.json().catch(() => null))?.data;
+      const blockers = review?.blockers ?? [];
+      const unexpected = blockers.filter((blocker) => blocker.reason !== "REVIEW_NO_WEBSITE" && !blocker.message?.startsWith("Add your business website"));
+      assert.equal(unexpected.length, 0, `Preflight blocked: ${unexpected.map((blocker) => blocker.reason ?? blocker.code).join(", ")}`);
+      assert.ok(blockers.length || review?.canCreatePaused === true, "Preflight can't create the campaign paused, with no blocker named");
+      console.log(`PASS Go live preflight (WhatsApp, ₹300 a day, 2 days; ${blockers.length ? "held only by the missing business website" : "ready to create paused"}; nothing sent to Meta)`);
+    } catch (error) {
+      console.log(`FAIL Go live preflight: ${error instanceof Error ? error.message.split("\n")[0].slice(0, 180) : "Unknown error"}; nothing sent to Meta`);
+      process.exitCode = 1;
+    } finally {
+      goLiveSetup = false;
+      await removeDraft("Go live draft", "the newest Go live draft");
     }
   }
   if (modes.has("--create")) {
@@ -404,7 +459,7 @@ try {
       // #904 made "Review ads" a link, not a button (QA on #1227).
       await page.getByRole("link", { name: "Review ads", exact: true }).waitFor({ state: "visible" });
       assert.equal(errors.length, 0, errors[0] ?? "Browser error after Create");
-      console.log(`PASS Create: ${savedCount}/3 saved (free pictures; one run of paid text; record in #88)`);
+      console.log(`PASS Create: ${savedCount}/3 saved (free pictures, free text; $0)`);
       if (process.env.SMOKE_CREATE_CLEANUP === "1") {
         try {
           const removed = await removeCreateRun(auth, generationRequest);
@@ -418,6 +473,43 @@ try {
       if (generationCount && savedCount === null) savedCount = await recoverSavedCount();
       console.log(`FAIL Create${generationCount ? `: ${savedCount ?? "unconfirmed"}/3 saved` : ""}: ${error instanceof Error ? error.message.split("\n")[0].slice(0, 180) : "Unknown error"}; ${generationCount ? "check saved work before any retry" : "no paid request sent"}`);
       process.exitCode = 1;
+    }
+  }
+  if (modes.has("--prepare")) {
+    // #2230: the scheduled Prepare check. Choosing an ad starts one audience plan; the smoke login's text is free
+    // only (spend-policy `freeTextOnly`), so the plan comes from a free model or fails. Nothing is saved or sent to Meta.
+    const since = new Date(Date.now() - 30_000).toISOString();
+    try {
+      assert.equal(process.exitCode ?? 0, 0, "Read-only views failed; no plan was requested");
+      assert.ok(auth?.user?.id, "Signed-in identity unknown; no plan was requested");
+      errors.length = 0;
+      const creative = await approvedAd(page);
+      const plan = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/campaigns/plan" && response.request().method() === "POST", { timeout: 90_000 });
+      plan.catch(() => undefined);
+      campaignSetup = true;
+      await creative.click();
+      const response = await plan;
+      campaignSetup = false;
+      const businessId = response.request().postDataJSON()?.audienceDraft?.businessId;
+      const reply = await response.json().catch(() => null);
+      assert.equal(response.status(), 200, `Plan returned HTTP ${response.status()}${reply?.code ? ` (${reply.code})` : ""}`);
+      assert.ok(reply?.ready && reply.targeting, "Plan returned no targeting");
+      assert.ok(UUID.test(businessId ?? ""), "Plan request named no business");
+      const receipts = await supabaseFetch(auth, `/rest/v1/llm_usage_events?business_id=eq.${businessId}&route=eq.campaigns.plan`
+        + `&created_at=gte.${encodeURIComponent(since)}&select=provider,model,status,error_code,estimated_cost_usd&order=created_at.asc`);
+      assert.ok(receipts.ok, `AI receipts not read (HTTP ${receipts.status})`);
+      const rows = await receipts.json();
+      const quoted = rows.map((row) => `${row.provider} ${row.status}${row.error_code ? ` ${row.error_code}` : ""} $${row.estimated_cost_usd}`).join("; ");
+      const answered = rows.find((row) => row.status === "success");
+      assert.ok(answered, `No free model answered, so the plan fell back to default targeting (${quoted || "no AI calls recorded"})`);
+      assert.ok(rows.every((row) => Number(row.estimated_cost_usd) === 0), `An AI call cost money: ${quoted}`);
+      assert.equal(errors.length, 0, errors[0] ?? "Browser error during the plan");
+      console.log(`PASS Prepare plan: ${answered.provider}/${answered.model}${reply.fallback ? " (default targeting kept)" : ""}; receipts: ${quoted}; nothing saved or sent to Meta`);
+    } catch (error) {
+      console.log(`FAIL Prepare plan: ${error instanceof Error ? error.message.split("\n")[0].slice(0, 300) : "Unknown error"}; nothing sent to Meta`);
+      process.exitCode = 1;
+    } finally {
+      campaignSetup = false;
     }
   }
   if (modes.has("--picture")) {
@@ -435,7 +527,7 @@ try {
       const recent = await supabaseFetch(auth, "/rest/v1/creatives?select=id,business_id,variant_group,image_url,generation&image_url=not.is.null&order=created_at.desc&limit=10");
       assert.ok(recent.ok, `ads not read (HTTP ${recent.status})`);
       const candidates = (await recent.json()).filter((ad) => UUID.test(ad.id) && !live.has(ad.id));
-      assert.ok(candidates.length, "No ad to change; run --create once by hand (paid text, record in #88)");
+      assert.ok(candidates.length, "No ad to change; run --create once by hand (free text and pictures)");
       let result = null;
       const busy = [];
       for (const ad of candidates) {

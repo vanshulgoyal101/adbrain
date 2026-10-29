@@ -62,7 +62,8 @@ export function snoozedUntil(body) {
 }
 
 export function waitingOnMe(lastBody, m, labels = [], now = Date.now()) {
-  if (labels.some((l) => PARKED.has(l))) return false;
+  // `later` is frozen (board, #2238): a reply on it doesn't wake its owner.
+  if (labels.some((l) => PARKED.has(l) || l === "later")) return false;
   if (lastBody == null) return true;
   // Your own last word without a handoff (no "→ Role") means the item is still yours to continue;
   // idle workers otherwise slept with their queue unfinished (Oct 25). A scheduled check

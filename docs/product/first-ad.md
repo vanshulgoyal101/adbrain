@@ -27,7 +27,10 @@ you sign in yourself, on your own phone, within 30 minutes.
   Facebook or made a campaign for you, so you connect your own Page and ad account.
   You pay Meta for the ads yourself, on your own card or UPI.
 - **If it fails:** a team email gets "Sign in with the owner's own email, not a
-  team account." After 30 minutes the hand-over ends; ask them to start it again.
+  team account." If your email already has an AdBrain business (say you signed
+  up before the visit), you see "This email already has an AdBrain business; use
+  another email or ask AdBrain". After 30 minutes the hand-over ends; ask them to
+  start it again.
 
 ## Sign in
 
@@ -105,9 +108,10 @@ with "Continue"; once your ads are made it shows "Your 3 ads are ready" with
   selected business", then "Continue to review". The row now says "Connected"
   and the button becomes "Go live · ₹300 a day". Tap it.
 - **Takes:** about 10 minutes the first time, mostly connecting Facebook. After
-  you tap Go live you see "Checking your campaign…", "Creating it on Meta,
-  paused…", then "Turning it on…". AdBrain creates the campaign paused first and
-  only switches it on once everything checks out.
+  you tap Go live you see "Checking your campaign…" (AdBrain picks the age range
+  and audience for your ads, as **Recommend audience** does in Campaigns, up to
+  about a minute), "Creating it on Meta, paused…", then "Turning it on…". AdBrain
+  creates the campaign paused first and only switches it on once everything checks out.
 - **If it fails:** nothing is spent when something fails. What the screen says:
   - Meta connect: "Meta has not finished yet. Complete the Meta window, then check
     again. Your draft is saved." Finish in the Meta window, then tap "Check again".
@@ -136,7 +140,7 @@ day." Tap "Open your campaign" to see it.
   day."
 - Customers who tap your ad message you straight on your WhatsApp. Reply there.
 - **Home** shows your results: "Chats" (or "Enquiries"), "Spent" and "Per chat".
-- **Enquiries** (tap "See enquiries" on Home): form enquiries arrive on their own;
+- **Enquiries** (open the menu, then "Enquiries"; or "See enquiries" on Home): form enquiries arrive on their own;
   WhatsApp chats show there once you add them. On each one tap "WhatsApp them" for a ready-written first reply, or "Call". Home
   shows how quickly you usually contact people, so reply fast.
 - Did someone buy? Tap "Mark customers" so you can see what a customer costs.

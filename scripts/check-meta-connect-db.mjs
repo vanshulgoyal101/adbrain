@@ -48,6 +48,7 @@ const hardeningMigration = await readFile(join(root, "db/migrations/20261026_leg
 const reauthMigration = await readFile(join(root, "db/migrations/20261026_meta_connection_reauth.sql"), "utf8");
 const leadCampaignLinkMigration = await readFile(join(root, "db/migrations/20261026_lead_campaign_link.sql"), "utf8");
 const leadEraseMigration = await readFile(join(root, "db/migrations/20261029_lead_erase.sql"), "utf8");
+const subjectPurgeMigration = await readFile(join(root, "db/migrations/20261029_meta_subject_purge.sql"), "utf8");
 const leadSharedPageMigration = await readFile(join(root, "db/migrations/20261028_lead_sync_shared_page.sql"), "utf8");
 const managedWhatsAppMigration = await readFile(join(root, "db/migrations/20261025_managed_whatsapp_page_link.sql"), "utf8");
 const productRollupMigration = await readFile(join(root, "db/migrations/20260928_product_event_rollups.sql"), "utf8");
@@ -1744,6 +1745,57 @@ async function verifyPlanPeriods(db, database) {
  *   public.business_transfer_mine() / business_transfer_decline(p_transfer_id) for the owner;
  *   public.business_transfer_status(p_business_id) for the rep (service role).
  */
+/** #1734: a Meta deletion request purges only that person's businesses; one reconnected by someone else keeps its data. */
+async function verifyMetaSubjectPurge(db, database) {
+  await check(`${database}: Meta subject purge deletes that person's Meta data, keeps manual enquiries and other people's (#1734)`, async () => {
+    const owner = randomUUID(), [a, b, c] = [randomUUID(), randomUUID(), randomUUID()];
+    const token = async (business, subject, revoked = false) => (await db.query(`insert into private.meta_tokens(business_id,authorized_by,subject_id,token_kind,ciphertext,nonce,auth_tag,key_id,revoked_at)
+      values ($1,$2,$3,'user','\\x01',$4,$5,'k1',$6) returning id`, [business, owner, subject, `\\x${"00".repeat(12)}`, `\\x${"00".repeat(16)}`, revoked ? new Date() : null])).rows[0].id;
+    const seed = async (business, tokenId) => {
+      await db.query("insert into public.meta_connections(business_id,generation,authorization_status,ad_account_id,page_id,token_id,meta_business_id,account_name,page_name,currency) values ($1,1,'connected','act_1','11',$2,'99','Shop ads','Shop page','INR')", [business, tokenId]);
+      const campaign = randomUUID();
+      await db.query("insert into public.campaigns(id,business_id,daily_budget) values ($1,$2,200)", [campaign, business]);
+      await db.query("insert into public.campaign_results(campaign_id,spend,impressions) values ($1,10,100)", [campaign]);
+      await db.query("insert into public.ad_results(business_id,campaign_id,meta_ad_id) values ($1,$2,'1')", [business, campaign]);
+      await db.query("insert into public.leads(business_id,source,meta_lead_id,full_name,field_data) values ($1,'meta_form','m1','Synced','{}'),($1,'whatsapp_manual',null,'Walk-in','{}')", [business]);
+    };
+    const attempt = (business, tokenId, assets) => db.query(`insert into private.meta_connection_attempts(business_id,user_id,token_id,state_hash,browser_binding_hash,status,intent,discovered_assets,expires_at)
+      values ($1,$2,$3,$4,'bind','cancelled','{}',$5,now())`, [business, owner, tokenId, randomUUID(), assets]);
+    const count = async (sql, business) => Number((await db.query(sql, [business])).rows[0].n);
+    const leads = (business) => count("select count(*) n from public.leads where business_id=$1 and meta_lead_id is not null", business);
+    await db.query("begin");
+    try {
+      await db.query("insert into auth.users(id) values ($1)", [owner]);
+      await db.query("insert into public.businesses(id,owner_id,name) values ($1,$4,'Purge A'),($2,$4,'Purge B'),($3,$4,'Purge C')", [a, b, c, owner]);
+      // One person (fb-gone) on A and, earlier, on B; B has since reconnected with fb-other; C is only fb-other.
+      const goneA = await token(a, "fb-gone");
+      await token(b, "fb-gone", true);
+      const otherB = await token(b, "fb-other"), otherC = await token(c, "fb-other");
+      await seed(a, goneA); await seed(b, otherB); await seed(c, otherC);
+      await attempt(a, goneA, '{"pages":[]}'); await attempt(a, null, '{"pages":[]}'); await attempt(a, null, null);
+      await assert.rejects(db.query("savepoint s; set local role authenticated; select public.meta_subject_purge('fb-gone')"), { code: "42501" });
+      await db.query("rollback to savepoint s");
+      const result = (await db.query("select public.meta_subject_purge('fb-gone') r")).rows[0].r;
+      assert.deepEqual(result, { businesses: 2, tokens: 2, attempts: 2, connections: 1, leads: 1, campaign_results: 1, ad_results: 1, kept_businesses: [b] });
+      const connection = (await db.query("select * from public.meta_connections where business_id=$1", [a])).rows[0];
+      assert.deepEqual([connection.token_id, connection.account_name, connection.page_name, connection.meta_business_id, connection.currency, connection.authorization_status], [null, null, null, null, null, "revoked"]);
+      assert.equal(await leads(a), 0);
+      assert.equal(await count("select count(*) n from public.leads where business_id=$1 and meta_lead_id is null", a), 1);
+      assert.equal(await count("select count(*) n from public.campaign_results r join public.campaigns c on c.id=r.campaign_id where c.business_id=$1", a), 0);
+      assert.equal(await count("select count(*) n from private.meta_connection_attempts where business_id=$1", a), 1);
+      for (const kept of [b, c]) {
+        assert.equal(await leads(kept), 1);
+        assert.equal(await count("select count(*) n from public.ad_results where business_id=$1", kept), 1);
+        assert.equal((await db.query("select account_name, authorization_status from public.meta_connections where business_id=$1", [kept])).rows[0].authorization_status, "connected");
+      }
+      assert.equal(await count("select count(*) n from private.meta_tokens where subject_id='fb-gone' or business_id=$1", a), 0);
+      assert.equal(await count("select count(*) n from private.meta_tokens where subject_id='fb-other' and revoked_at is null and business_id <> $1", a), 2);
+      assert.deepEqual((await db.query("select public.meta_subject_purge('fb-gone') r")).rows[0].r, { businesses: 0, tokens: 0, attempts: 0, connections: 0, leads: 0, campaign_results: 0, ad_results: 0, kept_businesses: [] });
+      await assert.rejects(db.query("select public.meta_subject_purge(' ')"), { code: "22023" });
+    } finally { await db.query("rollback"); }
+  });
+}
+
 async function verifyBusinessTransfer(db, database) {
   const files = (await readdir(join(root, "db/migrations"))).filter((file) => /business_transfer/.test(file)).sort();
   const override = process.env.META_TEST_TRANSFER_SQL;
@@ -1928,6 +1980,64 @@ async function verifyBusinessTransfer(db, database) {
     assert.equal((await status(asked.business)).state, "declined");
     await assert.rejects(claim(asked.owner, asked.ownerEmail, askedId));
     assert.equal(await ownerOf(asked.business), asked.staff);
+  });
+
+  const costFiles = (await readdir(join(root, "db/migrations"))).filter((file) => /monthly_ai_cost/.test(file)).sort();
+  const hasCost = (await db.query("select 1 from information_schema.columns where table_schema='public' and table_name='llm_usage_events' and column_name='estimated_cost_usd'")).rowCount;
+  if (!costFiles.length || !hasCost) { console.log(`SKIP ${database}: monthly AI cost after a hand-over (#1997) needs monthly_ai_cost_usd`); return; }
+  for (const file of costFiles) { const sql = await readFile(join(root, "db/migrations", file), "utf8"); await db.query(sql); await db.query(sql); }
+  await check(`${database}: business transfer: the owner's monthly AI cost starts at the hand-over (#1997)`, async () => {
+    const usage = (business, user, usd, at) => db.query("insert into public.llm_usage_events(business_id,user_id,route,provider,model,total_tokens,estimated_cost_usd,created_at) values ($1,$2,'creatives.generate','fixture','fixture',10,$3,$4)", [business, user, usd, at]);
+    const cost = (user, business) => session("authenticated", { sub: user, email: "x", role: "authenticated" },
+      async (s) => Number((await s.query("select public.monthly_ai_cost_usd($1, now() - interval '1 day') as usd", [business])).rows[0].usd));
+    const moved = await seed();
+    await usage(moved.business, moved.staff, 2.5, new Date(Date.now() - 3_600_000));
+    assert.equal(await cost(moved.staff, moved.business), 2.5, "before the hand-over the rep's paid pictures count");
+    assert.equal(await claim(moved.owner, moved.ownerEmail, await start(moved.business, moved.staff, moved.ownerEmail)), moved.business);
+    const { transferred_at: at } = (await db.query("select transferred_at from public.businesses where id=$1", [moved.business])).rows[0];
+    await usage(moved.business, moved.owner, 0.75, new Date(at.getTime() + 60_000));
+    assert.equal(await cost(moved.owner, moved.business), 0.75, "only the owner's own spend counts after the hand-over");
+    const kept = await seed();
+    await usage(kept.business, kept.staff, 1.25, new Date(Date.now() - 3_600_000));
+    assert.equal(await cost(kept.staff, kept.business), 1.25, "a business never handed over counts from p_since");
+  });
+}
+
+/** #1838: the crons remember Meta's throttling per account and app-wide; never shortened, at most a day, service role only. */
+async function verifyMetaThrottle(db, database) {
+  const sql = await readFile(join(root, "db/migrations/20261029_meta_throttle.sql"), "utf8");
+  await db.query(sql); await db.query(sql);
+  const as = async (role, run) => {
+    const s = client(database); await s.connect();
+    try { await s.query("begin"); await s.query(`set local role ${role}`); const result = await run(s); await s.query("commit"); return result; }
+    catch (error) { await s.query("rollback").catch(() => {}); throw error; } finally { await s.end(); }
+  };
+  const record = (business, scope, minutes) => as("service_role", (s) => s.query(
+    "select public.meta_throttle_record($1,$2,now() + make_interval(mins => $3))", [business, scope, minutes]));
+  await check(`${database}: Meta throttle: an account wait is kept, never shortened, at most a day (#1838)`, async () => {
+    const owner = randomUUID(), business = randomUUID();
+    await db.query("insert into auth.users(id) values ($1)", [owner]);
+    await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Throttled')", [business, owner]);
+    await db.query("insert into public.meta_connections(business_id,authorization_status) values ($1,'connected')", [business]);
+    const until = async () => (await db.query("select extract(epoch from throttled_until - now())/60 as mins, throttled_scope from public.meta_connections where business_id=$1", [business])).rows[0];
+    await record(business, "account", 37);
+    let row = await until();
+    assert.ok(row.mins > 36 && row.mins <= 37, String(row.mins)); assert.equal(row.throttled_scope, "account");
+    await record(business, "account", 5);
+    assert.ok((await until()).mins > 36, "a smaller later estimate doesn't shorten the wait");
+    await record(business, "page", 60 * 48);
+    row = await until();
+    assert.ok(row.mins <= 24 * 60 + 1, "capped at a day"); assert.equal(row.throttled_scope, "page");
+    await assert.rejects(record(business, "everyone", 5));
+  });
+  await check(`${database}: Meta throttle: the app-wide limit is one row; only the service role touches it (#1838)`, async () => {
+    await record(randomUUID(), "app", 15);
+    const app = await as("service_role", async (s) => (await s.query("select public.meta_app_throttled_until() as until")).rows[0].until);
+    assert.ok(app && new Date(app).getTime() > Date.now(), "app throttle active");
+    await assert.rejects(as("authenticated", (s) => s.query("select public.meta_throttle_record($1,'app',now())", [randomUUID()])), { code: "42501" });
+    await assert.rejects(as("authenticated", (s) => s.query("select public.meta_app_throttled_until()")), { code: "42501" });
+    await assert.rejects(as("authenticated", (s) => s.query("select 1 from private.channel_throttle")), { code: "42501" });
+    await db.query("delete from private.channel_throttle");
   });
 }
 
@@ -3048,9 +3158,13 @@ async function verify(database, source, integrityMigration, customerOnly = false
         await verifyLeadCampaignLink(db,database);
         await verifySharedPageLeads(db,database);
         await verifyLeadErase(db,database);
+        await db.query(subjectPurgeMigration);
+        await db.query(subjectPurgeMigration);
+        await verifyMetaSubjectPurge(db,database);
       }
       if (database === "customer_fresh") await verifyAdvisorHardening(db,database);
       await verifyBusinessTransfer(db,database);
+      await verifyMetaThrottle(db,database);
       return;
     }
     if (integrityMigration) {

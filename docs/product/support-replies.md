@@ -30,8 +30,9 @@ exact words tell you which section below fits. The full walk is in
 - **Screen shows:** "Making the pictures…" for a long time ("Usually about a
   minute"). In Create you may see "This picture couldn't be made: AdBrain's paid
   image credit has run out and the free image model is busy. Try again in a few
-  minutes." or "Your product photo needs our paid pictures, which are paused right
-  now. Try again in 15 minutes." When redrawing one picture: "Couldn't redraw the
+  minutes." or "This ad needs our paid pictures to draw your product, and they're paused
+  right now. Add a photo of your product in Brand and AdBrain uses it in the ad as it
+  is." When redrawing one picture: "Couldn't redraw the
   picture. Try again."
 - **Cause:** pictures come from free picture services that are sometimes busy.
 - **Reply:**
