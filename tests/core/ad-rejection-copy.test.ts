@@ -3,6 +3,7 @@ import recorded from "./fixtures/meta/ad-review.json";
 import segments from "./fixtures/meta/ad-review-segments.json";
 import { adReviewState, MetaClient } from "@/lib/meta/client";
 import { rejectedAdsSentence, rejectionCopy } from "@/lib/meta/rejection-copy";
+import hi from "../../messages/hi.json";
 
 // #1305: Meta's real review answer for Solaride's one disapproved ad (Free Survey CHD-PKL, Sep 2026), recorded
 // read-only by scripts/record-meta-ad-review.ts on Oct 28 and replayed through MetaClient.readAdReview.
@@ -122,5 +123,23 @@ describe("core: rejections in the segment's own words (#1645)", () => {
       const feedback = [{ policy, message: "Meta's words." }];
       expect(rejectionCopy(feedback, { vertical: SOLAR }), policy).toEqual(rejectionCopy(feedback));
     }
+  });
+});
+
+describe("core: the rejected-ads sentence in Hindi (#1438)", () => {
+  const words = { locale: "hi" as const, messages: hi.verdict };
+  const copy = rejectionCopy([{ policy: "Adult Content", message: "Suggestive." }, { policy: "Lead Ads", message: "Generic." }], { words })!;
+
+  it("counts with the verb agreeing, and keeps the row, actions and Meta's message as matched in English", () => {
+    expect(copy).toMatchObject({ row: "adult", actions: ["change_picture"], message: "Suggestive.", more: 1 });
+    expect(rejectedAdsSentence(copy, { rejected: 2, total: 5, spent: 0, running: true, words }))
+      .toBe("Meta ने 2 विज्ञापन मंज़ूर नहीं किए। Meta को लगता है तस्वीर में शरीर ज़्यादा दिख रहा है। (+1 और) आपके बाकी 3 विज्ञापन चल रहे हैं।");
+    expect(rejectedAdsSentence(copy, { rejected: 3, spent: 0, words })).toMatch(/^Meta ने आपके 3 विज्ञापन मंज़ूर नहीं किए।.*कोई पैसा खर्च नहीं हुआ।$/);
+  });
+
+  it("an interiors property reading gets its own Hindi and the edit fix", () => {
+    const interiors = rejectionCopy([{ policy: "Housing", message: "Housing ads need a special ad category." }], { vertical: "Interior design", words })!;
+    expect(interiors.sentence).toBe("Meta ने इसे प्रॉपर्टी का विज्ञापन समझा। किचन और डिज़ाइन की बात करें, फ़्लैट, प्रोजेक्ट या प्रति स्क्वायर फ़ुट कीमत की नहीं।");
+    expect(interiors.actions).toEqual(["edit_words"]);
   });
 });

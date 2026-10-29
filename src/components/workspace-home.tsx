@@ -49,6 +49,8 @@ export interface WorkspaceHomeProps {
   weekSummary?: ReactNode;
   /** #1650: the day-7 'would you pay ₹999 a month?' card, when it's due. */
   pilotQuestion?: ReactNode;
+  /** #2036: the weekly results card for WhatsApp Status, when it's offered. */
+  resultsCard?: ReactNode;
   now?: number;
   /** #1438: the owner's app language (Settings); English by default. */
   locale?: AppLocale;
@@ -76,6 +78,7 @@ export function WorkspaceHome({
   rejectedAds,
   weekSummary,
   pilotQuestion,
+  resultsCard,
   brandMeter,
   now,
   locale = "en",
@@ -127,6 +130,7 @@ export function WorkspaceHome({
       )}
       {adReview?.kind === "rejected" && rejectedAds}
       {weekSummary}
+      {resultsCard}
       {pilotQuestion}
 
       {stale.length > 0 && <StaleResultsRefresher campaignIds={stale} />}

@@ -95,9 +95,64 @@ describe("core: free pictures come from Cloudflare FLUX-1-schnell first (#1476)"
   });
 
   it.each([
-    ["is busy (429)", () => new Response("Too Many Requests", { status: 429 }), "IMAGE_FREE_BUSY"],
-    ["has used its daily free allowance (4006)", () => Response.json(cloudflare.dailyLimit.body, { status: cloudflare.dailyLimit.status }), "IMAGE_FREE_BUSY"],
-    ["is down (502)", () => new Response("Bad gateway", { status: 502 }), "IMAGE_FREE_BUSY"],
+    ["is busy (429)", () => new Response("Too Many Requests", { status: 429 })],
+    ["is out of capacity (3040)", () => Response.json(cloudflare.outOfCapacity.body, { status: cloudflare.outOfCapacity.status })],
+    ["is down (502)", () => new Response("Bad gateway", { status: 502 })],
+  ])("asks Cloudflare once more, then falls to Pollinations, when it %s twice (#2145)", async (_case, answer) => {
+    network(answer);
+    const { generateImage } = await import("@/lib/imageGen");
+    const attempts: Attempt[] = [];
+    const picture = await asInternal(() => generateImage({ ...image, onAttempt: (a) => attempts.push(a) }));
+    expect(picture.provider).toBe("pollinations");
+    expect(attempts.map(({ provider, status, errorCode }) => [provider, status, errorCode])).toEqual([
+      ["cloudflare", "error", "IMAGE_FREE_BUSY"], ["cloudflare", "error", "IMAGE_FREE_BUSY"], ["pollinations", "success", undefined],
+    ]);
+    expect(calls.filter((call) => call.startsWith("api.cloudflare.com"))).toHaveLength(2);
+  });
+
+  it("keeps Cloudflare's picture when its second try answers after a busy one (#2145)", async () => {
+    let tries = 0;
+    network(() => ++tries === 1
+      ? Response.json(cloudflare.outOfCapacity.body, { status: cloudflare.outOfCapacity.status })
+      : Response.json({ ...cloudflare.success.body, result: { image: jpeg } }));
+    const { generateImage } = await import("@/lib/imageGen");
+    const attempts: Attempt[] = [];
+    const picture = await asInternal(() => generateImage({ ...image, onAttempt: (a) => attempts.push(a) }));
+    expect(picture.provider).toBe("cloudflare");
+    expect(attempts.map(({ provider, status, errorCode }) => [provider, status, errorCode])).toEqual([
+      ["cloudflare", "error", "IMAGE_FREE_BUSY"], ["cloudflare", "success", undefined],
+    ]);
+    expect(calls.some((call) => call.startsWith("image.pollinations.ai"))).toBe(false);
+  });
+
+  it.each([
+    ["3036", cloudflare.dailyLimit3036],
+    ["4006", cloudflare.dailyLimit],
+  ])("skips Cloudflare until 00:00 UTC once its daily free allowance is used (%s, #2145)", async (_code, cap) => {
+    network(() => Response.json(cap.body, { status: cap.status }));
+    const { generateImage } = await import("@/lib/imageGen");
+    const attempts: Attempt[] = [];
+    const now = Date.UTC(2026, 9, 29, 22, 30);
+    const clock = vi.spyOn(Date, "now").mockReturnValue(now);
+    try {
+      expect((await asInternal(() => generateImage({ ...image, onAttempt: (a) => attempts.push(a) }))).provider).toBe("pollinations");
+      expect(attempts.map(({ provider, status, errorCode }) => [provider, status, errorCode])).toEqual([
+        ["cloudflare", "error", "IMAGE_FREE_DAILY_LIMIT"], ["pollinations", "success", undefined],
+      ]);
+      expect(calls.filter((call) => call.startsWith("api.cloudflare.com"))).toHaveLength(1);
+      network(() => Response.json(cap.body, { status: cap.status }));
+      clock.mockReturnValue(Date.UTC(2026, 9, 29, 23, 59));
+      expect((await asInternal(() => generateImage(image))).provider).toBe("pollinations");
+      expect(calls.some((call) => call.startsWith("api.cloudflare.com"))).toBe(false);
+      network();
+      clock.mockReturnValue(Date.UTC(2026, 9, 30, 0, 0, 1));
+      expect((await asInternal(() => generateImage(image))).provider).toBe("cloudflare");
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
+  it.each([
     ["refuses the token (401)", () => Response.json(cloudflare.badToken.body, { status: cloudflare.badToken.status }), "IMAGE_PROVIDER"],
     ["answers 200 with no picture", () => Response.json({ result: {}, success: true, errors: [] }), "IMAGE_PROVIDER"],
   ])("falls to Pollinations when Cloudflare %s, recording a fixed code (#451)", async (_case, answer, code) => {
