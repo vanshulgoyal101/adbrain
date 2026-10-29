@@ -78,7 +78,7 @@ an application release.
 
 The parser does not validate live account quota or model availability. The
 monthly limit is a per-business preflight check, **not an atomic reservation,
-dollar budget, or image-cost cap**. See [AI Pipeline](../AI_PIPELINE.md).
+dollar budget, or image-cost cap**. See [AI Pipeline](../architecture/ai-pipeline.md).
 
 ## Images
 
@@ -126,7 +126,7 @@ access; unset production rollout denies access. Register
 
 Keep the encryption key stable while encrypted tokens exist. A new key cannot
 decrypt old tokens; rotation requires a reviewed migration. See
-[Meta Connection](../META_CONNECT.md) for capabilities and recovery.
+[Meta Connection](../architecture/channels/meta-connect.md) for capabilities and recovery.
 
 ## Jobs and Internal Tools
 
