@@ -1,4 +1,6 @@
 import { cookies } from "next/headers";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { setupBatch } from "@/lib/creative/setup-picks";
 import { wentLive, type LiveSignals } from "@/lib/setup/steps";
 import { attachRealEnquiries } from "@/lib/campaign/real-enquiries";
 import { cache } from "react";
@@ -139,14 +141,17 @@ export async function getCreatives(businessId: string): Promise<Creative[]> {
   return data ?? [];
 }
 
-/** #1270 (WS1 step 2): the business's newest Create batch (one `variant_group`), oldest first. */
-export async function getLatestCreativeBatch(businessId: string): Promise<Creative[]> {
+/**
+ * #1270/#1402 (WS1 step 2): the ads setup made, oldest first: the newest batch (one `variant_group`), plus earlier
+ * batches from the last 2 hours while there are fewer than 3 ads, so a "Make another" top-up shows beside its batch.
+ * `newest` says when that batch started, so a short one can be checked before anything new is made.
+ */
+export async function getSetupCreativeBatch(businessId: string): Promise<ReturnType<typeof setupBatch<Creative>>> {
   const supabase = await createClient();
   const { data, error } = await supabase.from("creatives").select("*")
-    .eq("business_id", businessId).order("created_at", { ascending: false }).limit(6);
+    .eq("business_id", businessId).order("created_at", { ascending: false }).limit(12);
   if (error) throw new Error("Ads could not be loaded.");
-  const group = data?.[0]?.variant_group;
-  return (data ?? []).filter((creative) => group && creative.variant_group === group).reverse();
+  return setupBatch(data ?? []);
 }
 
 /** Brand assets for a business, newest first. */
@@ -186,6 +191,17 @@ export const getCampaigns = cache(async function getCampaigns(businessId: string
   }, "Campaigns could not be loaded.");
   return campaigns.sort((left, right) => (right.created_at ?? "").localeCompare(left.created_at ?? ""));
 });
+
+/** #1469: Meta's stored effective status of each ad in a campaign (lifetime rows from the last refresh, RLS read). */
+export async function getAdStatuses(campaignId: string): Promise<(string | null)[]> {
+  const supabase = await createClient();
+  // `ad_results` isn't in the generated types yet (same cast as GET /api/campaigns/[id]/ads).
+  const { data, error } = await (supabase as unknown as SupabaseClient).from("ad_results").select("effective_status")
+    .eq("campaign_id", campaignId).is("period_start", null).is("period_end", null).limit(100)
+    .returns<{ effective_status: string | null }[]>();
+  if (error) throw new Error("Ad statuses could not be loaded.");
+  return (data ?? []).map((row) => row.effective_status);
+}
 
 /** Latest result row per campaign, keyed by campaign id. */
 export async function getLatestResults(

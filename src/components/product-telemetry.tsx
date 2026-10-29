@@ -2,7 +2,10 @@
 
 import { useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
-import { productActions, productPages, type ClientEvent } from "@/lib/observability/client-events";
+import { productActions, productPages, tapPages, type ClientEvent } from "@/lib/observability/client-events";
+
+/** #1242: what an owner can tap; disabled controls don't count. */
+const TAPPABLE = "button, a[href], [role='button'], [role='tab'], [role='menuitem'], summary, select, input[type='checkbox'], input[type='radio']";
 
 export function ProductTelemetry() {
   const pathname = usePathname();
@@ -41,7 +44,10 @@ export function ProductTelemetry() {
       if (document.visibilityState === "hidden") flushEngagement();
       else if (visibleSince === null) visibleSince = performance.now();
     };
+    const tapPage = tapPages.find(candidate => candidate === page);
     const onClick = (event: MouseEvent) => {
+      const tapped = tapPage && event.target instanceof Element ? event.target.closest(TAPPABLE) : null;
+      if (tapped && !tapped.matches(":disabled, [aria-disabled='true']")) send({ name: "ui.tap", page: tapPage! });
       const control = event.target instanceof Element ? event.target.closest("[data-product-event]") : null;
       if (!control || control.matches(":disabled, [aria-disabled='true']")) return;
       const action = productActions.find(candidate => candidate === control.getAttribute("data-product-event"));

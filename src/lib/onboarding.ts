@@ -30,7 +30,7 @@ export function onboardingSteps(state: OnboardingState): OnboardingStep[] {
     },
     {
       id: "generate",
-      title: "Create your first campaign creative",
+      title: "Make your first ads",
       hint: "Choose a customer goal and create images and copy for review.",
       href: "/create",
       done: state.creativeCount > 0,

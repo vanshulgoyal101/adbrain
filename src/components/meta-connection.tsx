@@ -46,11 +46,11 @@ export function MetaConnectionPanel({
       });
       const result = await response.json();
       if (!response.ok || result?.ok !== true) {
-        throw new Error(typeof result?.error === "string" ? result.error : "Could not disconnect the Meta connection.");
+        throw new Error(typeof result?.error === "string" ? result.error : "Facebook is still connected. Try again in a minute.");
       }
       router.refresh();
     } catch (error) {
-      setDisconnectError(error instanceof Error ? error.message : "Could not disconnect the Meta connection.");
+      setDisconnectError(error instanceof Error ? error.message : "Facebook is still connected. Try again in a minute.");
     } finally {
       setDisconnecting(false);
     }

@@ -27,8 +27,21 @@ export const productEventSchema = z.object({
     /** #1583: a captured plan payment that settled no month, so DevOps can find and refund it in Razorpay. */
     paymentLinkId: z.string().regex(/^plink_[A-Za-z0-9]{1,100}$/).optional(),
     paymentId: z.string().regex(/^pay_[A-Za-z0-9]{1,100}$/).optional(),
+    /** #1650: the day-7 pricing question; codes only (no free text, no personal data). */
+    answer: z.enum(["yes", "maybe", "no"]).optional(),
+    reason: z.enum(["brings_enquiries", "saves_time", "sees_cost", "few_enquiries", "too_expensive", "hard_to_use", "prefer_meta", "other"]).optional(),
+    days: z.number().int().nonnegative().max(3650).optional(),
+    /** #1543: the scoreboard's Manage snapshot: oldest and p90 results age (minutes) across active campaigns. */
+    worstMinutes: z.number().int().nonnegative().max(1_000_000).optional(),
+    p90Minutes: z.number().int().nonnegative().max(1_000_000).optional(),
     /** #1123: ads the Create top-up round retried. */
     topUp: z.number().int().nonnegative().max(6).optional(),
+    /** #1547: missing ads whose picture a +prospect batch tried once more (same words, free picture). */
+    pictureRetry: z.number().int().nonnegative().max(6).optional(),
+    /** #1468: a Create's estimated AI cost in USD (text, images and total). */
+    costUsd: z.number().nonnegative().max(100).optional(),
+    textCostUsd: z.number().nonnegative().max(100).optional(),
+    imageCostUsd: z.number().nonnegative().max(100).optional(),
     errorCode: label.optional(),
     provider: label.optional(),
     model: label.optional(),

@@ -1,4 +1,6 @@
 import { OWNER_WORDS } from "@/lib/copy/owner-words";
+import { localeChosen, requestLocale } from "@/i18n/request-locale";
+import { namespaceMessages } from "@/i18n/locale";
 import { BrandAssets } from "@/components/brand-assets";
 import { BrandForm } from "@/components/brand-form";
 import { SetupBusinessStep } from "@/components/setup-business-step";
@@ -18,12 +20,18 @@ import { readWhatsAppStatus, type WhatsAppStatus } from "@/lib/meta/whatsapp-sta
 
 export const metadata = { title: OWNER_WORDS.business };
 
-export default async function BrandPage({ searchParams }: { searchParams: Promise<{ all?: string | string[] }> }) {
+export default async function BrandPage({ searchParams }: { searchParams: Promise<{ all?: string | string[]; again?: string | string[] }> }) {
   const [business, params] = await Promise.all([getPrimaryBusiness(), searchParams]);
   // #1269 (#1251 WS1 step 1): until a first campaign has gone live, Your business is the five-field setup step;
   // `?all=1` opens the full page. If the check fails, the full page shows as before.
   const setup = params.all !== "1" && (!business || !(await hasLaunchedCampaign(business.id).catch(() => true)));
-  if (setup) return <SetupBusinessStep business={business} />;
+  if (setup || (params.again === "1" && business)) {
+    const locale = await requestLocale();
+    const words = { locale, messages: namespaceMessages(locale, "setup") };
+    if (setup) return <SetupBusinessStep business={business} chooseLanguage={!(await localeChosen())} words={words} />;
+    // #1934 (CPO #1924): "New campaign" after one went live re-enters the 3 steps; step 1 asks only for the new offer.
+    return <SetupBusinessStep business={business} returning words={words} />;
+  }
   const [assets, instructions, connection] = business
     ? await Promise.all([
         getBrandAssets(business.id),

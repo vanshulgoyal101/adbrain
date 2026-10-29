@@ -8,7 +8,7 @@ set local lock_timeout = '5s';
 
 create table if not exists public.plan_periods (
   id uuid primary key default gen_random_uuid(),
-  business_id uuid not null references public.businesses(id) on delete cascade,
+  business_id uuid not null references public.businesses(id) on delete restrict,
   state text not null default 'open' check (state in ('open', 'paid', 'expired')),
   amount_paise integer not null default 99900 check (amount_paise = 99900),
   payment_link_id text unique check (payment_link_id is null or payment_link_id ~ '^plink_[A-Za-z0-9]{1,100}$'),

@@ -20,7 +20,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
-export const NAMES = { dev: "Dev", dev2: "Dev 2", dev3: "Dev 3", dev4: "Dev 4", qa: "QA", qa2: "QA 2", reviewer: "Reviewer", devops: "DevOps", cpo: "CPO", analyst: "Analyst", designer: "Designer", cto: "CTO", ceo: "CEO" };
+export const NAMES = { dev: "Dev", dev2: "Dev 2", dev3: "Dev 3", dev4: "Dev 4", qa: "QA", qa2: "QA 2", reviewer: "Reviewer", devops: "DevOps", cpo: "CPO", analyst: "Analyst", designer: "Designer", docs: "Docs", cto: "CTO", ceo: "CEO" };
 // Items parked on someone outside the team never count as waiting on you.
 const PARKED = new Set(["waiting-owner", "blocked", "parked"]);
 
@@ -71,19 +71,32 @@ export function waitingOnMe(lastBody, m, labels = [], now = Date.now()) {
     return !m.handedToOther(lastBody);
   }
   if (m.addressedToMe(lastBody)) return true;
+  // #1478: on a co-owned issue an un-arrowed FYI isn't every owner's turn; only one that names you is.
+  if (labels.filter((l) => l.startsWith("owner:")).length > 1) return false;
   return !m.handedToOther(lastBody);
 }
 
 /**
+ * #1478: comments created since the wait began; `?since=` filters on updated_at, so edits looked new.
+ * @template {{ created_at?: string }} T
+ * @param {T[]} comments
+ * @param {string} since
+ * @returns {T[]}
+ */
+export function freshComments(comments, since) {
+  return comments.filter((c) => (c.created_at ?? "") >= since);
+}
+
+/**
  * #364: the oldest owned item you can act on now, even when your last word on it was a handoff:
- * not parked, blocked, waiting on the owner, `later` or a CEO `decision`, no open PR naming it,
+ * not parked, blocked, waiting on the owner, `later`, `standing` (channels, umbrellas) or a CEO `decision`, no open PR naming it,
  * and not in `skip` (items snoozed by a future "Next check"). Null when there is none.
  * @param {Array<{ number: number, title?: string, pull_request?: unknown, labels?: Array<string | { name: string }> }>} items
  * @param {Array<{ title?: string }>} openPulls
  * @param {Set<number>} [skip]
  */
 export function nextItem(items, openPulls, skip = new Set()) {
-  const hold = new Set([...PARKED, "later", "decision"]);
+  const hold = new Set([...PARKED, "later", "decision", "standing"]);
   const withPr = new Set(openPulls.flatMap((pr) => linkedIssues(pr.title)));
   const names = (i) => (i.labels ?? []).map((l) => (typeof l === "string" ? l : l.name));
   return items
@@ -95,7 +108,7 @@ export function nextItem(items, openPulls, skip = new Set()) {
 let nextDue = Infinity;
 
 /** Ready-pool lane per role: briefed, unowned issues labelled `ready` + `lane:<lane>` (#573). */
-export const LANES = { dev: "dev", dev2: "dev", dev3: "dev", dev4: "dev", qa: "qa", qa2: "qa", devops: "devops", reviewer: "review", designer: "design", cpo: "product", analyst: "research" };
+export const LANES = { dev: "dev", dev2: "dev", dev3: "dev", dev4: "dev", qa: "qa", qa2: "qa", devops: "devops", reviewer: "review", designer: "design", cpo: "product", analyst: "research", docs: "docs" };
 
 /**
  * The lane's unclaimed ready issues, core first, oldest first; at most `max`.
@@ -109,12 +122,12 @@ export function readyPool(issues, role, max = 3) {
   const names = (i) => (i.labels ?? []).map((l) => (typeof l === "string" ? l : l.name));
   return issues
     .filter((i) => !i.pull_request && names(i).includes("ready") && names(i).includes(`lane:${lane}`)
-      && !names(i).some((n) => n.startsWith("owner:") || PARKED.has(n) || n === "decision"))
+      && !names(i).some((n) => n.startsWith("owner:") || PARKED.has(n) || n === "decision" || n === `declined:${role}`))
     .sort((a, b) => Number(names(b).includes("core")) - Number(names(a).includes("core")) || a.number - b.number)
     .slice(0, max);
 }
 
-export const WORKERS = ["dev", "dev2", "dev3", "dev4", "qa", "qa2", "reviewer", "devops", "cpo", "analyst", "designer"];
+export const WORKERS = ["dev", "dev2", "dev3", "dev4", "qa", "qa2", "reviewer", "devops", "cpo", "analyst", "designer", "docs"];
 export const MIN_QUEUE = 3;
 
 /** Workers with fewer than MIN_QUEUE actionable open items (not parked or waiting on the CEO). The CTO refills these. */
@@ -129,12 +142,11 @@ export function queueCounts(issues) {
 }
 
 /** Ready-pool items in a worker's lane count as supply: the waiter offers them, so the queue isn't dry (#573). */
-/** Roles that pick their own work when nothing is queued (Reviewer audits, Analyst research, Designer slices, DevOps ops hygiene), so the CTO doesn't refill them. */
-export const SELF_SOURCING = new Set(["reviewer", "analyst", "designer", "devops", "cpo"]);
 
 export function lowQueues(issues) {
   const counts = queueCounts(issues);
-  return WORKERS.filter((r) => !SELF_SOURCING.has(r) && counts[r] + readyPool(issues, r, MIN_QUEUE).length < MIN_QUEUE).map((r) => ({ role: r, count: counts[r] }));
+  // Every role keeps ≥ MIN_QUEUE, the self-sourcing ones too (CEO, Oct 28: their queues drained in minutes, #364).
+  return WORKERS.filter((r) => counts[r] + readyPool(issues, r, MIN_QUEUE).length < MIN_QUEUE).map((r) => ({ role: r, count: counts[r] }));
 }
 
 export const QUIET_MIN = 90;
@@ -355,10 +367,13 @@ function findWork() {
     }
   }
   // One repo-wide call (newest first) instead of one call per updated issue.
-  for (const comment of api(`repos/${repo}/issues/comments?since=${since}&sort=created&direction=desc&per_page=100`)) {
+  const coOwned = new Set(mine.filter(item => (item.labels ?? []).filter(l => l.name.startsWith("owner:")).length > 1).map(item => item.number));
+  for (const comment of freshComments(api(`repos/${repo}/issues/comments?since=${since}&sort=created&direction=desc&per_page=100`), since)) {
     const number = Number(comment.issue_url.split("/").pop());
     const body = comment.body ?? "";
     if (writtenByMe(body)) continue;
+    // #1478: on a co-owned issue, a comment wakes you only when it names you.
+    if (coOwned.has(number) && !addressedToMe(body)) continue;
     if (mineNumbers.has(number) || addressedToMe(body) || linkedToMine.has(number)) {
       found.push(`#${number} new comment: "${brief(body)}" ${comment.html_url}`);
     }
@@ -406,7 +421,7 @@ function backlog() {
   // Nothing of yours is actionable: pull the next briefed item from your lane instead of idling.
   if (!found.length) {
     for (const item of readyPool(openIssues(), role, 1)) {
-      found.push(`#${item.number} from the ready pool${withSkills(item)}: ${item.title}. Claim it first: gh issue edit ${item.number} --add-label owner:${role} --remove-label ready`);
+      found.push(`#${item.number} from the ready pool${withSkills(item)}: ${item.title}. Claim it first: gh issue edit ${item.number} --add-label owner:${role} --remove-label ready (or decline: --add-label declined:${role})`);
     }
   }
   return found;

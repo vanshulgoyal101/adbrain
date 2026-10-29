@@ -24,7 +24,7 @@ Inspect durable evidence before retrying anything that can create objects or spe
 	Separate a timeout from a confirmed remote rejection. Never retry a creation,
 	payment or activation with a fresh key to get past an error.
 3. Start with scoped logs, saved status and read-only metadata. Compare the
-	deployed handler and schema with the [API](API_REFERENCE.md) and
+	deployed handler and schema with the [API](api/README.md) and
 	[data](DATA_MODEL.md) guides. A migration file is not proof its objects exist remotely.
 4. If the core loop is broken after a deploy, roll back first and debug second
 	(see [Production guard](RELEASING.md#production-guard)). Migrations, production
@@ -79,6 +79,35 @@ regularly at `/settings/privacy-requests`; this page and its status actions requ
 the private operator grant, and ordinary customers receive 404. Contact the owner through a verified secure channel for scope and
 delivery. The API does not send email, automatically export data or delete records.
 Financial/security retention and provider-held Meta data remain separate.
+
+### Meta data-deletion request (#1734)
+
+Meta's deauthorize/deletion callback has already revoked every token for that Meta user
+(`meta_revoke_subject`) and filed one `privacy_requests` row (`source = 'meta'`, a
+`confirmation_code`, the `meta_subject_id`). `/data-deletion?code=` shows its status to the person.
+The deletion itself is this checklist (DevOps runs it; service role in the Supabase SQL editor,
+never an application client; no subject ids or names in public issues):
+
+1. **Queue:** `select id, confirmation_code, meta_subject_id, status, created_at from public.privacy_requests where source = 'meta' and status in ('received','in_review') order by created_at;`
+   Mark each **In review** at `/settings/privacy-requests` within 7 days (the status page promises this).
+2. **Scope:** `select distinct business_id from private.meta_tokens where subject_id = '<subject>';`
+   Any token still live (`revoked_at is null`)? Stop and ask on the issue: the callback didn't run.
+3. **Delete, in one transaction:**
+   `delete from private.meta_connection_attempts where token_id in (select id from private.meta_tokens where subject_id = '<subject>');`
+   `update public.meta_connections set meta_business_id = null, account_name = null, page_name = null, currency = null, timezone_name = null, selection_reason = null, capabilities = '{}' where business_id in (<scope>) and token_id is null and authorization_status = 'revoked';`
+   (a business that has since reconnected with another person keeps its connection);
+   `delete from private.meta_tokens where subject_id = '<subject>' and revoked_at is not null;`
+   (`managed_meta_accounts.manager_token_id` is set to null by its foreign key).
+4. **Kept:** payment, invoice, refund and security records (as the status page lists); synced
+   `leads`, `campaign_results` and `ad_results` are the business's records and stay until the
+   CTO's scope call on #1734.
+5. **Read-backs, all `0`:**
+   `select count(*) from private.meta_tokens where subject_id = '<subject>';`
+   `select count(*) from private.meta_connection_attempts a where a.business_id in (<scope>) and a.token_id is null and a.discovered_assets is not null and a.user_id in (select owner_id from public.businesses where id in (<scope>));`
+   (attempts that never got a token but still hold discovered asset names: delete them too);
+   `select count(*) from public.meta_connections where business_id in (<scope>) and token_id is null and (account_name is not null or page_name is not null or meta_business_id is not null);`
+6. Mark **Completed**, then post 'Meta deletion done' with the date and request id (no names)
+   on the tracking issue.
 
 ## Incident Playbooks
 
@@ -239,7 +268,7 @@ The CEO and CTO rerun it weekly.
 **Customer-only numbers (#379).** Every reported number excludes internal accounts by
 default. They are defined once in
 [internal-accounts.json](../src/lib/internal-accounts.json), which the app also uses to lift
-the monthly AI limit for them (#398) and to give them free Pollinations images instead of the
+the monthly AI limit for them (#398) and to give them free images (Cloudflare, then Pollinations, #1476) instead of the
 paid image model (#449, #466; text stays on Haiku; `exemptFromFreeProviders` lists the user ids
 that keep the paid images, each with its reason): team domains
 (`@adbrain.vanshul.com`, `@adbrain.local`), owner user ids, and the smoke/demo emails
@@ -331,6 +360,18 @@ Explicit `data: []` is a valid no-delivery response. Lead extraction prefers exa
 it never adds overlapping actions or matches arbitrary names containing `lead`.
 This does not certify attribution equivalence with every Ads Manager report.
 
+### Pilot day-7 pricing answers (#1650, for #718)
+
+Seven days after a pilot's first Go live, Home asks own-account, non-team businesses "would you pay ₹999 a month?"
+once ('Not now' hides it 3 days, at most twice). Answers are product events (codes only), kept 90 days, so copy the
+tally to #718 before then (read-only):
+
+```sql
+select attributes->>'answer' as answer, attributes->>'reason' as reason, count(*) as owners,
+  round(avg((attributes->>'days')::int)) as avg_days
+from public.product_events where name = 'pilot_day7' group by 1, 2 order by 1, 3 desc;
+```
+
 ### Prospect accounts: prepare, then hand over (#1315, #1317)
 
 AdBrain is one business per account, so each prospect gets its own account; at signing the
@@ -347,25 +388,70 @@ in issues.
    (it saves as you go), then **Make my ads**.
 3. Step 2, "Your ads": all 3 are picked; **Download sample pack (3)** approves them and downloads the
    marked pack (no Review, no Go live). Don't connect Meta, start a campaign or add funds.
-   Downloads go through the export, which marks every picture 'Sample: not live'; Share and the
+   Downloads go through the export, which marks every picture with a 'Sample ad: not live yet' pill (bottom-left) and puts a note card (`00-sample-note.png`) first; Share and the
    Assets tile's Download, Copy link and Open are hidden on a `+prospect` account, so no clean
    picture leaves before hand-over. After hand-over they come back on their own.
 
 **Hand over (DevOps executes, QA reviews; a tenant step):**
 1. Read-only checks, all must hold:
-   `select authorization_status from public.meta_connections where business_id='<business id>';`
-   returns no row or `disconnected`;
-   `select count(*) from public.campaigns where business_id='<business id>';` is `0`.
-   If either fails, stop and ask on the issue.
-2. With the owner present, change the account's email to theirs (Supabase dashboard →
-   Authentication → the user → change email, or `auth.admin.updateUserById(<user id>, { email })`).
-3. The owner signs in with a one-time code sent to that email. Receiving the code is their
-   confirmation. Read back:
-   `select email, email_confirmed_at from auth.users where id='<user id>';` shows their address.
-   The account is no longer internal, so the normal owner rules (paid images, allowance) apply
-   from here.
-4. Post 'handed over' with the date on the issue (no names); the owner connects Meta on the
+   `select authorization_status, token_id from public.meta_connections where business_id='<business id>';`
+   returns no row, or `disconnected`/`revoked` with `token_id` null;
+   `select provider from auth.identities where user_id='<user id>';` returns `email` only (a
+   linked Google or other identity still signs staff in: unlink it first);
+   `select count(*) from public.campaigns where business_id='<business id>';` is `0`;
+   `select count(*) from private.meta_tokens where business_id='<business id>';` is `0`;
+   `select count(*) from private.meta_connection_attempts where business_id='<business id>';` is `0`;
+   `select count(*) from public.managed_meta_accounts where business_id='<business id>';` is `0`;
+   `select count(*) from public.owner_alert_prefs where business_id='<business id>';` is `0`;
+   `select count(*) from auth.mfa_factors where user_id='<user id>';` is `0` (a staff TOTP factor
+   would lock the owner out); and the user id is not in `src/lib/internal-accounts.json`
+   (`userIds`, `smokeUserIds`, `exemptFromFreeProviders`), or the owner stays internal.
+   If any fails, stop and ask on the issue. Do not connect Meta, provision a managed
+   account, or enable WhatsApp/lead alerts during preparation.
+2. With the owner present, first clear the prospect's password and revoke every existing
+   session and pending sign-in token in Supabase Auth. In the SQL editor, run the
+   service-role-only cleanup:
+   `update auth.users set encrypted_password = '' where id='<user id>';`
+   `delete from auth.sessions where user_id='<user id>';`
+   `delete from auth.one_time_tokens where user_id='<user id>';`
+   `update auth.users set recovery_token = '', confirmation_token = '', email_change_token_new = '', email_change_token_current = '', reauthentication_token = '' where id='<user id>';`
+   Read back: `select recovery_token, confirmation_token, email_change_token_new, email_change_token_current, reauthentication_token from auth.users where id='<user id>';`
+   are all empty. Never run these statements with an application client or paste
+   credentials into an issue. Deleting sessions doesn't void an access token staff
+   already hold: it works until it expires (`jwt_expiry`, 1 hour), so note the time.
+   Then make the Brand theirs: set `businesses.email`/`phone` to the owner's, set
+   `profiles.email` (id = user id) to their address, and delete sales-only
+   `ad_instructions` for the business. The audit log shows staff actions from
+   preparation as the owner's account; say so to the owner.
+3. Have the owner read their address back first: `updateUserById` sends no confirmation, so a
+   typo hands the account to a stranger. Change the account's email to theirs (Supabase dashboard → Authentication → the user →
+   change email, or `auth.admin.updateUserById(<user id>, { email })`). Read back:
+   `select email, email_confirmed_at, encrypted_password from auth.users where id='<user id>';`
+   shows their address, a confirmation timestamp, and no usable password. Read back:
+   `select count(*) from auth.sessions where user_id='<user id>';` and
+   `select count(*) from auth.one_time_tokens where user_id='<user id>';` — both are `0`.
+4. The owner signs in with the sign-in link emailed to that address (or *Continue with Google* for
+   a Gmail address). Opening the link is their confirmation. The account is no longer internal, so the normal owner rules (paid images,
+   allowance) apply from here. Do not connect Meta until the session/token counts above are
+   zero, the owner has confirmed the new address, **and at least 1 hour has passed since
+   step 2** (staff access tokens expired). Auth **Confirm email** must be on in production
+   (dashboard → Authentication → Sign In / Providers → Email); check it once per hand-over.
+5. Post 'handed over' with the date on the issue (no names); the owner connects Meta on the
    20-minute onboarding call (#1279).
+6. Send the CPO's hand-over message (#1473) from our WhatsApp, or as an email with the subject
+   *Your AdBrain account is ready*. Fill in `{name}`, `{email}` and `{day, time}`; change nothing else.
+   > Hi {name}, your AdBrain account is ready, and it's yours now. Your business details and the 3 ads we made are inside.
+   > 1. Sign in at adbrain.vanshul.com/login with **{email}**: tap *Continue with Google* (if it's a Gmail address) or *Email me a sign-in link*.
+   > 2. What's changed: the 'Sample' mark is off your ads. Nothing runs until you tap *Go live*.
+   > 3. Next: connect your Facebook Page (step 3). We'll do it together on **{day, time}**; it takes about 20 minutes.
+   > Your first campaign is set up free. You pay Meta directly from your own account, only for ads you approve. After that, AdBrain is ₹999 a month, first month free, no auto-debit.
+
+   Hinglish:
+   > Hi {name}, aapka AdBrain account ready hai, ab yeh aapka hai. Aapke business ki details aur humare banaye 3 ads isme hain.
+   > 1. adbrain.vanshul.com/login pe **{email}** se sign in karein: *Continue with Google* (Gmail ho to) ya *Email me a sign-in link*.
+   > 2. Ab ads pe 'Sample' nahi likha. Jab tak aap *Go live* nahi dabate, kuch nahi chalta.
+   > 3. Agla step: apna Facebook Page connect karna (step 3). **{day, time}** ko saath mein karenge, lagbhag 20 minute.
+   > Pehla campaign free set hoga. Ad ka paisa aap seedha Meta ko dete hain, sirf un ads ka jo aap approve karein. Uske baad ₹999 mahina, pehla mahina free, koi auto-debit nahi.
 
 ### Scheduled Jobs
 
@@ -392,11 +478,11 @@ repository secret and Vault together.
 [`scheduled-jobs.yml`](../.github/workflows/scheduled-jobs.yml) is the backup and the
 only thing that opens issues. GitHub's 15-minute schedule actually runs every few hours, so the
 team supervisor's 10-minute tick dispatches it when its latest run started over 9 minutes ago (so every tick) and
-none is queued or running (#692; off with `~/.adbrain-supervisor/OFF`).
+none is queued or running (#692; the OFF switch stops only role runs, not this, #1525).
 It first calls `scheduler-health` and opens one `Scheduled job overdue: <job>` `core`
 bug for DevOps per job with no successful run in twice its interval. It then calls
 enforce-spend, `sync-leads`, `payment-health` and `refresh-results` itself. It needs
-repository secret `CRON_SECRET` equal to the production value, logs only counts, fails
+the `CRON_SECRET` secret of the **`production-secrets`** environment (deployments from `main` only, #1893) equal to the production value, logs only counts, fails
 red on any non-200 and opens one `Scheduled jobs failed twice in a row` `core` bug on
 two consecutive failures. Pause it with `gh workflow disable scheduled-jobs.yml`; resume
 with `gh workflow enable scheduled-jobs.yml`; run once with `gh workflow run scheduled-jobs.yml`.
@@ -411,16 +497,17 @@ for a mismatch. Do not log the header or paste it into support evidence.
 | `/api/cron/enforce-spend` | Paginates active campaigns to find businesses (including those without saved weekly limits), checks customer balances, and reads current-week Meta insights for opted-in weekly caps; attempts to pause bound active campaigns for held funds, reached caps, or unverifiable weekly spend. `unverified` lists businesses whose spend could not be read (503), never ₹0 |
 | `/api/cron/sync-leads` | For each business with a connected Meta Page, resumes or starts the same lead sync as **Sync** (at most 24 Graph reads per business, 20 s each, 45 s per run; leads deduplicated by Meta lead id). Returns `imported` and per-business `sync.hasMore`; any Meta or save failure returns 503 with saved progress, and the next run resumes it. With `OWNER_ALERTS_ENABLED`, it then sends each opted-in owner one `adbrain_lead_alert` per form lead under 24 h old (at most 20 per business per run; per-business `alerts: {sent, skipped}`; an alert failure never fails the run, #701) |
 | `/api/cron/payment-health` | Read-only Razorpay webhook counts (#178): events in 7 days, events unprocessed after 1 hour, captured orders with no capture event after 30 minutes, and `planUnmatched7d`: captured ₹999 plan payments that settled no month (`plan.payment_unmatched` events carry the `paymentLinkId` and `paymentId`; refund them in Razorpay, #1583). `payments:"disabled"` when live payments are off. When `ok` is false the workflow opens one `Razorpay webhook missing for a captured payment` `core` bug (counts only) and stays green. Triage: in the Razorpay Live dashboard confirm the webhook URL `https://adbrain.vanshul.com/api/payments/live/webhook`, its secret matches `RAZORPAY_LIVE_WEBHOOK_SECRET` and capture/refund/dispute events are enabled, then resend the delivery; never re-charge |
-| `/api/cron/refresh-results` | Read-only on Meta (#258, #992): every run (at most every 14 min) per active bound campaign, reads insights and ad review, saves one `campaign_results` row and `raw.health` flags: `rejected` (an ad `DISAPPROVED` or `WITH_ISSUES`, with Meta's reason), `not_delivering` (0 impressions after 6 h active) and `ended` (capped end time passed). Never pauses. Campaigns and Home show **Needs attention** with the reason. For each problem first seen in the last 24 h the workflow opens one (once per key, so a late GitHub run still alerts) `Campaign needs attention: <kind> (<key>)` `core` bug for Dev 3, with no identifiers; find the campaign with `select id, business_id from campaigns where raw->'health'->'flags' @> '[{"key":"<key>"}]'`. Paused bound campaigns (#1003): results only, at AdBrain's pause + 1 d and + 7 d, then final; one lifetime read for one with no row (imported); a pause made in Ads Manager has no anchor and keeps its last read; counted as `pausedReads`. 503 when any campaign could not be refreshed |
+| `/api/cron/pilot-readiness` | Pilot settings (#1875): names and states of production settings a pilot needs that are missing or switched off (AI keys, Cloudflare pictures, Meta app and rollout, support and alerts WhatsApp, results per ad), never values. The scheduled step adds `VERCEL_TOKEN` if the Actions secret is empty and opens one `core`/`owner:devops` issue "Pilot settings missing in production" while anything is missing. The list lives in `src/lib/config/pilot-readiness.ts` |
+| `/api/cron/refresh-results` | Read-only on Meta (#258, #992): every run (at most every 14 min) per active bound campaign, reads insights and ad review, saves one `campaign_results` row and `raw.health` flags: `rejected` (an ad `DISAPPROVED` or `WITH_ISSUES`, with Meta's reason), `not_delivering` (0 impressions after 6 h active) and `ended` (capped end time passed). Never pauses. Campaigns and Home show **Needs attention** with the reason. For each problem first seen in the last 24 h the workflow opens one (once per key, so a late GitHub run still alerts) `Campaign needs attention: <kind> (<key>)` `core` bug for Dev 3, with no identifiers; find the campaign with `select id, business_id from campaigns where raw->'health'->'flags' @> '[{"key":"<key>"}]'`. Paused bound campaigns (#1003): results only, at AdBrain's pause + 1 d and + 7 d, then final; one lifetime read for one with no row (imported); a pause made in Ads Manager has no anchor and keeps its last read; counted as `pausedReads`. #1592: a campaign Meta reports DELETED/ARCHIVED (`CampaignGoneError`) is ended (`status: completed`, `raw.metaStatus`, `raw.metaGoneAt`), listed in `ended` and raised once as an `ended` alert (#1600; the card and, for a week, Home say so in the CPO's #1601 words); one whose ad account/Page no longer matches the business's connection (CONFLICT), or that Meta won't load (Graph 100/33: gone *or* no permission, #1678), is listed in `unbound` and stays as it is, so enforce-spend keeps guarding it; neither fails the run. Others fail it and are listed in `failures: [{key, code}]`, with key = first 12 hex of sha256(`refresh:<campaign id>`) (find it with `select id from campaigns where left(encode(sha256(('refresh:'||id)::bytea),'hex'),12) = '<key>'`). 503 when any campaign could not be refreshed Meta throttling (#1838) skips that business for the run and stops it on the app-wide limit; listed under `throttled`, the run stays green |
 | `/api/cron/scheduler-health` | Read-only watchdog (#274): for each pg_cron job, minutes since its last run and last successful run (any scheduler), from logged `http.request` events; `overdue` after twice its interval without a success. Triage an overdue job: `cron.job` active, recent `cron.job_run_details`, `net._http_response` status (401 means the Vault secret differs from `CRON_SECRET`), then the route itself |
-| `/api/cron/meta-parent-health` | Read-only check of the 2-Tier parent's system-user token (#520), run by the production guard after each deploy; a refused token adds a `FAIL 2-Tier parent token` line to the guard issue (no rollback). **Rotate:** the owner generates a new token for the 'AdBrain provisioning' system user in Solaride Business Settings (same app and permissions) and pastes it only into Vercel production as `META_PARENT_SYSTEM_TOKEN` (Sensitive); the next deploy picks it up and the guard confirms it, then revoke the old token. Never put it in chat, issues or CLI arguments (#413) |
+| `/api/cron/meta-parent-health` | Read-only check of the 2-Tier parent's system-user token (#520), run by every scheduled-jobs run (moved from the guard, #1893); a refused token fails that run, and two in a row open the usual alert (no rollback). **Rotate:** the owner generates a new token for the 'AdBrain provisioning' system user in Solaride Business Settings (same app and permissions) and pastes it only into Vercel production as `META_PARENT_SYSTEM_TOKEN` (Sensitive); the next deploy picks it up and the next scheduled-jobs run confirms it, then revoke the old token. Never put it in chat, issues or CLI arguments (#413) |
 | `/api/cron/managed-health` | Read-only 2-Tier provisioning watchdog (#527): managed accounts by state, and each one in a non-final state (`failed` included) for over 30 min. The scheduled workflow opens one `Managed account stuck: <state> (<key>)` `core` `2tier` bug for Dev 2 per key, with no identifiers. Find it by listing the stuck rows: `select business_id, state, last_error, updated_at from managed_meta_accounts where state not in ('ready','offboarded') and updated_at < now() - interval '30 minutes'` (the issue gives the state and minutes), then read its `managed_meta_account_events`. `npm run stats` shows the counts by state. The near-cap spend alert follows #534 |
 | `/api/cron/campaign-reconciliation` | Read-only Launch watchdog (#734): each campaign operation in `needs_reconciliation` (a launch whose Meta outcome is unknown, so Meta may hold a campaign AdBrain doesn't track) for over 30 min. The scheduled workflow opens one `Launch needs reconciliation (<key>)` `core` bug for Dev 3 per key while none is open. Reconcile: `node scripts/reconcile-operation.mjs --key <key>` reads the row and each external id in Meta (GET only, the owner's system-user token, so only accounts it can see) plus campaigns created in the operation's window, and prints a verdict: `active` (pause it in Ads Manager first), `paused` (import or delete the tree, then rerun), `unreadable` (reconcile with the business's own connection) or `nothing_live`, where `--apply` closes the row as `failed` with the outcome |
 | `/api/cron/access-requests` | Read-only (#692, #725): outside owners who tapped **Ask for Facebook access** in the last 7 days. The app promises a WhatsApp within a working day, so the scheduled workflow opens one `Facebook access request (<key>)` `core` `waiting-owner` issue per person, at most 5 a run (the rest are noted on the newest issue and opened by later runs); the CEO asks the owner to add them as a Meta app Tester (#679). Find them: `select a.actor_label as email, b.name, b.phone, a.created_at from audit_log a join businesses b on b.id = a.business_id where a.action = 'meta.access_request' and left(encode(sha256(convert_to(a.actor_id::text, 'UTF8')), 'hex'), 12) = '<key>' order by a.created_at desc limit 1`; requests from before #725 are only in `product_events` (`attributes->>'action' = 'meta.access_request'`, same key on `user_id`) |
-| `/api/cron/core-scoreboard` | Daily core scoreboard (#681): Brand, Prepare, Create, Regenerate, assistant, Review, Launch and Manage numbers against their Nov 2 targets, smoke excluded. Brand (#1136) times each new business from `business.create` to its first save flagged `brandUsable` (name, category, area, phone and offer: `src/lib/brand/usable.ts`), p90 < 2 min met. Create is split by image path (`freeImagesOnly`: internal accounts on free Pollinations vs customers on paid images); only the customer path is held to the target. Launch scores settled `campaign_operations` creates; `meta.create_paused` failures are shown as context because Prepare, lead-form, preflight and WhatsApp-status reads share that purpose (#615). Manage scores the oldest newest-`campaign_results.fetched_at` across active, Meta-bound campaigns (≤ 15 min met; none active = —), with syncs and reads as context (#992). The scheduled workflow posts it on #681 once a day after 03:00Z (marked `<!-- core-scoreboard -->`, so `wait-for-work` doesn't wake anyone) while #681 is open. Locally: `npm run core-scoreboard [-- --hours 168] [-- --post]` (same numbers, read through the Management API) |
+| `/api/cron/core-scoreboard` | Daily core scoreboard (#681): Brand, Prepare, Create, Regenerate, assistant, Review, Launch and Manage numbers against their Nov 2 targets, smoke excluded. Brand (#1136) times each new business from `business.create` to its first save flagged `brandUsable` (name, category, area, phone and offer: `src/lib/brand/usable.ts`), p90 < 2 min met. Create is split by image path (`freeImagesOnly`: internal accounts on free Pollinations vs customers on paid images); only the customer path is held to the target. Launch scores settled `campaign_operations` creates; `meta.create_paused` failures are shown as context because Prepare, lead-form and preflight reads share that purpose (#615; the WhatsApp-status read is `meta.whatsapp_numbers` since #1540). Manage scores the oldest newest-`campaign_results.fetched_at` across active, Meta-bound campaigns (≤ 15 min met; none active = —), with syncs and reads as context (#992). Each route run also records a `scoreboard.manage` product event (active campaigns, with no results, worst and p90 age in minutes), and **Manage, 7 days** judges each past IST day by its worst stored snapshot (#1543). **Pilots** (#1697, counts only, no names): prepared (`+prospect`-owned businesses with an ad, plus handed over) → handed over (a `prospect.handed_over` product event with the business id, written by the hand-over's last step) → live (a handed-over business with a Go live) → Day 7 (with its `pilot_day7` answers, #1650), and how many reach Day 7 in the next 48 h. #1242 adds #1226's north-star rows, exactly as defined on #1284 (weeks Monday–Sunday IST; internal, demo and smoke accounts and their businesses left out): **Sign-up → first campaign live** (the last full week's sign-ups, `auth.users.created_at` → the owner's first `campaign.resume` in `audit_log` within 14 days; median and % live), **Taps, Create → live** (`ui.tap` from the last Create page view before the first ad batch to the first `campaign.resume`), **Owners needing help** (that cohort's `help.whatsapp` taps before going live; #796 calls aren't in the data), **Time to first contact** (leads in the trailing 7 days, `first_contacted_at` − `coalesce(created_time, created_at)`, Meta test leads out; median and % contacted) and **Weekly return** (owners with a campaign live at any point in the last full week, rebuilt from `audit_log`; distinct IST days with a Home, Campaigns or Enquiries view; median). The scheduled workflow posts it on #681 once a day after 03:00Z (marked `<!-- core-scoreboard -->`, so `wait-for-work` doesn't wake anyone) while #681 is open. Locally: `npm run core-scoreboard [-- --hours 168] [-- --post]` (same numbers, read through the Management API) |
 | `/api/cron/plan-links` | #718: once a day (proposed 04:30Z, 10:00 IST), each live own-account business whose ₹999 month ends within 7 days, or is unpaid, gets that month's Razorpay Payment Link (one per month), so Razorpay's reminders start. An open month whose link is past its 30 days is first re-read from Razorpay (paid settles it, expired/cancelled frees it for a fresh link), so a lost webhook never leaves a dead Pay link (#1583); the Settings plan read does the same. Returns `{ok, enabled, checked, created, failed}`; a no-op while `PLAN_BILLING_ENABLED` is off. |
 | `npm run ux-scoreboard` (local, no cron) | UX scoreboard (#1226 workstream 8): the north-star UX metrics against their Nov 30 targets: sign-up → first `campaigns.launched_at` (median over `--days`, default 28), median first reply over 7 d (`medianReplyMinutes`, Meta test leads excluded), and weekly return (distinct IST days with a `page.view` of /dashboard, /campaigns or /leads per owner with an active Meta-bound campaign). Taps to live, help needed and a11y/Web Vitals come from walks, ui-gate and Vercel, shown as —. Smoke is always excluded; internal accounts are too unless `--include-internal`. `-- --post` comments it on #1226 (QA 2) |
-| `/api/cron/llm-credit` | Read-only OpenRouter credit check (#449): `GET /api/v1/key` for each pooled key, dollars only. Called only by the GitHub scheduled workflow (not pg_cron); under $0.50 left it opens one `OpenRouter credit low` issue labelled `decision` for the CEO. OpenRouter errors are logged and never fail the run. |
+| `/api/cron/llm-credit` | Read-only OpenRouter credit check (#449): `GET /api/v1/key` for each pooled key, dollars only. Called only by the GitHub scheduled workflow (not pg_cron); under $1 left it opens one `OpenRouter credit low` issue labelled `decision` for the CEO. It also probes every configured AI key (Groq, OpenRouter, Gemini, Cerebras, Cloudflare, fal, OpenAI) on the provider's free models/key endpoint (#1569, no generation, ₹0); a refused key (401/402/403, or Gemini's API_KEY_INVALID) opens one `AI key refused: <ENV_NAME[i]>` issue for DevOps. It also checks each configured model id (env and code defaults: Groq, OpenRouter text and image, Gemini, Cerebras, Cloudflare) against one `/models` read per provider (#1808; OpenRouter with `output_modalities=all`); an id no longer listed opens one `AI model retired: <provider> <model>` issue for DevOps, and a list that can't be read never alerts. OpenRouter errors are logged and never fail the run. |
 
 **Meta reconnect needed (#758).** The scheduled workflow reads `reauth: [{key, since, activeCampaigns}]` (key = first 12 hex of sha256 of the business id) from the `enforce-spend`, `sync-leads` and `refresh-results` responses: owners whose Meta token is dead (expired or revoked). A business is listed when Meta answers Graph 190 or its stored connection is expired, revoked or awaiting reauthorization (not managed accounts, which run on AdBrain's token); it doesn't count toward the run's 503, and refresh-results skips its other campaigns that run. The workflow opens one `Meta reconnect needed (<key>)` `core` `waiting-owner` issue per key with the ACTIVE campaign count; the CEO asks the owner to reconnect. Find them: `select b.name, b.phone, u.email from businesses b join auth.users u on u.id = b.owner_id where left(encode(sha256(convert_to(b.id::text, 'UTF8')), 'hex'), 12) = '<key>'`.
 
@@ -463,9 +550,19 @@ so Supabase can't restore anything (paid backups are a CEO call, #884). Our own 
   to the same value so stored tokens decrypt, and point Vercel at it. Owners sign in again
   by email.
 - **Nightly (#884):** the team supervisor's tick runs the export after 20:00Z (01:30 IST) into
-  `~/.adbrain-backups/<UTC time>` (0700, the owner's Mac), restore-drills it and keeps the newest 7.
+  `~/.adbrain-backups/<UTC time>` (0700, the owner's Mac) and restore-drills it. Then it seals it
+  as `<UTC time>.tar.gz.cms` (0600, CMS-encrypted to `.github/backup/backup-cert.crt`, like `db-backup.yml`),
+  deletes the plaintext and keeps the newest 7 (#1762). To read one: decrypt with the keychain key
+  (RELEASING.md › restore drill: `openssl cms -decrypt …`), then `tar -xzf` and
+  `node scripts/db-export.mjs restore <folder>`.
+  After a good export it also runs `scripts/prune-smoke-storage.mjs --apply` (#1891): the core smoke's own
+  creatives and `creatives`-bucket files older than 7 days that nothing references (campaigns, ads, drafts,
+  operations, regeneration claims) are deleted; the newest 20 stay. Without `--apply` it only prints counts.
   A failure opens one `Nightly production export failed` `core` bug for DevOps; its log line is in
   `~/.adbrain-supervisor/supervisor.log`. If the Mac sleeps through 20:00Z, the export runs at the first tick after it wakes.
+- **Free-plan quotas (#1856):** once a UTC day the supervisor runs `scripts/plan-usage.mjs` (database size of 500 MB,
+  Storage of 1 GB, MAU of 50,000, via the Management API) and opens or updates one `Supabase free-plan quota above 80%`
+  issue. Egress isn't in the API: check the dashboard's Usage page. `--dry-run` prints the numbers.
 - **Lost even with an export:** Auth passwords and sessions, Storage file bytes (ad images
   and brand uploads; regenerate or re-upload), and everything since the export ran.
 - Known drift, harmless: production still has the empty legacy tables `meta_credentials`,

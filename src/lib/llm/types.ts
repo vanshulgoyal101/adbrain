@@ -19,6 +19,8 @@ export interface CompletionOptions {
   attemptTimeoutMs?: number;
   /** Tighter deadlines for named providers (e.g. `{ google: 5000 }`), overriding attemptTimeoutMs. */
   providerAttemptTimeoutMs?: Partial<Record<string, number>>;
+  /** #1200: a provider's own output cap; Groq counts `max_tokens` against its 1,000 output-tokens-per-minute limit. */
+  providerMaxTokens?: Partial<Record<string, number>>;
   /** Providers tried after the routing order, if not already in it (e.g. a fast last resort). */
   extraProviders?: string[];
   /** Providers tried right after the routing order's first one, before the rest (e.g. a proven fast fallback). */

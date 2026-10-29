@@ -1,0 +1,46 @@
+/* #1565: leave-behind landings. The site's own tokens; the one bold element is the WhatsApp chat. */
+.page { --wall: #efeae2; --sent: #d9fdd3; --wa: #1f7a4d; background: #fff; color: var(--foreground); min-height: 100vh; display: flex; flex-direction: column; }
+.page h1, .page h2, .page p, .page ul, .page ol, .page figure { margin: 0; }
+.page a:focus-visible { outline: 3px solid var(--primary); outline-offset: 3px; border-radius: 6px; }
+
+.header { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; max-width: 1080px; width: 100%; margin: 0 auto; }
+.logo { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; font-size: 18px; color: var(--foreground); text-decoration: none; }
+.signIn { min-height: 44px; display: inline-flex; align-items: center; font-weight: 600; color: var(--foreground); }
+
+.hero { display: grid; gap: 32px; padding: 16px 20px 40px; max-width: 1080px; width: 100%; margin: 0 auto; }
+.heroText h1 { font-size: 34px; line-height: 1.12; font-weight: 750; letter-spacing: -0.02em; max-width: 18ch; text-wrap: balance; }
+.lede { margin-top: 16px !important; font-size: 17px; line-height: 1.55; color: var(--muted); max-width: 52ch; }
+.hinglish { margin-top: 8px !important; font-size: 15px; line-height: 1.5; color: var(--muted); }
+.actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 24px; }
+.primary, .secondary { min-height: 48px; display: inline-flex; align-items: center; gap: 8px; padding: 0 20px; border-radius: 999px; font-weight: 650; font-size: 16px; text-decoration: none; }
+.primary { background: var(--wa); color: #fff; }
+.primary:hover { background: #17633e; }
+.secondary { color: var(--foreground); border: 1px solid var(--border); }
+.secondary:hover { background: #f8fafc; }
+
+.phone { justify-self: center; width: min(100%, 320px); border: 7px solid #1e293b; border-radius: 30px; overflow: hidden; background: var(--wall); }
+.chatTop { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: #fff; font-weight: 600; font-size: 15px; border-bottom: 1px solid #e9edef; }
+.avatar { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: #dfe5e7; color: #54656f; font-size: 13px; }
+.chat { display: grid; gap: 10px; padding: 16px 12px 28px; min-height: 230px; align-content: start; }
+.in, .out { max-width: 86%; padding: 8px 11px; border-radius: 10px; font-size: 15px; line-height: 1.4; box-shadow: 0 1px 0.5px rgba(11, 20, 26, 0.13); }
+.in { background: #fff; border-top-left-radius: 0; }
+.out { justify-self: end; background: var(--sent); border-top-right-radius: 0; font-weight: 600; }
+
+/* Same left edge as the hero at every width; the text column stays under ~70 characters. */
+.block { max-width: 1080px; width: 100%; margin: 0 auto; padding: 28px 20px; border-top: 1px solid var(--border); }
+.block > * { max-width: 640px; }
+.block h2 { font-size: 22px; line-height: 1.25; font-weight: 700; }
+.list, .steps { margin-top: 14px !important; padding-left: 20px; display: grid; gap: 10px; font-size: 16px; line-height: 1.55; }
+.steps li::marker { font-weight: 700; color: var(--wa); }
+.proof { margin-top: 14px !important; font-size: 16px; line-height: 1.55; max-width: 60ch; }
+.block > .proof:first-child { margin-top: 0 !important; }
+.note { margin-top: 14px !important; font-size: 15px; color: var(--muted); }
+
+.footer { margin-top: auto; display: flex; flex-wrap: wrap; gap: 12px 20px; justify-content: space-between; padding: 24px 20px; border-top: 1px solid var(--border); font-size: 14px; color: var(--muted); }
+.footer nav { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.footer a { min-height: 44px; display: inline-flex; align-items: center; color: inherit; }
+
+@media (min-width: 860px) {
+  .hero { grid-template-columns: 1.2fr 0.8fr; align-items: center; padding-top: 48px; padding-bottom: 64px; }
+  .heroText h1 { font-size: 48px; }
+}

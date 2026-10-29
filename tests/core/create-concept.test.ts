@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { conceptValidationRules, validateConcept, type ConceptInput } from "@/lib/creative/concept";
+import { clipToThought, conceptValidationRules, validateConcept, type ConceptInput } from "@/lib/creative/concept";
 import { AD_ANGLES } from "@/lib/templates/ads";
+import { adPolicyHits } from "@/lib/campaign/ad-policy";
 import recorded from "./fixtures/create/cedar-ridge-concept.json";
 import groq from "./fixtures/create/cedar-ridge-groq-drafts.json";
 import groqFields from "./fixtures/create/cedar-ridge-groq-fields.json";
@@ -27,6 +28,56 @@ describe("core: Create concept validation on a recorded production concept", () 
     expect(rules(overrun)).toEqual([]);
   });
 
+  // #1613 (QA): a Hindi paragraph ends its sentences with '।'; it is rewrapped like English instead of failing hook-length.
+  it("rewraps a long Hindi primary-text paragraph at '।' without changing a word", () => {
+    const hindi = "दिन भर डेस्क पर बैठने से गर्दन और पीठ अकड़ जाती है। हमारा ऑस्टिन क्लिनिक नए मरीज़ों को उसी दिन देखता है, शाम और सप्ताहांत में भी। आज ही अपनी पहली मुलाक़ात बुक करें।";
+    expect(hindi.length).toBeGreaterThan(125);
+    const result = validateConcept({ ...recorded.concept, primary_text: hindi }, input);
+    const issues = result.success ? [] : conceptValidationRules(result.issues);
+    expect(issues).not.toContain("hook-length");
+    if (result.success) {
+      const lines = result.concept.primary_text.split("\n");
+      expect(lines.length).toBeGreaterThan(1);
+      expect(lines.every((line) => line.length <= 125)).toBe(true);
+      expect(lines.join(" ")).toBe(hindi);
+    }
+  });
+
+  // #1609 (CPO, #1500): an IELTS business's ad that promises a band is repaired in Create and blocked in Review.
+  it("an IELTS brand's 'guaranteed band' is refused for repair and blocked at Review", () => {
+    const ielts: ConceptInput = { ...input, brand: { ...recorded.brand, vertical: "IELTS coaching" } };
+    const promise = { ...recorded.concept, primary_text: `${recorded.concept.primary_text.split("\n")[0]}\nGuaranteed band 7 in 30 days.` };
+    const result = validateConcept(promise, ielts);
+    expect(result.success).toBe(false);
+    expect(result.success ? [] : conceptValidationRules(result.issues).join(" ")).toMatch(/banned-claim/);
+    expect(adPolicyHits([{ id: "c1", headline: promise.headline, primaryText: promise.primary_text }], "IELTS coaching").map((hit) => hit.term))
+      .toEqual(expect.arrayContaining(["guaranteed", "guaranteed band"]));
+    // The same words pass for a business outside education and health.
+    expect(adPolicyHits([{ id: "c1", headline: promise.headline, primaryText: promise.primary_text }], "solar energy")).toEqual([]);
+  });
+
+  // #1617 (CPO, #1501): a generated picture can't be called the business's own work; the owner's photo can.
+  it("refuses 'Kitchens we finished' under a generated picture, allows it on the owner's photo", () => {
+    const line = (text: string) => ({ ...recorded.concept, primary_text: `${recorded.concept.primary_text.split("\n")[0]}\n${text}` });
+    expect(rules(line("Kitchens we finished in Mohali last month."))).toContain("work-claim");
+    expect(rules(line("See our work in Austin."))).toContain("work-claim");
+    expect(conceptValidationRules((() => {
+      const result = validateConcept(line("Kitchens we finished in Mohali last month."), { ...input, ownerPhoto: "https://core-test.supabase.co/brand/kitchen.jpg" });
+      return result.success ? [] : result.issues;
+    })())).not.toContain("work-claim");
+    expect(rules(line("Modular kitchens in Mohali, free consultation."))).not.toContain("work-claim");
+  });
+
+  // #1822 (Reviewer): a pasted bio's third-party number and link are refused (the repair rewrites them); the
+  // business's own phone is allowed.
+  it("refuses a third-party phone and link copied from a pasted bio, allows the business's own phone", () => {
+    const line = (text: string) => ({ ...recorded.concept, primary_text: `${recorded.concept.primary_text.split("\n")[0]}\n${text}` });
+    expect(rules(line("Call 98765 43210 or book at otherclinic.in."))).toContain("contact-in-copy");
+    const withPhone: ConceptInput = { ...input, brand: { ...recorded.brand, phone: "+91 98290 12345" } };
+    const result = validateConcept(line("Call 98290 12345 to book."), withPhone);
+    expect(result.success ? [] : conceptValidationRules(result.issues)).not.toContain("contact-in-copy");
+  });
+
   it("clips an over-long link description instead of discarding the concept", () => {
     const long = `${recorded.concept.description} with flexible evening and weekend appointments for busy adults`;
     expect(long.length).toBeGreaterThan(100);
@@ -36,6 +87,24 @@ describe("core: Create concept validation on a recorded production concept", () 
       expect(result.concept.description.length).toBeLessThanOrEqual(100);
       expect(long.startsWith(result.concept.description)).toBe(true);
     }
+  });
+
+  // #1544 (QA, production a93f972f, free path): the stored description was 'Modular kitchens for Mohali Phase 8B,
+  // Mohali, Kharar and New Chandigarh. Ask for a quote on' (91), word-clipped from the model's >100. The part past
+  // 100 characters wasn't stored, so the tail here is filled in; the clip point is the recorded one.
+  it("cuts an over-long description back to a complete thought, never mid-sentence", () => {
+    const nook = "Modular kitchens for Mohali Phase 8B, Mohali, Kharar and New Chandigarh. Ask for a quote on your new kitchen today.";
+    expect(nook.slice(0, 100)).toContain("Ask for a quote on");
+    expect(clipToThought(nook, 100)).toBe("Modular kitchens for Mohali Phase 8B, Mohali, Kharar and New Chandigarh.");
+    // No sentence end: the last clause, when it keeps at least half.
+    const clause = "Same-day new-patient slots in Austin with insurance and transparent cash pricing; evening and weekend visits too";
+    expect(clipToThought(clause, 100)).toBe("Same-day new-patient slots in Austin with insurance and transparent cash pricing");
+    // 'Rs.' isn't a sentence end; with no other safe cut the text stays long for the repair.
+    const rupees = "Modular kitchens from Rs. 2 lakh in Mohali with free 3D design and installation in 21 days for every home";
+    expect(clipToThought(rupees, 100)).toBe(rupees);
+    expect(rules({ ...recorded.concept, description: rupees })).toEqual(["schema:description:too_big"]);
+    const saved = validateConcept({ ...recorded.concept, description: `${recorded.concept.description} Ask for a quote on your first visit and more.` }, input);
+    expect(saved.success && saved.concept.description).toBe(recorded.concept.description);
   });
 
   it("still rejects uncited or invented claims and over-length ad copy", () => {
