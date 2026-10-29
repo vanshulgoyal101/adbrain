@@ -658,6 +658,34 @@
       "discardTitle": "Discard this setup?",
       "discardCopy": "Start a copy of \"{name}\" instead. Saved drafts stay available.",
       "discardAndCopy": "Discard and copy"
+    },
+    "review": {
+      "title": "Campaign review",
+      "fixItems": "Fix {count, plural, one {# item} other {# items}} before sending to Meta",
+      "cantSendYet": "This campaign can't be sent to Meta yet",
+      "pausedNote": "Meta gets it paused. Nothing spends until you activate it.",
+      "appearsOnceFixed": "Send to Meta (paused) appears once this is fixed.",
+      "checkAgain": "Check again",
+      "openBrand": "Open your business details",
+      "useWhatsApp": "Use WhatsApp chat instead (no website needed)",
+      "fix": {
+        "REVIEW_NO_META_CONNECTION": "Connect Facebook",
+        "REVIEW_CURRENCY": "Choose another ad account",
+        "REVIEW_META_ACCESS": "Connect Facebook again",
+        "REVIEW_CREATIVES": "Choose your ads",
+        "REVIEW_WHATSAPP_NOT_LINKED": "Link your WhatsApp number",
+        "REVIEW_NO_LEAD_FORM": "Choose a lead form",
+        "REVIEW_NO_WEBSITE": "Add your website",
+        "REVIEW_BUDGET": "Set the daily budget",
+        "REVIEW_NO_AGE_RANGE": "Set the age range",
+        "REVIEW_RADIUS": "Set the city radius",
+        "REVIEW_CITY_RADIUS": "Choose the locations again",
+        "REVIEW_AREAS_UNRESOLVED": "Fix the areas",
+        "REVIEW_NO_AUDIENCE": "Go to Recommend audience",
+        "REVIEW_AD_POLICY": "Edit the ad's wording",
+        "REVIEW_INTERESTS_UNRESOLVED": "Edit the interests",
+        "REVIEW_WHATSAPP_MESSAGE": "Edit the WhatsApp message"
+      }
     }
   },
   "errors": {
@@ -774,5 +802,33 @@
     "reviewBlockersFirst": "Campaign preparation is blocked. Resolve the review blockers before creating.",
     "reviewChangedBeforeCreate": "Campaign review changed. Review again before creating.",
     "campaignQueueUnavailable": "Campaign queue is unavailable. No inline fallback was attempted."
+  },
+  "review": {
+    "noMetaConnection": "Connect Facebook and choose your Page and ad account.",
+    "currency": "Choose an ad account that pays in Indian rupees (INR).",
+    "metaAccess": "Meta hasn't confirmed AdBrain can create campaigns in this ad account. Connect Facebook again and allow every permission it asks for.",
+    "noAds": "Choose at least one ad to send to Meta.",
+    "adGone": "One of the ads you chose isn't available any more. Choose your ads again.",
+    "adNoHeadline": "An ad you chose has no headline. Take it out of this campaign and choose another ad.",
+    "adNotApproved": "The ad {named, select, yes {{name}} other {you chose}} isn't approved yet. Approve it on the Review page, or take it out of this campaign.",
+    "adNoPicture": "The ad {named, select, yes {{name}} other {you chose}} has no picture yet. Take it out of this campaign and choose another ad.",
+    "adsMore": "{first} {more, plural, one {# more ad needs} other {# more ads need}} fixing too.",
+    "whatsappNotLinked": "Your Facebook Page has no WhatsApp number linked yet, so the ad's button has nowhere to open a chat. Link the number in Settings, then review again.",
+    "whatsappMessage": "Your WhatsApp message: {problem}",
+    "noLeadForm": "Choose an active lead form from your Facebook Page in the Lead form field.",
+    "noWebsite": "Add your business website on the Your business page. Meta lead ads must link to the advertiser's own website, not Facebook.",
+    "adPolicy": "\"{term}\" in the ad \"{named, select, yes {{headline}} other {without a headline}}\" is a health promise Meta rejects. Edit the ad to describe the service instead.",
+    "budgetZero": "Set a daily budget above ₹0.",
+    "budgetLow": "Meta needs at least ₹{min} a day. Set a daily budget of ₹{min} or more.",
+    "noAgeRange": "Choose an age range, or let AdBrain recommend one, before reviewing.",
+    "radius": "Set the city radius between 17 and 80 km; Meta allows nothing outside that range.",
+    "cityRadius": "\"City only\" came back from Meta with a radius. Choose the locations again.",
+    "areasNamed": "Meta didn't recognise the {count, plural, one {area} other {areas}} {names}. Fix or remove {count, plural, one {it} other {them}}, or choose nationwide targeting.",
+    "areasUnnamed": "Meta didn't recognise some of your areas. Fix or remove them, or choose nationwide targeting.",
+    "noAudience": "Let AdBrain recommend the audience (Recommend audience) before reviewing.",
+    "interestsNamed": "Meta didn't recognise the {count, plural, one {interest} other {interests}} {names}. Edit or remove {count, plural, one {it} other {them}}.",
+    "interestsUnnamed": "Meta didn't recognise some audience interests. Edit or remove them.",
+    "listAnd": "{first} and {last}",
+    "listMore": "{names} and {more} more"
   }
 }

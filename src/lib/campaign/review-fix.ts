@@ -1,4 +1,5 @@
 import type { ReviewBlockerReason } from "@/lib/meta/connect-contracts";
+import { campaignsTranslator, type Words } from "@/i18n/words";
 
 /**
  * #723: the one-tap fix for a Review blocker. `page` opens the page that fixes it, `connect`
@@ -11,31 +12,34 @@ export type ReviewFix =
   | { kind: "field"; label: string; targets: string[] }
   | { kind: "destination"; label: string; destination: "whatsapp" };
 
-const FIXES: Record<ReviewBlockerReason, ReviewFix> = {
-  REVIEW_NO_META_CONNECTION: { kind: "connect", label: "Connect Facebook" },
-  REVIEW_CURRENCY: { kind: "connect", label: "Choose another ad account" },
-  REVIEW_META_ACCESS: { kind: "connect", label: "Connect Facebook again" },
-  REVIEW_CREATIVES: { kind: "field", label: "Choose your ads", targets: ["campaign-ad-picker"] },
+type Fix<T> = T extends ReviewFix ? Omit<T, "label"> : never;
+
+/** #2333: the label is `campaigns.review.fix.<reason>`, in the owner's language. */
+const FIXES: Record<ReviewBlockerReason, Fix<ReviewFix>> = {
+  REVIEW_NO_META_CONNECTION: { kind: "connect" },
+  REVIEW_CURRENCY: { kind: "connect" },
+  REVIEW_META_ACCESS: { kind: "connect" },
+  REVIEW_CREATIVES: { kind: "field", targets: ["campaign-ad-picker"] },
   // #847: linking lives in Settings' WhatsApp card (steps + Check again), not on Your business.
-  REVIEW_WHATSAPP_NOT_LINKED: { kind: "page", label: "Link your WhatsApp number", href: "/settings#whatsapp-status-title" },
-  REVIEW_NO_LEAD_FORM: { kind: "field", label: "Choose a lead form", targets: ["leadform"] },
-  REVIEW_NO_WEBSITE: { kind: "page", label: "Add your website", href: "/brand" },
-  REVIEW_BUDGET: { kind: "field", label: "Set the daily budget", targets: ["budget"] },
-  REVIEW_NO_AGE_RANGE: { kind: "field", label: "Set the age range", targets: ["age-min", "age-mode"] },
-  REVIEW_RADIUS: { kind: "field", label: "Set the city radius", targets: ["city-radius", "location-include", "location-mode"] },
-  REVIEW_CITY_RADIUS: { kind: "field", label: "Choose the locations again", targets: ["location-include", "location-mode"] },
-  REVIEW_AREAS_UNRESOLVED: { kind: "field", label: "Fix the areas", targets: ["planned-areas", "location-include", "location-mode"] },
-  REVIEW_NO_AUDIENCE: { kind: "field", label: "Go to Recommend audience", targets: ["recommend-audience"] },
-  REVIEW_AD_POLICY: { kind: "field", label: "Edit the ad's wording", targets: ["campaign-ad-picker"] },
-  REVIEW_INTERESTS_UNRESOLVED: { kind: "field", label: "Edit the interests", targets: ["audience-interests", "recommend-audience"] },
-  REVIEW_WHATSAPP_MESSAGE: { kind: "field", label: "Edit the WhatsApp message", targets: ["whatsapp-message"] },
+  REVIEW_WHATSAPP_NOT_LINKED: { kind: "page", href: "/settings#whatsapp-status-title" },
+  REVIEW_NO_LEAD_FORM: { kind: "field", targets: ["leadform"] },
+  REVIEW_NO_WEBSITE: { kind: "page", href: "/brand" },
+  REVIEW_BUDGET: { kind: "field", targets: ["budget"] },
+  REVIEW_NO_AGE_RANGE: { kind: "field", targets: ["age-min", "age-mode"] },
+  REVIEW_RADIUS: { kind: "field", targets: ["city-radius", "location-include", "location-mode"] },
+  REVIEW_CITY_RADIUS: { kind: "field", targets: ["location-include", "location-mode"] },
+  REVIEW_AREAS_UNRESOLVED: { kind: "field", targets: ["planned-areas", "location-include", "location-mode"] },
+  REVIEW_NO_AUDIENCE: { kind: "field", targets: ["recommend-audience"] },
+  REVIEW_AD_POLICY: { kind: "field", targets: ["campaign-ad-picker"] },
+  REVIEW_INTERESTS_UNRESOLVED: { kind: "field", targets: ["audience-interests", "recommend-audience"] },
+  REVIEW_WHATSAPP_MESSAGE: { kind: "field", targets: ["whatsapp-message"] },
 };
 
-export function reviewBlockerFix(reason: ReviewBlockerReason | undefined): ReviewFix | null {
-  return reason ? FIXES[reason] : null;
+export function reviewBlockerFix(reason: ReviewBlockerReason | undefined, words?: Words<"campaigns">): ReviewFix | null {
+  return reason ? { ...FIXES[reason], label: campaignsTranslator(words)(`review.fix.${reason}`) } : null;
 }
 
 /** #742: another way past a blocker. WhatsApp chat ads need no website, so a site-less owner isn't stuck. */
-export function reviewBlockerAlternative(reason: ReviewBlockerReason | undefined): ReviewFix | null {
-  return reason === "REVIEW_NO_WEBSITE" ? { kind: "destination", label: "Use WhatsApp chat instead (no website needed)", destination: "whatsapp" } : null;
+export function reviewBlockerAlternative(reason: ReviewBlockerReason | undefined, words?: Words<"campaigns">): ReviewFix | null {
+  return reason === "REVIEW_NO_WEBSITE" ? { kind: "destination", label: campaignsTranslator(words)("review.useWhatsApp"), destination: "whatsapp" } : null;
 }
