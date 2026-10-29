@@ -45,7 +45,7 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
 
 - **Publishing requires a verified Page-linked number.** Eligible reviews offer
   Send to Meta (paused); missing or unreadable linkage still blocks publishing.
-  In the earlier 2026-09-19 read-only check, Solaride's Page omitted its linkage/number fields
+  In the earlier 2026-09-19 read-only check, the first pilot's Page omitted its linkage/number fields
   with both Page and system-user tokens. An existing ad set's historical recipient
   is not accepted as proof of the current linkage. No test campaign was created.
 - Select WhatsApp chat in either manual or guided setup. No lead form is required
@@ -58,8 +58,8 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
   button can differ from the phone printed on the ad. It is accepted only if it is the
   Page's number or a number on a WhatsApp Business Account owned by the ad account's
   own Meta business; Meta accepts those for the Page's WhatsApp ad sets (#157).
-- Brand and Settings show early whether WhatsApp chat ads can run ("Ready: +91 ••••• 4842" or
-  "Not linked yet") with a short linking guide and a Check again button (#235).
+- Brand and Settings show early whether WhatsApp chat ads can run ("Ready: +91 ••••• 4842
+  (linked to your Page)" or "Not linked yet") with a short linking guide and a Check again button (#235).
 - In manual setup, the campaign form lists those numbers (masked; full numbers never
   reach the browser before review) as **WhatsApp button number** and saves the chosen
   mask in the draft; preflight resolves it to the full number. A new campaign, and a plan
@@ -133,6 +133,13 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
   passes it, and the #588 ledger records `placements: "advantage:facebook,instagram,messenger"`.
   An audience edit to a WhatsApp ad set applies the same rule; an edit to an older lead-form ad set keeps
   its placements.
+- No-Facebook-Reels test (#2273, for #680): an internal-only checkbox in the composer ("No Facebook Reels
+  (team test)", shown only to `internal-accounts.ts` users) saves `excludeFacebookReels: true` on the draft.
+  WhatsApp and lead-form ad sets then also name `facebook_positions` (every Facebook position except
+  `facebook_reels`; Meta refuses `video_feeds` as discontinued), the 9:16 creative's story rule drops
+  `facebook_reels`, the plan check calls it the no-Reels test, and the ledger records
+  `advantage:facebook,instagram,messenger -facebook_reels`. Off by default; the field is in the reviewed
+  plan only when on, so older reviews keep their hash. Re-run copies of a campaign start with it off.
 - Every launch checks the payloads it sent against Meta's new-advertiser guidance
   (Advantage+ audience and placements, one ad set, budget vs learning, 4:5 and 9:16
   images) and logs `campaign.plan_check` (#419). Review shows two plain, non-blocking warnings
@@ -168,4 +175,4 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
 - Meta Page field references were checked; mocked provider tests do not certify
   actual account eligibility, delivery, or Graph v21 payload acceptance. Perform
   an explicitly authorized real-account PAUSED creation test before rollout.
-  No live Solaride campaign is modified by this implementation.
+  No live pilot campaign is modified by this implementation.

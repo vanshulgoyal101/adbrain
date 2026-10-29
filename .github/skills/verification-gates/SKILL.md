@@ -3,7 +3,7 @@ name: verification-gates
 description: "Use this skill for any change that crosses source, generated assets, shared modules, database behavior, or deployment state."
 ---
 
-<!-- Generated from vanshulgoyal101/skills@fb8f6e0 skills/verification-gates.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
+<!-- Generated from vanshulgoyal101/skills@b877c32 skills/verification-gates.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
 
 # Verification Gates
 
@@ -261,3 +261,25 @@ recorded delayed deployment completion, exact-commit provider evidence, and
 canonical authenticated checks. Follow-up reconciliation found 93 local paths
 already equal to the released tree; all 490 fingerprinted working files remained
 unchanged while the old branch/index baseline was aligned with explicit approval.
+
+## AdBrain lessons (Oct 29)
+
+- When a rule tightens what an input may mean, run the production smoke's own saved
+  data through it before merging (#1745).
+- A structural (AST) guard test doesn't prove behaviour. Plant a failing case first,
+  then pair it with a recorded route case and one mutation per layer, each turning only
+  its own case red (#1729, #1961).
+- Gate checks done at preflight go stale across a multi-minute step; re-check right
+  before the irreversible action (#2187).
+- Delete old secret copies only after proving the new path succeeds and the policy
+  denies the branch, then test again without fallback credentials (#1893).
+- Trace a stored-format change to every consumer of the bytes: a shared validator
+  re-encoded to PNG, so a later converter was dead code and exports shipped PNG. Test
+  real bytes at each consumer, not mocked buffers (#1963, #2016, #1897).
+- Pure move refactor: re-export from the old module so call sites don't change and the
+  type check is the proof; move each test's module mock with the import, or
+  `instanceof` compares different classes (#1824, #2165). Keep a helper a client needs
+  in a neutral module rather than importing an adapter for it (#1968).
+- A scheduled job is live when its log line appears, not when it merges: the supervisor
+  runs main and may skip ticks under load. Grep the logged text, not the script name
+  (#1856, #1857).

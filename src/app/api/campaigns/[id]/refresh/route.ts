@@ -17,6 +17,7 @@ import { ownerRefusal } from "@/lib/campaign/campaign-owner";
 import { resultsStale } from "@/lib/campaign/results-freshness";
 import { createClient } from "@/lib/supabase/server";
 import { saveCampaign, saveCampaignResult } from "@/lib/campaign/trusted-write";
+import { saveOutsideChanges } from "@/lib/campaign/outside-changes";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -129,9 +130,14 @@ async function handlePOST(
   }
 
   if (ads) await saveAdResults(createAdminClient() as unknown as SupabaseClient, { businessId: campaign.business_id, campaignId: id, ads }).catch(() => false);
+  // #1903: paused or budget changed in Meta Ads Manager; the card shows it from the updated row.
+  const { metaState, ...readInsights } = insights;
+  const outside = await saveOutsideChanges({ businessId: campaign.business_id, userId: user.id }, campaign, metaState)
+    .catch(() => ({ changed: false, raised: false }));
+  const { data: updated } = outside.changed ? await supabase.from("campaigns").select("*").eq("id", id).maybeSingle() : { data: null };
 
   const [summary, enforcement] = await Promise.all([
-    summarizeInsights(campaign.name ?? "Your campaign", insights),
+    summarizeInsights(campaign.name ?? "Your campaign", readInsights),
     enforceAutoPauseWithStatus(campaign.business_id),
     logEvent({
       businessId: campaign.business_id,
@@ -139,9 +145,9 @@ async function handlePOST(
       entityType: "campaign",
       entityId: id,
       metaObjectId: campaign.meta_campaign_id,
-      details: { ...insights },
+      details: { ...readInsights },
     }),
   ]);
 
-  return NextResponse.json({ result, summary, insights, review, autoPaused: enforcement.paused, protectionConfirmed: enforcement.confirmed });
+  return NextResponse.json({ result, summary, insights: readInsights, review, autoPaused: enforcement.paused, protectionConfirmed: enforcement.confirmed, ...updated ? { campaign: updated } : {} });
 }

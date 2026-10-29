@@ -75,6 +75,7 @@ an application release.
 | `CREATIVE_CONCEPT_SCHEDULE` | `serial` | `serial` or `parallel`. `parallel` starts all Create concept calls at once; each still validates against earlier concepts (repeated headline/opening → normal repair). #142 measure on Haiku, 3 briefs × 2: p50 60.1 s → 28.2 s, first-attempt pass 12/18 → 16/18, judge 3.88 → 4.39 |
 | `GEMINI_THINKING_HEADROOM` | `3000` | Nonnegative integer extra output headroom |
 | `LLM_MONTHLY_TOKEN_LIMIT` | `2000000` | Nonnegative integer; 0 disables quota checking. Internal accounts in [internal-accounts.json](../../src/lib/internal-accounts.json) (confirmed team-domain emails, listed owner ids) have no limit (#398) |
+| `AI_MONTHLY_COST_LIMIT_USD` | Unset | #1717: a business's monthly AI spend in USD (text and paid pictures, `llm_usage_events.estimated_cost_usd`, IST calendar month). At or over it, or if the spend can't be read, that business's pictures come from the free providers with the 'taking longer' notice, and a product-photo ad fails honestly. Internal accounts are exempt. Unset means no cap and no read. The token cap still applies to text. The value is the CEO's (#1722). |
 
 The parser does not validate live account quota or model availability. The
 monthly limit is a per-business preflight check, **not an atomic reservation,
@@ -170,6 +171,27 @@ may require additional guards; inspect the exact script before execution.
 `NEXT_PUBLIC_SITE_URL`. The migration runner uses `PGHOST`, `PGPORT` (default
 5432), `PGDATABASE`, `PGUSER`, `PGPASSWORD` and optional `PGSSLROOTCERT`; see
 [Release Workflow](releasing.md#database-and-credential-safety).
+
+Scripts and CI read these too. Secrets live in the ignored `.env.smoke` or `.env.local`, or in
+GitHub environment secrets; never in an issue. GitHub's and Vercel's own variables (`GITHUB_*`,
+`VERCEL_ENV` and the like), `CI`, `HOME` and `PATH` need no row.
+
+| Variable | Read by and purpose | Secret |
+| --- | --- | --- |
+| `SMOKE_EMAIL`, `SMOKE_PASSWORD` | `smoke-core.mjs`, `ui-gate.mjs`: the smoke account's login | Password |
+| `SMOKE_ENV_FILE` | `ui-gate.mjs`: path of the smoke env file (default `.env.smoke` in the owner's checkout) | No |
+| `SMOKE_CREATE_CLEANUP` | `smoke-core.mjs`: `1` removes what a Create smoke made | No |
+| `VERCEL_TOKEN` | `production-guard.mjs`: Vercel API for the live SHA and rollback | Yes |
+| `GH_TOKEN`, `GH_REPO` | CI scripts' GitHub token; `wait-for-work.mjs` repository override | Token |
+| `GROQ_REVIEW_API_KEY` | `ai-review.mjs`: the PR AI review's Groq key, separate from the app's pool | Yes |
+| `ADBRAIN_ALLOW_META_WRITES` | `scripts/lib/meta-write-gate.ts`: `1` lets a `record-meta-*` script make non-GET Graph calls | No |
+| `ADBRAIN_HEADLESS` | Set by `team-supervisor.mjs` for role runs; refuses releases, migrations and Meta writes | No |
+| `ADBRAIN_SUPERVISOR_CLI`, `ADBRAIN_SUPERVISOR_MAX_LOAD`, `ADBRAIN_SUPERVISOR_MIN_FREE_GB` | `team-supervisor.mjs`: the CLI command (JSON array), and the load and free-disk limits for starting a run | No |
+| `WS1_EMAIL`, `WS1_PASSWORD` | `ws1-walk.mts`: an internal account that has never gone live | Password |
+| `META_CONNECT_UI_BASE_URL`, `META_CONNECT_UI_STATIC_ONLY`, `META_OAUTH_INTERACTIVE`, `META_TEST_TRANSFER_SQL` | Local Meta connect checks (`check-meta-connect-ui.mjs`, `check-meta-oauth-entry.mjs`, `check-meta-connect-db.mjs`): target URL, static-only and interactive switches, transfer SQL path | No |
+| `META_TEST_PG_BIN` | `check-meta-connect-db.mjs`, `db-export.mjs`, `restore-drill.mjs`: Postgres binary folder | No |
+| `WORKSPACE_CHECK_URL`, `WORKSPACE_CHECK_WIDTH` | `check-workspace-ux.mjs`: target URL and viewport width | No |
+| `BRAND_JSON`, `GOAL`, `APPROVED_JSON`, `WHATSAPP_NUMBER`, `MESSAGES_JSON`, `ONLY`, `OUT` | `record-*-fixtures.ts` inputs and output path for recording real responses | No |
 
 `npm run env:doctor` and `npm run env:doctor:strict` run
 [env-doctor.sh](../../scripts/env-doctor.sh), which only reports whether the

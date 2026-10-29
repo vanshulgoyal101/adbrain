@@ -18,6 +18,7 @@ const creativeSettleMigration = await readFile(join(root, "db/migrations/2026102
 const configurablePaymentMigration = await readFile(join(root, "db/migrations/20260927_configurable_payment_quotes.sql"), "utf8");
 const webhookHealthMigration = await readFile(join(root, "db/migrations/20261022_payment_webhook_health.sql"), "utf8");
 const cappedBoundMigration = await readFile(join(root, "db/migrations/20261023_capped_reservation_bound.sql"), "utf8");
+const spendCapMinimumMigration = await readFile(join(root, "db/migrations/20261029_reserve_spend_cap_minimum.sql"), "utf8");
 const customAmountMigration = await readFile(join(root, "db/migrations/20261023_custom_payment_amount.sql"), "utf8");
 const paymentTermsV2Migration = await readFile(join(root, "db/migrations/20261028_payment_terms_v2.sql"), "utf8");
 const metaCostMigration = await readFile(join(root, "db/migrations/20261023_meta_cost_observation.sql"), "utf8");
@@ -47,6 +48,7 @@ const hardeningMigration = await readFile(join(root, "db/migrations/20261026_leg
 const reauthMigration = await readFile(join(root, "db/migrations/20261026_meta_connection_reauth.sql"), "utf8");
 const leadCampaignLinkMigration = await readFile(join(root, "db/migrations/20261026_lead_campaign_link.sql"), "utf8");
 const leadEraseMigration = await readFile(join(root, "db/migrations/20261029_lead_erase.sql"), "utf8");
+const subjectPurgeMigration = await readFile(join(root, "db/migrations/20261029_meta_subject_purge.sql"), "utf8");
 const leadSharedPageMigration = await readFile(join(root, "db/migrations/20261028_lead_sync_shared_page.sql"), "utf8");
 const managedWhatsAppMigration = await readFile(join(root, "db/migrations/20261025_managed_whatsapp_page_link.sql"), "utf8");
 const productRollupMigration = await readFile(join(root, "db/migrations/20260928_product_event_rollups.sql"), "utf8");
@@ -768,6 +770,8 @@ async function verifyCappedRunBound(db, database) {
       costs: (media, tax) => service("select public.customer_ad_reconcile_costs($1,$2,$3,$4,'act_123',1,$5,$6,1800,$7,$8,false,null)",
         [business,owner,account,campaign,media,tax,new Date().toISOString(),randomUUID()]),
       reserve: (cap = null) => service("select public.customer_ad_reserve($1,$2,$3,$4,'act_123',1,$5,$6,false,$7) as result",[business,owner,account,campaign,dailyRupees*100,'e'.repeat(64),cap]),
+      reserveAtLeast: (minimum, { review = false, cap = null } = {}) => service("select public.customer_ad_reserve($1,$2,$3,$4,'act_123',1,$5,$6,$7,$8,$9) as result",
+        [business,owner,account,campaign,dailyRupees*100,'e'.repeat(64),review,cap,minimum]),
       result: (reservationId, state) => service("select public.customer_ad_activation_result($1,$2,$3,$4,$5,$6)",[business,owner,account,campaign,reservationId,state]),
       activate: async (reservationId) => { await run.result(reservationId,'active'); await db.query("update public.campaigns set status='active' where id=$1",[campaign]); },
       age: () => db.query("update private.customer_ad_costs set observed_at=clock_timestamp()-interval '20 minutes' where campaign_id=$1",[campaign]),
@@ -823,6 +827,22 @@ async function verifyCappedRunBound(db, database) {
     assert.equal((await uncapped.balance()).held,false);
     await uncapped.age();
     assert.equal((await uncapped.balance()).held,true);
+  });
+  // #1799: ₹280/day leaves a ₹6,779.66 media limit (₹8,000 less GST); Meta's live minimum is checked in the same transaction.
+  await check(`${database}: an uncapped reserve under Meta's campaign spend-cap minimum is refused and holds nothing (#1799)`, async () => {
+    const run = await fixture(280);
+    const before = await run.balance();
+    await assert.rejects(run.reserveAtLeast(677967, { review: true }), {code:'23514', message:/Meta campaign spend cap minimum/});
+    await assert.rejects(run.reserveAtLeast(677967), {code:'23514', message:/Meta campaign spend cap minimum/});
+    assert.equal(await run.state(),undefined);
+    assert.equal((await run.balance()).reservedPaise,before.reservedPaise);
+    await assert.rejects(run.reserveAtLeast(0), {code:'23514', message:/binding changed/});
+    const { reservationId: id, mediaLimitPaise } = await run.reserveAtLeast(677966);
+    assert.equal(Number(mediaLimitPaise),677966);
+    assert.equal(await run.state(),'uncertain');
+    await run.result(id,'uncertain');
+    const cappedRun = await fixture(1000);
+    assert.equal(Number((await cappedRun.reserveAtLeast(9000000, { cap: 300000 })).mediaLimitPaise) > 0,true);
   });
   await check(`${database}: explicit cost holds still hold a capped run`, async () => {
     await capped.hold(true);
@@ -1712,16 +1732,70 @@ async function verifyPlanPeriods(db, database) {
  * #1700 (QA red tests for #1670: CTO design 18:55Z + Reviewer's 7 points, 19:06Z). A rep hands a `+prospect` business to
  * its owner: the owner's own new account claims it with a single-use link; nothing of the staff login carries over.
  * Skips until a `db/migrations/*business_transfer*.sql` exists (META_TEST_TRANSFER_SQL points at another file to try).
- * Contract these cases pin (rename freely, keep the behaviour):
- *   private.business_transfers(id, business_id, from_user_id, target_email, token_hash, state, expires_at, ...)
- *   public.business_transfer_start(p_business_id uuid, p_from_user_id uuid, p_target_email text, p_token_hash text)
+ * Contract these cases pin (rename freely, keep the behaviour). CTO 19:56Z: no link; the owner signs in normally and
+ * Home asks, so the claim names the transfer (no token):
+ *   private.business_transfers(id, business_id, from_user_id, target_email, state, expires_at, ...)
+ *   public.business_transfer_start(p_business_id uuid, p_from_user_id uuid, p_target_email text)
  *     returns uuid, service_role only, 30-min expiry; refuses unless p_from_user_id owns the business with a
  *     `+prospect@<team domain>` address and the pre-checks pass (no live Meta connection, no campaigns, no payments).
- *   public.business_transfer_claim(p_token_hash text) returns uuid (the business), for `authenticated`: the session's
- *     confirmed email (case-insensitive) must be the target; pre-checks re-run under lock; single use; refuses a target
- *     that already owns a business; moves owner_id on businesses, campaign_drafts, preference_settings and
- *     declared_preferences; writes one audit_log row naming both users.
+ *   public.business_transfer_claim(p_transfer_id uuid) returns uuid (the business), for `authenticated`: the user's
+ *     confirmed email in auth.users (case-insensitive) must be the target; pre-checks re-run under lock; single use;
+ *     refuses a target that already owns a business; moves owner_id on businesses, campaign_drafts,
+ *     preference_settings and declared_preferences; writes one audit_log row naming both users.
+ *   public.business_transfer_mine() / business_transfer_decline(p_transfer_id) for the owner;
+ *   public.business_transfer_status(p_business_id) for the rep (service role).
  */
+/** #1734: a Meta deletion request purges only that person's businesses; one reconnected by someone else keeps its data. */
+async function verifyMetaSubjectPurge(db, database) {
+  await check(`${database}: Meta subject purge deletes that person's Meta data, keeps manual enquiries and other people's (#1734)`, async () => {
+    const owner = randomUUID(), [a, b, c] = [randomUUID(), randomUUID(), randomUUID()];
+    const token = async (business, subject, revoked = false) => (await db.query(`insert into private.meta_tokens(business_id,authorized_by,subject_id,token_kind,ciphertext,nonce,auth_tag,key_id,revoked_at)
+      values ($1,$2,$3,'user','\\x01',$4,$5,'k1',$6) returning id`, [business, owner, subject, `\\x${"00".repeat(12)}`, `\\x${"00".repeat(16)}`, revoked ? new Date() : null])).rows[0].id;
+    const seed = async (business, tokenId) => {
+      await db.query("insert into public.meta_connections(business_id,generation,authorization_status,ad_account_id,page_id,token_id,meta_business_id,account_name,page_name,currency) values ($1,1,'connected','act_1','11',$2,'99','Shop ads','Shop page','INR')", [business, tokenId]);
+      const campaign = randomUUID();
+      await db.query("insert into public.campaigns(id,business_id,daily_budget) values ($1,$2,200)", [campaign, business]);
+      await db.query("insert into public.campaign_results(campaign_id,spend,impressions) values ($1,10,100)", [campaign]);
+      await db.query("insert into public.ad_results(business_id,campaign_id,meta_ad_id) values ($1,$2,'1')", [business, campaign]);
+      await db.query("insert into public.leads(business_id,source,meta_lead_id,full_name,field_data) values ($1,'meta_form','m1','Synced','{}'),($1,'whatsapp_manual',null,'Walk-in','{}')", [business]);
+    };
+    const attempt = (business, tokenId, assets) => db.query(`insert into private.meta_connection_attempts(business_id,user_id,token_id,state_hash,browser_binding_hash,status,intent,discovered_assets,expires_at)
+      values ($1,$2,$3,$4,'bind','cancelled','{}',$5,now())`, [business, owner, tokenId, randomUUID(), assets]);
+    const count = async (sql, business) => Number((await db.query(sql, [business])).rows[0].n);
+    const leads = (business) => count("select count(*) n from public.leads where business_id=$1 and meta_lead_id is not null", business);
+    await db.query("begin");
+    try {
+      await db.query("insert into auth.users(id) values ($1)", [owner]);
+      await db.query("insert into public.businesses(id,owner_id,name) values ($1,$4,'Purge A'),($2,$4,'Purge B'),($3,$4,'Purge C')", [a, b, c, owner]);
+      // One person (fb-gone) on A and, earlier, on B; B has since reconnected with fb-other; C is only fb-other.
+      const goneA = await token(a, "fb-gone");
+      await token(b, "fb-gone", true);
+      const otherB = await token(b, "fb-other"), otherC = await token(c, "fb-other");
+      await seed(a, goneA); await seed(b, otherB); await seed(c, otherC);
+      await attempt(a, goneA, '{"pages":[]}'); await attempt(a, null, '{"pages":[]}'); await attempt(a, null, null);
+      await assert.rejects(db.query("savepoint s; set local role authenticated; select public.meta_subject_purge('fb-gone')"), { code: "42501" });
+      await db.query("rollback to savepoint s");
+      const result = (await db.query("select public.meta_subject_purge('fb-gone') r")).rows[0].r;
+      assert.deepEqual(result, { businesses: 2, tokens: 2, attempts: 2, connections: 1, leads: 1, campaign_results: 1, ad_results: 1, kept_businesses: [b] });
+      const connection = (await db.query("select * from public.meta_connections where business_id=$1", [a])).rows[0];
+      assert.deepEqual([connection.token_id, connection.account_name, connection.page_name, connection.meta_business_id, connection.currency, connection.authorization_status], [null, null, null, null, null, "revoked"]);
+      assert.equal(await leads(a), 0);
+      assert.equal(await count("select count(*) n from public.leads where business_id=$1 and meta_lead_id is null", a), 1);
+      assert.equal(await count("select count(*) n from public.campaign_results r join public.campaigns c on c.id=r.campaign_id where c.business_id=$1", a), 0);
+      assert.equal(await count("select count(*) n from private.meta_connection_attempts where business_id=$1", a), 1);
+      for (const kept of [b, c]) {
+        assert.equal(await leads(kept), 1);
+        assert.equal(await count("select count(*) n from public.ad_results where business_id=$1", kept), 1);
+        assert.equal((await db.query("select account_name, authorization_status from public.meta_connections where business_id=$1", [kept])).rows[0].authorization_status, "connected");
+      }
+      assert.equal(await count("select count(*) n from private.meta_tokens where subject_id='fb-gone' or business_id=$1", a), 0);
+      assert.equal(await count("select count(*) n from private.meta_tokens where subject_id='fb-other' and revoked_at is null and business_id <> $1", a), 2);
+      assert.deepEqual((await db.query("select public.meta_subject_purge('fb-gone') r")).rows[0].r, { businesses: 0, tokens: 0, attempts: 0, connections: 0, leads: 0, campaign_results: 0, ad_results: 0, kept_businesses: [] });
+      await assert.rejects(db.query("select public.meta_subject_purge(' ')"), { code: "22023" });
+    } finally { await db.query("rollback"); }
+  });
+}
+
 async function verifyBusinessTransfer(db, database) {
   const files = (await readdir(join(root, "db/migrations"))).filter((file) => /business_transfer/.test(file)).sort();
   const override = process.env.META_TEST_TRANSFER_SQL;
@@ -1737,7 +1811,6 @@ async function verifyBusinessTransfer(db, database) {
   for (const file of files) { const sql = await readFile(join(root, "db/migrations", file), "utf8"); await db.query(sql); await db.query(sql); }
   if (override) await db.query(await readFile(override, "utf8"));
 
-  const hash = (token) => createHash("sha256").update(token).digest("hex");
   const session = async (role, claims, run) => {
     const s = client(database);
     await s.connect();
@@ -1750,10 +1823,14 @@ async function verifyBusinessTransfer(db, database) {
       const result = await run(s); await s.query("commit"); return result;
     } catch (error) { await s.query("rollback").catch(() => {}); throw error; } finally { await s.end(); }
   };
-  const start = (business, from, email, token) => session("service_role", null,
-    async (s) => (await s.query("select public.business_transfer_start($1,$2,$3,$4) as id", [business, from, email, hash(token)])).rows[0].id);
-  const claim = (user, email, token) => session("authenticated", { sub: user, email, role: "authenticated" },
-    async (s) => (await s.query("select public.business_transfer_claim($1) as business_id", [hash(token)])).rows[0].business_id);
+  const start = (business, from, email) => session("service_role", null,
+    async (s) => (await s.query("select public.business_transfer_start($1,$2,$3) as id", [business, from, email])).rows[0].id);
+  const claim = (user, email, transfer) => session("authenticated", { sub: user, email, role: "authenticated" },
+    async (s) => (await s.query("select public.business_transfer_claim($1) as business_id", [transfer])).rows[0].business_id);
+  const mine = (user, email) => session("authenticated", { sub: user, email, role: "authenticated" },
+    async (s) => (await s.query("select * from public.business_transfer_mine()")).rows);
+  const status = (business) => session("service_role", null,
+    async (s) => (await s.query("select * from public.business_transfer_status($1)", [business])).rows[0]);
   const ownerOf = async (business) => (await db.query("select owner_id from public.businesses where id=$1", [business])).rows[0].owner_id;
   const seed = async ({ staffEmail, ownerConfirmed = true } = {}) => {
     const staff = randomUUID(), owner = randomUUID(), business = randomUUID();
@@ -1769,9 +1846,10 @@ async function verifyBusinessTransfer(db, database) {
     await db.query("insert into public.preference_settings(business_id,owner_id,enabled) values ($1,$2,true)", [business, staff]);
     await db.query("insert into public.declared_preferences(business_id,owner_id,category,value) values ($1,$2,'tone','warm')", [business, staff]);
     await db.query("insert into public.campaign_drafts(business_id,owner_id,input,expires_at) values ($1,$2,'{}',now()+interval '1 day')", [business, staff]);
-    await start(business, staff, ownerEmail, "token-happy");
-    // Case-insensitive: the owner's mail app may capitalise.
-    assert.equal(await claim(owner, ownerEmail.toUpperCase(), "token-happy"), business);
+    const transfer = await start(business, staff, ownerEmail.toUpperCase());
+    // Home's question: the owner's own pending hand-over, with the business's name.
+    assert.deepEqual((await mine(owner, ownerEmail)).map((row) => [row.transfer_id, row.business_name]), [[transfer, "Prospect bakery"]]);
+    assert.equal(await claim(owner, ownerEmail, transfer), business);
     assert.equal(await ownerOf(business), owner);
     for (const table of ["campaign_drafts", "preference_settings", "declared_preferences"]) {
       const rows = (await db.query(`select owner_id from public.${table} where business_id=$1`, [business])).rows;
@@ -1779,82 +1857,187 @@ async function verifyBusinessTransfer(db, database) {
     }
     const audit = (await db.query("select details::text as details, actor_id from public.audit_log where business_id=$1", [business])).rows;
     assert.ok(audit.some((row) => `${row.details} ${row.actor_id}`.includes(staff) && `${row.details} ${row.actor_id}`.includes(owner)), "one audit row names both users");
-    await assert.rejects(claim(owner, ownerEmail, "token-happy"), "a used link is refused");
+    await assert.rejects(claim(owner, ownerEmail, transfer), "a used hand-over is refused");
+    assert.equal((await status(business)).state, "claimed");
+    assert.deepEqual(await mine(owner, ownerEmail), []);
   });
 
   await check(`${database}: business transfer: expired, wrong email, unconfirmed email and an unknown link are refused (#1670)`, async () => {
     const expired = await seed();
-    await start(expired.business, expired.staff, expired.ownerEmail, "token-expired");
-    await db.query("update private.business_transfers set expires_at = now() - interval '1 minute' where token_hash=$1", [hash("token-expired")]);
-    await assert.rejects(claim(expired.owner, expired.ownerEmail, "token-expired"));
+    const expiredId = await start(expired.business, expired.staff, expired.ownerEmail);
+    await db.query("update private.business_transfers set expires_at = now() - interval '1 minute' where id=$1", [expiredId]);
+    await assert.rejects(claim(expired.owner, expired.ownerEmail, expiredId));
+    assert.deepEqual(await mine(expired.owner, expired.ownerEmail), []);
+    assert.equal((await status(expired.business)).state, "expired");
     assert.equal(await ownerOf(expired.business), expired.staff);
 
     const wrong = await seed();
-    await start(wrong.business, wrong.staff, wrong.ownerEmail, "token-wrong");
+    const wrongId = await start(wrong.business, wrong.staff, wrong.ownerEmail);
     const stranger = randomUUID();
     await db.query("insert into auth.users(id,email,email_confirmed_at) values ($1,'stranger@example.com',now())", [stranger]);
-    await assert.rejects(claim(stranger, "stranger@example.com", "token-wrong"));
+    await assert.rejects(claim(stranger, "stranger@example.com", wrongId));
     // The JWT's email claim alone isn't proof: it must be this user's confirmed address.
-    await assert.rejects(claim(stranger, wrong.ownerEmail, "token-wrong"));
+    await assert.rejects(claim(stranger, wrong.ownerEmail, wrongId));
+    assert.deepEqual(await mine(stranger, wrong.ownerEmail), []);
     assert.equal(await ownerOf(wrong.business), wrong.staff);
 
     const unconfirmed = await seed({ ownerConfirmed: false });
-    await start(unconfirmed.business, unconfirmed.staff, unconfirmed.ownerEmail, "token-unconfirmed");
-    await assert.rejects(claim(unconfirmed.owner, unconfirmed.ownerEmail, "token-unconfirmed"));
+    const unconfirmedId = await start(unconfirmed.business, unconfirmed.staff, unconfirmed.ownerEmail);
+    assert.deepEqual(await mine(unconfirmed.owner, unconfirmed.ownerEmail), []);
+    await assert.rejects(claim(unconfirmed.owner, unconfirmed.ownerEmail, unconfirmedId));
     assert.equal(await ownerOf(unconfirmed.business), unconfirmed.staff);
 
-    await assert.rejects(claim(wrong.owner, wrong.ownerEmail, "token-never-issued"));
+    await assert.rejects(claim(wrong.owner, wrong.ownerEmail, randomUUID()));
   });
 
   await check(`${database}: business transfer: pre-checks block at start and again at claim (Meta connected, a campaign) (#1670)`, async () => {
     const atStart = await seed();
     await db.query("insert into public.meta_connections(business_id,authorization_status) values ($1,'connected')", [atStart.business]);
-    await assert.rejects(start(atStart.business, atStart.staff, atStart.ownerEmail, "token-meta-start"));
+    await assert.rejects(start(atStart.business, atStart.staff, atStart.ownerEmail));
 
     // Staff connect Meta after the link went out: the claim re-checks under lock.
     const atClaim = await seed();
-    await start(atClaim.business, atClaim.staff, atClaim.ownerEmail, "token-meta-claim");
+    const atClaimId = await start(atClaim.business, atClaim.staff, atClaim.ownerEmail);
     await db.query("insert into public.meta_connections(business_id,authorization_status) values ($1,'connected')", [atClaim.business]);
-    await assert.rejects(claim(atClaim.owner, atClaim.ownerEmail, "token-meta-claim"));
+    await assert.rejects(claim(atClaim.owner, atClaim.ownerEmail, atClaimId));
     assert.equal(await ownerOf(atClaim.business), atClaim.staff);
 
     const campaign = await seed();
-    await start(campaign.business, campaign.staff, campaign.ownerEmail, "token-campaign");
+    const campaignId = await start(campaign.business, campaign.staff, campaign.ownerEmail);
     await db.query("insert into public.campaigns(id,business_id,daily_budget) values ($1,$2,300)", [randomUUID(), campaign.business]);
-    await assert.rejects(claim(campaign.owner, campaign.ownerEmail, "token-campaign"));
+    await assert.rejects(claim(campaign.owner, campaign.ownerEmail, campaignId));
     assert.equal(await ownerOf(campaign.business), campaign.staff);
   });
 
   await check(`${database}: business transfer: only a +prospect owner can start; a target who already owns a business is refused (#1670)`, async () => {
     for (const staffEmail of ["qa@adbrain.vanshul.com", "owner@example.com"]) {
       const notProspect = await seed({ staffEmail: staffEmail.replace("@", `-${randomUUID().slice(0, 6)}@`) });
-      await assert.rejects(start(notProspect.business, notProspect.staff, notProspect.ownerEmail, `token-np-${staffEmail}`), staffEmail);
+      await assert.rejects(start(notProspect.business, notProspect.staff, notProspect.ownerEmail), staffEmail);
     }
     const notOwner = await seed();
-    await assert.rejects(start(notOwner.business, notOwner.owner, notOwner.ownerEmail, "token-not-owner"), "the starter must own the business");
+    await assert.rejects(start(notOwner.business, notOwner.owner, notOwner.ownerEmail), "the starter must own the business");
+    const teamTarget = await seed();
+    await assert.rejects(start(teamTarget.business, teamTarget.staff, "qa@adbrain.vanshul.com"), "a team address would keep it internal");
 
     const taken = await seed();
     await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Their own shop')", [randomUUID(), taken.owner]);
-    await start(taken.business, taken.staff, taken.ownerEmail, "token-taken");
-    await assert.rejects(claim(taken.owner, taken.ownerEmail, "token-taken"));
+    const takenId = await start(taken.business, taken.staff, taken.ownerEmail);
+    await assert.rejects(claim(taken.owner, taken.ownerEmail, takenId));
     assert.equal(await ownerOf(taken.business), taken.staff);
   });
 
   await check(`${database}: business transfer: two simultaneous claims, exactly one wins (#1670)`, async () => {
     const race = await seed();
-    await start(race.business, race.staff, race.ownerEmail, "token-race");
-    const results = await Promise.allSettled([claim(race.owner, race.ownerEmail, "token-race"), claim(race.owner, race.ownerEmail, "token-race")]);
+    const raceId = await start(race.business, race.staff, race.ownerEmail);
+    const results = await Promise.allSettled([claim(race.owner, race.ownerEmail, raceId), claim(race.owner, race.ownerEmail, raceId)]);
     assert.equal(results.filter((result) => result.status === "fulfilled").length, 1);
     assert.equal(await ownerOf(race.business), race.owner);
+  });
+
+  // Reviewer (#1783): two DIFFERENT hand-overs to one recipient each lock only their own rows; without the recipient
+  // lock both see "owns nothing" and both commit. A slow owner_id trigger, scoped to this recipient, widens the race.
+  await check(`${database}: business transfer: two hand-overs to the same recipient claimed at once, exactly one wins (#1783)`, async () => {
+    const first = await seed();
+    const second = await seed();
+    const firstId = await start(first.business, first.staff, first.ownerEmail);
+    const secondId = await start(second.business, second.staff, first.ownerEmail);
+    await db.query(`create or replace function public.test_slow_transfer() returns trigger language plpgsql as
+      $$ begin perform pg_sleep(0.5); return new; end $$`);
+    await db.query(`create trigger test_slow_transfer before update of owner_id on public.businesses for each row
+      when (new.owner_id = '${first.owner}'::uuid) execute function public.test_slow_transfer()`);
+    try {
+      const results = await Promise.allSettled([claim(first.owner, first.ownerEmail, firstId), claim(first.owner, first.ownerEmail, secondId)]);
+      assert.deepEqual(results.map((result) => result.status).sort(), ["fulfilled", "rejected"]);
+      assert.match(String(results.find((result) => result.status === "rejected").reason?.message), /already has an AdBrain business/);
+      assert.equal((await db.query("select count(*)::int as n from public.businesses where owner_id=$1", [first.owner])).rows[0].n, 1);
+    } finally {
+      await db.query("drop trigger if exists test_slow_transfer on public.businesses");
+      await db.query("drop function if exists public.test_slow_transfer()");
+    }
   });
 
   await check(`${database}: business transfer: browsers can't start one or read the transfers; anon can't claim (#1670)`, async () => {
     const roles = await seed();
     await assert.rejects(session("authenticated", { sub: roles.staff, email: "x", role: "authenticated" },
-      (s) => s.query("select public.business_transfer_start($1,$2,$3,$4)", [roles.business, roles.staff, roles.ownerEmail, hash("token-browser")])), { code: "42501" });
+      (s) => s.query("select public.business_transfer_start($1,$2,$3)", [roles.business, roles.staff, roles.ownerEmail])), { code: "42501" });
+    await assert.rejects(session("authenticated", { sub: roles.staff, email: "x", role: "authenticated" },
+      (s) => s.query("select * from public.business_transfer_status($1)", [roles.business])), { code: "42501" });
     await assert.rejects(session("authenticated", { sub: roles.staff, email: "x", role: "authenticated" },
       (s) => s.query("select 1 from private.business_transfers")), { code: "42501" });
-    await assert.rejects(session("anon", null, (s) => s.query("select public.business_transfer_claim($1)", [hash("token-anon")])), { code: "42501" });
+    await assert.rejects(session("anon", null, (s) => s.query("select public.business_transfer_claim($1)", [randomUUID()])), { code: "42501" });
+  });
+
+  await check(`${database}: business transfer: 'This isn't my business' declines it; only the target can, and the rep sees it (#1670)`, async () => {
+    const asked = await seed();
+    const askedId = await start(asked.business, asked.staff, asked.ownerEmail);
+    const stranger = randomUUID();
+    await db.query("insert into auth.users(id,email,email_confirmed_at) values ($1,$2,now())", [stranger, `stranger-${stranger.slice(0, 8)}@example.com`]);
+    const decline = (user, transfer) => session("authenticated", { sub: user, email: "x", role: "authenticated" },
+      async (s) => (await s.query("select public.business_transfer_decline($1) as ok", [transfer])).rows[0].ok);
+    assert.equal(await decline(stranger, askedId), false);
+    assert.equal((await status(asked.business)).state, "pending");
+    assert.equal(await decline(asked.owner, askedId), true);
+    assert.equal((await status(asked.business)).state, "declined");
+    await assert.rejects(claim(asked.owner, asked.ownerEmail, askedId));
+    assert.equal(await ownerOf(asked.business), asked.staff);
+  });
+
+  const costFiles = (await readdir(join(root, "db/migrations"))).filter((file) => /monthly_ai_cost/.test(file)).sort();
+  const hasCost = (await db.query("select 1 from information_schema.columns where table_schema='public' and table_name='llm_usage_events' and column_name='estimated_cost_usd'")).rowCount;
+  if (!costFiles.length || !hasCost) { console.log(`SKIP ${database}: monthly AI cost after a hand-over (#1997) needs monthly_ai_cost_usd`); return; }
+  for (const file of costFiles) { const sql = await readFile(join(root, "db/migrations", file), "utf8"); await db.query(sql); await db.query(sql); }
+  await check(`${database}: business transfer: the owner's monthly AI cost starts at the hand-over (#1997)`, async () => {
+    const usage = (business, user, usd, at) => db.query("insert into public.llm_usage_events(business_id,user_id,route,provider,model,total_tokens,estimated_cost_usd,created_at) values ($1,$2,'creatives.generate','fixture','fixture',10,$3,$4)", [business, user, usd, at]);
+    const cost = (user, business) => session("authenticated", { sub: user, email: "x", role: "authenticated" },
+      async (s) => Number((await s.query("select public.monthly_ai_cost_usd($1, now() - interval '1 day') as usd", [business])).rows[0].usd));
+    const moved = await seed();
+    await usage(moved.business, moved.staff, 2.5, new Date(Date.now() - 3_600_000));
+    assert.equal(await cost(moved.staff, moved.business), 2.5, "before the hand-over the rep's paid pictures count");
+    assert.equal(await claim(moved.owner, moved.ownerEmail, await start(moved.business, moved.staff, moved.ownerEmail)), moved.business);
+    const { transferred_at: at } = (await db.query("select transferred_at from public.businesses where id=$1", [moved.business])).rows[0];
+    await usage(moved.business, moved.owner, 0.75, new Date(at.getTime() + 60_000));
+    assert.equal(await cost(moved.owner, moved.business), 0.75, "only the owner's own spend counts after the hand-over");
+    const kept = await seed();
+    await usage(kept.business, kept.staff, 1.25, new Date(Date.now() - 3_600_000));
+    assert.equal(await cost(kept.staff, kept.business), 1.25, "a business never handed over counts from p_since");
+  });
+}
+
+/** #1838: the crons remember Meta's throttling per account and app-wide; never shortened, at most a day, service role only. */
+async function verifyMetaThrottle(db, database) {
+  const sql = await readFile(join(root, "db/migrations/20261029_meta_throttle.sql"), "utf8");
+  await db.query(sql); await db.query(sql);
+  const as = async (role, run) => {
+    const s = client(database); await s.connect();
+    try { await s.query("begin"); await s.query(`set local role ${role}`); const result = await run(s); await s.query("commit"); return result; }
+    catch (error) { await s.query("rollback").catch(() => {}); throw error; } finally { await s.end(); }
+  };
+  const record = (business, scope, minutes) => as("service_role", (s) => s.query(
+    "select public.meta_throttle_record($1,$2,now() + make_interval(mins => $3))", [business, scope, minutes]));
+  await check(`${database}: Meta throttle: an account wait is kept, never shortened, at most a day (#1838)`, async () => {
+    const owner = randomUUID(), business = randomUUID();
+    await db.query("insert into auth.users(id) values ($1)", [owner]);
+    await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Throttled')", [business, owner]);
+    await db.query("insert into public.meta_connections(business_id,authorization_status) values ($1,'connected')", [business]);
+    const until = async () => (await db.query("select extract(epoch from throttled_until - now())/60 as mins, throttled_scope from public.meta_connections where business_id=$1", [business])).rows[0];
+    await record(business, "account", 37);
+    let row = await until();
+    assert.ok(row.mins > 36 && row.mins <= 37, String(row.mins)); assert.equal(row.throttled_scope, "account");
+    await record(business, "account", 5);
+    assert.ok((await until()).mins > 36, "a smaller later estimate doesn't shorten the wait");
+    await record(business, "page", 60 * 48);
+    row = await until();
+    assert.ok(row.mins <= 24 * 60 + 1, "capped at a day"); assert.equal(row.throttled_scope, "page");
+    await assert.rejects(record(business, "everyone", 5));
+  });
+  await check(`${database}: Meta throttle: the app-wide limit is one row; only the service role touches it (#1838)`, async () => {
+    await record(randomUUID(), "app", 15);
+    const app = await as("service_role", async (s) => (await s.query("select public.meta_app_throttled_until() as until")).rows[0].until);
+    assert.ok(app && new Date(app).getTime() > Date.now(), "app throttle active");
+    await assert.rejects(as("authenticated", (s) => s.query("select public.meta_throttle_record($1,'app',now())", [randomUUID()])), { code: "42501" });
+    await assert.rejects(as("authenticated", (s) => s.query("select public.meta_app_throttled_until()")), { code: "42501" });
+    await assert.rejects(as("authenticated", (s) => s.query("select 1 from private.channel_throttle")), { code: "42501" });
+    await db.query("delete from private.channel_throttle");
   });
 }
 
@@ -2878,12 +3061,15 @@ async function verify(database, source, integrityMigration, customerOnly = false
     await db.query(operatorPaymentMigration);
     if (customerOnly) {
       await db.query("drop function if exists public.customer_ad_reserve(uuid,uuid,text,uuid,text,bigint,bigint,text,boolean,bigint)");
+      await db.query("drop function if exists public.customer_ad_reserve(uuid,uuid,text,uuid,text,bigint,bigint,text,boolean,bigint,bigint)");
       await db.query(customerAllowanceMigration);
       await db.query(customerAllowanceMigration);
       const priced = (await db.query("select exists(select 1 from information_schema.columns where table_schema='private' and table_name='production_payment_orders' and column_name='purpose') as installed")).rows[0].installed;
       if (!priced) await db.query(configurablePaymentMigration);
       await db.query(cappedBoundMigration);
       await db.query(cappedBoundMigration);
+      await db.query(spendCapMinimumMigration);
+      await db.query(spendCapMinimumMigration);
       await db.query(metaCostMigration);
       await db.query(metaCostMigration);
       await db.query(metaSettleMigration);
@@ -2972,9 +3158,13 @@ async function verify(database, source, integrityMigration, customerOnly = false
         await verifyLeadCampaignLink(db,database);
         await verifySharedPageLeads(db,database);
         await verifyLeadErase(db,database);
+        await db.query(subjectPurgeMigration);
+        await db.query(subjectPurgeMigration);
+        await verifyMetaSubjectPurge(db,database);
       }
       if (database === "customer_fresh") await verifyAdvisorHardening(db,database);
       await verifyBusinessTransfer(db,database);
+      await verifyMetaThrottle(db,database);
       return;
     }
     if (integrityMigration) {

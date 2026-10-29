@@ -16,6 +16,16 @@ export interface CampaignInsights {
   whatsappOpens?: number;
   /** Meta returned no rows: nothing delivered in the requested period. */
   noDelivery?: true;
+  /** #1903: the campaign's own status and budgets, read with the binding check (no extra call). */
+  metaState?: MetaCampaignState;
+}
+
+/** #1903: what Meta says the campaign is set to, raw minor units, for spotting changes made in Ads Manager. */
+export interface MetaCampaignState {
+  status: string;
+  dailyBudget?: string;
+  lifetimeBudget?: string;
+  adSets: Array<{ id: string; status?: string; dailyBudget?: string; lifetimeBudget?: string }>;
 }
 
 const amountSchema = z.string().regex(/^\d+(?:\.\d+)?$/).transform(Number)

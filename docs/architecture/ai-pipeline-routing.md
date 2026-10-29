@@ -19,13 +19,16 @@ terminal local errors do not mean trying every key indefinitely.
 Internal accounts (team, owner, test; [internal-accounts.json](../../src/lib/internal-accounts.json))
 write on the same models as customers (Haiku text is about $0.006 a Create, and the free text
 tiers allow 20 Gemini requests a day) but make their images free, without reference images and
-never falling back to the paid image model (#449, #466). When `CLOUDFLARE_ACCOUNT_ID` and
+never falling back to the paid image model (#449, #466). The production smoke login (`smokeUserIds`) also
+writes on free text only (Groq, Gemini): its usage rows cost $0, and when those can't answer a call fails with
+`FREE_TEXT_UNAVAILABLE` rather than reaching OpenRouter (#2230). When `CLOUDFLARE_ACCOUNT_ID` and
 `CLOUDFLARE_AI_TOKEN` are set, the free picture comes from Cloudflare Workers AI FLUX-1-schnell
 ([cloudflare.ts](../../src/lib/imageGen/providers/cloudflare.ts), #1476): 4 steps, prompt capped at
 2048 characters, $0 within the daily free allowance. It returns a square JPEG (no size option); the
-poster covers its frame, so a 4:5 ad crops the sides. A 429, 5xx or error 4006 (daily allowance
-used) is recorded as `IMAGE_FREE_BUSY`, any other failure as `IMAGE_PROVIDER`, and the picture falls
-to Pollinations, which stays last. Pollinations answers
+poster covers its frame, so a 4:5 ad crops the sides. A 429 (including 3040, out of capacity) or 5xx
+is recorded as `IMAGE_FREE_BUSY` and asked once more a second later; error 3036 or 4006 (daily allowance used)
+is recorded as `IMAGE_FREE_DAILY_LIMIT` and skips Cloudflare on that instance until 00:00 UTC (#2145). Any other
+failure is `IMAGE_PROVIDER`. Then the picture falls to Pollinations, which stays last. Pollinations answers
 402/429/503 past its free limit of one image per 45 s per address, while its Retry-After says 1 s;
 from production it also answered a fast 404 in the same spot (#634). So free images run one at a
 time per server instance, treat 402/404/429/503 as busy, wait the longer of Retry-After and 15 s,
@@ -172,6 +175,10 @@ limit is spent. AdBrain treats either as `CREDIT_EXHAUSTED`, not as a generic re
   (Gemini, Groq) even when the routing order (for example Create's `CREATIVE_PROVIDER_ORDER`) lists
   only OpenRouter. Free providers are added only after a credit failure; other failures behave as
   before. Usage events record `LLM_CREDIT_EXHAUSTED`.
+- **Monthly cost cap (#1717):** with `AI_MONTHLY_COST_LIMIT_USD` set, `generate`, `regenerate` and
+  `background` read the business's month-to-date AI spend (text and pictures). At or over the cap, that
+  request's pictures take the free path exactly like a parked key (notice, honest product-photo failure),
+  so one account can't drain the shared image key. Internal accounts are exempt; text keeps the token cap.
 - **Images:** a credit-exhausted OpenRouter image falls back to the free picture (Cloudflare when
   configured, then Pollinations, #1476) even when `IMAGE_PROVIDER_FALLBACK` is `none`. Neither can
   take product reference photos, so a picture made from the owner's product photos or past ads
@@ -182,8 +189,9 @@ limit is spent. AdBrain treats either as `CREDIT_EXHAUSTED`, not as a generic re
   as not charged (`providerFinalStatus: failed`); any other image failure stays `unknown`.
   The exhausted image provider is then parked for 15 minutes per server (#1422), so the rest of
   the batch and the next Creates go straight to the free picture. A Pollinations fallback joins the
-  one-at-a-time free queue and waits out one busy answer (402/404/429/503, at least 15 s) before
-  that ad fails.
+  one-at-a-time free queue. Out of credit (or parked), or over the #1717 cost cap, it waits out busy answers (402/404/429/503,
+  at least 15 s each) up to the 90 s cap, like a free account (#2189); after a one-off paid failure
+  it waits out one busy answer before that ad fails.
 - **Owner message:** if the free models can't help either, Create says plainly that AdBrain's paid
   AI or image credit has run out and to try again shortly, instead of a generic failure.
 

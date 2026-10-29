@@ -1,6 +1,7 @@
 import { GRAPH } from "@/lib/meta/graph-version";
 import { z } from "zod";
 import { getEnv } from "@/lib/env";
+import { appSecretProof } from "@/lib/meta/appsecret-proof";
 
 const meSchema = z.object({ id: z.string() });
 const businessSchema = z.object({ id: z.string(), verification_status: z.string().optional() });
@@ -21,7 +22,8 @@ export async function checkParentAccess(fetchImpl: typeof fetch = fetch): Promis
   const token = env.META_PARENT_SYSTEM_TOKEN;
   if (!token) return { configured: false, enabled };
   async function read(path: string) {
-    const response = await fetchImpl(`${GRAPH}/${path}`, {
+    const proof = appSecretProof(token);
+    const response = await fetchImpl(`${GRAPH}/${path}${proof ? `${path.includes("?") ? "&" : "?"}appsecret_proof=${proof}` : ""}`, {
       headers: { Authorization: `Bearer ${token}` }, cache: "no-store", signal: AbortSignal.timeout(10_000),
     });
     const body = await response.json().catch(() => null);

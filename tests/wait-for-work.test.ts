@@ -149,6 +149,13 @@ describe("wait-for-work handoffs", () => {
     expect(waitingOnMe("CEO: please submit", devops, ["core", "waiting-owner"])).toBe(false);
   });
 
+  it("keeps frozen later items quiet, even when a reply names you (#2238)", () => {
+    const dev2 = matchers("dev2");
+    expect(waitingOnMe("Reviewer: **changes requested**. → Dev 2: fix the order-less case.", dev2, ["later", "owner:dev2"])).toBe(false);
+    expect(waitingOnMe("Docs: the old file is gone; merge next.", dev2, ["later", "owner:dev2"])).toBe(false);
+    expect(waitingOnMe("CEO: → Dev 2: decide by noon.", dev2, ["decision", "owner:dev2"])).toBe(true);
+  });
+
   it("keeps Dev distinct from Dev 2, Dev 3 and DevOps", () => {
     expect(dev.writtenByMe("Dev 2: slice 3 is finished")).toBe(false);
     expect(waitingOnMe("CTO: → Dev 2: yours now.", dev)).toBe(false);
@@ -222,6 +229,10 @@ describe("ready pool (#573)", () => {
     expect(readyPool(lanes, "designer").map((i) => i.number)).toEqual([20]);
     expect(readyPool(lanes, "cpo").map((i) => i.number)).toEqual([21]);
     expect(readyPool(lanes, "analyst").map((i) => i.number)).toEqual([22]);
+  });
+  it("never offers frozen work: `later` and `standing` stay out of the pool (#2052)", () => {
+    const pool = [issue(30, "ready", "lane:dev", "later"), issue(31, "ready", "lane:dev", "standing"), issue(32, "ready", "lane:dev")];
+    expect(readyPool(pool, "dev3").map((i) => i.number)).toEqual([32]);
   });
 });
 

@@ -156,6 +156,9 @@ export const productionPaymentPolicySchema = z.union([z.strictObject({
   refundTerms: z.literal(OPERATOR_MANAGED_POLICY.refundTerms),
 }), pricedPolicySchema, pricedPolicyV1Schema, legacyPaymentPolicySchema]);
 
+/** #1235 (owner): these terms name AdBrain's service/advertising split. Kept only to read orders accepted under them. */
+const RETIRED_POLICY_VERSIONS = new Set<string>([OPERATOR_MANAGED_POLICY.version, "operator-managed-priced-v1"]);
+
 export function getProductionCollectionPolicy(environment: Environment = process.env, now = Date.now(), subject?: PaymentSubject) {
   getProductionPaymentConfig(environment);
   try {
@@ -182,6 +185,7 @@ export function getProductionCollectionPolicy(environment: Environment = process
       throw new Error();
     }
     const policy = productionPaymentPolicySchema.parse(JSON.parse(raw));
+    if (RETIRED_POLICY_VERSIONS.has(policy.version)) throw new Error();
     if (subject?.verificationAmountPaise !== undefined && !("verification" in policy && policy.verification)) throw new Error();
     if (Date.parse(policy.approvedAt) > now || ("expiresAt" in policy && Date.parse(policy.expiresAt) <= now)) throw new Error();
     if ("verification" in policy && policy.verification && (policy.verification.businessId !== subject?.businessId

@@ -62,7 +62,8 @@ export function snoozedUntil(body) {
 }
 
 export function waitingOnMe(lastBody, m, labels = [], now = Date.now()) {
-  if (labels.some((l) => PARKED.has(l))) return false;
+  // `later` is frozen (board, #2238): a reply on it doesn't wake its owner.
+  if (labels.some((l) => PARKED.has(l) || l === "later")) return false;
   if (lastBody == null) return true;
   // Your own last word without a handoff (no "→ Role") means the item is still yours to continue;
   // idle workers otherwise slept with their queue unfinished (Oct 25). A scheduled check
@@ -225,7 +226,7 @@ export function readyPool(issues, role, max = 3) {
   const names = (i) => (i.labels ?? []).map((l) => (typeof l === "string" ? l : l.name));
   return issues
     .filter((i) => !i.pull_request && names(i).includes("ready") && names(i).includes(`lane:${lane}`)
-      && !names(i).some((n) => n.startsWith("owner:") || PARKED.has(n) || n === "decision" || n === `declined:${role}`))
+      && !names(i).some((n) => n.startsWith("owner:") || HOLD.has(n) || n === `declined:${role}`))
     .sort((a, b) => Number(names(b).includes("core")) - Number(names(a).includes("core")) || a.number - b.number)
     .slice(0, max);
 }

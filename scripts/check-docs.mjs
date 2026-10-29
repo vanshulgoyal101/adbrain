@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, existsSync, statSync, realpathSync } from "node:fs";
+import { readFileSync, readdirSync, existsSync, statSync, realpathSync, writeFileSync } from "node:fs";
 import { resolve, relative, dirname, extname, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
@@ -38,6 +38,7 @@ function parseDocument(file) {
   const links = [];
   const examples = [];
   const unclosedFences = [];
+  const prose = [];
   const inspect = (items, parentLine = 1) => {
     for (let index = 0; index < items.length; index++) {
       const token = items[index];
@@ -56,11 +57,12 @@ function parseDocument(file) {
         const lastLine = text.split("\n")[token.map[1] - 1]?.trim().replace(/^(?:>\s*)+/, "") ?? "";
         if (!lastLine.startsWith(token.markup) || lastLine.split(token.markup[0]).join("").trim()) unclosedFences.push(line);
       }
+      if (token.type === "inline") prose.push({ line, text: token.children.map(child => /break$/.test(child.type) ? " " : child.type === "code_inline" ? "" : child.type === "html_inline" ? parseHtml(child.content).text : child.content).join("") });
       if (token.children) inspect(token.children, line);
     }
   };
   inspect(tokens);
-  return { text, anchors, links, examples, unclosedFences };
+  return { text, anchors, links, examples, unclosedFences, prose };
 }
 
 export function sourceInventory(root) {
@@ -117,6 +119,180 @@ export function routeRows(text) {
     .map(match => ({ path: match[1], line: text.slice(0, match.index).split("\n").length }));
 }
 
+// #2252: a "quoted" label in docs/product must exist in the app (src, messages, db/migrations). Compared as word
+// trigrams: an app slot ({x}, ${x}) matches one word; a doc placeholder (…, N, n, X, Y, [x], {x}, numbers) is skipped.
+// "Owner says:" lines quote customers; LABEL_PROSE lists example text that isn't app copy.
+export const LABEL_PROSE = new Set(["Cures back pain", "Hi, I want info", "Can I get PM Surya Ghar subsidy help?", "fresh direction", "ignore preferences",
+  // setup-go-live.tsx renders hintBefore + <strong>adBrain</strong> + hintAfter.
+  "Facebook is still reviewing AdBrain. Until then, your Facebook account needs our invite: open your invites and accept adBrain, then tap Connect."]);
+const SLOT = "§";
+const words = text => (text.replace(/[‘’]/g, "'").replace(/&apos;|&rsquo;|&#39;/g, "'").toLowerCase().match(/[\p{L}\p{M}\p{N}'§]+/gu) ?? [])
+  .map(word => word.replace(/^'+|'+$/g, "")).filter(Boolean).map(word => /^\d+[a-z]{0,2}$/.test(word) || /^[nxy]$/.test(word) ? SLOT : word);
+export function appCopy(root) {
+  const files = [...walk(resolve(root, "src")).filter(file => /\.(?:tsx?|json)$/.test(file) && !/\.test\./.test(file)), ...walk(resolve(root, "messages")), ...walk(resolve(root, "db/migrations"))];
+  const grams = new Set();
+  for (const file of files) {
+    const list = words(readFileSync(file, "utf8").replace(/\$\{[^{}`]*\}|\{[\w.]{1,40}\}|#/g, ` ${SLOT} `));
+    list.forEach((word, index) => { for (let size = 1; size <= 3 && index + size <= list.length; size++) grams.add(list.slice(index, index + size).join(" ")); });
+  }
+  return grams;
+}
+const known = (gram, grams) => [-1, ...gram.keys()].some(slot => grams.has(gram.map((word, index) => index === slot ? SLOT : word).join(" ")));
+export function missingLabels(texts, grams) {
+  const missing = [];
+  for (const { line, text } of texts) {
+    if (/^\s*Owner says:/.test(text)) continue;
+    // Quotes after "reply:" are support's words, and labels without Latin letters are customer words or Hindi.
+    for (const [, before, label] of text.replace(/“[^”]*”/g, ` ${SLOT} `).matchAll(/([^\s"]*\s?)"([^"]{1,200})"/g)) {
+      if (LABEL_PROSE.has(label.trim()) || /(?:reply|दें):\s?$/i.test(before) || !/[a-z]/i.test(label) || /[\u0900-\u097F]/.test(label)) continue;
+      // "·" and sentence ends usually separate UI elements, so each piece is checked on its own.
+      const pieces = label.replace(/…|\.\.\.|\[[^\]]*\]|\{[^}]*\}/g, ` ${SLOT} `).split(/·|[.?!;:](?:\s|$)/).map(words);
+      const checks = pieces.flatMap(list => list.map((_, index) => list.slice(index, index + Math.min(3, list.length)))
+        .filter(gram => gram.length === Math.min(3, list.length) && !gram.includes(SLOT)));
+      if (checks.some(gram => !known(gram, grams))) missing.push({ line, label });
+    }
+  }
+  return missing;
+}
+
+// #2267: scheduled-jobs.md lists every schedule: a table row naming the source (workflow file, vercel.json path or
+// pg_cron job) and its cron in code spans. Sources: `cron:` lines in workflows, vercel.json crons, and the last
+// cron.schedule/unschedule per job across db/migrations in file order.
+const CRON = /^[\d*,/-]+(?: [\d*,/-]+){4}$/;
+export function scheduleDrift(root, markdown) {
+  const actual = new Set();
+  const workflows = resolve(root, ".github/workflows");
+  for (const path of walk(workflows).filter(file => /\.ya?ml$/.test(file))) {
+    for (const [, cron] of readFileSync(path, "utf8").matchAll(/^\s*-?\s*cron:\s*["']([^"']+)["']/gm)) actual.add(`${relative(workflows, path)} ${cron}`);
+  }
+  if (existsSync(resolve(root, "vercel.json"))) {
+    for (const { path, schedule } of JSON.parse(readFileSync(resolve(root, "vercel.json"), "utf8")).crons ?? []) actual.add(`${path} ${schedule}`);
+  }
+  const jobs = new Map();
+  for (const path of walk(resolve(root, "db/migrations")).filter(file => file.endsWith(".sql")).sort()) {
+    for (const [, name, cron] of readFileSync(path, "utf8").matchAll(/cron\.(?:un)?schedule\(\s*'([^']+)'(?:\s*,\s*'([^']+)')?/g)) cron ? jobs.set(name, cron) : jobs.delete(name);
+  }
+  for (const [name, cron] of jobs) actual.add(`${name} ${cron}`);
+  const documented = new Map();
+  markdown.split("\n").forEach((text, index) => {
+    if (!text.startsWith("|")) return;
+    const spans = [...text.matchAll(/`([^`]+)`/g)].map(match => match[1]);
+    const key = spans.find(span => /\.ya?ml$|^\/api\/cron\/|^adbrain-/.test(span));
+    for (const cron of spans.filter(span => CRON.test(span))) if (key) documented.set(`${key} ${cron}`, index + 1);
+  });
+  return [
+    ...[...actual].filter(entry => !documented.has(entry)).map(entry => ({ line: 1, message: `Schedule missing from the table: \`${entry}\`` })),
+    ...[...documented].filter(([entry]) => !actual.has(entry)).map(([entry, line]) => ({ line, message: `Documented schedule no longer exists: \`${entry}\`` })),
+  ];
+}
+
+// #2277: each docs/product/hi page carries `<!-- mirrors ../x.md <hash> -->` under its H1. The hash covers the English
+// page's headings and quoted labels, so a changed step or label names the Hindi page to refresh. Stamp after a refresh
+// with `npm run docs:check -- --stamp docs/product/hi/x.md`.
+const MIRROR = /<!-- mirrors (\S+\.md) ([0-9a-f]{12}) -->/;
+export const isHindiMirror = file => /^docs\/product\/hi\/(?!README\.md$)[^/]+\.md$/.test(file);
+export function mirrorHash(markdown) {
+  const text = markdown.replace(/^(```|~~~)[^\n]*\n[\s\S]*?^\1[^\n]*$/gm, "");
+  const parts = [...text.match(/^#{1,6} .*$/gm) ?? [], ...text.match(/"[^"\n]{1,200}"/g) ?? []].map(part => part.trim());
+  return createHash("sha256").update(parts.join("\n")).digest("hex").slice(0, 12);
+}
+export function mirrorDrift(path, markdown) {
+  const stamp = markdown.match(MIRROR);
+  if (!stamp) return "No mirror stamp: run `npm run docs:check -- --stamp <this file>` once it matches its English page";
+  const english = resolve(dirname(path), stamp[1]);
+  if (!existsSync(english)) return `Mirrored English page is missing: ${stamp[1]}`;
+  return mirrorHash(readFileSync(english, "utf8")) === stamp[2] ? null
+    : `${stamp[1]} changed since this translation: update this page, then run \`npm run docs:check -- --stamp <this file>\``;
+}
+export function stampMirror(path) {
+  const markdown = readFileSync(path, "utf8");
+  const target = markdown.match(MIRROR)?.[1] ?? markdown.match(/\]\((\.\.\/[^)#\s]+\.md)\)/)?.[1];
+  if (!target) throw new Error(`${path}: no link to its English page`);
+  const line = `<!-- mirrors ${target} ${mirrorHash(readFileSync(resolve(dirname(path), target), "utf8"))} -->`;
+  writeFileSync(path, MIRROR.test(markdown) ? markdown.replace(MIRROR, line) : markdown.replace(/^(# .*\n)/, `$1${line}\n`));
+}
+
+// #2276: scripts and next.config read environment too, and a documented name nothing reads is set for nothing.
+// Platform-provided names need no row.
+const PLATFORM_ENV = /^(?:HOME|PATH|CI|NODE_ENV|NEXT_RUNTIME|(?:GITHUB|RUNNER)_[A-Z0-9_]+|VERCEL_(?!TOKEN$)[A-Z0-9_]+)$/;
+export function scriptEnvironment(root) {
+  const names = new Set();
+  const files = [...walk(resolve(root, "scripts")), ...readdirSync(root).filter(file => /^next\.config\./.test(file)).map(file => resolve(root, file))];
+  for (const path of files.filter(file => /\.(?:[cm]?[jt]sx?|sh)$/.test(file) && !/\.test\./.test(file))) {
+    const text = readFileSync(path, "utf8");
+    const reads = path.endsWith(".sh") ? [...text.matchAll(/\$\{([A-Z][A-Z0-9_]+):?-/g)].map(match => match[1])
+      : [...text.matchAll(/process\.env(?:\.([A-Z][A-Z0-9_]+)|\[\s*["']([A-Z][A-Z0-9_]+)["']\s*\])/g)].map(match => match[1] ?? match[2])
+        .concat([...text.matchAll(/\{([^{}]+)\}\s*=\s*process\.env\b/g)].flatMap(match => match[1].match(/\b[A-Z][A-Z0-9_]+\b/g) ?? []));
+    for (const name of reads) names.add(name);
+  }
+  return names;
+}
+export function environmentDrift(source, scripts, pages) {
+  const documented = new Map();
+  for (const { file, text } of pages) text.split("\n").forEach((line, index) => {
+    for (const [, name] of line.matchAll(/`([A-Z][A-Z0-9_]*[A-Z0-9])`/g)) if (!documented.has(name)) documented.set(name, { file, line: index + 1 });
+  });
+  const read = new Set([...source, ...scripts]);
+  return [
+    ...[...scripts].filter(name => !source.includes(name) && !documented.has(name) && !PLATFORM_ENV.test(name)).sort()
+      .map(name => ({ file: pages[0].file, line: 1, message: `Environment key read by scripts but not documented: ${name}` })),
+    ...[...documented].filter(([name]) => name.includes("_") && !read.has(name) && !PLATFORM_ENV.test(name))
+      .map(([name, { file, line }]) => ({ file, line, message: `Documented environment key nothing reads: ${name}` })),
+  ];
+}
+
+// #2275: reps read docs/product's money aloud to owners. Every ₹ amount and % there is derived from the constants
+// below (read from src, so a changed price or rate turns the page red) or is a worked example in MONEY_EXAMPLES.
+const MONEY_SOURCES = {
+  presets: ["src/lib/campaign/budget.ts", /BUDGET_PRESETS = \[([\d_, ]+)\]/],
+  days: ["src/components/setup-go-live.tsx", /SETUP_RUN_DAY_CHOICES = \[SETUP_RUN_DAYS, ([\d_]+)\]/],
+  defaultDays: ["src/components/setup-go-live.tsx", /SETUP_RUN_DAYS = ([\d_]+);/],
+  gstBps: ["src/lib/payments/allocation.ts", /taxRateBps \?\? ([\d_]+)/],
+  planPaise: ["src/lib/plan/status.ts", /PLAN_PRICE_PAISE = ([\d_]+)/],
+  evidenceSpend: ["src/lib/campaign/verdict.ts", /EVIDENCE_MIN_SPEND = ([\d_]+)/],
+  bestMargin: ["src/lib/meta/insights.ts", /BEST_AD_MARGIN = ([\d.]+)/],
+  storySafe: ["src/lib/creative/design.ts", /STORY_SAFE = \{ top: ([\d.]+), bottom: ([\d.]+), side: ([\d.]+) \}/],
+};
+// Illustrative figures, not prices: a cost per chat, an offer, a result read, an empty-insights read.
+const MONEY_EXAMPLES = new Set(["₹45", "₹499", "₹10.69", "₹0"]);
+export function moneyFacts(root) {
+  const missing = [];
+  // A tree without any of these files (a test fixture) has no money to check.
+  if (!Object.values(MONEY_SOURCES).some(([file]) => existsSync(resolve(root, file)))) return { facts: null, missing };
+  const read = Object.fromEntries(Object.entries(MONEY_SOURCES).map(([key, [file, pattern]]) => {
+    const path = resolve(root, file);
+    const match = existsSync(path) && readFileSync(path, "utf8").match(pattern);
+    if (!match) missing.push(`${file} ${pattern.source}`);
+    return [key, match ? match.slice(1).flatMap(group => group.split(",")).map(value => Number(value.trim().replace(/_/g, ""))) : []];
+  }));
+  const facts = new Map();
+  const rupees = (amount, why) => facts.set(`₹${amount.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`, why);
+  const percent = (value, why) => facts.set(`${Math.round(value * 100) / 100}%`, why);
+  const gstBps = read.gstBps[0];
+  for (const daily of read.presets) {
+    rupees(daily, "BUDGET_PRESETS");
+    for (const days of [...read.defaultDays, ...read.days]) rupees(Math.ceil(daily * 100 * days * (10_000 + gstBps) / 10_000) / 100, `capWithGstPaise(${daily} × ${days} days)`);
+  }
+  for (const paise of read.planPaise) rupees(paise / 100, "PLAN_PRICE_PAISE");
+  for (const spend of read.evidenceSpend) rupees(spend, "EVIDENCE_MIN_SPEND");
+  for (const bps of read.gstBps) percent(bps / 100, "GST taxRateBps");
+  for (const margin of read.bestMargin) percent(margin * 100, "BEST_AD_MARGIN");
+  for (const share of read.storySafe) percent(share * 100, "STORY_SAFE");
+  return { facts, missing };
+}
+export function moneyDrift(prose, facts) {
+  const found = [];
+  if (!facts) return found;
+  for (const { line, text } of prose) {
+    for (const [amount] of text.matchAll(/₹ ?\d+(?:,\d{2,3})*(?:\.\d+)?|\d+(?:\.\d+)? ?%/g)) {
+      const value = Number(amount.replace(/[₹%, ]/g, ""));
+      const key = amount.includes("%") ? `${value}%` : `₹${value.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
+      if (!facts.has(key) && !MONEY_EXAMPLES.has(key)) found.push({ line, amount: key });
+    }
+  }
+  return found;
+}
+
 export function checkDocumentation(root, options = {}) {
   root = resolve(root);
   const moduleReadmes = walk(resolve(root, "src")).filter(file => file.endsWith(`${sep}README.md`));
@@ -131,6 +307,8 @@ export function checkDocumentation(root, options = {}) {
     return cache.get(file);
   };
   const checked = [];
+  let appText;
+  let money;
   for (const path of selected) {
     const file = relative(root, path).split(sep).join("/");
     if (file.startsWith("../") || !existsSync(path) || !statSync(path).isFile()) {
@@ -142,6 +320,12 @@ export function checkDocumentation(root, options = {}) {
     const report = (line, message, warning = false) => diagnostics.push({ severity: historical || warning ? "warning" : "error", file, line, message });
     checked.push({ file, role: historical ? "historical" : "current", sha256: createHash("sha256").update(document.text).digest("hex") });
     for (const line of document.unclosedFences) report(line, "Unclosed fenced code block");
+    if (isHindiMirror(file) && !historical) { const drift = mirrorDrift(path, readFileSync(path, "utf8")); if (drift) report(1, drift); }
+    if (file === "docs/operations/scheduled-jobs.md") for (const { line, message } of scheduleDrift(root, readFileSync(path, "utf8"))) report(line, message);
+    if (file.startsWith("docs/product/") && !historical) {
+      for (const { line, amount } of moneyDrift(document.prose, (money ??= moneyFacts(root)).facts)) report(line, `Amount not derived from a source constant: ${amount} (fix it, add its source to MONEY_SOURCES, or add an example to MONEY_EXAMPLES)`);
+      for (const { line, label } of missingLabels(document.prose, appText ??= appCopy(root))) report(line, `Quoted label not in the app: "${label}" (fix it to the app's text, or add example text to LABEL_PROSE)`);
+    }
     for (const { href, line } of document.links) {
       if (!href || /^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(href)) continue;
       let url;
@@ -181,6 +365,7 @@ export function checkDocumentation(root, options = {}) {
     return found.length ? found : existsSync(resolve(root, legacy)) ? [legacy] : [];
   };
   const fail = (file, line, message) => diagnostics.push({ severity: "error", file, line, message });
+  for (const source of money?.missing ?? []) fail("scripts/check-docs.mjs", 1, `Money source moved: ${source} (update MONEY_SOURCES)`);
   const configPages = docFiles.filter(file => /^docs\/operations\/configuration[^/]*\.md$/.test(file)).sort((a, b) => a.length - b.length);
   const configText = configPages.map(textOf).join("\n");
   const dataText = textOf("docs/architecture/migrations.md");
@@ -200,6 +385,7 @@ export function checkDocumentation(root, options = {}) {
 
   // Configuration: every environment key is documented.
   if (configPages.length) for (const name of source.environment) if (!configText.includes(name)) fail(configPages[0], 1, `Environment key not documented: ${name}`);
+  if (configPages.length) for (const item of environmentDrift(source.environment, scriptEnvironment(root), configPages.map(file => ({ file, text: textOf(file) })))) fail(item.file, item.line, item.message);
 
   // Shape: short pages, an index per folder that links each page, nothing new loose in docs/.
   for (const file of docFiles) {
@@ -250,13 +436,16 @@ if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToP
   const files = [];
   let all = false;
   let json = false;
+  let stamp = false;
   for (let index = 0; index < args.length; index++) {
     if (args[index] === "--root" && args[index + 1]) root = resolve(args[++index]);
     else if (args[index] === "--all") all = true;
     else if (args[index] === "--json") json = true;
+    else if (args[index] === "--stamp") stamp = true;
     else if (args[index].startsWith("--")) throw new Error(`Unknown option: ${args[index]}`);
     else files.push(args[index]);
   }
+  if (stamp) for (const file of files.map(file => relative(root, resolve(root, file)).split(sep).join("/")).filter(isHindiMirror)) stampMirror(resolve(root, file));
   const result = checkDocumentation(root, { files, all });
   if (json) console.log(JSON.stringify(result, null, 2));
   else {

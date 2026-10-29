@@ -122,7 +122,8 @@ where name = 'ai.completion' and outcome = 'failed' and created_at >= now() - in
 group by 1, 2 order by failures desc;
 ```
 
-`business.create` and `business.update` carry `brandUsable` (#1136): whether the saved Brand has
+`business.create` and `business.update` (from the full Brand form, the setup step and, since #2231, Home's
+Brand meter) carry `brandUsable` (#1136): whether the saved Brand has
 what Prepare needs (name, category, area, phone, offer). The core scoreboard's Brand row uses it: minutes
 from the owner's sign-up (if within 24 h before the create, since setup collects the Brand first) or else the
 create, to the first usable save; team accounts (`isInternalUser`) are left out.
@@ -140,7 +141,7 @@ group by 1 order by rejections desc;
 
 A failed image attempt's usage row and `ai.completion` event carry a short reason in
 `errorCode`: `IMAGE_HTTP_<status>`, `IMAGE_FREE_BUSY` (an internal account's Pollinations stayed
-busy past ~90 s), `IMAGE_INVALID` (the answer was not a usable picture), `IMAGE_FETCH_<code>`,
+busy past ~90 s, or Cloudflare was busy), `IMAGE_FREE_DAILY_LIMIT` (Cloudflare's daily free allowance is used up), `IMAGE_INVALID` (the answer was not a usable picture), `IMAGE_FETCH_<code>`,
 `IMAGE_TIMEOUT`, `IMAGE_PROVIDER` or `IMAGE_OTHER` (#451).
 
 Create's assistant and the campaign planner (`campaigns.plan`, #378) also log each

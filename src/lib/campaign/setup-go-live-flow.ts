@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { fetchAudiencePlan, needsAudiencePlan, plannedTargeting } from "@/lib/campaign/audience-plan";
 import { activationConfirmationPayload, campaignDeliverySnapshotSchema } from "@/lib/campaign/activation";
 import { createCampaignRequestSchema, type CreateCampaignRequest, type DraftInput, type OperationDTO } from "@/lib/campaign/connect-contracts";
 import { campaignNameDate, defaultCampaignName } from "@/lib/campaign/draft-name";
@@ -23,7 +24,7 @@ export function setupDraftInput(input: { businessId: string; name: string; adIds
 
 /**
  * #1271 (#1251 WS1 step 3) slice 4b: setup's one-tap "Go live", through the same routes the Campaigns page uses:
- * save the draft → review it (preflight) → create it PAUSED → activate it as a capped run of `capDays` days.
+ * plan the audience → save the draft → review it (preflight) → create it PAUSED → activate it as a capped run of `capDays` days.
  * Nothing is spent before the activation PATCH, which enforces the Meta total limit, the weekly cap and funding.
  */
 export type GoLiveStep = "check" | "create" | "activate";
@@ -73,6 +74,10 @@ function readPending(storage: GoLiveDeps["storage"], key: string, businessId: st
 
 const errorText = (reason: unknown, fallback: string) => reason instanceof Error && reason.message ? reason.message : fallback;
 
+/** #2046: Go live has no "Check my campaign" or "Refresh review" button; tapping Go live again checks it afresh. */
+export const GO_LIVE_STALE = "This campaign changed after it was checked. Nothing was spent. Tap Go live again.";
+const isConflict = (reason: unknown) => typeof reason === "object" && reason !== null && (reason as { code?: unknown }).code === "CONFLICT";
+
 async function sha256Hex(payload: string): Promise<string> {
   if (!globalThis.crypto?.subtle) throw new Error("Activation confirmation is unavailable in this browser.");
   const digest = await globalThis.crypto.subtle.digest("SHA-256", new TextEncoder().encode(payload));
@@ -121,10 +126,15 @@ export async function goLive(deps: GoLiveDeps, input: GoLiveInput, onStep: (step
         headline: input.ads[0]?.headline, businessName: input.businessName, destination: "whatsapp",
         date: campaignNameDate(deps.now?.() ?? new Date()),
       });
-      const draft = await client.saveDraft(setupDraftInput({
+      let draftInput = setupDraftInput({
         businessId: input.businessId, name, adIds: input.ads.map((ad) => ad.id), dailyBudgetRupees: input.dailyBudgetRupees,
         whatsappNumber: pickWhatsAppNumber(whatsapp.state === "ready" ? whatsapp.numbers : [], ""),
-      }));
+      });
+      // #2257: Review blocks the default AI age and missing audience, so plan them first, as the composer's Prepare does.
+      if (needsAudiencePlan(draftInput)) {
+        draftInput = { ...draftInput, targeting: plannedTargeting(draftInput, await fetchAudiencePlan(deps.fetch, draftInput)).targeting };
+      }
+      const draft = await client.saveDraft(draftInput);
       const review = await client.preflight(input.businessId, draft.draftId, draft.version);
       if (!review.canCreatePaused || review.blockers.length || !review.planHash) {
         const messages = review.blockers.map((blocker) => blocker.message);
@@ -134,7 +144,17 @@ export async function goLive(deps: GoLiveDeps, input: GoLiveInput, onStep: (step
       storage?.setItem(key, JSON.stringify({ request }));
     }
     onStep("create");
-    if (!operation) operation = await client.createCampaign(request);
+    if (!operation) {
+      try {
+        operation = await client.createCampaign(request);
+      } catch (reason) {
+        // #2046: the server refused this saved request as stale (the review, draft or Meta connection changed since
+        // it was checked). Unless it's already running, the next tap starts over instead of resending it.
+        if (!isConflict(reason) || await client.operationForRequest(input.businessId, request.idempotencyKey)) throw reason;
+        forget();
+        return { kind: "failed", message: GO_LIVE_STALE };
+      }
+    }
     for (let poll = 0; !isTerminalOperation(operation) && poll < POLLS; poll += 1) {
       await sleep(POLL_MS);
       operation = await client.operation(operation.operationId);

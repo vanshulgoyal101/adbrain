@@ -3,9 +3,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import createTape from "./fixtures/meta/create.json";
 import deliveryTape from "./fixtures/meta/delivery.json";
 import whatsappTape from "./fixtures/meta/whatsapp-number.json";
+import groqAudience from "./fixtures/planner/groq-audience-city-only.json";
 import { activationConfirmationPayload } from "@/lib/campaign/activation";
 import type { DraftInput, OperationDTO, ReviewDTO } from "@/lib/campaign/connect-contracts";
-import { goLive, goLiveStorageKey, type GoLiveDeps, type GoLiveInput, type GoLiveStep } from "@/lib/campaign/setup-go-live-flow";
+import { plannerPlanToDraftInput } from "@/lib/campaign/planner-draft";
+import { runPreflight } from "@/lib/campaign/preflight";
+import { GO_LIVE_STALE, goLive, goLiveStorageKey, type GoLiveDeps, type GoLiveInput, type GoLiveStep } from "@/lib/campaign/setup-go-live-flow";
 import { MetaClient, type CampaignDeliverySnapshot } from "@/lib/meta/client";
 import type { ConnectionDTO } from "@/lib/meta/connect-contracts";
 import { maskWhatsAppNumber } from "@/lib/meta/whatsapp-status-shared";
@@ -47,6 +50,8 @@ const recordedNumber = (() => {
   return accounts.data[0].phone_numbers.data[0].display_phone_number.replace(/\s/g, "");
 })();
 const MASKED = maskWhatsAppNumber(recordedNumber);
+const recordedPlan: Record<string, unknown> = { ...groqAudience.plan };
+delete recordedPlan.radius_km;
 
 const available = { state: "available" as const, blockers: [] };
 const connection: ConnectionDTO = {
@@ -96,6 +101,10 @@ type Options = {
   created?: OperationDTO["state"];
   patch?: { status: number; body: unknown };
   existing?: OperationDTO | null;
+  /** The plan route's own refusal instead of the recorded plan. */
+  plan?: { status: number; body: unknown };
+  /** The create route's own error envelope (`errorResponse` in campaigns/create/route.ts). */
+  createError?: { status: number; code: string; message: string; retryable: boolean };
 };
 
 async function api(options: Options = {}) {
@@ -103,6 +112,7 @@ async function api(options: Options = {}) {
   const calls: string[] = [];
   const bodies: Record<string, unknown> = {};
   let draftInput: DraftInput | null = null;
+  let planned = 0;
   const operation = (state: OperationDTO["state"]): OperationDTO => ({
     operationId: OPERATION, businessId: BUSINESS, state, campaignId: state === "succeeded" ? ROW : null,
     blockers: state === "failed" ? [{ code: "UNAVAILABLE" as const, message: "Meta refused the ad image.", action: null }] : [],
@@ -120,13 +130,38 @@ async function api(options: Options = {}) {
       case "POST /api/campaign-drafts":
         draftInput = body;
         return ok({ draftId: DRAFT, version: 1, expiresAt: "2099-01-01T00:00:00.000Z", input: body });
-      case "POST /api/campaigns/preflight":
-        return ok({
-          draftId: DRAFT, draftVersion: 1, connectionGeneration: GENERATION, canCreatePaused: true, blockers: [], planHash: "c".repeat(64),
-          destination: "whatsapp", whatsappNumber: recordedNumber, currency: "INR", perAdSetDailyBudgetRupees: DAILY, adSetCount: 1,
-          totalDailyBudgetRupees: DAILY, resolvedAreaLabel: "Austin, Texas", selected: connection.selected, ...options.review,
-        } satisfies ReviewDTO);
-      case "POST /api/campaigns/create": return ok(operation("running"));
+      case "POST /api/campaigns/plan": {
+        // The plan route's audience-only answer to the recorded Groq plan (campaign-prepare.test.ts drives the route).
+        planned += 1;
+        if (options.plan) return Response.json(options.plan.body, { status: options.plan.status });
+        const draft: DraftInput = body.audienceDraft;
+        const result = plannerPlanToDraftInput({
+          businessId: BUSINESS, goal: body.goal, approvedCreativeIds: ADS.map((ad) => ad.id), leadFormIds: [],
+          // The planner drops the recorded radius_km 0 (planner.ts), as Groq sent it for a city-only plan.
+          plan: { ...recordedPlan, name: draft.name, daily_budget_rupees: draft.dailyBudgetRupees, creative_ids: draft.creativeIds, lead_form_id: null, destination: "whatsapp", city_scope: draft.targeting.location?.cityScope ?? "radius", ...(draft.targeting.location?.radiusKm ? { radius_km: draft.targeting.location.radiusKm } : {}) },
+        });
+        if (!result.ok) throw new Error(result.error);
+        return Response.json({ ready: true, targeting: { ...result.draft.targeting, gender: draft.targeting.gender ?? "all" } });
+      }
+      case "POST /api/campaigns/preflight": {
+        // #2257: the real Review over the saved draft; Meta resolves its areas and interests as recorded.
+        const review = runPreflight({
+          draft: draftInput!, draftId: DRAFT, draftVersion: 1,
+          connection: { generation: GENERATION, canCreatePaused: true, selected: connection.selected },
+          creatives: ADS.map((ad) => ({ id: ad.id, businessId: BUSINESS, approved: true, imageUrl: "https://example.com/ad.png", headline: ad.headline })),
+          form: null, whatsappNumber: recordedNumber, website: "https://cedarridgechiro.com",
+          geo: { resolvedAreaLabel: "Austin, Texas", unresolvedNames: [], explicitlyNationwide: false,
+            audienceInterests: (draftInput!.targeting.audience?.interestNames ?? []).map((name, index) => ({ id: `600000000000${index}`, name })) },
+          hash: (payload) => createHash("sha256").update(payload).digest("hex"),
+        });
+        return ok({ ...review, ...options.review } satisfies ReviewDTO);
+      }
+      case "POST /api/campaigns/create":
+        if (options.createError) {
+          const { status, ...error } = options.createError;
+          return Response.json({ ok: false, error, requestId: REQUEST_ID }, { status });
+        }
+        return ok(operation("running"));
       case `GET /api/campaigns/operations/${OPERATION}`: return ok(operation(options.created ?? "succeeded"));
       case "GET /api/campaigns/operations": return ok(options.existing ?? null);
       case "GET /api/campaigns/list": return Response.json({ campaigns: [campaignRow], results: {}, nextCursor: null });
@@ -145,7 +180,7 @@ async function api(options: Options = {}) {
     client: createMetaConnectClient({ fetchImpl: fetchImpl as typeof fetch }), fetch: fetchImpl as typeof fetch, storage,
     newKey: () => KEY, sleep: async () => {}, now: () => new Date("2026-10-28T10:00:00+05:30"),
   };
-  return { deps, calls, bodies, storage, draft: () => draftInput };
+  return { deps, calls, bodies, storage, draft: () => draftInput, plans: () => planned };
 }
 
 const input: GoLiveInput = { businessId: BUSINESS, businessName: "Cedar Ridge Chiropractic", ads: ADS, dailyBudgetRupees: DAILY, capDays: 2 };
@@ -155,13 +190,13 @@ afterEach(() => vi.restoreAllMocks());
 
 describe("core: setup Go live one tap (#1271 4b) on recorded Meta answers", () => {
   it("saves the picked ads at ₹d a day on WhatsApp, reviews, creates paused, then turns it on capped for 2 days", async () => {
-    const { deps, calls, bodies, storage, draft } = await api();
+    const { deps, calls, bodies, storage, draft, plans } = await api();
     const steps: GoLiveStep[] = [];
     await expect(goLive(deps, input, (step) => steps.push(step))).resolves.toEqual({ kind: "live", campaignId: ROW });
     expect(steps).toEqual(["check", "create", "activate"]);
     expect(calls).toEqual([
-      "GET /api/meta/connections/status", "GET /api/meta/whatsapp", "POST /api/campaign-drafts", "POST /api/campaigns/preflight",
-      "POST /api/campaigns/create", `GET /api/campaigns/operations/${OPERATION}`, "GET /api/campaigns/list",
+      "GET /api/meta/connections/status", "GET /api/meta/whatsapp", "POST /api/campaigns/plan", "POST /api/campaign-drafts",
+      "POST /api/campaigns/preflight", "POST /api/campaigns/create", `GET /api/campaigns/operations/${OPERATION}`, "GET /api/campaigns/list",
       `GET /api/campaigns/${ROW}`, `PATCH /api/campaigns/${ROW}`,
     ]);
     expect(draft()).toEqual({
@@ -169,7 +204,14 @@ describe("core: setup Go live one tap (#1271 4b) on recorded Meta answers", () =
       mode: "manual", creativeIds: ADS.map((ad) => ad.id), dailyBudgetRupees: DAILY, leadFormId: null, destination: "whatsapp",
       whatsappNumber: MASKED, targeting: expect.any(Object), abTest: false,
     });
-    expect(bodies["POST /api/campaigns/create"]).toEqual({ businessId: BUSINESS, draftId: DRAFT, draftVersion: 1, planHash: "c".repeat(64), connectionGeneration: GENERATION, idempotencyKey: KEY });
+    // #2257: Review passes only with the planned age range and audience, never the default AI age and no audience.
+    expect(plans()).toBe(1);
+    expect(draft()!.targeting).toMatchObject({
+      age: { mode: "manual", min: groqAudience.plan.age_min, max: groqAudience.plan.age_max },
+      audience: { interestNames: groqAudience.plan.interests }, gender: "all",
+    });
+    expect(bodies["POST /api/campaigns/plan"]).toMatchObject({ goal: draft()!.goal, audienceDraft: { targeting: { age: { mode: "ai" } } } });
+    expect(bodies["POST /api/campaigns/create"]).toEqual({ businessId: BUSINESS, draftId: DRAFT, draftVersion: 1, planHash: expect.stringMatching(/^[a-f0-9]{64}$/), connectionGeneration: GENERATION, idempotencyKey: KEY });
     expect(bodies[`PATCH /api/campaigns/${ROW}`]).toEqual({ status: "active", confirmationDigest: expect.stringMatching(/^[a-f0-9]{64}$/), connectionGeneration: GENERATION, capDays: 2 });
     expect(storage.items.size).toBe(0);
   });
@@ -177,7 +219,15 @@ describe("core: setup Go live one tap (#1271 4b) on recorded Meta answers", () =
   it("preflight blockers: says Meta's own words and creates nothing", async () => {
     const { deps, calls, storage } = await api({ review: { canCreatePaused: false, planHash: null, blockers: [noWebsite] } });
     await expect(goLive(deps, input)).resolves.toEqual({ kind: "blocked", messages: [noWebsite.message] });
-    expect(writes(calls)).toEqual(["POST /api/campaign-drafts", "POST /api/campaigns/preflight"]);
+    expect(writes(calls)).toEqual(["POST /api/campaigns/plan", "POST /api/campaign-drafts", "POST /api/campaigns/preflight"]);
+    expect(storage.items.size).toBe(0);
+  });
+
+  it("#2257: a plan that can't answer saves nothing and says the plan route's words", async () => {
+    const busy = "AdBrain's AI is busy. Try again in a minute.";
+    const { deps, calls, storage } = await api({ plan: { status: 503, body: { error: busy, code: "AI_BUSY" } } });
+    await expect(goLive(deps, input)).resolves.toEqual({ kind: "failed", message: busy });
+    expect(writes(calls)).toEqual(["POST /api/campaigns/plan"]);
     expect(storage.items.size).toBe(0);
   });
 
@@ -191,6 +241,23 @@ describe("core: setup Go live one tap (#1271 4b) on recorded Meta answers", () =
   it("the weekly cap refuses the PATCH: 'refused' with the campaign and the server's words; the request is kept", async () => {
     const { deps, storage } = await api({ patch: { status: 422, body: { error: weeklyCapRefusal } } });
     await expect(goLive(deps, input)).resolves.toEqual({ kind: "refused", campaignId: ROW, message: weeklyCapRefusal });
+    expect(storage.items.has(goLiveStorageKey(input))).toBe(true);
+  });
+
+  it("#2046: a stale request (409 CONFLICT, nothing running) says to tap Go live again and is forgotten, so that tap re-checks", async () => {
+    const createError = { status: 409, code: "CONFLICT", message: "Meta connection changed. Review again before creating.", retryable: true };
+    const { deps, calls, storage } = await api({ createError, existing: null });
+    await expect(goLive(deps, input)).resolves.toEqual({ kind: "failed", message: GO_LIVE_STALE });
+    expect(GO_LIVE_STALE).toBe("This campaign changed after it was checked. Nothing was spent. Tap Go live again.");
+    expect(calls).toContain("GET /api/campaigns/operations");
+    expect(storage.items.size).toBe(0);
+  });
+
+  it("#2046: a 409 for one already running keeps the request, so the next tap polls it instead of creating a second", async () => {
+    const createError = { status: 409, code: "CONFLICT", message: "This campaign operation is already running.", retryable: true };
+    const existing: OperationDTO = { operationId: OPERATION, businessId: BUSINESS, state: "running", campaignId: null, blockers: [] };
+    const { deps, storage } = await api({ createError, existing });
+    await expect(goLive(deps, input)).resolves.toEqual({ kind: "failed", message: "This campaign operation is already running." });
     expect(storage.items.has(goLiveStorageKey(input))).toBe(true);
   });
 

@@ -66,7 +66,7 @@ anyone watching (owner-approved automatic rollback, #111):
 
 - **After each successful Production deployment** it waits until
   `adbrain.vanshul.com` serves that commit, then runs
-  `npm run smoke:core`, which views five pages read-only and then prepares one campaign review without sending it (one retry after 60 s). If the smoke still fails, it rolls
+  `npm run smoke:core`, which views five pages read-only and then prepares one campaign review without sending it, then drives one-tap Go live to its preflight with create and activation blocked (one retry after 60 s). If the smoke still fails, it rolls
   production back to the newest earlier READY production deployment and opens a
   `core` `bug` issue with the failing step.
 - **Daily at 03:30 UTC** it runs the same smoke and opens an issue on failure
@@ -79,6 +79,29 @@ anyone watching (owner-approved automatic rollback, #111):
   (`src/lib/copy/honest-copy-rules.ts`). Every Meta write is blocked. The result lands in the
   run summary; a FAIL turns the guard red and opens a core bug, but never rolls back. Skipped while the secrets are
   unset. `--plant` must make it FAIL (a planted promise and a slowed load).
+- **Free pictures, every 2 hours (#2145):** [`create-smoke.yml`](../../.github/workflows/create-smoke.yml)
+  runs `smoke-core.mjs --picture` as the smoke account at :17 past every second hour, one run at a time and with
+  no retry. It signs in, opens the read-only views and changes the background of the most recent ad that isn't
+  in a campaign on Meta (`plain light studio background`). It passes only when the saved picture came from a free
+  provider (Pollinations or Cloudflare). The run spends $0: the prompt is a template with no text model, it
+  skips Prepare, and it refuses before the request if the account
+  isn't internal or is exempt. It then deletes the picture and composed ad it replaced in that ad's Storage
+  folder, so 12 runs a day don't grow Storage (#1891). When an earlier failed change holds an ad (HTTP 409,
+  cleared only by a database check), it tries the next of the 10 most recent ads. With no ad at all it fails
+  with "run --create once by hand".
+  **Daily Prepare, 08:47Z (#2230)** (or dispatch `mode: prepare`) runs `--prepare`: it chooses an approved ad,
+  which starts one audience plan, and passes only when a free model answered, the reply has targeting and every
+  `campaigns.plan` row in `llm_usage_events` for the run costs $0 (the PASS line quotes them). Nothing is saved or
+  sent to Meta. The smoke login (`smokeUserIds`) writes on free text only (Groq, Gemini; `freeTextOnly` in
+  [spend-policy.ts](../../src/lib/llm/spend-policy.ts)); when they can't answer, the plan fails with
+  `FREE_TEXT_UNAVAILABLE` instead of paying. Once a day keeps it far inside Groq's free daily cap.
+  **Dispatch `mode: create`** runs `--create` instead: 3 ads, their words on free text too (#2230), so a busy
+  free tier fails the run rather than spending. DevOps uses it before and
+  after the Cloudflare token lands. A PASS deletes those ads and their files, but keeps the newest ad when the
+  smoke business has no other ad.
+  A failure opens one `core` `bug` issue `Create smoke failed in production` for DevOps (`FAIL Picture` says
+  free pictures are failing, `FAIL Prepare plan` that Prepare's free-text plan is). Repeat failures comment on that issue, and the first pass after it says so once.
+  The check never rolls back. Pause it with `gh workflow disable create-smoke.yml`.
 - **After each push to `main`, and every 15 minutes if GitHub fires the schedule**
   [`production-drift.yml`](../../.github/workflows/production-drift.yml) waits until
   15 minutes after main HEAD landed, then fails and opens one
@@ -87,7 +110,7 @@ anyone watching (owner-approved automatic rollback, #111):
 
 Every step has its own `timeout-minutes`, and together they fit inside the 95-minute
 job limit, because a timed-out job opens no issue (#210, #2029; a step timeout still
-does). `tests/workflow-time-budgets.test.ts` enforces that sum for the guard and the
+does). `tests/workflow-time-budgets.test.ts` enforces that sum for the guard, the Create smoke and the
 deploy train. `playwright install --with-deps` gets 8 minutes; the
 Ubuntu apt mirror has stalled for 11-15 minutes. After that the guard installs
 Chromium without OS packages and still runs the smoke, but a failure then only

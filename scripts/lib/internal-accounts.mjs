@@ -9,6 +9,17 @@ import internal from "../../src/lib/internal-accounts.json" with { type: "json" 
 export const INTERNAL_DOMAINS = internal.domains;
 export const INTERNAL_USER_IDS = internal.userIds;
 
+/**
+ * #2145: would this signed-in user's Create make free pictures? The same rule as the app's `freeImagesOnly()`
+ * (src/lib/llm/spend-policy.ts): internal (listed id, or a confirmed team-domain email) and not exempt.
+ */
+export function makesFreePictures(user) {
+  if (!user?.id) return false;
+  const domain = user.email?.trim().toLowerCase().split("@")[1];
+  const isInternal = internal.userIds.includes(user.id) || Boolean(domain && user.email_confirmed_at && internal.domains.includes(domain));
+  return isInternal && !internal.exemptFromFreeProviders.some((entry) => entry.userId === user.id);
+}
+
 const quote = (value) => `'${String(value).trim().toLowerCase().replaceAll("'", "''")}'`;
 const list = (values, type) => `array[${values.map(quote).join(",")}]::${type}[]`;
 
