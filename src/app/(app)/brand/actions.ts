@@ -184,12 +184,15 @@ export async function saveBrandFact(id: string, fact: BrandFact, input: string):
         update = { usps: usps.includes(value) ? usps : [...usps, value] };
       }
     }
-    const { data, error } = await supabase.from("businesses").update(update).eq("id", id).select("id").single();
+    const { data, error } = await supabase.from("businesses").update(update).eq("id", id)
+      .select("id, name, vertical, phone, locations, offers").single();
     if (error || !data) {
       console.error("[business.fact]", error?.message ?? "no row");
       return { ok: false, error: "Your business details weren't saved. Check your connection and try again." };
     }
-    await logEvent({ businessId: id, action: "business.update", entityType: "business", entityId: id });
+    // #2231: an offer saved here can complete the Brand, so the scoreboard's Brand clock reads this save too.
+    const usable = brandUsable({ ...data, vertical: setupFieldsFrom(data).vertical });
+    await logEvent({ businessId: id, action: "business.update", entityType: "business", entityId: id, eventAttributes: { brandUsable: usable } });
     revalidatePath("/brand");
     revalidatePath("/dashboard");
     return { ok: true };

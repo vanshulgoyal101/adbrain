@@ -122,7 +122,8 @@ where name = 'ai.completion' and outcome = 'failed' and created_at >= now() - in
 group by 1, 2 order by failures desc;
 ```
 
-`business.create` and `business.update` carry `brandUsable` (#1136): whether the saved Brand has
+`business.create` and `business.update` (from the full Brand form, the setup step and, since #2231, Home's
+Brand meter) carry `brandUsable` (#1136): whether the saved Brand has
 what Prepare needs (name, category, area, phone, offer). The core scoreboard's Brand row uses it: minutes
 from the owner's sign-up (if within 24 h before the create, since setup collects the Brand first) or else the
 create, to the first usable save; team accounts (`isInternalUser`) are left out.
