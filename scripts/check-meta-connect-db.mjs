@@ -18,6 +18,7 @@ const creativeSettleMigration = await readFile(join(root, "db/migrations/2026102
 const configurablePaymentMigration = await readFile(join(root, "db/migrations/20260927_configurable_payment_quotes.sql"), "utf8");
 const webhookHealthMigration = await readFile(join(root, "db/migrations/20261022_payment_webhook_health.sql"), "utf8");
 const cappedBoundMigration = await readFile(join(root, "db/migrations/20261023_capped_reservation_bound.sql"), "utf8");
+const spendCapMinimumMigration = await readFile(join(root, "db/migrations/20261029_reserve_spend_cap_minimum.sql"), "utf8");
 const customAmountMigration = await readFile(join(root, "db/migrations/20261023_custom_payment_amount.sql"), "utf8");
 const paymentTermsV2Migration = await readFile(join(root, "db/migrations/20261028_payment_terms_v2.sql"), "utf8");
 const metaCostMigration = await readFile(join(root, "db/migrations/20261023_meta_cost_observation.sql"), "utf8");
@@ -768,6 +769,8 @@ async function verifyCappedRunBound(db, database) {
       costs: (media, tax) => service("select public.customer_ad_reconcile_costs($1,$2,$3,$4,'act_123',1,$5,$6,1800,$7,$8,false,null)",
         [business,owner,account,campaign,media,tax,new Date().toISOString(),randomUUID()]),
       reserve: (cap = null) => service("select public.customer_ad_reserve($1,$2,$3,$4,'act_123',1,$5,$6,false,$7) as result",[business,owner,account,campaign,dailyRupees*100,'e'.repeat(64),cap]),
+      reserveAtLeast: (minimum, { review = false, cap = null } = {}) => service("select public.customer_ad_reserve($1,$2,$3,$4,'act_123',1,$5,$6,$7,$8,$9) as result",
+        [business,owner,account,campaign,dailyRupees*100,'e'.repeat(64),review,cap,minimum]),
       result: (reservationId, state) => service("select public.customer_ad_activation_result($1,$2,$3,$4,$5,$6)",[business,owner,account,campaign,reservationId,state]),
       activate: async (reservationId) => { await run.result(reservationId,'active'); await db.query("update public.campaigns set status='active' where id=$1",[campaign]); },
       age: () => db.query("update private.customer_ad_costs set observed_at=clock_timestamp()-interval '20 minutes' where campaign_id=$1",[campaign]),
@@ -823,6 +826,22 @@ async function verifyCappedRunBound(db, database) {
     assert.equal((await uncapped.balance()).held,false);
     await uncapped.age();
     assert.equal((await uncapped.balance()).held,true);
+  });
+  // #1799: ₹280/day leaves a ₹6,779.66 media limit (₹8,000 less GST); Meta's live minimum is checked in the same transaction.
+  await check(`${database}: an uncapped reserve under Meta's campaign spend-cap minimum is refused and holds nothing (#1799)`, async () => {
+    const run = await fixture(280);
+    const before = await run.balance();
+    await assert.rejects(run.reserveAtLeast(677967, { review: true }), {code:'23514', message:/Meta campaign spend cap minimum/});
+    await assert.rejects(run.reserveAtLeast(677967), {code:'23514', message:/Meta campaign spend cap minimum/});
+    assert.equal(await run.state(),undefined);
+    assert.equal((await run.balance()).reservedPaise,before.reservedPaise);
+    await assert.rejects(run.reserveAtLeast(0), {code:'23514', message:/binding changed/});
+    const { reservationId: id, mediaLimitPaise } = await run.reserveAtLeast(677966);
+    assert.equal(Number(mediaLimitPaise),677966);
+    assert.equal(await run.state(),'uncertain');
+    await run.result(id,'uncertain');
+    const cappedRun = await fixture(1000);
+    assert.equal(Number((await cappedRun.reserveAtLeast(9000000, { cap: 300000 })).mediaLimitPaise) > 0,true);
   });
   await check(`${database}: explicit cost holds still hold a capped run`, async () => {
     await capped.hold(true);
@@ -2878,12 +2897,15 @@ async function verify(database, source, integrityMigration, customerOnly = false
     await db.query(operatorPaymentMigration);
     if (customerOnly) {
       await db.query("drop function if exists public.customer_ad_reserve(uuid,uuid,text,uuid,text,bigint,bigint,text,boolean,bigint)");
+      await db.query("drop function if exists public.customer_ad_reserve(uuid,uuid,text,uuid,text,bigint,bigint,text,boolean,bigint,bigint)");
       await db.query(customerAllowanceMigration);
       await db.query(customerAllowanceMigration);
       const priced = (await db.query("select exists(select 1 from information_schema.columns where table_schema='private' and table_name='production_payment_orders' and column_name='purpose') as installed")).rows[0].installed;
       if (!priced) await db.query(configurablePaymentMigration);
       await db.query(cappedBoundMigration);
       await db.query(cappedBoundMigration);
+      await db.query(spendCapMinimumMigration);
+      await db.query(spendCapMinimumMigration);
       await db.query(metaCostMigration);
       await db.query(metaCostMigration);
       await db.query(metaSettleMigration);
