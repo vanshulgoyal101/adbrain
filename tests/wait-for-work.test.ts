@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readyPool, boardRow, systemicFailures, snoozedUntil, latestWord, linkedIssues, lowQueues, matchers, nextItem, freshComments, offTrack, roleCard, unsavedWork, waitingOnMe } from "../scripts/wait-for-work.mjs";
+import { readyPool, boardRow, systemicFailures, snoozedUntil, latestWord, linkedIssues, lowQueues, matchers, nextItem, freshComments, offTrack, rateBackoffMs, roleCard, unsavedWork, waitingOnMe } from "../scripts/wait-for-work.mjs";
 
 describe("PR reviews count as the latest word (#423)", () => {
   it("picks a review posted after the last comment, and ignores empty approvals", () => {
@@ -283,5 +283,17 @@ describe("waiter fixes (#1478)", () => {
     const pool = [issue(1228, "core", "ready", "lane:qa", "declined:qa2"), issue(1230, "core", "ready", "lane:qa")];
     expect(readyPool(pool, "qa2").map((i) => i.number)).toEqual([1230]);
     expect(readyPool(pool, "qa").map((i) => i.number)).toEqual([1228, 1230]);
+  });
+});
+
+describe("shared GitHub budget (#2021)", () => {
+  const now = Date.parse("2026-10-28T21:40:00Z");
+  it("waits for the reset when the budget is spent, slows down when it's low, else adds nothing", () => {
+    const reset = now / 1000 + 120;
+    const spent = rateBackoffMs({ remaining: 0, reset }, 90_000, now);
+    expect(spent).toBeGreaterThanOrEqual(125_000);
+    expect(spent).toBeLessThan(155_000);
+    expect(rateBackoffMs({ remaining: 800, reset }, 90_000, now)).toBe(180_000);
+    expect(rateBackoffMs({ remaining: 4_000, reset }, 90_000, now)).toBe(0);
   });
 });

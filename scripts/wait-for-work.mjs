@@ -77,6 +77,16 @@ export function waitingOnMe(lastBody, m, labels = [], now = Date.now()) {
 }
 
 /**
+ * #2021: every role shares one gh login (5,000 REST calls/hour). `rate_limit` itself is free. Returns ms to wait:
+ * until the reset when the budget is spent, a slowed poll when it's low, else 0.
+ */
+export function rateBackoffMs({ remaining, reset }, pollMs, now = Date.now()) {
+  if (remaining <= 50) return Math.max(0, reset * 1000 - now) + 5_000 + Math.floor(Math.random() * 30_000);
+  if (remaining < 1_000) return pollMs * 2;
+  return 0;
+}
+
+/**
  * #1478: comments created since the wait began; `?since=` filters on updated_at, so edits looked new.
  * @template {{ created_at?: string }} T
  * @param {T[]} comments
@@ -323,6 +333,12 @@ function api(path) {
   return JSON.parse(execFileSync("gh", ["api", path], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 16 * 1024 * 1024 , env: ghEnv }));
 }
 
+function rateState() {
+  try { return JSON.parse(execFileSync("gh", ["api", "rate_limit", "--jq", ".resources.core"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], env: ghEnv })); }
+  catch { return { remaining: 5_000, reset: 0 }; }
+}
+const isRateLimited = (error) => /rate limit|HTTP 403|HTTP 429/i.test(String(error?.stderr ?? "") + String(error?.message ?? ""));
+
 const owned = () => api(`repos/${repo}/issues?state=open&labels=${encodeURIComponent(label)}&per_page=100`);
 const brief = text => text.replace(/\s+/g, " ").trim().slice(0, 200);
 
@@ -333,6 +349,7 @@ async function firstOwned() {
       return owned();
     } catch (error) {
       // A failed first read would make every owned item look newly labelled later.
+      if (isRateLimited(error)) { await new Promise(resolve => setTimeout(resolve, rateBackoffMs({ remaining: 0, reset: rateState().reset }, 0))); continue; }
       if (attempt >= 5) throw error;
       await new Promise(resolve => setTimeout(resolve, attempt * 5000));
     }
@@ -500,10 +517,11 @@ while (Date.now() < deadline) {
     const found = findWork();
     if (found.length) report(found);
   } catch (error) {
-    if (!warned) console.error(`gh api failed, will keep polling: ${error.message.split("\n")[0]}`);
+    if (isRateLimited(error)) console.error(`GitHub rate limit hit; waiting for the reset (#2021).`);
+    else if (!warned) console.error(`gh api failed, will keep polling: ${error.message.split("\n")[0]}`);
     warned = true;
   }
-  await new Promise(resolve => setTimeout(resolve, pollMs));
+  await new Promise(resolve => setTimeout(resolve, pollMs + rateBackoffMs(rateState(), pollMs)));
 }
 try {
   const waiting = backlog();
