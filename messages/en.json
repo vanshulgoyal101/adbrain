@@ -779,6 +779,11 @@
     "reloadPage": "Reload the page and try again.",
     "openRequestExists": "An open request of this type already exists.",
     "setUpBrandFirst": "Set up your Brand first, then connect Facebook in Settings.",
-    "leadFormsUnavailable": "Could not load lead forms. Try again."
+    "leadFormsUnavailable": "Could not load lead forms. Try again.",
+    "campaignFiltersInvalid": "Invalid campaign filters.",
+    "campaignsNotLoaded": "We couldn't load your campaigns. Reload the page.",
+    "enquiryInvalid": "Invalid enquiry.",
+    "enquiryWhatsAppOnly": "Real enquiries can be logged on WhatsApp campaigns only.",
+    "enquiryNotSaved": "The enquiry could not be saved. Try again."
   }
 }

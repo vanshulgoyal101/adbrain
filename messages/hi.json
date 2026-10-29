@@ -779,6 +779,11 @@
     "reloadPage": "पेज रिफ़्रेश करें और फिर से कोशिश करें।",
     "openRequestExists": "इस तरह का एक अनुरोध पहले से खुला है।",
     "setUpBrandFirst": "पहले अपना Brand सेट करें, फिर Settings में Facebook जोड़ें।",
-    "leadFormsUnavailable": "लीड फ़ॉर्म लोड नहीं हो सके। फिर से कोशिश करें।"
+    "leadFormsUnavailable": "लीड फ़ॉर्म लोड नहीं हो सके। फिर से कोशिश करें।",
+    "campaignFiltersInvalid": "कैंपेन फ़िल्टर सही नहीं हैं।",
+    "campaignsNotLoaded": "आपके कैंपेन लोड नहीं हो पाए। पेज दोबारा लोड करें।",
+    "enquiryInvalid": "पूछताछ सही नहीं है।",
+    "enquiryWhatsAppOnly": "असली पूछताछ सिर्फ़ WhatsApp कैंपेन पर दर्ज हो सकती है।",
+    "enquiryNotSaved": "पूछताछ सेव नहीं हो पाई। फिर कोशिश करें।"
   }
 }
