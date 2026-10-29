@@ -295,7 +295,7 @@ uncommitted work in a shared checkout is ready to publish together.
 
 For verification, start with [connection access tests](../tests/meta-connection-access.test.ts),
 [Studio recovery tests](../tests/studio.test.tsx), and the owning module's existing
-suite; [Testing](TESTING.md) owns execution commands and environment isolation.
+suite; [Testing](team/testing.md) owns execution commands and environment isolation.
 
 ## Multi-Channel Architecture (ADR-001, #1792)
 
