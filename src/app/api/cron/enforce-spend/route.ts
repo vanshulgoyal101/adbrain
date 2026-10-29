@@ -6,7 +6,7 @@ import { readAllByCursor } from "@/lib/supabase/queries";
 import { confirmCustomerCampaign, getCustomerBalance, listSettlingBusinesses } from "@/lib/payments/customer-balance";
 import { refreshOpenRunCosts, settlePausedRuns } from "@/lib/payments/meta-cost-evidence";
 import { fundingMode } from "@/lib/payments/operator-funding";
-import { cappedRunEnded } from "@/lib/campaign/activation";
+import { cappedRunEnded, pauseEndedRun } from "@/lib/campaign/activation";
 import {
   requireScheduledBusiness,
   withMetaConnection,
@@ -191,7 +191,11 @@ async function handleGET(request: Request) {
             },
             expectedGeneration: storedBinding.metaConnectionGeneration,
           },
-          (meta) => meta.updateCampaignStatus(campaign.meta_campaign_id!, "PAUSED"),
+          // #2301: an ended run stops whole, so its card can turn it on capped again.
+          async (meta) => {
+            if (!ended.has(id)) return meta.updateCampaignStatus(campaign.meta_campaign_id!, "PAUSED");
+            if (!await pauseEndedRun(meta, campaign)) incomplete = true;
+          },
         );
         const reservation = customerBalance?.reservations.find(item => item.campaignId === id && item.state !== "closed");
         if (reservation) await confirmCustomerCampaign(context, id, reservation.reservationId, "paused").catch(() => { incomplete = true; });

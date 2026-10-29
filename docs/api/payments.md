@@ -116,7 +116,7 @@ operator-only (#216). For paused runs the sweep confirms the whole Meta tree
 is stopped and records settle reads (`customer_ad_settle_costs`); two equal
 reads 30 minutes apart, at least 3 hours after the pause, finalize the run and
 close its reservation without an operator. Capped runs past their Meta end time
-are paused by the sweep first (#221), with or without a reservation (#2281). Capturing payment
+are paused by the sweep first (#221), with or without a reservation (#2281), ad sets and ads included (#2301). Capturing payment
 does not earn service fees or activate ads. Review precedes an atomic reservation
 for one campaign. Before ACTIVE, the Meta cap must be written and read back
 within the reserved media allowance; unsupported or rejected caps block
