@@ -1,4 +1,5 @@
 # सेटिंग्स: खर्च की सीमा और आपकी पसंद
+<!-- mirrors ../settings.md 315054aaebea -->
 
 यह [Settings: Spend Guardrails and Preferences](../settings.md) का हिंदी रूप है; अंग्रेज़ी पेज बदले तो इसे भी बदलें।
 [Features and workflows](../README.md) का हिस्सा।

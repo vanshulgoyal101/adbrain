@@ -1,4 +1,5 @@
 # कैंपेन की टारगेटिंग और बजट
+<!-- mirrors ../targeting-and-budget.md e78419bd85d2 -->
 
 यह [Campaign Targeting and Budget](../targeting-and-budget.md) का हिंदी रूप है; अंग्रेज़ी पेज बदले तो इसे भी बदलें।
 [Features and workflows](../README.md) का हिस्सा।

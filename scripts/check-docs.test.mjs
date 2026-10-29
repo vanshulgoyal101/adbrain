@@ -1,11 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
-import { appCopy, checkDocumentation, missingLabels, scheduleDrift } from "./check-docs.mjs";
+import { appCopy, checkDocumentation, missingLabels, mirrorDrift, scheduleDrift, stampMirror } from "./check-docs.mjs";
 
 function fixture(context, files = {}) {
   const root = mkdtempSync(resolve(tmpdir(), "adbrain-docs-check-"));
@@ -194,4 +194,21 @@ test("scheduled-jobs.md must list every cron and nothing that is gone", context 
     "5 Documented schedule no longer exists: `adbrain-a */15 * * * *`",
     "6 Documented schedule no longer exists: `adbrain-b 1 * * * *`",
   ]);
+});
+
+test("a Hindi page names its stale English page until it is refreshed and stamped", context => {
+  const root = fixture(context, {
+    "docs/product/go.md": "# Go\n\nTap \"Go live\".\n\n```\n# not a heading \"x\"\n```\n",
+    "docs/product/hi/go.md": "# जाएँ\n\nयह [Go](../go.md) का हिंदी रूप है। \"Go live\" दबाएँ।\n",
+  });
+  const hindi = resolve(root, "docs/product/hi/go.md");
+  assert.match(mirrorDrift(hindi, readFileSync(hindi, "utf8")), /No mirror stamp/);
+  stampMirror(hindi);
+  assert.match(readFileSync(hindi, "utf8"), /^# जाएँ\n<!-- mirrors \.\.\/go\.md [0-9a-f]{12} -->\n/);
+  assert.equal(mirrorDrift(hindi, readFileSync(hindi, "utf8")), null);
+  writeFileSync(resolve(root, "docs/product/go.md"), "# Go\n\nTap \"Go live\". More words.\n\n```\n# changed code \"y\"\n```\n");
+  assert.equal(mirrorDrift(hindi, readFileSync(hindi, "utf8")), null);
+  writeFileSync(resolve(root, "docs/product/go.md"), "# Go\n\nTap \"Go live now\".\n");
+  assert.match(mirrorDrift(hindi, readFileSync(hindi, "utf8")), /\.\.\/go\.md changed since this translation/);
+  assert.ok(checkDocumentation(root, { files: ["docs/product/hi/go.md"] }).diagnostics.some(item => item.severity === "error" && /changed since this translation/.test(item.message)));
 });

@@ -1,4 +1,5 @@
 # Go live के बाद आपका पहला हफ़्ता
+<!-- mirrors ../first-week.md cef133946f83 -->
 
 यह [Your first week after Go live](../first-week.md) का हिंदी रूप है; अंग्रेज़ी पेज बदले तो इसे भी बदलें।
 [Features and workflows](../README.md) का हिस्सा।
