@@ -48,6 +48,8 @@ async function reconcileOpenLink(db: ReturnType<typeof createAdminClient>, perio
   if (!event) return false;
   const result = await handlePlanWebhook({ event, payload: { payment_link: { entity: { id: link.id } } } }, {
     fetchPlanLink: async () => link,
+    // Only `payment_link.*` events are replayed here, so the ad-money ownership check is never reached.
+    isAdMoneyPayment: async () => { throw new Error("Plan reconcile never classifies payments."); },
     rpc: async (name: "plan_period_paid" | "plan_period_expire", args: Record<string, string>) => {
       const { data, error } = name === "plan_period_paid"
         ? await db.rpc(name, { p_link_id: args.p_link_id, p_payment_id: args.p_payment_id, p_paid_at: args.p_paid_at })
