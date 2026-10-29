@@ -211,5 +211,16 @@
   "creative": {
     "yourPhoto": "आपकी फ़ोटो",
     "aiPicture": "AI तस्वीर"
+  },
+  "shell": {
+    "home": "होम",
+    "create": "विज्ञापन बनाएँ",
+    "review": "विज्ञापन जाँचें",
+    "campaigns": "कैंपेन",
+    "enquiries": "पूछताछ",
+    "business": "बिज़नेस",
+    "assets": "फ़ोटो",
+    "settings": "सेटिंग",
+    "getStarted": "शुरू करें"
   }
 }
