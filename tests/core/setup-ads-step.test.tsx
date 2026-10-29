@@ -12,6 +12,7 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ push: mocks.push }) }));
 vi.mock("@/app/(app)/studio/actions", () => ({ setCreativeStatus: mocks.setCreativeStatus }));
 vi.mock("@/app/(app)/brand/actions", () => ({ saveAdLanguage: mocks.saveAdLanguage }));
 import { SetupAdsStep, storyFor } from "@/components/setup-ads-step";
+import hi from "../../messages/hi.json";
 
 const business = { id: "11111111-1111-4111-8111-111111111111", name: "SunPeak Solar", vertical: "Rooftop solar", locations: ["Jaipur"],
   offers: ["Free site survey"], phone: "9876543210", languages: [] } as unknown as Business;
@@ -373,9 +374,22 @@ describe("#1901: each ad says whose picture it is", () => {
     expect(screen.getByText("Your photo")).toBeInTheDocument();
     expect(screen.getByText("AI picture")).toBeInTheDocument();
     unmount();
-    render(<SetupAdsStep business={business} initialAds={[yours, ai]} locale="hi" />);
+    render(<SetupAdsStep business={business} initialAds={[yours, ai]} words={{ locale: "hi", messages: hi.setup }} />);
     expect(screen.getByText("आपकी फ़ोटो")).toBeInTheDocument();
     expect(screen.getByText("AI तस्वीर")).toBeInTheDocument();
+  });
+});
+
+describe("#1438: step 2 in Hindi (CPO #1251, #1707)", () => {
+  it("says ready, picked and Continue in the CPO's words", () => {
+    render(<SetupAdsStep business={business} initialAds={[ad("a"), ad("b"), ad("c")]} words={{ locale: "hi", messages: hi.setup }} />);
+    expect(screen.getByRole("heading", { name: "आपके विज्ञापन तैयार हैं" })).toBeInTheDocument();
+    expect(screen.getByText(/^हमने सबसे अच्छे 2 चुने हैं।/)).toBeInTheDocument();
+    expect(screen.getAllByText("चुना गया")).toHaveLength(2);
+    expect(screen.getByText("चुनने के लिए टैप करें")).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: /के शब्द बदलें$/ })).toHaveLength(3);
+    expect(screen.getByRole("button", { name: "2 विज्ञापन के साथ आगे बढ़ें" })).toBeInTheDocument();
+    expect(screen.queryByText(/Continue with|Picked|Tap to pick/)).toBeNull();
   });
 });
 });

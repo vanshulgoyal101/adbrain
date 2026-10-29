@@ -1,4 +1,5 @@
 import { WalletCards } from "lucide-react";
+import { PauseAllAds } from "@/components/pause-all-ads";
 import { translator, type AppLocale } from "@/i18n/locale";
 import type { MetaConnection } from "@/lib/meta/credentials";
 import { TestCheckout } from "@/components/test-checkout";
@@ -64,7 +65,12 @@ export function ManagedBilling({ connection, testBusinessId, liveBusinessId, ini
  * directly and an operator-funded business is paid by the operator, so neither is asked to pay; nor is anyone
  * while the funding mode can't be read.
  */
-export function BillingSection({ mode, locale = "en", ...billing }: { mode: "managed" | "own" | "operator" | null; locale?: AppLocale } & Parameters<typeof ManagedBilling>[0]) {
+export function BillingSection({ mode, locale = "en", runningCampaigns = [], ...billing }: {
+  mode: "managed" | "own" | "operator" | null;
+  locale?: AppLocale;
+  /** #1968 (frame 7): an own-account owner can stop everything next to "If you stop"; hidden while nothing runs. */
+  runningCampaigns?: Parameters<typeof PauseAllAds>[0]["campaigns"];
+} & Parameters<typeof ManagedBilling>[0]) {
   if (mode === "managed") return <ManagedBilling {...billing} />;
   if (mode !== "own") return null;
   const t = translator(locale, "settings");
@@ -76,6 +82,7 @@ export function BillingSection({ mode, locale = "en", ...billing }: { mode: "man
       </h2>
       <p className="text-sm leading-6 text-slate-600">{t("ownBilling")}</p>
       <IfYouStop locale={locale} />
+      <PauseAllAds locale={locale} campaigns={runningCampaigns} />
     </section>
   );
 }

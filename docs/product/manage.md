@@ -4,7 +4,8 @@ Part of [Features and workflows](README.md).
 
 ## Sync, Results, and Leads
 
-While campaigns run, Home offers **Pause all ads**: one confirmation, then each
+While campaigns run, Home (and, on an own-account plan, Settings → Billing under
+"If you stop") offers **Pause all ads**: one confirmation, then each
 running campaign's existing emergency stop, one at a time. It reports success
 only when every pause is confirmed, otherwise a partial result with Try again
 and Open in Ads Manager. Resume remains per campaign.

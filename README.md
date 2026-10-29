@@ -20,7 +20,7 @@ Start at the [documentation index](docs/README.md).
 | Integrate or debug requests | [API reference](docs/api/README.md) |
 | Configure providers and limits | [Configuration](docs/operations/configuration.md) |
 | Understand storage and upgrades | [Data model](docs/DATA_MODEL.md) |
-| Validate changes | [Testing](docs/TESTING.md) |
+| Validate changes | [Testing](docs/team/testing.md) |
 | Diagnose production | [Operations](docs/operations/README.md) and [observability](docs/operations/observability.md) |
 | Release safely | [Release workflow](docs/RELEASING.md) |
 
@@ -47,7 +47,7 @@ confirm the database target before starting the application. An existing
 `.env.local` may point to production; do not overwrite it or copy it into a test
 worktree. The repository's shared development environment is not a sandbox.
 
-The [testing guide](docs/TESTING.md) owns validation commands and safe test
+The [testing guide](docs/team/testing.md) owns validation commands and safe test
 environments. The [release guide](docs/RELEASING.md) owns branch, migration and
 deployment procedures. Follow those guides instead of using production setup
 commands as installation checks.
