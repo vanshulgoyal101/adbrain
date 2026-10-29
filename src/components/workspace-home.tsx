@@ -9,7 +9,7 @@ import { describeAuditEvent, isBackgroundAuditAction } from "@/lib/audit-labels"
 import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
 import { formatClock, formatDate, formatMoney, formatPerDay } from "@/lib/format";
 import { firstEnquiryLine } from "@/lib/trust-lines";
-import { homeResults } from "@/lib/campaign/home-results";
+import { homeResults, unloggedChats } from "@/lib/campaign/home-results";
 import { homeVerdicts } from "@/lib/campaign/card-verdict";
 import { staleCampaignIds } from "@/lib/campaign/results-freshness";
 import { StaleResultsRefresher } from "@/components/stale-results-refresher";
@@ -82,7 +82,7 @@ export function WorkspaceHome({
   const verdicts = business ? homeVerdicts(campaigns, results, { now, waiting: firstEnquiry ? 0 : waiting }) : null;
   const leadCampaign = verdicts?.lead ? campaigns.find((campaign) => campaign.id === verdicts.lead?.campaignId) : null;
   const stale = business ? staleCampaignIds(campaigns, results, now) : [];
-  const [next, ...later] = buildWorkQueue({ business, creatives, campaigns, metaReady, now, locale });
+  const [next, ...later] = buildWorkQueue({ business, creatives, campaigns, metaReady, now, locale, unloggedChats: business ? unloggedChats(campaigns, results) : 0 });
   const setAside = setAsideIds(creatives, now);
   const reviewLabel = (creative: CreativePreview) => creative.status === "approved" ? t("approved") : setAside.has(creative.id) ? t("setAside") : t("needsReview");
   const places = business?.locations.length ? business.locations.join(", ") : null;
@@ -138,9 +138,9 @@ export function WorkspaceHome({
           )}
           <dl className="grid grid-cols-3 gap-4 sm:flex sm:gap-16">
             {[
-              { label: t("enquiries"), value: String(summary.enquiries) },
+              { label: summary.chatsOnly ? t("chats") : t("enquiries"), value: String(summary.enquiries) },
               { label: t("spent"), value: formatMoney(summary.spend) },
-              { label: t("perEnquiry"), value: summary.perEnquiry === null ? null : formatMoney(summary.perEnquiry) },
+              { label: summary.chatsOnly ? t("perChat") : t("perEnquiry"), value: summary.perEnquiry === null ? null : formatMoney(summary.perEnquiry) },
             ].map((metric) => (
               <div key={metric.label} className="flex min-w-0 flex-col-reverse">
                 <dt className="mt-1 text-xs text-slate-600">{metric.label}</dt>

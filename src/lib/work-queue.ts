@@ -60,6 +60,7 @@ export function buildWorkQueue({
   metaReady,
   now = Date.now(),
   locale = "en",
+  unloggedChats = 0,
   plan = null,
 }: {
   business: QueueBusiness | null;
@@ -69,6 +70,8 @@ export function buildWorkQueue({
   now?: number;
   /** #1438: the owner's app language. */
   locale?: AppLocale;
+  /** #1624: WhatsApp chats with no real enquiry or customer logged yet (`unloggedChats`). */
+  unloggedChats?: number;
   /** #1630: the ₹999 plan, when billing is on (see `QueuePlan`). */
   plan?: QueuePlan | null;
 }): WorkItem[] {
@@ -114,6 +117,15 @@ export function buildWorkQueue({
       detail: t("reviewDetail"),
       href: "/studio?status=draft",
       action: t("reviewAction"),
+      tone: "work",
+    });
+  if (unloggedChats > 0)
+    queue.push({
+      id: "chats",
+      title: t("chatsTitle", { n: unloggedChats }),
+      detail: t("chatsDetail"),
+      href: "/leads",
+      action: t("chatsAction"),
       tone: "work",
     });
   if (missing.length)

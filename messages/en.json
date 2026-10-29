@@ -31,7 +31,9 @@
     "approved": "Approved",
     "setAside": "Set aside",
     "metaChecking": "Meta is checking your ads. This usually takes minutes to a few hours, and up to a day.",
-    "metaReview": "Meta review"
+    "metaReview": "Meta review",
+    "chats": "Chats",
+    "perChat": "Per chat"
   },
   "workQueue": {
     "brandTitle": "Set up your business",
@@ -68,6 +70,9 @@
     "campaignsTitle": "Check your paused campaigns",
     "campaignsDetail": "{paused} paused, {draft} not started. Check the ads, area and budget, then turn one on when you're ready.",
     "campaignsAction": "Review campaigns",
+    "chatsTitle": "Which of your {n} chats were real enquiries?",
+    "chatsDetail": "Add each real one so you can see what an enquiry costs you.",
+    "chatsAction": "Add enquiries",
     "planFreeEndsTitle": "Your free month ends on {date}",
     "planFreeEndsDetail": "Then it's ₹999 a month. No auto-debit; you pay when you choose.",
     "planDueTitle": "Your ₹999 plan payment is due",
