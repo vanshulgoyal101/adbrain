@@ -256,6 +256,15 @@ describe("same changes despite moved context (#567)", () => {
     expect(changedLines(diff(10, "a"))).not.toBe(changedLines(diff(10, "a").replace("+create table lease (id int);\n-drop view v;", "-drop view v;\n+create table lease (id int);")));
     expect(changedLines("")).toBe("");
   });
+
+  it("ignores Markdown, so a docs move in a base merge keeps the approvals (#2147)", () => {
+    const docs = (file: string, row: string) => `diff --git a/${file} b/${file}\n--- a/${file}\n+++ b/${file}\n@@ -5,1 +5,2 @@\n ctx\n+${row}\n`;
+    const before = diff(10, "a") + docs("docs/DATA_MODEL.md", "| [x.sql](../db/x.sql) |");
+    const after = diff(10, "a") + docs("docs/architecture/migrations.md", "| [x.sql](../../db/x.sql) |");
+    expect(changedLines(before)).toBe(changedLines(after));
+    expect(changedLines(docs("README.md", "only docs"))).toBe("");
+    expect(changedLines(after)).not.toBe(changedLines(after.replace("lease", "leases")));
+  });
 });
 
 describe("fresh backup before a migration (#884)", () => {
