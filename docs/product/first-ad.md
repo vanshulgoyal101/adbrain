@@ -6,10 +6,14 @@ Before you start, have these ready: a Facebook Page for your business, a Meta ad
 account with a way to pay (a card, or UPI or net banking), and the WhatsApp number
 customers should message. AdBrain also asks what you sell, where you serve and one
 offer. Nothing spends until you tap Go live, and you can stop at any step.
+"Your first month of AdBrain is free. After that it's ₹999 a month; we'll remind
+you before it's due."
 
 ## Sign in
 
-- **You see:** "Create your account or sign in".
+- **You see:** on a phone, a card first: "From your business to WhatsApp chats".
+  Tap "Skip" (or "Create my free account") to reach the form, headed "Create your
+  free account". Already have an account? Tap "Already have an account? Sign in".
 - **Tap:** "Continue with Google", or type your email and tap "Email me a sign-in
   link". "No password needed. The link creates your account."
 - **Takes:** a minute. With email you see "Check your email": open the link on the
@@ -19,7 +23,8 @@ offer. Nothing spends until you tap Go live, and you can stop at any step.
 
 After signing in you land on "Set up your first ad", "Step 1 of 3". The bar at the
 top shows your three steps. If you leave and come back, Home shows "Your first ad"
-with "Continue".
+with "Continue"; once your ads are made it shows "Your 3 ads are ready" with
+"Connect and go live".
 
 ## Step 1: Your business
 
@@ -28,6 +33,8 @@ with "Continue".
   "Where you serve", "Your offer" and "WhatsApp number".
 - **Tap:** "Make my ads". If you have a website, type it first and tap "Fill it
   from my website"; no website? Tap "No website? Paste a bio or listing".
+  Check "Your ads will be in" (the language), and if you like fill "Why do
+  customers pick you? (optional)": one line makes your ads sound like you.
 - **Takes:** about a minute. Your answers save as you type ("Saved").
 - **If it fails:** a field you missed is named in red, for example "Add at least one
   city or area." or "Enter a 10-digit mobile number." If your website can't be read
@@ -43,6 +50,9 @@ with "Continue".
   the strongest; tap an ad to change your pick ("Tap to pick" / "Picked"), or the
   pencil to change its words.
 - **Tap:** "Continue with 1 ad" (the number matches how many you picked).
+- **Made ads before?** You may see "Make ads from your details": "Your earlier ads
+  were made from older details or in Studio, so they aren't used here. Making ads
+  is included." Tap "Make 3 ads" for fresh ones, or "Use your earlier ads".
 - **Takes:** "Usually about a minute". Nothing is published at this step.
 - **If it fails:** making pictures uses free picture services that are sometimes
   busy. Then some ads may not arrive: "1 ad couldn't be made." with "Make another",
@@ -63,7 +73,10 @@ with "Continue".
     ₹708, or the ads stop when it runs out." Tap "Add payment in Meta" to do it
     on Meta.
   - "Stops at ₹708": the most this run can ever cost.
-- **Tap:** first "Connect Facebook Page". A Meta window opens: tap "Connect
+- **Tap:** while Facebook is still reviewing AdBrain, the Facebook Page row says
+  "Facebook is still reviewing AdBrain. Until then, your Facebook account needs our
+  invite: open your invites and accept adBrain, then tap Connect." Tap "Open my
+  invites", accept adBrain, come back, then tap "Connect Facebook Page". A Meta window opens: tap "Connect
   Business", sign in to Facebook, choose your Page and ad account, tap "Use
   selected business", then "Continue to review". The row now says "Connected"
   and the button becomes "Go live · ₹300 a day". Tap it.
@@ -74,9 +87,9 @@ with "Continue".
 - **If it fails:** nothing is spent when something fails. What the screen says:
   - Meta connect: "Meta has not finished yet. Complete the Meta window, then check
     again. Your draft is saved." Finish in the Meta window, then tap "Check again".
-    If Facebook said the app isn't available, the screen says "Didn't connect? If
-    Facebook said the app isn't available, accept the invite first, then try
-    again.": tap "Open my invites", accept, then "Try again".
+    "Didn't connect? If Facebook said the app isn't available, accept the invite
+    first, then try again.": you skipped the invite above. Tap "Open my invites",
+    accept, then "Try again".
   - Ad account not active: "This ad account is not active. Check Account quality
     in Meta." Fix it on Meta's Account quality page, or connect another ad
     account.
