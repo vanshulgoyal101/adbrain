@@ -176,13 +176,36 @@ export function freshComments(comments, since) {
  * @param {Set<number>} [skip]
  */
 export function nextItem(items, openPulls, skip = new Set()) {
-  const hold = new Set([...PARKED, "later", "decision", "standing"]);
   const withPr = new Set(openPulls.flatMap((pr) => linkedIssues(pr.title)));
-  const names = (i) => (i.labels ?? []).map((l) => (typeof l === "string" ? l : l.name));
   return items
-    .filter((i) => !i.pull_request && !names(i).some((n) => hold.has(n)) && !withPr.has(i.number) && !skip.has(i.number))
+    .filter((i) => !i.pull_request && !labelNames(i).some((n) => HOLD.has(n)) && !withPr.has(i.number) && !skip.has(i.number))
     .sort((a, b) => a.number - b.number)[0] ?? null;
 }
+
+const HOLD = new Set([...PARKED, "later", "decision", "standing"]);
+/** @param {{ labels?: Array<string | { name: string }> }} i */
+const labelNames = (i) => (i.labels ?? []).map((l) => (typeof l === "string" ? l : l.name));
+
+/**
+ * #364 (CEO, Oct 29): the owned items that stop you waiting. Everything labelled yours except held items
+ * (parked, blocked, waiting-owner, decision, later, standing) and scheduled checks not yet due (`snoozed`).
+ * A co-owned item (#1478) counts only when it is your turn (`myTurn`). Turns first, then `core`, then oldest.
+ * @param {Array<{ number: number, labels?: Array<string | { name: string }> }>} items
+ * @param {{ snoozed?: Set<number>, myTurn?: Set<number> }} [state]
+ */
+export function actionableOwned(items, { snoozed = new Set(), myTurn = new Set() } = {}) {
+  const rank = (i) => (myTurn.has(i.number) ? 0 : labelNames(i).includes("core") ? 1 : 2);
+  return items
+    .filter((i) => {
+      const names = labelNames(i);
+      if (names.some((n) => HOLD.has(n)) || snoozed.has(i.number)) return false;
+      return names.filter((n) => n.startsWith("owner:")).length < 2 || myTurn.has(i.number);
+    })
+    .sort((a, b) => rank(a) - rank(b) || a.number - b.number);
+}
+
+/** Exit code when the waiter refuses to wait because you own actionable items (#364). */
+export const OWNS_WORK = 6;
 
 /** Earliest scheduled check seen this run; the wait loop rechecks the backlog when it passes. */
 let nextDue = Infinity;
@@ -490,11 +513,14 @@ async function findWork() {
   return found;
 }
 
+// Set by backlog(): owned items you can act on now (#364).
+let ownedActionable = [];
 // Items you own where the last word is someone else's (said while you were busy, or before this wait).
 async function backlog() {
   const found = [];
   const items = await owned();
   const snoozed = new Set();
+  const myTurn = new Set();
   for (const item of items.slice(0, 20)) {
     const comments = item.comments ? await api(`repos/${repo}/issues/${item.number}/comments?per_page=100`) : [];
     const reviews = item.pull_request ? await api(`repos/${repo}/pulls/${item.number}/reviews?per_page=100`) : [];
@@ -502,16 +528,18 @@ async function backlog() {
     const due = last && writtenByMe(last.body ?? "") ? snoozedUntil(last.body) : null;
     if (due !== null && Date.now() < due) snoozed.add(item.number);
     if (waitingOnMe(last?.body ?? null, m, (item.labels ?? []).map(l => l.name))) {
+      myTurn.add(item.number);
       found.push(last ? `#${item.number} is waiting on you${withSkills(item)}: "${brief(last.body)}" ${last.url}` : `#${item.number} is yours and not started${withSkills(item)}: ${item.title}`);
     }
   }
+  ownedActionable = actionableOwned(items, { snoozed, myTurn });
   // #364: nothing is waiting on you, but you still own work with no open PR: continue the oldest.
   if (!found.length) {
     const next = nextItem(items, await api(`repos/${repo}/pulls?state=open&per_page=100`), snoozed);
     if (next) found.push(`#${next.number} is your next item${withSkills(next)}: ${next.title} (your oldest open item with no PR; continue it, ship it, or hand it off with its label)`);
   }
   // Nothing of yours is actionable: pull the next briefed item from your lane instead of idling.
-  if (!found.length) {
+  if (!found.length && !ownedActionable.length) {
     for (const item of readyPool(await openIssues(), role, 1)) {
       found.push(`#${item.number} from the ready pool${withSkills(item)}: ${item.title}. Claim it first: gh issue edit ${item.number} --add-label owner:${role} --remove-label ready (or decline: --add-label declined:${role})`);
     }
@@ -524,12 +552,12 @@ const card = (() => { try { return roleCard(readFileSync(join(repoRoot, "docs/OR
 // The live priorities and queues are the pinned Team board issue (#580), edited without a PR.
 const BOARD_ISSUE = 580;
 const board = async () => { try { return boardRow((await api(`repos/${repo}/issues/${BOARD_ISSUE}`)).body ?? "", role); } catch { return null; } };
-const report = async (found) => {
+const report = async (found, code = 0) => {
   if (card) console.log(`Role: ${card}`);
   const row = await board();
   if (row) console.log(`Team board #${BOARD_ISSUE} (your queue, in order):\n${row}`);
   console.log(`WORK for ${name} (${found.length}):\n- ${found.join("\n- ")}`);
-  process.exit(0);
+  process.exit(code);
 };
 const git = (cwd, args) => execFileSync("git", ["-C", cwd, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
 function localTrees() {
@@ -578,6 +606,14 @@ try {
     const low = lowQueues(await openIssues());
     startLow = new Set(low.map(({ role: r }) => r));
     waiting.push(...describeLow(low));
+  }
+  // #364 (CEO, Oct 29): never wait while you own work you can act on. The top 3, then a non-zero exit.
+  if (ownedActionable.length) {
+    const top = ownedActionable.slice(0, 3).map((item) => waiting.find((line) => line.startsWith(`#${item.number} `))
+      ?? `#${item.number} is yours${withSkills(item)}: ${item.title} (work it, ship it, or move its owner: label to whoever acts next)`);
+    const rest = waiting.filter((line) => !/^#\d+ /.test(line));
+    console.error(`Not waiting: ${name} owns ${ownedActionable.length} actionable item(s) (#364). Work these first; park, block or hand off by label what you can't act on.`);
+    await report([...top, ...rest], OWNS_WORK);
   }
   if (waiting.length) await report(waiting);
 } catch (error) {

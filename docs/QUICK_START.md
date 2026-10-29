@@ -16,7 +16,7 @@ preparation is not an installation prerequisite or proof of approval.
 - Optional model credentials for AI; optional Meta credentials for connections.
   Neither is needed for the mocked unit suite.
 - Local PostgreSQL binaries for database integration tests; see
-  [Testing](TESTING.md).
+  [Testing](team/testing.md).
 
 ## Install and Configure
 
@@ -107,7 +107,7 @@ npm run build
 
 Local tests do not prove email delivery, real consent, provider quality, or
 production deployment. Browser scripts can sign in to the configured backend;
-read [Testing](TESTING.md) before invoking them.
+read [Testing](team/testing.md) before invoking them.
 
 ## Enable Workflows Deliberately
 

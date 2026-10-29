@@ -9,7 +9,7 @@ import { describeAuditEvent, isBackgroundAuditAction } from "@/lib/audit-labels"
 import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
 import { formatClock, formatDate, formatMoney, formatPerDay } from "@/lib/format";
 import { firstEnquiryLine } from "@/lib/trust-lines";
-import { homeResults } from "@/lib/campaign/home-results";
+import { homeCustomers, homeResults, unloggedChats } from "@/lib/campaign/home-results";
 import { homeVerdicts } from "@/lib/campaign/card-verdict";
 import { staleCampaignIds } from "@/lib/campaign/results-freshness";
 import { StaleResultsRefresher } from "@/components/stale-results-refresher";
@@ -18,7 +18,7 @@ import type { AuditLog, Business, Campaign, CampaignResult, CreativePreview } fr
 import { campaignAttention } from "@/lib/campaign/health";
 import { formatReplyTime } from "@/lib/leads/first-reply";
 import { campaignStatus, Status } from "@/components/ui/status";
-import { goneInMeta, recentlyDeletedInMeta } from "@/lib/campaign/gone-in-meta";
+import { goneInMeta, pausableCampaigns, recentlyDeletedInMeta } from "@/lib/campaign/gone-in-meta";
 import type { HomeAdReview } from "@/lib/campaign/home-ad-review";
 import { timeAgoIn, translator, type AppLocale } from "@/i18n/locale";
 
@@ -82,7 +82,9 @@ export function WorkspaceHome({
   const verdicts = business ? homeVerdicts(campaigns, results, { now, waiting: firstEnquiry ? 0 : waiting }) : null;
   const leadCampaign = verdicts?.lead ? campaigns.find((campaign) => campaign.id === verdicts.lead?.campaignId) : null;
   const stale = business ? staleCampaignIds(campaigns, results, now) : [];
-  const [next, ...later] = buildWorkQueue({ business, creatives, campaigns, metaReady, now, locale });
+  const unlogged = business ? unloggedChats(campaigns, results) : 0;
+  const [next, ...later] = buildWorkQueue({ business, creatives, campaigns, metaReady, now, locale, unloggedChats: unlogged });
+  const customers = homeCustomers(summary, unlogged);
   const setAside = setAsideIds(creatives, now);
   const reviewLabel = (creative: CreativePreview) => creative.status === "approved" ? t("approved") : setAside.has(creative.id) ? t("setAside") : t("needsReview");
   const places = business?.locations.length ? business.locations.join(", ") : null;
@@ -138,9 +140,9 @@ export function WorkspaceHome({
           )}
           <dl className="grid grid-cols-3 gap-4 sm:flex sm:gap-16">
             {[
-              { label: t("enquiries"), value: String(summary.enquiries) },
+              { label: summary.chatsOnly ? t("chats") : t("enquiries"), value: String(summary.enquiries) },
               { label: t("spent"), value: formatMoney(summary.spend) },
-              { label: t("perEnquiry"), value: summary.perEnquiry === null ? null : formatMoney(summary.perEnquiry) },
+              { label: summary.chatsOnly ? t("perChat") : t("perEnquiry"), value: summary.perEnquiry === null ? null : formatMoney(summary.perEnquiry) },
             ].map((metric) => (
               <div key={metric.label} className="flex min-w-0 flex-col-reverse">
                 <dt className="mt-1 text-xs text-slate-600">{metric.label}</dt>
@@ -150,6 +152,10 @@ export function WorkspaceHome({
               </div>
             ))}
           </dl>
+          {customers?.kind === "line" && <p className="mt-3 text-sm text-slate-700">{t("customersLine", { n: customers.customers, cost: formatMoney(customers.perCustomer) })}</p>}
+          {customers?.kind === "ask" && <p className="mt-3 text-sm text-slate-700">
+            {t("customersAsk")}{" "}<Link href="/leads" className={linkClass}>{t("markCustomers")}</Link>
+          </p>}
           {replyMinutes !== null && <p className="mt-3 text-sm text-slate-700">
             {/* #1443: the number is the owner's first WhatsApp/Call tap, not a reply AdBrain can see. */}
             {t.rich("contactTime", { time: formatReplyTime(replyMinutes), strong: (chunks) => <strong className="font-medium">{chunks}</strong> })}{" "}
@@ -243,8 +249,7 @@ export function WorkspaceHome({
                 </p>
               )}
               {/* #1968: a quiet secondary stop while anything runs; each campaign resumes from its own card. */}
-              <PauseAllAds locale={locale} campaigns={campaigns.filter((campaign) => campaign.status === "active" && !goneInMeta(campaign))
-                .map(({ id, name, meta_ad_account_id, meta_campaign_id }) => ({ id, name, meta_ad_account_id, meta_campaign_id }))} />
+              <PauseAllAds locale={locale} campaigns={pausableCampaigns(campaigns)} />
             </section>
           )}
         </div>

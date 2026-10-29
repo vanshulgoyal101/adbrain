@@ -3,6 +3,11 @@
 Part of [the documentation index](../README.md). The architecture guide itself is
 still [ARCHITECTURE.md](../ARCHITECTURE.md) until #1851 moves it into this folder.
 
+## AI Pipeline
+
+[Interview and boundaries](ai-pipeline.md), [variant generation](ai-pipeline-variants.md) and
+[text routing, images, reliability and cost](ai-pipeline-routing.md).
+
 ## Channels
 
 [Channels](channels/README.md): one page of current facts per ad channel, starting with [Meta](channels/meta.md).

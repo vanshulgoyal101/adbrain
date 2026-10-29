@@ -108,4 +108,4 @@ alter sibling sites or their favicons as an incidental AdBrain change.
 For documentation-only changes, run `npm run docs:check`; do not regenerate
 assets or replay browser/provider suites. For an actual brand change, run the
 affected icon tests and required CI, then inspect favicon, social raster and
-desktop/mobile surfaces under the [Testing](TESTING.md) isolation rules.
+desktop/mobile surfaces under the [Testing](team/testing.md) isolation rules.
