@@ -22,10 +22,22 @@ const queries = vi.hoisted(() => ({
   getLatestResultsWithEnquiries: vi.fn(),
   getSpendEvaluation: vi.fn(),
   getMetaConnection: vi.fn(),
+  getAdStatuses: vi.fn(async () => ({})),
   getUser: vi.fn(),
   businessLLMUsageSummary: vi.fn(),
 }));
 vi.mock("@/lib/supabase/queries", () => queries);
+// #1668: the "last week" card has its own tests; here it reads nothing.
+vi.mock("@/lib/home/week-summary-load", () => ({ loadWeekSummary: async () => null }));
+// #1650: the day-7 question's facts (exempt, first Go live, earlier answers); hidden unless a test opens it.
+const pilot = vi.hoisted(() => ({ facts: vi.fn(async (): Promise<{ exempt: boolean; firstLaunchAt: string | null; events: { name: string; created_at: string }[] }> => ({ exempt: true, firstLaunchAt: null, events: [] })) }));
+vi.mock("@/lib/feedback/pilot-day7-store", () => ({ pilotDay7Facts: pilot.facts }));
+// #2036: the weekly results card's facts; not offered unless a test offers it.
+const card = vi.hoisted(() => ({ facts: vi.fn(async () => ({ offered: false, enquiries: 0, area: null as string | null })) }));
+vi.mock("@/lib/results-card/store", () => ({
+  resultsCardFacts: card.facts,
+  resultsCardLines: () => ({ main: "6 people in Sector 70 enquired with us this week", contact: null }),
+}));
 vi.mock("@/lib/llm/persist", () => ({ businessLLMUsageSummary: queries.businessLLMUsageSummary }));
 vi.mock("@/lib/env", () => ({ getEnv: () => ({ DEMO_USER_EMAIL: "demo@example.test", NEXT_PUBLIC_SUPABASE_URL: "https://project.supabase.co" }) }));
 const operator = vi.hoisted(() => ({ allowed: true }));
@@ -79,6 +91,29 @@ function suspenseBoundaries(node: any): any[] {
 }
 
 describe("Home workspace", () => {
+  // #1469: between launch and first delivery Home says Meta is checking, once.
+  const CHECKING = "Meta checks your ads first. This usually takes a few hours, sometimes up to a day.";
+  it("says Meta is checking while the newest campaign's ads are in review (#1469)", () => {
+    const live = { id: "c-new", name: "Solar", status: "active", daily_budget: 300, raw: {}, meta_campaign_id: "1" } as unknown as Campaign;
+    render(<WorkspaceHome {...empty} business={business} campaigns={[live]} adReview={{ kind: "checking", campaignId: "c-new" }} />);
+    expect(screen.getByRole("status", { name: "Meta review" })).toHaveTextContent(CHECKING);
+  });
+
+  it("doesn't repeat it when the results verdict already says Meta is checking (#1469)", () => {
+    const live = { id: "c-new", name: "Solar", status: "active", daily_budget: 300, raw: {}, meta_campaign_id: "1", launched_at: new Date().toISOString() } as unknown as Campaign;
+    const result = { campaign_id: "c-new", impressions: 0, clicks: 0, spend: 0, leads: 0, conversations: 0, fetched_at: new Date().toISOString(), raw: {} } as unknown as CampaignResult;
+    render(<WorkspaceHome {...empty} business={business} campaigns={[live]} results={{ "c-new": result }} adReview={{ kind: "checking", campaignId: "c-new" }} />);
+    expect(screen.getAllByText(/Meta checks your ads first/)).toHaveLength(1);
+    expect(screen.queryByRole("status", { name: "Meta review" })).toBeNull();
+  });
+
+  it("shows the rejected-ads section in place of the checking line (#1469)", () => {
+    render(<WorkspaceHome {...empty} business={business} campaigns={[wentLive]} adReview={{ kind: "rejected", campaignId: "c-live" }}
+      rejectedAds={<p>Meta didn&apos;t approve your ad.</p>} />);
+    expect(screen.getByText("Meta didn't approve your ad.")).toBeInTheDocument();
+    expect(screen.queryByText(CHECKING)).toBeNull();
+  });
+
   // #1150: Home lists only campaigns still in Meta, with the Campaigns page's status word.
   it("leaves campaigns deleted in Meta off Home's list", () => {
     const run = (id: string, status: string, raw: object = {}) => ({ id, name: `Run ${id}`, status, daily_budget: 300, raw }) as unknown as Campaign;
@@ -88,6 +123,20 @@ describe("Home workspace", () => {
     expect(within(list).queryByRole("link", { name: /Run old/ })).toBeNull();
     expect(within(list).getByText("Running")).toBeInTheDocument();
     expect(within(list).getByRole("link", { name: "See all 3" })).toBeInTheDocument();
+  });
+
+  it("#1600 (Designer #1633): a campaign deleted in Meta keeps its Home row for a week, the CPO's line as its status (EN and HI)", () => {
+    const now = Date.parse("2026-10-28T18:00:00Z");
+    const run = (id: string, at: string) => ({ id, name: `Run ${id}`, status: "completed", daily_budget: 300, raw: { metaStatus: "DELETED", metaGoneAt: at } }) as unknown as Campaign;
+    const campaigns = [run("fresh", "2026-10-27T18:00:00Z"), run("old", "2026-10-10T18:00:00Z")];
+    const { unmount } = render(<WorkspaceHome {...empty} business={business} now={now} campaigns={campaigns} />);
+    const list = screen.getByRole("heading", { name: "Campaigns" }).closest("section")!;
+    const row = within(list).getByRole("link", { name: "Run fresh" }).closest("li")!;
+    expect(within(row).getByText("Deleted in Meta. Run it again from Campaigns if you still want it.")).toBeInTheDocument();
+    expect(within(list).queryByRole("link", { name: "Run old" })).toBeNull();
+    unmount();
+    render(<WorkspaceHome {...empty} business={business} now={now} campaigns={campaigns} locale="hi" />);
+    expect(screen.getByText("Meta में डिलीट हुआ है। अगर अब भी चाहिए, तो Campaigns से फिर से चलाएँ।")).toBeInTheDocument();
   });
 
   it("#1393: the workspace shell opens the Storage connection before the page streams in", async () => {
@@ -332,6 +381,62 @@ describe("Home workspace", () => {
     expect(screen.getByRole("link", { name: "Continue" })).toHaveAttribute("href", "/brand");
   });
 
+  it("reads the newest live campaign's stored ad statuses for the Meta review line (#1469)", async () => {
+    vi.stubEnv("AD_RESULTS_ENABLED", "true");
+    const live = { id: "c-new", name: "Solar", status: "active", daily_budget: 300, raw: {}, meta_campaign_id: "123", launched_at: "2026-10-28T10:00:00Z", created_at: "2026-10-28T10:00:00Z" } as unknown as Campaign;
+    queries.getPrimaryBusiness.mockResolvedValue(business);
+    queries.getCreativePreviews.mockResolvedValue([]);
+    queries.getCampaigns.mockResolvedValue([live, wentLive]);
+    queries.getMetaConnection.mockResolvedValue({ ready: true });
+    queries.getSpendEvaluation.mockResolvedValue({ evaluation: { status: "healthy" } });
+    queries.getAuditLog.mockResolvedValue([]);
+    queries.getLatestResultsWithEnquiries.mockResolvedValue({});
+    queries.getAdStatuses.mockResolvedValue(["PENDING_REVIEW", "IN_PROCESS"]);
+    const { default: DashboardPage } = await import("@/app/(app)/dashboard/page");
+    render(await DashboardPage());
+    expect(queries.getAdStatuses).toHaveBeenCalledWith("c-new");
+    expect(screen.getByRole("status", { name: "Meta review" })).toHaveTextContent(CHECKING);
+    vi.unstubAllEnvs();
+  });
+
+  it("asks the day-7 pricing question once the first week has passed, and not for an exempt business (#1650)", async () => {
+    const live = { id: "c-new", name: "Solar", status: "active", daily_budget: 300, raw: {}, meta_campaign_id: "123", launched_at: "2026-10-01T10:00:00Z", created_at: "2026-10-01T10:00:00Z" } as unknown as Campaign;
+    queries.getPrimaryBusiness.mockResolvedValue(business);
+    queries.getCreativePreviews.mockResolvedValue([]);
+    queries.getCampaigns.mockResolvedValue([live]);
+    queries.getMetaConnection.mockResolvedValue({ ready: true });
+    queries.getSpendEvaluation.mockResolvedValue({ evaluation: { status: "healthy" } });
+    queries.getAuditLog.mockResolvedValue([]);
+    queries.getLatestResultsWithEnquiries.mockResolvedValue({});
+    pilot.facts.mockResolvedValueOnce({ exempt: false, firstLaunchAt: new Date(Date.now() - 8 * 86_400_000).toISOString(), events: [] });
+    const { default: DashboardPage } = await import("@/app/(app)/dashboard/page");
+    const { unmount } = render(await DashboardPage());
+    expect(screen.getByText(/would you pay ₹999 a month/)).toBeInTheDocument();
+    unmount();
+    render(await DashboardPage());
+    expect(screen.queryByText(/would you pay ₹999 a month/)).toBeNull();
+  });
+
+  it("offers the weekly results card only in a week it's offered (#2036)", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 503 })));
+    const live = { id: "c-new", name: "Solar", status: "active", daily_budget: 300, raw: {}, meta_campaign_id: "123", launched_at: "2026-10-01T10:00:00Z", created_at: "2026-10-01T10:00:00Z" } as unknown as Campaign;
+    queries.getPrimaryBusiness.mockResolvedValue(business);
+    queries.getCreativePreviews.mockResolvedValue([]);
+    queries.getCampaigns.mockResolvedValue([live]);
+    queries.getMetaConnection.mockResolvedValue({ ready: true });
+    queries.getSpendEvaluation.mockResolvedValue({ evaluation: { status: "healthy" } });
+    queries.getAuditLog.mockResolvedValue([]);
+    queries.getLatestResultsWithEnquiries.mockResolvedValue({});
+    card.facts.mockResolvedValueOnce({ offered: true, enquiries: 6, area: "Sector 70" });
+    const { default: DashboardPage } = await import("@/app/(app)/dashboard/page");
+    const { unmount } = render(await DashboardPage());
+    expect(screen.getByRole("region", { name: "Good week. Share it?" })).toHaveTextContent("6 people enquired this week.");
+    unmount();
+    render(await DashboardPage());
+    expect(screen.queryByText("Good week. Share it?")).toBeNull();
+    vi.unstubAllGlobals();
+  });
+
   it("keeps recent activity failures local to their section", async () => {
     queries.getPrimaryBusiness.mockResolvedValue(business);
     queries.getCreativePreviews.mockResolvedValue([]);
@@ -344,7 +449,7 @@ describe("Home workspace", () => {
     const page = await DashboardPage();
     const feed = page.props.activity.props.children;
     render(await feed.type(feed.props));
-    expect(screen.getByRole("alert")).toHaveTextContent("Recent activity could not be loaded.");
+    expect(screen.getByRole("alert")).toHaveTextContent("We couldn't load your recent activity. Reload the page.");
     expect(screen.queryByText("Private audit detail")).not.toBeInTheDocument();
   });
 
@@ -418,6 +523,20 @@ describe("Home results row (#764)", () => {
     expect(within(row).getByRole("link", { name: /See campaigns/ })).toHaveAttribute("href", "/campaigns");
   });
 
+  it("#1934: a launched owner starts a new campaign from Home in the guided returning mode", () => {
+    render(<WorkspaceHome {...empty} business={business} campaigns={[chats, forms]} results={results} now={now} />);
+    expect(within(screen.getByRole("region", { name: "Results so far" })).getByRole("link", { name: "New campaign" })).toHaveAttribute("href", "/brand?again=1");
+  });
+
+  // #1774 (QA): in Hindi the freshness line was the one English phrase left in the row.
+  it("#1774: in Hindi, says how fresh in Hindi; English keeps '10m ago'", () => {
+    const old = { ...results, "c-form": { ...results["c-form"], fetched_at: new Date(now - 2 * 86_400_000).toISOString() } } as Record<string, CampaignResult>;
+    render(<WorkspaceHome {...empty} business={business} campaigns={[chats, forms]} results={old} now={now} locale="hi" />);
+    const row = screen.getByRole("region", { name: "अब तक के नतीजे" });
+    expect(within(row).getByText(/2 दिन पहले अपडेट हुआ/)).toBeInTheDocument();
+    expect(within(row).queryByText(/Updated|ago/)).toBeNull();
+  });
+
   it("#1049: says how fast the owner replies to enquiries, when there's a reply to measure", () => {
     const { rerender } = render(<WorkspaceHome {...empty} business={business} campaigns={[chats, forms]} results={results} replyMinutes={12.4} now={now} />);
     expect(screen.getByText(/You usually contact people within/)).toHaveTextContent("You usually contact people within 12 min (last 30 days).");
@@ -432,12 +551,23 @@ describe("Home results row (#764)", () => {
     const lead = within(row).getByRole("link", { name: "WhatsApp run" }).closest("p");
     expect(lead).toHaveTextContent("Each chat costs ₹168. WhatsApp run");
     const campaignsList = screen.getByRole("region", { name: "Campaigns" });
-    expect(within(campaignsList).getAllByText("Live")).not.toHaveLength(0);
+    // #1795: 'Live' and 'Ended' only restate the status, so the row shows no word ('Paused · Live' contradicted it).
+    expect(within(campaignsList).queryByText("Live")).not.toBeInTheDocument();
+    rerender(<WorkspaceHome {...empty} business={business} campaigns={[{ ...chats, status: "completed" } as Campaign, forms]} results={results} now={now} />);
+    expect(within(screen.getByRole("region", { name: "Campaigns" })).getAllByText("Ended")).toHaveLength(1);
     rerender(<WorkspaceHome {...empty} business={business} campaigns={[chats, forms]} results={results} waiting={2} now={now} />);
     expect(within(screen.getByRole("region", { name: "Results so far" })).getByRole("link", { name: "WhatsApp run" }).closest("p")).toHaveTextContent(/^2 people are waiting for your reply\. /);
     // With #1292's named line on Home, the count isn't repeated.
     rerender(<WorkspaceHome {...empty} business={business} campaigns={[chats, forms]} results={results} waiting={2} firstEnquiry={{ name: "Rohit", at: "2026-10-26T04:10:00Z" }} now={now} />);
     expect(within(screen.getByRole("region", { name: "Results so far" })).getByRole("link", { name: "WhatsApp run" }).closest("p")).toHaveTextContent("Each chat costs ₹168. WhatsApp run");
+  });
+
+  // #1438: in Hindi, Home's lead sentence and the row words come from the same Hindi verdicts.
+  it("#1438: the verdict sentence and row words in Hindi", () => {
+    render(<WorkspaceHome {...empty} business={business} campaigns={[chats, forms]} results={results} now={now} locale="hi" />);
+    const row = screen.getByRole("region", { name: "अब तक के नतीजे" });
+    expect(within(row).getByRole("link", { name: "WhatsApp run" }).closest("p")).toHaveTextContent("हर चैट ₹168 की पड़ रही है। WhatsApp run");
+    expect(screen.queryByText(/Each chat costs|Early days/)).toBeNull();
   });
 
   it("#1274: no lead sentence when nothing is running", () => {
@@ -464,12 +594,12 @@ describe("Home results row (#764)", () => {
     queries.getCreativePreviews.mockResolvedValue([]);
     queries.getAuditLog.mockResolvedValue([]);
     queries.getCampaigns.mockResolvedValue([chats, forms, { ...forms, id: "c-draft", meta_campaign_id: null }]);
-    queries.getLatestResults.mockResolvedValue(results);
+    queries.getLatestResultsWithEnquiries.mockResolvedValue(results);
     queries.getSpendEvaluation.mockResolvedValue({ limits: {}, evaluation: { status: "healthy" } });
     queries.getMetaConnection.mockResolvedValue({ ready: true });
     const { default: DashboardPage } = await import("@/app/(app)/dashboard/page");
     render(await DashboardPage());
-    expect(queries.getLatestResults).toHaveBeenCalledWith(["c-wa", "c-form"]);
+    expect(queries.getLatestResultsWithEnquiries).toHaveBeenCalledWith(["c-wa", "c-form"]);
     expect(screen.getByRole("region", { name: "Results so far" })).toBeInTheDocument();
   });
 });
@@ -488,5 +618,16 @@ describe("Recent activity", () => {
   it("shows nothing when only syncs happened", () => {
     const { container } = render(<RecentActivity audit={[row("1", "leads.sync")]} />);
     expect(container).toBeEmptyDOMElement();
+  });
+});
+
+describe("#1968: Pause all ads on Home", () => {
+  it("shows the quiet stop while a campaign runs, and not otherwise", () => {
+    const live = { id: "c-new", name: "Solar", status: "active", daily_budget: 300, raw: {}, meta_campaign_id: "1" } as unknown as Campaign;
+    const { unmount } = render(<WorkspaceHome {...empty} business={business} campaigns={[live]} />);
+    expect(screen.getByRole("button", { name: "Pause all ads" })).toBeInTheDocument();
+    unmount();
+    render(<WorkspaceHome {...empty} business={business} campaigns={[{ ...live, status: "paused" } as Campaign]} />);
+    expect(screen.queryByRole("button", { name: "Pause all ads" })).toBeNull();
   });
 });

@@ -2,14 +2,15 @@
 
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { LivePicture, type PicturePreview } from "@/components/live-picture";
+import { PhotoFitSheet, PhotoPicker, useBrandPhotos } from "@/components/photo-fit-sheet";
 import { AlertTriangle, CheckCircle2, Info } from "lucide-react";
 import { updateCreativeCopy, type CopyEditResult } from "@/app/(app)/studio/actions";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Textarea } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import type { PhotoFit } from "@/lib/creative/fit-photo";
 import { editableCopySchema, savedCreativeDescription, type EditableCopy } from "@/lib/creative/concept";
 import { pictureDesign, pictureWordsOf, pictureWordsSchema, withPictureWords, type PictureWords } from "@/lib/creative/picture-words";
-import { createClient } from "@/lib/supabase/client";
 import { META_CTAS, type BrandContext } from "@/lib/templates/ads";
 import type { Creative } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -384,8 +385,9 @@ function BackgroundEditor({
   onPreview?: (preview: PicturePreview | null) => void;
 }) {
   const [instruction, setInstruction] = useState("");
-  const [photos, setPhotos] = useState<string[]>([]);
+  const photos = useBrandPhotos(creative.business_id);
   const [photo, setPhoto] = useState<string | null>(null);
+  const [fit, setFit] = useState<PhotoFit>("attention");
   // A picked photo shows behind the same words at once (#387).
   const { headline, primary_text, cta, angle, generation } = creative;
   const base = useMemo(
@@ -393,29 +395,12 @@ function BackgroundEditor({
     [headline, primary_text, cta, angle, generation, brand],
   );
   useEffect(() => {
-    onPreview?.(photo ? { spec: { ...base, backgroundUrl: photo } } : null);
-  }, [photo, base, onPreview]);
+    onPreview?.(photo ? { spec: { ...base, backgroundUrl: photo, backgroundFit: fit } } : null);
+  }, [photo, fit, base, onPreview]);
   useEffect(() => () => onPreview?.(null), [onPreview]);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   useEffect(() => onBusy?.(saving), [saving, onBusy]);
-  useEffect(() => {
-    let alive = true;
-    void Promise.resolve(
-      createClient()
-        .from("brand_assets")
-        .select("url")
-        .eq("business_id", creative.business_id)
-        .eq("type", "product_photo")
-        .order("created_at", { ascending: false })
-        .limit(12),
-    ).then(({ data }) => {
-      if (alive) setPhotos((data ?? []).map((row) => row.url));
-    }).catch(() => undefined);
-    return () => {
-      alive = false;
-    };
-  }, [creative.business_id]);
   const id = `background-${creative.id}`;
 
   async function save(event: React.FormEvent) {
@@ -426,7 +411,7 @@ function BackgroundEditor({
       const res = await fetch(`/api/creatives/${creative.id}/background`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(photo ? { photoUrl: photo } : { instruction }),
+        body: JSON.stringify(photo ? { photoUrl: photo, fit } : { instruction }),
       });
       const data = (await res.json().catch(() => ({}))) as { creative?: Creative; liveNotice?: string; error?: string };
       if (res.ok && data.creative) onSaved({ ...creative, ...data.creative }, { warnings: [], liveNotice: data.liveNotice });
@@ -438,11 +423,34 @@ function BackgroundEditor({
     }
   }
 
+  if (photo) {
+    return (
+      <PhotoFitSheet
+        creativeId={creative.id}
+        photo={photo}
+        fit={fit}
+        width={base.width}
+        height={base.height}
+        saving={saving}
+        error={error}
+        onFit={setFit}
+        onSubmit={save}
+        onPickAnother={() => {
+          setPhoto(null);
+          setFit("attention");
+          setError(null);
+        }}
+      />
+    );
+  }
+
   return (
-    <form aria-label="Change the background" onSubmit={save} className="flex flex-col gap-3">
+    <form aria-label="Change the picture" onSubmit={save} className="flex flex-col gap-3">
+      {/* #1901: the owner's photos first, then an AI picture; neither changes the words. */}
+      <PhotoPicker photos={photos} selected={photo} onPick={(url) => setPhoto((current) => (current === url ? null : url))} />
       <div className="flex flex-col gap-1">
         <div className="flex items-center justify-between">
-          <Label htmlFor={id}>New background</Label>
+          <Label htmlFor={id}>Or describe an AI picture</Label>
           <span className="text-xs tabular-nums text-slate-400">{instruction.length}/300</span>
         </div>
         <Textarea
@@ -455,31 +463,8 @@ function BackgroundEditor({
             setInstruction(e.target.value);
             setPhoto(null);
           }}
-          autoFocus
         />
       </div>
-      {photos.length > 0 && (
-        <fieldset className="flex flex-col gap-1.5">
-          <legend className="mb-1.5 text-sm font-medium text-slate-700">Or use one of your photos</legend>
-          <div className="grid grid-cols-4 gap-2">
-            {photos.map((url, index) => (
-              <button
-                key={url}
-                type="button"
-                aria-pressed={photo === url}
-                aria-label={`Your photo ${index + 1}`}
-                onClick={() => setPhoto((current) => (current === url ? null : url))}
-                className={cn(
-                  "aspect-square overflow-hidden rounded-md border-2 bg-slate-100",
-                  photo === url ? "border-blue-600" : "border-transparent hover:border-slate-300",
-                )}
-              >
-                <img src={url} alt="" className="h-full w-full object-cover" loading="lazy" />
-              </button>
-            ))}
-          </div>
-        </fieldset>
-      )}
       {error && (
         <p className="text-xs text-red-600" role="alert">
           {error}

@@ -5,7 +5,7 @@
 import { execFileSync } from "node:child_process";
 import { parseArgs } from "node:util";
 import internal from "../src/lib/internal-accounts.json" with { type: "json" };
-import { isExemptFromFreeProviders, isInternalUser, isScoreboardExcluded } from "../src/lib/internal-accounts";
+import { isExemptFromFreeProviders, isInternalUser, isProspectAccount, isScoreboardExcluded } from "../src/lib/internal-accounts";
 import {
   buildScoreboard,
   lastIstWeek,
@@ -18,6 +18,9 @@ import {
   type ScoreAiCall,
   type ScoreEvent,
   type ScoreLaunch,
+  pilotData,
+  PROSPECT_HANDED_OVER,
+  type ScoreManageSnapshot,
 } from "../src/lib/observability/core-scoreboard";
 import { META_TEST_LEAD_PATTERN } from "../src/lib/leads/test-lead";
 import { readOnlyQuery } from "./lib/prod-query.mjs";
@@ -40,7 +43,7 @@ const weekStart = quote(new Date(week.start).toISOString());
 const weekEnd = quote(new Date(week.end).toISOString());
 const sevenDays = quote(new Date(until.getTime() - 7 * 86_400_000).toISOString());
 
-const [owned, events, aiCalls, launches, users, active, businesses, changes, campaigns, pageViews, helpTaps, leads] = await Promise.all([
+const [owned, events, aiCalls, launches, users, active, businesses, changes, campaigns, pageViews, helpTaps, leads, manageHistory] = await Promise.all([
   readOnlyQuery(`select id from public.businesses where owner_id in (${list(smoke)})`),
   readOnlyQuery(`select name, outcome, user_id, business_id, duration_ms, attributes,
   ${iso()} from public.product_events
@@ -65,6 +68,8 @@ where name = 'page.view' and user_id is not null and created_at >= ${weekStart} 
 where name = 'ui.action' and attributes->>'action' = 'help.whatsapp' and user_id is not null and created_at >= ${weekStart}`),
   readOnlyQuery(`select business_id, ${iso("created_time")}, ${iso()}, ${iso("first_contacted_at")} from public.leads
 where created_at >= ${sevenDays} and source in ('meta_form', 'whatsapp_manual') and coalesce(full_name, '') not ilike ${quote(META_TEST_LEAD_PATTERN)}`),
+  // #1543: the scheduled runs' Manage snapshots, for the 7-day row.
+  readOnlyQuery(`select ${iso()}, attributes from public.product_events where name = 'scoreboard.manage' and created_at >= ${sevenDays}`),
 ]);
 type Identity = { id: string; email: string | null; email_confirmed_at: string | null; created_at: string };
 const identities = users as Identity[];
@@ -88,6 +93,22 @@ const createUserIds = new Set((events as ScoreEvent[]).filter((event) => event.n
 const brandOwners = identities.filter((user) => createUserIds.has(user.id))
   .map((owner) => ({ id: owner.id, signedUpAt: owner.created_at, internal: isInternalUser(owner) }));
 
+// #1697: the pilot funnel (counts only), read the same way as the route.
+const prospectOwners = new Set(identities.filter((user) => isProspectAccount(user)).map((user) => user.id));
+const prospectOwned = owners.filter((business) => prospectOwners.has(business.owner_id)).map((business) => business.id);
+const [prospectCreatives, pilotEvents, launchedRows] = await Promise.all([
+  prospectOwned.length ? readOnlyQuery(`select distinct business_id from public.creatives where business_id in (${list(prospectOwned)})`) : [],
+  readOnlyQuery(`select business_id, name, attributes, ${iso()} from public.product_events where name in (${list([PROSPECT_HANDED_OVER, "pilot_day7"])})`),
+  readOnlyQuery(`select business_id, ${iso("launched_at")} from public.campaigns where launched_at is not null`),
+]);
+const pilots = pilotData({
+  prospectCreatives: prospectCreatives as { business_id: string }[],
+  pilotEvents: pilotEvents as Parameters<typeof pilotData>[0]["pilotEvents"],
+  launchedRows: launchedRows as { business_id: string; launched_at: string }[],
+  leads: leads as Array<{ business_id: string; created_at: string }>,
+  excludedBusinessIds: (owned as Array<{ id: string }>).map((row) => row.id),
+  now: until,
+});
 const board = buildScoreboard({
   events: events as ScoreEvent[],
   aiCalls: aiCalls as ScoreAiCall[],
@@ -99,6 +120,8 @@ const board = buildScoreboard({
   brandOwners,
   excludedBusinessIds: (owned as Array<{ id: string }>).map((row) => row.id),
   northStar,
+  pilots,
+  manageHistory: manageHistory as ScoreManageSnapshot[],
   since,
   until,
 });

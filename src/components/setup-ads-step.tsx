@@ -1,18 +1,24 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { PictureSourceBadge } from "@/components/picture-source-badge";
+import { setupTranslator, type SetupWords } from "@/i18n/setup-words";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { preload } from "react-dom";
 import Link from "next/link";
-import { Check, Loader2, Pencil } from "lucide-react";
+import { Check, Loader2, Maximize2, Pencil } from "lucide-react";
+import { saveAdLanguage } from "@/app/(app)/brand/actions";
 import { setCreativeStatus } from "@/app/(app)/studio/actions";
+import { AdLanguageChips } from "@/components/ad-language-chips";
 import { applyCreateLine, readCreateResponse, type LiveAd } from "@/components/create-progress";
+import { SampleViewer } from "@/components/sample-viewer";
 import { SetupSpine } from "@/components/setup-spine";
+import { takeMakeTap } from "@/lib/setup/steps";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
 import { downloadBlob } from "@/lib/download";
 import { SETUP_PICKS, setupGoal, setupPicks } from "@/lib/creative/setup-picks";
-import { CREATE_LANGUAGES, defaultAdLanguage } from "@/lib/languages";
+import { CREATE_LANGUAGES, defaultAdLanguage, type CreateLanguageId } from "@/lib/languages";
 import type { Business, Creative } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -20,15 +26,8 @@ const FULL_BATCH = 3;
 const AI_ANSWER = "Let the AI decide the best option based on the brand.";
 const MAX_INTERVIEW_TURNS = 4;
 
+/** One line at a time (#1251 CPO strings, `setup.ads.story` in messages/); a key per step, so #1320 can add option-specific words. */
 type Story = "reading" | "writing" | "checking" | "pictures" | "almost";
-/** One line at a time (#1251 CPO strings); a table so each step can carry option-specific words later (#1320). */
-export const SETUP_STORY: Record<Story, (language: string) => string> = {
-  reading: () => "Reading your business…",
-  writing: (language) => `Writing 3 ads in ${language}…`,
-  checking: () => "Checking each ad against Meta's rules…",
-  pictures: () => "Making the pictures…",
-  almost: () => "Almost ready…",
-};
 
 /** The furthest any ad has got; the story never goes backwards. */
 export function storyFor(slots: LiveAd[] | null): Story {
@@ -45,6 +44,7 @@ const KEEP_MS = 15 * 60_000;
 // #1402: the status GET allows 30 reads per 5 minutes; every 10 s for 4 minutes stays inside it.
 const POLL_MS = 10_000;
 const POLLS = 24;
+const RATE_LIMIT_WAIT_MS = 60_000;
 
 /** #1402: the run in progress lives in localStorage, so a second tab resumes it instead of paying for another. */
 function readKept(businessId: string): { id: string; count: number } | null {
@@ -60,6 +60,35 @@ function keep(businessId: string, id: string, count: number) {
 function forget(businessId: string) {
   try { window.localStorage.removeItem(generationKey(businessId)); } catch { /* nothing kept */ }
 }
+/**
+ * #1534: the tab that gets a batch's ads publishes them, so other tabs waiting on the same batch show them at once
+ * instead of polling the status route (30 reads per 5 minutes per owner, shared by every tab) into 429s.
+ */
+const resultKey = (businessId: string) => `setup-generation-result:${businessId}`;
+function readResult(businessId: string, id: string, raw?: string | null): Creative[] | null {
+  try {
+    const value = JSON.parse(raw ?? window.localStorage.getItem(resultKey(businessId)) ?? "null") as { id?: string; at?: number; creatives?: Creative[] } | null;
+    if (value && Date.now() - Number(value.at) > KEEP_MS) { window.localStorage.removeItem(resultKey(businessId)); return null; }
+    return value?.id === id && Array.isArray(value.creatives) && value.creatives.length ? value.creatives : null;
+  } catch { return null; }
+}
+function publish(businessId: string, id: string, creatives: Creative[]) {
+  if (!creatives.length) return;
+  try { window.localStorage.setItem(resultKey(businessId), JSON.stringify({ id, at: Date.now(), creatives })); } catch { /* the other tabs keep polling */ }
+}
+/** Waits up to `ms` for another tab to publish this batch; null if none did. */
+function publishedWithin(businessId: string, id: string, ms: number): Promise<Creative[] | null> {
+  return new Promise((resolve) => {
+    const done = (value: Creative[] | null) => { window.clearTimeout(timer); window.removeEventListener("storage", heard); resolve(value); };
+    const heard = (event: StorageEvent) => {
+      if (event.key !== resultKey(businessId)) return;
+      const found = readResult(businessId, id, event.newValue);
+      if (found) done(found);
+    };
+    const timer = window.setTimeout(() => done(readResult(businessId, id)), ms);
+    window.addEventListener("storage", heard);
+  });
+}
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 // The generate route stops by 300 s, so a batch whose first ad is older has ended, whatever its status says (#1289).
 const BATCH_DEADLINE_MS = 6 * 60 * 1000;
@@ -69,14 +98,21 @@ const BATCH_DEADLINE_MS = 6 * 60 * 1000;
  * with the best 2 picked (fixed rule, `setupPicks`). Leaving mid-way is safe: the generation id is kept,
  * and coming back reads what was saved instead of starting again (#1261).
  */
-export function SetupAdsStep({ business, initialAds, sample = false, earlier = false }: {
+export function SetupAdsStep({ business, initialAds, sample = false, earlier = false, again = false, words }: {
   business: Business; initialAds: Creative[];
+  /** #1934: a returning owner's new campaign; Continue and Back keep the mode. */
+  again?: boolean;
+  /** #1438: the owner's app language (#1901: the picture badge's too); English without it. */
+  words?: SetupWords;
   /** #1475: the owner has ads from earlier details or Studio, so a paid batch starts only from a tap. */
   earlier?: boolean;
   /** #1407: a sales prospect's account takes its picks away as the marked sample pack, without Review or Go live. */
   sample?: boolean;
 }) {
-  const language = defaultAdLanguage(business.languages);
+  // #1681: Brand language first, else the segment's default (solar → Hinglish); the chips before a tapped batch change it.
+  const t = setupTranslator(words);
+  const locale = words?.locale ?? "en";
+  const [language, setLanguage] = useState<CreateLanguageId>(() => defaultAdLanguage(business.languages, business.vertical));
   const languageLabel = CREATE_LANGUAGES.find((item) => item.id === language)?.label ?? "English";
   const [ads, setAds] = useState<Creative[]>(initialAds);
   // #1407: a sales visit takes all of them; an owner starts with the best 2.
@@ -85,8 +121,13 @@ export function SetupAdsStep({ business, initialAds, sample = false, earlier = f
   const [slots, setSlots] = useState<LiveAd[] | null>(null);
   const [making, setMaking] = useState(initialAds.length === 0 && !earlier);
   const [failedCount, setFailedCount] = useState(0);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<"busy" | "failedAll" | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [viewing, setViewing] = useState(false);
+  const closeViewer = useCallback(() => {
+    setViewing(false);
+    document.getElementById("sample-full-screen")?.focus();
+  }, []);
   // #1407: on return, ads of this batch still being made (they're added as they land).
   const [coming, setComing] = useState(0);
   const [downloading, setDownloading] = useState(false);
@@ -95,8 +136,8 @@ export function SetupAdsStep({ business, initialAds, sample = false, earlier = f
 
   useEffect(() => {
     if (startedRef.current || initialAds.length) return;
-    // #1475: a batch already running (another tab) is still picked up; a new one waits for the tap.
-    if (earlier && !readKept(business.id)) return;
+    // #1475: a batch already running (another tab) is still picked up; a new one waits for the tap (#1934: or step 1's).
+    if (earlier && !readKept(business.id) && !(again && takeMakeTap(business.id))) return;
     startedRef.current = true;
     void makeAds(FULL_BATCH);
     // Runs once per visit; makeAds reads only stable props.
@@ -149,17 +190,26 @@ export function SetupAdsStep({ business, initialAds, sample = false, earlier = f
    */
   async function savedBatch(generationId: string, expected: number): Promise<Creative[] | null> {
     for (let attempt = 0; attempt < POLLS; attempt += 1) {
+      const shared = readResult(business.id, generationId);
+      if (shared) return shared;
+      let wait = POLL_MS;
       try {
         const res = await fetch(`/api/creatives/generate?businessId=${encodeURIComponent(business.id)}&generationId=${encodeURIComponent(generationId)}&expectedCount=${expected}`, { cache: "no-store" });
         if (res.status === 404) return [];
+        // #1534: every tab shares the owner's status budget; wait it out (another tab may publish meanwhile).
+        if (res.status === 429) wait = Math.min(Math.max(POLL_MS, (Number(res.headers.get("Retry-After")) || 0) * 1000), RATE_LIMIT_WAIT_MS);
         if (res.ok) {
           const data = (await res.json()) as { status?: string; creatives?: Creative[] };
-          if (data.status === "complete" || data.status === "failed" || data.status === "unresolved") return data.creatives ?? [];
+          if (data.status === "complete" || data.status === "failed" || data.status === "unresolved") {
+            publish(business.id, generationId, data.creatives ?? []);
+            return data.creatives ?? [];
+          }
         }
       } catch {
         // Keep checking; never start the generation again.
       }
-      await new Promise((resolve) => window.setTimeout(resolve, POLL_MS));
+      const heard = await publishedWithin(business.id, generationId, wait);
+      if (heard) return heard;
     }
     return null;
   }
@@ -193,11 +243,7 @@ export function SetupAdsStep({ business, initialAds, sample = false, earlier = f
     if (kept) {
       const saved = await savedBatch(kept.id, kept.count);
       if (saved?.length) return finish(saved, kept.count, false);
-      if (saved === null) {
-        setMaking(false);
-        setError("Your ads are still being made. Check again in a minute; we won't start another batch.");
-        return;
-      }
+      if (saved === null) { setMaking(false); setError("busy"); return; }
       forget(business.id);
     }
     let generationId = "";
@@ -217,7 +263,10 @@ export function SetupAdsStep({ business, initialAds, sample = false, earlier = f
         setSlots(live);
       });
       const saved = (data as { creatives?: Creative[] } | null)?.creatives ?? [];
-      if (status >= 200 && status < 300 && saved.length) return finish(saved, count, count === FULL_BATCH);
+      if (status >= 200 && status < 300 && saved.length) {
+        publish(business.id, generationId, saved);
+        return finish(saved, count, count === FULL_BATCH);
+      }
       if (status >= 400 && status < 500 && status !== 408) {
         // Refused before anything was made: nothing to recover.
         forget(business.id);
@@ -234,14 +283,14 @@ export function SetupAdsStep({ business, initialAds, sample = false, earlier = f
         if (recovered === null) {
           setMaking(false);
           setSlots(null);
-          setError("Your ads are still being made. Check again in a minute; we won't start another batch.");
+          setError("busy");
           return;
         }
         forget(business.id);
       }
       setMaking(false);
       setSlots(null);
-      if (!ads.length) setError("We couldn't make your ads this time.");
+      if (!ads.length) setError("failedAll");
       else setFailedCount(count);
     }
   }
@@ -273,7 +322,7 @@ export function SetupAdsStep({ business, initialAds, sample = false, earlier = f
     for (const id of ids) {
       const result = await setCreativeStatus(id, "approved");
       if (!result.ok) {
-        setSaveError("Not saved. Check your connection.");
+        setSaveError(t("saveFailed"));
         throw new Error(result.error);
       }
     }
@@ -298,40 +347,48 @@ export function SetupAdsStep({ business, initialAds, sample = false, earlier = f
   }
 
   const story = storyFor(slots);
-  const count = `${ids.length} ${ids.length === 1 ? "ad" : "ads"}`;
   const waiting = !making && !ads.length && !error && earlier;
-  const primaryLabel = making ? "Making your ads…" : !ids.length ? "Pick at least 1 ad"
-    : sample ? (downloading ? "Preparing download…" : `Download sample pack (${ids.length})`) : `Continue with ${count}`;
+  // #1407: the sample pack is the sales rep's, so its words stay English (CPO #1707).
+  const primaryLabel = making ? t("ads.making") : coming > 0 ? t("ads.onTheWay", { n: coming }) : !ids.length ? t("ads.pickOne")
+    : sample ? (downloading ? "Preparing download…" : `Download sample pack (${ids.length})`) : t("ads.continue", { n: ids.length });
 
   return (
-    <SetupSpine step={2} saved={saveError ? "failed" : null} beforeLeave={beforeLeave}
-      primary={waiting ? { label: `Make ${FULL_BATCH} ads`, onClick: () => void makeAds(FULL_BATCH) } : sample
-        ? { label: primaryLabel, disabled: making || downloading || ids.length === 0, onClick: () => void downloadSamplePack() }
-        : { label: primaryLabel, disabled: making || ids.length === 0, href: `/campaigns?new=1&creatives=${ids.join(",")}` }}>
+    <SetupSpine step={2} saved={saveError ? "failed" : null} beforeLeave={beforeLeave} again={again} words={words}
+      primary={waiting ? { label: t("ads.makeN", { n: FULL_BATCH }), onClick: () => void makeAds(FULL_BATCH) } : sample
+        ? { label: primaryLabel, disabled: making || coming > 0 || downloading || ids.length === 0, onClick: () => void downloadSamplePack() }
+        : { label: primaryLabel, disabled: making || coming > 0 || ids.length === 0, href: `/campaigns?${again ? "again" : "new"}=1&creatives=${ids.join(",")}` }}>
       {making ? (
         <div aria-live="polite" className="flex flex-col items-start gap-3 py-10">
           <Loader2 className="h-6 w-6 animate-spin text-primary" aria-hidden="true" />
-          <p className="text-lg font-semibold text-slate-950">{SETUP_STORY[story](languageLabel)}</p>
-          <p className="text-sm text-slate-600">Usually about a minute</p>
+          <p className="text-lg font-semibold text-slate-950">{t(`ads.story.${story}`, { language: languageLabel })}</p>
+          <p className="text-sm text-slate-600">{t("ads.usually")}</p>
         </div>
       ) : waiting ? (
         <div className="flex flex-col items-start gap-2 py-6">
-          <h2 className="text-xl font-semibold text-slate-950">Make ads from your details</h2>
-          <p className="text-sm text-slate-600">Your earlier ads were made from older details or in Studio, so they aren&apos;t used here. Making ads is free.</p>
-          <Link href="/campaigns?all=1" className="inline-flex min-h-11 items-center text-sm font-medium text-primary underline underline-offset-4">Use your earlier ads</Link>
+          <h2 className="text-xl font-semibold text-slate-950">{t("ads.earlierTitle")}</h2>
+          <p className="text-sm text-slate-600">{t("ads.earlierBody")}</p>
+          <AdLanguageChips value={language} onChange={(next) => { setLanguage(next); void saveAdLanguage(business.id, next).catch(() => undefined); }} />
+          <Link href="/campaigns?all=1" className="inline-flex min-h-11 items-center text-sm font-medium text-primary underline underline-offset-4">{t("ads.useEarlier")}</Link>
         </div>
       ) : error && !ads.length ? (
         <div className="flex flex-col items-start gap-3 py-6">
-          <Alert variant="error">{error}</Alert>
-          {error.startsWith("We couldn't") && <Button type="button" variant="outline" onClick={() => void makeAds(FULL_BATCH)}>Try again</Button>}
-          {!error.startsWith("We couldn't") && <Button type="button" variant="outline" onClick={() => void makeAds(FULL_BATCH)}>Check again</Button>}
+          <Alert variant="error">{t(`ads.${error}`)}</Alert>
+          <Button type="button" variant="outline" onClick={() => void makeAds(FULL_BATCH)}>{t(error === "failedAll" ? "ads.tryAgain" : "ads.checkAgain")}</Button>
         </div>
       ) : (
         <>
-          <h2 className="text-xl font-semibold text-slate-950">Your ads are ready</h2>
+          {/* #1564: opened mid-batch, it isn't ready until the rest lands (or the batch ends short). */}
+          <h2 className="text-xl font-semibold text-slate-950">{coming > 0 ? t("ads.making") : t("ads.ready")}</h2>
           <p className="mt-1 text-sm text-slate-600">{sample
-            ? "All of them go in the sample pack, each marked 'Sample: not live'. Tap an ad to leave it out, or the pencil to edit its words."
-            : `We picked the ${Math.min(SETUP_PICKS, ads.length)} strongest. Tap an ad to change your pick, or the pencil to edit its words.`}</p>
+            ? "All of them go in the sample pack, each marked 'Sample ad: not live yet'. Tap an ad to leave it out, or the pencil to edit its words."
+            : t("ads.pickedLine", { n: Math.min(SETUP_PICKS, ads.length) })}</p>
+          {sample && (
+            <Button id="sample-full-screen" type="button" variant="outline" className="mt-4 w-full sm:w-auto" disabled={!ids.length || coming > 0}
+              onClick={() => setViewing(true)}>
+              <Maximize2 className="h-4 w-4" aria-hidden="true" /> Show full screen
+            </Button>
+          )}
+          {viewing && <SampleViewer ads={ads.filter((ad) => picked.has(ad.id))} onClose={closeViewer} />}
           <ul className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-3">
             {ads.map((ad) => {
               const on = picked.has(ad.id);
@@ -348,12 +405,13 @@ export function SetupAdsStep({ business, initialAds, sample = false, earlier = f
                     )}
                     <span className="block min-w-0 p-3 pr-14 sm:pr-3">
                       <span className="block font-medium text-slate-950">{ad.headline}</span>
+                      {ad.image_url && <PictureSourceBadge generation={ad.generation} locale={locale} className="mt-1" />}
                       <span className={cn("mt-2 inline-flex min-h-6 items-center gap-1 text-sm font-medium", on ? "text-primary" : "text-slate-600")}>
-                        {on ? <><Check className="h-4 w-4" aria-hidden="true" /> Picked</> : "Tap to pick"}
+                        {on ? <><Check className="h-4 w-4" aria-hidden="true" /> {t("ads.picked")}</> : t("ads.tapToPick")}
                       </span>
                     </span>
                   </button>
-                  <Link href={`/studio?creative=${ad.id}`} aria-label={`Edit the words of ${ad.headline ?? "this ad"}`}
+                  <Link href={`/studio?creative=${ad.id}`} aria-label={t("ads.editWords", { headline: ad.headline ?? t("ads.thisAd") })}
                     className="absolute top-2 right-2 inline-flex size-11 items-center justify-center rounded-full bg-white/90 text-slate-800 shadow">
                     <Pencil className="h-4 w-4" aria-hidden="true" />
                   </Link>
@@ -363,16 +421,16 @@ export function SetupAdsStep({ business, initialAds, sample = false, earlier = f
           </ul>
           {coming > 0 && (
             <p role="status" className="mt-4 text-sm text-slate-700">
-              {coming === 1 ? "1 more ad is still being made. It appears here when it's ready." : `${coming} more ads are still being made. They appear here when they're ready.`}
+              {t("ads.coming", { n: coming })}
             </p>
           )}
           {failedCount > 0 && (
             <p className="mt-4 text-sm text-slate-700">
-              {failedCount === 1 ? "1 ad couldn't be made." : `${failedCount} ads couldn't be made.`}{" "}
-              <button type="button" className="inline-flex min-h-11 items-center font-medium text-primary underline underline-offset-4" onClick={() => void makeAds(failedCount)}>Make another</button>
+              {t("ads.failed", { n: failedCount })}{" "}
+              <button type="button" className="inline-flex min-h-11 items-center font-medium text-primary underline underline-offset-4" onClick={() => void makeAds(failedCount)}>{t("ads.makeAnother")}</button>
             </p>
           )}
-          {error && ads.length > 0 && <Alert variant="error" className="mt-4">{error}</Alert>}
+          {error && ads.length > 0 && <Alert variant="error" className="mt-4">{t(`ads.${error}`)}</Alert>}
           {saveError && <Alert variant="error" className="mt-4">{saveError}</Alert>}
         </>
       )}

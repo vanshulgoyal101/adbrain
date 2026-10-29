@@ -74,11 +74,67 @@ describe("core: a daily-limit 429 parks Groq until retry-after (#1200)", () => {
     expect(await twoCalls("tokens per day (TPD): Limit 200000, Used 199998, Requested 2013", 600, 120_000)).toEqual(["openrouter"]);
   });
 
-  it("tokens per day: parked at most 15 minutes, then tried again", async () => {
-    expect(await twoCalls("tokens per day (TPD): Limit 200000, Used 199998, Requested 2013", 7_200, 16 * 60_000)).toEqual(["groq", "openrouter"]);
+  it("tokens per day: parked for Groq's own retry-after, not 15 minutes (#1568), then tried again", async () => {
+    const tpd = "tokens per day (TPD): Limit 200000, Used 199998, Requested 2013";
+    expect(await twoCalls(tpd, 7_200, 16 * 60_000)).toEqual(["openrouter"]);
+    setEnv();
+    expect(await twoCalls(tpd, 7_200, 7_200_000 + 1_000)).toEqual(["groq", "openrouter"]);
+  });
+
+  it("a daily park is capped at 6 hours even if retry-after says more (#1568)", async () => {
+    expect(await twoCalls("tokens per day (TPD): Limit 200000, Used 199998, Requested 2013", 86_400, 6 * 3_600_000 + 1_000)).toEqual(["groq", "openrouter"]);
+  });
+
+  it("an org-wide limit parks every Groq key, not just the one that answered (#1568)", async () => {
+    process.env.GROQ_API_KEYS = "gk1,gk2";
+    vi.resetModules();
+    const calls = routeFetch(groqLimit("tokens per day (TPD): Limit 200000, Used 199998, Requested 2013", 600));
+    const { complete } = await import("@/lib/llm");
+    await complete([{ role: "user", content: "plan 1" }], {});
+    expect(calls.map((call) => call.host)).toEqual(["groq", "openrouter"]);
+    calls.length = 0;
+    await complete([{ role: "user", content: "plan 2" }], {});
+    expect(calls.map((call) => call.host)).toEqual(["openrouter"]);
   });
 
   it("a per-minute limit still clears after a minute, as before", async () => {
     expect(await twoCalls("output tokens per minute (OTPM): Limit 1000, Used 0, Requested 1343", 600, 61_000)).toEqual(["groq", "openrouter"]);
+  });
+});
+
+describe("core: after a Groq rate limit, one call probes it; parallel calls don't pile on (#1568)", () => {
+  it("park ends → the first call probes Groq; the calls made meanwhile go straight to the fallback", async () => {
+    let now = Date.parse("2026-10-28T14:00:00Z");
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    const gate: { release?: () => void } = {};
+    let groqCalls = 0;
+    const hosts: string[] = [];
+    global.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      const host = url.includes("api.groq.com") ? "groq" : "openrouter";
+      hosts.push(host);
+      if (host === "groq") {
+        groqCalls += 1;
+        if (groqCalls === 1) return groqLimit("tokens per day (TPD): Limit 200000, Used 199998, Requested 2013", 600)();
+        // The probe after the park: slow, so the other calls overlap it.
+        if (groqCalls === 2) await new Promise<void>((resolve) => { gate.release = resolve; });
+        return Response.json({ choices: [{ message: { content: "{\"ready\":true}" } }] });
+      }
+      return Response.json({ choices: [{ message: { content: "{\"ready\":true}" } }] });
+    }) as unknown as typeof fetch;
+    const { complete } = await import("@/lib/llm");
+    await complete([{ role: "user", content: "plan 1" }], {});
+    now += 601_000;
+    hosts.length = 0;
+    const probe = complete([{ role: "user", content: "plan 2" }], {});
+    // Date.now is mocked, so poll with real timers instead of vi.waitFor.
+    while (!gate.release) await new Promise((resolve) => setTimeout(resolve, 5));
+    const others = await Promise.all([1, 2, 3].map((n) => complete([{ role: "user", content: `plan ${n + 2}` }], {})));
+    expect(others.map((result) => result.provider)).toEqual(["openrouter", "openrouter", "openrouter"]);
+    gate.release();
+    expect((await probe).provider).toBe("groq");
+    expect(hosts.filter((host) => host === "groq")).toHaveLength(1);
+    // Groq answered, so the next call uses it again.
+    expect((await complete([{ role: "user", content: "plan 9" }], {})).provider).toBe("groq");
   });
 });

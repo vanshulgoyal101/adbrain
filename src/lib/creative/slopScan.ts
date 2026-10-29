@@ -44,6 +44,9 @@ export function capitalWords(text: string): string[] {
   return [...new Set(text.split(/[\s/-]+/).map(bareWord).filter((w) => w === w.toUpperCase() && /\p{Lu}.*\p{Lu}/u.test(w)))];
 }
 
+/** #1609 (CPO): "वीज़ा" is typed precomposed, decomposed or without the nukta, so claims compare without it. */
+export const foldClaimText = (text: string) => text.toLowerCase().normalize("NFD").replace(/[\u093C\u0A3C]/g, "");
+
 /** Return every quality problem found in `text`. Empty array = clean. */
 export function scanAdCopy(text: string, opts: SlopScanOptions = {}): SlopFinding[] {
   const findings: SlopFinding[] = [];
@@ -74,10 +77,11 @@ export function scanAdCopy(text: string, opts: SlopScanOptions = {}): SlopFindin
     findings.push({ rule: "too-long", detail: `${words.length}/${opts.maxWords}` });
   }
 
+  const folded = foldClaimText(text);
   for (const claim of opts.bannedClaims ?? []) {
-    const term = claim.toLowerCase();
+    const term = foldClaimText(claim);
     // "heal" (heals, healed, healing) is a health claim; "health" is not.
-    const found = term === "heal" ? /heal(?!th)/.test(lower) : lower.includes(term);
+    const found = term === "heal" ? /heal(?!th)/.test(folded) : folded.includes(term);
     if (claim && found) {
       findings.push({ rule: "banned-claim", detail: claim });
     }
@@ -137,10 +141,56 @@ export const MEDICAL_BANNED_CLAIMS = [
 export const HEALTH_VERTICAL = /chiro|dental|dentist|clinic|medical|doctor|physio|health|wellness|therapy|hospital|ayurved|derma/i;
 
 /**
- * Banned claims for a business's industry. Non-health verticals get none, so
+ * Banned claims for a business's industry (health, #1609 education). Other verticals get none, so
  * existing customers' copy is unaffected.
  */
+/** #1609 (CPO, #1500): IELTS, study-abroad and visa businesses can't promise a band, a visa or a success rate. */
+export const EDUCATION_VERTICAL = /ielts|pte|toefl|celpip|duolingo english|study abroad|overseas education|immigration|visa|spoken english|coaching/i;
+
+export const EDUCATION_BANNED_CLAIMS = [
+  "guaranteed",
+  "guarantee",
+  "assured",
+  "sure shot",
+  "sure-shot",
+  "100% visa",
+  "100% success",
+  "100% selection",
+  "100% result",
+  "visa success rate",
+  "success rate",
+  "no refusal",
+  "zero refusal",
+  "guaranteed band",
+  "band guarantee",
+  "guaranteed admission",
+  "guaranteed job",
+  "pr guaranteed",
+  // CPO (#1910 Ad Library sample): "crack in 1st attempt" promises a result like a band does.
+  "first attempt",
+  "1st attempt",
+  // CPO (Analyst #1514 ② ④): fixed visa timelines and document fraud. "No IELTS needed" stays allowed (some waive it).
+  "visa in ", // with its space: "visa interview practice" is fine
+  "fake",
+  "arranged offer letter",
+  "backdated",
+  "experience certificate",
+  "गारंटी",
+  "ਗਾਰੰਟੀ",
+  "पक्का वीज़ा",
+  "ਪੱਕਾ ਵੀਜ਼ਾ",
+  "वीज़ा पक्का",
+  "ਵੀਜ਼ਾ ਪੱਕਾ",
+  "100% वीज़ा",
+  "pakka visa",
+  "visa pakka",
+];
+
 export function bannedClaimsForVertical(vertical?: string | null): string[] {
-  return HEALTH_VERTICAL.test(vertical ?? "") ? [...MEDICAL_BANNED_CLAIMS] : [];
+  const text = vertical ?? "";
+  return [
+    ...(HEALTH_VERTICAL.test(text) ? MEDICAL_BANNED_CLAIMS : []),
+    ...(EDUCATION_VERTICAL.test(text) ? EDUCATION_BANNED_CLAIMS : []),
+  ];
 }
 

@@ -1,5 +1,5 @@
 // One read-only statement against production through the Supabase Management API
-// (docs/ORCHESTRATION.md "Access"). Never prints the token.
+// (docs/team/orchestration.md "Access"). Never prints the token.
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";

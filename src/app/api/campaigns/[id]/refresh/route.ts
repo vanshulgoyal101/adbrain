@@ -100,7 +100,7 @@ async function handlePOST(
       // #721: no spend can come from a deleted campaign; end it here so Manage stops treating it as paused.
       const raw = campaign.raw && typeof campaign.raw === "object" && !Array.isArray(campaign.raw) ? campaign.raw : {};
       const { data: ended } = await saveCampaign({ businessId: campaign.business_id, userId: user.id },
-        { status: "completed", raw: { ...raw, metaStatus: err.metaStatus } }, id).catch(() => ({ data: null }));
+        { status: "completed", raw: { ...raw, metaStatus: err.metaStatus, metaGoneAt: new Date().toISOString() } }, id).catch(() => ({ data: null }));
       return NextResponse.json({ error: `${err.message} AdBrain moved it to ended campaigns.`, gone: err.metaStatus, campaign: ended ?? null }, { status: 410 });
     }
     const enforcement = await enforceAutoPauseWithStatus(campaign.business_id);

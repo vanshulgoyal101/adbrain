@@ -57,4 +57,12 @@ describe("Indian scripts on the ad image", () => {
     expect(ours.byteLength).toBeGreaterThan(10_000);
     expect(sha(ours)).not.toBe(sha(unshaped));
   });
+
+  // #1503: a headline that wraps keeps Latin-or-taller line pitch, so one line's matras never reach the next.
+  it("a wrapped Hindi headline keeps at least 1.15× line pitch", async () => {
+    const shaped = await shapeText("मुफ़्त सोलर सर्वे, बिजली बिल आधा करें", { ...headlineStyle, maxWidth: 600 });
+    const lines = Math.round(shaped.height / (headlineStyle.size * 1.25));
+    expect(lines).toBeGreaterThanOrEqual(2);
+    expect(shaped.height / lines).toBeGreaterThanOrEqual(headlineStyle.size * 1.15);
+  });
 });

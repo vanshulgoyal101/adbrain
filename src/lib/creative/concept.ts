@@ -9,46 +9,15 @@ import {
 } from "@/lib/templates/ads";
 import { contactChannel, formatDimensions, whatsappContactLabel, type AdFormat } from "@/lib/creative/design";
 import { quotedAsk } from "@/lib/campaign/whatsapp-greeting";
-import { bannedClaimsForVertical, capitalWords, scanAdCopy } from "@/lib/creative/slopScan";
+import { bannedClaimsForVertical, capitalWords, HEALTH_VERTICAL, MEDICAL_BANNED_CLAIMS, scanAdCopy } from "@/lib/creative/slopScan";
 import { policyFindings } from "@/lib/creative/policy-rules";
 import { emptyScene } from "@/lib/creative/visual-rules";
-import { spelledAmountIndex, spelledCurrency } from "./currency";
+import { plainDigits, rateDropIssues, spelledAmountIndex, spelledCurrency, spelledRupeeAmounts } from "./currency";
+import { contactsInCopy } from "./contact-in-copy";
 
 export const CONCEPT_VERSION = "creative-concept-v3";
 // Primary text Meta shows on mobile before "See more" (#194).
 const FOLD_CHARACTERS = 125;
-
-// #418 rule 3 (Analyst, #941): a price the Brand states as a rate ("10,000 rupees per kilowatt") keeps its unit.
-const PRICE_AMOUNT = /(?:[$£€₹]\s?|\brs\.?\s?)(\d[\d,]*(?:\.\d+)?)|(\d[\d,]*(?:\.\d+)?)\s?(?:rupees?|rupaye|रुपये|रुपए)/giu;
-const RATE_UNIT = /^\s*(?:(?:rupees?|rupaye|रुपये|रुपए)\s*)?(?:\/|\bper\s+|प्रति\s+)\s*([\p{L}\p{M}]+)/iu;
-
-function priceRates(text: string): { amount: string; unit: string | null; shown: string }[] {
-  const value = text.normalize("NFC");
-  return [...value.matchAll(PRICE_AMOUNT)].map((match) => {
-    const unit = RATE_UNIT.exec(value.slice(match.index + match[0].length))?.[1].toLowerCase() ?? null;
-    return {
-      amount: (match[1] ?? match[2]).replace(/,/g, ""),
-      unit: unit && (/^(?:kw|kilowatts?|किलोवाट)$/u.test(unit) ? "kw" : unit.replace(/s$/, "")),
-      shown: match[0].trim(),
-    };
-  });
-}
-
-/** Amounts every supplied fact gives only as a rate, mapped to that unit; an ad stating one must keep it. */
-function rateDropIssues(output: string, facts: string[]): string[] {
-  const rates = new Map<string, Set<string | null>>();
-  for (const fact of facts) {
-    for (const { amount, unit } of priceRates(fact)) rates.set(amount, (rates.get(amount) ?? new Set()).add(unit));
-  }
-  const issues = new Set<string>();
-  for (const { amount, unit, shown } of priceRates(output)) {
-    const units = rates.get(amount);
-    if (!units || units.has(null) || (unit && units.has(unit))) continue;
-    const factUnit = [...units][0];
-    issues.add(`price-unit: "${shown}" is per ${factUnit === "kw" ? "kW" : factUnit} in the Brand facts; keep "per ${factUnit === "kw" ? "kW" : factUnit}" next to it, never as a flat price`);
-  }
-  return [...issues];
-}
 
 export const creativeConceptSchema = z.object({
   headline: z.string().trim().min(1).max(40),
@@ -154,7 +123,8 @@ Return only JSON, with this shape. Character limits include spaces and are hard 
 "sourceQuotes":["1-8 verbatim quotes from supplied facts supporting the message, each up to 500 characters"]}
 The headline, primary_text and supportingText together should stay under 85 words. Avoid
 unsubstantiated health promises and personal-attribute assumptions. Customer stylistic preferences
-matter, but never override factual constraints. Use the requested language for all customer copy.`,
+matter, but never override factual constraints. Use the requested language for all customer copy, but write
+prices, numbers, ratings and phone numbers in English digits (₹499, 4.8★, 50%) in every language.`,
     },
     {
       role: "user",
@@ -186,14 +156,28 @@ matter, but never override factual constraints. Use the requested language for a
 function claimClass(term: string): string {
   if (/^(?:free|no[- ]cost)$/i.test(term)) return "free";
   if (/^guaranteed?$/i.test(term)) return "guarantee";
+  if (SUBSIDY_WORD.test(term)) return "subsidy";
   return term.includes("%") ? "percent" : "currency";
 }
+
+/**
+ * #1617 (CPO, #1501): first-person work claims ("our work", "kitchens we finished") say the picture shows the business's
+ * own work. Under a generated picture that is misleading (Meta's deceptive-practices policy); the owner's photo may say it.
+ */
+const WORK_CLAIM = /(?<![\p{L}\p{M}])(?:our (?:work|projects?|installs?|installations?)|we (?:built|finished|completed|installed|designed))(?![\p{L}\p{M}])|हमारा काम|हमने बनाया/giu;
+
+export function workClaims(text: string): string[] {
+  return [...new Set((text.normalize("NFC").match(WORK_CLAIM) ?? []).map((claim) => claim.toLowerCase()))];
+}
+
+export const WORK_CLAIM_WARNING = "This picture wasn't taken by you. Say what you offer, not 'our work', or use your own photo.";
 
 export function conceptValidationRules(issues: string[]): string[] {
   const allowedRules = new Set([
     "sourceQuotes", "unsupported-commercial-claim", "repeated-headline", "repeated-opening",
     "cliche", "em-dash-overuse", "exclamation-spam", "all-caps", "too-long", "banned-claim",
     "hook-length", "offer-below-fold", "price-unit", "personal-attribute", "unsupported-superlative", "exaggerated-result", "no-subject",
+    "work-claim", "contact-in-copy",
   ]);
   return [...new Set(issues.map((issue) => {
     if (issue.startsWith("schema:")) return issue.slice(0, issue.indexOf(": "));
@@ -218,6 +202,22 @@ function clipField(value: unknown, max: number | null): unknown {
   return text.length > max ? clipAtWord(text, max) : text;
 }
 
+/**
+ * #1544: a link description over its limit is cut back to its last full sentence, else its last clause (keeping at
+ * least half the limit), never mid-thought ('…Ask for a quote on'). With neither, it stays too long, so validation
+ * fails and the one repair rewrites it.
+ */
+export function clipToThought(value: unknown, max: number | null): unknown {
+  if (typeof value !== "string" || max === null) return value;
+  const text = value.trim();
+  if (text.length <= max) return text;
+  let sentence = -1;
+  for (const match of text.matchAll(/(?<!\b(?:rs|dr|mr|mrs|ms|st|no|sr|jr|ph|vs|etc|approx|govt|pvt|ltd|co|inc))[.!?।](?=\s|$)/giu)) if (match.index < max) sentence = match.index;
+  if (sentence >= 0) return text.slice(0, sentence + 1);
+  const clause = Math.max(...[...text.slice(0, max).matchAll(/\s*[,;:—–]\s/gu)].map((match) => match.index));
+  return clause >= max / 2 ? text.slice(0, clause) : text;
+}
+
 // The "center" layout is a left-side text panel, so "left" (Groq, Oct 21) maps there; "right" has no layout.
 function placement(value: unknown): unknown {
   if (typeof value !== "string") return value;
@@ -237,7 +237,7 @@ function shortLines(value: unknown): unknown {
   return value.trim().split("\n").map((paragraph) => {
     if (paragraph.trim().length <= FOLD_CHARACTERS) return paragraph;
     const lines: string[] = [];
-    for (const sentence of paragraph.trim().split(/(?<=[.!?])\s+(?=\S)/u)) {
+    for (const sentence of paragraph.trim().split(/(?<=[.!?।])\s+(?=\S)/u)) {
       const last = lines.length - 1;
       if (last >= 0 && lines[last].length + 1 + sentence.length <= FOLD_CHARACTERS) lines[last] += ` ${sentence}`;
       else lines.push(sentence);
@@ -267,7 +267,7 @@ function normalizeDraft(value: unknown): unknown {
   return {
     ...value,
     primary_text: shortLines(value.primary_text),
-    description: clipField(value.description, shape.description.maxLength),
+    description: clipToThought(value.description, shape.description.maxLength),
     rationale: clipField(value.rationale, shape.rationale.maxLength),
     cta,
     visual,
@@ -307,28 +307,35 @@ const GUARANTEE_WORD = /(?<![\p{L}\p{M}])(?:गारंटी|ਗਾਰੰਟ�
 const NEGATION = /\b(?:no|not|never|without|avoid)\b|(?<![\p{L}\p{M}])(?:नहीं|बिना|ਨਹੀਂ|ਬਿਨਾਂ)(?![\p{L}\p{M}])/iu;
 
 // "text-free" is the visual the prompt asks for, not a free offer. Match on NFC text.
-const COMMERCIAL_TERMS = new RegExp(
-  `(?<!\\btext-)\\bfree\\b|\\bno[- ]cost\\b|\\bguaranteed?\\b|\\d+(?:\\.\\d+)?\\s*%|[$\\u00a3\\u20ac\\u20b9]\\s*\\d+(?:[.,]\\d+)*|${FREE_WORD.source}|${GUARANTEE_WORD.source}`,
-  "giu",
-);
+const OFFER_TERMS_SOURCE =
+  `(?<!\\btext-)\\bfree\\b|\\bno[- ]cost\\b|\\bguaranteed?\\b|\\d+(?:\\.\\d+)?\\s*%|[$\\u00a3\\u20ac\\u20b9]\\s*\\d+(?:[.,]\\d+)*|${FREE_WORD.source}|${GUARANTEE_WORD.source}`;
+/**
+ * #1676 (Analyst #1514): a PM Surya Ghar subsidy line needs a Brand fact (a registered vendor says so), like "free".
+ * It's a claim, not an offer, so the above-the-fold offer rule ignores it.
+ */
+const SUBSIDY_WORD = /\bsubsid(?:y|ies|ised|ized)\b|\bPM Surya Ghar\b|(?<![\p{L}\p{M}])(?:सब्सिडी|ਸਬਸਿਡੀ)(?![\p{L}\p{M}])/iu;
+const COMMERCIAL_TERMS = new RegExp(`${OFFER_TERMS_SOURCE}|${SUBSIDY_WORD.source}`, "giu");
 
 /** The commercial terms text states, skipping negated ones. */
 function claimedTerms(text: string): string[] {
-  return [...text.matchAll(COMMERCIAL_TERMS)].filter((match) => !negatedTerm(text, match.index, match[0])).map((match) => match[0]);
+  const spelled = spelledRupeeAmounts(text).filter(({ index, shown }) => !negatedTerm(text, index, shown)).map(({ term }) => term);
+  return [...[...text.matchAll(COMMERCIAL_TERMS)].filter((match) => !negatedTerm(text, match.index, match[0])).map((match) => match[0]), ...spelled];
 }
 
 /** Whether text states an offer, a price or a percentage: things only a Brand fact may supply (#371). */
 export function statesOffer(text: string): boolean {
-  const value = text.normalize("NFC");
+  const value = plainDigits(text.normalize("NFC"));
   return new RegExp(COMMERCIAL_TERMS.source, "iu").test(value) || spelledAmountIndex(value) >= 0
     || /\b(?:offers?|discounts?|deals?|cashback|coupons?)\b/i.test(value);
 }
 
 // An amount must be cited whole: $49 is not supported by $490 or $49.99, nor 5% by 15%.
-function citesTerm(quote: string, term: string): boolean {
+function citesTerm(fact: string, term: string): boolean {
+  const quote = plainDigits(fact);
   // "No-cost" is the same offer as "free" (#378).
   if (/^(?:free|no[- ]cost)$/i.test(term) || FREE_WORD.test(term)) return /free|no[- ]cost/i.test(quote) || FREE_WORD.test(quote);
   if (GUARANTEE_WORD.test(term)) return quote.toLowerCase().includes("guarantee") || GUARANTEE_WORD.test(quote);
+  if (SUBSIDY_WORD.test(term)) return SUBSIDY_WORD.test(quote);
   if (!/\d/.test(term)) return quote.toLowerCase().includes(term.toLowerCase()) || (/^guarantee/i.test(term) && GUARANTEE_WORD.test(quote));
   const amount = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   return new RegExp(`(?<![\\d.,])${amount}(?![\\d]|[.,]\\d)`, "i").test(quote) || spelledCurrency(term, quote);
@@ -339,12 +346,16 @@ function citesTerm(quote: string, term: string): boolean {
  * anywhere ("$49 exam, no referral needed" supports $49; "$49 exam no longer offered" doesn't).
  * Forms found only by meaning (Hindi words, spelled amounts) keep the whole-quote negation check.
  */
-function affirmedCitation(quote: string, term: string, negation: RegExp): boolean {
+function affirmedCitation(fact: string, term: string, negation: RegExp): boolean {
+  const quote = plainDigits(fact);
   const pattern = /^(?:free|no[- ]cost)$/i.test(term) ? /free|no[- ]cost/gi
     : /^guarantee/i.test(term) ? /guarantee/gi
+      : SUBSIDY_WORD.test(term) ? new RegExp(SUBSIDY_WORD.source, "giu")
       : new RegExp(`(?<![\\d.,])${term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\d]|[.,]\\d)`, "gi");
   const matches = [...quote.matchAll(pattern)];
   if (!matches.length) return !negation.test(quote);
+  // #1676: "not a PM Surya Ghar subsidy vendor" negates the whole fact, so every subsidy mention must be affirmed.
+  if (SUBSIDY_WORD.test(term)) return matches.every((match) => affirmedInFact(quote, match.index, match[0]));
   return matches.some((match) => affirmedInFact(quote, match.index, match[0]));
 }
 
@@ -411,24 +422,32 @@ export function copyClaimWarnings(
   copy: Pick<EditableCopy, "headline" | "primary_text" | "description">,
   facts: (string | null | undefined)[],
   vertical?: string | null,
+  /** #1617: false when the ad's picture is generated, not the owner's photo. */
+  options: { ownPicture?: boolean } = {},
 ): string[] {
   const sources = facts.filter((fact): fact is string => typeof fact === "string" && fact.trim() !== "").map((fact) => fact.normalize("NFC"));
-  const text = [copy.headline, copy.primary_text, copy.description].join(" ").normalize("NFC");
+  const typed = [copy.headline, copy.primary_text, copy.description].join(" ").normalize("NFC");
+  const text = plainDigits(typed);
   const warnings: string[] = [];
   const seen = new Set<string>();
-  for (const term of text.match(COMMERCIAL_TERMS) ?? []) {
+  for (const match of text.matchAll(COMMERCIAL_TERMS)) {
+    const term = match[0];
     const key = term.toLowerCase().replace(/\s+/g, "");
     if (seen.has(key)) continue;
     seen.add(key);
     if (!sources.some((fact) => citesTerm(fact, term) && !NEGATION.test(fact))) {
-      warnings.push(`"${term.trim()}" isn't in your Brand. Check it's true, or add it to your Brand's offers.`);
+      // #2166: in the digits the owner typed.
+      warnings.push(`"${typed.slice(match.index, match.index + term.length).trim()}" isn't in your Brand. Check it's true, or add it to your Brand's offers.`);
     }
   }
   for (const finding of scanAdCopy(text, { bannedClaims: bannedClaimsForVertical(vertical) })) {
     if (finding.rule === "banned-claim") {
-      warnings.push(`"${finding.detail}" is a health claim Meta often rejects. Consider rewording it.`);
+      // #1609: education terms ("guaranteed") are promises, not health claims.
+      const kind = HEALTH_VERTICAL.test(vertical ?? "") && (MEDICAL_BANNED_CLAIMS as readonly string[]).includes(finding.detail) ? "a health claim" : "a promise";
+      warnings.push(`"${finding.detail}" is ${kind} Meta often rejects. Consider rewording it.`);
     }
   }
+  if (options.ownPicture === false && workClaims(text).length) warnings.push(WORK_CLAIM_WARNING);
   for (const finding of policyFindings([copy.headline, copy.primary_text, copy.description].join("\n"), { vertical, facts: sources })) {
     warnings.push(`"${finding.detail}": Meta often rejects this. ${finding.fix[0].toUpperCase()}${finding.fix.slice(1)}.`);
   }
@@ -509,6 +528,17 @@ export function validateConcept(
     [concept.headline, concept.primary_text, concept.supportingText, concept.description].filter(Boolean).join("\n"),
     { vertical: input.brand.vertical, facts: sources },
   ).map((finding) => `${finding.rule}: "${finding.detail}"; ${finding.fix}`));
+  // #1617: the generated picture isn't the business's own work; the first ad may use the owner's photo.
+  if (!input.ownerPhoto) {
+    for (const claim of workClaims([concept.headline, concept.primary_text, concept.supportingText, concept.description].filter(Boolean).join("\n"))) {
+      issues.push(`work-claim: "${claim}" says the picture is the business's own work, but the picture is generated; say what the business offers instead`);
+    }
+  }
+  // #1822: no link or phone number the brand didn't give as its own; the ad's button already reaches the business.
+  for (const contact of contactsInCopy([concept.headline, concept.primary_text, concept.supportingText, concept.description].filter(Boolean).join("\n"),
+    { website: input.brand.website, phone: input.brand.phone })) {
+    issues.push(`contact-in-copy: "${contact.slice(0, 60)}" is a link or phone number the brand didn't give as its own; remove it (the ad's button already reaches the business)`);
+  }
   const empty = emptyScene(concept.visual.direction);
   if (empty) {
     issues.push(`no-subject: visual.direction shows an "${empty}" scene; give the image a clear subject (the people the business serves, its team at work, or its product), not an empty space`);
@@ -517,7 +547,6 @@ export function validateConcept(
   if (firstLine.length > FOLD_CHARACTERS) {
     issues.push(`hook-length: the first line of primary_text is ${firstLine.length} characters; keep the hook and offer within ${FOLD_CHARACTERS} and move the rest to short lines after \n`);
   }
-  const commercialTerms = COMMERCIAL_TERMS;
   const cites = citesTerm;
   const negation = NEGATION;
   const visualClaims = concept.visual.direction
@@ -527,18 +556,18 @@ export function validateConcept(
     // Layout notes, not offers (#202): "55% of the frame height", "45% opacity", "kept free of detail".
     .replace(/\d+(?:\.\d+)?\s*%\s*(?:of\s+(?:the\s+)?(?:\w+\s+)?(?:frame|image|canvas|height|width|area|composition|layout|space|screen)|opacity|transparen\w*)/gi, "")
     .replace(/\bfree\s+(?:of|from)\b|\b[a-z]+-free\b/gi, "");
-  const output = [
+  const output = plainDigits([
     concept.headline,
     concept.primary_text,
     concept.description,
     concept.supportingText,
     concept.rationale,
     visualClaims,
-  ].join(" ").normalize("NFC");
-  const supported = (term: string) => concept.sourceQuotes.some((quote) => {
-    const text = quote.normalize("NFC");
-    return cites(text, term) && affirmedCitation(text, term, negation);
-  });
+  ].join(" ").normalize("NFC"));
+  const affirms = (text: string, term: string) => cites(text, term) && affirmedCitation(text, term, negation);
+  // #1676: a subsidy line stands when any Brand fact states it affirmatively (a registered vendor), quoted or not.
+  const supported = (term: string) => concept.sourceQuotes.some((quote) => affirms(quote.normalize("NFC"), term))
+    || (SUBSIDY_WORD.test(term) && sources.some((fact) => affirms(fact.normalize("NFC"), term)));
   // #281 (CTO): an offer the copy states without citing it is cited with the one supplied fact that
   // contains it. None or several matching facts leave it uncited; nothing is invented.
   const facts = [...new Set(sources.map((source) => source.normalize("NFC").trim()).filter(Boolean))];
@@ -561,8 +590,8 @@ export function validateConcept(
     }
   }
   issues.push(...rateDropIssues([concept.headline, concept.primary_text, concept.supportingText, concept.description].filter(Boolean).join("\n"), facts));
-  const primaryText = concept.primary_text.normalize("NFC");
-  const offer = new RegExp(commercialTerms.source, "iu").exec(primaryText);
+  const primaryText = plainDigits(concept.primary_text.normalize("NFC"));
+  const offer = new RegExp(OFFER_TERMS_SOURCE, "iu").exec(primaryText);
   // "10,000 rupaye per kW" leading the first line is the same amount as "₹10,000/kW" (#418).
   const spelled = spelledAmountIndex(primaryText);
   if (offer && offer.index >= FOLD_CHARACTERS && !(spelled >= 0 && spelled < FOLD_CHARACTERS)) {
@@ -604,7 +633,7 @@ function withWhatsAppAsk(concept: CreativeConcept, input: ConceptInput): string 
  * Hindi or Punjabi picture would mix scripts, and those replies already put the offer there.
  */
 function offerOnPicture(concept: CreativeConcept, offers: string[]): string | null {
-  const copy = concept.primary_text.normalize("NFC");
+  const copy = plainDigits(concept.primary_text.normalize("NFC"));
   if (/[\u0900-\u0DFF]/u.test(copy)) return null;
   const shown = [concept.headline, concept.supportingText ?? ""].join("\n").normalize("NFC");
   const facts = [...new Set(offers.map((offer) => offer.normalize("NFC").trim()))];

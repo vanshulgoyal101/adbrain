@@ -24,8 +24,17 @@ export const productEventSchema = z.object({
     entityType: z.enum(["business", "creative", "campaign", "adset", "ad", "instruction", "asset", "lead"]).optional(),
     count: z.number().int().nonnegative().max(1_000_000).optional(),
     failedCount: z.number().int().nonnegative().max(1_000_000).optional(),
+    /** #1650: the day-7 pricing question; codes only (no free text, no personal data). */
+    answer: z.enum(["yes", "maybe", "no"]).optional(),
+    reason: z.enum(["brings_enquiries", "saves_time", "sees_cost", "few_enquiries", "too_expensive", "hard_to_use", "prefer_meta", "other"]).optional(),
+    days: z.number().int().nonnegative().max(3650).optional(),
+    /** #1543: the scoreboard's Manage snapshot: oldest and p90 results age (minutes) across active campaigns. */
+    worstMinutes: z.number().int().nonnegative().max(1_000_000).optional(),
+    p90Minutes: z.number().int().nonnegative().max(1_000_000).optional(),
     /** #1123: ads the Create top-up round retried. */
     topUp: z.number().int().nonnegative().max(6).optional(),
+    /** #1547: missing ads whose picture a +prospect batch tried once more (same words, free picture). */
+    pictureRetry: z.number().int().nonnegative().max(6).optional(),
     /** #1468: a Create's estimated AI cost in USD (text, images and total). */
     costUsd: z.number().nonnegative().max(100).optional(),
     textCostUsd: z.number().nonnegative().max(100).optional(),
@@ -61,6 +70,10 @@ export const productEventSchema = z.object({
     metaUserTitle: z.string().max(160).optional(),
     fbtraceId: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/).optional(),
     metaPath: label.optional(),
+    /** #2026: `lead.customer_marked`, saved when a lead becomes a customer or stops being one (undone). */
+    source: z.enum(["inbox", "whatsapp"]).optional(),
+    campaignId: identifier.optional(),
+    undone: z.boolean().optional(),
   }),
 });
 

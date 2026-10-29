@@ -2,6 +2,7 @@
 import { fireEvent, render, renderHook, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AdResults, useWeakAd } from "@/components/ad-results";
+import hi from "../messages/hi.json";
 
 // #783: "Which ad worked" on the campaign card (CPO + Designer notes): one quiet row per ad, "Best" as a word,
 // "—" before an ad's first enquiry, "Early" while no winner, the rest behind "All ads", hidden while off.
@@ -209,5 +210,27 @@ describe("useWeakAd (#1274)", () => {
     fireEvent(details, new Event("toggle"));
     expect(await screen.findAllByRole("listitem")).toHaveLength(2);
     expect(screen.queryByRole("button", { name: "Pause this ad" })).not.toBeInTheDocument();
+  });
+});
+
+// #1438 (CPO's Screen 2 table): "Which ad worked" and the pause offer in Hindi.
+describe("<AdResults> in Hindi (#1438)", () => {
+  afterEach(() => window.localStorage.clear());
+
+  it("words the rows, the age and the pause offer in Hindi; chats stay चैट", async () => {
+    const ads = [ad("1", { best: true, status: "ACTIVE", results: 6, spend: 600, costPerResult: 100 }), ad("2", { status: "ACTIVE", results: 2, spend: 500, costPerResult: 250 })];
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ ok: true, syncedAt: new Date(Date.now() - 3 * 3600_000).toISOString(), ads })));
+    const view = render(<AdResults campaignId="c1" whatsapp words={{ locale: "hi", messages: hi.verdict }} />);
+    expect(view.getByText("कौन सा विज्ञापन चला")).toBeInTheDocument();
+    const details = view.container.querySelector("details")!;
+    details.open = true;
+    fireEvent(details, new Event("toggle"));
+    expect(await screen.findByText("“Ad 2” में हर चैट ₹250 की है, जबकि “Ad 1” में ₹100। इसे रोकें?")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "यह विज्ञापन रोकें" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "चलने दें" })).toBeInTheDocument();
+    expect(screen.getByText("सबसे अच्छा")).toBeInTheDocument();
+    expect(screen.getAllByRole("listitem")[0]).toHaveTextContent("6 चैट");
+    expect(screen.getAllByRole("listitem")[0]).toHaveTextContent("हर चैट ₹100");
+    expect(screen.getByText("3 घंटे पहले अपडेट हुआ")).toBeInTheDocument();
   });
 });

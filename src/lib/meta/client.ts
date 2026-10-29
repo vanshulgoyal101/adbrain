@@ -2,10 +2,9 @@ import { GRAPH } from "@/lib/meta/graph-version";
 import { z } from "zod";
 import { WHATSAPP_PUBLISHER_PLATFORMS } from "@/lib/meta/placements";
 import type { SetupReads } from "@/lib/meta/setup-checklist";
-import { fetchPublicUrl } from "@/lib/security/ssrf";
-import { readBoundedResponse } from "@/lib/imageGen/raster";
 import { destinationFromAdSets, type CampaignDestination } from "@/lib/campaign/outcomes";
 import type { CampaignSkipReason } from "@/lib/campaign/sync-skips";
+import { minCampaignSpendCapPaise, type SpendCapMinimumAccount } from "@/lib/campaign/spend-cap-minimum";
 import { decodeAdResults, decodeCampaignInsights, decodeLifetimeSpendPaise, type AdResult, type CampaignInsights } from "./insights";
 import { maskWhatsAppNumber, maskedWhatsAppNumberPattern } from "./whatsapp-status-shared";
 import { graphEndpoint, graphEntity, graphErrorCode, graphOutcome } from "./graph-event";
@@ -13,8 +12,9 @@ import { recordProductEvent } from "@/lib/observability/logger";
 import { ConnectionAccessError } from "./connection-access-error";
 import { EXCLUDABLE_CITIES, INDIA_REGION_KEYS, mergeExclusions, serviceAreaExclusions, TargetingExclusionsMissingError, type IncludedPlace } from "./service-area";
 import { AD_LANGUAGE_KEYS, storedLocales } from "./locales";
+import { expandPlaceAliases } from "./geo-aliases";
+import { fetchAdImage, readAdVideo, startAdVideo, uploadAdImageBytes, type AdVideoState } from "./media";
 export type { AdResult, CampaignInsights } from "./insights";
-
 
 export interface MetaCredentials {
   adAccountId: string;
@@ -304,6 +304,44 @@ export class MetaError extends Error {
   }
 }
 
+/** #1838: Meta's rate limits: app (4), user/account (17, 613, 80000–80014), Page (32). */
+export function isThrottleCode(code: number | undefined): boolean {
+  return code === 4 || code === 17 || code === 32 || code === 613 || (code !== undefined && code >= 80000 && code <= 80014);
+}
+
+/**
+ * #1838 (Reviewer, CTO): Meta is throttling us. `scope` says who waits (the whole app, one ad account, one Page) and
+ * `retryAfterMs` for how long (Meta's own estimate from the usage headers, else 15 min). Crons skip on it; a person's
+ * pause or activation is still tried. `reason` maps 1:1 to ADR-001's ChannelError code later.
+ */
+export class MetaThrottledError extends MetaError {
+  readonly reason = "rate_limited" as const;
+  constructor(message: string, status: number | undefined, code: number | undefined, subcode: number | undefined,
+    readonly scope: "app" | "account" | "page", readonly retryAfterMs: number, details?: MetaErrorDetails) {
+    super(message, status, code, subcode, details);
+    this.name = "MetaThrottledError";
+  }
+}
+
+const THROTTLE_DEFAULT_MS = 15 * 60_000;
+
+/** Meta's estimated wait from `x-business-use-case-usage` (minutes) or `x-ad-account-usage` (seconds); null if none. */
+export function throttleWaitMs(headers: Headers): number | null {
+  const waits: number[] = [];
+  try {
+    const usage = JSON.parse(headers.get("x-business-use-case-usage") ?? "{}") as Record<string, { estimated_time_to_regain_access?: number }[]>;
+    for (const rows of Object.values(usage)) for (const row of Array.isArray(rows) ? rows : []) {
+      if (typeof row?.estimated_time_to_regain_access === "number") waits.push(row.estimated_time_to_regain_access * 60_000);
+    }
+  } catch {}
+  try {
+    const account = JSON.parse(headers.get("x-ad-account-usage") ?? "{}") as { reset_time_duration?: number };
+    if (typeof account.reset_time_duration === "number") waits.push(account.reset_time_duration * 1000);
+  } catch {}
+  const longest = Math.max(0, ...waits.filter((wait) => Number.isFinite(wait)));
+  return longest > 0 ? longest : null;
+}
+
 /** #757: Graph 190 (any subcode: expired, password change, checkpoint, permission removed) means the token is dead. */
 export function isMetaReauthError(error: unknown): error is MetaError {
   return error instanceof MetaError && error.code === 190;
@@ -325,7 +363,6 @@ export class MetaCreateRolledBackError extends MetaError {
 export type MetaErrorDetails = { userTitle?: string; fbtraceId?: string; path?: string };
 
 type GraphErrorBody = { message?: string; error_user_msg?: string; error_user_title?: string; code?: number; error_subcode?: number; fbtrace_id?: string };
-
 
 const META_SUBCODE_MESSAGES: Record<number, (userMessage: string) => string> = {
   2446307: userMessage =>
@@ -740,26 +777,27 @@ function clampRadiusKm(km: number): number {
  * Pick the best adgeolocation match for a typed place name. Meta returns
  * Exact names and qualified city/region labels take precedence. Otherwise keep
  * Meta's relevance order within the requested country and preferred place type.
+ * #1555: with a country, a place abroad counts only when the owner typed its
+ * qualified label ("Austin, Texas"); a bare namesake ('Tricity' → Tri-City,
+ * Oregon) is no match, so it comes back unresolved instead of spending abroad.
  */
 export function pickBestGeoMatch(
   matches: GeoSearchResult[],
   query: string,
   preferCountry = "",
 ): GeoSearchResult | null {
-  if (!matches.length) return null;
   const normalizedQuery = query.trim().toLowerCase();
-  const exact = matches.filter((match) => [match.name, geoLabel(match)]
-    .some((label) => label.trim().toLowerCase() === normalizedQuery));
-  const candidates = exact.length ? exact : matches;
-  const inCountry = preferCountry
-    ? candidates.filter((m) => !m.country_code || m.country_code === preferCountry)
-    : candidates;
-  const pool = inCountry.length ? inCountry : candidates;
-  for (const type of ["city", "region", "country"]) {
-    const hit = pool.find((m) => m.type === type);
-    if (hit) return hit;
-  }
-  return pool[0] ?? null;
+  const qualified = (match: GeoSearchResult) => Boolean(match.region) && geoLabel(match).trim().toLowerCase() === normalizedQuery;
+  const exact = matches.filter((match) => match.name.trim().toLowerCase() === normalizedQuery || qualified(match));
+  const byType = (pool: GeoSearchResult[]) => ["city", "region", "country"]
+    .map((type) => pool.find((m) => m.type === type)).find(Boolean) ?? pool[0] ?? null;
+  if (!preferCountry) return byType(exact.length ? exact : matches);
+  const home = (match: GeoSearchResult) => !match.country_code || match.country_code === preferCountry;
+  const homeExact = exact.filter(home);
+  if (homeExact.length) return byType(homeExact);
+  const namedAbroad = exact.filter(qualified);
+  if (namedAbroad.length) return byType(namedAbroad);
+  return byType(matches.filter(home));
 }
 
 /**
@@ -946,8 +984,12 @@ export class MetaClient {
     const json = await res.json().catch(() => ({}));
     if (!res.ok || (json as { error?: unknown }).error) {
       const err = (json as { error?: GraphErrorBody }).error;
-      throw new MetaError(metaErrorMessage(err, res.status), res.status, err?.code, err?.error_subcode,
-        { userTitle: err?.error_user_title, fbtraceId: err?.fbtrace_id, path: graphEndpoint(path) });
+      const details = { userTitle: err?.error_user_title, fbtraceId: err?.fbtrace_id, path: graphEndpoint(path) };
+      if (isThrottleCode(err?.code)) {
+        throw new MetaThrottledError(metaErrorMessage(err, res.status), res.status, err?.code, err?.error_subcode,
+          err?.code === 4 ? "app" : err?.code === 32 ? "page" : "account", throttleWaitMs(res.headers) ?? THROTTLE_DEFAULT_MS, details);
+      }
+      throw new MetaError(metaErrorMessage(err, res.status), res.status, err?.code, err?.error_subcode, details);
     }
     return { status: res.status, body: json as unknown };
   }
@@ -1025,6 +1067,7 @@ export class MetaClient {
     return {
       portfolio: account.business?.id ? { id: account.business.id, name: account.business.name ?? null } : null,
       accountActive: account.account_status === 1,
+      accountStatus: account.account_status ?? null,
       currency: account.currency ?? null,
       paymentMethod: Boolean(account.funding_source_details?.id),
       pageListed: Boolean(pages.data?.some((page) => page.id === this.creds.pageId)),
@@ -1185,7 +1228,7 @@ export class MetaClient {
     const unresolved: string[] = [];
     const seen = new Set<string>();
     // #271: independent searches run together; results are applied in the given order.
-    const searches = await Promise.all(names.map(async raw => {
+    const searches = await Promise.all(expandPlaceAliases(names).map(async raw => {
       const name = (raw ?? "").trim();
       if (!name) return null;
       return { name, results: await this.searchGeoLocations(name).catch(() => null) };
@@ -1234,36 +1277,20 @@ export class MetaClient {
 
   /** Upload an image to the ad account and return its hash. */
   async uploadAdImage(imageUrl: string): Promise<string> {
-    let parsed: URL;
-    try {
-      parsed = new URL(imageUrl);
-    } catch {
-      throw new MetaError("Creative image URL is invalid.");
-    }
-    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-      throw new MetaError("Creative image URL must use HTTP or HTTPS.");
-    }
-    let imgRes: Response;
-    try {
-      imgRes = await fetchPublicUrl(parsed.toString(), { timeoutMs: 30_000, signal: this.executionSignal });
-    } catch {
-      throw new MetaError("Could not fetch the creative image.");
-    }
-    if (!imgRes.ok) {
-      throw new MetaError(`Could not fetch creative image (${imgRes.status}).`);
-    }
-    return this.uploadAdImageBytes(await readBoundedResponse(imgRes));
+    return this.uploadAdImageBytes(await fetchAdImage(imageUrl, this.executionSignal));
   }
 
-  async uploadAdImageBytes(bytes: Uint8Array): Promise<string> {
-    const b64 = Buffer.from(bytes).toString("base64");
-    const data = await this.graph<{ images: Record<string, { hash: string }> }>(
-      `${this.creds.adAccountId}/adimages`,
-      { method: "POST", form: { bytes: b64 } },
-    );
-    const first = Object.values(data.images ?? {})[0];
-    if (!first?.hash) throw new MetaError("Image upload returned no hash.");
-    return first.hash;
+  uploadAdImageBytes(bytes: Uint8Array): Promise<string> {
+    return uploadAdImageBytes((path, opts) => this.graph(path, opts), this.creds.adAccountId, bytes);
+  }
+
+  /** #749: start an owner's video upload by URL (Meta pulls it); poll `readAdVideo` until it's ready. */
+  startAdVideo(input: { fileUrl: () => string | Promise<string>; name: string; title: string }): Promise<string> {
+    return startAdVideo((path, opts) => this.graph(path, opts), this.creds.adAccountId, input);
+  }
+
+  readAdVideo(videoId: string): Promise<AdVideoState> {
+    return readAdVideo((path, opts) => this.graph(path, opts), videoId);
   }
 
   /**
@@ -1732,11 +1759,14 @@ export class MetaClient {
     return decodeLifetimeSpendPaise(await this.graph<unknown>(`${node}/insights?fields=spend&date_preset=maximum`));
   }
 
+  /** #1799: Meta's smallest campaign spend_cap for this INR account (paise), or null; see campaign/spend-cap-minimum. */
+  async readMinCampaignSpendCapPaise(): Promise<number | null> {
+    return minCampaignSpendCapPaise(await this.graph<SpendCapMinimumAccount>(`${encodeURIComponent(this.creds.adAccountId)}?fields=id,currency,min_campaign_group_spend_cap`), this.creds.adAccountId);
+  }
+
   /** Live ad account funding (#245): Meta's account spending limit and amount spent, both media paise excluding GST. */
   async readAccountFunding(): Promise<AccountFunding> {
-    const account = await this.graph<{ id?: string; currency?: string; spend_cap?: string; amount_spent?: string; is_prepay_account?: boolean }>(
-      `${encodeURIComponent(this.creds.adAccountId)}?fields=id,spend_cap,amount_spent,is_prepay_account,currency`,
-    );
+    const account = await this.graph<{ id?: string; currency?: string; spend_cap?: string; amount_spent?: string; is_prepay_account?: boolean }>(`${encodeURIComponent(this.creds.adAccountId)}?fields=id,spend_cap,amount_spent,is_prepay_account,currency`);
     const paise = /^\d{1,15}$/;
     if (account.id !== this.creds.adAccountId || account.currency !== "INR"
       || !paise.test(account.spend_cap ?? "0") || !paise.test(account.amount_spent ?? "")) {
@@ -1915,9 +1945,7 @@ export class MetaClient {
       const updated = await this.graph<{ success?: boolean }>(encodeURIComponent(campaignId), { method: "POST", form: { spend_cap: String(target) } });
       if (updated.success !== true) throw new MetaError("Campaign spending limit is unconfirmed. Reconcile before activation.");
     }
-    const confirmed = await this.graph<{ id: string; account_id: string; spend_cap?: string }>(
-      `${encodeURIComponent(campaignId)}?fields=id,account_id,spend_cap`,
-    );
+    const confirmed = await this.graph<{ id: string; account_id: string; spend_cap?: string }>(`${encodeURIComponent(campaignId)}?fields=id,account_id,spend_cap`);
     if (confirmed.id !== campaignId || confirmed.account_id !== current.account_id || !/^\d+$/.test(confirmed.spend_cap ?? "")
       || Number(confirmed.spend_cap) !== target) throw new MetaError("Campaign spending limit changed. Keep the campaign paused.");
   }

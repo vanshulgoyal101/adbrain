@@ -2,9 +2,10 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import recorded from "./fixtures/meta/ad-review.json";
-import { RejectedAds } from "@/components/rejected-ads";
+import { RejectedAds, rejectedMetaMessage } from "@/components/rejected-ads";
 import { SupportLinkProvider } from "@/components/support-link";
 import { adReviewState, type AdReview } from "@/lib/meta/client";
+import hi from "../../messages/hi.json";
 
 vi.mock("next/link", () => ({ default: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => <a href={href} {...rest}>{children}</a> }));
 
@@ -13,10 +14,10 @@ vi.mock("next/link", () => ({ default: ({ href, children, ...rest }: { href: str
 type Exchange = { path: string; body: unknown };
 const adsBody = (recorded.tape as Exchange[]).find((exchange) => exchange.path.includes("/ads?"))!.body as { data: Parameters<typeof adReviewState>[0][] };
 const recordedReviews = adsBody.data.map(adReviewState);
-const region = () => within(screen.getByRole("region", { name: "Ads Meta didn't approve" }));
+const region = () => within(screen.getByRole("group", { name: "Ads Meta didn't approve" }));
 
 describe("core: the card's rejected-ads line (#1274, #1305)", () => {
-  it("recorded 'Lead Ads' rejection: Meta's words quoted, the three fallback fixes, Meta's message under Details", () => {
+  it("recorded 'Lead Ads' rejection: Meta's words quoted, the three fallback fixes; no Details of its own (#1841)", () => {
     const onEditAd = vi.fn();
     render(<RejectedAds reviews={recordedReviews} spend={0} onEditAd={onEditAd} adsManagerUrl="https://adsmanager.facebook.com/x" />);
     expect(region().getByText(/^Meta didn't approve your ad\. Meta didn't say exactly why\. Here's their message: "It looks like your ad contains content/)).toHaveTextContent(/Nothing was spent\.$/);
@@ -24,7 +25,11 @@ describe("core: the card's rejected-ads line (#1274, #1305)", () => {
     expect(onEditAd).toHaveBeenCalledTimes(1);
     expect(region().getByRole("link", { name: "Make a new picture" })).toHaveAttribute("href", "/create");
     expect(region().getByRole("link", { name: "Ask Meta to review again" })).toHaveAttribute("href", "https://adsmanager.facebook.com/x");
-    expect(region().getByText(/^Meta's message: “It looks like your ad contains content/)).toBeInTheDocument();
+    // #1841 (Designer): the card has one Details; Meta's message goes there (rejectedMetaMessage).
+    expect(region().queryByText("Details")).toBeNull();
+    expect(rejectedMetaMessage(recordedReviews)).toMatch(/^It looks like your ad contains content/);
+    // #1633's quiet notice: a rule, not a filled box; nothing is broken when the other ads run.
+    expect(screen.getByRole("group", { name: "Ads Meta didn't approve" }).className).not.toMatch(/\bbg-/);
   });
 
   it("a matched policy says the CPO's sentence and its own fix; a spent campaign doesn't say nothing was spent", () => {
@@ -38,6 +43,17 @@ describe("core: the card's rejected-ads line (#1274, #1305)", () => {
     expect(region().queryByRole("button")).not.toBeInTheDocument();
   });
 
+  // #1645: the business type picks the words; the edit opens with the licence hint for an IELTS job/visa reading.
+  it("an IELTS ad read as a job offer: the course words, and the editor opens with the licence hint", () => {
+    const onEditAd = vi.fn();
+    const reviews = [adReviewState({ id: "1", effective_status: "DISAPPROVED",
+      ad_review_feedback: { global: { "Unacceptable Business Practices": "Ads must not promote job offers or immigration schemes." } } })];
+    render(<RejectedAds reviews={reviews} spend={0} vertical="IELTS coaching" onEditAd={onEditAd} />);
+    expect(region().getByText(/Meta read this as a job or visa offer\. Keep it about the course/)).toBeInTheDocument();
+    fireEvent.click(region().getByRole("button", { name: "Edit the words" }));
+    expect(onEditAd).toHaveBeenCalledWith("Add your licence number as the last line, e.g. 'Punjab licence no. 123'.");
+  });
+
   it("says nothing when no ad is rejected or Meta gave no reason", () => {
     const { container } = render(<RejectedAds reviews={[adReviewState({ id: "1", effective_status: "ACTIVE" }), adReviewState({ id: "2", effective_status: "DISAPPROVED" })]} spend={0} />);
     expect(container).toBeEmptyDOMElement();
@@ -47,5 +63,39 @@ describe("core: the card's rejected-ads line (#1274, #1305)", () => {
     const reviews = [adReviewState({ id: "1", effective_status: "DISAPPROVED", ad_review_feedback: { global: { "Housing": "Housing ads need a special ad category." } } })];
     render(<SupportLinkProvider url="https://wa.me/910000000000"><RejectedAds reviews={reviews} spend={0} /></SupportLinkProvider>);
     expect(region().getByRole("link", { name: "Message us" })).toHaveAttribute("href", "https://wa.me/910000000000");
+  });
+});
+
+// #1438 (CPO's Screen 2 table and #1770 addendum): the same line and fixes in Hindi; Meta's own words stay as Meta wrote them.
+describe("core: the rejected-ads line in Hindi (#1438)", () => {
+  const words = { locale: "hi" as const, messages: hi.verdict };
+  const hindi = () => within(screen.getByRole("group", { name: "जिन विज्ञापनों को Meta ने मंज़ूरी नहीं दी" }));
+
+  it("one of two ads: the CPO's sentence, and the running ad named", () => {
+    const reviews: AdReview[] = [
+      adReviewState({ id: "1", effective_status: "DISAPPROVED", ad_review_feedback: { global: { "Personal Attributes": "Ads must not assert personal attributes." } } }),
+      adReviewState({ id: "2", effective_status: "ACTIVE" }),
+    ];
+    render(<RejectedAds reviews={reviews} spend={120} running words={words} />);
+    expect(hindi().getByText("Meta ने 1 विज्ञापन मंज़ूर नहीं किया। विज्ञापन पढ़ने वाले की अपनी सेहत या परेशानी की बात करता है (\"क्या आप…?\")। Meta इसकी इजाज़त नहीं देता। आपका दूसरा विज्ञापन चल रहा है।")).toBeInTheDocument();
+  });
+
+  it("recorded fallback: Meta's message quoted as Meta wrote it, the fixes and Details in Hindi", () => {
+    render(<RejectedAds reviews={recordedReviews} spend={0} onEditAd={() => {}} adsManagerUrl="https://adsmanager.facebook.com/x" ownDetails words={words} />);
+    expect(hindi().getByText(/^Meta ने आपका विज्ञापन मंज़ूर नहीं किया। Meta ने ठीक-ठीक वजह नहीं बताई। उनका मैसेज: "It looks like your ad contains content/)).toHaveTextContent(/कोई पैसा खर्च नहीं हुआ।$/);
+    expect(hindi().getByRole("button", { name: "शब्द बदलें" })).toBeInTheDocument();
+    expect(hindi().getByRole("link", { name: "नई तस्वीर बनाएं" })).toHaveAttribute("href", "/create");
+    expect(hindi().getByRole("link", { name: "Meta से फिर से जांच करवाएं" })).toBeInTheDocument();
+    expect(hindi().getByText("पूरी जानकारी")).toBeInTheDocument();
+    expect(hindi().getByText(/^Meta का मैसेज: “It looks like your ad contains content/)).toBeInTheDocument();
+  });
+
+  it("an IELTS guarantee: the segment's Hindi, and the editor hint keeps the words to find in Latin script", () => {
+    const onEditAd = vi.fn();
+    const reviews = [adReviewState({ id: "1", effective_status: "DISAPPROVED", ad_review_feedback: { global: { "Misleading Claims": "Ads must not make unrealistic claims." } } })];
+    render(<RejectedAds reviews={reviews} spend={0} vertical="IELTS coaching" onEditAd={onEditAd} words={words} />);
+    expect(hindi().getByText(/जैसे पक्का बैंड, वीज़ा या एडमिशन।/)).toBeInTheDocument();
+    fireEvent.click(hindi().getByRole("button", { name: "शब्द बदलें" }));
+    expect(onEditAd).toHaveBeenCalledWith("'guaranteed', '100%' या बैंड, वीज़ा या एडमिशन का कोई भी वादा हटा दें।");
   });
 });

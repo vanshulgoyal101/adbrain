@@ -33,7 +33,7 @@ const store = vi.hoisted(() => {
     tables: {} as Record<string, Row[]>, user: null as { id: string } | null, log: [] as string[], unknown: [] as string[],
     rpc: {} as Record<string, (args: Row) => { data: unknown; error: unknown }>, inserted: 0,
   };
-  const known = ["audit_log", "businesses", "campaigns", "campaign_results", "meta_connections", "spend_limits"];
+  const known = ["audit_log", "businesses", "campaign_edit_operations", "campaigns", "campaign_results", "meta_connections", "spend_limits"];
   const fail = (call: string): never => {
     state.unknown.push(call);
     throw new Error(`Unstubbed Supabase call: ${call}`);
@@ -277,6 +277,36 @@ describe("core: manage routes against recorded Graph responses (#649)", () => {
     expect(graph.pending).toEqual([]);
     expect(store.state.tables.campaigns[0].status).toBe("paused");
     expect(audits()).toHaveLength(1);
+  });
+
+  // #1961: pause is the owner's safety stop. A waiting new-audience copy (#1518) refuses activation, never a pause.
+  it("pause: still pauses the whole tree in Meta while a new audience waits to be switched on", async () => {
+    treeCampaign();
+    store.state.tables.campaign_edit_operations = [{ id: "op-waiting", campaign_id: STORED, kind: "audience", state: "awaiting_switch", phase: "copy" }];
+    replay(tapes.pause);
+    const response = await pause();
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ ok: true, status: "paused", pause: { confirmed: true } });
+    expect(writes().map(({ path, form }) => [path, form])).toEqual([TREE.campaignId, ...TREE.adSetIds, ...TREE.adIds].map(id => [id, { status: "PAUSED" }]));
+    expect(graph.pending).toEqual([]);
+    expect(store.state.tables.campaigns[0].status).toBe("paused");
+  });
+
+  // #1961: Meta throttling the account (#1838) must not leave anything that refuses the owner's next pause.
+  it("pause: right after Meta throttles the account, the owner's retry still reaches Meta and pauses", async () => {
+    treeCampaign();
+    const throttled = { ...tapes.pause[0], status: 400, body: { error: { message: "There have been too many calls to this ad-account.", type: "OAuthException", code: 17, error_subcode: 2446079 } } };
+    replay([throttled]);
+    const first = await pause();
+    expect(first.status).not.toBe(200);
+    expect(writes()).toEqual([]);
+    expect(store.state.tables.campaigns[0].status).toBe("active");
+    replay(tapes.pause);
+    const retry = await pause();
+    expect(retry.status).toBe(200);
+    expect(writes().map(({ path }) => path)).toEqual([TREE.campaignId, ...TREE.adSetIds, ...TREE.adIds]);
+    expect(graph.pending).toEqual([]);
+    expect(store.state.tables.campaigns[0].status).toBe("paused");
   });
 
   // #757: Meta stops accepting the token (password change, checkpoint) with no deauthorize callback.
@@ -523,6 +553,22 @@ describe("core: manage routes against recorded Graph responses (#649)", () => {
     expect(await response.json()).toMatchObject({ error: "Meta connection changed; review the campaign again." });
     expect(globalThis.fetch).not.toHaveBeenCalled();
     expect(capabilities.verify).not.toHaveBeenCalled();
+    expect(store.state.tables.campaigns[0].status).toBe("paused");
+  });
+
+  // #1518 (CTO): a paused campaign can still have a new-audience copy waiting (made while it ran). Turning it on would
+  // build a capped copy of the old ad set beside the waiting one, and both could spend.
+  it("activate: refuses while a new audience waits to be switched on, before any Meta write or reservation", async () => {
+    const campaign = reviewedCampaign();
+    replay(tapes.delivery, tapes.funding);
+    const confirmationDigest = await digest(campaign, (await (await review()).json()).delivery, 3);
+    store.state.tables.campaign_edit_operations = [{ id: "op-waiting", campaign_id: STORED, kind: "audience", state: "awaiting_switch", phase: "copy" }];
+    replay(tapes.delivery, tapes.funding);
+    const response = await activate({ confirmationDigest, connectionGeneration: GENERATION, capDays: 3 });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ code: "switch_pending", error: "A new audience is waiting for this campaign. Turn it on or cancel it first." });
+    expect(writes()).toEqual([]);
+    expect(store.state.inserted).toBe(0);
     expect(store.state.tables.campaigns[0].status).toBe("paused");
   });
 

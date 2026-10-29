@@ -66,13 +66,19 @@ const BRAND_LANGUAGE_ALIASES = new Map<string, CreateLanguageId>([
   ["pa", "pa"],
 ]);
 
-/** The first Brand language (free text) that maps to a Create language, else English. */
-export function defaultAdLanguage(brandLanguages: string[] | null | undefined): CreateLanguageId {
+/** #1681: the Brand language a Create language is saved as (Brand `languages[0]`). */
+export const BRAND_LANGUAGE_NAME: Record<CreateLanguageId, string> = { en: "English", hinglish: "Hinglish", hi: "Hindi", pa: "Punjabi" };
+
+/**
+ * The first Brand language (free text) that maps to a Create language; else the segment's default (#1681, CPO #1669:
+ * solar ads read best in Hinglish), else English.
+ */
+export function defaultAdLanguage(brandLanguages: string[] | null | undefined, vertical?: string | null): CreateLanguageId {
   for (const language of brandLanguages ?? []) {
     const id = BRAND_LANGUAGE_ALIASES.get(String(language).normalize("NFC").trim().toLowerCase());
     if (id) return id;
   }
-  return "en";
+  return /solar/i.test(vertical ?? "") ? "hinglish" : "en";
 }
 
 /** Short UI label for a language id (for badges); "" for brand default. */

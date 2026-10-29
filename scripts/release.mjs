@@ -9,6 +9,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs, parseEnv } from "node:util";
 import { managementMigrationSql, migrationChecksum } from "./database-migrations.mjs";
+import { refuseHeadless } from "./lib/headless.mjs";
 
 const repo = "vanshulgoyal101/adbrain";
 const projectId = "kmzuxrvfrwwpwmoovwcp";
@@ -45,9 +46,15 @@ export function qaApproval(comments, headSha, samePatch = /** @type {(sha: strin
 /**
  * A diff's changed lines in order, per file, without context or hunk positions. Equal for two heads whose
  * own edits are byte-identical even when a merge of the base moved the surrounding lines (git patch-id differs; #567).
+ * Markdown is skipped (#2147): docs need no approval, and a base merge that moves a docs row must not reset the
+ * approvals of a migration whose code is unchanged.
  */
 export function changedLines(diff) {
-  const out = diff.split("\n").filter((l) => l.startsWith("diff --git ") || (/^[+-]/.test(l) && !/^(\+\+\+|---) /.test(l)));
+  let docs = false;
+  const out = diff.split("\n").filter((l) => {
+    if (l.startsWith("diff --git ")) docs = /\.md$/i.test(l);
+    return !docs && (l.startsWith("diff --git ") || (/^[+-]/.test(l) && !/^(\+\+\+|---) /.test(l)));
+  });
   return out.some((l) => !l.startsWith("diff --git ")) ? out.join("\n") : "";
 }
 
@@ -60,14 +67,15 @@ export function releaseMigrations(files) {
 
 // Money code (dispatch item 5): these PRs, like migrations, need the CTO's review as well as QA's (#259).
 // lib/managed: 2-Tier child spend caps set from the customer's allowance (#522).
-export const moneyPath = /^src\/(lib\/payments\/|lib\/managed\/|app\/api\/payments\/|app\/api\/cron\/(enforce-spend|payment-health)\/|lib\/campaign\/(spend|activation|budget|funding))/;
+// #1740: `lib/plan` (the ₹999 plan: crediting, gate, links) and its cron are money too.
+export const moneyPath = /^src\/(lib\/payments\/|lib\/managed\/|lib\/plan\/|app\/api\/payments\/|app\/api\/cron\/(enforce-spend|payment-health|plan-links)\/|lib\/campaign\/(spend|activation|budget|funding))/;
 
-// "CTO review of <sha>", "CTO post-release review of <sha>" or the Reviewer's "Reviewer review of <sha>" (#575);
+// CTO/Reviewer "review of <sha>" verdicts accept the required "Role:" signature and legacy space-only form;
 // in "<old> → <new>" the last sha is the one reviewed.
 export function ctoReviews(comments) {
   return comments.flatMap((c) => {
     const line = c.body.split("\n")[0];
-    const sha = line.match(/^[*_\s]*(?:CTO|Reviewer) (?:post-release )?review of (?:[0-9a-f]{7,40}\s*(?:→|->)\s*)*([0-9a-f]{7,40})\b/i)?.[1];
+    const sha = line.match(/^[*_\s]*(?:CTO|Reviewer):? (?:post-release |re-)?review of (?:[0-9a-f]{7,40}\s*(?:→|->)\s*)*([0-9a-f]{7,40})\b/i)?.[1];
     if (!sha) return [];
     const verdict = verdictSentence(c.body);
     const approved = /\*\*approved\.?\*\*/i.test(verdict) && !/\b(not approved|changes requested|request(ed)? changes|withdrawn|blocked)\b/i.test(verdict);
@@ -81,12 +89,26 @@ export function ctoApproval(reviews, samePatch) {
   return { approved: Boolean(latest?.approved), latest };
 }
 
+/**
+ * #2187: the approvals a release needs, from one read of the threads. Called at preflight and again right before
+ * the first apply, so a verdict withdrawn while the backup runs stops the release before any SQL.
+ */
+export function releaseGate({ comments, head, samePatch, needsCto }) {
+  const qa = qaApproval(comments, head, samePatch);
+  const cto = needsCto ? ctoApproval(ctoReviews(comments), samePatch) : null;
+  const missing = [qa.approved ? null : "QA", !needsCto || cto.approved ? null : "Reviewer/CTO"].filter(Boolean);
+  return { qa, cto, missing };
+}
+
 export function supersededBy(log) {
   return log.match(/Superseded: production serves newer ([0-9a-f]{7,40})/)?.[1] ?? null;
 }
 
+/** The smoke retries once: count from its last attempt (the last "Sign in" line), so a flake it recovered from doesn't stop a release. */
 export function smokeCounts(log) {
-  return { pass: (log.match(/\dZ PASS /g) ?? []).length, fail: (log.match(/\dZ FAIL /g) ?? []).length };
+  const starts = [...log.matchAll(/\dZ (?:PASS|FAIL) Sign in\b/g)];
+  const last = starts.length ? log.slice(starts.at(-1).index) : log;
+  return { pass: (last.match(/\dZ PASS /g) ?? []).length, fail: (last.match(/\dZ FAIL /g) ?? []).length };
 }
 
 /** #884: a migration needs a database backup that finished less than an hour ago. */
@@ -157,11 +179,19 @@ async function requireFreshBackup(dry) {
   console.log(`    Backup ${run.url} done.`);
 }
 
+/**
+ * The guard run that judges a commit, from `gh run list` (newest first). Non-production deployment
+ * statuses fire the guard too and its job skips them; a skipped run is no verdict (#2138).
+ */
+export function guardRun(runs) {
+  return runs.find((r) => !(r.status === "completed" && r.conclusion === "skipped"));
+}
+
 async function waitForGuard(sha) {
   for (let hop = 0; hop < 3; hop++) {
     let run;
     for (let i = 0; i < 90; i++) {
-      run = ghJson("run", "list", "-R", repo, "--workflow", "production-guard.yml", "--commit", sha, "--limit", "1", "--json", "databaseId,status,conclusion,url")[0];
+      run = guardRun(ghJson("run", "list", "-R", repo, "--workflow", "production-guard.yml", "--commit", sha, "--limit", "20", "--json", "databaseId,status,conclusion,url"));
       if (run?.status === "completed") break;
       await sleep(20_000);
     }
@@ -169,7 +199,7 @@ async function waitForGuard(sha) {
     const log = gh("run", "view", String(run.databaseId), "-R", repo, "--log");
     const { pass, fail } = smokeCounts(log);
     const newer = supersededBy(log);
-    if (run.conclusion !== "success" || fail) stop(`Production guard failed (${run.url}). It rolls production back on a failed smoke; read the run, then follow docs/RELEASING.md#rollback-and-incident-handling. Do not undo the migration by hand.`);
+    if (run.conclusion !== "success" || fail) stop(`Production guard failed (${run.url}). It rolls production back on a failed smoke; read the run, then follow docs/operations/releasing-recovery.md#rollback-and-incident-handling. Do not undo the migration by hand.`);
     if (!newer && !pass) stop(`Production guard ${run.url} passed without running the smoke. Run \`npm run smoke:core\` and check the log.`);
     if (!newer) return { run, pass, sha };
     const full = gh("api", `repos/${repo}/commits/${newer}`, "--jq", ".sha");
@@ -182,6 +212,8 @@ async function waitForGuard(sha) {
 }
 
 async function main() {
+  // #1513: even --dry-run loads the production Management token, and verdict comments are one shared GitHub user.
+  refuseHeadless("release.mjs");
   const { values } = parseArgs({ options: { pr: { type: "string" }, "dry-run": { type: "boolean", default: false } } });
   if (!/^\d+$/.test(values.pr ?? "")) stop("Usage: node scripts/release.mjs --pr <number> [--dry-run]");
   const dry = values["dry-run"];
@@ -217,10 +249,11 @@ async function main() {
   console.log(`    CI: ${required.join(", ")} green`);
 
   const threads = [pr.number, ...pr.closingIssuesReferences.map((issue) => issue.number)];
-  const comments = [
+  const readComments = () => [
     ...threads.flatMap((n) => ghJson("api", "--paginate", `repos/${repo}/issues/${n}/comments?per_page=100`, "--jq", "[.[]|{body,createdAt:.created_at,url:.html_url}]")),
     ...reviewVerdicts(ghJson("api", "--paginate", `repos/${repo}/pulls/${pr.number}/reviews?per_page=100`, "--jq", "[.[]|{body,state,submitted_at,html_url}]")),
   ];
+  const comments = readComments();
   const patches = new Map();
   const patchOf = (sha) => {
     if (!patches.has(sha)) {
@@ -244,7 +277,8 @@ async function main() {
   else if (dry) console.log(`    QA has not approved ${head.slice(0, 7)} yet (latest QA verdict: ${qa.latest?.url ?? "none"}); continuing because --dry-run.`);
   else stop(`No QA approval naming ${head.slice(0, 7)} or a head with the same patch (latest QA verdict: ${qa.latest?.url ?? "none"}). QA must approve this head.`);
 
-  if (names.length || files.some((f) => moneyPath.test(f.filename))) {
+  const needsCto = names.length > 0 || files.some((f) => moneyPath.test(f.filename));
+  if (needsCto) {
     const cto = ctoApproval(ctoReviews(comments), samePatch);
     const reviewed = cto.latest && !head.startsWith(cto.latest.sha) ? ` (reviewed ${cto.latest.sha}, same patch against main)` : "";
     if (cto.approved) console.log(`    CTO approved ${head.slice(0, 7)}${reviewed}: ${cto.latest.url}`);
@@ -282,6 +316,14 @@ async function main() {
     return;
   }
 
+  if (pending.length) {
+    // #2187: the backup can take minutes; re-read the head and the verdicts before any SQL reaches production.
+    const now = ghJson("pr", "view", String(pr.number), "-R", repo, "--json", "headRefOid").headRefOid;
+    if (now !== head) stop(`PR #${pr.number} moved to ${now.slice(0, 7)} during the release. Nothing was applied; rerun this command.`);
+    const { missing } = releaseGate({ comments: readComments(), head, samePatch, needsCto });
+    if (missing.length) stop(`${missing.join(" and ")} approval of ${head.slice(0, 7)} was withdrawn during the release. Nothing was applied.`);
+    console.log("    Approvals re-checked after the backup.");
+  }
   for (const m of pending) {
     step(`Apply ${m.name} with its ledger row`);
     try {

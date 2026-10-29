@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { coreApproval, coreFiles } from "../scripts/core-approval.mjs";
+import { coreApproval, coreFiles, syncExempt } from "../scripts/core-approval.mjs";
 
 const head = "7612817abcdef0123456789abcdef0123456789";
 const at = (body: string, createdAt = "2026-10-27T10:00:00Z") => ({ body, createdAt, url: "u" });
@@ -24,6 +24,33 @@ describe("core-approval required check (#926)", () => {
     expect(coreApproval({ files: ["src/lib/meta/client.ts"], head, headRef: "next", comments: [] }).state).toBe("success");
   });
 
+  it("#1740: only this repo's next → main is the train; a fork's `next` or another base waits for a verdict", () => {
+    const pr = { files: ["src/lib/meta/client.ts"], head, headRef: "next", comments: [] };
+    expect(coreApproval({ ...pr, headRepo: "vanshulgoyal101/adbrain", baseRef: "main" }).state).toBe("success");
+    expect(coreApproval({ ...pr, headRepo: "someone/adbrain", baseRef: "main" }).state).toBe("pending");
+    expect(coreApproval({ ...pr, headRepo: "", baseRef: "main" }).state).toBe("pending");
+    expect(coreApproval({ ...pr, headRepo: "vanshulgoyal101/adbrain", baseRef: "next" }).state).toBe("pending");
+  });
+
+  it("#1740: gates the ₹999 plan as money and tenant/auth boundaries as core", () => {
+    expect(coreFiles([
+      "src/lib/plan/webhook.ts",
+      "src/app/api/cron/plan-links/route.ts",
+      "src/app/api/cron/refresh-results/route.ts",
+      "src/app/api/whatsapp/webhook/route.ts",
+      "src/lib/alerts/owner-alerts.ts",
+      "src/lib/security/cron-auth.ts",
+      "src/lib/internal-accounts.ts",
+      "src/lib/internal-accounts.json",
+      "src/app/api/privacy-requests/route.ts",
+      "src/lib/privacy-requests.ts",
+      "src/lib/internal-accounts-helper.ts",
+      "src/lib/securityish.ts",
+    ])).toHaveLength(10);
+    const cto = at(`CTO review of ${head.slice(0, 7)}: **approved**.`);
+    expect(coreApproval({ files: ["src/lib/plan/gate.ts"], head, headRef: "b", comments: [cto] }).state).toBe("pending");
+  });
+
   it("holds #914's shape (core Meta change, no approval at the head) until QA, the Reviewer or the CTO approves it", () => {
     const pr = { files: ["src/lib/campaign/create-service.ts"], head, headRef: "dev/914" };
     expect(coreApproval({ ...pr, comments: [] }).state).toBe("pending");
@@ -42,6 +69,18 @@ describe("core-approval required check (#926)", () => {
     const earlier = [at("Reviewer review of 2222222: **approved**.")];
     expect(coreApproval({ ...pr, comments: earlier, samePatch: (sha: string) => sha === "2222222" || head.startsWith(sha) }).state).toBe("success");
     expect(coreApproval({ ...pr, comments: earlier }).state).toBe("pending");
+  });
+
+  it("consumes the recorded signed Reviewer approval at the named head (#2054)", () => {
+    const pr = { files: ["src/lib/campaign/ledger.ts"], head: "f784739f36d8e2957ccd0497f349c32fe4431a48", headRef: "work/issue-1786" };
+    const approval = at("Reviewer: review of f784739f36d8e2957ccd0497f349c32fe4431a48: **approved** (core-approval).");
+    expect(coreApproval({ ...pr, comments: [approval] })).toMatchObject({
+      state: "success", description: "Reviewer approved f784739",
+    });
+    expect(coreApproval({ ...pr, head, comments: [approval] }).state).toBe("pending");
+    expect(coreApproval({ ...pr, comments: [
+      approval, at("Reviewer: review of f784739f36d8e2957ccd0497f349c32fe4431a48: **changes requested**.", "2026-10-29T06:00:00Z"),
+    ] }).state).toBe("pending");
   });
 
   it("lets a labelled revert through so rollback never waits", () => {
@@ -68,5 +107,44 @@ describe("money and migrations need QA and the CTO/Reviewer (#1083)", () => {
   });
   it("treats migrations like money", () => {
     expect(coreApproval({ files: ["db/migrations/20261027_x.sql"], head, headRef: "b", comments: [cto] }).state).toBe("pending");
+  });
+  it("still requires QA alongside a signed Reviewer money verdict", () => {
+    const reviewer = at("Reviewer: review of 7612817: **approved** (money).");
+    expect(coreApproval({ ...pr, comments: [reviewer] }).state).toBe("pending");
+    expect(coreApproval({ ...pr, comments: [reviewer, qaOk] })).toMatchObject({
+      state: "success", description: "QA and Reviewer approved 7612817 (money/migration)",
+    });
+    expect(coreApproval({ ...pr, comments: [reviewer, qaNo] }).state).toBe("pending");
+  });
+});
+
+describe("a main → next sync merge isn't held on main's own gated files (#2147)", () => {
+  const pr = { files: ["db/migrations/20261029_lead_erase.sql", "docs/architecture/migrations.md"], head, headRef: "devops/sync-main-next", comments: [] };
+
+  it("passes when every core file equals main's copy", () => {
+    expect(coreApproval({ ...pr, onMain: () => true })).toMatchObject({ state: "success", description: expect.stringContaining("identical to main") });
+  });
+
+  it("still holds a core file that differs from main, and applies the money/migration rule to it alone", () => {
+    const both = { ...pr, files: [...pr.files, "src/lib/meta/client.ts"] };
+    const verdict = coreApproval({ ...both, onMain: (f: string) => f.startsWith("db/") });
+    expect(verdict.state).toBe("pending");
+    expect(verdict.description).toContain("src/lib/meta/client.ts");
+    expect(verdict.description).not.toContain("Money/migration");
+    expect(coreApproval({ ...pr, onMain: () => false }).description).toContain("Money/migration");
+  });
+
+  it("exempts a file only if next hasn't changed it since the merge base", () => {
+    // main-only file (e.g. a released migration that isn't on next or the base): exempt
+    expect(syncExempt({ head: "m", main: "m", next: null, base: null })).toBe(true);
+    // main changed it, next didn't: taking main's copy drops nothing
+    expect(syncExempt({ head: "m", main: "m", next: "b", base: "b" })).toBe(true);
+    // next changed it and the head took main's copy: a gated next change would be dropped
+    expect(syncExempt({ head: "m", main: "m", next: "n", base: "b" })).toBe(false);
+    // both changed it (a real merge): gated
+    expect(syncExempt({ head: "x", main: "m", next: "n", base: "b" })).toBe(false);
+    // deleted at head: gated
+    expect(syncExempt({ head: null, main: null, next: null, base: null })).toBe(false);
+    expect(syncExempt({ head: null, main: "m", next: "b", base: "b" })).toBe(false);
   });
 });

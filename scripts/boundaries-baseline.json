@@ -1,0 +1,825 @@
+{
+  "cruiser": [
+    {
+      "rule": "R1-ui-meta-types-only",
+      "from": "src/app/api/meta/connections/change/route.ts",
+      "to": "src/lib/meta/connect-contracts.ts"
+    },
+    {
+      "rule": "R1-ui-meta-types-only",
+      "from": "src/app/api/meta/connections/start/route.ts",
+      "to": "src/lib/meta/connect-contracts.ts"
+    },
+    {
+      "rule": "R1-ui-meta-types-only",
+      "from": "src/app/connect/meta/complete/page.tsx",
+      "to": "src/lib/meta/connect-contracts.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/(app)/brand/page.tsx",
+      "to": "src/lib/meta/credentials.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/(app)/brand/page.tsx",
+      "to": "src/lib/meta/whatsapp-status.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/(app)/campaigns/page.tsx",
+      "to": "src/lib/meta/connection-access.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/(app)/campaigns/page.tsx",
+      "to": "src/lib/meta/credentials.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/(app)/campaigns/page.tsx",
+      "to": "src/lib/meta/pilot-access.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/(app)/campaigns/page.tsx",
+      "to": "src/lib/meta/token-expiry.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/(app)/campaigns/page.tsx",
+      "to": "src/lib/meta/whatsapp-status-shared.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/(app)/dashboard/page.tsx",
+      "to": "src/lib/meta/credentials.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/(app)/leads/page.tsx",
+      "to": "src/lib/meta/credentials.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/(app)/onboarding/page.tsx",
+      "to": "src/lib/meta/managed-account.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/(app)/onboarding/page.tsx",
+      "to": "src/lib/meta/pilot-access.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/(app)/settings/page.tsx",
+      "to": "src/lib/meta/connection-access.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/(app)/settings/page.tsx",
+      "to": "src/lib/meta/credentials.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/(app)/settings/page.tsx",
+      "to": "src/lib/meta/oauth.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/(app)/settings/page.tsx",
+      "to": "src/lib/meta/setup-checklist.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/(app)/settings/page.tsx",
+      "to": "src/lib/meta/setup-status.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/brand/autofill/route.ts",
+      "to": "src/lib/meta/credentials.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/campaign-drafts/[id]/route.ts",
+      "to": "src/lib/meta/connection-access.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/campaign-drafts/route.ts",
+      "to": "src/lib/meta/connection-access.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/campaigns/[id]/ads/[adId]/route.ts",
+      "to": "src/lib/meta/connection-access.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/campaigns/[id]/ads/[adId]/status/route.ts",
+      "to": "src/lib/meta/connection-access.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/campaigns/[id]/audience/route.ts",
+      "to": "src/lib/meta/connection-access.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/campaigns/[id]/audience/switch/route.ts",
+      "to": "src/lib/meta/connection-access.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/campaigns/[id]/budget/route.ts",
+      "to": "src/lib/meta/connection-access.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/campaigns/[id]/refresh/route.ts",
+      "to": "src/lib/meta/client.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/campaigns/[id]/refresh/route.ts",
+      "to": "src/lib/meta/connection-access.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/campaigns/[id]/route.ts",
+      "to": "src/lib/meta/client.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/campaigns/[id]/route.ts",
+      "to": "src/lib/meta/connection-access.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/campaigns/[id]/route.ts",
+      "to": "src/lib/meta/service-area.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/campaigns/create/route.ts",
+      "to": "src/lib/meta/connection-access.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/campaigns/lead-forms/route.ts",
+      "to": "src/lib/meta/client.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/campaigns/lead-forms/route.ts",
+      "to": "src/lib/meta/connection-access.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/campaigns/lead-forms/route.ts",
+      "to": "src/lib/meta/lead-form-cache.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/campaigns/list/route.ts",
+      "to": "src/lib/meta/connection-access.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/campaigns/operations/[id]/route.ts",
+      "to": "src/lib/meta/connection-access.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/campaigns/operations/route.ts",
+      "to": "src/lib/meta/connection-access.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/campaigns/plan/route.ts",
+      "to": "src/lib/meta/client.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/campaigns/plan/route.ts",
+      "to": "src/lib/meta/connection-access.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/campaigns/plan/route.ts",
+      "to": "src/lib/meta/lead-form-cache.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/campaigns/plan/route.ts",
+      "to": "src/lib/meta/whatsapp-status-shared.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/campaigns/preflight/route.ts",
+      "to": "src/lib/meta/connection-access.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/campaigns/sync/route.ts",
+      "to": "src/lib/meta/connection-access.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/cron/enforce-spend/route.ts",
+      "to": "src/lib/meta/connection-access.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/cron/enforce-spend/route.ts",
+      "to": "src/lib/meta/managed-account.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/cron/enforce-spend/route.ts",
+      "to": "src/lib/meta/reauth.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/cron/meta-parent-health/route.ts",
+      "to": "src/lib/meta/parent.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/cron/owner-daily-results/route.ts",
+      "to": "src/lib/meta/connection-access.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/cron/refresh-results/route.ts",
+      "to": "src/lib/meta/client.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/cron/refresh-results/route.ts",
+      "to": "src/lib/meta/connection-access-error.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/cron/refresh-results/route.ts",
+      "to": "src/lib/meta/connection-access.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/cron/refresh-results/route.ts",
+      "to": "src/lib/meta/reauth.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/cron/sync-leads/route.ts",
+      "to": "src/lib/meta/client.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/cron/sync-leads/route.ts",
+      "to": "src/lib/meta/connection-access.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/cron/sync-leads/route.ts",
+      "to": "src/lib/meta/reauth.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/feedback/pilot-day7/route.ts",
+      "to": "src/lib/meta/connection-access.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/internal/meta-traffic/route.ts",
+      "to": "src/lib/meta/credentials.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/leads/sync/route.ts",
+      "to": "src/lib/meta/client.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/leads/sync/route.ts",
+      "to": "src/lib/meta/connection-access.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/managed/onboarding/route.ts",
+      "to": "src/lib/meta/connection-access.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/managed/onboarding/route.ts",
+      "to": "src/lib/meta/managed-attempt.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/managed/whatsapp/route.ts",
+      "to": "src/lib/meta/connection-access.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/managed/whatsapp/route.ts",
+      "to": "src/lib/meta/managed-attempt.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/managed/whatsapp/route.ts",
+      "to": "src/lib/meta/managed-whatsapp.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/meta/accounts/route.ts",
+      "to": "src/lib/meta/connection-access.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/meta/connect/route.ts",
+      "to": "src/lib/meta/connection-access.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/meta/connections/attempts/[id]/retry/route.ts",
+      "to": "src/lib/meta/connection-repository.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/meta/connections/attempts/[id]/retry/route.ts",
+      "to": "src/lib/meta/pilot-access.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/meta/connections/attempts/[id]/retry/route.ts",
+      "to": "src/lib/meta/retry-discovery.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/meta/connections/attempts/[id]/route.ts",
+      "to": "src/lib/meta/connection-repository.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/meta/connections/attempts/[id]/route.ts",
+      "to": "src/lib/meta/pilot-access.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/meta/connections/attempts/[id]/select/route.ts",
+      "to": "src/lib/meta/connection-repository.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/meta/connections/attempts/[id]/select/route.ts",
+      "to": "src/lib/meta/pilot-access.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/meta/connections/change/route.ts",
+      "to": "src/lib/meta/change-selection.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/meta/connections/change/route.ts",
+      "to": "src/lib/meta/connection-access.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/meta/connections/change/route.ts",
+      "to": "src/lib/meta/pilot-access.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/meta/connections/recheck/route.ts",
+      "to": "src/lib/meta/connection-access.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/meta/connections/start/route.ts",
+      "to": "src/lib/meta/connection-access.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/meta/connections/start/route.ts",
+      "to": "src/lib/meta/connection-repository.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/meta/connections/start/route.ts",
+      "to": "src/lib/meta/oauth.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/meta/connections/start/route.ts",
+      "to": "src/lib/meta/pilot-access.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/meta/connections/status/route.ts",
+      "to": "src/lib/meta/connection-access.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/meta/connections/status/route.ts",
+      "to": "src/lib/meta/pilot-access.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/meta/deauthorize/route.ts",
+      "to": "src/lib/meta/oauth.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/meta/disconnect/route.ts",
+      "to": "src/lib/meta/connection-access.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/meta/geo-search/route.ts",
+      "to": "src/lib/meta/client.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/meta/geo-search/route.ts",
+      "to": "src/lib/meta/credentials.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/meta/managed/page/route.ts",
+      "to": "src/lib/meta/managed-attempt.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/meta/managed/page/route.ts",
+      "to": "src/lib/meta/managed-page.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/meta/managed/provision/route.ts",
+      "to": "src/lib/meta/managed-attempt.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/meta/managed/provision/route.ts",
+      "to": "src/lib/meta/managed-provision-runner.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/meta/oauth/callback/route.ts",
+      "to": "src/lib/meta/connection-access.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/meta/oauth/callback/route.ts",
+      "to": "src/lib/meta/connection-repository.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/meta/oauth/callback/route.ts",
+      "to": "src/lib/meta/oauth.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/meta/oauth/callback/route.ts",
+      "to": "src/lib/meta/pilot-access.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/meta/oauth/callback/route.ts",
+      "to": "src/lib/meta/selection.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/meta/whatsapp/route.ts",
+      "to": "src/lib/meta/connection-access.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/meta/whatsapp/route.ts",
+      "to": "src/lib/meta/whatsapp-status.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/api/payments/customer-balance/route.ts",
+      "to": "src/lib/meta/connection-access.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/connect/meta/complete/page.tsx",
+      "to": "src/lib/meta/connection-access.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/connect/meta/page.tsx",
+      "to": "src/lib/meta/connection-access.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/app/connect/meta/page.tsx",
+      "to": "src/lib/meta/pilot-access.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/components/campaigns.tsx",
+      "to": "src/lib/meta/client.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/components/campaigns.tsx",
+      "to": "src/lib/meta/insights.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/components/campaigns.tsx",
+      "to": "src/lib/meta/setup-checklist.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/components/campaigns.tsx",
+      "to": "src/lib/meta/whatsapp-status-shared.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/components/edit-audience-dialog.tsx",
+      "to": "src/lib/meta/locales.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/components/home-rejected-ads.tsx",
+      "to": "src/lib/meta/connection-access.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/components/managed-billing.tsx",
+      "to": "src/lib/meta/credentials.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/components/meta-connection.tsx",
+      "to": "src/lib/meta/credentials.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/components/meta-connection.tsx",
+      "to": "src/lib/meta/token-expiry.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/components/meta-setup-checklist.tsx",
+      "to": "src/lib/meta/setup-checklist.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/components/rejected-ads.tsx",
+      "to": "src/lib/meta/client.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/components/rejected-ads.tsx",
+      "to": "src/lib/meta/rejection-copy.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/components/whatsapp-message-card.tsx",
+      "to": "src/lib/meta/limits.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/components/whatsapp-status-section.tsx",
+      "to": "src/lib/meta/whatsapp-status.ts"
+    },
+    {
+      "rule": "R1-ui-no-channels",
+      "from": "src/components/whatsapp-status.tsx",
+      "to": "src/lib/meta/whatsapp-status-shared.ts"
+    },
+    {
+      "rule": "R2-client-no-server",
+      "from": "src/components/campaigns.tsx",
+      "to": "src/lib/meta/insights.ts"
+    },
+    {
+      "rule": "R2-client-no-server",
+      "from": "src/components/campaigns.tsx",
+      "to": "src/lib/meta/setup-checklist.ts"
+    },
+    {
+      "rule": "R2-client-no-server",
+      "from": "src/components/campaigns.tsx",
+      "to": "src/lib/meta/whatsapp-status-shared.ts"
+    },
+    {
+      "rule": "R2-client-no-server",
+      "from": "src/components/customer-balance.tsx",
+      "to": "src/lib/payments/customer-balance-contracts.ts"
+    },
+    {
+      "rule": "R2-client-no-server",
+      "from": "src/components/edit-audience-dialog.tsx",
+      "to": "src/lib/meta/locales.ts"
+    },
+    {
+      "rule": "R2-client-no-server",
+      "from": "src/components/meta-connection.tsx",
+      "to": "src/lib/meta/token-expiry.ts"
+    },
+    {
+      "rule": "R2-client-no-server",
+      "from": "src/components/production-checkout.tsx",
+      "to": "src/lib/payments/allocation.ts"
+    },
+    {
+      "rule": "R2-client-no-server",
+      "from": "src/components/rejected-ads.tsx",
+      "to": "src/lib/meta/rejection-copy.ts"
+    },
+    {
+      "rule": "R2-client-no-server",
+      "from": "src/components/setup-go-live.tsx",
+      "to": "src/lib/payments/allocation.ts"
+    },
+    {
+      "rule": "R2-client-no-server",
+      "from": "src/components/whatsapp-message-card.tsx",
+      "to": "src/lib/meta/limits.ts"
+    },
+    {
+      "rule": "R2-client-no-server",
+      "from": "src/components/whatsapp-status.tsx",
+      "to": "src/lib/meta/whatsapp-status-shared.ts"
+    },
+    {
+      "rule": "R6-money-not-in-adapters",
+      "from": "src/lib/meta/connection-access.ts",
+      "to": "src/lib/managed/spend-cap-wiring.ts"
+    }
+  ],
+  "checks": [
+    {
+      "rule": "C1-graph-urls-in-meta",
+      "from": "src/lib/alerts/sender.ts",
+      "to": "graph.facebook.com"
+    },
+    {
+      "rule": "C2-adapter-own-data",
+      "from": "src/lib/meta/connection-access.ts",
+      "to": "table:businesses"
+    },
+    {
+      "rule": "C2-adapter-own-data",
+      "from": "src/lib/meta/connection-access.ts",
+      "to": "table:campaign_drafts"
+    },
+    {
+      "rule": "C2-adapter-own-data",
+      "from": "src/lib/meta/connection-access.ts",
+      "to": "table:campaign_operations"
+    },
+    {
+      "rule": "C2-adapter-own-data",
+      "from": "src/lib/meta/managed-provision-runner.ts",
+      "to": "table:businesses"
+    },
+    {
+      "rule": "C2-adapter-own-data",
+      "from": "src/lib/meta/reauth.ts",
+      "to": "table:campaigns"
+    },
+    {
+      "rule": "C3-appsecret-proof",
+      "from": "src/lib/alerts/sender.ts",
+      "to": "appSecretProof"
+    },
+    {
+      "rule": "C3-appsecret-proof",
+      "from": "src/lib/meta/client.ts",
+      "to": "appSecretProof"
+    },
+    {
+      "rule": "C3-appsecret-proof",
+      "from": "src/lib/meta/oauth.ts",
+      "to": "appSecretProof"
+    },
+    {
+      "rule": "C3-appsecret-proof",
+      "from": "src/lib/meta/parent.ts",
+      "to": "appSecretProof"
+    },
+    {
+      "rule": "C4-file-size",
+      "from": "src/app/api/campaigns/[id]/route.ts",
+      "to": "> 400 lines",
+      "lines": 463
+    },
+    {
+      "rule": "C4-file-size",
+      "from": "src/app/api/creatives/generate/route.ts",
+      "to": "> 400 lines",
+      "lines": 473
+    },
+    {
+      "rule": "C4-file-size",
+      "from": "src/components/ad-assistant.tsx",
+      "to": "> 400 lines",
+      "lines": 1134
+    },
+    {
+      "rule": "C4-file-size",
+      "from": "src/components/brand-form.tsx",
+      "to": "> 400 lines",
+      "lines": 613
+    },
+    {
+      "rule": "C4-file-size",
+      "from": "src/components/campaigns.tsx",
+      "to": "> 400 lines",
+      "lines": 2753
+    },
+    {
+      "rule": "C4-file-size",
+      "from": "src/components/creative-copy-editor.tsx",
+      "to": "> 400 lines",
+      "lines": 579
+    },
+    {
+      "rule": "C4-file-size",
+      "from": "src/components/lead-inbox.tsx",
+      "to": "> 400 lines",
+      "lines": 668
+    },
+    {
+      "rule": "C4-file-size",
+      "from": "src/components/meta-connect/meta-connect-dialog.tsx",
+      "to": "> 400 lines",
+      "lines": 547
+    },
+    {
+      "rule": "C4-file-size",
+      "from": "src/components/setup-ads-step.tsx",
+      "to": "> 400 lines",
+      "lines": 442
+    },
+    {
+      "rule": "C4-file-size",
+      "from": "src/components/studio.tsx",
+      "to": "> 400 lines",
+      "lines": 1098
+    },
+    {
+      "rule": "C4-file-size",
+      "from": "src/components/targeting-controls.tsx",
+      "to": "> 400 lines",
+      "lines": 551
+    },
+    {
+      "rule": "C4-file-size",
+      "from": "src/lib/campaign/edit-service.ts",
+      "to": "> 400 lines",
+      "lines": 475
+    },
+    {
+      "rule": "C4-file-size",
+      "from": "src/lib/creative/concept.ts",
+      "to": "> 400 lines",
+      "lines": 664
+    },
+    {
+      "rule": "C4-file-size",
+      "from": "src/lib/creative/generate.ts",
+      "to": "> 400 lines",
+      "lines": 442
+    },
+    {
+      "rule": "C4-file-size",
+      "from": "src/lib/creative/interview.ts",
+      "to": "> 400 lines",
+      "lines": 481
+    },
+    {
+      "rule": "C4-file-size",
+      "from": "src/lib/meta/client.ts",
+      "to": "> 400 lines",
+      "lines": 2481
+    },
+    {
+      "rule": "C4-file-size",
+      "from": "src/lib/meta/oauth.ts",
+      "to": "> 400 lines",
+      "lines": 426
+    },
+    {
+      "rule": "C4-file-size",
+      "from": "src/lib/observability/core-scoreboard.ts",
+      "to": "> 400 lines",
+      "lines": 578
+    },
+    {
+      "rule": "C4-file-size",
+      "from": "src/lib/supabase/queries.ts",
+      "to": "> 400 lines",
+      "lines": 424
+    }
+  ]
+}

@@ -1,4 +1,5 @@
 import { setAsideIds } from "@/lib/creative/set-aside";
+import { translator, type AppLocale } from "@/i18n/locale";
 import type { Business, Campaign, Creative } from "@/lib/types";
 
 export interface WorkItem {
@@ -15,13 +16,25 @@ type QueueBusiness = Pick<
   "name" | "description" | "brand_voice" | "target_audience" | "locations"
 >;
 
-export function missingBrandContext(business: QueueBusiness): string[] {
-  return [
-    !business.description?.trim() && "business description",
-    !business.brand_voice?.trim() && "brand voice",
-    !business.target_audience?.trim() && "target audience",
-    !business.locations.some((location) => location.trim()) && "service areas",
-  ].filter((field): field is string => Boolean(field));
+/**
+ * #1630 (CPO, #1604): the ₹999 plan's status, as #1442's `readPlan` returns it, or null while PLAN_BILLING_ENABLED is
+ * off or the business isn't on the plan. Home is where a pilot owner lives, so the free month's end shows there.
+ */
+export type QueuePlan =
+  | { state: "exempt" }
+  | { state: "trial_not_started" }
+  | { state: "free" | "paid"; until: string; dueSoon: boolean }
+  | { state: "unpaid"; since: string };
+
+function planItem(plan: QueuePlan | null | undefined, locale: AppLocale): WorkItem | null {
+  const t = translator(locale, "workQueue");
+  if (plan?.state === "unpaid")
+    return { id: "plan", title: t("planDueTitle"), detail: t("planDueDetail"), href: "/settings#plan-title", action: t("planPayAction"), tone: "attention" };
+  if (plan?.state === "free" && plan.dueSoon) {
+    const date = new Intl.DateTimeFormat(locale === "hi" ? "hi-IN" : "en-IN", { day: "numeric", month: "long", timeZone: "Asia/Kolkata" }).format(new Date(plan.until));
+    return { id: "plan", title: t("planFreeEndsTitle", { date }), detail: t("planFreeEndsDetail"), href: "/settings#plan-title", action: t("planPayAction"), tone: "work" };
+  }
+  return null;
 }
 
 export function buildWorkQueue({
@@ -30,21 +43,31 @@ export function buildWorkQueue({
   campaigns,
   metaReady,
   now = Date.now(),
+  locale = "en",
+  unloggedChats = 0,
+  plan = null,
 }: {
   business: QueueBusiness | null;
   creatives: (Pick<Creative, "id" | "status"> & Partial<Pick<Creative, "created_at" | "variant_group">>)[];
   campaigns: Pick<Campaign, "status" | "creative_ids">[];
   metaReady: boolean;
   now?: number;
+  /** #1438: the owner's app language. */
+  locale?: AppLocale;
+  /** #1624: WhatsApp chats with no real enquiry or customer logged yet (`unloggedChats`). */
+  unloggedChats?: number;
+  /** #1630: the ₹999 plan, when billing is on (see `QueuePlan`). */
+  plan?: QueuePlan | null;
 }): WorkItem[] {
+  const t = translator(locale, "workQueue");
   if (!business)
     return [
       {
         id: "brand",
-        title: "Set up your business",
-        detail: "Add your business, audience, voice, and service areas.",
+        title: t("brandTitle"),
+        detail: t("brandDetail"),
         href: "/brand",
-        action: "Set up brand",
+        action: t("brandAction"),
         tone: "work",
       },
     ];
@@ -63,7 +86,6 @@ export function buildWorkQueue({
   const unusedApproved = creatives.filter(
     (creative) => creative.status === "approved" && !usedIds.has(creative.id),
   ).length;
-  const missing = missingBrandContext(business);
   const paused = campaigns.filter(
     (campaign) => campaign.status === "paused",
   ).length;
@@ -74,38 +96,37 @@ export function buildWorkQueue({
   if (drafts)
     queue.push({
       id: "review",
-      title: `${drafts} ${drafts === 1 ? "ad needs" : "ads need"} review`,
-      detail: "Check the image, copy, and claims before approving.",
+      title: t("reviewTitle", { n: drafts }),
+      detail: t("reviewDetail"),
       href: "/studio?status=draft",
-      action: "Review ads",
+      action: t("reviewAction"),
       tone: "work",
     });
-  if (missing.length)
+  if (unloggedChats > 0)
     queue.push({
-      id: "context",
-      title: "Add missing brand context",
-      detail: `Missing: ${missing.join(", ")}.`,
-      href: "/brand",
-      action: "Update brand",
-      tone: "attention",
+      id: "chats",
+      title: t("chatsTitle", { n: unloggedChats }),
+      detail: t("chatsDetail"),
+      href: "/leads",
+      action: t("chatsAction"),
+      tone: "work",
     });
   if (!creatives.length)
     queue.push({
       id: "create",
-      title: "Create your first campaign creative",
-      detail: "Who do you want to reach, and what would you like them to do?",
+      title: t("createTitle"),
+      detail: t("createDetail"),
       href: "/create",
-      action: "Start creating",
+      action: t("createAction"),
       tone: "work",
     });
   if (!metaReady && campaigns.length)
     queue.push({
       id: "connection",
-      title: "Check your Meta connection",
-      detail:
-        "Connect an eligible account before creating or managing Meta campaigns. You can still export approved ads.",
+      title: t("connectionTitle"),
+      detail: t("connectionDetail"),
       href: "/settings",
-      action: "Open settings",
+      action: t("connectionAction"),
       tone: "attention",
     });
   // #1148: with approved ads and nothing running, launching comes before reviewing more ads.
@@ -113,39 +134,41 @@ export function buildWorkQueue({
   if (launchFirst)
     queue.unshift({
       id: "launch",
-      title: "Launch a campaign with your approved ads",
-      detail: `${approved} approved ${approved === 1 ? "ad is" : "ads are"} ready. Choose where to show them and how much to spend.`,
+      title: t("launchTitle"),
+      detail: t("launchDetail", { n: approved }),
       href: "/campaigns",
-      action: "Launch a campaign",
+      action: t("launchAction"),
       tone: "work",
     });
   else if (!metaReady && !campaigns.length && unusedApproved)
     queue.push({
       id: "approved",
-      title: "Your ads are ready",
-      detail: "Share them on WhatsApp or download them now. Launching on Facebook and Instagram opens soon.",
+      title: t("readyTitle"),
+      detail: t("readyDetail"),
       href: "/campaigns",
-      action: "Share your ads",
+      action: t("readyAction"),
       tone: "work",
     });
   else if (unusedApproved)
     queue.push({
       id: "approved",
-      title: `${unusedApproved} approved ${unusedApproved === 1 ? "ad is" : "ads are"} available`,
-      detail:
-        "Not in a campaign yet. Put them in a campaign or export them.",
+      title: t("approvedTitle", { n: unusedApproved }),
+      detail: t("approvedDetail"),
       href: metaReady ? "/campaigns" : "/studio?status=approved",
-      action: metaReady ? "Prepare campaign" : "Export ads",
+      action: metaReady ? t("prepareAction") : t("exportAction"),
       tone: "work",
     });
   if (paused || draftCampaigns)
     queue.push({
       id: "campaigns",
-      title: "Review campaigns before activation",
-      detail: `${paused} paused, ${draftCampaigns} draft. Check the creative, audience, and budget; leave paused until you are ready.`,
+      title: t("campaignsTitle"),
+      detail: t("campaignsDetail", { paused, draft: draftCampaigns }),
       href: "/campaigns",
-      action: "Review campaigns",
+      action: t("campaignsAction"),
       tone: "work",
     });
+  // #1630: the plan comes first; an unpaid plan stops new ads and campaigns.
+  const due = planItem(plan, locale);
+  if (due) queue.unshift(due);
   return queue;
 }

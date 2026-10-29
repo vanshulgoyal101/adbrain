@@ -24,6 +24,28 @@ describe("AudienceSwitchStrip", () => {
     expect(sent()).toEqual({ operationId: "op-1", action: "switch" });
   });
 
+  // #1737: a waiting choice, not a warning: a neutral inset, one solid action, Cancel as quiet text.
+  it("is calm: no amber, one solid button, Cancel as a quiet text button", () => {
+    render(<AudienceSwitchStrip campaignId="c-1" operationId="op-1" running={false} onDone={vi.fn()} />);
+    const strip = screen.getByRole("group", { name: "New audience ready" });
+    expect(strip.className).not.toMatch(/amber/);
+    expect(screen.getByRole("button", { name: "Use the new audience" }).className).toMatch(/\bbg-primary\b/);
+    const cancel = screen.getByRole("button", { name: "Cancel new audience" });
+    expect(cancel.className).not.toMatch(/\bborder\b|\bbg-primary\b/);
+    expect(cancel.className).toMatch(/\bh-11\b/);
+  });
+
+  // #1274: in a half-width card at 1440 the viewport `sm:` row squeezed the text to one word per line.
+  it("goes side by side only when the strip itself is wide, not the screen", () => {
+    render(<AudienceSwitchStrip campaignId="c-1" operationId="op-1" running={false} onDone={vi.fn()} />);
+    const strip = screen.getByRole("group", { name: "New audience ready" });
+    expect(strip.className).toMatch(/(^|\s)@container(\s|$)/);
+    const row = strip.firstElementChild as HTMLElement;
+    expect(row.className).toMatch(/\bflex-col\b/);
+    expect(row.className).toMatch(/@2xl:flex-row/);
+    expect(strip.outerHTML).not.toMatch(/\bsm:flex-row\b/);
+  });
+
   it("cancels: only the copy goes and the current audience keeps running", async () => {
     const onDone = vi.fn();
     render(<AudienceSwitchStrip campaignId="c-1" operationId="op-1" running onDone={onDone} />);

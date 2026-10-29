@@ -83,13 +83,53 @@ describe("core: Create's pictures keep coming when the OpenRouter key is out of 
     const attempts: { provider: string; status: string; errorCode?: string }[] = [];
     const { generateImage } = await import("@/lib/imageGen");
     const image = await generateImage({ prompt: "rooftop solar panels on a house", width: 1024, height: 1024,
-      referenceImages: ["https://example.com/logo.png"], onAttempt: (attempt) => attempts.push(attempt) });
+      onAttempt: (attempt) => attempts.push(attempt) });
     expect(image).toMatchObject({ provider: "pollinations", fallbackFrom: "openrouter-image" });
     expect(image.url.startsWith("data:image/png;base64,")).toBe(true);
     expect(attempts.map((a) => [a.provider, a.status, a.errorCode])).toEqual([
       ["openrouter-image", "error", "IMAGE_CREDIT_EXHAUSTED"], ["pollinations", "success", undefined],
     ]);
     vi.doUnmock("@/lib/security/ssrf");
+  });
+});
+
+// #1593 (Reviewer): the free pictures can't use the owner's product photo, so an ad made from it came back with a
+// generic product. Now that picture fails with an honest reason, on the first 402 and while the key is parked.
+describe("core: an ad from the owner's product photo never silently becomes a generic product (#1593)", () => {
+  it("credit runs out → that picture fails, no free picture is made; while parked, the same", async () => {
+    vi.resetModules();
+    process.env.IMAGE_PROVIDER = "openrouter";
+    process.env.IMAGE_PROVIDER_FALLBACK = "none";
+    const free: string[] = [];
+    vi.doMock("@/lib/security/ssrf", async (original) => ({
+      ...(await original<typeof import("@/lib/security/ssrf")>()),
+      fetchPublicUrl: async (url: string) => { free.push(url); throw new Error("no free picture should be fetched"); },
+    }));
+    const paid: string[] = [];
+    global.fetch = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input instanceof Request ? input.url : input);
+      if (url.includes("/images/models/")) return Response.json({ endpoints: [{ supported_parameters: { input_references: { max: 3 } } }] });
+      if (url.endsWith("/api/v1/images")) { paid.push("openrouter"); return Response.json(recorded.body, { status: recorded.status }); }
+      throw new Error(`unexpected ${url}`);
+    }) as unknown as typeof fetch;
+    const { generateImage } = await import("@/lib/imageGen");
+    const { ReferencePhotoPausedError } = await import("@/lib/imageGen/types");
+    const attempts: [string, string, string | undefined][] = [];
+    const fallbacks: string[] = [];
+    const request = { prompt: "our 5 kW panel on a Mohali rooftop", width: 1024, height: 1024,
+      referenceImages: ["https://example.com/owner-panel.jpg"], onFallback: () => fallbacks.push("fallback"),
+      onAttempt: (attempt: { provider: string; status: string; errorCode?: string }) => attempts.push([attempt.provider, attempt.status, attempt.errorCode]) };
+
+    try {
+      await expect(generateImage(request)).rejects.toBeInstanceOf(ReferencePhotoPausedError);
+      expect(attempts).toEqual([["openrouter-image", "error", "IMAGE_CREDIT_EXHAUSTED"]]);
+      await expect(generateImage(request)).rejects.toBeInstanceOf(ReferencePhotoPausedError);
+      expect(paid).toEqual(["openrouter"]);
+      expect(free).toEqual([]);
+      expect(fallbacks).toEqual([]);
+    } finally {
+      vi.doUnmock("@/lib/security/ssrf");
+    }
   });
 });
 
@@ -142,10 +182,16 @@ describe("core: an exhausted image key is parked and the free picture waits out 
     vi.useFakeTimers({ shouldAdvanceTime: true });
     process.env.IMAGE_PROVIDER = "openrouter";
     process.env.IMAGE_PROVIDER_FALLBACK = "none";
+    const sharp = (await import("sharp")).default;
+    const png = await sharp({ create: { width: 1024, height: 1024, channels: 3, background: "#e8f0e8" } }).png().toBuffer();
     const { SafeFetchError } = await import("@/lib/security/ssrf");
+    let busy = true;
     vi.doMock("@/lib/security/ssrf", async (original) => ({
       ...(await original<typeof import("@/lib/security/ssrf")>()),
-      fetchPublicUrl: async () => { throw new SafeFetchError("status", 404); },
+      fetchPublicUrl: async () => {
+        if (busy) throw new SafeFetchError("status", 404);
+        return new Response(new Uint8Array(png), { headers: { "content-type": "image/png" } });
+      },
     }));
     global.fetch = vi.fn(async (input: string | URL | Request) => {
       const url = String(input instanceof Request ? input.url : input);
@@ -157,6 +203,9 @@ describe("core: an exhausted image key is parked and the free picture waits out 
     const outcome = expect(pending).rejects.toThrow(/busy/i);
     await vi.advanceTimersByTimeAsync(20_000);
     await outcome;
+    // #2153: a customer's one-retry busy-out doesn't park the free pictures (only the 90 s cap does); the next one is tried.
+    busy = false;
+    await expect(generateImage({ prompt: "a family on their roof", width: 1024, height: 1024 })).resolves.toMatchObject({ provider: "pollinations" });
     vi.useRealTimers();
     vi.doUnmock("@/lib/security/ssrf");
   });

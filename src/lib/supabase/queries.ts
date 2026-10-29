@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { setupBatch } from "@/lib/creative/setup-picks";
 import { wentLive, type LiveSignals } from "@/lib/setup/steps";
 import { attachRealEnquiries } from "@/lib/campaign/real-enquiries";
@@ -166,6 +167,15 @@ export async function getBrandAssets(
   return data ?? [];
 }
 
+/** #1945/#1617: the owner has at least one of their own photos (a `product_photo` brand asset). */
+export async function hasOwnPhoto(businessId: string): Promise<boolean> {
+  const supabase = await createClient();
+  const { count, error } = await supabase.from("brand_assets").select("id", { count: "exact", head: true })
+    .eq("business_id", businessId).eq("type", "product_photo");
+  if (error) throw new Error("Photos could not be checked.");
+  return (count ?? 0) > 0;
+}
+
 /** Approved creatives for a business, newest first. */
 export async function getApprovedCreatives(
   businessId: string,
@@ -190,6 +200,17 @@ export const getCampaigns = cache(async function getCampaigns(businessId: string
   }, "Campaigns could not be loaded.");
   return campaigns.sort((left, right) => (right.created_at ?? "").localeCompare(left.created_at ?? ""));
 });
+
+/** #1469: Meta's stored effective status of each ad in a campaign (lifetime rows from the last refresh, RLS read). */
+export async function getAdStatuses(campaignId: string): Promise<(string | null)[]> {
+  const supabase = await createClient();
+  // `ad_results` isn't in the generated types yet (same cast as GET /api/campaigns/[id]/ads).
+  const { data, error } = await (supabase as unknown as SupabaseClient).from("ad_results").select("effective_status")
+    .eq("campaign_id", campaignId).is("period_start", null).is("period_end", null).limit(100)
+    .returns<{ effective_status: string | null }[]>();
+  if (error) throw new Error("Ad statuses could not be loaded.");
+  return (data ?? []).map((row) => row.effective_status);
+}
 
 /** Latest result row per campaign, keyed by campaign id. */
 export async function getLatestResults(
@@ -228,9 +249,9 @@ export async function getLatestResultsWithEnquiries(campaignIds: string[]): Prom
   const ids = Object.keys(results);
   if (!ids.length) return results;
   const supabase = await createClient();
-  // #798: one read for logged WhatsApp enquiries and enquiries (any source) that became customers.
+  // #798/#1994: one read for logged WhatsApp enquiries and enquiries (any source) that were booked or became customers.
   const { data, error } = await supabase.from("leads").select("campaign_id, source, workflow_status")
-    .in("campaign_id", ids).or("source.eq.whatsapp_manual,workflow_status.eq.customer").limit(10_000);
+    .in("campaign_id", ids).or("source.eq.whatsapp_manual,workflow_status.eq.booked,workflow_status.eq.customer").limit(10_000);
   return error || !data ? results : attachRealEnquiries(results, data);
 }
 

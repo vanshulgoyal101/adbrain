@@ -1,0 +1,29 @@
+name: Dependabot auto-merge
+# #1772: enable auto-merge on Dependabot's grouped github-actions PRs; required checks still gate the merge.
+# GitHub's documented pattern: on `pull_request`, Dependabot runs may raise the token via `permissions` (forks can't).
+# The job never checks out or runs the PR's code, uses no third-party action, reads PR fields only through env,
+# and acts only on Dependabot PRs that touch workflow files alone.
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+
+permissions: {}
+
+jobs:
+  automerge:
+    if: github.event.pull_request.user.login == 'dependabot[bot]' && github.event.pull_request.base.ref == 'next'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PR: ${{ github.event.pull_request.number }}
+    steps:
+      - name: Enable auto-merge when only workflow pins change
+        run: |
+          set -euo pipefail
+          others=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR/files" --paginate --jq '.[].filename' | grep -cv '^\.github/workflows/' || true)
+          if [ "$others" != 0 ]; then echo "PR #$PR changes files outside .github/workflows; leaving it for a person."; exit 0; fi
+          gh pr merge "$PR" -R "$GITHUB_REPOSITORY" --auto --squash
