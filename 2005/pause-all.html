@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="only light">
+<title>Pause all ads · #2005 design for #1956</title>
+<style>
+  @font-face { font-family: "DM Sans"; src: url("../node_modules/@fontsource-variable/dm-sans/files/dm-sans-latin-wght-normal.woff2") format("woff2"); font-weight: 100 900; font-display: swap; }
+  :root { color-scheme: only light; --canvas: #f6f7f4; --ink: #1b2420; --muted: #5a6660; --line: #e2e6df; --leaf: #13784a; --amber: #a15c07; --red: #b42318; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--canvas); color: var(--ink); font: 15px/1.5 "DM Sans", "Noto Sans Devanagari", "Kohinoor Devanagari", sans-serif; }
+  h1, h2, h3, p { margin: 0; }
+  h1 { font-size: 24px; line-height: 1.25; font-weight: 600; text-wrap: balance; }
+  h2 { font-size: 17px; line-height: 1.4; font-weight: 600; }
+  h3 { font-size: 15px; font-weight: 600; }
+  small, .meta { font-size: 13px; color: var(--muted); }
+  .intro { padding: 24px; max-width: 760px; }
+  .intro p { margin-top: 8px; color: var(--muted); }
+  .boards { display: grid; grid-template-columns: repeat(auto-fit, 390px); gap: 24px; padding: 0 24px 24px; align-items: start; }
+  .frame { background: white; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; min-height: 820px; }
+  .caption { padding: 12px 16px; background: var(--ink); color: white; font-size: 13px; }
+  .bar { min-height: 60px; padding: 8px 16px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line); }
+  .content { padding: 20px 16px; }
+  .content > * + * { margin-top: 16px; }
+  .heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .button { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; padding: 10px 14px; border: 1px solid var(--line); border-radius: 8px; font-weight: 600; text-align: center; }
+  .primary { color: white; background: var(--leaf); border-color: var(--leaf); }
+  .disabled { background: #eef0ec; color: var(--muted); }
+  .full { display: flex; width: 100%; }
+  .tabs { display: flex; gap: 4px; flex-wrap: wrap; }
+  .tab { min-height: 44px; display: flex; align-items: center; padding: 8px 10px; border: 1px solid var(--line); border-radius: 24px; font-size: 13px; }
+  .tab.selected { background: var(--ink); color: white; border-color: var(--ink); }
+  .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+  .tile { min-width: 0; }
+  .thumb { aspect-ratio: 1; background: #eef0ec; border-radius: 8px; display: flex; align-items: center; justify-content: center; position: relative; color: var(--muted); }
+  .thumb svg { width: 32px; height: 32px; }
+  .pending .thumb { opacity: .5; }
+  .tile p { font-size: 13px; padding: 6px 2px 0; overflow-wrap: anywhere; }
+  .badge { position: absolute; bottom: 4px; left: 4px; background: white; padding: 1px 5px; border-radius: 4px; font-size: 11px; }
+  .status { display: block; font-size: 13px; font-weight: 600; }
+  .ready { color: var(--leaf); }
+  .warning { color: var(--amber); }
+  .error { color: var(--red); }
+  .panel { padding: 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--canvas); }
+  .panel p + p { margin-top: 8px; }
+  .row { display: flex; gap: 12px; align-items: flex-start; padding: 16px 0; border-bottom: 1px solid var(--line); }
+  .row .thumb { width: 52px; flex: 0 0 52px; }
+  .details { min-width: 0; flex: 1; }
+  .details p { overflow-wrap: anywhere; }
+  .details .button, .details .actions { margin-top: 12px; }
+  .details .actions .button { margin-top: 0; }
+  progress { display: block; width: 100%; height: 6px; margin: 12px 0; accent-color: var(--leaf); }
+  .rule { margin-top: 8px; padding-left: 10px; border-left: 2px solid var(--amber); }
+  .rule.blocked { border-color: var(--red); }
+  .foot { padding: 16px; border-top: 1px solid var(--line); }
+  .foot p { margin-bottom: 12px; }
+  .sheet { margin-top: 48px; border-top: 1px solid var(--line); border-radius: 16px 16px 0 0; }
+  .handle { width: 40px; height: 4px; border-radius: 4px; background: var(--line); margin: 12px auto 0; }
+  .rights { display: flex; gap: 12px; align-items: flex-start; }
+  .check { flex: 0 0 22px; height: 22px; background: white; border: 1px solid var(--muted); border-radius: 4px; margin-top: 2px; }
+  .preview { aspect-ratio: 4/5; width: 132px; margin: 16px auto; }
+  .preview svg { width: 48px; height: 48px; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .note { margin-top: 20px; color: var(--muted); font-size: 13px; }
+  svg { fill: none; stroke: currentColor; stroke-width: 1.5; }
+  @media (max-width: 437px) { .intro { padding: 20px 16px; } .boards { grid-template-columns: minmax(0, 1fr); padding: 0; gap: 24px; } .frame { border-radius: 0; min-height: 0; } }
+  @media print { .intro { padding: 0 0 16px; } .boards { padding: 0; } }
+</style>
+<style>
+  .stats { display: flex; gap: 20px; align-items: flex-end; }
+  .stats b { display: block; font-size: 28px; line-height: 1.1; font-weight: 600; }
+  .quiet { display: inline-flex; gap: 8px; min-height: 44px; align-items: center; padding: 10px 14px; border: 1px solid var(--line); border-radius: 8px; font-weight: 600; color: var(--ink); background: white; }
+  .quiet svg { width: 18px; height: 18px; }
+  .link { color: var(--leaf); font-weight: 600; }
+  .card { border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
+  .card .top { display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; }
+  .pill { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 12px; white-space: nowrap; }
+  .pill.live { background: #e3f2ea; color: var(--leaf); }
+  .pill.paused { background: #eef0ec; color: var(--muted); }
+  .scrim { background: rgba(27,36,32,.45); padding-top: 120px; display: flex; flex-direction: column; justify-content: flex-end; }
+  .scrim .sheet { margin: 0; background: white; padding: 0 16px 20px; }
+  .scrim .sheet > * + * { margin-top: 12px; }
+  .scrim .sheet h2 { font-size: 18px; padding-top: 16px; }
+  .stack { display: flex; flex-direction: column; gap: 8px; margin-top: 20px !important; }
+  .stack .button { width: 100%; }
+  .steps { list-style: none; padding: 0; margin: 0; border-top: 1px solid var(--line); }
+  .steps li { display: flex; gap: 10px; align-items: center; min-height: 48px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+  .steps li span:first-child { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  .steps svg { width: 18px; height: 18px; flex: 0 0 18px; }
+  .state { font-size: 13px; font-weight: 600; white-space: nowrap; display: inline-flex; gap: 4px; align-items: center; }
+  .result { padding: 12px; border-radius: 8px; font-weight: 500; display: flex; gap: 10px; }
+  .result svg { width: 20px; height: 20px; flex: 0 0 20px; margin-top: 2px; }
+  .result.ok { background: #e3f2ea; color: #0d5a37; }
+  .result.part { background: #fdf3e2; color: #6e3f05; }
+  .spin { animation: none; }
+  .settings h2 { margin-bottom: 8px; }
+  .settings ul { margin: 0; padding: 0; list-style: none; font-size: 14px; color: var(--muted); }
+  .settings li + li { margin-top: 6px; }
+  .settings li b { color: var(--ink); font-weight: 500; }
+  .busy { opacity: .7; }
+</style>
+<svg aria-hidden="true" width="0" height="0" style="position:absolute"><defs>
+<symbol id="pause" viewBox="0 0 20 20"><rect x="5" y="4" width="3" height="12" rx="1"/><rect x="12" y="4" width="3" height="12" rx="1"/></symbol>
+<symbol id="ok" viewBox="0 0 20 20"><circle cx="10" cy="10" r="8"/><path d="m6.5 10.2 2.4 2.4 4.6-5"/></symbol>
+<symbol id="warn" viewBox="0 0 20 20"><path d="M10 3 18 17H2z"/><path d="M10 8v4M10 14.5v.5"/></symbol>
+<symbol id="wait" viewBox="0 0 20 20"><circle cx="10" cy="10" r="7" stroke-dasharray="30 14"/></symbol>
+<symbol id="ext" viewBox="0 0 20 20"><path d="M8 4H4v12h12v-4M11 3h6v6M17 3l-8 8"/></symbol>
+</defs></svg>
+<header class="intro"><h1>Pause all ads: Home, Settings, confirm, result</h1><p>#2005 design for #1956 (words from #1968). Static frames at 390. Placeholder business and numbers. Pausing is the safe action, so the confirm button is the normal green, not red.</p></header>
+<main class="boards">
+<section class="frame" lang="en"><p class="caption">1 · Home, 2 running: quiet button under the results</p><div class="bar"><span>☰ Home</span><span class="button">+</span></div>
+    <div class="content">
+      <div><h1>Cedar Ridge Chiropractic</h1><p class="meta">chiropractic clinic · Austin, Texas</p></div>
+      <div class="stats"><div><b>6</b><small>Enquiries</small></div><div><b>₹1,840</b><small>Spent</small></div><div><b>₹307</b><small>Per enquiry</small></div></div>
+      <p class="meta">Updated 4 min ago · <span class="link">See campaigns</span></p>
+      <span class="quiet"><svg><use href="#pause"/></svg>Pause all ads</span><div class="heading"><h2>Campaigns</h2><span class="link">See all 2</span></div>
+      <div class="card"><div class="top"><h3>Spine check · Round Rock</h3><span class="pill live">Running</span></div><p class="meta">4 enquiries · ₹1,120 spent</p></div>
+      <div class="card"><div class="top"><h3>New-patient exam · Cedar Park</h3><span class="pill live">Running</span></div><p class="meta">2 enquiries · ₹720 spent</p></div></div></section><section class="frame" lang="en"><p class="caption">2 · Confirm sheet (tap Pause all ads)</p><div class="scrim"><div class="sheet" role="dialog"><div class="handle"></div><h2>Pause all your ads?</h2><p>2 running campaigns will pause in Meta. Nothing is deleted, and nothing more will be spent once Meta stops them (usually within minutes). You can turn each one back on from Campaigns.</p><div class="stack"><span class="button primary">Pause all</span><span class="button">Keep running</span></div></div></div></section><section class="frame" lang="en"><p class="caption">3 · Pausing one at a time; sheet can’t be dismissed until done</p><div class="scrim"><div class="sheet" role="dialog"><div class="handle"></div><h2>Pause all your ads?</h2><ul class="steps" aria-live="polite"><li><span>Spine check · Round Rock</span><span class="state ready"><svg><use href="#ok"/></svg>Paused</span></li><li><span>New-patient exam · Cedar Park</span><span class="state meta"><svg><use href="#wait"/></svg>Pausing…</span></li></ul><div class="stack"><span class="button disabled">Pausing 2 of 2…</span></div></div></div></section><section class="frame" lang="en"><p class="caption">4 · Meta confirmed both</p><div class="scrim"><div class="sheet" role="dialog"><div class="handle"></div><h2>Pause all your ads?</h2><ul class="steps" aria-live="polite"><li><span>Spine check · Round Rock</span><span class="state ready"><svg><use href="#ok"/></svg>Paused</span></li><li><span>New-patient exam · Cedar Park</span><span class="state ready"><svg><use href="#ok"/></svg>Paused</span></li></ul><p class="result ok"><svg><use href="#ok"/></svg>All 2 campaigns are paused. Nothing more will be spent.</p><div class="stack"><span class="button primary">Done</span></div></div></div></section><section class="frame" lang="en"><p class="caption">5 · After Done: button gone (0 running), Resume per card</p><div class="bar"><span>☰ Home</span><span class="button">+</span></div>
+    <div class="content">
+      <div><h1>Cedar Ridge Chiropractic</h1><p class="meta">chiropractic clinic · Austin, Texas</p></div>
+      <div class="stats"><div><b>6</b><small>Enquiries</small></div><div><b>₹1,840</b><small>Spent</small></div><div><b>₹307</b><small>Per enquiry</small></div></div>
+      <p class="meta">Updated 4 min ago · <span class="link">See campaigns</span></p>
+      <div class="heading"><h2>Campaigns</h2><span class="link">See all 2</span></div>
+      <div class="card"><div class="top"><h3>Spine check · Round Rock</h3><span class="pill paused">Paused</span></div><p class="meta">4 enquiries · ₹1,120 spent</p><div class="actions" style="margin-top:12px"><span class="button">Resume</span></div></div>
+      <div class="card"><div class="top"><h3>New-patient exam · Cedar Park</h3><span class="pill paused">Paused</span></div><p class="meta">2 enquiries · ₹720 spent</p><div class="actions" style="margin-top:12px"><span class="button">Resume</span></div></div></div></section><section class="frame" lang="en"><p class="caption">6 · Partial: one didn’t pause</p><div class="scrim"><div class="sheet" role="dialog"><div class="handle"></div><h2>Pause all your ads?</h2><ul class="steps" aria-live="polite"><li><span>Spine check · Round Rock</span><span class="state ready"><svg><use href="#ok"/></svg>Paused</span></li><li><span>New-patient exam · Cedar Park</span><span class="state warning"><svg><use href="#warn"/></svg>Didn’t pause</span></li></ul><p class="result part" role="alert"><svg><use href="#warn"/></svg>1 of 2 paused. ‘New-patient exam · Cedar Park’ didn’t pause; tap Try again, or pause it in Meta Ads Manager.</p><div class="stack"><span class="button primary">Try again</span><span class="button"><svg style="width:18px;height:18px;margin-right:6px"><use href="#ext"/></svg>Open in Ads Manager</span><span class="button" style="border:0">Done</span></div></div></div></section><section class="frame" lang="en"><p class="caption">7 · Settings → Billing → If you stop (own account)</p><div class="bar"><span>☰ Settings</span></div><div class="content settings"><h2>Billing</h2><p class="meta">You pay Meta directly from your ad account. Your first month of AdBrain is free; after that it’s ₹999 a month.</p>
+   <ul><li><b>If you stop paying:</b> your running ads keep running on Meta, and your results and enquiries stay here. Making new ads and campaigns waits until you pay. Nothing is deleted.</li><li><b>If you disconnect Facebook:</b> your ads keep running in Meta until you pause them there. AdBrain can’t pause them or update results after that.</li><li><b>To delete your data:</b> use Privacy and data requests below. Your campaigns stay in your own Meta ad account.</li></ul>
+   <span class="quiet"><svg><use href="#pause"/></svg>Pause all ads</span><p class="meta">Shown only while a campaign is running. Same sheet as Home.</p></div></section><section class="frame" lang="hi"><p class="caption">8 · हिंदी: confirm</p><div class="scrim"><div class="sheet" role="dialog"><div class="handle"></div><h2>सारे विज्ञापन रोकें?</h2><p>2 चल रहे कैंपेन Meta में रुक जाएँगे। कुछ भी डिलीट नहीं होगा, और Meta के रोकते ही (आमतौर पर कुछ मिनट में) आगे कोई खर्च नहीं होगा। हर कैंपेन को आप Campaigns से फिर चालू कर सकते हैं।</p><div class="stack"><span class="button primary">सब रोकें</span><span class="button">चलने दें</span></div></div></div></section><section class="frame" lang="hi"><p class="caption">9 · हिंदी: partial</p><div class="scrim"><div class="sheet" role="dialog"><div class="handle"></div><h2>सारे विज्ञापन रोकें?</h2><ul class="steps" aria-live="polite"><li><span>Spine check · Round Rock</span><span class="state ready"><svg><use href="#ok"/></svg>रुका</span></li><li><span>New-patient exam · Cedar Park</span><span class="state warning"><svg><use href="#warn"/></svg>नहीं रुका</span></li></ul><p class="result part" role="alert"><svg><use href="#warn"/></svg>2 में से 1 रुका। ‘New-patient exam · Cedar Park’ नहीं रुका; फिर से कोशिश करें, या उसे Meta Ads Manager में रोकें।</p><div class="stack"><span class="button primary">फिर से कोशिश करें</span><span class="button"><svg style="width:18px;height:18px;margin-right:6px"><use href="#ext"/></svg>Ads Manager में खोलें</span><span class="button" style="border:0">ठीक है</span></div></div></div></section>
+</main>
+</html>
