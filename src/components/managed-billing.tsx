@@ -5,17 +5,26 @@ import { ProductionCheckout } from "@/components/production-checkout";
 import { CustomerBalance } from "@/components/customer-balance";
 import { PlanCard } from "@/components/plan-card";
 import type { PlanStatus } from "@/lib/plan/status";
+import { BillingTabs, type BillingTab } from "@/components/billing-tabs";
 import type { CustomerBalanceView as Balance } from "@/lib/payments/customer-balance-contracts";
 
 type BillingConnection = Pick<MetaConnection, "adAccountId" | "ready" | "pending" | "expired">;
 
-export function ManagedBilling({ connection, testBusinessId, liveBusinessId, initialBalance = null }: {
+/** #1358: a business with any money shows its Ad budget first; one that hasn't paid yet starts on Payments. */
+export function initialBillingTab(balance: Balance | null, requested?: string | null): BillingTab {
+  if (requested === "payments" || requested === "budget") return requested;
+  const anyMoney = balance && [balance.remainingPaise, balance.reservedPaise, balance.mediaCostPaise, balance.taxCostPaise, balance.refundedPaise].some((paise) => paise > 0);
+  return anyMoney ? "budget" : "payments";
+}
+
+export function ManagedBilling({ connection, testBusinessId, liveBusinessId, initialBalance = null, billingTab }: {
   connection: BillingConnection | null; testBusinessId?: string; liveBusinessId?: string; initialBalance?: Balance | null;
+  /** `/settings?billing=payments|budget` opens that tab. */
+  billingTab?: string | null;
 }) {
-  if (liveBusinessId) return <>
-    <ProductionCheckout key={liveBusinessId} businessId={liveBusinessId} />
-    <CustomerBalance key={`allowance-${liveBusinessId}`} businessId={liveBusinessId} initialBalance={initialBalance} />
-  </>;
+  if (liveBusinessId) return <BillingTabs key={liveBusinessId} initialTab={initialBillingTab(initialBalance, billingTab)}
+    budget={<CustomerBalance key={`allowance-${liveBusinessId}`} businessId={liveBusinessId} initialBalance={initialBalance} />}
+    payments={<ProductionCheckout key={liveBusinessId} businessId={liveBusinessId} />} />;
   const connectionStatus = !connection ? "Temporarily unavailable"
     : connection.expired ? "Reconnect required"
       : connection.ready ? "Connected"
@@ -70,7 +79,7 @@ export function BillingSection({ mode, plan, planBusinessId, ...billing }: { mod
       {plan && planBusinessId ? <>
         <p className="text-sm leading-6 text-slate-600">You pay Meta directly from your ad account.</p>
         <PlanCard businessId={planBusinessId} status={plan.status} payUrl={plan.payUrl} />
-      </> : <p className="text-sm leading-6 text-slate-600">You pay Meta directly from your ad account. AdBrain&apos;s pilot is free.</p>}
+      </> : <p className="text-sm leading-6 text-slate-600">You pay Meta directly from your ad account. Your first month of AdBrain is free; after that it&apos;s ₹999 a month.</p>}
     </section>
   );
 }

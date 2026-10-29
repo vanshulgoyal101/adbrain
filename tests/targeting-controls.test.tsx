@@ -13,7 +13,7 @@ import { targetingFromEditor, targetingToEditor } from "@/lib/campaign/editor-ta
 const JAIPUR = { key: "1027633", name: "Jaipur", type: "city", region: "Rajasthan" };
 const AJMER = { key: "999", name: "Ajmer", type: "city", region: "Rajasthan" };
 
-const INCLUDE_PLACEHOLDER = "e.g. Jaipur, Rajasthan…";
+const INCLUDE_PLACEHOLDER = "e.g. Mohali, Punjab…";
 const EXCLUDE_PLACEHOLDER = "e.g. exclude a city…";
 
 const manual = (over: Partial<TargetingValue> = {}): TargetingValue => ({

@@ -97,6 +97,8 @@ describe("core: WhatsApp button number against recorded Graph reads (#157)", () 
       { masked: "+91 ••••• 0874", source: "business" },
     ] });
     expect(JSON.stringify(status)).not.toContain("9999");
+    // #1540: Settings/Brand's number read is gated like a launch but logged as its own event, not meta.create_paused.
+    expect(access.withMetaConnection).toHaveBeenCalledWith(expect.anything(), { purpose: "create_paused", event: "whatsapp_numbers" }, expect.any(Function));
   });
 
   it("resolves a masked choice to the one number behind it, and refuses unknown or shared masks (#235)", async () => {

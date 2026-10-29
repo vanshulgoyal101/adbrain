@@ -45,6 +45,8 @@ const nextConfig: NextConfig = {
     return [
       { source: "/:path*", headers: getSecurityHeaders(supabaseUrl, isRazorpayTestEnabled(), isProductionPaymentConfigured()) },
       { source: "/(api|auth|connect)/:path*", headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }] },
+      // #1457: the commit this build serves, so the guard can tell a pinned domain without a Vercel token (public repo).
+      { source: "/:path*", headers: [{ key: "X-AdBrain-Release", value: process.env.VERCEL_GIT_COMMIT_SHA ?? "local" }] },
     ];
   },
 };

@@ -7,6 +7,7 @@ import { ManagedOnboarding } from "@/components/managed/managed-onboarding";
 import { ManagedPageStep } from "@/components/managed-page-step";
 import { createMetaConnectClient } from "@/lib/meta-connect-ui/client";
 import { continueInTab } from "@/lib/meta-connect-ui/navigate";
+import { usePoll } from "@/lib/use-poll";
 import { onboardingProgress, type ManagedAccountProgressRow } from "@/lib/managed/onboarding";
 import { clearOnboardingConnect, markOnboardingConnect } from "@/lib/managed/onboarding-connect";
 import { POPUP_FALLBACK_MS } from "@/components/meta-connect/meta-connect-dialog";
@@ -67,27 +68,25 @@ export function ManagedOnboardingLive({ businessId, initialAttemptId }: { busine
   const [inTabUrl, setInTabUrl] = useState<string | null>(null);
   const fallbackTimerRef = useRef<number | null>(null);
 
-  const refresh = useCallback(async () => {
+  /** Returns the Response it read so the poll can back off (429) or stop (401, #1541). */
+  const load = useCallback(async (signal?: AbortSignal): Promise<Response | null> => {
+    let response: Response | null = null;
     try {
-      const response = await fetch(`/api/managed/onboarding?businessId=${encodeURIComponent(businessId)}`, { cache: "no-store" });
+      response = await fetch(`/api/managed/onboarding?businessId=${encodeURIComponent(businessId)}`, { cache: "no-store", signal });
       const body = await response.json().catch(() => null);
       if (!response.ok || !body?.ok) throw new Error(body?.error?.message ?? "Your progress couldn't be loaded.");
+      if (signal?.aborted) return response;
       setSnapshot(body.data as Snapshot);
       setLoadError(null);
     } catch (reason) {
-      setLoadError(reason instanceof Error ? reason.message : "Your progress couldn't be loaded.");
+      if (!signal?.aborted) setLoadError(reason instanceof Error ? reason.message : "Your progress couldn't be loaded.");
     }
+    return response;
   }, [businessId]);
+  const refresh = useCallback(() => load(), [load]);
 
   const ready = snapshot?.row?.state === "ready";
-  useEffect(() => {
-    const first = window.setTimeout(() => void refresh(), 0);
-    const timer = ready ? null : window.setInterval(() => void refresh(), POLL_MS);
-    return () => {
-      window.clearTimeout(first);
-      if (timer !== null) window.clearInterval(timer);
-    };
-  }, [refresh, ready]);
+  usePoll(load, { intervalMs: POLL_MS, enabled: !ready, key: businessId });
 
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {

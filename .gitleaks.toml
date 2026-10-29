@@ -9,6 +9,8 @@ paths = [
   '''\.env\.example''',
   '''\.next/''',
   '''.*\.tsbuildinfo''',
+  # #1627's public-data scanner test feeds deliberately fake tokens/JWTs to its patterns.
+  '''tests/scan-public-data\.test\.ts''',
 ]
 regexes = [
   '''^operation-key-1$''',

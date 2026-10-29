@@ -8,7 +8,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { getMetaConnection } from "@/lib/meta/credentials";
 import { getCampaigns, getLatestResultsWithEnquiries, getPrimaryBusiness } from "@/lib/supabase/queries";
 import { EnquiriesSections } from "@/components/enquiries-sections";
-import { whatsappChatRows, type WhatsAppChatRow } from "@/lib/campaign/real-enquiries";
+import { enquiriesTitle, whatsappChatRows, type WhatsAppChatRow } from "@/lib/campaign/real-enquiries";
 import { getLeadPage } from "@/lib/leads/queries";
 import { inboxSummary } from "@/lib/leads/reply-time";
 import { readAlertSettings } from "@/lib/alerts/settings-read";
@@ -56,6 +56,9 @@ export default async function LeadsPage() {
   // #1260: the inbox opens on Waiting when someone waits, so its first page (and Load more) is the New list.
   const waitingPage = summary?.waiting ? await getLeadPage(business.id, { status: "new" }).catch(() => null) : null;
   const firstPage = waitingPage ?? page;
+  // #1597: nothing has come in at all (no form enquiry, no WhatsApp chat or logged enquiry).
+  const chatsEmpty = chatRows.every((row) => row.chats === 0 && row.realEnquiries === 0);
+  const whatsapp = chatRows[0];
 
   return (
     <div>
@@ -65,7 +68,7 @@ export default async function LeadsPage() {
         description="People who responded to your ads."
       />
       <div className="mt-6 max-sm:mt-4">
-        <EnquiriesSections chatRows={chatRows} formTotal={page.total}>
+        <EnquiriesSections chatRows={chatRows} formTotal={page.total} empty={chatsEmpty && page.total === 0}>
           <LeadInbox
             key={`${business.owner_id}:${business.id}`}
             businessName={business.name}
@@ -76,9 +79,11 @@ export default async function LeadsPage() {
             initialNextCursor={firstPage.nextCursor}
             allTotal={page.total}
             offerAlerts={Boolean(alerts && !alerts.leadAlerts && !alerts.optedOut)}
+            chatsEmpty={chatsEmpty}
+            addEnquiryFor={whatsapp ? { campaignId: whatsapp.id, spend: whatsapp.spend, enquiries: whatsapp.realEnquiries } : null}
             metaReady={metaConnection.ready}
             syncScope={`${business.owner_id}:${business.id}:${metaConnection.adAccountId ?? ""}:${metaConnection.pageId ?? ""}`}
-            title={chatRows.length ? "Form enquiries" : "Enquiries"}
+            title={enquiriesTitle(chatRows)}
             summary={waitingPage || !summary?.waiting ? summary : { ...summary, waiting: null }}
           />
         </EnquiriesSections>

@@ -1,0 +1,14 @@
+{
+  "note": "#1645 (CPO, #1622): recorded-style ad_review_feedback items in Meta's shape (policy key from Meta's Advertising Standards names, message in Meta's voice) for the IELTS and interiors pilots. Not live recordings: no pilot ad has been rejected yet; replace with real ones when they come.",
+  "ielts": {
+    "misleading": { "policy": "Misleading Claims", "message": "Ads must not make claims that are deceptive or unrealistic, such as a guaranteed band score or visa approval." },
+    "personal": { "policy": "Personal Attributes", "message": "Ads must not assert or imply personal attributes. Failed IELTS? implies the viewer failed an exam." },
+    "personal_words_only": { "policy": null, "message": "Your ad says 'Visa refused? Low band?' which refers to the person seeing it." },
+    "job_policy": { "policy": "Unacceptable Business Practices", "message": "Ads must not promote job offers or immigration schemes that may be deceptive." },
+    "job_words_only": { "policy": "Lead Ads", "message": "This ad offers a work permit and jobs in Canada with PR." }
+  },
+  "interiors": {
+    "housing": { "policy": "Special Ad Categories", "message": "Ads about housing, such as 2BHK flats and prices per sq ft, need the Housing special ad category." },
+    "misleading": { "policy": "Misleading Claims", "message": "Ads must not claim the lowest price or a guaranteed handover date." }
+  }
+}

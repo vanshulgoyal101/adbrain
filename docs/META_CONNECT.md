@@ -3,7 +3,7 @@
 AdBrain binds each local business to one selected Meta ad account and Facebook
 Page. Application login and Meta authorization are separate. A Google login to
 AdBrain does not grant access to Facebook assets, and matching email addresses
-do not establish ownership. See [API Reference](API_REFERENCE.md) for exact bodies.
+do not establish ownership. See [API Reference](api/README.md) for exact bodies.
 
 ## Prerequisites
 
@@ -192,7 +192,7 @@ requires the `CRON_SECRET` bearer, allows 20 seconds per business within a
 The saved inbox (`GET /api/leads`) pages up to 100 enquiries with search, status,
 contact and sort filters. `PATCH /api/leads/[id]` saves `workflow_status` (`new`,
 `contacted`, `qualified`, `booked`, `closed`) and/or a `follow_up_note` of at most
-2000 characters. See [API Reference](API_REFERENCE.md#sync-insights-leads-and-settings).
+2000 characters. See [API Reference](api/leads-and-settings.md#sync-insights-leads-and-settings).
 The [lead sync migration](../db/migrations/20260926_lead_sync_progress.sql) adds
 `lead_sync_runs`, `lead_sync_start` and `lead_sync_checkpoint`, granted only to the
 service role; the [follow-up migration](../db/migrations/20260926_lead_follow_up.sql)

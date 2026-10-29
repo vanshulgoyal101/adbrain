@@ -18,14 +18,14 @@ const ad = (adId: string, results: number, spend: number): AdResultView => ({
 
 describe("verdict (#1255)", () => {
   it("evidence bar: 4 results or ₹499 is early days; 5 results and ₹500 is judged", () => {
-    expect(v({ results: 4, spend: 600 })).toMatchObject({ state: "early", label: "Early days", sentence: "Early days: 4 chats so far. AdBrain will tell you if it's working after 5.", number: { kind: "cost", value: 150 }, action: null });
+    expect(v({ results: 4, spend: 600 })).toMatchObject({ state: "early", label: "Early days", sentence: "4 chats so far. AdBrain will tell you if it's working after 5.", number: { kind: "cost", value: 150 }, action: null });
     expect(v({ results: 5, spend: 499 })).toMatchObject({ state: "early" });
     expect(v({ results: 5, spend: 500 })).toMatchObject({ state: "working", number: { kind: "cost", value: 100 } });
-    expect(v({ results: 1, spend: 120 }).sentence).toBe("Early days: 1 chat so far. AdBrain will tell you if it's working after 5.");
+    expect(v({ results: 1, spend: 120 }).sentence).toBe("1 chat so far. AdBrain will tell you if it's working after 5.");
   });
 
   it("bands around the typical cost: < 0.67× working, 0.67–1.5× about the same, > 1.5× costly", () => {
-    expect(v({ results: 10, spend: 1330 })).toMatchObject({ state: "working", label: "Working", action: null, sentence: "Working: each chat costs ₹133, less than usual for solar ads AdBrain has run (about ₹200 each)." });
+    expect(v({ results: 10, spend: 1330 })).toMatchObject({ state: "working", label: "Working", action: null, sentence: "Each chat costs ₹133, less than usual for solar ads AdBrain has run (about ₹200 each)." });
     expect(v({ results: 10, spend: 1340 })).toMatchObject({ state: "about_average", label: "About average", sentence: "Each chat costs ₹134, about the same as usual for solar ads AdBrain has run (about ₹200 each)." });
     expect(v({ results: 10, spend: 3000 })).toMatchObject({ state: "about_average" });
     expect(v({ results: 10, spend: 3001 })).toMatchObject({ state: "costly", label: "Costly", action: "new_ads", sentence: "Each chat costs ₹300, more than usual for solar ads AdBrain has run (about ₹200 each)." });
@@ -34,18 +34,18 @@ describe("verdict (#1255)", () => {
   it("never says 'less than' for a cost inside the usual range (Reviewer: ₹290 against ₹100–300)", () => {
     const wide = { kind: "category", category: "solar", results: 40, typical: 200, low: 100, high: 300 } as const;
     expect(v({ results: 10, spend: 2900, comparison: wide })).toMatchObject({ state: "about_average", sentence: "Each chat costs ₹290, about the same as usual for solar ads AdBrain has run (₹100–300)." });
-    expect(v({ results: 10, spend: 1300, comparison: wide }).sentence).toBe("Working: each chat costs ₹130, less than usual for solar ads AdBrain has run (₹100–300).");
+    expect(v({ results: 10, spend: 1300, comparison: wide }).sentence).toBe("Each chat costs ₹130, less than usual for solar ads AdBrain has run (₹100–300).");
   });
 
   it("compares only with 20+ results behind the typical cost; below that, the number with no judgement", () => {
     expect(v({ comparison: { ...solar, results: 19 } })).toMatchObject({ state: "measured", label: "Live", sentence: "Each chat costs ₹150." });
     expect(v({ comparison: { kind: "own", results: 19, typical: 300 } })).toMatchObject({ state: "measured" });
-    expect(v({ comparison: { kind: "own", results: 20, typical: 300 } }).sentence).toBe("Working: each chat costs ₹150, less than your last campaign (₹300 each).");
+    expect(v({ comparison: { kind: "own", results: 20, typical: 300 } }).sentence).toBe("Each chat costs ₹150, less than your last campaign (₹300 each).");
     expect(v({ comparison: null, destination: "instant_form", opens: null })).toMatchObject({ state: "measured", sentence: "Each enquiry costs ₹150." });
   });
 
   it("spent with no results: ₹299 is early, ₹300 says so; the range's 1.5× upper end raises the bar; opens only from 10", () => {
-    expect(v({ results: 0, spend: 299, comparison: null })).toMatchObject({ state: "early", sentence: "Early days: no chats yet.", number: { kind: "count", value: 0 } });
+    expect(v({ results: 0, spend: 299, comparison: null })).toMatchObject({ state: "early", sentence: "No chats yet.", number: { kind: "count", value: 0 } });
     expect(v({ results: 0, spend: 300, comparison: null, opens: 9 })).toMatchObject({ state: "no_results", label: "No chats yet", sentence: "₹300 spent, no chats yet.", action: "edit_message" });
     // A comparison raises the bar to 1.5× its typical cost (₹200 → ₹300).
     expect(v({ results: 0, spend: 299 })).toMatchObject({ state: "early" });
@@ -70,7 +70,7 @@ describe("verdict (#1255)", () => {
   });
 
   it("ended: worked, costly, measured without a comparison, or too few to judge", () => {
-    expect(v({ status: "completed", results: 14, spend: 1344 })).toMatchObject({ state: "ended_worked", label: "Ended", action: "run_again", sentence: "It worked: 14 chats at ₹96 each. Run it again with the best ad first?" });
+    expect(v({ status: "completed", results: 14, spend: 1344 })).toMatchObject({ state: "ended_worked", label: "Ended", action: "run_again", sentence: "14 chats at ₹96 each. Run it again with the best ad first?" });
     expect(v({ status: "completed", results: 10, spend: 3010 })).toMatchObject({ state: "ended_costly", action: "new_ads", sentence: "It didn't bring chats at a good price. Try new ads?" });
     // CPO: no comparison, no judgement; Run this again once there are 5+ chats (#1050 picks the best ad).
     expect(v({ status: "completed", results: 14, spend: 1344, comparison: null })).toMatchObject({ state: "ended_measured", action: "run_again", sentence: "It ended with 14 chats at ₹96 each." });
@@ -84,7 +84,7 @@ describe("verdict (#1255)", () => {
   });
 
   it("QA 2's Solaride numbers (#1133): the Jan WhatsApp run (1 chat, ₹32.63) and today's live run (0 chats, ₹40)", () => {
-    expect(v({ status: "paused", impressions: 439, results: 1, spend: 32.63, opens: 3 })).toMatchObject({ state: "early", number: { kind: "cost", value: 33 }, sentence: "Early days: 1 chat so far. AdBrain will tell you if it's working after 5." });
-    expect(v({ impressions: 601, results: 0, spend: 40.83, opens: 0 })).toMatchObject({ state: "early", sentence: "Early days: no chats yet.", number: { kind: "count", value: 0 } });
+    expect(v({ status: "paused", impressions: 439, results: 1, spend: 32.63, opens: 3 })).toMatchObject({ state: "early", number: { kind: "cost", value: 33 }, sentence: "1 chat so far. AdBrain will tell you if it's working after 5." });
+    expect(v({ impressions: 601, results: 0, spend: 40.83, opens: 0 })).toMatchObject({ state: "early", sentence: "No chats yet.", number: { kind: "count", value: 0 } });
   });
 });

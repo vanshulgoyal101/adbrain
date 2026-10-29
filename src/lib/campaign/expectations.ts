@@ -1,7 +1,8 @@
 /**
  * #1307: Review's "What to expect" line, from the #588 ledger (the Analyst's read on #1255, Oct 28): AdBrain-made
  * WhatsApp runs (#157 + #499) got 6 chats for ₹1,195. Under 20 pooled results it states the facts with n, never a
- * typical cost (#1255 gates); #1255's ledger aggregate replaces these figures.
+ * typical cost (#1255 gates). Review reads the live totals (`ledgerTotals`, hourly); these recorded figures are the
+ * fallback when that read fails.
  */
 export const WHATSAPP_LEDGER = { chats: 6, spendRupees: 1195 } as const;
 

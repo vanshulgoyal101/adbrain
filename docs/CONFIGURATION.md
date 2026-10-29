@@ -51,6 +51,12 @@ settings, credentials and encryption keys are DevOps-owned changes; see the
 
 ## Live Checkout (Disabled By Default)
 
+`PLAN_BILLING_ENABLED` defaults off. Exact `true` enables the own-account
+Settings Plan card and monthly payment-link endpoint (#718), after the
+`plan_periods` migration and payment-link webhook are released. Team, managed
+and operator businesses are exempt. DevOps owns enabling collection; publishing
+these routes does not authorize charges or change the flag.
+
 The server-only [live configuration](../src/lib/payments/production-config.ts)
 requires `PAYMENTS_LIVE_ENABLED=true` and `PAYMENTS_LIVE_COLLECTION_ENABLED=true`
 for collection, a production Vercel deployment from `main`, matching
@@ -190,16 +196,17 @@ dollar budget, or image-cost cap**. See [AI Pipeline](AI_PIPELINE.md).
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `IMAGE_PROVIDER` | `pollinations` | Implemented names: `pollinations`, `openrouter` |
+| `IMAGE_PROVIDER` | `pollinations` | Implemented names: `pollinations`, `cloudflare`, `openrouter` |
 | `IMAGE_PROVIDER_FALLBACK` | `none` | `none`/empty disables fallback; otherwise implemented provider name |
 | `POLLINATIONS_MODEL` | `flux` | Pollinations model |
+| `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_AI_TOKEN` | Empty | #1476: Workers AI (FLUX-1-schnell) for free pictures, tried before Pollinations for internal accounts and the credit-exhausted fallback; skipped unless both are set. The token needs Workers AI only (Sensitive in Vercel) |
 | `OPENROUTER_IMAGE_MODEL` | `openai/gpt-image-2.5-flare` | OpenRouter image model; requires OpenRouter keys |
 | `AD_DESIGN_OVERLAY` | `true` | Exact `false` or `0` disables; other strings enable |
 | `FALAI_API_KEY`, `OPENAI_API_KEY` | Empty | Reserved fields, not implemented image-provider selectors |
 
 The [provider switch](../src/lib/imageGen/index.ts) rejects unknown names.
 `IMAGE_PROVIDER=openai` or `falai` does not activate an adapter. Fallback must be
-explicit; timeout/cancellation does not trigger fallback. Pollinations rejects
+explicit; timeout/cancellation does not trigger fallback. Pollinations and Cloudflare reject
 product-reference requests. Do not assume a fallback has equivalent fidelity or
 lower cost.
 
@@ -298,7 +305,7 @@ exported in your shell are still inherited; this is not a network sandbox.
 | `dev` | `npm run dev` on port 3939 |
 | `build`, `oauth-check`, `workspace`, `connect`, `e2e`, `recovery`, `draft-connect`, `draft-lifecycle`, `connection-recovery` | Runs the mapped build, check script or Playwright spec against the local project |
 | `oauth-dev` | Copies the real `META_APP_ID`/`META_APP_SECRET`/`META_LOGIN_CONFIG_ID` from `.env.local` and redacts them from output; real Meta consent work |
-| `payments-dev` | Reads Razorpay test credentials from `.env`, enables test checkout and the dev auth bypass, derives a webhook secret if absent, disables product logging and binds 127.0.0.1:3939 |
+| `payments-dev` | Reads Razorpay test credentials from `.env.local` (the `RAZORPAY_TEST_*` pair, or a standard pair only if it is `rzp_test_`; live keys are refused), enables test checkout and the dev auth bypass, derives a webhook secret if absent, disables product logging and binds 127.0.0.1:3939 |
 
 Each mode runs immediately; none is an environment inspector. Stop only the
 servers and fixtures you started.

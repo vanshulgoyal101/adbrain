@@ -439,28 +439,11 @@ function BackgroundEditor({
   }
 
   return (
-    <form aria-label="Change the background" onSubmit={save} className="flex flex-col gap-3">
-      <div className="flex flex-col gap-1">
-        <div className="flex items-center justify-between">
-          <Label htmlFor={id}>New background</Label>
-          <span className="text-xs tabular-nums text-slate-400">{instruction.length}/300</span>
-        </div>
-        <Textarea
-          id={id}
-          value={instruction}
-          maxLength={300}
-          rows={3}
-          placeholder="e.g. Rooftop at sunset with solar panels"
-          onChange={(e) => {
-            setInstruction(e.target.value);
-            setPhoto(null);
-          }}
-          autoFocus
-        />
-      </div>
+    <form aria-label="Change the picture" onSubmit={save} className="flex flex-col gap-3">
+      {/* #1901: the owner's photos first, then an AI picture; neither changes the words. */}
       {photos.length > 0 && (
         <fieldset className="flex flex-col gap-1.5">
-          <legend className="mb-1.5 text-sm font-medium text-slate-700">Or use one of your photos</legend>
+          <legend className="mb-1.5 text-sm font-medium text-slate-700">Use another photo</legend>
           <div className="grid grid-cols-4 gap-2">
             {photos.map((url, index) => (
               <button
@@ -480,6 +463,24 @@ function BackgroundEditor({
           </div>
         </fieldset>
       )}
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center justify-between">
+          <Label htmlFor={id}>Use an AI picture instead</Label>
+          <span className="text-xs tabular-nums text-slate-400">{instruction.length}/300</span>
+        </div>
+        <Textarea
+          id={id}
+          value={instruction}
+          maxLength={300}
+          rows={3}
+          placeholder="e.g. Rooftop at sunset with solar panels"
+          onChange={(e) => {
+            setInstruction(e.target.value);
+            setPhoto(null);
+          }}
+          autoFocus
+        />
+      </div>
       {error && (
         <p className="text-xs text-red-600" role="alert">
           {error}

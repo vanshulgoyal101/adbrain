@@ -1,4 +1,6 @@
 "use client";
+import { PictureSourceBadge } from "@/components/picture-source-badge";
+import type { AppLocale } from "@/i18n/locale";
 import { formatDate } from "@/lib/format";
 import { AD_FLOW, Stepper } from "@/components/ui/stepper";
 import { useConfirm } from "@/components/ui/confirm-dialog";
@@ -82,9 +84,12 @@ export function Studio({
   initialFilter = "all",
   initialCreativeId = null,
   sample = false,
+  locale = "en",
 }: {
   business: Business;
   initialCreatives: Creative[];
+  /** #1901: the picture badge's language. */
+  locale?: AppLocale;
   /** #1317: a prospect's ads are samples: no Share, so no clean picture leaves AdBrain. */
   sample?: boolean;
   /** Operators see model names and generation costs; owners don't (#403). */
@@ -246,7 +251,7 @@ export function Studio({
       const stored = localStorage.getItem(generationKey);
       setPendingGeneration(stored ? studioGenerationSchema.parse(JSON.parse(stored)) : null);
     } catch {
-      setError("Generation recovery storage is unavailable. No generation was started.");
+      setError("This browser won't let AdBrain save your progress, so no ads were started. Turn off private browsing or use another browser.");
     }
   }
 
@@ -300,7 +305,8 @@ export function Studio({
         if (response.ok) {
           const result = await response.json() as { status?: string; creatives?: Creative[] };
           acceptResults(result.creatives ?? []);
-          if (result.status === "complete" && (result.creatives?.length ?? 0) >= intent.count) {
+          // #1407: 'ended' is a batch that finished short; the notice above says how many couldn't be made.
+          if (result.status === "ended" || (result.status === "complete" && (result.creatives?.length ?? 0) >= intent.count)) {
             clearIntent();
             return;
           }
@@ -335,7 +341,7 @@ export function Studio({
           return;
         }
       } catch {
-        setError("Generation recovery storage is unavailable. No generation was started.");
+        setError("This browser won't let AdBrain save your progress, so no ads were started. Turn off private browsing or use another browser.");
         return;
       }
       setPendingGeneration(intent);
@@ -393,26 +399,38 @@ export function Studio({
         body: JSON.stringify({ creativeIds: ids }),
       });
       if (!res.ok) {
-        setError("Export failed.");
+        setError("The ad pack didn't download. Check your connection and tap Download again.");
         return;
       }
       const blob = await res.blob();
       downloadBlob(blob, "adbrain-ad-pack.zip");
       setExportOk(true);
     } catch {
-      setError("Export failed.");
+      setError("The ad pack didn't download. Check your connection and tap Download again.");
     } finally {
       setExporting(false);
     }
   }
 
+  // #1598 (Designer, #1463): no ads and nothing being made: one block (title, line, one action) under the intro.
+  const empty = items.length === 0 && !generating && !pendingGeneration;
+
   return (
     <div className="flex flex-col gap-4">
-      <Stepper
+      {empty && (
+        <section aria-labelledby="review-empty-title" className="flex max-w-xl flex-col items-start gap-2">
+          <h2 id="review-empty-title" className="text-[17px] font-semibold leading-6 text-slate-900">No ads yet</h2>
+          <p className="text-[15px] leading-[22px] text-slate-600">AdBrain makes 3 ads from your business details in about a minute.</p>
+          <Link href="/create" className="mt-2 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary-hover sm:w-auto">
+            Make ads
+          </Link>
+        </section>
+      )}
+      {!empty && <Stepper
         current={AD_FLOW[workflowStep - 1]}
         details={{ Review: `${reviewCount} awaiting approval`, Launch: `${approvedCount} ready for a campaign` }}
-      />
-      <details open={items.length === 0 || Boolean(pendingGeneration)} className="group">
+      />}
+      <details open={(items.length === 0 && !empty) || Boolean(pendingGeneration)} className="group">
         <summary className="flex min-h-11 w-fit cursor-pointer list-none items-center gap-1 text-sm font-medium text-blue-700 [&::-webkit-details-marker]:hidden">
           <ChevronRight size={16} aria-hidden="true" className="transition-transform group-open:rotate-90" />
           Make more ads
@@ -486,6 +504,7 @@ export function Studio({
 
       {error && <Alert variant="error">{error}</Alert>}
 
+      {!empty && (
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-lg font-semibold text-slate-900">
           Ads{" "}
@@ -521,6 +540,7 @@ export function Studio({
           )}
         </div>
       </div>
+      )}
 
       {exportOk && <Alert variant="success">Ad pack downloaded.</Alert>}
 
@@ -589,35 +609,7 @@ export function Studio({
         </div>
       )}
 
-      {items.length === 0 ? (
-        <Card className="border-dashed border-slate-300 bg-white/60">
-          <CardContent className="flex flex-col items-center gap-1 px-5 py-12 text-center">
-            <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-950 text-white">
-              <ImageIcon className="h-5 w-5" />
-            </span>
-            <p className="mt-3 text-lg font-semibold text-slate-900">
-              Your review board is ready
-            </p>
-            <p className="max-w-md text-sm text-slate-500">
-              Write a short brief above — what you’re selling and to whom — and
-              generate your first batch. You’ll compare, approve, and export the
-              strongest variants here.
-            </p>
-            <div className="mt-4 flex flex-wrap justify-center gap-2 text-xs text-slate-500">
-              {["Compare concepts", "Approve winners", "Export an ad pack"].map(
-                (item) => (
-                  <span
-                    key={item}
-                    className="rounded-full border border-slate-200 bg-white px-3 py-1.5"
-                  >
-                    {item}
-                  </span>
-                ),
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      ) : selectedCreative ? (
+      {items.length === 0 ? null : selectedCreative ? (
         <div className="grid items-start gap-6 lg:grid-cols-[minmax(220px,0.8fr)_minmax(0,1.2fr)]">
           <section aria-label="Ads" className="scrollbar-stable min-w-0 space-y-3 lg:max-h-[75vh] lg:overflow-y-auto">
             {batches.map((batch, index) => {
@@ -644,6 +636,7 @@ export function Studio({
           >
             <CreativeCard
               key={selectedCreative.id}
+              locale={locale}
               business={business}
               showInternals={showInternals}
               sample={sample}
@@ -666,12 +659,13 @@ export function Studio({
           </section>
         </div>
       ) : (
-        <div className="border-y border-slate-200 py-10">
-          <h3 className="font-semibold text-slate-900">
+        <div className="flex max-w-xl flex-col items-start gap-2 py-6">
+          <h3 className="text-[17px] font-semibold leading-6 text-slate-900">
             No matching creatives
           </h3>
+          <p className="text-[15px] leading-[22px] text-slate-600">Try another word, or show all ads.</p>
           <Button
-            className="mt-4"
+            className="mt-2"
             variant="outline"
             onClick={() => {
               setFilter("all");
@@ -696,6 +690,7 @@ export function Studio({
 
 function CreativeCard({
   business,
+  locale = "en",
   showInternals = false,
   sample = false,
   onImageSettled,
@@ -705,6 +700,7 @@ function CreativeCard({
   onPreview,
 }: {
   business: Business;
+  locale?: AppLocale;
   showInternals?: boolean;
   sample?: boolean;
   onImageSettled?: () => void;
@@ -829,6 +825,7 @@ function CreativeCard({
             }}
           />
         )}
+        {creative.image_url && !imgError && <PictureSourceBadge generation={creative.generation} locale={locale} className="absolute left-2 top-2" />}
         {(!creative.image_url || imgError) && (
           <div className="absolute inset-0 flex items-center justify-center">
             <span className="flex items-center gap-2 text-sm text-slate-500">
@@ -884,7 +881,7 @@ function CreativeCard({
         <>
         {editNotes && <CopyEditNotice notes={editNotes} />}
         {showInternals && <GenerationDetails value={creative.generation} />}
-        {approved && !sample && <ShareCreativeButton creative={creative} data-product-event="creative.share" className="pt-2" />}
+        {approved && !sample && <ShareCreativeButton creative={creative} variant="outline" data-product-event="creative.share" className="pt-2" />}
         <div className="mt-auto flex flex-wrap items-center gap-2 pt-3">
           <Button
             size="sm"
