@@ -179,7 +179,10 @@ Vercel Hobby allows 100 production deploys a day, and every push to `main` is on
   commit. A run with **0 jobs** is GitHub's merge ref not being ready yet (#878): it reruns that run
   once and keeps retrying for up to 10 minutes. A PR CI failure that ran jobs stops the train at once.
 - A red or stuck `next` opens one `Deploy train stuck` issue for DevOps. Fix `next`
-  with a PR to it; production keeps the last train.
+  with a PR to it; production keeps the last train. The promote step's own 93-minute
+  limit leaves its alert time to run. A newer push cancels a waiting train, and a
+  cancelled run alerts nothing, so the scheduled watchdog job opens the same issue
+  (once) when a change has waited on `next` for 120 minutes (#2029).
 - [pr-base.yml](../.github/workflows/pr-base.yml) retargets PRs opened against `main`
   to `next`, except the train itself, PRs labelled `hotfix` or `ready-to-ship`, and PRs
   that add `db/migrations/` (released to `main` by DevOps with `release.mjs`).
@@ -269,8 +272,10 @@ anyone watching (owner-approved automatic rollback, #111):
   `Production is not main HEAD` issue if that commit is not live. A run whose
   commit is no longer main HEAD passes and leaves the check to the newer run.
 
-Every step is bounded below the 45-minute job limit, because a cancelled job
-opens no issue (#210). `playwright install --with-deps` gets 8 minutes; the
+Every step has its own `timeout-minutes`, and together they fit inside the 95-minute
+job limit, because a timed-out job opens no issue (#210, #2029; a step timeout still
+does). `tests/workflow-time-budgets.test.ts` enforces that sum for the guard and the
+deploy train. `playwright install --with-deps` gets 8 minutes; the
 Ubuntu apt mirror has stalled for 11-15 minutes. After that the guard installs
 Chromium without OS packages and still runs the smoke, but a failure then only
 opens the issue and does not roll back. If the browser install also fails, the
