@@ -2,8 +2,11 @@
  * #749 (#744 plan 2): an owner's video goes to Meta by URL. Meta pulls the file itself (no bytes pass through
  * Vercel), then processes it for minutes, so the caller starts the upload, stores the id and polls the Video
  * node until `ready`. Adapter-shaped (ADR-001, #1792): Graph in, plain results out, so the Meta channel adapter
- * can lift these as they are. Images need nothing new: `MetaClient.uploadAdImageBytes` already does `adimages`.
+ * can lift these as they are. Images go up as bytes to `adimages` (`uploadAdImageBytes`).
  */
+import { jpegIfWebp } from "@/lib/imageGen/encode";
+import { readBoundedResponse } from "@/lib/imageGen/raster";
+import { fetchPublicUrl } from "@/lib/security/ssrf";
 import { MetaError, isThrottleCode } from "./client";
 
 export type MetaGraph = <T>(path: string, opts?: { method?: string; form?: Record<string, string> }) => Promise<T>;
@@ -27,6 +30,42 @@ const TITLE_MAX = 254;
 const CANT_FETCH_URL = 389;
 
 export const AD_VIDEO_FIELDS = "status,length,is_instagram_eligible,format{width,height,filter},picture,thumbnails{uri,width,height,is_preferred}";
+
+/** Fetch a public http(s) image (SSRF-guarded, size-bounded) for `uploadAdImageBytes`. */
+export async function fetchAdImage(imageUrl: string, signal?: AbortSignal): Promise<Uint8Array> {
+  let parsed: URL;
+  try {
+    parsed = new URL(imageUrl);
+  } catch {
+    throw new MetaError("Creative image URL is invalid.");
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new MetaError("Creative image URL must use HTTP or HTTPS.");
+  }
+  let imgRes: Response;
+  try {
+    imgRes = await fetchPublicUrl(parsed.toString(), { timeoutMs: 30_000, signal });
+  } catch {
+    throw new MetaError("Could not fetch the creative image.");
+  }
+  if (!imgRes.ok) {
+    throw new MetaError(`Could not fetch creative image (${imgRes.status}).`);
+  }
+  return readBoundedResponse(imgRes);
+}
+
+/** `POST /act_{id}/adimages` and return the image hash. */
+export async function uploadAdImageBytes(graph: MetaGraph, adAccountId: string, bytes: Uint8Array): Promise<string> {
+  // #1897: stored ads are WebP; Meta's ad images are sent as JPEG.
+  const b64 = Buffer.from((await jpegIfWebp(bytes)).bytes).toString("base64");
+  const data = await graph<{ images?: Record<string, { hash: string }> }>(`${adAccountId}/adimages`, {
+    method: "POST",
+    form: { bytes: b64 },
+  });
+  const first = Object.values(data.images ?? {})[0];
+  if (!first?.hash) throw new MetaError("Image upload returned no hash.");
+  return first.hash;
+}
 
 /**
  * `POST /act_{id}/advideos` with `file_url`. Meta's 389 (it couldn't fetch the URL, e.g. the signed link

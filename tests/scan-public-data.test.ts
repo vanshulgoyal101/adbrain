@@ -28,6 +28,9 @@ describe("public-data scanner (#1627)", () => {
     expect(scan("41 Dev 4 counted 3 of 14 businesses; ₹999 a month; 63306 rows")).toEqual([]);
     expect(scan("a JWT starts with eyJ, and EAA is Meta's prefix")).toEqual([]);
     expect(scan("Dev 3's runbook (comment 6464957507) and run 40756575003")).toEqual([]);
+    // #2151: GitHub comment ids (~6.4e9) look like mobiles; a list after "comments" is still ids.
+    expect(scan("delete the earlier revisions of comments 6396936263, 6444232534 and 6446256329.")).toEqual([]);
+    expect(scan("comments #6396936263 or 6444232534; call 9812345678")).toEqual(["indian_mobile"]);
     expect(scan("placeholder `9876543210` and +91 98765 43210")).toEqual([]);
     expect(scan("Solaride act_2398686420592052, Page 885223068001054, app 2286157145462990")).toEqual([]);
     expect(scan("")).toEqual([]);

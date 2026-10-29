@@ -27,6 +27,13 @@ checks the weekly cap and funding). One progress line per step. Review blockers
 are shown in their own words with "Fix in campaign review"
 (`?all=1&new=1&review=1&budget=d&creatives=…`) and nothing is created; a refused
 activation is shown verbatim and the campaign stays paused with nothing spent.
+When Meta can't activate because the ad account has no way to pay (`BILLING_REQUIRED`,
+#1990), step 3 says it in the owner's language instead of Meta's text: "Meta needs a way to
+pay first: a card, or money added by UPI or net banking. Add it in Meta, then tap Go live
+again. Nothing was spent.", with "Add payment in Meta" (Meta's payment settings); "Fix in campaign review"
+shows only if other blockers remain. The payment row's "Add a card, or pay by UPI or net
+banking" explains that Meta charges a card after the ads run, while UPI or net banking money
+must be added first, at least the run's total, or the ads stop when it runs out.
 The create request (idempotency key) is kept in sessionStorage per business, ads
 and budget, so a second tap or a reload resumes its operation
 (`operationForRequest`) instead of creating another campaign.

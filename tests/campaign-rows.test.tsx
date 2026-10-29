@@ -40,6 +40,38 @@ beforeEach(() => {
 });
 
 describe("Campaigns rows (#403 S5)", () => {
+  it.each([true, false])("only erases a campaign's enquiries after confirmation (%s)", async (confirmed) => {
+    const user = userEvent.setup();
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(confirmed);
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ deleted: 2 })));
+    view();
+    const card = within((await screen.findByRole("heading", { name: "Solar EMI" })).closest("article")!);
+    card.getByRole("button", { name: "More actions for Solar EMI" }).focus();
+    await user.keyboard("{Enter}");
+    await user.click(within(await screen.findByRole("menu")).getByRole("menuitem", { name: "Delete its enquiries" }));
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining("Your ads aren't affected."));
+    if (confirmed) {
+      expect(await card.findByRole("status")).toHaveTextContent("Deleted 2 enquiries from this campaign.");
+      expect(fetch).toHaveBeenCalledWith("/api/leads?campaignId=campaign-2", { method: "DELETE" });
+    } else {
+      expect(vi.mocked(fetch).mock.calls.some(([, init]) => init?.method === "DELETE")).toBe(false);
+    }
+    expect(card.getByRole("heading", { name: "Solar EMI" })).toBeInTheDocument();
+  });
+
+  it("keeps the campaign and shows its enquiry erasure error on the card", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ error: "Enquiries could not be deleted." }, { status: 503 })));
+    view();
+    const card = within((await screen.findByRole("heading", { name: "Solar EMI" })).closest("article")!);
+    card.getByRole("button", { name: "More actions for Solar EMI" }).focus();
+    await user.keyboard("{Enter}");
+    await user.click(within(await screen.findByRole("menu")).getByRole("menuitem", { name: "Delete its enquiries" }));
+    expect(await card.findByRole("alert")).toHaveTextContent("Enquiries could not be deleted.");
+    expect(card.getByRole("heading", { name: "Solar EMI" })).toBeInTheDocument();
+  });
+
   // #1150: campaigns deleted in Meta fold under "Deleted (n)" after the live list, with one status word.
   it("folds campaigns deleted in Meta under Deleted (n) after the live one", async () => {
     const deleted = (id: string, metaStatus: string) => ({ ...paused, id, name: "Rooftop solar old", status: "completed", raw: { ...paused.raw as object, metaStatus } }) as unknown as Campaign;
