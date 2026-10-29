@@ -270,6 +270,8 @@
       "budget": "बजट",
       "budgetLine": "{daily} रोज़, {days} दिन तक, Meta के GST समेत ज़्यादा से ज़्यादा {total}",
       "dailyBudget": "रोज़ का बजट",
+      "runDays": "कितने दिन",
+      "dayChoice": "{days} दिन",
       "perDay": "{amount} रोज़",
       "where": "कहाँ",
       "whereFallback": "जहाँ आपका बिज़नेस सर्विस देता है",
