@@ -347,6 +347,7 @@
   },
   "setup": {
     "title": "Set up your first ad",
+    "titleAgain": "New campaign",
     "step1": "Your business",
     "step2": "Your ads",
     "step3": "Go live",
