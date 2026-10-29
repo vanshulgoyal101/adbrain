@@ -146,7 +146,9 @@ day." इसे देखने के लिए "Open your campaign" दबा�
 
 - "Meta checks your ads first. This usually takes a few hours, sometimes up to a
   day."
-- जो ग्राहक आपके ऐड पर टैप करते हैं, वे सीधे आपके WhatsApp पर मैसेज करते हैं। वहीं जवाब दें।
+- जो ग्राहक आपके ऐड पर टैप करते हैं, वे सीधे आपके WhatsApp पर मैसेज करते हैं। वहीं,
+  5 मिनट के अंदर जवाब दें: [ऐड से आई चैट का जवाब दें](answer-chats.md) में सेव करने
+  लायक तीन जवाब हैं।
 - **Home** पर आपके नतीजे दिखते हैं: "Chats" (या "Enquiries"), "Spent" और "Per chat"।
 - **Enquiries** (मेन्यू खोलकर "Enquiries", या Home पर "See enquiries" दबाएँ): फ़ॉर्म वाली पूछताछ अपने-आप आ जाती है;
   WhatsApp चैट आप जोड़ेंगे तब वहाँ दिखेंगी। हर एक पर पहले से लिखे जवाब के लिए "WhatsApp them" दबाएँ, या "Call"। Home

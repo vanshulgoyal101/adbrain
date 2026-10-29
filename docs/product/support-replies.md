@@ -129,6 +129,7 @@ service.", don't promise a fix: tell the owner honestly and label the issue
 
 If Home says the ads haven't started after a day, ask for a screenshot of "See
 Meta's status" and check for a rejection (section 5) or payment (section 4).
+Once chats come, send them [Answer the chats your ad brings](answer-chats.md).
 
 ## 7. The sign-in link doesn't work
 

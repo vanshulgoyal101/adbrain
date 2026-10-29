@@ -15,6 +15,7 @@
 | [ऐड बनाएँ और जाँचें](create.md) | [Create and Review Ads](../create.md) |
 | [जाँचें और लाइव करें](review.md) | [Review and Go Live](../review.md) |
 | [कैंपेन टारगेटिंग और बजट](targeting-and-budget.md) | [Campaign Targeting and Budget](../targeting-and-budget.md) |
+| [ऐड से आई चैट का जवाब दें](answer-chats.md) | [Answer the chats your ad brings](../answer-chats.md) |
 | [Go live के बाद आपका पहला हफ़्ता](first-week.md) | [Your first week after Go live](../first-week.md) |
 | [AdBrain कैसे काम करता है](how-adbrain-works.md) | [How AdBrain Works](../how-adbrain-works.md) |
 | [सेटिंग्स: खर्च की सीमा और आपकी पसंद](settings.md) | [Settings: Spend Guardrails and Preferences](../settings.md) |

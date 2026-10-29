@@ -138,7 +138,9 @@ day." Tap "Open your campaign" to see it.
 
 - "Meta checks your ads first. This usually takes a few hours, sometimes up to a
   day."
-- Customers who tap your ad message you straight on your WhatsApp. Reply there.
+- Customers who tap your ad message you straight on your WhatsApp. Reply there,
+  within 5 minutes: [Answer the chats your ad brings](answer-chats.md) has three
+  answers to save.
 - **Home** shows your results: "Chats" (or "Enquiries"), "Spent" and "Per chat".
 - **Enquiries** (open the menu, then "Enquiries"; or "See enquiries" on Home): form enquiries arrive on their own;
   WhatsApp chats show there once you add them. On each one tap "WhatsApp them" for a ready-written first reply, or "Call". Home
