@@ -4,6 +4,7 @@ import { startTransition, useCallback, useEffect, useEffectEvent, useReducer, us
 import { flushSync } from "react-dom";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { CampaignEnquiryDeleteItem, CampaignEnquiryFeedback } from "@/components/enquiry-erasure";
+import { HowItWorks, Stat } from "@/components/campaign-parts";
 import { useCampaignList } from "@/lib/meta-connect-ui/use-campaign-list";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -2700,40 +2701,4 @@ function CardResults({ campaign, result: r, outcome, comparison, waiting, onRunA
   return <CampaignVerdict verdict={judged} words={words} whatsapp={input.destination === "whatsapp"} results={input.results} spend={input.spend}
     details={figures} onRunAgain={onRunAgain} runAgainBusy={runAgainBusy} adsManagerUrl={adsManagerUrl} onEditAd={onEditAd}
     pauseOffer={weakAd && <PauseOffer campaignId={campaign.id} suggestion={weakAd} whatsapp={input.destination === "whatsapp"} onKeep={clearWeakAd} words={words} />} />;
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <p className="text-lg font-bold text-slate-900">{value}</p>
-      <p className="text-xs text-slate-500">{label}</p>
-    </div>
-  );
-}
-
-const HOW_IT_WORKS_STEPS = [
-  "We create the campaign paused — nothing spends yet.",
-  "Open it in Meta Ads Manager to review the ads and audience.",
-  "Flip it on when you're happy; leads start coming in.",
-  "Come back and hit “Refresh results” to see leads and cost per lead in plain English.",
-];
-
-function HowItWorks() {
-  return (
-    <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-        What happens next
-      </p>
-      <ol className="mt-2 flex flex-col gap-1.5">
-        {HOW_IT_WORKS_STEPS.map((step, i) => (
-          <li key={i} className="flex gap-2 text-sm text-slate-600">
-            <span className="flex h-5 w-5 flex-none items-center justify-center rounded-full bg-blue-100 text-xs font-bold text-blue-700">
-              {i + 1}
-            </span>
-            <span>{step}</span>
-          </li>
-        ))}
-      </ol>
-    </div>
-  );
 }
