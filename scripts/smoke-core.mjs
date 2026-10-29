@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { parseEnv } from "node:util";
 import { chromium } from "@playwright/test";
+import { makesFreePictures } from "./lib/internal-accounts.mjs";
 
 const envPath = "/Users/vanshulgoyal/Development/copilot/adbrain/.env.smoke";
 
@@ -31,6 +32,43 @@ async function readCreateResponse(response) {
   }
   assert.ok(result, "Create stream ended without a result.");
   return { status: result.status, data: result.body };
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * #2145: the scheduled run deletes its own ads and every file under `<business>/<generation>/` in the creatives
+ * bucket (the photo and composed ad, originals and thumbnails), as the signed-in owner, so a run every 2 hours
+ * doesn't fill the 1 GB free Storage. Rows first: a failed file delete leaves orphan files, never broken ads.
+ */
+async function removeCreateRun(auth, { businessId, generationId } = {}) {
+  assert.ok(UUID.test(businessId ?? "") && UUID.test(generationId ?? ""), "run ids unknown");
+  assert.ok(auth?.apikey && auth.token, "session unknown");
+  const headers = { apikey: auth.apikey, authorization: `Bearer ${auth.token}` };
+  const rows = await fetch(`${auth.supabase}/rest/v1/creatives?business_id=eq.${businessId}&variant_group=eq.${generationId}&select=id`,
+    { method: "DELETE", headers: { ...headers, prefer: "return=representation" } });
+  assert.ok(rows.ok, `ads not deleted (HTTP ${rows.status})`);
+  const ads = (await rows.json()).length;
+  const files = [];
+  async function list(folder, depth) {
+    const response = await fetch(`${auth.supabase}/storage/v1/object/list/creatives`, {
+      method: "POST", headers: { ...headers, "content-type": "application/json" },
+      body: JSON.stringify({ prefix: folder, limit: 1000, offset: 0 }),
+    });
+    assert.ok(response.ok, `pictures not listed (HTTP ${response.status})`);
+    for (const entry of await response.json()) {
+      if (entry.id) files.push(`${folder}/${entry.name}`);
+      else if (depth < 2) await list(`${folder}/${entry.name}`, depth + 1);
+    }
+  }
+  await list(`${businessId}/${generationId}`, 0);
+  if (files.length) {
+    const removed = await fetch(`${auth.supabase}/storage/v1/object/creatives`, {
+      method: "DELETE", headers: { ...headers, "content-type": "application/json" }, body: JSON.stringify({ prefixes: files }),
+    });
+    assert.ok(removed.ok, `pictures not deleted (HTTP ${removed.status})`);
+  }
+  return { ads, files: files.length };
 }
 
 const { SMOKE_EMAIL: email, SMOKE_PASSWORD: password } = process.env.SMOKE_EMAIL
@@ -153,6 +191,10 @@ try {
   await page.getByRole("button", { name: "Sign in with password", exact: true }).click();
   const response = await loginResponse;
   assert.equal(response.status(), 200, "Login failed.");
+  // #2145: who signed in decides free or paid pictures; the session also lets a scheduled run delete its own ads.
+  const session = await response.json().catch(() => null);
+  const auth = session?.access_token && session.user ? { supabase: new URL(response.url()).origin,
+    apikey: response.request().headers().apikey, token: session.access_token, user: session.user } : null;
   await page.waitForURL((url) => url.origin === origin && !url.pathname.startsWith("/login"));
   signedIn = true;
   console.log("PASS Sign in");
@@ -259,6 +301,9 @@ try {
     }
     try {
       assert.equal(process.exitCode ?? 0, 0, "Read-only views failed; paid run was not started");
+      // #2145: the smoke never buys pictures. The account must be internal and not exempt (`freeImagesOnly`).
+      assert.ok(auth?.user?.id, "Signed-in identity unknown, so free pictures aren't certain; paid run was not started");
+      assert.ok(makesFreePictures(auth.user), "This account would make paid pictures (not internal, or exempt); paid run was not started");
       await page.goto(`${origin}/create`);
       await page.getByRole("textbox", { name: "Campaign goal" }).fill("Introduce our team to local customers using only verified Brand Brain facts. Avoid unsupported claims.");
       await page.getByRole("button", { name: /^(Start creating|Edit brief)$/ }).click(); // #1004: a complete Brand offers "Edit brief" to keep the brief review
@@ -295,7 +340,16 @@ try {
       // #904 made "Review ads" a link, not a button (QA on #1227).
       await page.getByRole("link", { name: "Review ads", exact: true }).waitFor({ state: "visible" });
       assert.equal(errors.length, 0, errors[0] ?? "Browser error after Create");
-      console.log(`PASS Create: ${savedCount}/3 saved (one paid run; record in #88)`);
+      console.log(`PASS Create: ${savedCount}/3 saved (free pictures; one run of paid text; record in #88)`);
+      if (process.env.SMOKE_CREATE_CLEANUP === "1") {
+        try {
+          const removed = await removeCreateRun(auth, generationRequest);
+          console.log(`PASS Cleanup: deleted ${removed.ads} ads and ${removed.files} files`);
+        } catch (error) {
+          console.log(`FAIL Cleanup: ${error instanceof Error ? error.message.split("\n")[0].slice(0, 180) : "Unknown error"}; delete this run's ads in Review`);
+          process.exitCode = 1;
+        }
+      }
     } catch (error) {
       if (generationCount && savedCount === null) savedCount = await recoverSavedCount();
       console.log(`FAIL Create${generationCount ? `: ${savedCount ?? "unconfirmed"}/3 saved` : ""}: ${error instanceof Error ? error.message.split("\n")[0].slice(0, 180) : "Unknown error"}; ${generationCount ? "check saved work before any retry" : "no paid request sent"}`);

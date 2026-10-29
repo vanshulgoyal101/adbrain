@@ -27,7 +27,7 @@ function jobBudgets(lines: string[]) {
   return jobs;
 }
 
-describe.each(["deploy-train.yml", "production-guard.yml"])("%s time budget", (name) => {
+describe.each(["create-smoke.yml", "deploy-train.yml", "production-guard.yml"])("%s time budget", (name) => {
   const jobs = jobBudgets(workflow(name));
 
   it("bounds every step so the failure alert still runs inside the job limit", () => {

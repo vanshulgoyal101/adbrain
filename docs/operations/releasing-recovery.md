@@ -79,6 +79,13 @@ anyone watching (owner-approved automatic rollback, #111):
   (`src/lib/copy/honest-copy-rules.ts`). Every Meta write is blocked. The result lands in the
   run summary; a FAIL turns the guard red and opens a core bug, but never rolls back. Skipped while the secrets are
   unset. `--plant` must make it FAIL (a planted promise and a slowed load).
+- **Create, every 2 hours (#2145):** [`create-smoke.yml`](../../.github/workflows/create-smoke.yml)
+  runs `smoke-core.mjs --create` as the smoke account at :17 past every second hour (and on dispatch), one at a
+  time, with no retry. It makes 3 ads on free pictures only (it refuses before any paid request if the account
+  isn't internal or is exempt) and spends one Create's text on the normal models (about $0.006 on Haiku). A PASS
+  deletes its ads and their Storage files, so the 1 GB free Storage doesn't fill. A failure opens one `core`
+  `bug` issue `Create smoke failed in production` for DevOps (repeats comment on it; the first pass after it
+  says so once). It never rolls back. Pause it with `gh workflow disable create-smoke.yml`.
 - **After each push to `main`, and every 15 minutes if GitHub fires the schedule**
   [`production-drift.yml`](../../.github/workflows/production-drift.yml) waits until
   15 minutes after main HEAD landed, then fails and opens one
@@ -87,7 +94,7 @@ anyone watching (owner-approved automatic rollback, #111):
 
 Every step has its own `timeout-minutes`, and together they fit inside the 95-minute
 job limit, because a timed-out job opens no issue (#210, #2029; a step timeout still
-does). `tests/workflow-time-budgets.test.ts` enforces that sum for the guard and the
+does). `tests/workflow-time-budgets.test.ts` enforces that sum for the guard, the Create smoke and the
 deploy train. `playwright install --with-deps` gets 8 minutes; the
 Ubuntu apt mirror has stalled for 11-15 minutes. After that the guard installs
 Chromium without OS packages and still runs the smoke, but a failure then only
