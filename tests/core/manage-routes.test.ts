@@ -279,6 +279,36 @@ describe("core: manage routes against recorded Graph responses (#649)", () => {
     expect(audits()).toHaveLength(1);
   });
 
+  // #1961: pause is the owner's safety stop. A waiting new-audience copy (#1518) refuses activation, never a pause.
+  it("pause: still pauses the whole tree in Meta while a new audience waits to be switched on", async () => {
+    treeCampaign();
+    store.state.tables.campaign_edit_operations = [{ id: "op-waiting", campaign_id: STORED, kind: "audience", state: "awaiting_switch", phase: "copy" }];
+    replay(tapes.pause);
+    const response = await pause();
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ ok: true, status: "paused", pause: { confirmed: true } });
+    expect(writes().map(({ path, form }) => [path, form])).toEqual([TREE.campaignId, ...TREE.adSetIds, ...TREE.adIds].map(id => [id, { status: "PAUSED" }]));
+    expect(graph.pending).toEqual([]);
+    expect(store.state.tables.campaigns[0].status).toBe("paused");
+  });
+
+  // #1961: Meta throttling the account (#1838) must not leave anything that refuses the owner's next pause.
+  it("pause: right after Meta throttles the account, the owner's retry still reaches Meta and pauses", async () => {
+    treeCampaign();
+    const throttled = { ...tapes.pause[0], status: 400, body: { error: { message: "There have been too many calls to this ad-account.", type: "OAuthException", code: 17, error_subcode: 2446079 } } };
+    replay([throttled]);
+    const first = await pause();
+    expect(first.status).not.toBe(200);
+    expect(writes()).toEqual([]);
+    expect(store.state.tables.campaigns[0].status).toBe("active");
+    replay(tapes.pause);
+    const retry = await pause();
+    expect(retry.status).toBe(200);
+    expect(writes().map(({ path }) => path)).toEqual([TREE.campaignId, ...TREE.adSetIds, ...TREE.adIds]);
+    expect(graph.pending).toEqual([]);
+    expect(store.state.tables.campaigns[0].status).toBe("paused");
+  });
+
   // #757: Meta stops accepting the token (password change, checkpoint) with no deauthorize callback.
   it("pause: a recorded Graph 190 names Ads Manager, writes nothing, and flips the connection to reauth_required", async () => {
     treeCampaign();

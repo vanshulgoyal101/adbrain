@@ -22,7 +22,7 @@ In Production it is applied at SHA-256
 `02a409069475caff00872c9de31296771d0669bf852f5e5034f7f876a47d972c`, with one
 owner-confirmed operator registered and zero requests at readback. This does not
 verify the application request workflow; see
-[Privacy request operations](OPERATIONS.md#privacy-request-operations).
+[Privacy request operations](operations/privacy-requests.md#privacy-request-operations).
 
 The source-only [configurable quote migration](../db/migrations/20260927_configurable_payment_quotes.sql)
 depends on the original payment, operator policy and
@@ -229,7 +229,7 @@ depends only on the existing product-event table and replaces its pruning functi
 without changing the caller contract. It aggregates and deletes up to 10,000 raw
 events older than 90 days atomically, preserves aggregate totals for 730 UTC days,
 and bounds old-aggregate cleanup. Migration application itself deletes no events.
-Use the [observability guide](OBSERVABILITY.md#retention-and-health) for metrics,
+Use the [observability guide](operations/observability.md#retention-and-health) for metrics,
 privacy, retention limitations and queries spanning raw and aggregate data.
 
 Leads use duplicate-ignore inserts, so later provider edits do not update an
@@ -321,7 +321,7 @@ before serving the updated regeneration route.
 
 Product events are server-only (no browser read/write policy), with bounded JSON
 attributes and a 90-day retention target. Pruning deletes at most 10000 old rows
-per call. See [Observability](OBSERVABILITY.md) for exceptions and retention backlog.
+per call. See [Observability](operations/observability.md) for exceptions and retention backlog.
 
 ### Effective Authority
 

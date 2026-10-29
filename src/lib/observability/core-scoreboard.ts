@@ -8,6 +8,7 @@
  */
 
 import { medianReplyMinutes } from "@/lib/leads/first-reply";
+import { isMetaTestLead } from "@/lib/leads/test-lead";
 
 /** #1468: the rupee rate the CEO uses for AI money ($5 ≈ ₹420 on #1129); for reading, never billing. */
 const INR_PER_USD = 84;
@@ -366,15 +367,19 @@ export type PilotData = {
   firstLaunch: Record<string, string>;
   /** Each business's latest `pilot_day7` answer (#1650). */
   day7Answers: Record<string, "yes" | "maybe" | "no">;
+  /** #1965: form and logged WhatsApp enquiries (`created_at`), Meta test leads already out. */
+  recentEnquiries: { business_id: string; created_at: string }[];
   excludedBusinessIds: string[];
   now: Date;
 };
 
 /** #1697: builds PilotData from the raw reads the route and the local script both make. */
-export function pilotData({ prospectCreatives, pilotEvents, launchedRows, excludedBusinessIds, now }: {
+export function pilotData({ prospectCreatives, pilotEvents, launchedRows, leads, excludedBusinessIds, now }: {
   prospectCreatives: { business_id: string }[];
   pilotEvents: { business_id: string | null; name: string; attributes: { answer?: string } | null; created_at: string }[];
   launchedRows: { business_id: string; launched_at: string }[];
+  /** `meta_form` and `whatsapp_manual` leads from at least the last 24 h. */
+  leads: { business_id: string; created_at: string; full_name?: string | null }[];
   excludedBusinessIds: string[];
   now: Date;
 }): PilotData {
@@ -389,13 +394,15 @@ export function pilotData({ prospectCreatives, pilotEvents, launchedRows, exclud
     prospectBusinessIds: [...new Set(prospectCreatives.map((row) => row.business_id))],
     handedOverBusinessIds: [...new Set(pilotEvents.filter((event) => event.name === PROSPECT_HANDED_OVER && event.business_id).map((event) => event.business_id as string))],
     firstLaunch, day7Answers, excludedBusinessIds, now,
+    recentEnquiries: leads.filter((lead) => !isMetaTestLead({ full_name: lead.full_name ?? null })).map(({ business_id, created_at }) => ({ business_id, created_at })),
   };
 }
 
 /**
  * #1697 (CPO #1685): the pilot funnel, counts only and cumulative: prepared (still with the rep, or handed over) →
  * handed over → live (a handed-over business with a Go live) → Day 7 → its answers; plus how many reach Day 7 in
- * the next 48 h so the rep can book the visit. No names; nothing until the first pilot.
+ * the next 48 h so the rep can book the visit, and (#1965) real enquiries on live pilots in the last 24 h. No names;
+ * nothing until the first pilot.
  */
 export function pilotRows(data: PilotData): ScoreRow[] {
   const excluded = new Set(data.excludedBusinessIds);
@@ -408,6 +415,8 @@ export function pilotRows(data: PilotData): ScoreRow[] {
   const due = live.filter((id) => age(id) < 7 * DAY && age(id) >= 5 * DAY).length;
   const answers = { yes: 0, maybe: 0, no: 0 };
   for (const id of day7) { const answer = data.day7Answers[id]; if (answer) answers[answer] += 1; }
+  const liveIds = new Set(live);
+  const enquiries = data.recentEnquiries.filter((lead) => liveIds.has(lead.business_id) && data.now.getTime() - Date.parse(lead.created_at) < DAY).length;
   return [
     {
       step: "Pilots",
@@ -416,6 +425,7 @@ export function pilotRows(data: PilotData): ScoreRow[] {
       met: null,
     },
     { step: "Pilots: Day 7 due in 48 h", now: String(due), target: "book the Day 7 visit", met: null },
+    { step: "Pilots: enquiries in 24 h", now: String(enquiries), target: "real enquiries on live pilots", met: null },
   ];
 }
 

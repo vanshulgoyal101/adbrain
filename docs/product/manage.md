@@ -48,7 +48,9 @@ note up to 2000 characters; a failed save keeps the edits for retry. Follow-up i
 local record-keeping only and sends nothing. Each row also has a one-tap **Became a
 customer** button with Undo (#798). A campaign card then shows its customers and
 **Per customer** (Meta spend ÷ enquiries marked as customers, any source) once
-there is at least one.
+there is at least one. Before them it shows bookings (#1994: enquiries marked Booked or
+Customer), named for the segment: "consultations booked" (interiors), "site visits
+booked" (solar), "demo classes booked" (IELTS), otherwise "booked"; hidden at 0.
 
 The copy-ready digest summarizes the last seven days of the currently loaded
 enquiries with at most ten contacts, including email where available. It is not
