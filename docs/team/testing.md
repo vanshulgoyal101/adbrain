@@ -86,6 +86,8 @@ Recorded Meta tapes go through `metaScrubber()` (`scripts/lib/scrub-meta.ts`, #1
   `scripts/record-interview-fixtures.ts`: after a "type it below" chip with nothing typed, the
   assistant asks for the offer again instead of failing, and the replies the old claim check
   rejected for "₹10,000" against "10,000 rupees" now pass. Failed attempts name their rule.
+  `assistant-slow-provider` (#2249): Groq at its daily limit and Gemini hanging still end in
+  OpenRouter's answer inside the 45 s request, because Gemini's attempt stops at 25 s.
 - **Brand autofill** (`brand-autofill`, #650): Solaride's real home page and the real Groq
   extraction reply, recorded by `scripts/record-brand-autofill-fixtures.ts`, drive the real route:
   description, vertical, USPs and languages come from the reply, the phone from the page's `tel:`
