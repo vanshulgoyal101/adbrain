@@ -6,6 +6,7 @@ const db = vi.hoisted(() => ({
   leads: [] as Record<string, unknown>[],
   insertError: null as unknown,
   limited: false,
+  lang: "en",
 }));
 
 // RLS stand-in: the owner sees only their own business's campaigns and leads.
@@ -47,6 +48,7 @@ vi.mock("@/lib/supabase/server", () => ({
 vi.mock("@/lib/security/rate-limit", () => ({
   rateLimitResponse: async () => (db.limited ? Response.json({ error: "Too many requests." }, { status: 429 }) : null),
 }));
+vi.mock("next/headers", () => ({ cookies: async () => ({ get: (name: string) => (name === "adbrain_lang" ? { value: db.lang } : undefined) }) }));
 vi.mock("@/lib/observability/logger", () => ({ observeRoute: (_path: string, _method: string, handler: unknown) => handler, recordProductEvent: () => {} }));
 
 const WHATSAPP = "30000000-0000-4000-8000-000000000001";
@@ -61,6 +63,7 @@ async function add(id: string, body: unknown = {}) {
 }
 
 beforeEach(() => {
+  db.lang = "en";
   db.user = { id: "owner" };
   db.insertError = null;
   db.limited = false;
@@ -100,6 +103,13 @@ describe("POST /api/campaigns/[id]/enquiries (#335)", () => {
     db.user = null;
     expect((await add(WHATSAPP)).status).toBe(401);
     expect(db.leads).toEqual([]);
+  });
+
+  it("refuses in the owner's language (#2330)", async () => {
+    db.lang = "hi";
+    expect(await add(FORM)).toEqual({ status: 400, body: { error: "असली पूछताछ सिर्फ़ WhatsApp कैंपेन पर दर्ज हो सकती है।" } });
+    db.insertError = { message: "down" };
+    expect(await add(WHATSAPP)).toEqual({ status: 503, body: { error: "पूछताछ सेव नहीं हो पाई। फिर कोशिश करें।" } });
   });
 
   it("is rate limited and reports a failed save plainly", async () => {
