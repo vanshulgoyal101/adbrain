@@ -69,7 +69,7 @@ async function handlePOST(
     .eq("id", id)
     .maybeSingle();
   if (!creative) {
-    return NextResponse.json({ error: "Creative not found" }, { status: 404 });
+    return NextResponse.json({ error: "We couldn't find this ad. It may have been deleted; refresh the page." }, { status: 404 });
   }
 
   const { data: business } = await supabase
@@ -78,7 +78,7 @@ async function handlePOST(
     .eq("id", creative.business_id)
     .maybeSingle();
   if (!business) {
-    return NextResponse.json({ error: "Business not found" }, { status: 404 });
+    return NextResponse.json({ error: "We couldn't find this business. Refresh the page and try again." }, { status: 404 });
   }
 
   const angle = getAngleByName(creative.angle ?? "") ?? AD_ANGLES[0];
@@ -120,13 +120,17 @@ async function handlePOST(
   });
   if (claimError || !claim)
     return NextResponse.json({ error: "Something on our side didn't answer. Nothing was started; try again in a minute." }, { status: 503 });
-  if (claim.action === "missing") return NextResponse.json({ error: "Creative not found" }, { status: 404 });
+  if (claim.action === "missing") return NextResponse.json({ error: "We couldn't find this ad. It may have been deleted; refresh the page." }, { status: 404 });
   if (claim.action === "busy")
     return NextResponse.json({ error: claim.status === "unresolved"
       ? "Previous paid regeneration needs review before retrying."
       : "Regeneration is already in progress. Refresh this creative before trying again." }, { status: 409 });
   if (claim.action !== "start")
     return NextResponse.json({ error: "Something on our side didn't answer. Nothing was started; try again in a minute." }, { status: 503 });
+  // #2291: the stale attempt this replaces may have paid for a picture it never recorded; ops matches this to its usage.
+  if (claim.tookOver)
+    await logEvent({ businessId: business.id, action: "creative.claim_taken_over", entityType: "creative", entityId: id,
+      details: { route: "creatives.regenerate", attemptId } });
 
   let paidAttemptStarted = false;
   let unresolved = false;
@@ -251,7 +255,7 @@ async function handlePOST(
       response = NextResponse.json({ error: "Couldn't make a new version this time. Your current ad is unchanged; try again." }, { status: 502 });
     else response = NextResponse.json(
       {
-        error: "Regeneration could not be completed. This attempt needs a check before the ad can be regenerated again.",
+        error: "This ad didn't finish remaking. AdBrain needs to check this attempt before you can remake it again.",
       },
       { status: 502 },
     );
@@ -261,6 +265,6 @@ async function handlePOST(
     p_attempt_id: attemptId, p_unresolved: unresolved,
   });
   if (settleError || settled?.status !== (unresolved ? "unresolved" : "released"))
-    return NextResponse.json({ error: "Regeneration state could not be confirmed. Check the creative before trying again." }, { status: 503 });
+    return NextResponse.json({ error: "We couldn't tell whether the remake finished. Refresh the page to see the ad before you try again." }, { status: 503 });
   return response;
 }

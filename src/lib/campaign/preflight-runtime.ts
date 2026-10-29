@@ -1,5 +1,10 @@
 import { createHash } from "node:crypto";
-import { hasStoryDesign, storedPictureDesign } from "@/lib/creative/picture-words";
+import { hasStoryDesign, savedBackground, storedPictureDesign } from "@/lib/creative/picture-words";
+import { renderAndPersistDesign } from "@/lib/creative/persist";
+import { logEvent } from "@/lib/audit";
+import { getEnv } from "@/lib/env";
+import { AD_ANGLES, getAngleByName } from "@/lib/templates/ads";
+import type { Json } from "@/lib/types";
 import { getCostPerResult } from "@/lib/campaign/result-evidence-store";
 import { getConnectionStatus, withMetaConnection, type AuthorizedBusiness } from "@/lib/meta/connection-access";
 import { draftRecordFromRow } from "@/lib/campaign/draft-store";
@@ -48,8 +53,10 @@ export function buildCampaignPreflightLoaders(
         cta: creative.cta,
         storyReady: hasStoryDesign(creative.generation),
         asksWhatsApp: storedPictureDesign((creative.generation as { design?: unknown } | null)?.design)?.contact === "whatsapp",
+        printedPhone: storedPictureDesign((creative.generation as { design?: unknown } | null)?.design)?.phone ?? null,
       }));
     },
+    redrawPictureNumber: (actor, creativeId, phone) => redrawPictureNumber(supabase, actor.businessId, creativeId, phone),
     findCostPerResult: (actor, destination) => getCostPerResult(actor.businessId, destination),
     findForm: async (businessId, formId) => {
       const connection = await status();
@@ -139,4 +146,43 @@ export function buildCampaignPreflightLoaders(
     },
     hash: (payload) => createHash("sha256").update(payload).digest("hex"),
   };
+}
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+/**
+ * #2274: redraws the phone printed on one ad's saved design over its own background, like the owner's
+ * picture edit (#280), and saves it on the ad. Null when the ad has no words or background to redraw.
+ */
+async function redrawPictureNumber(supabase: CampaignSupabase, businessId: string, creativeId: string, phone: string): Promise<string | null> {
+  if (!getEnv().AD_DESIGN_OVERLAY) return null;
+  const { data: creative } = await supabase
+    .from("creatives")
+    .select("id, business_id, variant_group, angle, image_url, generation")
+    .eq("id", creativeId)
+    .eq("business_id", businessId)
+    .maybeSingle();
+  if (!creative) return null;
+  const generation = isRecord(creative.generation) ? creative.generation : {};
+  const stored = storedPictureDesign(generation.design);
+  if (!stored?.phone || generation.composition === "image-only") return null;
+  const angle = getAngleByName(creative.angle ?? "") ?? AD_ANGLES[0];
+  const photoUrl = await savedBackground(supabase, creative, generation, angle.id);
+  if (!photoUrl) return null;
+  const design = { ...stored, phone };
+  const imageUrl = await renderAndPersistDesign(supabase, businessId, creative.variant_group ?? creative.id, angle.id, design, photoUrl);
+  // Re-read so a text edit saved during the redraw isn't overwritten.
+  const { data: fresh } = await supabase.from("creatives").select("generation").eq("id", creativeId).maybeSingle();
+  const latest = isRecord(fresh?.generation) ? fresh.generation : generation;
+  const nextGeneration = JSON.parse(JSON.stringify({ ...latest, design: { ...design, backgroundUrl: undefined }, photoUrl })) as Json;
+  const { data: updated, error } = await supabase
+    .from("creatives")
+    .update({ image_url: imageUrl, generation: nextGeneration })
+    .eq("id", creativeId)
+    .eq("business_id", businessId)
+    .select("id")
+    .maybeSingle();
+  if (error || !updated) return null;
+  await logEvent({ businessId, action: "creative.edit_picture", entityType: "creative", entityId: creativeId });
+  return imageUrl;
 }

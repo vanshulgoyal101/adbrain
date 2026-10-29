@@ -129,6 +129,7 @@ service.", don't promise a fix: tell the owner honestly and label the issue
 
 If Home says the ads haven't started after a day, ask for a screenshot of "See
 Meta's status" and check for a rejection (section 5) or payment (section 4).
+Once chats come, send them [Answer the chats your ad brings](answer-chats.md).
 
 ## 7. The sign-in link doesn't work
 
@@ -143,6 +144,34 @@ Meta's status" and check for a rejection (section 5) or payment (section 4).
 
   > Each sign-in link works once, for a short time. Tap "Send a new link" and open
   > the new email on the same phone. Or tap "Continue with Google" if you use Gmail.
+
+## 8. Review won't let me launch
+
+- **Owner says:** "It won't send to Meta", "red message on Review", "says fix this first".
+- **Screen shows:** on Review, a message with a fix button under it, such as
+  "Set the city radius between 17 and 80 km; Meta allows nothing outside that range."
+  with "Set the city radius".
+- **Cause:** a check that Meta would fail. Nothing was sent and nothing was spent.
+- **Reply:** find the message in [When Review stops you](review.md#when-review-stops-you)
+  and paste its "What to do" line, then:
+
+  > Tap the button under the message, fix that one thing, then tap "Check again".
+  > Nothing has been sent to Meta or spent yet.
+
+## 9. What does Costly (or Early days) mean?
+
+- **Owner says:** "It says Costly", "what does Early days mean?", "is About average bad?".
+- **Screen shows:** next to the campaign on Home, or on its card: "Costly", "Early days",
+  "About average", "Working", "No chats yet" or "No enquiries yet". With "Costly" the card
+  offers "Try new ads", or, when one ad is the problem, "Pause this ad" and "Keep".
+- **Cause:** AdBrain compares the cost per chat or enquiry with the usual cost, using fixed
+  rules. Every word and its button is in [What your campaign card says](manage.md#what-your-campaign-card-says).
+  "Not showing yet" is section 6.
+- **Reply:**
+
+  > "Early days" means it's too soon to judge, so let it run and reply to every chat fast.
+  > "Costly" means each chat costs much more than usual. If it names one ad, tap "Pause
+  > this ad"; otherwise tap "Try new ads". Nothing changes your budget on its own.
 
 ## Still stuck
 

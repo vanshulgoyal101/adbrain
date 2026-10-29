@@ -72,6 +72,12 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
   number until it is prepared again from manual setup.
 - Review displays and hashes the verified number. Creation rechecks it before
   any mutation. WhatsApp never silently falls back to a form.
+- When a chosen ad's picture prints a different phone from that number, Prepare redraws
+  the picture's phone with it over the saved background (no AI, like the owner's picture
+  edit) and saves it on the ad, before the review hash. Review's first note says "Your
+  pictures now show your WhatsApp number …4842, the one the chat opens." Pictures with
+  no printed phone and lead-form ads are left alone; a failed redraw is a note, never a
+  blocker (#2274).
 - The WhatsApp creation adapter uses `OUTCOME_ENGAGEMENT`, `CONVERSATIONS`, `WHATSAPP`,
   a recipient-bound promoted object and `wa.me` creative link. Campaigns, ad sets,
   and ads are created PAUSED; activation remains a separate confirmation.

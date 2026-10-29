@@ -367,7 +367,7 @@ export function Studio({
       if (!res.ok) {
         if ([400, 401, 403, 404, 409, 422, 429].includes(res.status)) {
           clearIntent();
-          setError(data.error ?? "Generation was rejected.");
+          setError(data.error ?? "We couldn't start your ads. Try again in a minute.");
         } else await recover(data.error);
         return;
       }
@@ -776,11 +776,11 @@ function CreativeCard({
         if (res.ok) onDelete(creative.id);
         else
           setRegenError(
-            res.error ?? "Couldn't delete the creative. Try again.",
+            res.error ?? "Couldn't delete this ad. Try again.",
           );
       } catch {
         setRegenError(
-          "Couldn't delete the creative. Check your connection and try again.",
+          "Couldn't delete this ad. Check your connection and try again.",
         );
       }
     });

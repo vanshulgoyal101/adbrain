@@ -1144,7 +1144,7 @@ describe("<Studio> review board", () => {
     render(<Studio business={business} initialCreatives={[creative()]} />);
     fireEvent.click(screen.getByRole("button", { name: "Delete ad" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Couldn't delete the creative",
+      "Couldn't delete this ad",
     );
     expect(
       screen.getByRole("heading", { name: "Cut your power bill" }),
