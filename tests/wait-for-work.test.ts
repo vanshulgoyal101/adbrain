@@ -355,6 +355,42 @@ describe("shared GitHub budget (#2021)", () => {
     expect(sleep).not.toHaveBeenCalled();
   });
 
+  it("does not retry before the primary reset when Retry-After is shorter", async () => {
+    let clock = now;
+    const request = vi.fn()
+      .mockReturnValueOnce(response(403, {
+        "retry-after": "1", "x-ratelimit-remaining": "0", "x-ratelimit-reset": String(now / 1000 + 120),
+      }, '{"message":"API rate limit exceeded"}'))
+      .mockImplementation(() => {
+        expect(clock).toBeGreaterThanOrEqual(now + 125_000);
+        return response(200, {}, "[]");
+      });
+    const client = createGitHubApi({ request, sleep: async (ms: number) => { clock += ms; }, now: () => clock, warn: vi.fn() });
+    expect(await client.get("issues")).toEqual([]);
+  });
+
+  it("falls back to a real delay for malformed Retry-After instead of a tight retry loop", async () => {
+    const sleep = vi.fn(async (_ms: number) => {});
+    const request = vi.fn()
+      .mockReturnValueOnce(response(429, { "retry-after": "invalid" }))
+      .mockReturnValueOnce(response(200, {}, "[]"));
+    const client = createGitHubApi({ request, sleep, warn: vi.fn() });
+    expect(await client.get("issues")).toEqual([]);
+    expect(sleep.mock.calls[0][0]).toBeGreaterThanOrEqual(60_000);
+  });
+
+  it("drops the old ETag when a changed response stops supplying one", async () => {
+    const request = vi.fn()
+      .mockReturnValueOnce(response(200, { ETag: '"one"' }, "[1]"))
+      .mockReturnValueOnce(response(200, {}, "[2]"))
+      .mockReturnValueOnce(response(200, {}, "[3]"));
+    const client = createGitHubApi({ request });
+    await client.get("issues");
+    expect(await client.get("issues")).toEqual([2]);
+    expect(await client.get("issues")).toEqual([3]);
+    expect(request.mock.calls[2]).toEqual([["api", "--include", "issues"]]);
+  });
+
   it("uses response headers to slow polling without a rate_limit request", async () => {
     const request = vi.fn().mockReturnValue(response(200, {
       "x-ratelimit-remaining": "800", "x-ratelimit-reset": String(now / 1000 + 120),
