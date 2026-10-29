@@ -18,7 +18,7 @@ Core features come first, always: Brand, Create 3 ads, review, launch a Meta
 campaign and manage it (sync/pause/results), working reliably in production.
 Other work (polish, speed, docs, compliance, support, analytics) waits until that
 loop is healthy or the owner asks for it. Build, ship and test in production via
-the [Startup Fast Path](../RELEASING.md#startup-fast-path).
+the [Startup Fast Path](../operations/releasing.md#startup-fast-path).
 
 ### Role cards
 

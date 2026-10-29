@@ -23,7 +23,7 @@ separate approval for migrations, hosting, credentials, and environment changes.
 1. Back up and verify the target. Apply the reviewed
 	`20260919_campaign_reporting_identity.sql` before deploying the new web code;
 	apply `20260919_campaign_worker.sql` before enabling the queue. Use the named
-	migration runner described in [Release Workflow](../../RELEASING.md), not the schema file.
+	migration runner described in [Release Workflow](../releasing.md), not the schema file.
 2. Deploy the same dependency-complete application revision to a supervised Node
 	process with production dependencies installed. Run `npm run worker:campaigns`.
 	Supply `CAMPAIGN_EXECUTION_MODE=worker`, `CAMPAIGN_WORKER_TARGET` equal to the

@@ -18,7 +18,7 @@ feature branch or a passing local test.
 | Owner or coordinating worker | [Worker orchestration](team/orchestration.md) | [Roadmap](roadmap.md) |
 | New developer | [Quick start](team/quick-start.md) | [Architecture](ARCHITECTURE.md) |
 | Product or support | [Features and workflows](product/README.md) | [Roadmap](roadmap.md) |
-| Operator | [Deployment configuration](operations/deploy.md) | [Release policy](RELEASING.md) |
+| Operator | [Deployment configuration](operations/deploy.md) | [Release policy](operations/releasing.md) |
 | Debugging engineer | [Observability](operations/observability.md) | [Operations](operations/README.md) |
 | Product planner | [Roadmap](roadmap.md) | [Payment plan](PAYMENTS-PLAN.md) |
 
@@ -39,7 +39,7 @@ feature branch or a passing local test.
 | [Operations](operations/README.md) | How do we diagnose partial work, stale spend, provider failures and retention problems? |
 | [Observability](operations/observability.md) | What is logged, how is it correlated, and what must never be collected? |
 | [Deployment](operations/deploy.md) | How is a target environment configured and smoke-tested? |
-| [Release policy](RELEASING.md) | What approvals and checks govern remote changes? |
+| [Release policy](operations/releasing.md) | What approvals and checks govern remote changes? |
 | [Meta approval readiness](META_APPROVAL_ACTION_PLAN.md) | What external review evidence must be prepared and verified? |
 | [Payment plan and readiness](PAYMENTS-PLAN.md) | What are the agreed economics, implemented payment boundaries and remaining live-rollout requirements? |
 | [Brand identity](BRAND-IDENTITY.md) | Which presentation and terminology conventions should the product follow? |
@@ -71,6 +71,7 @@ last move.
 | `DATA_MODEL.md` | [architecture/data-model.md](architecture/data-model.md), [data-model-access.md](architecture/data-model-access.md) and [migrations.md](architecture/migrations.md) |
 | `QUICK_START.md` | [team/quick-start.md](team/quick-start.md) |
 | `ORCHESTRATION.md` | [team/orchestration.md](team/orchestration.md) |
+| `RELEASING.md` | [operations/releasing.md](operations/releasing.md) and [operations/releasing-recovery.md](operations/releasing-recovery.md) (backups, rollback, production guard) |
 
 ## Terminology
 
@@ -91,7 +92,7 @@ last move.
 
 - Runtime schemas, route handlers, database constraints, and tests define the
   current contract. Documentation explains them; it does not override them.
-- [Release policy](RELEASING.md) governs publication and production changes.
+- [Release policy](operations/releasing.md) governs publication and production changes.
 - [Brand identity](BRAND-IDENTITY.md) covers product presentation.
 
 ## Safety Before Setup

@@ -3,7 +3,7 @@
 Part of [Operations](README.md).
 
 Use this runbook to prepare a target and verify a deployment. Authorization and
-promotion rules live in [Release Workflow](../RELEASING.md); configuration defaults
+promotion rules live in [Release Workflow](releasing.md); configuration defaults
 live in [Configuration](configuration.md). AdBrain requires a dynamic Node/Next.js
 host and Supabase Auth/Postgres/Storage, not a static export.
 
