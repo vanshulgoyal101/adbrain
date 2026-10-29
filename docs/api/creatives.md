@@ -170,6 +170,12 @@ unavailable admission returns 503 before paid work. A confirmed save or pre-prov
 failure releases the claim. So does a fact-check rejection whose text attempts all
 completed and were receipted: it returns 422 with a plain message naming any
 uncited claim (for example "10%, free"), and the creative is unchanged (#281).
+A picture that failed on a free provider (Pollinations, Cloudflare) or that the provider
+refused, after copy whose attempts all finished and were receipted, also releases it
+with a 502 retry message (#2219). After the
+[stale-claim migration](../../db/migrations/20261029_creative_regeneration_stale_claims.sql),
+a `processing` claim untouched for 15 minutes (a request killed past the 300-second
+limit or by a deploy) is taken over by the next attempt; `unresolved` never is.
 An uncertain paid failure returns 502 and retains the claim for operator review.
 
 `POST /api/creatives/[id]/picture` redraws the words printed on the picture
@@ -190,9 +196,10 @@ direction) and redraws the same overlay words on it (#280). It shares Regenerate
 rate limit, monthly AI limit and `creative_regeneration_claim`, so only one paid job
 runs per ad. Usage is recorded as `creatives.background`. The copy, overlay words
 and status are kept; the receipt gets the new `photoUrl`, `imagePrompt`, image usage
-and `backgroundInstruction`. If the provider confirms every attempt failed, the claim
-is released with a retry message. Any other failure (OpenRouter reports `unknown`)
-holds the claim as `unresolved` with a 502, exactly like Regenerate.
+and `backgroundInstruction`. If every attempt was a free picture or the provider
+confirmed it failed, the claim is released with a retry message, so a Pollinations
+timeout never locks the ad (#2219). Any other paid failure (OpenRouter reports
+`unknown`) holds the claim as `unresolved` with a 502, exactly like Regenerate.
 With `{photoUrl}` instead, the URL must be one of the business's `product_photo`
 Brand assets (else 400 before the claim). There is no image call, no usage row and
 no monthly-limit check; the photo is copied through the guarded downloader, the
