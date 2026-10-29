@@ -5,7 +5,7 @@ import type { SetupReads } from "@/lib/meta/setup-checklist";
 import { destinationFromAdSets, type CampaignDestination } from "@/lib/campaign/outcomes";
 import type { CampaignSkipReason } from "@/lib/campaign/sync-skips";
 import { minCampaignSpendCapPaise, type SpendCapMinimumAccount } from "@/lib/campaign/spend-cap-minimum";
-import { decodeAdResults, decodeCampaignInsights, decodeLifetimeSpendPaise, type AdResult, type CampaignInsights } from "./insights";
+import { decodeAdResults, decodeCampaignInsights, decodeLifetimeSpendPaise, type AdResult, type CampaignInsights, type MetaCampaignState } from "./insights";
 import { maskWhatsAppNumber, maskedWhatsAppNumberPattern } from "./whatsapp-status-shared";
 import { graphEndpoint, graphEntity, graphErrorCode, graphOutcome } from "./graph-event";
 import { recordProductEvent } from "@/lib/observability/logger";
@@ -14,7 +14,9 @@ import { EXCLUDABLE_CITIES, INDIA_REGION_KEYS, mergeExclusions, serviceAreaExclu
 import { AD_LANGUAGE_KEYS, storedLocales } from "./locales";
 import { expandPlaceAliases } from "./geo-aliases";
 import { fetchAdImage, readAdVideo, startAdVideo, uploadAdImageBytes, type AdVideoState } from "./media";
-export type { AdResult, CampaignInsights } from "./insights";
+import { buildGeoLocations, clampRadiusKm, geoLabel, hasGeo, pickBestGeoMatch } from "./geo";
+export { buildGeoLocations, geoItemsToTargeting, hasGeo, pickBestGeoMatch } from "./geo";
+export type { AdResult, CampaignInsights, MetaCampaignState } from "./insights";
 
 export interface MetaCredentials {
   adAccountId: string;
@@ -762,112 +764,6 @@ export function splitAgeRange(
     { ageMin: min, ageMax: mid, label: `Age ${min}–${mid}` },
     { ageMin: mid + 1, ageMax: max, label: `Age ${mid + 1}–${max}` },
   ];
-}
-
-/** Meta city-radius bounds (kilometers). */
-const RADIUS_MIN_KM = 5;
-const RADIUS_MAX_KM = 80;
-
-function clampRadiusKm(km: number): number {
-  if (!Number.isFinite(km)) return 25;
-  return Math.min(Math.max(Math.round(km), RADIUS_MIN_KM), RADIUS_MAX_KM);
-}
-
-/**
- * Pick the best adgeolocation match for a typed place name. Meta returns
- * Exact names and qualified city/region labels take precedence. Otherwise keep
- * Meta's relevance order within the requested country and preferred place type.
- * #1555: with a country, a place abroad counts only when the owner typed its
- * qualified label ("Austin, Texas"); a bare namesake ('Tricity' → Tri-City,
- * Oregon) is no match, so it comes back unresolved instead of spending abroad.
- */
-export function pickBestGeoMatch(
-  matches: GeoSearchResult[],
-  query: string,
-  preferCountry = "",
-): GeoSearchResult | null {
-  const normalizedQuery = query.trim().toLowerCase();
-  const qualified = (match: GeoSearchResult) => Boolean(match.region) && geoLabel(match).trim().toLowerCase() === normalizedQuery;
-  const exact = matches.filter((match) => match.name.trim().toLowerCase() === normalizedQuery || qualified(match));
-  const byType = (pool: GeoSearchResult[]) => ["city", "region", "country"]
-    .map((type) => pool.find((m) => m.type === type)).find(Boolean) ?? pool[0] ?? null;
-  if (!preferCountry) return byType(exact.length ? exact : matches);
-  const home = (match: GeoSearchResult) => !match.country_code || match.country_code === preferCountry;
-  const homeExact = exact.filter(home);
-  if (homeExact.length) return byType(homeExact);
-  const namedAbroad = exact.filter(qualified);
-  if (namedAbroad.length) return byType(namedAbroad);
-  return byType(matches.filter(home));
-}
-
-/**
- * Build the targeting `geo_locations` object, falling back to whole countries
- * when no city/region/country resolved.
- */
-export function buildGeoLocations(
-  geo: GeoTargeting | undefined,
-  fallbackCountries: string[],
-): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  if (geo?.cities?.length) out.cities = geo.cities;
-  if (geo?.regions?.length) out.regions = geo.regions;
-  if (geo?.countries?.length) out.countries = geo.countries;
-  if (!out.cities && !out.regions && !out.countries) {
-    out.countries = fallbackCountries;
-  }
-  return out;
-}
-
-/** Short human label for a resolved geo match (e.g. "Jaipur (city)"). */
-function geoLabel(m: GeoSearchResult): string {
-  const region = m.region ? `, ${m.region}` : "";
-  return `${m.name}${region}`;
-}
-
-/**
- * Convert user-picked places (each already carrying a Meta key) into a
- * `GeoTargeting` spec. Cities get a radius (their own, else the default);
- * regions and countries are exact. Duplicates are removed. Pure — no network.
- */
-export function geoItemsToTargeting(
-  items: GeoItem[],
-  defaultRadiusKm = 25,
-  cityScope: "city_only" | "radius" = "radius",
-): GeoTargeting {
-  const cities: NonNullable<GeoTargeting["cities"]> = [];
-  const regions: NonNullable<GeoTargeting["regions"]> = [];
-  const countries: string[] = [];
-  const seen = new Set<string>();
-  for (const item of items ?? []) {
-    const key = (item?.key ?? "").trim();
-    if (!key) continue;
-    const dedupe = `${item.type}:${key}`;
-    if (seen.has(dedupe)) continue;
-    seen.add(dedupe);
-    if (item.type === "city") {
-      cities.push({
-        key,
-        ...(cityScope === "radius" ? {
-          radius: clampRadiusKm(item.radiusKm ?? defaultRadiusKm),
-          distance_unit: "kilometer",
-        } : {}),
-      });
-    } else if (item.type === "region") {
-      regions.push({ key });
-    } else if (item.type === "country") {
-      countries.push(key);
-    }
-  }
-  const geo: GeoTargeting = {};
-  if (cities.length) geo.cities = cities;
-  if (regions.length) geo.regions = regions;
-  if (countries.length) geo.countries = countries;
-  return geo;
-}
-
-/** True when a targeting spec has at least one place. */
-export function hasGeo(geo: GeoTargeting | undefined): boolean {
-  return !!(geo?.cities?.length || geo?.regions?.length || geo?.countries?.length);
 }
 
 /**
@@ -1703,13 +1599,20 @@ export class MetaClient {
   }
 
   private async verifyCampaignBinding(campaignId: string): Promise<CampaignDestination> {
+    return (await this.readCampaignBinding(campaignId, false)).destination;
+  }
+
+  /** The binding check; #1903: with `withState` the same two reads also carry the campaign's status and budgets. */
+  private async readCampaignBinding(campaignId: string, withState: boolean): Promise<{ destination: CampaignDestination; state: MetaCampaignState | null }> {
     const node = encodeURIComponent(campaignId);
-    const campaign = await this.graph<{ id?: string; account_id?: string }>(`${node}?fields=id,account_id`);
+    const campaign = await this.graph<{ id?: string; account_id?: string; status?: string; daily_budget?: string; lifetime_budget?: string }>(
+      `${node}?fields=id,account_id${withState ? ",status,daily_budget,lifetime_budget" : ""}`,
+    );
     if (campaign.id !== campaignId || campaign.account_id !== this.creds.adAccountId.replace(/^act_/, "")) {
       throw new MetaError("Campaign does not match the connected ad account.");
     }
-    const adSets = await this.graph<{ data?: Array<{ destination_type?: string; promoted_object?: { page_id?: string } }>; paging?: { next?: string } }>(
-      `${node}/adsets?fields=promoted_object,destination_type&limit=100`,
+    const adSets = await this.graph<{ data?: Array<{ id?: string; status?: string; daily_budget?: string; lifetime_budget?: string; destination_type?: string; promoted_object?: { page_id?: string } }>; paging?: { next?: string } }>(
+      `${node}/adsets?fields=${withState ? "id,status,daily_budget,lifetime_budget," : ""}promoted_object,destination_type&limit=100`,
     );
     if (Array.isArray(adSets.data) && !adSets.data.length && !adSets.paging?.next) {
       // #721: a campaign deleted in Meta still answers, but lists no ad sets; its own status says why.
@@ -1722,14 +1625,19 @@ export class MetaClient {
       || adSets.data.some(adSet => adSet.promoted_object?.page_id !== this.creds.pageId)) {
       throw new MetaError("Campaign Page binding could not be verified. Review the campaign in Meta.");
     }
-    return destinationFromAdSets(adSets.data);
+    const state: MetaCampaignState | null = withState && typeof campaign.status === "string" ? {
+      status: campaign.status, dailyBudget: campaign.daily_budget, lifetimeBudget: campaign.lifetime_budget,
+      adSets: adSets.data.map(adSet => ({ id: String(adSet.id ?? ""), status: adSet.status, dailyBudget: adSet.daily_budget, lifetimeBudget: adSet.lifetime_budget })),
+    } : null;
+    return { destination: destinationFromAdSets(adSets.data), state };
   }
 
   async getCampaignInsights(campaignId: string, options?: { weekly?: boolean }): Promise<CampaignInsights> {
-    const destination = await this.verifyCampaignBinding(campaignId);
+    const { destination, state } = await this.readCampaignBinding(campaignId, true);
     // #404: without a preset Meta reads last_30d, which leaves out today, so a new campaign read ₹0. Results are lifetime.
     const data = await this.graph<unknown>(`${encodeURIComponent(campaignId)}/insights?fields=impressions,clicks,spend,actions,date_start,date_stop&date_preset=${options?.weekly ? "this_week_mon_today" : "maximum"}`);
-    return decodeCampaignInsights(data, destination, { requireSpend: options?.weekly });
+    const insights = decodeCampaignInsights(data, destination, { requireSpend: options?.weekly });
+    return state ? { ...insights, metaState: state } : insights;
   }
 
   /**

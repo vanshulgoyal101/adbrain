@@ -233,6 +233,16 @@ describe("core: edit a launched campaign's daily budget (#774)", () => {
     expect(mirror()).toMatchObject({ daily_budget: 150 });
   });
 
+  it("clears a 'changed in Meta Ads Manager' note a refresh wrote meanwhile, keeping the rest of raw (#1903)", async () => {
+    storedDaily({ daily_budget: 250 });
+    const row = mirror();
+    row.raw = { ...row.raw as Row, metaBudgetChange: { wasRupees: 200, nowRupees: 250, at: "2026-10-29T09:00:00.000Z" } };
+    replay([daily[11], ...daily.slice(9, 14)]);
+    expect((await edit({ change: { dailyRupees: 150 } })).status).toBe(200);
+    expect(mirror()).toMatchObject({ daily_budget: 150, raw: { source: "campaign_operation", metaResult: { campaignId: CAMPAIGN } } });
+    expect(mirror().raw).not.toHaveProperty("metaBudgetChange");
+  });
+
   // #1146: a waiting new-audience copy holds the budget it was made with; the switch would drop this change.
   it("refuses while a new audience waits to be switched on, before any Meta call", async () => {
     storedDaily({ daily_budget: 250 });

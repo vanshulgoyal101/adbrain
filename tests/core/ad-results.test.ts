@@ -3,6 +3,7 @@ import recorded from "./fixtures/meta/ad-results.json";
 import { MetaClient } from "@/lib/meta/client";
 import { bestAd, decodeAdResults, type AdResult } from "@/lib/meta/insights";
 import { adResultViews, saveAdResults, type StoredAdResult } from "@/lib/campaign/ad-results-store";
+import { metaDailyBudgetPaise, outsideChanges } from "@/lib/campaign/gone-in-meta";
 
 // #783/#789: per-ad results. Meta's real read-only answers for Solaride's live WhatsApp campaign (#499), recorded
 // by scripts/record-meta-ad-results.ts: 6 ads, of which Meta lists insights only for the 3 that delivered.
@@ -72,6 +73,27 @@ describe("core: results per ad (#783)", () => {
 });
 
 // #783 PR 3: what the refresh stores and what the card reads back, on the same recorded campaign.
+// #1903: the insights read's binding check also carries status and budgets (same two calls). Recorded Oct 29 for the
+// same campaign, read-only: paused, one capped ad set (lifetime ₹900) and one daily ad set (₹300); Meta sends "0" for unset budgets.
+describe("core: what Meta Ads Manager changed, from the insights read (#1903)", () => {
+  it("reads Meta's status and budgets, and counts only the uncapped daily budget", async () => {
+    const pending = replay();
+    const total = await new MetaClient(creds).getCampaignInsights(recorded.campaignId);
+    expect(total.metaState).toMatchObject({ status: "PAUSED", adSets: [
+      { id: "120253710066230526", status: "PAUSED", dailyBudget: "0", lifetimeBudget: "90000" },
+      { id: "120253709998340526", status: "PAUSED", dailyBudget: "30000", lifetimeBudget: "0" },
+    ] });
+    expect(pending.filter(exchange => exchange.path.includes("status%2Cdaily_budget"))).toEqual([]);
+    expect(metaDailyBudgetPaise(total.metaState!, ["120253710066230526"])).toBe(30000);
+    expect(metaDailyBudgetPaise(total.metaState!, [])).toBeNull();
+    const now = new Date("2026-10-29T07:00:00Z");
+    expect(outsideChanges({ status: "active", daily_budget: 300, raw: {} }, total.metaState!, ["120253710066230526"], now))
+      .toEqual({ raw: { metaPausedAt: now.toISOString() }, raised: false });
+    expect(outsideChanges({ status: "active", daily_budget: 200, raw: {} }, total.metaState!, ["120253710066230526"], now))
+      .toMatchObject({ daily_budget: 300, raised: true, raw: { metaBudgetChange: { wasRupees: 200, nowRupees: 300 } } });
+  });
+});
+
 describe("core: stored per-ad results round-trip (#783)", () => {
   it("stores one lifetime row per ad and reads back the same totals, with no 'Best' at one chat", async () => {
     replay();
