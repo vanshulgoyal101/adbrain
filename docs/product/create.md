@@ -70,10 +70,19 @@ Download, ZIP export, and campaign delivery retain the original image. If the
 derivative fails, the original remains available; older creatives and uploaded
 brand assets are not retroactively resized.
 
+Sharing an approved ad converts a stored WebP to a full-size JPEG (`.jpg`) in the
+browser, including the desktop download fallback (#2016). Transparent areas
+become white. Existing PNG/JPEG pictures stay unchanged. Conversion failures show
+the existing preparation error instead of sharing or downloading the WebP.
+
 Regeneration uses the creative's saved language/format, updates that creative,
 and resets approval to `draft`. Approval toggles `draft`/`approved`; it does not
 change existing remote ads. Deleting a local creative is not a request to delete
 a Meta ad already created from it.
+
+Studio's Background editor offers saved Brand photos before the optional
+"Or describe an AI picture" field. Opening it does not focus that text field;
+the owner can choose a photo without first opening the phone keyboard.
 
 New creative concepts require a headline, primary text, and a separate Meta link
 description. Copy is directed toward one brief-specific argument, supported facts,

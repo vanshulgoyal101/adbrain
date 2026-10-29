@@ -3,6 +3,10 @@
 Part of [the documentation index](../README.md). The architecture guide itself is
 still [ARCHITECTURE.md](../ARCHITECTURE.md) until #1851 moves it into this folder.
 
+## Channels
+
+[Channels](channels/README.md): one page of current facts per ad channel, starting with [Meta](channels/meta.md).
+
 ## Decisions (ADRs)
 
 An architecture decision record (ADR) holds one decision that shapes code across
