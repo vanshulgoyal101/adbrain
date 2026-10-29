@@ -45,7 +45,7 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
 
 - **Publishing requires a verified Page-linked number.** Eligible reviews offer
   Send to Meta (paused); missing or unreadable linkage still blocks publishing.
-  In the earlier 2026-09-19 read-only check, Solaride's Page omitted its linkage/number fields
+  In the earlier 2026-09-19 read-only check, the first pilot's Page omitted its linkage/number fields
   with both Page and system-user tokens. An existing ad set's historical recipient
   is not accepted as proof of the current linkage. No test campaign was created.
 - Select WhatsApp chat in either manual or guided setup. No lead form is required
@@ -58,8 +58,8 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
   button can differ from the phone printed on the ad. It is accepted only if it is the
   Page's number or a number on a WhatsApp Business Account owned by the ad account's
   own Meta business; Meta accepts those for the Page's WhatsApp ad sets (#157).
-- Brand and Settings show early whether WhatsApp chat ads can run ("Ready: +91 ••••• 4842" or
-  "Not linked yet") with a short linking guide and a Check again button (#235).
+- Brand and Settings show early whether WhatsApp chat ads can run ("Ready: +91 ••••• 4842
+  (linked to your Page)" or "Not linked yet") with a short linking guide and a Check again button (#235).
 - In manual setup, the campaign form lists those numbers (masked; full numbers never
   reach the browser before review) as **WhatsApp button number** and saves the chosen
   mask in the draft; preflight resolves it to the full number. A new campaign, and a plan
@@ -168,4 +168,4 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
 - Meta Page field references were checked; mocked provider tests do not certify
   actual account eligibility, delivery, or Graph v21 payload acceptance. Perform
   an explicitly authorized real-account PAUSED creation test before rollout.
-  No live Solaride campaign is modified by this implementation.
+  No live pilot campaign is modified by this implementation.
