@@ -11,3 +11,6 @@
 | [साइन इन और Meta जोड़ना](setup.md) | [Sign In and Connect Meta](../setup.md) |
 | [कैंपेन लॉन्च करना](launch.md) | [Launch a Campaign](../launch.md) |
 | [कैंपेन संभालना: सिंक, नतीजे और लीड](manage.md) | [Manage: Sync, Results and Leads](../manage.md) |
+| [ब्रांड](brand.md) | [Brand](../brand.md) |
+| [ऐड बनाना और देखना](create.md) | [Create and Review Ads](../create.md) |
+| [रिव्यू और Go live](review.md) | [Review and Go Live](../review.md) |
