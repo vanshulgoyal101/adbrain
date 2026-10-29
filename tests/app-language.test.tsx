@@ -82,7 +82,7 @@ describe("AppLanguage, compact (step 1)", () => {
     render(<CompactAppLanguage />);
     fireEvent.click(screen.getByRole("button", { name: "हिंदी" }));
     await waitFor(() => expect(action.setAppLanguage).toHaveBeenCalledWith("hi"));
-    expect(await screen.findByText("अभी सिर्फ़ होम हिंदी में है; बाकी स्क्रीन एक-एक करके जुड़ेंगी।")).toHaveAttribute("lang", "hi");
+    expect(await screen.findByText("कुछ स्क्रीन अब हिंदी में हैं; बाकी एक-एक करके जुड़ेंगी।")).toHaveAttribute("lang", "hi");
     expect(screen.queryByRole("button", { name: "English" })).toBeNull();
   });
 
