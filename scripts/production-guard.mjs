@@ -3,13 +3,13 @@
 //   wait <sha>                wait up to 5 minutes for production to serve <sha>
 //   drift <sha> <epochSecs>   wait until 15 minutes after main HEAD <sha> landed; fail if it is not live
 //   rollback <badSha>         roll production back to the newest earlier READY deployment
+//   served <sha>              no token: wait up to 6 min for the domain's X-AdBrain-Release to be <sha> (#1457)
 import { execFileSync } from "node:child_process";
 import { appendFileSync } from "node:fs";
 
 const team = "vanshul-goyals-projects";
 const domain = "adbrain.vanshul.com";
 const token = process.env.VERCEL_TOKEN;
-if (!token) throw new Error("VERCEL_TOKEN is not set.");
 
 /** Strips the token and anything shaped like a Vercel token from text bound for logs or issues. */
 function redact(text) {
@@ -17,6 +17,7 @@ function redact(text) {
 }
 
 async function vercel(path) {
+  if (!token) throw new Error("VERCEL_TOKEN is not set.");
   const url = new URL(path, "https://api.vercel.com");
   url.searchParams.set("slug", team);
   const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
@@ -78,6 +79,33 @@ if (command === "live") {
     console.log(`DRIFT: main HEAD ${sha.slice(0, 7)} landed ${minutes} min ago but production serves ${current.sha.slice(0, 7)} (${current.url})`);
     process.exitCode = 1;
   }
+} else if (command === "served") {
+  // #1457: a hand rollback/promote can pin the domain to an old deployment; then the smoke would test the wrong
+  // build. The app sends its build's commit as X-AdBrain-Release, so this needs no Vercel token.
+  const repo = process.env.GITHUB_REPOSITORY;
+  const newer = async (served) => {
+    if (!repo) return false;
+    const headers = process.env.GH_TOKEN ? { Authorization: `Bearer ${process.env.GH_TOKEN}` } : {};
+    const response = await fetch(`https://api.github.com/repos/${repo}/compare/${sha}...${served}`, { headers });
+    return response.ok && (await response.json()).status === "ahead";
+  };
+  let served = "";
+  for (let i = 0; ; i++) {
+    const response = await fetch(`https://${domain}/`, { method: "HEAD", cache: "no-store", signal: AbortSignal.timeout(15_000) }).catch(() => null);
+    served = response?.headers.get("x-adbrain-release") ?? "";
+    if (served === sha) { console.log(`Production serves ${sha.slice(0, 7)}`); break; }
+    if (served && served !== "local" && await newer(served)) {
+      console.log(`Superseded: production serves newer ${served.slice(0, 7)}; its own run smokes it`);
+      if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, "superseded=true\n");
+      break;
+    }
+    if (i >= 24) {
+      console.log(`FAIL Domain serves ${served ? served.slice(0, 7) : "an unknown build"}, not ${sha.slice(0, 7)}: promote the newest production deployment (docs/RELEASING.md#rollback-and-incident-handling)`);
+      process.exitCode = 1;
+      break;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 15_000));
+  }
 } else if (command === "rollback") {
   const current = await live();
   const { deployments } = await vercel("/v6/deployments?app=adbrain&target=production&state=READY&limit=20");
@@ -101,5 +129,5 @@ if (command === "live") {
   console.log(`Production now serves ${after.sha.slice(0, 7)} (${after.url})`);
   if (after.id !== target.uid) process.exitCode = 1;
 } else {
-  throw new Error("Usage: production-guard.mjs live | wait <sha> | drift <sha> <epochSecs> | rollback <badSha>");
+  throw new Error("Usage: production-guard.mjs live | wait <sha> | drift <sha> <epochSecs> | served <sha> | rollback <badSha>");
 }

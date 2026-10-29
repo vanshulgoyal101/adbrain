@@ -33,7 +33,7 @@ const store = vi.hoisted(() => {
     tables: {} as Record<string, Row[]>, user: null as { id: string } | null, log: [] as string[], unknown: [] as string[],
     rpc: {} as Record<string, (args: Row) => { data: unknown; error: unknown }>, inserted: 0,
   };
-  const known = ["audit_log", "businesses", "campaigns", "campaign_results", "meta_connections", "spend_limits"];
+  const known = ["audit_log", "businesses", "campaign_edit_operations", "campaigns", "campaign_results", "meta_connections", "spend_limits"];
   const fail = (call: string): never => {
     state.unknown.push(call);
     throw new Error(`Unstubbed Supabase call: ${call}`);
@@ -523,6 +523,22 @@ describe("core: manage routes against recorded Graph responses (#649)", () => {
     expect(await response.json()).toMatchObject({ error: "Meta connection changed; review the campaign again." });
     expect(globalThis.fetch).not.toHaveBeenCalled();
     expect(capabilities.verify).not.toHaveBeenCalled();
+    expect(store.state.tables.campaigns[0].status).toBe("paused");
+  });
+
+  // #1518 (CTO): a paused campaign can still have a new-audience copy waiting (made while it ran). Turning it on would
+  // build a capped copy of the old ad set beside the waiting one, and both could spend.
+  it("activate: refuses while a new audience waits to be switched on, before any Meta write or reservation", async () => {
+    const campaign = reviewedCampaign();
+    replay(tapes.delivery, tapes.funding);
+    const confirmationDigest = await digest(campaign, (await (await review()).json()).delivery, 3);
+    store.state.tables.campaign_edit_operations = [{ id: "op-waiting", campaign_id: STORED, kind: "audience", state: "awaiting_switch", phase: "copy" }];
+    replay(tapes.delivery, tapes.funding);
+    const response = await activate({ confirmationDigest, connectionGeneration: GENERATION, capDays: 3 });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ code: "switch_pending", error: "A new audience is waiting for this campaign. Turn it on or cancel it first." });
+    expect(writes()).toEqual([]);
+    expect(store.state.inserted).toBe(0);
     expect(store.state.tables.campaigns[0].status).toBe("paused");
   });
 

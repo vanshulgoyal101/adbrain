@@ -97,7 +97,7 @@ describe("<Studio> generation", () => {
       render(<Studio business={business} initialCreatives={[]} />);
       fireEvent.change(screen.getByLabelText(/what are we advertising/i), { target: { value: "Solar installation" } });
       fireEvent.click(screen.getByRole("button", { name: /generate ads/i }));
-      expect(await screen.findByRole("alert")).toHaveTextContent("No generation was started");
+      expect(await screen.findByRole("alert")).toHaveTextContent("so no ads were started");
       expect(global.fetch).not.toHaveBeenCalled();
     } finally { storage.mockRestore(); }
   });
@@ -725,6 +725,19 @@ describe("<Studio> live picture preview while editing (#387)", () => {
     expect(screen.queryByTestId("phone-picture-preview")).toBeNull();
   });
 
+  // #1901 item 3 (CPO words): the swap offers the owner's photos first, then an AI picture; neither re-writes the words.
+  it("offers 'Use another photo' first, then 'Use an AI picture instead'", async () => {
+    const user = userEvent.setup();
+    h.photos = ["https://cdn.example/brand-assets/b1/roof.jpg"];
+    render(<Studio business={business} initialCreatives={[creative()]} />);
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    await user.click(screen.getByRole("tab", { name: "Background" }));
+    const photos = await screen.findByRole("group", { name: "Use another photo" });
+    const ai = screen.getByLabelText("Use an AI picture instead");
+    expect(photos.compareDocumentPosition(ai) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByRole("form", { name: "Change the picture" })).toHaveTextContent("Your text and the words on the picture stay.");
+  });
+
   it("shows a picked Brand photo behind the same words at once", async () => {
     const user = userEvent.setup();
     h.photos = ["https://cdn.example/brand-assets/b1/roof.jpg"];
@@ -807,10 +820,10 @@ describe("<Studio> change only the background (#280)", () => {
     render(<Studio business={business} initialCreatives={[creative({ status: "approved" })]} />);
     await user.click(screen.getByRole("button", { name: "Edit" }));
     await user.click(screen.getByRole("tab", { name: "Background" }));
-    const form = screen.getByRole("form", { name: "Change the background" });
+    const form = screen.getByRole("form", { name: "Change the picture" });
     expect(within(form).getByRole("button", { name: "Make background" })).toBeDisabled();
     expect(within(form).getByText(/uses one AI\s+image, like Regenerate/)).toBeInTheDocument();
-    await user.type(within(form).getByLabelText("New background"), "Rooftop at sunset");
+    await user.type(within(form).getByLabelText("Use an AI picture instead"), "Rooftop at sunset");
     await user.click(within(form).getByRole("button", { name: "Make background" }));
 
     await waitFor(() => expect(global.fetch).toHaveBeenCalledWith("/api/creatives/c1/background", expect.objectContaining({ method: "POST" })));
@@ -829,7 +842,7 @@ describe("<Studio> change only the background (#280)", () => {
     render(<Studio business={business} initialCreatives={[creative()]} />);
     await user.click(screen.getByRole("button", { name: "Edit" }));
     await user.click(screen.getByRole("tab", { name: "Background" }));
-    const form = screen.getByRole("form", { name: "Change the background" });
+    const form = screen.getByRole("form", { name: "Change the picture" });
     await user.click(await within(form).findByRole("button", { name: "Your photo 2" }));
     expect(within(form).getByText(/No AI and no cost/)).toBeInTheDocument();
     await user.click(within(form).getByRole("button", { name: "Use this photo" }));
@@ -845,10 +858,10 @@ describe("<Studio> change only the background (#280)", () => {
     render(<Studio business={business} initialCreatives={[creative()]} />);
     await user.click(screen.getByRole("button", { name: "Edit" }));
     await user.click(screen.getByRole("tab", { name: "Background" }));
-    await user.type(screen.getByLabelText("New background"), "Rooftop at sunset");
+    await user.type(screen.getByLabelText("Use an AI picture instead"), "Rooftop at sunset");
     await user.click(screen.getByRole("button", { name: "Make background" }));
     expect(await screen.findByText(/Your ad is unchanged; try again/)).toBeInTheDocument();
-    expect(screen.getByRole("form", { name: "Change the background" })).toBeInTheDocument();
+    expect(screen.getByRole("form", { name: "Change the picture" })).toBeInTheDocument();
   });
 });
 
@@ -909,15 +922,31 @@ describe("<Studio> export", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: /export approved/i }));
 
-    expect(await screen.findByText("Export failed.")).toBeInTheDocument();
+    expect(await screen.findByText("The ad pack didn't download. Check your connection and tap Download again.")).toBeInTheDocument();
     expect(h.downloadBlob).not.toHaveBeenCalled();
   });
 });
 
 describe("<Studio> empty state", () => {
-  it("nudges the owner to generate their first batch", () => {
+  it("#1598: no ads is one block (title, line, one solid Make ads); no stepper, header, tabs or Create campaign (0)", () => {
     render(<Studio business={business} initialCreatives={[]} />);
-    expect(screen.getByText(/generate your first batch/i)).toBeInTheDocument();
+    const block = screen.getByRole("region", { name: "No ads yet" });
+    expect(within(block).getByText("AdBrain makes 3 ads from your business details in about a minute.")).toBeInTheDocument();
+    expect(within(block).getByRole("link", { name: "Make ads" })).toHaveAttribute("href", "/create");
+    expect(screen.queryByRole("button", { name: /Create campaign/ })).toBeNull();
+    expect(screen.queryByRole("link", { name: /Create campaign/ })).toBeNull();
+    expect(screen.queryByRole("searchbox", { name: "Search ads" })).toBeNull();
+    expect(screen.queryByText(/Ads\s*\(0\)/)).toBeNull();
+    // Writing a brief here still works, behind the closed 'Make more ads'.
+    expect(screen.getByText("Make more ads").closest("details")).not.toHaveAttribute("open");
+  });
+
+  it("#1598: with ads, Create campaign is the one solid primary; the card's Share is outline", () => {
+    render(<Studio business={business} initialCreatives={[creative({ status: "approved" })]} />);
+    expect(screen.getByRole("link", { name: /Create campaign \(1\)/ }).className).toContain("bg-primary");
+    const share = screen.getByRole("button", { name: "Share to WhatsApp or Instagram" });
+    expect(share.className).not.toMatch(/(^|\s)bg-primary(\s|$)/);
+    expect(screen.queryByRole("region", { name: "No ads yet" })).toBeNull();
   });
 });
 
@@ -1214,4 +1243,11 @@ describe("<Studio> the newest batch on return (#1261)", () => {
     await act(async () => {});
     expect(statusCalls()).toHaveLength(0);
   });
+
+describe("#1901: the Studio tile says whose picture it is", () => {
+  it("shows Your photo on an owner-photo ad", () => {
+    render(<Studio business={business} initialCreatives={[creative({ generation: { image: { provider: "owner-photo" } } })]} />);
+    expect(screen.getByText("Your photo")).toBeInTheDocument();
+  });
+});
 });

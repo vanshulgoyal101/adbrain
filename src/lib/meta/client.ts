@@ -1,4 +1,5 @@
 import { GRAPH } from "@/lib/meta/graph-version";
+import { jpegIfWebp } from "@/lib/imageGen/encode";
 import { z } from "zod";
 import { WHATSAPP_PUBLISHER_PLATFORMS } from "@/lib/meta/placements";
 import type { SetupReads } from "@/lib/meta/setup-checklist";
@@ -13,6 +14,7 @@ import { recordProductEvent } from "@/lib/observability/logger";
 import { ConnectionAccessError } from "./connection-access-error";
 import { EXCLUDABLE_CITIES, INDIA_REGION_KEYS, mergeExclusions, serviceAreaExclusions, TargetingExclusionsMissingError, type IncludedPlace } from "./service-area";
 import { AD_LANGUAGE_KEYS, storedLocales } from "./locales";
+import { expandPlaceAliases } from "./geo-aliases";
 export type { AdResult, CampaignInsights } from "./insights";
 
 
@@ -302,6 +304,44 @@ export class MetaError extends Error {
     super(message);
     this.name = "MetaError";
   }
+}
+
+/** #1838: Meta's rate limits: app (4), user/account (17, 613, 80000–80014), Page (32). */
+export function isThrottleCode(code: number | undefined): boolean {
+  return code === 4 || code === 17 || code === 32 || code === 613 || (code !== undefined && code >= 80000 && code <= 80014);
+}
+
+/**
+ * #1838 (Reviewer, CTO): Meta is throttling us. `scope` says who waits (the whole app, one ad account, one Page) and
+ * `retryAfterMs` for how long (Meta's own estimate from the usage headers, else 15 min). Crons skip on it; a person's
+ * pause or activation is still tried. `reason` maps 1:1 to ADR-001's ChannelError code later.
+ */
+export class MetaThrottledError extends MetaError {
+  readonly reason = "rate_limited" as const;
+  constructor(message: string, status: number | undefined, code: number | undefined, subcode: number | undefined,
+    readonly scope: "app" | "account" | "page", readonly retryAfterMs: number, details?: MetaErrorDetails) {
+    super(message, status, code, subcode, details);
+    this.name = "MetaThrottledError";
+  }
+}
+
+const THROTTLE_DEFAULT_MS = 15 * 60_000;
+
+/** Meta's estimated wait from `x-business-use-case-usage` (minutes) or `x-ad-account-usage` (seconds); null if none. */
+export function throttleWaitMs(headers: Headers): number | null {
+  const waits: number[] = [];
+  try {
+    const usage = JSON.parse(headers.get("x-business-use-case-usage") ?? "{}") as Record<string, { estimated_time_to_regain_access?: number }[]>;
+    for (const rows of Object.values(usage)) for (const row of Array.isArray(rows) ? rows : []) {
+      if (typeof row?.estimated_time_to_regain_access === "number") waits.push(row.estimated_time_to_regain_access * 60_000);
+    }
+  } catch {}
+  try {
+    const account = JSON.parse(headers.get("x-ad-account-usage") ?? "{}") as { reset_time_duration?: number };
+    if (typeof account.reset_time_duration === "number") waits.push(account.reset_time_duration * 1000);
+  } catch {}
+  const longest = Math.max(0, ...waits.filter((wait) => Number.isFinite(wait)));
+  return longest > 0 ? longest : null;
 }
 
 /** #757: Graph 190 (any subcode: expired, password change, checkpoint, permission removed) means the token is dead. */
@@ -740,26 +780,27 @@ function clampRadiusKm(km: number): number {
  * Pick the best adgeolocation match for a typed place name. Meta returns
  * Exact names and qualified city/region labels take precedence. Otherwise keep
  * Meta's relevance order within the requested country and preferred place type.
+ * #1555: with a country, a place abroad counts only when the owner typed its
+ * qualified label ("Austin, Texas"); a bare namesake ('Tricity' → Tri-City,
+ * Oregon) is no match, so it comes back unresolved instead of spending abroad.
  */
 export function pickBestGeoMatch(
   matches: GeoSearchResult[],
   query: string,
   preferCountry = "",
 ): GeoSearchResult | null {
-  if (!matches.length) return null;
   const normalizedQuery = query.trim().toLowerCase();
-  const exact = matches.filter((match) => [match.name, geoLabel(match)]
-    .some((label) => label.trim().toLowerCase() === normalizedQuery));
-  const candidates = exact.length ? exact : matches;
-  const inCountry = preferCountry
-    ? candidates.filter((m) => !m.country_code || m.country_code === preferCountry)
-    : candidates;
-  const pool = inCountry.length ? inCountry : candidates;
-  for (const type of ["city", "region", "country"]) {
-    const hit = pool.find((m) => m.type === type);
-    if (hit) return hit;
-  }
-  return pool[0] ?? null;
+  const qualified = (match: GeoSearchResult) => Boolean(match.region) && geoLabel(match).trim().toLowerCase() === normalizedQuery;
+  const exact = matches.filter((match) => match.name.trim().toLowerCase() === normalizedQuery || qualified(match));
+  const byType = (pool: GeoSearchResult[]) => ["city", "region", "country"]
+    .map((type) => pool.find((m) => m.type === type)).find(Boolean) ?? pool[0] ?? null;
+  if (!preferCountry) return byType(exact.length ? exact : matches);
+  const home = (match: GeoSearchResult) => !match.country_code || match.country_code === preferCountry;
+  const homeExact = exact.filter(home);
+  if (homeExact.length) return byType(homeExact);
+  const namedAbroad = exact.filter(qualified);
+  if (namedAbroad.length) return byType(namedAbroad);
+  return byType(matches.filter(home));
 }
 
 /**
@@ -946,8 +987,12 @@ export class MetaClient {
     const json = await res.json().catch(() => ({}));
     if (!res.ok || (json as { error?: unknown }).error) {
       const err = (json as { error?: GraphErrorBody }).error;
-      throw new MetaError(metaErrorMessage(err, res.status), res.status, err?.code, err?.error_subcode,
-        { userTitle: err?.error_user_title, fbtraceId: err?.fbtrace_id, path: graphEndpoint(path) });
+      const details = { userTitle: err?.error_user_title, fbtraceId: err?.fbtrace_id, path: graphEndpoint(path) };
+      if (isThrottleCode(err?.code)) {
+        throw new MetaThrottledError(metaErrorMessage(err, res.status), res.status, err?.code, err?.error_subcode,
+          err?.code === 4 ? "app" : err?.code === 32 ? "page" : "account", throttleWaitMs(res.headers) ?? THROTTLE_DEFAULT_MS, details);
+      }
+      throw new MetaError(metaErrorMessage(err, res.status), res.status, err?.code, err?.error_subcode, details);
     }
     return { status: res.status, body: json as unknown };
   }
@@ -1025,6 +1070,7 @@ export class MetaClient {
     return {
       portfolio: account.business?.id ? { id: account.business.id, name: account.business.name ?? null } : null,
       accountActive: account.account_status === 1,
+      accountStatus: account.account_status ?? null,
       currency: account.currency ?? null,
       paymentMethod: Boolean(account.funding_source_details?.id),
       pageListed: Boolean(pages.data?.some((page) => page.id === this.creds.pageId)),
@@ -1185,7 +1231,7 @@ export class MetaClient {
     const unresolved: string[] = [];
     const seen = new Set<string>();
     // #271: independent searches run together; results are applied in the given order.
-    const searches = await Promise.all(names.map(async raw => {
+    const searches = await Promise.all(expandPlaceAliases(names).map(async raw => {
       const name = (raw ?? "").trim();
       if (!name) return null;
       return { name, results: await this.searchGeoLocations(name).catch(() => null) };
@@ -1256,7 +1302,8 @@ export class MetaClient {
   }
 
   async uploadAdImageBytes(bytes: Uint8Array): Promise<string> {
-    const b64 = Buffer.from(bytes).toString("base64");
+    // #1897: stored ads are WebP; Meta's ad images are sent as JPEG.
+    const b64 = Buffer.from((await jpegIfWebp(bytes)).bytes).toString("base64");
     const data = await this.graph<{ images: Record<string, { hash: string }> }>(
       `${this.creds.adAccountId}/adimages`,
       { method: "POST", form: { bytes: b64 } },

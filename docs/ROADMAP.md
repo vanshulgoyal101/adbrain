@@ -4,7 +4,7 @@ What AdBrain works on next and why: outcomes, not delivery promises. The
 ranked list and its evidence live on
 [#703](https://github.com/vanshulgoyal101/adbrain/issues/703); who does what is in the
 [current dispatch](ORCHESTRATION.md#current-dispatch); what the product does today is in
-[Features](FEATURES.md). This page holds current truth only; git keeps the history.
+[Features](product/README.md). This page holds current truth only; git keeps the history.
 
 **The core loop comes first:** Brand → Create → Review → Launch on Meta → Manage
 and results. Every item below must help a local business get more real enquiries
@@ -15,7 +15,7 @@ for less money, faster and more easily, and must not break that loop
 
 | # | Outcome | Tracked in | Done when |
 | --- | --- | --- | --- |
-| 1 | **First outside pilots live** | [#679](https://github.com/vanshulgoyal101/adbrain/issues/679), [#1315](https://github.com/vanshulgoyal101/adbrain/issues/1315) | 3 outside businesses meet the 'pilot live' definition on #1315 (their own account, the owner switched it on, delivering) within 2 weeks of October 28; the first case study reaches 'Proven' by week 4 |
+| 1 | **First outside pilots live**: rooftop solar, IELTS/study-abroad, interior designers and modular kitchens in the Tricity area (clinics paused, [#1427](https://github.com/vanshulgoyal101/adbrain/issues/1427)) | [#679](https://github.com/vanshulgoyal101/adbrain/issues/679), [#1315](https://github.com/vanshulgoyal101/adbrain/issues/1315) | 3 outside businesses meet the 'pilot live' definition on #1315 (their own account, the owner switched it on, delivering) within 2 weeks of October 28; the first case study reaches 'Proven' by week 4 |
 | 2 | **More WhatsApp chats per ₹** | [#680](https://github.com/vanshulgoyal101/adbrain/issues/680), [#1174](https://github.com/vanshulgoyal101/adbrain/issues/1174) | One lever per run, judged with the decision rule below; results in the [#588](https://github.com/vanshulgoyal101/adbrain/issues/588) ledger |
 | 3 | **A reliable, fast core loop** | [#681](https://github.com/vanshulgoyal101/adbrain/issues/681) | Every step meets its target on the daily core scoreboard for 3 days running |
 | 4 | **Effortless on a phone** | [#1226](https://github.com/vanshulgoyal101/adbrain/issues/1226) | Sign-up to live in ≤ 10 minutes and ≤ 12 taps; results understood in 3 seconds (WS1–WS3 first) |
@@ -64,14 +64,16 @@ live ad or Meta object is changed by the ranking itself.
 
 ## Pilots and Money
 
-- Pilot businesses use **their own** Meta ad account and Page and pay Meta directly. AdBrain sets up the first campaign free; the price after the pilot is the CEO's call ([#718](https://github.com/vanshulgoyal101/adbrain/issues/718)). Until Meta's App Review ([#156](https://github.com/vanshulgoyal101/adbrain/issues/156)) is approved, each pilot owner connects as an app Tester.
+- Pilot businesses use **their own** Meta ad account and Page and pay Meta directly. AdBrain sets up the first campaign free. **Price (CEO, [#718](https://github.com/vanshulgoyal101/adbrain/issues/718)):** ₹999 a month, first month free, no auto-debit; the first 10 customers use the own-ad-account path only.
+- Go live's first run is 2 days today (₹300 a day, stops at ₹708 including Meta's GST). Whether pilots get a 7-day choice is a CEO decision ([#1530](https://github.com/vanshulgoyal101/adbrain/issues/1530)).
+- Until Meta's App Review ([#156](https://github.com/vanshulgoyal101/adbrain/issues/156)) is approved, each pilot owner connects as an app Tester.
 - AdBrain's own checkout and per-customer ad balances exist in source behind flags ([Payments plan](PAYMENTS-PLAN.md)). Whether they go live or are removed is a CEO decision due November 11, 2026 ([#1171](https://github.com/vanshulgoyal101/adbrain/issues/1171)).
 - Numbers shown to owners come from AdBrain's own ledger with the sample size, never from industry benchmarks. A comparison sentence needs at least 20 pooled results for that kind of business ([#1255](https://github.com/vanshulgoyal101/adbrain/issues/1255)).
 
 ## Next, Once the Pilots Run
 
-- **Google Search and Business Profile** as the next channel for businesses people search for (repairs, clinics, B2B). Start: the developer-token application (no build) ([#1241](https://github.com/vanshulgoyal101/adbrain/issues/1241), [#510](https://github.com/vanshulgoyal101/adbrain/issues/510)).
-- **The app in Hindi and Hinglish**, starting with the core screens ([#1285](https://github.com/vanshulgoyal101/adbrain/issues/1285)).
+- **Google Search and Business Profile** as the next channel for businesses people search for (repairs, B2B). Start: the developer-token application (no build) ([#1241](https://github.com/vanshulgoyal101/adbrain/issues/1241), [#510](https://github.com/vanshulgoyal101/adbrain/issues/510)).
+- **The app in Hindi**, one screen per slice from the CPO's tables, then Punjabi for the 3 most-used screens ([#1438](https://github.com/vanshulgoyal101/adbrain/issues/1438)). Home is live behind Settings › App language.
 - **Fill the Brand from the owner's Facebook Page** ([#1238](https://github.com/vanshulgoyal101/adbrain/issues/1238)), and a daily 'what I'd change' line that never raises spend on its own ([#799](https://github.com/vanshulgoyal101/adbrain/issues/799)).
 
 ## Not Now

@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { draftDtoSchema, draftInputSchema } from "@/lib/campaign/connect-contracts";
 import { DRAFT_TTL_MS, MAX_ACTIVE_DRAFTS, draftRecordFromRow, draftRecordToDTO, prepareDraftCreate } from "@/lib/campaign/draft-store";
-import { formatAnswers, runPlanner, plannerAnswerSchema, PLANNER_PROMPT_VERSION, type PlannerQuestion, type PlannerTopic } from "@/lib/campaign/planner";
+import { formatAnswers, runPlanner, plannerAnswerSchema, PLANNER_GROQ_MAX_TOKENS, PLANNER_PROMPT_VERSION, type PlannerQuestion, type PlannerTopic } from "@/lib/campaign/planner";
 import { configuredMonthlyTokenLimit, monthlyTokenUsage, persistLLMUsage } from "@/lib/llm/persist";
 import { AllLLMProvidersFailedError, LLMError, NoLLMKeysError } from "@/lib/llm/types";
 import { fallbackAudienceTargeting, plannerPlanToDraftInput, rationaleForMatchedInterests } from "@/lib/campaign/planner-draft";
@@ -162,7 +162,7 @@ async function handlePOST(req: Request) {
           provider: completion.provider, model: completion.model, usage: completion.usage,
           promptVersion: PLANNER_PROMPT_VERSION, inputChars: completion.inputChars,
           outputChars: completion.outputChars, latencyMs: completion.latencyMs,
-          attempt, maxTokens: 3000, temperature: 0.2,
+          attempt, maxTokens: completion.provider === "groq" ? PLANNER_GROQ_MAX_TOKENS : 3000, temperature: 0.2,
           status: valid ? "success" : "error", errorCode: valid ? undefined : "PLANNER_VALIDATION",
           metadata: { audienceOnly: Boolean(audienceDraft) },
         }]);
@@ -175,7 +175,7 @@ async function handlePOST(req: Request) {
           provider: failure.provider, model: failure.model,
           usage: failure.usage ?? { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
           promptVersion: PLANNER_PROMPT_VERSION, latencyMs: failure.latencyMs,
-          attempt, maxTokens: 3000, temperature: 0.2,
+          attempt, maxTokens: failure.provider === "groq" ? PLANNER_GROQ_MAX_TOKENS : 3000, temperature: 0.2,
           status: "error", failure: failure.failure, errorCode: `LLM_${failure.failure ?? "UNKNOWN"}`, rateLimit: failure.rateLimit,
           providerRequestId: failure.providerRequestId, providerFinalStatus: failure.providerFinalStatus,
           metadata: { audienceOnly: Boolean(audienceDraft) },
