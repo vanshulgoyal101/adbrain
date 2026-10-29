@@ -24,8 +24,9 @@ The check fails when:
 
 - a violation is not in the baseline (a new edge);
 - a baseline entry no longer occurs (you fixed it; drop it from the baseline);
-- with `--base`, the baseline has an entry the base branch did not have, or a higher C4 line count;
-- a file listed under C4 has more lines than its baseline ceiling.
+- with `--base`, the baseline has an entry the base branch did not have, or a higher C4 or C5 ceiling
+  (a rule the base branch's checker doesn't define yet is skipped for this one comparison);
+- a file listed under C4 has more lines than its baseline ceiling, or one listed under C5 more English errors.
 
 ## What each rule protects
 
@@ -52,6 +53,7 @@ Source checks, from `checkFile` in [`scripts/check-boundaries.mjs`](../../script
 | `C2-adapter-own-data` | An adapter (`src/channels/<name>/`, `src/lib/meta/`) touches only its own tables and RPCs. For Meta: `meta_connections`, `managed_meta_accounts`, `managed_meta_account_events`, `whatsapp_number_bindings`, and RPCs starting `meta_` or `managed_meta_account_`. |
 | `C3-appsecret-proof` | A file that builds a Graph URL also sends `appsecret_proof` (`appSecretProof` or `appsecret_proof` appears in it). `graph-version.ts` and `headers.ts` are exempt. |
 | `C4-file-size` | No source file goes over 400 lines. Files already over it are listed with a `lines` ceiling and may only shrink. |
+| `C5-english-errors` | An API route (not `cron/` or `internal/`) adds no `error: "<English>"` literal. Routes that still have them are listed with their count as the `lines` ceiling, which may only shrink (#2330). |
 
 ## Fixing a red check
 
@@ -70,6 +72,7 @@ The CI summary lists each failing entry as `rule: from → to`. Fix the code, no
 | `C2-adapter-own-data` | Read or write that table or RPC in a service, and pass the data to the adapter. |
 | `C3-appsecret-proof` | Add `appsecret_proof` to the Graph call, the way the existing Meta helpers do. |
 | `C4-file-size` | Move your own new lines into a sibling module (400 lines or fewer), so the file stays at or under its ceiling. The author fixes it. The baseline never goes up (#2071). |
+| `C5-english-errors` | Say the error with `ownerError("key")` from `@/i18n/request-locale` and add the key to `errors` in `messages/en.json` and `messages/hi.json` (#2305). |
 
 When you fix an entry, the check goes red with "Fixed, still in the baseline". Run
 `npm run boundaries -- --write-baseline`, check the diff (below) and commit the
@@ -85,7 +88,7 @@ in your PR. Find the PR that grew the file (`git log` on the file) and name it o
 
 `--write-baseline` does not only remove fixed entries. It overwrites
 `scripts/boundaries-baseline.json` with whatever the code has now: new violations are
-added and every C4 `lines` ceiling is set to today's count, including files that grew.
+added and every C4 and C5 `lines` ceiling is set to today's count, including files that grew.
 It always exits green.
 
 So after every `--write-baseline`:

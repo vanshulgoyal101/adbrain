@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 /**
  * ADR-001 (#1792) Phase 1 boundary check (#2070, #2071). Runs dependency-cruiser with `.dependency-cruiser.mjs`
- * plus the source checks C1–C4 it can't express, and compares both with `scripts/boundaries-baseline.json`, which
+ * plus the source checks C1–C5 it can't express, and compares both with `scripts/boundaries-baseline.json`, which
  * may only shrink:
  * - a violation not in the baseline fails (a new edge);
  * - a baseline entry that no longer occurs fails until it is removed (`--write-baseline`), so every fix shows as −N;
  * - with `--base <git-ref>`, a baseline entry the base branch didn't have fails (the baseline grew);
- * - C4 entries also carry a line ceiling: a listed big file may not grow past it (shrinking passes).
+ * - C4 entries also carry a line ceiling: a listed big file may not grow past it (shrinking passes);
+ * - C5 entries carry the same ceiling for a route's English-only error literals (#2330).
  *
  *   node scripts/check-boundaries.mjs [--base origin/next] [--write-baseline]
  */
@@ -48,6 +49,10 @@ const GRAPH_URL_ALLOWED = [META_ADAPTER, /^src\/lib\/security\/headers\.ts$/];
 const GRAPH_URL = /graph\.facebook\.com|\$\{GRAPH\}|\bGRAPH\s*\+/;
 const NOT_A_GRAPH_CALL = [/^src\/lib\/meta\/graph-version\.ts$/, /^src\/lib\/security\/headers\.ts$/];
 const PROOF = /appSecretProof|appsecret_proof/;
+/** #2330: owner-facing routes say errors with `ownerError(key)` (en + hi), not an English literal. */
+const OWNER_ROUTE = /^src\/app\/api\/(?!cron\/|internal\/)/;
+const ENGLISH_ERROR = /\berror:\s*(?:["'`][A-Za-z]|`\$\{)/g;
+const CEILINGED = new Set(["C4-file-size", "C5-english-errors"]);
 /** Per channel: the tables and RPCs its adapter may touch. Everything else goes through a service. */
 /** @type {Record<string, { tables: Set<string>, rpc: RegExp }>} */
 export const CHANNEL_DATA = {
@@ -63,7 +68,7 @@ const channelOf = (file) => (/^src\/lib\/meta\//.test(file) ? "meta" : file.matc
 export const lineCount = (text) => (text.length === 0 ? 0 : text.split("\n").length - (text.endsWith("\n") ? 1 : 0));
 
 /**
- * One source file → C1–C4 violations, in the cruiser's {rule, from, to} shape (C4 adds `lines`).
+ * One source file → C1–C5 violations, in the cruiser's {rule, from, to} shape (C4 and C5 add their ceiling as `lines`).
  * @param {string} file repo-relative, `/`-separated
  * @param {string} text
  * @returns {Violation[]}
@@ -86,6 +91,8 @@ export function checkFile(file, text) {
   }
   const lines = lineCount(text);
   if (lines > FILE_LINE_BUDGET) out.push({ rule: "C4-file-size", from: file, to: `> ${FILE_LINE_BUDGET} lines`, lines });
+  const english = OWNER_ROUTE.test(file) ? text.match(ENGLISH_ERROR)?.length ?? 0 : 0;
+  if (english) out.push({ rule: "C5-english-errors", from: file, to: "English error literals", lines: english });
   return out;
 }
 
@@ -143,14 +150,17 @@ export function report({ added, fixed, grown, swollen = [], perRule }) {
     if (!items.length) return;
     lines.push("", `**${title} (${items.length})** ${hint}`);
     for (const v of items.slice(0, 50)) {
-      const size = v.was !== undefined ? ` (${v.was} → ${v.lines} lines)` : v.lines !== undefined ? ` (${v.lines} lines)` : "";
+      const unit = v.rule === "C5-english-errors" ? "errors" : "lines";
+      const size = v.was !== undefined ? ` (${v.was} → ${v.lines} ${unit})` : v.lines !== undefined ? ` (${v.lines} ${unit})` : "";
       lines.push(`- \`${v.rule}\`: \`${v.from}\` → \`${v.to}\`${size}`);
     }
     if (items.length > 50) lines.push(`- … ${items.length - 50} more`);
   };
-  list("New violations", added, "— route it through a service/domain module (or split the file); the baseline never grows.");
+  const english = (v) => v.rule === "C5-english-errors";
+  list("New violations", added.filter(v => !english(v)), "— route it through a service/domain module (or split the file); the baseline never grows.");
+  list("New English-only errors", [...added, ...swollen].filter(english), "— say it with `ownerError(key)` and add the key to `errors` in messages/en.json and hi.json (#2330).");
   list("Fixed, still in the baseline", fixed, `— baseline −${fixed.length}: run \`npm run boundaries -- --write-baseline\` and commit.`);
-  list("Big files that grew", swollen, "— a listed file may only shrink: move code out (a new module ≤ 400 lines) before adding.");
+  list("Big files that grew", swollen.filter(v => !english(v)), "— a listed file may only shrink: move code out (a new module ≤ 400 lines) before adding.");
   list("Baseline grew vs base", grown, "— the baseline may only shrink.");
   return lines.join("\n");
 }
@@ -164,11 +174,18 @@ export function readBaseline(text) {
   const parsed = JSON.parse(text);
   if (!Array.isArray(parsed?.cruiser)) throw new Error(`${BASELINE}: expected {"cruiser": [...], "checks": [...]}`);
   const entry = ({ rule, from, to, lines }) => {
-    if (rule === "C4-file-size" && !Number.isInteger(lines)) throw new Error(`${BASELINE}: ${from} needs its "lines" ceiling`);
+    if (CEILINGED.has(rule) && !Number.isInteger(lines)) throw new Error(`${BASELINE}: ${from} needs its "lines" ceiling`);
     return lines === undefined ? { rule, from, to } : { rule, from, to, lines };
   };
   return { cruiser: parsed.cruiser.map(entry), checks: Array.isArray(parsed.checks) ? parsed.checks.map(entry) : null };
 }
+
+/**
+ * Baseline entries of the rules the base branch's checker doesn't define yet (a rule this branch adds).
+ * @param {string} baseScript the base branch's scripts/check-boundaries.mjs
+ * @param {Violation[]} checks
+ */
+export const newRules = (baseScript, checks) => checks.filter(v => !baseScript.includes(`"${v.rule}"`));
 
 function main(argv) {
   const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -189,9 +206,10 @@ function main(argv) {
   let base = null;
   if (baseRef) {
     try {
-      const fromBase = readBaseline(execFileSync("git", ["show", `${baseRef}:${BASELINE}`], { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }));
-      // A base that predates the checks can't show their growth; compare the checks with themselves.
-      base = [...fromBase.cruiser, ...(fromBase.checks ?? known.checks)];
+      const show = (path) => execFileSync("git", ["show", `${baseRef}:${path}`], { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+      const fromBase = readBaseline(show(BASELINE));
+      // A base that predates the checks, or one rule, can't show their growth; compare those with themselves.
+      base = [...fromBase.cruiser, ...(fromBase.checks ?? known.checks), ...newRules(show("scripts/check-boundaries.mjs"), known.checks)];
     } catch {
       console.log(`No ${BASELINE} on ${baseRef}; growth check skipped.`);
     }

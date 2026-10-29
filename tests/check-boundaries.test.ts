@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { checkFile, compare, lineCount, readBaseline, report, violationsOf } from "../scripts/check-boundaries.mjs";
+import { checkFile, compare, lineCount, newRules, readBaseline, report, violationsOf } from "../scripts/check-boundaries.mjs";
 
 const edge = (rule: string, from: string, to: string) => ({ rule, from, to });
 const ui = edge("R1-ui-no-channels", "src/components/a.tsx", "src/lib/meta/client.ts");
@@ -55,7 +55,7 @@ describe("check-boundaries (#2070)", () => {
   });
 });
 
-describe("source checks C1–C4 (#2071)", () => {
+describe("source checks C1–C5 (#2071, #2330)", () => {
   const rules = (file: string, text: string) => checkFile(file, text).map(v => `${v.rule} ${v.to}`);
   const graphCall = "const r = await fetch(`${GRAPH}/me`);\n";
 
@@ -103,6 +103,34 @@ describe("source checks C1–C4 (#2071)", () => {
     expect(result.ok).toBe(false);
     expect(result.grown).toEqual([big(910)]);
     expect(compare([big(850)], [big(850)], [big(900)]).ok).toBe(true);
+  });
+
+  const english = (lines: number, from = "src/app/api/x/route.ts") => ({ rule: "C5-english-errors", from, to: "English error literals", lines });
+
+  it("C5: counts a route's English error literals; ownerError keys, cron and internal don't count", () => {
+    const text = 'json({ error: "Could not fetch" }); json({ error:\n `Site returned ${s}` }); json({ error: `${e.message} Moved.` });\n'
+      + 'json({ error: await ownerError("siteRefused") }); json({ error: err.message }); const error: string = x;';
+    expect(checkFile("src/app/api/x/route.ts", text)).toEqual([english(3)]);
+    expect(checkFile("src/app/api/cron/x/route.ts", text)).toEqual([]);
+    expect(checkFile("src/app/api/internal/x/route.ts", text)).toEqual([]);
+    expect(checkFile("src/lib/x.ts", text)).toEqual([]);
+  });
+
+  it("C5: a new English error fails, in a new route or a listed one; fewer pass", () => {
+    const fresh = compare([english(1, "src/app/api/y/route.ts")], []);
+    expect(fresh.ok).toBe(false);
+    expect(report(fresh)).toContain("New English-only errors (1)");
+    const more = compare([english(4)], [english(3)]);
+    expect(more.ok).toBe(false);
+    expect(report(more)).toContain("(3 → 4 errors)");
+    expect(report(more)).not.toContain("Big files that grew");
+    expect(compare([english(2)], [english(3)]).ok).toBe(true);
+    expect(compare([english(4)], [english(4)], [english(3)]).ok).toBe(false);
+  });
+
+  it("a rule the base branch's checker doesn't define yet is compared with itself", () => {
+    expect(newRules('const x = "C4-file-size";', [big(900), english(3)])).toEqual([english(3)]);
+    expect(newRules('"C4-file-size", "C5-english-errors"', [big(900), english(3)])).toEqual([]);
   });
 
   it("reads a baseline with checks, and one that predates them", () => {

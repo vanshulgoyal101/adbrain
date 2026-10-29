@@ -10,7 +10,7 @@ import { rationaleForMatchedInterests } from "@/lib/campaign/planner-draft";
 
 // Prepare (audience planning) through the real route and real runPlanner; only
 // the LLM transport, auth, rate limiting and data reads are stubbed.
-const mocks = vi.hoisted(() => ({ complete: vi.fn(), persist: vi.fn(), meta: vi.fn(), instructions: vi.fn(), performance: vi.fn(), usage: vi.fn() }));
+const mocks = vi.hoisted(() => ({ complete: vi.fn(), persist: vi.fn(), meta: vi.fn(), instructions: vi.fn(), performance: vi.fn(), usage: vi.fn(), lang: { value: "" } }));
 
 const business = {
   id: "816aaafb-7ebc-4ad7-bbda-001beff172f8", name: "Cedar Ridge Chiropractic", vertical: "chiropractic clinic",
@@ -27,6 +27,7 @@ vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({ auth: { getUser: async () => ({ data: { user: { id: "user-1" } } }) } }),
 }));
 vi.mock("@/lib/security/rate-limit", () => ({ rateLimitResponse: async () => null }));
+vi.mock("next/headers", () => ({ cookies: async () => ({ get: (name: string) => (name === "adbrain_lang" && mocks.lang.value ? { value: mocks.lang.value } : undefined) }) }));
 vi.mock("@/lib/llm/persist", () => ({
   configuredMonthlyTokenLimit: () => 1_000_000, monthlyTokenUsage: mocks.usage, persistLLMUsage: mocks.persist,
 }));
@@ -61,11 +62,11 @@ const usage = { promptTokens: 1200, completionTokens: 300, totalTokens: 1500 };
 // Saved on production draft 4839bca0 (Oct 22, #174), where Meta kept only "Parenting".
 const issue174Rationale = "Targeting adults 25-55 in Austin, Round Rock, and Cedar Park based on the clinic's service areas and the creative's focus on desk workers. Interests were selected to align with the 'Posture care for long desk days' message, targeting professionals and active individuals likely to seek chiropractic care. The age range and location scope were preserved as per the owner's manual settings.";
 
-async function prepare() {
+async function prepare(body: object = { goal: audienceDraft.goal, audienceDraft }) {
   const { POST } = await import("@/app/api/campaigns/plan/route");
   const response = await POST(new Request("http://localhost/api/campaigns/plan", {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ goal: audienceDraft.goal, audienceDraft }),
+    body: JSON.stringify(body),
   }));
   return { status: response.status, body: await response.json() };
 }
@@ -77,6 +78,7 @@ beforeEach(() => {
   mocks.instructions.mockResolvedValue("");
   mocks.performance.mockResolvedValue("");
   mocks.usage.mockResolvedValue(0);
+  mocks.lang.value = "";
 });
 
 /** Runs the interest lookup on a real MetaClient against recorded Graph responses. */
@@ -241,5 +243,14 @@ describe("core: Prepare audience", () => {
     const { status, body } = await prepare();
     expect(status).toBe(200);
     expect(body).toMatchObject({ ready: true, fallback: true, targeting: { audience: { interestNames: [] } } });
+  });
+
+  it.each([
+    ["", "Could not prepare the campaign plan."],
+    ["hi", "कैंपेन प्लान तैयार नहीं हो पाया।"],
+  ])("the planner chat's failure reads in the owner's language (lang=%s, #2330)", async (lang, error) => {
+    mocks.lang.value = lang;
+    mocks.complete.mockRejectedValue(new Error("all providers failed"));
+    expect(await prepare({ goal: audienceDraft.goal })).toEqual({ status: 502, body: { error } });
   });
 });
