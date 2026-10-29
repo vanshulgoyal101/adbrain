@@ -17,7 +17,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getCampaignSpend, getSpendLimits } from "@/lib/supabase/queries";
 import { createClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/types";
-import { CampaignEditError, ownerEditError, refuseWhileSwitchPending } from "./edit-service";
+import { CampaignEditError, refuseWhileSwitchPending } from "./edit-service";
+import { OwnerEditError, ownerEditError } from "./owner-edit-error";
 
 /**
  * #774: edit a launched campaign's daily budget, total cap or end date, in the same `campaign_edit_operations`
@@ -156,14 +157,14 @@ export async function editCampaignBudget(context: AuthorizedBusiness, campaignId
   let weekly: { otherActive: CampaignSpend[]; weeklyLimitRupees: number | null } = { otherActive: [], weeklyLimitRupees: null };
   if (capped && status === "active" && (change.capRupees !== undefined || change.endTime !== undefined)) {
     const loaded = await Promise.all([getSpendLimits(context.businessId), getCampaignSpend(context.businessId)]).catch(() => null);
-    if (!loaded) throw ownerEditError("spendLimitsUnverified", 503, true);
+    if (!loaded) throw ownerEditError("budgetSpendLimitsUnverified", 503, true);
     weekly = { otherActive: loaded[1].filter(item => item.status === "active" && item.id !== campaignId), weeklyLimitRupees: loaded[0].weeklyCapRupees };
   }
   const raisesCap = capped && change.capRupees !== undefined && change.capRupees > (cap!.lifetimeBudgetPaise / 100);
   let mode: FundingMode | null = null;
   if (raisesCap) {
     mode = await fundingMode(context.businessId).catch(() => null);
-    if (!mode) throw ownerEditError("fundingUnverified", 503, true);
+    if (!mode) throw ownerEditError("budgetFundingUnverified", 503, true);
     // A managed run's allowance was reserved at launch; reserving more is not built yet.
     if (mode === "managed") throw ownerEditError("managedCapRaise", 422);
   }
@@ -286,7 +287,7 @@ export async function editCampaignBudget(context: AuthorizedBusiness, campaignId
   } catch (error) {
     const converted = toBudgetEditError(error);
     // A 613 on a later A/B ad set leaves the edit to reconcile, not to retry (Reviewer on #901).
-    const mapped = converted.retryable && transmitted ? Object.assign(new CampaignEditError(converted.message, converted.status, false), { ownerKey: converted.ownerKey }) : converted;
+    const mapped = converted.retryable && transmitted ? converted instanceof OwnerEditError ? new OwnerEditError(converted.ownerKey, converted.status, false) : new CampaignEditError(converted.message, converted.status, false) : converted;
     if (options.preview) throw mapped;
     if (!(error instanceof CampaignEditError && error.status === 502)) {
       await fail(transmitted ? "needs_reconciliation" : "failed", mapped.message);

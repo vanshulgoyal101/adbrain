@@ -44,7 +44,7 @@ async function handlePOST(req: Request, { params }: { params: Promise<{ id: stri
   if (!parsed.success) {
     const tooLong = typeof (body as { instruction?: unknown } | null)?.instruction === "string" && (body as { instruction: string }).instruction.trim().length > 300;
     return NextResponse.json(
-      { error: tooLong ? "Keep the description to 300 characters or fewer." : "Describe the background you want, for example \"rooftop at sunset\"." },
+      { error: tooLong ? await ownerError("backgroundTooLong") : await ownerError("backgroundDescribe") },
       { status: 400 },
     );
   }
@@ -60,13 +60,13 @@ async function handlePOST(req: Request, { params }: { params: Promise<{ id: stri
     .select("id, business_id, variant_group, angle, image_url, headline, primary_text, cta, generation")
     .eq("id", id)
     .maybeSingle();
-  if (!creative) return NextResponse.json({ error: "We couldn't find this ad. It may have been deleted; refresh the page." }, { status: 404 });
+  if (!creative) return NextResponse.json({ error: await ownerError("adNotFound") }, { status: 404 });
   const { data: business } = await supabase
     .from("businesses")
     .select("*")
     .eq("id", creative.business_id)
     .maybeSingle();
-  if (!business) return NextResponse.json({ error: "We couldn't find this business. Refresh the page and try again." }, { status: 404 });
+  if (!business) return NextResponse.json({ error: await ownerError("businessNotFound") }, { status: 404 });
 
   if (ownerPhoto) {
     // Only the business's own product photos; never an arbitrary URL.
@@ -78,7 +78,7 @@ async function handlePOST(req: Request, { params }: { params: Promise<{ id: stri
       .eq("url", ownerPhoto)
       .limit(1)
       .maybeSingle();
-    if (!asset) return NextResponse.json({ error: "That photo isn't in your Brand assets." }, { status: 400 });
+    if (!asset) return NextResponse.json({ error: await ownerError("photoNotInBrand") }, { status: 400 });
   }
 
   const limit = ownerPhoto ? 0 : configuredMonthlyTokenLimit(user);
@@ -104,11 +104,11 @@ async function handlePOST(req: Request, { params }: { params: Promise<{ id: stri
   });
   if (claimError || !claim)
     return NextResponse.json({ error: await ownerError("backgroundDidntStart") }, { status: 503 });
-  if (claim.action === "missing") return NextResponse.json({ error: "We couldn't find this ad. It may have been deleted; refresh the page." }, { status: 404 });
+  if (claim.action === "missing") return NextResponse.json({ error: await ownerError("adNotFound") }, { status: 404 });
   if (claim.action === "busy")
     return NextResponse.json({ error: claim.status === "unresolved"
-      ? "A previous paid change to this ad needs a check before trying again."
-      : "This ad is already being changed. Refresh it before trying again." }, { status: 409 });
+      ? await ownerError("changeNeedsCheck")
+      : await ownerError("adBeingChanged") }, { status: 409 });
   if (claim.action !== "start")
     return NextResponse.json({ error: await ownerError("backgroundDidntStart") }, { status: 503 });
   // #2291: the stale attempt this replaces may have paid for a picture it never recorded; ops matches this to its usage.
@@ -192,7 +192,7 @@ async function handlePOST(req: Request, { params }: { params: Promise<{ id: stri
     if (error || !updated) {
       // Paid and stored, but not attached to the ad: hold the claim for a check.
       unresolved = paidPicture();
-      response = NextResponse.json({ error: "The new background was made but didn't save to this ad. AdBrain needs to check it before you try again." }, { status: 502 });
+      response = NextResponse.json({ error: await ownerError("backgroundNotSaved") }, { status: 502 });
     } else {
       const { data: live } = await supabase
         .from("campaigns")
@@ -210,7 +210,7 @@ async function handlePOST(req: Request, { params }: { params: Promise<{ id: stri
       });
       response = NextResponse.json({
         creative: updated,
-        ...(live?.length ? { liveNotice: "This ad is live on Meta; your edit applies to new campaigns." } : {}),
+        ...(live?.length ? { liveNotice: await ownerError("liveEditNotice") } : {}),
       });
     }
   } catch (err) {
@@ -226,10 +226,10 @@ async function handlePOST(req: Request, { params }: { params: Promise<{ id: stri
     response = NextResponse.json(
       {
         error: unresolved
-          ? "The new background could not be finished. This attempt needs a check before the ad's picture can be changed again."
+          ? await ownerError("backgroundNeedsCheck")
           : ownerPhoto
-            ? "Couldn't use that photo. Your ad is unchanged; try another photo."
-            : "Couldn't make a new background this time. Your ad is unchanged; try again.",
+            ? await ownerError("photoUnusable")
+            : await ownerError("backgroundFailed"),
       },
       { status: 502 },
     );
@@ -239,6 +239,6 @@ async function handlePOST(req: Request, { params }: { params: Promise<{ id: stri
     p_attempt_id: attemptId, p_unresolved: unresolved,
   });
   if (settleError || settled?.status !== (unresolved ? "unresolved" : "released"))
-    return NextResponse.json({ error: "We couldn't tell whether the change finished. Refresh the page to see the ad before you try again." }, { status: 503 });
+    return NextResponse.json({ error: await ownerError("changeUnknown") }, { status: 503 });
   return response;
 }

@@ -11,6 +11,7 @@ import { savedCreativeDescription } from "@/lib/creative/concept";
 import { sampleNoteCard, sampleWatermark, SAMPLE_LABEL, SAMPLE_NOTE } from "@/lib/creative/sample-watermark";
 import { isProspectAccount } from "@/lib/internal-accounts";
 import { leaveBehindBlock, segmentForCategory } from "@/lib/segments";
+import { ownerError } from "@/i18n/request-locale";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -29,7 +30,7 @@ async function handlePOST(req: Request) {
   const limited = await rateLimitResponse(`creative-export:${user.id}`, { limit: 10, windowMs: 5 * 60_000 });
   if (limited) return limited;
   const parsed = z.object({ creativeIds: z.array(z.string().uuid()).min(1).max(MAX_BATCH_IDS) }).safeParse(await req.json().catch(() => null));
-  if (!parsed.success) return apiError("Pick between 1 and 50 ads to download.", 400);
+  if (!parsed.success) return apiError(await ownerError("exportCount"), 400);
   const ids = [...new Set(parsed.data.creativeIds)];
 
   // RLS scopes this to the user's own creatives.
@@ -37,9 +38,9 @@ async function handlePOST(req: Request) {
     .from("creatives")
     .select("*")
     .in("id", ids);
-  if (error) return apiError("Could not load the selected creatives. Retry the export.", 503);
+  if (error) return apiError(await ownerError("exportLoadFailed"), 503);
   if (!creatives?.length || creatives.length !== ids.length) {
-    return apiError("Some ads you picked were deleted. Refresh the page and pick again.", 404);
+    return apiError(await ownerError("exportAdsDeleted"), 404);
   }
 
   // #1317: a prospect's ads are samples until the owner takes the account over; every picture says so.

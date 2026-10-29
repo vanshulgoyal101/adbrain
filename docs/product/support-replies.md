@@ -177,7 +177,7 @@ Once chats come, send them [Answer the chats your ad brings](answer-chats.md).
 
 - **Owner says:** "My ads stopped", "who paused my campaign?", "it says Paused but I didn't".
 - **Screen shows:** the card says "Paused" (or "Ended") with "Resume"; Home's Recent
-  activity says "Campaigns auto-paused at your cap".
+  activity says why, for example "Campaign paused: its run reached the end date".
 - **Cause:** one of four: the weekly cap was reached, this week's spend couldn't be
   checked, the AdBrain balance needs a check, or the run reached its end date. Each one,
   with what to do, is in [Why AdBrain paused your campaign](manage.md#why-adbrain-paused-your-campaign).

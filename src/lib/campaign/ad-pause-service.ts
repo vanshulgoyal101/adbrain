@@ -9,7 +9,8 @@ import { recordProductEvent } from "@/lib/observability/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/types";
-import { CampaignEditError, ownerEditError, refuseWhileSwitchPending } from "./edit-service";
+import { CampaignEditError, refuseWhileSwitchPending } from "./edit-service";
+import { ownerEditError } from "./owner-edit-error";
 import { ownerErrorIn } from "@/i18n/locale";
 
 export type AdPauseAction = "pause" | "undo";
