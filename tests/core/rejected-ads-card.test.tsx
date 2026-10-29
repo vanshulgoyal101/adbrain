@@ -84,8 +84,8 @@ describe("core: the rejected-ads line in Hindi (#1438)", () => {
     render(<RejectedAds reviews={recordedReviews} spend={0} onEditAd={() => {}} adsManagerUrl="https://adsmanager.facebook.com/x" ownDetails words={words} />);
     expect(hindi().getByText(/^Meta ने आपका विज्ञापन मंज़ूर नहीं किया। Meta ने ठीक-ठीक वजह नहीं बताई। उनका मैसेज: "It looks like your ad contains content/)).toHaveTextContent(/कोई पैसा खर्च नहीं हुआ।$/);
     expect(hindi().getByRole("button", { name: "शब्द बदलें" })).toBeInTheDocument();
-    expect(hindi().getByRole("link", { name: "नई तस्वीर बनाएं" })).toHaveAttribute("href", "/create");
-    expect(hindi().getByRole("link", { name: "Meta से फिर से जांच करवाएं" })).toBeInTheDocument();
+    expect(hindi().getByRole("link", { name: "नई तस्वीर बनाएँ" })).toHaveAttribute("href", "/create");
+    expect(hindi().getByRole("link", { name: "Meta से फिर से जांच करवाएँ" })).toBeInTheDocument();
     expect(hindi().getByText("पूरी जानकारी")).toBeInTheDocument();
     expect(hindi().getByText(/^Meta का मैसेज: “It looks like your ad contains content/)).toBeInTheDocument();
   });
