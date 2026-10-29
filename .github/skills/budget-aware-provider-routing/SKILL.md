@@ -3,7 +3,7 @@ name: budget-aware-provider-routing
 description: "Use this when a product calls paid LLM or image providers for tasks with different value, latency, or quality requirements, or when it has per-tenant AI quotas, concurrent variants or uncertain reservation lifetime."
 ---
 
-<!-- Generated from vanshulgoyal101/skills@b877c32 skills/budget-aware-provider-routing.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
+<!-- Generated from vanshulgoyal101/skills@eb9e65d skills/budget-aware-provider-routing.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
 
 # Budget-Aware Provider Routing
 

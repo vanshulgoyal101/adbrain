@@ -3,7 +3,7 @@ name: external-api-error-contracts
 description: "Use this skill when a product integrates with a provider API whose errors are localized, unstable, overly technical, or capable of changing business behavior such as destination, campaign type, billing or permissions."
 ---
 
-<!-- Generated from vanshulgoyal101/skills@b877c32 skills/external-api-error-contracts.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
+<!-- Generated from vanshulgoyal101/skills@eb9e65d skills/external-api-error-contracts.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
 
 # External API Error Contracts
 
@@ -232,3 +232,7 @@ radius fixes each have a core test that fails without them
 - A past approval or a pending review isn't current entitlement, and a renamed gate
   isn't a change in it; record historical approval and current status as separate
   rows (#2049).
+- Pausing only the parent object leaves its children ACTIVE. Delivery stops, but a later
+  step that needs every child PAUSED (a capped turn-on) is blocked. Pause the tree and
+  read the children's effective status back; don't trust the parent's status (#2293,
+  #2301, #2310).
