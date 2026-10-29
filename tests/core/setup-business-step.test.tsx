@@ -219,7 +219,7 @@ describe("core: <SetupBusinessStep> (#1269)", () => {
     await waitFor(() => expect(setAppLanguage).toHaveBeenCalledWith("hi"));
     // The server action sets the cookie and the route re-renders with chooseLanguage false.
     rerender(<SetupBusinessStep business={business} chooseLanguage={false} />);
-    expect(await screen.findByText("अभी सिर्फ़ होम हिंदी में है; बाकी स्क्रीन एक-एक करके जुड़ेंगी।")).toBeInTheDocument();
+    expect(await screen.findByText("कुछ स्क्रीन अब हिंदी में हैं; बाकी एक-एक करके जुड़ेंगी।")).toBeInTheDocument();
     expect(screen.queryByRole("group", { name: "App language / ऐप की भाषा" })).toBeNull();
   });
 

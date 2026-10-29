@@ -16,9 +16,16 @@ function card(change: Partial<VerdictInput>, props: Partial<React.ComponentProps
   return render(<CampaignVerdict verdict={verdict(input)} whatsapp={input.destination === "whatsapp"} results={input.results} spend={input.spend}
     details={<p>Impressions 5,000</p>} adsManagerUrl="https://adsmanager.facebook.com/x" {...props} />);
 }
-const region = () => within(screen.getByRole("region", { name: "How it's going" }));
+const region = () => within(screen.getByRole("group", { name: "How it's going" }));
 
 describe("<CampaignVerdict> (#1274)", () => {
+  // #1274 walk: a page lists many cards, so each card's parts are labelled groups, not landmarks repeated per card (axe landmark-unique).
+  it("is a labelled group, not a page landmark", () => {
+    card({});
+    expect(screen.getByRole("group", { name: "How it's going" })).toBeInTheDocument();
+    expect(screen.queryAllByRole("region")).toHaveLength(0);
+  });
+
   it("measured: the number and spend, no judgement and no action; figures folded under Details", () => {
     card({});
     expect(region().getByText("Each chat costs ₹150.")).toBeInTheDocument();

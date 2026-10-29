@@ -382,7 +382,7 @@ describe("Home workspace", () => {
     queries.getMetaConnection.mockResolvedValue({ ready: true });
     queries.getSpendEvaluation.mockResolvedValue({ evaluation: { status: "healthy" } });
     queries.getAuditLog.mockResolvedValue([]);
-    queries.getLatestResults.mockResolvedValue({});
+    queries.getLatestResultsWithEnquiries.mockResolvedValue({});
     queries.getAdStatuses.mockResolvedValue(["PENDING_REVIEW", "IN_PROCESS"]);
     const { default: DashboardPage } = await import("@/app/(app)/dashboard/page");
     render(await DashboardPage());
@@ -558,12 +558,12 @@ describe("Home results row (#764)", () => {
     queries.getCreativePreviews.mockResolvedValue([]);
     queries.getAuditLog.mockResolvedValue([]);
     queries.getCampaigns.mockResolvedValue([chats, forms, { ...forms, id: "c-draft", meta_campaign_id: null }]);
-    queries.getLatestResults.mockResolvedValue(results);
+    queries.getLatestResultsWithEnquiries.mockResolvedValue(results);
     queries.getSpendEvaluation.mockResolvedValue({ limits: {}, evaluation: { status: "healthy" } });
     queries.getMetaConnection.mockResolvedValue({ ready: true });
     const { default: DashboardPage } = await import("@/app/(app)/dashboard/page");
     render(await DashboardPage());
-    expect(queries.getLatestResults).toHaveBeenCalledWith(["c-wa", "c-form"]);
+    expect(queries.getLatestResultsWithEnquiries).toHaveBeenCalledWith(["c-wa", "c-form"]);
     expect(screen.getByRole("region", { name: "Results so far" })).toBeInTheDocument();
   });
 });
@@ -582,5 +582,16 @@ describe("Recent activity", () => {
   it("shows nothing when only syncs happened", () => {
     const { container } = render(<RecentActivity audit={[row("1", "leads.sync")]} />);
     expect(container).toBeEmptyDOMElement();
+  });
+});
+
+describe("#1968: Pause all ads on Home", () => {
+  it("shows the quiet stop while a campaign runs, and not otherwise", () => {
+    const live = { id: "c-new", name: "Solar", status: "active", daily_budget: 300, raw: {}, meta_campaign_id: "1" } as unknown as Campaign;
+    const { unmount } = render(<WorkspaceHome {...empty} business={business} campaigns={[live]} />);
+    expect(screen.getByRole("button", { name: "Pause all ads" })).toBeInTheDocument();
+    unmount();
+    render(<WorkspaceHome {...empty} business={business} campaigns={[{ ...live, status: "paused" } as Campaign]} />);
+    expect(screen.queryByRole("button", { name: "Pause all ads" })).toBeNull();
   });
 });

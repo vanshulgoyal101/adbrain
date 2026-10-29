@@ -8,5 +8,6 @@ describe("team-status probe (#573 A1)", () => {
     expect(parseProbe(3, "Waiting for work…")).toEqual({ state: "no-work", items: [] });
     expect(parseProbe(4, "")).toEqual({ state: "waiting", items: [] });
     expect(parseProbe(1, "")).toEqual({ state: "error", items: [] });
+    expect(parseProbe(6, "WORK for Dev (1):\n- #7 is yours: x")).toEqual({ state: "has-work", items: ["#7 is yours: x"] });
   });
 });

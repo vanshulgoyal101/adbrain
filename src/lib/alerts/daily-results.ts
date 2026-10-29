@@ -46,11 +46,12 @@ function dayLabel(day: string, language: AlertLanguage): string {
 function highlight(campaigns: CampaignDay[], language: AlertLanguage): string {
   const ads = campaigns.flatMap((campaign) => campaign.ads.map((ad) => ({ ad, whatsapp: campaign.whatsapp })));
   const named = (ad: AdResult) => `'${(ad.name?.trim() || (language === "hi" ? "बिना नाम का विज्ञापन" : "Unnamed ad")).slice(0, 60)}'`;
-  const enquiries = (count: number) => language === "hi" ? `${count} पूछताछ` : `${count} ${count === 1 ? "enquiry" : "enquiries"}`;
+  // #1720 (CPO): the count is people who messaged or filled a form, so not "enquiries".
+  const people = (count: number) => language === "hi" ? `${count} ${count === 1 ? "व्यक्ति" : "लोग"}` : `${count} ${count === 1 ? "person" : "people"}`;
   const best = bestAd(ads.map(({ ad }) => ad));
   const top = best ?? ads.map(({ ad }) => ad).filter((ad) => ad.results > 0)
     .sort((left, right) => right.results - left.results || (left.costPerResult ?? Infinity) - (right.costPerResult ?? Infinity))[0];
-  if (top) return `${named(top)} (${enquiries(top.results)})`;
+  if (top) return `${named(top)} (${people(top.results)})`;
   const tapped = ads.map(({ ad, whatsapp }) => ({ ad, taps: whatsapp ? ad.whatsappOpens ?? ad.clicks : ad.clicks, whatsapp }))
     .filter(({ taps }) => taps > 0).sort((left, right) => right.taps - left.taps)[0];
   if (!tapped) return "—";
@@ -73,7 +74,7 @@ export function dailyResultsParams(input: { businessName: string; day: string; c
   const { spend, enquiries } = dailyTotals(input.campaigns);
   if (Math.round(spend) <= 0 && enquiries === 0) return null;
   const each = enquiries > 0
-    ? (language === "hi" ? `₹${rupees(spend / enquiries)} प्रति पूछताछ` : `₹${rupees(spend / enquiries)} each`)
+    ? (language === "hi" ? `₹${rupees(spend / enquiries)} प्रति व्यक्ति` : `₹${rupees(spend / enquiries)} each`)
     : (language === "hi" ? "अभी कोई नहीं" : "none yet");
   return [input.businessName.trim().slice(0, 60) || "your business", dayLabel(input.day, language), rupees(spend), String(enquiries), each, highlight(input.campaigns, language)];
 }

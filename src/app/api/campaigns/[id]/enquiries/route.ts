@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { campaignDestination } from "@/lib/campaign/outcomes";
+import { recordCustomerMark } from "@/lib/leads/customer-event";
 import { observeRoute } from "@/lib/observability/logger";
 import { rateLimitResponse } from "@/lib/security/rate-limit";
 import { createClient } from "@/lib/supabase/server";
@@ -56,6 +57,7 @@ export const POST = observeRoute("/api/campaigns/[id]/enquiries", "POST", async 
     ...(input.customer ? { workflow_status: "customer" as const } : {}),
   }).select("id").single();
   if (error || !saved) return NextResponse.json({ error: "The enquiry could not be saved. Try again." }, { status: 503 });
+  if (input.customer) recordCustomerMark({ businessId: campaign.business_id, campaignId: campaign.id, source: "whatsapp", undone: false });
   return NextResponse.json({ id: saved.id, ...await counts(database, campaign.id) }, { status: 201, headers: { "Cache-Control": "private, no-store" } });
 });
 
@@ -79,8 +81,10 @@ export const DELETE = observeRoute("/api/campaigns/[id]/enquiries", "DELETE", as
   const limited = await rateLimitResponse(`manual-enquiry:${user.id}`, { limit: 30, windowMs: 5 * 60_000 });
   if (limited) return limited;
   const { data: removed, error } = await database.from("leads").delete()
-    .eq("id", lead).eq("campaign_id", id).eq("source", "whatsapp_manual").select("id");
+    .eq("id", lead).eq("campaign_id", id).eq("source", "whatsapp_manual").select("id, business_id, workflow_status");
   if (error) return NextResponse.json({ error: "The enquiry could not be removed. Try again." }, { status: 503 });
   if (!removed?.length) return NextResponse.json({ error: "Enquiry not found." }, { status: 404 });
+  // #2026: undoing "+1 customer" removes a customer.
+  if (removed[0].workflow_status === "customer") recordCustomerMark({ businessId: removed[0].business_id, campaignId: id, source: "whatsapp", undone: true });
   return NextResponse.json(await counts(database, id), { headers: { "Cache-Control": "private, no-store" } });
 });
