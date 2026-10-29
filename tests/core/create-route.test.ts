@@ -20,7 +20,9 @@ const mocks = vi.hoisted(() => ({
   ownerPhotos: [] as string[],
   ownerPhotoStatus: 200,
   usage: [] as Record<string, unknown>[],
+  planGate: null as null | { status: 402; code: "PLAN_UNPAID"; error: string },
 }));
+vi.mock("@/lib/plan/gate", () => ({ planGate: async () => mocks.planGate }));
 
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
@@ -113,6 +115,7 @@ beforeEach(() => {
   mocks.ownerPhotoStatus = 200;
   mocks.usage.length = 0;
   calls = [];
+  mocks.planGate = null;
   for (const [name, value] of Object.entries({
     NEXT_PUBLIC_SUPABASE_URL: SUPABASE,
     NEXT_PUBLIC_SUPABASE_ANON_KEY: "anon",
@@ -233,6 +236,18 @@ describe("core: Create route on recorded run 4", () => {
     expect(textCalls("openrouter")).toHaveLength(3);
     expect(calls.filter(({ url }) => !url.includes("/images"))).toHaveLength(3);
     expect(calls.filter(({ url }) => url === "https://openrouter.ai/api/v1/images")).toHaveLength(3);
+  });
+
+  // #718: an unpaid own-account plan stops a new batch before any AI spend; paid or exempt is untouched (above).
+  it("refuses a new batch with the plan's reason, before any provider call or saved row, when the plan is unpaid", async () => {
+    stubProviders();
+    mocks.planGate = { status: 402, code: "PLAN_UNPAID", error: "Your ₹999 plan payment is due. Running ads keep running. Pay in Settings to make new ads and campaigns." };
+    const response = await (await postCreate())();
+    expect(response.status).toBe(402);
+    expect(await response.json()).toEqual({ code: "PLAN_UNPAID", error: mocks.planGate.error });
+    expect(calls).toEqual([]);
+    expect(mocks.inserts).toEqual([]);
+    expect(mocks.progress).toEqual([]);
   });
 
   it("repairs the rejected first value concept and still saves 3/3", async () => {

@@ -17,6 +17,12 @@ const mocks = vi.hoisted(() => ({
   claims: new Map<string, { attempt: string; state: "processing" | "unresolved" }>(),
   updates: [] as Record<string, unknown>[],
   usage: [] as Record<string, unknown>[],
+  planUnpaid: false,
+}));
+
+vi.mock("@/lib/plan/store", () => ({
+  isPlanBillingEnabled: () => mocks.planUnpaid,
+  readStoredPlan: async () => ({ status: { state: "unpaid", since: "2026-10-01T00:00:00Z" }, payUrl: null }),
 }));
 
 vi.mock("@/lib/supabase/admin", () => ({
@@ -118,6 +124,7 @@ beforeEach(() => {
   mocks.updates.length = 0;
   mocks.usage.length = 0;
   textCalls = 0;
+  mocks.planUnpaid = false;
   for (const [name, value] of Object.entries({
     NEXT_PUBLIC_SUPABASE_URL: "https://core-test.supabase.co",
     NEXT_PUBLIC_SUPABASE_ANON_KEY: "anon",
@@ -137,6 +144,18 @@ afterEach(() => {
 });
 
 describe("core: Regenerate fact check on recorded Solaride replies (#281)", () => {
+  it("refuses unpaid regeneration before any provider call, admission claim or saved change", async () => {
+    mocks.planUnpaid = true;
+    replay(run(2));
+    const result = await regenerate();
+    expect(result.status).toBe(402);
+    expect(result.body).toMatchObject({ code: "PLAN_UNPAID" });
+    expect(textCalls).toBe(0);
+    expect(mocks.updates).toEqual([]);
+    expect(mocks.usage).toEqual([]);
+    expect(mocks.claims.size).toBe(0);
+  });
+
   it("accepts ₹10,000 when the cited fact says 10,000 rupees, and keeps the real failures", () => {
     expect(recorded.replies.map(({ rulesOnMain }) => rulesOnMain)).toEqual([
       ["unsupported-commercial-claim"], [], ["sourceQuotes", "unsupported-commercial-claim"],

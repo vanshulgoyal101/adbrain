@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { MetaConnectionPanel } from "@/components/meta-connection";
 import { BillingSection } from "@/components/managed-billing";
 import { fundingMode } from "@/lib/payments/operator-funding";
+import { isPlanBillingEnabled, readPlan } from "@/lib/plan/store";
 import { SpendGuardrails } from "@/components/spend-guardrails";
 import { PreferenceSettings } from "@/components/preference-settings";
 import { PrivacyRequests } from "@/components/privacy-requests";
@@ -159,7 +160,8 @@ async function ConnectionSettings({ businessId, searchParams, whatsapp }: {
 }) {
   // #759: payment shows only where AdBrain holds ad money; an unreadable mode shows none.
   const mode = await fundingMode(businessId).catch(() => null);
-  const [result, params, initialBalance, locale, campaigns] = await Promise.all([
+  const planEnabled = mode === "own" && isPlanBillingEnabled();
+  const [result, params, initialBalance, locale, campaigns, plan] = await Promise.all([
     getMetaConnection(businessId).then(connection => ({ connection })).catch(() => ({ connection: null })),
     searchParams,
     mode === "managed" && isProductionPaymentConfigured()
@@ -168,6 +170,7 @@ async function ConnectionSettings({ businessId, searchParams, whatsapp }: {
     requestLocale(),
     // #1968: Pause all sits under "If you stop", which only an own-account owner sees.
     mode === "own" ? getCampaigns(businessId).catch(() => []) : Promise.resolve([]),
+    planEnabled ? readPlan(businessId).catch(() => null) : Promise.resolve(null),
   ]);
   return (
     <>
@@ -189,6 +192,7 @@ async function ConnectionSettings({ businessId, searchParams, whatsapp }: {
       {whatsapp}
       <BillingSection mode={mode} locale={locale} runningCampaigns={pausableCampaigns(campaigns)} connection={result.connection} testBusinessId={isRazorpayTestEnabled() ? businessId : undefined}
         liveBusinessId={isProductionPaymentConfigured() ? businessId : undefined} initialBalance={initialBalance}
+        plan={plan} planBusinessId={businessId} planUnavailable={planEnabled && plan === null}
         billingTab={typeof params.billing === "string" ? params.billing : null} />
     </>
   );

@@ -1,10 +1,13 @@
 import { WalletCards } from "lucide-react";
+import { Alert } from "@/components/ui/alert";
 import { PauseAllAds } from "@/components/pause-all-ads";
 import { translator, type AppLocale } from "@/i18n/locale";
 import type { MetaConnection } from "@/lib/meta/credentials";
 import { TestCheckout } from "@/components/test-checkout";
 import { ProductionCheckout } from "@/components/production-checkout";
 import { CustomerBalance } from "@/components/customer-balance";
+import { PlanCard } from "@/components/plan-card";
+import type { PlanStatus } from "@/lib/plan/status";
 import { BillingTabs, type BillingTab } from "@/components/billing-tabs";
 import type { CustomerBalanceView as Balance } from "@/lib/payments/customer-balance-contracts";
 
@@ -65,11 +68,13 @@ export function ManagedBilling({ connection, testBusinessId, liveBusinessId, ini
  * directly and an operator-funded business is paid by the operator, so neither is asked to pay; nor is anyone
  * while the funding mode can't be read.
  */
-export function BillingSection({ mode, locale = "en", runningCampaigns = [], ...billing }: {
+export function BillingSection({ mode, locale = "en", runningCampaigns = [], plan, planBusinessId, planUnavailable = false, ...billing }: {
   mode: "managed" | "own" | "operator" | null;
   locale?: AppLocale;
   /** #1968 (frame 7): an own-account owner can stop everything next to "If you stop"; hidden while nothing runs. */
   runningCampaigns?: Parameters<typeof PauseAllAds>[0]["campaigns"];
+  /** #718 slice 2: an own-account owner's ₹999 plan, when plan billing is on. */
+  plan?: { status: PlanStatus; payUrl: string | null } | null; planBusinessId?: string; planUnavailable?: boolean;
 } & Parameters<typeof ManagedBilling>[0]) {
   if (mode === "managed") return <ManagedBilling {...billing} />;
   if (mode !== "own") return null;
@@ -80,7 +85,13 @@ export function BillingSection({ mode, locale = "en", runningCampaigns = [], ...
         <WalletCards aria-hidden="true" className="h-5 w-5 text-blue-600" />
         {t("billingTitle")}
       </h2>
-      <p className="text-sm leading-6 text-slate-600">{t("ownBilling")}</p>
+      {planUnavailable ? <>
+        <p className="text-sm leading-6 text-slate-600">{t("ownBillingPlan")}</p>
+        <Alert variant="error">{t("planUnavailable")}</Alert>
+      </> : plan && planBusinessId ? <>
+        <p className="text-sm leading-6 text-slate-600">{t("ownBillingPlan")}</p>
+        <PlanCard businessId={planBusinessId} status={plan.status} payUrl={plan.payUrl} />
+      </> : <p className="text-sm leading-6 text-slate-600">{t("ownBilling")}</p>}
       <IfYouStop locale={locale} />
       <PauseAllAds locale={locale} campaigns={runningCampaigns} />
     </section>

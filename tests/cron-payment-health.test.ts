@@ -1,8 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const database = vi.hoisted(() => ({ rpc: vi.fn(), abortSignal: vi.fn() }));
+const database = vi.hoisted(() => ({ rpc: vi.fn(), abortSignal: vi.fn(), unmatched: vi.fn(), filters: [] as unknown[][] }));
 const payments = vi.hoisted(() => ({ live: true }));
-vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ rpc: database.rpc }) }));
+vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ rpc: database.rpc, from: (table: string) => {
+  const chain: Record<string, unknown> = {};
+  for (const op of ["select", "eq", "gte"]) chain[op] = (...args: unknown[]) => { database.filters.push([table, op, ...args]); return chain; };
+  chain.abortSignal = database.unmatched;
+  return chain;
+} }) }));
 vi.mock("@/lib/payments/production-config", async importOriginal => {
   const actual = await importOriginal<typeof import("@/lib/payments/production-config")>();
   return {
@@ -29,6 +34,8 @@ beforeEach(() => {
   payments.live = true;
   database.rpc.mockReturnValue({ abortSignal: database.abortSignal });
   database.abortSignal.mockResolvedValue({ data: { events7d: 2, unprocessed: 0, capturedWithoutEvent: 0 }, error: null });
+  database.unmatched.mockResolvedValue({ count: 0, error: null });
+  database.filters = [];
 });
 afterEach(() => vi.unstubAllEnvs());
 
@@ -37,7 +44,7 @@ describe("GET /api/cron/payment-health (#178)", () => {
     const { GET } = await import("@/app/api/cron/payment-health/route");
     const response = await GET(request(`Bearer ${SECRET}`));
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ ok: true, payments: "live", events7d: 2, unprocessed: 0, capturedWithoutEvent: 0 });
+    expect(await response.json()).toEqual({ ok: true, payments: "live", events7d: 2, unprocessed: 0, capturedWithoutEvent: 0, planUnmatched7d: 0 });
     expect(database.rpc).toHaveBeenCalledWith("production_payment_webhook_health", { p_account_id: "acc_fixture" });
   });
 
@@ -46,6 +53,15 @@ describe("GET /api/cron/payment-health (#178)", () => {
     const { GET } = await import("@/app/api/cron/payment-health/route");
     const body = await (await GET(request(`Bearer ${SECRET}`))).json();
     expect(body).toMatchObject({ ok: false, capturedWithoutEvent: 1 });
+  });
+
+  // #1583 (Reviewer): a captured ₹999 plan payment that settled no month must reach DevOps for a refund.
+  it("flags a captured plan payment that matched no plan month in the last 7 days", async () => {
+    database.unmatched.mockResolvedValueOnce({ count: 1, error: null });
+    const { GET } = await import("@/app/api/cron/payment-health/route");
+    const body = await (await GET(request(`Bearer ${SECRET}`))).json();
+    expect(body).toMatchObject({ ok: false, planUnmatched7d: 1 });
+    expect(database.filters).toContainEqual(["product_events", "eq", "name", "plan.payment_unmatched"]);
   });
 
   it("reports disabled payments without querying", async () => {

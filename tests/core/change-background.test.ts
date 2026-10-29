@@ -19,6 +19,12 @@ const mocks = vi.hoisted(() => ({
   /** Words saved on the picture by another tab while the image is being made. */
   editedDuringImage: null as Record<string, unknown> | null,
   assets: [] as string[],
+  planUnpaid: false,
+}));
+
+vi.mock("@/lib/plan/store", () => ({
+  isPlanBillingEnabled: () => mocks.planUnpaid,
+  readStoredPlan: async () => ({ status: { state: "unpaid", since: "2026-10-01T00:00:00Z" }, payUrl: null }),
 }));
 
 vi.mock("@/lib/supabase/admin", () => ({
@@ -102,6 +108,7 @@ beforeEach(() => {
   mocks.imageStatus = 200;
   mocks.editedDuringImage = null;
   mocks.assets = [];
+  mocks.planUnpaid = false;
   imageBodies = [];
   for (const [name, value] of Object.entries({
     NEXT_PUBLIC_SUPABASE_URL: SUPABASE,
@@ -144,6 +151,17 @@ async function post(instruction: unknown = "Rooftop at sunset, warm light", body
 }
 
 describe("core: change only the background on a recorded run-4 ad", () => {
+  it("refuses a paid background for an unpaid plan before any image, admission claim or saved change", async () => {
+    mocks.planUnpaid = true;
+    const res = await post();
+    expect(res.status).toBe(402);
+    expect(res.body.code).toBe("PLAN_UNPAID");
+    expect(imageBodies).toEqual([]);
+    expect(mocks.updates).toEqual([]);
+    expect(mocks.usage).toEqual([]);
+    expect(mocks.claims.size).toBe(0);
+  });
+
   it("makes one image from the owner's direction, keeps every word and approval, and records the spend", async () => {
     const res = await post();
     expect(res.status, JSON.stringify(res.body)).toBe(200);
@@ -200,7 +218,8 @@ describe("core: change only the background on a recorded run-4 ad", () => {
     expect(imageBodies).toHaveLength(1);
   });
 
-  it("uses the owner's own Brand photo with no image call, no spend and the same words", async () => {
+  it.each([false, true])("uses the owner's own Brand photo without paid work even when plan unpaid is %s", async unpaid => {
+    mocks.planUnpaid = unpaid;
     const photo = `${SUPABASE}/storage/v1/object/public/brand-assets/${run4.brand.id}/front-desk.jpg`;
     mocks.assets = [photo];
     const res = await post(undefined, { photoUrl: photo });

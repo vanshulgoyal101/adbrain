@@ -19,7 +19,8 @@ const collectionSchema = <Schema extends z.ZodType>(schema: Schema, maximum = 10
 const planLinkSchema = z.object({
   id: identifier("plink"), amount: z.literal(PLAN_PRICE_PAISE), currency: z.literal("INR"), reference_id: z.string(),
   status: z.enum(["created", "partially_paid", "expired", "cancelled", "paid"]), short_url: z.url(),
-  payments: z.array(z.object({ payment_id: identifier("pay"), status: z.string(), amount: z.number().int() })).nullable().optional(),
+  payments: z.array(z.object({ payment_id: identifier("pay"), status: z.string(), amount: z.number().int(),
+    created_at: z.number().int().positive().max(8_640_000_000_000).optional() })).nullable().optional(),
 });
 
 function validated<Schema extends z.ZodType>(schema: Schema, input: unknown): z.output<Schema> {
@@ -69,12 +70,22 @@ export function createProductionPaymentClient(environment: Readonly<Record<strin
       if (link.reference_id !== input.periodId || link.status !== "created") throw new ProductionPaymentError("INVALID_PROVIDER_RESPONSE");
       return { id: link.id, shortUrl: link.short_url };
     },
+    /** The link already made for a month (Razorpay keeps reference_id unique), after a create that failed or raced. */
+    async findPlanLink(periodId: string) {
+      z.uuid().parse(periodId);
+      const page = validated(z.object({ payment_links: z.array(planLinkSchema).max(5) }),
+        await request(sdk => sdk.paymentLink.all({ reference_id: periodId } as Parameters<typeof sdk.paymentLink.all>[0])));
+      const links = page.payment_links.filter(link => link.reference_id === periodId && link.status === "created");
+      if (links.length > 1) throw new ProductionPaymentError("INVALID_PROVIDER_RESPONSE");
+      return links[0] ? { id: links[0].id, shortUrl: links[0].short_url } : null;
+    },
     async fetchPlanLink(linkId: string) {
       identifier("plink").parse(linkId);
       const link = validated(planLinkSchema, await request(sdk => sdk.paymentLink.fetch(linkId)));
       if (link.id !== linkId) throw new ProductionPaymentError("INVALID_PROVIDER_RESPONSE");
       const captured = (link.payments ?? []).find(payment => payment.status === "captured" && payment.amount === PLAN_PRICE_PAISE);
-      return { id: link.id, status: link.status, amountPaise: link.amount, referenceId: link.reference_id, paymentId: captured?.payment_id ?? null };
+      return { id: link.id, status: link.status, amountPaise: link.amount, referenceId: link.reference_id, paymentId: captured?.payment_id ?? null,
+        paidAt: captured?.created_at ? new Date(captured.created_at * 1000).toISOString() : null };
     },
     async fetchOrder(orderId: string) {
       identifier("order").parse(orderId);

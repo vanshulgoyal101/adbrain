@@ -36,9 +36,15 @@ async function handleGET(request: Request) {
   const { data, error } = await createAdminClient()
     .rpc("production_payment_webhook_health", { p_account_id: accountId })
     .abortSignal(AbortSignal.timeout(10_000));
+  // #1583: captured ₹999 plan payments that settled no month (plan.payment_unmatched) need a refund.
+  const unmatched = await createAdminClient().from("product_events").select("event_id", { count: "exact", head: true })
+    .eq("name", "plan.payment_unmatched").gte("created_at", new Date(Date.now() - 7 * 86_400_000).toISOString())
+    .abortSignal(AbortSignal.timeout(10_000));
   const health = healthSchema.safeParse(data);
-  if (error || !health.success) {
+  if (error || !health.success || unmatched.error || typeof unmatched.count !== "number") {
     return NextResponse.json({ ok: false, error: "Payment health is unavailable." }, { status: 503 });
   }
-  return NextResponse.json({ ok: health.data.capturedWithoutEvent === 0 && health.data.unprocessed === 0, payments: "live", ...health.data });
+  const planUnmatched7d = unmatched.count;
+  return NextResponse.json({ ok: health.data.capturedWithoutEvent === 0 && health.data.unprocessed === 0 && planUnmatched7d === 0,
+    payments: "live", ...health.data, planUnmatched7d });
 }
