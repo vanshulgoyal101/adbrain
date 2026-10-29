@@ -10,6 +10,10 @@ import { SpendStatusBanner } from "@/components/spend-status";
 import { RecentActivity, WorkspaceHome } from "@/components/workspace-home";
 import { requestLocale } from "@/i18n/request-locale";
 import { SetupResumeCard } from "@/components/setup-resume-card";
+import { ClaimBusiness } from "@/components/claim-business";
+import { myPendingTransfer } from "@/lib/prospect/transfer-server";
+import { createClient } from "@/lib/supabase/server";
+import { CheckCircle2 } from "lucide-react";
 import { madeForSetup } from "@/lib/creative/setup-picks";
 import { setupResumeStep } from "@/lib/setup/resume";
 import { getMetaConnection } from "@/lib/meta/credentials";
@@ -49,8 +53,16 @@ async function brandMeterSnoozed(): Promise<boolean> {
   }
 }
 
-export default async function DashboardPage() {
-  const [business, locale] = await Promise.all([getPrimaryBusiness(), requestLocale()]);
+export default async function DashboardPage({ searchParams }: { searchParams?: Promise<Record<string, string | string[] | undefined>> } = {}) {
+  const [business, locale, params] = await Promise.all([getPrimaryBusiness(), requestLocale(), searchParams ?? Promise.resolve({} as Record<string, string | string[] | undefined>)]);
+  // #1670 (CTO): a new owner with a business AdBrain prepared for them is asked first, before WS1 starts an empty one.
+  if (!business) {
+    const claim = await myPendingTransfer().catch(() => null);
+    if (claim) {
+      const email = await createClient().then((supabase) => supabase.auth.getUser()).then(({ data }) => data.user?.email ?? null, () => null);
+      return <ClaimBusiness claim={claim} email={email} />;
+    }
+  }
   const spendStatus = business ? getSpendEvaluation(business.id).then<ReactNode, ReactNode>(
     ({ evaluation }) => evaluation.status === "approaching" || evaluation.status === "over"
       ? <SpendStatusBanner evaluation={evaluation} /> : null,
@@ -74,7 +86,10 @@ export default async function DashboardPage() {
     const ready = resume === 3 && business
       ? await getApprovedCreatives(business.id).then((rows) => rows.filter((row) => madeForSetup(row, business)), () => [])
       : [];
-    return <SetupResumeCard step={resume} ready={ready} locale={locale} />;
+    return <>
+      {params.handed === "1" && <HandedOverNotice />}
+      <SetupResumeCard step={resume} ready={ready} locale={locale} />
+    </>;
   }
   // #764: the Home results row; an unreadable result leaves the row out, never the page.
   const launched = campaigns.filter((campaign) => campaign.meta_campaign_id).map((campaign) => campaign.id);
@@ -156,6 +171,16 @@ async function SpendNotice({ result }: { result: Promise<ReactNode> }) {
 
 async function Activity({ result }: { result: Promise<ReactNode> }) {
   return await result;
+}
+
+/** #1670 (Designer #1736 frame 4): the owner just made the prepared business theirs. */
+function HandedOverNotice() {
+  return (
+    <p role="status" className="mx-auto mb-4 flex max-w-xl items-start gap-2 rounded-lg bg-green-50 p-4 text-sm text-slate-900">
+      <CheckCircle2 size={18} className="mt-0.5 shrink-0 text-primary" aria-hidden="true" />
+      It&apos;s yours. The &apos;Sample&apos; mark is off your ads. Nothing runs until you tap Go live.
+    </p>
+  );
 }
 
 function resultsCardOffer(businessId: string, facts: ResultsCardFacts, locale: AppLocale) {
