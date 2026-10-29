@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Building2 } from "lucide-react";
 import { AssetsLibrary } from "@/components/assets-library";
+import { MediaLibrary } from "@/components/media-library";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
@@ -10,11 +11,14 @@ import {
   getPrimaryBusiness,
 } from "@/lib/supabase/queries";
 import { isProspectSession } from "@/lib/prospect-session";
+import { hasCurrentMediaConsent } from "@/lib/media/consent";
+import { listMedia, mediaUploadsEnabled } from "@/lib/media/store";
+import { createClient } from "@/lib/supabase/server";
 
 export const metadata = { title: "Assets" };
 
-export default async function AssetsPage() {
-  const business = await getPrimaryBusiness();
+export default async function AssetsPage({ searchParams }: { searchParams?: Promise<{ add?: string | string[] }> } = {}) {
+  const [business, params] = await Promise.all([getPrimaryBusiness(), searchParams ?? ({} as { add?: string | string[] })]);
 
   if (!business) {
     return (
@@ -43,6 +47,25 @@ export default async function AssetsPage() {
     getBrandAssets(business.id),
     isProspectSession(),
   ]);
+
+  // #778 slice 3a: with uploads on, the page is the owner's photo library; a failed read shows the empty state.
+  if (mediaUploadsEnabled()) {
+    const client = await createClient();
+    const [media, consented] = await Promise.all([
+      listMedia(client, business.id).then((page) => page.items, () => []),
+      // A failed check shows the tick again; the sign route re-checks either way.
+      hasCurrentMediaConsent(client, business).catch(() => false),
+    ]);
+    return (
+      <div>
+        <PageHeader title="Photos & videos" description={<p>Your own photos for {business.name}&apos;s ads, and every ad AdBrain made.</p>} />
+        <div className="mt-6">
+          <MediaLibrary business={{ id: business.id, vertical: business.vertical ?? null }} media={media} creatives={creatives}
+            brandAssets={brandAssets} sample={sample} consented={consented} startOpen={params.add === "1"} />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>

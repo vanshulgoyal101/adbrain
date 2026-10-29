@@ -16,6 +16,7 @@ import { clientCreative } from "@/lib/creative/client-receipt";
 import { madeForSetup } from "@/lib/creative/setup-picks";
 import { getApprovedCreatives, getBrandAssets, getSetupCreativeBatch, getPrimaryBusiness, hasLaunchedCampaign } from "@/lib/supabase/queries";
 import { occasionsFor } from "@/lib/seasonal";
+import { mediaUploadsEnabled } from "@/lib/media/store";
 
 export const metadata = {
   title: "Create ads",
@@ -87,6 +88,13 @@ export default async function CreatePage({ searchParams }: { searchParams?: Prom
         title="Create ads"
         description="Say who you want to reach. You check every ad before it runs."
       />
+      {/* #778 slice 3a: the entry choice (CPO #1868); own-photo ads start from the library until slice 3b's picker. */}
+      {mediaUploadsEnabled() && (
+        <nav aria-label="How to make ads" className="mb-4 flex flex-wrap gap-2 text-sm">
+          <span aria-current="page" className="inline-flex min-h-11 items-center rounded-full bg-blue-50 px-4 font-medium text-blue-700">Make ads with AI</span>
+          <Link href="/assets" className="inline-flex min-h-11 items-center rounded-full border border-slate-300 px-4 font-medium text-slate-700 hover:bg-slate-50">Use my photos &amp; videos</Link>
+        </nav>
+      )}
       <CreateFlow business={business} opening={openingLine(evidence)} occasions={occasionsFor(business)}>
         <aside aria-label="Your business details" className="max-w-2xl border-t border-slate-200 pt-5 text-sm text-slate-500">
           <p>
