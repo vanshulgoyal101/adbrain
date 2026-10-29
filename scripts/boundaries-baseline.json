@@ -670,5 +670,171 @@
       "from": "src/lib/meta/connection-access.ts",
       "to": "src/lib/managed/spend-cap-wiring.ts"
     }
+  ],
+  "checks": [
+    {
+      "rule": "C1-graph-urls-in-meta",
+      "from": "src/lib/alerts/sender.ts",
+      "to": "graph.facebook.com"
+    },
+    {
+      "rule": "C2-adapter-own-data",
+      "from": "src/lib/meta/connection-access.ts",
+      "to": "table:businesses"
+    },
+    {
+      "rule": "C2-adapter-own-data",
+      "from": "src/lib/meta/connection-access.ts",
+      "to": "table:campaign_drafts"
+    },
+    {
+      "rule": "C2-adapter-own-data",
+      "from": "src/lib/meta/connection-access.ts",
+      "to": "table:campaign_operations"
+    },
+    {
+      "rule": "C2-adapter-own-data",
+      "from": "src/lib/meta/managed-provision-runner.ts",
+      "to": "table:businesses"
+    },
+    {
+      "rule": "C2-adapter-own-data",
+      "from": "src/lib/meta/reauth.ts",
+      "to": "table:campaigns"
+    },
+    {
+      "rule": "C3-appsecret-proof",
+      "from": "src/lib/alerts/sender.ts",
+      "to": "appSecretProof"
+    },
+    {
+      "rule": "C3-appsecret-proof",
+      "from": "src/lib/meta/client.ts",
+      "to": "appSecretProof"
+    },
+    {
+      "rule": "C3-appsecret-proof",
+      "from": "src/lib/meta/oauth.ts",
+      "to": "appSecretProof"
+    },
+    {
+      "rule": "C3-appsecret-proof",
+      "from": "src/lib/meta/parent.ts",
+      "to": "appSecretProof"
+    },
+    {
+      "rule": "C4-file-size",
+      "from": "src/app/api/campaigns/[id]/route.ts",
+      "to": "> 400 lines",
+      "lines": 463
+    },
+    {
+      "rule": "C4-file-size",
+      "from": "src/app/api/creatives/generate/route.ts",
+      "to": "> 400 lines",
+      "lines": 473
+    },
+    {
+      "rule": "C4-file-size",
+      "from": "src/components/ad-assistant.tsx",
+      "to": "> 400 lines",
+      "lines": 1134
+    },
+    {
+      "rule": "C4-file-size",
+      "from": "src/components/brand-form.tsx",
+      "to": "> 400 lines",
+      "lines": 613
+    },
+    {
+      "rule": "C4-file-size",
+      "from": "src/components/campaigns.tsx",
+      "to": "> 400 lines",
+      "lines": 2754
+    },
+    {
+      "rule": "C4-file-size",
+      "from": "src/components/creative-copy-editor.tsx",
+      "to": "> 400 lines",
+      "lines": 579
+    },
+    {
+      "rule": "C4-file-size",
+      "from": "src/components/lead-inbox.tsx",
+      "to": "> 400 lines",
+      "lines": 675
+    },
+    {
+      "rule": "C4-file-size",
+      "from": "src/components/meta-connect/meta-connect-dialog.tsx",
+      "to": "> 400 lines",
+      "lines": 547
+    },
+    {
+      "rule": "C4-file-size",
+      "from": "src/components/setup-ads-step.tsx",
+      "to": "> 400 lines",
+      "lines": 442
+    },
+    {
+      "rule": "C4-file-size",
+      "from": "src/components/studio.tsx",
+      "to": "> 400 lines",
+      "lines": 1098
+    },
+    {
+      "rule": "C4-file-size",
+      "from": "src/components/targeting-controls.tsx",
+      "to": "> 400 lines",
+      "lines": 551
+    },
+    {
+      "rule": "C4-file-size",
+      "from": "src/lib/campaign/edit-service.ts",
+      "to": "> 400 lines",
+      "lines": 475
+    },
+    {
+      "rule": "C4-file-size",
+      "from": "src/lib/creative/concept.ts",
+      "to": "> 400 lines",
+      "lines": 689
+    },
+    {
+      "rule": "C4-file-size",
+      "from": "src/lib/creative/generate.ts",
+      "to": "> 400 lines",
+      "lines": 442
+    },
+    {
+      "rule": "C4-file-size",
+      "from": "src/lib/creative/interview.ts",
+      "to": "> 400 lines",
+      "lines": 481
+    },
+    {
+      "rule": "C4-file-size",
+      "from": "src/lib/meta/client.ts",
+      "to": "> 400 lines",
+      "lines": 2481
+    },
+    {
+      "rule": "C4-file-size",
+      "from": "src/lib/meta/oauth.ts",
+      "to": "> 400 lines",
+      "lines": 426
+    },
+    {
+      "rule": "C4-file-size",
+      "from": "src/lib/observability/core-scoreboard.ts",
+      "to": "> 400 lines",
+      "lines": 578
+    },
+    {
+      "rule": "C4-file-size",
+      "from": "src/lib/supabase/queries.ts",
+      "to": "> 400 lines",
+      "lines": 424
+    }
   ]
 }

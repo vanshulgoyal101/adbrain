@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { contactsInCopy } from "@/lib/creative/concept";
+import { contactsInCopy } from "@/lib/creative/contact-in-copy";
 
 // #1822 (Reviewer, #1816): a pasted bio's third-party number or link must not ship in the ad's words.
 const own = { website: "https://www.solaride.in/", phone: "+91 98290 12345" };

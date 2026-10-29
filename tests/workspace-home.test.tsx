@@ -27,6 +27,8 @@ const queries = vi.hoisted(() => ({
   businessLLMUsageSummary: vi.fn(),
 }));
 vi.mock("@/lib/supabase/queries", () => queries);
+// #1668: the "last week" card has its own tests; here it reads nothing.
+vi.mock("@/lib/home/week-summary-load", () => ({ loadWeekSummary: async () => null }));
 // #1650: the day-7 question's facts (exempt, first Go live, earlier answers); hidden unless a test opens it.
 const pilot = vi.hoisted(() => ({ facts: vi.fn(async (): Promise<{ exempt: boolean; firstLaunchAt: string | null; events: { name: string; created_at: string }[] }> => ({ exempt: true, firstLaunchAt: null, events: [] })) }));
 vi.mock("@/lib/feedback/pilot-day7-store", () => ({ pilotDay7Facts: pilot.facts }));
@@ -532,6 +534,14 @@ describe("Home results row (#764)", () => {
     // With #1292's named line on Home, the count isn't repeated.
     rerender(<WorkspaceHome {...empty} business={business} campaigns={[chats, forms]} results={results} waiting={2} firstEnquiry={{ name: "Rohit", at: "2026-10-26T04:10:00Z" }} now={now} />);
     expect(within(screen.getByRole("region", { name: "Results so far" })).getByRole("link", { name: "WhatsApp run" }).closest("p")).toHaveTextContent("Each chat costs ₹168. WhatsApp run");
+  });
+
+  // #1438: in Hindi, Home's lead sentence and the row words come from the same Hindi verdicts.
+  it("#1438: the verdict sentence and row words in Hindi", () => {
+    render(<WorkspaceHome {...empty} business={business} campaigns={[chats, forms]} results={results} now={now} locale="hi" />);
+    const row = screen.getByRole("region", { name: "अब तक के नतीजे" });
+    expect(within(row).getByRole("link", { name: "WhatsApp run" }).closest("p")).toHaveTextContent("हर चैट ₹168 की पड़ रही है। WhatsApp run");
+    expect(screen.queryByText(/Each chat costs|Early days/)).toBeNull();
   });
 
   it("#1274: no lead sentence when nothing is running", () => {

@@ -3,7 +3,7 @@
 What AdBrain works on next and why: outcomes, not delivery promises. The
 ranked list and its evidence live on
 [#703](https://github.com/vanshulgoyal101/adbrain/issues/703); who does what is in the
-[current dispatch](ORCHESTRATION.md#current-dispatch); what the product does today is in
+[current dispatch](team/orchestration.md#current-dispatch); what the product does today is in
 [Features](product/README.md). This page holds current truth only; git keeps the history.
 
 **The core loop comes first:** Brand → Create → Review → Launch on Meta → Manage
@@ -65,10 +65,10 @@ live ad or Meta object is changed by the ranking itself.
 ## Pilots and Money
 
 - Pilot businesses use **their own** Meta ad account and Page and pay Meta directly. AdBrain sets up the first campaign free. **Price (CEO, [#718](https://github.com/vanshulgoyal101/adbrain/issues/718)):** ₹999 a month, first month free, no auto-debit; the first 10 customers use the own-ad-account path only. **Refund (CEO, [#1629](https://github.com/vanshulgoyal101/adbrain/issues/1629)):** the full ₹999 on request if no new campaign went live that month; once one does, that month isn't refunded.
-- **Run length (CEO, [#1530](https://github.com/vanshulgoyal101/adbrain/issues/1530)):** self-serve Go live stays 2 days (₹300 a day, ₹708 at most including Meta's GST); WS1 step 3 gets a 2 days / 7 days choice, and pilots run 7 days at ₹300 a day (₹2,478 at most including Meta's GST). Until the choice ships, pilots run 2 days.
+- **Run length (CEO, [#1530](https://github.com/vanshulgoyal101/adbrain/issues/1530)):** self-serve Go live stays 2 days (₹300 a day, ₹708 at most including Meta's GST); WS1 step 3 gets a 2 days / 7 days choice, and pilots run 7 days at ₹300 a day (₹2,478 at most including Meta's GST).
 - **Referrals (CEO, [#1653](https://github.com/vanshulgoyal101/adbrain/issues/1653)):** asked in person only after a Good Day 7; the referrer gets one free month (credit, never cash) when the referred business goes live, at most 3 a year. No app UI yet.
 - Until Meta's App Review ([#156](https://github.com/vanshulgoyal101/adbrain/issues/156)) is approved, each pilot owner connects as an app Tester.
-- AdBrain's own checkout and per-customer ad balances exist in source behind flags ([Payments plan](PAYMENTS-PLAN.md)). Whether they go live or are removed is a CEO decision due November 11, 2026 ([#1171](https://github.com/vanshulgoyal101/adbrain/issues/1171)).
+- AdBrain's own checkout and per-customer ad balances exist in source behind flags ([Payments plan](plans/payments.md)). Whether they go live or are removed is a CEO decision due November 11, 2026 ([#1171](https://github.com/vanshulgoyal101/adbrain/issues/1171)).
 - Numbers shown to owners come from AdBrain's own ledger with the sample size, never from industry benchmarks. A comparison sentence needs at least 20 pooled results for that kind of business ([#1255](https://github.com/vanshulgoyal101/adbrain/issues/1255)).
 
 ## Next, Once the Pilots Run

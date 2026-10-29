@@ -33,6 +33,7 @@ async function AuthenticatedWorkspace({ children }: { children: React.ReactNode 
   const supportUrl = supportWhatsAppUrl(getEnv().SUPPORT_WHATSAPP, business?.name ?? null);
   // #1272: until a first campaign has gone live, + continues the setup instead of starting over; unknown counts as not.
   const firstAd = business ? !(await hasLaunchedCampaign(business.id).catch(() => true)) : true;
-  const labels = namespaceMessages(await requestLocale(), "shell");
-  return <WorkspaceShell labels={labels} email={user.email} ownerId={user.id} businessId={business?.id ?? null} businessName={business?.name ?? null} supportUrl={supportUrl} firstAd={firstAd}><ProductTelemetry />{children}</WorkspaceShell>;
+  const locale = await requestLocale();
+  const labels = namespaceMessages(locale, "shell");
+  return <WorkspaceShell labels={labels} locale={locale} email={user.email} ownerId={user.id} businessId={business?.id ?? null} businessName={business?.name ?? null} supportUrl={supportUrl} firstAd={firstAd}><ProductTelemetry />{children}</WorkspaceShell>;
 }

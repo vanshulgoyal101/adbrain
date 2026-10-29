@@ -24,6 +24,33 @@ describe("core-approval required check (#926)", () => {
     expect(coreApproval({ files: ["src/lib/meta/client.ts"], head, headRef: "next", comments: [] }).state).toBe("success");
   });
 
+  it("#1740: only this repo's next → main is the train; a fork's `next` or another base waits for a verdict", () => {
+    const pr = { files: ["src/lib/meta/client.ts"], head, headRef: "next", comments: [] };
+    expect(coreApproval({ ...pr, headRepo: "vanshulgoyal101/adbrain", baseRef: "main" }).state).toBe("success");
+    expect(coreApproval({ ...pr, headRepo: "someone/adbrain", baseRef: "main" }).state).toBe("pending");
+    expect(coreApproval({ ...pr, headRepo: "", baseRef: "main" }).state).toBe("pending");
+    expect(coreApproval({ ...pr, headRepo: "vanshulgoyal101/adbrain", baseRef: "next" }).state).toBe("pending");
+  });
+
+  it("#1740: gates the ₹999 plan as money and tenant/auth boundaries as core", () => {
+    expect(coreFiles([
+      "src/lib/plan/webhook.ts",
+      "src/app/api/cron/plan-links/route.ts",
+      "src/app/api/cron/refresh-results/route.ts",
+      "src/app/api/whatsapp/webhook/route.ts",
+      "src/lib/alerts/owner-alerts.ts",
+      "src/lib/security/cron-auth.ts",
+      "src/lib/internal-accounts.ts",
+      "src/lib/internal-accounts.json",
+      "src/app/api/privacy-requests/route.ts",
+      "src/lib/privacy-requests.ts",
+      "src/lib/internal-accounts-helper.ts",
+      "src/lib/securityish.ts",
+    ])).toHaveLength(10);
+    const cto = at(`CTO review of ${head.slice(0, 7)}: **approved**.`);
+    expect(coreApproval({ files: ["src/lib/plan/gate.ts"], head, headRef: "b", comments: [cto] }).state).toBe("pending");
+  });
+
   it("holds #914's shape (core Meta change, no approval at the head) until QA, the Reviewer or the CTO approves it", () => {
     const pr = { files: ["src/lib/campaign/create-service.ts"], head, headRef: "dev/914" };
     expect(coreApproval({ ...pr, comments: [] }).state).toBe("pending");

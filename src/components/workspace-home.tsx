@@ -9,7 +9,7 @@ import { describeAuditEvent, isBackgroundAuditAction } from "@/lib/audit-labels"
 import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
 import { formatClock, formatDate, formatMoney, formatPerDay } from "@/lib/format";
 import { firstEnquiryLine } from "@/lib/trust-lines";
-import { homeResults, unloggedChats } from "@/lib/campaign/home-results";
+import { homeCustomers, homeResults, unloggedChats } from "@/lib/campaign/home-results";
 import { homeVerdicts } from "@/lib/campaign/card-verdict";
 import { staleCampaignIds } from "@/lib/campaign/results-freshness";
 import { StaleResultsRefresher } from "@/components/stale-results-refresher";
@@ -18,9 +18,9 @@ import type { AuditLog, Business, Campaign, CampaignResult, CreativePreview } fr
 import { campaignAttention } from "@/lib/campaign/health";
 import { formatReplyTime } from "@/lib/leads/first-reply";
 import { campaignStatus, Status } from "@/components/ui/status";
-import { goneInMeta, recentlyDeletedInMeta } from "@/lib/campaign/gone-in-meta";
+import { goneInMeta, pausableCampaigns, recentlyDeletedInMeta } from "@/lib/campaign/gone-in-meta";
 import type { HomeAdReview } from "@/lib/campaign/home-ad-review";
-import { timeAgoIn, translator, type AppLocale } from "@/i18n/locale";
+import { namespaceMessages, timeAgoIn, translator, type AppLocale } from "@/i18n/locale";
 
 export interface WorkspaceHomeProps {
   business: Business | null;
@@ -45,6 +45,8 @@ export interface WorkspaceHomeProps {
   rejectedAds?: ReactNode;
   /** #2032: the Brand meter card, after the next step; left out when the Brand is complete or snoozed. */
   brandMeter?: ReactNode;
+  /** #1668: the streamed Monday "last week" card. */
+  weekSummary?: ReactNode;
   /** #1650: the day-7 'would you pay ₹999 a month?' card, when it's due. */
   pilotQuestion?: ReactNode;
   now?: number;
@@ -72,6 +74,7 @@ export function WorkspaceHome({
   firstEnquiry = null,
   adReview = null,
   rejectedAds,
+  weekSummary,
   pilotQuestion,
   brandMeter,
   now,
@@ -82,10 +85,12 @@ export function WorkspaceHome({
   const liveCampaigns = campaigns.filter((campaign) => !goneInMeta(campaign) || recentlyDeletedInMeta(campaign, now));
   const summary = business ? homeResults(campaigns, results) : null;
   // #1292's line already names the newest person waiting, so the verdict doesn't say it twice.
-  const verdicts = business ? homeVerdicts(campaigns, results, { now, waiting: firstEnquiry ? 0 : waiting }) : null;
+  const verdicts = business ? homeVerdicts(campaigns, results, { now, waiting: firstEnquiry ? 0 : waiting, words: { locale, messages: namespaceMessages(locale, "verdict") } }) : null;
   const leadCampaign = verdicts?.lead ? campaigns.find((campaign) => campaign.id === verdicts.lead?.campaignId) : null;
   const stale = business ? staleCampaignIds(campaigns, results, now) : [];
-  const [next, ...later] = buildWorkQueue({ business, creatives, campaigns, metaReady, now, locale, unloggedChats: business ? unloggedChats(campaigns, results) : 0 });
+  const unlogged = business ? unloggedChats(campaigns, results) : 0;
+  const [next, ...later] = buildWorkQueue({ business, creatives, campaigns, metaReady, now, locale, unloggedChats: unlogged });
+  const customers = homeCustomers(summary, unlogged);
   const setAside = setAsideIds(creatives, now);
   const reviewLabel = (creative: CreativePreview) => creative.status === "approved" ? t("approved") : setAside.has(creative.id) ? t("setAside") : t("needsReview");
   const places = business?.locations.length ? business.locations.join(", ") : null;
@@ -121,6 +126,7 @@ export function WorkspaceHome({
         <p role="status" aria-label={t("metaReview")} className="text-sm text-slate-900">{t("metaChecking")}</p>
       )}
       {adReview?.kind === "rejected" && rejectedAds}
+      {weekSummary}
       {pilotQuestion}
 
       {stale.length > 0 && <StaleResultsRefresher campaignIds={stale} />}
@@ -153,6 +159,10 @@ export function WorkspaceHome({
               </div>
             ))}
           </dl>
+          {customers?.kind === "line" && <p className="mt-3 text-sm text-slate-700">{t("customersLine", { n: customers.customers, cost: formatMoney(customers.perCustomer) })}</p>}
+          {customers?.kind === "ask" && <p className="mt-3 text-sm text-slate-700">
+            {t("customersAsk")}{" "}<Link href="/leads" className={linkClass}>{t("markCustomers")}</Link>
+          </p>}
           {replyMinutes !== null && <p className="mt-3 text-sm text-slate-700">
             {/* #1443: the number is the owner's first WhatsApp/Call tap, not a reply AdBrain can see. */}
             {t.rich("contactTime", { time: formatReplyTime(replyMinutes), strong: (chunks) => <strong className="font-medium">{chunks}</strong> })}{" "}
@@ -248,8 +258,7 @@ export function WorkspaceHome({
                 </p>
               )}
               {/* #1968: a quiet secondary stop while anything runs; each campaign resumes from its own card. */}
-              <PauseAllAds locale={locale} campaigns={campaigns.filter((campaign) => campaign.status === "active" && !goneInMeta(campaign))
-                .map(({ id, name, meta_ad_account_id, meta_campaign_id }) => ({ id, name, meta_ad_account_id, meta_campaign_id }))} />
+              <PauseAllAds locale={locale} campaigns={pausableCampaigns(campaigns)} />
             </section>
           )}
         </div>

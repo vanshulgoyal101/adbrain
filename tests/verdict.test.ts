@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { AdResultView } from "@/lib/campaign/ad-results-store";
-import { verdict, type VerdictInput } from "@/lib/campaign/verdict";
+import hi from "../messages/hi.json";
+import { restatesStatus, verdict, type VerdictInput } from "@/lib/campaign/verdict";
 
 // #1255 slice 1: the card's one sentence, one number, one action, at every edge the CPO set.
 const NOW = Date.parse("2026-10-28T12:00:00Z");
@@ -91,5 +92,47 @@ describe("verdict (#1255)", () => {
   it("QA 2's Solaride numbers (#1133): the Jan WhatsApp run (1 chat, ₹32.63) and today's live run (0 chats, ₹40)", () => {
     expect(v({ status: "paused", impressions: 439, results: 1, spend: 32.63, opens: 3 })).toMatchObject({ state: "early", number: { kind: "cost", value: 33 }, sentence: "1 chat so far. AdBrain will tell you if it's working after 5." });
     expect(v({ impressions: 601, results: 0, spend: 40.83, opens: 0 })).toMatchObject({ state: "early", sentence: "No chats yet.", number: { kind: "count", value: 0 } });
+  });
+});
+
+// #1438 (CPO's Screen 2 table): the same rules in Hindi; numbers and ₹ stay as in English.
+describe("verdict in Hindi (#1438)", () => {
+  const words = { locale: "hi" as const, messages: hi.verdict };
+  const h = (change: Partial<VerdictInput>) => verdict({ ...base, ...change }, words);
+  const own = { kind: "own", results: 25, typical: 300 } as const;
+
+  it("people waiting, then the cost against the owner's last campaign", () => {
+    expect(h({ comparison: own, waiting: 2 })).toMatchObject({ state: "working", label: "चल रहा है", action: "reply",
+      sentence: "2 लोग आपके जवाब का इंतज़ार कर रहे हैं। हर चैट ₹150 की पड़ रही है, आपके पिछले कैंपेन (हर एक ₹300) से कम।" });
+    expect(h({ comparison: own, waiting: 1 }).sentence).toMatch(/^1 व्यक्ति आपके जवाब का इंतज़ार कर रहा है। /);
+    expect(h({ comparison: null })).toMatchObject({ label: "चालू", sentence: "हर चैट ₹150 की पड़ रही है।" });
+    expect(h({ comparison: { ...solar, results: 30, low: 100, high: 300 }, spend: 3500 })).toMatchObject({ label: "महंगा",
+      sentence: "हर चैट ₹350 की पड़ रही है, AdBrain के चलाए solar विज्ञापनों के आम खर्च (₹100–300) से ज़्यादा।" });
+    expect(h({ spend: 2000 }).sentence).toBe("हर चैट ₹200 की पड़ रही है, AdBrain के चलाए solar विज्ञापनों के आम खर्च (लगभग ₹200 हर एक) से लगभग बराबर।");
+  });
+
+  it("early days, no results with opens, not showing, and enquiries", () => {
+    expect(h({ results: 3, spend: 300 })).toMatchObject({ label: "अभी शुरुआत है", sentence: "अब तक 3 चैट। 5 के बाद AdBrain बताएगा कि यह चल रहा है या नहीं।" });
+    expect(h({ results: 0, spend: 100 }).sentence).toBe("अभी तक कोई चैट नहीं।");
+    expect(h({ results: 0, spend: 400, opens: 12, comparison: null })).toMatchObject({ label: "अभी कोई चैट नहीं",
+      sentence: "₹400 खर्च हुए, अभी तक कोई चैट नहीं। 12 लोगों ने WhatsApp खोला पर मैसेज नहीं भेजा।" });
+    expect(h({ destination: "instant_form", results: 0, spend: 400, opens: null, comparison: null })).toMatchObject({ label: "अभी कोई पूछताछ नहीं",
+      sentence: "₹400 खर्च हुए, अभी तक कोई पूछताछ नहीं।" });
+    expect(h({ impressions: 0, results: 0, spend: 0, liveSince: "2026-10-27T10:00:00Z" })).toMatchObject({ label: "अभी दिख नहीं रहा",
+      sentence: "एक दिन बाद भी आपके विज्ञापन दिखने शुरू नहीं हुए। देखें Meta क्या कह रहा है।" });
+  });
+
+  it("a weak ad and an ended run", () => {
+    const expensive = { ad: ad("a2", 2, 900), reference: ad("a1", 6, 600), reason: "expensive" as const };
+    expect(h({ weakAd: expensive }).sentence).toBe("एक विज्ञापन में हर चैट बाकी विज्ञापनों से 5 गुना महंगी पड़ रही है। इसे रोकने से बजट उन विज्ञापनों को मिलेगा जो चल रहे हैं।");
+    expect(h({ status: "completed", destination: "instant_form", spend: 5000, opens: null })).toMatchObject({ label: "खत्म",
+      sentence: "इससे सही दाम पर पूछताछ नहीं आई। नए विज्ञापन आज़माएं?" });
+    expect(h({ status: "completed", results: 0, spend: 100, opens: 0 }).sentence).toBe("यह 0 चैट के साथ खत्म हुआ, कुछ कहने के लिए बहुत कम।");
+  });
+
+  it("'Live' and 'Ended' restate a campaign's status, in any language", () => {
+    expect(restatesStatus(h({ comparison: null }).state)).toBe(true);
+    expect(restatesStatus(h({ status: "completed" }).state)).toBe(true);
+    expect(restatesStatus(h({ results: 3, spend: 300 }).state)).toBe(false);
   });
 });

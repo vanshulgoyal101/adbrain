@@ -67,7 +67,7 @@ describe("Home's Brand meter card (#2032)", () => {
     fireEvent.click(screen.getByRole("button", { name: "जोड़ें" }));
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "सबसे अच्छी सर्विस" } });
     fireEvent.click(screen.getByRole("button", { name: "सेव करें" }));
-    expect(screen.getByText("दाम या मुफ़्त पहला कदम जोड़ें, जैसे ₹999 या मुफ़्त विज़िट।")).toBeTruthy();
+    expect(screen.getByText("दाम या मुफ़्त पहला कदम जोड़ें, जैसे शुरुआती दाम या मुफ़्त विज़िट।")).toBeTruthy();
     expect(mocks.save).not.toHaveBeenCalled();
   });
 

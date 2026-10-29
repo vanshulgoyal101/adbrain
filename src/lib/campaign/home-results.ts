@@ -1,8 +1,12 @@
 import { campaignDestination } from "@/lib/campaign/outcomes";
+import { costPerCustomer } from "@/lib/campaign/real-enquiries";
 import type { Campaign, CampaignResult } from "@/lib/types";
 
-/** `chatsOnly` (#1624): every counted campaign is WhatsApp, so the numbers are chats, not real enquiries. */
-export type HomeResults = { enquiries: number; spend: number; perEnquiry: number | null; oldestFetchedAt: string; chatsOnly: boolean };
+/**
+ * `chatsOnly` (#1624): every counted campaign is WhatsApp, so the numbers are chats, not real enquiries.
+ * `customers` (#2026): the cards' Customers summed; null when the marked customers couldn't be read.
+ */
+export type HomeResults = { enquiries: number; spend: number; perEnquiry: number | null; oldestFetchedAt: string; chatsOnly: boolean; customers: number | null };
 
 /**
  * #764: Home's "is it working?" row, from each campaign's latest result, counted the way its card
@@ -17,7 +21,21 @@ export function homeResults(campaigns: Campaign[], results: Record<string, Campa
   // The oldest of the latest reads, so "updated" never sounds fresher than any campaign's numbers.
   const oldestFetchedAt = rows.map(({ result }) => result.fetched_at).sort()[0];
   const chatsOnly = rows.every(({ campaign, result }) => campaignDestination(campaign, result) === "whatsapp");
-  return { enquiries, spend, perEnquiry: enquiries > 0 ? spend / enquiries : null, oldestFetchedAt, chatsOnly };
+  const customers = rows.some(({ result }) => result.customers === undefined) ? null : rows.reduce((sum, { result }) => sum + (result.customers ?? 0), 0);
+  return { enquiries, spend, perEnquiry: enquiries > 0 ? spend / enquiries : null, oldestFetchedAt, chatsOnly, customers };
+}
+
+export type HomeCustomers = { kind: "line"; customers: number; perCustomer: number } | { kind: "ask" } | null;
+
+/**
+ * #2026 (#2020): what a customer costs, in Meta ad spend only (never the ₹999 fee, #1235). With none marked yet,
+ * from 3 enquiries ask which ones bought, unless Home already asks which chats were real (#1624).
+ */
+export function homeCustomers(summary: HomeResults | null, unloggedChatCount = 0): HomeCustomers {
+  if (!summary || summary.customers === null) return null;
+  const perCustomer = costPerCustomer(summary.spend, summary.customers);
+  if (perCustomer !== null) return { kind: "line", customers: summary.customers, perCustomer };
+  return summary.enquiries >= 3 && unloggedChatCount === 0 ? { kind: "ask" } : null;
 }
 
 /**
