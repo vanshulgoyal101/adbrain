@@ -241,6 +241,58 @@ export function environmentDrift(source, scripts, pages) {
   ];
 }
 
+// #2275: reps read docs/product's money aloud to owners. Every ₹ amount and % there is derived from the constants
+// below (read from src, so a changed price or rate turns the page red) or is a worked example in MONEY_EXAMPLES.
+const MONEY_SOURCES = {
+  presets: ["src/lib/campaign/budget.ts", /BUDGET_PRESETS = \[([\d_, ]+)\]/],
+  days: ["src/components/setup-go-live.tsx", /SETUP_RUN_DAY_CHOICES = \[SETUP_RUN_DAYS, ([\d_]+)\]/],
+  defaultDays: ["src/components/setup-go-live.tsx", /SETUP_RUN_DAYS = ([\d_]+);/],
+  gstBps: ["src/lib/payments/allocation.ts", /taxRateBps \?\? ([\d_]+)/],
+  planPaise: ["src/lib/plan/status.ts", /PLAN_PRICE_PAISE = ([\d_]+)/],
+  evidenceSpend: ["src/lib/campaign/verdict.ts", /EVIDENCE_MIN_SPEND = ([\d_]+)/],
+  bestMargin: ["src/lib/meta/insights.ts", /BEST_AD_MARGIN = ([\d.]+)/],
+  storySafe: ["src/lib/creative/design.ts", /STORY_SAFE = \{ top: ([\d.]+), bottom: ([\d.]+), side: ([\d.]+) \}/],
+};
+// Illustrative figures, not prices: a cost per chat, an offer, a result read, an empty-insights read.
+const MONEY_EXAMPLES = new Set(["₹45", "₹499", "₹10.69", "₹0"]);
+export function moneyFacts(root) {
+  const missing = [];
+  // A tree without any of these files (a test fixture) has no money to check.
+  if (!Object.values(MONEY_SOURCES).some(([file]) => existsSync(resolve(root, file)))) return { facts: null, missing };
+  const read = Object.fromEntries(Object.entries(MONEY_SOURCES).map(([key, [file, pattern]]) => {
+    const path = resolve(root, file);
+    const match = existsSync(path) && readFileSync(path, "utf8").match(pattern);
+    if (!match) missing.push(`${file} ${pattern.source}`);
+    return [key, match ? match.slice(1).flatMap(group => group.split(",")).map(value => Number(value.trim().replace(/_/g, ""))) : []];
+  }));
+  const facts = new Map();
+  const rupees = (amount, why) => facts.set(`₹${amount.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`, why);
+  const percent = (value, why) => facts.set(`${Math.round(value * 100) / 100}%`, why);
+  const gstBps = read.gstBps[0];
+  for (const daily of read.presets) {
+    rupees(daily, "BUDGET_PRESETS");
+    for (const days of [...read.defaultDays, ...read.days]) rupees(Math.ceil(daily * 100 * days * (10_000 + gstBps) / 10_000) / 100, `capWithGstPaise(${daily} × ${days} days)`);
+  }
+  for (const paise of read.planPaise) rupees(paise / 100, "PLAN_PRICE_PAISE");
+  for (const spend of read.evidenceSpend) rupees(spend, "EVIDENCE_MIN_SPEND");
+  for (const bps of read.gstBps) percent(bps / 100, "GST taxRateBps");
+  for (const margin of read.bestMargin) percent(margin * 100, "BEST_AD_MARGIN");
+  for (const share of read.storySafe) percent(share * 100, "STORY_SAFE");
+  return { facts, missing };
+}
+export function moneyDrift(prose, facts) {
+  const found = [];
+  if (!facts) return found;
+  for (const { line, text } of prose) {
+    for (const [amount] of text.matchAll(/₹ ?\d+(?:,\d{2,3})*(?:\.\d+)?|\d+(?:\.\d+)? ?%/g)) {
+      const value = Number(amount.replace(/[₹%, ]/g, ""));
+      const key = amount.includes("%") ? `${value}%` : `₹${value.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
+      if (!facts.has(key) && !MONEY_EXAMPLES.has(key)) found.push({ line, amount: key });
+    }
+  }
+  return found;
+}
+
 export function checkDocumentation(root, options = {}) {
   root = resolve(root);
   const moduleReadmes = walk(resolve(root, "src")).filter(file => file.endsWith(`${sep}README.md`));
@@ -256,6 +308,7 @@ export function checkDocumentation(root, options = {}) {
   };
   const checked = [];
   let appText;
+  let money;
   for (const path of selected) {
     const file = relative(root, path).split(sep).join("/");
     if (file.startsWith("../") || !existsSync(path) || !statSync(path).isFile()) {
@@ -270,6 +323,7 @@ export function checkDocumentation(root, options = {}) {
     if (isHindiMirror(file) && !historical) { const drift = mirrorDrift(path, readFileSync(path, "utf8")); if (drift) report(1, drift); }
     if (file === "docs/operations/scheduled-jobs.md") for (const { line, message } of scheduleDrift(root, readFileSync(path, "utf8"))) report(line, message);
     if (file.startsWith("docs/product/") && !historical) {
+      for (const { line, amount } of moneyDrift(document.prose, (money ??= moneyFacts(root)).facts)) report(line, `Amount not derived from a source constant: ${amount} (fix it, add its source to MONEY_SOURCES, or add an example to MONEY_EXAMPLES)`);
       for (const { line, label } of missingLabels(document.prose, appText ??= appCopy(root))) report(line, `Quoted label not in the app: "${label}" (fix it to the app's text, or add example text to LABEL_PROSE)`);
     }
     for (const { href, line } of document.links) {
@@ -311,6 +365,7 @@ export function checkDocumentation(root, options = {}) {
     return found.length ? found : existsSync(resolve(root, legacy)) ? [legacy] : [];
   };
   const fail = (file, line, message) => diagnostics.push({ severity: "error", file, line, message });
+  for (const source of money?.missing ?? []) fail("scripts/check-docs.mjs", 1, `Money source moved: ${source} (update MONEY_SOURCES)`);
   const configPages = docFiles.filter(file => /^docs\/operations\/configuration[^/]*\.md$/.test(file)).sort((a, b) => a.length - b.length);
   const configText = configPages.map(textOf).join("\n");
   const dataText = textOf("docs/architecture/migrations.md");

@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
-import { appCopy, checkDocumentation, environmentDrift, mirrorDrift, missingLabels, scheduleDrift, scriptEnvironment, stampMirror } from "./check-docs.mjs";
+import { appCopy, checkDocumentation, environmentDrift, mirrorDrift, missingLabels, moneyDrift, moneyFacts, scheduleDrift, scriptEnvironment, stampMirror } from "./check-docs.mjs";
 
 function fixture(context, files = {}) {
   const root = mkdtempSync(resolve(tmpdir(), "adbrain-docs-check-"));
@@ -227,4 +227,25 @@ test("configuration docs list every variable scripts read, and nothing that is n
     "1 Environment key read by scripts but not documented: VERCEL_TOKEN",
     "3 Documented environment key nothing reads: OLD_KEY",
   ]);
+});
+
+test("a ₹ amount or % in docs/product must come from a source constant or be a listed example", context => {
+  const sources = {
+    "src/lib/campaign/budget.ts": "export const BUDGET_PRESETS = [300, 500, 1000] as const;\n",
+    "src/components/setup-go-live.tsx": "export const SETUP_RUN_DAYS = 2;\nexport const SETUP_RUN_DAY_CHOICES = [SETUP_RUN_DAYS, 7] as const;\n",
+    "src/lib/payments/allocation.ts": "return Math.ceil(capPaise * (10_000 + (input.taxRateBps ?? 1_800)) / 10_000);\n",
+    "src/lib/plan/status.ts": "export const PLAN_PRICE_PAISE = 99_900;\n",
+    "src/lib/campaign/verdict.ts": "export const EVIDENCE_MIN_SPEND = 500;\n",
+    "src/lib/meta/insights.ts": "export const BEST_AD_MARGIN = 0.3;\n",
+    "src/lib/creative/design.ts": "export const STORY_SAFE = { top: 0.14, bottom: 0.35, side: 0.06 } as const;\n",
+  };
+  const root = fixture(context, sources);
+  const prose = [{ line: 3, text: "₹300 a day for 2 days, ₹708 at most incl. 18% GST; 7 days is ₹2,478. Then ₹999 a month. Each chat costs ₹45." }];
+  assert.deepEqual(moneyDrift(prose, moneyFacts(root).facts), []);
+  assert.deepEqual(moneyDrift([{ line: 4, text: "Only ₹1,499 and 25% off." }], moneyFacts(root).facts), [{ line: 4, amount: "₹1,499" }, { line: 4, amount: "25%" }]);
+  writeFileSync(resolve(root, "src/lib/payments/allocation.ts"), "(input.taxRateBps ?? 2_800)\n");
+  writeFileSync(resolve(root, "src/lib/plan/status.ts"), "export const PLAN_PRICE_PAISE = 1_49_900;\n");
+  assert.deepEqual(moneyDrift(prose, moneyFacts(root).facts).map(({ amount }) => amount), ["₹708", "18%", "₹2,478", "₹999"]);
+  rmSync(resolve(root, "src/lib/meta/insights.ts"));
+  assert.deepEqual(moneyFacts(root).missing, ["src/lib/meta/insights.ts BEST_AD_MARGIN = ([\\d.]+)"]);
 });
