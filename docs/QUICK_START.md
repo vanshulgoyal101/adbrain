@@ -53,7 +53,7 @@ model, Meta and payment keys absent until their workflow is authorized. The imag
 setting selects an adapter; it does not make generation free. Keep `.env.local`
 out of Git. The public key relies on
 RLS; the service-role key bypasses RLS and must never reach a browser. Review
-[Configuration](CONFIGURATION.md) before adding provider credentials. Configuring
+[Configuration](operations/configuration.md) before adding provider credentials. Configuring
 image generation does not prove it is free or available.
 
 ## Prepare the Database

@@ -24,7 +24,7 @@ the PRs and issues; priorities belong in [Roadmap](../roadmap.md). Start at [the
 This guide describes source behavior. Source alone does not prove that a target
 database has the required migrations or that a deployment has the required
 configuration; check [Data Model](../DATA_MODEL.md#migration-map) and
-[Configuration](../CONFIGURATION.md) before demonstrating a workflow there.
+[Configuration](../operations/configuration.md) before demonstrating a workflow there.
 
 | Workflow | Availability boundary |
 | --- | --- |
