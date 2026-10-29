@@ -52,7 +52,7 @@ describe("Settings → WhatsApp alerts (#701)", () => {
     const daily = screen.getByLabelText(/Yesterday's results, 9 am/);
     const form = screen.getByLabelText(/New form enquiry/);
     expect(daily.compareDocumentPosition(form) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(screen.getByText("One line: spent, chats and enquiries, and what each enquiry cost.")).toBeInTheDocument();
+    expect(screen.getByText("One line: what you spent, how many people messaged you or filled a form, and the cost of each.")).toBeInTheDocument();
     expect(screen.getByText("Only for ads with a form: name, phone and which ad, with a tap to call.")).toBeInTheDocument();
   });
 
@@ -61,15 +61,31 @@ describe("Settings → WhatsApp alerts (#701)", () => {
     render(<WhatsAppAlerts businessId="b1" initial={{ ...off, saved: false }} locale="hi" />);
     expect(screen.getByLabelText(/कल के नतीजे, सुबह 9 बजे/)).toBeChecked();
     expect(screen.getByLabelText(/फ़ॉर्म से नई पूछताछ/)).toBeChecked();
-    expect(screen.getByLabelText("Language")).toHaveValue("hi");
-    fireEvent.click(screen.getByRole("button", { name: "Save alerts" }));
+    expect(screen.getByLabelText("भाषा")).toHaveValue("hi");
+    fireEvent.click(screen.getByRole("button", { name: "अलर्ट सेव करें" }));
     await waitFor(() => expect(actions.saveAlertSettings).toHaveBeenCalledWith({ businessId: "b1", leadAlerts: true, dailyResults: true, language: "hi" }));
   });
 
   it("keeps a saved choice (both off) as saved", () => {
     render(<WhatsAppAlerts businessId="b1" initial={{ ...off, saved: true }} locale="hi" />);
     expect(screen.getByLabelText(/कल के नतीजे/)).not.toBeChecked();
-    expect(screen.getByLabelText("Language")).toHaveValue("en");
+    expect(screen.getByLabelText("भाषा")).toHaveValue("en");
+  });
+
+  // #1720 (CPO): no fixed English under Hindi rows.
+  it("shows the whole panel in Hindi, number step and messages included", async () => {
+    actions.startAlertVerification.mockResolvedValue({ ok: true, link: "https://wa.me/919800000000?text=START%20A1B2C3D4E5" });
+    const { unmount } = render(<WhatsAppAlerts businessId="b1" initial={off} locale="hi" />);
+    expect(screen.getByRole("heading", { name: "WhatsApp अलर्ट" })).toBeInTheDocument();
+    expect(screen.getByText("पहले वह WhatsApp नंबर पक्का करें जिस पर अलर्ट आने चाहिए: उसी नंबर से एक मैसेज भेजें।")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "मेरा WhatsApp नंबर पक्का करें" }));
+    expect(await screen.findByRole("link", { name: "WhatsApp खोलें और START भेजें" })).toBeInTheDocument();
+    expect(screen.getByText("मैसेज भेजने के लिए तैयार है। लिंक 15 मिनट तक चलेगा।")).toBeInTheDocument();
+    unmount();
+    render(<WhatsAppAlerts businessId="b1" initial={{ ...off, leadAlerts: true, number: "+91 ••••• 2222" }} locale="hi" />);
+    expect(screen.getByText(/कभी भी WhatsApp पर STOP भेजें/)).toHaveTextContent("+91 ••••• 2222");
+    expect(screen.getByRole("button", { name: "दूसरा नंबर इस्तेमाल करें" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "WhatsApp अलर्ट" }).textContent).not.toMatch(/Save alerts|Confirm my|Alerts go to|Language/);
   });
 
   it("a failed save stays on the card with 'Try again' (#920)", async () => {
