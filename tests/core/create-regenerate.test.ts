@@ -14,7 +14,8 @@ import { openAIReply, requestUrl } from "./replay";
 const CREATIVE = "f5727105-521b-49a0-bb67-8905e2225acd";
 const [current, ...recent] = recorded.recentCopy;
 const mocks = vi.hoisted(() => ({
-  claims: new Map<string, { attempt: string; state: "processing" | "unresolved" }>(),
+  claims: new Map<string, { attempt: string; state: "processing" | "unresolved" | "stale" }>(),
+  events: [] as { action: string; details?: Record<string, unknown> }[],
   updates: [] as Record<string, unknown>[],
   usage: [] as Record<string, unknown>[],
   /** #2219: the picture times out on this provider (as AbortSignal.timeout throws it). */
@@ -26,9 +27,9 @@ vi.mock("@/lib/supabase/admin", () => ({
     rpc: async (name: string, args: { p_creative_id: string; p_attempt_id: string; p_unresolved?: boolean }) => {
       const claim = mocks.claims.get(args.p_creative_id);
       if (name === "creative_regeneration_claim") {
-        if (claim) return { data: { action: "busy", status: claim.state }, error: null };
+        if (claim && claim.state !== "stale") return { data: { action: "busy", status: claim.state }, error: null };
         mocks.claims.set(args.p_creative_id, { attempt: args.p_attempt_id, state: "processing" });
-        return { data: { action: "start" }, error: null };
+        return { data: claim ? { action: "start", tookOver: true } : { action: "start" }, error: null };
       }
       if (name === "creative_regeneration_finish") {
         if (!claim || claim.attempt !== args.p_attempt_id || claim.state !== "processing") return { data: { status: "missing" }, error: null };
@@ -89,7 +90,7 @@ vi.mock("@/lib/llm/persist", () => ({
   persistLLMUsage: async (events: Record<string, unknown>[]) => { mocks.usage.push(...events); return true; },
 }));
 vi.mock("@/lib/security/rate-limit", () => ({ rateLimitResponse: async () => null }));
-vi.mock("@/lib/audit", () => ({ logEvent: async () => {} }));
+vi.mock("@/lib/audit", () => ({ logEvent: async (event: { action: string; details?: Record<string, unknown> }) => { mocks.events.push(event); } }));
 
 const input: ConceptInput = {
   brand: recorded.brand as BrandContext, brief: recorded.brief, angle: getAngleByName(recorded.angle)!,
@@ -123,6 +124,7 @@ async function regenerate() {
 
 beforeEach(() => {
   mocks.claims.clear();
+  mocks.events.length = 0;
   mocks.updates.length = 0;
   mocks.usage.length = 0;
   mocks.imageTimeout = null;
@@ -181,6 +183,21 @@ describe("core: Regenerate fact check on recorded Solaride replies (#281)", () =
 });
 
 describe("core: Regenerate route on recorded Solaride replies (#281)", () => {
+  it("logs taking over a stale claim with the attempt its spend is filed under, and nothing on a fresh claim (#2291)", async () => {
+    replay(run(0), run(0));
+    expect((await regenerate()).status).toBe(200);
+    expect(mocks.events.map(({ action }) => action)).not.toContain("creative.claim_taken_over");
+    mocks.events.length = 0;
+    mocks.usage.length = 0;
+    mocks.claims.set(CREATIVE, { attempt: "killed-attempt", state: "stale" });
+    expect((await regenerate()).status).toBe(200);
+    const takeovers = mocks.events.filter(({ action }) => action === "creative.claim_taken_over");
+    expect(takeovers).toEqual([expect.objectContaining({ entityType: "creative", entityId: CREATIVE, details: { route: "creatives.regenerate", attemptId: expect.any(String) } })]);
+    expect(mocks.usage.length).toBeGreaterThan(0);
+    expect(mocks.usage.every(({ requestId }) => requestId === takeovers[0].details?.attemptId)).toBe(true);
+    expect(mocks.claims.size).toBe(0);
+  });
+
   it("saves the first reply in one text call", async () => {
     replay(run(0));
     const { status, body } = await regenerate();
@@ -248,7 +265,7 @@ describe("core: Regenerate route on recorded Solaride replies (#281)", () => {
     replay(run(0));
     const { status, body } = await regenerate();
     expect(status).toBe(502);
-    expect(body.error).toBe("Regeneration could not be completed. This attempt needs a check before the ad can be regenerated again.");
+    expect(body.error).toBe("This ad didn't finish remaking. AdBrain needs to check this attempt before you can remake it again.");
     expect([...mocks.claims.values()].map(({ state }) => state)).toEqual(["unresolved"]);
   });
 });

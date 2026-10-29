@@ -32,6 +32,7 @@ describe("public-data scanner (#1627)", () => {
     expect(scan("delete the earlier revisions of comments 6396936263, 6444232534 and 6446256329.")).toEqual([]);
     expect(scan("comments #6396936263 or 6444232534; call 9812345678")).toEqual(["indian_mobile"]);
     expect(scan("placeholder `9876543210` and +91 98765 43210")).toEqual([]);
+    expect(scan('no false redraws for "98765 44842" or "098765 44842" against +91 98765 44842')).toEqual([]);
     expect(scan("Solaride act_2398686420592052, Page 885223068001054, app 2286157145462990")).toEqual([]);
     expect(scan("")).toEqual([]);
   });

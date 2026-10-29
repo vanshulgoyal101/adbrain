@@ -106,6 +106,18 @@ describe("Review blockers carry their own reason (#688)", () => {
     expect(runPreflight(value).blockers[0].message).toBe('The ad "नमस्तेनमस्तेनमस्तेनमस्तेनमस्तेनमस्तेनमस्तेनमस्ते" isn\'t approved yet. Approve it on the Review page, or take it out of this campaign.');
   });
 
+  // #681: without Meta access the WhatsApp number can't be read, so the connection blocker is the one fix (#688), not two.
+  it.each([
+    ["no connection", (v: PreflightInput) => { v.connection = null; }, "REVIEW_NO_META_CONNECTION"],
+    ["no Meta access", (v: PreflightInput) => { v.connection!.canCreatePaused = false; }, "REVIEW_META_ACCESS"],
+  ] as const)("WhatsApp draft with %s: one blocker, not 'link your number' too", (_name, change, reason) => {
+    const value = input();
+    value.draft.destination = "whatsapp";
+    value.whatsappNumber = null;
+    change(value);
+    expect(runPreflight(value).blockers.map((item) => item.reason)).toEqual([reason]);
+  });
+
   it("the reasons are distinct and fit the campaign.review event", () => {
     const reasons = cases.map(([reason]) => reason);
     expect(new Set(reasons).size).toBe(reasons.length);

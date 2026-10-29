@@ -22,6 +22,7 @@ import {
   getPerformanceContext,
   getPrimaryBusiness,
 } from "@/lib/supabase/queries";
+import { ownerError } from "@/i18n/request-locale";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -127,8 +128,8 @@ async function handlePOST(req: Request) {
       stage("PERFORMANCE", getPerformanceContext(business.id)),
     ]);
     if (limit > 0) {
-      if (used === null) return NextResponse.json({ error: "Something on our side didn't answer. Nothing was started; try again in a minute." }, { status: 503 });
-      if (used >= limit) return NextResponse.json({ error: "You've used this month's AI allowance for this business. Ask AdBrain to raise it." }, { status: 429 });
+      if (used === null) return NextResponse.json({ error: await ownerError("somethingDidntAnswer") }, { status: 503 });
+      if (used >= limit) return NextResponse.json({ error: await ownerError("aiAllowanceUsed") }, { status: 429 });
     }
     const requestId = currentRequestId();
     failureStage = "MODEL";
@@ -310,11 +311,11 @@ async function handlePOST(req: Request) {
     .eq("business_id", actor.businessId)
     .eq("owner_id", actor.userId)
     .gt("expires_at", now);
-  if (countError) return NextResponse.json({ error: "We couldn't save your campaign just now. Try again in a minute." }, { status: 503 });
+  if (countError) return NextResponse.json({ error: await ownerError("draftSaveUnavailable") }, { status: 503 });
   if ((activeRows ?? []).length >= MAX_ACTIVE_DRAFTS) {
     try {
       if ((await listEditableDrafts(supabase, actor)).length >= MAX_ACTIVE_DRAFTS) {
-        return NextResponse.json({ error: "You have too many unfinished campaigns. Finish or remove one, then try again." }, { status: 409 });
+        return NextResponse.json({ error: await ownerError("tooManyDrafts") }, { status: 409 });
       }
     } catch {
       return NextResponse.json({ error: "Saved draft operations could not be checked." }, { status: 503 });
@@ -333,7 +334,7 @@ async function handlePOST(req: Request) {
     })
     .select("*")
     .single();
-  if (error || !row) return NextResponse.json({ error: "We couldn't save your campaign just now. Try again in a minute." }, { status: 503 });
+  if (error || !row) return NextResponse.json({ error: await ownerError("draftSaveUnavailable") }, { status: 503 });
   const draft = draftDtoSchema.parse(draftRecordToDTO(draftRecordFromRow(row)));
   planReady();
   return NextResponse.json({ ready: true, draft });

@@ -17,6 +17,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { AD_ANGLES, getAngleByName } from "@/lib/templates/ads";
 import type { Json } from "@/lib/types";
+import { ownerError } from "@/i18n/request-locale";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -59,13 +60,13 @@ async function handlePOST(req: Request, { params }: { params: Promise<{ id: stri
     .select("id, business_id, variant_group, angle, image_url, headline, primary_text, cta, generation")
     .eq("id", id)
     .maybeSingle();
-  if (!creative) return NextResponse.json({ error: "Creative not found" }, { status: 404 });
+  if (!creative) return NextResponse.json({ error: "We couldn't find this ad. It may have been deleted; refresh the page." }, { status: 404 });
   const { data: business } = await supabase
     .from("businesses")
     .select("*")
     .eq("id", creative.business_id)
     .maybeSingle();
-  if (!business) return NextResponse.json({ error: "Business not found" }, { status: 404 });
+  if (!business) return NextResponse.json({ error: "We couldn't find this business. Refresh the page and try again." }, { status: 404 });
 
   if (ownerPhoto) {
     // Only the business's own product photos; never an arbitrary URL.
@@ -83,9 +84,9 @@ async function handlePOST(req: Request, { params }: { params: Promise<{ id: stri
   const limit = ownerPhoto ? 0 : configuredMonthlyTokenLimit(user);
   if (limit > 0) {
     const used = await monthlyTokenUsage(business.id);
-    if (used === null) return NextResponse.json({ error: "Something on our side didn't answer. Nothing was started; try again in a minute." }, { status: 503 });
+    if (used === null) return NextResponse.json({ error: await ownerError("somethingDidntAnswer") }, { status: 503 });
     if (used >= limit)
-      return NextResponse.json({ error: "You've used this month's AI allowance for this business. Ask AdBrain to raise it." }, { status: 429 });
+      return NextResponse.json({ error: await ownerError("aiAllowanceUsed") }, { status: 429 });
   }
   // #1717: over the monthly AI cost cap, the new picture is free (text keeps the token cap).
   await applyMonthlyCostCap(business.id, user);
@@ -95,21 +96,25 @@ async function handlePOST(req: Request, { params }: { params: Promise<{ id: stri
   try {
     admin = createAdminClient();
   } catch {
-    return NextResponse.json({ error: "Image admission is unavailable. No new background was started." }, { status: 503 });
+    return NextResponse.json({ error: await ownerError("backgroundDidntStart") }, { status: 503 });
   }
   // One paid job per ad at a time, shared with Regenerate.
   const { data: claim, error: claimError } = await admin.rpc("creative_regeneration_claim", {
     p_creative_id: id, p_business_id: business.id, p_user_id: user.id, p_attempt_id: attemptId,
   });
   if (claimError || !claim)
-    return NextResponse.json({ error: "Image admission is unavailable. No new background was started." }, { status: 503 });
-  if (claim.action === "missing") return NextResponse.json({ error: "Creative not found" }, { status: 404 });
+    return NextResponse.json({ error: await ownerError("backgroundDidntStart") }, { status: 503 });
+  if (claim.action === "missing") return NextResponse.json({ error: "We couldn't find this ad. It may have been deleted; refresh the page." }, { status: 404 });
   if (claim.action === "busy")
     return NextResponse.json({ error: claim.status === "unresolved"
       ? "A previous paid change to this ad needs a check before trying again."
       : "This ad is already being changed. Refresh it before trying again." }, { status: 409 });
   if (claim.action !== "start")
-    return NextResponse.json({ error: "Image admission is unavailable. No new background was started." }, { status: 503 });
+    return NextResponse.json({ error: await ownerError("backgroundDidntStart") }, { status: 503 });
+  // #2291: the stale attempt this replaces may have paid for a picture it never recorded; ops matches this to its usage.
+  if (claim.tookOver)
+    await logEvent({ businessId: business.id, action: "creative.claim_taken_over", entityType: "creative", entityId: id,
+      details: { route: "creatives.background", attemptId } });
 
   const angle = getAngleByName(creative.angle ?? "") ?? AD_ANGLES[0];
   const group = creative.variant_group ?? id;
@@ -187,7 +192,7 @@ async function handlePOST(req: Request, { params }: { params: Promise<{ id: stri
     if (error || !updated) {
       // Paid and stored, but not attached to the ad: hold the claim for a check.
       unresolved = paidPicture();
-      response = NextResponse.json({ error: "The new background was made but couldn't be saved to this ad. It needs a check before trying again." }, { status: 502 });
+      response = NextResponse.json({ error: "The new background was made but didn't save to this ad. AdBrain needs to check it before you try again." }, { status: 502 });
     } else {
       const { data: live } = await supabase
         .from("campaigns")
@@ -234,6 +239,6 @@ async function handlePOST(req: Request, { params }: { params: Promise<{ id: stri
     p_attempt_id: attemptId, p_unresolved: unresolved,
   });
   if (settleError || settled?.status !== (unresolved ? "unresolved" : "released"))
-    return NextResponse.json({ error: "This change's state could not be confirmed. Check the ad before trying again." }, { status: 503 });
+    return NextResponse.json({ error: "We couldn't tell whether the change finished. Refresh the page to see the ad before you try again." }, { status: 503 });
   return response;
 }

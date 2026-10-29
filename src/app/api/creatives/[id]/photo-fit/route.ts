@@ -41,7 +41,7 @@ async function handleGET(req: Request, { params }: { params: Promise<{ id: strin
   if (limited) return limited;
 
   const { data: creative } = await supabase.from("creatives").select("business_id, generation").eq("id", id).maybeSingle();
-  if (!creative) return NextResponse.json({ error: "Creative not found" }, { status: 404 });
+  if (!creative) return NextResponse.json({ error: "We couldn't find this ad. It may have been deleted; refresh the page." }, { status: 404 });
   // Only the business's own product photos; never an arbitrary URL.
   const { data: asset } = await supabase
     .from("brand_assets")

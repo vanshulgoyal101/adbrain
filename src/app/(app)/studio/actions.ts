@@ -61,13 +61,13 @@ export async function updateCreativeCopy(
       .eq("id", id)
       .maybeSingle();
     if (error) return { ok: false, error: error.message };
-    if (!creative) return { ok: false, error: "Creative not found or no longer accessible." };
+    if (!creative) return { ok: false, error: "We couldn't find this ad. It may have been deleted; refresh the page." };
     const { data: business } = await supabase
       .from("businesses")
       .select("name, vertical, description, target_audience, usps, offers, locations")
       .eq("id", creative.business_id)
       .maybeSingle();
-    if (!business) return { ok: false, error: "Creative not found or no longer accessible." };
+    if (!business) return { ok: false, error: "We couldn't find this ad. It may have been deleted; refresh the page." };
 
     const { headline, primary_text, description, cta } = parsed.data;
     const generation = isRecord(creative.generation) ? creative.generation : {};
@@ -105,7 +105,7 @@ export async function updateCreativeCopy(
       .select("headline, primary_text, cta, generation")
       .maybeSingle();
     if (saveError) return { ok: false, error: saveError.message };
-    if (!saved) return { ok: false, error: "Creative not found or no longer accessible." };
+    if (!saved) return { ok: false, error: "We couldn't find this ad. It may have been deleted; refresh the page." };
 
     const { data: live } = await supabase
       .from("campaigns")
@@ -148,7 +148,7 @@ export async function setCreativeStatus(
       .select("business_id")
       .maybeSingle();
     if (error) return { ok: false, error: error.message };
-    if (!creative) return { ok: false, error: "Creative not found or no longer accessible." };
+    if (!creative) return { ok: false, error: "We couldn't find this ad. It may have been deleted; refresh the page." };
     if (creative) {
       await logEvent({
         businessId: creative.business_id,
@@ -174,7 +174,7 @@ export async function deleteCreative(id: string): Promise<ActionResult> {
       .eq("id", id)
       .maybeSingle();
     if (error) return { ok: false, error: error.message };
-    if (!creative) return { ok: false, error: "Creative not found or no longer accessible." };
+    if (!creative) return { ok: false, error: "We couldn't find this ad. It may have been deleted; refresh the page." };
     if (creative) {
       await logEvent({
         businessId: creative.business_id,

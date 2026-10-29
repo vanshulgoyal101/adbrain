@@ -12,6 +12,10 @@ const access = vi.hoisted(() => ({
 vi.mock("@/lib/meta/connection-access", () => access);
 const evidence = vi.hoisted(() => ({ getCostPerResult: vi.fn(async () => 69) }));
 vi.mock("@/lib/campaign/result-evidence-store", () => evidence);
+// #253's bindings have their own tests (whatsapp-bindings.test.ts); here the Page's number is the one.
+vi.mock("@/lib/meta/whatsapp-bindings", () => ({
+  whatsappNumberForBusiness: (_businessId: string, meta: { getWhatsAppNumber: (requested: string | null, bound: string[]) => Promise<string | null> }, requested: string | null) => meta.getWhatsAppNumber(requested, []),
+}));
 
 import { buildCampaignPreflightLoaders } from "@/lib/campaign/preflight-runtime";
 
@@ -33,6 +37,17 @@ describe("preflight loaders (#366)", () => {
     expect(access.getConnectionStatus).toHaveBeenCalledTimes(1);
     buildCampaignPreflightLoaders(supabase, actor).getConnection(actor);
     expect(access.getConnectionStatus).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("WhatsApp number loader (#681)", () => {
+  it("a failed Meta read rejects (Review says try again) instead of reading as 'no number linked'", async () => {
+    access.withMetaConnection.mockImplementationOnce(async () => { throw new Error("Meta request failed (500)."); });
+    await expect(buildCampaignPreflightLoaders(supabase, actor).findWhatsAppNumber?.(actor, "+91 ••••• 4842")).rejects.toThrow("Meta request failed");
+  });
+
+  it("reads the Page's number when Meta answers", async () => {
+    await expect(buildCampaignPreflightLoaders(supabase, actor).findWhatsAppNumber?.(actor, "+91 ••••• 4842")).resolves.toBe("+919999994842");
   });
 });
 
