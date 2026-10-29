@@ -469,10 +469,22 @@ before more slices land.
 
 - **Meta:** #1838's rate-limit handling precedes pilot scale. Limited access has a
   60-point/five-minute account budget (writes cost three points); parallel campaign
-  builds must share that budget, not each assume it is theirs. Dev 2 includes Ads
-  Management Standard Access in #156's App Review work; Full Access requires the
-  documented recent-call threshold as well as review. Do not generate calls just
-  to qualify.
+  builds must share that budget, not each assume it is theirs. Track four separate
+  gates in #156 (evidence: #2049), and don't let one stand in for another:
+  - **Marketing API Access Tier** (Limited/Full; Meta's new name for Ads Management
+    Standard Access). Approval is recorded historically; current Full entitlement is
+    unknown. Full requires at least 500 successful Marketing API calls in the last
+    15 days **and** an error rate under 15% over the last 500 calls. Our counters
+    are unrecorded, which means unknown, not unmet. Do not generate calls just to
+    qualify.
+  - **Per-permission Advanced access** (App Review): submitted and in review, not
+    approved. Keep the existing submission; no replacement packet.
+  - **Business Verification:** reported verified; still required.
+  - **Tech Provider Access Verification:** Meta retired it on Oct 9, 2026, but our
+    Oct 28 receipt still shows "In Review". Treat it as neither a blocker nor done
+    until the next planned owner-assisted review (CEO).
+
+  Assume pilot scale fits Limited access until Full is confirmed.
 - **Google:** #1826 supplies the Phase 5 access evidence. Developer tokens were
   sunset; access belongs to the OAuth client's Cloud project. Start the spike at
   **Test** access against test accounts, with no customer launch or production
