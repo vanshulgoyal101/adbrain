@@ -42,7 +42,7 @@ feature branch or a passing local test.
 | [Release policy](operations/releasing.md) | What approvals and checks govern remote changes? |
 | [Meta approval readiness](META_APPROVAL_ACTION_PLAN.md) | What external review evidence must be prepared and verified? |
 | [Payment plan and readiness](PAYMENTS-PLAN.md) | What are the agreed economics, implemented payment boundaries and remaining live-rollout requirements? |
-| [Brand identity](BRAND-IDENTITY.md) | Which presentation and terminology conventions should the product follow? |
+| [Brand identity](team/brand-identity.md) | Which presentation and terminology conventions should the product follow? |
 
 ## Plans and Records
 
@@ -71,6 +71,7 @@ last move.
 | `DATA_MODEL.md` | [architecture/data-model.md](architecture/data-model.md), [data-model-access.md](architecture/data-model-access.md) and [migrations.md](architecture/migrations.md) |
 | `QUICK_START.md` | [team/quick-start.md](team/quick-start.md) |
 | `RELEASING.md` | [operations/releasing.md](operations/releasing.md) and [operations/releasing-recovery.md](operations/releasing-recovery.md) (backups, rollback, production guard) |
+| `BRAND-IDENTITY.md` | [team/brand-identity.md](team/brand-identity.md) |
 
 ## Terminology
 
@@ -92,7 +93,7 @@ last move.
 - Runtime schemas, route handlers, database constraints, and tests define the
   current contract. Documentation explains them; it does not override them.
 - [Release policy](operations/releasing.md) governs publication and production changes.
-- [Brand identity](BRAND-IDENTITY.md) covers product presentation.
+- [Brand identity](team/brand-identity.md) covers product presentation.
 
 ## Safety Before Setup
 

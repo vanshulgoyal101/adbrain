@@ -109,7 +109,7 @@ export function sourceInventory(root) {
 export const MAX_LINES = 300;
 export const TOP_LEVEL = new Set(["docs/README.md", "docs/roadmap.md"]);
 // Flat files not yet moved into docs/{product,architecture,api,operations,team}/; each move PR deletes its entries.
-export const LEGACY_FLAT = new Set(["ARCHITECTURE", "BRAND-IDENTITY",
+export const LEGACY_FLAT = new Set(["ARCHITECTURE",
   "META_APPROVAL_ACTION_PLAN", "ORCHESTRATION", "PAYMENTS-PLAN"].map(name => `docs/${name}.md`));
 const CODE_DIRS = ["src", "scripts", "db", ".github"];
 const CODE_FILES = ["AGENTS.md", ".env.example", "package.json"];
