@@ -112,8 +112,8 @@ day." Tap "Open your campaign" to see it.
   day."
 - Customers who tap your ad message you straight on your WhatsApp. Reply there.
 - **Home** shows your results: "Chats" (or "Enquiries"), "Spent" and "Per chat".
-- **Enquiries** lists the people who reached you (tap "See enquiries" on Home).
-  On each one tap "WhatsApp them" for a ready-written first reply, or "Call". Home
+- **Enquiries** (tap "See enquiries" on Home): form enquiries arrive on their own;
+  WhatsApp chats show there once you add them. On each one tap "WhatsApp them" for a ready-written first reply, or "Call". Home
   shows how quickly you usually contact people, so reply fast.
 - Did someone buy? Tap "Mark customers" so you can see what a customer costs.
 - To stop: on **Campaigns**, tap "Pause" on the campaign; to stop everything at
@@ -121,6 +121,7 @@ day." Tap "Open your campaign" to see it.
   nothing more will be spent once Meta stops them (usually within minutes)." Tap
   "Resume" to turn a campaign back on.
 - The run stops by itself at the total you chose. To run again, tap "New campaign".
+- What to expect day by day: [Your first week after Go live](first-week.md).
 - Stuck at any step? Tap "Help" at the top of the setup screen to message us on
   WhatsApp. (It shows only once AdBrain's support number is set up; until then,
   message the person who gave you AdBrain.)
