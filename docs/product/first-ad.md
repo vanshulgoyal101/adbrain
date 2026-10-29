@@ -108,9 +108,10 @@ with "Continue"; once your ads are made it shows "Your 3 ads are ready" with
   selected business", then "Continue to review". The row now says "Connected"
   and the button becomes "Go live · ₹300 a day". Tap it.
 - **Takes:** about 10 minutes the first time, mostly connecting Facebook. After
-  you tap Go live you see "Checking your campaign…", "Creating it on Meta,
-  paused…", then "Turning it on…". AdBrain creates the campaign paused first and
-  only switches it on once everything checks out.
+  you tap Go live you see "Checking your campaign…" (AdBrain picks the age range
+  and audience for your ads, as **Recommend audience** does in Campaigns, up to
+  about a minute), "Creating it on Meta, paused…", then "Turning it on…". AdBrain
+  creates the campaign paused first and only switches it on once everything checks out.
 - **If it fails:** nothing is spent when something fails. What the screen says:
   - Meta connect: "Meta has not finished yet. Complete the Meta window, then check
     again. Your draft is saved." Finish in the Meta window, then tap "Check again".
