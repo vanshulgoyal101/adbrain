@@ -1,7 +1,7 @@
 "use client";
 
 import { PictureSourceBadge } from "@/components/picture-source-badge";
-import type { AppLocale } from "@/i18n/locale";
+import { translator, type AppLocale } from "@/i18n/locale";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -208,6 +208,8 @@ export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNum
         <div>
           <dt className="text-slate-500">Budget</dt>
           <dd className="mt-1 font-medium text-slate-950">{formatMoney(daily)} a day for {SETUP_RUN_DAYS} days, {formatMoney(total)} at most including Meta&apos;s GST</dd>
+          {/* #2007: a capped run is a lifetime budget, so Meta paces the total, not each day. The total isn't repeated (#1587). */}
+          <dd className="mt-1 text-slate-600">{translator(locale, "setup")("pacing", { d: formatMoney(daily) })}</dd>
           <dd className="mt-2"><div className="flex flex-wrap gap-2" role="group" aria-label="Daily budget">
             {BUDGET_PRESETS.map((amount, index) => (
               <button key={amount} type="button" aria-pressed={daily === amount} aria-label={`${formatMoney(amount)} a day`} disabled={step !== null || result?.kind === "live"}
