@@ -17,6 +17,11 @@ export function toLocale(value: string | null | undefined): AppLocale {
 type Messages = typeof en;
 const MESSAGES: Record<AppLocale, Messages> = { en, hi };
 
+/** One namespace's messages, for a server page to hand a client component (the rest stays on the server). */
+export function namespaceMessages<Namespace extends keyof Messages>(locale: AppLocale, namespace: Namespace): Messages[Namespace] {
+  return MESSAGES[locale][namespace];
+}
+
 /** #1774: "10m ago" in English (unchanged); in Hindi, Intl's words ("2 दिन पहले"), same steps. */
 export function timeAgoIn(locale: AppLocale, date: Date, now: Date = new Date()): string {
   if (locale === "en") return timeAgo(date, now);

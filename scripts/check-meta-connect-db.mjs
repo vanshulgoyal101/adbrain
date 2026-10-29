@@ -34,12 +34,14 @@ const learningsMigration = await readFile(join(root, "db/migrations/20261026_cam
 const editOperationsMigration = await readFile(join(root, "db/migrations/20261026_campaign_edit_operations.sql"), "utf8");
 const editAdCreativeMigration = await readFile(join(root, "db/migrations/20261026_campaign_edit_operations_ad_creative.sql"), "utf8");
 const adResultsMigration = await readFile(join(root, "db/migrations/20261026_campaign_ads_ad_results.sql"), "utf8");
+const mediaAssetsMigration = await readFile(join(root, "db/migrations/20261028_media_assets.sql"), "utf8");
 const ownerAlertsMigration = await readFile(join(root, "db/migrations/20261027_owner_whatsapp_alerts.sql"), "utf8");
 const ownerAlertSendsMigration = await readFile(join(root, "db/migrations/20261027_owner_whatsapp_alerts_sends.sql"), "utf8");
 const mediaConsentsMigration = await readFile(join(root, "db/migrations/20261028_media_consents.sql"), "utf8");
 const leadCustomerMigration = await readFile(join(root, "db/migrations/20261026_lead_customer_status.sql"), "utf8");
 const leadFirstContactedMigration = await readFile(join(root, "db/migrations/20261027_lead_first_contacted.sql"), "utf8");
 const tokenSearchPathMigration = await readFile(join(root, "db/migrations/20261026_meta_token_search_path.sql"), "utf8");
+const tokenPurgeMigration = await readFile(join(root, "db/migrations/20261029_meta_token_purge.sql"), "utf8");
 const whatsappTemplateMigration = await readFile(join(root, "db/migrations/20261026_business_whatsapp_template.sql"), "utf8");
 const metaDeletionMigration = await readFile(join(root, "db/migrations/20261026_meta_deletion_requests.sql"), "utf8");
 const hardeningMigration = await readFile(join(root, "db/migrations/20261026_legacy_credentials_bucket_limits.sql"), "utf8");
@@ -1175,6 +1177,69 @@ async function verifyTokenSearchPath(db, database) {
   });
 }
 
+/** #1648: seeds a token revoked before the migration (backfill), then applies it twice. */
+async function verifyMetaTokenPurge(db, database) {
+  const owner = randomUUID(), business = randomUUID(), revoked = randomUUID(), live = randomUUID();
+  await db.query("insert into auth.users(id) values ($1)", [owner]);
+  await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Token purge')", [business, owner]);
+  for (const token of [revoked, live]) {
+    await db.query(`select public.meta_token_insert($1,$2,$3,'s-purge','user',$4,$5,$6,'k1','v1',array['ads_management'],'[]'::jsonb,null,now(),null)`,
+      [token, business, owner, "\\x01", `\\x${"00".repeat(12)}`, `\\x${"00".repeat(16)}`]);
+  }
+  await db.query("update private.meta_tokens set revoked_at = now() where id = $1", [revoked]);
+  await db.query(tokenPurgeMigration);
+  await db.query(tokenPurgeMigration);
+  await check(`${database}: a revoked Meta token keeps no secret, a live one keeps all of it (#1648)`, async () => {
+    const secrets = async (id) => (await db.query("select ciphertext, nonce, auth_tag, revoked_at from private.meta_tokens where id = $1", [id])).rows[0];
+    const old = await secrets(revoked);
+    assert.ok(old.revoked_at);
+    assert.deepEqual([old.ciphertext, old.nonce, old.auth_tag], [null, null, null]);
+    assert.deepEqual([...(await secrets(live)).ciphertext], [1]);
+    const [read] = (await db.query("select * from public.meta_token_get($1,$2)", [revoked, business])).rows;
+    assert.ok(read.revoked_at);
+    assert.equal(read.ciphertext, null);
+    assert.equal((await db.query("select public.meta_disconnect($1,$2) as ok", [business, owner])).rows[0].ok, true);
+    assert.deepEqual(Object.values(await secrets(live)).slice(0, 3), [null, null, null]);
+    await db.query("update private.meta_tokens set ciphertext = $2, nonce = $3, auth_tag = $4 where id = $1", [live, Buffer.from([1]), Buffer.alloc(12), Buffer.alloc(16)]);
+    assert.equal((await secrets(live)).ciphertext, null);
+    await assert.rejects(db.query("update private.meta_tokens set revoked_at = null where id = $1", [live]), { code: "23514" });
+  });
+}
+
+/** #1649: which live token disconnect may revoke at Meta, and whether that Meta user is shared with another business. */
+async function verifyMetaRevocationTarget(db, database) {
+  await check(`${database}: revocation target: unshared, shared, system user, already revoked (#1649)`, async () => {
+    const owner = randomUUID();
+    const [a, b, c, d] = [randomUUID(), randomUUID(), randomUUID(), randomUUID()];
+    const target = async (business) => (await db.query("select * from public.meta_token_revocation_target($1)", [business])).rows;
+    await db.query("begin");
+    try {
+      await db.query("insert into auth.users(id) values ($1)", [owner]);
+      const connect = async (business, subject, kind) => {
+        const token = randomUUID();
+        await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Revoke target')", [business, owner]);
+        await db.query(`select public.meta_token_insert($1,$2,$3,$4,$5,$6,$7,$8,'k1','v1',array['ads_management'],'[]'::jsonb,null,now(),null)`,
+          [token, business, owner, subject, kind, "\\x01", `\\x${"00".repeat(12)}`, `\\x${"00".repeat(16)}`]);
+        await db.query("insert into public.meta_connections(business_id,generation,authorization_status,ad_account_id,page_id,token_id) values ($1,1,'connected','act_123','123',$2)", [business, token]);
+        return token;
+      };
+      const tokenA = await connect(a, "4242", "user");
+      assert.deepEqual(await target(a), [{ token_id: tokenA, subject_id: "4242", token_kind: "user", shared: false }]);
+      await connect(b, "4242", "user");
+      assert.equal((await target(a))[0].shared, true);
+      await connect(c, "9001", "business_system_user");
+      assert.deepEqual((await target(c)).map((r) => [r.token_kind, r.shared]), [["business_system_user", false]]);
+      await connect(d, "7777", "user");
+      await db.query("update private.meta_tokens set revoked_at = now() where business_id = $1", [d]);
+      assert.equal((await target(d)).length, 0);
+      await db.query("update private.meta_tokens set revoked_at = now() where business_id = $1", [b]);
+      assert.equal((await target(a))[0].shared, false);
+      await db.query("set local role authenticated");
+      await assert.rejects(db.query("select * from public.meta_token_revocation_target($1)", [a]), { code: "42501" });
+    } finally { await db.query("rollback"); }
+  });
+}
+
 async function verifyConnectionReauth(db, database) {
   await check(`${database}: a Graph 190 marks only the failing connection generation reauth_required, service role only (#757)`, async () => {
     const owner = randomUUID(), business = randomUUID();
@@ -1441,6 +1506,65 @@ async function verifyLeadFirstContacted(db, database) {
       assert.equal((await session.query("update public.leads set first_contacted_at=now() where id=$1", [lead])).rowCount, 0);
     });
     assert.equal((await db.query("select count(*)::int as n from pg_indexes where indexname='leads_business_first_contacted_idx'")).rows[0].n, 1);
+  });
+}
+
+async function verifyMediaAssets(db, database) {
+  const owner = randomUUID(), other = randomUUID(), business = randomUUID(), otherBusiness = randomUUID();
+  await db.query("insert into auth.users(id) values ($1),($2)", [owner, other]);
+  await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Media'),($3,$4,'Other media')", [business, owner, otherBusiness, other]);
+  // Supabase grants authenticated these on storage.objects; RLS decides the rows.
+  await db.query("grant usage on schema storage to authenticated, service_role; grant select, insert, update, delete on storage.objects to authenticated, service_role");
+  const sha = (n) => String(n).repeat(64).slice(0, 64);
+  const as = async (role, user, run) => {
+    const session = client(database);
+    await session.connect();
+    try {
+      await session.query("begin");
+      await session.query(`set local role ${role}`);
+      if (user) await session.query("select set_config('request.jwt.claim.sub',$1,true)", [user]);
+      return await run(session);
+    } finally { await session.query("rollback").catch(() => {}); await session.end(); }
+  };
+  await check(`${database}: media library: owners read only their own photos, only the server writes, one live row per file (#1209)`, async () => {
+    await as("service_role", null, async (session) => {
+      await session.query("insert into public.media_assets(business_id,path,sha256,bytes,mime,width,height,status) values ($1::uuid,$1::text||'/a.jpg',$3,1000,'image/jpeg',1080,1350,'ready'),($2::uuid,$2::text||'/b.jpg',$3,1000,'image/jpeg',1080,1080,'ready')", [business, otherBusiness, sha(1)]);
+      await session.query("insert into storage.objects(bucket_id,name) values ('media',$1::text||'/a.jpg'),('media',$2::text||'/b.jpg')", [business, otherBusiness]);
+      for (const [sql, params, code] of [
+        ["insert into public.media_assets(business_id,path,sha256) values ($1::uuid,$2::text||'/c.jpg',$3)", [business, otherBusiness, sha(2)], "23514"],
+        ["insert into public.media_assets(business_id,path,sha256) values ($1::uuid,$1::text||'/d.jpg','not-a-hash')", [business], "23514"],
+        ["insert into public.media_assets(business_id,path,sha256,mime) values ($1::uuid,$1::text||'/e.heic',$2,'image/heic')", [business, sha(3)], "23514"],
+        ["insert into public.media_assets(business_id,path,sha256) values ($1::uuid,$1::text||'/f.jpg',$2)", [business, sha(1)], "23505"],
+      ]) {
+        await session.query("savepoint s");
+        await assert.rejects(session.query(sql, params), { code }, sql);
+        await session.query("rollback to savepoint s");
+      }
+      await session.query("update public.media_assets set deleted_at=now() where business_id=$1", [business]);
+      await session.query("insert into public.media_assets(business_id,path,sha256) values ($1::uuid,$1::text||'/again.jpg',$2)", [business, sha(1)]);
+      await session.query("delete from public.media_assets where path=$1::text||'/again.jpg'", [business]);
+      await session.query("update public.media_assets set deleted_at=null where path=$1::text||'/a.jpg'", [business]);
+      await session.query("select set_config('request.jwt.claim.sub',$1,true)", [owner]);
+      await session.query("set local role authenticated");
+      assert.deepEqual((await session.query("select path from public.media_assets order by path")).rows.map(row => row.path), [`${business}/a.jpg`]);
+      assert.deepEqual((await session.query("select name from storage.objects where bucket_id='media'")).rows.map(row => row.name), [`${business}/a.jpg`]);
+      for (const [sql, params] of [
+        ["insert into public.media_assets(business_id,path,sha256) values ($1::uuid,$1::text||'/x.jpg',$2)", [business, sha(4)]],
+        ["update public.media_assets set name='mine' where business_id=$1", [business]],
+        ["delete from public.media_assets where business_id=$1", [business]],
+      ]) {
+        await session.query("savepoint s");
+        await assert.rejects(session.query(sql, params), { code: "42501" }, sql);
+        await session.query("rollback to savepoint s");
+      }
+      // No write policy on the private bucket: uploads only through the server's signed URL.
+      await session.query("savepoint s");
+      await assert.rejects(session.query("insert into storage.objects(bucket_id,name) values ('media',$1::text||'/own.jpg')", [business]), { code: "42501" });
+      await session.query("rollback to savepoint s");
+    });
+    const bucket = (await db.query("select public, file_size_limit::int as size, allowed_mime_types as types from storage.buckets where id='media'")).rows[0];
+    assert.deepEqual(bucket, { public: false, size: 8388608, types: ["image/jpeg", "image/png", "image/webp"] });
+    assert.ok((await db.query("select 1 from information_schema.columns where table_schema='public' and table_name='creatives' and column_name='media_asset_id'")).rowCount);
   });
 }
 
@@ -2801,6 +2925,8 @@ async function verify(database, source, integrityMigration, customerOnly = false
       await db.query(tokenSearchPathMigration);
       await db.query(tokenSearchPathMigration);
       await verifyTokenSearchPath(db,database);
+      await verifyMetaTokenPurge(db,database);
+      await verifyMetaRevocationTarget(db,database);
       await db.query(whatsappTemplateMigration);
       await db.query(whatsappTemplateMigration);
       await verifyWhatsAppTemplate(db,database);
@@ -2815,6 +2941,9 @@ async function verify(database, source, integrityMigration, customerOnly = false
       await db.query(reauthMigration);
       await db.query(reauthMigration);
       await verifyConnectionReauth(db,database);
+      await db.query(mediaAssetsMigration);
+      await db.query(mediaAssetsMigration);
+      await verifyMediaAssets(db,database);
       if ((await db.query("select to_regclass('public.lead_sync_runs') is not null as installed")).rows[0].installed) {
         await db.query(leadCampaignLinkMigration);
         await db.query(leadCampaignLinkMigration);
