@@ -138,7 +138,7 @@ When the interview cannot progress, it returns HTTP 200 with
 `no_progress` or `interview_limit`. This response performs no draft save or Meta
 mutation. Both guided and manual-audience callers surface it without losing their
 existing context. Explicit audience-editor radius values are retained. See
-[campaign interview and framework choice](../AI_PIPELINE.md#campaign-interview).
+[campaign interview and framework choice](../architecture/ai-pipeline.md#campaign-interview).
 
 ## Review and Durable Creation
 
