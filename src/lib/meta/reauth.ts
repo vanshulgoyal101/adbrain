@@ -13,7 +13,7 @@ export type ReauthEntry = { key: string; since: string; activeCampaigns: number 
 // Thrown by withMetaConnection when the stored token or connection is unusable (connection-access.ts).
 const CONNECTION_TOKEN_MESSAGES = new Set(["Meta credentials are unavailable.", "Meta is not connected for this business."]);
 
-/** First 12 hex chars of sha256(business id); docs/OPERATIONS.md maps it back with SQL. */
+/** First 12 hex chars of sha256(business id); docs/operations/scheduled-jobs.md maps it back with SQL. */
 function reauthKey(businessId: string): string {
   return createHash("sha256").update(businessId).digest("hex").slice(0, 12);
 }

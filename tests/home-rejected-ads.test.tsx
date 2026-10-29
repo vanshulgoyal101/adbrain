@@ -24,7 +24,7 @@ describe("Home rejected ads (#1469)", () => {
     expect(meta.withMetaConnection).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
       purpose: "read_insights", binding: { adAccountId: "act_42", pageId: "77" }, expectedGeneration: 3 }), expect.any(Function));
     expect(meta.readAdReview).toHaveBeenCalledWith("120");
-    expect(screen.getByRole("region", { name: "Ads Meta didn't approve" })).toHaveTextContent(/Meta didn't approve 1 ad\..*Your other ad is running\./);
+    expect(screen.getByRole("group", { name: "Ads Meta didn't approve" })).toHaveTextContent(/Meta didn't approve 1 ad\..*Your other ad is running\./);
   });
 
   it("shows nothing when Meta can't be read", async () => {

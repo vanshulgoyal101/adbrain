@@ -4,6 +4,9 @@ import { afterEach, expect, it, vi } from "vitest";
 import { PlanCard } from "@/components/plan-card";
 import { BillingSection } from "@/components/managed-billing";
 
+// Own billing also mounts Pause all (#1968), which reads the router.
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
+
 const businessId = "55555555-5555-4555-8555-555555555555";
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
@@ -12,6 +15,12 @@ it("shows a plan read failure instead of silently substituting the free-month ex
   expect(screen.getByText("Your plan is unavailable right now. Refresh Settings to try again.")).toBeInTheDocument();
   expect(screen.queryByText(/Your first month of AdBrain is free/)).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Pay ₹999" })).not.toBeInTheDocument();
+});
+
+it("says the plan read failure in Hindi too", () => {
+  render(<BillingSection mode="own" connection={null} locale="hi" planBusinessId={businessId} planUnavailable />);
+  expect(screen.getByText("आपका प्लान अभी नहीं दिख रहा। फिर से देखने के लिए सेटिंग रीफ़्रेश करें।")).toBeInTheDocument();
+  expect(screen.getByText("आप अपने विज्ञापन खाते से सीधे Meta को भुगतान करते हैं।")).toBeInTheDocument();
 });
 
 it("says the price, no auto-debit, and the free month before the first Go live, with nothing to pay", () => {

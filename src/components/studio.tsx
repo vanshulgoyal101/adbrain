@@ -584,7 +584,7 @@ export function Studio({
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search ads"
-              className="h-10 w-full rounded-md border border-slate-300 pl-9 pr-3 text-sm sm:w-60"
+              className="h-11 w-full rounded-md border border-slate-300 pl-9 pr-3 text-sm sm:w-60"
             />
           </label>
         </div>

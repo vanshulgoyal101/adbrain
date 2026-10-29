@@ -43,8 +43,8 @@ export function formatNumber(n: number): string {
   return new Intl.NumberFormat(LOCALE).format(n);
 }
 
-const parts = (d: Date, options: Intl.DateTimeFormatOptions) =>
-  Object.fromEntries(new Intl.DateTimeFormat(LOCALE, { timeZone: TIME_ZONE, ...options }).formatToParts(d).map((p) => [p.type, p.value]));
+const parts = (d: Date, options: Intl.DateTimeFormatOptions, locale = LOCALE) =>
+  Object.fromEntries(new Intl.DateTimeFormat(locale, { timeZone: TIME_ZONE, ...options }).formatToParts(d).map((p) => [p.type, p.value]));
 
 const istDay = (d: Date) => { const p = parts(d, { day: "numeric", month: "numeric", year: "numeric" }); return `${p.year}-${p.month}-${p.day}`; };
 
@@ -52,14 +52,15 @@ const istDay = (d: Date) => { const p = parts(d, { day: "numeric", month: "numer
  * "today, 9:40 am" and "yesterday, 9:40 am" by the India calendar day (#1290); "24 Oct, 4:30 pm" otherwise
  * this year; "24 Oct 2025" for earlier years. "" for an invalid date.
  */
-export function formatDate(date: Date | string, now: Date = new Date()): string {
+export function formatDate(date: Date | string, now: Date = new Date(), language: "en" | "hi" = "en"): string {
   const d = typeof date === "string" ? new Date(date) : date;
   if (Number.isNaN(d.getTime())) return "";
-  const p = parts(d, { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit", hour12: true });
+  // #1877: Hindi month names and day words, with Latin digits like the rest of Home.
+  const p = parts(d, { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit", hour12: true, numberingSystem: "latn" }, language === "hi" ? "hi-IN" : LOCALE);
   if (p.year !== parts(now, { year: "numeric" }).year) return `${p.day} ${p.month} ${p.year}`;
   const time = `${p.hour}:${p.minute} ${String(p.dayPeriod).toLowerCase()}`;
-  if (istDay(d) === istDay(now)) return `today, ${time}`;
-  if (istDay(d) === istDay(new Date(now.getTime() - 86_400_000))) return `yesterday, ${time}`;
+  if (istDay(d) === istDay(now)) return `${language === "hi" ? "आज" : "today"}, ${time}`;
+  if (istDay(d) === istDay(new Date(now.getTime() - 86_400_000))) return `${language === "hi" ? "कल" : "yesterday"}, ${time}`;
   return `${p.day} ${p.month}, ${time}`;
 }
 

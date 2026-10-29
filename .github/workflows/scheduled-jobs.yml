@@ -44,7 +44,7 @@ jobs:
             open=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search "in:title \"$title\"" --json number --jq length)
             [ "$open" = 0 ] || continue
             gh issue create -R "$GITHUB_REPOSITORY" -l core -l bug -l owner:devops -t "$title" \
-              -b "$(printf 'No successful %s run in twice its interval: %s\n\nCheck pg_cron and the Vault secret first, then the route: docs/OPERATIONS.md#scheduled-jobs\nRun: %s/%s/actions/runs/%s\n' "$job" "$(jq -c --arg job "$job" '.jobs[] | select(.job == $job)' scheduler.json)" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+              -b "$(printf 'No successful %s run in twice its interval: %s\n\nCheck pg_cron and the Vault secret first, then the route: docs/operations/scheduled-jobs.md#scheduled-jobs\nRun: %s/%s/actions/runs/%s\n' "$job" "$(jq -c --arg job "$job" '.jobs[] | select(.job == $job)' scheduler.json)" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
           done
       - name: Spend enforcement
         id: spend
@@ -77,7 +77,7 @@ jobs:
           open=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search "in:title \"$title\"" --json number --jq length)
           [ "$open" = 0 ] || exit 0
           gh issue create -R "$GITHUB_REPOSITORY" -l core -l bug -l owner:devops -t "$title" \
-            -b "$(printf 'Payment health: %s\n\nA captured payment has no capture webhook event after 30 minutes, or an event is unprocessed after an hour, or a captured plan payment settled no month (planUnmatched7d: refund it; see the plan.payment_unmatched events). Check the Razorpay webhook settings and reconcile the order (no charges).\n\nRun: %s/%s/actions/runs/%s\nRunbook: docs/OPERATIONS.md#scheduled-jobs\n' "$(jq -c '{events7d, unprocessed, capturedWithoutEvent, planUnmatched7d}' payments.json)" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+            -b "$(printf 'Payment health: %s\n\nA captured payment has no capture webhook event after 30 minutes, or an event is unprocessed after an hour, or a captured plan payment settled no month (planUnmatched7d: refund it; see the plan.payment_unmatched events). Check the Razorpay webhook settings and reconcile the order (no charges).\n\nRun: %s/%s/actions/runs/%s\nRunbook: docs/operations/scheduled-jobs.md#scheduled-jobs\n' "$(jq -c '{events7d, unprocessed, capturedWithoutEvent, planUnmatched7d}' payments.json)" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
       - name: Pilot settings (#1875)
         if: always()
         env:
@@ -97,7 +97,7 @@ jobs:
           open=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search "in:title \"$title\"" --json number --jq length)
           [ "$open" = 0 ] || exit 0
           gh issue create -R "$GITHUB_REPOSITORY" -l core -l owner:devops -t "$title" \
-            -b "$(printf 'These production settings are missing or switched off (names only, never values):\n\n%s\n\nSet them in Vercel production (or the GitHub secret), redeploy, and close this issue; the next run reopens it if anything is still missing.\nRun: %s/%s/actions/runs/%s\nRunbook: docs/OPERATIONS.md#scheduled-jobs\n' "$lines" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+            -b "$(printf 'These production settings are missing or switched off (names only, never values):\n\n%s\n\nSet them in Vercel production (or the GitHub secret), redeploy, and close this issue; the next run reopens it if anything is still missing.\nRun: %s/%s/actions/runs/%s\nRunbook: docs/operations/scheduled-jobs.md#scheduled-jobs\n' "$lines" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
       - name: Campaign results and health
         if: always()
         env:
@@ -114,7 +114,7 @@ jobs:
             seen=$(gh issue list -R "$GITHUB_REPOSITORY" --state all --search "in:title $key" --json number --jq length)
             [ "$seen" = 0 ] || continue
             gh issue create -R "$GITHUB_REPOSITORY" -l core -l bug -l owner:dev3 -t "Campaign needs attention: $kind ($key)" \
-              -b "$(printf 'A live campaign needs attention: %s. The campaign shows a Needs attention badge in AdBrain with the reason.\n\nFind it (key %s): docs/OPERATIONS.md#scheduled-jobs\nRun: %s/%s/actions/runs/%s\n' "$kind" "$key" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+              -b "$(printf 'A live campaign needs attention: %s. The campaign shows a Needs attention badge in AdBrain with the reason.\n\nFind it (key %s): docs/operations/scheduled-jobs.md#scheduled-jobs\nRun: %s/%s/actions/runs/%s\n' "$kind" "$key" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
           done
           [ "$code" = 200 ]
       - name: Meta reconnect needed (#758)
@@ -133,7 +133,7 @@ jobs:
             open=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search "in:title \"Meta reconnect needed ($key)\"" --json number --jq length)
             [ "$open" = 0 ] || continue
             gh issue create -R "$GITHUB_REPOSITORY" -l core -l waiting-owner -t "Meta reconnect needed ($key)" \
-              -b "$(printf "An owner's Meta connection stopped working (token expired or revoked) since %s. Their leads don't sync, results go stale and the weekly cap can't be enforced until they reconnect.\nACTIVE campaigns: %s%s\n\n→ CEO: ask the owner to reconnect Meta in AdBrain (Settings → Meta). Find them (key %s): docs/OPERATIONS.md#scheduled-jobs\nRun: %s/%s/actions/runs/%s\n" \
+              -b "$(printf "An owner's Meta connection stopped working (token expired or revoked) since %s. Their leads don't sync, results go stale and the weekly cap can't be enforced until they reconnect.\nACTIVE campaigns: %s%s\n\n→ CEO: ask the owner to reconnect Meta in AdBrain (Settings → Meta). Find them (key %s): docs/operations/scheduled-jobs.md#scheduled-jobs\nRun: %s/%s/actions/runs/%s\n" \
                 "$since" "$active" "$([ "$active" -gt 0 ] && echo ' (still delivering; Meta lifetime cap applies, ask today)')" "$key" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
           done <<<"$rows"
       - name: Managed accounts (2-Tier provisioning, #527)
@@ -152,7 +152,7 @@ jobs:
             seen=$(gh issue list -R "$GITHUB_REPOSITORY" --state all --search "in:title $key" --json number --jq length)
             [ "$seen" = 0 ] || continue
             gh issue create -R "$GITHUB_REPOSITORY" -l core -l bug -l 2tier -l owner:dev2 -t "Managed account stuck: $state ($key)" \
-              -b "$(printf 'A 2-Tier managed account has been in `%s` for %s min (over 30). Resume or fail it, then check its step log.\n\nFind it (key %s): docs/OPERATIONS.md#scheduled-jobs\nRun: %s/%s/actions/runs/%s\n' "$state" "$minutes" "$key" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+              -b "$(printf 'A 2-Tier managed account has been in `%s` for %s min (over 30). Resume or fail it, then check its step log.\n\nFind it (key %s): docs/operations/scheduled-jobs.md#scheduled-jobs\nRun: %s/%s/actions/runs/%s\n' "$state" "$minutes" "$key" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
           done
           [ "$code" = 200 ]
       - name: Facebook access requests (#692)
@@ -175,7 +175,7 @@ jobs:
             if [ "$opened" -ge 5 ]; then waiting=$((waiting + 1)); continue; fi
             opened=$((opened + 1))
             last=$(gh issue create -R "$GITHUB_REPOSITORY" -l core -l waiting-owner -t "Facebook access request ($key)" \
-              -b "$(printf 'An outside owner tapped **Ask for Facebook access** %s h ago. The app told them: we will WhatsApp you within a working day.\n\n→ CEO: ask the owner to add them as a Tester on the Meta app (#679), then WhatsApp them.\nFind their name, business and WhatsApp number (key %s): docs/OPERATIONS.md#scheduled-jobs\nRun: %s/%s/actions/runs/%s\n' "$hours" "$key" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")")
+              -b "$(printf 'An outside owner tapped **Ask for Facebook access** %s h ago. The app told them: we will WhatsApp you within a working day.\n\n→ CEO: ask the owner to add them as a Tester on the Meta app (#679), then WhatsApp them.\nFind their name, business and WhatsApp number (key %s): docs/operations/scheduled-jobs.md#scheduled-jobs\nRun: %s/%s/actions/runs/%s\n' "$hours" "$key" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")")
           done
           if [ -n "$last" ] && [ "$waiting" -gt 0 ]; then
             gh issue comment "$last" -R "$GITHUB_REPOSITORY" --body "$waiting more access requests are waiting; the next runs open them."
@@ -197,7 +197,7 @@ jobs:
             seen=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search "in:title $key" --json number --jq length)
             [ "$seen" = 0 ] || continue
             gh issue create -R "$GITHUB_REPOSITORY" -l core -l bug -l owner:dev3 -t "Launch needs reconciliation ($key)" \
-              -b "$(printf 'A campaign launch has waited in `needs_reconciliation` for %s min: Meta may hold a campaign AdBrain does not track.\n\nRead what Meta holds (read-only): `node scripts/reconcile-operation.mjs --key %s`. If the verdict is `active`, pause it in Ads Manager first. `nothing_live`: rerun with `--apply` to close it. `paused`: import or delete the tree, then rerun.\nRunbook: docs/OPERATIONS.md#scheduled-jobs\nRun: %s/%s/actions/runs/%s\n' "$minutes" "$key" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+              -b "$(printf 'A campaign launch has waited in `needs_reconciliation` for %s min: Meta may hold a campaign AdBrain does not track.\n\nRead what Meta holds (read-only): `node scripts/reconcile-operation.mjs --key %s`. If the verdict is `active`, pause it in Ads Manager first. `nothing_live`: rerun with `--apply` to close it. `paused`: import or delete the tree, then rerun.\nRunbook: docs/operations/scheduled-jobs.md#scheduled-jobs\nRun: %s/%s/actions/runs/%s\n' "$minutes" "$key" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
           done
           [ "$code" = 200 ]
       - name: Core scoreboard (#681, once a day after 03:00Z)
@@ -264,6 +264,26 @@ jobs:
           [ "$open" = 0 ] || exit 0
           gh issue create -R "$GITHUB_REPOSITORY" -l decision -t "$title" \
             -b "$(printf 'An OpenRouter key has $%s left (alert under $%s, #449). Paid Create models (images, Haiku concepts) stop when it runs out.\n\n→ CEO: ask the owner whether to raise the key limit (OpenRouter settings → Keys).\nRun: %s/%s/actions/runs/%s\n' "$(jq -r '.minRemainingUsd' credit.json)" "$(jq -r '.thresholdUsd' credit.json)" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+      # #1627: the repo is public. Flags customer data pasted into issues/PRs since the last run (URL + pattern type only).
+      - name: Check out the public-data scanner
+        if: always()
+        timeout-minutes: 1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: |
+            scripts/scan-public-data.mjs
+            src/lib/internal-accounts.json
+          sparse-checkout-cone-mode: false
+      - name: Public-data scan (#1627)
+        if: always()
+        # A scan problem is a warning, never a failed run; the bound keeps the 5-minute job's alert alive.
+        timeout-minutes: 2
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          last=$(gh run list -R "$GITHUB_REPOSITORY" -w scheduled-jobs.yml --status completed -L 1 --json createdAt --jq '.[0].createdAt // empty')
+          node scripts/scan-public-data.mjs ${last:+--since "$last"}
       # Moved from production-guard (#1893): the guard runs on Vercel's SHA-ref deployments, which a main-only environment can't serve.
       - name: 2-Tier parent token (#520)
         if: always()
@@ -291,4 +311,4 @@ jobs:
           open=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search "in:title \"$title\"" --json number --jq length)
           [ "$open" = 0 ] || exit 0
           gh issue create -R "$GITHUB_REPOSITORY" -l core -l bug -l owner:devops -t "$title" \
-            -b "$(printf 'Scheduler health, spend enforcement, lead sync, payment health or results refresh failed on two consecutive runs.\n\nRun: %s/%s/actions/runs/%s\nRunbook: docs/OPERATIONS.md#scheduled-jobs\n' "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+            -b "$(printf 'Scheduler health, spend enforcement, lead sync, payment health or results refresh failed on two consecutive runs.\n\nRun: %s/%s/actions/runs/%s\nRunbook: docs/operations/scheduled-jobs.md#scheduled-jobs\n' "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"

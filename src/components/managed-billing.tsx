@@ -1,5 +1,7 @@
 import { WalletCards } from "lucide-react";
 import { Alert } from "@/components/ui/alert";
+import { PauseAllAds } from "@/components/pause-all-ads";
+import { translator, type AppLocale } from "@/i18n/locale";
 import type { MetaConnection } from "@/lib/meta/credentials";
 import { TestCheckout } from "@/components/test-checkout";
 import { ProductionCheckout } from "@/components/production-checkout";
@@ -66,24 +68,45 @@ export function ManagedBilling({ connection, testBusinessId, liveBusinessId, ini
  * directly and an operator-funded business is paid by the operator, so neither is asked to pay; nor is anyone
  * while the funding mode can't be read.
  */
-export function BillingSection({ mode, plan, planBusinessId, planUnavailable = false, ...billing }: { mode: "managed" | "own" | "operator" | null;
+export function BillingSection({ mode, locale = "en", runningCampaigns = [], plan, planBusinessId, planUnavailable = false, ...billing }: {
+  mode: "managed" | "own" | "operator" | null;
+  locale?: AppLocale;
+  /** #1968 (frame 7): an own-account owner can stop everything next to "If you stop"; hidden while nothing runs. */
+  runningCampaigns?: Parameters<typeof PauseAllAds>[0]["campaigns"];
   /** #718 slice 2: an own-account owner's ₹999 plan, when plan billing is on. */
-  plan?: { status: PlanStatus; payUrl: string | null } | null; planBusinessId?: string; planUnavailable?: boolean } & Parameters<typeof ManagedBilling>[0]) {
+  plan?: { status: PlanStatus; payUrl: string | null } | null; planBusinessId?: string; planUnavailable?: boolean;
+} & Parameters<typeof ManagedBilling>[0]) {
   if (mode === "managed") return <ManagedBilling {...billing} />;
   if (mode !== "own") return null;
+  const t = translator(locale, "settings");
   return (
     <section aria-labelledby="own-billing-title" className="space-y-2 border-t border-slate-200 pt-6">
       <h2 id="own-billing-title" className="flex items-center gap-2 font-semibold text-slate-900">
         <WalletCards aria-hidden="true" className="h-5 w-5 text-blue-600" />
-        Billing
+        {t("billingTitle")}
       </h2>
       {planUnavailable ? <>
-        <p className="text-sm leading-6 text-slate-600">You pay Meta directly from your ad account.</p>
-        <Alert variant="error">Your plan is unavailable right now. Refresh Settings to try again.</Alert>
+        <p className="text-sm leading-6 text-slate-600">{t("ownBillingPlan")}</p>
+        <Alert variant="error">{t("planUnavailable")}</Alert>
       </> : plan && planBusinessId ? <>
-        <p className="text-sm leading-6 text-slate-600">You pay Meta directly from your ad account.</p>
+        <p className="text-sm leading-6 text-slate-600">{t("ownBillingPlan")}</p>
         <PlanCard businessId={planBusinessId} status={plan.status} payUrl={plan.payUrl} />
-      </> : <p className="text-sm leading-6 text-slate-600">You pay Meta directly from your ad account. Your first month of AdBrain is free; after that it&apos;s ₹999 a month.</p>}
+      </> : <p className="text-sm leading-6 text-slate-600">{t("ownBilling")}</p>}
+      <IfYouStop locale={locale} />
+      <PauseAllAds locale={locale} campaigns={runningCampaigns} />
     </section>
+  );
+}
+
+/** #1916 (CPO, #1880): what happens if an own-account owner stops paying, disconnects or deletes. Copy only. */
+function IfYouStop({ locale }: { locale: AppLocale }) {
+  const t = translator(locale, "settings");
+  const rows = [["payingLead", "paying"], ["disconnectLead", "disconnect"], ["deleteLead", "delete"]] as const;
+  return (
+    <ul aria-label={t("ifYouStop.title")} className="space-y-1.5 text-sm leading-6 text-slate-600">
+      {rows.map(([lead, text]) => (
+        <li key={lead}><strong className="font-medium text-slate-900">{t(`ifYouStop.${lead}`)}</strong> {t(`ifYouStop.${text}`)}</li>
+      ))}
+    </ul>
   );
 }

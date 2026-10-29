@@ -168,7 +168,7 @@ async function handleGET(request: Request) {
       pages<{ business_id: string; launched_at: string }>((from, to) => db.from("campaigns").select("business_id, launched_at")
         .not("launched_at", "is", null).order("launched_at").range(from, to).abortSignal(signal())),
     ]);
-    const pilots = pilotData({ prospectCreatives, pilotEvents, launchedRows, excludedBusinessIds: (owned as Array<{ id: string }>).map((row) => row.id), now: until });
+    const pilots = pilotData({ prospectCreatives, pilotEvents, launchedRows, leads, excludedBusinessIds: (owned as Array<{ id: string }>).map((row) => row.id), now: until });
     const board = buildScoreboard({
       events: [...events, ...planRequests],
       aiCalls,

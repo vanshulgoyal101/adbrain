@@ -17,7 +17,7 @@ Scheduled jobs (`/api/cron/*`), internal diagnostics, product analytics and feed
 | GET | `/api/cron/owner-daily-results` | Cron Bearer auth | #1022: the daily WhatsApp results line. Acts only with `OWNER_ALERTS_ENABLED` and between 09:00 and 12:00 IST; at most one line per opted-in owner per day (yesterday in IST, #783's per-ad numbers, read-only on Meta); `{ok,day,sent,outcomes:[{businessId,result}]}` or `{ok,skipped}`; a per-owner failure doesn't fail the run |
 | GET | `/api/cron/payment-health` | Cron Bearer auth | Razorpay webhook counts for the live account (`events7d`, `unprocessed`, `capturedWithoutEvent`); `ok:false` when a capture lacks its webhook event; read-only |
 | GET | `/api/cron/pilot-readiness` | Cron secret | `{ok, missing:[{name, state, why}]}`: production settings a pilot needs that are missing or off (#1875); names only, never values |
-| GET | `/api/cron/plan-links` | Cron secret | #718: `{ok,enabled,checked,created,failed}`; reconciles payable open links immediately for lost paid webhooks, recovers expiry after the 30-day link lifetime, and creates a link only when needed. Uses the provider capture timestamp. No-op while `PLAN_BILLING_ENABLED` is off |
+| GET | `/api/cron/plan-links` | Cron secret | #718: `{ok,enabled,checked,created,failed}`; reconciles payable open links immediately for lost paid webhooks, recovers expiry after the 30-day link lifetime and a cancelled link at any age (#2074), and creates a link only when needed. Uses the provider capture timestamp. No-op while `PLAN_BILLING_ENABLED` is off |
 | GET | `/api/cron/scheduler-health` | Cron Bearer auth | Read-only watchdog (#274): per job (`enforce-spend`, `sync-leads` every 15 min; `refresh-results` must succeed hourly) minutes since the last run and last successful run, from logged `http.request` events; `overdue` after twice the interval without a success; `ok:false` when any job is overdue |
 | GET | `/api/cron/meta-parent-health` | Cron Bearer auth | Read-only 2-Tier parent token check (#520): `GET /me` and the parent business with `META_PARENT_SYSTEM_TOKEN`; `{ok:true, configured:false}` when unset, `{configured, enabled, ok, businessVerified}` when it works, 503 with a Meta `errorCode` only when refused |
 | GET | `/api/cron/managed-health` | Cron Bearer auth | Read-only 2-Tier watchdog (#527): `{ok, accounts, byState, stuck:[{state, minutes, key}]}`; stuck = a non-final state (not `ready`/`offboarded`; `failed` included) unchanged for over 30 min; opaque 12-hex keys, no IDs |
@@ -39,7 +39,7 @@ launch-path `page` (`/create`, `/studio`, `/campaigns`); `page.engagement`
 requires integer `durationMs` between 1000 and 3600000. Unknown fields, arbitrary
 labels and client identity overrides are rejected. No request/field content is
 captured. DNT/GPC, 2 KiB body limits, rate limiting and 204 responses are preserved.
-Action intent is not authoritative success. See [collection and retention](../OBSERVABILITY.md)
+Action intent is not authoritative success. See [collection and retention](../operations/observability.md)
 for the fixed action catalog, privacy controls and operator-only analytics queries.
 
 ## Jobs and Telemetry
