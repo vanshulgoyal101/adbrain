@@ -162,6 +162,15 @@ export const EDUCATION_BANNED_CLAIMS = [
   "guaranteed admission",
   "guaranteed job",
   "pr guaranteed",
+  // CPO (#1910 Ad Library sample): "crack in 1st attempt" promises a result like a band does.
+  "first attempt",
+  "1st attempt",
+  // CPO (Analyst #1514 ② ④): fixed visa timelines and document fraud. "No IELTS needed" stays allowed (some waive it).
+  "visa in ", // with its space: "visa interview practice" is fine
+  "fake",
+  "arranged offer letter",
+  "backdated",
+  "experience certificate",
   "गारंटी",
   "ਗਾਰੰਟੀ",
   "पक्का वीज़ा",

@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useEffectEvent, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useEffectEvent, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import Link from "next/link";
 import { Inbox, Loader2, MessageCircle, Phone, RefreshCw, Search, X, Save, Pencil, ChevronDown, SlidersHorizontal, UserCheck, MoreHorizontal } from "lucide-react";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Status } from "@/components/ui/status";
 import { relativeAge } from "@/lib/leads/digest";
 import { formatDate } from "@/lib/format";
@@ -13,11 +14,13 @@ import { useMounted } from "@/lib/use-mounted";
 import type { Lead } from "@/lib/types";
 import { useLeadList } from "@/lib/leads/use-lead-list";
 import { workflowStatuses, type WorkflowStatus } from "@/lib/leads/filters";
-import { firstReplyText, formatReplyTime, whatsappReplyLink, type ReplyLanguage } from "@/lib/leads/first-reply";
+import { formatReplyTime, whatsappReplyLink, type ReplyLanguage } from "@/lib/leads/first-reply";
+import { replyChoices } from "@/lib/leads/reply-choices";
 import { isMetaTestLead } from "@/lib/leads/test-lead";
 import { isWaiting } from "@/lib/leads/waiting";
 import { leadAnswers } from "@/lib/leads/answers";
 import styles from "./lead-inbox.module.css";
+import { WhatsAppEnquiries } from "@/components/whatsapp-enquiries";
 
 const LEADS_FRESH_MS = 15 * 60_000;
 
@@ -73,6 +76,8 @@ export function LeadInbox({
   businessName,
   offer = null,
   language = "en",
+  vertical = null,
+  ownPhotos = false,
   initialLeads,
   initialTotal = initialLeads.filter((lead) => !isMetaTestLead(lead)).length,
   initialNextCursor = null,
@@ -82,17 +87,23 @@ export function LeadInbox({
   summary = null,
   allTotal,
   offerAlerts = false,
+  chatsEmpty = false,
+  addEnquiryFor = null,
 }: {
   businessName: string;
   /** #1049: the business's first offer and language, for the pre-filled first WhatsApp reply. */
   offer?: string | null;
   language?: ReplyLanguage;
+  /** #1945: the business type; a pilot segment's "WhatsApp them" offers its 3 first replies, then 2 follow-ups. */
+  vertical?: string | null;
+  /** #1945/#1617: the owner has their own photos, so interiors may offer to share them. */
+  ownPhotos?: boolean;
   initialLeads: Lead[];
   initialTotal?: number;
   initialNextCursor?: string | null;
   metaReady: boolean;
   syncScope?: string;
-  /** #1223: "Form enquiries" when WhatsApp chats are shown above. */
+  /** #1223/#1835: "Form enquiries" when WhatsApp chats are shown above and none is logged here. */
   title?: string;
   /** #1260: people waiting for a first contact, and the 30-day median minutes to contact (null under 3). */
   summary?: { waiting: number | null; replyMinutes: number | null } | null;
@@ -100,7 +111,12 @@ export function LeadInbox({
   allTotal?: number;
   /** #1260: WhatsApp alerts (#701) can be turned on here and aren't yet, so the empty state offers them. */
   offerAlerts?: boolean;
+  /** #1597: the page found no WhatsApp chat or logged enquiry either; with no form enquiry, one block replaces the inbox. */
+  chatsEmpty?: boolean;
+  /** #1597: a WhatsApp campaign the empty block's 'Add an enquiry' logs to. */
+  addEnquiryFor?: { campaignId: string; spend: number; enquiries: number } | null;
 }) {
+  const [adding, setAdding] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -133,9 +149,12 @@ export function LeadInbox({
   // #1260: Waiting (default when anyone waits) · All (search and filters) · Customers.
   const [view, setView] = useState<InboxView>(summary?.waiting ? "waiting" : "all");
   const [openedAt] = useState(() => Date.now());
+  const [emptyOnArrival] = useState(() => chatsEmpty && initialLeads.length === 0 && (allTotal ?? 0) === 0);
   const wide = useWide();
   const [pickedId, setPickedId] = useState<string | null>(null);
   const [contactedAt, setContactedAt] = useState<Record<string, string>>({});
+  // #1945: the enquiry whose reply sheet is open.
+  const [replyLeadId, setReplyLeadId] = useState<string | null>(null);
   const page = useLeadList({ leads: initialLeads, total: initialTotal, nextCursor: initialNextCursor }, view === "all"
     ? { query, status, contact: contactFilter, sort }
     : { query: "", status: view === "waiting" ? "new" : "customer", contact: "all", sort: "newest" });
@@ -299,7 +318,7 @@ export function LeadInbox({
       setNotice(
         data.imported
           ? `${data.imported} new ${data.imported === 1 ? "enquiry" : "enquiries"} from Meta.`
-          : data.sync?.state === "complete" ? null : "Checked Meta, but couldn't confirm everything was read.",
+          : data.sync?.state === "complete" ? null : "Some enquiries on Meta couldn't be checked. The ones below are saved; tap Check now to try again.",
       );
     } catch {
       setError("Couldn't check Meta for enquiries. Check your connection.");
@@ -335,17 +354,59 @@ export function LeadInbox({
     const contactMinutes = first ? (Date.parse(first) - Date.parse(l.created_time ?? l.created_at)) / 60_000 : NaN;
     const current = statusOf(l);
     // #1260: one state word per row: New → Contacted in {m} → Customer.
-    const state = current === "customer" ? "customer" : current === "closed" ? "closed" : first ? "contacted" : current === "new" ? "new" : "other";
-    const stateLabel = state === "new" ? "New" : state === "contacted" ? contactedLabel(contactMinutes) : state === "closed" ? "Not interested" : STATUS_LABEL[current];
+    // #1819: Meta's test lead isn't someone waiting (the counts leave it out), so it says what it is.
+    const state = isMetaTestLead(l) ? "test" : current === "customer" ? "customer" : current === "closed" ? "closed" : first ? "contacted" : current === "new" ? "new" : "other";
+    const stateLabel = state === "test" ? "Test from Meta" : state === "new" ? "New" : state === "contacted" ? contactedLabel(contactMinutes) : state === "closed" ? "Not interested" : STATUS_LABEL[current];
+    // #1819: no WhatsApp/Call line and no Became a customer, so ⋯ sits on the name row instead of alone on a line.
+    const noActions = state === "test" || state === "customer" || (state === "new" && !l.phone);
     const city = isMetaTestLead(l) ? null : l.city;
     const meta = [l.created_time ? whenLabel(l.created_time) : null, l.source === "whatsapp_manual" ? "WhatsApp chat" : null, city].filter(Boolean).join(" · ");
-    const replyText = firstReplyText({ leadName: leadName(l), businessName, offer, language });
-    const whatsapp = isMetaTestLead(l) ? null : whatsappReplyLink(l.phone, replyText);
-    return { first, contactMinutes, current, state, stateLabel, meta, name: leadName(l) ?? "this enquiry", replyText, whatsapp };
+    const choices = replyChoices({ leadName: leadName(l), businessName, offer, vertical, language, contacted: Boolean(first), ownPhotos });
+    const replyText = choices.texts[0] ?? "";
+    const whatsapp = isMetaTestLead(l) || !replyText ? null : whatsappReplyLink(l.phone, replyText);
+    return { first, contactMinutes, current, state, stateLabel, meta, name: leadName(l) ?? "this enquiry", choices, replyText, whatsapp, noActions };
   }
+  // #1945: one generic reply opens WhatsApp straight away; a segment's choices open the sheet first.
+  function whatsappAction(l: Lead, info: ReturnType<typeof rowInfo>, className: string | undefined, content: ReactNode) {
+    if (!info.whatsapp) return null;
+    if (info.choices.kind === "generic") {
+      return <a href={info.whatsapp} target="_blank" rel="noopener noreferrer" onClick={() => markContacted(l)} className={className}>{content}</a>;
+    }
+    return <button type="button" aria-haspopup="dialog" className={className}
+      onClick={event => { event.currentTarget.closest("details")?.removeAttribute("open"); setReplyLeadId(l.id); }}>{content}</button>;
+  }
+  const replyLead = replyLeadId ? leads.find((lead) => lead.id === replyLeadId) ?? null : null;
+  const replyInfo = replyLead ? rowInfo(replyLead) : null;
   const selectedLead = wide ? leads.find((lead) => lead.id === pickedId) ?? leads[0] ?? null : null;
   const detail = selectedLead ? rowInfo(selectedLead) : null;
   const answers = selectedLead && !isMetaTestLead(selectedLead) ? leadAnswers(selectedLead.field_data) : [];
+
+  // #1597 (Designer, #1463): no enquiries anywhere: one block (title, line, one action) instead of banner, count, tabs,
+  // search and a card that repeats it. The checking above keeps running, so the first enquiry brings the inbox back.
+  // #1810: decided from the unfiltered first load (test leads included), never from a tab's filtered result.
+  if (emptyOnArrival && page.total === 0 && leads.length === 0 && !page.loading && !page.error) {
+    const solid = !metaReady || offerAlerts;
+    return (
+      <section aria-labelledby="enquiries-empty-title" className="mt-4 flex max-w-xl flex-col items-start gap-2">
+        <h2 id="enquiries-empty-title" className="text-[17px] font-semibold leading-6 text-slate-900">No enquiries yet</h2>
+        <p className="text-[15px] leading-[22px] text-slate-600">
+          {metaReady
+            ? "Enquiries from your ads show up here: form enquiries on their own, WhatsApp chats when you add them. Reply fast: people often pick the first business that answers."
+            : "Connect your Facebook Page to run ads. Enquiries from them show up here."}
+        </p>
+        <Link href={!metaReady ? "/settings" : offerAlerts ? "/settings#whatsapp-alerts-title" : "/campaigns"}
+          className={`mt-2 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md px-4 text-sm font-medium sm:w-auto ${solid
+            ? "bg-[var(--primary)] text-white"
+            : "border border-slate-300 text-slate-800 hover:bg-slate-50"}`}>
+          {!metaReady ? "Connect Facebook Page" : offerAlerts ? "Get a WhatsApp alert for form enquiries" : "See your campaigns"}
+        </Link>
+        {metaReady && addEnquiryFor && (adding
+          ? <WhatsAppEnquiries compact campaignId={addEnquiryFor.campaignId} spend={addEnquiryFor.spend} enquiries={addEnquiryFor.enquiries}
+            onLogged={() => window.location.reload()} />
+          : <button type="button" className="inline-flex min-h-11 items-center text-sm font-medium text-blue-700 hover:underline" onClick={() => setAdding(true)}>Add an enquiry</button>)}
+      </section>
+    );
+  }
 
   return (
     <div className={styles.inbox}>
@@ -455,7 +516,7 @@ export function LeadInbox({
           </CardContent>
         </Card>
       ) : leads.length === 0 ? (
-        <div className={styles.empty}><Search size={28} aria-hidden="true" /><h3>No matching enquiries</h3><Button variant="outline" onClick={clearFilters}>Clear filters</Button></div>
+        <div className={styles.empty}><h3>No matching enquiries</h3><Button variant="outline" onClick={clearFilters}>Clear filters</Button></div>
       ) : (
         <div className={detail ? styles.panes : undefined}>
         <div className={styles.listPane}>
@@ -472,9 +533,10 @@ export function LeadInbox({
             </thead>
             <tbody className="divide-y divide-slate-100">
               {leads.map((l) => {
-                const { first, contactMinutes, current, state, stateLabel, meta, name, whatsapp } = rowInfo(l);
+                const info = rowInfo(l);
+                const { first, contactMinutes, current, state, stateLabel, meta, name, noActions } = info;
                 return (
-                <tr role="row" key={l.id} className="hover:bg-slate-50" data-state={state} data-selected={selectedLead?.id === l.id || undefined}>
+                <tr role="row" key={l.id} className="hover:bg-slate-50" data-lead={l.id} data-state={state} data-actions={noActions ? "none" : undefined} data-selected={selectedLead?.id === l.id || undefined}>
                   <td role="cell" className={styles.person}>
                     <span className={styles.avatar} aria-hidden="true">{initials(leadName(l))}</span>
                     {wide ? <button type="button" className={styles.name} aria-pressed={selectedLead?.id === l.id} onClick={() => setPickedId(l.id)}>{leadName(l) ?? "—"}</button>
@@ -494,9 +556,8 @@ export function LeadInbox({
                     {!isMetaTestLead(l) && l.phone && (() => {
                       const replied = contactMinutes * 60_000;
                       return <div className={`${styles.replyActions} mt-1 flex flex-wrap items-center gap-2`}>
-                        {whatsapp && <a href={whatsapp} target="_blank" rel="noopener noreferrer" onClick={() => markContacted(l)}
-                          className="inline-flex min-h-11 items-center gap-1 rounded-md bg-primary px-3 text-xs font-medium text-white hover:bg-primary-hover">
-                          <MessageCircle size={14} aria-hidden="true" />WhatsApp them</a>}
+                        {whatsappAction(l, info, "inline-flex min-h-11 items-center gap-1 rounded-md bg-primary px-3 text-xs font-medium text-white hover:bg-primary-hover",
+                          <><MessageCircle size={14} aria-hidden="true" />WhatsApp them</>)}
                         <a href={`tel:${l.phone}`} onClick={() => markContacted(l)}
                           className="inline-flex min-h-11 items-center gap-1 rounded-md border border-slate-300 px-3 text-xs font-medium text-slate-800 hover:bg-slate-50">
                           <Phone size={14} aria-hidden="true" />Call</a>
@@ -535,7 +596,7 @@ export function LeadInbox({
                         <div className={styles.moreMenu}>
                           {/* #1260: once someone isn't waiting, their row shows only Became a customer · ⋯, so the replies live here. */}
                           {state !== "new" && !isMetaTestLead(l) && <>
-                            {whatsapp && l.phone && <a href={whatsapp} target="_blank" rel="noopener noreferrer" onClick={() => markContacted(l)}>WhatsApp them</a>}
+                            {l.phone && whatsappAction(l, info, undefined, "WhatsApp them")}
                             {l.phone && <a href={`tel:${l.phone}`} onClick={() => markContacted(l)}>Call</a>}
                             {l.email && <a href={`mailto:${l.email}`}>Email</a>}
                           </>}
@@ -562,16 +623,15 @@ export function LeadInbox({
               </div>
             </div>
             {!isMetaTestLead(selectedLead) && detail.state !== "customer" && <div className="flex flex-wrap gap-2">
-              {detail.whatsapp && <a href={detail.whatsapp} target="_blank" rel="noopener noreferrer" onClick={() => markContacted(selectedLead)}
-                className="inline-flex min-h-11 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-white hover:bg-primary-hover">
-                <MessageCircle size={16} aria-hidden="true" />WhatsApp them</a>}
+              {whatsappAction(selectedLead, detail, "inline-flex min-h-11 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-white hover:bg-primary-hover",
+                <><MessageCircle size={16} aria-hidden="true" />WhatsApp them</>)}
               {selectedLead.phone && <a href={`tel:${selectedLead.phone}`} onClick={() => markContacted(selectedLead)}
                 className="inline-flex min-h-11 items-center gap-2 rounded-md border border-slate-300 px-4 text-sm font-medium text-slate-800 hover:bg-slate-50">
                 <Phone size={16} aria-hidden="true" />Call</a>}
               {detail.first && <Button type="button" variant="outline" className="min-h-11" data-product-event="lead.customer" disabled={!!marking || saving}
                 onClick={() => void setCustomer(selectedLead, "customer", detail.current)}><UserCheck size={16} aria-hidden="true" />Became a customer</Button>}
             </div>}
-            {detail.whatsapp && detail.state !== "customer" && <section>
+            {detail.whatsapp && detail.choices.kind === "generic" && detail.state !== "customer" && <section>
               <h4>Opens WhatsApp with:</h4>
               <p className={styles.detailMessage}>{detail.replyText}</p>
             </section>}
@@ -583,6 +643,26 @@ export function LeadInbox({
         )}
         </div>
       )}
+      <Dialog open={Boolean(replyInfo)} onOpenChange={(open) => { if (!open) setReplyLeadId(null); }}>
+        {replyLead && replyInfo && <DialogContent className="sm:max-w-md">
+          <div className="flex items-start justify-between gap-2 px-4 pt-4">
+            <div className="min-w-0 pt-2">
+              <DialogTitle className="text-[17px] font-semibold leading-6 text-slate-900">{replyInfo.choices.kind === "follow-up" ? "Follow up" : "Choose a first reply"}</DialogTitle>
+              <DialogDescription className="mt-1 text-sm text-slate-600">Opens WhatsApp to {replyInfo.name} with this message. You can change it there before you send.</DialogDescription>
+            </div>
+            <DialogClose aria-label="Close replies" />
+          </div>
+          <ul className="flex flex-col gap-2 p-4">
+            {replyInfo.choices.texts.map((text) => <li key={text}>
+              <a href={whatsappReplyLink(replyLead.phone, text) ?? undefined} target="_blank" rel="noopener noreferrer"
+                onClick={() => { markContacted(replyLead); setReplyLeadId(null); }}
+                className="flex min-h-11 items-start gap-2 rounded-lg border border-slate-300 px-3 py-2.5 text-[15px] leading-[22px] text-slate-800 hover:border-primary hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
+                <MessageCircle size={16} className="mt-[3px] shrink-0 text-primary" aria-hidden="true" /><span>{text}</span>
+              </a>
+            </li>)}
+          </ul>
+        </DialogContent>}
+      </Dialog>
       {page.nextCursor && <Button variant="outline" disabled={page.loading} onClick={page.loadMore}>{page.loading ? <Loader2 size={16} className="animate-spin" /> : <ChevronDown size={16} />}Load more enquiries</Button>}
     </div>
   );

@@ -3,7 +3,7 @@ import path from "node:path";
 import sharp from "sharp";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-// #1317: a sales prospect's exported ads say "Sample: not live" on the picture until the owner takes the account over.
+// #1317, #1471: a sales prospect's exported ads say "Sample ad: not live yet" on the picture until the owner takes the account over.
 const mocks = vi.hoisted(() => ({ download: vi.fn(), file: vi.fn(), lookup: vi.fn(), user: { id: "u1", email: "sales+prospect-sunpeak@team.example", email_confirmed_at: "2026-10-28T00:00:00Z" } as Record<string, unknown> }));
 vi.mock("@/lib/internal-accounts.json", () => ({ default: { domains: ["team.example"], userIds: [], smokeUserIds: [], exemptFromFreeProviders: [] } }));
 vi.mock("@/lib/security/rate-limit", () => ({ rateLimitResponse: async () => null }));
@@ -15,7 +15,7 @@ vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({
 }) }));
 
 const { isProspectAccount } = await import("@/lib/internal-accounts");
-const { sampleWatermark } = await import("@/lib/creative/sample-watermark");
+const { sampleNoteCard, sampleWatermark, SAMPLE_LABEL } = await import("@/lib/creative/sample-watermark");
 const picture = (format: "png" | "jpeg" | "webp", width = 400, height = 500) =>
   sharp({ create: { width, height, channels: 3, background: "#ffffff" } })[format]().toBuffer().then((buffer) => new Uint8Array(buffer));
 const ID = "11111111-1111-4111-8111-111111111111";
@@ -39,41 +39,95 @@ describe("isProspectAccount (#1317)", () => {
   });
 });
 
-describe("sampleWatermark (#1317)", () => {
-  it.each(["png", "jpeg", "webp"] as const)("darkens a band across the foot of a %s, same size and format, top untouched", async (format) => {
+describe("sampleWatermark (#1317, #1471)", () => {
+  const dark = (width: number, height: number) =>
+    sharp({ create: { width, height, channels: 3, background: "#203040" } }).png().toBuffer().then((buffer) => new Uint8Array(buffer));
+  async function pixels(bytes: Uint8Array) {
+    const { data, info } = await sharp(bytes).raw().toBuffer({ resolveWithObject: true });
+    return (x: number, y: number) => [0, 1, 2].map((c) => data[(y * info.width + x) * info.channels + c]);
+  }
+
+  it("says 'Sample ad: not live yet', matching Go live", () => {
+    expect(SAMPLE_LABEL).toBe("Sample ad: not live yet");
+  });
+
+  it.each(["png", "jpeg", "webp"] as const)("keeps a %s's size and format", async (format) => {
     const marked = await sampleWatermark(await picture(format));
     expect(marked.contentType).toBe(`image/${format}`);
     const meta = await sharp(marked.bytes).metadata();
     expect([meta.width, meta.height, meta.format]).toEqual([400, 500, format]);
-    const { data } = await sharp(marked.bytes).raw().toBuffer({ resolveWithObject: true });
-    const at = (x: number, y: number) => data[(y * 400 + x) * (meta.channels ?? 3)];
-    expect(at(10, 10)).toBeGreaterThan(240);
-    expect(at(10, 495)).toBeLessThan(120);
   });
+
+  // #1471 (Designer): a light pill inset 4% of the width from the left and bottom, sized from the width, so 1:1 and
+  // 9:16 match; the old full-width dark band read as a censor bar and covered the product.
+  it.each([[1080, 1080], [1080, 1920]])("%ix%i: a light pill with an amber dot in the bottom-left corner, nothing else changed", async (width, height) => {
+    const at = await pixels((await sampleWatermark(await dark(width, height))).bytes);
+    const s = Math.round(0.04 * width), inset = Math.round(0.04 * width);
+    const original = [0x20, 0x30, 0x40];
+    const near = (pixel: number[], expected: number[]) => pixel.every((value, i) => Math.abs(value - expected[i]) < 12);
+    // Inside the pill, just right of its left padding and at mid-height: light.
+    const midY = height - inset - Math.round(s * 0.84);
+    expect(Math.min(...at(inset + Math.round(s * 0.3), midY))).toBeGreaterThan(220);
+    // The amber dot, after the left padding.
+    const [r, g, b] = at(inset + Math.round(s * 0.9 + s * 0.29), midY);
+    expect(r).toBeGreaterThan(200); expect(g).toBeGreaterThan(130); expect(g).toBeLessThan(190); expect(b).toBeLessThan(80);
+    // Outside the pill: untouched (the foot's right side, above the pill, the top).
+    expect(near(at(width - 10, height - 10), original)).toBe(true);
+    expect(near(at(inset, height - inset - s * 3), original)).toBe(true);
+    expect(near(at(10, 10), original)).toBe(true);
+    expect(near(at(inset - 3, height - 3), original)).toBe(true);
+  });
+
   // #1375: on Vercel an SVG <text> drew empty boxes (no system fonts). The words come from Pango with the bundled Inter,
   // the same path the ads' Hindi text uses in production; a local test can't see tofu, so it also guards the source.
   it("#1375: draws the words with the bundled font, never an SVG <text> that needs system fonts", async () => {
     const source = readFileSync(path.join(process.cwd(), "src/lib/creative/sample-watermark.ts"), "utf8");
     expect(source).not.toMatch(/<text\b/);
     expect(source).toMatch(/shapeText\(SAMPLE_LABEL/);
-    const marked = await sampleWatermark(await picture("png", 1080, 1350));
-    const { data, info } = await sharp(marked.bytes).raw().toBuffer({ resolveWithObject: true });
-    const band = Math.round(1350 * 0.08);
-    let ink = 0, left = 1080, right = 0;
-    for (let y = 1350 - band; y < 1350; y += 1) for (let x = 0; x < 1080; x += 1) {
-      if (data[(y * 1080 + x) * info.channels] > 200) { ink += 1; left = Math.min(left, x); right = Math.max(right, x); }
+    const at = await pixels((await sampleWatermark(await dark(1080, 1080))).bytes);
+    const s = 43, inset = 43, top = 1080 - inset - Math.round(s * 1.84);
+    let ink = 0, right = 0;
+    for (let y = top; y < 1080 - inset; y += 1) for (let x = inset + s * 2; x < 1080; x += 1) {
+      const [r, g, b] = at(x, y);
+      if (r < 90 && g < 90 && b < 90 && Math.abs(r - 0x20) + Math.abs(g - 0x30) + Math.abs(b - 0x40) > 30) { ink += 1; right = Math.max(right, x); }
     }
     expect(ink).toBeGreaterThan(1000);
-    // Centred words about a third of the width, not a full-width strip.
-    expect(Math.abs((left + right) / 2 - 540)).toBeLessThan(30);
-    expect(right - left).toBeGreaterThan(200);
-    expect(right - left).toBeLessThan(800);
+    // The words end well before the right edge: a label, not a strip.
+    expect(right).toBeGreaterThan(400);
+    expect(right).toBeLessThan(700);
+  });
+
+  it("the note card: 1080 square, the page colour, the business named in dark ink", async () => {
+    const card = await sampleNoteCard("SunPeak Solar");
+    const meta = await sharp(card).metadata();
+    expect([meta.width, meta.height, meta.format]).toEqual([1080, 1080, "png"]);
+    const at = await pixels(card);
+    expect(at(5, 5)).toEqual([0xf6, 0xf7, 0xf4]);
+    let ink = 0;
+    for (let y = 200; y < 900; y += 2) for (let x = 80; x < 1000; x += 2) if (Math.max(...at(x, y)) < 80) ink += 1;
+    expect(ink).toBeGreaterThan(2000);
   });
 
   it("refuses what isn't a picture", async () => {
     await expect(sampleWatermark(new TextEncoder().encode("not a picture"))).rejects.toThrow();
   });
 });
+
+// The amber dot of the pill on a 400×500 picture (see the pill geometry above); white when unmarked.
+async function dotPixel(bytes: Uint8Array) {
+  const { data, info } = await sharp(bytes).raw().toBuffer({ resolveWithObject: true });
+  const s = 16, x = s + Math.round(s * 0.9 + s * 0.29), y = 500 - s - Math.round(s * 0.84);
+  return [0, 1, 2].map((c) => data[(y * info.width + x) * info.channels + c]);
+}
+// #1897: downloadImage hands back PNG, so the pack's picture is re-encoded as a JPEG of the same size.
+async function exportedJpeg() {
+  const call = mocks.file.mock.calls.find(([name]) => /^ad-/.test(String(name)));
+  expect(call?.[0]).toBe("ad-1-offer.jpg");
+  const bytes = call![1] as Uint8Array;
+  const meta = await sharp(bytes).metadata();
+  expect([meta.width, meta.height, meta.format]).toEqual([400, 500, "jpeg"]);
+  return bytes;
+}
 
 describe("export for a prospect (#1317)", () => {
   it("marks every picture and says so in copy.txt", async () => {
@@ -82,9 +136,11 @@ describe("export for a prospect (#1317)", () => {
     const { POST } = await import("@/app/api/creatives/export/route");
     const response = await POST(new Request("http://localhost/api/creatives/export", { method: "POST", body: JSON.stringify({ creativeIds: [ID] }) }));
     expect(response.status).toBe(200);
-    const [, bytes] = mocks.file.mock.calls.find(([name]) => String(name).endsWith(".png"))!;
-    expect(Buffer.compare(Buffer.from(bytes as Uint8Array), Buffer.from(original))).not.toBe(0);
-    expect(mocks.file).toHaveBeenCalledWith("copy.txt", expect.stringMatching(/^SAMPLE: NOT LIVE\. Made for a sales visit/));
+    const [r, g, b] = await dotPixel(await exportedJpeg());
+    expect(r).toBeGreaterThan(200); expect(g).toBeGreaterThan(120); expect(g).toBeLessThan(200); expect(b).toBeLessThan(100);
+    expect(mocks.file).toHaveBeenCalledWith("copy.txt", expect.stringMatching(/^Sample ad: not live yet\. Made by AdBrain to show what your ads could look like\. They don't run, and you pay nothing, until you sign up and tap Go live\./));
+    // #1471: the note card comes first in the zip.
+    expect(mocks.file.mock.calls[0][0]).toBe("00-sample-note.png");
   });
 
   it("leaves out a picture it can't mark, never ships it unmarked", async () => {
@@ -92,17 +148,17 @@ describe("export for a prospect (#1317)", () => {
     const { POST } = await import("@/app/api/creatives/export/route");
     const response = await POST(new Request("http://localhost/api/creatives/export", { method: "POST", body: JSON.stringify({ creativeIds: [ID] }) }));
     expect(response.headers.get("X-Images-Skipped")).toBe("1");
-    expect(mocks.file.mock.calls.filter(([name]) => String(name).endsWith(".png"))).toHaveLength(0);
+    expect(mocks.file.mock.calls.filter(([name]) => /^ad-/.test(String(name)))).toHaveLength(0);
   });
 
-  it("leaves an owner's export as it was", async () => {
+  it("leaves an owner's export unmarked, as a JPEG", async () => {
     mocks.user = { id: "owner", email: "owner@gmail.com", email_confirmed_at: "2026-10-28" };
     const original = await picture("png");
     mocks.download.mockResolvedValue({ bytes: original, contentType: "image/png" });
     const { POST } = await import("@/app/api/creatives/export/route");
     await POST(new Request("http://localhost/api/creatives/export", { method: "POST", body: JSON.stringify({ creativeIds: [ID] }) }));
-    const [, bytes] = mocks.file.mock.calls.find(([name]) => String(name).endsWith(".png"))!;
-    expect(bytes).toBe(original);
-    expect(mocks.file).toHaveBeenCalledWith("copy.txt", expect.not.stringContaining("SAMPLE"));
+    expect(Math.min(...await dotPixel(await exportedJpeg()))).toBeGreaterThan(245);
+    expect(mocks.file).toHaveBeenCalledWith("copy.txt", expect.not.stringContaining("Sample ad"));
+    expect(mocks.file.mock.calls.map(([name]) => name)).not.toContain("00-sample-note.png");
   });
 });

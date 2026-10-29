@@ -87,8 +87,8 @@ describe("work queue in Hindi", () => {
 
   it("fills counts into the campaigns line", () => {
     const item = buildWorkQueue({ ...base, campaigns: [wentLive], locale: "hi" }).find((entry) => entry.id === "campaigns");
-    expect(item?.title).toBe("चालू करने से पहले कैंपेन जाँचें");
-    expect(item?.detail).toBe("1 रुके हुए, 0 ड्राफ़्ट। विज्ञापन, ग्राहक और बजट जाँचें; तैयार होने तक रुका रहने दें।");
+    expect(item?.title).toBe("अपने रुके हुए कैंपेन देखें");
+    expect(item?.detail).toBe("1 रुके हुए, 0 शुरू नहीं हुए। विज्ञापन, इलाका और बजट देखें, फिर तैयार होने पर एक चालू करें।");
     expect(item?.action).toBe("कैंपेन जाँचें");
   });
 

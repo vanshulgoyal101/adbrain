@@ -222,6 +222,7 @@ lower cost.
 | `META_PARENT_SYSTEM_TOKEN` | Empty | Privileged secret (Vercel Sensitive): the parent's 'AdBrain provisioning' system-user token. Checked read-only after each deploy (`/api/cron/meta-parent-health`); rotation in OPERATIONS |
 | `META_CONNECT_ROLLOUT` | Unset | `disabled`, `pilot`, `enabled`; unset allows nonproduction only |
 | `META_CONNECT_PILOT_USER_ID` | Unset | Exact app user allowed in pilot mode |
+| `META_APP_REVIEW_PENDING` | on | #1989: while Meta App Review (#156) is pending, WS1 step 3 asks a not-yet-Tester owner to accept the app invite before Connect, and offers Try again after a return with nothing connected. Exactly `false` hides it; DevOps sets that once #156 is approved. No secret |
 | `META_SYSTEM_USER_TOKEN`, `META_AD_ACCOUNT_ID`, `META_PAGE_ID` | Empty | **Local fixture recording only** (`.env.local`, read by `scripts/lib/meta-env.ts`). The app doesn't read them (#520), and they aren't set in Vercel |
 
 Rollout variables are read directly, outside `getEnv()`. Unknown values deny
@@ -299,7 +300,7 @@ exported in your shell are still inherited; this is not a network sandbox.
 | `dev` | `npm run dev` on port 3939 |
 | `build`, `oauth-check`, `workspace`, `connect`, `e2e`, `recovery`, `draft-connect`, `draft-lifecycle`, `connection-recovery` | Runs the mapped build, check script or Playwright spec against the local project |
 | `oauth-dev` | Copies the real `META_APP_ID`/`META_APP_SECRET`/`META_LOGIN_CONFIG_ID` from `.env.local` and redacts them from output; real Meta consent work |
-| `payments-dev` | Reads Razorpay test credentials from `.env`, enables test checkout and the dev auth bypass, derives a webhook secret if absent, disables product logging and binds 127.0.0.1:3939 |
+| `payments-dev` | Reads Razorpay test credentials from `.env.local` (the `RAZORPAY_TEST_*` pair, or a standard pair only if it is `rzp_test_`; live keys are refused), enables test checkout and the dev auth bypass, derives a webhook secret if absent, disables product logging and binds 127.0.0.1:3939 |
 
 Each mode runs immediately; none is an environment inspector. Stop only the
 servers and fixtures you started.

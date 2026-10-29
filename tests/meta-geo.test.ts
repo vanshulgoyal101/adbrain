@@ -44,6 +44,16 @@ describe("pickBestGeoMatch", () => {
     expect(pickBestGeoMatch([], "Jaipur")).toBeNull();
   });
 
+  it("with a country, a bare name that only matches abroad isn't a match (#1555)", () => {
+    expect(pickBestGeoMatch([jaipurUs], "Jaipur", "IN")).toBeNull();
+    expect(pickBestGeoMatch([jaipurUs], "Jaipur")).toEqual(jaipurUs);
+  });
+
+  it("with a country, an in-country place wins over an exact name abroad (#1555)", () => {
+    const pinkCity: GeoSearchResult = { ...jaipurCity, name: "Jaipur, India" };
+    expect(pickBestGeoMatch([jaipurUs, pinkCity], "Jaipur", "IN")).toEqual(pinkCity);
+  });
+
   it("prefers a city over a same-name region", () => {
     const best = pickBestGeoMatch([jaipurRegion, jaipurCity], "Jaipur");
     expect(best?.type).toBe("city");

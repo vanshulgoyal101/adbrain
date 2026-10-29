@@ -18,6 +18,11 @@ export type Segment = {
   angles: string[];
   /** Pre-typed in the WhatsApp button. */
   whatsappText: string;
+  /** #1944 (CPO #1937): measured results to show, or an invitation to be among the first when we have none. */
+  proof?: { heading: string; body: string; smallPrint: string; hinglish: string };
+  firstThree?: string;
+  /** #1632: real sample ads (4:5) from /ideas, shown marked "Sample". Without them, step 2 lists the angles in words. */
+  tiles?: { src: string; alt: string; caption: string }[];
 };
 
 export const SEGMENTS: Segment[] = [
@@ -31,7 +36,20 @@ export const SEGMENTS: Segment[] = [
     welcome: "Thanks for messaging us! Tell us your area and your monthly bill, and we'll book your free site survey.",
     ask: "I'd like a free site survey",
     angles: ["Your free site survey, up front", "Lower power bills, in your customers' words", "Subsidy help, if you're a registered PM Surya Ghar vendor"],
+    tiles: [
+      { src: "/ideas/rooftop-solar-1.webp", alt: "Sample ad: Free solar site survey in Jaipur", caption: "A free site survey, up front" },
+      { src: "/ideas/rooftop-solar-2.webp", alt: "Sample ad: Tired of rising power bills?", caption: "Lower power bills" },
+      { src: "/ideas/rooftop-solar-3.webp", alt: "Sample ad: Survey first, quote later", caption: "Survey first, quote later" },
+    ],
     whatsappText: "Hi, I saw AdBrain for solar installers. I'd like to try the free first campaign.",
+    // Exactly as measured (#157 ₹820 → 5 chats, #499 ₹374 → 1); no per-chat headline (n = 6). Shown once the CEO OKs
+    // naming Solaride publicly (#1937): SHOW_SOLARIDE_PROOF in the page.
+    proof: {
+      heading: "What our own solar business got",
+      body: "Solaride, our rooftop solar business in Tricity, ran its first WhatsApp ads with AdBrain in October 2026: 6 WhatsApp chats for about ₹1,200 across two short runs. That's one business and a small number, so it isn't a promise. Your first run will show yours.",
+      smallPrint: "Ad spend paid to Meta. Numbers from Meta's reports, October 2026.",
+      hinglish: "Humare apne solar business ne pehle ads se ~₹1,200 mein 6 WhatsApp chats paaye. Yeh vaada nahi; aapke results aapke pehle run se dikhenge.",
+    },
   },
   {
     slug: "ielts",
@@ -44,6 +62,7 @@ export const SEGMENTS: Segment[] = [
     ask: "I'd like to book a free demo class",
     angles: ["A free demo class, up front", "Your next batch dates and timings", "Small batches and mock tests"],
     whatsappText: "Hi, I saw AdBrain for IELTS coaching. I'd like to try the free first campaign.",
+    firstThree: "Be one of the first 3 IELTS and study-abroad centres in Tricity to try it. We'll share your results with you, and with others only if you say yes.",
   },
   {
     slug: "interiors",
@@ -56,6 +75,7 @@ export const SEGMENTS: Segment[] = [
     ask: "I'd like a free design consultation",
     angles: ["A free consultation or site visit, up front", "Your real finished work", "Modular kitchens and wardrobes, in your area"],
     whatsappText: "Hi, I saw AdBrain for interior designers. I'd like to try the free first campaign.",
+    firstThree: "Be one of the first 3 interior designers in Tricity to try it. We'll share your results with you, and with others only if you say yes.",
   },
 ];
 

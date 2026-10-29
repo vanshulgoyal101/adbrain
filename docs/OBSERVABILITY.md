@@ -20,7 +20,7 @@ For an incident, first identify deployment SHA, environment, safe request ID and
 authorized account scope. Search one bounded time window, then compare the durable
 operation/usage record and authorized provider evidence where necessary. Never
 replay a paid operation just to manufacture a missing log. See
-[Operations](OPERATIONS.md#first-response) for recovery decisions.
+[Operations](operations/README.md#first-response) for recovery decisions.
 
 Implementation owners: [event schema](../src/lib/observability/events.ts),
 [request context](../src/lib/observability/context.ts),
