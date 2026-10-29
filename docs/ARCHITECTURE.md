@@ -299,7 +299,8 @@ suite; [Testing](TESTING.md) owns execution commands and environment isolation.
 
 ## Multi-Channel Architecture (ADR-001, #1792)
 
-**Status:** proposed (CTO, Oct 29). Needs the CEO's approval and the Reviewer's review before Phase 1 starts.
+**Status:** proposed (CTO, Oct 29). The Reviewer's eight conditions are incorporated below;
+the CEO's approval is still required before Phase 1 starts.
 
 ### Context
 
@@ -370,19 +371,19 @@ export interface ChannelAdapter {
   readonly channel: Channel;
   capabilities(ctx: ChannelContext): Promise<ChannelCapabilities>;
   connect: ConnectFlow;                                   // OAuth/discovery/selection; channel-specific steps behind one flow
-  validate(ctx, plan: LaunchPlan): Promise<Validation>;   // dry run: geo, audience, assets, funding, policy
-  launch(ctx, plan: LaunchPlan): Promise<WriteOutcome<LaunchedCampaign>>; // always paused
-  activate(ctx, ref: ExternalRef, cap: SpendCap): Promise<WriteOutcome<void>>;
-  pause(ctx, ref: ExternalRef, scope?: "campaign" | "ad"): Promise<WriteOutcome<void>>;
-  editBudget(ctx, ref, budget: Budget): Promise<WriteOutcome<void>>;
-  editAudience(ctx, ref, audience: AudienceIntent): Promise<WriteOutcome<AudienceEdit>>; // copy-and-switch hidden inside
-  editCreative(ctx, ref, creative: CreativeVersion): Promise<WriteOutcome<void>>;
-  syncStatus(ctx, refs: ExternalRef[]): Promise<CampaignState[]>;   // delivery, review, rejection reasons
-  fetchResults(ctx, ref, period: Period): Promise<ResultSnapshot>; // normalised metrics
-  syncLeads(ctx, cursor?: string): Promise<LeadPage>;
-  enforceSpendCap(ctx, ref, cap: SpendCap): Promise<WriteOutcome<void>>;
-  cleanup(ctx, refs: ExternalRef[]): Promise<WriteOutcome<void>>;
-  revoke(ctx): Promise<void>;                             // best effort, never blocks disconnect (#1649)
+  validate(ctx: ChannelContext, plan: LaunchPlan): Promise<Validation>; // dry run only
+  launch(ctx: WriteContext, plan: LaunchPlan): Promise<WriteOutcome<LaunchedCampaign>>; // always paused
+  activate(ctx: WriteContext, ref: ExternalRef, cap: SpendCap): Promise<WriteOutcome<void>>;
+  pause(ctx: WriteContext, ref: ExternalRef, scope?: "campaign" | "ad"): Promise<WriteOutcome<void>>;
+  editBudget(ctx: WriteContext, ref: ExternalRef, budget: Budget): Promise<WriteOutcome<void>>;
+  editAudience(ctx: WriteContext, ref: ExternalRef, audience: AudienceIntent): Promise<WriteOutcome<AudienceEdit>>;
+  editCreative(ctx: WriteContext, ref: ExternalRef, creative: CreativeVersion): Promise<WriteOutcome<void>>;
+  syncStatus(ctx: ChannelContext, refs: ExternalRef[]): Promise<CampaignState[]>;
+  fetchResults(ctx: ChannelContext, ref: ExternalRef, period: Period): Promise<ResultSnapshot>;
+  syncLeads(ctx: ChannelContext, cursor?: string): Promise<LeadPage>;
+  enforceSpendCap(ctx: WriteContext, ref: ExternalRef, cap: SpendCap): Promise<WriteOutcome<void>>;
+  cleanup(ctx: WriteContext, refs: ExternalRef[]): Promise<WriteOutcome<void>>;
+  revoke(ctx: WriteContext): Promise<void>; // best effort, never blocks disconnect (#1649)
 }
 ```
 
@@ -463,6 +464,20 @@ before more slices land.
   never a second copy.
 - Recorded core tests stay byte-for-byte; a slice that needs a fixture change is not behaviour-preserving.
 - No new code may add to the boundary baseline once Phase 1 lands.
+
+### Provider access prerequisites
+
+- **Meta:** #1838's rate-limit handling precedes pilot scale. Limited access has a
+  60-point/five-minute account budget (writes cost three points); parallel campaign
+  builds must share that budget, not each assume it is theirs. Dev 2 includes Ads
+  Management Standard Access in #156's App Review work; Full Access requires the
+  documented recent-call threshold as well as review. Do not generate calls just
+  to qualify.
+- **Google:** #1826 supplies the Phase 5 access evidence. Developer tokens were
+  sunset; access belongs to the OAuth client's Cloud project. Start the spike at
+  **Test** access against test accounts, with no customer launch or production
+  credentials. Explorer/Basic access and Cloud brand verification are separate
+  prerequisites owned by DevOps if a production-account read becomes necessary.
 
 ### Risks
 
