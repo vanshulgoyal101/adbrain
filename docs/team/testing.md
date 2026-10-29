@@ -5,7 +5,7 @@ Part of [Team](README.md). Database, browser, paid and documentation checks: [Ve
 Tests prove only the conditions they exercise. Keep local unit evidence, database
 transaction tests, browser fixtures, hosted CI, live provider checks, and production
 deployment receipts separate. Current run counts belong in the PR
-or issue, not setup promises. Start with [Quick Start](../QUICK_START.md).
+or issue, not setup promises. Start with [Quick Start](quick-start.md).
 
 ## Isolation First
 

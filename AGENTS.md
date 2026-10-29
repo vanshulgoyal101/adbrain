@@ -44,7 +44,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 	2. stop a chat doing something harmful or obsolete right now (P0), with `steer`.
 	Never stack messages; replace or cancel a pending one. **Never end a turn
 	silently:** before stopping, run your waiter or post `→ <Role>` for what's next.
-- Read [docs/ORCHESTRATION.md](docs/ORCHESTRATION.md) before editing or using
+- Read [docs/team/orchestration.md](docs/team/orchestration.md) before editing or using
 	shared resources: read Current Dispatch, then your GitHub label queue
 	(`gh issue list -l core -l owner:<you>`), not historical receipts. When an issue
 	is done, hand it off by label and start the next one without waiting.
@@ -186,7 +186,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 | CI and workflows | ci, workflow, actions, scheduler, cron | github-actions-hardening, ci-merge-throughput |
 | QA walks and live checks | walk, verify, live check, qa, screenshot | playwright-cli, rendered-ui-evidence |
 | Coordination | queue, handoff, worker, orchestration, roles, skills | multi-worker-delivery, dispatching-parallel-agents |
-- They are advice: this file and `docs/ORCHESTRATION.md` win on any conflict.
+- They are advice: this file and `docs/team/orchestration.md` win on any conflict.
 	"Your human partner" means the issue's owner (the CTO for technical calls, the
 	CEO for priority and money); decide and note it on the issue, never ask the
 	owner directly. Plans and review scratch stay out of git (`.superpowers/` is

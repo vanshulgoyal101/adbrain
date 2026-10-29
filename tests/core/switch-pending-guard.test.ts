@@ -25,6 +25,7 @@ const OTHER_WRITERS: Record<string, string> = {
   createLeadCampaign: "launch builds a new campaign; no copy can wait on it yet",
   uploadAdImage: "the ad account's image library, not the live tree",
   uploadAdImageBytes: "the ad account's image library, not the live tree",
+  startAdVideo: "the ad account's video library, not the live tree",
   deleteObject: "deletes a draft or a failed launch",
   switchAdSet: "the switch itself",
   deleteAdSetCopy: "cancels or cleans up the waiting copy",
@@ -35,6 +36,7 @@ const OTHER_WRITERS: Record<string, string> = {
 };
 
 const READS = new Set([
+  "readAdVideo",
   "getPageAccessToken", "getPageInstagramId", "getWhatsAppNumber", "setupReads", "whatsappNumbers", "listLeadForms", "readActiveLeadForm",
   "listLeadFormsPage", "listLeadsForForm", "listLeadsForFormPage", "searchGeoLocations", "serviceAreaExclusionsFor",
   "resolveGeoTargeting", "resolveAudienceInterests", "listCampaigns", "listCampaignsPage", "readBoundCampaign",

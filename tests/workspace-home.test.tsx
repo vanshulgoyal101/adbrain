@@ -27,6 +27,8 @@ const queries = vi.hoisted(() => ({
   businessLLMUsageSummary: vi.fn(),
 }));
 vi.mock("@/lib/supabase/queries", () => queries);
+// #1668: the "last week" card has its own tests; here it reads nothing.
+vi.mock("@/lib/home/week-summary-load", () => ({ loadWeekSummary: async () => null }));
 // #1650: the day-7 question's facts (exempt, first Go live, earlier answers); hidden unless a test opens it.
 const pilot = vi.hoisted(() => ({ facts: vi.fn(async (): Promise<{ exempt: boolean; firstLaunchAt: string | null; events: { name: string; created_at: string }[] }> => ({ exempt: true, firstLaunchAt: null, events: [] })) }));
 vi.mock("@/lib/feedback/pilot-day7-store", () => ({ pilotDay7Facts: pilot.facts }));

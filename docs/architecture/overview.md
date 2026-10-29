@@ -1,0 +1,171 @@
+# Architecture
+
+Part of [Architecture](README.md). [Overview and data flows](overview.md) · [Boundaries and where to change](overview-boundaries.md).
+
+Use this guide to locate the owner of a request, diagnose interrupted work, or
+change a workflow without bypassing its authorization and persistence checks.
+[API Reference](../api/README.md) owns wire contracts, [Data Model](data-model.md)
+owns tables/migrations, and [Features](../product/README.md) owns the customer workflow.
+
+### Source and Release Scope
+
+Reviewed against development commit `672eb132ad57bb3ba31f118afaffddaa878b4923`
+on September 26, 2026. The SDK/query release (PR #36)
+recorded production commit `6291dc2d2691bfc8a235b2aa1b103f119b26b83e`.
+These are deliberately different baselines:
+
+| Layer | What this guide can establish |
+| --- | --- |
+| Released SDK/query integration | AI SDK adapters and the scoped TanStack campaign-list hook shipped in PR #36; the receipt describes the bounded deployed checks |
+| Current development source | Includes DB integrity/trusted-write changes and test-payment work excluded from that release; source presence does not establish applied production migrations |
+| Enquiry candidates | [#34 / PR #37](https://github.com/vanshulgoyal101/adbrain/pull/37) adds resumable import; [#35 / PR #38](https://github.com/vanshulgoyal101/adbrain/pull/38) adds saved follow-up/listing. Neither is part of this baseline or the cited production release |
+
+Use [Meta Connection](channels/meta-connect.md#lead-import-and-follow-up) for the candidate
+boundary and concrete migration handoff. Documentation is not deployment approval.
+
+## System Overview
+
+```mermaid
+flowchart LR
+  Browser[Workspace browser] --> Next[Next.js pages, actions, routes]
+  Browser --> Auth[Supabase Auth]
+  Browser --> Storage[Supabase Storage]
+  Next --> Session[Session client and owner checks]
+  Session --> DB[(Postgres and RLS)]
+  Next --> Admin[Server-only admin and RPCs]
+  Admin --> DB
+  Next --> AI[Text and image providers]
+  Next --> Binding[Verified Meta connection]
+  Binding --> Meta[Meta Graph API]
+  Next --> Logs[Audit, usage, product events]
+```
+
+The browser is untrusted. RLS protects tenant queries; admin operations require
+explicit owner checks and constrained RPCs. Not all writes pass through API
+routes: brand assets and other browser Supabase interactions rely on Storage/DB
+policies. Route instrumentation therefore is not a complete mutation ledger.
+
+## Repository Map
+
+| Location | Responsibility |
+| --- | --- |
+| [app](../../src/app/) | Public pages, authenticated `(app)` pages, auth completion, API handlers |
+| [components](../../src/components/) | Interactive workspace and shared UI primitives |
+| [proxy](../../src/proxy.ts) | Session refresh/request guard entry point; sends signed-in owners from the static homepage to `/dashboard` (#1376) |
+| [Supabase](../../src/lib/supabase/) | Session/admin clients, query ownership and aggregation |
+| [creative](../../src/lib/creative/) | Interview, guarded generation, design, raster persistence, receipts |
+| [LLM](../../src/lib/llm/) | Application facade owns routing/key cooldown/cache/accounting; AI SDK adapters own text transport and schema output |
+| [image generation](../../src/lib/imageGen/) | Provider adapters and bounded raster validation |
+| [campaign](../../src/lib/campaign/) | Drafts, planner, preflight, operations, targeting, activation, spend, reports |
+| [Meta](../../src/lib/meta/) | OAuth, encrypted tokens, discovery, capability checks, verified provider access |
+| [Meta UI client](../../src/lib/meta-connect-ui/) | Typed transport, query-owned campaign display reads, preparation cancellation and browser recovery; not mutation authority |
+| [security](../../src/lib/security/) | Outbound network policy, shared limits, headers |
+| [observability](../../src/lib/observability/) | Request context, structured events, post-response persistence |
+| [database](../../db/) | Fresh schema and incremental migrations |
+| [tests](../../tests/), [e2e](../../e2e/) | Unit/component contracts and browser scenarios |
+| [scripts](../../scripts/) | Local verification and explicitly guarded operational tools |
+
+Next.js 16 differs from earlier framework versions: read the installed
+`node_modules/next/dist/docs/` guidance before changing routing, proxy, or async
+request APIs. Route parameters are promises in this codebase. Do not replace
+current patterns with older framework recipes without checking them.
+
+## Identity and Tenant Ownership
+
+1. Supabase Auth provides the session; server handlers verify `getUser()` rather
+  than treating browser IDs or cached page data as authorization.
+2. [Queries](../../src/lib/supabase/queries.ts) resolve the primary owned workspace.
+  Session-scoped queries still require DB/Storage policies; hidden UI is no policy.
+3. [Connection access](../../src/lib/meta/connection-access.ts) authenticates ownership
+  and issues an opaque branded `AuthorizedBusiness` context. A caller cannot gain
+  provider authority by constructing a plain business-ID object.
+4. `withMetaConnection` checks authorization, purpose capability, optional expected
+  generation/binding, then rereads the token binding before decrypting credentials.
+  Pause/delete require the campaign's original binding and generation; they do not
+  need an activation capability, but still need management permission.
+  A **managed** business (2-Tier child under AdBrain's parent business, #518) has a
+  `managed_meta_accounts` row instead (#519). With `MANAGED_ACCOUNTS_ENABLED`, its calls use
+  that row's child ad account and Page with the child's own system-user token (`manager_token_id`,
+  read with `meta_token_get` for that business only, #624), through the same generation, binding and
+  capability checks. A missing, revoked, expired or unreadable child token fails closed
+  (`UNAVAILABLE`, no Meta call); it never falls back to the parent token
+  (`META_PARENT_SYSTEM_TOKEN`, provisioning and re-mint only) or an OAuth connection. Reads, pause and delete work whenever the ad account
+  and Page exist (any state, so spend can always be stopped); paused creation needs `state =
+  ready`, and activation also needs `funding_state` `card_attached` or `invoiced` and a current
+  Meta spending limit with room on the child account (`managedSpendCapGate`, #522). The ledger's ad
+  account can't change once set, so its generation is 1 unless the ledger adds one; a Page change
+  is caught by campaign bindings. A contract test pins these columns and values to #519's
+  migration. Businesses without a managed row stay on their OAuth connection
+  ([managed-account.ts](../../src/lib/meta/managed-account.ts), #525).
+5. Admin clients bypass RLS. Each trusted-write/RPC boundary must therefore enforce
+  its own actor, tenant and concurrency conditions. Development DB-A callers depend
+  on their corresponding migration grants/functions being installed.
+
+The development identity fallback is intentionally separate from real API auth.
+Global Meta environment credentials do not authorize a customer's publishing
+action. A business ID supplied by a client is never proof of ownership.
+
+## Creative Data Flow
+
+Brand + active instructions + goal/history -> bounded interview -> editable
+brief -> per-angle concept/copy and image generation -> raster/design persistence
+-> draft creative rows -> explicit approval.
+
+The [text facade](../../src/lib/llm/index.ts) keeps provider selection, key rotation,
+cache policy and usage accounting outside the SDK. The
+[SDK adapter](../../src/lib/llm/providers/sdk.ts) performs one physical text attempt
+with SDK retries disabled. Image generation remains a separate adapter boundary;
+installing a text SDK does not route raster generation through it.
+
+Each saved variant is independent. `variant_group` connects a client-known UUID
+to recoverable rows. [Studio](../../src/components/studio.tsx) persists that identity
+before POST and reconciles GET results before offering a fresh attempt. Late
+responses may clear only their matching pending identity. This is recovery of
+saved results, not a durable generation queue, cross-tab admission lock, or
+once-only paid execution guarantee. Regeneration resets approval. See
+[AI Pipeline](ai-pipeline-variants.md#variant-generation) for partial results and costs.
+
+## Campaign Data Flow
+
+```mermaid
+sequenceDiagram
+  participant UI as Campaign UI
+  participant API as Routes
+  participant DB as Postgres
+  participant Meta as Meta API
+  UI->>API: Save draft (expectedVersion on update)
+  API->>DB: Owner-scoped versioned write
+  UI->>API: Preflight draft ID + version
+  API->>Meta: Verify form, geography, interests, capability
+  API-->>UI: Review, blockers, planHash, connection generation
+  UI->>API: Create with same review + idempotency key
+  API->>API: Recompute review and verify freshness
+  API->>DB: Claim durable operation and lease
+  API->>Meta: Create paused objects
+  API->>DB: Checkpoint external IDs and finalize local campaign
+  API-->>UI: Operation state
+  UI->>API: Separate activation with confirmation digest
+  API->>Meta: Recheck remote state, then activate
+```
+
+Three independent concurrency values matter:
+
+| Value | Guards against |
+| --- | --- |
+| Draft `version` | Another tab editing saved inputs |
+| Connection `generation` | Assets/token authorization changing during work |
+| Review `planHash` | Targeting resolution, creative content, selected assets, or budget changing since review |
+
+The creation `idempotencyKey` identifies the same intended operation. It cannot
+be reused for different inputs. Database claim/checkpoint/finish RPCs arbitrate
+competing workers. A transmitted/uncertain Meta write becomes
+`needs_reconciliation`, not an automatic replay. External-ID checkpoints are
+important even when a local campaign row has not been finalized. One exception
+(#735): if a create fails after Meta made the campaign but before any ad set, the
+client deletes that empty PAUSED campaign (sync can't import a campaign without ad
+sets); when Meta confirms, the operation is `failed` with nothing left in Meta, and
+when the delete fails it stays `needs_reconciliation`.
+
+Activation has its own digest and live verification; creation permission never
+implies permission to spend. Budget checks use the total daily commitment across
+ad sets. Targeting failures block rather than silently broaden the audience.

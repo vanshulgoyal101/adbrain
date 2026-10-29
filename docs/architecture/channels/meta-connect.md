@@ -140,7 +140,7 @@ randomized A/B testing integration. Actual remote billing remains controlled by 
 
 Draft version, attempt revision, connection generation, review hash, activation
 digest, and idempotency key are different controls. Never substitute one for
-another or recompute server hashes in an integration. See [Architecture](../../ARCHITECTURE.md).
+another or recompute server hashes in an integration. See [Architecture](../overview.md).
 
 [Activation review and PATCH](../../../src/app/api/campaigns/[id]/route.ts) verify
 stored child IDs, binding, generation, account/Page/budget and current Meta
@@ -152,7 +152,7 @@ Effective delivery/eligibility is not certified. #49 reservation remains uncerta
 when the parent request or post-request verification is ambiguous; reconcile
 before retrying. Creation idempotency does not make activation atomic with Meta.
 [Operations](../../operations/README.md) owns incident procedures and
-[Release Policy](../../RELEASING.md) owns authorization for live changes.
+[Release Policy](../../operations/releasing.md) owns authorization for live changes.
 
 ## Lead Import and Follow-Up
 

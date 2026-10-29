@@ -44,6 +44,7 @@ const ROUTES: Record<string, Entry> = {
   "campaigns/report": { kind: "session", methods: ["GET"], why: "session: RLS client (the owner's own campaigns)" },
   "campaigns/sync": { kind: "owner", methods: ["POST"] },
   "creatives/[id]/background": { kind: "session", methods: ["POST"], why: "session: business loaded through RLS before creative_regeneration_claim (#1723)" },
+  "creatives/[id]/photo-fit": { kind: "session", methods: ["GET"], why: "session: RLS client (the owner's own creative and Brand photos, #1904)" },
   "creatives/[id]/picture": { kind: "session", methods: ["POST"], why: "session: RLS client (the owner's own creative)" },
   "creatives/[id]/regenerate": { kind: "session", methods: ["POST"], why: "session: business loaded through RLS before creative_regeneration_claim (#1723)" },
   "creatives/assistant": { kind: "session", methods: ["POST"], why: "session: RLS client" },
