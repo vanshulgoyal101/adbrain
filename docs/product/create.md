@@ -80,6 +80,10 @@ and resets approval to `draft`. Approval toggles `draft`/`approved`; it does not
 change existing remote ads. Deleting a local creative is not a request to delete
 a Meta ad already created from it.
 
+Studio's Background editor offers saved Brand photos before the optional
+"Or describe an AI picture" field. Opening it does not focus that text field;
+the owner can choose a photo without first opening the phone keyboard.
+
 New creative concepts require a headline, primary text, and a separate Meta link
 description. Copy is directed toward one brief-specific argument, supported facts,
 and a clear next step rather than repeating the complete brand profile. Generation
