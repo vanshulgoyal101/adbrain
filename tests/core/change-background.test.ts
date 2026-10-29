@@ -12,7 +12,8 @@ const IMAGE_MODEL = "openai/gpt-image-2.5-flare";
 const CREATIVE = "9a7c1f52-3b8e-4d61-9f0a-2c5e8b7d4a10";
 const angle = run4.angles[0];
 const mocks = vi.hoisted(() => ({
-  claims: new Map<string, { attempt: string; state: "processing" | "unresolved" }>(),
+  claims: new Map<string, { attempt: string; state: "processing" | "unresolved" | "stale" }>(),
+  events: [] as { action: string; details?: Record<string, unknown> }[],
   updates: [] as Record<string, unknown>[],
   usage: [] as Record<string, unknown>[],
   imageStatus: 200,
@@ -26,9 +27,9 @@ vi.mock("@/lib/supabase/admin", () => ({
     rpc: async (name: string, args: { p_creative_id: string; p_attempt_id: string; p_unresolved?: boolean }) => {
       const claim = mocks.claims.get(args.p_creative_id);
       if (name === "creative_regeneration_claim") {
-        if (claim) return { data: { action: "busy", status: claim.state }, error: null };
+        if (claim && claim.state !== "stale") return { data: { action: "busy", status: claim.state }, error: null };
         mocks.claims.set(args.p_creative_id, { attempt: args.p_attempt_id, state: "processing" });
-        return { data: { action: "start" }, error: null };
+        return { data: claim ? { action: "start", tookOver: true } : { action: "start" }, error: null };
       }
       if (name === "creative_regeneration_finish") {
         if (!claim || claim.attempt !== args.p_attempt_id || claim.state !== "processing") return { data: { status: "missing" }, error: null };
@@ -85,7 +86,7 @@ vi.mock("@/lib/creative/persist", () => ({
   renderAndPersistDesign: async () => `${SUPABASE}/storage/v1/object/public/creatives/${run4.brand.id}/ad-new.png`,
 }));
 vi.mock("@/lib/security/rate-limit", () => ({ rateLimitResponse: async () => null }));
-vi.mock("@/lib/audit", () => ({ logEvent: async () => {} }));
+vi.mock("@/lib/audit", () => ({ logEvent: async (event: { action: string; details?: Record<string, unknown> }) => { mocks.events.push(event); } }));
 
 let png: string;
 let imageBodies: string[];
@@ -97,6 +98,7 @@ beforeAll(async () => {
 beforeEach(() => {
   vi.resetModules();
   mocks.claims.clear();
+  mocks.events.length = 0;
   mocks.updates.length = 0;
   mocks.usage.length = 0;
   mocks.imageStatus = 200;
@@ -145,6 +147,20 @@ async function post(instruction: unknown = "Rooftop at sunset, warm light", body
 }
 
 describe("core: change only the background on a recorded run-4 ad", () => {
+  it("logs taking over a stale claim with the attempt its spend is filed under, and nothing on a fresh claim (#2291)", async () => {
+    expect((await post()).status).toBe(200);
+    expect(mocks.events.map(({ action }) => action)).not.toContain("creative.claim_taken_over");
+    mocks.events.length = 0;
+    mocks.usage.length = 0;
+    mocks.claims.set(CREATIVE, { attempt: "killed-attempt", state: "stale" });
+    expect((await post()).status).toBe(200);
+    const takeovers = mocks.events.filter(({ action }) => action === "creative.claim_taken_over");
+    expect(takeovers).toEqual([expect.objectContaining({ entityType: "creative", entityId: CREATIVE, details: { route: "creatives.background", attemptId: expect.any(String) } })]);
+    expect(mocks.usage.length).toBeGreaterThan(0);
+    expect(mocks.usage.every(({ requestId }) => requestId === takeovers[0].details?.attemptId)).toBe(true);
+    expect(mocks.claims.size).toBe(0);
+  });
+
   it("makes one image from the owner's direction, keeps every word and approval, and records the spend", async () => {
     const res = await post();
     expect(res.status, JSON.stringify(res.body)).toBe(200);
