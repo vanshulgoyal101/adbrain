@@ -42,6 +42,6 @@ export function translator<Namespace extends keyof Messages>(locale: AppLocale, 
 export type OwnerErrorKey = keyof Messages["errors"];
 
 /** #2305: an owner-facing API error in one language; routes keep their status codes and `code` fields unchanged. */
-export function ownerErrorIn(locale: AppLocale, key: OwnerErrorKey): string {
-  return translator(locale, "errors")(key);
+export function ownerErrorIn(locale: AppLocale, key: OwnerErrorKey, values?: Record<string, string | number>): string {
+  return translator(locale, "errors")(key, values);
 }

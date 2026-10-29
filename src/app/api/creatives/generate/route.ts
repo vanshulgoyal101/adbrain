@@ -79,7 +79,7 @@ async function handleGET(req: Request) {
   } catch {
     return NextResponse.json({ error: await ownerError("checkAdsUnavailable") }, { status: 503 });
   }
-  if (intent.status === "unknown") return NextResponse.json({ error: "We couldn't find that ad request. Start again from Create." }, { status: 404 });
+  if (intent.status === "unknown") return NextResponse.json({ error: await ownerError("adRequestNotFound") }, { status: 404 });
   const expectedCount = Number(intent.expectedCount);
   if (requestedCount !== null && requestedCount !== expectedCount)
     return NextResponse.json({ error: "Generation count does not match the saved request." }, { status: 409 });
@@ -222,7 +222,7 @@ async function generate(req: Request, live?: LiveCreate) {
     .eq("id", businessId)
     .maybeSingle();
   if (!business) {
-    return NextResponse.json({ error: "We couldn't find this business. Refresh the page and try again." }, { status: 404 });
+    return NextResponse.json({ error: await ownerError("businessNotFound") }, { status: 404 });
   }
 
   const monthlyLimit = configuredMonthlyTokenLimit(user);
@@ -282,7 +282,7 @@ async function generate(req: Request, live?: LiveCreate) {
     });
     if (admissionError || !admission) return NextResponse.json({ error: await ownerError("somethingDidntAnswer") }, { status: 503 });
     if (admission.action !== "start") {
-      if (admission.action === "missing") return NextResponse.json({ error: "We couldn't find that ad request. Start again from Create." }, { status: 404 });
+      if (admission.action === "missing") return NextResponse.json({ error: await ownerError("adRequestNotFound") }, { status: 404 });
       if (admission.action === "conflict") return NextResponse.json({ error: "Generation ID was already used for different inputs." }, { status: 409 });
       if (admission.action === "quota") return NextResponse.json({ error: await ownerError("aiAllowanceUsed"), code: "LLM_MONTHLY_QUOTA_EXCEEDED" }, { status: 429 });
       return NextResponse.json({ variantGroup, status: admission.status, creatives: [], count: 0, expectedCount: count }, { status: 202 });
@@ -441,7 +441,7 @@ async function generate(req: Request, live?: LiveCreate) {
       costUsd: roundUsd(cost.text + cost.image), textCostUsd: roundUsd(cost.text), imageCostUsd: roundUsd(cost.image) } });
   if (!inserted.length)
     return NextResponse.json(
-      { error: failures[0]?.error ?? "No creatives were generated.", failures },
+      { error: failures[0]?.error ?? await ownerError("noAdsMade"), failures },
       { status: 502 },
     );
 
