@@ -64,11 +64,11 @@ describe("core: turn-on refused while a new audience waits (#1571, #1539)", () =
   it("drops New campaign to outline while a new audience waits for the owner's decision", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => Response.json({ campaigns: [], nextCursor: null })));
     const { unmount } = render(<Campaigns business={business} approved={[creative]} initialCampaigns={[campaign]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady={false} adAccountId="act_1" />);
-    expect(screen.getByRole("button", { name: "New campaign" }).className).toContain("bg-primary");
+    expect(screen.getByRole("link", { name: "New campaign" }).className).toContain("bg-primary");
     unmount();
     mocks.waiting = [{ id: "op-1", campaign_id: campaign.id, sanitized_error: null }];
     render(<Campaigns business={business} approved={[creative]} initialCampaigns={[campaign]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady={false} adAccountId="act_1" />);
-    await waitFor(() => expect(screen.getByRole("button", { name: "New campaign" }).className).not.toContain("bg-primary"));
+    await waitFor(() => expect(screen.getByRole("link", { name: "New campaign" }).className).not.toContain("bg-primary"));
   });
 
   it("control: another refusal shows its own words, not the switch line", async () => {

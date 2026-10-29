@@ -180,7 +180,10 @@ describe("Campaigns rows (#403 S5)", () => {
         initialDrafts={drafts as never} leadForms={[]} leadFormError={null} metaReady adAccountId="act_999" />);
       expect(await screen.findByRole("heading", { name: "None running" })).toBeInTheDocument();
       expect(screen.getByText("Your 2 saved drafts are below.")).toBeInTheDocument();
-      expect(screen.getAllByRole("button", { name: "New campaign" })).toHaveLength(1);
+      // #1934: the header's New campaign is the guided flow (a link); the composer is the quiet More options.
+      expect(screen.getAllByRole("link", { name: "New campaign" }).map((link) => link.getAttribute("href"))).toEqual(["/brand?again=1"]);
+      expect(screen.queryByRole("button", { name: "New campaign" })).toBeNull();
+      expect(screen.getByRole("button", { name: "More options" })).toHaveAttribute("aria-controls", "campaign-composer");
       expect(screen.queryByRole("button", { name: "More list actions" })).toBeNull();
       expect(screen.getByText("Deleted (2)").closest("details")).not.toBeNull();
     });
