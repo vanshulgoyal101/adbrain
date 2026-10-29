@@ -41,7 +41,7 @@ async function handleGET(request: Request) {
   } catch (error) {
     const code = error instanceof ConnectionAccessError ? error.code : "UNAVAILABLE";
     const status = code === "UNAUTHENTICATED" ? 401 : code === "FORBIDDEN" ? 403 : code === "NOT_FOUND" ? 404 : 503;
-    return responseError(requestId, status, code, "Saved drafts could not be loaded.", status >= 500);
+    return responseError(requestId, status, code, "We couldn't load your saved drafts. Reload the page.", status >= 500);
   }
 }
 

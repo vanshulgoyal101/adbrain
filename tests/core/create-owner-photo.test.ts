@@ -58,6 +58,34 @@ describe("core: Create uses the owner's own photo for one ad (#195)", () => {
     expect(`${variant.headline} ${variant.primaryText}`).not.toMatch(/\b(?:pictured|photo|shown|this image)\b/i);
   });
 
+  // #1901: with two owner photos, ads 1 and 2 each use a different one (newest first) and ad 3 gets an AI picture.
+  // Ad 1 replays the recorded owner-photo reply; ads 2 and 3 replay run 4's recorded concepts for their angles.
+  it("fills ads from the owner's photos first, one different photo per ad, then AI pictures", async () => {
+    const SECOND = "https://core-test.supabase.co/storage/v1/object/public/brand-assets/cedar-ridge/treatment-room.jpg";
+    const upright = await sharp({ create: { width: 40, height: 60, channels: 3, background: "#74A7FE" } }).jpeg().toBuffer();
+    const replies: Record<string, string> = Object.fromEntries(run4.angles.map((angle) => [angle.angleName, JSON.stringify(angle.concept)]));
+    replies[recorded.angleName] = recorded.response.content;
+    const sources: Record<string, unknown> = {};
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = requestUrl(input);
+      if (url === PHOTO || url === SECOND) return new Response(new Uint8Array(upright), { headers: { "content-type": "image/jpeg" } });
+      const user = JSON.parse((JSON.parse(requestBody(init)).messages as { content: string }[])[1].content);
+      sources[user.angle.name] = user.imageSource;
+      return openAIReply(replies[user.angle.name], recorded.model, recorded.response.usage);
+    }));
+    const { generateVariants } = await import("@/lib/creative/generate");
+    const failures: Record<string, string> = {};
+    const variants = await generateVariants({ brand: run4.brand, brief: run4.brief, count: 3, ownerPhotos: [PHOTO, SECOND],
+      onFailure: async (angle, error) => { failures[angle.name] = String((error as Error).message); } });
+
+    const byAngle = Object.fromEntries(variants.map((variant) => [variant.angleName, variant]));
+    expect(byAngle["Save money / value"]).toMatchObject({ ownerPhotoUrl: PHOTO, imageUrl: PHOTO });
+    expect(byAngle["Solve a pain point"]).toMatchObject({ ownerPhotoUrl: SECOND, imageUrl: SECOND });
+    expect(sources).toMatchObject({ "Save money / value": "owner_photo", "Solve a pain point": "owner_photo", "Special offer / incentive": "generated" });
+    // Ad 3 took the AI-picture path (blocked in this test), so no owner photo was reused for it.
+    expect(failures["Special offer / incentive"]).toContain("must not call the image model");
+  });
+
   it("keeps an unreadable photo from costing the ad: it falls back to a generated image", async () => {
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
       if (requestUrl(input) === PHOTO) return new Response("<html>not an image</html>", { headers: { "content-type": "text/html" } });

@@ -113,7 +113,7 @@ export function verdict(input: VerdictInput): Verdict {
       if (Number.isFinite(since) && input.now - since >= DAY_MS) {
         return { state: "not_showing_day", label: "Not showing yet", sentence: "Your ads haven't started showing after a day. Check what Meta says.", action: "meta_status" };
       }
-      return { state: "not_showing", label: "Not showing yet", sentence: "Meta is checking your ads. They usually start showing within a day.", action: null };
+      return { state: "not_showing", label: "Not showing yet", sentence: "Meta is checking your ads. This usually takes minutes to a few hours, and up to a day.", action: null };
     }
     if (!evidence) {
       return { state: "early", label: "Early days", action: null, sentence: input.results

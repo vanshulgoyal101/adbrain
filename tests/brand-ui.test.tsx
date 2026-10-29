@@ -542,7 +542,7 @@ describe("<BrandForm> autofill", () => {
     global.fetch = vi.fn().mockRejectedValue(new Error("offline")) as unknown as typeof fetch;
     render(<BrandForm business={business()} />);
     fireEvent.click(screen.getByRole("button", { name: /autofill/i }));
-    expect(await screen.findByText(/could not reach the site/i)).toBeInTheDocument();
+    expect(await screen.findByText(/We couldn't read that page/i)).toBeInTheDocument();
   });
 });
 

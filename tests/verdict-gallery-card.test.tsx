@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 // #1841 (Designer's walk of /settings/verdicts): every action a card can offer shows on the walk page, and the newer states are there.
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { VerdictGalleryCard } from "@/components/verdict-gallery-card";
 import { galleryCards } from "@/lib/campaign/verdict-gallery";
@@ -33,6 +33,19 @@ describe("walk page cards (#1841)", () => {
     unmount();
     render(<VerdictGalleryCard card={card("New audience waiting")} />);
     expect(screen.getByText("New audience ready")).toBeInTheDocument();
+  });
+
+  it("#1854: an IELTS job/visa rejection says so, and Edit the words shows the hint the editor opens with", async () => {
+    render(<VerdictGalleryCard card={card("IELTS: read as a job or visa offer")} />);
+    expect(screen.getByText(/Meta read this as a job or visa offer\. Keep it about the course/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Edit the words" }));
+    expect(screen.getByRole("status")).toHaveTextContent("Opens the words editor with: Add your licence number as the last line, e.g. 'Punjab licence no. 123'.");
+  });
+
+  it("#1854: interiors' property reading is fixed by editing the words", () => {
+    render(<VerdictGalleryCard card={card("Interiors: read as a property ad")} />);
+    expect(screen.getByText(/Meta read this as a property ad\./)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Edit the words" })).toBeInTheDocument();
   });
 
   it("one Details per card, also with a rejected ad", () => {
