@@ -171,6 +171,10 @@ limit is spent. AdBrain treats either as `CREDIT_EXHAUSTED`, not as a generic re
   (Gemini, Groq) even when the routing order (for example Create's `CREATIVE_PROVIDER_ORDER`) lists
   only OpenRouter. Free providers are added only after a credit failure; other failures behave as
   before. Usage events record `LLM_CREDIT_EXHAUSTED`.
+- **Monthly cost cap (#1717):** with `AI_MONTHLY_COST_LIMIT_USD` set, `generate`, `regenerate` and
+  `background` read the business's month-to-date AI spend (text and pictures). At or over the cap, that
+  request's pictures take the free path exactly like a parked key (notice, honest product-photo failure),
+  so one account can't drain the shared image key. Internal accounts are exempt; text keeps the token cap.
 - **Images:** a credit-exhausted OpenRouter image falls back to the free picture (Cloudflare when
   configured, then Pollinations, #1476) even when `IMAGE_PROVIDER_FALLBACK` is `none`. Neither can
   take product reference photos, so a picture made from the owner's product photos or past ads
@@ -181,7 +185,7 @@ limit is spent. AdBrain treats either as `CREDIT_EXHAUSTED`, not as a generic re
   as not charged (`providerFinalStatus: failed`); any other image failure stays `unknown`.
   The exhausted image provider is then parked for 15 minutes per server (#1422), so the rest of
   the batch and the next Creates go straight to the free picture. A Pollinations fallback joins the
-  one-at-a-time free queue. Out of credit (or parked), it waits out busy answers (402/404/429/503,
+  one-at-a-time free queue. Out of credit (or parked), or over the #1717 cost cap, it waits out busy answers (402/404/429/503,
   at least 15 s each) up to the 90 s cap, like a free account (#2189); after a one-off paid failure
   it waits out one busy answer before that ad fails.
 - **Owner message:** if the free models can't help either, Create says plainly that AdBrain's paid

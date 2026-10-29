@@ -1,4 +1,5 @@
 import { observeRoute, currentRequestId } from "@/lib/observability/logger";
+import { applyMonthlyCostCap } from "@/lib/llm/cost-cap";
 import { NextResponse } from "next/server";
 import { logEvent } from "@/lib/audit";
 import { backgroundImagePrompt, backgroundRequestSchema } from "@/lib/creative/background";
@@ -86,6 +87,8 @@ async function handlePOST(req: Request, { params }: { params: Promise<{ id: stri
     if (used >= limit)
       return NextResponse.json({ error: "This business has reached its monthly AI generation limit." }, { status: 429 });
   }
+  // #1717: over the monthly AI cost cap, the new picture is free (text keeps the token cap).
+  await applyMonthlyCostCap(business.id, user);
 
   const attemptId = currentRequestId();
   let admin: ReturnType<typeof createAdminClient>;
