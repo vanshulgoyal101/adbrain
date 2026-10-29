@@ -3,9 +3,11 @@
 // Run it in the foreground only; it gives up after --max-min (default 30), and nothing is left running.
 // It also never outlives its chat: it exits when its parent process is gone, and a second copy for
 // the same role exits at once.
-// Usage: node scripts/wait-for-work.mjs --me dev2 [--max-min 30] [--poll-sec 90] [--since <ISO time>]
+// Usage: node scripts/wait-for-work.mjs --me dev2 [--max-min 30] [--poll-sec 300] [--since <ISO time>]
 // Exit 0 = work found (printed), 3 = nothing new before --max-min, 4 = another waiter for this role
 // is already running, 5 = the chat that started it is gone.
+// #2021: every role shares one gh login's 5,000 calls/hour, so reads revalidate with ETags (304s are free),
+// a 403/429 rate limit waits for x-ratelimit-reset (or Retry-After) and retries, and polling slows when low.
 // Restart-proof (#384): on start it prints your role card, everything labelled for you with its latest
 // comment, and worktrees for your issues with uncommitted or unpushed work.
 // Work is: an item newly labelled for you; a comment on your item, addressed to you, or on an open PR
@@ -74,6 +76,84 @@ export function waitingOnMe(lastBody, m, labels = [], now = Date.now()) {
   // #1478: on a co-owned issue an un-arrowed FYI isn't every owner's turn; only one that names you is.
   if (labels.filter((l) => l.startsWith("owner:")).length > 1) return false;
   return !m.handedToOther(lastBody);
+}
+
+/**
+ * #2021: every role shares one gh login (5,000 REST calls/hour). `rate_limit` itself is free. Returns ms to wait:
+ * until the reset when the budget is spent, a slowed poll when it's low, else 0.
+ */
+export function rateBackoffMs({ remaining, reset }, pollMs, now = Date.now()) {
+  if (remaining <= 50) return Math.max(0, reset * 1000 - now) + 5_000 + Math.floor(Math.random() * 30_000);
+  if (remaining < 1_000) return pollMs * 2;
+  return 0;
+}
+
+const parseResponse = (raw) => {
+  const text = String(raw ?? "");
+  const split = text.search(/\r?\n\r?\n/);
+  const head = split < 0 ? text : text.slice(0, split);
+  const body = split < 0 ? "" : text.slice(split).replace(/^\r?\n\r?\n/, "");
+  const [statusLine, ...lines] = head.split(/\r?\n/);
+  const headers = {};
+  for (const line of lines) {
+    const at = line.indexOf(":");
+    if (at > 0) headers[line.slice(0, at).trim().toLowerCase()] = line.slice(at + 1).trim();
+  }
+  return { status: Number(statusLine.split(" ")[1]) || 0, headers, body };
+};
+
+/**
+ * #2021: a gh api client that revalidates with ETags (a 304 doesn't spend the shared budget), waits out
+ * 403/429 rate limits (x-ratelimit-reset or Retry-After) instead of crashing, and slows polling from the
+ * rate headers it already has, so it never spends a call on `rate_limit`.
+ * @param {{ request: (args: string[]) => string, sleep?: (ms: number) => Promise<void>, now?: () => number, warn?: (line: string) => void }} options
+ */
+export function createGitHubApi({
+  request,
+  sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  now = () => Date.now(),
+  warn = (line) => console.error(line),
+}) {
+  const cache = new Map();
+  let rate = null;
+  async function get(path) {
+    for (let attempt = 1; ; attempt++) {
+      const cached = cache.get(path);
+      const args = ["api", "--include", path, ...(cached ? ["-H", `If-None-Match: ${cached.etag}`] : [])];
+      let raw;
+      // gh exits nonzero on 304 and on errors; with --include the response is still on stdout.
+      try { raw = request(args); } catch (error) {
+        if (!error?.stdout) throw error;
+        raw = error.stdout;
+      }
+      const { status, headers, body } = parseResponse(raw);
+      if (headers["x-ratelimit-remaining"] !== undefined) {
+        rate = { remaining: Number(headers["x-ratelimit-remaining"]), reset: Number(headers["x-ratelimit-reset"]) || 0 };
+      }
+      if (status === 304 && cached) return cached.data;
+      if (status >= 200 && status < 300) {
+        const data = body.trim() ? JSON.parse(body) : null;
+        if (headers.etag) cache.set(path, { etag: headers.etag, data });
+        else cache.delete(path);
+        return data;
+      }
+      let message = `HTTP ${status}`;
+      try { message = JSON.parse(body).message || message; } catch { /* not JSON */ }
+      const limited = status === 429 || (status === 403 && (headers["x-ratelimit-remaining"] === "0" || headers["retry-after"] !== undefined || /rate limit/i.test(message)));
+      if (!limited) throw new Error(`${message} (HTTP ${status}, ${path})`);
+      const jitter = Math.floor(Math.random() * 30_000);
+      const retryAfter = headers["retry-after"];
+      const retryMs = retryAfter === undefined ? 0
+        : /^\d+$/.test(retryAfter) ? Number(retryAfter) * 1000 : Date.parse(retryAfter) - now();
+      const resetMs = headers["x-ratelimit-remaining"] === "0"
+        ? Number(headers["x-ratelimit-reset"]) * 1000 - now() + 5_000 : 0;
+      const hints = [retryMs, resetMs].filter((ms) => Number.isFinite(ms) && ms > 0);
+      const wait = (hints.length ? Math.max(...hints) : Math.min(60_000 * 2 ** (attempt - 1), 900_000)) + jitter;
+      warn(`GitHub rate limit (HTTP ${status}); waiting ${Math.ceil(wait / 1000)} s before retrying (#2021).`);
+      await sleep(wait);
+    }
+  }
+  return { get, pollDelay: (pollMs) => pollMs + (rate ? rateBackoffMs(rate, pollMs, now()) : 0) };
 }
 
 /**
@@ -265,7 +345,7 @@ const { values } = parseArgs({
   options: {
     me: { type: "string" },
     "max-min": { type: "string", default: "30" },
-    "poll-sec": { type: "string", default: "90" },
+    "poll-sec": { type: "string", default: "300" },
     // #573: the supervisor's read-only check; never takes the role's lock, so a chat starting its waiter isn't refused.
     probe: { type: "boolean", default: false },
     since: { type: "string" },
@@ -313,15 +393,27 @@ const repo = values.repo;
 const label = role === "ceo" ? "decision" : `owner:${role}`;
 const since = values.since ? new Date(values.since).toISOString() : new Date().toISOString();
 const deadline = Date.now() + Number(values["max-min"]) * 60_000;
-const pollMs = Math.max(15, Number(values["poll-sec"])) * 1000;
+const pollMs = Math.max(60, Number(values["poll-sec"])) * 1000;
 
 // Chats started without a login shell (e.g. VS Code after a reboot) may lack Homebrew's bin on PATH.
 const ghEnv = { ...process.env, PATH: [process.env.PATH, "/opt/homebrew/bin", "/usr/local/bin"].filter(Boolean).join(":") };
 
-function api(path) {
-  // All chats share one gh login (5,000 requests/hour): each poll makes 4–5 calls plus one per PR updated during the wait.
-  return JSON.parse(execFileSync("gh", ["api", path], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 16 * 1024 * 1024 , env: ghEnv }));
-}
+const gh = createGitHubApi({
+  request: (args) => execFileSync("gh", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 16 * 1024 * 1024, env: ghEnv }),
+  sleep: async (ms) => {
+    const until = Date.now() + ms;
+    while (Date.now() < until) {
+      exitIfOrphaned();
+      if (Date.now() >= deadline) {
+        console.error("Wait deadline reached during GitHub rate-limit backoff; retry after the reset (#2021).");
+        process.exit(3);
+      }
+      await new Promise(resolve => setTimeout(resolve, Math.min(5_000, until - Date.now(), Math.max(1, deadline - Date.now()))));
+    }
+  },
+});
+// All chats share one gh login (5,000 requests/hour, #2021): unchanged reads come back 304 and cost nothing.
+const api = (path) => gh.get(path);
 
 const owned = () => api(`repos/${repo}/issues?state=open&labels=${encodeURIComponent(label)}&per_page=100`);
 const brief = text => text.replace(/\s+/g, " ").trim().slice(0, 200);
@@ -330,7 +422,7 @@ async function firstOwned() {
   for (let attempt = 1; ; attempt++) {
     exitIfOrphaned();
     try {
-      return owned();
+      return await owned();
     } catch (error) {
       // A failed first read would make every owned item look newly labelled later.
       if (attempt >= 5) throw error;
@@ -341,24 +433,24 @@ async function firstOwned() {
 
 const startOwned = new Set((await firstOwned()).map(item => item.number));
 // CTO only: workers about to run dry (one extra call per poll). Reported at start, then only when newly low.
-const openIssues = () => api(`repos/${repo}/issues?state=open&per_page=100`).filter(item => !item.pull_request);
+const openIssues = async () => (await api(`repos/${repo}/issues?state=open&per_page=100`)).filter(item => !item.pull_request);
 const describeLow = (low) => low.map(({ role: r, count }) => `Queue low: ${NAMES[r]} has ${count} actionable item(s); refill from the CEO priorities (worker table)`);
 let startLow = new Set();
 
-function findWork() {
+async function findWork() {
   const found = [];
-  const mine = owned();
+  const mine = await owned();
   for (const item of mine) {
     if (!startOwned.has(item.number)) found.push(`#${item.number} is now labelled ${label}${withSkills(item)}: ${item.title}`);
   }
   const mineNumbers = new Set(mine.map(item => item.number));
   // A PR whose title names one of your issues is yours to watch too (QA's #309 verdict was for #274's owner).
-  const openPulls = api(`repos/${repo}/pulls?state=open&per_page=100`);
+  const openPulls = await api(`repos/${repo}/pulls?state=open&per_page=100`);
   const linkedToMine = new Set(openPulls
     .filter(pr => linkedIssues(pr.title).some(n => mineNumbers.has(n))).map(pr => pr.number));
   // Verdicts are PR reviews (#423): read reviews on PRs touched since this wait began.
   for (const pr of openPulls.filter(pr => pr.updated_at >= since)) {
-    for (const review of api(`repos/${repo}/pulls/${pr.number}/reviews?per_page=100`)) {
+    for (const review of await api(`repos/${repo}/pulls/${pr.number}/reviews?per_page=100`)) {
       const body = review.body ?? "";
       if (!body.trim() || !review.submitted_at || review.submitted_at < since || writtenByMe(body)) continue;
       if (mineNumbers.has(pr.number) || addressedToMe(body) || linkedToMine.has(pr.number)) {
@@ -368,7 +460,7 @@ function findWork() {
   }
   // One repo-wide call (newest first) instead of one call per updated issue.
   const coOwned = new Set(mine.filter(item => (item.labels ?? []).filter(l => l.name.startsWith("owner:")).length > 1).map(item => item.number));
-  for (const comment of freshComments(api(`repos/${repo}/issues/comments?since=${since}&sort=created&direction=desc&per_page=100`), since)) {
+  for (const comment of freshComments(await api(`repos/${repo}/issues/comments?since=${since}&sort=created&direction=desc&per_page=100`), since)) {
     const number = Number(comment.issue_url.split("/").pop());
     const body = comment.body ?? "";
     if (writtenByMe(body)) continue;
@@ -379,14 +471,14 @@ function findWork() {
     }
   }
   if (role === "cto") {
-    const low = lowQueues(openIssues());
+    const low = lowQueues(await openIssues());
     const lowNow = new Set(low.map(({ role: r }) => r));
     // A refilled worker leaves the known-low set, so running dry again alerts again.
     for (const r of startLow) if (!lowNow.has(r)) startLow.delete(r);
     for (const line of describeLow(low.filter(({ role: r }) => !startLow.has(r)))) found.push(line);
   }
   if (role === "cto" || role === "devops") {
-    const runs = api(`repos/${repo}/actions/runs?status=completed&created=${encodeURIComponent(`>=${since}`)}&per_page=100`).workflow_runs ?? [];
+    const runs = (await api(`repos/${repo}/actions/runs?status=completed&created=${encodeURIComponent(`>=${since}`)}&per_page=100`)).workflow_runs ?? [];
     for (const run of runs) {
       if (run.conclusion === "failure" && run.event !== "pull_request") {
         found.push(`CI failed: ${run.name} on ${run.head_branch} (${run.head_sha.slice(0, 7)}) ${run.html_url}`);
@@ -399,13 +491,13 @@ function findWork() {
 }
 
 // Items you own where the last word is someone else's (said while you were busy, or before this wait).
-function backlog() {
+async function backlog() {
   const found = [];
-  const items = owned();
+  const items = await owned();
   const snoozed = new Set();
   for (const item of items.slice(0, 20)) {
-    const comments = item.comments ? api(`repos/${repo}/issues/${item.number}/comments?per_page=100`) : [];
-    const reviews = item.pull_request ? api(`repos/${repo}/pulls/${item.number}/reviews?per_page=100`) : [];
+    const comments = item.comments ? await api(`repos/${repo}/issues/${item.number}/comments?per_page=100`) : [];
+    const reviews = item.pull_request ? await api(`repos/${repo}/pulls/${item.number}/reviews?per_page=100`) : [];
     const last = latestWord(comments, reviews);
     const due = last && writtenByMe(last.body ?? "") ? snoozedUntil(last.body) : null;
     if (due !== null && Date.now() < due) snoozed.add(item.number);
@@ -415,12 +507,12 @@ function backlog() {
   }
   // #364: nothing is waiting on you, but you still own work with no open PR: continue the oldest.
   if (!found.length) {
-    const next = nextItem(items, api(`repos/${repo}/pulls?state=open&per_page=100`), snoozed);
+    const next = nextItem(items, await api(`repos/${repo}/pulls?state=open&per_page=100`), snoozed);
     if (next) found.push(`#${next.number} is your next item${withSkills(next)}: ${next.title} (your oldest open item with no PR; continue it, ship it, or hand it off with its label)`);
   }
   // Nothing of yours is actionable: pull the next briefed item from your lane instead of idling.
   if (!found.length) {
-    for (const item of readyPool(openIssues(), role, 1)) {
+    for (const item of readyPool(await openIssues(), role, 1)) {
       found.push(`#${item.number} from the ready pool${withSkills(item)}: ${item.title}. Claim it first: gh issue edit ${item.number} --add-label owner:${role} --remove-label ready (or decline: --add-label declined:${role})`);
     }
   }
@@ -431,10 +523,10 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const card = (() => { try { return roleCard(readFileSync(join(repoRoot, "docs/ORCHESTRATION.md"), "utf8"), role); } catch { return null; } })();
 // The live priorities and queues are the pinned Team board issue (#580), edited without a PR.
 const BOARD_ISSUE = 580;
-const board = () => { try { return boardRow(api(`repos/${repo}/issues/${BOARD_ISSUE}`).body ?? "", role); } catch { return null; } };
-const report = (found) => {
+const board = async () => { try { return boardRow((await api(`repos/${repo}/issues/${BOARD_ISSUE}`)).body ?? "", role); } catch { return null; } };
+const report = async (found) => {
   if (card) console.log(`Role: ${card}`);
-  const row = board();
+  const row = await board();
   if (row) console.log(`Team board #${BOARD_ISSUE} (your queue, in order):\n${row}`);
   console.log(`WORK for ${name} (${found.length}):\n- ${found.join("\n- ")}`);
   process.exit(0);
@@ -461,13 +553,13 @@ const withSkills = (item) => {
   const skills = skillsFor(skillRows, item.title ?? "", (item.labels ?? []).map((l) => (typeof l === "string" ? l : l.name)));
   return skills.length ? ` [skills: ${skills.join(", ")}]` : "";
 };
-function startupSummary() {
+async function startupSummary() {
   if (card) console.log(`Role: ${card}`);
-  const items = owned();
+  const items = await owned();
   console.log(items.length ? `In flight for ${name} (${items.length}):` : `Nothing labelled ${label}; take the next item in your worker-table row.`);
   for (const item of items) {
-    const comments = item.comments ? api(`repos/${repo}/issues/${item.number}/comments?per_page=100`) : [];
-    const reviews = item.pull_request ? api(`repos/${repo}/pulls/${item.number}/reviews?per_page=100`) : [];
+    const comments = item.comments ? await api(`repos/${repo}/issues/${item.number}/comments?per_page=100`) : [];
+    const reviews = item.pull_request ? await api(`repos/${repo}/pulls/${item.number}/reviews?per_page=100`) : [];
     const last = latestWord(comments, reviews)?.body;
     console.log(`- ${item.pull_request ? "PR " : ""}#${item.number} ${item.title.slice(0, 70)}${withSkills(item)}${last ? ` | last: ${brief(last.split("\n")[0]).slice(0, 120)}` : " | no comments yet"}`);
   }
@@ -476,18 +568,18 @@ function startupSummary() {
 }
 
 try {
-  startupSummary();
+  await startupSummary();
 } catch (error) {
   console.error(`Start-up summary failed, continuing: ${error.message.split("\n")[0]}`);
 }
 try {
-  const waiting = backlog();
+  const waiting = await backlog();
   if (role === "cto") {
-    const low = lowQueues(openIssues());
+    const low = lowQueues(await openIssues());
     startLow = new Set(low.map(({ role: r }) => r));
     waiting.push(...describeLow(low));
   }
-  if (waiting.length) report(waiting);
+  if (waiting.length) await report(waiting);
 } catch (error) {
   console.error(`Queue check failed, continuing: ${error.message.split("\n")[0]}`);
 }
@@ -496,29 +588,29 @@ let warned = false;
 while (Date.now() < deadline) {
   exitIfOrphaned();
   try {
-    if (Date.now() >= nextDue) { nextDue = Infinity; const due = backlog(); if (due.length) report(due); }
-    const found = findWork();
-    if (found.length) report(found);
+    if (Date.now() >= nextDue) { nextDue = Infinity; const due = await backlog(); if (due.length) await report(due); }
+    const found = await findWork();
+    if (found.length) await report(found);
   } catch (error) {
     if (!warned) console.error(`gh api failed, will keep polling: ${error.message.split("\n")[0]}`);
     warned = true;
   }
-  await new Promise(resolve => setTimeout(resolve, pollMs));
+  await new Promise(resolve => setTimeout(resolve, gh.pollDelay(pollMs)));
 }
 try {
-  const waiting = backlog();
-  if (waiting.length) report(waiting);
+  const waiting = await backlog();
+  if (waiting.length) await report(waiting);
 } catch { /* fall through to the timeout */ }
 // CTO: a regular on-track review at the end of every wait (once per cycle, so it never spins).
 if (role === "cto") {
   try {
-    const recent = api(`repos/${repo}/issues/comments?since=${new Date(Date.now() - 3 * 3_600_000).toISOString()}&sort=created&direction=desc&per_page=100`);
-    const { quiet, stale } = offTrack({ issues: openIssues(), comments: recent, prs: api(`repos/${repo}/pulls?state=open&per_page=100`), now: Date.now() });
+    const recent = await api(`repos/${repo}/issues/comments?since=${new Date(Date.now() - 3 * 3_600_000).toISOString()}&sort=created&direction=desc&per_page=100`);
+    const { quiet, stale } = offTrack({ issues: await openIssues(), comments: recent, prs: await api(`repos/${repo}/pulls?state=open&per_page=100`), now: Date.now() });
     const lines = [
       ...quiet.map(({ role: r, minutes }) => `Off track? ${NAMES[r]} has queued work but no signed comment in ${minutes ?? "180+"} min: check their issue/PR and nudge or unblock`),
       ...stale.map(({ number, title, minutes }) => `Stale PR #${number} (${minutes} min untouched): ${title}`),
     ];
-    if (lines.length) report(lines);
+    if (lines.length) await report(lines);
   } catch { /* fall through */ }
 }
 console.log(`No new work for ${name} in ${values["max-min"]} min. Next: the next item in your worker-table row, then an unowned \`core\` issue in your area. Then run this waiter again; don't stop (owner, Oct 27).`);
