@@ -50,8 +50,11 @@ export class ImageProviderError extends Error {
 
 /** #1593: the owner's product photo needs the paid image model, which is out of credit or parked; no generic stand-in. */
 export class ReferencePhotoPausedError extends Error {
-  constructor() {
-    super("The product photo needs the paid image model, which is paused right now.");
+  /** `allowance`: the business used this month's AI allowance (#1717); `paused`: the shared key is out of credit. */
+  constructor(readonly reason: "paused" | "allowance" = "paused") {
+    super(reason === "allowance"
+      ? "The product photo needs the paid image model, and this month's allowance is used."
+      : "The product photo needs the paid image model, which is paused right now.");
     this.name = "ReferencePhotoPausedError";
   }
 }
