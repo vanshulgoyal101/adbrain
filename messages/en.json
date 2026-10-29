@@ -120,6 +120,7 @@
     "notShowing": "Meta is checking your ads. This usually takes minutes to a few hours, and up to a day.",
     "early": "{chats} so far. AdBrain will tell you if it's working after {min}.",
     "earlyNoChats": "No chats yet.",
+    "earlyShownNoChats": "Your ads have been shown {impressions} times so far. No chats yet; many people message in the evening.",
     "earlyNoEnquiries": "No enquiries yet.",
     "cost": "Each {chat} costs {cost}{against}.",
     "waiting": "{n, plural, one {# person is waiting for your reply.} other {# people are waiting for your reply.}}",
