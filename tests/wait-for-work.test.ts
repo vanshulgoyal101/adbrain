@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { readyPool, boardRow, systemicFailures, snoozedUntil, latestWord, linkedIssues, lowQueues, matchers, nextItem, freshComments, offTrack, rateBackoffMs, roleCard, unsavedWork, waitingOnMe } from "../scripts/wait-for-work.mjs";
+import { describe, expect, it, vi } from "vitest";
+import { createGitHubApi, readyPool, boardRow, systemicFailures, snoozedUntil, latestWord, linkedIssues, lowQueues, matchers, nextItem, freshComments, offTrack, rateBackoffMs, roleCard, unsavedWork, waitingOnMe } from "../scripts/wait-for-work.mjs";
 
 describe("PR reviews count as the latest word (#423)", () => {
   it("picks a review posted after the last comment, and ignores empty approvals", () => {
@@ -288,6 +288,83 @@ describe("waiter fixes (#1478)", () => {
 
 describe("shared GitHub budget (#2021)", () => {
   const now = Date.parse("2026-10-28T21:40:00Z");
+  const response = (status: number, headers: Record<string, string>, body = "") =>
+    `HTTP/2.0 ${status}\r\n${Object.entries(headers).map(([k, v]) => `${k}: ${v}\r\n`).join("")}\r\n${body}`;
+
+  it("revalidates each URL with its ETag and reuses the body only on 304", async () => {
+    const request = vi.fn()
+      .mockReturnValueOnce(response(200, { ETag: '"one"' }, '[{"number":2021}]'))
+      .mockReturnValueOnce(response(200, { ETag: '"other"' }, "[]"))
+      .mockReturnValueOnce(response(304, {}))
+      .mockReturnValueOnce(response(200, { ETag: '"two"' }, '[{"number":2022}]'))
+      .mockReturnValueOnce(response(304, {}));
+    const client = createGitHubApi({ request });
+    expect(await client.get("issues")).toEqual([{ number: 2021 }]);
+    expect(await client.get("pulls")).toEqual([]);
+    expect(await client.get("issues")).toEqual([{ number: 2021 }]);
+    expect(await client.get("issues")).toEqual([{ number: 2022 }]);
+    expect(await client.get("issues")).toEqual([{ number: 2022 }]);
+    expect(request.mock.calls).toEqual([
+      [["api", "--include", "issues"]],
+      [["api", "--include", "pulls"]],
+      [["api", "--include", "issues", "-H", 'If-None-Match: "one"']],
+      [["api", "--include", "issues", "-H", 'If-None-Match: "one"']],
+      [["api", "--include", "issues", "-H", 'If-None-Match: "two"']],
+    ]);
+  });
+
+  it.each([403, 429])("retries HTTP %i after x-ratelimit-reset, including gh's nonzero exit", async (status) => {
+    let clock = now;
+    const failure = Object.assign(new Error("gh failed"), {
+      stdout: response(status, { "x-ratelimit-remaining": "0", "x-ratelimit-reset": String(now / 1000 + 120) }, '{"message":"API rate limit exceeded"}'),
+    });
+    const request = vi.fn().mockImplementationOnce(() => { throw failure; })
+      .mockImplementation(() => {
+        expect(clock).toBeGreaterThanOrEqual(now + 125_000);
+        return response(200, {}, '[{"number":2021}]');
+      });
+    const sleep = vi.fn(async (ms: number) => { clock += ms; });
+    const warn = vi.fn();
+    const client = createGitHubApi({ request, sleep, now: () => clock, warn });
+    expect(await client.get("issues")).toEqual([{ number: 2021 }]);
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("rate limit"));
+  });
+
+  it("honours Retry-After for secondary limits and backs off when headers are missing", async () => {
+    let clock = now;
+    const request = vi.fn()
+      .mockReturnValueOnce(response(429, { "Retry-After": "180" }, '{"message":"slow down"}'))
+      .mockReturnValueOnce(response(403, {}, '{"message":"secondary rate limit"}'))
+      .mockImplementation(() => {
+        expect(clock).toBeGreaterThanOrEqual(now + 240_000);
+        return response(200, {}, "[]");
+      });
+    const client = createGitHubApi({ request, sleep: async (ms: number) => { clock += ms; }, now: () => clock, warn: vi.fn() });
+    expect(await client.get("issues")).toEqual([]);
+    expect(request).toHaveBeenCalledTimes(3);
+  });
+
+  it("surfaces non-rate-limit 403s without retrying", async () => {
+    const sleep = vi.fn();
+    const client = createGitHubApi({
+      request: () => response(403, {}, '{"message":"Resource not accessible"}'),
+      sleep,
+    });
+    await expect(client.get("issues")).rejects.toThrow("Resource not accessible");
+    expect(sleep).not.toHaveBeenCalled();
+  });
+
+  it("uses response headers to slow polling without a rate_limit request", async () => {
+    const request = vi.fn().mockReturnValue(response(200, {
+      "x-ratelimit-remaining": "800", "x-ratelimit-reset": String(now / 1000 + 120),
+    }, "[]"));
+    const client = createGitHubApi({ request, now: () => now });
+    await client.get("issues");
+    expect(client.pollDelay(300_000)).toBe(900_000);
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
   it("waits for the reset when the budget is spent, slows down when it's low, else adds nothing", () => {
     const reset = now / 1000 + 120;
     const spent = rateBackoffMs({ remaining: 0, reset }, 90_000, now);
