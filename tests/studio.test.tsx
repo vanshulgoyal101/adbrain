@@ -993,6 +993,8 @@ describe("<Studio> review board", () => {
     expect(second).toHaveAttribute("aria-pressed", "true");
     expect(within(screen.getByRole("region", { name: "Ad details" })).getByText("First concept copy.")).toBeInTheDocument();
 
+    // #1287: 44 px tap target on phones (it was 40).
+    expect(screen.getByRole("searchbox", { name: "Search ads" })).toHaveClass("h-11");
     await user.type(screen.getByRole("searchbox", { name: "Search ads" }), "Second concept copy.");
     expect(first).toHaveAttribute("aria-pressed", "true");
     expect(board.getAllByRole("button", { name: "Same offer Needs review" })).toHaveLength(1);

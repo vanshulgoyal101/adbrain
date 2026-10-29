@@ -144,6 +144,21 @@
       "againTitle": "What's new this time?",
       "sameAsLast": "Same as last time: {summary}.",
       "change": "Change",
+      "proof": {
+        "label": "Why do customers pick you? (optional)",
+        "placeholder": "e.g. Same-day visits in Mohali",
+        "fillBlanks": "Fill in each blank, using only what is true for your business.",
+        "chips": {
+          "solarTeam": "Our own installation team, no subcontractors",
+          "solarHomes": "'{n}' homes installed in '{area}'",
+          "ieltsSize": "Batches of at most '{n}' students",
+          "ieltsMock": "A full mock test every '{week/fortnight}'",
+          "ieltsEvening": "Evening batches for working students",
+          "interiorsDesign": "3D design before you pay",
+          "interiorsWorkshop": "Our own workshop in '{area}'",
+          "interiorsKitchens": "'{n}' kitchens finished in '{area}'"
+        }
+      },
       "fields": {
         "name": {
           "label": "Business name",

@@ -18,4 +18,20 @@ describe("advisors gate (#359)", () => {
   it("gives every accepted finding a reason", () => {
     for (const reason of Object.values(ACCEPTED)) expect(reason.length).toBeGreaterThan(10);
   });
+
+  it("accepts the owner-checked alert RPC warnings without blocking unrelated migrations", () => {
+    expect(newFindings([
+      lint("WARN", "authenticated_security_definer_function_executable", "public", "owner_alert_prefs_set"),
+      lint("WARN", "authenticated_security_definer_function_executable", "public", "owner_alert_start_verification"),
+    ])).toEqual([]);
+  });
+
+  it("still blocks unreviewed roles, schemas and alert RPCs", () => {
+    const findings = [
+      lint("WARN", "anon_security_definer_function_executable", "public", "owner_alert_prefs_set"),
+      lint("WARN", "authenticated_security_definer_function_executable", "private", "owner_alert_prefs_set"),
+      lint("WARN", "authenticated_security_definer_function_executable", "public", "owner_alert_confirm"),
+    ];
+    expect(newFindings(findings)).toEqual(findings);
+  });
 });
