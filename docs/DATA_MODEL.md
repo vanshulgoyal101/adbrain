@@ -113,7 +113,7 @@ even to the service role; the service-only `operator_funded` and
 `operator_funding_set` RPCs read and change them (operator grant required). The
 campaign guard lets such a business save `active` without a reservation. Source inclusion alone
 does not prove a target migration was applied. See the
-[allowance API](API_REFERENCE.md#customer-advertising-allowance) for admission
+[allowance API](api/payments.md#customer-advertising-allowance) for admission
 and recovery limitations.
 
 ## Table Dictionary
@@ -293,7 +293,7 @@ that usage plus 10,000 units per saved image; runs with unknown usage stay
 `unresolved` with their full hold. An unknown owner recovery lookup claims a
 zero-quota `abandoned` ID under the same lock, preventing a delayed POST from
 starting after the client receives a 404. This is a conservative quota fence, **not** a
-payment ledger or provider cost reconciliation. The [API contract](API_REFERENCE.md#generate-and-recover)
+payment ledger or provider cost reconciliation. The [API contract](api/creatives.md#generate-and-recover)
 defines the client-visible recovery states.
 
 The [operator reconciliation migration](../db/migrations/20260930_creative_generation_reconcile.sql)
@@ -357,7 +357,7 @@ Test order/event tables deny direct access even to the service role; only the
 `razorpay_test_order_*` RPCs reach them. Test order states are `creating`,
 `created`, `captured` and `needs_reconciliation`. A capture is not Meta funding
 or spendable credit, and installing the tables does not enable checkout; see
-[local test payments](API_REFERENCE.md#local-test-payments).
+[local test payments](api/payments.md#local-test-payments).
 
 ## RPC Ownership Boundaries
 

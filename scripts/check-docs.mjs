@@ -109,8 +109,8 @@ export function sourceInventory(root) {
 export const MAX_LINES = 300;
 export const TOP_LEVEL = new Set(["docs/README.md", "docs/roadmap.md"]);
 // Flat files not yet moved into docs/{product,architecture,api,operations,team}/; each move PR deletes its entries.
-export const LEGACY_FLAT = new Set(["AI_PIPELINE", "API_REFERENCE", "ARCHITECTURE", "BRAND-IDENTITY", "CONFIGURATION", "DATA_MODEL", "DEPLOY",
-  "FEATURES", "META_APPROVAL_ACTION_PLAN", "META_CONNECT", "OBSERVABILITY", "OPERATIONS", "ORCHESTRATION", "PAYMENTS-PLAN", "QUICK_START",
+export const LEGACY_FLAT = new Set(["AI_PIPELINE", "ARCHITECTURE", "BRAND-IDENTITY", "CONFIGURATION", "DATA_MODEL", "DEPLOY",
+  "META_APPROVAL_ACTION_PLAN", "META_CONNECT", "OBSERVABILITY", "OPERATIONS", "ORCHESTRATION", "PAYMENTS-PLAN", "QUICK_START",
   "RELEASING", "ROADMAP", "TESTING"].map(name => `docs/${name}.md`));
 const CODE_DIRS = ["src", "scripts", "db", ".github"];
 const CODE_FILES = ["AGENTS.md", ".env.example", "package.json"];
@@ -123,6 +123,7 @@ export function routeRows(text) {
 
 export function checkDocumentation(root, options = {}) {
   root = resolve(root);
+  const legacyFlat = options.legacyFlat ?? LEGACY_FLAT;
   const moduleReadmes = walk(resolve(root, "src")).filter(file => file.endsWith(`${sep}README.md`));
   const files = [...["README.md", "AGENTS.md"].map(file => resolve(root, file)).filter(existsSync), ...walk(resolve(root, "docs")).filter(file => file.endsWith(".md")), ...moduleReadmes];
   const inventory = files.map(path => ({ file: relative(root, path).split(sep).join("/"), role: classification(relative(root, path).split(sep).join("/")) }));
@@ -208,8 +209,8 @@ export function checkDocumentation(root, options = {}) {
   // Shape: short pages, an index per folder that links each page, nothing new loose in docs/.
   for (const file of docFiles) {
     const lines = textOf(file).split("\n").length - 1;
-    if (lines > MAX_LINES && !LEGACY_FLAT.has(file)) fail(file, MAX_LINES + 1, `Page has ${lines} lines; split it (limit ${MAX_LINES})`);
-    if (!file.slice("docs/".length).includes("/") && !TOP_LEVEL.has(file) && !LEGACY_FLAT.has(file)) fail(file, 1, "Put pages in a docs/ subfolder (product, architecture, api, operations, team)");
+    if (lines > MAX_LINES && !legacyFlat.has(file)) fail(file, MAX_LINES + 1, `Page has ${lines} lines; split it (limit ${MAX_LINES})`);
+    if (!file.slice("docs/".length).includes("/") && !TOP_LEVEL.has(file) && !legacyFlat.has(file)) fail(file, 1, "Put pages in a docs/ subfolder (product, architecture, api, operations, team)");
   }
   const folders = new Set([...docFiles.length ? ["docs/"] : [], ...docFiles.map(file => file.slice(0, file.lastIndexOf("/") + 1))]);
   for (const folder of [...folders].filter(folder => folder !== "docs/")) {
