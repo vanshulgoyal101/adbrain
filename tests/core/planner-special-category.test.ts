@@ -58,4 +58,21 @@ describe("core: an interiors or 'EMI available' offer never becomes a special ca
     expect(effectiveSpecialCategory("issues_elections_politics", interiors)).toBe("issues_elections_politics");
     expect(draft("financial_products_services").ok).toBe(false);
   });
+
+  // QA at 255e5e5: the planner's label is the judgement, so only a business plainly outside the category is demoted.
+  it.each([
+    ...["Financial advisor", "Wealth management", "Microfinance", "Chit fund", "Nidhi company", "Share trading academy",
+      "Loan DSA", "Mutual fund distributor", "Insurance agent", "Gold loan", "Stock market classes"]
+      .map((vertical) => ["financial_products_services", vertical] as const),
+    ...["Realtor", "Estate agent", "Land dealer", "Township project", "Paying guest", "Real estate agent", "Property dealer", "Residential colony"]
+      .map((vertical) => ["housing", vertical] as const),
+  ])("keeps %s for a '%s'", (category, vertical) => {
+    expect(effectiveSpecialCategory(category, { vertical, offers: [] })).toBe(category);
+  });
+
+  it("an offer selling a financial product keeps the block; how customers pay doesn't", () => {
+    expect(effectiveSpecialCategory("financial_products_services", { vertical: "Tax consultant", offers: ["Start a SIP in mutual funds"] })).toBe("financial_products_services");
+    expect(effectiveSpecialCategory("financial_products_services", { vertical: "Rooftop solar", offers: ["Solar loan in 48 hours"] })).toBe("financial_products_services");
+    expect(effectiveSpecialCategory("financial_products_services", { vertical: "Solar", offers: ["EMI on credit cards", "HDFC Bank EMI"] })).toBe("none");
+  });
 });

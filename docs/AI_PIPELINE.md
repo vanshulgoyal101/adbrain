@@ -111,8 +111,10 @@ A planner label of housing or financial products is read as none unless the busi
 itself lends, insures or sells property, and employment is read as none for an education
 business that doesn't recruit, so a shop's 'EMI available' or an interiors offer never
 blocks a launch; a lender, property seller or recruiter keeps the block (#1671).
-Lending and property checks use the business vertical, not offers mentioning its
-bank, credit-card EMI or flat interiors. Education terms match whole words;
+Lending and property checks use the business vertical (advisers, wealth, chit funds,
+trading, realtors, land and townships count), not offers mentioning its bank,
+credit-card EMI or flat interiors; an offer selling a loan, insurance, SIP or
+investment keeps the financial block. Education terms match whole words;
 recruiting in either the vertical or offers keeps the employment block. A missing
 or blank vertical preserves the planner's category.
 The `campaign.interview` workflow event records fixed no-progress/limit codes,

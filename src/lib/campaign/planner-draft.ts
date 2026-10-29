@@ -90,16 +90,19 @@ export function fallbackAudienceTargeting(draft: DraftInput): TargetingInputDTO 
  * financial or employment for such a business would block the whole launch, so it is read as none. A lender, an
  * insurer, a property seller or a recruiter keeps its category (and the block).
  */
-const LENDER = /\b(?:loans?|lend(?:er|ing)|credit cards?|insurance|mutual funds?|nbfc|finance compan(?:y|ies)|financial services|bank(?:ing)?|mortgages?|invest(?:ment|ing)s?|stock ?brok|forex|crypto)\b/i;
-const PROPERTY = /\b(?:real estate|propert(?:y|ies)|builders?|developers?|flats?|apartments?|plots?|villas?|rentals?|for rent|pg|hostels?|co-?living|housing)\b/i;
+const LENDER = /financ|\b(?:loans?|lend(?:er|ing)|credit cards?|insurance|mutual funds?|funds?|nbfc|bank(?:ing)?|mortgages?|invest(?:ment|ing)s?|stock ?brok(?:er|ers|ing)|stocks?|share market|trading|forex|crypto|wealth|chit|nidhi|dsa|advis(?:or|ors|ory|er|ers))\b/i;
+// Offers name a lender's products, never how a shop's customers pay: no "credit card", "bank" or "EMI" here.
+const OFFER_LENDER = /\b(?:loans?|insurance|mutual funds?|sip|investments?|policy|policies|fixed deposits?)\b/i;
+const PROPERTY = /\b(?:real estate|estate|realtors?|propert(?:y|ies)|builders?|developers?|flats?|apartments?|plots?|land|township|colon(?:y|ies)|villas?|rentals?|for rent|pg|paying guest|hostels?|co-?living|housing)\b/i;
 const RECRUITER = /\b(?:jobs?|recruit(?:er|ment|ing)?|placements?|hiring|staffing|manpower|work permits?)\b/i;
 const EDUCATION = /\b(?:ielts|pte|toefl|celpip|study abroad|overseas education|spoken english|coaching|tuition|classes|academy|institute)\b/i;
 
 export function effectiveSpecialCategory(category: PlannerPlanInput["special_ad_category"], business?: { vertical?: string | null; offers?: string[] | null }) {
   const vertical = business?.vertical?.trim();
   if (!vertical) return category;
-  const about = [vertical, ...(business?.offers ?? [])].filter(Boolean).join(" \n ");
-  if (category === "financial_products_services" && !LENDER.test(vertical)) return "none";
+  const offers = (business?.offers ?? []).filter(Boolean).join(" \n ");
+  const about = [vertical, offers].filter(Boolean).join(" \n ");
+  if (category === "financial_products_services" && !LENDER.test(vertical) && !OFFER_LENDER.test(offers)) return "none";
   if (category === "housing" && !PROPERTY.test(vertical) && !LENDER.test(vertical)) return "none";
   if (category === "employment" && EDUCATION.test(about) && !RECRUITER.test(about)) return "none";
   return category;
