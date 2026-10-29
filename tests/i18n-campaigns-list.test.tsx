@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import en from "../messages/en.json";
 import hi from "../messages/hi.json";
@@ -57,5 +57,21 @@ describe("#1438 Campaigns list words", () => {
     expect(screen.getByText(/0 running/)).toBeTruthy();
     expect(screen.getByRole("combobox", { name: "Campaign status" }).querySelector("option")?.textContent).toBe("All statuses");
     expect(screen.getByRole("button", { name: "Load more campaigns" })).toBeTruthy();
+  });
+
+  it("renders a running card and its refresh notice in Hindi", async () => {
+    const running = { ...campaign, id: "c-2", status: "active", meta_campaign_id: "meta-2", raw: { metaResult: { campaignId: "meta-2" } } } as unknown as Campaign;
+    const result = { campaign_id: "c-2", impressions: 900, clicks: 12, leads: 0, spend: 150, cpl: null, conversations: 2, fetched_at: new Date().toISOString() };
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ result }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<Campaigns business={business} approved={[]} initialCampaigns={[running]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady adAccountId="act_1" campaignWords={{ locale: "hi", messages: hi.campaigns }} />);
+    expect(screen.getByText("₹300 रोज़")).toBeTruthy();
+    expect(screen.getByText(hi.campaigns.card.noResults)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "रोकें" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Diwali offer के और विकल्प" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "नतीजे रिफ़्रेश करें" }));
+    await waitFor(() => expect(screen.getByText("नतीजे अभी-अभी अपडेट हुए।")).toBeTruthy());
+    expect(fetchMock).toHaveBeenCalledWith("/api/campaigns/c-2/refresh", expect.objectContaining({ method: "POST" }));
+    vi.unstubAllGlobals();
   });
 });

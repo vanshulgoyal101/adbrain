@@ -11,14 +11,15 @@ export function leadName(lead: Pick<Lead, "full_name">): string | null {
   return isMetaTestLead(lead) ? "Test enquiry from Meta" : lead.full_name;
 }
 
-export function CampaignEnquiryFeedback({ error, notice, adsManagerUrl }: {
+export function CampaignEnquiryFeedback({ error, notice, adsManagerUrl, adsManagerLabel = "Open in Ads Manager" }: {
   error?: { message: string; adsManager?: boolean };
   notice?: { message: string };
   adsManagerUrl?: string;
+  adsManagerLabel?: string;
 }) {
   if (error) return <p role="alert" className="text-sm font-medium text-red-800">
     {error.message}
-    {error.adsManager ? <> <a href={adsManagerUrl} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center gap-1 underline underline-offset-4"><ExternalLink className="h-4 w-4" aria-hidden="true" />Open in Ads Manager</a></> : null}
+    {error.adsManager ? <> <a href={adsManagerUrl} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center gap-1 underline underline-offset-4"><ExternalLink className="h-4 w-4" aria-hidden="true" />{adsManagerLabel}</a></> : null}
   </p>;
   return notice ? <p role="status" className="text-sm text-slate-600">{notice.message}</p> : null;
 }
