@@ -27,7 +27,10 @@ you sign in yourself, on your own phone, within 30 minutes.
   Facebook or made a campaign for you, so you connect your own Page and ad account.
   You pay Meta for the ads yourself, on your own card or UPI.
 - **If it fails:** a team email gets "Sign in with the owner's own email, not a
-  team account." After 30 minutes the hand-over ends; ask them to start it again.
+  team account." If your email already has an AdBrain business (say you signed
+  up before the visit), you see "This email already has an AdBrain business; use
+  another email or ask AdBrain". After 30 minutes the hand-over ends; ask them to
+  start it again.
 
 ## Sign in
 
@@ -136,7 +139,7 @@ day." Tap "Open your campaign" to see it.
   day."
 - Customers who tap your ad message you straight on your WhatsApp. Reply there.
 - **Home** shows your results: "Chats" (or "Enquiries"), "Spent" and "Per chat".
-- **Enquiries** (tap "See enquiries" on Home): form enquiries arrive on their own;
+- **Enquiries** (open the menu, then "Enquiries"; or "See enquiries" on Home): form enquiries arrive on their own;
   WhatsApp chats show there once you add them. On each one tap "WhatsApp them" for a ready-written first reply, or "Call". Home
   shows how quickly you usually contact people, so reply fast.
 - Did someone buy? Tap "Mark customers" so you can see what a customer costs.

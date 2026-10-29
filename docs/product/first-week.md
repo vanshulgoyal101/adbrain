@@ -42,7 +42,7 @@ day." For every screen in detail, see [Manage](manage.md).
 - **Chats come to your WhatsApp.** Customers who tap your ad message you there.
   "The messages are in your WhatsApp Business app." Reply there, and reply fast:
   "people often pick the first business that answers."
-- **Enquiries** (tap "See enquiries" on Home): form enquiries arrive on their own,
+- **Enquiries** (open the menu, then "Enquiries"; or "See enquiries" on Home): form enquiries arrive on their own,
   WhatsApp chats only when you add them. For a WhatsApp ad, tap "Add an enquiry"
   for each real one; not every chat is a customer. Home may ask "Which of your 6
   chats were real enquiries?" with "Add enquiries".
@@ -54,8 +54,8 @@ day." For every screen in detail, see [Manage](manage.md).
   then shows what each customer cost in ad spend.
 - **One ad costs much more than the others?** AdBrain may say so and offer "Pause
   this ad". "Paused [ad]. The other ads keep running."
-- **Monday:** Home may show "Last week: …" with your chats, real enquiries and
-  spend.
+- **Each week:** Home shows "Last week: …" with last Monday to Sunday's chats,
+  real enquiries and spend.
 
 ## An ad is rejected
 
@@ -105,8 +105,9 @@ day." For every screen in detail, see [Manage](manage.md).
 
 - Meta stops the ads when the days you picked are over, and never spends past
   the "Stops at" total.
-- **Run it again:** if the campaign on **Campaigns** shows "Run this again", tap
-  it. It "Copies it into a new campaign, best ad first. Nothing goes to Meta until
+- **Run it again:** when nothing is running, Home says "Nothing is running. Run
+  your best ad again?" with "Run it again". Or, if the campaign on **Campaigns**
+  shows "Run this again", tap it. It "Copies it into a new campaign, best ad first. Nothing goes to Meta until
   you review and send it, paused."
 - **Something new:** tap "New campaign" on Home. You go through the same three
   steps again, with a new offer if you like.
