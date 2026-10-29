@@ -221,7 +221,7 @@ describe("<AdResults> in Hindi (#1438)", () => {
     const ads = [ad("1", { best: true, status: "ACTIVE", results: 6, spend: 600, costPerResult: 100 }), ad("2", { status: "ACTIVE", results: 2, spend: 500, costPerResult: 250 })];
     vi.stubGlobal("fetch", vi.fn(async () => Response.json({ ok: true, syncedAt: new Date(Date.now() - 3 * 3600_000).toISOString(), ads })));
     const view = render(<AdResults campaignId="c1" whatsapp words={{ locale: "hi", messages: hi.verdict }} />);
-    expect(view.getByText("कौन सा विज्ञापन चला")).toBeInTheDocument();
+    expect(view.getByText("कौन सा विज्ञापन काम आया")).toBeInTheDocument();
     const details = view.container.querySelector("details")!;
     details.open = true;
     fireEvent(details, new Event("toggle"));
