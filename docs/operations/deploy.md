@@ -143,7 +143,7 @@ but cannot detect a loopback tunnel to production. Repeated DDL can change grant
 policies and functions even when tables already exist; do not use it for upgrades.
 
 For an existing target, compare actual schema and `private.schema_migrations`
-with the [migration map](../DATA_MODEL.md#migration-map). Historical objects may
+with the [migration map](../architecture/migrations.md#migration-map). Historical objects may
 predate the ledger. Missing ledger entries do not authorize replaying the folder.
 Preview the one reviewed file first. Application is a separate approved action:
 
