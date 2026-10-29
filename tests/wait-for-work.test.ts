@@ -4,7 +4,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { createGitHubApi, readyPool, boardRow, systemicFailures, snoozedUntil, latestWord, linkedIssues, lowQueues, matchers, nextItem, freshComments, offTrack, rateBackoffMs, roleCard, unsavedWork, waitingOnMe } from "../scripts/wait-for-work.mjs";
+import { actionableOwned, OWNS_WORK, createGitHubApi, readyPool, boardRow, systemicFailures, snoozedUntil, latestWord, linkedIssues, lowQueues, matchers, nextItem, freshComments, offTrack, rateBackoffMs, roleCard, unsavedWork, waitingOnMe } from "../scripts/wait-for-work.mjs";
 
 describe("PR reviews count as the latest word (#423)", () => {
   it("picks a review posted after the last comment, and ignores empty approvals", () => {
@@ -262,6 +262,10 @@ describe("next item (#364: idle with a full queue)", () => {
     // Standing channels and umbrellas (#364, #418) are never "your next item".
     expect(nextItem([issue(364, "standing"), issue(400, "core")], [])?.number).toBe(400);
   });
+  it("owned PRs count toward a queue (#2122: QA's reviews are its work)", () => {
+    const prs = [1, 2, 3].map((n) => ({ ...issue(n, "owner:qa"), pull_request: {} }));
+    expect(lowQueues(prs).map((l) => l.role)).not.toContain("qa");
+  });
   it("parked items don't count toward a queue", () => {
     expect(lowQueues([issue(1, "owner:dev"), issue(2, "owner:dev", "parked")]).map((l) => l.role)).toContain("dev");
   });
@@ -485,5 +489,26 @@ setInterval(() => {}, 60_000);
     expect(spent).toBeLessThan(155_000);
     expect(rateBackoffMs({ remaining: 800, reset }, 90_000, now)).toBe(180_000);
     expect(rateBackoffMs({ remaining: 4_000, reset }, 90_000, now)).toBe(0);
+  });
+});
+
+describe("never wait while you own actionable work (#364, CEO Oct 29)", () => {
+  const issue = (number: number, ...labels: string[]) => ({ number, title: `item ${number}`, labels: labels.map((name) => ({ name })) });
+  it("counts owned items except held, snoozed and co-owned-not-your-turn ones; your turns first, then core, then oldest", () => {
+    const items = [
+      issue(40, "owner:dev"), issue(30, "owner:dev", "core"), issue(50, "owner:dev"),
+      issue(11, "owner:dev", "parked"), issue(12, "owner:dev", "blocked"), issue(13, "owner:dev", "waiting-owner"),
+      issue(14, "owner:dev", "decision"), issue(15, "owner:dev", "later"), issue(16, "owner:dev", "standing"),
+      issue(17, "owner:dev"), // scheduled check not yet due
+      issue(18, "owner:dev", "owner:qa"), // co-owned, QA's turn
+      issue(19, "owner:dev", "owner:qa"), // co-owned, your turn
+    ];
+    const got = actionableOwned(items, { snoozed: new Set([17]), myTurn: new Set([19, 50]) }).map((i) => i.number);
+    expect(got).toEqual([19, 50, 30, 40]);
+  });
+  it("a handed-off item still counts while its owner label is yours, and nothing owned means you may wait", () => {
+    expect(actionableOwned([issue(7, "owner:dev2")]).map((i) => i.number)).toEqual([7]);
+    expect(actionableOwned([])).toEqual([]);
+    expect(OWNS_WORK).not.toBe(0);
   });
 });

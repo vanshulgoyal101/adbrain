@@ -39,6 +39,7 @@ import { suggestedQuestions } from "@/lib/campaign/whatsapp-questions";
 import { whatsappTemplateSchema, type WhatsAppTemplate } from "@/lib/campaign/whatsapp-template";
 import { CampaignWhatsAppMessageDialog } from "@/components/campaign-whatsapp-message-dialog";
 import { WhenTheyTap } from "@/components/when-they-tap";
+import { AdReviewBadge } from "@/components/ad-review-badge";
 import { draftFromSuggestion, draftFromTemplate, type Suggested } from "@/components/whatsapp-message-card";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Alert } from "@/components/ui/alert";
@@ -117,6 +118,7 @@ import { cardVerdictInput, lastCampaignComparison } from "@/lib/campaign/card-ve
 import { verdict, type Comparison } from "@/lib/campaign/verdict";
 import { WAITING_COLUMNS, WAITING_DAYS, waitingByCampaign, type WaitingLeadRow } from "@/lib/leads/waiting";
 import { CampaignVerdict } from "@/components/campaign-verdict";
+import type { Words } from "@/i18n/words";
 import { campaignAttention } from "@/lib/campaign/health";
 import { campaignWhatsAppSummary } from "@/lib/campaign/results-summary";
 import { bookedLabel, costPerCustomer } from "@/lib/campaign/real-enquiries";
@@ -222,6 +224,8 @@ type CampaignsProps = {
   whatsappLedger?: { chats: number; spendRupees: number } | null;
   /** #1342: the Settings weekly cap and the live campaigns' budgets (read on the server); null when they couldn't be read. */
   weeklyCap?: { capRupees: number | null; active: CampaignSpend[] } | null;
+  /** #1438: the results card's words in the owner's language; English without. */
+  verdictWords?: Words<"verdict">;
 };
 
 
@@ -301,6 +305,7 @@ function BusinessCampaigns({
   adResults = false,
   whatsappLedger = null,
   weeklyCap = null,
+  verdictWords,
   scope,
   initialSetup,
   onSetupChange,
@@ -2573,7 +2578,7 @@ function BusinessCampaigns({
                         metaMessage={reviews[c.id] ? rejectedMetaMessage(reviews[c.id], business.vertical) : null}
                         onEditAd={c.meta_campaign_id && (c.status === "paused" || c.status === "active") && reviewableCampaign(c) && (c.meta_ad_ids?.length ?? 0) > 0 && !waitingSwitch[c.id]
                           ? () => { setAdEditHint(EDIT_AD_HINT); setAdEdit(c); } : undefined}
-                        adsManagerUrl={c.meta_campaign_id ? adsLink(c) : undefined} perAd={adResults} onWeakAd={weakAdShown} />
+                        adsManagerUrl={c.meta_campaign_id ? adsLink(c) : undefined} perAd={adResults} onWeakAd={weakAdShown} words={verdictWords} />
                     )}
                     {r && mounted && (
                       // #1003: always say how old the numbers are.
@@ -2665,13 +2670,14 @@ function madeOutsideAdBrain(campaign: Campaign): boolean {
 /** A launched campaign's numbers: #1255's verdict for WhatsApp and form campaigns, with the figures under Details. */
 const EDIT_AD_HINT = "Tell people what happens after the tap, e.g. 'Tap, then press Send'.";
 
-function CardResults({ campaign, result: r, outcome, comparison, waiting, onRunAgain, runAgainBusy, adsManagerUrl, onEditAd, perAd, onWeakAd, metaMessage = null }: {
+function CardResults({ campaign, result: r, outcome, comparison, waiting, onRunAgain, runAgainBusy, adsManagerUrl, onEditAd, perAd, onWeakAd, metaMessage = null, words }: {
   campaign: Campaign; result: CampaignResult; outcome: ReturnType<typeof campaignDestination>; comparison: Comparison | null;
   /** #1841: Meta's own words for a rejected ad, in the card's one Details. */
   metaMessage?: string | null;
   waiting: number; onRunAgain: () => void; runAgainBusy: boolean; adsManagerUrl?: string; onEditAd?: () => void;
   /** #783's per-ad rows are on; a running campaign with enough results reads them for the weak-ad state. */
   perAd: boolean; onWeakAd: (campaignId: string, shown: boolean) => void;
+  words?: Words<"verdict">;
 }) {
   const [now] = useState(() => Date.now());
   const enough = (outcome === "whatsapp" ? r.conversations ?? 0 : r.leads) >= BEST_AD_MIN_RESULTS;
@@ -2695,12 +2701,12 @@ function CardResults({ campaign, result: r, outcome, comparison, waiting, onRunA
     {metaMessage && <p className="wrap-break-word text-sm text-slate-700">Meta&apos;s message about the ad it didn&apos;t approve: &ldquo;{metaMessage}&rdquo;</p>}
   </>;
   const input = cardVerdictInput(campaign, r, { now, waiting, weakAd, comparison });
-  const judged = input ? verdict(input) : null;
+  const judged = input ? verdict(input, words) : null;
   const weakShown = judged?.state === "weak_ad";
   useEffect(() => { onWeakAd(campaign.id, weakShown); }, [campaign.id, weakShown, onWeakAd]);
   // A paused card that never showed keeps its one "nothing has spent" line (#173), with no verdict beside it.
   if (!input || !judged || (campaign.status !== "active" && campaign.status !== "completed" && !r.impressions)) return figures;
-  return <CampaignVerdict verdict={judged} whatsapp={input.destination === "whatsapp"} results={input.results} spend={input.spend}
+  return <CampaignVerdict verdict={judged} words={words} whatsapp={input.destination === "whatsapp"} results={input.results} spend={input.spend}
     details={figures} onRunAgain={onRunAgain} runAgainBusy={runAgainBusy} adsManagerUrl={adsManagerUrl} onEditAd={onEditAd}
     pauseOffer={weakAd && <PauseOffer campaignId={campaign.id} suggestion={weakAd} unit={input.destination === "whatsapp" ? { one: "chat", many: "chats" } : { one: "enquiry", many: "enquiries" }} onKeep={clearWeakAd} />} />;
 }
@@ -2711,30 +2717,6 @@ function Stat({ label, value }: { label: string; value: string }) {
       <p className="text-lg font-bold text-slate-900">{value}</p>
       <p className="text-xs text-slate-500">{label}</p>
     </div>
-  );
-}
-
-const REVIEW_LABELS: Record<AdReview["state"], { label: string; style: string }> = {
-  rejected: { label: "Rejected by Meta", style: "bg-red-50 text-red-700" },
-  issues: { label: "Meta flagged issues", style: "bg-red-50 text-red-700" },
-  in_review: { label: "In Meta's review", style: "bg-slate-100 text-slate-700" },
-  unknown: { label: "Review status unknown", style: "bg-slate-100 text-slate-600" },
-  approved: { label: "Approved by Meta", style: "bg-emerald-50 text-emerald-700" },
-};
-
-/** The least-ready ad decides the badge; flagged issues are shown as Meta wrote them, rejections by <RejectedAds> (#1274). */
-function AdReviewBadge({ reviews }: { reviews: AdReview[] }) {
-  const order: AdReview["state"][] = ["rejected", "issues", "in_review", "unknown", "approved"];
-  const state = order.find(candidate => reviews.some(review => review.state === candidate))!;
-  const reasons = [...new Set(reviews.filter(review => review.state === state).flatMap(review => review.reasons))];
-  const count = reviews.filter(review => review.state === state).length;
-  return (
-    <span className="inline-flex min-w-0 flex-wrap items-center gap-2">
-      <Badge className={REVIEW_LABELS[state].style}>
-        {REVIEW_LABELS[state].label}{reviews.length > 1 ? ` (${count} of ${reviews.length} ads)` : ""}
-      </Badge>
-      {reasons.length > 0 && state !== "rejected" && <span className="text-xs text-slate-600">{reasons.join(" ")}</span>}
-    </span>
   );
 }
 

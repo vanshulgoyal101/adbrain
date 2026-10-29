@@ -16,9 +16,9 @@ feature branch or a passing local test.
 | --- | --- | --- |
 | Pilot, sales or new team role | [How AdBrain works](product/how-adbrain-works.md) | [Features and workflows](product/README.md) |
 | Owner or coordinating worker | [Worker orchestration](ORCHESTRATION.md) | [Roadmap](roadmap.md) |
-| New developer | [Quick start](QUICK_START.md) | [Architecture](ARCHITECTURE.md) |
+| New developer | [Quick start](team/quick-start.md) | [Architecture](ARCHITECTURE.md) |
 | Product or support | [Features and workflows](product/README.md) | [Roadmap](roadmap.md) |
-| Operator | [Deployment configuration](operations/deploy.md) | [Release policy](RELEASING.md) |
+| Operator | [Deployment configuration](operations/deploy.md) | [Release policy](operations/releasing.md) |
 | Debugging engineer | [Observability](operations/observability.md) | [Operations](operations/README.md) |
 | Product planner | [Roadmap](roadmap.md) | [Payment plan](PAYMENTS-PLAN.md) |
 
@@ -32,14 +32,14 @@ feature branch or a passing local test.
 | [Configuration](operations/configuration.md) | Which variables are required, what are their defaults, and which changes cost money or require a restart? |
 | [Architecture](ARCHITECTURE.md) | Where is behavior owned, and how do requests cross trust boundaries? |
 | [Architecture decisions](architecture/README.md) | Which cross-cutting decisions (ADRs) bind the code, and how do we record a new one? |
-| [Data model](DATA_MODEL.md) | Which tables, relationships, grants, RPCs, buckets and migrations support the app? |
-| [AI pipeline](AI_PIPELINE.md) | How do interviews, concepts, images, composition, retries, cache and accounting work? |
+| [Data model](architecture/data-model.md) | Which tables, relationships, grants, RPCs, buckets and migrations support the app? |
+| [AI pipeline](architecture/ai-pipeline.md) | How do interviews, concepts, images, composition, retries, cache and accounting work? |
 | [Meta connection](architecture/channels/meta-connect.md) | How do consent, selection, capabilities, paused creation and activation work, and what does Meta's App Review need? |
 | [Testing](team/testing.md) | Which commands are safe locally and what does each verification layer prove? ([Team](team/README.md) index) |
 | [Operations](operations/README.md) | How do we diagnose partial work, stale spend, provider failures and retention problems? |
 | [Observability](operations/observability.md) | What is logged, how is it correlated, and what must never be collected? |
 | [Deployment](operations/deploy.md) | How is a target environment configured and smoke-tested? |
-| [Release policy](RELEASING.md) | What approvals and checks govern remote changes? |
+| [Release policy](operations/releasing.md) | What approvals and checks govern remote changes? |
 | [Meta approval readiness](META_APPROVAL_ACTION_PLAN.md) | What external review evidence must be prepared and verified? |
 | [Payment plan and readiness](PAYMENTS-PLAN.md) | What are the agreed economics, implemented payment boundaries and remaining live-rollout requirements? |
 | [Brand identity](BRAND-IDENTITY.md) | Which presentation and terminology conventions should the product follow? |
@@ -67,6 +67,10 @@ last move.
 | `ROADMAP.md` | [roadmap.md](roadmap.md) (lower case, like the folders) |
 | `META_CONNECT.md` | [architecture/channels/meta-connect.md](architecture/channels/meta-connect.md) and [meta-app-review.md](architecture/channels/meta-app-review.md) |
 | `TESTING.md` | [team/testing.md](team/testing.md) and [team/testing-verification.md](team/testing-verification.md) |
+| `AI_PIPELINE.md` | [architecture/ai-pipeline.md](architecture/ai-pipeline.md), [-variants](architecture/ai-pipeline-variants.md) and [-routing](architecture/ai-pipeline-routing.md) |
+| `DATA_MODEL.md` | [architecture/data-model.md](architecture/data-model.md), [data-model-access.md](architecture/data-model-access.md) and [migrations.md](architecture/migrations.md) |
+| `QUICK_START.md` | [team/quick-start.md](team/quick-start.md) |
+| `RELEASING.md` | [operations/releasing.md](operations/releasing.md) and [operations/releasing-recovery.md](operations/releasing-recovery.md) (backups, rollback, production guard) |
 
 ## Terminology
 
@@ -87,7 +91,7 @@ last move.
 
 - Runtime schemas, route handlers, database constraints, and tests define the
   current contract. Documentation explains them; it does not override them.
-- [Release policy](RELEASING.md) governs publication and production changes.
+- [Release policy](operations/releasing.md) governs publication and production changes.
 - [Brand identity](BRAND-IDENTITY.md) covers product presentation.
 
 ## Safety Before Setup

@@ -168,8 +168,8 @@ The [production payment migration](../db/migrations/20260926_production_payment_
 is applied in production (live orders are recorded). The optional [test-order migration](../db/migrations/20260926_razorpay_test_orders.sql)
 and [billing](../db/migrations/20260924_managed_billing.sql)/[event](../db/migrations/20260924_meta_billing_events.sql)
 migrations exist in source; check the migration ledger before relying on them in a
-target. Follow [Data Model](DATA_MODEL.md) and
-[Releasing](RELEASING.md) for target-specific prerequisites and approval.
+target. Follow [Data Model](architecture/data-model.md) and
+[Releasing](operations/releasing.md) for target-specific prerequisites and approval.
 
 Live order/capture/webhook/reconciliation/refund behavior and the three identified
 payment fixes are implemented in dev. Customer liability/reservation accounting
@@ -332,4 +332,4 @@ and all Vercel environments are rejected. The test order amount is fixed at
 ## 10. Primary References
 
 - [Roadmap](roadmap.md).
-- [Release and environment authority](RELEASING.md).
+- [Release and environment authority](operations/releasing.md).

@@ -1,5 +1,5 @@
 import { reconnectByLabel } from "@/lib/meta/token-expiry";
-import { requestLocale } from "@/i18n/request-locale";
+import { requestWords, setupWords } from "@/i18n/request-locale";
 import { Alert } from "@/components/ui/alert";
 import { clientCreative } from "@/lib/creative/client-receipt";
 import { madeForSetup } from "@/lib/creative/setup-picks";
@@ -128,7 +128,7 @@ export default async function CampaignsPage({
     const initialDaily = lastDaily === null ? undefined
       : BUDGET_PRESETS.reduce((best, amount) => Math.abs(amount - lastDaily) < Math.abs(best - lastDaily) ? amount : best);
     return <SetupGoLive business={business} ads={ads} pageConnected={metaReady} funding={funding} returning={again} initialDaily={initialDaily}
-      whatsappNumber={masked ? maskWhatsAppNumber(`+91${masked}`) : null} weeklyCap={weeklyCap} welcome={welcome} locale={await requestLocale()} appReviewPending={metaAppReviewPending()} />;
+      whatsappNumber={masked ? maskWhatsAppNumber(`+91${masked}`) : null} weeklyCap={weeklyCap} welcome={welcome} words={await setupWords()} appReviewPending={metaAppReviewPending()} />;
   }
 
   return (
@@ -162,6 +162,7 @@ export default async function CampaignsPage({
           whatsappLedger={ledger?.whatsapp ? { chats: ledger.whatsapp.results, spendRupees: ledger.whatsapp.spendRupees } : null}
           adAccountId={connection.adAccountId ?? ""}
           weeklyCap={weeklyCap}
+          verdictWords={await requestWords("verdict")}
           newCampaign={params.new === "1" ? { creativeIds: requested, review: params.review === "1", budget: chosenBudget } : undefined}
         />}
       </div>

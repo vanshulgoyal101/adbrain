@@ -37,6 +37,8 @@ const storedDesignSchema = z.object({
   ctaTextColor: z.string(),
   fontFamily: z.string(),
   layout: z.enum(["bottom", "top", "center"]),
+  // #1904: how the owner's photo meets the frame, kept for every later render (words, 9:16).
+  backgroundFit: z.enum(["attention", "blur"]).optional(),
 });
 
 type CreativeRow = Pick<

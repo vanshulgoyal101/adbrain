@@ -37,7 +37,7 @@ the words on the picture and the background. Details: [Create and review ads](cr
 ## 3. Review and go live
 
 The owner connects their Facebook Page and Meta ad account, chooses a daily
-budget (₹300, ₹500 or ₹1,000 a day for two days) and sees the most it can spend,
+budget (₹300, ₹500 or ₹1,000 a day) for 2 days or, for pilots, 7 days, and sees the most it can spend,
 Meta's GST included. AdBrain shows the areas, the WhatsApp welcome message and the
 weekly spending cap, then checks everything before anything is created. If a check
 fails, it says what to fix and nothing is created. Otherwise one tap creates the
@@ -74,4 +74,5 @@ results count it. Details: [Manage: sync, results and leads](manage.md).
 | Meta | Reviews and shows the ads, charges the ad money to the owner's ad account |
 
 The app also works in Hindi (Settings → App language): the menu, app bar and
-Home, including Recent activity, which shows only the Hindi label for each event.
+Home, including Recent activity, which shows only the Hindi label for each event,
+and each campaign's "How it's going" sentence and buttons, on Home and Campaigns (#1438).

@@ -87,6 +87,9 @@ The stream includes:
   upload/delete, follow-up save, payment quote/checkout, Meta connect controls and
   `meta.access_request` (a new owner asking for Facebook access before App Review),
   the audience edit (`campaign.edit_audience`), and Help on WhatsApp (`help.whatsapp`, #1284).
+- `lead.customer_marked` (#2026), `kind=action`, server-side: an enquiry crossing to or from
+  "customer" in the inbox or a campaign's WhatsApp chats. Attributes: `source` (inbox|whatsapp),
+  `campaignId` when known, `undone` (true when unmarked).
 - `ui.tap` (#1242): one per tap on an enabled control (button, link, tab, checkbox, select) on the
   launch path (`/create`, `/studio`, `/campaigns`), page only, never which control or what was typed;
   it counts #1226's "taps from Create to live". Same switch, Do Not Track and 45-a-minute cap.
@@ -142,7 +145,7 @@ privacy notice and applicable consent requirements before production rollout.
 
 1. Inspect the target's existing schema and configuration. For a new sink, apply
   [the product-event migration](../../db/migrations/20260918_product_events.sql)
-  under the [release policy](../RELEASING.md). Existing sinks need only the new
+  under the [release policy](releasing.md). Existing sinks need only the new
   [rollup migration](../../db/migrations/20260928_product_event_rollups.sql) before
   the next cleanup; do not replay old applied migrations.
 2. Deploy through the protected release workflow. Structured runtime JSON is on

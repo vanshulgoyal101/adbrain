@@ -16,7 +16,7 @@ Core features come first, always: Brand, Create 3 ads, review, launch a Meta
 campaign and manage it (sync/pause/results), working reliably in production.
 Other work (polish, speed, docs, compliance, support, analytics) waits until that
 loop is healthy or the owner asks for it. Build, ship and test in production via
-the [Startup Fast Path](RELEASING.md#startup-fast-path).
+the [Startup Fast Path](operations/releasing.md#startup-fast-path).
 
 ### Role cards
 
@@ -63,7 +63,9 @@ Routine steps never wait for the CEO or the CTO.
    oldest. Empty queue: take an unowned `core` issue in your area and add your
    label. Nothing left: run `wait-for-work` (no idle post;
    [AGENTS.md](../AGENTS.md#worker-coordination)) and continue with what it
-   reports. Stop only when it times out. Do not invent work.
+   reports. Stop only when it times out. Do not invent work. While you own an
+   actionable item, the waiter prints your top 3 and exits 6 instead of waiting
+   (#2122): park, block or hand off by label what you can't act on.
 3. **Finish an issue** with a PR, not a loose commit. Branch from current
    `origin/next`, keep the change small, push, and open a PR to `next` titled
    with the issue number. Comment on the issue in five lines or fewer: what

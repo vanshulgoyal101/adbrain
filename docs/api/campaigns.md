@@ -138,7 +138,7 @@ When the interview cannot progress, it returns HTTP 200 with
 `no_progress` or `interview_limit`. This response performs no draft save or Meta
 mutation. Both guided and manual-audience callers surface it without losing their
 existing context. Explicit audience-editor radius values are retained. See
-[campaign interview and framework choice](../AI_PIPELINE.md#campaign-interview).
+[campaign interview and framework choice](../architecture/ai-pipeline.md#campaign-interview).
 
 ## Review and Durable Creation
 
@@ -171,7 +171,7 @@ an unresolved/failed execution result; terminal replays can return 200. Inspect
 the operation `state`, not just the HTTP status. With `CAMPAIGN_EXECUTION_MODE=worker`
 the route enqueues the persisted operation and returns 202; a queue failure is 503
 with no inline fallback, and any mode other than `inline`/`worker` is 503. Worker
-mode needs the [worker migration](../DATA_MODEL.md#migration-map) and a running
+mode needs the [worker migration](../architecture/migrations.md#migration-map) and a running
 `worker:campaigns` process.
 
 | State | Client action |
