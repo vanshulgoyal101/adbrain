@@ -40,13 +40,13 @@ feature branch or a passing local test.
 | [Observability](operations/observability.md) | What is logged, how is it correlated, and what must never be collected? |
 | [Deployment](operations/deploy.md) | How is a target environment configured and smoke-tested? |
 | [Release policy](operations/releasing.md) | What approvals and checks govern remote changes? |
-| [Meta approval readiness](META_APPROVAL_ACTION_PLAN.md) | What external review evidence must be prepared and verified? |
+| [Meta approval readiness](plans/meta-approval.md) | What external review evidence must be prepared and verified? |
 | [Payment plan and readiness](PAYMENTS-PLAN.md) | What are the agreed economics, implemented payment boundaries and remaining live-rollout requirements? |
 | [Brand identity](BRAND-IDENTITY.md) | Which presentation and terminology conventions should the product follow? |
 
 ## Plans and Records
 
-[Roadmap](roadmap.md) and the [payment plan](PAYMENTS-PLAN.md) hold intent and
+[Roadmap](roadmap.md), the [plans](plans/README.md) and the [payment plan](PAYMENTS-PLAN.md) hold intent and
 decisions; the [worker dispatch](team/orchestration.md) holds current assignments.
 Consolidate guidance into its owning reference instead of adding dated documents.
 
@@ -72,6 +72,7 @@ last move.
 | `QUICK_START.md` | [team/quick-start.md](team/quick-start.md) |
 | `ORCHESTRATION.md` | [team/orchestration.md](team/orchestration.md) |
 | `RELEASING.md` | [operations/releasing.md](operations/releasing.md) and [operations/releasing-recovery.md](operations/releasing-recovery.md) (backups, rollback, production guard) |
+| `META_APPROVAL_ACTION_PLAN.md` | [plans/meta-approval.md](plans/meta-approval.md) |
 
 ## Terminology
 
