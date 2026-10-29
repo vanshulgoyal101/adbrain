@@ -63,6 +63,19 @@ const ENGLISH: Record<OwnerErrorKey, string> = {
   exportAdsDeleted: "Some ads you picked were deleted. Refresh the page and pick again.",
   adRequestNotFound: "We couldn't find that ad request. Start again from Create.",
   noAdsMade: "No creatives were generated.",
+  // #2327: Enquiries and the Facebook connect path.
+  signInRequired: "Sign in required.",
+  businessMissing: "Business not found.",
+  chooseCampaign: "Choose a campaign.",
+  campaignNotFound: "Campaign not found.",
+  enquiriesNotDeleted: "The enquiries couldn't be deleted. Try again.",
+  enquiryNotDeleted: "The enquiry couldn't be deleted. Try again.",
+  enquiryNotFound: "Enquiry not found.",
+  enquiriesNotReloaded: "Couldn't reload your saved enquiries. Your existing enquiries are still here.",
+  enquiryCountUnavailable: "Enquiry count unavailable.",
+  requestNotSent: "We couldn't send your request. Try again.",
+  pickAccountAndPage: "Pick both an ad account and a page.",
+  facebookStillConnected: "Facebook is still connected. Try again in a minute.",
 };
 // The messages that take values, rendered with these.
 const VALUES: Partial<Record<OwnerErrorKey, Record<string, string | number>>> = {
@@ -79,7 +92,7 @@ const RENDERED: Partial<Record<OwnerErrorKey, string>> = {
 };
 const keys = Object.keys(ENGLISH) as OwnerErrorKey[];
 
-describe("owner errors (#2305, #2324)", () => {
+describe("owner errors (#2305, #2324, #2327)", () => {
   it("has the same keys in English and Hindi", () => {
     expect(Object.keys(en.errors).sort()).toEqual([...keys].sort());
     expect(Object.keys(hi.errors).sort()).toEqual([...keys].sort());

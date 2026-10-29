@@ -712,6 +712,18 @@
     "exportLoadFailed": "चुने हुए विज्ञापन लोड नहीं हो पाए। डाउनलोड फिर से करें।",
     "exportAdsDeleted": "आपके चुने हुए कुछ विज्ञापन हटा दिए गए हैं। पेज रिफ़्रेश करें और फिर से चुनें।",
     "adRequestNotFound": "विज्ञापन का वह अनुरोध नहीं मिला। Create से फिर से शुरू करें।",
-    "noAdsMade": "कोई विज्ञापन नहीं बना।"
+    "noAdsMade": "कोई विज्ञापन नहीं बना।",
+    "signInRequired": "साइन इन करना ज़रूरी है।",
+    "businessMissing": "बिज़नेस नहीं मिला।",
+    "chooseCampaign": "एक कैंपेन चुनें।",
+    "campaignNotFound": "कैंपेन नहीं मिला।",
+    "enquiriesNotDeleted": "पूछताछ हटाई नहीं जा सकीं। फिर से कोशिश करें।",
+    "enquiryNotDeleted": "यह पूछताछ हटाई नहीं जा सकी। फिर से कोशिश करें।",
+    "enquiryNotFound": "पूछताछ नहीं मिली।",
+    "enquiriesNotReloaded": "सेव की हुई पूछताछ फिर से लोड नहीं हो पाईं। आपकी मौजूदा पूछताछ यहीं हैं।",
+    "enquiryCountUnavailable": "पूछताछ की गिनती अभी नहीं मिल पाई।",
+    "requestNotSent": "आपका अनुरोध भेजा नहीं जा सका। फिर से कोशिश करें।",
+    "pickAccountAndPage": "एक ऐड अकाउंट और एक पेज, दोनों चुनें।",
+    "facebookStillConnected": "Facebook अभी भी जुड़ा हुआ है। एक मिनट बाद फिर से कोशिश करें।"
   }
 }
