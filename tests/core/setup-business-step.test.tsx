@@ -64,7 +64,7 @@ describe("core: setup fields (#1269)", () => {
 
   it("reads a saved Brand back; the column default isn't shown as what you sell", () => {
     expect(setupFieldsFrom({ name: "A", vertical: "local business", locations: ["Jaipur", "Ajmer"], offers: ["Free visit", "10% off"], phone: "9876543210" }))
-      .toEqual({ name: "A", vertical: "", locations: "Jaipur\nAjmer", offer: "Free visit", phone: "9876543210" });
+      .toEqual({ name: "A", vertical: "", locations: "Jaipur\nAjmer", offer: "Free visit", phone: "9876543210", usp: "" });
   });
 });
 
@@ -118,6 +118,49 @@ describe("core: saveSetupBusiness writes only the five fields (#1269)", () => {
     const { saveSetupBusiness } = await import("@/app/(app)/brand/actions");
     await expect(saveSetupBusiness("b1", complete)).resolves.toEqual({ ok: false, error: "Not authenticated." });
     expect(mocks.update).not.toHaveBeenCalled();
+  });
+
+  it("#1966: saves the owner's first USP without replacing their other facts", async () => {
+    mocks.current.mockResolvedValue({ data: { offers: ["Old offer"], usps: ["Old fact", "Local installation team"] }, error: null });
+    mocks.written.mockResolvedValue({ data: { id: "b1", ...complete, locations: ["Jaipur"], offers: [complete.offer] }, error: null });
+    const { saveSetupBusiness } = await import("@/app/(app)/brand/actions");
+    await expect(saveSetupBusiness("b1", { ...complete, usp: "  80 homes installed in Mohali  " }))
+      .resolves.toMatchObject({ ok: true });
+    expect(mocks.update.mock.calls.at(-1)![0].usps).toEqual(["80 homes installed in Mohali", "Local installation team"]);
+  });
+
+  it("#1966: rejects unresolved or truncated chip blanks before writing", async () => {
+    const { saveSetupBusiness } = await import("@/app/(app)/brand/actions");
+    for (const usp of ["{n} homes installed in {area}", "80 homes installed in {area", "}".padStart(301, "a")]) {
+      await expect(saveSetupBusiness("b1", { ...complete, usp })).resolves.toMatchObject({ ok: false });
+    }
+    expect(mocks.insert).not.toHaveBeenCalled();
+    expect(mocks.update).not.toHaveBeenCalled();
+  });
+
+  it("#1966: includes a completed fact when the first save creates the business", async () => {
+    mocks.written.mockResolvedValue({ data: { id: "b2", ...complete, locations: ["Jaipur"], offers: [complete.offer] }, error: null });
+    const { saveSetupBusiness } = await import("@/app/(app)/brand/actions");
+    await saveSetupBusiness(null, { ...complete, usp: "Our own installation team, no subcontractors" });
+    expect(mocks.insert.mock.calls.at(-1)![0].usps).toEqual(["Our own installation team, no subcontractors"]);
+  });
+
+  it("#1966: doesn't truncate a longer existing Brand fact or block saving its other fields", async () => {
+    const usp = `${"Our own installation team. ".repeat(14)}No subcontractors.`;
+    mocks.current.mockResolvedValue({ data: { offers: [], usps: [usp] }, error: null });
+    mocks.written.mockResolvedValue({ data: { id: "b1", ...complete, locations: ["Jaipur"], offers: [] }, error: null });
+    const { saveSetupBusiness } = await import("@/app/(app)/brand/actions");
+    await expect(saveSetupBusiness("b1", { ...complete, usp })).resolves.toMatchObject({ ok: true });
+    expect(mocks.update.mock.calls.at(-1)![0].usps).toEqual([usp]);
+  });
+
+  it("#1966: an omitted or empty optional fact leaves saved facts untouched", async () => {
+    mocks.current.mockResolvedValue({ data: { offers: [], usps: ["Our own team", "Local workshop"] }, error: null });
+    mocks.written.mockResolvedValue({ data: { id: "b1", ...complete, locations: ["Jaipur"], offers: [] }, error: null });
+    const { saveSetupBusiness } = await import("@/app/(app)/brand/actions");
+    await saveSetupBusiness("b1", complete);
+    await saveSetupBusiness("b1", { ...complete, usp: " " });
+    for (const [payload] of mocks.update.mock.calls) expect(payload).not.toHaveProperty("usps");
   });
 });
 
@@ -215,6 +258,48 @@ describe("core: <SetupBusinessStep> (#1269)", () => {
     expect(screen.getByLabelText("Where you serve")).toHaveAttribute("placeholder", "e.g. Mohali\nKharar");
   });
 
+  it("#1966: no claim is prefilled; a chip focuses and selects its first blank", async () => {
+    await step({ ...business, vertical: "Rooftop solar" });
+    const field = screen.getByLabelText("Why do customers pick you? (optional)") as HTMLInputElement;
+    expect(field).toHaveValue("");
+    expect(screen.queryByRole("button", { name: "Registered PM Surya Ghar vendor" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "{n} homes installed in {area}" }));
+    expect(field).toHaveValue("{n} homes installed in {area}");
+    expect(field).toHaveFocus();
+    expect(field.value.slice(field.selectionStart!, field.selectionEnd!)).toBe("{n}");
+    type("What you sell", "IELTS coaching");
+    expect(screen.getByRole("button", { name: "Batches of at most {n} students" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "{n} homes installed in {area}" })).toBeNull();
+    type("What you sell", "Modular kitchens");
+    expect(screen.getByRole("button", { name: "Our own workshop in {area}" })).toBeInTheDocument();
+    type("What you sell", "Bakery");
+    expect(screen.queryByRole("button", { name: "Our own workshop in {area}" })).toBeNull();
+    expect(field).toHaveAttribute("placeholder", "e.g. Same-day visits in Mohali");
+  });
+
+  it("#1966: incomplete blanks never autosave or reach Create; completed text does", async () => {
+    await step({ ...business, vertical: complete.vertical, locations: ["Jaipur"], offers: [complete.offer], phone: complete.phone });
+    fireEvent.click(screen.getByRole("button", { name: "{n} homes installed in {area}" }));
+    await waitFor(() => expect(screen.getByLabelText("Why do customers pick you? (optional)")).toHaveAttribute("aria-invalid", "true"), { timeout: 2000 });
+    await act(async () => fireEvent.click(makeMyAds()));
+    expect(mocks.saveSetupBusiness).not.toHaveBeenCalled();
+    expect(mocks.push).not.toHaveBeenCalled();
+    type("Why do customers pick you? (optional)", "80 homes installed in Mohali");
+    await act(async () => fireEvent.click(makeMyAds()));
+    expect(mocks.saveSetupBusiness.mock.calls.at(-1)![1]).toMatchObject({ usp: "80 homes installed in Mohali" });
+    expect(mocks.push).toHaveBeenCalledWith("/create");
+  });
+
+  it("#1966: reads a saved first fact and translates the field and chips in Hindi", async () => {
+    const hi = await import("../../messages/hi.json");
+    const { SetupBusinessStep } = await import("@/components/setup-business-step");
+    render(<SetupBusinessStep business={{ ...business, vertical: "IELTS coaching", usps: ["Evening batches"] }} words={{ locale: "hi", messages: hi.setup }} />);
+    const field = screen.getByLabelText("ग्राहक आपको क्यों चुनते हैं? (ज़रूरी नहीं)");
+    expect(field).toHaveValue("Evening batches");
+    fireEvent.click(screen.getByRole("button", { name: "एक बैच में ज़्यादा से ज़्यादा {n} छात्र" }));
+    expect(field).toHaveValue("एक बैच में ज़्यादा से ज़्यादा {n} छात्र");
+  });
+
   it("completing the five fields saves them (brandUsable) and goes to Your ads", async () => {
     await step();
     type("What you sell", complete.vertical);
@@ -225,7 +310,7 @@ describe("core: <SetupBusinessStep> (#1269)", () => {
     await waitFor(() => expect(mocks.push).toHaveBeenCalledWith("/create"));
     const [id, saved] = mocks.saveSetupBusiness.mock.calls.at(-1)!;
     expect(id).toBe("b1");
-    expect(saved).toEqual(complete);
+    expect(saved).toEqual({ ...complete, usp: "" });
     expect(brandUsable({ ...saved, locations: setupLocations(saved.locations), offers: [saved.offer] })).toBe(true);
   });
 
