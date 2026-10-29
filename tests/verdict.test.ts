@@ -51,6 +51,8 @@ describe("verdict (#1255)", () => {
     expect(v({ impressions: 340, results: 1, spend: 120, comparison: null }).sentence).toBe("1 chat so far. AdBrain will tell you if it's working after 5.");
     // Paused before it ever showed: nothing was shown, so the bare line stays.
     expect(v({ status: "paused", impressions: 0, results: 0, spend: 0, comparison: null }).sentence).toBe("No chats yet.");
+    // QA nit on #2143: paused after showing; no promise of evening chats from ads that aren't running.
+    expect(v({ status: "paused", impressions: 340, results: 0, spend: 120, comparison: null }).sentence).toBe("No chats yet.");
     expect(v({ destination: "instant_form", opens: null, impressions: 340, results: 0, spend: 120, comparison: null }).sentence).toBe("No enquiries yet.");
   });
 

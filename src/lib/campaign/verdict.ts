@@ -132,7 +132,7 @@ export function verdict(input: VerdictInput, words?: Words<"verdict">): Verdict 
       return { state: "early", label: t("label.early"), action: null, sentence: input.results
         ? t("early", { chats: chats(input.results), min: String(EVIDENCE_MIN_RESULTS) })
         // #1929 (CPO, #1923): shown but no chat yet reads as failure on the first evening; say how often it was shown.
-        : whatsapp && input.impressions > 0 ? t("earlyShownNoChats", { impressions: formatNumber(input.impressions) })
+        : whatsapp && input.status === "active" && input.impressions > 0 ? t("earlyShownNoChats", { impressions: formatNumber(input.impressions) })
           : whatsapp ? t("earlyNoChats") : t("earlyNoEnquiries") };
     }
     const each = (word: "less" | "same" | "more" | null) => t("cost", { chat, cost: rupees(cost!), against: word ? against(word) : "" });
