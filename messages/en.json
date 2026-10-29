@@ -42,15 +42,6 @@
     "reviewTitle": "{n, plural, one {# ad needs review} other {# ads need review}}",
     "reviewDetail": "Check the picture and words before you approve them.",
     "reviewAction": "Review ads",
-    "contextTitle": "Finish your business details",
-    "contextDetail": "Missing: {fields}.",
-    "contextAction": "Update brand",
-    "field": {
-      "description": "business description",
-      "voice": "brand voice",
-      "audience": "target audience",
-      "areas": "service areas"
-    },
     "createTitle": "Make your first ads",
     "createDetail": "Who do you want to reach, and what would you like them to do?",
     "createAction": "Start creating",
@@ -77,7 +68,41 @@
     "planFreeEndsDetail": "Then it's ₹999 a month. No auto-debit; you pay when you choose.",
     "planDueTitle": "Your ₹999 plan payment is due",
     "planDueDetail": "Running ads keep running. New ads and campaigns wait until you pay.",
-    "planPayAction": "Pay ₹999"
+    "planPayAction": "Pay ₹999",
+    "meter": {
+      "title": "Your ads know {n} of {total} things about you",
+      "offer": "Make your offer specific: add a price or a free first step.",
+      "proof": "Add one number people can trust: years in business, jobs done or your warranty.",
+      "why": "Why do customers pick you? One line makes your ads sound like you, not like everyone else.",
+      "audience": "Who are your best customers?",
+      "example": "Like “{example}”.",
+      "add": "Add",
+      "notNow": "Not now",
+      "save": "Save",
+      "cancel": "Cancel",
+      "nextCreate": "Your next ads will use this. Running ads don't change.",
+      "saved": "Saved. Your next ads will use this.",
+      "label": {
+        "offer": "Your offer",
+        "proof": "A number people can trust",
+        "why": "Why customers pick you",
+        "audience": "Your best customers"
+      },
+      "examples": {
+        "solar": {
+          "offer": "Free site survey",
+          "audience": "homeowners in Mohali with ₹3,000+ bills"
+        },
+        "interiors": {
+          "offer": "Free design visit",
+          "audience": "families moving into a new flat"
+        },
+        "ielts": {
+          "offer": "Free demo class",
+          "audience": "Class 12 students going abroad"
+        }
+      }
+    }
   },
   "settings": {
     "language": "App language",

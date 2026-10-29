@@ -43,6 +43,8 @@ export interface WorkspaceHomeProps {
   adReview?: HomeAdReview | null;
   /** #1469: the streamed rejected-ads section, shown when `adReview` is "rejected". */
   rejectedAds?: ReactNode;
+  /** #2032: the Brand meter card, after the next step; left out when the Brand is complete or snoozed. */
+  brandMeter?: ReactNode;
   /** #1650: the day-7 'would you pay ₹999 a month?' card, when it's due. */
   pilotQuestion?: ReactNode;
   now?: number;
@@ -71,6 +73,7 @@ export function WorkspaceHome({
   adReview = null,
   rejectedAds,
   pilotQuestion,
+  brandMeter,
   now,
   locale = "en",
 }: WorkspaceHomeProps) {
@@ -201,6 +204,8 @@ export function WorkspaceHome({
               </div>
             )}
           </section>
+
+          {brandMeter}
 
           {business && (
             <section aria-labelledby="campaigns-title" className="min-w-0">
