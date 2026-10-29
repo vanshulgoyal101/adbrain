@@ -448,10 +448,6 @@ export function adReviewState(ad: { id: string; effective_status?: string; ad_re
   return { adId: ad.id, state, effectiveStatus: status, reasons: all.map((item) => item.message), feedback: all };
 }
 
-/** #1799: Meta's subcode for a campaign spend_cap under the account's `min_campaign_group_spend_cap`. */
-export const CAMPAIGN_SPEND_CAP_TOO_LOW = 2446307;
-export const CAMPAIGN_SPEND_CAP_TOO_LOW_MESSAGE = "Meta needs at least ₹5,000 as a campaign's total limit. Choose how many days to run (a run with a day limit has no such minimum), or add funds.";
-
 /** Graph allows about one status write per object per 30 s (error 613). */
 const STATUS_RATE_LIMIT_WAIT_MS = 30_000;
 
@@ -462,9 +458,6 @@ export function friendlyMetaError(
 ): string {
   const message = error instanceof Error ? error.message : "";
   const normalized = message.toLowerCase();
-  // #1799 (QA, recorded): a campaign spend_cap under the account's minimum (₹5,000 INR); Meta's text is in the token
-  // user's language, so the subcode decides.
-  if (error instanceof MetaError && error.subcode === CAMPAIGN_SPEND_CAP_TOO_LOW) return CAMPAIGN_SPEND_CAP_TOO_LOW_MESSAGE;
   if (/lead_gen_form_id|call_to_action|invalid.*cta|cta.*invalid/.test(normalized)) {
     return "Meta rejected the ad call-to-action for this lead form. Please choose another approved creative or lead form and try again.";
   }
@@ -1786,7 +1779,6 @@ export class MetaClient {
     return decodeLifetimeSpendPaise(await this.graph<unknown>(`${node}/insights?fields=spend&date_preset=maximum`));
   }
 
-  /** Live ad account funding (#245): Meta's account spending limit and amount spent, both media paise excluding GST. */
   /** #1799: Meta's smallest campaign spend_cap for this account (paise; ₹5,000 for INR on Oct 28); null if unread. */
   async readMinCampaignSpendCapPaise(): Promise<number | null> {
     const account = await this.graph<{ id?: string; min_campaign_group_spend_cap?: string }>(
@@ -1796,6 +1788,7 @@ export class MetaClient {
     return account.id === this.creds.adAccountId && value && /^\d{1,15}$/.test(value) ? Number(value) : null;
   }
 
+  /** Live ad account funding (#245): Meta's account spending limit and amount spent, both media paise excluding GST. */
   async readAccountFunding(): Promise<AccountFunding> {
     const account = await this.graph<{ id?: string; currency?: string; spend_cap?: string; amount_spent?: string; is_prepay_account?: boolean }>(
       `${encodeURIComponent(this.creds.adAccountId)}?fields=id,spend_cap,amount_spent,is_prepay_account,currency`,
