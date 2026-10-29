@@ -720,13 +720,13 @@
       "rule": "C4-file-size",
       "from": "src/components/campaigns.tsx",
       "to": "> 400 lines",
-      "lines": 2727
+      "lines": 2753
     },
     {
       "rule": "C4-file-size",
       "from": "src/components/creative-copy-editor.tsx",
       "to": "> 400 lines",
-      "lines": 564
+      "lines": 579
     },
     {
       "rule": "C4-file-size",
@@ -744,7 +744,7 @@
       "rule": "C4-file-size",
       "from": "src/components/setup-ads-step.tsx",
       "to": "> 400 lines",
-      "lines": 439
+      "lines": 442
     },
     {
       "rule": "C4-file-size",
@@ -786,7 +786,7 @@
       "rule": "C4-file-size",
       "from": "src/lib/meta/client.ts",
       "to": "> 400 lines",
-      "lines": 2462
+      "lines": 2481
     },
     {
       "rule": "C4-file-size",
