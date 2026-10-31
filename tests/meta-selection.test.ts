@@ -66,5 +66,20 @@ describe("Meta asset selection", () => {
     expect(candidate.eligible).toBe(false);
     expect(candidate.blockers).toEqual([expect.objectContaining({ code: "SETUP_REQUIRED" })]);
     expect(candidate.blockers[0].message).toMatch(/same business portfolio.*Meta Business Settings/);
+    expect(candidate.blockers[0].message).toContain("No portfolio yet? Create one in Business Settings.");
+  });
+
+  it("names the account's currency and the fix for a non-rupee ad account (#2421)", () => {
+    const [candidate] = buildCandidateDTOs(buildDiscoveryPairs({
+      adAccounts: [{ ...account, currency: "USD" }], pages: [page],
+      relationshipPairs: [{ adAccountId: "act_1", pageId: "page_1", metaBusinessId: "biz_1" }],
+      supportedCurrencies: ["INR"],
+    }));
+    expect(candidate.eligible).toBe(false);
+    expect(candidate.blockers).toEqual([{
+      code: "UNSUPPORTED_CURRENCY",
+      message: "This ad account uses USD. AdBrain runs ads in rupees, and Meta can't change an account's currency. Create a new ad account in rupees (INR) in your business portfolio, then tap Reconnect Meta.",
+      action: null,
+    }]);
   });
 });

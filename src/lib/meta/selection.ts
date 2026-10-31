@@ -82,10 +82,11 @@ export function buildCandidateDTOs(
       blockers.push(adAccountBlocker(pair.adAccount.status === 1 ? undefined : pair.adAccount.status, pair.adAccount.id)!);
     }
     if (!pair.relationshipVerified) {
-      blockers.push({ code: "SETUP_REQUIRED", message: "This Page and ad account aren't in the same business portfolio. In Meta Business Settings, add both to one portfolio, then connect again.", action: null });
+      blockers.push({ code: "SETUP_REQUIRED", message: "This Page and ad account aren't in the same business portfolio. In Meta Business Settings, add both to one portfolio, then connect again. No portfolio yet? Create one in Business Settings.", action: null });
     }
     if (!pair.currencySupported) {
-      blockers.push({ code: "UNSUPPORTED_CURRENCY", message: "This account currency is not supported for campaigns yet.", action: null });
+      // Meta can't change an existing ad account's currency, so the only fix is a new rupee account.
+      blockers.push({ code: "UNSUPPORTED_CURRENCY", message: `This ad account uses ${currency}. AdBrain runs ads in rupees, and Meta can't change an account's currency. Create a new ad account in rupees (INR) in your business portfolio, then tap Reconnect Meta.`, action: null });
     }
     return [{
       pairId: pair.pairId,

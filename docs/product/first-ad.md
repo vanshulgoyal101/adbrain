@@ -154,9 +154,17 @@ ads were made from older details or in Studio, Home takes you back to Your ads i
     "no Facebook Page"). Tap "Reconnect Meta" and tick the ad account and Page in
     Meta's window. No ad account yet? Create one in rupees in the business portfolio.
   - Not in one portfolio: "This Page and ad account aren't in the same business
-    portfolio…". If another pair is listed as ready, choose it. Otherwise tap "Open
-    business settings", add the Page and the rupee ad account to one portfolio,
+    portfolio…". If the list has another pair you can tick (no amber note under
+    it), choose it. Otherwise tap "Open business settings", add the Page and the
+    rupee ad account to one portfolio (no portfolio yet? create one there first),
     then tap "Reconnect Meta".
+  - Not in rupees: "This ad account uses USD. AdBrain runs ads in rupees, and Meta
+    can't change an account's currency…". Tap "Open business settings", create a
+    new ad account in rupees (INR) in the same portfolio, then tap "Reconnect Meta"
+    and tick the new account.
+  - No currency or time zone: "Meta did not return a currency or time zone for
+    your ad account…". Open the ad account's settings in Meta Business Settings,
+    check its currency and time zone are set, then tap "Reconnect Meta".
   - Ad account not active: "This ad account is not active. Check Account quality
     in Meta." Fix it on Meta's Account quality page, or connect another ad
     account.
