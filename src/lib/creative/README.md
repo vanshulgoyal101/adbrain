@@ -7,6 +7,7 @@ Part of the [repository map](../../../docs/architecture/overview.md#repository-m
 | File | Owns |
 | --- | --- |
 | [generate.ts](generate.ts) | `generateVariants()`: one concept and one picture per angle, with progress and failure callbacks |
+| [batch-reuse.ts](batch-reuse.ts) | An ad whose free picture busied out reuses a sibling's picture, $0, `fallbackFrom: "batch_reuse"` (#2378) |
 | [concept.ts](concept.ts) | Concept prompt, `creativeConceptSchema` and `validateConcept()` |
 | [interview.ts](interview.ts) | The Create interview: next question or an editable brief |
 | [design.ts](design.ts) | `AdDesignSpec`, formats and sizes, brand colour and contact labels |

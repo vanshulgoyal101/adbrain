@@ -36,9 +36,9 @@ with existing campaigns, payment shows "Set up for your last campaign" and the b
 at the offered amount nearest the last campaign's daily budget. `?again=1` is kept by Back.
 
 Until then Home (`/dashboard`) is one resume card, "Your first ad · Step N of 3 ·
-{step} · Continue" (#1272, `setupResumeStep`): step 1 until the five facts make a
-usable Brand, step 2 until an ad is picked (approved), then step 3. At step 3 with ads made
-from today's step 1 (`madeForSetup`, e.g. a handed-over prospect account), the card says
+{step} · Continue" (#1272, `setupResume`): step 1 until the five facts make a
+usable Brand, step 2 until an approved ad was made from today's step 1 (`madeForSetup`),
+then step 3. At step 3 (e.g. a handed-over prospect account), the card says
 "Your N ads are ready", shows up to 3 of them and leads with **Connect and go live** (#1712);
 budget, area and payment stay on step 3. The + button
 reads "Continue your first ad" and `/create` sends a first-timer without the five

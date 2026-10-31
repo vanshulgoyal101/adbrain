@@ -274,7 +274,9 @@ export function offTrack({ issues, comments, prs, now }) {
   }
   const quiet = WORKERS.filter((r) => counts[r] > 0 && !(now - (lastSeen[r] ?? 0) < QUIET_MIN * 60_000))
     .map((r) => ({ role: r, minutes: lastSeen[r] ? Math.floor((now - lastSeen[r]) / 60_000) : null }));
-  const stale = prs.filter((pr) => !pr.draft && now - Date.parse(pr.updated_at) >= STALE_PR_MIN * 60_000)
+  // Frozen (`later`) and parked PRs wait on purpose; only live work can go stale.
+  const frozen = (pr) => (pr.labels ?? []).some((l) => { const n = typeof l === "string" ? l : l.name; return n === "later" || PARKED.has(n); });
+  const stale = prs.filter((pr) => !pr.draft && !frozen(pr) && now - Date.parse(pr.updated_at) >= STALE_PR_MIN * 60_000)
     .map((pr) => ({ number: pr.number, title: pr.title, minutes: Math.floor((now - Date.parse(pr.updated_at)) / 60_000) }));
   return { quiet, stale };
 }
@@ -284,10 +286,20 @@ export function offTrack({ issues, comments, prs, now }) {
  * Workflows failing on `min` or more distinct PR branches in the window: these never reach main/next pushes,
  * so without this the CTO only hears about them from the owner's inbox (#926's core-approval, Oct 27).
  */
+// A run that ends within 30 s never started a job: the merge-ref race (#878), which the train retries itself.
+const NO_JOB_MS = 30_000;
+const ranNoJob = (run) => run.run_started_at && run.updated_at && Date.parse(run.updated_at) - Date.parse(run.run_started_at) < NO_JOB_MS;
+
+/** `runs` newest first (as the API returns them). A branch whose latest run of that workflow passed is fixed, not systemic. */
 export function systemicFailures(runs, min = 2) {
   const byName = new Map();
+  const seen = new Set();
   for (const run of runs) {
-    if (run.event !== "pull_request" || run.conclusion !== "failure") continue;
+    if (run.event !== "pull_request") continue;
+    const key = `${run.name}\u0000${run.head_branch}`;
+    const latest = !seen.has(key);
+    seen.add(key);
+    if (!latest || run.conclusion !== "failure" || ranNoJob(run)) continue;
     const entry = byName.get(run.name) ?? { branches: new Set(), url: run.html_url };
     entry.branches.add(run.head_branch);
     byName.set(run.name, entry);
@@ -470,7 +482,6 @@ const openItems = async () => {
 };
 const openIssues = async () => (await openItems()).filter(item => !item.pull_request);
 const describeLow = (low) => low.map(({ role: r, count }) => `Queue low: ${NAMES[r]} has ${count} actionable item(s); refill from the CEO priorities (worker table)`);
-let startLow = new Set();
 
 async function findWork() {
   const found = [];
@@ -504,13 +515,6 @@ async function findWork() {
     if (mineNumbers.has(number) || addressedToMe(body) || linkedToMine.has(number)) {
       found.push(`#${number} new comment: "${brief(body)}" ${comment.html_url}`);
     }
-  }
-  if (role === "cto") {
-    const low = lowQueues(await openItems());
-    const lowNow = new Set(low.map(({ role: r }) => r));
-    // A refilled worker leaves the known-low set, so running dry again alerts again.
-    for (const r of startLow) if (!lowNow.has(r)) startLow.delete(r);
-    for (const line of describeLow(low.filter(({ role: r }) => !startLow.has(r)))) found.push(line);
   }
   if (role === "cto" || role === "devops") {
     const runs = (await api(`repos/${repo}/actions/runs?status=completed&created=${encodeURIComponent(`>=${since}`)}&per_page=100`)).workflow_runs ?? [];
@@ -616,8 +620,8 @@ try {
   const waiting = await backlog();
   if (role === "cto") {
     const low = lowQueues(await openItems());
-    startLow = new Set(low.map(({ role: r }) => r));
-    // Outcome first (CEO, #364 Oct 29): a thin queue is not work by itself, so it's shown but doesn't stop the wait.
+    // Outcome first (CEO, #364 Oct 29; AGENTS.md Oct 30): a thin queue is not work by itself, so it's shown at
+    // start-up but never wakes the CTO mid-wait.
     for (const line of describeLow(low)) console.log(`(info) ${line}`);
   }
   // #364 (CEO, Oct 29): never wait while you own work you can act on. The top 3, then a non-zero exit.

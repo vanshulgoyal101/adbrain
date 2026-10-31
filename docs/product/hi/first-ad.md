@@ -1,5 +1,5 @@
 # फ़ोन पर आपका पहला ऐड
-<!-- mirrors ../first-ad.md 6d905c72aacb -->
+<!-- mirrors ../first-ad.md c18f2dd38f7f -->
 
 यह [Your first ad on a phone](../first-ad.md) का हिंदी रूप है; अंग्रेज़ी पेज बदले तो इसे भी बदलें।
 [Features and workflows](../README.md) का हिस्सा।
@@ -53,8 +53,9 @@ you before it's due."
 
 साइन इन के बाद आप "Set up your first ad", "Step 1 of 3" पर पहुँचते हैं। ऊपर की पट्टी
 आपके तीनों स्टेप दिखाती है। अगर आप बीच में छोड़कर वापस आएँ, तो Home पर "Your first ad"
-के साथ "Continue" दिखेगा; ऐड बन जाने के बाद वहाँ "Your 3 ads are ready" के साथ
-"Connect and go live" दिखेगा।
+के साथ "Continue" दिखेगा; चुना गया ऐड आपकी मौजूदा जानकारी से मेल खाने पर "Your ad is
+ready" (या "Your N ads are ready") के साथ "Connect and go live" दिखेगा।
+अगर चुने हुए ऐड पुरानी जानकारी से या Studio में बने थे, Home आपको फिर Your ads पर ले जाएगा।
 
 ## स्टेप 1: आपका बिज़नेस
 
@@ -126,6 +127,13 @@ you before it's due."
     "Didn't connect? If Facebook said the app isn't available, accept the invite
     first, then try again.": आपने ऊपर वाला इनवाइट छोड़ दिया। "Open my invites" दबाएँ,
     स्वीकार करें, फिर "Try again"।
+  - ऐड अकाउंट या पेज शेयर नहीं हुआ: "Meta shared no ad account with AdBrain…" (या
+    "no Facebook Page")। "Reconnect Meta" दबाएँ और Meta की विंडो में ऐड अकाउंट और पेज
+    पर टिक करें। ऐड अकाउंट नहीं है? बिज़नेस पोर्टफ़ोलियो में रुपये वाला एक बनाएँ।
+  - एक पोर्टफ़ोलियो में नहीं: "This Page and ad account aren't in the same business
+    portfolio…"। अगर कोई दूसरी जोड़ी तैयार दिखे तो उसे चुनें। नहीं तो "Open business
+    settings" दबाएँ, पेज और रुपये वाला ऐड अकाउंट एक पोर्टफ़ोलियो में जोड़ें, फिर
+    "Reconnect Meta" दबाएँ।
   - ऐड अकाउंट चालू नहीं: "This ad account is not active. Check Account quality
     in Meta." इसे Meta के Account quality पेज पर ठीक करें, या कोई दूसरा ऐड अकाउंट
     कनेक्ट करें।

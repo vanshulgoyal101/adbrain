@@ -79,6 +79,8 @@ describe("CTO on-track check", () => {
       prs: [
         { number: 357, title: "#334 Advantage+", updated_at: at(75), draft: false },
         { number: 365, title: "#335 enquiries", updated_at: at(10), draft: false },
+        { number: 1248, title: "#784 frozen", updated_at: at(2000), draft: false, labels: [{ name: "later" }] },
+        { number: 1250, title: "#785 parked", updated_at: at(2000), draft: false, labels: [{ name: "parked" }] },
       ],
     });
     expect(result.quiet).toEqual([{ role: "dev2", minutes: 120 }]);
@@ -259,6 +261,15 @@ describe("systemic CI failures (CTO auto-track)", () => {
     ]);
     expect(lines).toHaveLength(1);
     expect(lines[0]).toMatch(/^CI systemic: Core approval failed on 2 PR branches \(dev3\/701, designer\/847\)/);
+  });
+  it("ignores 0-job runs (#878) and branches that went green since", () => {
+    const at = (s: number) => new Date(Date.parse("2026-10-31T12:00:00Z") + s * 1000).toISOString();
+    const lines = systemicFailures([
+      { ...run("CI", "next"), run_started_at: at(0), updated_at: at(14) },
+      run("CI", "work/issue-2371", "success"), { ...run("CI", "work/issue-2371"), run_started_at: at(0), updated_at: at(190) },
+      { ...run("CI", "dev/1"), run_started_at: at(0), updated_at: at(190) },
+    ]);
+    expect(lines).toEqual([]);
   });
 });
 

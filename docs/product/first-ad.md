@@ -46,8 +46,9 @@ you sign in yourself, on your own phone, within 30 minutes.
 
 After signing in you land on "Set up your first ad", "Step 1 of 3". The bar at the
 top shows your three steps. If you leave and come back, Home shows "Your first ad"
-with "Continue"; once your ads are made it shows "Your 3 ads are ready" with
-"Connect and go live".
+with "Continue"; once a picked ad matches your current details it shows "Your ad is
+ready" (or "Your N ads are ready") with "Connect and go live". If your picked
+ads were made from older details or in Studio, Home takes you back to Your ads instead.
 
 ## Step 1: Your business
 
@@ -118,6 +119,13 @@ with "Continue"; once your ads are made it shows "Your 3 ads are ready" with
     "Didn't connect? If Facebook said the app isn't available, accept the invite
     first, then try again.": you skipped the invite above. Tap "Open my invites",
     accept, then "Try again".
+  - No ad account or Page shared: "Meta shared no ad account with AdBrain…" (or
+    "no Facebook Page"). Tap "Reconnect Meta" and tick the ad account and Page in
+    Meta's window. No ad account yet? Create one in rupees in the business portfolio.
+  - Not in one portfolio: "This Page and ad account aren't in the same business
+    portfolio…". If another pair is listed as ready, choose it. Otherwise tap "Open
+    business settings", add the Page and the rupee ad account to one portfolio,
+    then tap "Reconnect Meta".
   - Ad account not active: "This ad account is not active. Check Account quality
     in Meta." Fix it on Meta's Account quality page, or connect another ad
     account.
