@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { beforeEach } from "vitest";
-import { MANAGER_SCOPE, provisionManagedAccount, type ManagerTokens, type ProvisionGraph, type ProvisionStore } from "@/lib/meta/managed-provision";
+import { MANAGER_SCOPE, metaVertical, provisionManagedAccount, type ManagerTokens, type ProvisionGraph, type ProvisionStore } from "@/lib/meta/managed-provision";
 import recordedLookup from "./core/fixtures/meta/parent-owned-businesses.json";
 
 // #521 (2-Tier). The child lookup uses Meta's recorded answer for Solaride (no children yet);
@@ -79,7 +79,7 @@ const manager: ManagerTokens = {
   remove: async (tokenId) => { removed.push(tokenId); vault.delete(tokenId); },
 };
 const run = (store: ProvisionStore, graph: ProvisionGraph) =>
-  provisionManagedAccount({ businessId: business, businessName: "Solaride Mohali", parentBusinessId: PARENT, store, graph, tokens, manager, requestId: "r1" });
+  provisionManagedAccount({ businessId: business, businessName: "Solaride Mohali", vertical: "ENERGY_AND_UTILITIES", parentBusinessId: PARENT, store, graph, tokens, manager, requestId: "r1" });
 beforeEach(() => { vault.clear(); saved.length = 0; removed.length = 0; });
 
 describe("provisionManagedAccount (#521)", () => {
@@ -89,7 +89,8 @@ describe("provisionManagedAccount (#521)", () => {
     expect(await run(db.store, graph)).toEqual({ ok: true, state: "ad_account_created", childBusinessId: "7000000000001", adAccountId: "act_8000000000001" });
     const child = calls.find((c) => c.method === "POST" && c.path.endsWith("/owned_businesses"))!;
     expect(child.token).toBe("customer-token");
-    expect(child.form).toMatchObject({ name: "Solaride Mohali", shared_page_id: "111", child_business_external_id: business, timezone_id: "71" });
+    // #2358: Meta requires `vertical` on a new business (its owned_businesses reference omits it).
+    expect(child.form).toMatchObject({ name: "Solaride Mohali", vertical: "ENERGY_AND_UTILITIES", shared_page_id: "111", child_business_external_id: business, timezone_id: "71" });
     expect(JSON.parse(child.form!.page_permitted_tasks)).toEqual(["ADVERTISE", "ANALYZE", "MESSAGING"]);
     const account = calls.find((c) => c.path === "7000000000001/adaccount")!;
     expect(account.token).toBe("parent-token");
@@ -299,5 +300,16 @@ describe("provisionManagedAccount (#521)", () => {
       expect(await run(ledger({ business_id: business, page_id: "111", ...row }).store, graph)).toEqual({ ok: false, code: "PAGE_NOT_LINKED", retryable: false });
       expect(calls).toEqual([]);
     }
+  });
+});
+
+describe("metaVertical (#2358)", () => {
+  it("maps the Brand's category to Meta's business vertical enum, OTHER when unsure", () => {
+    expect(metaVertical("Rooftop solar installer")).toBe("ENERGY_AND_UTILITIES");
+    expect(metaVertical("IELTS coaching")).toBe("EDUCATION");
+    expect(metaVertical("Study abroad consultant")).toBe("EDUCATION");
+    expect(metaVertical("Modular kitchens and interiors")).toBe("PROFESSIONAL_SERVICES");
+    expect(metaVertical("Bakery")).toBe("OTHER");
+    expect(metaVertical(null)).toBe("OTHER");
   });
 });

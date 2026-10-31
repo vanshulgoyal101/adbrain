@@ -93,10 +93,11 @@ const schema = z.object({
   META_LOGIN_CONFIG_ID: z.string().optional().default(""),
   // Base64-encoded 32-byte key for server-only Meta token encryption.
   META_TOKEN_ENCRYPTION_KEY: z.string().optional().default(""),
-  // 2-Tier managed accounts (#518, #520): Solaride is the parent business; its system user's
+  // 2-Tier managed accounts (#518, #520): the AdBrain BP is the parent business (#2357); its system user's
   // token provisions child businesses. Off until provisioning ships; the token is Sensitive in Vercel.
+  // No default parent (#2358): an unset id is NOT_CONFIGURED, never someone else's business.
   MANAGED_ACCOUNTS_ENABLED: z.string().optional().default("false").transform((v) => v === "true" || v === "1"),
-  META_PARENT_BUSINESS_ID: z.string().regex(/^\d+$/).optional().default("1158100643072508"),
+  META_PARENT_BUSINESS_ID: z.preprocess((v) => (v === "" ? undefined : v), z.string().regex(/^\d+$/).optional()),
   META_PARENT_SYSTEM_TOKEN: z.string().optional().default(""),
 
   // Internal traffic runner (for Meta review call-volume generation)
