@@ -129,6 +129,12 @@ function reviewedMessage({ source, opening, language }: ResolvedWhatsAppMessage)
   };
 }
 
+/** #2452: whether the message launch rebuilt from fresh reads is the one this review checked; launch refuses otherwise. */
+export function isReviewedWhatsAppMessage(message: ResolvedWhatsAppMessage, review: Pick<ReviewDTO, "whatsappMessage">): boolean {
+  return Boolean(review.whatsappMessage)
+    && JSON.stringify(canonicalize(reviewedMessage(message))) === JSON.stringify(canonicalize(review.whatsappMessage));
+}
+
 function adName(creative: PreflightCreative): string {
   const headline = (creative.headline ?? "").trim();
   if (!headline) return "you chose";
@@ -208,9 +214,9 @@ export function buildCanonicalReviewPayload(
     // #493: only when it changes what's sent, so plans reviewed before this field keep their hash.
     ...(input.draft.destination === "whatsapp" && input.draft.whatsappLanguage && input.draft.whatsappLanguage !== "ad"
       ? { whatsappLanguage: input.draft.whatsappLanguage } : {}),
-    // #840: an edited or saved message is fixed text, so a change to it needs a new review. A
-    // suggestion is derived from what's already here, so plans without one keep their hash.
-    ...(input.draft.destination === "whatsapp" && input.whatsappMessage && input.whatsappMessage.source !== "suggested"
+    // #840/#2452: the exact message launch will send, suggested ones too: a suggestion is rebuilt from the Brand's name,
+    // offers and areas at launch, so a Brand edit after Review changes the plan and launch refuses it.
+    ...(input.draft.destination === "whatsapp" && input.whatsappMessage
       ? { whatsappOpening: input.whatsappMessage.opening } : {}),
     dailyBudgetRupees: input.draft.dailyBudgetRupees,
     abTest: input.draft.abTest,

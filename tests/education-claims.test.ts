@@ -39,6 +39,9 @@ describe("education banned claims (#1609)", () => {
     // Review blocks the same whole phrase, not "visa interview".
     expect(adPolicyHits([{ id: "a", headline: "Visa in 30 days" }], "study abroad").map((hit) => hit.term)).toContain("visa in ");
     expect(adPolicyHits([{ id: "a", headline: "Visa interview practice" }], "study abroad")).toEqual([]);
+    // #2452: "just" or "only" in front of the number is the same fixed timeline.
+    expect(adPolicyHits([{ id: "a", headline: "Visa in just 30 days" }], "study abroad").map((hit) => hit.term)).toContain("visa in just ");
+    expect(adPolicyHits([{ id: "a", headline: "Canada visa in only 2 weeks" }], "study abroad").map((hit) => hit.term)).toContain("visa in only ");
   });
 
   it("flags first-attempt promises (CPO, #1910 Ad Library sample)", () => {
