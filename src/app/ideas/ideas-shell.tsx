@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { Brain } from "lucide-react";
 import { LEGAL_LINKS } from "@/lib/legal-links";
+import { SIGN_IN_HREF } from "@/lib/site";
 import styles from "./ideas.module.css";
 
 export function IdeasShell({ children }: { children: ReactNode }) {
@@ -9,7 +10,7 @@ export function IdeasShell({ children }: { children: ReactNode }) {
     <div className={styles.page}>
       <header className={styles.header}>
         <Link href="/" aria-label="AdBrain home" className={styles.logo}><Brain aria-hidden="true" size={26} /> AdBrain</Link>
-        <Link href="/login" className={styles.signIn}>Sign in</Link>
+        <Link href={SIGN_IN_HREF} className={styles.signIn}>Sign in</Link>
       </header>
       <main className={styles.main}>{children}</main>
       <footer className={styles.footer}>

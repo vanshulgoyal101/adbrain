@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { Brain } from "lucide-react";
-import { siteConfig } from "@/lib/site";
+import { SIGN_IN_HREF, siteConfig } from "@/lib/site";
 
 /**
  * Last-resort boundary. `error.tsx` cannot catch a failure in the root layout,
@@ -65,7 +65,7 @@ export default function GlobalError({
         >
           Try again
         </button>
-        <a href="/login" style={{ color: "#0f6440", fontSize: "0.875rem", fontWeight: 500 }}>Sign in</a>
+        <a href={SIGN_IN_HREF} style={{ color: "#0f6440", fontSize: "0.875rem", fontWeight: 500 }}>Sign in</a>
       </body>
     </html>
   );

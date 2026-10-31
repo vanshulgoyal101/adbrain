@@ -44,6 +44,7 @@ you before it's due."
 - **आपको दिखेगा:** फ़ोन पर पहले एक कार्ड: "From your business to WhatsApp chats"।
   फ़ॉर्म तक जाने के लिए "Skip" (या "Create my free account") दबाएँ, जिसके ऊपर लिखा है "Create your
   free account"। पहले से अकाउंट है? "Already have an account? Sign in" दबाएँ।
+  होमपेज के ऊपर वाला "Sign in" लिंक यह कार्ड छोड़कर सीधे "Welcome back" खोलता है।
 - **टैप करें:** "Continue with Google", या अपना ईमेल डालकर "Email me a sign-in
   link" दबाएँ। "No password needed. The link creates your account."
 - **कितना समय:** एक मिनट। ईमेल से करने पर "Check your email" दिखेगा: लिंक उसी फ़ोन

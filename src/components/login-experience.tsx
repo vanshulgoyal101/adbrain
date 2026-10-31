@@ -47,8 +47,10 @@ function subscribePhone(listener: () => void) {
 }
 
 /** `deepLink`: sent here from an app page (e.g. ?redirect=/campaigns), so it is a returning user. */
-export function LoginExperience({ deepLink = false, failedSignIn = false }: {
+export function LoginExperience({ deepLink = false, signIn = false, failedSignIn = false }: {
   deepLink?: boolean;
+  /** #1793: arrived from a "Sign in" link (`?mode=signin`); the visitor said they have an account. */
+  signIn?: boolean;
   /** #1428: back from a failed sign-in; the phone intro would cover what went wrong. */
   failedSignIn?: boolean;
 }) {
@@ -63,7 +65,7 @@ export function LoginExperience({ deepLink = false, failedSignIn = false }: {
   const phone = useSyncExternalStore(subscribePhone, () => window.matchMedia(PHONE_QUERY).matches, () => false);
   // A visitor who picked an idea in the gallery is most likely new, even though /create sent them here.
   const pendingIdea = useHasPendingIdea();
-  const mode = choice ?? (returning || (deepLink && !pendingIdea) ? "returning" : "new");
+  const mode = choice ?? (returning || signIn || (deepLink && !pendingIdea) ? "returning" : "new");
   const isNew = mode === "new";
 
   const closeIntro = () => {
