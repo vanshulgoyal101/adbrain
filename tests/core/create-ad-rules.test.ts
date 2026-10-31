@@ -8,6 +8,7 @@ import { personInScene, personSubjectLine } from "@/lib/creative/visual-rules";
 import { AD_ANGLES, type BrandContext } from "@/lib/templates/ads";
 import baseline from "../eval/baseline.json";
 import cases from "../eval/cases.json";
+import regenerate from "./fixtures/create/solaride-regenerate.json";
 
 // #418 rules 1, 4, 5 and 7 (Analyst, #941). Prompt lines plus $0 checks: none adds a validation repair,
 // so Create's latency (#713) is unchanged. The recorded inputs are production Haiku concepts (fixtures)
@@ -26,8 +27,7 @@ const collect = (value: unknown): void => {
 for (const file of readdirSync(FIXTURES)) collect(JSON.parse(readFileSync(join(FIXTURES, file), "utf8")));
 const recordedDirections = [...new Set(directions)];
 
-const solarideReplies = (JSON.parse(readFileSync(join(FIXTURES, "solaride-regenerate.json"), "utf8")) as { replies: { content: string }[] })
-  .replies.map((reply) => reply.content.replace(/^```json\s*|\s*```\s*$/g, ""));
+const solarideReplies = regenerate.replies.map((reply) => reply.content.replace(/^```json\s*|\s*```\s*$/g, ""));
 const caseById = (id: string) => cases.cases.find((item) => item.id === id)!;
 const solaride = caseById("solaride-factory-en");
 const cedar = caseById("cedar-ridge-en");
@@ -53,15 +53,39 @@ describe("core: Create follows the long-running local ad rules (#418 rules 1, 4,
     expect(system).not.toMatch(/Do not default to stock people/);
   });
 
-  it("#1147: the copy never asks people to call: the model gets no phone number and is told the button opens a chat or form", () => {
-    expect(system).toMatch(/never ask people to call, phone or email/);
-    const brand = { ...(cedar.brand as BrandContext), phone: "+1 512 555 0142", email: "hello@cedarridge.example" };
-    const user = buildConceptMessages({ brand, brief: cedar.brief, angle: AD_ANGLES[0] })[1].content as string;
-    expect(user).not.toContain("555 0142");
-    expect(user).not.toContain("hello@cedarridge.example");
-    // Before: recorded Haiku copy asked people to call ("…then book or call our Austin clinic"; CPO's #1131 walk saw "…or call <phone>").
-    const recorded = readFileSync(join(FIXTURES, "cedar-ridge-run4.json"), "utf8") + readFileSync(join(FIXTURES, "cedar-ridge-haiku.json"), "utf8");
-    expect(recorded).toMatch(/\bor call\b/);
+  it("#1147: hides WhatsApp contacts from the model but keeps other businesses' contacts", () => {
+    const whatsappBrand = { ...(solaride.brand as BrandContext), phone: "+91 80000 00001", email: "hello@solar.example" };
+    const whatsapp = JSON.parse(buildConceptMessages({ brand: whatsappBrand, brief: solaride.brief, angle: AD_ANGLES[0] })[1].content as string);
+    expect(whatsapp.contact).toBe("whatsapp");
+    expect(whatsapp.brand.phone).toBeUndefined();
+    expect(whatsapp.brand.email).toBeUndefined();
+
+    const otherBrand = { ...(cedar.brand as BrandContext), phone: "+1 512 555 0142", email: "hello@cedarridge.example" };
+    const other = JSON.parse(buildConceptMessages({ brand: otherBrand, brief: cedar.brief, angle: AD_ANGLES[0] })[1].content as string);
+    expect(other.contact).toBe("any");
+    expect(other.brand).toMatchObject({ phone: "+1 512 555 0142", email: "hello@cedarridge.example" });
+  });
+
+  it("#1364: keeps the quoted shared ask last after adding the WhatsApp contact line", () => {
+    const reply = JSON.parse(solarideReplies[0]);
+    const lines = reply.primary_text.split("\n").filter(Boolean);
+    const result = validateConcept({
+      ...reply,
+      primary_text: [...lines.slice(0, -1), "Send “Free site survey” to book."].join("\n"),
+    }, {
+      brand: { ...(regenerate.brand as BrandContext), phone: "+91 80000 00001" },
+      brief: regenerate.brief,
+      angle: AD_ANGLES.find((angle) => angle.name === regenerate.angle) ?? AD_ANGLES[0],
+      instructions: regenerate.instructions,
+      sourceFacts: regenerate.sourceFacts,
+    });
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.concept.primary_text.split("\n").slice(-2)).toEqual([
+      "Message us on WhatsApp.",
+      "Send “Free site survey” to book.",
+    ]);
+    expect(quotedAsk(result.concept.primary_text)).toBe("Free site survey");
   });
 
   it("rule 4: puts a person in every recorded picture that had none, and leaves the others alone", () => {
