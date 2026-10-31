@@ -57,7 +57,7 @@ describe("education banned claims (#1609)", () => {
   it("applies to education verticals only; solar is unchanged and health keeps its own list", () => {
     for (const vertical of ["IELTS coaching", "PTE academy", "study abroad", "overseas education", "immigration consultant", "spoken English classes"])
       expect(bannedClaimsForVertical(vertical), vertical).toEqual(expect.arrayContaining(EDUCATION_BANNED_CLAIMS));
-    expect(bannedClaimsForVertical("solar energy")).toEqual([]);
+    expect(bannedClaimsForVertical("solar energy")).not.toContain("success rate");
     expect(bannedClaimsForVertical("dental clinic")).not.toContain("success rate");
   });
 });

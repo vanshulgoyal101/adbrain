@@ -132,6 +132,12 @@ describe("core: Review checks the saved ad wording (#739)", () => {
   });
 
   it("doesn't hold a non-health business to the clinic rules", () => {
-    expect(reviewCopy({ headline: "Guaranteed savings on your power bill" }, "solar energy").blockers).toEqual([]);
+    expect(reviewCopy({ headline: "Cures for a high power bill" }, "solar energy").blockers).toEqual([]);
+  });
+
+  it("blocks a solar ad promising guaranteed savings as a promise, not a health claim (#2423)", () => {
+    const result = reviewCopy({ headline: "Guaranteed savings on your power bill" }, "solar energy");
+    expect(result.blockers.map((item) => item.reason)).toEqual(["REVIEW_AD_POLICY"]);
+    expect(result.blockers[0].message).toBe('"guaranteed saving" in the ad "Guaranteed savings on your power bill" is a promise Meta rejects. Edit the ad to describe the service instead.');
   });
 });

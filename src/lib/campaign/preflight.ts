@@ -1,4 +1,4 @@
-import { adPolicyHits } from "@/lib/campaign/ad-policy";
+import { adPolicyHits, bannedTermKind } from "@/lib/campaign/ad-policy";
 import type { GeoTargeting } from "@/lib/meta/client";
 import { describeServiceArea } from "@/lib/meta/service-area";
 import { effectiveDailyBudget } from "@/lib/campaign/spend";
@@ -267,7 +267,7 @@ export function runPreflight(input: PreflightInput): ReviewDTO {
   }
   const policyHit = adPolicyHits(input.creatives, input.vertical)[0];
   if (policyHit) {
-    blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_AD_POLICY", `"${policyHit.term}" in the ad "${policyHit.headline ?? "without a headline"}" is a health promise Meta rejects. Edit the ad to describe the service instead.`));
+    blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_AD_POLICY", `"${policyHit.term}" in the ad "${policyHit.headline ?? "without a headline"}" is ${bannedTermKind(policyHit.term, input.vertical)} Meta rejects. Edit the ad to describe the service instead.`));
   }
   if (draft.dailyBudgetRupees <= 0) {
     blockers.push(blocker("INVALID_INPUT", "REVIEW_BUDGET", "Set a daily budget above ₹0."));

@@ -26,10 +26,11 @@ describe("bannedClaimsForVertical", () => {
     }
   });
 
-  it("leaves non-health businesses untouched", () => {
-    for (const v of ["solar energy", "gym", "restaurant", "law firm", ""]) {
+  it("leaves businesses outside health, education and home services untouched", () => {
+    for (const v of ["gym", "restaurant", "law firm", ""]) {
       expect(bannedClaimsForVertical(v), v).toEqual([]);
     }
+    expect(bannedClaimsForVertical("solar energy")).not.toContain("cure");
     expect(bannedClaimsForVertical(null)).toEqual([]);
     expect(bannedClaimsForVertical(undefined)).toEqual([]);
   });
@@ -89,8 +90,8 @@ describe("scanAdCopy with healthcare claims", () => {
     expect(findings).toEqual([]);
   });
 
-  it("does not penalise a solar ad for the same words", () => {
-    const findings = scanAdCopy("Guaranteed savings on your power bill", {
+  it("does not hold a solar ad to the health words (#2423 has its own list)", () => {
+    const findings = scanAdCopy("Pain-free installation, 25-year guarantee", {
       bannedClaims: bannedClaimsForVertical("solar energy"),
     });
     expect(findings.some((f) => f.rule === "banned-claim")).toBe(false);
