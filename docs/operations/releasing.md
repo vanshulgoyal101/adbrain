@@ -192,8 +192,8 @@ Vercel Hobby allows 100 production deploys a day, and every push to `main` is on
 - If `main` refuses the train PR's merge, the train checks the PR's own `pull_request` CI on that
   commit. A run with **0 jobs** is GitHub's merge ref not being ready yet (#878): it reruns that run
   once and keeps retrying for up to 10 minutes. A PR CI failure that ran jobs stops the train at once.
-- A red or stuck `next` opens one `Deploy train stuck` issue for DevOps. Fix `next`
-  with a PR to it; production keeps the last train. The promote step's own 93-minute
+- A red or stuck `next` opens one `Deploy train stuck` issue for DevOps that lists
+  the changes on `next` not yet on `main` (the suspects). Fix `next` with a PR to it; production keeps the last train. The promote step's own 93-minute
   limit leaves its alert time to run. A newer push cancels a waiting train, and a
   cancelled run alerts nothing, so the scheduled watchdog job opens the same issue
   (once) when a change has waited on `next` for 120 minutes (#2029).

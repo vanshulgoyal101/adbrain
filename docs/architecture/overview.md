@@ -53,17 +53,23 @@ policies. Route instrumentation therefore is not a complete mutation ledger.
 | [components](../../src/components/) | Interactive workspace and shared UI primitives |
 | [proxy](../../src/proxy.ts) | Session refresh/request guard entry point; sends signed-in owners from the static homepage to `/dashboard` (#1376) |
 | [Supabase](../../src/lib/supabase/) | Session/admin clients, query ownership and aggregation |
-| [creative](../../src/lib/creative/) | Interview, guarded generation, design, raster persistence, receipts |
-| [LLM](../../src/lib/llm/) | Application facade owns routing/key cooldown/cache/accounting; AI SDK adapters own text transport and schema output |
-| [image generation](../../src/lib/imageGen/) | Provider adapters and bounded raster validation |
-| [campaign](../../src/lib/campaign/) | Drafts, planner, preflight, operations, targeting, activation, spend, reports |
-| [Meta](../../src/lib/meta/) | OAuth, encrypted tokens, discovery, capability checks, verified provider access |
+| [creative](../../src/lib/creative/README.md) | Interview, guarded generation, design, raster persistence, receipts |
+| [LLM](../../src/lib/llm/README.md) | Application facade owns routing/key cooldown/cache/accounting; AI SDK adapters own text transport and schema output |
+| [image generation](../../src/lib/imageGen/README.md) | Provider adapters and bounded raster validation |
+| [campaign](../../src/lib/campaign/README.md) | Drafts, planner, preflight, operations, targeting, activation, spend, reports |
+| [Meta](../../src/lib/meta/README.md) | OAuth, encrypted tokens, discovery, capability checks, verified provider access |
+| [leads](../../src/lib/leads/README.md) | Meta lead import with checkpoints and tombstones, inbox reads, follow-up rules |
+| [brand](../../src/lib/brand/README.md) | Pure Brand form, setup and autofill rules; no database or network |
 | [Meta UI client](../../src/lib/meta-connect-ui/) | Typed transport, query-owned campaign display reads, preparation cancellation and browser recovery; not mutation authority |
 | [security](../../src/lib/security/) | Outbound network policy, shared limits, headers |
 | [observability](../../src/lib/observability/) | Request context, structured events, post-response persistence |
 | [database](../../db/) | Fresh schema and incremental migrations |
 | [tests](../../tests/), [e2e](../../e2e/) | Unit/component contracts and browser scenarios |
 | [scripts](../../scripts/) | Local verification and explicitly guarded operational tools |
+
+Core-loop modules (creative, LLM, image generation, campaign, Meta, leads, brand)
+have a README with their entry files, rules and tests; read it before changing
+the module.
 
 Next.js 16 differs from earlier framework versions: read the installed
 `node_modules/next/dist/docs/` guidance before changing routing, proxy, or async
