@@ -72,17 +72,27 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - name: Full suite (push, dispatch)
-        if: github.event_name != 'pull_request'
-        run: npx vitest run --shard=${{ matrix.shard }}/3
       # #2386: a PR runs the tests its change reaches plus every test that scans files
-      # (routes, docs, workflows) with fs instead of importing them. Infra files in
-      # vitest.config.mts forceRerunTriggers run everything; next still runs it all.
+      # (routes, docs, workflows) with fs instead of importing them; next still runs it all.
+      # Modules also read data with fs (JSON, fonts, AGENTS.md), which the import graph
+      # can't see, so a PR changing anything but JS/TS/CSS modules or docs/ runs it all.
+      - name: Pick full or changed-file run
+        run: |
+          full=1
+          if [ "${{ github.event_name }}" = pull_request ]; then
+            changed="$(git diff --name-only HEAD^1 HEAD)"
+            grep -qvE '^docs/|\.(ts|tsx|js|jsx|mjs|cjs|mts|cts|css)$' <<<"$changed" || full=0
+          fi
+          echo "FULL=$full" >> "$GITHUB_ENV"
+          echo "full suite: $full"
+      - name: Full suite
+        if: env.FULL == '1'
+        run: npx vitest run --shard=${{ matrix.shard }}/3
       - name: Changed-file tests (PR)
-        if: github.event_name == 'pull_request'
+        if: env.FULL == '0'
         run: npx vitest run --changed HEAD^1 --passWithNoTests --shard=${{ matrix.shard }}/3
       - name: File-scanning tests (PR)
-        if: github.event_name == 'pull_request'
+        if: env.FULL == '0'
         run: |
           mapfile -t scans < <(grep -rlE "readFileSync|readdirSync|globSync|existsSync" tests --include='*.test.ts' --include='*.test.tsx' | sort)
           echo "${#scans[@]} file-scanning tests"
