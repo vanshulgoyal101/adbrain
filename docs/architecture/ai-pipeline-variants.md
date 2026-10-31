@@ -67,6 +67,10 @@ Part of [Architecture](README.md). [Interview and boundaries](ai-pipeline.md) ·
    (`fitPhoto`, #1904): EXIF orientation, then sharp's `attention` saliency crop
    so a phone photo's face isn't cut off, or `backgroundFit: "blur"` (the whole
    photo on a blurred copy of itself) for group shots.
+   An owner photo's words always go along the bottom (`OWNER_PHOTO_LAYOUT`, #2430), at
+   Create, on a borrowed sibling photo and when the owner switches an ad to their own photo:
+   the concept picks `textPlacement` without seeing the photo, and real photos put faces
+   on the upper third. AI pictures keep the concept's placement, which their prompt keeps quiet.
 5. Download and validate the raster, persist the source image, render the designed
    poster when enabled, persist the final image, then insert a draft creative row.
    The poster's contact bar asks for a WhatsApp message (chat icon, no number) for a business whose
