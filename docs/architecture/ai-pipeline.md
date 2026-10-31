@@ -117,7 +117,9 @@ itself lends, insures or sells property, and employment is read as none for an e
 business that doesn't recruit, so a shop's 'EMI available' or an interiors offer never
 blocks a launch; a lender, property seller or recruiter keeps the block (#1671).
 Lending and property checks use the business vertical (advisers, wealth, chit funds,
-trading, realtors, land and townships count), not offers mentioning its bank,
+trading, realtors, land and townships count; so do pawn brokers, money lenders, sood/girvi,
+rooms, kiraya, 1RK and flatmates, but not vehicles or equipment on rent, hotels, or room
+interiors, #2370), not offers mentioning its bank,
 credit-card EMI or flat interiors; an offer selling a loan, insurance, a SIP, a mutual
 fund, an investment plan or an insurance policy keeps the financial block, while a
 return policy or 'investment for your home' doesn't (#2097). Education terms match whole words;
