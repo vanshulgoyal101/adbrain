@@ -1,5 +1,5 @@
 # फ़ोन पर आपका पहला ऐड
-<!-- mirrors ../first-ad.md c18f2dd38f7f -->
+<!-- mirrors ../first-ad.md 30d6d9f75578 -->
 
 यह [Your first ad on a phone](../first-ad.md) का हिंदी रूप है; अंग्रेज़ी पेज बदले तो इसे भी बदलें।
 [Features and workflows](../README.md) का हिस्सा।
