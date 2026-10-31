@@ -139,6 +139,9 @@ describe("core: Create concept validation on a recorded production concept", () 
     expect(rules({ ...recorded.concept, cta: "Shop Now" })).toEqual(["schema:cta:invalid_value"]);
     expect(rules({ ...recorded.concept, visual: { ...recorded.concept.visual, textPlacement: "right" } }))
       .toEqual(["schema:visual.textPlacement:invalid_value"]);
+    // #1064: the repair (and the eval report) see the value the model sent.
+    const refused = validateConcept({ ...recorded.concept, visual: { ...recorded.concept.visual, textPlacement: "right" } }, input);
+    expect(refused.success ? [] : refused.issues).toEqual([expect.stringMatching(/^schema:visual\.textPlacement:invalid_value: .*; it is "right"$/)]);
   });
 });
 
