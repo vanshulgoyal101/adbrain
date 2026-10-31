@@ -82,7 +82,7 @@ export function buildCandidateDTOs(
       blockers.push(adAccountBlocker(pair.adAccount.status === 1 ? undefined : pair.adAccount.status, pair.adAccount.id)!);
     }
     if (!pair.relationshipVerified) {
-      blockers.push({ code: "SETUP_REQUIRED", message: "Meta did not verify this Page and ad account belong together.", action: null });
+      blockers.push({ code: "SETUP_REQUIRED", message: "This Page and ad account aren't in the same business portfolio. In Meta Business Settings, add both to one portfolio, then connect again.", action: null });
     }
     if (!pair.currencySupported) {
       blockers.push({ code: "UNSUPPORTED_CURRENCY", message: "This account currency is not supported for campaigns yet.", action: null });

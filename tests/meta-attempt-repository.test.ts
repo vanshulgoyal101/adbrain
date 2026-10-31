@@ -28,8 +28,8 @@ describe("saved attempt recovery response", () => {
     const result = await getConnectionAttempt(row.id, "owner-id");
     expect(mocks.rpc).toHaveBeenCalledWith("meta_attempt_get", { p_attempt_id: row.id, p_user_id: "owner-id" });
     expect(result?.blockers).toHaveLength(2);
-    expect(result?.blockers[0].message).toContain("No accessible ad account");
-    expect(result?.blockers[1].message).toContain("No accessible Facebook Page");
+    expect(result?.blockers[0].message).toContain("Meta shared no ad account with AdBrain");
+    expect(result?.blockers[1].message).toContain("Meta shared no Facebook Page with AdBrain");
     expect(result?.blockers[0].action).toMatchObject({ kind: "open_meta" });
   });
 
