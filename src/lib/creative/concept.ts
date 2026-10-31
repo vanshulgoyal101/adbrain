@@ -644,21 +644,3 @@ function offerOnPicture(concept: CreativeConcept, offers: string[]): string | nu
   }
   return null;
 }
-
-export function conceptImagePrompt(
-  concept: CreativeConcept,
-  input: ConceptInput,
-): string {
-  const dims = formatDimensions(input.format ?? "portrait");
-  return [
-    `Create the visual for ${input.brand.name}. Medium: ${concept.visual.medium}.`,
-    concept.visual.direction,
-    `Brand context: ${JSON.stringify(input.brand)}`,
-    input.advisoryPreferences ? `Style advisory only (not claims or requirements; current visual direction and Brand facts win): ${input.advisoryPreferences}` : "",
-    `Composition: ${dims.width}:${dims.height}; keep the ${concept.visual.textPlacement} area quiet for separately rendered copy.`,
-    input.referenceImages?.length
-      ? "Use supplied references for product identity, materials and proportions. Do not reproduce text or layouts from past ads."
-      : "No reference images supplied; use an illustrative representation, not purported documentary evidence of this business.",
-    "Do not render words, letters, logos, watermarks or interface elements. Do not depict unverified claims or before/after health outcomes.",
-  ].join("\n");
-}

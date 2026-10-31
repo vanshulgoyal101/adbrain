@@ -106,13 +106,27 @@ const escape = (text) => text.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
 export function wordsLine(line, run) {
   const t = line.trim();
   // A comment, or JSX text wrapped onto its own line (no quotes, brackets or operators).
-  if (/^(\/\/|\/\*|\*)/.test(t) || /^[^"'\x60(){}[\]=;<>]+$/.test(t)) return true;
+  if (/^(\/\/|\/\*|\*)/.test(t) || /^[^"'\x60(){}[\]=;<>]+$/.test(t.replace(/&#?\w+;/g, ""))) return true;
   const r = escape(run);
   const shownAs = String.raw`(\b(message|error|title|description|label|text|body|hint|placeholder|heading|subtitle|summary|detail|reason|rationale|help|tip|note|cta|en|hi)\s*:\s*|new \w*Error\(\s*|\b(title|placeholder|alt|label|description|aria-[\w-]+)=\{?\s*|\b(toast\w*|notify\w*|setError|setMessage|blocker|errorResponse|apiError|refuse|fail\w*|friendly\w*)\([^"'\x60]*)`;
   if (new RegExp(`>[^<>]*${r}[^<>]*<`, "i").test(t)) return true;
   const str = `["'\x60][^"'\x60]*${r}[^"'\x60]*["'\x60]`;
   const read = new RegExp(`(\\.(includes|startsWith|endsWith|indexOf|match|test|search|has|get)\\s*\\(\\s*|[!=]==?\\s*|\\bcase\\s+|\\[\\s*)${str}|${str}\\s*([!=]==?|\\])`, "i");
   return new RegExp(shownAs, "i").test(t) && !read.test(t);
+}
+
+/**
+ * Whether a line elsewhere reads `words`: a string on it that holds `run` is part of the words (a matcher, a
+ * locator) or holds all of them (a constant, a copy). A run outside any quoted string (a regex literal, a wrapped
+ * template) counts too. Unrelated text that only shares a phrase ("Sign in with password") doesn't.
+ */
+export function readsWords(line, run, words) {
+  const lower = (text) => text.toLowerCase().replace(/\s+/g, " ").trim();
+  const w = lower(words);
+  const r = lower(run);
+  const strings = [...line.matchAll(/(["'`])((?:\\.|(?!\1).)*)\1/g)].map((m) => lower(m[2])).filter((text) => text.includes(r));
+  if (!strings.length) return true;
+  return strings.some((text) => w.includes(text) || text.includes(w));
 }
 
 /** Three-word runs: a string matcher elsewhere (`includes("token expired")`) shares one with the words it reads. */
@@ -125,13 +139,14 @@ export function wordRuns(text) {
 /**
  * True when base and head have the same tree and the same tokens in order (comments ignored, bundler directives
  * unchanged), and every token that differs is a string, template part or JSX text that is prose, sits in a
- * words place, and shares no three-word run with any other file (`elsewhere(run)`, fail closed) or with a
+ * words place, that no other file reads (`elsewhere` plus `readsWords`, fail closed), and that shares no run with a
  * string this file's code reads.
  * @param {typeof import("typescript")} ts
  * @param {string} fileName
  * @param {string | null} base the file at the PR's merge base
  * @param {string | null} head the file at the PR head
- * @param {(run: string) => boolean} [elsewhere] whether `run` appears in a source file other than this one
+ * @param {(run: string) => boolean | string[]} [elsewhere] other files' lines holding `run` that aren't only words
+ *   (`wordsLine`), or true when it can't tell
  * @param {string[]} [why] gets the reason when the answer is false
  */
 export function wordsOnly(ts, fileName, base, head, elsewhere = () => true, why = []) {
@@ -165,7 +180,8 @@ export function wordsOnly(ts, fileName, base, head, elsewhere = () => true, why 
       const hit = matchers.find((text) => lower.includes(text));
       if (hit) return no(`code may match "${hit.slice(0, 40)}"`);
       for (const run of wordRuns(words)) {
-        if (read.some((text) => text.toLowerCase().includes(run.toLowerCase())) || elsewhere(run)) return no(`code may match "${run}"`);
+        const hits = read.some((text) => text.toLowerCase().includes(run.toLowerCase())) || elsewhere(run);
+        if (hits === true || (Array.isArray(hits) && hits.some((line) => readsWords(line, run, words)))) return no(`code may match "${run}"`);
       }
     }
   }

@@ -32,7 +32,11 @@ writes on free text only (Groq, Gemini): its usage rows cost $0, and when those 
 `CLOUDFLARE_AI_TOKEN` are set, the free picture comes from Cloudflare Workers AI FLUX-1-schnell
 ([cloudflare.ts](../../src/lib/imageGen/providers/cloudflare.ts), #1476): 4 steps, prompt capped at
 2048 characters, $0 within the daily free allowance. It returns a square JPEG (no size option); the
-poster covers its frame, so a 4:5 ad crops the sides. A 429 (including 3040, out of capacity) or 5xx
+poster covers its frame, so a 4:5 ad crops the sides. Schnell has no negative prompt and letters a
+named business onto the picture, so every picture prompt
+([image-prompt.ts](../../src/lib/creative/image-prompt.ts)) opens with the text-free rule, says "the
+<vertical>" instead of the business name, and sends only the brand's visual fields (no name,
+phone, address, website, offers or proof points; #2441). A 429 (including 3040, out of capacity) or 5xx
 is recorded as `IMAGE_FREE_BUSY` and asked once more a second later; error 3036 or 4006 (daily allowance used)
 is recorded as `IMAGE_FREE_DAILY_LIMIT` and skips Cloudflare on that instance until 00:00 UTC (#2145). Any other
 failure is `IMAGE_PROVIDER`. Then the picture falls to Pollinations, which stays last. Pollinations answers
