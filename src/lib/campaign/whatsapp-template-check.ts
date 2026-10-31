@@ -1,4 +1,5 @@
 import { bannedTermKind, bannedTermsIn } from "@/lib/campaign/ad-policy";
+import { withoutOwnName } from "@/lib/campaign/whatsapp-greeting";
 import { copyClaimWarnings } from "@/lib/creative/concept";
 import { policyFindings } from "@/lib/creative/policy-rules";
 import type { WhatsAppTemplate } from "@/lib/campaign/whatsapp-template";
@@ -46,10 +47,9 @@ export function whatsappOpeningProblem(opening: WhatsAppOpening, business: Whats
       ? opening.iceBreakers.map((question) => ["questions", question] as [WhatsAppTemplateField, string])
       : [["prefill", opening.autofill] as [WhatsAppTemplateField, string]]),
   ];
-  // AdBrain's own welcome names the business; its name ("Cure Dental", "No. 1 IELTS") is not a claim the owner wrote.
   const name = business.name?.trim();
   for (const [field, written] of texts) {
-    const text = name ? written?.split(name).join(" ") : written;
+    const text = name && written ? withoutOwnName(written, name) : written;
     if (!text?.trim()) continue;
     const term = bannedTermsIn(text, business.vertical)[0];
     if (term) return { field, error: `"${term}" in the ${OPENING_FIELD_NAMES[field]} is ${bannedTermKind(term, business.vertical)} Meta rejects. Reword it.` };

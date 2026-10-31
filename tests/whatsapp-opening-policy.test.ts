@@ -30,6 +30,18 @@ describe("WhatsApp opening policy check (#2422)", () => {
     // The name is skipped, not the rest of the message.
     expect(whatsappOpeningProblem({ greeting: `${greeting("Cure Dental Clinic")} We cure gum disease.`, autofill: "Hi" }, { name: "Cure Dental Clinic", vertical: "dental clinic" }))
       .toMatchObject({ field: "greeting", error: expect.stringMatching(/^"cure" in the welcome is a health promise/) });
+    // AdBrain's "know more about {name} in {city}" pre-typed message, in each language's word order.
+    expect(whatsappOpeningProblem({ greeting: greeting("Cure Dental Clinic"), autofill: "Hi! I'd like to know more about Cure Dental Clinic in Mohali." }, { name: "Cure Dental Clinic", vertical: "dental clinic" })).toBeNull();
+    expect(whatsappOpeningProblem({ greeting: greeting("Cure Dental Clinic"), autofill: "नमस्ते, मुझे Mohali में Cure Dental Clinic के बारे में जानकारी चाहिए।" }, { name: "Cure Dental Clinic", vertical: "dental clinic" })).toBeNull();
+  });
+
+  // Attack review on #2450: a name that is itself a claim word must not erase the owner's own claims.
+  it.each([
+    ["Cure", "Cure back pain with Cure", "chiropractic clinic"],
+    ["No", "No refusal with No", "IELTS coaching"],
+    ["Cure", "Hi! I'd like to know more about Cure in cure for back pain.", "chiropractic clinic"],
+  ])("still checks the owner's words when the business is named %s", (name, text, vertical) => {
+    expect(whatsappOpeningProblem({ greeting: text, autofill: "Hi" }, { name, vertical })).not.toBeNull();
   });
 
   it("passes AdBrain's suggested welcome and ordinary messages", () => {
