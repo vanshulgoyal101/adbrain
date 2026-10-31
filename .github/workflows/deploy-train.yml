@@ -163,7 +163,10 @@ jobs:
           title="Deploy train stuck"
           open=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search "in:title \"$title\"" --json number --jq '.[0].number // empty')
           reason=$(cat "$RUNNER_TEMP/reason" 2>/dev/null || echo "Red or slow checks on next, a merge error, or the promote step hit its time limit.")
-          body="$(printf 'next could not be promoted to main. %s\n\nRun: %s/%s/actions/runs/%s\nFix next, or ship a hotfix PR to main (DevOps/CTO). Runbook: docs/operations/releasing.md#deploy-train\n' "$reason" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+          # #2361 (E5): name the suspects, the changes on next that main lacks, so whoever sees it fixes forward.
+          suspects=$(gh api "repos/$GITHUB_REPOSITORY/compare/main...next" \
+            --jq '.commits[-15:][] | "- \(.sha[0:7]) \(.commit.message | split("\n")[0])"' 2>/dev/null || echo "- (could not list next's commits)")
+          body="$(printf 'next could not be promoted to main. %s\n\nRun: %s/%s/actions/runs/%s\nChanges on next not yet on main (latest 15):\n%s\n\nFix forward on next (whoever sees it first, #2360 E3), or ship a hotfix PR to main (DevOps/CTO). Runbook: docs/operations/releasing.md#deploy-train\n' "$reason" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" "$suspects")"
           if [ -n "$open" ]; then gh issue comment "$open" -R "$GITHUB_REPOSITORY" -b "$body"
           else gh issue create -R "$GITHUB_REPOSITORY" -l core -l bug -l owner:devops -t "$title" -b "$body"; fi
 
