@@ -14,8 +14,7 @@ import { ClaimBusiness } from "@/components/claim-business";
 import { myPendingTransfer } from "@/lib/prospect/transfer-server";
 import { createClient } from "@/lib/supabase/server";
 import { CheckCircle2 } from "lucide-react";
-import { madeForSetup } from "@/lib/creative/setup-picks";
-import { setupResumeStep } from "@/lib/setup/resume";
+import { setupResume } from "@/lib/setup/resume";
 import { getMetaConnection } from "@/lib/meta/credentials";
 import { metaWaitFor } from "@/services/meta-throttle";
 import { HomeRejectedAds } from "@/components/home-rejected-ads";
@@ -31,6 +30,7 @@ import { translator, type AppLocale } from "@/i18n/locale";
 import { adResultsEnabled } from "@/lib/campaign/ad-results-store";
 import { homeAdReview, newestLiveCampaign } from "@/lib/campaign/home-ad-review";
 import { inboxSummary, newestWaitingEnquiry, recentReplyMinutes } from "@/lib/leads/reply-time";
+import type { Creative } from "@/lib/types";
 import {
   getCampaigns,
   getCreativePreviews,
@@ -80,16 +80,28 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
         getMetaConnection(business.id),
       ])
     : [[], [], null];
-  // #1272 (#1251 WS1): until a first campaign has gone live, Home is the one resume card.
-  const resume = setupResumeStep({ business, creatives, campaigns });
-  if (resume) {
-    // #1712: at step 3, the ads Go live will use (made from today's step 1, #1432); unreadable shows the plain card.
-    const ready = resume === 3 && business
-      ? await getApprovedCreatives(business.id).then((rows) => rows.filter((row) => madeForSetup(row, business)), () => [])
-      : [];
+  // #1272: normal Home and an incomplete Brand need no approved-ad read.
+  let resume = setupResume<Creative>({ business, creatives: [], campaigns });
+  if (resume.step === 2 && business) {
+    let approved: Creative[];
+    try {
+      approved = await getApprovedCreatives(business.id, { throwOnError: true });
+    } catch (error) {
+      unstable_rethrow(error);
+      return <>
+        {params.handed === "1" && <HandedOverNotice />}
+        <Alert variant="error">
+          {translator(locale, "errors")("checkAdsUnavailable")}{" "}
+          <Link href="/dashboard" className="font-medium underline">{translator(locale, "setup")("ads.tryAgain")}</Link>
+        </Alert>
+      </>;
+    }
+    resume = setupResume({ business, creatives: approved, campaigns });
+  }
+  if (resume.step) {
     return <>
       {params.handed === "1" && <HandedOverNotice />}
-      <SetupResumeCard step={resume} ready={ready} locale={locale} />
+      <SetupResumeCard step={resume.step} ready={resume.ready} locale={locale} />
     </>;
   }
   // #764: the Home results row; an unreadable result leaves the row out, never the page.
