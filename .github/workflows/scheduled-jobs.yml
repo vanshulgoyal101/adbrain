@@ -258,6 +258,14 @@ jobs:
               -b "$(printf 'The model check (#1808) did not find %s on its provider'"'"'s /models list, so calls to it fail and fall back. Pick a listed model and set its env var in Vercel Production (or update the code default), then close this.\n\nRun: %s/%s/actions/runs/%s\n' "$entry" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")" || true
           done <<< "$retired"
           # #2404: Cloudflare's ~57 free pictures a day; one issue per UTC day from 45, or once it refused one.
+          # An unreadable count would silently switch the alert off, so it keeps one DevOps issue open.
+          if [ "$(jq -r 'has("cloudflare") and .cloudflare == null' credit.json 2>/dev/null)" = true ]; then
+            echo "::warning::Cloudflare picture count unreadable"
+            title="Cloudflare picture count unreadable"
+            open=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search "in:title \"$title\"" --json number --jq length) || open=1
+            [ "$open" != 0 ] || gh issue create -R "$GITHUB_REPOSITORY" -l core -l bug -l owner:devops -t "$title" \
+              -b "$(printf '/api/cron/llm-credit could not count today'"'"'s Cloudflare pictures from llm_usage_events (#2404), so the near-the-cap alert is off.\n\n→ DevOps: check the service-role read of llm_usage_events, then close this.\nRun: %s/%s/actions/runs/%s\n' "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")" || true
+          fi
           if [ "$(jq -r '.cloudflare.near // false' credit.json 2>/dev/null)" = true ]; then
             day=$(jq -r '.cloudflare.day' credit.json | grep -E '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' || true)
             pictures=$(jq -r '.cloudflare.pictures' credit.json | grep -E '^[0-9]+$' || true)
