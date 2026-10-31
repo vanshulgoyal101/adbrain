@@ -57,22 +57,26 @@ function WhatsAppStep({ businessId, onLinked }: { businessId: string; onLinked: 
   );
 }
 type BillingResult =
-  | { status: "funded" | "invited" | "invalid_email" | "too_many_invites" | "waiting_setup" | "unavailable" }
+  | { status: "funded" | "invited" | "pending" | "joined" | "invalid_email" | "too_many_invites" | "busy" | "waiting_setup" | "unavailable" }
   | { status: "not_funded"; reason: FundingReason; payer: PayerStatus };
 const SETUP_MESSAGES = {
+  invited: "Invite sent. They'll get an email from Facebook. Once they accept it, press Check again so we can give them access to add the card.",
+  pending: "They already have an invite waiting. Ask them to accept it in their email, then press Check again.",
+  joined: "They're already in your business on Facebook, so we've given them access to your ad account. Ask them to add the card, then check again.",
   invalid_email: "Enter a valid email address.",
-  too_many_invites: "You already have 3 invites waiting. Ask one of those people to accept Facebook's email, then check again.",
+  too_many_invites: "You already have 3 invites waiting. Ask one of those people to accept the invite in their email, then check again.",
+  busy: "We're already working on this. Try again in a minute.",
   waiting_setup: "We'll be able to check as soon as your ad account is ready, usually within a minute.",
-  unavailable: "Your setup has stopped, so the card can't be checked right now. Contact AdBrain support.",
+  unavailable: "Your setup didn't finish, so we can't check the card yet. Contact AdBrain support.",
 };
 const NO_CARD: Record<PayerStatus, string> = {
   none: "We don't see a card on your ad account yet. Invite the person who'll add it.",
-  invited: "Waiting for your person to accept Facebook's invite. Ask them to check their email.",
-  joined: "We don't see a card on your ad account yet. Ask your person to add it, then check again.",
+  invited: "Waiting for them to accept Facebook's invite. Ask them to check their email.",
+  joined: "We don't see a card on your ad account yet. Ask the person you invited to add it, then check again.",
 };
 const FUNDING_MESSAGES: Record<Exclude<FundingReason, "NO_PAYMENT_METHOD">, string> = {
   PREPAID_UNCONFIRMED: "Your ad account has a prepaid balance, not a card. Add a card on Facebook, then check again.",
-  NOT_OWN_PAYMENT_METHOD: "Your ad account's payment method isn't a card or account of your own. Add your card on Facebook, then check again.",
+  NOT_OWN_PAYMENT_METHOD: "The payment method on your ad account isn't yours. Add your own card on Facebook, then check again.",
   PAYMENT_DUE: "Facebook says a payment is due on your ad account. Pay it on Facebook, then check again.",
   PENDING_REVIEW: "Facebook is reviewing your ad account's payment. This can take a day; check again later.",
   IN_GRACE_PERIOD: "Facebook couldn't charge your card. Update it on Facebook, then check again.",
@@ -96,10 +100,9 @@ function CardStep({ businessId, onFunded }: { businessId: string; onFunded: () =
       if (!response.ok || !body?.ok) throw new Error(body?.error?.message ?? "We couldn't reach Facebook just now. Try again.");
       const result = body.data as BillingResult;
       if (result.status === "funded") {
-        setMessage({ text: "Card added. Your ad account can run ads.", error: false });
+        // Funded is one step: the account is ready to advertise only after the remaining steps (isManagedReady).
+        setMessage({ text: "Card added. Facebook has confirmed it on your ad account.", error: false });
         onFunded();
-      } else if (result.status === "invited") {
-        setMessage({ text: "Invite sent. They'll get an email from Facebook; once they accept, they add the card.", error: false });
       } else if (result.status === "not_funded") {
         setMessage(result.reason === "NO_PAYMENT_METHOD"
           ? { text: NO_CARD[result.payer], error: false }
@@ -124,7 +127,9 @@ function CardStep({ businessId, onFunded }: { businessId: string; onFunded: () =
       </form>
       <ol className="list-decimal space-y-1 pl-5">
         <li>They accept the invite in the email from Facebook.</li>
+        <li>You press Check again, and we give them access to your ad account.</li>
         <li>On Facebook, they open Business Settings → Billing &amp; payments for your ad account and add the card.</li>
+        <li>You press Check again, and we confirm the card with Facebook.</li>
       </ol>
       <Button variant="outline" onClick={() => void send("check")} disabled={busy !== null}>{busy === "check" ? "Checking…" : "Check again"}</Button>
       {message && <p role={message.error ? "alert" : "status"} className={message.error ? "text-red-700" : "text-slate-700"}>{message.text}</p>}

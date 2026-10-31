@@ -14,7 +14,7 @@ const CUSTOMER: { key: CustomerStep; title: string; detail: string }[] = [
   { key: "pay", title: "Add money for ads", detail: "Your ads spend only what you add. You can stop any time." },
   { key: "page", title: "Choose your Facebook Page", detail: "Ads run from your own Page, under your business name." },
   { key: "whatsapp", title: "Connect your WhatsApp", detail: "People who tap your ad message you on this number." },
-  { key: "card", title: "Add your card in Meta", detail: "Meta charges your ads to your own card. The person who holds it adds it on Facebook." },
+  { key: "card", title: "Add your card on Facebook", detail: "Facebook charges your ads to your own card. Whoever holds the card adds it on Facebook." },
 ];
 
 const BACKGROUND: { key: BackgroundStep; title: string; waitingFor: string }[] = [
@@ -28,7 +28,7 @@ const FAILED_COPY: Record<CustomerStep | BackgroundStep, string> = {
   whatsapp: "We couldn't connect that WhatsApp number. Try again.",
   childBusiness: "Meta didn't create your business. We're looking into it; nothing has been spent.",
   adAccount: "Meta didn't create your ad account. We're looking into it; nothing has been spent.",
-  card: "Meta couldn't use the card on your ad account, so no ads can run yet. Add another card on Facebook, then check again.",
+  card: "Facebook couldn't use the card on your ad account, so no ads can run yet. Add another card on Facebook, then check again.",
 };
 
 function Marker({ status, index }: { status: StepStatus; index: number }) {
