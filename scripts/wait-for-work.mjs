@@ -274,7 +274,9 @@ export function offTrack({ issues, comments, prs, now }) {
   }
   const quiet = WORKERS.filter((r) => counts[r] > 0 && !(now - (lastSeen[r] ?? 0) < QUIET_MIN * 60_000))
     .map((r) => ({ role: r, minutes: lastSeen[r] ? Math.floor((now - lastSeen[r]) / 60_000) : null }));
-  const stale = prs.filter((pr) => !pr.draft && now - Date.parse(pr.updated_at) >= STALE_PR_MIN * 60_000)
+  // Frozen (`later`) and parked PRs wait on purpose; only live work can go stale.
+  const frozen = (pr) => (pr.labels ?? []).some((l) => { const n = typeof l === "string" ? l : l.name; return n === "later" || PARKED.has(n); });
+  const stale = prs.filter((pr) => !pr.draft && !frozen(pr) && now - Date.parse(pr.updated_at) >= STALE_PR_MIN * 60_000)
     .map((pr) => ({ number: pr.number, title: pr.title, minutes: Math.floor((now - Date.parse(pr.updated_at)) / 60_000) }));
   return { quiet, stale };
 }

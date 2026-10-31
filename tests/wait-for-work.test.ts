@@ -79,6 +79,8 @@ describe("CTO on-track check", () => {
       prs: [
         { number: 357, title: "#334 Advantage+", updated_at: at(75), draft: false },
         { number: 365, title: "#335 enquiries", updated_at: at(10), draft: false },
+        { number: 1248, title: "#784 frozen", updated_at: at(2000), draft: false, labels: [{ name: "later" }] },
+        { number: 1250, title: "#785 parked", updated_at: at(2000), draft: false, labels: [{ name: "parked" }] },
       ],
     });
     expect(result.quiet).toEqual([{ role: "dev2", minutes: 120 }]);
