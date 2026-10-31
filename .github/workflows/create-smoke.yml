@@ -1,7 +1,8 @@
 name: Create smoke
-# #2145: every 2 hours the smoke account changes one ad's background in production (`--picture`), so dead free
+# #2145: every 4 hours the smoke account changes one ad's background in production (`--picture`), so dead free
 # pictures fail a check instead of waiting for someone to walk into them. That run spends $0: a template prompt,
-# no text model, and smoke-core.mjs refuses before the request unless the account makes free pictures.
+# no text model, and smoke-core.mjs refuses before the request unless the account makes free pictures. Every 4 h,
+# not 2 h (#2405): Cloudflare's free tier is ~57 pictures a day for customers and smokes together.
 # #2230: daily at 08:47Z (after Gemini's free quota resets at midnight Pacific) `--prepare` plans one audience on
 # free text only, $0.
 # A dispatched `create` runs the full Create (3 ads); the smoke login's words use free text only (#2230).
@@ -9,7 +10,7 @@ name: Create smoke
 # check passed while customers' 3-ad batches saved 1 of 3 (QA 2, #679). Once a day keeps the free tiers for customers.
 on:
   schedule:
-    - cron: "17 */2 * * *"
+    - cron: "17 */4 * * *"
     - cron: "47 8 * * *"
     - cron: "37 3 * * *"
   workflow_dispatch:

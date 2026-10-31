@@ -79,8 +79,8 @@ anyone watching (owner-approved automatic rollback, #111):
   (`src/lib/copy/honest-copy-rules.ts`). Every Meta write is blocked. The result lands in the
   run summary; a FAIL turns the guard red and opens a core bug, but never rolls back. Skipped while the secrets are
   unset. `--plant` must make it FAIL (a planted promise and a slowed load).
-- **Free pictures, every 2 hours (#2145):** [`create-smoke.yml`](../../.github/workflows/create-smoke.yml)
-  runs `smoke-core.mjs --picture` as the smoke account at :17 past every second hour, one run at a time and with
+- **Free pictures, every 4 hours (#2145, #2405):** [`create-smoke.yml`](../../.github/workflows/create-smoke.yml)
+  runs `smoke-core.mjs --picture` as the smoke account at :17 past every fourth hour, one run at a time and with
   no retry. It signs in, opens the read-only views and changes the background of the most recent ad that isn't
   in a campaign on Meta (`plain light studio background`). It passes only when the saved picture came from a free
   provider (Pollinations or Cloudflare). The run spends $0: the prompt is a template with no text model, it

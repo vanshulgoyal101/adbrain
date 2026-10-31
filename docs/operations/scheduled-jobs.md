@@ -94,7 +94,7 @@ dispatched (team supervisor, pushes) or run by pg_cron.
 | pg_cron `adbrain-refresh-results` | `10,25,40,55 * * * *` | `/api/cron/refresh-results` |
 | pg_cron `adbrain-cron-history-cleanup` | `40 3 * * *` | Deletes `cron.job_run_details` older than 7 days |
 | Workflow `scheduled-jobs.yml` | `7,22,37,52 * * * *` | The backup scheduler and alerts above |
-| Workflow `create-smoke.yml` | `17 */2 * * *`, `47 8 * * *`, `37 3 * * *` | Picture smoke every 2 hours, a daily `--prepare` smoke and a daily 3-ad `--create` smoke, all $0 (#2145, #2230) |
+| Workflow `create-smoke.yml` | `17 */4 * * *`, `47 8 * * *`, `37 3 * * *` | Picture smoke every 4 hours (#2405: saves Cloudflare's ~57 free pictures a day for customers), a daily `--prepare` smoke and a daily 3-ad `--create` smoke, all $0 (#2145, #2230) |
 | Workflow `production-guard.yml` | `30 3 * * *` | Daily read-only core smoke ([Production guard](releasing-recovery.md#production-guard)) |
 | Workflow `production-drift.yml` | `*/15 * * * *` | Fails when main HEAD isn't live 15 minutes after it landed (also on every main push) |
 | Workflow `deploy-train.yml` | `11,41 * * * *` | Promotes a green `next` to `main` (#461; also on every `next` push) |
