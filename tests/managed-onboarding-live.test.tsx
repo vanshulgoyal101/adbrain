@@ -105,7 +105,7 @@ describe("<ManagedOnboardingLive> (#526)", () => {
     fireEvent.change(await screen.findByLabelText("Email of the person who'll add the card"), { target: { value: "owner@example.in" } });
     fireEvent.click(screen.getByRole("button", { name: "Send invite" }));
     expect(await screen.findByRole("status")).toHaveTextContent("Invite sent");
-    expect(JSON.parse(fetchMock.mock.calls.find(([url]) => url === "/api/managed/billing")![1].body)).toEqual({ action: "invite", businessId, email: "owner@example.in" });
+    expect(JSON.parse((fetchMock.mock.calls.find(([url]) => url === "/api/managed/billing") as unknown as [string, RequestInit])[1].body as string)).toEqual({ action: "invite", businessId, email: "owner@example.in" });
     billing = { status: "not_funded", reason: "NO_PAYMENT_METHOD", payer: "invited" };
     fireEvent.click(screen.getByRole("button", { name: "Check again" }));
     expect(await screen.findByText(/Waiting for your person to accept/)).toBeInTheDocument();

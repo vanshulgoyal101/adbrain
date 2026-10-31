@@ -1,7 +1,7 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { getEnv } from "@/lib/env";
 import { createAdminClient } from "@/lib/supabase/admin";
-import type { Database } from "@/lib/types";
 import type { ProvisionGraph } from "./managed-provision";
 import { graphClient, readToken } from "./managed-provision-runner";
 
@@ -155,23 +155,22 @@ export async function checkFunding(deps: BillingDeps): Promise<BillingCheck> {
   return { status: "funded" };
 }
 
-type ManagedUpdate = Database["public"]["Tables"]["managed_meta_accounts"]["Update"];
-
 /** The real dependencies: the ledger (service role), the encrypted token store and Meta's Graph API. */
 export function billingDeps(businessId: string): BillingDeps {
   const admin = createAdminClient();
-  const table = () => admin.from("managed_meta_accounts");
+  // whatsapp_number_e164 (#519) isn't in the generated types yet, as in managed-whatsapp.
+  const table = () => (admin as unknown as SupabaseClient).from("managed_meta_accounts");
   return {
     businessId,
     row: async () => {
       const { data, error } = await table()
         .select("state,child_business_id,ad_account_id,step_keys,manager_token_id,whatsapp_number_e164").eq("business_id", businessId).maybeSingle();
       if (error) throw new Error("The managed account could not be read.");
-      return data;
+      return data as BillingRow | null;
     },
     managerToken: (tokenId) => readToken(admin, tokenId, businessId),
     update: async (values, whenState) => {
-      const { error } = await table().update(values as ManagedUpdate).eq("business_id", businessId).eq("state", whenState);
+      const { error } = await table().update(values).eq("business_id", businessId).eq("state", whenState);
       if (error) throw new Error("The managed account could not be updated.");
     },
     event: async (values) => {

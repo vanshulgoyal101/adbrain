@@ -41,7 +41,7 @@ async function handlePOST(request: Request) {
   const name = `managed.billing.${body.data.action}`;
   const result = await runManagedBilling(actor.businessId, body.data.action === "invite" ? { action: "invite", email: body.data.email } : { action: "check" });
   if (result.ok) {
-    recordProductEvent({ kind: "workflow", name, businessId: actor.businessId, outcome: "success", attributes: { status: result.data.status } });
+    recordProductEvent({ kind: "workflow", name, businessId: actor.businessId, outcome: "success" });
     return NextResponse.json({ ok: true, data: result.data, requestId: currentRequestId() }, { headers: { "Cache-Control": "no-store" } });
   }
   recordProductEvent({ kind: "workflow", name, businessId: actor.businessId, outcome: result.retryable ? "failed" : "rejected", attributes: { errorCode: result.code } });
