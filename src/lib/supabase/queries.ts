@@ -176,17 +176,19 @@ export async function hasOwnPhoto(businessId: string): Promise<boolean> {
   return (count ?? 0) > 0;
 }
 
-/** Approved creatives for a business, newest first. */
+/** Approved creatives for a business, newest first; Home must distinguish an unreadable list from an empty one. */
 export async function getApprovedCreatives(
   businessId: string,
+  options: { throwOnError?: boolean } = {},
 ): Promise<Creative[]> {
   const supabase = await createClient();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("creatives")
     .select("*")
     .eq("business_id", businessId)
     .eq("status", "approved")
     .order("created_at", { ascending: false });
+  if (options.throwOnError && (error || !data)) throw new Error("Approved ads could not be loaded.");
   return data ?? [];
 }
 

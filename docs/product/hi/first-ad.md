@@ -1,5 +1,5 @@
 # फ़ोन पर आपका पहला ऐड
-<!-- mirrors ../first-ad.md 6d905c72aacb -->
+<!-- mirrors ../first-ad.md 2350017a7831 -->
 
 यह [Your first ad on a phone](../first-ad.md) का हिंदी रूप है; अंग्रेज़ी पेज बदले तो इसे भी बदलें।
 [Features and workflows](../README.md) का हिस्सा।
@@ -53,8 +53,9 @@ you before it's due."
 
 साइन इन के बाद आप "Set up your first ad", "Step 1 of 3" पर पहुँचते हैं। ऊपर की पट्टी
 आपके तीनों स्टेप दिखाती है। अगर आप बीच में छोड़कर वापस आएँ, तो Home पर "Your first ad"
-के साथ "Continue" दिखेगा; ऐड बन जाने के बाद वहाँ "Your 3 ads are ready" के साथ
-"Connect and go live" दिखेगा।
+के साथ "Continue" दिखेगा; चुना गया ऐड आपकी मौजूदा जानकारी से मेल खाने पर "Your ad is
+ready" (या "Your N ads are ready") के साथ "Connect and go live" दिखेगा।
+अगर चुने हुए ऐड पुरानी जानकारी से या Studio में बने थे, Home आपको फिर Your ads पर ले जाएगा।
 
 ## स्टेप 1: आपका बिज़नेस
 

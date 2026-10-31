@@ -347,6 +347,7 @@ describe("Home workspace", () => {
 
   it("loads independent dashboard reads concurrently", async () => {
     queries.getPrimaryBusiness.mockResolvedValue(business);
+    queries.getApprovedCreatives.mockClear();
     let resolveCreatives!: (value: Creative[]) => void;
     queries.getCreativePreviews.mockReturnValue(
       new Promise<Creative[]>((resolve) => {
@@ -366,6 +367,7 @@ describe("Home workspace", () => {
     expect(queries.getCampaigns).toHaveBeenCalledWith(business.id);
     resolveCreatives([creative]);
     render(await page);
+    expect(queries.getApprovedCreatives).not.toHaveBeenCalled();
     expect(
       screen.getByRole("heading", { name: "1 ad needs review" }),
     ).toBeInTheDocument();
@@ -397,6 +399,7 @@ describe("Home workspace", () => {
 
   it("a first-timer's Home is the one resume card at the saved step (#1272)", async () => {
     queries.getPrimaryBusiness.mockResolvedValue(business);
+    queries.getApprovedCreatives.mockClear();
     queries.getCreativePreviews.mockResolvedValue([creative]);
     queries.getCampaigns.mockResolvedValue([]);
     queries.getMetaConnection.mockResolvedValue({ ready: false });
@@ -408,6 +411,75 @@ describe("Home workspace", () => {
     expect(screen.getByRole("heading", { name: "Your first ad" })).toBeInTheDocument();
     expect(screen.getByText("Step 1 of 3 · Your business")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Continue" })).toHaveAttribute("href", "/brand");
+    expect(queries.getApprovedCreatives).not.toHaveBeenCalled();
+  });
+
+  describe("the first-timer Home and Go live agree on ready ads (#2371)", () => {
+    const setupBusiness = { ...business, name: "SunPeak", vertical: "Rooftop solar", phone: "9876543210", offers: ["Free survey"] };
+    const currentGoal = "Get WhatsApp enquiries for Rooftop solar in Jaipur, leading with: Free survey";
+    const approved = (id: string, facts: string[]) => ({
+      ...creative, id, status: "approved", headline: `Ad ${id}`,
+      image_url: `https://example.supabase.co/storage/v1/object/public/creatives/${id}.png`,
+      generation: { sourceFacts: facts },
+    });
+
+    function arrange() {
+      queries.getPrimaryBusiness.mockResolvedValue(setupBusiness);
+      queries.getCreativePreviews.mockResolvedValue([]);
+      queries.getCampaigns.mockResolvedValue([]);
+      queries.getMetaConnection.mockResolvedValue({ ready: false });
+      queries.getSpendEvaluation.mockResolvedValue({ evaluation: { status: "healthy" } });
+      queries.getAuditLog.mockResolvedValue([]);
+      queries.getApprovedCreatives.mockResolvedValue([]);
+    }
+
+    it.each([
+      ["older details", ["Get WhatsApp enquiries for Rooftop solar in Jaipur, leading with: Free quote"]],
+      ["Studio", []],
+    ])("an approved ad from %s shows step 2 and links directly to Create", async (_source, facts) => {
+      arrange();
+      const old = approved("old", facts);
+      queries.getCreativePreviews.mockResolvedValue([old]);
+      queries.getApprovedCreatives.mockResolvedValue([old]);
+      const { default: DashboardPage } = await import("@/app/(app)/dashboard/page");
+      render(await DashboardPage());
+      expect(queries.getApprovedCreatives).toHaveBeenCalledWith(setupBusiness.id, { throwOnError: true });
+      expect(screen.getByText("Step 2 of 3 · Your ads")).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "Continue" })).toHaveAttribute("href", "/create");
+    });
+
+    it("shows step 2 when no ads have been approved", async () => {
+      arrange();
+      const { default: DashboardPage } = await import("@/app/(app)/dashboard/page");
+      render(await DashboardPage());
+      expect(screen.getByText("Step 2 of 3 · Your ads")).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "Continue" })).toHaveAttribute("href", "/create");
+    });
+
+    it("uses only current ads for both the step and ready card, even if previews are empty", async () => {
+      arrange();
+      queries.getApprovedCreatives.mockResolvedValue([
+        approved("old", ["Get WhatsApp enquiries for Rooftop solar in Jaipur, leading with: Free quote"]),
+        approved("current", [currentGoal]),
+      ]);
+      const { default: DashboardPage } = await import("@/app/(app)/dashboard/page");
+      render(await DashboardPage());
+      expect(screen.getByRole("heading", { name: "Your ad is ready" })).toBeInTheDocument();
+      expect(screen.getByRole("img", { name: "Ad current" })).toBeInTheDocument();
+      expect(screen.queryByRole("img", { name: "Ad old" })).toBeNull();
+      expect(screen.getByRole("link", { name: "Connect and go live" })).toHaveAttribute("href", "/campaigns");
+    });
+
+    it("reports an unreadable approved-ad list instead of guessing the step", async () => {
+      arrange();
+      queries.getCreativePreviews.mockResolvedValue([approved("current", [currentGoal])]);
+      queries.getApprovedCreatives.mockRejectedValueOnce(new Error("database down"));
+      const { default: DashboardPage } = await import("@/app/(app)/dashboard/page");
+      render(await DashboardPage());
+      expect(screen.getByRole("alert")).toHaveTextContent("We couldn't check on your ads just now");
+      expect(screen.getByRole("link", { name: "Try again" })).toHaveAttribute("href", "/dashboard");
+      expect(screen.queryByText(/Step [123] of 3/)).toBeNull();
+    });
   });
 
   // #1670 (CTO): a new owner with a prepared business waiting is asked first, before WS1 would start an empty one.
