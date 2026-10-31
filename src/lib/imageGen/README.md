@@ -20,12 +20,13 @@ Part of the [repository map](../../../docs/architecture/overview.md#repository-m
 - Internal accounts (`freeImagesOnly()` in [spend-policy.ts](../llm/spend-policy.ts)) always get free pictures, with reference images dropped and no paid fallback.
 - Free providers never take reference images: a fallback from a request with product references throws `ReferencePhotoPausedError` rather than draw an unrelated product.
 - Pollinations runs one image at a time per instance, waits at least 15 s on a busy answer, and gives up after about 90 s, parking free pictures for 2 min.
+- In a Create batch, an ad whose free picture busies out (`FreeImageBusyError`) reuses a picture a sibling ad made, under its own words: no new image call, $0, `fallbackFrom: "batch_reuse"` ([batch-reuse.ts](../creative/batch-reuse.ts)). Other picture failures, or a batch with no picture made, still fail the ad.
 - Every attempt reports through `onAttempt` with a fixed `errorCode` so usage rows can record it. A change to providers, models or timeouts must add or update a core test (`npm run test:core`) with recorded real responses (AGENTS.md).
 
 ## Tests
 
 - [imageGen tests](../../../tests/imageGen.test.ts), [image-execution tests](../../../tests/image-execution.test.ts), [image-encode tests](../../../tests/image-encode.test.ts), [creative-raster tests](../../../tests/creative-raster.test.ts)
-- Core: [cloudflare-free-images](../../../tests/core/cloudflare-free-images.test.ts), [internal-free-providers](../../../tests/core/internal-free-providers.test.ts), [pollinations-watermark](../../../tests/core/pollinations-watermark.test.ts), [webp-meta-upload](../../../tests/core/webp-meta-upload.test.ts)
+- Core: [cloudflare-free-images](../../../tests/core/cloudflare-free-images.test.ts), [internal-free-providers](../../../tests/core/internal-free-providers.test.ts), [create-free-busy-reuse](../../../tests/core/create-free-busy-reuse.test.ts), [pollinations-watermark](../../../tests/core/pollinations-watermark.test.ts), [webp-meta-upload](../../../tests/core/webp-meta-upload.test.ts)
 
 ## More
 

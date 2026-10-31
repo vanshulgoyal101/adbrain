@@ -1,0 +1,9 @@
+{
+  "note": "#2378/#2145. Busy reply: Pollinations' answer to DevOps' direct probe, 2026-10-29T09:27Z (#2145). Batch: production request 32b92b65 (internal account, 2026-10-29T15:17Z, #2145): picture 1 saved; picture 2 stayed IMAGE_FREE_BUSY past the 90 s cap, which parked the free queue (#2153); picture 3 failed at once.",
+  "busy": { "status": 503, "body": "SERVICE_UNAVAILABLE: The Classic API is at its limit right now" },
+  "batch": [
+    { "provider": "pollinations", "status": "success" },
+    { "provider": "pollinations", "status": "error", "errorCode": "IMAGE_FREE_BUSY" },
+    { "provider": "pollinations", "status": "error", "errorCode": "IMAGE_FREE_BUSY" }
+  ]
+}
