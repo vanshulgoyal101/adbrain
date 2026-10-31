@@ -24,6 +24,7 @@ vi.mock("@/lib/campaign/budget-edit-service", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/lib/campaign/budget-edit-service")>(),
   editCampaignBudget: budget.edit,
 }));
+vi.mock("@/lib/supabase/queries", () => ({ getPrimaryBusiness: async () => ({ id: "b1" }) }));
 
 // #2305/#2314: owner-facing errors (the #2225 plain words), byte-identical in English; routes match on status and `code`, not this text.
 const ENGLISH: Record<OwnerErrorKey, string> = {
@@ -171,6 +172,13 @@ const ENGLISH: Record<OwnerErrorKey, string> = {
   requestNotSent: "We couldn't send your request. Try again.",
   pickAccountAndPage: "Pick both an ad account and a page.",
   facebookStillConnected: "Facebook is still connected. Try again in a minute.",
+  // #2334: Settings spend limits and preferences.
+  spendLimitsInvalid: "Enter the weekly cap in whole rupees (or leave it blank for no cap), and a Warn at number from 1 to 100.",
+  spendLimitsNotSaved: "We couldn't save your spend limits. Try again.",
+  preferencesUnavailable: "We couldn't load your preferences just now. Try again in a minute.",
+  preferencesChanged: "Your preferences changed somewhere else. Reload the page before saving.",
+  preferencesNotSaved: "We couldn't save your preferences. Try again.",
+  preferencesSavedNotLoaded: "Saved, but we couldn't show the update. Refresh the page to check.",
   // #2335: Day 7 answer, privacy requests and the lead-form picker.
   chooseAnswer: "Choose one of the answers.",
   questionNotOpen: "This question isn't open.",
@@ -181,6 +189,12 @@ const ENGLISH: Record<OwnerErrorKey, string> = {
   openRequestExists: "An open request of this type already exists.",
   setUpBrandFirst: "Set up your Brand first, then connect Facebook in Settings.",
   leadFormsUnavailable: "Could not load lead forms. Try again.",
+  // #2330: the campaign list and Enquiries routes (byte-identical).
+  campaignFiltersInvalid: "Invalid campaign filters.",
+  campaignsNotLoaded: "We couldn't load your campaigns. Reload the page.",
+  enquiryInvalid: "Invalid enquiry.",
+  enquiryWhatsAppOnly: "Real enquiries can be logged on WhatsApp campaigns only.",
+  enquiryNotSaved: "The enquiry could not be saved. Try again.",
 };
 // The messages that take values, rendered with these.
 const VALUES: Partial<Record<OwnerErrorKey, Record<string, string | number>>> = {
@@ -210,7 +224,7 @@ const RENDERED: Partial<Record<OwnerErrorKey, string>> = {
 };
 const keys = Object.keys(ENGLISH) as OwnerErrorKey[];
 
-describe("owner errors (#2305, #2312, #2314, #2324, #2327, #2330, #2335)", () => {
+describe("owner errors (#2305, #2312, #2314, #2324, #2327, #2330, #2334, #2335)", () => {
   it("has the same keys in English and Hindi", () => {
     expect(Object.keys(en.errors).sort()).toEqual([...keys].sort());
     expect(Object.keys(hi.errors).sort()).toEqual([...keys].sort());
@@ -283,5 +297,14 @@ describe("owner errors (#2305, #2312, #2314, #2324, #2327, #2330, #2335)", () =>
     const english = await send();
     expect(english.status).toBe(409);
     expect(await english.json()).toEqual({ error: ENGLISH.runEnded, retryable: false });
+  });
+
+  it("#2334: the spend-limits route answers a Hindi owner in Hindi", async () => {
+    const { POST } = await import("@/app/api/spend-limits/route");
+    cookie.lang = "hi";
+    const response = await POST(new Request("http://x/api/spend-limits", { method: "POST", body: JSON.stringify({ weeklyCapRupees: -5, alertPct: 50, autoPause: true }) }));
+    cookie.lang = undefined;
+    expect(response.status).toBe(422);
+    expect((await response.json()).error).toBe(hi.errors.spendLimitsInvalid);
   });
 });

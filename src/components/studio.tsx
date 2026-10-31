@@ -1,4 +1,5 @@
 "use client";
+import { useNotices } from "@/i18n/notices";
 import { PictureSourceBadge } from "@/components/picture-source-badge";
 import type { AppLocale } from "@/i18n/locale";
 import { formatDate } from "@/lib/format";
@@ -97,6 +98,7 @@ export function Studio({
   initialFilter?: "all" | "draft" | "approved";
   initialCreativeId?: string | null;
 }) {
+  const tn = useNotices();
   const [items, setItems] = useState<Creative[]>(initialCreatives);
   // #1261: the newest batch may still be coming in, or may have ended short, after the owner left Create.
   const [shortfall, setShortfall] = useState<{ brief: string; missing: number; expected: number; ended: boolean } | null>(null);
@@ -251,7 +253,7 @@ export function Studio({
       const stored = localStorage.getItem(generationKey);
       setPendingGeneration(stored ? studioGenerationSchema.parse(JSON.parse(stored)) : null);
     } catch {
-      setError("This browser won't let AdBrain save your progress, so no ads were started. Turn off private browsing or use another browser.");
+      setError(tn("studio.storageBlocked"));
     }
   }
 
@@ -329,7 +331,7 @@ export function Studio({
         if (stored) intent = studioGenerationSchema.parse(JSON.parse(stored));
         if (!intent) {
           if (!runBrief.trim()) {
-            setError("Describe what you want to advertise.");
+            setError(tn("studio.describeAd"));
             return;
           }
           intent = { generationId: crypto.randomUUID(), count: runCount };
@@ -341,7 +343,7 @@ export function Studio({
           return;
         }
       } catch {
-        setError("This browser won't let AdBrain save your progress, so no ads were started. Turn off private browsing or use another browser.");
+        setError(tn("studio.storageBlocked"));
         return;
       }
       setPendingGeneration(intent);
@@ -367,7 +369,7 @@ export function Studio({
       if (!res.ok) {
         if ([400, 401, 403, 404, 409, 422, 429].includes(res.status)) {
           clearIntent();
-          setError(data.error ?? "We couldn't start your ads. Try again in a minute.");
+          setError(data.error ?? tn("studio.startFailed"));
         } else await recover(data.error);
         return;
       }
@@ -399,14 +401,14 @@ export function Studio({
         body: JSON.stringify({ creativeIds: ids }),
       });
       if (!res.ok) {
-        setError("The ad pack didn't download. Check your connection and tap Download again.");
+        setError(tn("studio.downloadFailed"));
         return;
       }
       const blob = await res.blob();
       downloadBlob(blob, "adbrain-ad-pack.zip");
       setExportOk(true);
     } catch {
-      setError("The ad pack didn't download. Check your connection and tap Download again.");
+      setError(tn("studio.downloadFailed"));
     } finally {
       setExporting(false);
     }
@@ -709,6 +711,7 @@ function CreativeCard({
   onDelete: (id: string) => void;
   onPreview: () => void;
 }) {
+  const tn = useNotices();
   const [pending, startTransition] = useTransition();
   const [regenerating, setRegenerating] = useState(false);
   const [confirmingRegen, setConfirmingRegen] = useState(false);
@@ -743,9 +746,9 @@ function CreativeCard({
         error?: string;
       };
       if (res.ok && data.creative) onChange(data.creative);
-      else setRegenError(data.error ?? "Couldn't regenerate — try again.");
+      else setRegenError(data.error ?? tn("studio.regenFailed"));
     } catch {
-      setRegenError("Couldn't regenerate — check your connection.");
+      setRegenError(tn("studio.regenOffline"));
     } finally {
       setRegenerating(false);
     }
@@ -758,11 +761,9 @@ function CreativeCard({
       try {
         const res = await setCreativeStatus(creative.id, next);
         if (res.ok) onChange({ ...creative, status: next });
-        else setRegenError(res.error ?? "Couldn't update approval. Try again.");
+        else setRegenError(res.error ?? tn("studio.approvalFailed"));
       } catch {
-        setRegenError(
-          "Couldn't update approval. Check your connection and try again.",
-        );
+        setRegenError(tn("studio.approvalOffline"));
       }
     });
   }
@@ -774,14 +775,9 @@ function CreativeCard({
       try {
         const res = await deleteCreative(creative.id);
         if (res.ok) onDelete(creative.id);
-        else
-          setRegenError(
-            res.error ?? "Couldn't delete this ad. Try again.",
-          );
+        else setRegenError(res.error ?? tn("studio.deleteFailed"));
       } catch {
-        setRegenError(
-          "Couldn't delete this ad. Check your connection and try again.",
-        );
+        setRegenError(tn("studio.deleteOffline"));
       }
     });
   }

@@ -617,7 +617,8 @@ try {
   if (role === "cto") {
     const low = lowQueues(await openItems());
     startLow = new Set(low.map(({ role: r }) => r));
-    waiting.push(...describeLow(low));
+    // Outcome first (CEO, #364 Oct 29): a thin queue is not work by itself, so it's shown but doesn't stop the wait.
+    for (const line of describeLow(low)) console.log(`(info) ${line}`);
   }
   // #364 (CEO, Oct 29): never wait while you own work you can act on. The top 3, then a non-zero exit.
   if (ownedActionable.length) {
