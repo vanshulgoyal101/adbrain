@@ -61,6 +61,19 @@ describe("setAdDelivery (#1045)", () => {
     await expect(setAdDelivery(context, "c1", "22", "undo")).rejects.toThrow("AdBrain didn't pause this ad");
   });
 
+  it("does not claim an ad is unchanged when a pause read-back fails", async () => {
+    let metaStatus = "ACTIVE";
+    m.setAdStatus.mockImplementationOnce(async () => {
+      metaStatus = "PAUSED";
+      throw new Error("Meta accepted the pause but read-back failed");
+    });
+    const refusal = await setAdDelivery(context, "c1", "22", "pause").then(() => null, (error: unknown) => error);
+    if (!(refusal instanceof Error)) throw new Error("Expected an unconfirmed pause error.");
+    expect(metaStatus).toBe("PAUSED");
+    expect(m.saved).toEqual([]);
+    expect(refusal).toMatchObject({ message: "Meta didn't confirm the change. Refresh the campaign before trying again.", status: 502, retryable: false });
+  });
+
   it("undoes only an ad AdBrain paused, as an activation", async () => {
     await expect(setAdDelivery(context, "c1", "22", "undo")).rejects.toThrow("AdBrain didn't pause this ad");
     expect(m.setAdStatus).not.toHaveBeenCalled();
