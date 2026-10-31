@@ -37,6 +37,7 @@ you sign in yourself, on your own phone, within 30 minutes.
 - **You see:** on a phone, a card first: "From your business to WhatsApp chats".
   Tap "Skip" (or "Create my free account") to reach the form, headed "Create your
   free account". Already have an account? Tap "Already have an account? Sign in".
+  The "Sign in" link at the top of the homepage skips the card and opens "Welcome back".
 - **Tap:** "Continue with Google", or type your email and tap "Email me a sign-in
   link". "No password needed. The link creates your account."
 - **Takes:** a minute. With email you see "Check your email": open the link on the

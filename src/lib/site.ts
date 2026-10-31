@@ -58,6 +58,9 @@ export const siteConfig = {
   category: "BusinessApplication",
 } as const;
 
+/** #1793: "Sign in" links open the returning view, so a pilot in a fresh phone browser skips the sign-up tour. */
+export const SIGN_IN_HREF = "/login?mode=signin";
+
 /** Absolute URL for a site-relative path (e.g. "/login" -> full URL). */
 export function absoluteUrl(path = "/"): string {
   const suffix = path.startsWith("/") ? path : `/${path}`;
