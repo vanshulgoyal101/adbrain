@@ -262,6 +262,15 @@ describe("systemic CI failures (CTO auto-track)", () => {
     expect(lines).toHaveLength(1);
     expect(lines[0]).toMatch(/^CI systemic: Core approval failed on 2 PR branches \(dev3\/701, designer\/847\)/);
   });
+  it("ignores 0-job runs (#878) and branches that went green since", () => {
+    const at = (s: number) => new Date(Date.parse("2026-10-31T12:00:00Z") + s * 1000).toISOString();
+    const lines = systemicFailures([
+      { ...run("CI", "next"), run_started_at: at(0), updated_at: at(14) },
+      run("CI", "work/issue-2371", "success"), { ...run("CI", "work/issue-2371"), run_started_at: at(0), updated_at: at(190) },
+      { ...run("CI", "dev/1"), run_started_at: at(0), updated_at: at(190) },
+    ]);
+    expect(lines).toEqual([]);
+  });
 });
 
 describe("next item (#364: idle with a full queue)", () => {
