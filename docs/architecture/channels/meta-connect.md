@@ -203,10 +203,12 @@ adds the follow-up columns and `get_lead_page`. Both are in the fresh schema.
 ## Managed Accounts (2-Tier, #518)
 
 Behind `MANAGED_ACCOUNTS_ENABLED`. AdBrain provisions each customer a child business under
-Solaride, tracked in `managed_meta_accounts` (#519). The customer links a Page they administer
+the AdBrain business portfolio (`META_PARENT_BUSINESS_ID`, no default; unset is `NOT_CONFIGURED`,
+#2357), tracked in `managed_meta_accounts` (#519). The customer links a Page they administer
 (#523). [`provisionManagedAccount`](../../../src/lib/meta/managed-provision.ts) (#521) then creates the
 child business (`POST /{parent}/owned_businesses` with `shared_page_id`, `page_permitted_tasks`,
-timezone 71 and `child_business_external_id` = the AdBrain business ID) and its INR ad account
+timezone 71, `vertical` from the Brand's category (solar `ENERGY_AND_UTILITIES`, IELTS
+`EDUCATION`, interiors `PROFESSIONAL_SERVICES`, else `OTHER`) and `child_business_external_id` = the AdBrain business ID) and its INR ad account
 (`POST /{child}/adaccount`, `end_advertiser` = the Page), then assigns the managing system user
 to it (`POST /{act}/assigned_users`, MANAGE/ADVERTISE/ANALYZE, `business` = the child; checked
 first with `GET /{act}/assigned_users?business=`). Every step reads before it creates: every

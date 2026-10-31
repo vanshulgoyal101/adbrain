@@ -470,7 +470,6 @@ const openItems = async () => {
 };
 const openIssues = async () => (await openItems()).filter(item => !item.pull_request);
 const describeLow = (low) => low.map(({ role: r, count }) => `Queue low: ${NAMES[r]} has ${count} actionable item(s); refill from the CEO priorities (worker table)`);
-let startLow = new Set();
 
 async function findWork() {
   const found = [];
@@ -504,13 +503,6 @@ async function findWork() {
     if (mineNumbers.has(number) || addressedToMe(body) || linkedToMine.has(number)) {
       found.push(`#${number} new comment: "${brief(body)}" ${comment.html_url}`);
     }
-  }
-  if (role === "cto") {
-    const low = lowQueues(await openItems());
-    const lowNow = new Set(low.map(({ role: r }) => r));
-    // A refilled worker leaves the known-low set, so running dry again alerts again.
-    for (const r of startLow) if (!lowNow.has(r)) startLow.delete(r);
-    for (const line of describeLow(low.filter(({ role: r }) => !startLow.has(r)))) found.push(line);
   }
   if (role === "cto" || role === "devops") {
     const runs = (await api(`repos/${repo}/actions/runs?status=completed&created=${encodeURIComponent(`>=${since}`)}&per_page=100`)).workflow_runs ?? [];
@@ -616,8 +608,8 @@ try {
   const waiting = await backlog();
   if (role === "cto") {
     const low = lowQueues(await openItems());
-    startLow = new Set(low.map(({ role: r }) => r));
-    // Outcome first (CEO, #364 Oct 29): a thin queue is not work by itself, so it's shown but doesn't stop the wait.
+    // Outcome first (CEO, #364 Oct 29; AGENTS.md Oct 30): a thin queue is not work by itself, so it's shown at
+    // start-up but never wakes the CTO mid-wait.
     for (const line of describeLow(low)) console.log(`(info) ${line}`);
   }
   // #364 (CEO, Oct 29): never wait while you own work you can act on. The top 3, then a non-zero exit.

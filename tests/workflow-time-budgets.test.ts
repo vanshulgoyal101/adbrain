@@ -169,11 +169,15 @@ describe("create smoke mode", () => {
     const text = workflow("create-smoke.yml").join("\n");
     const daily = text.match(/- cron: "(47 8 \* \* \*)"/)?.[1];
     expect(daily).toBeTruthy();
-    expect(text).toContain(`REQUESTED_MODE: \${{ inputs.mode || (github.event.schedule == '${daily}' && 'prepare') || 'picture' }}`);
+    expect(text).toContain(`(github.event.schedule == '${daily}' && 'prepare')`);
   });
 
-  it("runs --create only when dispatched with create", () => {
+  it("runs --create when the daily 3-ad schedule or a dispatch asks for it (#2145)", () => {
     expect(run(smoke, { REQUESTED_MODE: "create" }).calls).toBe("node scripts/smoke-core.mjs --create\n");
+    const text = workflow("create-smoke.yml").join("\n");
+    const daily = text.match(/- cron: "(37 3 \* \* \*)"/)?.[1];
+    expect(daily).toBeTruthy();
+    expect(text).toContain(`REQUESTED_MODE: \${{ inputs.mode || (github.event.schedule == '47 8 * * *' && 'prepare') || (github.event.schedule == '${daily}' && 'create') || 'picture' }}`);
   });
 
   it("refuses any other input without running the smoke", () => {
