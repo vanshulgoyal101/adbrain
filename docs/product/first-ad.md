@@ -66,11 +66,14 @@ you sign in yourself, on your own phone, within 30 minutes.
   free account". Already have an account? Tap "Already have an account? Sign in".
   The "Sign in" link at the top of the homepage skips the card and opens "Welcome back".
 - **Tap:** "Continue with Google", or type your email and tap "Email me a sign-in
-  link". "No password needed. The link creates your account."
+  link". "No password needed. The link creates your account." Google's screen
+  shows a …supabase.co address; the line under the button says "That's AdBrain."
 - **Takes:** a minute. With email you see "Check your email": open the link on the
   same phone. "It works once, for a short time."
 - **If it fails:** the screen says, for example, "Could not send a sign-in link.
-  Please try again." Tap "Send again", or use "Continue with Google".
+  Please try again." Tap "Send again", or use "Continue with Google". "Too many
+  sign-in emails right now…" means the hourly email limit is reached: use
+  "Continue with Google".
 
 After signing in you land on "Set up your first ad", "Step 1 of 3". The bar at the
 top shows your three steps. If you leave and come back, Home shows "Your first ad"

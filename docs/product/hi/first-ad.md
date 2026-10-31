@@ -1,5 +1,5 @@
 # फ़ोन पर आपका पहला ऐड
-<!-- mirrors ../first-ad.md 89441fb93d39 -->
+<!-- mirrors ../first-ad.md 7d83301228d1 -->
 
 यह [Your first ad on a phone](../first-ad.md) का हिंदी रूप है; अंग्रेज़ी पेज बदले तो इसे भी बदलें।
 [Features and workflows](../README.md) का हिस्सा।
@@ -73,11 +73,14 @@ you before it's due."
   free account"। पहले से अकाउंट है? "Already have an account? Sign in" दबाएँ।
   होमपेज के ऊपर वाला "Sign in" लिंक यह कार्ड छोड़कर सीधे "Welcome back" खोलता है।
 - **टैप करें:** "Continue with Google", या अपना ईमेल डालकर "Email me a sign-in
-  link" दबाएँ। "No password needed. The link creates your account."
+  link" दबाएँ। "No password needed. The link creates your account." Google की स्क्रीन पर
+  …supabase.co वाला पता दिखता है; बटन के नीचे की लाइन बताती है "That's AdBrain."
 - **कितना समय:** एक मिनट। ईमेल से करने पर "Check your email" दिखेगा: लिंक उसी फ़ोन
   पर खोलें। "It works once, for a short time."
 - **अगर काम न करे:** स्क्रीन पर लिखा आएगा, जैसे "Could not send a sign-in link.
   Please try again." "Send again" दबाएँ, या "Continue with Google" इस्तेमाल करें।
+  "Too many sign-in emails right now…" का मतलब है घंटे भर की ईमेल लिमिट पूरी हो गई:
+  "Continue with Google" इस्तेमाल करें।
 
 साइन इन के बाद आप "Set up your first ad", "Step 1 of 3" पर पहुँचते हैं। ऊपर की पट्टी
 आपके तीनों स्टेप दिखाती है। अगर आप बीच में छोड़कर वापस आएँ, तो Home पर "Your first ad"

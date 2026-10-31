@@ -18,6 +18,8 @@ const outlineLink = "inline-flex h-11 items-center justify-center gap-2 rounded-
 // #1414: the address a link was last sent to on this device, so 'Send a new link' can send without retyping.
 const LAST_EMAIL_KEY = "adbrain:sign-in-email";
 const RESEND_AFTER_S = 30;
+// #2415: Supabase's default mailer allows 2 emails an hour for the whole project (#1777); Google isn't limited.
+const EMAIL_LIMIT_WORDS = "Too many sign-in emails right now. Continue with Google, or try again in an hour.";
 
 /** `newVisitor` leads with a sign-in link, which also creates the account; passwords stay one tap away. */
 const noHash = () => () => {};
@@ -47,6 +49,7 @@ export function LoginForm({ newVisitor = false, onSucceeded, onCallbackDismiss }
   const [usePassword, setUsePassword] = useState(false);
   const passwordMode = !newVisitor || usePassword;
   const emailRef = useRef<HTMLInputElement>(null);
+  const googleRef = useRef<HTMLButtonElement>(null);
   const restoreEmailFocus = useRef(false);
   const [status, setStatus] = useState<"idle" | "sending" | "sent">("idle");
   const [pending, setPending] = useState<"magic" | "password" | "google" | null>(null);
@@ -88,7 +91,14 @@ export function LoginForm({ newVisitor = false, onSucceeded, onCallbackDismiss }
         options: { emailRedirectTo: callbackUrl("email") },
       });
       if (error) {
-        reportAuthOutcome({ method: "email_link", outcome: "failed", code: authCode(error) });
+        const code = authCode(error);
+        reportAuthOutcome({ method: "email_link", outcome: "failed", code });
+        if (code === "over_email_send_rate_limit") {
+          setError(EMAIL_LIMIT_WORDS);
+          setStatus("idle");
+          requestAnimationFrame(() => googleRef.current?.focus());
+          return;
+        }
         throw new Error(error.message);
       }
       reportAuthOutcome({ method: "email_link", outcome: "started" });
@@ -243,10 +253,14 @@ export function LoginForm({ newVisitor = false, onSucceeded, onCallbackDismiss }
         </div>
       )}
 
-      <Button type="button" variant="outline" className="h-11" disabled={pending !== null} onClick={signInWithGoogle}>
-        {pending === "google" && <Loader2 size={16} aria-hidden="true" className="animate-spin" />}
-        {pending === "google" ? "Connecting..." : "Continue with Google"}
-      </Button>
+      <div className="flex flex-col gap-1.5">
+        <Button ref={googleRef} type="button" variant="outline" className="h-11" disabled={pending !== null} onClick={signInWithGoogle}>
+          {pending === "google" && <Loader2 size={16} aria-hidden="true" className="animate-spin" />}
+          {pending === "google" ? "Connecting..." : "Continue with Google"}
+        </Button>
+        {/* #2415: Google's screen names the Supabase project domain until a custom domain lands (#1848). */}
+        <p className="text-xs leading-5 text-slate-500">Google shows our sign-in service&apos;s address (…supabase.co). That&apos;s AdBrain.</p>
+      </div>
 
       <div className="flex items-center gap-3 text-xs text-slate-500">
         <div className="h-px flex-1 bg-border" />

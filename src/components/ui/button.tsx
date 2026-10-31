@@ -25,6 +25,7 @@ export interface ButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: Variant;
   size?: Size;
+  ref?: React.Ref<HTMLButtonElement>;
 }
 
 export function Button({
