@@ -178,6 +178,9 @@ export const EDUCATION_BANNED_CLAIMS = [
   "1st attempt",
   // CPO (Analyst #1514 ② ④): fixed visa timelines and document fraud. "No IELTS needed" stays allowed (some waive it).
   "visa in ", // with its space: "visa interview practice" is fine
+  // #2452: "Visa in just 30 days" is the same fixed timeline.
+  "visa in just ",
+  "visa in only ",
   "fake",
   "arranged offer letter",
   "backdated",

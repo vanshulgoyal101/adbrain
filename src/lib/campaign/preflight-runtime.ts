@@ -75,11 +75,12 @@ export function buildCampaignPreflightLoaders(
       return withMetaConnection(authorizedBusiness, { purpose: "create_paused" }, (meta) => whatsappNumberForBusiness(authorizedBusiness.businessId, meta, requested ?? null));
     },
     findWhatsAppMessage: async (actor, draft) => {
-      const [{ data: business, error }, { data: creatives }] = await Promise.all([
+      const [{ data: business, error }, { data: creatives, error: creativesError }] = await Promise.all([
         supabase.from("businesses").select("name, offers, usps, description, vertical, locations, whatsapp_template").eq("id", actor.businessId).maybeSingle(),
         supabase.from("creatives").select("id, image_url, headline, primary_text, generation").in("id", draft.creativeIds).eq("business_id", actor.businessId),
       ]);
-      if (error || !business) return null;
+      // #2452: a failed read is a retry (Review says try again), never a fallback message Review passes and launch doesn't send.
+      if (error || creativesError || !business) throw new Error("WhatsApp message could not be read.");
       // The same ads, in the same order, as launch writes the suggestion from.
       const byId = new Map((creatives ?? []).map((creative) => [creative.id, creative]));
       const used = draft.creativeIds.map((id) => byId.get(id)).filter((creative): creative is NonNullable<typeof creative> => Boolean(creative?.image_url && creative.headline));

@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { runPreflight } from "@/lib/campaign/preflight";
-import { resolveWhatsAppMessage } from "@/lib/campaign/whatsapp-template";
+import { campaignWhatsAppMessage } from "@/lib/campaign/campaign-whatsapp-message";
 import type { DraftInput } from "@/lib/campaign/connect-contracts";
 
 const mocks = vi.hoisted(() => ({
@@ -107,8 +107,11 @@ function reviewPlanHash(): string {
   runPreflight({
     draft: input,
     whatsappNumber: input.destination === "whatsapp" ? "+919876543210" : null,
-    // #840: only an edited or saved message reaches the hash, so the suggestion's words don't matter here.
-    whatsappMessage: input.destination === "whatsapp" ? resolveWhatsAppMessage({ edited: input.whatsappMessage, saved: mocks.whatsappTemplate, suggest: () => ({ greeting: "", autofill: "" }) }) : null,
+    // #2452: every message is in the hash, so this builds it from the same business and ad rows the route reads.
+    whatsappMessage: input.destination === "whatsapp" ? campaignWhatsAppMessage({
+      draft: input, business: { name: "Solaride", locations: ["Jaipur"], offers: [], whatsapp_template: mocks.whatsappTemplate },
+      creatives: [{ headline: "Headline", primary_text: "Message", generation: { concept: { description: mocks.description } } }],
+    }) : null,
     draftId,
     draftVersion: 1,
     connection: {

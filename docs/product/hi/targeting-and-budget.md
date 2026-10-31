@@ -1,5 +1,5 @@
 # कैंपेन की टारगेटिंग और बजट
-<!-- mirrors ../targeting-and-budget.md e78419bd85d2 -->
+<!-- mirrors ../targeting-and-budget.md 3e800d9b85a1 -->
 
 यह [Campaign Targeting and Budget](../targeting-and-budget.md) का हिंदी रूप है; अंग्रेज़ी पेज बदले तो इसे भी बदलें।
 [Features and workflows](../README.md) का हिस्सा।
@@ -22,8 +22,10 @@
   के साथ) या ज़्यादा से ज़्यादा 3 सवाल। कैंपेन का अपना edit (ड्राफ़्ट `whatsappMessage`) इस पर
   भारी पड़ता है, और उस पर भी वही claim checks blocker की तरह लगती हैं। दोनों में से कोई न
   हो, तो AdBrain पहले की तरह हर कैंपेन के लिए greeting और prefill खुद लिखता है। Review बिल्कुल
-  वही मैसेज (`whatsappMessage`) लौटाता है और launch वही भेजता है; edit किया हुआ या सेव किया
-  हुआ मैसेज plan hash का हिस्सा है। Ledger में बटन दर्ज होता है, और यह भी कि मैसेज edit किया
+  वही मैसेज (`whatsappMessage`) लौटाता है और launch वही भेजता है: हर मैसेज, सुझाया हुआ भी,
+  plan hash का हिस्सा है, और launch उसे ताज़ा reads से दोबारा बनाता है और अलग निकले तो Meta तक
+  पहुँचने से पहले मना कर देता है (#2452)। कोई read fail हो तो "try again" आता है, कोई fallback
+  मैसेज नहीं। Ledger में बटन दर्ज होता है, और यह भी कि मैसेज edit किया
   गया, सेव किया हुआ था या सुझाया गया। Composer में "WhatsApp message: Your saved message ·
   Edit for this campaign" वही fields और preview खोलता है ("Also save as my message" शुरू में
   बंद रहता है); Review का "When they tap" मैसेज को एक लाइन में और एक preview में दिखाता है,
