@@ -14,12 +14,19 @@ describe("outcome guarantees for solar and interiors (#2423)", () => {
     ["Assured returns in 4 years", "rooftop solar installer", "assured return"],
     ["Solar with guaranteed ROI", "Solar", "guaranteed roi"],
     ["A risk-free switch to solar", "solar", "risk-free"],
-    ["Risk free modular kitchen upgrade", "Modular kitchens and interiors", "risk free"],
+    ["Risk free modular kitchen upgrade", "Modular kitchens and interiors", "risk-free"],
     ["Lowest price guaranteed on wardrobes", "Interior designer", "lowest price guaranteed"],
     ["Savings guaranteed from month one", "ENERGY_AND_UTILITIES", "savings guaranteed"],
     ["बिजली बिल पर बचत की गारंटी", "solar energy", "बचत की गारंटी"],
     ["ਬਿਜਲੀ ਬਿੱਲ ਤੇ ਬੱਚਤ ਦੀ ਗਾਰੰਟੀ", "solar energy", "ਬੱਚਤ ਦੀ ਗਾਰੰਟੀ"],
     ["Solar lagwao, bachat ki guarantee", "solar energy", "bachat ki guarantee"],
+    // Attack review on #2450: dashes, spacing and line breaks are the same claim.
+    ["Guaranteed-savings on solar", "solar energy", "guaranteed saving"],
+    ["guaranteed   savings", "solar energy", "guaranteed saving"],
+    ["Guaranteed\nsavings every month", "solar energy", "guaranteed saving"],
+    ["A risk\u2011free switch", "solar energy", "risk-free"],
+    ["Guaranteed\u2013savings", "solar energy", "guaranteed saving"],
+    ["Lowest prices guaranteed on kitchens", "Modular kitchens", "lowest prices guaranteed"],
   ])("Review blocks %s (%s)", (text, vertical, term) => {
     expect(bannedClaimsForVertical(vertical)).toContain(term);
     expect(reviewTerms(text, vertical)).toContain(term);
@@ -32,6 +39,7 @@ describe("outcome guarantees for solar and interiors (#2423)", () => {
       "Cut your electricity bill with rooftop solar",
       "Save on your bill every month",
       "10-year warranty on every kitchen",
+      "Easy returns guaranteed on every wardrobe",
     ]) expect(reviewTerms(text, "solar energy"), text).toEqual([]);
   });
 

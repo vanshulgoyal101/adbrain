@@ -23,6 +23,15 @@ describe("WhatsApp opening policy check (#2422)", () => {
       .toMatchObject({ field: "greeting", error: expect.stringContaining("Meta often rejects this") });
   });
 
+  it("doesn't read the business's own name in AdBrain's welcome as a claim", () => {
+    const greeting = (name: string) => `Hi! Thanks for messaging ${name}. Send this message and we'll reply here.`;
+    expect(whatsappOpeningProblem({ greeting: greeting("Cure Dental Clinic"), autofill: "Hi, I'd like a checkup" }, { name: "Cure Dental Clinic", vertical: "dental clinic" })).toBeNull();
+    expect(whatsappOpeningProblem({ greeting: greeting("No. 1 IELTS Institute"), autofill: "Hi, I'd like a demo class" }, { ...ielts, name: "No. 1 IELTS Institute" })).toBeNull();
+    // The name is skipped, not the rest of the message.
+    expect(whatsappOpeningProblem({ greeting: `${greeting("Cure Dental Clinic")} We cure gum disease.`, autofill: "Hi" }, { name: "Cure Dental Clinic", vertical: "dental clinic" }))
+      .toMatchObject({ field: "greeting", error: expect.stringMatching(/^"cure" in the welcome is a health promise/) });
+  });
+
   it("passes AdBrain's suggested welcome and ordinary messages", () => {
     expect(whatsappOpeningProblem({ greeting: "Hi! Thanks for messaging Solaride. Send this message and we'll reply here.", autofill: "Hi, I'd like a free site survey in Mohali" }, solar)).toBeNull();
     expect(whatsappOpeningProblem({ greeting: "नमस्ते! IELTS क्लास के लिए धन्यवाद।", autofill: "", iceBreakers: ["Demo class kab hai?"] }, ielts)).toBeNull();

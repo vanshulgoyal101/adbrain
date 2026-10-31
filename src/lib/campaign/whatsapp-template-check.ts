@@ -5,7 +5,7 @@ import type { WhatsAppTemplate } from "@/lib/campaign/whatsapp-template";
 import type { WhatsAppOpening } from "@/lib/meta/client";
 
 export type WhatsAppTemplateField = "greeting" | "prefill" | "questions";
-export type WhatsAppTemplateBusiness = { offers?: string[] | null; usps?: string[] | null; description?: string | null; vertical?: string | null };
+export type WhatsAppTemplateBusiness = { name?: string | null; offers?: string[] | null; usps?: string[] | null; description?: string | null; vertical?: string | null };
 
 const LINK_OR_PHONE = /(https?:\/\/|www\.|\b\S+\.(com|in|net|org)\b|\+?\d[\d\s-]{7,}\d)/i;
 
@@ -46,7 +46,10 @@ export function whatsappOpeningProblem(opening: WhatsAppOpening, business: Whats
       ? opening.iceBreakers.map((question) => ["questions", question] as [WhatsAppTemplateField, string])
       : [["prefill", opening.autofill] as [WhatsAppTemplateField, string]]),
   ];
-  for (const [field, text] of texts) {
+  // AdBrain's own welcome names the business; its name ("Cure Dental", "No. 1 IELTS") is not a claim the owner wrote.
+  const name = business.name?.trim();
+  for (const [field, written] of texts) {
+    const text = name ? written?.split(name).join(" ") : written;
     if (!text?.trim()) continue;
     const term = bannedTermsIn(text, business.vertical)[0];
     if (term) return { field, error: `"${term}" in the ${OPENING_FIELD_NAMES[field]} is ${bannedTermKind(term, business.vertical)} Meta rejects. Reword it.` };
