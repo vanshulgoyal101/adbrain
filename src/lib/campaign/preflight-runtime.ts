@@ -14,7 +14,7 @@ import type { createClient } from "@/lib/supabase/server";
 import { resolveDraftTargeting } from "./draft-targeting";
 import { savedCreativeDescription } from "@/lib/creative/concept";
 import { campaignWhatsAppMessage } from "./campaign-whatsapp-message";
-import { whatsappTemplateProblem } from "./whatsapp-template-check";
+import { whatsappOpeningProblem, whatsappTemplateProblem } from "./whatsapp-template-check";
 
 export type CampaignSupabase = Awaited<ReturnType<typeof createClient>>;
 
@@ -84,8 +84,10 @@ export function buildCampaignPreflightLoaders(
       const byId = new Map((creatives ?? []).map((creative) => [creative.id, creative]));
       const used = draft.creativeIds.map((id) => byId.get(id)).filter((creative): creative is NonNullable<typeof creative> => Boolean(creative?.image_url && creative.headline));
       const message = campaignWhatsAppMessage({ draft, business, creatives: used });
-      // A saved message was checked when it was saved; this campaign's edit is checked here.
-      const problem = draft.whatsappMessage ? whatsappTemplateProblem(draft.whatsappMessage, business)?.error ?? null : null;
+      // A saved message was checked when it was saved, and this campaign's edit is checked here. #2422: whatever
+      // launch sends (suggested and saved too) also meets the ad text's policy rules, since Meta reviews it with the ad.
+      const edited = draft.whatsappMessage ? whatsappTemplateProblem(draft.whatsappMessage, business)?.error ?? null : null;
+      const problem = edited ?? whatsappOpeningProblem(message.opening, business)?.error ?? null;
       return { message, problem };
     },
     findWebsite: async (actor) => {

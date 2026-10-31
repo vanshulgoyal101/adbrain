@@ -47,10 +47,13 @@ operation cannot be discarded to bypass its recovery identity; saved drafts
 remain available after clearing the local setup.
 
 Preflight validates ownership, approved creative content, active lead form,
-connection capability, INR currency, resolved targeting, and budget. For health
-businesses it also reads each ad's saved wording with Create's banned-claim rule
-(whole words only), so an owner-edited "Cures back pain" is blocked before Meta
-(`REVIEW_AD_POLICY`, #739). Its hash
+connection capability, INR currency, resolved targeting, and budget. For health,
+education and solar/interiors businesses it also reads each ad's saved wording
+with Create's banned-claim rule (whole words only), so an owner-edited "Cures back
+pain" or "Guaranteed savings" is blocked before Meta (`REVIEW_AD_POLICY`, #739,
+#2423). The WhatsApp welcome, pre-typed message and quick questions that launch
+will send (suggested, saved or edited) get the same rule plus #738's policy rules,
+naming the field (`REVIEW_WHATSAPP_MESSAGE`, #2422). Its hash
 binds the reviewed inputs, selected assets, resolved IDs, and creative content.
 Creation reruns preflight and rejects a stale draft, hash, or connection generation.
 Each Review blocker shows a one-tap fix under its message (`reviewBlockerFix`,
@@ -88,10 +91,10 @@ with the ad, area or interest Meta named. Support can paste the row's message an
 | `REVIEW_META_ACCESS` | "Meta hasn't confirmed AdBrain can create campaigns in this ad account. Connect Facebook again and allow every permission it asks for." | "Connect Facebook again" | Connect again and leave every permission switched on. |
 | `REVIEW_CREATIVES` | "Choose at least one ad to send to Meta.", "One of the ads you chose isn't available any more. Choose your ads again.", or an ad that "isn't approved yet", "has no picture yet" or "has no headline" | "Choose your ads" (opens the ad picker) | Choose approved ads that have a picture and a headline. |
 | `REVIEW_WHATSAPP_NOT_LINKED` | "Your Facebook Page has no WhatsApp number linked yet, so the ad's button has nowhere to open a chat. Link the number in Settings, then review again." | "Link your WhatsApp number" (opens Settings) | Link the WhatsApp Business number to the Page in Meta, then check it in Settings. |
-| `REVIEW_WHATSAPP_MESSAGE` | "Your WhatsApp message: {problem}" | "Edit the WhatsApp message" | Fix what the message names (too long, or missing). |
+| `REVIEW_WHATSAPP_MESSAGE` | "Your WhatsApp message: {problem}" | "Edit the WhatsApp message" | Fix what the message names (too long, missing, or a promise in the welcome, pre-typed message or a question). |
 | `REVIEW_NO_LEAD_FORM` | "Choose an active lead form from your Facebook Page in the Lead form field." | "Choose a lead form" | Pick an active form, or make one on the Facebook Page first. |
 | `REVIEW_NO_WEBSITE` | "Add your business website on the Your business page. Meta lead ads must link to the advertiser's own website, not Facebook." | "Add your website" (opens Brand), or "Use WhatsApp chat instead (no website needed)" | Add your own website, or switch to WhatsApp chat ads. |
-| `REVIEW_AD_POLICY` | "{word}" in an ad "is a health promise Meta rejects. Edit the ad to describe the service instead." | "Edit the ad's wording" | Say what the service is, not what it cures. |
+| `REVIEW_AD_POLICY` | "{word}" in an ad "is a health promise" (clinics) or "is a promise" (others) "Meta rejects. Edit the ad to describe the service instead." | "Edit the ad's wording" | Say what the service is, not what it cures or guarantees. |
 | `REVIEW_BUDGET` | "Set a daily budget above ₹0." or "Meta needs at least ₹96 a day. Set a daily budget of ₹96 or more." | "Set the daily budget" | Pick ₹300, ₹500 or ₹1,000 a day. |
 | `REVIEW_NO_AGE_RANGE` | "Choose an age range, or let AdBrain recommend one, before reviewing." | "Set the age range" | Set the ages, or tap **Recommend audience**. |
 | `REVIEW_RADIUS` | "Set the city radius between 17 and 80 km; Meta allows nothing outside that range." | "Set the city radius" | Choose a radius from 17 to 80 km. |

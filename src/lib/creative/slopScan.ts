@@ -186,11 +186,54 @@ export const EDUCATION_BANNED_CLAIMS = [
   "visa pakka",
 ];
 
+/** #2423 (Analyst #2411): solar, energy and home-interiors businesses, whose ads sell savings or a return on the job. */
+export const HOME_SERVICES_VERTICAL = /solar|rooftop|inverter|energy|interior|modular kitchen|home improvement|renovat|furnish|furniture|false ceiling|wardrobe/i;
+
+/**
+ * Meta's prohibited commercial practices: returns "guaranteed or risk-free", or a guaranteed result. Refused even when
+ * a Brand fact says it. Product warranties stay allowed ("25-year panel guarantee" names no outcome), so a bare
+ * "guarantee" is not on this list. Singular only: Create matches substrings and Review takes a plural "s".
+ */
+export const OUTCOME_GUARANTEE_CLAIMS = [
+  "guaranteed saving",
+  "savings guaranteed",
+  "saving guaranteed",
+  "assured saving",
+  "guaranteed return",
+  "assured return",
+  "guaranteed roi",
+  "roi guaranteed",
+  "guaranteed profit",
+  "guaranteed income",
+  "guaranteed zero bill",
+  "risk-free",
+  "risk free",
+  "lowest price guaranteed",
+  "guaranteed lowest price",
+  "lowest price guarantee",
+  "बचत की गारंटी",
+  "गारंटीड बचत",
+  "रिटर्न की गारंटी",
+  "गारंटीड रिटर्न",
+  "मुनाफे की गारंटी",
+  "जोखिम मुक्त",
+  "जोखिम-मुक्त",
+  "ਬੱਚਤ ਦੀ ਗਾਰੰਟੀ",
+  "ਗਾਰੰਟੀਡ ਬੱਚਤ",
+  "ਰਿਟਰਨ ਦੀ ਗਾਰੰਟੀ",
+  "ਗਾਰੰਟੀਡ ਰਿਟਰਨ",
+  "ਜੋਖਮ ਮੁਕਤ",
+  "bachat ki guarantee",
+  "guaranteed bachat",
+  "return ki guarantee",
+];
+
 export function bannedClaimsForVertical(vertical?: string | null): string[] {
   const text = vertical ?? "";
-  return [
+  return [...new Set([
     ...(HEALTH_VERTICAL.test(text) ? MEDICAL_BANNED_CLAIMS : []),
     ...(EDUCATION_VERTICAL.test(text) ? EDUCATION_BANNED_CLAIMS : []),
-  ];
+    ...(HOME_SERVICES_VERTICAL.test(text) ? OUTCOME_GUARANTEE_CLAIMS : []),
+  ])];
 }
 

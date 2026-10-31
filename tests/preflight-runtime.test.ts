@@ -67,3 +67,25 @@ describe("preflight loaders for the Review warnings (#419 2b)", () => {
   });
 });
 
+
+describe("WhatsApp message loader (#2422)", () => {
+  const loadersWith = (business: Record<string, unknown>) => {
+    const businesses = { select: () => businesses, eq: () => businesses, maybeSingle: async () => ({ data: business, error: null }) };
+    const creatives = { select: () => creatives, in: () => creatives, eq: async () => ({ data: [] }) };
+    return buildCampaignPreflightLoaders({ from: (table: string) => (table === "businesses" ? businesses : creatives) } as never, actor);
+  };
+  const draft = { destination: "whatsapp", creativeIds: [], targeting: {} } as never;
+
+  it("holds a saved message to the policy rules, not only this campaign's edit", async () => {
+    const saved = { greeting: "Hi! 100% visa with our team.", opening: { kind: "prefill", prefill: "Hi, I'd like a demo class", callButton: false }, language: "en" };
+    const found = await loadersWith({ name: "Study Hub", vertical: "IELTS coaching", offers: [], usps: [], description: null, locations: [], whatsapp_template: saved }).findWhatsAppMessage?.(actor, draft);
+    expect(found?.message.source).toBe("saved");
+    expect(found?.problem).toBe('"100% visa" in the welcome is a promise Meta rejects. Reword it.');
+  });
+
+  it("passes AdBrain's suggested message", async () => {
+    const found = await loadersWith({ name: "Study Hub", vertical: "IELTS coaching", offers: [], usps: [], description: null, locations: [], whatsapp_template: null }).findWhatsAppMessage?.(actor, draft);
+    expect(found?.message.source).toBe("suggested");
+    expect(found?.problem).toBeNull();
+  });
+});

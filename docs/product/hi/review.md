@@ -52,9 +52,12 @@ recovery के लिए Save draft इस्तेमाल करें। Pe
 मिलते रहते हैं।
 
 Preflight ownership, approved creative content, active lead form, connection capability, INR
-currency, resolved targeting और budget जाँचता है। Health businesses के लिए यह हर ad की saved
-wording को Create के banned-claim rule से भी पढ़ता है (सिर्फ़ पूरे शब्द), ताकि मालिक का बदला
-हुआ "Cures back pain" Meta तक पहुँचने से पहले रुक जाए (`REVIEW_AD_POLICY`, #739)। इसका hash
+currency, resolved targeting और budget जाँचता है। Health, education और solar/interiors businesses के
+लिए यह हर ad की saved wording को Create के banned-claim rule से भी पढ़ता है (सिर्फ़ पूरे शब्द), ताकि
+मालिक का बदला हुआ "Cures back pain" या "Guaranteed savings" Meta तक पहुँचने से पहले रुक जाए
+(`REVIEW_AD_POLICY`, #739, #2423)। Launch जो WhatsApp welcome, pre-typed message और quick questions
+भेजेगा (suggested, saved या edited), उन पर भी यही rule और #738 के policy rules लगते हैं, और blocker
+field का नाम बताता है (`REVIEW_WHATSAPP_MESSAGE`, #2422)। इसका hash
 review किए गए inputs, चुने हुए assets, resolved IDs और creative content को बाँधता है। Creation
 preflight दोबारा चलाता है और पुराना (stale) draft, hash या connection generation ठुकरा देता है।
 हर Review blocker अपने message के नीचे एक-tap fix दिखाता है (`reviewBlockerFix`, #723): यह
@@ -93,10 +96,10 @@ Button दबाएँ, वह एक चीज़ ठीक करें, फ�
 | `REVIEW_META_ACCESS` | "Meta hasn't confirmed AdBrain can create campaigns in this ad account. Connect Facebook again and allow every permission it asks for." | "Connect Facebook again" | दोबारा जोड़ें और हर permission चालू रहने दें। |
 | `REVIEW_CREATIVES` | "Choose at least one ad to send to Meta.", "One of the ads you chose isn't available any more. Choose your ads again.", या कोई ad जो "isn't approved yet", "has no picture yet" या "has no headline" | "Choose your ads" (ad picker खुलता है) | ऐसे approved ads चुनें जिनमें picture और headline हो। |
 | `REVIEW_WHATSAPP_NOT_LINKED` | "Your Facebook Page has no WhatsApp number linked yet, so the ad's button has nowhere to open a chat. Link the number in Settings, then review again." | "Link your WhatsApp number" (Settings खुलता है) | Meta में WhatsApp Business number को Page से जोड़ें, फिर Settings में जाँचें। |
-| `REVIEW_WHATSAPP_MESSAGE` | "Your WhatsApp message: {problem}" | "Edit the WhatsApp message" | Message में जो कमी बताई है (बहुत लंबा, या खाली) उसे ठीक करें। |
+| `REVIEW_WHATSAPP_MESSAGE` | "Your WhatsApp message: {problem}" | "Edit the WhatsApp message" | Message में जो कमी बताई है (बहुत लंबा, खाली, या welcome, pre-typed message या किसी question में कोई वादा) उसे ठीक करें। |
 | `REVIEW_NO_LEAD_FORM` | "Choose an active lead form from your Facebook Page in the Lead form field." | "Choose a lead form" | Active form चुनें, या पहले Facebook Page पर एक बनाएँ। |
 | `REVIEW_NO_WEBSITE` | "Add your business website on the Your business page. Meta lead ads must link to the advertiser's own website, not Facebook." | "Add your website" (Brand खुलता है), या "Use WhatsApp chat instead (no website needed)" | अपनी website डालें, या WhatsApp chat ads पर जाएँ। |
-| `REVIEW_AD_POLICY` | ad में "{word}" "is a health promise Meta rejects. Edit the ad to describe the service instead." | "Edit the ad's wording" | लिखें कि सेवा क्या है, यह नहीं कि वह क्या ठीक करती है। |
+| `REVIEW_AD_POLICY` | ad में "{word}" "is a health promise" (clinics) या "is a promise" (बाकी) "Meta rejects. Edit the ad to describe the service instead." | "Edit the ad's wording" | लिखें कि सेवा क्या है, यह नहीं कि वह क्या ठीक करती है या किसकी गारंटी देती है। |
 | `REVIEW_BUDGET` | "Set a daily budget above ₹0." या "Meta needs at least ₹96 a day. Set a daily budget of ₹96 or more." | "Set the daily budget" | रोज़ ₹300, ₹500 या ₹1,000 चुनें। |
 | `REVIEW_NO_AGE_RANGE` | "Choose an age range, or let AdBrain recommend one, before reviewing." | "Set the age range" | उम्र चुनें, या **Recommend audience** दबाएँ। |
 | `REVIEW_RADIUS` | "Set the city radius between 17 and 80 km; Meta allows nothing outside that range." | "Set the city radius" | 17 से 80 km के बीच radius चुनें। |
