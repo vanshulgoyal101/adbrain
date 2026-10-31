@@ -37,7 +37,10 @@ const withoutIntent = (raw: unknown, adId: string) => adPauseIntents(raw).filter
 /** Re-reads `raw` (other writers may have changed it during the Meta round trip, #258's pattern) and saves the change. */
 async function updateRaw(context: AuthorizedBusiness, campaignId: string, change: (raw: Record<string, Json | undefined>) => Record<string, Json | undefined>): Promise<boolean> {
   const database = createAdminClient() as unknown as SupabaseClient;
-  const { data: fresh } = await database.from("campaigns").select("raw").eq("business_id", context.businessId).eq("id", campaignId).maybeSingle();
+  const { data: fresh, error: readError } = await database.from("campaigns").select("raw").eq("business_id", context.businessId).eq("id", campaignId).maybeSingle()
+    .then((read) => read, () => ({ data: null, error: new Error("Campaign storage unavailable.") }));
+  // Reviewer on #2414: without the stored raw, saving would replace the cap, children and pause history.
+  if (readError || !fresh) return false;
   const raw = fresh?.raw && typeof fresh.raw === "object" && !Array.isArray(fresh.raw) ? fresh.raw as Record<string, Json | undefined> : {};
   const { error } = await saveCampaign({ businessId: context.businessId, userId: context.userId }, { raw: change(raw) as unknown as Json }, campaignId)
     .catch(() => ({ error: new Error("Campaign storage unavailable.") }));

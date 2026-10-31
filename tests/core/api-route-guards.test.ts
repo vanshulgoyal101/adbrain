@@ -71,6 +71,7 @@ const ROUTES: Record<string, Entry> = {
   "leads/[id]": { kind: "session", methods: ["DELETE", "PATCH"], why: "session: RLS client (the owner's own leads); DELETE runs leads_erase as the caller (#1761)" },
   "leads/sync": { kind: "owner", methods: ["POST"] },
   "leads/unseen": { kind: "session", methods: ["GET"], why: "session: RLS client (the owner's own leads)" },
+  "managed/billing": { kind: "owner", methods: ["POST"] },
   "managed/onboarding": { kind: "owner", methods: ["GET"] },
   "managed/whatsapp": { kind: "owner", methods: ["POST"] },
   "meta/access-request": { kind: "session", methods: ["POST"], why: "session: append_verified_audit_event refuses a business the user doesn't own (#1723)" },

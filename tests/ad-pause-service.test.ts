@@ -7,16 +7,20 @@ const m = vi.hoisted(() => ({
   setAdStatus: vi.fn(),
   purposes: [] as string[],
   waiting: false,
+  rawReadFails: false,
 }));
-const query = (rows: () => unknown) => {
+const query = (rows: () => unknown, error: { message: string } | null = null) => {
   const q: Record<string, unknown> = {};
   for (const name of ["select", "eq", "limit"]) q[name] = () => q;
-  q.maybeSingle = async () => ({ data: rows(), error: null });
-  q.then = (resolve: (value: unknown) => void) => resolve({ data: rows(), error: null });
+  q.maybeSingle = async () => ({ data: rows(), error });
+  q.then = (resolve: (value: unknown) => void) => resolve({ data: rows(), error });
   return q;
 };
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ from: (table: string) => query(() => table === "ad_results" ? m.listed : m.campaign) }) }));
-vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: (table: string) => query(() => table === "campaign_edit_operations" ? (m.waiting ? [{ id: "op-1" }] : []) : { raw: m.campaign?.raw ?? {} }) }) }));
+vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: (table: string) => {
+  if (table === "campaigns" && m.rawReadFails) return query(() => null, { message: "read failed" });
+  return query(() => table === "campaign_edit_operations" ? (m.waiting ? [{ id: "op-1" }] : []) : { raw: m.campaign?.raw ?? {} });
+} }) }));
 vi.mock("@/lib/campaign/activation", () => ({
   reviewableCampaign: (campaign: Record<string, unknown>) => campaign.meta_campaign_id ? { adAccountId: "act_1", pageId: "page_1", generation: 1 } : null,
   intendedCampaignChildren: () => ({ adIds: ["11"], adSetIds: ["1"], cappedAdSetIds: [] }),
@@ -37,7 +41,7 @@ const recorded = () => (m.saved as { raw: { adPauses?: unknown[] } }[]).flatMap(
 beforeEach(() => {
   m.campaign = { id: "c1", name: "Run", status: "active", meta_campaign_id: "100", meta_ad_ids: ["11"], raw: {} };
   m.listed = [{ meta_ad_id: "22" }];
-  m.saved = []; m.purposes = []; m.waiting = false;
+  m.saved = []; m.purposes = []; m.waiting = false; m.rawReadFails = false;
   m.setAdStatus.mockReset().mockImplementation(async (_campaign: string, adId: string, status: string) => ({ id: adId, status, effectiveStatus: status, changed: true }));
 });
 
@@ -90,6 +94,16 @@ describe("setAdDelivery (#1045)", () => {
     const refusal = await setAdDelivery(context, "c1", "22", "pause").then(() => null, (error: unknown) => error);
     expect(refusal).toMatchObject({ message: "Meta didn't confirm the change. Refresh the campaign before trying again.", status: 502, retryable: false });
     expect(recorded()).toEqual([]);
+  });
+
+  // Reviewer on #2414: a failed re-read must never save a near-empty `raw` over the cap, children and pause history.
+  it("never overwrites the campaign's raw when its re-read fails, before or after the Meta change", async () => {
+    m.rawReadFails = true;
+    await expect(setAdDelivery(context, "c1", "22", "pause")).rejects.toMatchObject({ status: 502, message: expect.stringContaining("could not record") });
+    expect(m.setAdStatus).toHaveBeenCalledTimes(1);
+    m.setAdStatus.mockResolvedValueOnce({ id: "22", status: "PAUSED", effectiveStatus: "PAUSED", changed: false });
+    expect((await setAdDelivery(context, "c1", "22", "pause")).changed).toBe(false);
+    expect(m.saved).toEqual([]);
   });
 
   it("undoes only an ad AdBrain paused, as an activation", async () => {

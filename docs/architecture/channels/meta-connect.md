@@ -238,6 +238,33 @@ provisioning Graph call carries `appsecret_proof` (HMAC-SHA256 of its token with
 Meta rejects the child-token mint without it), so a missing secret is `NOT_CONFIGURED`. A token
 the ledger no longer references (replaced, or saved before a failed update) is deleted.
 
+**The customer's own card (#2357, #2359).** Each customer pays Meta with their own payment method
+on their child ad account; AdBrain's card is never shared to it. Meta has no API to add a card, so
+[`managed-billing`](../../../src/lib/meta/managed-billing.ts) (via `POST /api/managed/billing`) does
+three things with the child's own token once the ad account and its grant exist, each inside the
+ledger lease (`managed_meta_account_claim`, so a concurrent invite or check gets `busy`): **invite**
+the person the owner names (`POST /{child}/business_users`, `role=EMPLOYEE`, after reading
+`business_users` and `pending_users` so a person is never invited twice, and refusing a new address
+while 3 invites are unaccepted so a child can't send spam; a list read without `data`, or with a
+further page, fails closed before any write; the email is validated before any call and goes to Meta
+only; the ledger keeps a keyed hash of it, `step_keys.payer`, recorded before the invite). A person
+already in the child is granted at once (`joined`) and an invite already waiting reads `pending`.
+**Grant** `MANAGE` on the ad account to that named person alone, once they have joined (`MANAGE`
+includes billing; `act_/assigned_users` has no billing-only task; other members get nothing). **Read**
+`GET /{act}?fields=account_status,funding_source_details`. The ledger moves
+`ad_account_created → funded` (`funding_state=card_attached`) only when that read shows
+`account_status=1` and a funding source the customer adds themselves (`type` 1 card, 12/13 PayPal,
+17 direct debit, 19 alternative payment), never on a click. It's an allow-list: a credit line or
+invoice (4, 6) shared from a parent, or any unknown type, reads as not funded. A prepaid `STORED_BALANCE` (20) stays not funded until a walk records its real shape (an
+empty balance won't deliver); statuses 3/8 (payment due), 7 (risk review), 9 (grace period),
+2 (disabled) and 100/101/202 (closed) each get a plain reason. An unaccepted invite reads as
+"waiting for them", not an error. A ledger move that matches no row (the state changed meanwhile)
+reports the current state, never `funded`. If the Page's WhatsApp was recorded while the account
+waited, it moves on to `whatsapp_linked`. Least privilege (EMPLOYEE + MANAGE), whether a child
+made with `owned_businesses` accepts people, and the Billing deep link are confirmed on the
+first internal child's walk; until then the screen says "Business Settings → Billing &
+payments". The funding tests use Meta's documented shapes, provisional until that walk's tape.
+
 ## Recovery and Destructive Actions
 
 | Situation | Safe action |

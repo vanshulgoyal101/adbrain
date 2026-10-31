@@ -68,6 +68,25 @@ describe("sign-in outcomes reach the server without the email (#451 L4)", () => 
     await waitFor(() => expect(beacons()).toHaveLength(2));
     expect(beacons()).toEqual([{ method: "email_link", outcome: "failed", code: "over_email_send_rate_limit" }, { method: "google", outcome: "failed", code: "other" }]);
   });
+
+  // #2415: Supabase's default mailer sends 2 emails an hour for the whole project; Google is the way through.
+  it("words the email limit plainly and moves focus to Google", async () => {
+    mocks.signInWithOtp.mockResolvedValueOnce({ error: Object.assign(new Error("email rate limit exceeded"), { code: "over_email_send_rate_limit" }) });
+    render(<LoginForm newVisitor />);
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "owner@example.test" } });
+    fireEvent.submit(screen.getByLabelText("Email").closest("form")!);
+    expect(await screen.findByRole("alert")).toHaveTextContent("Too many sign-in emails right now. Continue with Google, or try again in an hour.");
+    expect(screen.queryByText(/rate limit exceeded/i)).toBeNull();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Continue with Google" })).toHaveFocus());
+    expect(beacons()).toEqual([{ method: "email_link", outcome: "failed", code: "over_email_send_rate_limit" }]);
+  });
+});
+
+describe("Google's sign-in screen (#2415)", () => {
+  it("says the supabase.co address on Google's screen is AdBrain", () => {
+    render(<LoginForm newVisitor />);
+    expect(screen.getByText("Google shows our sign-in service's address (…supabase.co). That's AdBrain.")).toBeInTheDocument();
+  });
 });
 
 describe("login completion and recovery", () => {

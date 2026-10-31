@@ -263,9 +263,7 @@ async function generateConcept(
       maxTokens: env.CREATIVE_MAX_TOKENS,
       reasoningEffort: env.CREATIVE_REASONING_EFFORT,
       attemptTimeoutMs: env.CREATIVE_ATTEMPT_TIMEOUT_MS,
-      // #2189: parallel concepts share Groq's 1,000 output tokens a minute; when it's the last provider, take turns.
-      waitOnLastProvider: true,
-      cache: false,
+      cache: false, waitOnLastProvider: true, // #2189: parallel concepts take turns on Groq when it's the last provider.
       signal,
       onAttempt: (entry) => {
         sawProviderAttempt = true;
@@ -425,6 +423,7 @@ async function renderVariant(
       backgroundUrl: image.url,
       format,
       language: input.language,
+      ownerPhoto: Boolean(ownerPhoto),
     }),
     llmUsage: usage,
     imageUsage: {

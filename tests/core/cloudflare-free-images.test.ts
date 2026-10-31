@@ -156,6 +156,20 @@ describe("core: free pictures come from Cloudflare FLUX-1-schnell first (#1476)"
     }
   });
 
+  it("records each daily-limit refusal as a product event, so a capped day is seen without a customer (#2404)", async () => {
+    network(() => Response.json(cloudflare.dailyLimit.body, { status: cloudflare.dailyLimit.status }));
+    const logged = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    try {
+      const { generateImage } = await import("@/lib/imageGen");
+      await asInternal(() => generateImage(image));
+      const events = logged.mock.calls.map(([line]) => { try { return JSON.parse(String(line)); } catch { return null; } });
+      expect(events).toContainEqual(expect.objectContaining({ source: "adbrain.product", kind: "system", name: "image.free_daily_limit", outcome: "failed",
+        attributes: expect.objectContaining({ provider: "cloudflare", errorCode: "IMAGE_FREE_DAILY_LIMIT" }) }));
+    } finally {
+      logged.mockRestore();
+    }
+  });
+
   it.each([
     ["refuses the token (401)", () => Response.json(cloudflare.badToken.body, { status: cloudflare.badToken.status }), "IMAGE_PROVIDER"],
     ["answers 200 with no picture", () => Response.json({ result: {}, success: true, errors: [] }), "IMAGE_PROVIDER"],

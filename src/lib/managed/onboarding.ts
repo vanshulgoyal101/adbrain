@@ -1,9 +1,10 @@
 /**
  * #526 (2-Tier): where a new owner is in onboarding, read from their `managed_meta_accounts` row
  * (#519/#533) and whether they have paid (captured payments net of refunds, `customer_ad_balance`).
- * The owner does three things (pay, Page, WhatsApp); AdBrain does three in the background (child
- * business, ad account, funding: `funding_state` is the child account's payment setup, not the
- * owner's payment). Pure, so the screen and its tests agree.
+ * The owner does four things (pay, Page, WhatsApp, and their own card on the child ad account in
+ * Meta, #2359: `funding_state` is that card, read from Meta, not the owner's AdBrain payment);
+ * AdBrain does two in the background (child business, ad account). Pure, so the screen and its
+ * tests agree.
  */
 export type ManagedAccountState =
   | "requested" | "page_linked" | "child_created" | "ad_account_created" | "funded"
@@ -25,8 +26,8 @@ export type ManagedAccountProgressRow = {
 
 /** done; current = the owner's turn; working = AdBrain is on it; waiting = not yet; failed. */
 export type StepStatus = "done" | "current" | "working" | "waiting" | "failed";
-type CustomerStep = "pay" | "page" | "whatsapp";
-type BackgroundStep = "childBusiness" | "adAccount" | "funding";
+type CustomerStep = "pay" | "page" | "whatsapp" | "card";
+type BackgroundStep = "childBusiness" | "adAccount";
 
 export type OnboardingProgress = {
   customer: Record<CustomerStep, StepStatus>;
@@ -50,19 +51,19 @@ export function onboardingProgress(row: ManagedAccountProgressRow | null, { paid
     pay: paid ? "done" : "current",
     page: page ? "done" : paid ? "current" : "waiting",
     whatsapp: whatsapp ? "done" : page ? "current" : "waiting",
+    card: funded ? "done" : account ? "current" : "waiting",
   };
   const background: Record<BackgroundStep, StepStatus> = {
     childBusiness: child ? "done" : page ? "working" : "waiting",
     adAccount: account ? "done" : child ? "working" : "waiting",
-    funding: funded ? "done" : account && paid ? "working" : "waiting",
   };
 
   let failed: OnboardingProgress["failed"] = null;
-  if (row?.funding_state === "failed") failed = { step: "funding", code: row.last_error };
+  if (row?.funding_state === "failed") failed = { step: "card", code: row.last_error };
   else if (row?.state === "failed") {
     // The first unfinished step, in the order the ledger moves through them.
     const order: [CustomerStep | BackgroundStep, boolean][] = [
-      ["pay", paid], ["page", page], ["childBusiness", child], ["adAccount", account], ["funding", funded], ["whatsapp", whatsapp],
+      ["pay", paid], ["page", page], ["childBusiness", child], ["adAccount", account], ["card", funded], ["whatsapp", whatsapp],
     ];
     const step = order.find(([, finished]) => !finished)?.[0];
     if (step) failed = { step, code: row.last_error };
