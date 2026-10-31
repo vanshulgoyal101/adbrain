@@ -104,7 +104,8 @@ const PAYER_ROLE = "EMPLOYEE";
 /** Invites go out from a child under the AdBrain BP: refuse a new address while this many are unaccepted, so it can't send spam. */
 export const MAX_PENDING_INVITES = 3;
 const PAYER_TASKS = ["MANAGE"];
-const LEASE_SECONDS = 60;
+// Same as provisioning: one call can chain 6 Graph requests at 15 s each.
+const LEASE_SECONDS = 300;
 const email = z.email().max(254);
 
 type Ready = { row: BillingRow; childId: string; adAccountId: string; token: string; keys: Record<string, string> };
