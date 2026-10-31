@@ -2,6 +2,8 @@ import react from "@vitejs/plugin-react";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
+const root = fileURLToPath(new URL(".", import.meta.url));
+
 export default defineConfig({
   plugins: [react()],
   test: {
@@ -11,6 +13,17 @@ export default defineConfig({
     globals: true,
     setupFiles: ["./tests/setup.ts"],
     include: ["tests/**/*.test.{ts,tsx}"],
+    // `vitest --changed` (PR CI, #2386) runs every test when one of these changed.
+    // Root-anchored: src/lib/supabase must not match supabase/.
+    forceRerunTriggers: [
+      "**/package.json",
+      "**/{vitest,vite}.config.*",
+      `${root}package-lock.json`,
+      `${root}tsconfig*.json`,
+      `${root}tests/setup.ts`,
+      `${root}.github/**`,
+      `${root}supabase/**`,
+    ],
     // jsdom component tests (render + userEvent) can exceed the 5s default when
     // the machine is under load; a longer ceiling avoids spurious CI failures
     // while still catching genuinely hung tests.
