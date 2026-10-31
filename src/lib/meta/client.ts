@@ -563,6 +563,22 @@ export type AdCopyEdit = {
 type StoredCreative = { name?: string; object_story_spec?: Record<string, unknown>; asset_feed_spec?: Record<string, unknown> };
 
 /**
+ * #1932 (Analyst #1912, CTO): Meta's Advantage+ creative enhancements that change a picture, video or the words.
+ * All are OPT_OUT today only because the API default says so; every creative AdBrain builds now says it explicitly,
+ * so a silent default change can't put generated backgrounds or touch-ups on an owner's real-work photo (#744, #1859).
+ */
+export const CREATIVE_FEATURES_OPT_OUT = [
+  "image_background_gen", "image_touchups", "image_enhancement", "image_brightness_and_contrast", "image_uncrop",
+  "image_auto_crop", "image_animation", "image_templates", "pac_genai_recomposition", "add_text_overlay", "text_generation",
+  "music_generation", "audio", "video_voiceover", "translate_voiceover", "ig_video_native_subtitle", "wa_mm_image_filtering",
+] as const;
+export const CREATIVE_OPT_OUT_FORM = {
+  degrees_of_freedom_spec: JSON.stringify({
+    creative_features_spec: Object.fromEntries(CREATIVE_FEATURES_OPT_OUT.map((feature) => [feature, { enroll_status: "OPT_OUT" }])),
+  }),
+};
+
+/**
  * #775: the `adcreatives` form for an edited copy of a launched ad's creative. Starts from the
  * creative exactly as Meta stores it (images, 9:16 rules, Page and Instagram ids are kept) and
  * changes only the edited words, in whichever shape the ad was launched (single image or placement).
@@ -582,7 +598,7 @@ export function editedCreativeForm(creative: StoredCreative, edit: AdCopyEdit): 
       if (!feed.additional_data?.page_welcome_message) throw new MetaError("This ad has no WhatsApp message to change.");
       feed.additional_data = { ...feed.additional_data, page_welcome_message: welcome };
     }
-    return { name, object_story_spec: JSON.stringify(creative.object_story_spec ?? {}), asset_feed_spec: JSON.stringify(feed) };
+    return { name, object_story_spec: JSON.stringify(creative.object_story_spec ?? {}), asset_feed_spec: JSON.stringify(feed), ...CREATIVE_OPT_OUT_FORM };
   }
   const story = structuredClone(creative.object_story_spec ?? {}) as { link_data?: Record<string, unknown> };
   if (!story.link_data) throw new MetaError("This ad's format can't be edited in AdBrain yet.");
@@ -593,7 +609,7 @@ export function editedCreativeForm(creative: StoredCreative, edit: AdCopyEdit): 
     if (!story.link_data.page_welcome_message) throw new MetaError("This ad has no WhatsApp message to change.");
     story.link_data.page_welcome_message = welcome;
   }
-  return { name, object_story_spec: JSON.stringify(story) };
+  return { name, object_story_spec: JSON.stringify(story), ...CREATIVE_OPT_OUT_FORM };
 }
 
 /** The creative call-to-action for a lead destination. */
@@ -1473,6 +1489,7 @@ export class MetaClient {
               }),
             },
           }),
+          ...CREATIVE_OPT_OUT_FORM,
         };
         const postCreative = async (form: Record<string, string>) => {
           const created = await this.graph<{ id: string }>(`${acct}/adcreatives`, { method: "POST", form });
@@ -1485,6 +1502,7 @@ export class MetaClient {
             name: singleImageForm.name,
             object_story_spec: JSON.stringify(placement.object_story_spec),
             asset_feed_spec: JSON.stringify(placement.asset_feed_spec),
+            ...CREATIVE_OPT_OUT_FORM,
           }).catch((error: unknown) => {
             params.onStoryFallback?.("creative", metaErrorCode(error));
             return postCreative(singleImageForm);
