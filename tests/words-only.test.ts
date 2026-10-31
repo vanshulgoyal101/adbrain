@@ -1,6 +1,6 @@
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
-import { matches, prose, wordRuns, wordsOnly } from "../scripts/words-only.mjs";
+import { prose, wordRuns, wordsLine, wordsOnly } from "../scripts/words-only.mjs";
 
 const f = "src/lib/campaign/x.ts";
 const none = () => false;
@@ -67,6 +67,21 @@ describe("words-only (#364)", () => {
     expect(wordsOnly(ts, f, msg("Meta didn't change the ad"), msg("Meta may have paused it"))).toBe(false);
   });
 
+  it("keeps the gate on round 3 of the attack", () => {
+    const g = (base: string, head: string, elsewhere = none, file = f) => expect(words(base, head, file, elsewhere)).toBe(false);
+    // Matchers shorter than three words, here or elsewhere (any case), and wrapped matcher arrays elsewhere.
+    g("if (m.includes(\"token expired\")) r();\nthrow new Error(\"Your Meta token expired now\");\n", "if (m.includes(\"token expired\")) r();\nthrow new Error(\"Your Meta login lapsed now\");\n");
+    g("if (/token expired/i.test(m)) r();\nthrow new Error(\"Your Meta token expired now\");\n", "if (/token expired/i.test(m)) r();\nthrow new Error(\"Your Meta login lapsed now\");\n");
+    // A dictionary entry read as code.
+    g("const M = { en: \"Launch it now\" };\nif (label === M.en) go();\n", "const M = { en: \"Start it now\" };\nif (label === M.en) go();\n");
+    // Words that are data: a select option, a Meta write, a database row.
+    g("export const O = () => <option>Lead form ads</option>;\n", "export const O = () => <option>Chat ads now</option>;\n", none, "src/lib/campaign/o.tsx");
+    g("await graph(\"act/adcreatives\", { message: \"Call us today for solar\" });\n", "await graph(\"act/adcreatives\", { message: \"Guaranteed savings on solar\" });\n");
+    g("await db.from(\"x\").update({ error: \"Meta rejected the ad\" });\n", "await db.from(\"x\").update({ error: \"Meta paused the ad\" });\n");
+    // A moved directive.
+    g("/* @__PURE__ */ a();\nb();\n", "a();\n/* @__PURE__ */ b();\n");
+  });
+
   it("prose means words for a person, not code with spaces", () => {
     expect(prose("Refresh the campaign before trying again.")).toBe(true);
     expect(prose("₹300 a day for 2 days")).toBe(true);
@@ -76,13 +91,12 @@ describe("words-only (#364)", () => {
       expect(prose(code)).toBe(false);
     }
     expect(wordRuns("Meta token expired now")).toEqual(["Meta token expired", "token expired now"]);
-    const run = "token expired now";
     for (const line of ["if (e.message.includes(\"token expired now\"))", "const AUTH = \"Meta token expired now\";", "case \"token expired now\":",
-      "if (m === \"token expired now\")", "if (\"token expired now\" !== m)", "if ([\"token expired now\", \"x\"].includes(m))", "if (/token expired now/i.test(m))", "new RegExp(\"token expired now\")"]) {
-      expect(matches(line, run)).toBe(true);
+      "  \"Meta token expired now\",", "  auth: \"Meta token expired now\",", "if (/token expired now/i.test(m))", "  message: m.includes(\"token expired now\") ? a : b,", "if ([\"token expired now\"].includes(m)) throw new Error(\"x y\");"]) {
+      expect(wordsLine(line, "token expired now")).toBe(false);
     }
-    for (const line of ["  message: \"Your token expired now, reconnect.\",", "<p>Your token expired now.</p>", "if (typeof id !== \"string\") throw new Error(\"Meta said token expired now\");"]) {
-      expect(matches(line, run)).toBe(false);
+    for (const line of ["  message: \"Your token expired now, reconnect.\",", "<p>Your token expired now.</p>", "// token expired now", "            or your token expired now", "throw new MetaError(\"token expired now\");", "if (typeof id !== \"string\") throw new CampaignError(\"Meta token expired now\");", "throw new CampaignDeliveryError(s === \"PAUSED\" ? \"Meta token expired now.\" : \"Other words here\");"]) {
+      expect(wordsLine(line, "token expired now")).toBe(true);
     }
   });
 });

@@ -9,7 +9,7 @@ import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import { changedLines, ctoReviews, moneyPath, qaApproval, reviewVerdicts } from "./release.mjs";
-import { matches, wordsOnly } from "./words-only.mjs";
+import { wordsLine, wordsOnly } from "./words-only.mjs";
 
 const repo = process.env.GITHUB_REPOSITORY ?? "vanshulgoyal101/adbrain";
 export const CONTEXT = "core-approval";
@@ -111,12 +111,12 @@ async function wordsOnlyFiles(core, baseRef, head) {
     const mod = await import(spec);
     const ts = mod.default ?? mod;
     const base = ghJson("api", `repos/${repo}/compare/${baseRef}...${head}`, "--jq", "{sha: .merge_base_commit.sha}").sha;
-    // The checkout (the default branch) stands in for the base: another source line that reads a three-word run of
-    // the words as code (`matches`: a matcher, or a constant a matcher reads). Fails closed.
+    // The checkout (the default branch) stands in for the base: any other source line holding a three-word run of
+    // the words (any case) that isn't itself only words (`wordsLine`) may read them as code. Fails closed.
     const elsewhere = (file) => (run) => {
       try {
-        const lines = execFileSync("git", ["grep", "-h", "-F", "-e", run, "--", "src", "scripts", `:!${file}`], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
-        return lines.split("\n").some((line) => matches(line, run));
+        const lines = execFileSync("git", ["grep", "-h", "-i", "-F", "-e", run, "--", "src", "scripts", `:!${file}`], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+        return lines.split("\n").some((line) => line.trim() && !wordsLine(line, run));
       } catch (error) {
         return error?.status !== 1;
       }

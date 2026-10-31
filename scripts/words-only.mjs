@@ -12,14 +12,32 @@ export function prose(text) {
 }
 
 // Calls whose string argument is shown to a person.
-const SHOW = /^(toast\w*|notify\w*|alert|confirm|log|info|warn|error|debug|setError|setMessage|setNotice|blocker)$/;
+const SHOW = /^(toast\w*|notify\w*|alert|confirm|log|info|warn|error|debug|setError|setMessage|setNotice|blocker|errorResponse|friendly\w*)$/;
+// Calls that send or store what they get: words inside them are data (ad copy to Meta, a row), not a message.
+const DATA = /^(graph|fetch|request|post|put|patch|update|insert|upsert|rpc|send\w*)$/;
 // Properties that hold words: messages, labels and the EN/HI dictionaries.
-const WORDS_PROP = /^(message|error|title|description|label|text|body|hint|placeholder|alt|heading|subtitle|summary|detail|reason|help|tip|note|cta|actionLabel|aria\w*|en|hi)$/i;
+const WORDS_PROP = /^(message|error|title|description|label|text|body|hint|placeholder|alt|heading|subtitle|summary|detail|reason|rationale|help|tip|note|cta|actionLabel|aria\w*|en|hi)$/i;
 const WORDS_ATTR = /^(title|placeholder|alt|label|aria-[\w-]+)$/;
-const DIRECTIVE = /[@#]__(PURE|NO_SIDE_EFFECTS|INLINE)__|webpack\w*\s*:|turbopack\w*\s*:|@vite-ignore|@jsx\w*|@ts-(ignore|expect-error|nocheck)|eslint-disable/g;
+// Each directive with the code that follows it, so moving one counts as a change.
+const DIRECTIVE = /([@#]__(PURE|NO_SIDE_EFFECTS|INLINE)__|webpack\w*\s*:|turbopack\w*\s*:|@vite-ignore|@jsx\w*|@ts-(ignore|expect-error|nocheck)|eslint-disable)(?:[^\n*]|\*(?!\/))*(?:\*\/)?\s*\S{0,40}/g;
+// A dictionary entry read as code (`label === M.en`): its words are then data.
+const READS_WORDS = /\.(en|hi|label)\b\)?\s*([!=]==?|\.(includes|startsWith|endsWith|match|test)\()|[!=]==?\s*[\w$.?]+\.(en|hi|label)\b/;
+
+/** Whether a literal ends up where words go and isn't inside a call that sends or stores data. */
+function wordsPlace(ts, literal) {
+  if (!shown(ts, literal)) return false;
+  for (let node = literal.parent; node; node = node.parent) {
+    if (ts.isCallExpression(node)) {
+      const callee = node.expression;
+      const name = ts.isPropertyAccessExpression(callee) ? callee.name.text : ts.isIdentifier(callee) ? callee.text : "";
+      if (DATA.test(name)) return false;
+    }
+  }
+  return true;
+}
 
 /** Whether a literal ends up where words go. Walks up through `+`, `??`/`||` (right side), `a ? b : c`, parens, `as`. */
-function wordsPlace(ts, literal) {
+function shown(ts, literal) {
   let node = ts.isTemplateSpan(literal.parent) ? literal.parent.parent : ts.isTemplateExpression(literal.parent) ? literal.parent : literal;
   for (;;) {
     const parent = node.parent;
@@ -39,7 +57,9 @@ function wordsPlace(ts, literal) {
       if (ts.isJsxElement(parent.parent) || ts.isJsxFragment(parent.parent)) return true;
       continue;
     }
-    if (ts.isJsxElement(parent) || ts.isJsxFragment(parent)) return literal.kind === ts.SyntaxKind.JsxText;
+    if (ts.isJsxElement(parent) || ts.isJsxFragment(parent)) {
+      return literal.kind === ts.SyntaxKind.JsxText && !(ts.isJsxElement(parent) && /^(option|textarea|script|style)$/.test(parent.openingElement.tagName.getText()));
+    }
     if (ts.isJsxAttribute(parent)) return WORDS_ATTR.test(parent.name.getText());
     if (ts.isPropertyAssignment(parent)) return parent.initializer === node && WORDS_PROP.test(parent.name.getText());
     if (ts.isNewExpression(parent)) return /Error$/.test(parent.expression.getText()) && parent.arguments?.includes(node);
@@ -79,15 +99,20 @@ function wordsOf(ts, node, file) {
 const escape = (text) => text.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
 
 /**
- * Whether a source line reads `run` as code: a string holding it is searched (`includes(`…), compared (`===`,
- * `case`), turned into a RegExp, listed in an array a lookup takes, or named as a constant; or a regex literal
- * holds it. A line that only shows the words (a message, a throw) doesn't count.
+ * Whether a line in another file only shows `run` as words: in a comment, JSX text, or on a message line (`message:`/
+ * `error:`/… property, `new …Error(`, a toast) where its string isn't searched, compared or listed. Any other line
+ * holding it (a matcher, a wrapped matcher array, a constant) may read it as code, so `elsewhere` gates on it.
  */
-export function matches(line, run) {
-  const str = `["'\`][^"'\`]*${escape(run)}`;
-  return new RegExp(`\\b(includes|startsWith|endsWith|indexOf|lastIndexOf|match|matchAll|test|search|exec|replace|replaceAll|split|has|get|RegExp)\\s*\\(\\s*${str}`
-    + `|[!=]==?\\s*${str}|${str}[^"'\`]*["'\`]\\s*[!=]==?|\\bcase\\s+${str}|\\[\\s*${str}|\\b(const|let|var)\\s+\\w+\\s*(:[^=]+)?=\\s*${str}`
-    + `|(^|[(=,:!&|?{;]|\\breturn)\\s*\\/(?![/*])[^/\\n]*${escape(run)}[^/\\n]*\\/[dgimsuyv]*`).test(line);
+export function wordsLine(line, run) {
+  const t = line.trim();
+  // A comment, or JSX text wrapped onto its own line (no quotes, brackets or operators).
+  if (/^(\/\/|\/\*|\*)/.test(t) || /^[^"'\x60(){}[\]=;<>]+$/.test(t)) return true;
+  const r = escape(run);
+  const shownAs = String.raw`(\b(message|error|title|description|label|text|body|hint|placeholder|heading|subtitle|summary|detail|reason|rationale|help|tip|note|cta|en|hi)\s*:\s*|new \w*Error\(\s*|\b(toast\w*|notify\w*|setError|setMessage|blocker|errorResponse|friendly\w*)\([^"'\x60]*)`;
+  if (new RegExp(`>[^<>]*${r}[^<>]*<`, "i").test(t)) return true;
+  const str = `["'\x60][^"'\x60]*${r}[^"'\x60]*["'\x60]`;
+  const read = new RegExp(`(\\.(includes|startsWith|endsWith|indexOf|match|test|search|has|get)\\s*\\(\\s*|[!=]==?\\s*|\\bcase\\s+|\\[\\s*)${str}|${str}\\s*([!=]==?|\\])`, "i");
+  return new RegExp(shownAs, "i").test(t) && !read.test(t);
 }
 
 /** Three-word runs: a string matcher elsewhere (`includes("token expired")`) shares one with the words it reads. */
@@ -122,6 +147,11 @@ export function wordsOnly(ts, fileName, base, head, elsewhere = () => true, why 
   // Strings this file's code reads (not shown to a person): a matcher here shares a run with the words it reads.
   const codeStrings = (side) => side.leaves.filter((n) => literal.includes(n.kind) && !wordsPlace(ts, n)).map((n) => wordsOf(ts, n, side.file));
   const read = [...codeStrings(a), ...codeStrings(b)];
+  // Regex literals and multi-word code strings that occur inside the words match them, however short.
+  const patterns = (side) => side.leaves.filter((n) => n.kind === K.RegularExpressionLiteral).map((n) => n.text.slice(1, n.text.lastIndexOf("/")))
+    .concat(codeStrings(side)).filter((text) => /\S\s+\S/.test(text)).map((text) => text.toLowerCase());
+  const matchers = [...patterns(a), ...patterns(b)];
+  if (READS_WORDS.test(base) || READS_WORDS.test(head)) return no("code here reads a message or dictionary entry");
   for (let i = 0; i < a.leaves.length; i++) {
     const x = a.leaves[i];
     const y = b.leaves[i];
@@ -131,8 +161,11 @@ export function wordsOnly(ts, fileName, base, head, elsewhere = () => true, why 
       const words = wordsOf(ts, node, side.file);
       if (!prose(words)) return no(`not prose: "${words.slice(0, 40)}"`);
       if (!wordsPlace(ts, node)) return no(`not in a words place: "${words.slice(0, 40)}"`);
+      const lower = words.toLowerCase();
+      const hit = matchers.find((text) => lower.includes(text));
+      if (hit) return no(`code may match "${hit.slice(0, 40)}"`);
       for (const run of wordRuns(words)) {
-        if (read.some((text) => text.includes(run)) || elsewhere(run)) return no(`code may match "${run}"`);
+        if (read.some((text) => text.toLowerCase().includes(run.toLowerCase())) || elsewhere(run)) return no(`code may match "${run}"`);
       }
     }
   }
