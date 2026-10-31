@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { MetaConnectionPanel } from "@/components/meta-connection";
 import { BillingSection } from "@/components/managed-billing";
 import { fundingMode } from "@/lib/payments/operator-funding";
+import { isPlanBillingEnabled, readPlan } from "@/lib/plan/store";
 import { SpendGuardrails } from "@/components/spend-guardrails";
 import { PreferenceSettings } from "@/components/preference-settings";
 import { PrivacyRequests } from "@/components/privacy-requests";
@@ -176,6 +177,8 @@ async function ConnectionSettings({ businessId, searchParams, whatsapp }: {
 }) {
   // #759: payment shows only where AdBrain holds ad money; an unreadable mode shows none.
   const mode = await fundingMode(businessId).catch(() => null);
+  // #718 slice 2: an own-account owner's ₹999 plan (off until PLAN_BILLING_ENABLED); a read failure just hides it.
+  const plan = mode === "own" && isPlanBillingEnabled() ? await readPlan(businessId).catch(() => null) : null;
   const [result, params, initialBalance, locale, campaigns] = await Promise.all([
     getMetaConnection(businessId).then(connection => ({ connection })).catch(() => ({ connection: null })),
     searchParams,
@@ -206,6 +209,7 @@ async function ConnectionSettings({ businessId, searchParams, whatsapp }: {
       {whatsapp}
       <BillingSection mode={mode} locale={locale} runningCampaigns={pausableCampaigns(campaigns)} connection={result.connection} testBusinessId={isRazorpayTestEnabled() ? businessId : undefined}
         liveBusinessId={isProductionPaymentConfigured() ? businessId : undefined} initialBalance={initialBalance}
+        plan={plan} planBusinessId={businessId}
         billingTab={typeof params.billing === "string" ? params.billing : null} />
     </>
   );

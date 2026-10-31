@@ -97,6 +97,7 @@ const ROUTES: Record<string, Entry> = {
   "payments/live/reconcile": { kind: "delegated", methods: ["POST"] },
   "payments/live/verify": { kind: "delegated", methods: ["POST"] },
   "payments/live/webhook": { kind: "delegated", methods: ["POST"] },
+  "payments/plan": { kind: "owner", methods: ["GET", "POST"] },
   "payments/test/orders": { kind: "delegated", methods: ["GET", "POST"] },
   "payments/test/verify": { kind: "delegated", methods: ["POST"] },
   "payments/test/webhook": { kind: "delegated", methods: ["POST"] },

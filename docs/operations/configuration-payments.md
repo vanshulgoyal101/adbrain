@@ -4,6 +4,12 @@ Part of [Operations](README.md). Every other setting: [Configuration](configurat
 
 ## Live Checkout (Disabled By Default)
 
+`PLAN_BILLING_ENABLED` defaults off. Exact `true` enables the own-account
+Settings Plan card and monthly payment-link endpoint (#718), after the
+`plan_periods` migration and payment-link webhook are released. Team, managed
+and operator businesses are exempt. DevOps owns enabling collection; publishing
+these routes does not authorize charges or change the flag.
+
 The server-only [live configuration](../../src/lib/payments/production-config.ts)
 requires `PAYMENTS_LIVE_ENABLED=true` and `PAYMENTS_LIVE_COLLECTION_ENABLED=true`
 for collection, a production Vercel deployment from `main`, matching

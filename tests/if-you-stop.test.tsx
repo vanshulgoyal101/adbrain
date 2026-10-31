@@ -128,3 +128,21 @@ describe("Pause all in Settings (#1968, frame 7)", () => {
     expect(screen.queryByRole("button", { name: "Pause all ads" })).toBeNull();
   });
 });
+
+// #718 × #1916: with plan billing on, the plan card replaces the price sentence, and If you stop and Pause all still show.
+describe("Plan card with If you stop (#718)", () => {
+  it("says who pays Meta once, shows the plan card, then If you stop and Pause all", () => {
+    render(<BillingSection mode="own" connection={null} plan={{ status: { state: "trial_not_started" }, payUrl: null }} planBusinessId="00000000-0000-4000-8000-000000000001"
+      runningCampaigns={pausableCampaigns([{ id: "1", name: "Ad 1", status: "active", raw: {}, meta_ad_account_id: "act_999", meta_campaign_id: "121" } as Campaign])} />);
+    expect(screen.getByText("You pay Meta directly from your ad account.")).toBeInTheDocument();
+    expect(screen.queryByText(/after that it's ₹999 a month/)).toBeNull();
+    expect(screen.getByText("₹999 a month. First month free from your first Go live. No auto-debit. Stop anytime.")).toBeInTheDocument();
+    expect(screen.getByRole("list", { name: "If you stop" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Pause all ads" })).toBeInTheDocument();
+  });
+
+  it("says the same line in Hindi", () => {
+    render(<BillingSection mode="own" connection={null} locale="hi" plan={{ status: { state: "trial_not_started" }, payUrl: null }} planBusinessId="00000000-0000-4000-8000-000000000001" />);
+    expect(screen.getByText("आप अपने विज्ञापन खाते से सीधे Meta को भुगतान करते हैं।")).toBeInTheDocument();
+  });
+});

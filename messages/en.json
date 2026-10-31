@@ -303,6 +303,7 @@
     "alertsLinkNote": "The message is ready to send. The link works for 15 minutes.",
     "billingTitle": "Billing",
     "ownBilling": "You pay Meta directly from your ad account. Your first month of AdBrain is free; after that it's ₹999 a month.",
+    "ownBillingPlan": "You pay Meta directly from your ad account.",
     "ifYouStop": {
       "title": "If you stop",
       "payingLead": "If you stop paying:",
