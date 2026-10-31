@@ -7,7 +7,9 @@ Part of [Architecture](README.md). [Interview and boundaries](ai-pipeline.md) ·
 [The orchestrator](../../src/lib/llm/index.ts) supports Google plus OpenAI-compatible
 Groq, OpenRouter, and Cerebras. It follows the selected standard/budget order,
 round-robins keys within each provider, skips missing pools, and parks HTTP-429
-keys for the provider's Retry-After (at most 60 seconds). When every key of a
+keys for the provider's Retry-After (at most 60 seconds; a daily limit parks
+until its Retry-After, at most 6 hours, and a named organization limit parks
+every key of that provider). When every key of a
 model is parked for 20 seconds or less, it waits once and retries that model
 before falling through; Groq keys share one organization tokens-per-minute
 limit, so rotating keys does not add capacity. A 5xx skips that model's other
