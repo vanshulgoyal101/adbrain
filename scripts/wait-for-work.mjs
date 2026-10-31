@@ -286,10 +286,20 @@ export function offTrack({ issues, comments, prs, now }) {
  * Workflows failing on `min` or more distinct PR branches in the window: these never reach main/next pushes,
  * so without this the CTO only hears about them from the owner's inbox (#926's core-approval, Oct 27).
  */
+// A run that ends within 30 s never started a job: the merge-ref race (#878), which the train retries itself.
+const NO_JOB_MS = 30_000;
+const ranNoJob = (run) => run.run_started_at && run.updated_at && Date.parse(run.updated_at) - Date.parse(run.run_started_at) < NO_JOB_MS;
+
+/** `runs` newest first (as the API returns them). A branch whose latest run of that workflow passed is fixed, not systemic. */
 export function systemicFailures(runs, min = 2) {
   const byName = new Map();
+  const seen = new Set();
   for (const run of runs) {
-    if (run.event !== "pull_request" || run.conclusion !== "failure") continue;
+    if (run.event !== "pull_request") continue;
+    const key = `${run.name}\u0000${run.head_branch}`;
+    const latest = !seen.has(key);
+    seen.add(key);
+    if (!latest || run.conclusion !== "failure" || ranNoJob(run)) continue;
     const entry = byName.get(run.name) ?? { branches: new Set(), url: run.html_url };
     entry.branches.add(run.head_branch);
     byName.set(run.name, entry);
