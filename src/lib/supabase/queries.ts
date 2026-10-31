@@ -1,4 +1,7 @@
 import { cookies } from "next/headers";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { setupBatch } from "@/lib/creative/setup-picks";
+import { wentLive, type LiveSignals } from "@/lib/setup/steps";
 import { attachRealEnquiries } from "@/lib/campaign/real-enquiries";
 import { cache } from "react";
 import { z } from "zod";
@@ -30,7 +33,6 @@ import type {
   CampaignResult,
   Creative,
   CreativePreview,
-  Lead,
 } from "@/lib/types";
 
 const QUERY_BATCH_SIZE = 100;
@@ -100,7 +102,7 @@ export const getUser = cache(async function getUser(): Promise<AppUser | null> {
 });
 
 /** All businesses owned by the current user (RLS-scoped). */
-export const getBusinesses = cache(async function getBusinesses(): Promise<Business[]> {
+const getBusinesses = cache(async function getBusinesses(): Promise<Business[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("businesses")
@@ -116,16 +118,6 @@ export async function getPrimaryBusiness(): Promise<Business | null> {
   const userId = eventContext.getStore()?.userId;
   if (userId && businesses[0]?.owner_id === userId) observeIdentity(userId, businesses[0].id);
   return businesses[0] ?? null;
-}
-
-export async function getBusinessById(id: string): Promise<Business | null> {
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("businesses")
-    .select("*")
-    .eq("id", id)
-    .maybeSingle();
-  return data ?? null;
 }
 
 export async function getCreativePreviews(businessId: string): Promise<CreativePreview[]> {
@@ -149,6 +141,19 @@ export async function getCreatives(businessId: string): Promise<Creative[]> {
   return data ?? [];
 }
 
+/**
+ * #1270/#1402 (WS1 step 2): the ads setup made, oldest first: the newest batch (one `variant_group`), plus earlier
+ * batches from the last 2 hours while there are fewer than 3 ads, so a "Make another" top-up shows beside its batch.
+ * `newest` says when that batch started, so a short one can be checked before anything new is made.
+ */
+export async function getSetupCreativeBatch(businessId: string): Promise<ReturnType<typeof setupBatch<Creative>>> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("creatives").select("*")
+    .eq("business_id", businessId).order("created_at", { ascending: false }).limit(12);
+  if (error) throw new Error("Ads could not be loaded.");
+  return setupBatch(data ?? []);
+}
+
 /** Brand assets for a business, newest first. */
 export async function getBrandAssets(
   businessId: string,
@@ -160,6 +165,15 @@ export async function getBrandAssets(
     .eq("business_id", businessId)
     .order("created_at", { ascending: false });
   return data ?? [];
+}
+
+/** #1945/#1617: the owner has at least one of their own photos (a `product_photo` brand asset). */
+export async function hasOwnPhoto(businessId: string): Promise<boolean> {
+  const supabase = await createClient();
+  const { count, error } = await supabase.from("brand_assets").select("id", { count: "exact", head: true })
+    .eq("business_id", businessId).eq("type", "product_photo");
+  if (error) throw new Error("Photos could not be checked.");
+  return (count ?? 0) > 0;
 }
 
 /** Approved creatives for a business, newest first. */
@@ -186,6 +200,17 @@ export const getCampaigns = cache(async function getCampaigns(businessId: string
   }, "Campaigns could not be loaded.");
   return campaigns.sort((left, right) => (right.created_at ?? "").localeCompare(left.created_at ?? ""));
 });
+
+/** #1469: Meta's stored effective status of each ad in a campaign (lifetime rows from the last refresh, RLS read). */
+export async function getAdStatuses(campaignId: string): Promise<(string | null)[]> {
+  const supabase = await createClient();
+  // `ad_results` isn't in the generated types yet (same cast as GET /api/campaigns/[id]/ads).
+  const { data, error } = await (supabase as unknown as SupabaseClient).from("ad_results").select("effective_status")
+    .eq("campaign_id", campaignId).is("period_start", null).is("period_end", null).limit(100)
+    .returns<{ effective_status: string | null }[]>();
+  if (error) throw new Error("Ad statuses could not be loaded.");
+  return (data ?? []).map((row) => row.effective_status);
+}
 
 /** Latest result row per campaign, keyed by campaign id. */
 export async function getLatestResults(
@@ -224,9 +249,9 @@ export async function getLatestResultsWithEnquiries(campaignIds: string[]): Prom
   const ids = Object.keys(results);
   if (!ids.length) return results;
   const supabase = await createClient();
-  // #798: one read for logged WhatsApp enquiries and enquiries (any source) that became customers.
+  // #798/#1994: one read for logged WhatsApp enquiries and enquiries (any source) that were booked or became customers.
   const { data, error } = await supabase.from("leads").select("campaign_id, source, workflow_status")
-    .in("campaign_id", ids).or("source.eq.whatsapp_manual,workflow_status.eq.customer").limit(10_000);
+    .in("campaign_id", ids).or("source.eq.whatsapp_manual,workflow_status.eq.booked,workflow_status.eq.customer").limit(10_000);
   return error || !data ? results : attachRealEnquiries(results, data);
 }
 
@@ -246,6 +271,25 @@ export async function getSpendLimits(businessId: string): Promise<SpendLimits> {
     autoPause: data.auto_pause,
   };
 }
+
+/** #1342: the business's live campaigns, in the shape the weekly-cap check needs (no results read). */
+export async function getActiveCampaignBudgets(businessId: string): Promise<CampaignSpend[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("campaigns").select("id, status, daily_budget")
+    .eq("business_id", businessId).eq("status", "active").limit(QUERY_BATCH_SIZE);
+  if (error || !data || data.length >= QUERY_BATCH_SIZE) throw new Error("Campaign budgets could not be loaded.");
+  return data.map((c) => ({ id: c.id, status: c.status, dailyBudget: c.daily_budget, spend: 0 }));
+}
+
+/** #1251 WS1: whether any campaign of the business went live (`wentLive`, #1403); the setup spine shows until one has. */
+// #1393: the layout and the page both ask; one read per request.
+export const hasLaunchedCampaign = cache(async function hasLaunchedCampaign(businessId: string): Promise<boolean> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("campaigns").select("launched_at, status, meta_campaign_id, source:raw->>source")
+    .eq("business_id", businessId).or("launched_at.not.is.null,meta_campaign_id.not.is.null,status.in.(active,completed)").limit(QUERY_BATCH_SIZE);
+  if (error || !data) throw new Error("Campaigns could not be loaded.");
+  return data.some((campaign) => wentLive(campaign as LiveSignals));
+});
 
 /** Campaigns mapped to the minimal shape the spend guardrails need. */
 export async function getCampaignSpend(
@@ -310,20 +354,6 @@ export async function getAuditLog(
     .select("*")
     .eq("business_id", businessId)
     .order("created_at", { ascending: false })
-    .limit(limit);
-  return data ?? [];
-}
-
-export async function getLeads(
-  businessId: string,
-  limit = 200,
-): Promise<Lead[]> {
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("leads")
-    .select("*")
-    .eq("business_id", businessId)
-    .order("created_time", { ascending: false, nullsFirst: false })
     .limit(limit);
   return data ?? [];
 }

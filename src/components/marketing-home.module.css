@@ -55,9 +55,13 @@
 .safety li p { font-size: var(--t-sm); line-height: 1.7; color: var(--subtle); }
 .faq { display: grid; grid-template-columns: 1fr 1.5fr; gap: 64px; }
 .faq .primary { margin-top: 24px; }
-.faq details { border-bottom: 1px solid var(--line); padding: 20px 0; }
-.faq summary { font-size: var(--t-md); font-weight: 600; cursor: pointer; }
-.faq details p { margin-top: 14px; font-size: var(--t-sm); line-height: 1.7; color: var(--subtle); }
+.faq details { border-bottom: 1px solid var(--line); padding: 11px 0; }
+/* #847: a 44 px tap target; the details padding shrinks by the same amount, so rows keep their height. */
+.faq summary { font-size: var(--t-md); font-weight: 600; cursor: pointer; padding: 9px 0; }
+.pricing ul { list-style: none; padding: 0; margin: 20px 0 0; display: grid; gap: 14px; }
+.pricing li { font-size: var(--t-sm); line-height: 1.7; color: var(--subtle); max-width: 60ch; }
+.pricing li strong { color: var(--ink); }
+.faq details p { margin-top: 5px; font-size: var(--t-sm); line-height: 1.7; color: var(--subtle); }
 .footer { border-top: 1px solid var(--line); padding: 28px 48px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 20px; font-size: var(--t-xs); color: var(--subtle); }
 .footer nav { display: flex; flex-wrap: wrap; gap: 20px; }
 @media (max-width: 1000px) {

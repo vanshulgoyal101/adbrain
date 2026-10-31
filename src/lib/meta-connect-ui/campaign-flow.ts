@@ -10,7 +10,7 @@ export type OperationKey = {
   idempotencyKey: string;
 };
 
-export function reviewOperationKey(review: ReviewDTO): string {
+function reviewOperationKey(review: ReviewDTO): string {
   return `${review.draftId}:${review.draftVersion}:${review.planHash ?? "blocked"}:${review.connectionGeneration}`;
 }
 
@@ -30,7 +30,7 @@ export function buildCreateCampaignRequest(
   review: ReviewDTO,
   idempotencyKey: string,
 ): CreateCampaignRequest {
-  if (!review.planHash) throw new Error("A reviewed plan hash is required before creation.");
+  if (!review.planHash) throw new Error("This campaign needs a fresh check before it's created. Tap Check my campaign again.");
   return {
     businessId,
     draftId: draft.draftId,
@@ -47,7 +47,7 @@ export function buildActivationPatch(
   capDays?: number,
 ) {
   if (!/^[a-f0-9]{64}$/.test(confirmationDigest)) {
-    throw new Error("A reviewed activation digest is required.");
+    throw new Error("This campaign needs a fresh check before it's switched on. Tap Refresh review.");
   }
   return {
     status: "active" as const,

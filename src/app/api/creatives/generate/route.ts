@@ -13,6 +13,7 @@ import { NoLLMKeysError } from "@/lib/llm";
 import {
   configuredMonthlyTokenLimit,
   persistLLMUsage,
+  usageCostUsd,
 } from "@/lib/llm/persist";
 import { rateLimitResponse } from "@/lib/security/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -27,13 +28,19 @@ import {
 } from "@/lib/creative/receipt";
 import type { Creative, Database } from "@/lib/types";
 import { creativeAssets, recentCreativeCopy } from "@/lib/creative/references";
-import { CREATE_HEARTBEAT_MS, CREATE_TOP_UP_BUDGET_MS, CREATE_TOP_UP_START_MS } from "@/lib/creative/stream";
+import { CREATE_HEARTBEAT_MS, CREATE_TOP_UP_BUDGET_MS, CREATE_TOP_UP_START_MS, PROSPECT_PICTURE_RETRY_END_MS, PROSPECT_PICTURE_RETRY_MIN_MS } from "@/lib/creative/stream";
+import { isProspectAccount } from "@/lib/internal-accounts";
 import { AD_ANGLES, type AdAngle } from "@/lib/templates/ads";
 import { freeImagesOnly } from "@/lib/llm/spend-policy";
+import { cloudflareConfigured } from "@/lib/imageGen/providers/cloudflare";
+import { applyMonthlyCostCap } from "@/lib/llm/cost-cap";
 import { preferenceContext } from "@/lib/preferences/store";
+import { ownerError } from "@/i18n/request-locale";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
+
+const roundUsd = (usd: number) => Math.round(usd * 1e6) / 1e6;
 
 /**
  * Reconcile a client whose long-running generation request outlived its HTTP
@@ -67,12 +74,12 @@ async function handleGET(req: Request) {
     const lookup = await createAdminClient().rpc("creative_generation_status", {
       p_business_id: businessId, p_user_id: user.id, p_generation_id: generationId,
     });
-    if (lookup.error || !lookup.data) return NextResponse.json({ error: "Generation status is unavailable." }, { status: 503 });
+    if (lookup.error || !lookup.data) return NextResponse.json({ error: await ownerError("checkAdsUnavailable") }, { status: 503 });
     intent = lookup.data;
   } catch {
-    return NextResponse.json({ error: "Generation status is unavailable." }, { status: 503 });
+    return NextResponse.json({ error: await ownerError("checkAdsUnavailable") }, { status: 503 });
   }
-  if (intent.status === "unknown") return NextResponse.json({ error: "Generation not found." }, { status: 404 });
+  if (intent.status === "unknown") return NextResponse.json({ error: await ownerError("adRequestNotFound") }, { status: 404 });
   const expectedCount = Number(intent.expectedCount);
   if (requestedCount !== null && requestedCount !== expectedCount)
     return NextResponse.json({ error: "Generation count does not match the saved request." }, { status: 409 });
@@ -83,12 +90,20 @@ async function handleGET(req: Request) {
     .eq("business_id", businessId)
     .eq("variant_group", generationId)
     .order("created_at", { ascending: true });
-  if (error) return NextResponse.json({ error: "Generation status is unavailable." }, { status: 503 });
+  if (error) return NextResponse.json({ error: await ownerError("checkAdsUnavailable") }, { status: 503 });
 
   const saved = (creatives ?? []) as Creative[];
+  let status: string = intent.status === "complete" && saved.length < expectedCount ? "unresolved" :
+    intent.status === "processing" && saved.length ? "partial" : intent.status;
+  // #1407: a batch that ended short keeps the intent's 'partial' until it times out (5 min), so Studio said 'still being
+  // made' while step 2 said 'couldn't be made'. The batch's closing audit row (written after any top-up) settles it.
+  if ((status === "partial" || status === "processing") && saved.length < expectedCount) {
+    const { data: closed } = await supabase.from("audit_log").select("id").eq("business_id", businessId)
+      .eq("action", "creatives.generate").eq("details->>variantGroup", generationId).limit(1);
+    if (closed?.length) status = "ended";
+  }
   return NextResponse.json({
-    status: intent.status === "complete" && saved.length < expectedCount ? "unresolved" :
-      intent.status === "processing" && saved.length ? "partial" : intent.status,
+    status,
     creatives: saved,
     count: saved.length,
     expectedCount,
@@ -101,15 +116,15 @@ export const POST = observeRoute("/api/creatives/generate", "POST", handlePOST);
 export type CreateStreamLine =
   | ({ type: "progress" } & CreateProgressEvent)
   | { type: "creative"; angleId: string; creative: Creative }
-  /** #1123: the first pass came up short; this many more are being made in the same request. */
-  | { type: "topUp"; missing: number }
+  /** #1123: the first pass came up short; this many more are being made in the same request (#1547: `picture`: only their pictures). */
+  | { type: "topUp"; missing: number; kind?: "picture" }
   | { type: "result"; status: number; body: unknown };
 
 interface LiveCreate {
   onAdmitted: () => void;
   onProgress: (event: CreateProgressEvent) => void;
   onCreative: (angleId: string, creative: Creative) => void;
-  onTopUp: (missing: number) => void;
+  onTopUp: (missing: number, kind?: "picture") => void;
 }
 
 async function handlePOST(req: Request): Promise<Response> {
@@ -126,7 +141,7 @@ async function handlePOST(req: Request): Promise<Response> {
     onAdmitted: admitted,
     onProgress: (event) => write({ type: "progress", ...event }),
     onCreative: (angleId, creative) => write({ type: "creative", angleId, creative }),
-    onTopUp: (missing) => write({ type: "topUp", missing }),
+    onTopUp: (missing, kind) => write({ type: "topUp", missing, ...(kind ? { kind } : {}) }),
   });
   // Rejections before admission (auth, limits, quota) keep their normal status and JSON body.
   const early = await Promise.race([started, result]);
@@ -143,9 +158,10 @@ async function handlePOST(req: Request): Promise<Response> {
     }, CREATE_HEARTBEAT_MS);
   };
   beat();
+  const unfinished = await ownerError("adsDidntFinish");
   void result
     .then(async (response) => write({ type: "result", status: response.status, body: await response.json() }))
-    .catch(() => write({ type: "result", status: 502, body: { error: "Creative generation could not be completed. Check saved results before trying again." } }))
+    .catch(() => write({ type: "result", status: 502, body: { error: unfinished } }))
     .finally(() => {
       clearTimeout(heartbeat);
       writer.close().catch(() => {});
@@ -195,22 +211,9 @@ async function generate(req: Request, live?: LiveCreate) {
       { status: 400 },
     );
   const body = parsed.data;
-
-  const businessId = (body?.businessId ?? "").trim();
-  const brief = (body?.brief ?? "").trim();
-  const rawCount = Number(body?.count ?? 3);
-  const count = Number.isFinite(rawCount)
-    ? Math.min(Math.max(Math.floor(rawCount), 1), 6)
-    : 3;
-  const language = languagePromptName(body?.language);
-  const sourceFacts = body.sourceFacts;
-
-  if (!businessId || !brief) {
-    return NextResponse.json(
-      { error: "businessId and brief are required" },
-      { status: 400 },
-    );
-  }
+  // The schema already trims and bounds these (count 1-6, default 3).
+  const { businessId, brief, count, sourceFacts } = body;
+  const language = languagePromptName(body.language);
 
   // RLS ensures the user can only read their own business.
   const { data: business } = await supabase
@@ -219,10 +222,11 @@ async function generate(req: Request, live?: LiveCreate) {
     .eq("id", businessId)
     .maybeSingle();
   if (!business) {
-    return NextResponse.json({ error: "Business not found" }, { status: 404 });
+    return NextResponse.json({ error: await ownerError("businessNotFound") }, { status: 404 });
   }
 
   const monthlyLimit = configuredMonthlyTokenLimit(user);
+  await applyMonthlyCostCap(businessId, user);
   const { error: schemaError } = await supabase
     .from("creatives")
     .select("generation")
@@ -243,6 +247,8 @@ async function generate(req: Request, live?: LiveCreate) {
   const failed = new Map<string, { angle: AdAngle; error: unknown; message: string }>();
   let failures: { angle: string; error: string }[] = [];
   let topUp = 0;
+  let pictureRetry = 0;
+  const cost = { text: 0, image: 0 };
   let noProviderFailures = 0;
   // Usage is unknown only when recording it failed or an unexpected error hid provider calls (#138).
   let usageUnknown = false;
@@ -274,16 +280,21 @@ async function generate(req: Request, live?: LiveCreate) {
       p_image_floor_tokens: count * 10_000,
       p_monthly_limit: monthlyLimit,
     });
-    if (admissionError || !admission) return NextResponse.json({ error: "Generation admission is unavailable. No generation was started." }, { status: 503 });
+    if (admissionError || !admission) return NextResponse.json({ error: await ownerError("somethingDidntAnswer") }, { status: 503 });
     if (admission.action !== "start") {
-      if (admission.action === "missing") return NextResponse.json({ error: "Generation not found." }, { status: 404 });
+      if (admission.action === "missing") return NextResponse.json({ error: await ownerError("adRequestNotFound") }, { status: 404 });
       if (admission.action === "conflict") return NextResponse.json({ error: "Generation ID was already used for different inputs." }, { status: 409 });
-      if (admission.action === "quota") return NextResponse.json({ error: "This business has reached its monthly AI generation limit.", code: "LLM_MONTHLY_QUOTA_EXCEEDED" }, { status: 429 });
+      if (admission.action === "quota") return NextResponse.json({ error: await ownerError("aiAllowanceUsed"), code: "LLM_MONTHLY_QUOTA_EXCEEDED" }, { status: 429 });
       return NextResponse.json({ variantGroup, status: admission.status, creatives: [], count: 0, expectedCount: count }, { status: 202 });
     }
     admitted = true;
     live?.onAdmitted();
     const advisoryPreferences = await preferenceContext(businessId, "creative", [brief, instructions].filter(Boolean).join("\n")).catch(() => "");
+    const addCost = (events: Parameters<typeof usageCostUsd>[0]) => {
+      const add = usageCostUsd(events);
+      cost.text += add.text;
+      cost.image += add.image;
+    };
     const run = {
       brand: business,
       brief,
@@ -302,6 +313,7 @@ async function generate(req: Request, live?: LiveCreate) {
             requestId,
             generationId: variantGroup,
           });
+        addCost(events);
         const recorded = await persistLLMUsage(events);
         if (recorded) recordedAngles.add(variant.angleId);
         else usageUnknown = true;
@@ -355,6 +367,7 @@ async function generate(req: Request, live?: LiveCreate) {
             requestId,
             generationId: variantGroup,
           });
+        addCost(events);
         const recorded = await persistLLMUsage(events);
         if (recorded && error instanceof NoLLMKeysError) noProviderFailures++;
         const unknown = !recorded || !(error instanceof CreativeValidationError || error instanceof CreativeImageError
@@ -368,8 +381,11 @@ async function generate(req: Request, live?: LiveCreate) {
     // #1123: one top-up round, in parallel, for the ads the first pass missed. Only failures a fresh
     // concept can fix are retried (not "no provider" or every provider down), never beyond `count`.
     const firstPass = AD_ANGLES.slice(0, count);
+    // #1547: a sales visit's lost pictures get the ₹0 picture retry below instead of new words.
+    const prospectPictures = isProspectAccount(user) && freeImagesOnly();
+    const pictureOnly = (error: unknown): error is CreativeImageError => prospectPictures && error instanceof CreativeImageError && Boolean(error.concept);
     const retry = [...failed.values()]
-      .filter(({ error }) => error instanceof CreativeImageError || (error instanceof CreativeValidationError && error.stage !== "provider"))
+      .filter(({ error }) => !pictureOnly(error) && (error instanceof CreativeImageError || (error instanceof CreativeValidationError && error.stage !== "provider")))
       .map(({ angle }) => angle)
       .sort((a, b) => firstPass.indexOf(a) - firstPass.indexOf(b))
       .slice(0, count - inserted.length);
@@ -380,11 +396,22 @@ async function generate(req: Request, live?: LiveCreate) {
         ...run,
         angleIds: retry.map((angle) => angle.id),
         count: retry.length,
-        // The business's photo belongs to the first ad only, so it is reused only when that ad is retried.
-        ownerPhotos: retry[0].id === firstPass[0]?.id ? ownerPhotos : undefined,
+        // #1901: each owner photo belongs to one of ads 1-3 by place, so a retried ad gets its own photo back.
+        ownerPhotos,
         recentCopy: [...inserted.map((creative) => ({ headline: creative.headline ?? "", primary_text: creative.primary_text ?? "" })), ...recentCopy].slice(0, 12),
         signal: AbortSignal.timeout(CREATE_TOP_UP_BUDGET_MS),
       });
+    }
+    // #1547: a sales visit (+prospect account, free pictures) gets one more free try at each missing ad's picture,
+    // with the words it already passed (₹0, no text call); pictures still queue one at a time. Never customers.
+    const concepts = Object.fromEntries([...failed.values()]
+      .flatMap(({ angle, error }) => pictureOnly(error) ? [[angle.id, error.concept!] as const] : [])
+      .slice(0, count - inserted.length));
+    const retryBudget = PROSPECT_PICTURE_RETRY_END_MS - (Date.now() - startedAt);
+    if (Object.keys(concepts).length && retryBudget >= PROSPECT_PICTURE_RETRY_MIN_MS) {
+      pictureRetry = Object.keys(concepts).length;
+      live?.onTopUp(pictureRetry, "picture");
+      await generateVariants({ ...run, angleIds: Object.keys(concepts), count: pictureRetry, concepts, ownerPhotos: undefined, recentCopy, signal: AbortSignal.timeout(retryBudget) });
     }
     failures = [...failed.values()].map(({ angle, message }) => ({ angle: angle.name, error: message }));
     const noProvider = !inserted.length && failures.length === count && noProviderFailures === count;
@@ -400,19 +427,21 @@ async function generate(req: Request, live?: LiveCreate) {
       );
     }
     return NextResponse.json(
-      { error: "Creative generation could not be completed. Check saved results before trying again." },
+      { error: await ownerError("adsDidntFinish") },
       { status: 502 },
     );
   }
 
   // #681: the whole batch's wall time; usage rows are written at the end, so they can't time it.
-  // Internal accounts make free Pollinations images; customers wait on the paid path.
+  // Internal accounts make free images (Cloudflare when configured, else Pollinations, #1476); customers wait on the paid path.
   recordProductEvent({ kind: "workflow", name: "creative.batch", businessId, durationMs: Date.now() - startedAt,
     outcome: !inserted.length ? "failed" : failures.length ? "partial" : "success",
-    attributes: { count: inserted.length, failedCount: failures.length, topUp, provider: freeImagesOnly() ? "pollinations" : "paid" } });
+    // #1468: the estimated AI cost of this Create (USD), for the top-up and image-provider decisions.
+    attributes: { count: inserted.length, failedCount: failures.length, topUp, ...(pictureRetry ? { pictureRetry } : {}), provider: freeImagesOnly() ? (cloudflareConfigured() ? "cloudflare" : "pollinations") : "paid",
+      costUsd: roundUsd(cost.text + cost.image), textCostUsd: roundUsd(cost.text), imageCostUsd: roundUsd(cost.image) } });
   if (!inserted.length)
     return NextResponse.json(
-      { error: failures[0]?.error ?? "No creatives were generated.", failures },
+      { error: failures[0]?.error ?? await ownerError("noAdsMade"), failures },
       { status: 502 },
     );
 

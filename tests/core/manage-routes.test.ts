@@ -8,6 +8,7 @@ import tokenRevoked from "./fixtures/meta/token-revoked.json";
 import deliveryTape from "./fixtures/meta/delivery.json";
 import fundingTape from "./fixtures/meta/account-funding-live-runs.json";
 import deletedTape from "./fixtures/meta/campaign-deleted.json";
+import goneFixture from "./fixtures/meta/campaigns-gone.json";
 
 // #649: the manage loop (pause, sync, refresh, activation review and refusals) through the real route
 // handlers, connection access, MetaClient, trusted writes, spend enforcement and audit, on an OAuth
@@ -33,7 +34,7 @@ const store = vi.hoisted(() => {
     tables: {} as Record<string, Row[]>, user: null as { id: string } | null, log: [] as string[], unknown: [] as string[],
     rpc: {} as Record<string, (args: Row) => { data: unknown; error: unknown }>, inserted: 0,
   };
-  const known = ["audit_log", "businesses", "campaigns", "campaign_results", "meta_connections", "spend_limits"];
+  const known = ["audit_log", "businesses", "campaign_edit_operations", "campaigns", "campaign_results", "meta_connections", "spend_limits"];
   const fail = (call: string): never => {
     state.unknown.push(call);
     throw new Error(`Unstubbed Supabase call: ${call}`);
@@ -108,6 +109,9 @@ vi.mock("@/lib/supabase/server", () => ({ createClient: async () => store.client
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => store.client() }));
 vi.mock("@/lib/meta/capability-verification", () => ({ verifyMetaCapabilities: capabilities.verify }));
 vi.mock("@/lib/llm", async importOriginal => ({ ...await importOriginal<typeof import("@/lib/llm")>(), complete: llm.complete }));
+// #2312: the owner's language cookie; unset (English) unless a test sets it.
+const lang = vi.hoisted(() => ({ value: undefined as string | undefined }));
+vi.mock("next/headers", () => ({ cookies: async () => ({ get: (name: string) => (name === "adbrain_lang" && lang.value ? { value: lang.value } : undefined) }) }));
 
 const BUSINESS = "00000000-0000-4000-8000-000000000649";
 const OWNER = "00000000-0000-4000-8000-000000000001";
@@ -155,11 +159,12 @@ function replay(...recorded: Exchange[][]) {
   vi.spyOn(globalThis, "fetch").mockClear().mockImplementation(async (input, init) => {
     const url = new URL(String(input));
     const body = new URLSearchParams(init?.body instanceof URLSearchParams ? init.body : undefined);
-    const access = url.searchParams.get("access_token") ?? body.get("access_token");
-    url.searchParams.delete("access_token");
-    body.delete("access_token");
+    // #1649: the token rides in the Authorization header; the proof is stripped for matching.
+    const access = new Headers(init?.headers).get("authorization")?.replace(/^Bearer /, "") ?? null;
+    url.searchParams.delete("appsecret_proof");
+    body.delete("appsecret_proof");
     const method = init?.method ?? "GET";
-    const path = url.pathname.replace("/v21.0/", "") + url.search;
+    const path = url.pathname.replace("/v26.0/", "") + url.search;
     graph.sent.push({ method, path, form: Object.fromEntries(body), access });
     const index = graph.pending.findIndex(exchange => exchange.method === method && exchange.path === path);
     if (index < 0) {
@@ -255,6 +260,7 @@ beforeEach(async () => {
   await connect();
 });
 afterEach(() => {
+  lang.value = undefined;
   expect(store.state.unknown).toEqual([]);
   expect(graph.unrecorded).toEqual([]);
   vi.restoreAllMocks();
@@ -279,6 +285,36 @@ describe("core: manage routes against recorded Graph responses (#649)", () => {
     expect(audits()).toHaveLength(1);
   });
 
+  // #1961: pause is the owner's safety stop. A waiting new-audience copy (#1518) refuses activation, never a pause.
+  it("pause: still pauses the whole tree in Meta while a new audience waits to be switched on", async () => {
+    treeCampaign();
+    store.state.tables.campaign_edit_operations = [{ id: "op-waiting", campaign_id: STORED, kind: "audience", state: "awaiting_switch", phase: "copy" }];
+    replay(tapes.pause);
+    const response = await pause();
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ ok: true, status: "paused", pause: { confirmed: true } });
+    expect(writes().map(({ path, form }) => [path, form])).toEqual([TREE.campaignId, ...TREE.adSetIds, ...TREE.adIds].map(id => [id, { status: "PAUSED" }]));
+    expect(graph.pending).toEqual([]);
+    expect(store.state.tables.campaigns[0].status).toBe("paused");
+  });
+
+  // #1961: Meta throttling the account (#1838) must not leave anything that refuses the owner's next pause.
+  it("pause: right after Meta throttles the account, the owner's retry still reaches Meta and pauses", async () => {
+    treeCampaign();
+    const throttled = { ...tapes.pause[0], status: 400, body: { error: { message: "There have been too many calls to this ad-account.", type: "OAuthException", code: 17, error_subcode: 2446079 } } };
+    replay([throttled]);
+    const first = await pause();
+    expect(first.status).not.toBe(200);
+    expect(writes()).toEqual([]);
+    expect(store.state.tables.campaigns[0].status).toBe("active");
+    replay(tapes.pause);
+    const retry = await pause();
+    expect(retry.status).toBe(200);
+    expect(writes().map(({ path }) => path)).toEqual([TREE.campaignId, ...TREE.adSetIds, ...TREE.adIds]);
+    expect(graph.pending).toEqual([]);
+    expect(store.state.tables.campaigns[0].status).toBe("paused");
+  });
+
   // #757: Meta stops accepting the token (password change, checkpoint) with no deauthorize callback.
   it("pause: a recorded Graph 190 names Ads Manager, writes nothing, and flips the connection to reauth_required", async () => {
     treeCampaign();
@@ -298,6 +334,19 @@ describe("core: manage routes against recorded Graph responses (#649)", () => {
     expect(store.state.tables.meta_connections[0].authorization_status).toBe("reauth_required");
     const { getMetaConnection } = await import("@/lib/meta/credentials");
     expect(await getMetaConnection(BUSINESS)).toMatchObject({ expired: true, ready: false });
+  });
+
+  it("#2312: the same refusal reads in Hindi for a हिन्दी owner, with the status and code unchanged", async () => {
+    treeCampaign();
+    replay([{ ...(tapes.pause[0]), status: tokenRevoked.status, body: tokenRevoked.body }]);
+    store.state.rpc.meta_connection_mark_reauth = () => ({ data: true, error: null });
+    lang.value = "hi";
+    const response = await pause();
+    expect(response.status).toBe(409);
+    const body = await response.json();
+    expect(body.code).toBe("META_REAUTH");
+    expect(body.error).toBe("Meta ने AdBrain की पहुँच मानना बंद कर दिया, इसलिए हम यह कैंपेन रोक नहीं पाए। अभी इसे Ads Manager में रोकें, फिर सेटिंग में Facebook दोबारा जोड़ें।");
+    expect(graph.sent.filter(call => call.method !== "GET")).toEqual([]);
   });
 
   it.each([
@@ -479,6 +528,39 @@ describe("core: manage routes against recorded Graph responses (#649)", () => {
     expect(audits()).toEqual([]);
   });
 
+  // #1217: one Meta 5xx during the capability re-check used to be saved as 'unknown' and read as a permissions problem.
+  it("#1217 activate: Meta not answering the re-check returns a retryable 503, stores nothing and makes no Meta write", async () => {
+    const campaign = reviewedCampaign();
+    replay(tapes.delivery, tapes.funding);
+    const { delivery } = await (await review()).json();
+    const stored = structuredClone(store.state.tables.meta_connections[0].capabilities);
+    const { ConnectionAccessError } = await import("@/lib/meta/connection-access-error");
+    capabilities.verify.mockRejectedValueOnce(new ConnectionAccessError("UNAVAILABLE", "Meta didn't answer. Try again.", { retryable: true }));
+    replay(tapes.delivery);
+    const response = await activate({ confirmationDigest: await digest(campaign, delivery, 3), connectionGeneration: GENERATION, capDays: 3 });
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({ error: "Meta didn't answer. Try again." });
+    expect(store.state.tables.meta_connections[0].capabilities).toEqual(stored);
+    expect(writes()).toEqual([]);
+    expect(store.state.tables.campaigns[0].status).toBe("paused");
+  });
+
+  it("#1217 activate: 'unknown' access is a retryable 503 ('Check again'); 'blocked' gives Meta's reason", async () => {
+    const campaign = reviewedCampaign();
+    replay(tapes.delivery, tapes.funding);
+    const { delivery } = await (await review()).json();
+    const available = { state: "available", blockers: [] };
+    const unknown = { state: "unknown", blockers: [{ code: "MISSING_PERMISSION", message: "Meta access could not be verified. Check again.", action: { kind: "retry_check" } }] };
+    const billing = { state: "blocked", blockers: [{ code: "BILLING_REQUIRED", message: "Meta billing must be verified before activation.", action: null }] };
+    for (const [canActivate, status, error] of [[unknown, 503, "Meta access could not be verified. Check again."], [billing, 400, "Meta billing must be verified before activation."]] as const) {
+      capabilities.verify.mockResolvedValueOnce({ canReadInsights: available, canReadLeads: available, canCreatePaused: available, canActivate });
+      replay(tapes.delivery);
+      const response = await activate({ confirmationDigest: await digest(campaign, delivery, 3), connectionGeneration: GENERATION, capDays: 3 });
+      expect({ status: response.status, body: await response.json() }).toMatchObject({ status, body: { error } });
+      expect(writes()).toEqual([]);
+    }
+  });
+
   it("activate: a connectionGeneration other than the stored binding is refused before any Meta call", async () => {
     const campaign = reviewedCampaign();
     replay(tapes.delivery, tapes.funding);
@@ -490,6 +572,22 @@ describe("core: manage routes against recorded Graph responses (#649)", () => {
     expect(await response.json()).toMatchObject({ error: "Meta connection changed; review the campaign again." });
     expect(globalThis.fetch).not.toHaveBeenCalled();
     expect(capabilities.verify).not.toHaveBeenCalled();
+    expect(store.state.tables.campaigns[0].status).toBe("paused");
+  });
+
+  // #1518 (CTO): a paused campaign can still have a new-audience copy waiting (made while it ran). Turning it on would
+  // build a capped copy of the old ad set beside the waiting one, and both could spend.
+  it("activate: refuses while a new audience waits to be switched on, before any Meta write or reservation", async () => {
+    const campaign = reviewedCampaign();
+    replay(tapes.delivery, tapes.funding);
+    const confirmationDigest = await digest(campaign, (await (await review()).json()).delivery, 3);
+    store.state.tables.campaign_edit_operations = [{ id: "op-waiting", campaign_id: STORED, kind: "audience", state: "awaiting_switch", phase: "copy" }];
+    replay(tapes.delivery, tapes.funding);
+    const response = await activate({ confirmationDigest, connectionGeneration: GENERATION, capDays: 3 });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ code: "switch_pending", error: "A new audience is waiting for this campaign. Turn it on or cancel it first." });
+    expect(writes()).toEqual([]);
+    expect(store.state.inserted).toBe(0);
     expect(store.state.tables.campaigns[0].status).toBe("paused");
   });
 
@@ -517,7 +615,7 @@ describe("core: manage routes against recorded Graph responses (#649)", () => {
     const response = await activate({ confirmationDigest: await digest(campaign, delivery, 5), connectionGeneration: GENERATION, capDays: 5 });
     expect(response.status).toBe(409);
     expect(await response.json()).toMatchObject({
-      error: "Meta has ₹134.87 left under the ad account's spending limit after ₹450.00 for your 1 other live run; this run needs ₹1,000.00. Add funds on Meta or choose fewer days.",
+      error: "Meta has ₹134.87 left under the ad account's spending limit after ₹450 for your 1 other live run; this run needs ₹1,000. Add funds on Meta or choose fewer days.",
     });
     expect(graph.sent.map(call => `${call.method} ${call.path}`).sort()).toEqual([...deliveryReads, ...tapes.funding.map(exchange => `GET ${exchange.path}`)].sort());
     expect(writes()).toEqual([]);
@@ -551,5 +649,45 @@ describe("core: manage routes against recorded Graph responses (#649)", () => {
     expect(JSON.stringify(body)).toMatch(/deleted/i);
     expect(store.state.tables.campaigns.find(row => row.id === STORED)?.status).not.toBe("paused");
     expect(graph.sent.every(call => call.method === "GET")).toBe(true);
+  });
+
+  // #2268 (QA on #2261): Meta's /campaigns listing leaves deleted campaigns out, so Sync never revisited a stored paused
+  // row deleted in Ads Manager and Manage kept saying "Paused". Sync now reads the account's gone campaigns.
+  // campaigns-gone.json: the real read-only `filtering` read (Graph v26 refuses `?ids=`), recorded through the client.
+  const goneTape = goneFixture.tape as Exchange[];
+  const goneList = (goneTape[0].body as { data: Array<{ id: string; effective_status: string }> }).data;
+  const [DELETED_ID, OTHER_ACCOUNT_ID] = goneList.filter(campaign => campaign.effective_status === "DELETED").map(campaign => campaign.id);
+  const ARCHIVED_ID = goneList.find(campaign => campaign.effective_status === "ARCHIVED")!.id;
+  const STILL_PAUSED = "120253164673180526";
+  const goneRows = () => [
+    storeCampaign({ id: "00000000-0000-4000-8000-000000000011", meta_campaign_id: DELETED_ID, status: "paused", meta_ad_account_id: null, raw: { source: "sync" } }),
+    storeCampaign({ id: "00000000-0000-4000-8000-000000000012", meta_campaign_id: ARCHIVED_ID, status: "active" }),
+    storeCampaign({ id: "00000000-0000-4000-8000-000000000013", meta_campaign_id: STILL_PAUSED, status: "paused" }),
+    storeCampaign({ id: "00000000-0000-4000-8000-000000000014", meta_campaign_id: OTHER_ACCOUNT_ID, status: "paused", meta_ad_account_id: "act_1000000000000001" }),
+  ];
+  const row = (id: string) => store.state.tables.campaigns.find(campaign => campaign.meta_campaign_id === id);
+
+  it("sync: stored live campaigns Meta deleted or archived end as gone, legacy rows with no account id included", async () => {
+    const [, , stillPaused, otherAccount] = goneRows();
+    replay(tapes.sync([SYNCED]), goneTape);
+    const response = await sync();
+    expect(response.status).toBe(200);
+    expect(row(DELETED_ID)).toMatchObject({ status: "completed", raw: { source: "sync", metaStatus: "DELETED", metaGoneAt: expect.any(String) } });
+    expect(row(ARCHIVED_ID)).toMatchObject({ status: "completed", raw: { metaStatus: "ARCHIVED" } });
+    const { goneInMeta } = await import("@/lib/campaign/gone-in-meta");
+    expect([goneInMeta(row(DELETED_ID) as never), goneInMeta(row(ARCHIVED_ID) as never)]).toEqual(["Deleted in Meta", "Archived in Meta"]);
+    // Still paused in Meta, or bound to another ad account: left exactly as they were.
+    expect([row(STILL_PAUSED), row(OTHER_ACCOUNT_ID)]).toEqual([stillPaused, otherAccount]);
+    expect(graph.sent.every(call => call.method === "GET" && call.access === ACCESS)).toBe(true);
+    expect(graph.pending).toEqual([]);
+  });
+
+  it("sync: when Meta refuses the gone-campaigns read, every stored row is kept and the sync still succeeds", async () => {
+    const before = goneRows();
+    replay(tapes.sync([SYNCED]), [{ ...goneTape[0], status: 400, body: { error: { message: "Invalid parameter", type: "OAuthException", code: 100 } } }]);
+    const response = await sync();
+    expect(response.status).toBe(200);
+    expect(store.state.tables.campaigns.filter(campaign => campaign.meta_campaign_id !== SYNCED)).toEqual(before);
+    expect(graph.pending).toEqual([]);
   });
 });

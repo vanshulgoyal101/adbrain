@@ -3,7 +3,7 @@ name: database-invariants
 description: "Use this skill when correctness depends on SQL triggers, RPCs, caps, RLS policies, constraints, or SECURITY DEFINER functions."
 ---
 
-<!-- Generated from vanshulgoyal101/skills@fb8f6e0 skills/database-invariants.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
+<!-- Generated from vanshulgoyal101/skills@eb9e65d skills/database-invariants.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
 
 # Database Invariants
 
@@ -115,3 +115,35 @@ A browser can forge usage events, an API row limit truncates monthly totals, or 
 ## Evidence
 
 AdBrain commit `1dbb4e9` (2026-09-16), its trusted-usage/rate-limit migration and `scripts/check-meta-connect-db.mjs`, records fresh and ordered-upgrade checks, browser privilege denial, tenant isolation, 1,100-event aggregation and twelve concurrent requests competing for three slots. The dated security audit records local PostgreSQL evidence, not remote migration completion.
+
+## Lessons (Oct 28)
+
+- Stamp a "first X" timestamp in the same guarded update as the state change it
+  measures (`... where workflow_status = 'new'`). Otherwise backfilled or old rows
+  record bogus firsts (#1140).
+- Versioned legal or terms text that the DB rebuilds and compares needs a new
+  version plus a migration to change; keep the old version for old orders (#1235).
+- Before excluding a data class (e.g. Meta test leads) everywhere, check the
+  recorded test fixtures. The only real recorded lead may be a test lead (#1149).
+- Check a metric's start column against real rows before building on it
+  (`leads.created_at` was import time, 18 h after Meta's `created_time`) (#1284).
+- "Went live" can't rest on a field only one code path sets; ask production which rows
+  exist before choosing the rule (#1403).
+- Deleting `auth.sessions` doesn't end access: issued JWTs live until expiry, and linked
+  identities and MFA survive an email change (#1477).
+
+## Lessons (Oct 29)
+
+- A DB function fix needs a guard on the final definition after all migrations; a later
+  `create or replace` silently reverts it. Review a migration against the newest body
+  on any open PR, not main's (#2022, #1864). For a SECURITY DEFINER release with no
+  traffic yet, `md5(prosrc)` against the file body plus overload and grant reads is a
+  complete proof (#2177).
+- A "recipient owns nothing" check needs a lock keyed on the recipient, not just the
+  transfer row: two hand-overs to one recipient both passed under READ COMMITTED. A
+  temporary delay trigger made the race test red; `pg_advisory_xact_lock` on the
+  recipient made it green. Test concurrency across different rows that share one
+  invariant (#1670, #2071).
+- Count real leads from the leads table with test and smoke rows filtered in the query
+  and the phone format validated, not from events, so the number matches the owner's
+  inbox (#1942, #1965).

@@ -80,32 +80,50 @@ type VerificationScope = z.infer<typeof verificationSchema>;
 export type PaymentSubject = { businessId: string; userId: string; verificationCompleted?: boolean; verificationAmountPaise?: number; annualAmountPaise?: number };
 const rupees = (paise: number) => `INR ${new Intl.NumberFormat("en-IN", { maximumFractionDigits: 2 }).format(paise / 100)}`;
 
-function pricedPolicy(quote: ProductionPaymentQuote, verification?: VerificationScope) {
-  const serviceScope = verification
-    ? `One real ${rupees(quote.totalPaise)} payment to verify checkout for the selected internal pilot. This is not the annual service and grants no service or advertising allocation, renewal or ad activation. AdBrain absorbs gateway fees; no additional checkout charge applies.`
-    : OPERATOR_MANAGED_POLICY.serviceScope.replace("INR 10,000", rupees(quote.totalPaise))
-      .replace("INR 2,000", rupees(quote.serviceAllocationPaise)).replace("INR 8,000", rupees(quote.metaAllocationPaise));
+// #1235 (CEO, Oct 28): new checkouts' terms speak of "your ad budget", never AdBrain's share. v1 stays for old orders.
+export const PRICING_V2_APPROVAL_REFERENCE = "https://github.com/vanshulgoyal101/adbrain/issues/1235#issuecomment-6467091869";
+export const PRICING_V2_APPROVED_AT = "2026-10-28T10:52:31Z";
+const VERIFICATION_REFUND_TERMS = "This verification payment remains recorded separately from service and advertising funds. Refund requests are handled by the operator under applicable law; no automatic refund is initiated. Mandatory customer rights remain applicable.";
+const verificationScope = (quote: ProductionPaymentQuote) => `One real ${rupees(quote.totalPaise)} payment to verify checkout for the selected internal pilot. This is not the annual service and grants no service or advertising allocation, renewal or ad activation. AdBrain absorbs gateway fees; no additional checkout charge applies.`;
+
+function pricedPolicyV1(quote: ProductionPaymentQuote, verification?: VerificationScope) {
   return {
     version: "operator-managed-priced-v1" as const, fundingMode: "operator_managed" as const,
     approvalReference: PRICING_APPROVAL_REFERENCE, approvedAt: PRICING_APPROVED_AT,
-    serviceScope, invoiceTerms: OPERATOR_MANAGED_POLICY.invoiceTerms,
-    refundTerms: verification
-      ? "This verification payment remains recorded separately from service and advertising funds. Refund requests are handled by the operator under applicable law; no automatic refund is initiated. Mandatory customer rights remain applicable."
-      : OPERATOR_MANAGED_POLICY.refundTerms.replace("INR 2,000", rupees(quote.serviceAllocationPaise)),
+    serviceScope: verification ? verificationScope(quote) : OPERATOR_MANAGED_POLICY.serviceScope.replace("INR 10,000", rupees(quote.totalPaise))
+      .replace("INR 2,000", rupees(quote.serviceAllocationPaise)).replace("INR 8,000", rupees(quote.metaAllocationPaise)),
+    invoiceTerms: OPERATOR_MANAGED_POLICY.invoiceTerms,
+    refundTerms: verification ? VERIFICATION_REFUND_TERMS : OPERATOR_MANAGED_POLICY.refundTerms.replace("INR 2,000", rupees(quote.serviceAllocationPaise)),
     quote, ...(verification ? { verification } : {}),
   };
 }
 
-const pricedPolicySchema = z.strictObject({
-  version: z.literal("operator-managed-priced-v1"), fundingMode: z.literal("operator_managed"),
-  approvalReference: z.literal(PRICING_APPROVAL_REFERENCE), approvedAt: z.literal(PRICING_APPROVED_AT),
+/** Must match private.production_payment_priced_policy_v2 byte for byte (scripts/check-meta-connect-db.mjs compares them). */
+function pricedPolicy(quote: ProductionPaymentQuote, verification?: VerificationScope) {
+  return {
+    version: "operator-managed-priced-v2" as const, fundingMode: "operator_managed" as const,
+    approvalReference: PRICING_V2_APPROVAL_REFERENCE, approvedAt: PRICING_V2_APPROVED_AT,
+    serviceScope: verification ? verificationScope(quote)
+      : `${rupees(quote.totalPaise).replace("INR ", "₹")} for 12 months for one business, one offer and one service area, including up to two ads and one capped Meta campaign. It includes your ad budget, with Meta's GST. Gateway fees are on us. No extra charge, automatic renewal, year-round delivery or guaranteed results. The operator pays Meta separately.`,
+    invoiceTerms: OPERATOR_MANAGED_POLICY.invoiceTerms,
+    refundTerms: verification ? VERIFICATION_REFUND_TERMS
+      : "Full refund before we start work. After that, your unused ad budget is refundable once pending Meta costs are settled. Mandatory customer rights remain applicable.",
+    quote, ...(verification ? { verification } : {}),
+  };
+}
+
+const pricedSchema = <V extends string>(version: V, approvalReference: string, approvedAt: string, build: typeof pricedPolicy | typeof pricedPolicyV1) => z.strictObject({
+  version: z.literal(version), fundingMode: z.literal("operator_managed"),
+  approvalReference: z.literal(approvalReference), approvedAt: z.literal(approvedAt),
   serviceScope: policyText, invoiceTerms: z.literal(OPERATOR_MANAGED_POLICY.invoiceTerms), refundTerms: policyText,
   quote: productionPaymentQuoteSchema, verification: verificationSchema.optional(),
 }).refine(policy => {
   if ((policy.quote.version === "inr-payment-verification-v1") !== Boolean(policy.verification)) return false;
-  const expected = pricedPolicy(policy.quote, policy.verification);
+  const expected = build(policy.quote, policy.verification);
   return policy.serviceScope === expected.serviceScope && policy.refundTerms === expected.refundTerms;
 });
+const pricedPolicySchema = pricedSchema("operator-managed-priced-v2", PRICING_V2_APPROVAL_REFERENCE, PRICING_V2_APPROVED_AT, pricedPolicy);
+const pricedPolicyV1Schema = pricedSchema("operator-managed-priced-v1", PRICING_APPROVAL_REFERENCE, PRICING_APPROVED_AT, pricedPolicyV1);
 
 export function quoteForPaymentPolicy(policy: z.infer<typeof productionPaymentPolicySchema>): ProductionPaymentQuote {
   return "quote" in policy ? policy.quote : createAnnualPaymentQuote();
@@ -136,14 +154,17 @@ export const productionPaymentPolicySchema = z.union([z.strictObject({
   approvalReference: z.literal(OPERATOR_MANAGED_POLICY.approvalReference), approvedAt: z.literal(OPERATOR_MANAGED_POLICY.approvedAt),
   serviceScope: z.literal(OPERATOR_MANAGED_POLICY.serviceScope), invoiceTerms: z.literal(OPERATOR_MANAGED_POLICY.invoiceTerms),
   refundTerms: z.literal(OPERATOR_MANAGED_POLICY.refundTerms),
-}), pricedPolicySchema, legacyPaymentPolicySchema]);
+}), pricedPolicySchema, pricedPolicyV1Schema, legacyPaymentPolicySchema]);
+
+/** #1235 (owner): these terms name AdBrain's service/advertising split. Kept only to read orders accepted under them. */
+const RETIRED_POLICY_VERSIONS = new Set<string>([OPERATOR_MANAGED_POLICY.version, "operator-managed-priced-v1"]);
 
 export function getProductionCollectionPolicy(environment: Environment = process.env, now = Date.now(), subject?: PaymentSubject) {
   getProductionPaymentConfig(environment);
   try {
     const totalPaise = subject?.annualAmountPaise === undefined ? configuredAmount(environment, "PAYMENTS_LIVE_AMOUNT_PAISE", DEFAULT_ANNUAL_PAYMENT_PAISE)
       : z.number().int().min(100).max(DEFAULT_ANNUAL_PAYMENT_PAISE).parse(subject.annualAmountPaise);
-    let configured: unknown = totalPaise === DEFAULT_ANNUAL_PAYMENT_PAISE ? OPERATOR_MANAGED_POLICY : pricedPolicy(createAnnualPaymentQuote(totalPaise));
+    let configured: unknown = pricedPolicy(createAnnualPaymentQuote(totalPaise));
     const verificationEnabled = environment.PAYMENTS_LIVE_VERIFICATION_ENABLED;
     if (verificationEnabled !== undefined && !["", "false", "true"].includes(verificationEnabled)) throw new Error();
     if (verificationEnabled === "true") {
@@ -164,6 +185,7 @@ export function getProductionCollectionPolicy(environment: Environment = process
       throw new Error();
     }
     const policy = productionPaymentPolicySchema.parse(JSON.parse(raw));
+    if (RETIRED_POLICY_VERSIONS.has(policy.version)) throw new Error();
     if (subject?.verificationAmountPaise !== undefined && !("verification" in policy && policy.verification)) throw new Error();
     if (Date.parse(policy.approvedAt) > now || ("expiresAt" in policy && Date.parse(policy.expiresAt) <= now)) throw new Error();
     if ("verification" in policy && policy.verification && (policy.verification.businessId !== subject?.businessId

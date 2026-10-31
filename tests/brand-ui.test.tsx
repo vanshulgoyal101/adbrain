@@ -4,6 +4,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { BrandForm } from "@/components/brand-form";
 import { BrandAssets } from "@/components/brand-assets";
 import { Instructions } from "@/components/instructions";
+import { NoticesProvider } from "@/i18n/notices";
+import hi from "../messages/hi.json";
 import type { AdInstruction, BrandAsset, Business } from "@/lib/types";
 // #403 S6: the confirm dialog has its own tests (confirm-dialog.test.tsx); here window.confirm stands in for the owner's answer.
 vi.mock("@/components/ui/confirm-dialog", () => ({
@@ -108,6 +110,43 @@ describe("<BrandForm> prefill", () => {
     expect(h.storageFrom).not.toHaveBeenCalled();
   });
 
+  // #2345: the app layout's notices words reach the client fallbacks, so a Hindi owner reads Hindi with no server reply.
+  it("shows its own fallbacks in the owner's language", () => {
+    render(<NoticesProvider words={{ locale: "hi", messages: hi.notices }}><BrandAssets businessId="b1" initialAssets={[]} /></NoticesProvider>);
+    fireEvent.change(screen.getByLabelText("Image file"), { target: { files: [new File(["x".repeat(6 * 1024 * 1024)], "big.png", { type: "image/png" })] } });
+    fireEvent.click(screen.getByRole("button", { name: "Upload" }));
+    expect(screen.getByText("5 MB से छोटी तस्वीर चुनें।")).toBeInTheDocument();
+    expect(h.storageFrom).not.toHaveBeenCalled();
+  });
+
+  // #1317: a prospect with no website fills Brand from a pasted bio or listing, through the same autofill.
+  it("fills a new Brand from a pasted bio when there's no website", async () => {
+    vi.mocked(global.fetch).mockResolvedValue({ ok: true, json: async () => ({ extraction: { description: "Rooftop solar for homes", phone: "+919829012345", name: "SunPeak Solar" } }) } as unknown as Response);
+    render(<BrandForm business={null} />);
+    fireEvent.click(screen.getByRole("button", { name: "No website? Paste a bio or listing" }));
+    const fill = screen.getByRole("button", { name: "Fill from this text" });
+    expect(fill).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Instagram bio, Google listing or catalogue text"), { target: { value: "SunPeak Solar: rooftop solar for homes in Jaipur. Call 98290 12345" } });
+    fireEvent.click(fill);
+    await waitFor(() => expect(screen.getByPlaceholderText("What your business does, in a sentence or two.")).toHaveValue("Rooftop solar for homes"));
+    const [url, init] = vi.mocked(global.fetch).mock.calls[0];
+    expect(url).toBe("/api/brand/autofill");
+    expect(JSON.parse(String(init!.body))).toEqual({ text: "SunPeak Solar: rooftop solar for homes in Jaipur. Call 98290 12345" });
+    // #1379: the required name is filled too, and the note says where it came from.
+    expect(screen.getByPlaceholderText("Your business name")).toHaveValue("SunPeak Solar");
+    expect(screen.getByText(/^Filled from your text: name, description, phone number\./)).toBeInTheDocument();
+  });
+
+  it("#1379: autofill never replaces a name the owner typed", async () => {
+    vi.mocked(global.fetch).mockResolvedValue({ ok: true, json: async () => ({ extraction: { description: "Rooftop solar for homes", name: "Solaride" } }) } as unknown as Response);
+    render(<BrandForm business={null} />);
+    fireEvent.change(screen.getByPlaceholderText("Your business name"), { target: { value: "SunPeak" } });
+    fireEvent.change(document.querySelector('input[name="website"]')!, { target: { value: "solaride.in" } });
+    fireEvent.click(screen.getByRole("button", { name: /autofill/i }));
+    await waitFor(() => expect(screen.getByPlaceholderText("What your business does, in a sentence or two.")).toHaveValue("Rooftop solar for homes"));
+    expect(screen.getByPlaceholderText("Your business name")).toHaveValue("SunPeak");
+  });
+
   it("starts empty for a brand new business", () => {
     render(<BrandForm business={null} />);
     expect(screen.getByPlaceholderText("Your business name")).toHaveValue("");
@@ -158,21 +197,22 @@ describe("<BrandForm> prefill", () => {
   it("updates brand readiness as missing context is supplied", () => {
     render(<BrandForm business={business({ offers: [], usps: [] })} />);
     const preview = screen.getByRole("region", { name: "Preview" });
-    expect(preview).toHaveTextContent("3 of 6 ready");
+    expect(preview).toHaveTextContent("2 of 5 ready");
 
     fireEvent.change(screen.getByLabelText(/^Offers/), {
       target: { value: "Free survey" },
     });
 
-    expect(preview).toHaveTextContent("4 of 6 ready");
+    expect(preview).toHaveTextContent("3 of 5 ready");
   });
 
   // #681 (Dev 2's 390 px walk): a no-website owner who filled every essential read "1 of 6 ready".
   it("counts what ads need: name, area and an offer, without brand voice or audience text", () => {
     render(<BrandForm business={business({ website: null, brand_voice: null, target_audience: null, usps: [], languages: [] })} />);
     const preview = screen.getByRole("region", { name: "Preview" });
-    expect(preview).toHaveTextContent("3 of 6 ready");
-    expect(screen.getByRole("link", { name: "Add website for lead ads" })).toHaveAttribute("href", "#brand-identity");
+    expect(preview).toHaveTextContent("3 of 5 ready");
+    // #1171: WhatsApp is the default, so a website is only asked for instant forms, not counted.
+    expect(screen.queryByRole("link", { name: /website/i })).not.toBeInTheDocument();
   });
 
   it("links each missing item to the section that fills it", () => {
@@ -201,16 +241,18 @@ describe("<BrandForm> prefill", () => {
     }
   });
 
-  it("is not ready for lead ads without a website, even with a phone number", () => {
+  // #1171: WhatsApp is the default destination. #1238: the label says what a website is for (autofill), not 'only for instant forms'.
+  it("does not count a website towards readiness and says it's optional, for autofill", () => {
     render(<BrandForm business={business({ website: null, phone: "+91 98765 43210" })} />);
     const preview = screen.getByRole("region", { name: "Preview" });
-    expect(preview).toHaveTextContent("3 of 6 ready");
+    expect(preview).toHaveTextContent("3 of 5 ready");
+    expect(screen.getByLabelText("Website (optional: lets AdBrain fill this page for you)")).toBe(screen.getByPlaceholderText("example.com"));
 
     fireEvent.change(screen.getByPlaceholderText("example.com"), {
       target: { value: "https://example.com" },
     });
 
-    expect(preview).toHaveTextContent("4 of 6 ready");
+    expect(preview).toHaveTextContent("3 of 5 ready");
   });
 
   it("asks for a logo and real photos, linking to the asset section (#195)", () => {
@@ -283,6 +325,21 @@ describe("<BrandForm> prefill", () => {
     expect(await screen.findByText("Saved")).toBeInTheDocument();
     expect((saveBusiness.mock.calls[1][1] as FormData).get("description")).toBe("Draft description");
   });
+
+  it("announces Saved and a failed save in a status region that is there before the save (#1262)", async () => {
+    saveBusiness.mockResolvedValueOnce({ ok: false, error: "Synthetic save failed" });
+    render(<BrandForm business={business()} />);
+    const statuses = () => screen.getAllByRole("status").map((node) => node.textContent ?? "");
+    const before = screen.getAllByRole("status").length;
+    expect(before).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: "Save your business" }));
+    await screen.findByText("Synthetic save failed");
+    expect(screen.getAllByRole("status")).toHaveLength(before);
+    expect(statuses()).toContain("Synthetic save failed");
+    fireEvent.click(screen.getByRole("button", { name: "Save your business" }));
+    await screen.findByText("Saved");
+    expect(statuses().map((text) => text.trim())).toContain("Saved");
+  });
 });
 
 describe("<BrandAssets> persistence", () => {
@@ -314,7 +371,7 @@ describe("<BrandAssets> persistence", () => {
     const { remove } = setup({ recordError: true });
     render(<BrandAssets businessId="b1" initialAssets={[]} />);
     uploadFile();
-    expect(await screen.findByRole("alert")).toHaveTextContent("write failed");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Couldn't save the picture. Try again.");
     expect(remove).toHaveBeenCalledWith([expect.stringMatching(/^b1\/logo\//)]);
     expect(screen.queryByRole("button", { name: "Delete asset" })).toBeNull();
   });
@@ -323,7 +380,7 @@ describe("<BrandAssets> persistence", () => {
     setup({ logoError: true });
     render(<BrandAssets businessId="b1" initialAssets={[]} />);
     uploadFile();
-    expect(await screen.findByRole("alert")).toHaveTextContent("Asset saved, but the brand logo could not be updated");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Picture saved, but it couldn't be set as your logo");
     expect(screen.getByRole("button", { name: "Delete asset" })).toBeInTheDocument();
   });
 
@@ -331,7 +388,7 @@ describe("<BrandAssets> persistence", () => {
     const { remove } = setup({ recordError: true });
     render(<BrandAssets businessId="b1" initialAssets={[asset]} />);
     fireEvent.click(screen.getByRole("button", { name: "Delete asset" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("write failed");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Couldn't delete the picture. Try again.");
     expect(remove).not.toHaveBeenCalled();
     expect(screen.getByRole("img", { name: "Main logo" })).toBeInTheDocument();
   });
@@ -350,7 +407,7 @@ describe("<BrandAssets> persistence", () => {
     setup({ storageError: true });
     render(<BrandAssets businessId="b1" initialAssets={[asset]} />);
     fireEvent.click(screen.getByRole("button", { name: "Delete asset" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("its stored file could not be deleted");
+    expect(await screen.findByRole("alert")).toHaveTextContent("its stored file couldn't be deleted");
     expect(screen.queryByRole("img", { name: "Main logo" })).toBeNull();
   });
 });
@@ -423,7 +480,7 @@ describe("<BrandForm> autofill", () => {
   it("insists on a website first", async () => {
     render(<BrandForm business={business({ website: null })} />);
     fireEvent.click(screen.getByRole("button", { name: /autofill/i }));
-    expect(await screen.findByText("Enter your website URL first.")).toBeInTheDocument();
+    expect(await screen.findByText("Enter your website URL first, or paste a bio or listing.")).toBeInTheDocument();
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
@@ -496,7 +553,7 @@ describe("<BrandForm> autofill", () => {
     global.fetch = vi.fn().mockRejectedValue(new Error("offline")) as unknown as typeof fetch;
     render(<BrandForm business={business()} />);
     fireEvent.click(screen.getByRole("button", { name: /autofill/i }));
-    expect(await screen.findByText(/could not reach the site/i)).toBeInTheDocument();
+    expect(await screen.findByText(/We couldn't read that page/i)).toBeInTheDocument();
   });
 });
 

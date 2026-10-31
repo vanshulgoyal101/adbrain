@@ -1,8 +1,11 @@
 import { observeRoute, currentRequestId } from "@/lib/observability/logger";
+import { applyMonthlyCostCap } from "@/lib/llm/cost-cap";
 import { NextResponse } from "next/server";
 import { serverError } from "@/lib/api";
 import { logEvent } from "@/lib/audit";
-import { CreativeValidationError, generateOneVariant } from "@/lib/creative/generate";
+import { CreativeImageError, CreativeValidationError, generateOneVariant } from "@/lib/creative/generate";
+import { pausedPhotoFor } from "@/lib/creative/owner-photos";
+import { imageAttemptCostsNothing } from "@/lib/imageGen/types";
 import {
   persistCreativeImage,
   renderAndPersistDesign,
@@ -25,20 +28,21 @@ import {
   variantUsageEvents,
   failedVariantUsage,
 } from "@/lib/creative/receipt";
-import { creativeReferences, recentCreativeCopy } from "@/lib/creative/references";
+import { creativeAssets, recentCreativeCopy } from "@/lib/creative/references";
 import { preferenceContext } from "@/lib/preferences/store";
+import { ownerError } from "@/i18n/request-locale";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
 export const POST = observeRoute("/api/creatives/[id]/regenerate", "POST", handlePOST);
 
-function rejectionMessage(issues: string[]): string {
+function rejectionMessage(issues: string[]): Promise<string> {
   const claims = [...new Set(issues.flatMap((issue) =>
     /^unsupported-commercial-claim: (.+?);/.exec(issue)?.[1].toLowerCase() ?? []))];
   return claims.length
-    ? `The new version made a claim our fact check couldn't match to your Brand (${claims.join(", ")}). Your current ad is unchanged. Try again.`
-    : "The new version didn't pass our ad checks. Your current ad is unchanged. Try again.";
+    ? ownerError("versionClaimRejected", { claims: claims.join(", ") })
+    : ownerError("versionRejected");
 }
 
 async function handlePOST(
@@ -66,7 +70,7 @@ async function handlePOST(
     .eq("id", id)
     .maybeSingle();
   if (!creative) {
-    return NextResponse.json({ error: "Creative not found" }, { status: 404 });
+    return NextResponse.json({ error: await ownerError("adNotFound") }, { status: 404 });
   }
 
   const { data: business } = await supabase
@@ -75,7 +79,7 @@ async function handlePOST(
     .eq("id", creative.business_id)
     .maybeSingle();
   if (!business) {
-    return NextResponse.json({ error: "Business not found" }, { status: 404 });
+    return NextResponse.json({ error: await ownerError("businessNotFound") }, { status: 404 });
   }
 
   const angle = getAngleByName(creative.angle ?? "") ?? AD_ANGLES[0];
@@ -84,15 +88,17 @@ async function handlePOST(
     const used = await monthlyTokenUsage(business.id);
     if (used === null)
       return NextResponse.json(
-        { error: "AI usage limits could not be verified." },
+        { error: await ownerError("somethingDidntAnswer") },
         { status: 503 },
       );
     if (used >= limit)
       return NextResponse.json(
-        { error: "This business has reached its monthly AI generation limit." },
+        { error: await ownerError("aiAllowanceUsed") },
         { status: 429 },
       );
   }
+  // #1717: over the monthly AI cost cap, the new picture is free (text keeps the token cap).
+  await applyMonthlyCostCap(business.id, user);
   const { error: schemaError } = await supabase
     .from("creatives")
     .select("generation")
@@ -108,28 +114,32 @@ async function handlePOST(
   try {
     admin = createAdminClient();
   } catch {
-    return NextResponse.json({ error: "Regeneration admission is unavailable. No generation was started." }, { status: 503 });
+    return NextResponse.json({ error: await ownerError("somethingDidntAnswer") }, { status: 503 });
   }
   const { data: claim, error: claimError } = await admin.rpc("creative_regeneration_claim", {
     p_creative_id: id, p_business_id: business.id, p_user_id: user.id, p_attempt_id: attemptId,
   });
   if (claimError || !claim)
-    return NextResponse.json({ error: "Regeneration admission is unavailable. No generation was started." }, { status: 503 });
-  if (claim.action === "missing") return NextResponse.json({ error: "Creative not found" }, { status: 404 });
+    return NextResponse.json({ error: await ownerError("somethingDidntAnswer") }, { status: 503 });
+  if (claim.action === "missing") return NextResponse.json({ error: await ownerError("adNotFound") }, { status: 404 });
   if (claim.action === "busy")
     return NextResponse.json({ error: claim.status === "unresolved"
-      ? "Previous paid regeneration needs review before retrying."
-      : "Regeneration is already in progress. Refresh this creative before trying again." }, { status: 409 });
+      ? await ownerError("regenerationNeedsReview")
+      : await ownerError("regenerationBusy") }, { status: 409 });
   if (claim.action !== "start")
-    return NextResponse.json({ error: "Regeneration admission is unavailable. No generation was started." }, { status: 503 });
+    return NextResponse.json({ error: await ownerError("somethingDidntAnswer") }, { status: 503 });
+  // #2291: the stale attempt this replaces may have paid for a picture it never recorded; ops matches this to its usage.
+  if (claim.tookOver)
+    await logEvent({ businessId: business.id, action: "creative.claim_taken_over", entityType: "creative", entityId: id,
+      details: { route: "creatives.regenerate", attemptId } });
 
   let paidAttemptStarted = false;
   let unresolved = false;
   let response: NextResponse;
   try {
-    const [instructions, referenceImages, recentCopy] = await Promise.all([
+    const [instructions, { references: referenceImages, photos }, recentCopy] = await Promise.all([
       getActiveInstructionsText(business.id),
-      creativeReferences(supabase, business.id),
+      creativeAssets(supabase, business.id),
       recentCreativeCopy(supabase, business.id),
     ]);
     const settings = savedGenerationSettings(creative.generation);
@@ -147,6 +157,7 @@ async function handlePOST(
       [{ headline: creative.headline ?? "", primary_text: creative.primary_text ?? "" }, ...recentCopy].slice(0, 12),
       advisoryPreferences,
       settings.sourceFacts,
+      pausedPhotoFor(angle, photos),
     );
     const recorded = await persistLLMUsage(
       variantUsageEvents(variant, {
@@ -203,7 +214,7 @@ async function handlePOST(
       response = serverError(
         "creative.regenerate",
         error ?? new Error("Creative update returned no row"),
-        "Could not update creative.",
+        await ownerError("creativeNotUpdated"),
       );
     } else {
       await logEvent({
@@ -220,6 +231,10 @@ async function handlePOST(
     // Every text attempt finished and our fact check refused it: nothing was saved and the spend is known.
     const rejection = err instanceof CreativeValidationError && err.stage !== "provider" && err.usage.length > 0 &&
       err.usage.every((entry) => entry.providerFinalStatus === "completed") ? err : null;
+    // #2219: the copy finished and the picture failed free (or the provider refused it): every charge is known once recorded.
+    const pictureFailed = err instanceof CreativeImageError &&
+      err.usage.every((entry) => entry.providerFinalStatus === "completed" || entry.providerFinalStatus === "failed") &&
+      err.imageAttempts.every(imageAttemptCostsNothing);
     unresolved = paidAttemptStarted && !(err instanceof NoLLMKeysError);
     try {
       const recorded = await persistLLMUsage(failedVariantUsage(err, {
@@ -229,17 +244,19 @@ async function handlePOST(
         requestId: attemptId,
         creativeId: id,
       }));
-      if (rejection && recorded) unresolved = false;
+      if ((rejection || pictureFailed) && recorded) unresolved = false;
     } catch {
       unresolved = paidAttemptStarted;
     }
     if (err instanceof NoLLMKeysError)
       response = NextResponse.json({ error: err.message }, { status: 400 });
     else if (rejection && !unresolved)
-      response = NextResponse.json({ error: rejectionMessage(rejection.issues) }, { status: 422 });
+      response = NextResponse.json({ error: await rejectionMessage(rejection.issues) }, { status: 422 });
+    else if (!unresolved)
+      response = NextResponse.json({ error: await ownerError("versionFailed") }, { status: 502 });
     else response = NextResponse.json(
       {
-        error: "Regeneration could not be completed. This attempt needs a check before the ad can be regenerated again.",
+        error: await ownerError("remakeNeedsCheck"),
       },
       { status: 502 },
     );
@@ -249,6 +266,6 @@ async function handlePOST(
     p_attempt_id: attemptId, p_unresolved: unresolved,
   });
   if (settleError || settled?.status !== (unresolved ? "unresolved" : "released"))
-    return NextResponse.json({ error: "Regeneration state could not be confirmed. Check the creative before trying again." }, { status: 503 });
+    return NextResponse.json({ error: await ownerError("remakeUnknown") }, { status: 503 });
   return response;
 }

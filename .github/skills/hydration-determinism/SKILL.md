@@ -3,7 +3,7 @@ name: hydration-determinism
 description: "Use this when server-rendered or statically rendered UI also renders on the client and output depends on time, timezone, locale, randomness, browser state, or per-request data."
 ---
 
-<!-- Generated from vanshulgoyal101/skills@fb8f6e0 skills/hydration-determinism.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
+<!-- Generated from vanshulgoyal101/skills@eb9e65d skills/hydration-determinism.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
 
 # Hydration Determinism
 
@@ -43,3 +43,20 @@ The first client render is identical to the server HTML. Nondeterministic values
 ## Evidence
 
 AdBrain fixed seasonal/date hydration and cached-image flicker with deterministic IST formatting and mounted-state guards in `cee48bc`, `e91129c`, and `c94b482`.
+
+## AdBrain lessons (Oct 28)
+
+- Date tests passed only because the Mac runs in IST; run focused tests with `TZ=UTC`
+  to match CI (#1290).
+- A value (not a component) exported from a "use client" module is a client reference
+  in server code: unit tests pass and the page crashes. Keep shared constants in a
+  plain module and render the page once before merging (#1272).
+- One `await getUser()` in a public page makes the route dynamic (no CDN, a round trip
+  per visit). Do per-user redirects in the proxy (#1376).
+- When a click handler gains an await, set any state another callback reads before the
+  await (#1333).
+
+## AdBrain lesson (Oct 29)
+
+- Mark the language on the Hindi words (`lang`, WCAG 3.1.2), not on `<html>` from a
+  cookie: a cookie read in the root layout makes every static page dynamic (#1895).

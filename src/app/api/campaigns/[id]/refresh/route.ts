@@ -13,9 +13,11 @@ import {
   withMetaConnection,
 } from "@/lib/meta/connection-access";
 import { readStoredCampaignBinding } from "@/lib/campaign/binding";
+import { ownerRefusal } from "@/lib/campaign/campaign-owner";
 import { resultsStale } from "@/lib/campaign/results-freshness";
 import { createClient } from "@/lib/supabase/server";
 import { saveCampaign, saveCampaignResult } from "@/lib/campaign/trusted-write";
+import { saveOutsideChanges } from "@/lib/campaign/outside-changes";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -49,6 +51,9 @@ async function handlePOST(
       { status: 400 },
     );
   }
+  // #1138: a refresh can auto-pause on Meta (spend enforcement), so a duplicate row never reaches it.
+  const refused = await ownerRefusal(campaign.business_id, campaign.meta_campaign_id);
+  if (refused) return refused;
 
   const storedBinding = readStoredCampaignBinding(campaign);
   if (
@@ -96,7 +101,7 @@ async function handlePOST(
       // #721: no spend can come from a deleted campaign; end it here so Manage stops treating it as paused.
       const raw = campaign.raw && typeof campaign.raw === "object" && !Array.isArray(campaign.raw) ? campaign.raw : {};
       const { data: ended } = await saveCampaign({ businessId: campaign.business_id, userId: user.id },
-        { status: "completed", raw: { ...raw, metaStatus: err.metaStatus } }, id).catch(() => ({ data: null }));
+        { status: "completed", raw: { ...raw, metaStatus: err.metaStatus, metaGoneAt: new Date().toISOString() } }, id).catch(() => ({ data: null }));
       return NextResponse.json({ error: `${err.message} AdBrain moved it to ended campaigns.`, gone: err.metaStatus, campaign: ended ?? null }, { status: 410 });
     }
     const enforcement = await enforceAutoPauseWithStatus(campaign.business_id);
@@ -125,9 +130,14 @@ async function handlePOST(
   }
 
   if (ads) await saveAdResults(createAdminClient() as unknown as SupabaseClient, { businessId: campaign.business_id, campaignId: id, ads }).catch(() => false);
+  // #1903: paused or budget changed in Meta Ads Manager; the card shows it from the updated row.
+  const { metaState, ...readInsights } = insights;
+  const outside = await saveOutsideChanges({ businessId: campaign.business_id, userId: user.id }, campaign, metaState)
+    .catch(() => ({ changed: false, raised: false }));
+  const { data: updated } = outside.changed ? await supabase.from("campaigns").select("*").eq("id", id).maybeSingle() : { data: null };
 
   const [summary, enforcement] = await Promise.all([
-    summarizeInsights(campaign.name ?? "Your campaign", insights),
+    summarizeInsights(campaign.name ?? "Your campaign", readInsights),
     enforceAutoPauseWithStatus(campaign.business_id),
     logEvent({
       businessId: campaign.business_id,
@@ -135,9 +145,9 @@ async function handlePOST(
       entityType: "campaign",
       entityId: id,
       metaObjectId: campaign.meta_campaign_id,
-      details: { ...insights },
+      details: { ...readInsights },
     }),
   ]);
 
-  return NextResponse.json({ result, summary, insights, review, autoPaused: enforcement.paused, protectionConfirmed: enforcement.confirmed });
+  return NextResponse.json({ result, summary, insights: readInsights, review, autoPaused: enforcement.paused, protectionConfirmed: enforcement.confirmed, ...updated ? { campaign: updated } : {} });
 }

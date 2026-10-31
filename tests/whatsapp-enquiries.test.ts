@@ -6,6 +6,7 @@ const db = vi.hoisted(() => ({
   leads: [] as Record<string, unknown>[],
   insertError: null as unknown,
   limited: false,
+  lang: "en",
 }));
 
 // RLS stand-in: the owner sees only their own business's campaigns and leads.
@@ -14,13 +15,14 @@ vi.mock("@/lib/supabase/server", () => ({
     auth: { getUser: async () => ({ data: { user: db.user } }) },
     from: (table: string) => {
       const visible = () => (table === "campaigns" ? db.campaigns : db.leads).filter((row) => row.business_id === "business");
-      const filters: [string, unknown][] = [];
+      const filters: [string, (value: unknown) => boolean][] = [];
       let deleting = false;
-      const rows = () => visible().filter((row) => filters.every(([key, value]) => row[key] === value));
+      const rows = () => visible().filter((row) => filters.every(([key, matches]) => matches(row[key])));
       const query = {
         select: () => query,
         delete: () => { deleting = true; return query; },
-        eq: (key: string, value: unknown) => { filters.push([key, value]); return query; },
+        eq: (key: string, value: unknown) => { filters.push([key, (field) => field === value]); return query; },
+        in: (key: string, values: unknown[]) => { filters.push([key, (field) => values.includes(field)]); return query; },
         maybeSingle: async () => ({ data: rows()[0] ?? null, error: null }),
         then: (resolve: (value: unknown) => void) => {
           if (!deleting) return resolve({ count: rows().length, error: null });
@@ -46,7 +48,8 @@ vi.mock("@/lib/supabase/server", () => ({
 vi.mock("@/lib/security/rate-limit", () => ({
   rateLimitResponse: async () => (db.limited ? Response.json({ error: "Too many requests." }, { status: 429 }) : null),
 }));
-vi.mock("@/lib/observability/logger", () => ({ observeRoute: (_path: string, _method: string, handler: unknown) => handler }));
+vi.mock("next/headers", () => ({ cookies: async () => ({ get: (name: string) => (name === "adbrain_lang" ? { value: db.lang } : undefined) }) }));
+vi.mock("@/lib/observability/logger", () => ({ observeRoute: (_path: string, _method: string, handler: unknown) => handler, recordProductEvent: () => {} }));
 
 const WHATSAPP = "30000000-0000-4000-8000-000000000001";
 const FORM = "30000000-0000-4000-8000-000000000002";
@@ -60,6 +63,7 @@ async function add(id: string, body: unknown = {}) {
 }
 
 beforeEach(() => {
+  db.lang = "en";
   db.user = { id: "owner" };
   db.insertError = null;
   db.limited = false;
@@ -74,7 +78,7 @@ beforeEach(() => {
 describe("POST /api/campaigns/[id]/enquiries (#335)", () => {
   it("saves a real WhatsApp enquiry to Enquiries with its campaign and returns the campaign's count", async () => {
     expect(await add(WHATSAPP, { name: " Ravi Kumar ", phone: "+91 98140 12345", note: "Wants 50 kW for his factory" }))
-      .toEqual({ status: 201, body: { id: "lead-1", enquiries: 1, customers: 0 } });
+      .toEqual({ status: 201, body: { id: "lead-1", enquiries: 1, customers: 0, booked: 0 } });
     expect(db.leads).toEqual([expect.objectContaining({
       business_id: "business", campaign_id: WHATSAPP, source: "whatsapp_manual",
       full_name: "Ravi Kumar", phone: "+91 98140 12345", follow_up_note: "Wants 50 kW for his factory",
@@ -86,7 +90,7 @@ describe("POST /api/campaigns/[id]/enquiries (#335)", () => {
 
   it("counts a bare +1 with no details", async () => {
     await add(WHATSAPP);
-    expect(await add(WHATSAPP, {})).toEqual({ status: 201, body: { id: "lead-2", enquiries: 2, customers: 0 } });
+    expect(await add(WHATSAPP, {})).toEqual({ status: 201, body: { id: "lead-2", enquiries: 2, customers: 0, booked: 0 } });
     expect(db.leads[1]).toMatchObject({ full_name: null, phone: null, follow_up_note: "" });
   });
 
@@ -101,6 +105,13 @@ describe("POST /api/campaigns/[id]/enquiries (#335)", () => {
     expect(db.leads).toEqual([]);
   });
 
+  it("refuses in the owner's language (#2330)", async () => {
+    db.lang = "hi";
+    expect(await add(FORM)).toEqual({ status: 400, body: { error: "असली पूछताछ सिर्फ़ WhatsApp कैंपेन पर दर्ज हो सकती है।" } });
+    db.insertError = { message: "down" };
+    expect(await add(WHATSAPP)).toEqual({ status: 503, body: { error: "पूछताछ सेव नहीं हो पाई। फिर कोशिश करें।" } });
+  });
+
   it("is rate limited and reports a failed save plainly", async () => {
     db.limited = true;
     expect((await add(WHATSAPP)).status).toBe(429);
@@ -113,18 +124,20 @@ describe("POST /api/campaigns/[id]/enquiries (#335)", () => {
   it("logs a customer in one tap and undoes it, never deleting a Meta form enquiry", async () => {
     const { status, body } = await add(WHATSAPP, { customer: true });
     expect(status).toBe(201);
-    expect(body).toMatchObject({ id: "lead-1", enquiries: 1, customers: 1 });
+    expect(body).toMatchObject({ id: "lead-1", enquiries: 1, customers: 1, booked: 1 });
     expect(db.leads[0]).toMatchObject({ source: "whatsapp_manual", workflow_status: "customer", full_name: null, campaign_id: WHATSAPP });
     const { DELETE } = await import("@/app/api/campaigns/[id]/enquiries/route");
     const undo = (lead: string) => DELETE(new Request(`http://localhost/api/campaigns/${WHATSAPP}/enquiries?lead=${lead}`, { method: "DELETE" }), { params: Promise.resolve({ id: WHATSAPP }) });
     db.leads.push({ id: "40000000-0000-4000-8000-000000000009", business_id: "business", campaign_id: WHATSAPP, source: "meta_form", workflow_status: "customer" });
+    // #1994: a booking from a form counts as booked, not as a customer.
+    db.leads.push({ id: "40000000-0000-4000-8000-000000000008", business_id: "business", campaign_id: WHATSAPP, source: "meta_form", workflow_status: "booked" });
     expect((await undo("40000000-0000-4000-8000-000000000009")).status).toBe(404);
     expect((await undo("not-a-uuid")).status).toBe(400);
     db.leads[0].id = "40000000-0000-4000-8000-000000000001";
     const removed = await undo("40000000-0000-4000-8000-000000000001");
     expect(removed.status).toBe(200);
-    expect(await removed.json()).toEqual({ enquiries: 0, customers: 1 });
-    expect(db.leads.map((row) => row.source)).toEqual(["meta_form"]);
+    expect(await removed.json()).toEqual({ enquiries: 0, customers: 1, booked: 2 });
+    expect(db.leads.map((row) => row.source)).toEqual(["meta_form", "meta_form"]);
     expect((await add(WHATSAPP, { customer: false })).status).toBe(400);
   });
 });

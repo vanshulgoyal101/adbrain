@@ -1,38 +1,46 @@
 [
   {
     "method": "GET",
-    "path": "120253678786150526?fields=id%2Caccount_id",
+    "path": "120253678786150526?fields=id%2Caccount_id%2Cstatus%2Cdaily_budget%2Clifetime_budget",
     "status": 200,
     "body": {
       "id": "120253678786150526",
-      "account_id": "9000000000000001"
+      "account_id": "9000000000000001",
+      "status": "ACTIVE"
     }
   },
   {
     "method": "GET",
-    "path": "120253678786150526/adsets?fields=promoted_object%2Cdestination_type&limit=100",
+    "path": "120253678786150526/adsets?fields=id%2Cstatus%2Cdaily_budget%2Clifetime_budget%2Cend_time%2Cpromoted_object%2Cdestination_type&limit=100",
     "status": 200,
     "body": {
       "data": [
         {
+          "id": "120253678789810526",
+          "status": "ACTIVE",
+          "daily_budget": "0",
+          "lifetime_budget": "84000",
+          "end_time": "2026-10-26T19:54:16+0530",
           "promoted_object": {
             "page_id": "900000000000002",
             "smart_pse_enabled": false,
             "whats_app_business_phone_number_id": "1113229925200671",
-            "whatsapp_phone_number": "917009764842"
+            "whatsapp_phone_number": "910000000000"
           },
-          "destination_type": "WHATSAPP",
-          "id": "120253678789810526"
+          "destination_type": "WHATSAPP"
         },
         {
+          "id": "120253678787370526",
+          "status": "ACTIVE",
+          "daily_budget": "28000",
+          "lifetime_budget": "0",
           "promoted_object": {
             "page_id": "900000000000002",
             "smart_pse_enabled": false,
             "whats_app_business_phone_number_id": "1113229925200671",
-            "whatsapp_phone_number": "917009764842"
+            "whatsapp_phone_number": "910000000000"
           },
-          "destination_type": "WHATSAPP",
-          "id": "120253678787370526"
+          "destination_type": "WHATSAPP"
         }
       ],
       "paging": {
@@ -168,26 +176,30 @@
   },
   {
     "method": "GET",
-    "path": "120253164673180526?fields=id%2Caccount_id",
+    "path": "120253164673180526?fields=id%2Caccount_id%2Cstatus%2Cdaily_budget%2Clifetime_budget",
     "status": 200,
     "body": {
       "id": "120253164673180526",
-      "account_id": "9000000000000001"
+      "account_id": "9000000000000001",
+      "status": "ACTIVE"
     }
   },
   {
     "method": "GET",
-    "path": "120253164673180526/adsets?fields=promoted_object%2Cdestination_type&limit=100",
+    "path": "120253164673180526/adsets?fields=id%2Cstatus%2Cdaily_budget%2Clifetime_budget%2Cend_time%2Cpromoted_object%2Cdestination_type&limit=100",
     "status": 200,
     "body": {
       "data": [
         {
+          "id": "120253164674160526",
+          "status": "ACTIVE",
+          "daily_budget": "20000",
+          "lifetime_budget": "0",
           "promoted_object": {
             "page_id": "900000000000002",
             "smart_pse_enabled": false
           },
-          "destination_type": "ON_AD",
-          "id": "120253164674160526"
+          "destination_type": "ON_AD"
         }
       ],
       "paging": {

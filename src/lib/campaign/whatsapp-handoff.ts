@@ -5,7 +5,7 @@
 export type Handoff = { opens: number; messages: number };
 
 /** Below this many opens the rate is noise, so Review doesn't show it. */
-export const HANDOFF_MIN_OPENS = 10;
+const HANDOFF_MIN_OPENS = 10;
 
 /** Sums the latest results of this business's WhatsApp campaigns; null until there are enough opens. */
 export function handoffRate(results: { whatsapp_opens?: number | null; conversations?: number | null }[]): Handoff | null {

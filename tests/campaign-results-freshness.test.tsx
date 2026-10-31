@@ -5,6 +5,7 @@ import { Campaigns } from "@/components/campaigns";
 import { StaleResultsRefresher } from "@/components/stale-results-refresher";
 import { resultsStale, staleCampaignIds } from "@/lib/campaign/results-freshness";
 import type { Business, Campaign, CampaignResult } from "@/lib/types";
+import hi from "../messages/hi.json";
 
 // #1003: stale live results refresh quietly when the card or Home opens, and every card says how old its numbers are.
 const mocks = vi.hoisted(() => ({ drafts: vi.fn(), status: vi.fn(), routerRefresh: vi.fn() }));
@@ -28,8 +29,8 @@ const result = (fetched_at: string, impressions = 1200) =>
 const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>();
 const refreshCalls = () => fetchMock.mock.calls.filter(([url]) => String(url).includes("/refresh"));
 const card = async (name: string) => within((await screen.findByRole("heading", { name })).closest("article") as HTMLElement);
-function view(results: Record<string, CampaignResult>) {
-  return render(<Campaigns business={business} approved={[]} initialCampaigns={[paused, active]} initialResults={results} leadForms={[]} leadFormError={null} metaReady={false} adAccountId="act_999" />);
+function view(results: Record<string, CampaignResult>, metaWaitUntil: string | null = null) {
+  return render(<Campaigns business={business} approved={[]} initialCampaigns={[paused, active]} initialResults={results} leadForms={[]} leadFormError={null} metaReady={false} adAccountId="act_999" metaWaitUntil={metaWaitUntil} />);
 }
 
 beforeEach(() => {
@@ -97,5 +98,28 @@ describe("results freshness (#1003)", () => {
     await waitFor(() => expect(refreshCalls()).toHaveLength(1));
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(mocks.routerRefresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("#1438: the campaign card's results read in Hindi when the page passes Hindi words", async () => {
+    render(<Campaigns business={business} approved={[]} initialCampaigns={[paused, active]} initialResults={{ "campaign-2": { ...result(minutesAgo(2)), conversations: 6, destination: "whatsapp" } as CampaignResult }}
+      leadForms={[]} leadFormError={null} metaReady={false} adAccountId="act_999" verdictWords={{ locale: "hi", messages: hi.verdict }} />);
+    const live = await card("Solar EMI");
+    expect(live.getByRole("group", { name: "कैसा चल रहा है" })).toBeTruthy();
+    expect(live.queryByRole("group", { name: "How it's going" })).toBeNull();
+    expect(live.getAllByText(/चैट/).length).toBeGreaterThan(0);
+    // The figures under Details too.
+    expect(live.getByText("कितनी बार दिखा")).toBeTruthy();
+    expect(live.getByText("खर्च / चैट")).toBeTruthy();
+    expect(live.queryByText("Impressions")).toBeNull();
+  });
+
+  it("#1838: while Meta asks us to wait, a launched card says its numbers may be old; after, no line", async () => {
+    const until = new Date(Date.now() + 30 * 60_000).toISOString();
+    const { unmount } = view({ "campaign-2": result(minutesAgo(40)) }, until);
+    expect(await (await card("Solar EMI")).findByText("Meta is limiting how often we can check right now, so these numbers may be up to about 40 minutes old. Your ads keep running, and pausing still works.")).toBeInTheDocument();
+    unmount();
+    view({ "campaign-2": result(minutesAgo(40)) }, minutesAgo(1));
+    await card("Solar EMI");
+    expect(screen.queryByText(/Meta is limiting/)).toBeNull();
   });
 });

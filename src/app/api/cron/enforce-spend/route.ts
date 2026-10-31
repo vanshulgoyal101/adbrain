@@ -6,7 +6,9 @@ import { readAllByCursor } from "@/lib/supabase/queries";
 import { confirmCustomerCampaign, getCustomerBalance, listSettlingBusinesses } from "@/lib/payments/customer-balance";
 import { refreshOpenRunCosts, settlePausedRuns } from "@/lib/payments/meta-cost-evidence";
 import { fundingMode } from "@/lib/payments/operator-funding";
-import { cappedRunEnded } from "@/lib/campaign/activation";
+import { cappedRunEnded, pauseEndedRun } from "@/lib/campaign/activation";
+import { metaCapEndTime } from "@/lib/campaign/gone-in-meta";
+import { saveOutsideChanges } from "@/lib/campaign/outside-changes";
 import {
   requireScheduledBusiness,
   withMetaConnection,
@@ -21,6 +23,7 @@ import {
   type SpendLimits,
 } from "@/lib/campaign/spend";
 import type { Json } from "@/lib/types";
+import { withoutDuplicates } from "@/lib/campaign/campaign-owner";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -105,6 +108,8 @@ async function handleGET(request: Request) {
           .eq("business_id", businessId).order("id").limit(100);
         return after ? query.gt("id", after) : query;
       }, "Campaigns could not be loaded.", campaign => campaign.id);
+      // #1138: another business's campaign duplicated here is neither counted, settled nor paused.
+      campaigns = await withoutDuplicates(businessId, campaigns);
     } catch { incomplete = true; unverified.push(businessId); continue; }
     const hasActive = campaigns.some(campaign => campaign.status === "active");
     if (!hasActive && !settlingBusinesses.includes(businessId)) continue;
@@ -161,9 +166,9 @@ async function handleGET(request: Request) {
       });
 
     const paused: string[] = [];
-    // A capped run whose Meta end time has passed is paused here, then settles like any paused run (#221).
-    const ended = new Set(campaigns.filter(campaign => campaign.status === "active" && cappedRunEnded(campaign.raw)
-      && customerBalance?.reservations.some(item => item.campaignId === campaign.id && item.state !== "closed")).map(campaign => campaign.id));
+    // A capped run whose Meta end time has passed is paused here, then settles like any paused run (#221),
+    // with or without a customer reservation (#2281: an own-account run has none and stayed 'active').
+    const ended = new Set(campaigns.filter(campaign => campaign.status === "active" && cappedRunEnded(campaign.raw)).map(campaign => campaign.id));
     const toPause = [...new Set([...decision.toPause, ...ended])];
     for (const id of toPause) {
       const campaign = campaigns.find((c) => c.id === id);
@@ -177,18 +182,33 @@ async function handleGET(request: Request) {
         incomplete = true;
         continue;
       }
+      const binding = { adAccountId: storedBinding.metaAdAccountId, pageId: storedBinding.metaPageId };
+      // #2290: paused only because the stored end time passed? The owner may have moved the end date in Ads Manager
+      // since the last refresh, so Meta's own end time decides. An unreadable answer still pauses (fail closed).
+      if (ended.has(id) && !decision.toPause.includes(id)) {
+        const extended = await withMetaConnection(context, { purpose: "read_insights", binding, expectedGeneration: storedBinding.metaConnectionGeneration },
+          meta => meta.getCampaignInsights(campaign.meta_campaign_id!))
+          .then(async ({ metaState }) => {
+            const metaEnd = metaState ? metaCapEndTime(campaign.raw, metaState) : null;
+            if (!metaEnd || Date.parse(metaEnd) <= Date.now()) return false;
+            await saveOutsideChanges(context, campaign, metaState).catch(() => null);
+            return true;
+          }).catch(() => false);
+        if (extended) continue;
+      }
       try {
         await withMetaConnection(
           context,
           {
             purpose: "pause",
-            binding: {
-              adAccountId: storedBinding.metaAdAccountId,
-              pageId: storedBinding.metaPageId,
-            },
+            binding,
             expectedGeneration: storedBinding.metaConnectionGeneration,
           },
-          (meta) => meta.updateCampaignStatus(campaign.meta_campaign_id!, "PAUSED"),
+          // #2301: an ended run stops whole, so its card can turn it on capped again.
+          async (meta) => {
+            if (!ended.has(id)) return meta.updateCampaignStatus(campaign.meta_campaign_id!, "PAUSED");
+            if (!await pauseEndedRun(meta, campaign)) incomplete = true;
+          },
         );
         const reservation = customerBalance?.reservations.find(item => item.campaignId === id && item.state !== "closed");
         if (reservation) await confirmCustomerCampaign(context, id, reservation.reservationId, "paused").catch(() => { incomplete = true; });

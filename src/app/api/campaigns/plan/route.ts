@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { draftDtoSchema, draftInputSchema } from "@/lib/campaign/connect-contracts";
 import { DRAFT_TTL_MS, MAX_ACTIVE_DRAFTS, draftRecordFromRow, draftRecordToDTO, prepareDraftCreate } from "@/lib/campaign/draft-store";
-import { formatAnswers, runPlanner, plannerAnswerSchema, PLANNER_PROMPT_VERSION, type PlannerQuestion, type PlannerTopic } from "@/lib/campaign/planner";
+import { formatAnswers, runPlanner, plannerAnswerSchema, PLANNER_GROQ_MAX_TOKENS, PLANNER_PROMPT_VERSION, type PlannerQuestion, type PlannerTopic } from "@/lib/campaign/planner";
 import { configuredMonthlyTokenLimit, monthlyTokenUsage, persistLLMUsage } from "@/lib/llm/persist";
 import { AllLLMProvidersFailedError, LLMError, NoLLMKeysError } from "@/lib/llm/types";
 import { fallbackAudienceTargeting, plannerPlanToDraftInput, rationaleForMatchedInterests } from "@/lib/campaign/planner-draft";
@@ -22,6 +22,7 @@ import {
   getPerformanceContext,
   getPrimaryBusiness,
 } from "@/lib/supabase/queries";
+import { ownerError } from "@/i18n/request-locale";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -60,29 +61,26 @@ async function handlePOST(req: Request) {
     whatsappNumber: z.string().regex(maskedWhatsAppNumberPattern).optional(),
     answers: z.union([z.string().max(12_000), z.array(plannerAnswerSchema).max(30)]).optional(),
   }).safeParse(await req.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: "A valid goal and answers are required." }, { status: 400 });
+  if (!parsed.success) return NextResponse.json({ error: await ownerError("planRequestInvalid") }, { status: 400 });
   const goal = parsed.data.goal;
   const rawAnswers = parsed.data.answers;
   if (Array.isArray(rawAnswers) && JSON.stringify(rawAnswers).length > 12_000) {
-    return NextResponse.json({ error: "The interview is too long. Continue in the campaign editor." }, { status: 400 });
+    return NextResponse.json({ error: await ownerError("interviewTooLong") }, { status: 400 });
   }
   const answers = Array.isArray(rawAnswers)
     ? formatAnswers(rawAnswers) || undefined
     : typeof rawAnswers === "string"
       ? rawAnswers.trim() || undefined
       : undefined;
-  if (!goal) {
-    return NextResponse.json({ error: "goal is required" }, { status: 400 });
-  }
 
   const business = await getPrimaryBusiness();
   if (!business) {
-    return NextResponse.json({ error: "No business found" }, { status: 400 });
+    return NextResponse.json({ error: await ownerError("businessNotFound") }, { status: 400 });
   }
   const audienceDraft = parsed.data.audienceDraft;
   const destination = audienceDraft?.destination ?? parsed.data.destination ?? "instant_form";
   if (audienceDraft && audienceDraft.businessId !== business.id) {
-    return NextResponse.json({ error: "Business access is not allowed." }, { status: 403 });
+    return NextResponse.json({ error: await ownerError("businessNotAllowed") }, { status: 403 });
   }
 
   const approved = await getApprovedCreatives(business.id);
@@ -127,8 +125,8 @@ async function handlePOST(req: Request) {
       stage("PERFORMANCE", getPerformanceContext(business.id)),
     ]);
     if (limit > 0) {
-      if (used === null) return NextResponse.json({ error: "AI usage limits could not be verified. No plan was started." }, { status: 503 });
-      if (used >= limit) return NextResponse.json({ error: "This business has reached its monthly AI generation limit." }, { status: 429 });
+      if (used === null) return NextResponse.json({ error: await ownerError("somethingDidntAnswer") }, { status: 503 });
+      if (used >= limit) return NextResponse.json({ error: await ownerError("aiAllowanceUsed") }, { status: 429 });
     }
     const requestId = currentRequestId();
     failureStage = "MODEL";
@@ -162,7 +160,7 @@ async function handlePOST(req: Request) {
           provider: completion.provider, model: completion.model, usage: completion.usage,
           promptVersion: PLANNER_PROMPT_VERSION, inputChars: completion.inputChars,
           outputChars: completion.outputChars, latencyMs: completion.latencyMs,
-          attempt, maxTokens: 3000, temperature: 0.2,
+          attempt, maxTokens: completion.provider === "groq" ? PLANNER_GROQ_MAX_TOKENS : 3000, temperature: 0.2,
           status: valid ? "success" : "error", errorCode: valid ? undefined : "PLANNER_VALIDATION",
           metadata: { audienceOnly: Boolean(audienceDraft) },
         }]);
@@ -175,8 +173,8 @@ async function handlePOST(req: Request) {
           provider: failure.provider, model: failure.model,
           usage: failure.usage ?? { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
           promptVersion: PLANNER_PROMPT_VERSION, latencyMs: failure.latencyMs,
-          attempt, maxTokens: 3000, temperature: 0.2,
-          status: "error", failure: failure.failure, errorCode: `LLM_${failure.failure ?? "UNKNOWN"}`,
+          attempt, maxTokens: failure.provider === "groq" ? PLANNER_GROQ_MAX_TOKENS : 3000, temperature: 0.2,
+          status: "error", failure: failure.failure, errorCode: `LLM_${failure.failure ?? "UNKNOWN"}`, rateLimit: failure.rateLimit,
           providerRequestId: failure.providerRequestId, providerFinalStatus: failure.providerFinalStatus,
           metadata: { audienceOnly: Boolean(audienceDraft) },
         })));
@@ -200,7 +198,9 @@ async function handlePOST(req: Request) {
     if (fallsBack) {
       return NextResponse.json({ ready: true, fallback: true, targeting: fallbackAudienceTargeting(audienceDraft!) });
     }
-    return NextResponse.json({ error: "Could not prepare the campaign plan." }, { status: 502 });
+    // #2230: only the smoke login is held to free text; its check names the cause.
+    return NextResponse.json({ error: await ownerError("planFailed"),
+      ...(failureClass === "EXHAUSTED_FREE_TEXT_UNAVAILABLE" ? { code: "FREE_TEXT_UNAVAILABLE" } : {}) }, { status: 502 });
   }
 
   // The editor cannot answer interview questions; give it usable default targeting instead.
@@ -232,6 +232,7 @@ async function handlePOST(req: Request) {
 
   const draftResult = plannerPlanToDraftInput({
     businessId: business.id,
+    business: { vertical: business.vertical, offers: business.offers },
     goal,
     plan: audienceDraft ? {
       ...result.plan,
@@ -307,14 +308,14 @@ async function handlePOST(req: Request) {
     .eq("business_id", actor.businessId)
     .eq("owner_id", actor.userId)
     .gt("expires_at", now);
-  if (countError) return NextResponse.json({ error: "Draft storage is unavailable." }, { status: 503 });
+  if (countError) return NextResponse.json({ error: await ownerError("draftSaveUnavailable") }, { status: 503 });
   if ((activeRows ?? []).length >= MAX_ACTIVE_DRAFTS) {
     try {
       if ((await listEditableDrafts(supabase, actor)).length >= MAX_ACTIVE_DRAFTS) {
-        return NextResponse.json({ error: "Draft limit reached. Finish or remove an existing draft first." }, { status: 409 });
+        return NextResponse.json({ error: await ownerError("tooManyDrafts") }, { status: 409 });
       }
     } catch {
-      return NextResponse.json({ error: "Saved draft operations could not be checked." }, { status: 503 });
+      return NextResponse.json({ error: await ownerError("draftSaveUnavailable") }, { status: 503 });
     }
   }
   const { data: row, error } = await supabase
@@ -330,7 +331,7 @@ async function handlePOST(req: Request) {
     })
     .select("*")
     .single();
-  if (error || !row) return NextResponse.json({ error: "Draft storage is unavailable." }, { status: 503 });
+  if (error || !row) return NextResponse.json({ error: await ownerError("draftSaveUnavailable") }, { status: 503 });
   const draft = draftDtoSchema.parse(draftRecordToDTO(draftRecordFromRow(row)));
   planReady();
   return NextResponse.json({ ready: true, draft });

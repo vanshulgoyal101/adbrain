@@ -12,6 +12,7 @@ import { ConnectionAccessError, requireOwnedBusiness } from "@/lib/meta/connecti
 import { createClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/types";
 import { listEditableDrafts } from "@/lib/campaign/draft-repository";
+import { ownerError } from "@/i18n/request-locale";
 
 export const runtime = "nodejs";
 
@@ -41,7 +42,7 @@ async function handleGET(request: Request) {
   } catch (error) {
     const code = error instanceof ConnectionAccessError ? error.code : "UNAVAILABLE";
     const status = code === "UNAUTHENTICATED" ? 401 : code === "FORBIDDEN" ? 403 : code === "NOT_FOUND" ? 404 : 503;
-    return responseError(requestId, status, code, "Saved drafts could not be loaded.", status >= 500);
+    return responseError(requestId, status, code, "We couldn't load your saved drafts. Reload the page.", status >= 500);
   }
 }
 
@@ -80,11 +81,11 @@ async function handlePOST(request: Request) {
     .eq("business_id", actor.businessId)
     .eq("owner_id", actor.userId)
     .gt("expires_at", now);
-  if (countError) return responseError(requestId, 503, "UNAVAILABLE", "Draft storage is unavailable.", true);
+  if (countError) return responseError(requestId, 503, "UNAVAILABLE", await ownerError("draftSaveUnavailable"), true);
   if ((activeRows ?? []).length >= MAX_ACTIVE_DRAFTS) {
     try {
       if ((await listEditableDrafts(supabase, actor)).length >= MAX_ACTIVE_DRAFTS) {
-        return responseError(requestId, 409, "CONFLICT", "Draft limit reached. Finish or remove an existing draft first.");
+        return responseError(requestId, 409, "CONFLICT", await ownerError("tooManyDrafts"));
       }
     } catch {
       return responseError(requestId, 503, "UNAVAILABLE", "Saved draft operations could not be checked.", true);
@@ -104,7 +105,7 @@ async function handlePOST(request: Request) {
     })
     .select("*")
     .single();
-  if (error || !row) return responseError(requestId, 503, "UNAVAILABLE", "Draft storage is unavailable.", true);
+  if (error || !row) return responseError(requestId, 503, "UNAVAILABLE", await ownerError("draftSaveUnavailable"), true);
 
   const draft = draftDtoSchema.parse(draftRecordToDTO(draftRecordFromRow(row)));
   return NextResponse.json({ ok: true, data: draft, requestId });

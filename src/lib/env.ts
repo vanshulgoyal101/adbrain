@@ -66,11 +66,16 @@ const schema = z.object({
   // non-thinking model to avoid paying for unused output tokens.
   GEMINI_THINKING_HEADROOM: z.coerce.number().int().min(0).optional().default(3000),
   LLM_MONTHLY_TOKEN_LIMIT: z.coerce.number().int().min(0).optional().default(2_000_000),
+  // #1717: a business's monthly AI spend (text and paid pictures, USD) above which its pictures are free; unset = no cap.
+  AI_MONTHLY_COST_LIMIT_USD: z.preprocess((value) => value === "" ? undefined : value, z.coerce.number().positive().max(10_000).optional()),
 
   // Image generation
   IMAGE_PROVIDER: z.string().optional().default("pollinations"),
   IMAGE_PROVIDER_FALLBACK: z.string().optional().default("none"),
   POLLINATIONS_MODEL: z.string().optional().default("flux"),
+  // #1476: Cloudflare Workers AI FLUX-1-schnell, the free picture; skipped unless both are set.
+  CLOUDFLARE_ACCOUNT_ID: z.string().optional().default(""),
+  CLOUDFLARE_AI_TOKEN: z.string().optional().default(""),
   OPENROUTER_IMAGE_MODEL: z.string().optional().default("openai/gpt-image-2.5-flare"),
   FALAI_API_KEY: z.string().optional().default(""),
   OPENAI_API_KEY: z.string().optional().default(""),

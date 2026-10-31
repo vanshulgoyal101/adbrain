@@ -88,7 +88,7 @@ describe("updateCreativeCopy", () => {
 
   it("refuses an ad the owner can't see (RLS hides it) and saves nothing", async () => {
     h.rows.creatives = null;
-    await expect(save()).resolves.toEqual({ ok: false, error: "Creative not found or no longer accessible." });
+    await expect(save()).resolves.toEqual({ ok: false, error: "We couldn't find this ad. It may have been deleted; refresh the page." });
     expect(h.updates).toEqual([]);
   });
 
@@ -127,6 +127,15 @@ describe("updateCreativeCopy", () => {
       "\"Guaranteed\" isn't in your Brand. Check it's true, or add it to your Brand's offers.",
     ]);
     expect(h.updates).toHaveLength(1);
+  });
+
+  // #1901 item 4: #1617's "our work" rule reads the same flag as the tile's Your photo / AI picture badge.
+  it("allows 'our work' words only on an ad the badge calls Your photo", async () => {
+    const { WORK_CLAIM_WARNING } = await import("@/lib/creative/concept");
+    h.rows.creatives = { business_id: "b1", generation: { ...generation, image: { provider: "owner-photo" } }, status: "approved" };
+    expect((await save({ headline: "Rooftops we installed in Jaipur" })).warnings).not.toContain(WORK_CLAIM_WARNING);
+    h.rows.creatives = { business_id: "b1", generation: { ...generation, image: { provider: "cloudflare" } }, status: "approved" };
+    expect((await save({ headline: "Rooftops we installed in Jaipur" })).warnings).toContain(WORK_CLAIM_WARNING);
   });
 
   it("accepts an offer that the Brand or the owner's instructions back up", async () => {

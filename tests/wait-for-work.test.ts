@@ -1,5 +1,10 @@
-import { describe, expect, it } from "vitest";
-import { readyPool, boardRow, systemicFailures, snoozedUntil, latestWord, linkedIssues, lowQueues, matchers, offTrack, roleCard, unsavedWork, waitingOnMe } from "../scripts/wait-for-work.mjs";
+import { describe, expect, it, vi } from "vitest";
+import { spawn, spawnSync } from "node:child_process";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { actionableOwned, OWNS_WORK, createGitHubApi, readyPool, boardRow, systemicFailures, snoozedUntil, latestWord, linkedIssues, lowQueues, matchers, nextItem, freshComments, offTrack, rateBackoffMs, roleCard, unsavedWork, waitingOnMe } from "../scripts/wait-for-work.mjs";
 
 describe("PR reviews count as the latest word (#423)", () => {
   it("picks a review posted after the last comment, and ignores empty approvals", () => {
@@ -84,19 +89,28 @@ describe("CTO on-track check", () => {
 describe("CTO queue watch", () => {
   const issue = (...labels: string[]) => ({ labels: labels.map((name) => ({ name })) });
 
-  it("flags workers with fewer than 2 actionable items, ignoring parked ones", () => {
+  it("flags workers with fewer than 3 actionable items (owner, Oct 28), ignoring parked ones", () => {
     const low = lowQueues([
       issue("core", "owner:dev"), issue("owner:dev"),
       issue("owner:dev2"), issue("owner:dev2", "waiting-owner"),
       issue("owner:dev3"), issue("owner:dev3"), issue("owner:dev3", "decision"),
       issue("owner:qa", "owner:dev"), issue("owner:qa"),
     ]);
-    expect(low).toEqual([{ role: "dev2", count: 1 }, { role: "dev4", count: 0 }, { role: "qa2", count: 0 }, { role: "cpo", count: 0 }]);
+    expect(low).toEqual([{ role: "dev2", count: 1 }, { role: "dev3", count: 2 }, { role: "dev4", count: 0 }, { role: "qa", count: 2 }, { role: "qa2", count: 0 },
+      { role: "reviewer", count: 0 }, { role: "devops", count: 0 }, { role: "cpo", count: 0 }, { role: "analyst", count: 0 }, { role: "designer", count: 0 }, { role: "docs", count: 0 }]);
+  });
+
+  it("knows the Docs role (owner, Oct 29): handoffs wake it, and it isn't confused with docs/ paths", () => {
+    const docs = matchers("docs");
+    expect(waitingOnMe("CEO: → Docs: split API_REFERENCE into docs/api/.", docs)).toBe(true);
+    expect(waitingOnMe("Docs: reorganised docs/product/. → CTO: check the ADR link.", docs)).toBe(false);
+    expect(docs.addressedToMe("Updated docs/OPERATIONS.md in this PR.")).toBe(false);
+    expect(lowQueues([issue("owner:docs", "core")]).find((l) => l.role === "docs")).toEqual({ role: "docs", count: 1 });
   });
 
   it("counts the worker's lane pool as supply, so a reactive Reviewer with pool audits isn't low", () => {
     const pool = (lane: string) => ({ labels: [{ name: "core" }, { name: "ready" }, { name: `lane:${lane}` }] });
-    const low = lowQueues([issue("owner:reviewer"), pool("review"), pool("dev")]).map((l) => l.role);
+    const low = lowQueues([issue("owner:reviewer"), pool("review"), pool("review"), pool("dev")]).map((l) => l.role);
     expect(low).not.toContain("reviewer");
     expect(low).toContain("dev4");
     expect(low).toContain("qa");
@@ -135,6 +149,13 @@ describe("wait-for-work handoffs", () => {
     expect(waitingOnMe("CEO: please submit", devops, ["core", "waiting-owner"])).toBe(false);
   });
 
+  it("keeps frozen later items quiet, even when a reply names you (#2238)", () => {
+    const dev2 = matchers("dev2");
+    expect(waitingOnMe("Reviewer: **changes requested**. → Dev 2: fix the order-less case.", dev2, ["later", "owner:dev2"])).toBe(false);
+    expect(waitingOnMe("Docs: the old file is gone; merge next.", dev2, ["later", "owner:dev2"])).toBe(false);
+    expect(waitingOnMe("CEO: → Dev 2: decide by noon.", dev2, ["decision", "owner:dev2"])).toBe(true);
+  });
+
   it("keeps Dev distinct from Dev 2, Dev 3 and DevOps", () => {
     expect(dev.writtenByMe("Dev 2: slice 3 is finished")).toBe(false);
     expect(waitingOnMe("CTO: → Dev 2: yours now.", dev)).toBe(false);
@@ -168,7 +189,7 @@ describe("Reviewer and QA 2 roles (#575)", () => {
   it("counts their queues", () => {
     const low = lowQueues([{ labels: [{ name: "owner:qa2" }] }, { labels: [{ name: "owner:reviewer" }] }]).map((x) => x.role);
     expect(low).toContain("qa2");
-    expect(low).not.toContain("reviewer"); // self-sourcing (#573)
+    expect(low).toContain("reviewer"); // every role keeps ≥ 3 (CEO, #364)
   });
 });
 
@@ -203,6 +224,16 @@ describe("ready pool (#573)", () => {
     expect(readyPool(pool, "devops")).toEqual([]);
     expect(readyPool(pool, "cto")).toEqual([]);
   });
+  it("gives the Designer, CPO and Analyst their own lanes (#364)", () => {
+    const lanes = [issue(20, "ready", "lane:design"), issue(21, "ready", "lane:product"), issue(22, "ready", "lane:research")];
+    expect(readyPool(lanes, "designer").map((i) => i.number)).toEqual([20]);
+    expect(readyPool(lanes, "cpo").map((i) => i.number)).toEqual([21]);
+    expect(readyPool(lanes, "analyst").map((i) => i.number)).toEqual([22]);
+  });
+  it("never offers frozen work: `later` and `standing` stay out of the pool (#2052)", () => {
+    const pool = [issue(30, "ready", "lane:dev", "later"), issue(31, "ready", "lane:dev", "standing"), issue(32, "ready", "lane:dev")];
+    expect(readyPool(pool, "dev3").map((i) => i.number)).toEqual([32]);
+  });
 });
 
 describe("Dev 4 role", () => {
@@ -228,5 +259,267 @@ describe("systemic CI failures (CTO auto-track)", () => {
     ]);
     expect(lines).toHaveLength(1);
     expect(lines[0]).toMatch(/^CI systemic: Core approval failed on 2 PR branches \(dev3\/701, designer\/847\)/);
+  });
+});
+
+describe("next item (#364: idle with a full queue)", () => {
+  const issue = (number: number, ...labels: string[]) => ({ number, title: `item ${number}`, labels: labels.map((name) => ({ name })) });
+  it("returns the oldest owned item that is actionable and has no open PR, even when its last word was a handoff", () => {
+    const items = [issue(30, "core"), issue(12, "core", "parked"), issue(14, "later"), issue(15, "waiting-owner"), issue(16, "decision"), issue(20, "core"), issue(25)];
+    const pulls = [{ title: "#20: the fix" }];
+    expect(nextItem(items, pulls)?.number).toBe(25);
+    expect(nextItem(items, pulls, new Set([25]))?.number).toBe(30);
+    expect(nextItem([issue(12, "parked")], [])).toBeNull();
+    // Standing channels and umbrellas (#364, #418) are never "your next item".
+    expect(nextItem([issue(364, "standing"), issue(400, "core")], [])?.number).toBe(400);
+  });
+  it("owned PRs count toward a queue (#2122: QA's reviews are its work)", () => {
+    const prs = [1, 2, 3].map((n) => ({ ...issue(n, "owner:qa"), pull_request: {} }));
+    expect(lowQueues(prs).map((l) => l.role)).not.toContain("qa");
+  });
+  it("parked items don't count toward a queue", () => {
+    expect(lowQueues([issue(1, "owner:dev"), issue(2, "owner:dev", "parked")]).map((l) => l.role)).toContain("dev");
+  });
+});
+
+describe("waiter fixes (#1478)", () => {
+  it("an edited comment isn't new: only comments created since the wait began count", () => {
+    const since = "2026-10-28T09:08:00Z";
+    const comments = [
+      { id: 1, created_at: "2026-10-28T09:07:10Z", updated_at: "2026-10-28T09:25:49Z", body: "Dev 3: runbook" },
+      { id: 2, created_at: "2026-10-28T09:10:00Z", updated_at: "2026-10-28T09:10:00Z", body: "QA 2: read" },
+    ];
+    expect(freshComments(comments, since).map((c) => c.id)).toEqual([2]);
+  });
+  it("on a co-owned issue, an un-arrowed FYI isn't waiting on every owner; one that names you is", () => {
+    const qa2 = matchers("qa2");
+    const coOwned = ["core", "owner:qa2", "owner:dev3"];
+    expect(waitingOnMe("CPO: Review gap filed as #1198 (Dev 4).", qa2, coOwned)).toBe(false);
+    expect(waitingOnMe("CPO: → QA 2: please re-read the arm.", qa2, coOwned)).toBe(true);
+    expect(waitingOnMe("CPO: Review gap filed as #1198 (Dev 4).", qa2, ["core", "owner:qa2"])).toBe(true);
+  });
+  it("a ready item a role declined (declined:<role>) isn't offered to that role again", () => {
+    const issue = (number: number, ...labels: string[]) => ({ number, labels: labels.map((name) => ({ name })) });
+    const pool = [issue(1228, "core", "ready", "lane:qa", "declined:qa2"), issue(1230, "core", "ready", "lane:qa")];
+    expect(readyPool(pool, "qa2").map((i) => i.number)).toEqual([1230]);
+    expect(readyPool(pool, "qa").map((i) => i.number)).toEqual([1228, 1230]);
+  });
+});
+
+describe("shared GitHub budget (#2021)", () => {
+  const now = Date.parse("2026-10-28T21:40:00Z");
+  const response = (status: number, headers: Record<string, string>, body = "") =>
+    `HTTP/2.0 ${status}\r\n${Object.entries(headers).map(([k, v]) => `${k}: ${v}\r\n`).join("")}\r\n${body}`;
+
+  it("revalidates each URL with its ETag and reuses the body only on 304", async () => {
+    const request = vi.fn()
+      .mockReturnValueOnce(response(200, { ETag: '"one"' }, '[{"number":2021}]'))
+      .mockReturnValueOnce(response(200, { ETag: '"other"' }, "[]"))
+      .mockReturnValueOnce(response(304, {}))
+      .mockReturnValueOnce(response(200, { ETag: '"two"' }, '[{"number":2022}]'))
+      .mockReturnValueOnce(response(304, {}));
+    const client = createGitHubApi({ request });
+    expect(await client.get("issues")).toEqual([{ number: 2021 }]);
+    expect(await client.get("pulls")).toEqual([]);
+    expect(await client.get("issues")).toEqual([{ number: 2021 }]);
+    expect(await client.get("issues")).toEqual([{ number: 2022 }]);
+    expect(await client.get("issues")).toEqual([{ number: 2022 }]);
+    expect(request.mock.calls).toEqual([
+      [["api", "--include", "issues"]],
+      [["api", "--include", "pulls"]],
+      [["api", "--include", "issues", "-H", 'If-None-Match: "one"']],
+      [["api", "--include", "issues", "-H", 'If-None-Match: "one"']],
+      [["api", "--include", "issues", "-H", 'If-None-Match: "two"']],
+    ]);
+  });
+
+  it.each([403, 429])("retries HTTP %i after x-ratelimit-reset, including gh's nonzero exit", async (status) => {
+    let clock = now;
+    const failure = Object.assign(new Error("gh failed"), {
+      stdout: response(status, { "x-ratelimit-remaining": "0", "x-ratelimit-reset": String(now / 1000 + 120) }, '{"message":"API rate limit exceeded"}'),
+    });
+    const request = vi.fn().mockImplementationOnce(() => { throw failure; })
+      .mockImplementation(() => {
+        expect(clock).toBeGreaterThanOrEqual(now + 125_000);
+        return response(200, {}, '[{"number":2021}]');
+      });
+    const sleep = vi.fn(async (ms: number) => { clock += ms; });
+    const warn = vi.fn();
+    const client = createGitHubApi({ request, sleep, now: () => clock, warn });
+    expect(await client.get("issues")).toEqual([{ number: 2021 }]);
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("rate limit"));
+  });
+
+  it("honours Retry-After for secondary limits and backs off when headers are missing", async () => {
+    let clock = now;
+    const request = vi.fn()
+      .mockReturnValueOnce(response(429, { "Retry-After": "180" }, '{"message":"slow down"}'))
+      .mockReturnValueOnce(response(403, {}, '{"message":"secondary rate limit"}'))
+      .mockImplementation(() => {
+        expect(clock).toBeGreaterThanOrEqual(now + 240_000);
+        return response(200, {}, "[]");
+      });
+    const client = createGitHubApi({ request, sleep: async (ms: number) => { clock += ms; }, now: () => clock, warn: vi.fn() });
+    expect(await client.get("issues")).toEqual([]);
+    expect(request).toHaveBeenCalledTimes(3);
+  });
+
+  it("surfaces non-rate-limit 403s without retrying", async () => {
+    const sleep = vi.fn();
+    const client = createGitHubApi({
+      request: () => response(403, {}, '{"message":"Resource not accessible"}'),
+      sleep,
+    });
+    await expect(client.get("issues")).rejects.toThrow("Resource not accessible");
+    expect(sleep).not.toHaveBeenCalled();
+  });
+
+  it("does not retry before the primary reset when Retry-After is shorter", async () => {
+    let clock = now;
+    const request = vi.fn()
+      .mockReturnValueOnce(response(403, {
+        "retry-after": "1", "x-ratelimit-remaining": "0", "x-ratelimit-reset": String(now / 1000 + 120),
+      }, '{"message":"API rate limit exceeded"}'))
+      .mockImplementation(() => {
+        expect(clock).toBeGreaterThanOrEqual(now + 125_000);
+        return response(200, {}, "[]");
+      });
+    const client = createGitHubApi({ request, sleep: async (ms: number) => { clock += ms; }, now: () => clock, warn: vi.fn() });
+    expect(await client.get("issues")).toEqual([]);
+  });
+
+  it("falls back to a real delay for malformed Retry-After instead of a tight retry loop", async () => {
+    const sleep = vi.fn(async (ms: number) => { expect(Number.isFinite(ms)).toBe(true); });
+    const request = vi.fn()
+      .mockReturnValueOnce(response(429, { "retry-after": "invalid" }))
+      .mockReturnValueOnce(response(200, {}, "[]"));
+    const client = createGitHubApi({ request, sleep, warn: vi.fn() });
+    expect(await client.get("issues")).toEqual([]);
+    expect(sleep.mock.calls[0][0]).toBeGreaterThanOrEqual(60_000);
+  });
+
+  it("drops the old ETag when a changed response stops supplying one", async () => {
+    const request = vi.fn()
+      .mockReturnValueOnce(response(200, { ETag: '"one"' }, "[1]"))
+      .mockReturnValueOnce(response(200, {}, "[2]"))
+      .mockReturnValueOnce(response(200, {}, "[3]"));
+    const client = createGitHubApi({ request });
+    await client.get("issues");
+    expect(await client.get("issues")).toEqual([2]);
+    expect(await client.get("issues")).toEqual([3]);
+    expect(request.mock.calls[2]).toEqual([["api", "--include", "issues"]]);
+  });
+
+  it("exits an expired foreground probe instead of sleeping past its deadline on a real gh failure", () => {
+    const dir = mkdtempSync(join(tmpdir(), "waiter-rate-test-"));
+    try {
+      writeFileSync(join(dir, "gh"), `#!/usr/bin/env node
+console.log('HTTP/2.0 429 Too Many Requests\\r\\nx-ratelimit-remaining: 0\\r\\nx-ratelimit-reset: ' + (Math.floor(Date.now() / 1000) + 3600) + '\\r\\n\\r\\n{"message":"API rate limit exceeded"}');
+process.exit(1);
+`, { mode: 0o755 });
+      const result = spawnSync(process.execPath, [
+        fileURLToPath(new URL("../scripts/wait-for-work.mjs", import.meta.url)), "--me", "cto", "--probe",
+      ], { env: { ...process.env, PATH: `${dir}:${process.env.PATH}` }, encoding: "utf8", timeout: 5_000 });
+      expect(result.error).toBeUndefined();
+      expect(result.status).toBe(3);
+      expect(result.stderr).toContain("Wait deadline reached during GitHub rate-limit backoff");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  // #2051: a chat that dies while its waiter sleeps out an hour-long rate limit must not leave the waiter (or its
+  // role lock) behind. The test kills the waiter's direct parent, which works whatever the orphan is re-parented to.
+  it("exits 5 and releases only its own role lock when its parent dies during rate-limit backoff", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "waiter-parent-test-"));
+    const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catch { return false; } };
+    const until = async (check: () => boolean, ms: number) => {
+      for (const end = Date.now() + ms; Date.now() < end; await new Promise((r) => setTimeout(r, 100))) if (check()) return true;
+      return check();
+    };
+    let parentPid = 0;
+    let waiterPid = 0;
+    try {
+      writeFileSync(join(dir, "gh"), `#!/usr/bin/env node
+console.log('HTTP/2.0 429 Too Many Requests\\r\\nx-ratelimit-remaining: 0\\r\\nx-ratelimit-reset: ' + (Math.floor(Date.now() / 1000) + 3600) + '\\r\\n\\r\\n{"message":"API rate limit exceeded"}');
+process.exit(1);
+`, { mode: 0o755 });
+      // Nobody can read an orphan's exit status, so the waiter records its own.
+      writeFileSync(join(dir, "exit-code.mjs"), `import { writeFileSync } from "node:fs";
+process.on("exit", (code) => writeFileSync(${JSON.stringify(join(dir, "exit-code"))}, String(code)));
+`);
+      const otherLock = join(dir, "adbrain-wait-for-work-qa.pid");
+      writeFileSync(otherLock, String(process.pid));
+      const lock = join(dir, "adbrain-wait-for-work-cto.pid");
+      const log = join(dir, "waiter.log");
+      const waiter = [fileURLToPath(new URL("../scripts/wait-for-work.mjs", import.meta.url)), "--me", "cto"];
+      const parent = spawn(process.execPath, ["-e", `
+const { spawn } = require("node:child_process");
+const { openSync } = require("node:fs");
+const out = openSync(${JSON.stringify(log)}, "a");
+const child = spawn(process.execPath, ["--import", ${JSON.stringify(pathToFileURL(join(dir, "exit-code.mjs")).href)}, ...${JSON.stringify(waiter)}], { stdio: ["ignore", out, out] });
+console.log(child.pid);
+setInterval(() => {}, 60_000);
+`], { env: { ...process.env, TMPDIR: dir, PATH: `${dir}:${process.env.PATH}` }, stdio: ["ignore", "pipe", "inherit"] });
+      parentPid = parent.pid!;
+      waiterPid = await new Promise<number>((resolve, reject) => {
+        parent.stdout!.once("data", (chunk) => resolve(Number.parseInt(String(chunk), 10)));
+        parent.once("exit", () => reject(new Error("parent exited early")));
+      });
+      const read = (file: string) => { try { return readFileSync(file, "utf8"); } catch { return ""; } };
+      expect(await until(() => read(log).includes("GitHub rate limit") && read(lock) === String(waiterPid), 10_000), read(log)).toBe(true);
+
+      process.kill(parentPid, "SIGKILL");
+      // The backoff wakes at least every 5 s to check its parent.
+      expect(await until(() => !alive(waiterPid), 12_000), "waiter outlived its parent").toBe(true);
+      expect(read(join(dir, "exit-code"))).toBe("5");
+      expect(read(log)).toContain("The chat that started this waiter is gone; exiting.");
+      expect(existsSync(lock)).toBe(false);
+      expect(read(otherLock)).toBe(String(process.pid));
+    } finally {
+      for (const pid of [waiterPid, parentPid]) if (pid && alive(pid)) process.kill(pid, "SIGKILL");
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  it("uses response headers to slow polling without a rate_limit request", async () => {
+    const request = vi.fn().mockReturnValue(response(200, {
+      "x-ratelimit-remaining": "800", "x-ratelimit-reset": String(now / 1000 + 120),
+    }, "[]"));
+    const client = createGitHubApi({ request, now: () => now });
+    await client.get("issues");
+    expect(client.pollDelay(300_000)).toBe(900_000);
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
+  it("waits for the reset when the budget is spent, slows down when it's low, else adds nothing", () => {
+    const reset = now / 1000 + 120;
+    const spent = rateBackoffMs({ remaining: 0, reset }, 90_000, now);
+    expect(spent).toBeGreaterThanOrEqual(125_000);
+    expect(spent).toBeLessThan(155_000);
+    expect(rateBackoffMs({ remaining: 800, reset }, 90_000, now)).toBe(180_000);
+    expect(rateBackoffMs({ remaining: 4_000, reset }, 90_000, now)).toBe(0);
+  });
+});
+
+describe("never wait while you own actionable work (#364, CEO Oct 29)", () => {
+  const issue = (number: number, ...labels: string[]) => ({ number, title: `item ${number}`, labels: labels.map((name) => ({ name })) });
+  it("counts owned items except held, snoozed and co-owned-not-your-turn ones; your turns first, then core, then oldest", () => {
+    const items = [
+      issue(40, "owner:dev"), issue(30, "owner:dev", "core"), issue(50, "owner:dev"),
+      issue(11, "owner:dev", "parked"), issue(12, "owner:dev", "blocked"), issue(13, "owner:dev", "waiting-owner"),
+      issue(14, "owner:dev", "decision"), issue(15, "owner:dev", "later"), issue(16, "owner:dev", "standing"),
+      issue(17, "owner:dev"), // scheduled check not yet due
+      issue(18, "owner:dev", "owner:qa"), // co-owned, QA's turn
+      issue(19, "owner:dev", "owner:qa"), // co-owned, your turn
+    ];
+    const got = actionableOwned(items, { snoozed: new Set([17]), myTurn: new Set([19, 50]) }).map((i) => i.number);
+    expect(got).toEqual([19, 50, 30, 40]);
+  });
+  it("a handed-off item still counts while its owner label is yours, and nothing owned means you may wait", () => {
+    expect(actionableOwned([issue(7, "owner:dev2")]).map((i) => i.number)).toEqual([7]);
+    expect(actionableOwned([])).toEqual([]);
+    expect(OWNS_WORK).not.toBe(0);
   });
 });

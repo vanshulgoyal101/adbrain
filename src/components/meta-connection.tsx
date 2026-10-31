@@ -1,6 +1,7 @@
 "use client";
 
 import { reconnectByLabel } from "@/lib/meta/token-expiry";
+import { translator, type AppLocale } from "@/i18n/locale";
 import { useState } from "react";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { useRouter } from "next/navigation";
@@ -10,17 +11,25 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MetaConnectDialog } from "@/components/meta-connect/meta-connect-dialog";
 import type { MetaConnection } from "@/lib/meta/credentials";
+import { connectTrustLine } from "@/lib/trust-lines";
+import type { FundingMode } from "@/lib/payments/operator-funding";
 
 export function MetaConnectionPanel({
   businessId,
   connection,
   oauthConfigured,
   notice,
+  fundingMode = null,
+  locale = "en",
 }: {
   businessId?: string;
   connection: MetaConnection;
   oauthConfigured: boolean;
   notice?: { kind: "success" | "error"; message: string };
+  /** #1292: who holds the ad money decides the trust line; unknown shows none. */
+  fundingMode?: FundingMode | null;
+  /** #1916: the disconnect question's language. */
+  locale?: AppLocale;
 }) {
   const router = useRouter();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -30,7 +39,9 @@ export function MetaConnectionPanel({
 
   async function disconnect() {
     if (!businessId || disconnecting) return;
-    if (!(await confirm({ title: "Disconnect this Meta business?", description: "This doesn't pause ads already running in Meta.", confirmLabel: "Disconnect", tone: "danger" }))) return;
+    // #1916 (CPO): disconnecting never pauses ads in Meta, so the question says so.
+    const t = translator(locale, "settings");
+    if (!(await confirm({ title: t("disconnect.title"), description: t("disconnect.body"), confirmLabel: t("disconnect.confirm"), cancelLabel: t("disconnect.cancel"), tone: "danger" }))) return;
     setDisconnecting(true);
     setDisconnectError(null);
     try {
@@ -41,11 +52,11 @@ export function MetaConnectionPanel({
       });
       const result = await response.json();
       if (!response.ok || result?.ok !== true) {
-        throw new Error(typeof result?.error === "string" ? result.error : "Could not disconnect the Meta connection.");
+        throw new Error(typeof result?.error === "string" ? result.error : "Facebook is still connected. Try again in a minute.");
       }
       router.refresh();
     } catch (error) {
-      setDisconnectError(error instanceof Error ? error.message : "Could not disconnect the Meta connection.");
+      setDisconnectError(error instanceof Error ? error.message : "Facebook is still connected. Try again in a minute.");
     } finally {
       setDisconnecting(false);
     }
@@ -55,7 +66,7 @@ export function MetaConnectionPanel({
     <Card>
       {confirmDialog}
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
+        <CardTitle as="h2" className="flex items-center gap-2">
           <Link2 className="h-5 w-5 text-blue-600" aria-hidden="true" />
           Meta connection
         </CardTitle>
@@ -83,6 +94,7 @@ export function MetaConnectionPanel({
             Connect an existing Meta business to prepare campaigns. You can keep working on a draft first.
           </p>
         )}
+        {businessId && fundingMode && <p className="text-sm text-slate-700">{connectTrustLine(fundingMode)}</p>}
         {!businessId && <Alert variant="warning">Set up your business before connecting Meta.</Alert>}
         {businessId && !oauthConfigured && (
           <Alert variant="warning">Meta connection is not configured on this server yet.</Alert>

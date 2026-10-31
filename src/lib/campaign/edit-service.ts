@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { logEvent } from "@/lib/audit";
 import { intendedCampaignChildren, reviewableCampaign } from "@/lib/campaign/activation";
+import { pausedAdIds } from "@/lib/campaign/ad-pause";
 import { saveCampaignChildren } from "@/lib/campaign/trusted-write";
 import { AdSetSwitchStuckError, CampaignDeliveryError, MetaError, friendlyMetaError, needsRebuild, type AudienceChanges, type AudienceEdit, type GeoTargeting } from "@/lib/meta/client";
 import { ConnectionAccessError, withMetaConnection, type AuthorizedBusiness } from "@/lib/meta/connection-access";
@@ -15,13 +16,13 @@ import type { Campaign, Json } from "@/lib/types";
 
 /** #773: the shared path for editing a launched campaign. Audience now; Dev 4 adds budgets (#774) as another kind. */
 
-export const RESTARTS_LEARNING = "This restarts Meta's learning; results may be slower for 2–3 days.";
-export const PAUSE_FIRST = "Part of this campaign is still running in Meta. Pause the campaign, then edit the audience.";
+const RESTARTS_LEARNING = "This restarts Meta's learning; results may be slower for 2–3 days.";
+const PAUSE_FIRST = "Part of this campaign is still running in Meta. Pause the campaign, then edit the audience.";
 /** #765: Meta refuses an in-place audience change on these ad sets; the owner confirms a PAUSED copy instead (CPO's words). */
-export const RUNNING_NEEDS_COPY = "Meta doesn't allow this change on a running campaign. We'll make a fresh copy with your change (paused, back to review, learning restarts) and stop the old one when you turn the new one on.";
-export const SWITCH_PENDING = "A new audience is waiting for this campaign. Turn it on or cancel it first.";
-export const NO_AREA_EXCLUSIONS = "This campaign covers a whole country, so there are no out-of-area places to leave out.";
-export const ALREADY_EXCLUDED = "Every ad set already leaves out the places outside its area. Nothing to change.";
+const RUNNING_NEEDS_COPY = "Meta doesn't allow this change on a running campaign. We'll make a fresh copy with your change (paused, back to review, learning restarts) and stop the old one when you turn the new one on.";
+const SWITCH_PENDING = "A new audience is waiting for this campaign. Turn it on or cancel it first.";
+const NO_AREA_EXCLUSIONS = "This campaign covers a whole country, so there are no out-of-area places to leave out.";
+const ALREADY_EXCLUDED = "Every ad set already leaves out the places outside its area. Nothing to change.";
 export const RATE_LIMITED = "Meta needs 30 seconds between audience changes. Try again in a moment.";
 
 const metaKey = z.string().regex(/^\d{1,20}$/);
@@ -75,7 +76,7 @@ function canonical(value: unknown): unknown {
   return value;
 }
 
-export const audienceChangeDigest = (change: AudienceChange) => sha256(JSON.stringify(canonical(change)));
+const audienceChangeDigest = (change: AudienceChange) => sha256(JSON.stringify(canonical(change)));
 
 /** Only the audience fields of an ad set's targeting, kept as the "before" of an edit. */
 function audienceOf(targeting: unknown): Json {
@@ -138,6 +139,9 @@ export function mirroredChildren(
   if (Array.isArray(raw.cappedAdSetIds)) next.cappedAdSetIds = (raw.cappedAdSetIds as string[]).map(adSet);
   const cap = raw.cap;
   if (cap && typeof cap === "object" && !Array.isArray(cap) && typeof cap.adSetId === "string") next.cap = { ...cap, adSetId: adSet(cap.adSetId) };
+  // #1146: an ad paused from the card stays paused under its copy's id, so Resume (#1055) and the card's Undo keep track.
+  const carried = pausedAdIds(raw).flatMap(adId => adMap.has(adId) ? [{ adId: adMap.get(adId)!, action: "paused" as const, at: new Date().toISOString(), reason: "Kept paused on the new audience" }] : []);
+  if (carried.length) next.adPauses = [...(Array.isArray(raw.adPauses) ? raw.adPauses : []), ...carried].slice(-50) as Json;
   const mirrored = { meta_adset_id: adSet(campaign.meta_adset_id ?? children.adSetIds[0]), meta_ad_ids: campaign.meta_ad_ids.map(ad), raw: next as Json };
   if (!intendedCampaignChildren({ meta_campaign_id: campaign.meta_campaign_id, ...mirrored })) throw new Error("The edited campaign children would not validate.");
   return mirrored;
@@ -223,7 +227,7 @@ export async function editCampaignAudience(context: AuthorizedBusiness, campaign
         adSetId: adSet.id, adIds: tree.ads.filter(ad => ad.adSetId === adSet.id).map(ad => ad.id), running: adSet.status === "ACTIVE",
         mode: needsRebuild({ targeting: adSet.targeting, destination_type: adSet.destinationType }) ? "rebuild" as const : "patch" as const, targeting: adSet.targeting,
       }));
-      if (treeTargets.some(target => !target.adIds.length)) throw new CampaignDeliveryError("An ad set has no ads. Reconcile the campaign in Meta first.");
+      if (treeTargets.some(target => !target.adIds.length)) throw new CampaignDeliveryError("Part of this campaign has no ads left on Meta, so it can't be changed here. Open it in Meta Ads Manager to fix it.");
 
       // Exclusions only grow: the new area's #741 exclusions are added to the owner's own and the ad set's existing ones.
       const changes: AudienceChanges = { ...change.age ? { age: change.age } : {}, ...change.gender ? { gender: change.gender } : {}, ...change.languages ? { languages: change.languages } : {} };
@@ -336,8 +340,14 @@ export async function editCampaignAudience(context: AuthorizedBusiness, campaign
 
 type Review = NonNullable<ReturnType<typeof reviewableCampaign>>;
 
+/** #1146: the copies of ads the owner paused from the card, which stay paused on the new audience (copies keep the ads' order). */
+export function keptPausedCopies(copy: PendingCopy, raw: unknown): string[] {
+  const paused = new Set(pausedAdIds(raw));
+  return copy.from.adIds.flatMap((adId, index) => paused.has(adId) && copy.to.adIds[index] ? [copy.to.adIds[index]] : []);
+}
+
 /** #765 (b): while a copy waits, the Meta tree has an extra ad set; other edits wait until it is switched or cancelled. */
-async function refuseWhileSwitchPending(database: SupabaseClient, campaignId: string) {
+export async function refuseWhileSwitchPending(database: Pick<SupabaseClient, "from">, campaignId: string) {
   const { data, error } = await database.from("campaign_edit_operations").select("id").eq("campaign_id", campaignId).eq("state", "awaiting_switch").limit(1);
   if (error) throw new CampaignEditError("Campaign edits are unavailable. Try again.", 503, true);
   if (data?.length) throw new CampaignEditError(SWITCH_PENDING, 409, false, "switch_pending");
@@ -354,7 +364,7 @@ export type AudienceSwitchResult = { action: "switch" | "cancel"; adSets: Array<
 
 /** A switch or cancel holds the row this long; one cut off (route timeout) can be retried after it. */
 const SWITCH_LEASE_MS = 120_000;
-export const SWITCH_IN_PROGRESS = "This new audience is already being switched. Try again in a minute.";
+const SWITCH_IN_PROGRESS = "This new audience is already being switched. Try again in a minute.";
 
 /**
  * #765 (b): the owner turns a waiting copy on (the old ad set is paused first and then retired; the mirror moves to
@@ -422,7 +432,8 @@ export async function switchCampaignAudience(context: AuthorizedBusiness, campai
     // Turning the copy on starts delivery, so a running campaign needs the activation capability.
     await withMetaConnection(context, { purpose: status === "active" ? "activate" : "create_paused", binding, expectedGeneration: review.generation }, async meta => {
       for (const copy of pending) {
-        const done = await meta.switchAdSet(review.metaCampaignId, { fromAdSetId: copy.from.adSetId, toAdSetId: copy.to.adSetId, toAdIds: copy.to.adIds, running: status === "active" });
+        const keepPausedAdIds = keptPausedCopies(copy, campaign.raw);
+        const done = await meta.switchAdSet(review.metaCampaignId, { fromAdSetId: copy.from.adSetId, toAdSetId: copy.to.adSetId, toAdIds: copy.to.adIds, running: status === "active", keepPausedAdIds });
         switched.push({ from: copy.from, to: { mode: "rebuild", validated: false, adSetId: done.adSetId, adIds: done.adIds, retiredAdSetId: copy.from.adSetId } });
       }
     });

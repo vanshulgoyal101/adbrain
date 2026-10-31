@@ -34,7 +34,8 @@ vi.mock("@/lib/payments/operator-funding", () => ({
   fundingMode: async (id: string) => (await isOperatorFunded(id)) ? "operator" : funding.ownAccount ? "own" : "managed",
 }));
 
-vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ rpc: insert }) }));
+// #1138's ownership read sees no other business's row.
+vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ rpc: insert, from: () => ({ select: () => ({ in: async () => ({ data: [], error: null }) }) }) }) }));
 vi.mock("@/lib/campaign/trusted-write", () => ({ saveCampaign: (...args: unknown[]) => updateEq(...args) }));
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({

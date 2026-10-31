@@ -34,6 +34,38 @@ const ACTION_LABELS: Record<string, string> = {
   "instruction.delete": "Ad instruction removed",
 };
 
+/** #1877: the CPO's Hindi for each action; Hindi shows the label alone, never the stored English note. */
+const HINDI_LABELS: Record<string, string> = {
+  "business.create": "बिज़नेस की जानकारी जोड़ी गई",
+  "business.update": "बिज़नेस की जानकारी बदली गई",
+  "creatives.generate": "नए विज्ञापन बने",
+  "creative.approve": "विज्ञापन मंज़ूर हुआ",
+  "creative.unapprove": "विज्ञापन वापस ड्राफ़्ट में गया",
+  "creative.delete": "विज्ञापन हटाया गया",
+  "creative.regenerate": "विज्ञापन दोबारा बना",
+  "creative.edit": "विज्ञापन के शब्द बदले गए",
+  "creative.edit_picture": "तस्वीर पर लिखे शब्द बदले गए",
+  "creative.change_background": "तस्वीर का बैकग्राउंड बदला गया",
+  "creatives.export": "विज्ञापन डाउनलोड किए गए",
+  "campaign.create": "कैंपेन बना",
+  "campaign.create.traffic_probe": "टेस्ट कैंपेन बना",
+  "campaign.update": "कैंपेन बदला गया",
+  "campaign.delete": "कैंपेन हटाया गया",
+  "campaign.pause": "कैंपेन रोका गया",
+  "campaign.resume": "कैंपेन फिर चालू हुआ",
+  "campaign.refresh": "कैंपेन के नतीजे अपडेट हुए",
+  "campaigns.sync": "Meta से कैंपेन अपडेट हुए",
+  "leads.sync": "Meta में पूछताछ देखी गई",
+  "spend.limits_updated": "खर्च की सीमा बदली गई",
+  "spend.auto_paused": "आपकी खर्च सीमा पूरी होने पर कैंपेन अपने-आप रुक गए",
+  "meta.connected": "Meta अकाउंट जुड़ा",
+  "meta.disconnected": "Meta अकाउंट हटाया गया",
+  "meta.traffic.run": "Meta कनेक्शन जाँचा गया",
+  "instruction.create": "विज्ञापन का नियम जोड़ा गया",
+  "instruction.update": "विज्ञापन का नियम बदला गया",
+  "instruction.delete": "विज्ञापन का नियम हटाया गया",
+};
+
 /** #763: background checks that run on their own; owners see what they did, not the log. */
 const BACKGROUND_ACTIONS = new Set(["campaigns.sync", "leads.sync", "meta.traffic.run"]);
 
@@ -44,7 +76,8 @@ export function isBackgroundAuditAction(action: string): boolean {
 /** Reasons are meant to be one-line notes; longer text is internal detail. */
 const MAX_REASON_LENGTH = 90;
 
-export function auditActionLabel(action: string): string {
+export function auditActionLabel(action: string, locale: "en" | "hi" = "en"): string {
+  if (locale === "hi") return HINDI_LABELS[action] ?? "गतिविधि";
   return ACTION_LABELS[action] ?? humanise(action);
 }
 
@@ -62,9 +95,42 @@ function humanise(action: string): string {
 export function describeAuditEvent(
   action: string,
   reason: string | null | undefined,
+  locale: "en" | "hi" = "en",
 ): string {
-  const label = auditActionLabel(action);
+  if (action === "spend.auto_paused") {
+    const why = autoPauseLabel(reason, locale);
+    if (why) return why;
+  }
+  const label = auditActionLabel(action, locale);
+  if (locale === "hi") return label;
   const note = (reason ?? "").trim();
   if (!note || note.length > MAX_REASON_LENGTH || note === label) return label;
   return `${label} — ${note}`;
+}
+
+/**
+ * #2321: `spend.auto_paused` is written for several reasons (enforce-spend, spend-enforce, managed
+ * funding); each row names one campaign. Matched on the writers' stable reason prefixes.
+ */
+function autoPauseLabel(reason: string | null | undefined, locale: "en" | "hi"): string | null {
+  const note = (reason ?? "").trim();
+  if (note.startsWith("Weekly spend cap of")) {
+    const rupees = Number(/₹(\d+(?:\.\d+)?)/.exec(note)?.[1]);
+    const cap = Number.isFinite(rupees) && rupees > 0 ? `₹${rupees.toLocaleString("en-IN")}` : null;
+    if (locale === "hi") return cap ? `कैंपेन रुका: हफ़्ते की ${cap} की खर्च सीमा पूरी हुई` : "कैंपेन रुका: हफ़्ते की खर्च सीमा पूरी हुई";
+    return cap ? `Campaign paused: your weekly cap of ${cap} was reached` : "Campaign paused: your weekly cap was reached";
+  }
+  if (note.startsWith("Weekly spend observation could not")) {
+    return locale === "hi" ? "कैंपेन रुका: इस हफ़्ते का खर्च जाँचा नहीं जा सका" : "Campaign paused: this week's spend couldn't be checked";
+  }
+  if (note.startsWith("Customer advertising funds")) {
+    return locale === "hi" ? "कैंपेन रुका: आपके AdBrain बैलेंस की जाँच होनी है" : "Campaign paused: your AdBrain balance needs a check";
+  }
+  if (note.startsWith("No advertising allowance left")) {
+    return locale === "hi" ? "कैंपेन रुका: आपका AdBrain बैलेंस खत्म हो गया" : "Campaign paused: your AdBrain balance ran out";
+  }
+  if (note.startsWith("Capped run reached its end time")) {
+    return locale === "hi" ? "कैंपेन रुका: रन अपनी आख़िरी तारीख तक पहुँच गया" : "Campaign paused: its run reached the end date";
+  }
+  return null;
 }

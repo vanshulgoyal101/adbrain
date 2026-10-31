@@ -45,7 +45,7 @@ beforeEach(() => {
 describe("core: Campaigns shows Meta's ad review status (#157)", () => {
   it("a new ad shows as in Meta review", async () => {
     showAfterRefresh((reviewNewAd[0].body as { data: Ad[] }).data);
-    expect(await screen.findByText("In Meta review")).toBeTruthy();
+    expect(await screen.findByText("In Meta's review")).toBeTruthy();
   });
 
   it("a rejected ad shows as rejected with Meta's own reason", async () => {
@@ -54,7 +54,9 @@ describe("core: Campaigns shows Meta's ad review status (#157)", () => {
     const reason = adReviewState(rejected).reasons[0];
     showAfterRefresh([rejected, ads.find(ad => ad.effective_status === "PAUSED")!]);
     expect(await screen.findByText("Rejected by Meta (1 of 2 ads)")).toBeTruthy();
-    expect(screen.getByText(reason)).toBeTruthy();
+    // #1274: the owner's sentence leads; Meta's own reason stays on the card under Details.
+    expect(screen.getByText(/^Meta didn't approve 1 ad\. /)).toBeTruthy();
+    expect(screen.getByText(`Meta's message: “${reason}”`)).toBeTruthy();
   });
 
   it("all ads approved shows approved", async () => {
@@ -109,5 +111,82 @@ describe("core: a campaign deleted in Meta shows as deleted after Refresh (#721)
     expect(await within(card).findByText("Deleted in Meta")).toBeTruthy();
     expect(within(card).getByText(message)).toBeTruthy();
     expect(within(card).queryByText("paused")).toBeNull();
+    // #1600 (CPO #1601): the card's own line, which stays after the notice.
+    expect(within(card).getByText("This campaign was deleted in Meta Ads Manager, so it can't run or be changed here. Nothing more will spend. Its results up to then stay below.")).toBeTruthy();
+    // Designer #1633: nothing to fetch any more, so no Refresh; ⋯ stays.
+    expect(within(card).queryByRole("button", { name: /Refresh results/ })).toBeNull();
+    expect(within(card).getByRole("button", { name: /More actions/ })).toBeTruthy();
+  });
+});
+
+// #1903 (CPO #1601, Designer #1633): the owner paused it, or changed its daily budget, in Meta Ads Manager. Refresh
+// returns the row the route updated (meta-connect-w2-refresh-route.test.ts) and the card says so.
+describe("core: a change made in Meta Ads Manager shows on the card after Refresh (#1903)", () => {
+  function refreshTo(next: Campaign) {
+    // A running card also refreshes on its own when it opens (`?ifStale=1`); both answers carry the updated row.
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => String(input).includes("/refresh")
+      ? Response.json({ result: { id: "r1", campaign_id: "c1", impressions: 0, clicks: 0, leads: 0, spend: 0, cpl: null }, review: [], campaign: next })
+      : Response.json({ campaigns: [next], results: {}, nextCursor: null })));
+    const start = { ...launched, status: next.status } as Campaign;
+    render(<Campaigns business={business} approved={[]} initialCampaigns={[start]} initialResults={{}}
+      leadForms={[]} leadFormError={null} metaReady={false} adAccountId="act_9000000000000001" />);
+    const card = screen.getByRole("article", { name: "First lead campaign" });
+    fireEvent.click(within(card).getByRole("button", { name: /Refresh results/ }));
+    return card;
+  }
+
+  it("paused in Meta: grey 'Paused in Meta', the CPO line, and Resume in Ads Manager instead of Pause", async () => {
+    const card = refreshTo({ ...launched, status: "active", raw: { ...(launched.raw as object), metaPausedAt: "2026-10-29T08:00:00.000Z" } } as Campaign);
+    expect(await within(card).findByText("This was paused in Meta Ads Manager. Nothing is spending.")).toBeTruthy();
+    expect(within(card).getByText("Paused in Meta")).toBeTruthy();
+    expect(within(card).getByRole("link", { name: /Resume in Ads Manager/ })).toBeTruthy();
+    expect(within(card).queryByRole("button", { name: /^Pause/ })).toBeNull();
+    expect(within(card).queryByText("Waiting for Meta to start delivery.")).toBeNull();
+  });
+
+  it("budget raised in Meta: the new daily budget on an amber rule, with Change budget", async () => {
+    const card = refreshTo({ ...launched, daily_budget: 300,
+      raw: { ...(launched.raw as object), metaBudgetChange: { wasRupees: 200, nowRupees: 300, at: "2026-10-29T08:00:00.000Z" } } } as Campaign);
+    const line = await within(card).findByText("The daily budget was changed in Meta Ads Manager: now ₹300 a day (was ₹200).");
+    expect(line.parentElement?.className).toContain("border-warning");
+    expect(within(card).getByRole("button", { name: "Change budget" })).toBeTruthy();
+  });
+
+  it("budget lowered in Meta: the same line on a grey rule", async () => {
+    const card = refreshTo({ ...launched, daily_budget: 150,
+      raw: { ...(launched.raw as object), metaBudgetChange: { wasRupees: 200, nowRupees: 150, at: "2026-10-29T08:00:00.000Z" } } } as Campaign);
+    const line = await within(card).findByText("The daily budget was changed in Meta Ads Manager: now ₹150 a day (was ₹200).");
+    expect(line.parentElement?.className).toContain("border-slate-300");
+  });
+});
+
+// CPO on #1255: a weak ad (it costs money) outranks one rejected ad of several (it doesn't); all rejected always shows.
+describe("core: a weak ad outranks 1-of-N rejected on the card (#1274)", () => {
+  const ad = (adId: string, over: Record<string, unknown>) => ({ adId, name: `Ad ${adId}`, delivered: true, replaced: false, best: false, creative: null, earlier: false, impressions: 1000, status: "ACTIVE", ...over });
+  const rows = [ad("1", { best: true, results: 6, spend: 600, costPerResult: 100 }), ad("2", { results: 2, spend: 600, costPerResult: 300 })];
+  function show(review: Ad[]) {
+    const live = { ...launched, status: "active", destination: "whatsapp" } as Campaign;
+    const result = { id: "r1", campaign_id: "c1", destination: "whatsapp", impressions: 9000, clicks: 90, leads: 0, conversations: 8, spend: 1200, cpl: null, fetched_at: new Date().toISOString() };
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/refresh")) return Response.json({ result, review: review.map(adReviewState) });
+      if (url.endsWith("/ads")) return Response.json({ ok: true, syncedAt: null, ads: rows });
+      return Response.json({ campaigns: [live], results: { c1: result }, nextCursor: null });
+    }));
+    render(<Campaigns business={business} approved={[]} initialCampaigns={[live]} initialResults={{ c1: result } as never}
+      leadForms={[]} leadFormError={null} metaReady={false} adAccountId="act_9000000000000001" adResults />);
+    fireEvent.click(screen.getByRole("button", { name: /Refresh results/ }));
+  }
+  const rejected = { id: "a1", effective_status: "DISAPPROVED", ad_review_feedback: { global: { "Adult Content": "Suggestive." } } };
+
+  it("1 of 2 rejected with a weak ad: the pause offer leads, the rejection waits", async () => {
+    show([rejected, { id: "a2", effective_status: "ACTIVE" }]);
+    expect(await screen.findByRole("button", { name: "Pause this ad" })).toBeTruthy();
+    await waitFor(() => expect(screen.queryByRole("group", { name: "Ads Meta didn't approve" })).toBeNull());
+  });
+
+  it("every ad rejected: the rejection shows", async () => {
+    show([rejected]);
+    expect(await screen.findByRole("group", { name: "Ads Meta didn't approve" })).toBeTruthy();
   });
 });

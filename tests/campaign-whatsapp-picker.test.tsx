@@ -5,7 +5,7 @@ import { Campaigns } from "@/components/campaigns";
 import type { DraftDTO, DraftInput } from "@/lib/campaign/connect-contracts";
 import type { Business, Creative } from "@/lib/types";
 
-// #235: the campaign form picks the WhatsApp button number and opens on WhatsApp once one is ready.
+// #235: the campaign form picks the WhatsApp button number; #1171: every new campaign opens on WhatsApp.
 const mocks = vi.hoisted(() => ({
   drafts: vi.fn(), draft: vi.fn(), saveDraft: vi.fn(), updateDraft: vi.fn(), status: vi.fn(), preflight: vi.fn(), createCampaign: vi.fn(), operationForRequest: vi.fn(),
 }));
@@ -63,7 +63,7 @@ describe("campaign WhatsApp button number (#235)", () => {
   it("opens an India business's new campaign on WhatsApp and sends the chosen number", async () => {
     view();
     const picker = await screen.findByLabelText("WhatsApp button number");
-    expect(screen.getByRole("radio", { name: "WhatsApp chat" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "WhatsApp chat (recommended)" })).toBeChecked();
     expect(screen.queryByLabelText("Lead form")).not.toBeInTheDocument();
     expect([...picker.querySelectorAll("option")].map((option) => option.textContent)).toEqual([
       "+91 ••••• 0874 (linked to your Page)",
@@ -79,13 +79,13 @@ describe("campaign WhatsApp button number (#235)", () => {
     expect(mocks.createCampaign).not.toHaveBeenCalled();
   });
 
-  it("keeps the lead form while no number is linked and points to the Your business guide", async () => {
+  it("opens on WhatsApp even while no number is linked and points to the Your business guide", async () => {
     whatsapp = async () => Response.json({ state: "not_linked" });
     view();
     await statusRead();
     await settle();
-    expect(screen.getByRole("radio", { name: "Instant form" })).toBeChecked();
-    fireEvent.click(screen.getByRole("radio", { name: "WhatsApp chat" }));
+    expect(screen.getByRole("radio", { name: "WhatsApp chat (recommended)" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "Instant form" })).not.toBeChecked();
     expect(screen.getByText(/No WhatsApp number is linked yet/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Your business" })).toHaveAttribute("href", "/brand");
     expect(screen.queryByLabelText("WhatsApp button number")).not.toBeInTheDocument();
@@ -95,17 +95,34 @@ describe("campaign WhatsApp button number (#235)", () => {
     expect(saved.input).not.toHaveProperty("whatsappNumber");
   });
 
+  // #1171 (QA): without a linked number, one tap moves to the Instant form; with a ready number it isn't offered.
+  it("offers Instant form for now only while no WhatsApp number is ready", async () => {
+    whatsapp = async () => Response.json({ state: "not_linked" });
+    const { unmount } = view();
+    await statusRead();
+    await settle();
+    fireEvent.click(screen.getByRole("button", { name: "No WhatsApp number yet? Use an Instant form for now" }));
+    expect(screen.getByRole("radio", { name: "Instant form" })).toBeChecked();
+    expect(screen.queryByRole("button", { name: /Use an Instant form for now/ })).toBeNull();
+    unmount();
+    whatsapp = async () => Response.json({ state: "ready", numbers: [{ masked: "+91 ••••• 4842", source: "page" }] });
+    view();
+    await statusRead();
+    await settle();
+    expect(screen.getByRole("radio", { name: "WhatsApp chat (recommended)" })).toBeChecked();
+    expect(screen.queryByRole("button", { name: /Use an Instant form for now/ })).toBeNull();
+  });
+
   it("keeps a destination the owner chose before the status arrived", async () => {
     let answer!: (response: Response) => void;
     whatsapp = () => new Promise((resolve) => { answer = resolve; });
     view();
     await statusRead();
-    fireEvent.click(screen.getByRole("radio", { name: "WhatsApp chat" }));
     fireEvent.click(screen.getByRole("radio", { name: "Instant form" }));
     answer(Response.json({ state: "ready", numbers: [{ masked: "+91 ••••• 0874", source: "page" }] }));
     await settle();
     expect(screen.getByRole("radio", { name: "Instant form" })).toBeChecked();
-    fireEvent.click(screen.getByRole("radio", { name: "WhatsApp chat" }));
+    fireEvent.click(screen.getByRole("radio", { name: "WhatsApp chat (recommended)" }));
     expect(screen.getByLabelText("WhatsApp button number")).toHaveValue("+91 ••••• 0874");
   });
 
@@ -141,12 +158,17 @@ describe("campaign WhatsApp button number (#235)", () => {
     expect(mocks.updateDraft.mock.lastCall![2]).toMatchObject({ destination: "whatsapp", whatsappNumber: "+91 ••••• 4842" });
   });
 
-  it("leaves a business outside India on the lead form", async () => {
+  it("opens a business outside India on WhatsApp too, listed first and recommended; Instant form stays selectable", async () => {
     view({ ...business, phone: "+1 512 555 0100" });
     await statusRead();
     await settle();
-    expect(screen.getByRole("radio", { name: "Instant form" })).toBeChecked();
-    fireEvent.click(screen.getByRole("radio", { name: "WhatsApp chat" }));
+    const [first, second] = screen.getAllByRole("radio", { name: /^(WhatsApp chat|Instant form)/ });
+    expect(first).toHaveAccessibleName("WhatsApp chat (recommended)");
+    expect(second).toHaveAccessibleName("Instant form");
+    expect(first).toBeChecked();
     expect(screen.getByLabelText("WhatsApp button number")).toHaveValue("+91 ••••• 0874");
+    fireEvent.click(second);
+    expect(second).toBeChecked();
+    expect(screen.getByLabelText("Lead form")).toBeInTheDocument();
   });
 });

@@ -16,15 +16,17 @@ permissions:
   actions: write # dispatches the drift check; a GITHUB_TOKEN merge triggers no workflows
   statuses: write # core-approval on the train PR (#1002)
 
-concurrency:
-  # A newer push replaces a waiting run, so one promotion carries everything merged meanwhile.
-  group: deploy-train
-  cancel-in-progress: true
-
 jobs:
   promote:
+    # A newer push replaces a waiting run, so one promotion carries everything merged meanwhile.
+    # Job-level, so a push never cancels the watchdog below.
+    concurrency:
+      group: deploy-train
+      cancel-in-progress: true
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # Each step has its own bound and they sum to at most this (#2029): a job timeout kills the
+    # runner before an if: failure() alert, a step timeout doesn't. Worst case of promote is ~87 min.
+    timeout-minutes: 100
     defaults:
       run:
         shell: bash
@@ -33,6 +35,7 @@ jobs:
       GAP_MINUTES: "30"
     steps:
       - name: Promote next to main
+        timeout-minutes: 93
         run: |
           set -euo pipefail
           repo="$GITHUB_REPOSITORY"
@@ -155,10 +158,47 @@ jobs:
           gh workflow run production-drift.yml -R "$repo" --ref main || echo "::warning::drift check not dispatched"
       - name: Alert once when the train is stuck
         if: failure()
+        timeout-minutes: 5
         run: |
           title="Deploy train stuck"
           open=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search "in:title \"$title\"" --json number --jq '.[0].number // empty')
-          reason=$(cat "$RUNNER_TEMP/reason" 2>/dev/null || echo "Red or slow checks on next, or a merge error.")
-          body="$(printf 'next could not be promoted to main. %s\n\nRun: %s/%s/actions/runs/%s\nFix next, or ship a hotfix PR to main (DevOps/CTO). Runbook: docs/RELEASING.md#deploy-train\n' "$reason" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+          reason=$(cat "$RUNNER_TEMP/reason" 2>/dev/null || echo "Red or slow checks on next, a merge error, or the promote step hit its time limit.")
+          # #2361 (E5): name the suspects, the changes on next that main lacks, so whoever sees it fixes forward.
+          suspects=$(gh api "repos/$GITHUB_REPOSITORY/compare/main...next" \
+            --jq '.commits[-15:][] | "- \(.sha[0:7]) \(.commit.message | split("\n")[0])"' 2>/dev/null || echo "- (could not list next's commits)")
+          body="$(printf 'next could not be promoted to main. %s\n\nRun: %s/%s/actions/runs/%s\nChanges on next not yet on main (latest 15):\n%s\n\nFix forward on next (whoever sees it first, #2360 E3), or ship a hotfix PR to main (DevOps/CTO). Runbook: docs/operations/releasing.md#deploy-train\n' "$reason" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" "$suspects")"
           if [ -n "$open" ]; then gh issue comment "$open" -R "$GITHUB_REPOSITORY" -b "$body"
           else gh issue create -R "$GITHUB_REPOSITORY" -l core -l bug -l owner:devops -t "$title" -b "$body"; fi
+
+  watchdog:
+    # A superseded promote is cancelled, and a cancelled job runs no failure alert (#2029). Cancels inside
+    # the 30-minute gap are normal; a change that waits OVERDUE_MINUTES on next is not.
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+    env:
+      GH_TOKEN: ${{ github.token }}
+      OVERDUE_MINUTES: "120"
+    steps:
+      - name: Alert when next has waited too long for production
+        timeout-minutes: 8
+        run: |
+          set -euo pipefail
+          git init -q "$RUNNER_TEMP/train" && cd "$RUNNER_TEMP/train"
+          git fetch -q --filter=tree:0 --no-tags "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
+            +refs/heads/main:refs/remotes/origin/main +refs/heads/next:refs/remotes/origin/next
+          # next's first parents are its PR merges; their commit time is when each landed on next.
+          # (A merged branch's own commits can be days older, so don't count those.)
+          oldest=$(git log --first-parent --format=%ct origin/main..origin/next | tail -n 1)
+          [ -n "$oldest" ] || { echo "next has nothing main lacks."; exit 0; }
+          age=$(( ($(date +%s) - oldest) / 60 ))
+          echo "Oldest change waiting on next landed ${age} min ago (alert at ${OVERDUE_MINUTES})."
+          [ "$age" -ge "$OVERDUE_MINUTES" ] || exit 0
+          title="Deploy train stuck"
+          open=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search "in:title \"$title\"" --json number --jq '.[0].number // empty')
+          if [ -n "$open" ]; then echo "Already alerted in #$open."; exit 0; fi
+          body="$(printf 'next has had changes waiting for production for %s min (no train finished). Promote runs keep being cancelled or timing out.\n\nRun: %s/%s/actions/runs/%s\nCheck the latest Deploy train runs and the checks on next. Runbook: docs/operations/releasing.md#deploy-train\n' "$age" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+          gh issue create -R "$GITHUB_REPOSITORY" -l core -l bug -l owner:devops -t "$title" -b "$body"

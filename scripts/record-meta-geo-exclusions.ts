@@ -5,10 +5,11 @@
  *
  *   npx tsx --env-file=<.env.local> scripts/record-meta-geo-exclusions.ts
  */
+import "./lib/meta-write-gate";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-const GRAPH = "https://graph.facebook.com/v21.0/";
+const GRAPH = "https://graph.facebook.com/v26.0/";
 const token = process.env.META_SYSTEM_USER_TOKEN;
 if (!token) throw new Error("Needs META_SYSTEM_USER_TOKEN.");
 

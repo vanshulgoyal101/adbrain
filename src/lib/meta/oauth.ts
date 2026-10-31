@@ -1,9 +1,10 @@
+import { GRAPH, GRAPH_VERSION } from "@/lib/meta/graph-version";
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { getEnv } from "@/lib/env";
 import { MetaError } from "./client";
+import { appSecretProof } from "./appsecret-proof";
 
-const GRAPH = "https://graph.facebook.com/v21.0";
-const OAUTH_DIALOG = "https://www.facebook.com/v21.0/dialog/oauth";
+const OAUTH_DIALOG = `https://www.facebook.com/${GRAPH_VERSION}/dialog/oauth`;
 
 /**
  * Permissions requested from the business owner. These cover reading their ad
@@ -188,6 +189,8 @@ async function graphRequest<T>(url: URL, token: string): Promise<T> {
     throw new MetaError("Meta returned an invalid request URL.");
   }
   url.searchParams.delete("access_token");
+  const proof = token && !token.includes("|") ? appSecretProof(token) : null; // none for app tokens or code exchanges
+  if (proof) url.searchParams.set("appsecret_proof", proof);
   const res = await fetch(url.toString(), {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
     redirect: "error",
@@ -317,10 +320,7 @@ export async function exchangeCodeForToken(
     redirect_uri: redirectUri,
     code,
   });
-  const data = await graphGet<{ access_token?: string }>(
-    `oauth/access_token?${q.toString()}`,
-    "",
-  );
+  const data = await graphGet<{ access_token?: string }>(`oauth/access_token?${q.toString()}`, "");
   if (!data.access_token) {
     throw new MetaError("Could not exchange code for a token.");
   }
@@ -338,10 +338,7 @@ export async function exchangeForLongLivedToken(
     client_secret: env.META_APP_SECRET,
     fb_exchange_token: shortToken,
   });
-  const data = await graphGet<{ access_token?: string; expires_in?: number }>(
-    `oauth/access_token?${q.toString()}`,
-    "",
-  );
+  const data = await graphGet<{ access_token?: string; expires_in?: number }>(`oauth/access_token?${q.toString()}`, "");
   if (!data.access_token) {
     throw new MetaError("Could not obtain a long-lived token.");
   }

@@ -28,7 +28,7 @@ function meta(options: { pages?: Child[][]; accounts?: { id: string; name: strin
         if (path.includes(business)) return { data: pages.flat().filter((child) => child.child_business_external_id === business) } as never;
         const index = Number(/after=CURSOR(\d+)/.exec(path)?.[1] ?? 0);
         const next = index + 1 < pages.length ? `CURSOR${index + 1}` : undefined;
-        return { data: pages[index], ...(next ? { paging: { cursors: { after: next }, next: `https://graph.facebook.com/v21.0/${PARENT}/owned_businesses?fields=id,child_business_external_id&limit=200&after=${next}` } } : {}) } as never;
+        return { data: pages[index], ...(next ? { paging: { cursors: { after: next }, next: `https://graph.facebook.com/v26.0/${PARENT}/owned_businesses?fields=id,child_business_external_id&limit=200&after=${next}` } } : {}) } as never;
       }
       if (path.includes("/owned_ad_accounts")) return { data: options.accounts ?? [] } as never;
       if (path.includes("/assigned_users")) return { data: [] } as never;

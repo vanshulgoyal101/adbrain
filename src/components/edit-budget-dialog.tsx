@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { budgetChangeFromForm, initialBudgetForm, localDay, type BudgetAfter, type BudgetForm, type BudgetFormStart } from "@/lib/campaign/budget-edit-form";
-import { formatMoney } from "@/lib/format";
+import { formatDay, formatMoney } from "@/lib/format";
 
 type State = BudgetAfter & { spentRupees: number };
 type Preview = { before: State; after: State; needsConfirmation: boolean; confirmationDigest: string | null; notices: string[] };
@@ -14,10 +14,10 @@ type Preview = { before: State; after: State; needsConfirmation: boolean; confir
 /** Meta allows one budget change per ad set every 30 s and counts the check in it (#774). */
 export const META_WAIT_MS = 30_000;
 
-const day = (iso: string | null) => iso ? new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short" }) : "no end date";
+const day = (iso: string | null) => iso ? formatDay(iso) : "no end date";
 
 /** The change in plain words, before saving. */
-export function budgetWords(preview: Pick<Preview, "before" | "after">): string {
+function budgetWords(preview: Pick<Preview, "before" | "after">): string {
   const { before, after } = preview;
   const parts = [
     before.dailyRupees !== after.dailyRupees && `${formatMoney(before.dailyRupees)} → ${formatMoney(after.dailyRupees)} a day`,

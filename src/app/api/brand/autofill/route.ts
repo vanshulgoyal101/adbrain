@@ -2,7 +2,7 @@ import { currentRequestId, observeRoute, recordProductEvent } from "@/lib/observ
 import { observeIdentity } from "@/lib/observability/context";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { BRAND_EXTRACTION, extractPhone, extractWebsiteText, verifiedAreas } from "@/lib/brand/autofill";
+import { BRAND_EXTRACTION, extractPhone, extractSiteName, extractWebsiteText, nameInText, PASTED_TEXT_MAX, pastedBrandText, phoneInText, verifiedAreas } from "@/lib/brand/autofill";
 import { metaClientForBusiness } from "@/lib/meta/credentials";
 import { completeJSON, NoLLMKeysError } from "@/lib/llm";
 import { persistLLMUsage } from "@/lib/llm/persist";
@@ -10,6 +10,7 @@ import type { CompletionResult, ProviderAttempt } from "@/lib/llm/types";
 import { fetchPublicUrlText, parsePublicUrl, SafeFetchError } from "@/lib/security/ssrf";
 import { rateLimitResponse } from "@/lib/security/rate-limit";
 import { createClient } from "@/lib/supabase/server";
+import { ownerError } from "@/i18n/request-locale";
 import {
   buildBrandExtractionMessages,
   type BrandExtraction,
@@ -48,47 +49,55 @@ async function handlePOST(req: Request) {
   });
   if (limited) return limited;
 
-  const body = z.object({ url: z.string().trim().min(1).max(2048), businessId: z.string().uuid().optional() })
-    .safeParse(await req.json().catch(() => null));
+  // #1317: a website to read, or text the business pasted (an Instagram bio, a Google listing). Nothing else is fetched.
+  const body = z.union([
+    z.object({ url: z.string().trim().min(1).max(2048), businessId: z.string().uuid().optional() }).strict(),
+    z.object({ text: z.string().max(PASTED_TEXT_MAX * 2), businessId: z.string().uuid().optional() }).strict(),
+  ]).safeParse(await req.json().catch(() => null));
   if (!body.success) {
-    return NextResponse.json({ error: "A website URL of at most 2048 characters is required." }, { status: 400 });
+    return NextResponse.json({ error: await ownerError("brandInputInvalid") }, { status: 400 });
   }
 
-  const parsed = parsePublicUrl(body.data.url);
-  if (!parsed) {
-    return NextResponse.json({ error: "That URL is not allowed" }, { status: 400 });
-  }
-
-  let html: string;
-  try {
-    html = await fetchPublicUrlText(parsed.toString(), {
-      headers: { "User-Agent": "AdBrainBot/1.0 (+https://adbrain.vanshul.com)" },
-      timeoutMs: 10_000,
-    });
-  } catch (err) {
-    if (err instanceof SafeFetchError) {
-      if (err.code === "blocked") {
-        return NextResponse.json({ error: "That URL is not allowed" }, { status: 400 });
-      }
-      if (err.code === "status") {
-        return NextResponse.json(
-          { error: `Site returned ${err.status}` },
-          { status: 502 },
-        );
-      }
+  let text: string;
+  let source: string;
+  let phone: string | undefined;
+  let name: string | undefined;
+  if ("text" in body.data) {
+    const pasted = pastedBrandText(body.data.text);
+    if (!pasted) return NextResponse.json({ error: await ownerError("pasteMore") }, { status: 400 });
+    text = pasted;
+    source = "(no website: text the business pasted, such as an Instagram bio or a Google listing)";
+    phone = phoneInText(pasted);
+    name = nameInText(pasted);
+  } else {
+    const parsed = parsePublicUrl(body.data.url);
+    if (!parsed) {
+      return NextResponse.json({ error: await ownerError("urlNotAllowed") }, { status: 400 });
     }
-    return NextResponse.json(
-      { error: "Could not fetch the site" },
-      { status: 502 },
-    );
-  }
 
-  const text = extractWebsiteText(html);
-  if (!text) {
-    return NextResponse.json(
-      { error: "No readable text found on that page" },
-      { status: 422 },
-    );
+    let html: string;
+    try {
+      html = await fetchPublicUrlText(parsed.toString(), {
+        headers: { "User-Agent": "AdBrainBot/1.0 (+https://adbrain.vanshul.com)" },
+        timeoutMs: 10_000,
+      });
+    } catch (err) {
+      if (err instanceof SafeFetchError) {
+        if (err.code === "blocked") {
+          return NextResponse.json({ error: await ownerError("urlNotAllowed") }, { status: 400 });
+        }
+        if (err.code === "status") return NextResponse.json({ error: await ownerError("siteRefused") }, { status: 502 });
+      }
+      return NextResponse.json({ error: await ownerError("siteUnreachable") }, { status: 502 });
+    }
+
+    text = extractWebsiteText(html);
+    if (!text) {
+      return NextResponse.json({ error: await ownerError("noReadableText") }, { status: 422 });
+    }
+    source = parsed.toString();
+    phone = extractPhone(html);
+    name = extractSiteName(html);
   }
 
   // #650: every provider attempt is a usage row, on the owner's business when it already exists
@@ -115,21 +124,18 @@ async function handlePOST(req: Request) {
 
   try {
     const extraction = await completeJSON<BrandExtraction>(
-      buildBrandExtractionMessages(text, parsed.toString()),
+      buildBrandExtractionMessages(text, source),
       { ...BRAND_EXTRACTION, cache: true, onAttempt: (attempt) => attempts.push(attempt) },
     );
     await logUsage((extraction as { __completion?: CompletionResult }).__completion);
     const locations = await resolvableAreas(verifiedAreas(extraction.locations, text), owned);
-    return NextResponse.json({ extraction: { ...extraction, locations: locations.length ? locations : undefined, phone: extractPhone(html) } });
+    return NextResponse.json({ extraction: { ...extraction, locations: locations.length ? locations : undefined, phone, name } });
   } catch (err) {
     await logUsage();
     if (err instanceof NoLLMKeysError) {
       return NextResponse.json({ error: err.message }, { status: 400 });
     }
-    return NextResponse.json(
-      { error: "Could not extract business details. Try again later or enter them manually." },
-      { status: 502 },
-    );
+    return NextResponse.json({ error: await ownerError("brandReadFailed") }, { status: 502 });
   }
 }
 

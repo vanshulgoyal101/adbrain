@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/types";
+import { formatMoney } from "@/lib/format";
 import { getProductionPaymentConfig } from "./production-config";
 import { customerBalanceSchema, customerPaiseSchema as paise, customerCostEvidenceSchema, customerRefundAllocationSchema, type CustomerBalance } from "./customer-balance-contracts";
 
@@ -32,8 +33,14 @@ type AccountingDatabase = Database & { public: { Functions: {
   }; Returns: undefined };
 } } };
 
+/** #782: why the AdBrain balance can't cover a run; UNVERIFIED is the generic, unreadable case. */
+export type CustomerBalanceCode = "UNVERIFIED" | "BALANCE_INSUFFICIENT" | "BALANCE_HELD" | "BALANCE_UNAVAILABLE" | "ACTIVATION_PENDING" | "BINDING_CHANGED" | "SPEND_CAP_TOO_LOW";
+
 export class CustomerBalanceError extends Error {
-  constructor(message = "Customer advertising funds could not be verified. Payment or cost reconciliation is required.") {
+  constructor(
+    message = "Customer advertising funds could not be verified. Payment or cost reconciliation is required.",
+    readonly code: CustomerBalanceCode = "UNVERIFIED",
+  ) {
     super(message);
     this.name = "CustomerBalanceError";
   }
@@ -49,15 +56,47 @@ function accounting(actor: Actor) {
 
 async function checked<Schema extends z.ZodType>(query: {
   abortSignal(signal: AbortSignal): PromiseLike<{ data: unknown; error: unknown }>;
-}, schema: Schema): Promise<z.output<Schema>> {
+}, schema: Schema, refusal?: (message: string) => Promise<CustomerBalanceError | null>): Promise<z.output<Schema>> {
+  let answer: { data: unknown; error: unknown };
   try {
-    const { data, error } = await query.abortSignal(AbortSignal.timeout(4_000));
-    const parsed = schema.safeParse(data);
-    if (error || !parsed.success) throw new CustomerBalanceError();
-    return parsed.data;
+    answer = await query.abortSignal(AbortSignal.timeout(4_000));
   } catch {
     throw new CustomerBalanceError();
   }
+  // #782: SQL's refusal text says which rule held (all raise 23514); map it to plain words, never show it.
+  const message = (answer.error as { message?: unknown } | null)?.message;
+  if (answer.error) throw (refusal && typeof message === "string" ? await refusal(message).catch(() => null) : null) ?? new CustomerBalanceError();
+  const parsed = schema.safeParse(answer.data);
+  if (!parsed.success) throw new CustomerBalanceError();
+  return parsed.data;
+}
+
+/** #782: the reserve's refusals (customer_ad_reserve's raise sites), each with its one action. */
+async function reserveRefusal(actor: Actor, message: string, capPaise: number, minimumPaise?: number): Promise<CustomerBalanceError | null> {
+  if (/Meta campaign spend cap minimum/.test(message) && minimumPaise) {
+    return new CustomerBalanceError(`Meta needs at least ${formatMoney(minimumPaise / 100)} as a campaign's total limit. Choose how many days to run (a run with a day limit has no such minimum), or add funds.`, "SPEND_CAP_TOO_LOW");
+  }
+  const balance = () => getCustomerBalance(actor).catch(() => null);
+  const cap = formatMoney(capPaise / 100);
+  if (/Insufficient customer advertising allowance/.test(message)) {
+    const current = await balance();
+    const text = current?.remainingPaise === 0
+      ? `There's no AdBrain balance for ads yet. Add funds to run this campaign (${cap} cap plus GST).`
+      : `Your AdBrain balance for ads is ${current ? `${formatMoney(current.remainingPaise / 100)}, ` : ""}below this run's ${cap} cap plus GST. Add funds or choose fewer days.`;
+    return new CustomerBalanceError(text, "BALANCE_INSUFFICIENT");
+  }
+  if (/media and tax evidence required/.test(message)) {
+    return (await balance())?.held
+      ? new CustomerBalanceError("Your AdBrain balance is on hold while we check a payment. We'll clear it; you can't start ads until then.", "BALANCE_HELD")
+      : new CustomerBalanceError("AdBrain couldn't confirm this campaign's latest Meta costs. Wait a few minutes and try again.", "BALANCE_UNAVAILABLE");
+  }
+  if (/must be reconciled before another attempt/.test(message)) {
+    return new CustomerBalanceError("An earlier start of this campaign is still being confirmed. Wait a minute, refresh, and try again.", "ACTIVATION_PENDING");
+  }
+  if (/customer binding changed/.test(message)) {
+    return new CustomerBalanceError("This campaign's Meta connection changed since you reviewed it. Refresh the page and try again.", "BINDING_CHANGED");
+  }
+  return null;
 }
 
 export async function getCustomerBalance(actor: Actor): Promise<CustomerBalance> {
@@ -67,12 +106,18 @@ export async function getCustomerBalance(actor: Actor): Promise<CustomerBalance>
   return balance;
 }
 
-/** `lifetimeCapPaise` is the Meta lifetime budget of a capped run; it replaces the 7-day reserve (#208). */
+/**
+ * `lifetimeCapPaise` is the Meta lifetime budget of a capped run; it replaces the 7-day reserve (#208).
+ * `minMediaLimitPaise` (#1799) is Meta's live campaign spend_cap minimum: an uncapped reserve under it is refused
+ * in the same transaction, so nothing is held.
+ */
 export async function reserveCustomerCampaign(actor: Actor, input: {
   campaignId: string; adAccountId: string; connectionGeneration: number; dailyBudgetRupees: number; requestKey: string; lifetimeCapPaise?: number;
+  minMediaLimitPaise?: number;
 }, reviewOnly = false) {
   const { database, scope } = accounting(actor);
   const rupees = z.number().positive().multipleOf(0.01).parse(input.dailyBudgetRupees);
+  const capPaise = input.lifetimeCapPaise ?? Math.round(rupees * 100) * 7;
   const result = await checked(database.rpc("customer_ad_reserve", {
     ...scope, p_campaign_id: z.uuid().parse(input.campaignId),
     p_ad_account_id: z.string().regex(/^act_[0-9]+$/).parse(input.adAccountId),
@@ -81,8 +126,11 @@ export async function reserveCustomerCampaign(actor: Actor, input: {
     p_request_key: z.string().regex(/^[a-f0-9]{64}$/).parse(input.requestKey),
     p_review_only: reviewOnly,
     ...(input.lifetimeCapPaise === undefined ? {} : { p_lifetime_cap_paise: paise.positive().parse(input.lifetimeCapPaise) }),
-  }), z.object({ reservationId: z.uuid(), mediaLimitPaise: paise.positive(), balance: customerBalanceSchema }));
-  if (result.balance.businessId !== actor.businessId || result.balance.held) throw new CustomerBalanceError();
+    ...(input.minMediaLimitPaise === undefined ? {} : { p_min_media_limit_paise: paise.positive().parse(input.minMediaLimitPaise) }),
+  }), z.object({ reservationId: z.uuid(), mediaLimitPaise: paise.positive(), balance: customerBalanceSchema }),
+  (message) => reserveRefusal(actor, message, capPaise, input.minMediaLimitPaise));
+  if (result.balance.businessId !== actor.businessId) throw new CustomerBalanceError();
+  if (result.balance.held) throw new CustomerBalanceError("Your AdBrain balance is on hold while we check a payment. We'll clear it; you can't start ads until then.", "BALANCE_HELD");
   return result;
 }
 

@@ -10,7 +10,7 @@ export function negatedTerm(text: string, index: number, term: string): boolean 
 }
 
 /** A Brand fact that negates or withdraws this term: "avoid free", "don't offer free", "Free survey, no longer offered" (#613, #767). */
-export function withdrawnInFact(source: string, index: number, term: string): boolean {
+function withdrawnInFact(source: string, index: number, term: string): boolean {
   const before = source.slice(Math.max(0, index - 32), index);
   // The rest of the sentence, not just the clause: "$49 exam, no longer offered" withdraws $49 (#767).
   // A sentence ends at . ! ? ; before a space, or a line break, so "$49.99" doesn't end it.

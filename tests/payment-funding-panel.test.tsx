@@ -1,18 +1,39 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { BillingSection, ManagedBilling } from "@/components/managed-billing";
-import { OPERATOR_MANAGED_POLICY } from "@/lib/payments/production-config";
+import { BillingSection, ManagedBilling, initialBillingTab } from "@/components/managed-billing";
+import { getProductionCollectionPolicy, OPERATOR_MANAGED_POLICY, PRICING_V2_APPROVED_AT } from "@/lib/payments/production-config";
 import { TestCheckout, type TestCheckoutOptions } from "@/components/test-checkout";
 import { ProductionCheckout } from "@/components/production-checkout";
 import { createAnnualPaymentQuote, createVerificationPaymentQuote } from "@/lib/payments/allocation";
 
+// #1968: own-account billing mounts Pause all, which reads the app router.
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock("next/script", () => ({ default: ({ onReady, onError }: { onReady: () => void; onError: () => void }) =>
   <img alt="" data-testid="checkout-script" onLoad={onReady} onError={onError} /> }));
 vi.mock("@/components/customer-balance", () => ({ CustomerBalance: ({ businessId }: { businessId: string }) =>
   <div data-testid="customer-balance" data-business-id={businessId} /> }));
 
 const connected = { adAccountId: "act_123", ready: true, expired: false, pending: false };
+
+// #1567: live terms come from the policy collection accepts (priced-v2), not the retired v1 text (#1235, #1536).
+const policyAt = Date.parse(PRICING_V2_APPROVED_AT);
+const liveCollectionEnv = {
+  PAYMENTS_LIVE_ENABLED: "true", NODE_ENV: "production", VERCEL_ENV: "production", VERCEL_GIT_COMMIT_REF: "main",
+  VERCEL_PROJECT_ID: "prj_fixture", PAYMENTS_LIVE_PROJECT_ID: "prj_fixture",
+  NEXT_PUBLIC_SUPABASE_URL: "https://fixture.supabase.co", PAYMENTS_LIVE_SUPABASE_URL: "https://fixture.supabase.co",
+  RAZORPAY_LIVE_KEY_ID: "rzp_live_fixture", RAZORPAY_LIVE_KEY_SECRET: "synthetic-checkout-secret",
+  RAZORPAY_LIVE_ACCOUNT_ID: "acc_fixture", RAZORPAY_LIVE_WEBHOOK_SECRET: "synthetic-webhook-secret",
+  PAYMENTS_LIVE_WEBHOOK_ID: "33333333-3333-4333-8333-333333333333", PAYMENTS_LIVE_COLLECTION_ENABLED: "true",
+};
+/** #1235 (owner): AdBrain's service/advertising split, in the words the CTO listed on #1567. */
+const SPLIT_WORDS = /(?<![\w.])(?:80|20)\s?%|allocated to service|service allocation/i;
+/** The collection policy is built on the server only (it refuses when `window` exists); build it there, then render. */
+function serverPolicy(...args: Parameters<typeof getProductionCollectionPolicy>) {
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, "window")!;
+  Object.defineProperty(globalThis, "window", { value: undefined, configurable: true });
+  try { return getProductionCollectionPolicy(...args); } finally { Object.defineProperty(globalThis, "window", descriptor); }
+}
 
 const businessId = "22222222-2222-4222-8222-222222222222";
 const orderId = "11111111-1111-4111-8111-111111111111";
@@ -180,7 +201,7 @@ describe("test checkout", () => {
 });
 
 describe("production checkout with synthetic responses", () => {
-  const livePolicy = { ...OPERATOR_MANAGED_POLICY, hash: "a".repeat(64) };
+  const livePolicy = serverPolicy(liveCollectionEnv, policyAt);
   const liveOrder = { ...createdOrder, environment: "live", capturedPaise: 0, refundedPaise: 0, refundReconciliationPending: false, receipt: null,
     checkout: { ...createdOrder.checkout, key: "rzp_live_fixture", name: "Vanshul Goyal", description: "AdBrain annual service" } };
   const captured = { ...liveOrder, status: "captured", capturedPaise: 1_000_000, checkout: null,
@@ -201,9 +222,9 @@ describe("production checkout with synthetic responses", () => {
     fireEvent.click(screen.getByRole("checkbox"));
     fireEvent.click(screen.getByRole("button", { name: "Pay ₹10,000" }));
     await waitFor(() => expect(opened).toHaveBeenCalledTimes(1));
-    expect(screen.getByText(OPERATOR_MANAGED_POLICY.serviceScope)).toBeInTheDocument();
-    expect(screen.getByText(OPERATOR_MANAGED_POLICY.refundTerms)).toBeInTheDocument();
-    expect(screen.getByText(/The operator pays Meta separately\. Advertising allocation/)).toBeInTheDocument();
+    expect(screen.getByText(livePolicy.serviceScope)).toBeInTheDocument();
+    expect(screen.getByText(livePolicy.refundTerms)).toBeInTheDocument();
+    expect(screen.getByText(/The operator pays Meta separately\. Your ad budget is not yet a confirmed Meta balance\./)).toBeInTheDocument();
     expect(options).toMatchObject({ key: "rzp_live_fixture", amount: 1_000_000, order_id: "order_fixture", retry: { enabled: false } });
     expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toMatchObject({ businessId, termsHash: livePolicy.hash, acceptTerms: true });
     act(() => options.handler({ razorpay_order_id: "order_fixture", razorpay_payment_id: "pay_fixture", razorpay_signature: "b".repeat(64) }));
@@ -225,6 +246,9 @@ describe("production checkout with synthetic responses", () => {
     await screen.findByText("Ready for payment");
     expect(screen.getByRole("heading", { name: "Payment verification" })).toBeInTheDocument();
     expect(screen.getByText("Previous payments")).toBeInTheDocument();
+    // #1235: the verification breakdown names no service share.
+    expect(screen.getByText("Checkout test: no ad budget is added")).toBeInTheDocument();
+    expect(screen.queryByText("Service allocation")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Continue saved checkout" })).not.toBeInTheDocument();
     fireEvent.load(screen.getByTestId("checkout-script"));
     fireEvent.click(screen.getByRole("checkbox"));
@@ -304,26 +328,26 @@ describe("production checkout with synthetic responses", () => {
       fireEvent.load(screen.getByTestId("checkout-script"));
     }
 
-    it("says pay-as-you-go: Ad money title and the 80/20 line, no annual wording (#225)", async () => {
+    it("says pay-as-you-go: Ad money title, no split and no annual wording (#225, #1235)", async () => {
       await mountAnnual();
       expect(screen.getByRole("heading", { name: "Ad money" })).toBeInTheDocument();
-      expect(screen.getByText("Pay any amount from \u20b9500. 80% goes to your ads (including Meta's GST) and 20% is AdBrain's service fee. Top up any time.")).toBeInTheDocument();
+      expect(screen.getByText("Pay any amount from \u20b9500. It becomes your ad budget, including Meta's GST, and AdBrain makes and runs your ads. Top up any time.")).toBeInTheDocument();
       expect(screen.queryByText(/Annual/)).not.toBeInTheDocument();
     });
 
-    it("takes an amount, shows the 80% ad money and 20% service split, and creates the order for that amount", async () => {
+    it("takes an amount, shows only what is paid (no ad-budget amount, #1235), and creates the order for that amount", async () => {
       await mountAnnual();
       const input = screen.getByRole("spinbutton", { name: "Amount to pay (₹)" });
       expect(input).toHaveValue(10_000);
-      expect(screen.getByText("Ad money, including Meta GST (80%)").nextSibling).toHaveTextContent("₹8,000");
-      expect(screen.getByText("AdBrain service (20%)").nextSibling).toHaveTextContent("₹2,000");
+      expect(screen.getByText("You pay").nextSibling).toHaveTextContent("₹10,000");
+      expect(screen.queryByText(/Ad budget for|AdBrain service|₹8,000|₹2,000/)).not.toBeInTheDocument();
       fireEvent.change(input, { target: { value: "1250" } });
       expect(screen.getByRole("button", { name: "Pay ₹10,000" })).toBeDisabled();
       fireEvent.click(screen.getByRole("button", { name: "Update amount" }));
       await screen.findByText("Amount updated.");
       expect(fetchMock.mock.calls.at(-1)![0]).toContain("amountPaise=125000");
-      expect(screen.getByText("Ad money, including Meta GST (80%)").nextSibling).toHaveTextContent("₹1,000");
-      expect(screen.getByText("AdBrain service (20%)").nextSibling).toHaveTextContent("₹250");
+      expect(screen.getByText("You pay").nextSibling).toHaveTextContent("₹1,250");
+      expect(screen.queryByText(/₹1,000|₹250/)).not.toBeInTheDocument();
       fireEvent.click(screen.getByRole("checkbox"));
       fireEvent.click(screen.getByRole("button", { name: "Pay ₹1,250" }));
       await waitFor(() => expect(opened).toHaveBeenCalledTimes(1));
@@ -490,6 +514,35 @@ describe("production checkout with synthetic responses", () => {
   });
 });
 
+const funded = {
+  businessId, currency: "INR" as const, refundedPaise: 0, mediaCostPaise: 0, taxCostPaise: 0, reservedPaise: 0, remainingPaise: 800000,
+  held: false, reason: null, reservations: [],
+};
+
+describe("#1567: the Payments tab never shows AdBrain's split for a policy collection accepts", () => {
+  const subject = { businessId, userId: "44444444-4444-4444-8444-444444444444" };
+  const verificationEnv = { ...liveCollectionEnv, PAYMENTS_LIVE_VERIFICATION_ENABLED: "true",
+    PAYMENTS_LIVE_VERIFICATION_BUSINESS_ID: subject.businessId, PAYMENTS_LIVE_VERIFICATION_USER_ID: subject.userId,
+    PAYMENTS_LIVE_VERIFICATION_EXPIRES_AT: new Date(policyAt + 3_600_000).toISOString(), PAYMENTS_LIVE_VERIFICATION_AMOUNT_PAISE: "1000" };
+
+  it.each([
+    ["annual service", () => serverPolicy(liveCollectionEnv, policyAt)],
+    ["checkout verification", () => serverPolicy(verificationEnv, policyAt, subject)],
+  ])("%s: terms are shown in full, with no split", async (_name, build) => {
+    const policy = build();
+    fetchMock.mockImplementation(async (path: string) => Response.json(path.includes("orders?") ? { policy, orders: [] } : {}));
+    render(<ProductionCheckout businessId={businessId} />);
+    await screen.findByText("Ready for payment");
+    expect(screen.getByText(policy.serviceScope)).toBeInTheDocument();
+    expect(screen.getByText(policy.refundTerms)).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(SPLIT_WORDS);
+  });
+
+  it("control: the retired v1 terms name the split, so the same check would catch them", () => {
+    expect(`${OPERATOR_MANAGED_POLICY.serviceScope} ${OPERATOR_MANAGED_POLICY.refundTerms}`).toMatch(SPLIT_WORDS);
+  });
+});
+
 describe("managed billing settings", () => {
   // #759: only where AdBrain holds ad money (managed) is there anything to pay; own-account owners pay Meta.
   it.each(["own", "operator", null] as const)("a %s business sees no Pay, Ad money or balance anywhere", (mode) => {
@@ -498,41 +551,69 @@ describe("managed billing settings", () => {
     expect(screen.queryByText(/Ad money|Pay any amount|Managed billing/)).not.toBeInTheDocument();
     expect(screen.queryByTestId("customer-balance")).not.toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
-    if (mode === "own") expect(screen.getByText("You pay Meta directly from your ad account. AdBrain's pilot is free.")).toBeInTheDocument();
+    if (mode === "own") expect(screen.getByText("You pay Meta directly from your ad account. Your first month of AdBrain is free; after that it's ₹999 a month.")).toBeInTheDocument();
   });
 
   it("a managed business keeps the live checkout and allowance", () => {
     fetchMock.mockResolvedValue(Response.json({ policy: null, orders: [] }));
-    render(<BillingSection mode="managed" connection={connected} liveBusinessId={businessId} />);
+    render(<BillingSection mode="managed" connection={connected} liveBusinessId={businessId} billingTab="budget" />);
     expect(screen.getByTestId("customer-balance")).toHaveAttribute("data-business-id", businessId);
   });
 
   it("shows the live business's checkout and allowance, updating both when the business changes", async () => {
     const otherBusinessId = "33333333-3333-4333-8333-333333333333";
     fetchMock.mockResolvedValue(Response.json({ policy: null, orders: [] }));
-    const view = render(<ManagedBilling connection={connected} testBusinessId={businessId} liveBusinessId={otherBusinessId} />);
+    const view = render(<ManagedBilling connection={connected} testBusinessId={businessId} liveBusinessId={otherBusinessId} billingTab="budget" />);
     expect(screen.getByTestId("customer-balance")).toHaveAttribute("data-business-id", otherBusinessId);
+    fireEvent.click(screen.getByRole("tab", { name: "Payments" }));
     await waitFor(() => expect(fetchMock.mock.calls.some(([path]) => path.includes(`businessId=${otherBusinessId}`))).toBe(true));
     expect(screen.queryByRole("region", { name: "Razorpay test checkout" })).not.toBeInTheDocument();
 
-    view.rerender(<ManagedBilling connection={connected} testBusinessId={businessId} liveBusinessId={businessId} />);
+    view.rerender(<ManagedBilling connection={connected} testBusinessId={businessId} liveBusinessId={businessId} billingTab="budget" />);
     expect(screen.getByTestId("customer-balance")).toHaveAttribute("data-business-id", businessId);
+    fireEvent.click(screen.getByRole("tab", { name: "Payments" }));
     await waitFor(() => expect(fetchMock.mock.calls.some(([path]) => path.includes(`businessId=${businessId}`))).toBe(true));
 
     view.rerender(<ManagedBilling connection={connected} />);
     expect(screen.queryByTestId("customer-balance")).not.toBeInTheDocument();
   });
 
+  // #1358 (CEO rule): a payment amount never appears on the same screen as any budget figure.
+  it("puts Ad budget and Payments on separate tabs, never both at once (#1358)", async () => {
+    fetchMock.mockImplementation(async (path: string) => path.includes("customer-balance")
+      ? Response.json({ balance: funded }) : Response.json({ policy: null, orders: [] }));
+    render(<ManagedBilling connection={connected} liveBusinessId={businessId} initialBalance={funded} />);
+    expect(screen.getByRole("tab", { name: "Ad budget" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByTestId("customer-balance")).toBeInTheDocument();
+    expect(screen.queryByText(/Pay any amount|Amount to pay|Payment reference/)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Add money" }));
+    expect(screen.getByRole("tab", { name: "Payments" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.queryByTestId("customer-balance")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Available|Spent|Held|₹8,000/)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Ad budget" }));
+    expect(screen.getByTestId("customer-balance")).toBeInTheDocument();
+    expect(screen.queryByText(/Pay any amount|Amount to pay|Payment reference/)).not.toBeInTheDocument();
+  });
+
+  it.each([
+    [null, undefined, "payments"], [{ ...funded, remainingPaise: 0, reservedPaise: 0, mediaCostPaise: 0, taxCostPaise: 0, refundedPaise: 0 }, undefined, "payments"],
+    [funded, undefined, "budget"], [funded, "payments", "payments"], [null, "budget", "budget"], [funded, "junk", "budget"],
+  ] as const)("opens on the right tab (#1358) %#", (balance, requested, expected) => {
+    expect(initialBillingTab(balance, requested)).toBe(expected);
+  });
+
   it("renders checkout only when supplied a server-authorized test business", () => {
     render(<ManagedBilling connection={connected} testBusinessId={businessId} />);
     expect(screen.getByRole("region", { name: "Razorpay test checkout" })).toBeInTheDocument();
   });
-  it("shows planned economics without presenting an enabled payment product", () => {
+  it("shows the offer without AdBrain's split or an enabled payment product (#1235)", () => {
     render(<ManagedBilling connection={connected} />);
     expect(screen.getByRole("region", { name: "Managed billing" })).toBeInTheDocument();
     expect(screen.getByText("Not enabled")).toBeInTheDocument();
-    expect(screen.getByText("20%")).toBeInTheDocument();
-    expect(screen.getByText("80%")).toBeInTheDocument();
+    expect(screen.getByText(/Your ad budget pays for Meta's ads and GST; AdBrain makes and runs the ads\./)).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/\b(80|20)\s?%|service (fee|allocation)|allocation|margin/i);
     expect(screen.getByText("Current operator")).toBeInTheDocument();
     expect(screen.getByText("Vanshul Goyal")).toBeInTheDocument();
     expect(screen.getByText("Operator-managed")).toBeInTheDocument();
@@ -564,7 +645,7 @@ describe("managed billing settings", () => {
 
   it("shows the approved refund boundary without a funding-setup or payment action", () => {
     render(<ManagedBilling connection={connected} />);
-    expect(screen.getByText(/Service allocation is earned only after/)).toBeInTheDocument();
+    expect(screen.getByText(/your unused ad budget is refundable once pending Meta costs are settled/)).toBeInTheDocument();
     expect(screen.queryByText("Funding options")).not.toBeInTheDocument();
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });

@@ -1,15 +1,15 @@
 "use client";
-
+import { useNotices } from "@/i18n/notices";
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { LivePicture, type PicturePreview } from "@/components/live-picture";
-import { AlertTriangle, CheckCircle2, Info } from "lucide-react";
+import { PhotoFitSheet, PhotoPicker, useBrandPhotos } from "@/components/photo-fit-sheet";
 import { updateCreativeCopy, type CopyEditResult } from "@/app/(app)/studio/actions";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Textarea } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import type { PhotoFit } from "@/lib/creative/fit-photo";
 import { editableCopySchema, savedCreativeDescription, type EditableCopy } from "@/lib/creative/concept";
 import { pictureDesign, pictureWordsOf, pictureWordsSchema, withPictureWords, type PictureWords } from "@/lib/creative/picture-words";
-import { createClient } from "@/lib/supabase/client";
 import { META_CTAS, type BrandContext } from "@/lib/templates/ads";
 import type { Creative } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -21,6 +21,7 @@ const LIMITS = {
 };
 
 export type CopyEditNotes = Pick<CopyEditResult, "warnings" | "liveNotice">;
+export { CopyEditNotice, UnsavedPreviewBadge } from "@/components/creative-edit-notices";
 
 /** The text an ad shows: saved, or the owner's unsaved draft while editing (#387). */
 export type AdText = { headline: string; primary_text: string; description: string; cta: string };
@@ -46,17 +47,8 @@ function savedPhotoUrl(creative: Creative): string | null {
 
 const PREVIEW_DEBOUNCE_MS = 700;
 
-/** Marks a live preview that isn't saved yet, so nobody mistakes it for the saved ad. */
-export function UnsavedPreviewBadge() {
-  return (
-    <span role="status" className="inline-flex w-fit items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900">
-      Preview · unsaved changes
-    </span>
-  );
-}
-
 /** Inline editor for an ad's words (#280). Saving never calls the AI. */
-export function CreativeCopyEditor({
+function CreativeCopyEditor({
   creative,
   onSaved,
   onCancel,
@@ -70,6 +62,7 @@ export function CreativeCopyEditor({
   /** Called with every edit so the card can preview it live; null when the editor closes. */
   onDraft?: (copy: AdText | null) => void;
 }) {
+  const tn = useNotices();
   const [copy, setCopy] = useState<EditableCopy>(() => ({
     headline: creative.headline ?? "",
     primary_text: creative.primary_text ?? "",
@@ -95,9 +88,9 @@ export function CreativeCopyEditor({
         const res = await updateCreativeCopy(creative.id, copy);
         if (res.ok && res.creative) {
           onSaved({ ...creative, ...res.creative }, { warnings: res.warnings ?? [], liveNotice: res.liveNotice });
-        } else setError(res.error ?? "Couldn't save your changes. Try again.");
+        } else setError(res.error ?? tn("editor.saveFailed"));
       } catch {
-        setError("Couldn't save your changes. Check your connection and try again.");
+        setError(tn("editor.saveOffline"));
       }
     });
   }
@@ -189,30 +182,6 @@ export function CreativeCopyEditor({
   );
 }
 
-/** What the owner should know after saving: unbacked claims and live campaigns. */
-export function CopyEditNotice({ notes }: { notes: CopyEditNotes }) {
-  const warnings = notes.warnings ?? [];
-  return (
-    <div className="flex flex-col gap-1.5" role="status">
-      {warnings.length === 0 && !notes.liveNotice && (
-        <p className="flex items-center gap-1.5 text-xs text-emerald-700">
-          <CheckCircle2 className="h-3.5 w-3.5" /> Saved.
-        </p>
-      )}
-      {warnings.map((warning) => (
-        <p key={warning} className="flex items-start gap-1.5 text-xs text-amber-800">
-          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" /> {warning}
-        </p>
-      ))}
-      {notes.liveNotice && (
-        <p className="flex items-start gap-1.5 text-xs text-slate-600">
-          <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" /> {notes.liveNotice}
-        </p>
-      )}
-    </div>
-  );
-}
-
 const PICTURE_LIMITS = {
   headline: pictureWordsSchema.shape.headline.maxLength ?? 40,
   subhead: pictureWordsSchema.shape.subhead.maxLength ?? 64,
@@ -220,7 +189,7 @@ const PICTURE_LIMITS = {
 };
 
 /** Redraws the words printed on the picture over the same background (#280). No AI. */
-export function PictureWordsEditor({
+function PictureWordsEditor({
   creative,
   brand,
   onSaved,
@@ -236,6 +205,7 @@ export function PictureWordsEditor({
   /** Live picture with the unsaved words (#387); null when there's nothing to preview. */
   onPreview?: (preview: PicturePreview | null) => void;
 }) {
+  const tn = useNotices();
   // Keyed on the fields the overlay uses: some cards rebuild `creative` on every render.
   const { id, headline, primary_text, cta, angle, generation } = creative;
   const base = useMemo(
@@ -294,9 +264,9 @@ export function PictureWordsEditor({
       });
       const data = (await res.json().catch(() => ({}))) as { creative?: Creative; liveNotice?: string; error?: string };
       if (res.ok && data.creative) onSaved({ ...creative, ...data.creative }, { warnings: [], liveNotice: data.liveNotice });
-      else setError(data.error ?? "Couldn't redraw the picture. Try again.");
+      else setError(data.error ?? tn("editor.redrawFailed"));
     } catch {
-      setError("Couldn't redraw the picture. Check your connection and try again.");
+      setError(tn("editor.redrawOffline"));
     } finally {
       setSaving(false);
     }
@@ -368,7 +338,7 @@ export function PictureWordsEditor({
 }
 
 /** A new picture behind the same words (#280 slice 3). One paid AI image, like Regenerate. */
-export function BackgroundEditor({
+function BackgroundEditor({
   creative,
   brand,
   onSaved,
@@ -383,9 +353,11 @@ export function BackgroundEditor({
   onBusy?: (busy: boolean) => void;
   onPreview?: (preview: PicturePreview | null) => void;
 }) {
+  const tn = useNotices();
   const [instruction, setInstruction] = useState("");
-  const [photos, setPhotos] = useState<string[]>([]);
+  const photos = useBrandPhotos(creative.business_id);
   const [photo, setPhoto] = useState<string | null>(null);
+  const [fit, setFit] = useState<PhotoFit>("attention");
   // A picked photo shows behind the same words at once (#387).
   const { headline, primary_text, cta, angle, generation } = creative;
   const base = useMemo(
@@ -393,29 +365,12 @@ export function BackgroundEditor({
     [headline, primary_text, cta, angle, generation, brand],
   );
   useEffect(() => {
-    onPreview?.(photo ? { spec: { ...base, backgroundUrl: photo } } : null);
-  }, [photo, base, onPreview]);
+    onPreview?.(photo ? { spec: { ...base, backgroundUrl: photo, backgroundFit: fit } } : null);
+  }, [photo, fit, base, onPreview]);
   useEffect(() => () => onPreview?.(null), [onPreview]);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   useEffect(() => onBusy?.(saving), [saving, onBusy]);
-  useEffect(() => {
-    let alive = true;
-    void Promise.resolve(
-      createClient()
-        .from("brand_assets")
-        .select("url")
-        .eq("business_id", creative.business_id)
-        .eq("type", "product_photo")
-        .order("created_at", { ascending: false })
-        .limit(12),
-    ).then(({ data }) => {
-      if (alive) setPhotos((data ?? []).map((row) => row.url));
-    }).catch(() => undefined);
-    return () => {
-      alive = false;
-    };
-  }, [creative.business_id]);
   const id = `background-${creative.id}`;
 
   async function save(event: React.FormEvent) {
@@ -426,23 +381,46 @@ export function BackgroundEditor({
       const res = await fetch(`/api/creatives/${creative.id}/background`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(photo ? { photoUrl: photo } : { instruction }),
+        body: JSON.stringify(photo ? { photoUrl: photo, fit } : { instruction }),
       });
       const data = (await res.json().catch(() => ({}))) as { creative?: Creative; liveNotice?: string; error?: string };
       if (res.ok && data.creative) onSaved({ ...creative, ...data.creative }, { warnings: [], liveNotice: data.liveNotice });
-      else setError(data.error ?? "Couldn't make a new background. Try again.");
+      else setError(data.error ?? tn("editor.backgroundFailed"));
     } catch {
-      setError("Couldn't make a new background. Check your connection, then refresh before trying again.");
+      setError(tn("editor.backgroundOffline"));
     } finally {
       setSaving(false);
     }
   }
 
+  if (photo) {
+    return (
+      <PhotoFitSheet
+        creativeId={creative.id}
+        photo={photo}
+        fit={fit}
+        width={base.width}
+        height={base.height}
+        saving={saving}
+        error={error}
+        onFit={setFit}
+        onSubmit={save}
+        onPickAnother={() => {
+          setPhoto(null);
+          setFit("attention");
+          setError(null);
+        }}
+      />
+    );
+  }
+
   return (
-    <form aria-label="Change the background" onSubmit={save} className="flex flex-col gap-3">
+    <form aria-label="Change the picture" onSubmit={save} className="flex flex-col gap-3">
+      {/* #1901: the owner's photos first, then an AI picture; neither changes the words. */}
+      <PhotoPicker photos={photos} selected={photo} onPick={(url) => setPhoto((current) => (current === url ? null : url))} />
       <div className="flex flex-col gap-1">
         <div className="flex items-center justify-between">
-          <Label htmlFor={id}>New background</Label>
+          <Label htmlFor={id}>Or describe an AI picture</Label>
           <span className="text-xs tabular-nums text-slate-400">{instruction.length}/300</span>
         </div>
         <Textarea
@@ -455,31 +433,8 @@ export function BackgroundEditor({
             setInstruction(e.target.value);
             setPhoto(null);
           }}
-          autoFocus
         />
       </div>
-      {photos.length > 0 && (
-        <fieldset className="flex flex-col gap-1.5">
-          <legend className="mb-1.5 text-sm font-medium text-slate-700">Or use one of your photos</legend>
-          <div className="grid grid-cols-4 gap-2">
-            {photos.map((url, index) => (
-              <button
-                key={url}
-                type="button"
-                aria-pressed={photo === url}
-                aria-label={`Your photo ${index + 1}`}
-                onClick={() => setPhoto((current) => (current === url ? null : url))}
-                className={cn(
-                  "aspect-square overflow-hidden rounded-md border-2 bg-slate-100",
-                  photo === url ? "border-blue-600" : "border-transparent hover:border-slate-300",
-                )}
-              >
-                <img src={url} alt="" className="h-full w-full object-cover" loading="lazy" />
-              </button>
-            ))}
-          </div>
-        </fieldset>
-      )}
       {error && (
         <p className="text-xs text-red-600" role="alert">
           {error}

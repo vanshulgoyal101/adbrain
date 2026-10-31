@@ -20,6 +20,7 @@
  * Uses META_SYSTEM_USER_TOKEN / META_AD_ACCOUNT_ID / META_PAGE_ID. Tokens are stripped and every Meta id, hash
  * and phone number is replaced with a stable fake by metaScrubber() (#1040); tests rebind the fake account and Page.
  */
+import "./lib/meta-write-gate";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { metaClientFromEnv } from "./lib/meta-env";
@@ -27,7 +28,7 @@ import { metaScrubber } from "./lib/scrub-meta";
 
 type Exchange = { method: string; path: string; form?: Record<string, string>; status: number; body: unknown };
 
-const GRAPH = "https://graph.facebook.com/v21.0/";
+const GRAPH = "https://graph.facebook.com/v26.0/";
 const OUT = join(process.cwd(), "tests/core/fixtures/meta");
 let tape: Exchange[] = [];
 const realFetch = globalThis.fetch;
@@ -56,7 +57,7 @@ globalThis.fetch = async (input, init) => {
   }
   tape.push({
     method: init?.method ?? "GET",
-    path: parsed.pathname.replace("/v21.0/", "") + parsed.search,
+    path: parsed.pathname.replace("/v26.0/", "") + parsed.search,
     ...(form ? { form } : {}),
     status: response.status,
     body: scrub(body),

@@ -1,17 +1,21 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AdSetSwitchStuckError, CampaignDeliveryError, MetaClient } from "@/lib/meta/client";
+import { keptPausedCopies, mirroredChildren } from "@/lib/campaign/edit-service";
+import { pausedAdIds } from "@/lib/campaign/ad-pause";
 
 // #765 (b): the switch's safety rules, on a scripted Graph (the recorded tapes replay the happy path).
 const creds = { adAccountId: "act_2398686420592052", pageId: "885223068001054", accessToken: "test-token" };
 const CAMPAIGN = "900000000000000003", OLD = "900000000000000004", NEW = "900000000000000006", ADS = ["900000000000000007", "900000000000000008"];
 
-type Node = { id: string; campaign_id: string; status: string; lifetime_budget?: string; budget_remaining?: string };
-function graph(options: { capped?: { lifetime: string; remaining: string; remainingAtSwitch: string }; failOn?: (method: string, id: string, form: Record<string, string>) => boolean; failRestore?: boolean } = {}) {
+type Node = { id: string; campaign_id: string; status: string; lifetime_budget?: string; budget_remaining?: string; daily_budget?: string; end_time?: string };
+function graph(options: { capped?: { lifetime: string; remaining: string; remainingAtSwitch: string }; failOn?: (method: string, id: string, form: Record<string, string>) => boolean; failRestore?: boolean; old?: Partial<Node>; copy?: Partial<Node> } = {}) {
   const nodes = new Map<string, Node>([
     [OLD, { id: OLD, campaign_id: CAMPAIGN, status: "ACTIVE", ...options.capped ? { lifetime_budget: options.capped.lifetime, budget_remaining: options.capped.remaining } : { lifetime_budget: "0" } }],
     [NEW, { id: NEW, campaign_id: CAMPAIGN, status: "PAUSED", ...options.capped ? { lifetime_budget: options.capped.remaining } : { lifetime_budget: "0" } }],
     ...ADS.map(id => [id, { id, campaign_id: CAMPAIGN, status: "PAUSED" }] as [string, Node]),
   ]);
+  Object.assign(nodes.get(OLD)!, options.old);
+  Object.assign(nodes.get(NEW)!, options.copy);
   const writes: Array<{ id: string; form: Record<string, string> }> = [];
   const activeAfterEachWrite: string[][] = [];
   let restoring = false;
@@ -32,6 +36,8 @@ function graph(options: { capped?: { lifetime: string; remaining: string; remain
       const node = nodes.get(id)!;
       if (form.status) node.status = form.status;
       if (form.lifetime_budget) node.lifetime_budget = form.lifetime_budget;
+      if (form.daily_budget) node.daily_budget = form.daily_budget;
+      if (form.end_time) node.end_time = form.end_time;
       if (id === OLD && form.status === "PAUSED" && options.capped) node.budget_remaining = options.capped.remainingAtSwitch;
     }
     activeAfterEachWrite.push(active());
@@ -91,6 +97,57 @@ describe("core: switch a running ad set to its new-audience copy (#765 b)", () =
     expect(order.indexOf("cut")).toBeGreaterThan(order.indexOf(`${OLD}:PAUSED`));
     expect(order.indexOf("cut")).toBeLessThan(order.indexOf(`${NEW}:ACTIVE`));
     expect(order.indexOf(`${NEW}:ACTIVE:validate`)).toBe(0);
+  });
+
+  // #1146: an ad the owner paused from the card while the copy waited stays paused on the new audience.
+  it("leaves the copies of card-paused ads PAUSED and still switches", async () => {
+    const meta = graph();
+    expect(await new MetaClient(creds).switchAdSet(CAMPAIGN, { ...switchInput, keepPausedAdIds: [ADS[1]] })).toEqual({ fromAdSetId: OLD, adSetId: NEW, adIds: ADS });
+    expect(meta.writes.map(write => `${write.id}:${write.form.status}${write.form.execution_options ? ":validate" : ""}`)).toEqual([
+      `${NEW}:ACTIVE:validate`, `${OLD}:PAUSED`, `${ADS[0]}:ACTIVE`, `${NEW}:ACTIVE`, `${OLD}:ARCHIVED`,
+    ]);
+    expect(meta.nodes.get(ADS[1])!.status).toBe("PAUSED");
+    // A retry once Meta finished treats the kept-paused ad as done, not as a failed activation.
+    meta.nodes.get(OLD)!.status = "PAUSED";
+    await new MetaClient(creds).switchAdSet(CAMPAIGN, { ...switchInput, keepPausedAdIds: [ADS[1]] });
+    expect(meta.nodes.get(ADS[1])!.status).toBe("PAUSED");
+  });
+
+  it("refuses, writing nothing, when every ad of a running campaign is paused", async () => {
+    const meta = graph();
+    await expect(new MetaClient(creds).switchAdSet(CAMPAIGN, { ...switchInput, keepPausedAdIds: ADS })).rejects.toThrow("Every ad in this audience is paused");
+    expect(meta.writes).toEqual([]);
+  });
+
+  // #1146: the owner lowered the daily budget (or moved the end date) while the copy waited; the copy takes it.
+  it("gives the copy the old ad set's current daily budget and end date before anything goes ACTIVE", async () => {
+    const end = "2026-11-05T18:29:59+0000";
+    const meta = graph({ old: { daily_budget: "30000", end_time: end }, copy: { daily_budget: "100000", end_time: "2026-11-01T18:29:59+0000" } });
+    await new MetaClient(creds).switchAdSet(CAMPAIGN, switchInput);
+    expect(meta.nodes.get(NEW)).toMatchObject({ daily_budget: "30000", end_time: end, status: "ACTIVE" });
+    const order = meta.writes.map(write => write.form.daily_budget ? "budget" : `${write.id}:${write.form.status}${write.form.execution_options ? ":validate" : ""}`);
+    expect(order.indexOf("budget")).toBeGreaterThan(order.indexOf(`${OLD}:PAUSED`));
+    expect(order.indexOf("budget")).toBeLessThan(order.indexOf(`${ADS[0]}:ACTIVE`));
+  });
+
+  it("writes no budget when the copy already matches", async () => {
+    const meta = graph({ old: { daily_budget: "30000" }, copy: { daily_budget: "30000" } });
+    await new MetaClient(creds).switchAdSet(CAMPAIGN, switchInput);
+    expect(meta.writes.some(write => write.form.daily_budget || write.form.end_time)).toBe(false);
+  });
+
+  it("moves a capped copy's end date with its total", async () => {
+    const end = "2026-11-08T18:29:59+0000";
+    const meta = graph({ capped: { lifetime: "500000", remaining: "300000", remainingAtSwitch: "260000" }, old: { end_time: end }, copy: { end_time: "2026-11-02T18:29:59+0000" } });
+    await new MetaClient(creds).switchAdSet(CAMPAIGN, switchInput);
+    expect(meta.nodes.get(NEW)).toMatchObject({ lifetime_budget: "260000", end_time: end });
+  });
+
+  it("restores the old ad set when Meta refuses the copy's budget", async () => {
+    const meta = graph({ old: { daily_budget: "30000" }, copy: { daily_budget: "100000" }, failOn: (_method, id, form) => id === NEW && Boolean(form.daily_budget) });
+    await expect(new MetaClient(creds).switchAdSet(CAMPAIGN, switchInput)).rejects.toThrow("The old audience is running again.");
+    expect(meta.nodes.get(OLD)!.status).toBe("ACTIVE");
+    expect(meta.nodes.get(NEW)!.status).toBe("PAUSED");
   });
 
   it("refuses to switch a capped run that has spent its total, and resumes the old ad set", async () => {
@@ -165,5 +222,27 @@ describe("core: switch a running ad set to its new-audience copy (#765 b)", () =
     expect(meta.nodes.has(NEW)).toBe(false);
     expect(meta.nodes.get(OLD)!.status).toBe("ACTIVE");
     await expect(new MetaClient(creds).deleteAdSetCopy(CAMPAIGN, OLD)).rejects.toThrow("Nothing was deleted.");
+  });
+});
+
+// #1146: card pauses (#1045) follow the ads onto their copies.
+describe("core: card-paused ads across an audience rebuild (#1146)", () => {
+  const copy = { from: { adSetId: OLD, adIds: ["900000000000000011", "900000000000000012"] }, to: { adSetId: NEW, adIds: ADS } };
+  const paused = (adId: string, action: "paused" | "resumed" = "paused") => ({ adId, action, at: "2026-10-28T09:00:00.000Z" });
+
+  it("keeps paused only the copies of ads still paused from the card", () => {
+    expect(keptPausedCopies(copy, { adPauses: [paused("900000000000000012")] })).toEqual([ADS[1]]);
+    expect(keptPausedCopies(copy, { adPauses: [paused("900000000000000012"), paused("900000000000000012", "resumed")] })).toEqual([]);
+    expect(keptPausedCopies(copy, {})).toEqual([]);
+  });
+
+  it("the mirror records the pause under the copy's id, so Resume and Undo keep track", () => {
+    const campaign = {
+      meta_campaign_id: CAMPAIGN, meta_adset_id: OLD, meta_ad_ids: copy.from.adIds,
+      raw: { source: "campaign_operation", metaResult: { campaignId: CAMPAIGN, adSetIds: [OLD], adIds: copy.from.adIds }, adPauses: [paused("900000000000000012")] },
+    };
+    const mirrored = mirroredChildren(campaign as never, [{ from: copy.from, to: { mode: "rebuild", validated: false, adSetId: NEW, adIds: ADS, retiredAdSetId: OLD } }]);
+    expect(mirrored.meta_ad_ids).toEqual(ADS);
+    expect(pausedAdIds(mirrored.raw)).toEqual(["900000000000000012", ADS[1]]);
   });
 });

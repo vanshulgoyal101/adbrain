@@ -1,19 +1,23 @@
+import { createHmac } from "node:crypto";
+import { GRAPH } from "@/lib/meta/graph-version";
 import { z } from "zod";
-import { WHATSAPP_PUBLISHER_PLATFORMS } from "@/lib/meta/placements";
+import { FACEBOOK_FEED_POSITIONS, FACEBOOK_POSITIONS_WITHOUT_REELS, WHATSAPP_PUBLISHER_PLATFORMS } from "@/lib/meta/placements";
 import type { SetupReads } from "@/lib/meta/setup-checklist";
-import { fetchPublicUrl } from "@/lib/security/ssrf";
-import { readBoundedResponse } from "@/lib/imageGen/raster";
 import { destinationFromAdSets, type CampaignDestination } from "@/lib/campaign/outcomes";
 import type { CampaignSkipReason } from "@/lib/campaign/sync-skips";
-import { decodeAdResults, decodeCampaignInsights, decodeLifetimeSpendPaise, type AdResult, type CampaignInsights } from "./insights";
+import { minCampaignSpendCapPaise, type SpendCapMinimumAccount } from "@/lib/campaign/spend-cap-minimum";
+import { decodeAdResults, decodeCampaignInsights, decodeLifetimeSpendPaise, type AdResult, type CampaignInsights, type MetaCampaignState } from "./insights";
 import { maskWhatsAppNumber, maskedWhatsAppNumberPattern } from "./whatsapp-status-shared";
 import { graphEndpoint, graphEntity, graphErrorCode, graphOutcome } from "./graph-event";
 import { recordProductEvent } from "@/lib/observability/logger";
+import { ConnectionAccessError } from "./connection-access-error";
 import { EXCLUDABLE_CITIES, INDIA_REGION_KEYS, mergeExclusions, serviceAreaExclusions, TargetingExclusionsMissingError, type IncludedPlace } from "./service-area";
 import { AD_LANGUAGE_KEYS, storedLocales } from "./locales";
-export type { AdResult, CampaignInsights } from "./insights";
-
-const GRAPH = "https://graph.facebook.com/v21.0";
+import { expandPlaceAliases } from "./geo-aliases";
+import { fetchAdImage, readAdVideo, startAdVideo, uploadAdImageBytes, type AdVideoState } from "./media";
+import { buildGeoLocations, clampRadiusKm, geoLabel, hasGeo, pickBestGeoMatch } from "./geo";
+export { buildGeoLocations, geoItemsToTargeting, hasGeo, pickBestGeoMatch } from "./geo";
+export type { AdResult, CampaignInsights, MetaCampaignState } from "./insights";
 
 export interface MetaCredentials {
   adAccountId: string;
@@ -186,7 +190,7 @@ export type AdSetBudget = {
 export type AdSetBudgetChange = { dailyBudgetPaise?: number; lifetimeBudgetPaise?: number; endTime?: string };
 
 /** Interests (or other detailed targeting) make Meta refuse an in-place targeting update (100/1359202). */
-export function hasInterests(targeting: Record<string, unknown>): boolean {
+function hasInterests(targeting: Record<string, unknown>): boolean {
   const flexible = targeting.flexible_spec;
   return (Array.isArray(targeting.interests) && targeting.interests.length > 0)
     || (Array.isArray(flexible) && flexible.some(spec => spec && typeof spec === "object" && Object.keys(spec).length > 0));
@@ -303,6 +307,44 @@ export class MetaError extends Error {
   }
 }
 
+/** #1838: Meta's rate limits: app (4), user/account (17, 613, 80000–80014), Page (32). */
+export function isThrottleCode(code: number | undefined): boolean {
+  return code === 4 || code === 17 || code === 32 || code === 613 || (code !== undefined && code >= 80000 && code <= 80014);
+}
+
+/**
+ * #1838 (Reviewer, CTO): Meta is throttling us. `scope` says who waits (the whole app, one ad account, one Page) and
+ * `retryAfterMs` for how long (Meta's own estimate from the usage headers, else 15 min). Crons skip on it; a person's
+ * pause or activation is still tried. `reason` maps 1:1 to ADR-001's ChannelError code later.
+ */
+export class MetaThrottledError extends MetaError {
+  readonly reason = "rate_limited" as const;
+  constructor(message: string, status: number | undefined, code: number | undefined, subcode: number | undefined,
+    readonly scope: "app" | "account" | "page", readonly retryAfterMs: number, details?: MetaErrorDetails) {
+    super(message, status, code, subcode, details);
+    this.name = "MetaThrottledError";
+  }
+}
+
+const THROTTLE_DEFAULT_MS = 15 * 60_000;
+
+/** Meta's estimated wait from `x-business-use-case-usage` (minutes) or `x-ad-account-usage` (seconds); null if none. */
+export function throttleWaitMs(headers: Headers): number | null {
+  const waits: number[] = [];
+  try {
+    const usage = JSON.parse(headers.get("x-business-use-case-usage") ?? "{}") as Record<string, { estimated_time_to_regain_access?: number }[]>;
+    for (const rows of Object.values(usage)) for (const row of Array.isArray(rows) ? rows : []) {
+      if (typeof row?.estimated_time_to_regain_access === "number") waits.push(row.estimated_time_to_regain_access * 60_000);
+    }
+  } catch {}
+  try {
+    const account = JSON.parse(headers.get("x-ad-account-usage") ?? "{}") as { reset_time_duration?: number };
+    if (typeof account.reset_time_duration === "number") waits.push(account.reset_time_duration * 1000);
+  } catch {}
+  const longest = Math.max(0, ...waits.filter((wait) => Number.isFinite(wait)));
+  return longest > 0 ? longest : null;
+}
+
 /** #757: Graph 190 (any subcode: expired, password change, checkpoint, permission removed) means the token is dead. */
 export function isMetaReauthError(error: unknown): error is MetaError {
   return error instanceof MetaError && error.code === 190;
@@ -324,7 +366,6 @@ export class MetaCreateRolledBackError extends MetaError {
 export type MetaErrorDetails = { userTitle?: string; fbtraceId?: string; path?: string };
 
 type GraphErrorBody = { message?: string; error_user_msg?: string; error_user_title?: string; code?: number; error_subcode?: number; fbtrace_id?: string };
-
 
 const META_SUBCODE_MESSAGES: Record<number, (userMessage: string) => string> = {
   2446307: userMessage =>
@@ -378,26 +419,33 @@ export type CappedActivation = {
 };
 
 export type AdReviewState = "in_review" | "approved" | "rejected" | "issues" | "unknown";
-export type AdReview = { adId: string; state: AdReviewState; effectiveStatus: string | null; reasons: string[] };
+/** #1305: Meta's policy key (e.g. "Personal Attributes") with its message; null policy for `issues_info`. */
+export type AdReviewFeedback = { policy: string | null; message: string };
+export type AdReview = { adId: string; state: AdReviewState; effectiveStatus: string | null; reasons: string[]; feedback: AdReviewFeedback[] };
 
 /** Meta's review outcome for one ad, from `effective_status`, `ad_review_feedback` and `issues_info`. */
 export function adReviewState(ad: { id: string; effective_status?: string; ad_review_feedback?: unknown; issues_info?: unknown }): AdReview {
   const status = ad.effective_status ?? null;
-  const feedback = ad.ad_review_feedback && typeof ad.ad_review_feedback === "object"
-    ? Object.values(ad.ad_review_feedback as Record<string, unknown>).flatMap(group =>
-      group && typeof group === "object" ? Object.values(group as Record<string, unknown>) : [group])
-      .filter((reason): reason is string => typeof reason === "string").map(reason => reason.trim()).filter(Boolean)
+  // `{ global: { "Personal Attributes": "…" }, placement_specific: {…} }`: the inner keys are the policies (#1305).
+  const feedback: AdReviewFeedback[] = ad.ad_review_feedback && typeof ad.ad_review_feedback === "object"
+    ? Object.values(ad.ad_review_feedback as Record<string, unknown>).flatMap((group): AdReviewFeedback[] =>
+      group && typeof group === "object"
+        ? Object.entries(group as Record<string, unknown>).map(([policy, message]) => ({ policy: policy.trim() || null, message: typeof message === "string" ? message.trim() : "" }))
+        : [{ policy: null, message: typeof group === "string" ? group.trim() : "" }])
+      .filter((item) => item.message)
     : [];
-  const issues = Array.isArray(ad.issues_info)
+  const issues: AdReviewFeedback[] = Array.isArray(ad.issues_info)
     ? ad.issues_info.map(issue => (issue as { error_message?: unknown }).error_message)
       .filter((reason): reason is string => typeof reason === "string" && reason.trim() !== "")
+      .map((message) => ({ policy: null, message: message.trim() }))
     : [];
   const state: AdReviewState = status === "DISAPPROVED" ? "rejected"
     : status === "WITH_ISSUES" ? "issues"
     : status === "IN_PROCESS" || status === "PENDING_REVIEW" ? "in_review"
     : status && ["ACTIVE", "PAUSED", "CAMPAIGN_PAUSED", "ADSET_PAUSED", "PREAPPROVED"].includes(status) ? "approved"
     : "unknown";
-  return { adId: ad.id, state, effectiveStatus: status, reasons: [...feedback, ...issues] };
+  const all = [...feedback, ...issues];
+  return { adId: ad.id, state, effectiveStatus: status, reasons: all.map((item) => item.message), feedback: all };
 }
 
 /** Graph allows about one status write per object per 30 s (error 613). */
@@ -442,7 +490,7 @@ export function friendlyMetaError(
 export type AdDestination = "instant_form" | "whatsapp" | "call";
 
 /** #680: WhatsApp and lead-form ads get the 9:16 placement creative and leave Audience Network out, so an A/B differs only in destination. */
-export function hasPlacementCreative(destination: AdDestination): boolean {
+function hasPlacementCreative(destination: AdDestination): boolean {
   return destination === "whatsapp" || destination === "instant_form";
 }
 
@@ -568,7 +616,7 @@ export function destinationCTA(
 }
 
 /** Meta rejects a hard minimum age above this with Advantage+ audience on (subcode 1870188). */
-export const ADVANTAGE_AUDIENCE_MAX_HARD_AGE_MIN = 25;
+const ADVANTAGE_AUDIENCE_MAX_HARD_AGE_MIN = 25;
 
 /**
  * Ad set targeting with Advantage+ audience on (#334). Area and exclusions stay hard
@@ -601,15 +649,20 @@ export function adSetTargeting(params: {
 const LISTED_AD_STATUSES = ["ACTIVE", "PAUSED", "ARCHIVED", "CAMPAIGN_PAUSED", "ADSET_PAUSED", "IN_PROCESS", "WITH_ISSUES", "PENDING_REVIEW", "DISAPPROVED", "PREAPPROVED", "PENDING_BILLING_INFO"];
 
 /** #906/#680: a WhatsApp or lead-form ad set's targeting names its platforms without Audience Network. */
-export function withoutAudienceNetwork(targeting: Record<string, unknown>): Record<string, unknown> {
+export function withoutAudienceNetwork(targeting: Record<string, unknown>, options: { noFacebookReels?: boolean } = {}): Record<string, unknown> {
   const platforms = Array.isArray(targeting.publisher_platforms) ? (targeting.publisher_platforms as unknown[]).filter(item => item !== "audience_network") : [];
   const { audience_network_positions: _dropped, ...rest } = targeting;
   void _dropped;
-  return { ...rest, publisher_platforms: platforms.length ? platforms : [...WHATSAPP_PUBLISHER_PLATFORMS] };
+  return {
+    ...rest,
+    publisher_platforms: platforms.length ? platforms : [...WHATSAPP_PUBLISHER_PLATFORMS],
+    // #2273: Facebook Reels left out; every other position stays automatic.
+    ...(options.noFacebookReels ? { facebook_positions: [...FACEBOOK_POSITIONS_WITHOUT_REELS] } : {}),
+  };
 }
 
 /** #334: every ad set runs with Advantage+ audience (area and age_min hard). The learning ledger records it (#588). */
-export const ADVANTAGE_AUDIENCE = true;
+const ADVANTAGE_AUDIENCE = true;
 
 /** A short, loggable code for a failed Graph call: Meta's code/subcode, else the HTTP status. */
 export function metaErrorCode(error: unknown): string {
@@ -617,11 +670,19 @@ export function metaErrorCode(error: unknown): string {
   return error instanceof Error && error.name === "TimeoutError" ? "timeout" : "unknown";
 }
 
+const GET_RETRY_DELAY_MS = 500;
+
+/** #1199: a failure a repeat of the same read can cure: our 15 s timeout, a dropped connection, or a Meta 5xx. */
+function transientReadFailure(error: unknown): boolean {
+  if (error instanceof MetaError) return error.status !== undefined && error.status >= 500;
+  return error instanceof TypeError || (error instanceof Error && error.name === "TimeoutError");
+}
+
 /**
  * Meta answered and refused the request (a 4xx with a Meta subcode, e.g. 100/1772103). Timeouts,
  * transport errors and 5xx are not refusals: the object may exist, so retrying could duplicate it.
  */
-export function isMetaRefusal(error: unknown): boolean {
+function isMetaRefusal(error: unknown): boolean {
   return error instanceof MetaError && error.status !== undefined && error.status >= 400 && error.status < 500 && error.subcode !== undefined;
 }
 
@@ -634,7 +695,7 @@ const STORY_PLACEMENTS = {
 // Placement creatives go to WhatsApp and lead-form ads, whose ad sets leave Audience Network out (#906, #680).
 const FEED_PLACEMENTS = {
   publisher_platforms: ["facebook", "instagram", "messenger"],
-  facebook_positions: ["feed", "right_hand_column", "marketplace", "video_feeds", "search", "instream_video", "facebook_reels_overlay", "profile_feed", "notification", "biz_disco_feed"],
+  facebook_positions: FACEBOOK_FEED_POSITIONS,
   instagram_positions: ["stream", "explore", "explore_home", "profile_feed", "ig_search"],
   messenger_positions: ["messenger_home", "sponsored_messages"],
 };
@@ -656,8 +717,11 @@ export function placementCreativeSpec(p: {
   whatsappNumber?: string;
   whatsappGreeting?: WhatsAppOpening;
   leadFormId?: string;
+  /** #2273: the ad set leaves Facebook Reels out, so no rule may name it. */
+  noFacebookReels?: boolean;
 }) {
   const cta = destinationCTA(p.destination, { leadFormId: p.leadFormId, phone: p.whatsappNumber });
+  const story = p.noFacebookReels ? { ...STORY_PLACEMENTS, facebook_positions: ["story"] } : STORY_PLACEMENTS;
   return {
     object_story_spec: { page_id: p.pageId, instagram_user_id: p.instagramUserId },
     asset_feed_spec: {
@@ -677,7 +741,7 @@ export function placementCreativeSpec(p: {
       optimization_type: "PLACEMENT",
       // Every placement must match exactly one rule, by explicit position, or Meta can't show it there.
       asset_customization_rules: [
-        { customization_spec: STORY_PLACEMENTS, image_label: { name: "adbrain_story" }, priority: 1 },
+        { customization_spec: story, image_label: { name: "adbrain_story" }, priority: 1 },
         { customization_spec: FEED_PLACEMENTS, image_label: { name: "adbrain_feed" }, priority: 2 },
       ],
     },
@@ -711,120 +775,26 @@ export function splitAgeRange(
   ];
 }
 
-/** Meta city-radius bounds (kilometers). */
-const RADIUS_MIN_KM = 5;
-const RADIUS_MAX_KM = 80;
-
-function clampRadiusKm(km: number): number {
-  if (!Number.isFinite(km)) return 25;
-  return Math.min(Math.max(Math.round(km), RADIUS_MIN_KM), RADIUS_MAX_KM);
-}
-
 /**
- * Pick the best adgeolocation match for a typed place name. Meta returns
- * Exact names and qualified city/region labels take precedence. Otherwise keep
- * Meta's relevance order within the requested country and preferred place type.
- */
-export function pickBestGeoMatch(
-  matches: GeoSearchResult[],
-  query: string,
-  preferCountry = "",
-): GeoSearchResult | null {
-  if (!matches.length) return null;
-  const normalizedQuery = query.trim().toLowerCase();
-  const exact = matches.filter((match) => [match.name, geoLabel(match)]
-    .some((label) => label.trim().toLowerCase() === normalizedQuery));
-  const candidates = exact.length ? exact : matches;
-  const inCountry = preferCountry
-    ? candidates.filter((m) => !m.country_code || m.country_code === preferCountry)
-    : candidates;
-  const pool = inCountry.length ? inCountry : candidates;
-  for (const type of ["city", "region", "country"]) {
-    const hit = pool.find((m) => m.type === type);
-    if (hit) return hit;
-  }
-  return pool[0] ?? null;
-}
-
-/**
- * Build the targeting `geo_locations` object, falling back to whole countries
- * when no city/region/country resolved.
- */
-export function buildGeoLocations(
-  geo: GeoTargeting | undefined,
-  fallbackCountries: string[],
-): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  if (geo?.cities?.length) out.cities = geo.cities;
-  if (geo?.regions?.length) out.regions = geo.regions;
-  if (geo?.countries?.length) out.countries = geo.countries;
-  if (!out.cities && !out.regions && !out.countries) {
-    out.countries = fallbackCountries;
-  }
-  return out;
-}
-
-/** Short human label for a resolved geo match (e.g. "Jaipur (city)"). */
-function geoLabel(m: GeoSearchResult): string {
-  const region = m.region ? `, ${m.region}` : "";
-  return `${m.name}${region}`;
-}
-
-/**
- * Convert user-picked places (each already carrying a Meta key) into a
- * `GeoTargeting` spec. Cities get a radius (their own, else the default);
- * regions and countries are exact. Duplicates are removed. Pure — no network.
- */
-export function geoItemsToTargeting(
-  items: GeoItem[],
-  defaultRadiusKm = 25,
-  cityScope: "city_only" | "radius" = "radius",
-): GeoTargeting {
-  const cities: NonNullable<GeoTargeting["cities"]> = [];
-  const regions: NonNullable<GeoTargeting["regions"]> = [];
-  const countries: string[] = [];
-  const seen = new Set<string>();
-  for (const item of items ?? []) {
-    const key = (item?.key ?? "").trim();
-    if (!key) continue;
-    const dedupe = `${item.type}:${key}`;
-    if (seen.has(dedupe)) continue;
-    seen.add(dedupe);
-    if (item.type === "city") {
-      cities.push({
-        key,
-        ...(cityScope === "radius" ? {
-          radius: clampRadiusKm(item.radiusKm ?? defaultRadiusKm),
-          distance_unit: "kilometer",
-        } : {}),
-      });
-    } else if (item.type === "region") {
-      regions.push({ key });
-    } else if (item.type === "country") {
-      countries.push(key);
-    }
-  }
-  const geo: GeoTargeting = {};
-  if (cities.length) geo.cities = cities;
-  if (regions.length) geo.regions = regions;
-  if (countries.length) geo.countries = countries;
-  return geo;
-}
-
-/** True when a targeting spec has at least one place. */
-export function hasGeo(geo: GeoTargeting | undefined): boolean {
-  return !!(geo?.cities?.length || geo?.regions?.length || geo?.countries?.length);
-}
-
-/**
- * Meta Marketing API wrapper (Graph v21). Creates Advantage+ lead campaigns in
+ * Meta Marketing API wrapper (Graph, version in graph-version.ts). Creates Advantage+ lead campaigns in
  * PAUSED state (no spend until activated) and reads insights. Validated against
  * a live ad account.
  */
+/** #1324: a validate_only check or a plain pause; the only writes a smoke-owned business may send. */
+function readOnlyOrPause(form: Record<string, string> | undefined): boolean {
+  if (!form) return false;
+  if (/"validate_only"/.test(form.execution_options ?? "")) return true;
+  return Object.keys(form).length === 1 && form.status === "PAUSED";
+}
+
 export class MetaClient {
   private pageAccessToken: Promise<string> | null = null;
 
-  constructor(private readonly creds: MetaCredentials, private readonly executionSignal?: AbortSignal) {}
+  constructor(
+    private readonly creds: MetaCredentials,
+    private readonly executionSignal?: AbortSignal,
+    private readonly writes: "all" | "pause-only" = "all",
+  ) {}
 
   private async graph<T>(
     path: string,
@@ -836,6 +806,26 @@ export class MetaClient {
     } = {},
   ): Promise<T> {
     const method = opts.method ?? "GET";
+    try {
+      return await this.graphOnce<T>(path, method, opts);
+    } catch (error) {
+      // #1199: a read is safe to repeat, so one failed GET (network, 5xx) gets one more try. Writes never repeat
+      // (they may have been done), nor does a call the caller or the route's budget stopped. A timeout already
+      // spent 15 s, so it repeats only under a job deadline (the launch worker); a 60 s route without one could be
+      // killed mid-write (Reviewer on #1204).
+      const stopped = Boolean(opts.signal?.aborted || this.executionSignal?.aborted);
+      const timedOut = error instanceof Error && error.name === "TimeoutError";
+      if (method !== "GET" || stopped || !transientReadFailure(error) || (timedOut && !this.executionSignal)) throw error;
+      await new Promise((resolve) => setTimeout(resolve, GET_RETRY_DELAY_MS));
+      return this.graphOnce<T>(path, method, opts);
+    }
+  }
+
+  private async graphOnce<T>(
+    path: string,
+    method: string,
+    opts: { token?: string; form?: Record<string, string>; signal?: AbortSignal },
+  ): Promise<T> {
     const token = opts.token ?? this.creds.accessToken;
     const signal = AbortSignal.any([
       AbortSignal.timeout(15_000),
@@ -843,6 +833,10 @@ export class MetaClient {
       ...(this.executionSignal ? [this.executionSignal] : []),
     ]);
     signal.throwIfAborted();
+
+    if (this.writes === "pause-only" && method !== "GET" && !readOnlyOrPause(opts.form)) {
+      throw new ConnectionAccessError("FORBIDDEN", "The test account can only check and pause on this Meta ad account.");
+    }
 
     const started = performance.now();
     let reply: { status: number; body: unknown };
@@ -872,33 +866,45 @@ export class MetaClient {
   }
 
   private async send(path: string, method: string, token: string, form: Record<string, string> | undefined, signal: AbortSignal) {
+    // #1649: the token rides in the Authorization header (never a URL or form body, which land in access logs), with
+    // `appsecret_proof` so Meta's 'Require app secret' can make a stolen token alone useless.
+    const secret = process.env.META_APP_SECRET;
+    const proof = secret ? createHmac("sha256", secret).update(token).digest("hex") : null;
+    const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
     let res: Response;
     if (method === "POST") {
-      const body = new URLSearchParams({
-        ...(form ?? {}),
-        access_token: token,
-      });
+      const body = new URLSearchParams({ ...(form ?? {}), ...(proof ? { appsecret_proof: proof } : {}) });
       res = await fetch(`${GRAPH}/${path}`, {
         method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        headers: { ...headers, "Content-Type": "application/x-www-form-urlencoded" },
         body,
         signal,
       });
     } else {
-      const sep = path.includes("?") ? "&" : "?";
-      res = await fetch(
-        `${GRAPH}/${path}${sep}access_token=${encodeURIComponent(token)}`,
-        { method, signal, cache: "no-store" },
-      );
+      const query = proof ? `${path.includes("?") ? "&" : "?"}appsecret_proof=${proof}` : "";
+      res = await fetch(`${GRAPH}/${path}${query}`, { method, headers, signal, cache: "no-store" });
     }
 
     const json = await res.json().catch(() => ({}));
     if (!res.ok || (json as { error?: unknown }).error) {
       const err = (json as { error?: GraphErrorBody }).error;
-      throw new MetaError(metaErrorMessage(err, res.status), res.status, err?.code, err?.error_subcode,
-        { userTitle: err?.error_user_title, fbtraceId: err?.fbtrace_id, path: graphEndpoint(path) });
+      const details = { userTitle: err?.error_user_title, fbtraceId: err?.fbtrace_id, path: graphEndpoint(path) };
+      if (isThrottleCode(err?.code)) {
+        throw new MetaThrottledError(metaErrorMessage(err, res.status), res.status, err?.code, err?.error_subcode,
+          err?.code === 4 ? "app" : err?.code === 32 ? "page" : "account", throttleWaitMs(res.headers) ?? THROTTLE_DEFAULT_MS, details);
+      }
+      throw new MetaError(metaErrorMessage(err, res.status), res.status, err?.code, err?.error_subcode, details);
     }
     return { status: res.status, body: json as unknown };
+  }
+
+  /**
+   * #1649: removes the app's whole grant for this Meta user (every business they connected with it). Callers check
+   * the user has no other live connection first. A write, so the smoke account (pause-only) can't send it.
+   */
+  async revokeGrant(subjectId: string): Promise<void> {
+    if (!/^\d+$/.test(subjectId)) throw new MetaError("Invalid Meta user.");
+    await this.graph(`${subjectId}/permissions`, { method: "DELETE" });
   }
 
   getPageAccessToken(): Promise<string> {
@@ -974,6 +980,7 @@ export class MetaClient {
     return {
       portfolio: account.business?.id ? { id: account.business.id, name: account.business.name ?? null } : null,
       accountActive: account.account_status === 1,
+      accountStatus: account.account_status ?? null,
       currency: account.currency ?? null,
       paymentMethod: Boolean(account.funding_source_details?.id),
       pageListed: Boolean(pages.data?.some((page) => page.id === this.creds.pageId)),
@@ -1134,7 +1141,7 @@ export class MetaClient {
     const unresolved: string[] = [];
     const seen = new Set<string>();
     // #271: independent searches run together; results are applied in the given order.
-    const searches = await Promise.all(names.map(async raw => {
+    const searches = await Promise.all(expandPlaceAliases(names).map(async raw => {
       const name = (raw ?? "").trim();
       if (!name) return null;
       return { name, results: await this.searchGeoLocations(name).catch(() => null) };
@@ -1183,36 +1190,20 @@ export class MetaClient {
 
   /** Upload an image to the ad account and return its hash. */
   async uploadAdImage(imageUrl: string): Promise<string> {
-    let parsed: URL;
-    try {
-      parsed = new URL(imageUrl);
-    } catch {
-      throw new MetaError("Creative image URL is invalid.");
-    }
-    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-      throw new MetaError("Creative image URL must use HTTP or HTTPS.");
-    }
-    let imgRes: Response;
-    try {
-      imgRes = await fetchPublicUrl(parsed.toString(), { timeoutMs: 30_000, signal: this.executionSignal });
-    } catch {
-      throw new MetaError("Could not fetch the creative image.");
-    }
-    if (!imgRes.ok) {
-      throw new MetaError(`Could not fetch creative image (${imgRes.status}).`);
-    }
-    return this.uploadAdImageBytes(await readBoundedResponse(imgRes));
+    return this.uploadAdImageBytes(await fetchAdImage(imageUrl, this.executionSignal));
   }
 
-  async uploadAdImageBytes(bytes: Uint8Array): Promise<string> {
-    const b64 = Buffer.from(bytes).toString("base64");
-    const data = await this.graph<{ images: Record<string, { hash: string }> }>(
-      `${this.creds.adAccountId}/adimages`,
-      { method: "POST", form: { bytes: b64 } },
-    );
-    const first = Object.values(data.images ?? {})[0];
-    if (!first?.hash) throw new MetaError("Image upload returned no hash.");
-    return first.hash;
+  uploadAdImageBytes(bytes: Uint8Array): Promise<string> {
+    return uploadAdImageBytes((path, opts) => this.graph(path, opts), this.creds.adAccountId, bytes);
+  }
+
+  /** #749: start an owner's video upload by URL (Meta pulls it); poll `readAdVideo` until it's ready. */
+  startAdVideo(input: { fileUrl: () => string | Promise<string>; name: string; title: string }): Promise<string> {
+    return startAdVideo((path, opts) => this.graph(path, opts), this.creds.adAccountId, input);
+  }
+
+  readAdVideo(videoId: string): Promise<AdVideoState> {
+    return readAdVideo((path, opts) => this.graph(path, opts), videoId);
   }
 
   /**
@@ -1260,6 +1251,8 @@ export class MetaClient {
     whatsappGreeting?: WhatsAppOpening;
     phone?: string;
     variants?: AdSetVariant[];
+    /** #2273 (#680 placement test): WhatsApp and lead-form ad sets leave Facebook Reels out. Off by default. */
+    excludeFacebookReels?: boolean;
     onCheckpoint?: (checkpoint: CampaignMutationCheckpoint) => void | Promise<void>;
     /** A 9:16 couldn't be used and the ad fell back to the single 4:5 image (#333). */
     onStoryFallback?: (stage: "instagram" | "upload" | "creative" | "ad", errorCode: string) => void;
@@ -1392,7 +1385,7 @@ export class MetaClient {
         ];
 
     // Ages are validated above, so both bounds are set here.
-    const targetingFor = (v: AdSetVariant, dest: AdDestination) => JSON.stringify((hasPlacementCreative(dest) ? withoutAudienceNetwork : (t: Record<string, unknown>) => t)(adSetTargeting({
+    const targetingFor = (v: AdSetVariant, dest: AdDestination) => JSON.stringify((hasPlacementCreative(dest) ? (t: Record<string, unknown>) => withoutAudienceNetwork(t, { noFacebookReels: params.excludeFacebookReels }) : (t: Record<string, unknown>) => t)(adSetTargeting({
       location: v.location ?? params.location,
       excludedLocation: mergeExclusions(v.excludedLocation ?? params.excludedLocation, areaExclusions.get(v.location ?? params.location) ?? null),
       ageMin: (v.ageMin ?? params.ageMin)!,
@@ -1457,6 +1450,7 @@ export class MetaClient {
             pageId: this.creds.pageId, instagramUserId, feedHash: imageHash, storyHash, headline: c.headline, message: c.message,
             description: c.description ?? undefined, link: destination === "whatsapp" ? `https://wa.me/${params.whatsappNumber!.slice(1)}` : params.link,
             destination, whatsappNumber: params.whatsappNumber, whatsappGreeting: params.whatsappGreeting, leadFormId: params.leadFormId,
+            noFacebookReels: params.excludeFacebookReels,
           })
           : null;
         const singleImageForm = {
@@ -1595,6 +1589,27 @@ export class MetaClient {
     return { campaigns: result.data, nextCursor: result.paging?.next ? result.paging.cursors!.after! : null };
   }
 
+  /** #2268: this account's campaigns Meta deleted or archived (the listing above leaves them out). 100 per read, ≤ 5 reads. */
+  async listGoneCampaigns(): Promise<Map<string, "DELETED" | "ARCHIVED">> {
+    const gone = new Map<string, "DELETED" | "ARCHIVED">();
+    let after: string | undefined;
+    for (let read = 0; read < 5; read++) {
+      // Graph v26 refuses `?ids=` and a bare `effective_status` param; `filtering` is the read QA verified live (#2279).
+      const query = new URLSearchParams({ fields: "id,status,effective_status", limit: "100",
+        filtering: JSON.stringify([{ field: "effective_status", operator: "IN", value: ["DELETED", "ARCHIVED"] }]) });
+      if (after) query.set("after", after);
+      const result = await this.graph<{ data?: Array<{ id?: string; status?: string; effective_status?: string }>; paging?: { next?: string; cursors?: { after?: string } } }>(`${this.creds.adAccountId}/campaigns?${query}`);
+      if (!Array.isArray(result.data)) throw new MetaError("Campaign listing is incomplete.");
+      for (const campaign of result.data) {
+        const status = [campaign.effective_status, campaign.status].find((value) => value === "DELETED" || value === "ARCHIVED");
+        if (campaign.id && (status === "DELETED" || status === "ARCHIVED")) gone.set(campaign.id, status);
+      }
+      after = result.paging?.next ? result.paging.cursors?.after : undefined;
+      if (!after) break;
+    }
+    return gone;
+  }
+
   /** The campaign's daily-budget binding to this account and Page, or why sync must leave it unchanged (#671). */
   async readBoundCampaign(campaign: MetaCampaignSummary & { account_id: string; lifetime_budget?: string }, cappedAdSetIds: readonly string[] = []): Promise<{ dailyBudgetRupees: number; adSetId: string; destination: CampaignDestination } | { skip: CampaignSkipReason }> {
     if (campaign.account_id !== this.creds.adAccountId.replace(/^act_/, "")) return { skip: "other_account" };
@@ -1625,13 +1640,20 @@ export class MetaClient {
   }
 
   private async verifyCampaignBinding(campaignId: string): Promise<CampaignDestination> {
+    return (await this.readCampaignBinding(campaignId, false)).destination;
+  }
+
+  /** The binding check; #1903: with `withState` the same two reads also carry the campaign's status and budgets (#2290: and ad-set end times). */
+  private async readCampaignBinding(campaignId: string, withState: boolean): Promise<{ destination: CampaignDestination; state: MetaCampaignState | null }> {
     const node = encodeURIComponent(campaignId);
-    const campaign = await this.graph<{ id?: string; account_id?: string }>(`${node}?fields=id,account_id`);
+    const campaign = await this.graph<{ id?: string; account_id?: string; status?: string; daily_budget?: string; lifetime_budget?: string }>(
+      `${node}?fields=id,account_id${withState ? ",status,daily_budget,lifetime_budget" : ""}`,
+    );
     if (campaign.id !== campaignId || campaign.account_id !== this.creds.adAccountId.replace(/^act_/, "")) {
       throw new MetaError("Campaign does not match the connected ad account.");
     }
-    const adSets = await this.graph<{ data?: Array<{ destination_type?: string; promoted_object?: { page_id?: string } }>; paging?: { next?: string } }>(
-      `${node}/adsets?fields=promoted_object,destination_type&limit=100`,
+    const adSets = await this.graph<{ data?: Array<{ id?: string; status?: string; daily_budget?: string; lifetime_budget?: string; end_time?: string; destination_type?: string; promoted_object?: { page_id?: string } }>; paging?: { next?: string } }>(
+      `${node}/adsets?fields=${withState ? "id,status,daily_budget,lifetime_budget,end_time," : ""}promoted_object,destination_type&limit=100`,
     );
     if (Array.isArray(adSets.data) && !adSets.data.length && !adSets.paging?.next) {
       // #721: a campaign deleted in Meta still answers, but lists no ad sets; its own status says why.
@@ -1644,14 +1666,19 @@ export class MetaClient {
       || adSets.data.some(adSet => adSet.promoted_object?.page_id !== this.creds.pageId)) {
       throw new MetaError("Campaign Page binding could not be verified. Review the campaign in Meta.");
     }
-    return destinationFromAdSets(adSets.data);
+    const state: MetaCampaignState | null = withState && typeof campaign.status === "string" ? {
+      status: campaign.status, dailyBudget: campaign.daily_budget, lifetimeBudget: campaign.lifetime_budget,
+      adSets: adSets.data.map(adSet => ({ id: String(adSet.id ?? ""), status: adSet.status, dailyBudget: adSet.daily_budget, lifetimeBudget: adSet.lifetime_budget, endTime: adSet.end_time })),
+    } : null;
+    return { destination: destinationFromAdSets(adSets.data), state };
   }
 
   async getCampaignInsights(campaignId: string, options?: { weekly?: boolean }): Promise<CampaignInsights> {
-    const destination = await this.verifyCampaignBinding(campaignId);
+    const { destination, state } = await this.readCampaignBinding(campaignId, true);
     // #404: without a preset Meta reads last_30d, which leaves out today, so a new campaign read ₹0. Results are lifetime.
     const data = await this.graph<unknown>(`${encodeURIComponent(campaignId)}/insights?fields=impressions,clicks,spend,actions,date_start,date_stop&date_preset=${options?.weekly ? "this_week_mon_today" : "maximum"}`);
-    return decodeCampaignInsights(data, destination, { requireSpend: options?.weekly });
+    const insights = decodeCampaignInsights(data, destination, { requireSpend: options?.weekly });
+    return state ? { ...insights, metaState: state } : insights;
   }
 
   /**
@@ -1681,11 +1708,14 @@ export class MetaClient {
     return decodeLifetimeSpendPaise(await this.graph<unknown>(`${node}/insights?fields=spend&date_preset=maximum`));
   }
 
+  /** #1799: Meta's smallest campaign spend_cap for this INR account (paise), or null; see campaign/spend-cap-minimum. */
+  async readMinCampaignSpendCapPaise(): Promise<number | null> {
+    return minCampaignSpendCapPaise(await this.graph<SpendCapMinimumAccount>(`${encodeURIComponent(this.creds.adAccountId)}?fields=id,currency,min_campaign_group_spend_cap`), this.creds.adAccountId);
+  }
+
   /** Live ad account funding (#245): Meta's account spending limit and amount spent, both media paise excluding GST. */
   async readAccountFunding(): Promise<AccountFunding> {
-    const account = await this.graph<{ id?: string; currency?: string; spend_cap?: string; amount_spent?: string; is_prepay_account?: boolean }>(
-      `${encodeURIComponent(this.creds.adAccountId)}?fields=id,spend_cap,amount_spent,is_prepay_account,currency`,
-    );
+    const account = await this.graph<{ id?: string; currency?: string; spend_cap?: string; amount_spent?: string; is_prepay_account?: boolean }>(`${encodeURIComponent(this.creds.adAccountId)}?fields=id,spend_cap,amount_spent,is_prepay_account,currency`);
     const paise = /^\d{1,15}$/;
     if (account.id !== this.creds.adAccountId || account.currency !== "INR"
       || !paise.test(account.spend_cap ?? "0") || !paise.test(account.amount_spent ?? "")) {
@@ -1864,9 +1894,7 @@ export class MetaClient {
       const updated = await this.graph<{ success?: boolean }>(encodeURIComponent(campaignId), { method: "POST", form: { spend_cap: String(target) } });
       if (updated.success !== true) throw new MetaError("Campaign spending limit is unconfirmed. Reconcile before activation.");
     }
-    const confirmed = await this.graph<{ id: string; account_id: string; spend_cap?: string }>(
-      `${encodeURIComponent(campaignId)}?fields=id,account_id,spend_cap`,
-    );
+    const confirmed = await this.graph<{ id: string; account_id: string; spend_cap?: string }>(`${encodeURIComponent(campaignId)}?fields=id,account_id,spend_cap`);
     if (confirmed.id !== campaignId || confirmed.account_id !== current.account_id || !/^\d+$/.test(confirmed.spend_cap ?? "")
       || Number(confirmed.spend_cap) !== target) throw new MetaError("Campaign spending limit changed. Keep the campaign paused.");
   }
@@ -2069,18 +2097,25 @@ export class MetaClient {
 
   /**
    * #765 (b): turns a running ad set's PAUSED copy on in its place. Never two ACTIVE: Meta first checks the
-   * copy's activation (validate_only), then the old ad set is paused, a capped copy's total is cut to what the
-   * old one has left, the copy's ads and then the copy go ACTIVE, and both are read back. If anything fails
+   * copy's activation (validate_only), then the old ad set is paused, the copy takes the old one's budget as it is
+   * now (a capped copy only what is left; its end date too), the copy's ads (except ones the owner paused, #1146)
+   * and then the copy go ACTIVE, and both are read back. If anything fails
    * after the pause, the copy is paused again and the old ad set resumed. The old ad set is archived last.
    * `running` is the campaign's intended state: on a paused campaign nothing is turned on, the copy just takes
    * the old ad set's place. Safe to retry: a switch Meta already finished is completed, and one cut off after
    * the pause carries on from where it stopped.
    */
-  async switchAdSet(campaignId: string, input: { fromAdSetId: string; toAdSetId: string; toAdIds: string[]; running: boolean }): Promise<AdSetSwitch> {
+  async switchAdSet(campaignId: string, input: { fromAdSetId: string; toAdSetId: string; toAdIds: string[]; running: boolean; keepPausedAdIds?: string[] }): Promise<AdSetSwitch> {
     const { fromAdSetId, toAdSetId, toAdIds, running } = input;
     if (fromAdSetId === toAdSetId || !toAdIds.length || new Set(toAdIds).size !== toAdIds.length) throw new MetaError("Invalid ad set switch.");
-    type AdSetRead = { id?: string; campaign_id?: string; status?: string; lifetime_budget?: string; budget_remaining?: string };
-    const read = (id: string) => this.graph<AdSetRead>(`${encodeURIComponent(id)}?fields=id,campaign_id,status,lifetime_budget,budget_remaining`);
+    // #1146: copies of ads the owner paused from the card stay PAUSED; the rest go ACTIVE.
+    const keptPaused = new Set(input.keepPausedAdIds ?? []);
+    if ([...keptPaused].some(adId => !toAdIds.includes(adId))) throw new MetaError("Invalid ad set switch.");
+    const turnOn = toAdIds.filter(adId => !keptPaused.has(adId));
+    if (running && !turnOn.length) throw new CampaignDeliveryError("Every ad in this audience is paused. Turn one on before switching. Nothing changed.");
+    const expected = (ad: { id: string; status?: string }) => ad.status === (keptPaused.has(ad.id) ? "PAUSED" : "ACTIVE");
+    type AdSetRead = { id?: string; campaign_id?: string; status?: string; lifetime_budget?: string; budget_remaining?: string; daily_budget?: string; end_time?: string };
+    const read = (id: string) => this.graph<AdSetRead>(`${encodeURIComponent(id)}?fields=id,campaign_id,status,lifetime_budget,budget_remaining,daily_budget,end_time`);
     const readAds = (id: string) => this.graph<{ data?: Array<{ id: string; status?: string; adset_id?: string }>; paging?: { next?: string } }>(`${encodeURIComponent(id)}/ads?fields=id,status,adset_id&limit=100`);
     const [from, to, ads] = await Promise.all([read(fromAdSetId), read(toAdSetId), readAds(toAdSetId)]);
     const sameAds = (list: typeof ads) => Array.isArray(list.data) && !list.paging?.next && list.data.length === toAdIds.length
@@ -2091,7 +2126,7 @@ export class MetaClient {
     const done = { fromAdSetId, adSetId: toAdSetId, adIds: toAdIds };
     const oldStopped = from.status === "PAUSED" || from.status === "ARCHIVED";
     // A retry after Meta finished: the copy delivers (or, on a paused campaign, has taken the old one's place).
-    if (running && to.status === "ACTIVE" && ads.data!.every(ad => ad.status === "ACTIVE") && oldStopped) {
+    if (running && to.status === "ACTIVE" && ads.data!.every(expected) && oldStopped) {
       if (from.status === "PAUSED") await this.writeStatus(fromAdSetId, "ARCHIVED").catch(() => undefined);
       return done;
     }
@@ -2100,18 +2135,28 @@ export class MetaClient {
       throw new CampaignDeliveryError("The old ad set or the new one is in an unexpected state. Nothing changed; check the campaign in Meta.");
     }
     const capped = Number(from.lifetime_budget ?? 0) > 0;
-    const cutCap = async () => {
-      // The old ad set kept spending while the copy waited; the copy may spend only what is left now.
-      const left = await read(fromAdSetId);
-      if (left.status === "ACTIVE" || !/^[1-9]\d*$/.test(left.budget_remaining ?? "")) throw new CampaignDeliveryError("This capped run has spent its total. Start a new run instead.");
-      if (to.lifetime_budget === left.budget_remaining) return;
-      await this.graph(encodeURIComponent(toAdSetId), { method: "POST", form: { lifetime_budget: left.budget_remaining! } });
-      const cut = await read(toAdSetId);
-      if (cut.lifetime_budget !== left.budget_remaining) throw new CampaignDeliveryError("Meta did not confirm the new ad set's total.");
+    /**
+     * The copy takes the old ad set's money as it is now (#1146): a capped run only what is left of its total
+     * (the old one kept spending while the copy waited), an uncapped one its current daily budget, and either
+     * its current end date, so a budget or end change made while the copy waited isn't lost.
+     */
+    const matchOld = async () => {
+      const left = capped ? await read(fromAdSetId) : from;
+      if (capped && (left.status === "ACTIVE" || !/^[1-9]\d*$/.test(left.budget_remaining ?? ""))) throw new CampaignDeliveryError("This capped run has spent its total. Start a new run instead.");
+      const form: Record<string, string> = {};
+      if (capped && to.lifetime_budget !== left.budget_remaining) form.lifetime_budget = left.budget_remaining!;
+      if (!capped && /^[1-9]\d*$/.test(left.daily_budget ?? "") && to.daily_budget !== left.daily_budget) form.daily_budget = left.daily_budget!;
+      if (left.end_time && to.end_time !== left.end_time) form.end_time = left.end_time;
+      if (!Object.keys(form).length) return;
+      await this.graph(encodeURIComponent(toAdSetId), { method: "POST", form });
+      const after = await read(toAdSetId);
+      if (Object.entries(form).some(([key, value]) => key === "end_time" ? Date.parse(after.end_time ?? "") !== Date.parse(value) : after[key as keyof AdSetRead] !== value)) {
+        throw new CampaignDeliveryError("Meta did not confirm the new ad set's budget.");
+      }
     };
     if (!running) {
       if (from.status === "ACTIVE") await this.writeStatus(fromAdSetId, "PAUSED");
-      if (capped) await cutCap();
+      await matchOld();
       await this.writeStatus(fromAdSetId, "ARCHIVED");
       return done;
     }
@@ -2123,11 +2168,11 @@ export class MetaClient {
     // An attempt cut off after the pause (old PAUSED) or after the archive carries on from here.
     if (from.status === "ACTIVE") await this.writeStatus(fromAdSetId, "PAUSED");
     try {
-      if (capped) await cutCap();
-      for (const adId of toAdIds) await this.writeStatus(adId, "ACTIVE");
+      await matchOld();
+      for (const adId of turnOn) await this.writeStatus(adId, "ACTIVE");
       await this.writeStatus(toAdSetId, "ACTIVE");
       const [oldAfter, newAfter, adsAfter] = await Promise.all([read(fromAdSetId), read(toAdSetId), readAds(toAdSetId)]);
-      if (oldAfter.status === "ACTIVE" || newAfter.status !== "ACTIVE" || !sameAds(adsAfter) || adsAfter.data!.some(ad => ad.status !== "ACTIVE")) {
+      if (oldAfter.status === "ACTIVE" || newAfter.status !== "ACTIVE" || !sameAds(adsAfter) || !adsAfter.data!.every(expected)) {
         throw new CampaignDeliveryError("Meta did not confirm the switch.");
       }
     } catch (error) {

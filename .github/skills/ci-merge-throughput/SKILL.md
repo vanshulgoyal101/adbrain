@@ -3,7 +3,7 @@ name: ci-merge-throughput
 description: "Use when several workers merge to one main branch many times a day, when a required check blocks every PR for reasons unrelated to the change, or when a new test suite should become a required merge check."
 ---
 
-<!-- Generated from vanshulgoyal101/skills@fb8f6e0 skills/ci-merge-throughput.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
+<!-- Generated from vanshulgoyal101/skills@eb9e65d skills/ci-merge-throughput.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
 
 # CI Merge Throughput
 
@@ -73,3 +73,48 @@ PRs. Long-lived branches drift and fail CI on old dependencies. Observed in
   rejects it and nothing merges. Pass the full 40-character SHA (#208).
 - A required aggregator that `needs:` the shards but lacks `if: always()`. A failed
   shard skips it, and a skipped required check counts as passing (#226).
+- A migration PR opened against a train branch must be retargeted to `main` before
+  release, and core approval needs QA plus CTO or Reviewer, so ask for both at once (#1138).
+- In a train repo, a version bump is in production as soon as it merges to `next`. Run
+  the "before promotion" checks before setting auto-merge (#1208).
+- A flag flip needs a behavioural before/after (signed-in page text), not just the
+  env var listing; the var only takes effect on the next deploy (#1016).
+- Before building a lever's "smallest option", write the recorded test of today's
+  path first. It can show no product change is needed (#1211).
+- Run `tsc` on new test files; vitest strips types, so a test can pass locally and fail
+  CI's build (#1580).
+- Match CI's Node version locally (nvm Node 24 first in PATH); jsdom crashed on Node 22
+  (#1551).
+- When mocking a module wholesale, spread `importOriginal()` so new helpers aren't
+  silently undefined (#1468).
+- Make a review habit into a CI rule with an AST inventory plus a mutation check (#1518).
+- Run a new lint or copy rule against the whole repo before merging; the first rule
+  flagged hex colours (#1291).
+
+## AdBrain lessons (Oct 29)
+
+- A job that is neither required nor in the required aggregator's `needs` can go red
+  without stopping auto-merge; read branch protection
+  (`gh api repos/<o>/<r>/branches/<b>/protection/required_status_checks`) before
+  calling it a gate (#1918). A size or import ratchet that isn't required drifts within
+  hours; make it required on every base, hotfix branches included, in the release that
+  adds it (#2071, #2157).
+- A `--write-baseline` run always exits green and rewrites every ceiling: it raises
+  grown files and lowers untouched ones, racing parallel PRs into red. Rebuild from the
+  target branch, edit only your own entries, and review the baseline diff (#2167,
+  #2096). A shrink-only baseline change belongs to the author's own extraction (#2157).
+- Never enable auto-merge on a PR whose base is another feature branch: it merges there
+  at once with no checks or review. Enable it after retargeting (#1255).
+- A "skip the gate for the release train" rule must bind repository and base, not the
+  branch name; on a public repo a fork can name its branch `next` (#1740).
+- Dependabot reads the default branch; verify a real bot PR after the config reaches
+  it (#1772).
+- Two PRs that pass alone can break the target together. When a PR adds a hook-using
+  child to a shared page, grep the tests that render that page and add the mock in the
+  same PR (#1624).
+- A move or split on the integration branch conflicts with any production hotfix to the
+  old file and stalls the sync. Check with `git merge --no-commit origin/main`, carry
+  the edit in a merge-commit back-merge PR (not squash), then confirm with
+  `git merge-base --is-ancestor` (#1851, #2106).
+- A component's real debounce in a test costs seconds in every test that triggers it;
+  spy on that one timer in the describe (#1509).

@@ -6,7 +6,7 @@
 export type CampaignClaim = { meta_campaign_id: string; business_id: string; created_at: string; source: string | null };
 
 /** The business a Meta campaign belongs to: the one that launched it, else the one that imported it first. */
-export function owningBusiness(claims: readonly CampaignClaim[]): string | null {
+function owningBusiness(claims: readonly CampaignClaim[]): string | null {
   const launched = claims.filter(claim => claim.source === "campaign_operation");
   const pool = launched.length ? launched : claims;
   return [...pool].sort((a, b) => a.created_at.localeCompare(b.created_at))[0]?.business_id ?? null;

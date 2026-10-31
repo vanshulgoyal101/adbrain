@@ -5,7 +5,9 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { ConnectionAccessError, requireOwnedBusiness } from "@/lib/meta/connection-access";
 import { getPrimaryBusiness } from "@/lib/supabase/queries";
 import { logEvent } from "@/lib/audit";
+import { revokeBeforeDisconnect } from "@/services/meta-disconnect";
 import { z } from "zod";
+import { ownerError } from "@/i18n/request-locale";
 
 export const runtime = "nodejs";
 
@@ -41,13 +43,14 @@ async function handlePOST(request?: Request) {
     const business = requestedBusinessId
       ? await requireOwnedBusiness(businessId)
       : { businessId };
+    await revokeBeforeDisconnect(business.businessId);
     const admin = createAdminClient();
     const { data: disconnected, error } = await admin.rpc("meta_disconnect", {
       p_business_id: business.businessId,
       p_user_id: user.id,
     });
     if (error || !disconnected) {
-      return NextResponse.json({ error: "Could not disconnect the Meta connection." }, { status: 500 });
+      return NextResponse.json({ error: await ownerError("facebookStillConnected") }, { status: 500 });
     }
 
     await logEvent({
@@ -62,6 +65,6 @@ async function handlePOST(request?: Request) {
     const status = error instanceof ConnectionAccessError
       ? { UNAUTHENTICATED: 401, NOT_FOUND: 404, FORBIDDEN: 403, CONFLICT: 409, UNAVAILABLE: 503 }[error.code]
       : 503;
-    return NextResponse.json({ error: error instanceof ConnectionAccessError ? error.message : "Could not disconnect the Meta connection." }, { status });
+    return NextResponse.json({ error: error instanceof ConnectionAccessError ? error.message : await ownerError("facebookStillConnected") }, { status });
   }
 }

@@ -3,7 +3,7 @@ name: supabase-rls-complete
 description: "When a multi-tenant application stores user, workspace, account, or organization data in a shared database, especially when tables or object storage are added."
 ---
 
-<!-- Generated from vanshulgoyal101/skills@fb8f6e0 skills/supabase-rls-complete.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
+<!-- Generated from vanshulgoyal101/skills@eb9e65d skills/supabase-rls-complete.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
 
 # Complete Row-Level Security
 
@@ -29,6 +29,21 @@ Treat tenant isolation as a database invariant. Enable RLS on every exposed tabl
 - Attempt cross-tenant select, insert, update, and delete with authenticated test identities.
 - Test storage object access with an object belonging to another tenant.
 - Inspect new migrations for tables or buckets added without a policy.
+
+## Production-state checks
+
+- Run variant checks against production `pg_proc`, not migration files: `proconfig` and
+  `proacl` show the live state, and `has_schema_privilege(role,'public','CREATE')` shows
+  who can plant objects (#673).
+- Base funnel steps on durable tables; `product_events` gets pruned (#338).
+- Exclude internal accounts by id or domain from one module, never by email in a public
+  repo, and attribute background events by business owner (#339, #379).
+- Two-tenant checks on isolated Postgres can pass while the real gap is a shared
+  credential. Read the credential path too (#617).
+- Check `has_column_privilege('authenticated', …, 'UPDATE')` per column, not only the
+  policies: an ALL policy plus default grants lets the browser write every column of its
+  own rows.
+- Before a cleanup on shared data, take a backup and assert row counts.
 
 ## Common traps
 

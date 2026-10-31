@@ -13,8 +13,8 @@ export type ReauthEntry = { key: string; since: string; activeCampaigns: number 
 // Thrown by withMetaConnection when the stored token or connection is unusable (connection-access.ts).
 const CONNECTION_TOKEN_MESSAGES = new Set(["Meta credentials are unavailable.", "Meta is not connected for this business."]);
 
-/** First 12 hex chars of sha256(business id); docs/OPERATIONS.md maps it back with SQL. */
-export function reauthKey(businessId: string): string {
+/** First 12 hex chars of sha256(business id); docs/operations/scheduled-jobs.md maps it back with SQL. */
+function reauthKey(businessId: string): string {
   return createHash("sha256").update(businessId).digest("hex").slice(0, 12);
 }
 
@@ -41,7 +41,7 @@ const expired = (value: string | null | undefined, now: number) =>
  * dead owner token (a managed account, a healthy stored token, or a state that can't be read).
  * Meta steps that swallow their errors still count: the stored connection state decides.
  */
-export async function reauthSince(businessId: string, errors: readonly unknown[], now = new Date()): Promise<string | null> {
+async function reauthSince(businessId: string, errors: readonly unknown[], now = new Date()): Promise<string | null> {
   const at = now.toISOString();
   const graph190 = errors.some(isGraphTokenError);
   try {

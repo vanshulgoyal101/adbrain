@@ -91,6 +91,8 @@ const scrollIntoView = vi.fn();
 async function prepareBlockedOn(reason: ReviewBlockerReason) {
   mocks.preflight.mockResolvedValue(reviewBlockedOn(reason));
   render(<Campaigns business={business} approved={[creative]} initialCampaigns={[]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady adAccountId="" />);
+  // #1171: WhatsApp chat is the default; this draft is the production lead-form one.
+  fireEvent.click(screen.getByRole("radio", { name: "Instant form" }));
   const leadForm = screen.getByLabelText("Lead form");
   await within(leadForm).findByRole("option", { name: "Enquiries" });
   fireEvent.change(leadForm, { target: { value: "1732372914636573" } });
@@ -150,6 +152,19 @@ describe("core: every Review blocker has a one-tap fix (#723)", () => {
     fireEvent.click(within(region).getByRole("button", { name: reviewBlockerFix(reason)!.label }));
     expect(control()).toHaveFocus();
     expect(scrollIntoView.mock.contexts).toContain(control());
+    // #1155: a fix inside the folded "Change who sees it" opens it first.
+    const fold = control().closest("details");
+    if (fold?.id === "who-sees-it") expect(fold.open).toBe(true);
+  });
+
+  it("folds goal, audience and the A/B test under 'Change who sees it', closed for a default setup (#1155)", async () => {
+    render(<Campaigns business={business} approved={[creative]} initialCampaigns={[]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady adAccountId="" />);
+    const fold = screen.getByText("Change who sees it").closest("details")!;
+    expect(fold.open).toBe(false);
+    expect(within(fold).getByLabelText("Campaign goal")).toBeInTheDocument();
+    expect(within(fold).getByText("A/B test the audience by age")).toBeInTheDocument();
+    expect(fold.contains(screen.getByLabelText("Daily budget (₹)"))).toBe(false);
+    expect(fold.contains(screen.getByRole("button", { name: "Check my campaign (nothing spends)" }))).toBe(false);
   });
 
   // With areas chosen by hand: Meta's own city picks go through the search; typed names (#740) sit in Planned areas.
@@ -163,9 +178,13 @@ describe("core: every Review blocker has a one-tap fix (#723)", () => {
     expect(screen.getByLabelText(field)).toHaveFocus();
   });
 
-  it.each(["REVIEW_NO_WEBSITE", "REVIEW_WHATSAPP_NOT_LINKED"] as const)("%s: the fix opens Your business", async (reason) => {
+  it.each([
+    ["REVIEW_NO_WEBSITE", "/brand"],
+    // #681 (#847): linking a WhatsApp number lives in Settings' WhatsApp card, not on Your business.
+    ["REVIEW_WHATSAPP_NOT_LINKED", "/settings#whatsapp-status-title"],
+  ] as const)("%s: the fix opens %s", async (reason, href) => {
     const region = await prepareBlockedOn(reason);
-    expect(within(region).getByRole("link", { name: reviewBlockerFix(reason)!.label })).toHaveAttribute("href", "/brand");
+    expect(within(region).getByRole("link", { name: reviewBlockerFix(reason)!.label })).toHaveAttribute("href", href);
   });
 
   // #742: QA's 390 px walk: a site-less owner on Instant form was only told to add a website.
@@ -177,7 +196,7 @@ describe("core: every Review blocker has a one-tap fix (#723)", () => {
 
     const region = await prepareBlockedOn("REVIEW_NO_WEBSITE");
     fireEvent.click(within(region).getByRole("button", { name: reviewBlockerAlternative("REVIEW_NO_WEBSITE")!.label }));
-    const whatsapp = screen.getByRole("radio", { name: "WhatsApp chat" });
+    const whatsapp = screen.getByRole("radio", { name: "WhatsApp chat (recommended)" });
     expect(whatsapp).toBeChecked();
     expect(whatsapp).toHaveFocus();
   });
@@ -202,6 +221,8 @@ describe("core: every Review blocker has a one-tap fix (#723)", () => {
   // #772: Prepare was silently disabled until an ad and a budget were set; a tap did nothing.
   async function openComposer() {
     render(<Campaigns business={business} approved={[creative]} initialCampaigns={[]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady adAccountId="" />);
+    // #1171: WhatsApp chat is the default; this draft is the production lead-form one.
+    fireEvent.click(screen.getByRole("radio", { name: "Instant form" }));
     const leadForm = screen.getByLabelText("Lead form");
     await within(leadForm).findByRole("option", { name: "Enquiries" });
     fireEvent.change(leadForm, { target: { value: "1732372914636573" } });
@@ -240,6 +261,8 @@ describe("core: every Review blocker has a one-tap fix (#723)", () => {
     const reviewed = { ...runPreflight(productionInput()), serviceArea: { excludedCities: ["Ludhiana", "Amritsar"], keptStates: ["Punjab"], excludedStateCount: 33 } };
     mocks.preflight.mockResolvedValue(reviewed);
     render(<Campaigns business={business} approved={[creative]} initialCampaigns={[]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady adAccountId="" />);
+    // #1171: WhatsApp chat is the default; this draft is the production lead-form one.
+    fireEvent.click(screen.getByRole("radio", { name: "Instant form" }));
     const leadForm = screen.getByLabelText("Lead form");
     await within(leadForm).findByRole("option", { name: "Enquiries" });
     fireEvent.change(leadForm, { target: { value: "1732372914636573" } });

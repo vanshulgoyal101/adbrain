@@ -1,4 +1,8 @@
 "use client";
+import { useNotices } from "@/i18n/notices";
+import { PictureSourceBadge } from "@/components/picture-source-badge";
+import type { AppLocale } from "@/i18n/locale";
+import { formatDate } from "@/lib/format";
 import { AD_FLOW, Stepper } from "@/components/ui/stepper";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { savedCreativeDescription } from "@/lib/creative/concept";
@@ -50,6 +54,12 @@ type StudioGeneration = z.infer<typeof studioGenerationSchema>;
 type CreateBatch = { key: string; made: number | null; items: Creative[] };
 
 /** #762: ads in their Create batch (`variant_group`), newest batch first, each in its given order. */
+/** #1261: batches this recent are checked for ads still coming or missing. */
+const RECENT_BATCH_MS = 2 * 60 * 60 * 1000;
+/** The generate route's own ceiling (maxDuration 300 s). */
+const BATCH_DEADLINE_MS = 5 * 60 * 1000;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function createBatches(list: Creative[]): CreateBatch[] {
   const batches = new Map<string, CreateBatch>();
   for (const item of list) {
@@ -65,7 +75,7 @@ function createBatches(list: Creative[]): CreateBatch[] {
 
 function formatBatchDate(made: number): string {
   // #724: several batches a day are common, so the time tells them apart.
-  return new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" }).format(made);
+  return formatDate(new Date(made));
 }
 
 export function Studio({
@@ -74,15 +84,24 @@ export function Studio({
   showInternals = false,
   initialFilter = "all",
   initialCreativeId = null,
+  sample = false,
+  locale = "en",
 }: {
   business: Business;
   initialCreatives: Creative[];
+  /** #1901: the picture badge's language. */
+  locale?: AppLocale;
+  /** #1317: a prospect's ads are samples: no Share, so no clean picture leaves AdBrain. */
+  sample?: boolean;
   /** Operators see model names and generation costs; owners don't (#403). */
   showInternals?: boolean;
   initialFilter?: "all" | "draft" | "approved";
   initialCreativeId?: string | null;
 }) {
+  const tn = useNotices();
   const [items, setItems] = useState<Creative[]>(initialCreatives);
+  // #1261: the newest batch may still be coming in, or may have ended short, after the owner left Create.
+  const [shortfall, setShortfall] = useState<{ brief: string; missing: number; expected: number; ended: boolean } | null>(null);
   // Survives a tab change so a long brief isn't retyped. Kept after generating,
   // since tweaking the brief and regenerating is the normal flow.
   const [brief, setBrief] = useSessionDraft<string>(
@@ -133,6 +152,31 @@ export function Studio({
   );
   const batches = createBatches(visibleItems.filter((item) => !setAside(item)));
   const setAsideItems = visibleItems.filter(setAside);
+  const newest = createBatches(items)[0];
+  const newestKey = newest && newest.made !== null && now - newest.made < RECENT_BATCH_MS && UUID.test(newest.key) ? newest.key : null;
+  useEffect(() => {
+    if (!newestKey || generating) return;
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const check = async () => {
+      const response = await fetch(`/api/creatives/generate?businessId=${encodeURIComponent(business.id)}&generationId=${encodeURIComponent(newestKey)}`, {
+        cache: "no-store", signal: AbortSignal.timeout(10_000),
+      }).catch(() => null);
+      if (stopped || !response?.ok) return;
+      const result = await response.json().catch(() => null) as { status?: string; creatives?: Creative[]; expectedCount?: number } | null;
+      const saved = result?.creatives ?? [];
+      if (stopped || !result?.expectedCount || !saved.length) return;
+      setItems((previous) => [...new Map([...previous, ...saved].map((creative) => [creative.id, creative])).values()]);
+      if (saved.length >= result.expectedCount) { setShortfall(null); return; }
+      // The route stops by 300 s; a batch whose first ad is older than that has ended, whatever its status says.
+      const first = Math.min(...saved.map((creative) => Date.parse(creative.created_at ?? "") || Date.now()));
+      const ended = result.status !== "processing" && result.status !== "partial" || Date.now() - first > BATCH_DEADLINE_MS;
+      setShortfall({ brief: saved[0].brief ?? "", missing: result.expectedCount - saved.length, expected: result.expectedCount, ended });
+      if (!ended) timer = setTimeout(() => void check(), 15_000);
+    };
+    void check();
+    return () => { stopped = true; clearTimeout(timer); };
+  }, [business.id, newestKey, generating]);
   // #360: on a phone the selected ad's picture is the largest paint; board tiles wait for it.
   const [boardImages, setBoardImages] = useState(false);
   useEffect(() => {
@@ -209,7 +253,7 @@ export function Studio({
       const stored = localStorage.getItem(generationKey);
       setPendingGeneration(stored ? studioGenerationSchema.parse(JSON.parse(stored)) : null);
     } catch {
-      setError("Generation recovery storage is unavailable. No generation was started.");
+      setError(tn("studio.storageBlocked"));
     }
   }
 
@@ -218,9 +262,11 @@ export function Studio({
     return () => { generationMounted.current = false; };
   }, [generationKey]);
 
-  async function generate(e: React.FormEvent) {
-    e.preventDefault();
+  async function generate(e?: React.FormEvent, more?: { brief: string; count: number }) {
+    e?.preventDefault();
     if (generationInFlight.current) return;
+    const runBrief = more?.brief ?? brief;
+    const runCount = more?.count ?? count;
     generationInFlight.current = true;
     setError(null);
     let intent: StudioGeneration | null = pendingGeneration;
@@ -261,7 +307,8 @@ export function Studio({
         if (response.ok) {
           const result = await response.json() as { status?: string; creatives?: Creative[] };
           acceptResults(result.creatives ?? []);
-          if (result.status === "complete" && (result.creatives?.length ?? 0) >= intent.count) {
+          // #1407: 'ended' is a batch that finished short; the notice above says how many couldn't be made.
+          if (result.status === "ended" || (result.status === "complete" && (result.creatives?.length ?? 0) >= intent.count)) {
             clearIntent();
             return;
           }
@@ -283,11 +330,11 @@ export function Studio({
         const stored = localStorage.getItem(generationKey);
         if (stored) intent = studioGenerationSchema.parse(JSON.parse(stored));
         if (!intent) {
-          if (!brief.trim()) {
-            setError("Describe what you want to advertise.");
+          if (!runBrief.trim()) {
+            setError(tn("studio.describeAd"));
             return;
           }
-          intent = { generationId: crypto.randomUUID(), count };
+          intent = { generationId: crypto.randomUUID(), count: runCount };
           localStorage.setItem(generationKey, JSON.stringify(intent));
         } else {
           setPendingGeneration(intent);
@@ -296,7 +343,7 @@ export function Studio({
           return;
         }
       } catch {
-        setError("Generation recovery storage is unavailable. No generation was started.");
+        setError(tn("studio.storageBlocked"));
         return;
       }
       setPendingGeneration(intent);
@@ -306,9 +353,9 @@ export function Studio({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           businessId: business.id,
-          brief,
-          sourceFacts: [brief.trim()],
-          count,
+          brief: runBrief,
+          sourceFacts: [runBrief.trim()],
+          count: runCount,
           generationId: intent.generationId,
           language,
           format,
@@ -322,7 +369,7 @@ export function Studio({
       if (!res.ok) {
         if ([400, 401, 403, 404, 409, 422, 429].includes(res.status)) {
           clearIntent();
-          setError(data.error ?? "Generation was rejected.");
+          setError(data.error ?? tn("studio.startFailed"));
         } else await recover(data.error);
         return;
       }
@@ -354,26 +401,38 @@ export function Studio({
         body: JSON.stringify({ creativeIds: ids }),
       });
       if (!res.ok) {
-        setError("Export failed.");
+        setError(tn("studio.downloadFailed"));
         return;
       }
       const blob = await res.blob();
       downloadBlob(blob, "adbrain-ad-pack.zip");
       setExportOk(true);
     } catch {
-      setError("Export failed.");
+      setError(tn("studio.downloadFailed"));
     } finally {
       setExporting(false);
     }
   }
 
+  // #1598 (Designer, #1463): no ads and nothing being made: one block (title, line, one action) under the intro.
+  const empty = items.length === 0 && !generating && !pendingGeneration;
+
   return (
     <div className="flex flex-col gap-4">
-      <Stepper
+      {empty && (
+        <section aria-labelledby="review-empty-title" className="flex max-w-xl flex-col items-start gap-2">
+          <h2 id="review-empty-title" className="text-[17px] font-semibold leading-6 text-slate-900">No ads yet</h2>
+          <p className="text-[15px] leading-[22px] text-slate-600">AdBrain makes 3 ads from your business details in about a minute.</p>
+          <Link href="/create" className="mt-2 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary-hover sm:w-auto">
+            Make ads
+          </Link>
+        </section>
+      )}
+      {!empty && <Stepper
         current={AD_FLOW[workflowStep - 1]}
         details={{ Review: `${reviewCount} awaiting approval`, Launch: `${approvedCount} ready for a campaign` }}
-      />
-      <details open={items.length === 0 || Boolean(pendingGeneration)} className="group">
+      />}
+      <details open={(items.length === 0 && !empty) || Boolean(pendingGeneration)} className="group">
         <summary className="flex min-h-11 w-fit cursor-pointer list-none items-center gap-1 text-sm font-medium text-blue-700 [&::-webkit-details-marker]:hidden">
           <ChevronRight size={16} aria-hidden="true" className="transition-transform group-open:rotate-90" />
           Make more ads
@@ -403,7 +462,7 @@ export function Studio({
                   id="count"
                   value={count}
                   onChange={(e) => setCount(Number(e.target.value))}
-                  className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none"
+                  className="h-11 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none"
                 >
                   {[1, 2, 3, 4, 5, 6].map((n) => (
                     <option key={n} value={n}>
@@ -418,7 +477,7 @@ export function Studio({
                   id="language"
                   value={language}
                   onChange={(e) => setLanguage(e.target.value)}
-                  className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none"
+                  className="h-11 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none"
                 >
                   {AD_LANGUAGES.map((l) => (
                     <option key={l.id} value={l.id}>
@@ -429,7 +488,7 @@ export function Studio({
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="format">Placement</Label>
-                <select id="format" value={format} onChange={(event) => setFormat(event.target.value)} className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none">
+                <select id="format" value={format} onChange={(event) => setFormat(event.target.value)} className="h-11 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none">
                   <option value="portrait">Feed 4:5</option>
                   <option value="square">Square 1:1</option>
                   <option value="story">Story 9:16</option>
@@ -447,6 +506,7 @@ export function Studio({
 
       {error && <Alert variant="error">{error}</Alert>}
 
+      {!empty && (
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-lg font-semibold text-slate-900">
           Ads{" "}
@@ -482,6 +542,7 @@ export function Studio({
           )}
         </div>
       </div>
+      )}
 
       {exportOk && <Alert variant="success">Ad pack downloaded.</Alert>}
 
@@ -525,41 +586,32 @@ export function Studio({
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search ads"
-              className="h-10 w-full rounded-md border border-slate-300 pl-9 pr-3 text-sm sm:w-60"
+              className="h-11 w-full rounded-md border border-slate-300 pl-9 pr-3 text-sm sm:w-60"
             />
           </label>
         </div>
       )}
 
-      {items.length === 0 ? (
-        <Card className="border-dashed border-slate-300 bg-white/60">
-          <CardContent className="flex flex-col items-center gap-1 px-5 py-12 text-center">
-            <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-950 text-white">
-              <ImageIcon className="h-5 w-5" />
-            </span>
-            <p className="mt-3 text-lg font-semibold text-slate-900">
-              Your review board is ready
-            </p>
-            <p className="max-w-md text-sm text-slate-500">
-              Write a short brief above — what you’re selling and to whom — and
-              generate your first batch. You’ll compare, approve, and export the
-              strongest variants here.
-            </p>
-            <div className="mt-4 flex flex-wrap justify-center gap-2 text-xs text-slate-500">
-              {["Compare concepts", "Approve winners", "Export an ad pack"].map(
-                (item) => (
-                  <span
-                    key={item}
-                    className="rounded-full border border-slate-200 bg-white px-3 py-1.5"
-                  >
-                    {item}
-                  </span>
-                ),
+      {shortfall && !generating && (
+        <div role="status" className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
+          {shortfall.ended ? (
+            <>
+              <span>{shortfall.missing} of {shortfall.expected} ads couldn&apos;t be made this time.</span>
+              {shortfall.brief.trim() && (
+                <Button size="sm" variant="outline" onClick={() => { const more = { brief: shortfall.brief, count: shortfall.missing }; setShortfall(null); void generate(undefined, more); }}>
+                  Make {shortfall.missing} more
+                </Button>
               )}
-            </div>
-          </CardContent>
-        </Card>
-      ) : selectedCreative ? (
+            </>
+          ) : (
+            <span>
+              {shortfall.missing === 1 ? "1 more ad is still being made. It appears here when it's ready." : `${shortfall.missing} more ads are still being made. They appear here when they're ready.`}
+            </span>
+          )}
+        </div>
+      )}
+
+      {items.length === 0 ? null : selectedCreative ? (
         <div className="grid items-start gap-6 lg:grid-cols-[minmax(220px,0.8fr)_minmax(0,1.2fr)]">
           <section aria-label="Ads" className="scrollbar-stable min-w-0 space-y-3 lg:max-h-[75vh] lg:overflow-y-auto">
             {batches.map((batch, index) => {
@@ -568,13 +620,13 @@ export function Studio({
               return index === 0
                 ? <div key={batch.key}><p className="px-1 pb-1 text-xs font-medium text-slate-500">{label}</p>{list}</div>
                 : <details key={batch.key} open={batch.items.some((item) => item.id === selectedCreative.id) || undefined} className="border-t border-slate-200 pt-2">
-                    <summary className="flex min-h-10 cursor-pointer items-center px-1 text-sm font-medium text-slate-700">{label}</summary>
+                    <summary className="flex min-h-11 cursor-pointer items-center px-1 text-sm font-medium text-slate-700">{label}</summary>
                     {list}
                   </details>;
             })}
             {setAsideItems.length > 0 && (
               <details open={setAsideItems.some((item) => item.id === selectedCreative.id) || undefined} className="border-t border-slate-200 pt-2">
-                <summary className="flex min-h-10 cursor-pointer items-center px-1 text-sm font-medium text-slate-700">Set aside ({setAsideItems.length}): not picked, or unreviewed after 7 days</summary>
+                <summary className="flex min-h-11 cursor-pointer items-center px-1 text-sm font-medium text-slate-700">Set aside ({setAsideItems.length}): not picked, or unreviewed after 7 days</summary>
                 {adList(setAsideItems)}
               </details>
             )}
@@ -586,8 +638,10 @@ export function Studio({
           >
             <CreativeCard
               key={selectedCreative.id}
+              locale={locale}
               business={business}
               showInternals={showInternals}
+              sample={sample}
               onImageSettled={() => setBoardImages(true)}
               creative={selectedCreative}
               onChange={(updated) =>
@@ -607,12 +661,13 @@ export function Studio({
           </section>
         </div>
       ) : (
-        <div className="border-y border-slate-200 py-10">
-          <h3 className="font-semibold text-slate-900">
+        <div className="flex max-w-xl flex-col items-start gap-2 py-6">
+          <h3 className="text-[17px] font-semibold leading-6 text-slate-900">
             No matching creatives
           </h3>
+          <p className="text-[15px] leading-[22px] text-slate-600">Try another word, or show all ads.</p>
           <Button
-            className="mt-4"
+            className="mt-2"
             variant="outline"
             onClick={() => {
               setFilter("all");
@@ -637,7 +692,9 @@ export function Studio({
 
 function CreativeCard({
   business,
+  locale = "en",
   showInternals = false,
+  sample = false,
   onImageSettled,
   creative,
   onChange,
@@ -645,13 +702,16 @@ function CreativeCard({
   onPreview,
 }: {
   business: Business;
+  locale?: AppLocale;
   showInternals?: boolean;
+  sample?: boolean;
   onImageSettled?: () => void;
   creative: Creative;
   onChange: (c: Creative) => void;
   onDelete: (id: string) => void;
   onPreview: () => void;
 }) {
+  const tn = useNotices();
   const [pending, startTransition] = useTransition();
   const [regenerating, setRegenerating] = useState(false);
   const [confirmingRegen, setConfirmingRegen] = useState(false);
@@ -686,9 +746,9 @@ function CreativeCard({
         error?: string;
       };
       if (res.ok && data.creative) onChange(data.creative);
-      else setRegenError(data.error ?? "Couldn't regenerate — try again.");
+      else setRegenError(data.error ?? tn("studio.regenFailed"));
     } catch {
-      setRegenError("Couldn't regenerate — check your connection.");
+      setRegenError(tn("studio.regenOffline"));
     } finally {
       setRegenerating(false);
     }
@@ -701,11 +761,9 @@ function CreativeCard({
       try {
         const res = await setCreativeStatus(creative.id, next);
         if (res.ok) onChange({ ...creative, status: next });
-        else setRegenError(res.error ?? "Couldn't update approval. Try again.");
+        else setRegenError(res.error ?? tn("studio.approvalFailed"));
       } catch {
-        setRegenError(
-          "Couldn't update approval. Check your connection and try again.",
-        );
+        setRegenError(tn("studio.approvalOffline"));
       }
     });
   }
@@ -717,14 +775,9 @@ function CreativeCard({
       try {
         const res = await deleteCreative(creative.id);
         if (res.ok) onDelete(creative.id);
-        else
-          setRegenError(
-            res.error ?? "Couldn't delete the creative. Try again.",
-          );
+        else setRegenError(res.error ?? tn("studio.deleteFailed"));
       } catch {
-        setRegenError(
-          "Couldn't delete the creative. Check your connection and try again.",
-        );
+        setRegenError(tn("studio.deleteOffline"));
       }
     });
   }
@@ -768,6 +821,7 @@ function CreativeCard({
             }}
           />
         )}
+        {creative.image_url && !imgError && <PictureSourceBadge generation={creative.generation} locale={locale} className="absolute left-2 top-2" />}
         {(!creative.image_url || imgError) && (
           <div className="absolute inset-0 flex items-center justify-center">
             <span className="flex items-center gap-2 text-sm text-slate-500">
@@ -823,7 +877,7 @@ function CreativeCard({
         <>
         {editNotes && <CopyEditNotice notes={editNotes} />}
         {showInternals && <GenerationDetails value={creative.generation} />}
-        {approved && <ShareCreativeButton creative={creative} data-product-event="creative.share" className="pt-2" />}
+        {approved && !sample && <ShareCreativeButton creative={creative} variant="outline" data-product-event="creative.share" className="pt-2" />}
         <div className="mt-auto flex flex-wrap items-center gap-2 pt-3">
           <Button
             size="sm"

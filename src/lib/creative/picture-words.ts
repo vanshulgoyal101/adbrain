@@ -28,6 +28,7 @@ const storedDesignSchema = z.object({
   phone: z.string().nullable(),
   // Designs saved before #1147 asked for a call.
   contact: z.enum(["phone", "whatsapp"]).default("phone"),
+  contactLabel: z.string().nullable().optional(),
   contactLine: z.string().nullable(),
   ctaLabel: z.string(),
   // Designs saved before #760 were all drawn with the button.
@@ -36,6 +37,8 @@ const storedDesignSchema = z.object({
   ctaTextColor: z.string(),
   fontFamily: z.string(),
   layout: z.enum(["bottom", "top", "center"]),
+  // #1904: how the owner's photo meets the frame, kept for every later render (words, 9:16).
+  backgroundFit: z.enum(["attention", "blur"]).optional(),
 });
 
 type CreativeRow = Pick<
@@ -73,6 +76,7 @@ export function pictureDesign(creative: CreativeRow, brand: BrandContext): AdDes
     copy: { headline: creative.headline ?? "", primary_text: creative.primary_text ?? "", cta: creative.cta ?? "" },
     angle: getAngleByName(creative.angle ?? ""),
     format,
+    language: typeof generation.language === "string" ? generation.language : null,
   });
   // Ads this old were all drawn with the button (before #760); keep it on redraw.
   if (typeof concept.headline !== "string") return { ...design, showCta: true };
@@ -142,4 +146,20 @@ export async function findStoredBackground(
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const chosen = usable[0];
   return chosen ? supabase.storage.from("creatives").getPublicUrl(chosen.path).data.publicUrl : null;
+}
+
+/** The background to redraw an ad's words over: its saved photo when it's in this business's own storage, else the stored original. */
+export async function savedBackground(
+  supabase: SupabaseClient<Database>,
+  creative: { id: string; business_id: string; variant_group: string | null; image_url: string | null },
+  generation: Record<string, unknown>,
+  angleId: string,
+): Promise<string | null> {
+  // The receipt is owner-writable under RLS, so only trust a background in this business's own storage.
+  const ownStorage = supabase.storage.from("creatives").getPublicUrl(`${creative.business_id}/`).data.publicUrl;
+  const savedPhoto = typeof generation.photoUrl === "string" && generation.photoUrl.startsWith(ownStorage)
+    && !generation.photoUrl.slice(ownStorage.length).includes("..")
+    ? generation.photoUrl
+    : null;
+  return savedPhoto ?? findStoredBackground(supabase, `${creative.business_id}/${creative.variant_group ?? creative.id}`, angleId, creative.image_url);
 }

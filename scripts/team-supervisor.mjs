@@ -10,11 +10,11 @@
 //   node scripts/team-supervisor.mjs --restart-prompt <role|all>          the prompt to resend with create_session
 // Each tick also dispatches scheduled-jobs.yml when GitHub's own schedule has lapsed (#692), and once a
 // night exports production to ~/.adbrain-backups and restore-drills it (#884).
-// Kill switch: touch ~/.adbrain-supervisor/OFF. Log: ~/.adbrain-supervisor/supervisor.log.
+// Kill switch for role runs: touch ~/.adbrain-supervisor/OFF (scheduled-job dispatch and the nightly backup keep running). Log: ~/.adbrain-supervisor/supervisor.log.
 import { execFileSync as rawExecFileSync, spawn, spawnSync } from "node:child_process";
-import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { appendFileSync, chmodSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { cpus, freemem, homedir, loadavg, totalmem } from "node:os";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { NAMES } from "./wait-for-work.mjs";
@@ -25,7 +25,7 @@ const CALL_TIMEOUT_MS = 120_000;
 const execFileSync = (cmd, args, opts = {}) => rawExecFileSync(cmd, args, { timeout: CALL_TIMEOUT_MS, killSignal: "SIGKILL", ...opts });
 
 /** Handoff bottlenecks first (reviews, releases), then builders. CTO/CEO coordinate through chat tools, so they're excluded. */
-export const ORDER = ["devops", "qa", "reviewer", "qa2", "dev3", "dev", "dev2", "dev4", "cpo", "analyst", "designer"];
+export const ORDER = ["devops", "qa", "reviewer", "qa2", "dev3", "dev", "dev2", "dev4", "cpo", "analyst", "designer", "docs"];
 export const LABEL = "in.adbrain.team-supervisor";
 const HOME = homedir();
 export const STATE_DIR = join(HOME, ".adbrain-supervisor");
@@ -41,7 +41,7 @@ export function roleFromPrompt(text) {
   // the first role name in the next few words. Helpers ("CTO helper") are separate chats, not the role itself.
   const m = /You are AdBrain's ([^.,;:(\n]{1,60})/i.exec(String(text ?? ""));
   if (!m) return null;
-  const said = ` ${m[1].toLowerCase().replace(/\s+/g, " ").trim()} `;
+  const said = ` ${m[1].replace(/[*_`]/g, "").toLowerCase().replace(/\s+/g, " ").trim()} `;
   if (/ helper /.test(said)) return null;
   const names = Object.entries(NAMES).sort((a, b) => b[1].length - a[1].length);
   let best = null;
@@ -161,7 +161,7 @@ export function prompt(role, items, runMin) {
   const name = NAMES[role];
   return [
     `You are AdBrain's ${name}, started headless by the #573 A1 supervisor because no ${name} chat is alive.`,
-    `Repo: ${WT} (current origin/main). Read AGENTS.md and the ${name} role card in docs/ORCHESTRATION.md first.`,
+    `Repo: ${WT} (current origin/main). Read AGENTS.md and the ${name} role card in docs/team/orchestration.md first.`,
     `Do ONE unit of work end to end: the first item below. Edit only in your own worktree (\`bash scripts/wt.sh <issue>\`), open a PR, and hand off with the owner label plus one arrow line. Sign every GitHub comment "${name} (headless):".`,
     `Your queue (from wait-for-work):`,
     ...items.slice(0, 3).map((i) => `- ${i}`),
@@ -177,7 +177,7 @@ export function restartPrompt(role) {
   if (!name) throw new Error(`unknown role ${role}`);
   return [
     `You are AdBrain's ${name}. Your old chat was lost in a VS Code restart, so start fresh.`,
-    `Read AGENTS.md, then the Current Dispatch and your role card in docs/ORCHESTRATION.md, then your row and today's priorities on Team board #580.`,
+    `Read AGENTS.md, then the Current Dispatch and your role card in docs/team/orchestration.md, then your row and today's priorities on Team board #580.`,
     `Your queue: \`gh issue list -R vanshulgoyal101/adbrain -l owner:${role} --state open\`; work the top item of your #580 row first.`,
     `Work only in your own worktree under ~/Development/copilot/adbrain-wt/ (\`bash scripts/wt.sh <issue>\`). Run commands in the foreground only and never leave anything running. Sign your comments "${name}:".`,
     `This task never completes: do not call task_complete and do not end your turn after an item. Loop: work → \`node scripts/wait-for-work.mjs --me ${role}\` in the foreground from a worktree on current origin/main → work. Stop only when the waiter times out.`,
@@ -192,6 +192,25 @@ export function scheduledJobsDue(latest, now = Date.now(), staleMin = 9) {
   return !Number.isFinite(started) || now - started > staleMin * 60_000;
 }
 
+/** #1495: the reason to hold a headless run while the shared Mac is overloaded, or null to launch. */
+export function loadSkip({ load1, cores, availableBytes }, { maxLoadPerCore = 1.5, minFreeGb = 2 } = {}) {
+  const perCore = load1 / Math.max(1, cores);
+  if (perCore > maxLoadPerCore) return `load ${load1.toFixed(1)} on ${cores} cores (${perCore.toFixed(2)}/core > ${maxLoadPerCore})`;
+  const gb = availableBytes / 2 ** 30;
+  if (gb < minFreeGb) return `${gb.toFixed(1)} GB memory available (< ${minFreeGb} GB)`;
+  return null;
+}
+
+/** os.freemem() on macOS counts only never-used pages (≈0.2 GB on a healthy 8 GB Mac), so use the kernel's memory-pressure level instead. */
+export function machineLoad() {
+  let availableBytes = freemem();
+  if (process.platform === "darwin") {
+    const level = Number(spawnSync("sysctl", ["-n", "kern.memorystatus_level"], { encoding: "utf8" }).stdout?.trim());
+    if (Number.isFinite(level) && level > 0) availableBytes = (totalmem() * level) / 100;
+  }
+  return { load1: loadavg()[0], cores: cpus().length, availableBytes };
+}
+
 export const BACKUP_DIR = join(HOME, ".adbrain-backups");
 const BACKUP_KEEP = 7;
 
@@ -202,17 +221,48 @@ export function exportDue(newest, now = new Date()) {
   return !newest || Date.parse(newest) < cutoff;
 }
 
-/** Export folders are named by their ISO time; keep the newest `keep`. */
+/** Exports are named by their ISO time: an encrypted `<time>.tar.gz.cms` (#1762) or a legacy plaintext folder. */
+export const EXPORT_NAME = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}Z(\.tar\.gz\.cms)?$/;
+
+/** Keep the newest `keep` exports. */
 export function exportsToPrune(names, keep = BACKUP_KEEP) {
-  return names.filter((n) => /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}Z$/.test(n)).sort().reverse().slice(keep);
+  return names.filter((n) => EXPORT_NAME.test(n)).sort().reverse().slice(keep);
+}
+
+const OPENSSL = ["/opt/homebrew/opt/openssl@3/bin/openssl", "/usr/local/opt/openssl@3/bin/openssl"].find((p) => existsSync(p)) ?? "openssl";
+
+/** #1762: tar the drilled export, CMS-encrypt it to the backup certificate (the private key stays in the keychain), then delete the plaintext. */
+export function encryptExport(dir, run = spawnSync) {
+  const tarball = `${dir}.tar.gz`, sealed = `${dir}.tar.gz.cms`;
+  const tar = run("tar", ["-czf", tarball, "-C", dirname(dir), basename(dir)], { encoding: "utf8" });
+  const cms = tar.status === 0 ? run(OPENSSL, ["cms", "-encrypt", "-binary", "-aes256", "-outform", "DER", "-in", tarball, "-out", sealed,
+    join(WT, ".github/backup/backup-cert.crt")], { encoding: "utf8" }) : null;
+  rmSync(tarball, { force: true });
+  rmSync(dir, { recursive: true, force: true });
+  if (cms?.status === 0 && existsSync(sealed)) {
+    chmodSync(sealed, 0o600);
+    return true;
+  }
+  rmSync(sealed, { force: true });
+  return false;
 }
 
 const folderTime = (name) => `${name.slice(0, 13)}:${name.slice(14, 16)}:00Z`;
 
+/** #1857: once a UTC day, warn 90 days before the Meta API version we call is retired (scripts/graph-sunset.mjs). */
+function dailyGraphSunsetCheck(dry) {
+  const stamp = join(STATE_DIR, `graph-sunset-${new Date().toISOString().slice(0, 10)}`);
+  if (existsSync(stamp)) return;
+  if (dry) return console.log("would check the Meta API version's retirement date");
+  const result = spawnSync(process.execPath, ["scripts/graph-sunset.mjs"], { cwd: WT, encoding: "utf8", timeout: 60_000 });
+  log(`graph sunset: ${`${result.stdout ?? ""}${result.stderr ?? ""}`.trim().split("\n").join(" | ").slice(0, 240)}`);
+  if (result.status === 0) writeFileSync(stamp, "");
+}
+
 /** Nightly free-plan backup (#884): export, restore-drill it, prune, and open one issue when it fails. */
 function nightlyExport(dry) {
   mkdirSync(BACKUP_DIR, { recursive: true, mode: 0o700 });
-  const names = readdirSync(BACKUP_DIR).filter((n) => /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}Z$/.test(n)).sort();
+  const names = readdirSync(BACKUP_DIR).filter((n) => EXPORT_NAME.test(n)).sort();
   const newest = names.at(-1);
   if (!exportDue(newest ? folderTime(newest) : null)) return;
   if (dry) return console.log(`would export production to ${BACKUP_DIR} (newest ${newest ?? "none"})`);
@@ -221,7 +271,9 @@ function nightlyExport(dry) {
   const run = (command) => spawnSync(process.execPath, ["scripts/db-export.mjs", command, dir], { cwd: WT, encoding: "utf8", timeout: 15 * 60_000 });
   const exported = run("export");
   const restored = exported.status === 0 ? run("restore") : null;
-  const ok = exported.status === 0 && restored?.status === 0;
+  // Encrypt whatever the drill says: plaintext never stays on the shared Mac (#1762).
+  const sealed = exported.status === 0 && encryptExport(dir);
+  const ok = exported.status === 0 && restored?.status === 0 && sealed;
   // The error line first (stacks end in "Node.js vNN"), never anything that looks like a credential.
   const tail = (r) => {
     if (!r) return "not run";
@@ -231,20 +283,33 @@ function nightlyExport(dry) {
   };
   if (ok) {
     log(`nightly export ${name}: ${tail(restored).slice(0, 200)}`);
-    for (const old of exportsToPrune([...names, name])) rmSync(join(BACKUP_DIR, old), { recursive: true, force: true });
+    // #1891: after a good backup, drop the core smoke's old unreferenced images so Storage stays under the free plan.
+    const pruned = spawnSync(process.execPath, ["scripts/prune-smoke-storage.mjs", "--apply"], { cwd: WT, encoding: "utf8", timeout: 5 * 60_000 });
+    log(`smoke storage prune: ${tail(pruned).slice(0, 200)}`);
+    for (const old of exportsToPrune([...names, `${name}.tar.gz.cms`])) rmSync(join(BACKUP_DIR, old), { recursive: true, force: true });
     return;
   }
   rmSync(dir, { recursive: true, force: true });
-  log(`nightly export ${name} FAILED: export ${exported.status}, restore ${restored?.status ?? "-"}`);
+  log(`nightly export ${name} FAILED: export ${exported.status}, restore ${restored?.status ?? "-"}, encrypted ${sealed}`);
   try {
     const title = "Nightly production export failed";
     const open = JSON.parse(execFileSync("gh", ["issue", "list", "-R", REPO, "--state", "open", "--search", `in:title "${title}"`, "--json", "number"], { encoding: "utf8" }));
     if (open.length) return;
     execFileSync("gh", ["issue", "create", "-R", REPO, "-l", "core", "-l", "bug", "-l", "owner:devops", "-t", title, "-b",
-      `The supervisor's nightly export (#884) failed at ${name}. Export exit ${exported.status}; restore drill exit ${restored?.status ?? "not run"}.\nLast lines: ${tail(restored ?? exported).slice(0, 300)}\n\nRerun by hand: \`node scripts/db-export.mjs export ~/.adbrain-backups/<now>\` then \`restore\` (docs/OPERATIONS.md#data-safety-and-recovery). Until an export succeeds, no destructive migration.`], { stdio: "ignore" });
+      `The supervisor's nightly export (#884) failed at ${name}. Export exit ${exported.status}; restore drill exit ${restored?.status ?? "not run"}; encrypted ${sealed}.\nLast lines: ${tail(restored ?? exported).slice(0, 300)}\n\nRerun by hand: \`node scripts/db-export.mjs export ~/.adbrain-backups/<now>\` then \`restore\` (docs/operations/backups.md#data-safety-and-recovery). Until an export succeeds, no destructive migration.`], { stdio: "ignore" });
   } catch (error) {
     log(`nightly export alert failed: ${String(error?.message ?? error).split("\n")[0].slice(0, 160)}`);
   }
+}
+
+/** #1856: once a UTC day, alert at 80% of a Supabase free-plan quota (scripts/plan-usage.mjs opens or updates one issue). */
+function dailyUsageCheck(dry) {
+  const stamp = join(STATE_DIR, `usage-${new Date().toISOString().slice(0, 10)}`);
+  if (existsSync(stamp)) return;
+  if (dry) return console.log("would check Supabase free-plan usage");
+  const result = spawnSync(process.execPath, ["scripts/plan-usage.mjs"], { cwd: WT, encoding: "utf8", timeout: 2 * 60_000 });
+  log(`plan usage: ${`${result.stdout ?? ""}${result.stderr ?? ""}`.trim().split("\n").join(" | ").slice(0, 240)}`);
+  if (result.status === 0) writeFileSync(stamp, "");
 }
 
 /** The nightly encrypted pg_dump (#884): GitHub's schedule is best effort, so dispatch it when its newest run is over 23 h old. */
@@ -288,10 +353,13 @@ function writeState(state) {
   writeFileSync(join(STATE_DIR, "state.json"), JSON.stringify(state, null, 2));
 }
 
-/** Keep this worktree on origin/main so each tick runs current code; skipped if anyone left edits here. */
+/** Keep this worktree on origin/main so each tick runs current code; false (no refresh) if anyone left edits here. */
 function refresh() {
   const dirty = execFileSync("git", ["-C", WT, "status", "--porcelain"], { encoding: "utf8" }).trim();
-  if (dirty) return log("refresh skipped: worktree has local changes");
+  if (dirty) {
+    log("refresh skipped: worktree has local changes");
+    return false;
+  }
   // stdio ignored: a killed git can leave git-remote-https holding a pipe, and the call would wait on it.
   try {
     execFileSync("git", ["-C", WT, "fetch", "-q", "origin", "main"], { stdio: "ignore" });
@@ -299,6 +367,7 @@ function refresh() {
   } catch (error) {
     log(`refresh failed, running the current checkout: ${String(error?.message ?? error).split("\n")[0].slice(0, 160)}`);
   }
+  return true;
 }
 
 /** The headless run still going, if any: runs are detached from the tick (#766), so a tick checks the recorded pid. */
@@ -320,9 +389,12 @@ function runCli(args, runMin, outFile) {
   });
 }
 
-const agentArgs = (text, credits) => [
-  "-p", text, "-C", WT, "--autopilot", "--no-ask-user", "--allow-all-tools",
+// #1513: deny rules beat --allow-all-tools. `gh auth token` prints the GitHub token; secrets and variables are DevOps's.
+// Releases, applied migrations and Meta writes are refused in code via ADBRAIN_HEADLESS (scripts/lib/headless.mjs).
+export const agentArgs = (text, credits, wt = WT) => [
+  "-p", text, "-C", wt, "--autopilot", "--no-ask-user", "--allow-all-tools",
   "--deny-tool", "shell(launchctl)", "--deny-tool", "shell(vercel)", "--deny-tool", "shell(supabase)",
+  "--deny-tool", "shell(gh auth)", "--deny-tool", "shell(gh secret)", "--deny-tool", "shell(gh variable)",
   "--max-ai-credits", String(credits), "-s",
 ];
 
@@ -387,13 +459,18 @@ async function main() {
     const result = await runCli(["-p", "Reply with exactly the word: ok", "-C", WT, "--no-ask-user", "--max-ai-credits", "30", "-s"], 5, out);
     return console.log(`${result}: ${readFileSync(out, "utf8").trim().split("\n").pop()}`);
   }
-  if (existsSync(join(STATE_DIR, "OFF"))) return log("tick skipped: OFF switch");
+  // OFF stops only the headless role runs (#1525): production's scheduled jobs and the nightly backup depend on these dispatches.
   dispatchScheduledJobs(values["dry-run"]);
   dispatchBackup(values["dry-run"]);
-  if (!values["dry-run"]) refresh();
+  dailyGraphSunsetCheck(values["dry-run"]);
+  const fresh = values["dry-run"] ? true : refresh();
   nightlyExport(values["dry-run"]);
+  dailyUsageCheck(values["dry-run"]);
   // A detached run (#766) finishes the run it was given and records it; the tick that started it has long returned.
   if (values["run-role"]) return finishRun(values["run-role"], values["run-start"], runMin, values.credits);
+  if (existsSync(join(STATE_DIR, "OFF"))) return values["dry-run"] ? console.log("no role runs: OFF switch") : log("tick: no role runs (OFF switch)");
+  // #1513: runs share this worktree; edits left here (this script included) would be what the next run executes.
+  if (!fresh) return log("tick: no role runs: the supervisor worktree has local edits; clean it to resume");
   const state = readState();
   for (const r of state.runs ?? []) if (r.pid && !r.end && !pidAlive(r.pid)) Object.assign(r, { end: new Date().toISOString(), result: "lost (process gone)" });
   const busy = activeRun(state);
@@ -408,6 +485,14 @@ async function main() {
   const pick = pickRole(statuses, live, roles, { last: lastWakes(state), capped, overdueMin: Number(values["overdue-min"]) });
   const summary = roles.map((r) => `${r}:${live.has(r) ? "live" : statuses[r]?.state}`).join(" ");
   if (!pick) return log(capped ? `tick: daily cap ${values["max-runs-day"]} reached, nobody overdue (${summary})` : `tick: nothing to wake (${summary})`);
+  const overloaded = loadSkip(machineLoad(), {
+    maxLoadPerCore: Number(process.env.ADBRAIN_SUPERVISOR_MAX_LOAD ?? 1.5),
+    minFreeGb: Number(process.env.ADBRAIN_SUPERVISOR_MIN_FREE_GB ?? 2),
+  });
+  if (overloaded) {
+    const why = `tick skipped: Mac overloaded, ${overloaded}; would wake ${pick.role}`;
+    return values["dry-run"] ? console.log(why) : log(why);
+  }
   if (values["dry-run"]) return console.log(`would wake ${NAMES[pick.role]}${pick.overdue ? " (overdue)" : ""} on: ${pick.items[0]}\n(${summary})`);
 
   const run = { role: pick.role, item: pick.items[0]?.slice(0, 160), items: pick.items.slice(0, 3), start: new Date().toISOString() };

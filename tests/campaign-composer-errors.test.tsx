@@ -27,8 +27,15 @@ const scrollIntoView = vi.fn();
 let forms: { id: string; name: string; status: string }[];
 
 // As in production: the composer opens before the Page's forms arrive.
-function view() {
-  return render(<Campaigns business={business} approved={[creative]} initialCampaigns={[]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady adAccountId="" />);
+function view(extra: Partial<React.ComponentProps<typeof Campaigns>> = {}) {
+  return render(<Campaigns business={business} approved={[creative]} initialCampaigns={[]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady adAccountId="" {...extra} />);
+}
+
+// #1171: WhatsApp chat is the default; lead-form behaviour needs Instant form chosen.
+async function viewInstantForm() {
+  const result = view();
+  fireEvent.click(await screen.findByRole("radio", { name: "Instant form" }));
+  return result;
 }
 
 beforeEach(() => {
@@ -46,17 +53,24 @@ beforeEach(() => {
 afterEach(() => { Reflect.deleteProperty(HTMLElement.prototype, "scrollIntoView"); vi.unstubAllGlobals(); });
 
 describe("launch composer defaults and plain words (#761)", () => {
+  it("#1307: quotes AdBrain's live pooled runs when the ledger is readable", async () => {
+    view({ whatsappLedger: { chats: 9, spendRupees: 1_640 } });
+    expect(await screen.findByText(/^What to expect: AdBrain's WhatsApp ads so far got 9 chats for about ₹1,600, about ₹180 each\. That's too few to predict yours\./)).toBeInTheDocument();
+  });
+
   it("starts at ₹300 a day, says what to expect and that the check spends nothing, with no 'pending' age", async () => {
     view();
     expect(await screen.findByLabelText("Daily budget (₹)")).toHaveValue(300);
     expect(screen.getByRole("button", { name: "₹300 a day" })).toBeInTheDocument();
-    // #1038: the default destination is Instant form, so no WhatsApp chat cost; WhatsApp chat shows it.
-    expect(screen.getByText(/What to expect: AdBrain hasn't run enough instant-form campaigns yet to quote a cost per enquiry\. Meta reviews new ads first/)).toBeInTheDocument();
-    expect(document.body.textContent).not.toContain("WhatsApp chat has cost");
+    // #1038, #1171: the default destination is WhatsApp chat, so its cost shows; Instant form has none yet.
+    // #1307: the ledger's facts with n (6 chats), not a range it can't support.
+    expect(await screen.findByText("What to expect: AdBrain's WhatsApp ads so far got 6 chats for about ₹1,200, about ₹200 each. That's too few to predict yours. Meta reviews new ads first, usually within 24 hours, and nothing spends until you go live.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Check my campaign (nothing spends)" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("radio", { name: "Instant form" }));
+    expect(await screen.findByText(/What to expect: AdBrain hasn't run enough instant-form campaigns yet to quote a cost per enquiry\. Meta reviews new ads first/)).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain("WhatsApp ads so far got");
+    // The WhatsApp line may say its number's verification is pending; the age never does.
     expect(document.body.textContent).not.toContain("pending");
-    fireEvent.click(screen.getByRole("radio", { name: "WhatsApp chat" }));
-    expect(await screen.findByText(/What to expect: in AdBrain's runs so far, a WhatsApp chat has cost about ₹150–180\. Meta reviews new ads first/)).toBeInTheDocument();
   });
 });
 
@@ -70,7 +84,7 @@ describe("help where owners get stuck (#796)", () => {
 
 describe("composer errors sit next to the control (#667)", () => {
   it("Prepare with no lead form chosen focuses the Lead form field and says why beside it", async () => {
-    view();
+    await viewInstantForm();
     const leadForm = screen.getByLabelText("Lead form");
     await within(leadForm).findByRole("option", { name: "Callbacks" });
     expect(leadForm).toHaveValue("");
@@ -93,7 +107,7 @@ describe("composer errors sit next to the control (#667)", () => {
 
   it("a failed draft save shows beside Prepare and scrolls there", async () => {
     mocks.saveDraft.mockRejectedValue(new Error("Could not save the campaign draft."));
-    view();
+    await viewInstantForm();
     const leadForm = screen.getByLabelText("Lead form");
     await within(leadForm).findByRole("option", { name: "Callbacks" });
     fireEvent.change(leadForm, { target: { value: "form-1" } });
@@ -114,7 +128,7 @@ describe("composer errors sit next to the control (#667)", () => {
       resolvedAreaLabel: "Jaipur", selected, audienceInterests: [{ id: "1", name: "Solar energy" }],
     });
     mocks.createCampaign.mockRejectedValue(new Error("Campaign creation could not be started."));
-    view();
+    await viewInstantForm();
     const leadForm = screen.getByLabelText("Lead form");
     await within(leadForm).findByRole("option", { name: "Callbacks" });
     fireEvent.change(leadForm, { target: { value: "form-1" } });
@@ -130,7 +144,7 @@ describe("composer errors sit next to the control (#667)", () => {
 
   it("preselects the lead form when the Page has exactly one", async () => {
     forms = [{ id: "form-1", name: "Enquiries", status: "ACTIVE" }];
-    view();
+    await viewInstantForm();
     const leadForm = screen.getByLabelText("Lead form");
     await within(leadForm).findByRole("option", { name: "Enquiries" });
     await waitFor(() => expect(leadForm).toHaveValue("form-1"));

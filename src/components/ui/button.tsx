@@ -15,7 +15,8 @@ const variants: Record<Variant, string> = {
 };
 
 const sizes: Record<Size, string> = {
-  sm: "h-9 px-3 text-sm",
+  // #847/#1156: 44 px tall on a phone; 36 px from 640 px up, where a pointer is likely.
+  sm: "h-9 px-3 text-sm max-sm:min-h-11",
   md: "h-11 px-4 text-sm",
   lg: "h-12 px-6 text-base",
 };

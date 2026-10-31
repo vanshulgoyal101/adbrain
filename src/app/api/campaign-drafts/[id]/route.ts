@@ -13,6 +13,7 @@ import {
 import { ConnectionAccessError, requireOwnedBusiness } from "@/lib/meta/connection-access";
 import { createClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/types";
+import { ownerError } from "@/i18n/request-locale";
 
 export const runtime = "nodejs";
 
@@ -109,7 +110,7 @@ async function handlePUT(
     p_input: plan.input as unknown as Json,
     p_now: plan.updatedAt,
   });
-  if (updateError) return errorResponse(requestId, 503, "UNAVAILABLE", "Draft storage is unavailable.", true);
+  if (updateError) return errorResponse(requestId, 503, "UNAVAILABLE", await ownerError("draftSaveUnavailable"), true);
   const updatedRow = rows?.[0];
   if (!updatedRow) return errorResponse(requestId, 409, "CONFLICT", "Draft changed in another tab. Reload before saving.", true);
   const draft = draftRecordFromRow(updatedRow);
@@ -139,7 +140,7 @@ async function handleDELETE(
   // The draft is referenced by a campaign operation (ON DELETE RESTRICT). PostgreSQL 18 reports this
   // as 23001 restrict_violation; earlier versions report 23503 foreign_key_violation.
   if (deleteError?.code === "23503" || deleteError?.code === "23001") return errorResponse(requestId, 409, "CONFLICT", "This draft has a campaign operation and must be retained for recovery.");
-  if (deleteError) return errorResponse(requestId, 503, "UNAVAILABLE", "Draft could not be removed.", true);
+  if (deleteError) return errorResponse(requestId, 503, "UNAVAILABLE", "The draft is still here. Try again in a minute.", true);
   if (!removed?.length) return errorResponse(requestId, 409, "CONFLICT", "Draft changed in another tab. Reload before removing it.", true);
   return NextResponse.json({ ok: true, data: { deleted: true }, requestId });
 }

@@ -12,7 +12,11 @@ import type { Creative } from "@/lib/types";
  * What a new owner sees on Campaigns before Facebook is connected (#336, CEO decision on #339):
  * share or download the approved ads today; launching opens after Meta's review, or on request.
  */
-export function ReadyAdsNextStep({ approved, phone, businessId }: { approved: Creative[]; phone: string | null; businessId: string }) {
+export function ReadyAdsNextStep({ approved, phone, businessId, sample = false }: {
+  approved: Creative[]; phone: string | null; businessId: string;
+  /** #1317: a prospect's ads are samples: Share is hidden; Download all goes through the marked export. */
+  sample?: boolean;
+}) {
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [requested, setRequested] = useState(false);
@@ -67,7 +71,7 @@ export function ReadyAdsNextStep({ approved, phone, businessId }: { approved: Cr
       {newest?.image_url && (
         <img src={newest.image_url} alt={newest.headline ? `Your ad: ${newest.headline}` : "Your newest approved ad"} className="mt-5 aspect-[4/5] w-full max-w-xs rounded-md border border-slate-200 object-cover" />
       )}
-      {newest && <ShareCreativeButton creative={newest} data-product-event="creative.share" className="mt-4 max-w-xs" />}
+      {newest && !sample && <ShareCreativeButton creative={newest} data-product-event="creative.share" className="mt-4 max-w-xs" />}
 
       <div className="mt-3 flex flex-col gap-1">
         <Button type="button" variant="outline" className="h-11 max-w-xs" disabled={downloading} onClick={downloadAll} data-product-event="creative.download">

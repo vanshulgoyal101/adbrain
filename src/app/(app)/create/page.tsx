@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { setupWords } from "@/i18n/request-locale";
 import { Building2 } from "lucide-react";
 import { openingLine } from "@/lib/campaign/result-evidence";
 import { getResultEvidence } from "@/lib/campaign/result-evidence-store";
@@ -6,8 +7,15 @@ import { CreateFlow } from "@/components/create-flow";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
-import { getBrandAssets, getPrimaryBusiness } from "@/lib/supabase/queries";
-import { occasionIdeas } from "@/lib/seasonal";
+import { redirect } from "next/navigation";
+import { SetupAdsStep } from "@/components/setup-ads-step";
+import { isProspectSession } from "@/lib/prospect-session";
+import { setupFieldsFrom } from "@/lib/brand/setup-fields";
+import { brandUsable } from "@/lib/brand/usable";
+import { clientCreative } from "@/lib/creative/client-receipt";
+import { madeForSetup } from "@/lib/creative/setup-picks";
+import { getApprovedCreatives, getBrandAssets, getSetupCreativeBatch, getPrimaryBusiness, hasLaunchedCampaign } from "@/lib/supabase/queries";
+import { occasionsFor } from "@/lib/seasonal";
 
 export const metadata = {
   title: "Create ads",
@@ -15,8 +23,10 @@ export const metadata = {
     "Start with your customer goal and create campaign images and copy for review.",
 };
 
-export default async function CreatePage() {
-  const business = await getPrimaryBusiness();
+export default async function CreatePage({ searchParams }: { searchParams?: Promise<{ all?: string | string[]; again?: string | string[] }> } = {}) {
+  const [business, params] = await Promise.all([getPrimaryBusiness(), searchParams ?? ({} as { all?: string | string[]; again?: string | string[] })]);
+  // #1934: a returning owner's "New campaign" runs step 2 again.
+  const again = params.again === "1";
 
   if (!business) {
     return (
@@ -40,6 +50,28 @@ export default async function CreatePage() {
     );
   }
 
+  // #1270 (#1251 WS1 step 2): until a first campaign has gone live, Create is the guided "Your ads" step;
+  // `?all=1` opens the full Create. If either read fails, the full Create shows as before.
+  if (params.all !== "1") {
+    const setup = await Promise.resolve()
+      .then(() => Promise.all([hasLaunchedCampaign(business.id), getSetupCreativeBatch(business.id)]))
+      .then(([launched, batch]) => {
+        if (launched && !again) return null;
+        // #1432: ads made from an earlier step 1 aren't offered; step 2 makes new ones from today's.
+        const ads = batch.ads.filter((ad) => madeForSetup(ad, business));
+        // #1475: with earlier ads (older details, or made in Studio) the owner taps to start a paid batch; a failed
+        // read counts as earlier, so nothing paid starts on its own.
+        // #1934: a returning owner always counts as earlier; step 2 starts on arrival only from step 1's tap.
+        const earlier = ads.length ? Promise.resolve(false) : again || batch.ads.length ? Promise.resolve(true)
+          : getApprovedCreatives(business.id).then((approved) => approved.length > 0, () => true);
+        // #1402: a "Make another" top-up shows beside its batch; the step checks the newest batch on arrival (#1407).
+        return earlier.then((hasEarlier) => ({ ads: ads.map(clientCreative), earlier: hasEarlier }));
+      }).catch(() => null);
+    // #1272: the + button lands here; a first-timer without the five facts resumes at step 1.
+    if (setup && !brandUsable({ ...business, vertical: setupFieldsFrom(business).vertical })) redirect(again ? "/brand?again=1" : "/brand");
+    if (setup) return <SetupAdsStep business={business} initialAds={setup.ads} earlier={setup.earlier} again={again} sample={await isProspectSession()} words={await setupWords()} />;
+  }
+
   const missing = [
     [business.offers?.length, "offers or prices"],
     [business.locations?.length, "service areas"],
@@ -56,7 +88,7 @@ export default async function CreatePage() {
         title="Create ads"
         description="Say who you want to reach. You check every ad before it runs."
       />
-      <CreateFlow business={business} opening={openingLine(evidence)} occasions={occasionIdeas(business.name)}>
+      <CreateFlow business={business} opening={openingLine(evidence)} occasions={occasionsFor(business)}>
         <aside aria-label="Your business details" className="max-w-2xl border-t border-slate-200 pt-5 text-sm text-slate-500">
           <p>
             Using {business.name}&apos;s details.{" "}

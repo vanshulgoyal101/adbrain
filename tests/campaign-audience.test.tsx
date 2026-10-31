@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
 import { act, fireEvent, render, renderHook, screen, waitFor, within } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { StrictMode } from "react";
 import { QueryClient, focusManager, onlineManager } from "@tanstack/react-query";
 import { Campaigns } from "@/components/campaigns";
+import { campaignNameDate } from "@/lib/campaign/draft-name";
+import { QUOTED_ASK_WITH_QUESTIONS } from "@/lib/campaign/plan-check";
 import { useCampaignList } from "@/lib/meta-connect-ui/use-campaign-list";
 import type { DraftDTO, DraftInput } from "@/lib/campaign/connect-contracts";
 import type { Business, Campaign, CampaignResult, Creative } from "@/lib/types";
@@ -11,10 +13,12 @@ import type { ConnectionDTO } from "@/lib/meta/connect-contracts";
 import { recoveryStorageKey, writeCampaignRecovery } from "@/lib/meta-connect-ui/recovery";
 
 const mocks = vi.hoisted(() => ({
+  updateCreativeCopy: vi.fn(),
   drafts: vi.fn(), draft: vi.fn(), saveDraft: vi.fn(), updateDraft: vi.fn(), status: vi.fn(), preflight: vi.fn(), createCampaign: vi.fn(), operationForRequest: vi.fn(),
   dialog: { current: null as null | { onConnected: (connection: ConnectionDTO) => void; onBeforeStart?: () => Promise<unknown> } },
 }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
+vi.mock("@/app/(app)/studio/actions", () => ({ updateCreativeCopy: mocks.updateCreativeCopy }));
 vi.mock("@/components/meta-connect/meta-connect-dialog", () => ({ MetaConnectDialog: (props: { onConnected: (connection: ConnectionDTO) => void; onBeforeStart?: () => Promise<unknown> }) => { mocks.dialog.current = props; return null; } }));
 vi.mock("@/components/campaign-chat", () => ({ CampaignChat: () => <div data-testid="guided-campaign-chat" /> }));
 vi.mock("@/lib/meta-connect-ui/client", () => ({ createMetaConnectClient: () => mocks, MetaConnectClientError: class extends Error {} }));
@@ -35,6 +39,13 @@ const savedAreas = (text: string) => waitFor(() => expect(document.body).toHaveT
 
 function view(metaReady = false) {
   return render(<Campaigns business={business} approved={[creative]} initialCampaigns={[]} initialResults={{}} leadForms={[{ id: "form-1", name: "Enquiries", status: "ACTIVE" }]} leadFormError={null} metaReady={metaReady} adAccountId="" />);
+}
+
+// #1171: WhatsApp chat is the default; lead-form flows choose Instant form.
+function viewInstantForm(metaReady = false) {
+  const result = view(metaReady);
+  fireEvent.click(screen.getByRole("radio", { name: "Instant form" }));
+  return result;
 }
 
 beforeEach(() => {
@@ -236,16 +247,16 @@ describe("campaign audience workflow", () => {
   it("withholds WhatsApp submission when the Page-linked number is unverified", async () => {
     mocks.preflight.mockImplementation(async () => ({
       draftId: saved.draftId, draftVersion: saved.version, connectionGeneration: 1,
-      canCreatePaused: false, blockers: [{ code: "PREFLIGHT_BLOCKED", message: "Connect a WhatsApp Business number to the selected Facebook Page and verify access before reviewing.", action: null }],
+      canCreatePaused: false, blockers: [{ code: "PREFLIGHT_BLOCKED", message: "Your Facebook Page has no WhatsApp number linked yet, so the ad's button has nowhere to open a chat. Link the number in Settings, then review again.", action: null }],
       planHash: null, currency: "INR", perAdSetDailyBudgetRupees: 200,
       totalDailyBudgetRupees: 200, adSetCount: 1, resolvedAreaLabel: "Jaipur",
       selected, destination: "whatsapp", whatsappNumber: null,
     }));
     view();
-    fireEvent.click(screen.getByRole("radio", { name: "WhatsApp chat" }));
+    fireEvent.click(screen.getByRole("radio", { name: "WhatsApp chat (recommended)" }));
     fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
     fireEvent.click(screen.getByRole("button", { name: "Check my campaign (nothing spends)" }));
-    expect(await screen.findByText("Connect a WhatsApp Business number to the selected Facebook Page and verify access before reviewing.")).toBeVisible();
+    expect(await screen.findByText("Your Facebook Page has no WhatsApp number linked yet, so the ad's button has nowhere to open a chat. Link the number in Settings, then review again.")).toBeVisible();
     expect(screen.queryByRole("button", { name: "Send to Meta (paused)" })).not.toBeInTheDocument();
     expect(mocks.createCampaign).not.toHaveBeenCalled();
   });
@@ -338,6 +349,23 @@ describe("campaign audience workflow", () => {
     expect(mocks.createCampaign).not.toHaveBeenCalled();
   });
 
+  // #1198: Quick questions show no ready message; one tap rewrites the quoting ad's last line, then Review runs again.
+  it("rewrites a quoted ask's last line in one tap and checks the campaign again", async () => {
+    const quoting = { ...creative, primary_text: "Cut your power bill.\nWhatsApp “Free site survey” to book.", cta: "Learn More" } as Creative;
+    const fixed = "Cut your power bill.\nTap, then pick a question to send.";
+    const first = mocks.preflight.getMockImplementation()!;
+    mocks.preflight.mockImplementationOnce(async (...args: unknown[]) => ({ ...(await first(...args)), planWarnings: [QUOTED_ASK_WITH_QUESTIONS] }));
+    mocks.updateCreativeCopy.mockResolvedValue({ ok: true, creative: { headline: quoting.headline, primary_text: fixed, cta: "Learn More", generation: null } });
+    render(<Campaigns business={business} approved={[quoting]} initialCampaigns={[]} initialResults={{}} leadForms={[{ id: "form-1", name: "Enquiries", status: "ACTIVE" }]} leadFormError={null} metaReady={false} adAccountId="" />);
+    fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
+    fireEvent.click(screen.getByRole("button", { name: "Check my campaign (nothing spends)" }));
+    expect(await screen.findByText(QUOTED_ASK_WITH_QUESTIONS)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Change the last line" }));
+    await waitFor(() => expect(mocks.updateCreativeCopy).toHaveBeenCalledWith(quoting.id, expect.objectContaining({ headline: quoting.headline, primary_text: fixed, cta: "Learn More" })));
+    await waitFor(() => expect(mocks.preflight).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByText(QUOTED_ASK_WITH_QUESTIONS)).not.toBeInTheDocument());
+  });
+
   it("surfaces failed eligibility checks without offering a Meta submission", async () => {
     mocks.preflight.mockResolvedValueOnce({
       canCreatePaused: false, planHash: null, currency: "INR", selected,
@@ -354,7 +382,7 @@ describe("campaign audience workflow", () => {
   });
 
   it("re-decides age using the new mode while retaining chosen locations and campaign settings", async () => {
-    view();
+    viewInstantForm();
     fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
     chooseAreas();
     fireEvent.change(screen.getByLabelText("Planned areas"), { target: { value: "Austin, Texas\nRound Rock, Texas" } });
@@ -442,7 +470,7 @@ describe("campaign audience workflow", () => {
   });
 
   it("requires a lead form before starting AI work for a connected campaign", async () => {
-    view(true);
+    viewInstantForm(true);
     await waitFor(() => expect(screen.queryByText("Loading lead forms...")).not.toBeInTheDocument());
     fireEvent.change(screen.getByRole("combobox", { name: "Lead form" }), { target: { value: "" } });
     fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
@@ -504,6 +532,31 @@ describe("campaign audience workflow", () => {
     }
   });
 
+  // #1151: drafts named after their first ad, and one draft per ad selection (#1171: WhatsApp is the default channel).
+  it("names a new campaign after its first ad until the owner types a name", async () => {
+    view();
+    await act(async () => {});
+    const field = screen.getByLabelText("Campaign name");
+    expect(field).toHaveValue(`Solar installer · WhatsApp · ${campaignNameDate(new Date())}`);
+    fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
+    expect(field).toHaveValue(`Lower electricity bills · WhatsApp · ${campaignNameDate(new Date())}`);
+    fireEvent.change(field, { target: { value: "Diwali push" } });
+    fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
+    expect(field).toHaveValue("Diwali push");
+  });
+
+  it("updates the saved draft for the same ads instead of adding another", async () => {
+    const existing = { draftId: "44444444-4444-4444-8444-444444444444", version: 3, expiresAt: "2099-01-01T00:00:00.000Z",
+      input: { businessId: business.id, name: "Lower electricity bills · Lead form · Oct 27", goal: "", mode: "manual", creativeIds: [creative.id], dailyBudgetRupees: 300, leadFormId: "form-1", destination: "instant_form", targeting: recommended, abTest: false } } as DraftDTO;
+    mocks.drafts.mockResolvedValue([existing]);
+    view();
+    await screen.findByText("Saved drafts");
+    fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
+    fireEvent.click(screen.getByRole("button", { name: "Check my campaign (nothing spends)" }));
+    await waitFor(() => expect(mocks.updateDraft).toHaveBeenCalledWith(existing.draftId, 3, expect.objectContaining({ creativeIds: [creative.id] }), expect.anything()));
+    expect(mocks.saveDraft).not.toHaveBeenCalled();
+  });
+
   it("times out a stalled preparation and preserves editable inputs", async () => {
     vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
     view();
@@ -516,7 +569,7 @@ describe("campaign audience workflow", () => {
       await act(async () => { vi.advanceTimersByTime(60_000); });
       expect(signal.aborted).toBe(true);
       expect(screen.getByText(/Campaign preparation timed out/)).toBeInTheDocument();
-      expect(screen.getByLabelText("Campaign name")).toHaveValue("Solar installer — leads");
+      expect(screen.getByLabelText("Campaign name")).toHaveValue(`Lower electricity bills · WhatsApp · ${campaignNameDate(new Date())}`);
       expect(screen.getByRole("button", { name: "Check my campaign (nothing spends)" })).toBeEnabled();
       expect(mocks.saveDraft).not.toHaveBeenCalled();
     } finally { vi.useRealTimers(); }
@@ -533,7 +586,7 @@ describe("campaign audience workflow", () => {
   });
 
   it("plans once before review and preserves the AI audience through reopen and edit", async () => {
-    const first = view();
+    const first = viewInstantForm();
     fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
     fireEvent.click(screen.getByRole("button", { name: "Check my campaign (nothing spends)" }));
     await screen.findByText("Campaign review");
@@ -631,7 +684,7 @@ describe("campaign review walkthrough dead ends (#158)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Check my campaign (nothing spends)" }));
     fireEvent.click(await screen.findByRole("button", { name: "Send to Meta (paused)" }));
     expect(await screen.findByRole("button", { name: "Sending to Meta…" })).toBeDisabled();
-    expect(screen.getByRole("radio", { name: "WhatsApp chat" })).toBeDisabled();
+    expect(screen.getByRole("radio", { name: "WhatsApp chat (recommended)" })).toBeDisabled();
     expect(screen.queryByText("Destination is locked until the previous campaign request is resolved.")).toBeNull();
     expect(screen.queryByText("The previous campaign request has not been confirmed.")).toBeNull();
     await act(async () => { finish({ operationId: "44444444-4444-4444-8444-444444444444", state: "succeeded", checkpoints: [], externalIds: {}, error: null }); });
@@ -660,6 +713,14 @@ describe("campaign review walkthrough dead ends (#158)", () => {
 });
 
 describe("background audience plan (#366)", () => {
+  // #1509: the 1.5 s BACKGROUND_PLAN_DELAY_MS (campaigns.tsx) ran in real time in every test here (~10 s of CI).
+  // Only that timer is shortened; it still fires asynchronously, so "not planned yet" checks keep their meaning.
+  beforeEach(() => {
+    const realSetTimeout = window.setTimeout.bind(window);
+    vi.spyOn(window, "setTimeout").mockImplementation(((handler: TimerHandler, ms?: number, ...args: unknown[]) =>
+      realSetTimeout(handler, ms === 1500 ? 20 : ms, ...args)) as typeof window.setTimeout);
+  });
+  afterEach(() => { vi.mocked(window.setTimeout).mockRestore(); });
   const planCalls = () => vi.mocked(fetch).mock.calls.filter(([url]) => url === "/api/campaigns/plan").length;
   const planned = () => waitFor(() => expect(planCalls()).toBe(1), { timeout: 3000 });
 

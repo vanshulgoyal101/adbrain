@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { requestLocale } from "@/i18n/request-locale";
 import { Suspense } from "react";
 import { Building2 } from "lucide-react";
 import { Studio } from "@/components/studio";
@@ -6,6 +7,7 @@ import { DemoLlmUsage } from "@/components/demo-llm-usage";
 import { Card, CardContent } from "@/components/ui/card";
 import { getCreatives, getPrimaryBusiness } from "@/lib/supabase/queries";
 import { getUser } from "@/lib/supabase/queries";
+import { isProspectSession } from "@/lib/prospect-session";
 import { businessLLMUsageSummary } from "@/lib/llm/persist";
 import { privacyOperatorAllowed } from "@/lib/privacy-requests";
 import { clientCreative } from "@/lib/creative/client-receipt";
@@ -76,6 +78,8 @@ export default async function StudioPage({
           initialFilter={filter}
           initialCreativeId={params.creative ?? null}
           showInternals={operator}
+          sample={await isProspectSession()}
+          locale={await requestLocale()}
         />
         {usage && <Suspense fallback={null}><StudioUsage usage={usage} /></Suspense>}
       </div>

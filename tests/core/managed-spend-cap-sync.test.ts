@@ -53,11 +53,12 @@ function replay(...exchanges: Exchange[]) {
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = new URL(String(input));
     const form = new URLSearchParams(requestBody(init ?? undefined));
-    tokens.add(url.searchParams.get("access_token") ?? form.get("access_token") ?? "none");
-    url.searchParams.delete("access_token");
-    form.delete("access_token");
+    // #1649: the token rides in the Authorization header.
+    tokens.add(new Headers(init?.headers).get("authorization")?.replace(/^Bearer /, "") ?? "none");
+    url.searchParams.delete("appsecret_proof");
+    form.delete("appsecret_proof");
     const method = init?.method ?? "GET";
-    const path = url.pathname.replace("/v21.0/", "") + url.search;
+    const path = url.pathname.replace("/v26.0/", "") + url.search;
     sent.push(`${method} ${path}${form.size ? ` ${form}` : ""}`);
     const index = pending.findIndex((exchange) => exchange.method === method && exchange.path === path
       && (!exchange.form || new URLSearchParams(exchange.form).toString() === form.toString()));

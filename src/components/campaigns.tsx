@@ -1,9 +1,10 @@
 "use client";
 
-import { startTransition, useEffect, useEffectEvent, useReducer, useRef, useState } from "react";
-import type { ReactNode } from "react";
+import { startTransition, useCallback, useEffect, useEffectEvent, useReducer, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { flushSync } from "react-dom";
 import { useConfirm } from "@/components/ui/confirm-dialog";
+import { CampaignEnquiryDeleteItem, CampaignEnquiryFeedback } from "@/components/enquiry-erasure";
+import { HowItWorks, Stat } from "@/components/campaign-parts";
 import { useCampaignList } from "@/lib/meta-connect-ui/use-campaign-list";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -32,11 +33,15 @@ import {
   X,
 } from "lucide-react";
 import { WhatsAppReadyChecklist } from "@/components/whatsapp-ready";
-import { whatsappGreeting, whatsappLanguageFor, type WhatsAppLanguage } from "@/lib/campaign/whatsapp-greeting";
+import { quotedAsk, whatsappGreeting, whatsappLanguageFor, withQuestionsLastLine, type WhatsAppLanguage } from "@/lib/campaign/whatsapp-greeting";
+import { updateCreativeCopy } from "@/app/(app)/studio/actions";
+import type { EditableCopy } from "@/lib/creative/concept";
 import { suggestedQuestions } from "@/lib/campaign/whatsapp-questions";
 import { whatsappTemplateSchema, type WhatsAppTemplate } from "@/lib/campaign/whatsapp-template";
+import { redrewChatNumber } from "@/lib/creative/chat-number";
 import { CampaignWhatsAppMessageDialog } from "@/components/campaign-whatsapp-message-dialog";
 import { WhenTheyTap } from "@/components/when-they-tap";
+import { AdReviewBadge } from "@/components/ad-review-badge";
 import { draftFromSuggestion, draftFromTemplate, type Suggested } from "@/components/whatsapp-message-card";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Alert } from "@/components/ui/alert";
@@ -53,8 +58,9 @@ import {
   type TargetingValue,
 } from "@/components/targeting-controls";
 import { CampaignChat } from "@/components/campaign-chat";
-import { AdResults } from "@/components/ad-results";
-import { WhatsAppAiCard } from "@/components/whatsapp-ai-card";
+import { AdResults, PauseOffer, useWeakAd } from "@/components/ad-results";
+import { RejectedAds, rejectedMetaMessage } from "@/components/rejected-ads";
+import { BEST_AD_MIN_RESULTS } from "@/lib/meta/insights";
 import { EditAudienceDialog } from "@/components/edit-audience-dialog";
 import { AudienceSwitchStrip } from "@/components/audience-switch-strip";
 import { createClient as createBrowserClient } from "@/lib/supabase/client";
@@ -63,9 +69,10 @@ import { applyBudget, budgetFormStart } from "@/lib/campaign/budget-edit-form";
 import { EditAdDialog } from "@/components/edit-ad-dialog";
 import { OWNER_WORDS } from "@/lib/copy/owner-words";
 import { CampaignLaunchReview } from "@/components/campaign-launch-review";
+import { WeeklyCapLine, weeklyCapWords } from "@/components/weekly-cap-line";
 import { WhatsAppEnquiries } from "@/components/whatsapp-enquiries";
 import { LivePicture, type PicturePreview } from "@/components/live-picture";
-import { CAMPAIGN_STATUS, Status } from "@/components/ui/status";
+import { campaignStatus, Status } from "@/components/ui/status";
 import { CopyEditNotice, CreativeEditor, UnsavedPreviewBadge, sameAdText, savedAdText, type AdText, type CopyEditNotes } from "@/components/creative-copy-editor";
 import { MetaConnectDialog } from "@/components/meta-connect/meta-connect-dialog";
 import {
@@ -85,15 +92,16 @@ import type {
   OperationDTO,
   ReviewDTO,
 } from "@/lib/campaign/connect-contracts";
-import { targetingInputSchema } from "@/lib/campaign/connect-contracts";
+import { fetchAudiencePlan, needsAudiencePlan, plannedTargeting, type AudiencePlanReply } from "@/lib/campaign/audience-plan";
+import { campaignNameDate, defaultCampaignName, draftForSelection } from "@/lib/campaign/draft-name";
+import { REVIEW_AND_SPEND, whatsappExpectation } from "@/lib/campaign/expectations";
 import { campaignDestination } from "@/lib/campaign/outcomes";
 import { handoffRate } from "@/lib/campaign/whatsapp-handoff";
 import { reviewBlockerAlternative, reviewBlockerFix } from "@/lib/campaign/review-fix";
 import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
 import { useCampaignPreparation } from "@/lib/meta-connect-ui/use-campaign-preparation";
 import { targetingFromEditor, targetingToEditor } from "@/lib/campaign/editor-targeting";
-import { parsePhone } from "@/lib/brand/countries";
-import type { LeadForm } from "@/lib/meta/client";
+import { buildManualDraftInput, pickWhatsAppNumber } from "@/lib/campaign/manual-draft-input";
 import { maskWhatsAppNumber, maskedWhatsAppNumberPattern, parseWhatsAppStatus, type WhatsAppStatus } from "@/lib/meta/whatsapp-status-shared";
 import type { ConnectIntent, ConnectionDTO } from "@/lib/meta/connect-contracts";
 import type { Business, Campaign, CampaignResult, Creative, Json } from "@/lib/types";
@@ -103,30 +111,34 @@ import {
   campaignNextAction,
   spendHealth,
 } from "@/lib/campaign/budget";
-import { effectiveDailyBudget } from "@/lib/campaign/spend";
-import { accountFundingSchema, activationConfirmationPayload, campaignDeliverySnapshotSchema, RESUME_IN_ADS_MANAGER, reviewableCampaign } from "@/lib/campaign/activation";
-import { activationWarnings } from "@/lib/campaign/plan-check";
+import { effectiveDailyBudget, weeklyCapNotice, type CampaignSpend } from "@/lib/campaign/spend";
+import { accountFundingSchema, activationConfirmationPayload, campaignDeliverySnapshotSchema, reviewableCampaign, runningNow } from "@/lib/campaign/activation";
+import { WHATSAPP_LINK_URL, WHATSAPP_UNVERIFIED_STEP } from "@/lib/meta/setup-checklist";
+import { activationWarnings, QUOTED_ASK_WITH_QUESTIONS, WHATSAPP_PICTURE_ON_FORM } from "@/lib/campaign/plan-check";
+import { cardVerdictInput, lastCampaignComparison } from "@/lib/campaign/card-verdict";
+import { verdict, type Comparison } from "@/lib/campaign/verdict";
+import { WAITING_COLUMNS, WAITING_DAYS, waitingByCampaign, type WaitingLeadRow } from "@/lib/leads/waiting";
+import { CampaignVerdict } from "@/components/campaign-verdict";
+import { ageText, campaignsTranslator, verdictTranslator, type Words } from "@/i18n/words";
 import { campaignAttention } from "@/lib/campaign/health";
 import { campaignWhatsAppSummary } from "@/lib/campaign/results-summary";
-import { costPerCustomer } from "@/lib/campaign/real-enquiries";
+import { bookedLabel, costPerCustomer } from "@/lib/campaign/real-enquiries";
 import { describeSkippedCampaigns, type SkippedCampaign } from "@/lib/campaign/sync-skips";
 import type { RerunPrefill } from "@/lib/campaign/rerun";
-import type { AdReview, CampaignDeliverySnapshot } from "@/lib/meta/client";
+import { activateTrustLine } from "@/lib/trust-lines";
+import type { AdReview, CampaignDeliverySnapshot, LeadForm } from "@/lib/meta/client";
 import { committedWords, freeRoomPaise, type AccountFunding } from "@/lib/campaign/funding-check";
 import { readCampaignRecovery, recoveryStorageKey, writeCampaignRecovery, type CampaignRecovery } from "@/lib/meta-connect-ui/recovery";
 import { HelpOnWhatsApp } from "@/components/support-link";
-import { cn, timeAgo } from "@/lib/utils";
+import { cn } from "@/lib/utils";
+import { resultsWaitLine, throttleActive } from "@/lib/campaign/meta-wait";
 import { useMounted } from "@/lib/use-mounted";
 import { refreshIfStale, staleCampaignIds } from "@/lib/campaign/results-freshness";
-import { formatMoney, formatNumber, formatPerDay } from "@/lib/format";
+import { GONE_LINES, OUTSIDE_LINES, budgetChangedInMeta, endTimeChangedInMeta, goneInMeta, madeOutsideAdBrain, pausedInMeta } from "@/lib/campaign/gone-in-meta";
+import { CampaignTestOptions } from "@/components/campaign-test-options";
+import { formatDate, formatDay, formatMoney, formatMoneyExact, formatNumber, formatPerDay } from "@/lib/format";
 
-const exactRupees = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" });
-
-/** #721: Meta deleted or archived it; Refresh ended the row and kept why in `raw.metaStatus`. */
-function goneInMeta(campaign: Campaign): string | null {
-  const status = campaign.raw && typeof campaign.raw === "object" && !Array.isArray(campaign.raw) ? (campaign.raw as { metaStatus?: unknown }).metaStatus : null;
-  return status === "DELETED" ? "Deleted in Meta" : status === "ARCHIVED" ? "Archived in Meta" : null;
-}
+const subscribeNever = () => () => {};
 
 /** #741: where the ads won't show, in the owner's words (launch applies the same exclusions). */
 function serviceAreaLine(area: NonNullable<ReviewDTO["serviceArea"]>): string {
@@ -181,7 +193,8 @@ type ComposerSetup = {
   /** #840: this campaign's own WhatsApp message ("Edit for this campaign"). */
   whatsappMessage?: WhatsAppTemplate | null;
   leadFormId: string;
-  name: string;
+  /** The name the owner typed; null keeps the #1151 default. */
+  name: string | null;
   targeting: TargetingValue;
   draftGoal: string;
   includedNames: string;
@@ -206,28 +219,25 @@ type CampaignsProps = {
   metaReady: boolean;
   adAccountId: string;
   /** Opened from Review: start a new campaign with these ads (non-approved IDs are ignored); with `review` (#1004, from Create) Review opens on its own once the composer has settled. */
-  newCampaign?: { creativeIds: string[]; review?: boolean };
+  newCampaign?: { creativeIds: string[]; review?: boolean; /** #1271: the daily budget chosen on Go live. */ budget?: number };
   /** #783: show "Which ad worked" on launched campaign cards (`AD_RESULTS_ENABLED`). */
   adResults?: boolean;
+  /** #1307: AdBrain's pooled WhatsApp runs (#588 ledger) for Review's "What to expect"; null keeps the recorded figures. */
+  whatsappLedger?: { chats: number; spendRupees: number } | null;
+  /** #1342: the Settings weekly cap and the live campaigns' budgets (read on the server); null when they couldn't be read. */
+  weeklyCap?: { capRupees: number | null; active: CampaignSpend[] } | null;
+  /** #1438: the results card's words in the owner's language; English without. */
+  verdictWords?: Words<"verdict">;
+  /** #1438: the list header, filters and sync lines in the owner's language. */
+  campaignWords?: Words<"campaigns">;
+  /** #1838: until when Meta asked us to wait before checking again; launched cards say their numbers may be old. */
+  metaWaitUntil?: string | null;
+  /** #2273: the team's own accounts see the no-Facebook-Reels test control (internal-accounts.ts). */
+  internal?: boolean;
 };
 
-
-type PlanReply = {
-  response: Response;
-  data: { ready?: boolean; fallback?: boolean; targeting?: unknown; error?: string; questions?: { question: string }[]; handoff?: { message: string } };
-};
 const BACKGROUND_PLAN_DELAY_MS = 1500;
 const MAX_BACKGROUND_PLANS = 3;
-
-async function fetchAudiencePlan(input: DraftInput, signal: AbortSignal): Promise<PlanReply> {
-  const response = await fetch("/api/campaigns/plan", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ goal: input.goal, audienceDraft: input }),
-    signal,
-  });
-  return { response, data: await response.json() as PlanReply["data"] };
-}
 
 type AudiencePlanInput = Pick<DraftInput, "goal" | "creativeIds" | "targeting" | "destination">;
 
@@ -239,22 +249,31 @@ function keptLeadForm(current: string, forms: { id: string }[], lastUsed = ""): 
 }
 
 /** What a finished results refresh tells the owner (#671): new numbers, or none since the last fetch. */
-function refreshNotice(previous: CampaignResult | undefined, next: CampaignResult | undefined): string {
-  const keys = ["impressions", "clicks", "leads", "spend", "conversations", "whatsapp_opens"] as const;
-  if (!next) return "Checked just now: Meta has no results for this campaign yet.";
-  if (!previous || keys.some(key => (previous[key] ?? null) !== (next[key] ?? null))) return "Results updated just now.";
-  const since = new Date(previous.fetched_at).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
-  return `Checked just now: no new results since ${since}.`;
-}
+/** The clock, read in an event handler (#1333); kept outside the component for the compiler's purity rule. */
+const currentTime = () => Date.now();
 
-function needsAudiencePlan(input: AudiencePlanInput): boolean {
-  return input.targeting.age?.mode === "ai" || !input.targeting.audience;
+function refreshNotice(previous: CampaignResult | undefined, next: CampaignResult | undefined, t: ReturnType<typeof campaignsTranslator>): string {
+  const keys = ["impressions", "clicks", "leads", "spend", "conversations", "whatsapp_opens"] as const;
+  if (!next) return t("notices.checkedNone");
+  if (!previous || keys.some(key => (previous[key] ?? null) !== (next[key] ?? null))) return t("notices.updatedNow");
+  return t("notices.checkedSince", { since: formatDate(previous.fetched_at) });
 }
 
 /**
  * What the audience plan depends on (#366): the owner's goal, the ads, the targeting and the destination.
  * The goal is the Campaign goal field only; a campaign name or budget typed later doesn't re-plan (#504).
  */
+// #681: a draft past its 7 days, or removed in another tab, can't be updated; the owner's current choices go into a new one.
+async function saveOverDraft(client: ReturnType<typeof createMetaConnectClient>, previous: DraftDTO | null | undefined, input: DraftInput, signal?: AbortSignal): Promise<DraftDTO> {
+  if (!previous) return client.saveDraft(input, signal);
+  try {
+    return await client.updateDraft(previous.draftId, previous.version, input, signal);
+  } catch (reason) {
+    if (!(reason instanceof MetaConnectClientError && reason.code === "NOT_FOUND")) throw reason;
+    return client.saveDraft(input, signal);
+  }
+}
+
 function audiencePlanKey(input: AudiencePlanInput): string {
   return JSON.stringify([input.goal, [...input.creativeIds].sort(), input.targeting, input.destination]);
 }
@@ -283,18 +302,25 @@ function BusinessCampaigns({
   adAccountId,
   newCampaign,
   adResults = false,
+  whatsappLedger = null,
+  weeklyCap = null,
+  verdictWords,
+  campaignWords,
+  metaWaitUntil = null,
+  internal = false,
   scope,
   initialSetup,
   onSetupChange,
 }: CampaignsProps & { scope: string; initialSetup?: ComposerSetup; onSetupChange: (value: [string, ComposerSetup]) => void }) {
+  const tc = campaignsTranslator(campaignWords);
   const [hadInitialSetup] = useState(Boolean(initialSetup));
   const [fromReview] = useState(Boolean(newCampaign) && !initialSetup);
   const [selected, setSelected] = useState<Set<string>>(() => initialSetup?.selected ?? new Set(
     newCampaign?.creativeIds.filter(id => approved.some(creative => creative.id === id)),
   ));
   // #761: ₹300 a day is the core run (#334); less rarely gets Meta out of learning.
-  const [budget, setBudget] = useState(initialSetup?.budget ?? 300);
-  const [destination, setDestination] = useState<"instant_form" | "whatsapp">(initialSetup?.destination ?? "instant_form");
+  const [budget, setBudget] = useState(initialSetup?.budget ?? newCampaign?.budget ?? 300);
+  const [destination, setDestination] = useState<"instant_form" | "whatsapp">(initialSetup?.destination ?? "whatsapp");
   const [whatsappNumber, setWhatsAppNumber] = useState(initialSetup?.whatsappNumber ?? "");
   const [whatsappLanguage, setWhatsAppLanguage] = useState<WhatsAppLanguage>(initialSetup?.whatsappLanguage ?? "ad");
   const [whatsappMessage, setWhatsAppMessage] = useState<WhatsAppTemplate | null>(initialSetup?.whatsappMessage ?? null);
@@ -303,7 +329,6 @@ function BusinessCampaigns({
   const [whatsappStatus, setWhatsAppStatus] = useState<WhatsAppStatus | null>(null);
   // #235: an India-based business starts new campaigns on WhatsApp once a number is ready; a choice or a restored draft wins.
   const destinationChosenRef = useRef(Boolean(initialSetup));
-  const indiaBased = parsePhone(business.phone).countryCode === "IN";
   const whatsappOptions = whatsappStatus?.state === "ready" ? whatsappStatus.numbers : [];
   // #840: the chosen ads' words and stored language, as launch reads them for the WhatsApp message.
   const adsFor = (ids: Iterable<string>) => { const wanted = new Set(ids); return approved.filter((creative) => wanted.has(creative.id)); };
@@ -314,7 +339,7 @@ function BusinessCampaigns({
     const text = whatsappGreeting(business, adWords(ads), [], adLanguages(ads), language);
     return [language, { greeting: text.greeting, prefill: text.autofill }];
   })) as Suggested;
-  const chosenWhatsAppNumber = whatsappOptions.some(({ masked }) => masked === whatsappNumber) ? whatsappNumber : whatsappOptions[0]?.masked ?? whatsappNumber;
+  const chosenWhatsAppNumber = pickWhatsAppNumber(whatsappOptions, whatsappNumber);
   const [leadFormId, setLeadFormId] = useState(initialSetup?.leadFormId ?? leadForms[0]?.id ?? "");
   const leadFormMemoryKey = `campaign-lead-form:${business.owner_id}:${business.id}`;
   const [availableForms, setAvailableForms] = useState(leadForms);
@@ -323,15 +348,27 @@ function BusinessCampaigns({
   const [formsRetry, setFormsRetry] = useState(0);
   const formsFreshnessRef = useRef<{ ownerId: string; businessId: string; retry: number; fetchedAt: number } | null>(null);
   const [connectedForDraft, setConnectedForDraft] = useState(metaReady);
-  const [name, setName] = useState(initialSetup?.name ?? `${business.name} — leads`);
+  const [customName, setName] = useState<string | null>(initialSetup?.name ?? null);
+  // #1151: client-only, so the server render (UTC) and the owner's browser never disagree on the day.
+  const nameDate = useSyncExternalStore(subscribeNever, () => campaignNameDate(new Date()), () => null);
+  const firstSelected = selected.values().next().value;
+  const name = customName ?? defaultCampaignName({
+    headline: approved.find((creative) => creative.id === firstSelected)?.headline, businessName: business.name, destination, date: nameDate,
+  });
   const [targeting, setTargeting] = useState<TargetingValue>(initialSetup?.targeting ?? defaultTargeting);
   const [draftGoal, setDraftGoal] = useState(initialSetup?.draftGoal ?? "");
   const [includedNames, setIncludedNames] = useState(initialSetup?.includedNames ?? "");
   const [excludedNames, setExcludedNames] = useState(initialSetup?.excludedNames ?? "");
   const [abTest, setAbTest] = useState(initialSetup?.abTest ?? false);
+  const [noFacebookReels, setNoFacebookReels] = useState(false);
+  // #1155: who sees the ads folds under one line; it starts open only for a setup that already changed it.
+  const [whoOpen, setWhoOpen] = useState(() => abTest || targeting.locationMode === "manual" || targeting.ageMode === "manual"
+    || targeting.gender !== "all" || targeting.cityScope !== "city_only" || Boolean(targeting.audience) || Boolean(initialSetup?.excludedNames || initialSetup?.includedNames));
   const [creating, setCreating] = useState(false);
   const [sendingNew, setSendingNew] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // #1286: sync news has its own line under 'Your campaigns', so a late answer never moves the list.
+  const [syncError, setSyncError] = useState<string | null>(null);
   // #667: a composer or review error shows beside the control that needs fixing, not in the page banner far above it.
   const [placedError, setPlacedError] = useState<{ at: "leadform" | "budget" | "ads" | "composer" | "review"; message: string } | null>(null);
   const placedErrorRef = useRef<HTMLParagraphElement | null>(null);
@@ -353,6 +390,7 @@ function BusinessCampaigns({
   function jumpToFix(targets: string[]) {
     flushSync(() => setShowComposer(true));
     const target = targets.map((id) => document.getElementById(id)).find((element) => element !== null);
+    if (target?.closest("details#who-sees-it") && !whoOpen) flushSync(() => setWhoOpen(true));
     const control = target?.matches("button, input, select, textarea") ? target : target?.querySelector<HTMLElement>("button, input, select, textarea");
     control?.scrollIntoView?.({ block: "center" });
     control?.focus();
@@ -417,6 +455,7 @@ function BusinessCampaigns({
   const [prepareReview, setPrepareReview] = useState<PrepareReviewState | null>(null);
   // Ads edited from the picker (#280); the server reads the saved copy at launch.
   const [editedAds, setEditedAds] = useState<Record<string, Creative>>({});
+  const [rewritingAsks, setRewritingAsks] = useState(false);
   const [editingAdId, setEditingAdId] = useState<string | null>(null);
   const [adEditNotes, setAdEditNotes] = useState<{ id: string; notes: CopyEditNotes } | null>(null);
   const [showAllAds, setShowAllAds] = useState(false);
@@ -454,13 +493,34 @@ function BusinessCampaigns({
   const [draftBusy, setDraftBusy] = useState<string | null>(null);
   const [retryAllowed, setRetryAllowed] = useState(false);
   useEffect(() => {
-    onSetupChange([scope, { selected, budget, destination, whatsappNumber, whatsappLanguage, whatsappMessage, leadFormId, name, targeting, draftGoal, includedNames, excludedNames, abTest, creationMode, showComposer }]);
-  }, [selected, budget, destination, whatsappNumber, whatsappLanguage, whatsappMessage, leadFormId, name, targeting, draftGoal, includedNames, excludedNames, abTest, creationMode, showComposer, scope, onSetupChange]);
+    onSetupChange([scope, { selected, budget, destination, whatsappNumber, whatsappLanguage, whatsappMessage, leadFormId, name: customName, targeting, draftGoal, includedNames, excludedNames, abTest, creationMode, showComposer }]);
+  }, [selected, budget, destination, whatsappNumber, whatsappLanguage, whatsappMessage, leadFormId, customName, targeting, draftGoal, includedNames, excludedNames, abTest, creationMode, showComposer, scope, onSetupChange]);
   const visibleCampaigns = campaigns.filter(campaign =>
     (statusFilter === "all" || campaign.status === statusFilter) &&
     (campaign.name ?? business.name).toLocaleLowerCase().includes(campaignQuery.trim().toLocaleLowerCase()),
   );
+  // #1150: campaigns deleted or archived in Meta fold under "Deleted (n)" after the live list. One that a
+  // Refresh found gone during this visit stays in place, with its notice, until the next visit.
+  const [endedHere, setEndedHere] = useState<ReadonlySet<string>>(() => new Set());
+  const folded = (campaign: Campaign) => Boolean(goneInMeta(campaign)) && !endedHere.has(campaign.id);
+  const liveCampaigns = visibleCampaigns.filter(campaign => !folded(campaign));
+  // #1588 (Designer, 390): search and the status filter earn their place only on a long list (or one that pages).
+  const showListTools = campaigns.filter(campaign => !goneInMeta(campaign)).length >= 6 || Boolean(initialNextCursor || nextListCursor) || Boolean(campaignQuery) || statusFilter !== "all";
+  const goneCampaigns = visibleCampaigns.filter(folded);
+  // #1926: deleted campaigns and saved drafts aren't running; with any of them the header keeps its New campaign.
+  const liveCount = campaigns.filter(campaign => !goneInMeta(campaign)).length;
+  const hasHistory = campaigns.length > 0 || savedDrafts.length > 0;
   const totalDailyBudget = effectiveDailyBudget(budget, abTest ? 2 : 1);
+  // #1342: live campaigns other than `exceptId`, the server's list updated by what this page has since turned on or off.
+  function otherLiveBudgets(exceptId?: string): CampaignSpend[] {
+    const byId = new Map((weeklyCap?.active ?? []).map((item) => [item.id, item]));
+    for (const c of campaigns) byId.set(c.id, { id: c.id, status: c.status, dailyBudget: c.daily_budget, spend: 0 });
+    return [...byId.values()].filter((item) => item.status === "active" && item.id !== exceptId);
+  }
+  const composerCap = weeklyCap ? weeklyCapNotice(otherLiveBudgets(), totalDailyBudget, weeklyCap.capRupees) : null;
+  const activationCap = weeklyCap && activationReview
+    ? weeklyCapNotice(otherLiveBudgets(activationReview.id), activationReview.daily_budget ?? 0, weeklyCap.capRupees)
+    : null;
   const [summaries, setSummaries] = useState<Record<string, string>>({});
   const [refreshingId, setRefreshingId] = useState<string | null>(null);
   // #1003: stale live results refresh quietly on open, once per campaign per visit, one at a time.
@@ -477,7 +537,9 @@ function BusinessCampaigns({
         const data = await refreshIfStale(id);
         if (data?.result) setResults((previous) => ({ ...previous, [id]: data.result! }));
         if (data?.summary) setSummaries((previous) => ({ ...previous, [id]: data.summary! }));
-        if (data?.gone && data.campaign) setCampaigns((list) => list.map((item) => (item.id === id ? data.campaign! : item)));
+        if (data?.gone && data.campaign) setEndedHere((ids) => new Set(ids).add(id));
+        // #721 deleted, #1903 paused or budget changed in Meta Ads Manager: the route returns the updated row.
+        if (data?.campaign) setCampaigns((list) => list.map((item) => (item.id === id ? data.campaign! : item)));
         setUpdatingIds((list) => list.filter((item) => item !== id));
       }
     })();
@@ -514,6 +576,7 @@ function BusinessCampaigns({
     setWhatsAppMessage(input.whatsappMessage ?? null);
     destinationChosenRef.current = true;
     setAbTest(input.abTest);
+    setNoFacebookReels(input.excludeFacebookReels === true);
     setCreationMode("manual");
     setDraftGoal(input.goal);
     setIncludedNames((input.targeting.location?.includedNames ?? []).join("\n"));
@@ -560,17 +623,16 @@ function BusinessCampaigns({
       .then((status) => {
         if (controller.signal.aborted) return;
         setWhatsAppStatus(status);
-        if (status.state === "ready" && indiaBased && !destinationChosenRef.current) setDestination("whatsapp");
       });
     return () => controller.abort();
-  }, [showComposer, connectedForDraft, business.id, indiaBased]);
+  }, [showComposer, connectedForDraft, business.id]);
 
   useEffect(() => {
     const controller = new AbortController();
     void createMetaConnectClient().drafts(business.id, controller.signal).then((drafts) => {
       if (!controller.signal.aborted) setSavedDrafts(drafts);
     }).catch((reason) => {
-      if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Saved drafts could not be loaded.");
+      if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "We couldn't load your saved drafts. Reload the page.");
     });
     return () => controller.abort();
   }, [business.id]);
@@ -605,8 +667,18 @@ function BusinessCampaigns({
           setRecoveryPending(!found);
           setRetryAllowed(!found);
         }
-        const draft = await client.draft(saved.draft.draftId, controller.signal);
+        const draft = await client.draft(saved.draft.draftId, controller.signal).catch((reason: unknown) => {
+          // #681: a draft that expired or was removed leaves nothing to recover; without this the tab kept failing "Draft not found." on every load and Review.
+          if (saved.request || !(reason instanceof MetaConnectClientError && reason.code === "NOT_FOUND")) throw reason;
+          return null;
+        });
         if (controller.signal.aborted) return;
+        if (!draft) {
+          window.sessionStorage.removeItem(recoveryKey);
+          recoveryRef.current = null;
+          preparedDraftRef.current = null;
+          return;
+        }
         if (!hadInitialSetup || saved.request) restoreDraft(draft);
         preparedDraftRef.current = draft;
         const connection = await client.status(business.id, controller.signal);
@@ -660,13 +732,18 @@ function BusinessCampaigns({
         window.sessionStorage.removeItem(recoveryKey);
         setPrepareReview(null);
       }
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "Draft could not be removed."); }
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "The draft is still here. Try again in a minute."); }
     finally { setDraftBusy(null); }
   }
 
+  // #1588: with no campaigns the header button goes away on close, so focus moves to the empty state's New campaign.
+  const focusEmptyRef = useRef(false);
+  useEffect(() => {
+    if (!showComposer && focusEmptyRef.current) { focusEmptyRef.current = false; document.getElementById("campaigns-empty-new")?.focus(); }
+  }, [showComposer]);
   function toggleComposer() {
     if (preparing || creating) return;
-    if (showComposer) { setShowComposer(false); return; }
+    if (showComposer) { focusEmptyRef.current = !hasHistory; setShowComposer(false); return; }
     focusOnOpenRef.current = true;
     setShowComposer(true);
   }
@@ -688,16 +765,18 @@ function BusinessCampaigns({
     setRecoveryPending(false);
     setPrepareReview(null);
     setCreationMode("manual");
-    setName(`${business.name} - leads`);
+    setName(null);
     setDraftGoal("");
     setSelected(new Set());
     setBudget(200);
     setAbTest(false);
+    setNoFacebookReels(false);
     setTargeting(defaultTargeting);
     setIncludedNames("");
     setExcludedNames("");
     setLeadFormId("");
-    setDestination(indiaBased && whatsappOptions.length ? "whatsapp" : "instant_form");
+    // #1171: WhatsApp is the channel (#680); an instant form only when the owner picks it.
+    setDestination("whatsapp");
     setWhatsAppNumber("");
     setWhatsAppLanguage("ad");
     destinationChosenRef.current = false;
@@ -712,13 +791,13 @@ function BusinessCampaigns({
   async function runAgain(campaign: Campaign) {
     if (preparing || creating || rerunBusy) return;
     setRerunError(null);
-    if (unresolvedRecovery()) { setRerunError({ id: campaign.id, message: "Resolve the current campaign operation before starting another campaign." }); return; }
-    if (showComposer && selected.size && !(await askConfirm({ title: "Discard this setup?", description: `Start a copy of "${campaign.name ?? "this campaign"}" instead. Saved drafts stay available.`, confirmLabel: "Discard and copy", tone: "danger" }))) return;
+    if (unresolvedRecovery()) { setRerunError({ id: campaign.id, message: tc("notices.resolveFirst") }); return; }
+    if (showComposer && selected.size && !(await askConfirm({ title: tc("notices.discardTitle"), description: tc("notices.discardCopy", { name: campaign.name ?? tc("card.thisCampaign") }), confirmLabel: tc("notices.discardAndCopy"), tone: "danger" }))) return;
     setRerunBusy(campaign.id);
     try {
       const response = await fetch(`/api/campaigns/${campaign.id}/rerun`, { cache: "no-store" });
       const data = await response.json().catch(() => null) as { prefill?: RerunPrefill; error?: string } | null;
-      if (!response.ok || !data?.prefill) throw new Error(data?.error ?? "This campaign couldn't be copied. Try again.");
+      if (!response.ok || !data?.prefill) throw new Error(data?.error ?? tc("notices.copyFailed"));
       const prefill = data.prefill;
       clearErrors();
       preparedDraftRef.current = null;
@@ -738,8 +817,10 @@ function BusinessCampaigns({
       setIncludedNames((prefill.targeting?.location?.includedNames ?? []).join("\n"));
       setExcludedNames((prefill.targeting?.location?.excludedNames ?? []).join("\n"));
       setLeadFormId(prefill.leadFormId ?? "");
-      if (prefill.destination) setDestination(prefill.destination);
-      destinationChosenRef.current = Boolean(prefill.destination);
+      // #1216: a copy with a lead form is a form campaign, whatever the composer's default.
+      const copiedDestination = prefill.destination ?? (prefill.leadFormId ? "instant_form" : undefined);
+      if (copiedDestination) setDestination(copiedDestination);
+      destinationChosenRef.current = Boolean(copiedDestination);
       setWhatsAppNumber(!prefill.whatsappNumber || maskedWhatsAppNumberPattern.test(prefill.whatsappNumber) ? prefill.whatsappNumber ?? "" : maskWhatsAppNumber(prefill.whatsappNumber));
       setWhatsAppLanguage(prefill.whatsappLanguage ?? "ad");
       setWhatsAppMessage(prefill.whatsappMessage ?? null);
@@ -751,7 +832,7 @@ function BusinessCampaigns({
       noticeRef.current?.scrollIntoView?.({ block: "start" });
       nameInputRef.current?.focus({ preventScroll: true });
     } catch (reason) {
-      setRerunError({ id: campaign.id, message: reason instanceof Error ? reason.message : "This campaign couldn't be copied. Try again." });
+      setRerunError({ id: campaign.id, message: reason instanceof Error ? reason.message : tc("notices.copyFailed") });
     } finally {
       setRerunBusy(null);
     }
@@ -764,7 +845,7 @@ function BusinessCampaigns({
     setPrepareReview(null);
     setShowComposer(true);
     setFormsRetry(current => current + 1);
-    setNotice(destination === "whatsapp" ? "Meta connected. Review the linked WhatsApp number before continuing." : "Meta connected. Review your lead form before continuing.");
+    setNotice(destination === "whatsapp" ? "Meta connected. Check your WhatsApp number before continuing." : "Meta connected. Review your lead form before continuing.");
   }
 
   function acceptOperation(next: OperationDTO) {
@@ -812,6 +893,7 @@ function BusinessCampaigns({
       );
       signal?.throwIfAborted();
       setPrepareReview({ status: "ready", draft, connection, review });
+      if (redrewChatNumber(review.planWarnings)) router.refresh(); // #2274: show the redrawn pictures
     } catch (reason: unknown) {
       if (signal?.aborted) throw reason;
       setPrepareReview({
@@ -831,6 +913,7 @@ function BusinessCampaigns({
   async function syncFromMeta(background = false) {
     setSyncing(true);
     clearErrors();
+    setSyncError(null);
     try {
       const cursor = syncCursorRef.current;
       const res = await fetch(`/api/campaigns/sync${cursor ? `?after=${encodeURIComponent(cursor)}` : ""}`, { method: "POST" });
@@ -853,14 +936,14 @@ function BusinessCampaigns({
           saveCampaignSyncTime(syncStorageKey, completedAt.getTime());
         }
         const skippedNotice = syncSkippedRef.current.count
-          ? ` ${describeSkippedCampaigns(syncSkippedRef.current.named, syncSkippedRef.current.count)}` : "";
+          ? ` ${describeSkippedCampaigns(syncSkippedRef.current.named, syncSkippedRef.current.count, campaignWords)}` : "";
         // #847: an automatic sync that finished with nothing to report stays quiet, so the list doesn't jump on load.
-        if (!background || data.nextCursor || skippedNotice) setNotice(`${data.nextCursor ? "More campaigns are available. Sync again to continue." : "Campaign sync completed."}${skippedNotice}`);
+        if (!background || data.nextCursor || skippedNotice) setNotice(`${tc(data.nextCursor ? "sync.more" : "sync.done")}${skippedNotice}`);
       } else {
-        setError(data.error ?? "Couldn't sync from Meta. Your campaigns below are from the last sync; try Sync from Meta again.");
+        setSyncError(data.error ?? tc("sync.failed"));
       }
     } catch {
-      setError("Couldn't reach Meta. Check your connection, then try Sync from Meta again.");
+      setSyncError(tc("sync.offline"));
     } finally {
       setSyncing(false);
     }
@@ -890,25 +973,26 @@ function BusinessCampaigns({
   function manualDraftInput(requireComplete = true): DraftInput {
     if (requireComplete && selected.size === 0) throw new Error("Select at least one creative.");
     if (requireComplete && budget <= 0) throw new Error("Enter a daily budget.");
-    return {
+    return buildManualDraftInput({
       businessId: business.id,
       name,
       goal: draftGoal || name,
       mode: preparedDraftRef.current?.input.mode === "guided" || creationMode === "guided" ? "guided" : "manual",
       creativeIds: [...selected],
-      dailyBudgetRupees: Math.max(0, budget),
-      leadFormId: destination === "whatsapp" ? null : leadFormId || null,
+      dailyBudgetRupees: budget,
+      leadFormId,
       destination,
-      ...(destination === "whatsapp" && chosenWhatsAppNumber ? { whatsappNumber: chosenWhatsAppNumber } : {}),
-      ...(destination === "whatsapp" && whatsappLanguage !== "ad" ? { whatsappLanguage } : {}),
-      ...(destination === "whatsapp" && whatsappMessage ? { whatsappMessage } : {}),
+      whatsappNumber: chosenWhatsAppNumber,
+      whatsappLanguage,
+      whatsappMessage,
       targeting: targetingFromEditor(targeting, plannedAreas, plannedExclusions),
       abTest,
-    };
+      excludeFacebookReels: internal && noFacebookReels,
+    });
   }
 
   // #366: plan the audience in the background once ads are chosen, so Prepare usually doesn't wait for the AI.
-  const backgroundPlanRef = useRef<{ key: string; reply: Promise<PlanReply>; controller: AbortController } | null>(null);
+  const backgroundPlanRef = useRef<{ key: string; reply: Promise<AudiencePlanReply>; controller: AbortController } | null>(null);
   const backgroundPlansRef = useRef(0);
   function backgroundKeyFor(input: DraftInput): string {
     return audiencePlanKey({ ...input, goal: draftGoal });
@@ -935,7 +1019,7 @@ function BusinessCampaigns({
     backgroundPlansRef.current += 1;
     backgroundPlanRef.current?.controller.abort();
     const controller = new AbortController();
-    const reply = fetchAudiencePlan(input, controller.signal);
+    const reply = fetchAudiencePlan((...args) => fetch(...args), input, controller.signal);
     reply.catch(() => {});
     backgroundPlanRef.current = { key, reply, controller };
   });
@@ -947,7 +1031,7 @@ function BusinessCampaigns({
   useEffect(() => () => backgroundPlanRef.current?.controller.abort(), []);
 
   /** The background reply for exactly this input, used once; null if there is none or it failed. */
-  function takeBackgroundPlan(input: DraftInput, signal: AbortSignal): Promise<PlanReply | null> | null {
+  function takeBackgroundPlan(input: DraftInput, signal: AbortSignal): Promise<AudiencePlanReply | null> | null {
     const planned = backgroundPlanRef.current;
     if (!planned) return null;
     backgroundPlanRef.current = null;
@@ -965,12 +1049,10 @@ function BusinessCampaigns({
   async function recommendAudience(input: DraftInput, signal: AbortSignal, reuseBackground = false): Promise<DraftInput> {
     setPreparationStage(signal, "Recommending audience...");
     const background = reuseBackground ? takeBackgroundPlan(input, signal) : null;
-    const { response, data } = (background && await background) || await fetchAudiencePlan(input, signal);
+    const reply = (background && await background) || await fetchAudiencePlan((...args) => fetch(...args), input, signal);
     signal.throwIfAborted();
-    if (!response.ok || !data.ready) throw new Error(data.error ?? data.handoff?.message ?? (data.questions?.map((question) => question.question).join(" ") || "Could not recommend an audience."));
-    const recommended = { ...targetingInputSchema.parse(data.targeting), gender: input.targeting.gender ?? "all" as const };
-    if (data.fallback && recommended.audience) setNotice(recommended.audience.rationale);
-    else if (!recommended.audience?.interestNames.length) throw new Error("The detailed targeting recommendation is incomplete. Try again.");
+    const { targeting: recommended, notice } = plannedTargeting(input, reply);
+    if (notice) setNotice(notice);
     setTargeting(targetingToEditor(recommended));
     setIncludedNames((recommended.location?.includedNames ?? []).join("\n"));
     setExcludedNames((recommended.location?.excludedNames ?? []).join("\n"));
@@ -997,9 +1079,29 @@ function BusinessCampaigns({
       }
       await recommendAudience(input, signal);
     } catch (reason) {
-      if (!signal.aborted) failAt("composer", reason instanceof Error ? reason.message : "Could not recommend an audience.");
+      if (!signal.aborted) failAt("composer", reason instanceof Error ? reason.message : "We couldn't suggest who should see your ads. Try again, or choose the area yourself.");
     } finally {
       finishPreparation(signal);
+    }
+  }
+
+  /** #1198: Quick questions show no ready message, so the chosen ads stop quoting one; then Review runs again. */
+  async function rewriteQuotedAsks(creativeIds: string[]) {
+    if (rewritingAsks || unresolvedRecovery()) return;
+    setRewritingAsks(true);
+    try {
+      for (const ad of savedPickerAds.filter((item) => creativeIds.includes(item.id) && quotedAsk(item.primary_text))) {
+        const primaryText = withQuestionsLastLine(ad.primary_text ?? "", adLanguages([ad])[0]);
+        const text = savedAdText(ad);
+        const result = await updateCreativeCopy(ad.id, { ...text, cta: text.cta as EditableCopy["cta"], primary_text: primaryText });
+        if (!result.ok) { failAt("review", result.error ?? "The ad couldn't be changed. Edit its last line, then check again."); return; }
+        setEditedAds((current) => ({ ...current, [ad.id]: { ...ad, ...result.creative, primary_text: result.creative?.primary_text ?? primaryText } }));
+      }
+      await prepareManualCampaign();
+    } catch {
+      failAt("review", "The ad couldn't be changed. Edit its last line, then check again.");
+    } finally {
+      setRewritingAsks(false);
     }
   }
 
@@ -1018,6 +1120,10 @@ function BusinessCampaigns({
     }
     if (reviewAfterSave && budget <= 0) {
       failAt("budget", "Set a daily budget above ₹0.");
+      return;
+    }
+    if (reviewAfterSave && composerCap?.exceeds) {
+      failAt("budget", weeklyCapWords(composerCap));
       return;
     }
     let input: DraftInput;
@@ -1042,10 +1148,11 @@ function BusinessCampaigns({
       }
       signal.throwIfAborted();
       setPreparationStage(signal, "Saving draft...");
-      const previous = preparedDraftRef.current;
-      const draft = previous && !recoveryRef.current?.request
-        ? await client.updateDraft(previous.draftId, previous.version, input, signal)
-        : await client.saveDraft(input, signal);
+      // #1151: the same ads prepared again update their saved draft instead of adding another.
+      const previous = preparedDraftRef.current ?? draftForSelection(savedDrafts, input.creativeIds);
+      const over = recoveryRef.current?.request ? null : previous;
+      const draft = await saveOverDraft(client, over, input, signal);
+      if (over && over.draftId !== draft.draftId) setSavedDrafts((drafts) => drafts.filter((saved) => saved.draftId !== over.draftId));
       signal.throwIfAborted();
       saveRecovery({ draft, request: null, operationId: null });
       if (reviewAfterSave && input.destination !== "whatsapp") saveLeadFormMemory(leadFormMemoryKey, input.leadFormId);
@@ -1073,12 +1180,14 @@ function BusinessCampaigns({
   }
 
   // #1004: from Create's 'Review this ad', the same prepare as the Review button runs once, after the
-  // WhatsApp check has picked the destination and (for a form) a lead form is chosen or its error shown.
+  // WhatsApp check, once WhatsApp has a ready number (#1171: else its checklist shows first) or, for a form,
+  // a lead form is chosen or its error shown.
   const autoReviewRef = useRef(Boolean(newCampaign?.review) && !initialSetup);
   const [autoReviewPending, setAutoReviewPending] = useState(Boolean(newCampaign?.review) && !initialSetup);
   const autoReview = useEffectEvent(() => {
     if (!autoReviewRef.current || recoveryPending || unresolvedRecovery() || isPreparing()) return;
     if (selected.size === 0 || (destination === "instant_form" && !leadFormId && !formsError)) return;
+    if (destination === "whatsapp" && whatsappStatus?.state !== "ready") return;
     autoReviewRef.current = false;
     setAutoReviewPending(false);
     void prepareManualCampaign();
@@ -1130,6 +1239,10 @@ function BusinessCampaigns({
     const { draft, review } = prepareReview;
     if (!review.canCreatePaused || !review.planHash || !review.selected || review.blockers.length) {
       failAt("review", "Resolve the campaign review blockers before creating.");
+      return;
+    }
+    if (composerCap?.exceeds) {
+      failAt("budget", weeklyCapWords(composerCap));
       return;
     }
     if (!canStartCreate(operation)) return;
@@ -1231,19 +1344,22 @@ function BusinessCampaigns({
         campaign?: Campaign | null;
       };
       if (res.status === 410 && data.gone) {
+        setEndedHere((ids) => new Set(ids).add(id));
         if (data.campaign) setCampaigns((list) => list.map((item) => (item.id === id ? data.campaign! : item)));
-        setCardNotice({ id, message: data.error ?? "This campaign is no longer in Meta." });
+        setCardNotice({ id, message: data.error ?? tc("notices.gone") });
       } else if (res.ok) {
         if (data.result) setResults((p) => ({ ...p, [id]: data.result! }));
-        setCardNotice({ id, message: refreshNotice(previous, data.result) });
+        // #1903: Refresh found it paused or its budget changed in Meta Ads Manager.
+        if (data.campaign) setCampaigns((list) => list.map((item) => (item.id === id ? data.campaign! : item)));
+        setCardNotice({ id, message: refreshNotice(previous, data.result, tc) });
         if (data.summary) setSummaries((p) => ({ ...p, [id]: data.summary! }));
         if (data.review) setReviews((p) => ({ ...p, [id]: data.review! }));
-        if (data.protectionConfirmed === false) setCardError({ id, message: "Results refreshed, but spend protection could not be verified. Check campaign delivery in Meta." });
+        if (data.protectionConfirmed === false) setCardError({ id, message: tc("notices.protection") });
       } else {
-        setCardError({ id, message: data.error ?? "Couldn't refresh results." });
+        setCardError({ id, message: data.error ?? tc("notices.refreshFailed") });
       }
     } catch {
-      setCardError({ id, message: "Couldn't refresh results — check your connection." });
+      setCardError({ id, message: tc("notices.refreshOffline") });
     } finally {
       setRefreshingId(null);
     }
@@ -1264,27 +1380,54 @@ function BusinessCampaigns({
   const [audienceEdit, setAudienceEdit] = useState<Campaign | null>(null);
   // #765 (b): campaign id → the edit whose paused copy waits for the owner to turn it on or cancel it.
   const [waitingSwitch, setWaitingSwitch] = useState<Record<string, string>>({});
+  const pendingDecision = campaigns.some(c => Boolean(waitingSwitch[c.id]) && (c.status === "active" || c.status === "paused"));
   const [waitingError, setWaitingError] = useState<Record<string, string>>({});
   // Only a launched, running or paused AdBrain campaign can have a waiting copy; skip the read otherwise.
   const switchable = campaigns.some(c => !!c.meta_campaign_id && (c.status === "active" || c.status === "paused") && !!reviewableCampaign(c));
-  useEffect(() => {
-    if (!switchable) return;
-    let live = true;
-    // Owners read their own edit rows (RLS). If this read fails, the strip just doesn't show; the server still refuses
-    // other edits while a copy waits.
+  // Owners read their own edit rows (RLS). If this read fails, the strip just doesn't show; the server still refuses
+  // other edits while a copy waits. #1576: read again when the server says a copy waits (made in another tab or device).
+  const loadWaiting = useCallback((isLive: () => boolean = () => true) => {
     try {
       void createBrowserClient().from("campaign_edit_operations").select("id,campaign_id,sanitized_error").eq("state", "awaiting_switch")
         .then(({ data }) => {
-          if (!live || !Array.isArray(data)) return;
+          if (!isLive() || !Array.isArray(data)) return;
           const rows = data as Array<{ id: string; campaign_id: string; sanitized_error: string | null }>;
           setWaitingSwitch(Object.fromEntries(rows.map(row => [row.campaign_id, row.id])));
           setWaitingError(Object.fromEntries(rows.filter(row => row.sanitized_error).map(row => [row.campaign_id, row.sanitized_error!])));
         }, () => undefined);
     } catch { /* no browser Supabase config (tests) */ }
+  }, [setWaitingSwitch, setWaitingError]);
+  useEffect(() => {
+    if (!switchable) return;
+    let live = true;
+    loadWaiting(() => live);
     return () => { live = false; };
-  }, [switchable]);
+  }, [switchable, loadWaiting]);
+  // #1274: enquiries waiting for a reply by the inbox's rule (#1260), per running campaign (owners read their own leads).
+  const [waitingReplies, setWaitingReplies] = useState<Record<string, number>>({});
+  // #1274 slice 2c: cards whose sentence already offers the pause; their "Which ad worked" doesn't repeat it.
+  const [weakAdCards, setWeakAdCards] = useState<string[]>([]);
+  const weakAdShown = useCallback((campaignId: string, shown: boolean) =>
+    setWeakAdCards((ids) => shown === ids.includes(campaignId) ? ids : shown ? [...ids, campaignId] : ids.filter((id) => id !== campaignId)), []);
+  const liveIds = campaigns.filter(c => c.status === "active").map(c => c.id).sort().join(",");
+  useEffect(() => {
+    if (!liveIds) return;
+    let live = true;
+    try {
+      void createBrowserClient().from("leads").select(WAITING_COLUMNS).in("campaign_id", liveIds.split(","))
+        .eq("workflow_status", "new").is("first_contacted_at", null)
+        .gte("created_at", new Date(Date.now() - WAITING_DAYS * 86_400_000).toISOString()).limit(500)
+        .then(({ data }) => {
+          if (!live || !Array.isArray(data)) return;
+          setWaitingReplies(waitingByCampaign(data as WaitingLeadRow[]));
+        }, () => undefined);
+    } catch { /* no browser Supabase config (tests) */ }
+    return () => { live = false; };
+  }, [liveIds]);
   const [budgetEdit, setBudgetEdit] = useState<{ campaign: Campaign; start: NonNullable<ReturnType<typeof budgetFormStart>> } | null>(null);
   const [adEdit, setAdEdit] = useState<Campaign | null>(null);
+  // #1274: the card's "Edit the ad" (no chats yet) opens the same editor with a hint about the last line.
+  const [adEditHint, setAdEditHint] = useState<string | undefined>(undefined);
   const [statusChangingId, setStatusChangingId] = useState<string | null>(null);
   const [reviews, setReviews] = useState<Record<string, AdReview[]>>({});
 
@@ -1318,7 +1461,7 @@ function BusinessCampaigns({
       setActivationLearning({
         costPerResultRupees: typeof review.learning?.costPerResultRupees === "number" ? review.learning.costPerResultRupees : null,
         pausedAt: typeof review.learning?.pausedAt === "string" ? review.learning.pausedAt : null,
-        now: Date.now(),
+        now: currentTime(),
       });
       setActivationReview(campaign);
       if (!refreshing) setReviewOpens((opens) => opens + 1);
@@ -1329,7 +1472,7 @@ function BusinessCampaigns({
       setActivationFunding(null);
       setActivationLearning(null);
       setActivationReview(null);
-      const message = reason instanceof Error ? reason.message : "Activation review is unavailable.";
+      const message = reason instanceof Error ? reason.message : "We couldn't check your campaign before switching it on, so it stays as it was. Tap Refresh review.";
       // Resume was tapped on the card; Refresh review on the panel at the top, next to the page banner.
       if (refreshing) setError(message);
       else setCardError({ id: campaign.id, message });
@@ -1340,6 +1483,12 @@ function BusinessCampaigns({
     setCardError(null);
     if (next === "active" && !confirmed) {
       setConnectionIntent({ kind: "review_activation", campaignId: c.id });
+      // #1333: a healthy connection goes straight to the activation review; the dialog is only for something to fix.
+      const connection = await createMetaConnectClient().status(business.id).catch(() => null);
+      if (connection?.authorization === "connected" && connection.selected && connection.capabilities?.canActivate?.state === "available") {
+        await openActivationReview(c, connection);
+        return;
+      }
       setConnectOpen(true);
       return;
     }
@@ -1370,7 +1519,7 @@ function BusinessCampaigns({
           ? reviewedDays
             ? `Activated with a ${formatMoney((c.daily_budget ?? 0) * reviewedDays)} total limit on Meta for ${reviewedDays} ${reviewedDays === 1 ? "day" : "days"}. Meta reviews the ads before they deliver.`
             : "Activation requested. Check Meta for effective delivery and eligibility."
-          : "Campaign paused.");
+          : tc("notices.paused"));
         if (next === "active") {
           setActivationReview(null);
           setActivationDigest(null);
@@ -1379,17 +1528,18 @@ function BusinessCampaigns({
         }
       } else {
         const data = (await res.json()) as { error?: string; code?: string };
-        fail(data.error ?? "Couldn't update the campaign.", data.code === "META_REAUTH" && Boolean(c.meta_campaign_id));
+        fail(data.error ?? tc("notices.updateFailed"), data.code === "META_REAUTH" && Boolean(c.meta_campaign_id));
+        if (data.code === "switch_pending") loadWaiting();
       }
     } catch {
-      fail("Couldn't update the campaign — check your connection.");
+      fail(tc("notices.updateOffline"));
     } finally {
       setStatusChangingId(null);
     }
   }
 
   async function deleteCampaign(c: Campaign) {
-    if (!(await askConfirm({ title: `Delete "${c.name ?? "this campaign"}"?`, description: "This removes it from Meta and can't be undone.", confirmLabel: "Delete campaign", tone: "danger" }))) {
+    if (!(await askConfirm({ title: tc("notices.deleteTitle", { name: c.name ?? tc("card.thisCampaign") }), description: tc("notices.deleteBody"), confirmLabel: tc("card.delete"), tone: "danger" }))) {
       return;
     }
     setDeletingId(c.id);
@@ -1401,23 +1551,44 @@ function BusinessCampaigns({
         setCampaigns((prev) => prev.filter((x) => x.id !== c.id));
       } else {
         const data = (await res.json()) as { error?: string };
-        setCardError({ id: c.id, message: data.error ?? "Couldn't delete the campaign." });
+        setCardError({ id: c.id, message: data.error ?? tc("notices.deleteFailed") });
       }
     } catch {
-      setCardError({ id: c.id, message: "Couldn't delete the campaign — check your connection." });
+      setCardError({ id: c.id, message: tc("notices.deleteOffline") });
     } finally {
       setDeletingId(null);
     }
   }
 
+  const savedDraftsBlock = savedDrafts.length > 0 && (
+    <details aria-label="Saved drafts" className="group border-y border-slate-200 py-3">
+      <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 text-sm font-semibold text-slate-900 [&::-webkit-details-marker]:hidden">
+        <ChevronRight className="h-4 w-4 text-slate-500 transition-transform group-open:rotate-90" aria-hidden="true" />
+        <h2>Saved drafts</h2>
+        <span className="font-normal text-slate-500">({savedDrafts.length})</span>
+      </summary>
+      <ul className="mt-1 divide-y divide-slate-100">
+        {savedDrafts.map((draft) => <li key={draft.draftId} className="flex min-w-0 items-center justify-between gap-3 py-2">
+          <button type="button" disabled={draftBusy !== null || creating || operationChecking} onClick={() => void reopenDraft(draft.draftId)} className="min-h-11 min-w-0 flex-1 text-left text-sm font-medium text-slate-800 hover:text-blue-700 disabled:opacity-50">
+            <span className="block wrap-break-word">{draft.input.name}</span>
+            <span className="mt-0.5 block text-xs font-normal text-slate-500">{formatMoney(draft.input.dailyBudgetRupees)} per ad set</span>
+          </button>
+          <Button variant="ghost" size="sm" className="h-11 w-11 p-0" title={`Remove ${draft.input.name}`} aria-label={`Remove ${draft.input.name}`} disabled={draftBusy !== null || creating} onClick={() => void removeDraft(draft)}><Trash2 className="h-4 w-4" aria-hidden="true" /></Button>
+        </li>)}
+      </ul>
+    </details>
+  );
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-4">
       {confirmDialog}
-        <p className="text-sm text-slate-500">{campaigns.filter(campaign => campaign.status === "active").length} {OWNER_WORDS.running.toLowerCase()} <span className="mx-2 text-slate-300">/</span> {campaigns.filter(campaign => campaign.status === "paused").length} paused</p>
+        <p className="text-sm text-slate-500">{tc("header.running", { n: campaigns.filter(campaign => runningNow(campaign)).length })} <span className="mx-2 text-slate-300">/</span> {tc("header.paused", { n: campaigns.filter(campaign => campaign.status === "paused").length })}</p>
         <div className="flex flex-wrap items-center gap-2">
-          {showComposer && <Button variant="ghost" onClick={startNewCampaign}><Trash2 className="h-4 w-4" aria-hidden="true" />Discard and start new</Button>}
-          <Button variant={showComposer ? "outline" : "primary"} onClick={toggleComposer} aria-expanded={showComposer} aria-controls="campaign-composer">{showComposer ? <X className="h-4 w-4" aria-hidden="true" /> : <Plus className="h-4 w-4" aria-hidden="true" />}{showComposer ? "Close campaign setup" : "New campaign"}</Button>
+          {/* #1588: the zero state carries its own New campaign; a pending audience decision owns the one solid button.
+              #1934 (CPO): New campaign is the guided 3 steps everywhere; this composer stays as a quiet More options. */}
+          {hasHistory && !showComposer && <Link href="/brand?again=1" className={`inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-md px-4 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${pendingDecision ? "border border-slate-300 bg-white text-slate-900 hover:bg-slate-50" : "bg-primary text-primary-foreground hover:bg-primary-hover"}`}><Plus className="h-4 w-4" aria-hidden="true" />{tc("header.newCampaign")}</Link>}
+          {(showComposer || hasHistory) && <Button variant={showComposer ? "outline" : "quiet"} onClick={toggleComposer} aria-expanded={showComposer} aria-controls="campaign-composer">{showComposer && <X className="h-4 w-4" aria-hidden="true" />}{tc(showComposer ? "header.closeSetup" : "header.moreOptions")}</Button>}
         </div>
       </div>
       {error && <Alert variant="error">{error}</Alert>}
@@ -1427,14 +1598,14 @@ function BusinessCampaigns({
       {!connectedForDraft && (
         <div className="space-y-3">
           <Alert variant="warning">
-            Meta isn’t connected yet. Connect an existing business to continue, or keep this campaign as a draft.
+            {tc("header.notConnected")}
           </Alert>
           <div className="flex flex-wrap gap-2">
             <Button onClick={openConnect}>
-              <Link2 className="h-4 w-4" aria-hidden="true" /> Connect Business
+              <Link2 className="h-4 w-4" aria-hidden="true" /> {tc("header.connect")}
             </Button>
-            <Link href="/settings" className="inline-flex h-10 items-center rounded-md px-3 text-sm font-medium text-slate-700 hover:bg-slate-100">
-              Open Settings
+            <Link href="/settings" className="inline-flex h-11 items-center rounded-md px-3 text-sm font-medium text-slate-700 hover:bg-slate-100">
+              {tc("header.openSettings")}
             </Link>
           </div>
         </div>
@@ -1472,11 +1643,13 @@ function BusinessCampaigns({
                 <p className="mt-1 font-medium">Total limit on Meta: {formatMoney((activationReview.daily_budget ?? 0) * capDays)} over {capDays} {capDays === 1 ? "day" : "days"}. Meta stops delivery at that amount or the end date, whichever comes first.</p>
                 {activationFunding && <p className="mt-1 font-medium">
                   {activationFunding.spendCapPaise > 0
-                    ? `Funded on Meta: ${exactRupees.format(freeRoomPaise(activationFunding) / 100)} room for a ${exactRupees.format(activationCapPaise / 100)} cap${committedWords(activationFunding.committed)}.${activationFunded ? "" : " Add funds on Meta or choose fewer days."}`
+                    ? `Funded on Meta: ${formatMoneyExact(freeRoomPaise(activationFunding) / 100)} room for a ${formatMoneyExact(activationCapPaise / 100)} cap${committedWords(activationFunding.committed)}.${activationFunded ? "" : " Add funds on Meta or choose fewer days."}`
                     : spendLimitRequired
                       ? "Funded on Meta: set a spending limit on the Meta ad account first."
                       : "Funded on your Meta ad account: no spending limit set; Meta stops at the total limit above."}
                 </p>}
+                {/* #1292: the trust line beside the money decision. */}
+                <p className="mt-1 font-medium">{activateTrustLine(activationReview.daily_budget ?? 0, (activationReview.daily_budget ?? 0) * capDays)}</p>
                 <p className="mt-1">The ad sets and ads listed above stay paused. Meta reviews the copied ads before they deliver.</p>
                 {keptPaused.length > 0 && <p className="mt-1">{keptPaused.length === 1 ? "1 ad you paused from the card stays paused" : `${keptPaused.length} ads you paused from the card stay paused`}: AdBrain doesn&apos;t copy it back in.</p>}
               </div>
@@ -1485,6 +1658,7 @@ function BusinessCampaigns({
                 : activationReady
                   ? <p className="mt-2">These ads are set to run. Meta still decides whether and when they deliver.</p>
                   : <p className="mt-2">Some listed children are on and some are paused. Pause all of them in Meta for a capped run, or turn on all of them, then refresh this review.</p>}
+            <WeeklyCapLine notice={activationCap} className="mt-2 text-amber-900" />
             {learningWarnings.length ? (
               <ul className="mt-2 space-y-1" aria-label="Before you activate">
                 {learningWarnings.map((warning) => (
@@ -1501,7 +1675,7 @@ function BusinessCampaigns({
           <Button
             size="sm"
             className="ml-3"
-            disabled={!activationDigest || !activationReady || !activationFunded
+            disabled={!activationDigest || !activationReady || !activationFunded || !!activationCap?.exceeds
               || statusChangingId === activationReview.id}
             onClick={() => void setCampaignStatus(activationReview, "active", true)}
             data-product-event="campaign.activate"
@@ -1589,7 +1763,16 @@ function BusinessCampaigns({
                     {fact("Budget", <>{formatMoney(review.totalDailyBudgetRupees)} a day{review.perAdSetDailyBudgetRupees !== review.totalDailyBudgetRupees && <span className="text-slate-600"> ({formatMoney(review.perAdSetDailyBudgetRupees)} per ad set)</span>}</>)}
                     {fact("Where", <>{review.resolvedAreaLabel ?? "Needs review"}, {input.targeting.location?.cityScope === "city_only" ? "city only (no added radius)" : `${input.targeting.location?.radiusKm ?? 25} km radius`}{review.serviceArea && <span className="block text-slate-600">{serviceAreaLine(review.serviceArea)}</span>}</>)}
                     {fact("Who", <>Ages {age?.min ?? "unset"}–{age?.max === 65 ? "65+" : age?.max ?? "unset"}, {{ all: "all genders", men: "men", women: "women" }[input.targeting.gender ?? "all"]}{interests ? `, interested in ${interests}` : input.targeting.audience?.interestNames.length ? ", interests need resolving" : ", no interest narrowing"}</>)}
-                    {fact("Destination", <>{input.destination === "whatsapp" ? `WhatsApp chat ${review.whatsappNumber ?? "(number not verified)"}` : "Instant lead form"}{/* #906: WhatsApp and lead-form ads leave Audience Network out. */}{(input.destination === "whatsapp" || input.destination === "instant_form") && <span className="block text-slate-600">Shown on Facebook, Instagram and Messenger</span>}</>)}
+                    {fact("Destination", <>{input.destination === "whatsapp" ? `WhatsApp chat ${review.whatsappNumber ?? "(number not verified)"}` : "Instant lead form"}{input.destination === "whatsapp" && !review.whatsappNumber && (
+                      // #1301: an unverified number gets one plain next step, a link and a re-check (the same preflight read).
+                      <span className="block text-slate-700">
+                        {WHATSAPP_UNVERIFIED_STEP}{" "}
+                        <a href={WHATSAPP_LINK_URL} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center font-medium text-blue-700 underline">Open WhatsApp settings</a>{" "}
+                        <button type="button" className="inline-flex min-h-11 items-center font-medium text-blue-700 underline disabled:opacity-60"
+                          disabled={prepareReview.status !== "ready"}
+                          onClick={() => void loadPrepareReview(prepareReview.draft, prepareReview.connection).catch(() => undefined)}>Check again</button>
+                      </span>
+                    )}{/* #906: WhatsApp and lead-form ads leave Audience Network out. */}{(input.destination === "whatsapp" || input.destination === "instant_form") && <span className="block text-slate-600">Shown on Facebook, Instagram and Messenger</span>}</>)}
                     {fact("Meta account", <>{review.selected?.accountName ?? prepareReview.connection.selected?.accountName ?? "Unavailable"}, Page {review.selected?.pageName ?? prepareReview.connection.selected?.pageName ?? "Unavailable"} ({review.currency})</>)}
                   </dl>
                   <p className="mt-3 text-xs text-slate-500">Location includes residents and recent visitors. Interest signals may expand under Meta lead optimization.</p>
@@ -1618,7 +1801,22 @@ function BusinessCampaigns({
                   {prepareReview.review.planWarnings.map((warning) => (
                     <li key={warning} className="flex items-start gap-1.5">
                       <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                      <span>{warning}</span>
+                      <span>
+                        {warning}
+                        {/* #1177: one tap switches to WhatsApp; the owner then reviews again. */}
+                        {warning === WHATSAPP_PICTURE_ON_FORM && (
+                          <button type="button" className="ml-1 min-h-11 font-medium text-blue-700 underline"
+                            onClick={() => { if (unresolvedRecovery()) return; setDestination("whatsapp"); destinationChosenRef.current = true; setPrepareReview(null); jumpToFix(["destination-whatsapp"]); }}>
+                            Switch to WhatsApp
+                          </button>
+                        )}
+                        {warning === QUOTED_ASK_WITH_QUESTIONS && (
+                          <button type="button" className="ml-1 min-h-11 font-medium text-blue-700 underline disabled:opacity-50" disabled={rewritingAsks || preparing}
+                            onClick={() => void rewriteQuotedAsks(prepareReview.draft.input.creativeIds)}>
+                            {rewritingAsks ? "Changing the last line…" : "Change the last line"}
+                          </button>
+                        )}
+                      </span>
                     </li>
                   ))}
                 </ul>
@@ -1664,11 +1862,11 @@ function BusinessCampaigns({
               if (unresolvedRecovery()) throw new Error("Check the existing operation before connecting again.");
               setPrepareReview(null);
               const client = createMetaConnectClient();
-              const previous = preparedDraftRef.current;
               const input = manualDraftInput(false);
-              const draft = previous && !recoveryRef.current?.request
-                ? await client.updateDraft(previous.draftId, previous.version, input)
-                : await client.saveDraft(input);
+              const previous = preparedDraftRef.current ?? draftForSelection(savedDrafts, input.creativeIds);
+              const over = recoveryRef.current?.request ? null : previous;
+              const draft = await saveOverDraft(client, over, input);
+              if (over && over.draftId !== draft.draftId) setSavedDrafts((drafts) => drafts.filter((saved) => saved.draftId !== over.draftId));
               preparedDraftRef.current = draft;
               saveRecovery({ draft, request: null, operationId: null });
               setOperation(null);
@@ -1690,27 +1888,16 @@ function BusinessCampaigns({
         }}
       />
 
-      {/* #847 T6: while a setup is open, saved drafts fold to one line so the setup starts in the first screen. */}
-      {savedDrafts.length > 0 && <details key={showComposer ? "composing" : "list"} open={!showComposer} aria-label="Saved drafts" className="group border-y border-slate-200 py-3">
-        <summary className="flex min-h-10 cursor-pointer list-none items-center gap-2 text-sm font-semibold text-slate-900 [&::-webkit-details-marker]:hidden">
-          <ChevronRight className="h-4 w-4 text-slate-500 transition-transform group-open:rotate-90" aria-hidden="true" />
-          <h2>Saved drafts</h2>
-          <span className="font-normal text-slate-500">({savedDrafts.length})</span>
-        </summary>
-        <ul className="mt-1 divide-y divide-slate-100">
-          {savedDrafts.map((draft) => <li key={draft.draftId} className="flex min-w-0 items-center justify-between gap-3 py-2">
-            <button type="button" disabled={draftBusy !== null || creating || operationChecking} onClick={() => void reopenDraft(draft.draftId)} className="min-w-0 flex-1 text-left text-sm font-medium text-slate-800 hover:text-blue-700 disabled:opacity-50">
-              <span className="block wrap-break-word">{draft.input.name}</span>
-              <span className="mt-0.5 block text-xs font-normal text-slate-500">{formatMoney(draft.input.dailyBudgetRupees)} per ad set</span>
-            </button>
-            <Button variant="ghost" size="sm" className="h-11 w-11 p-0" title={`Remove ${draft.input.name}`} aria-label={`Remove ${draft.input.name}`} disabled={draftBusy !== null || creating} onClick={() => void removeDraft(draft)}><Trash2 className="h-4 w-4" aria-hidden="true" /></Button>
-          </li>)}
-        </ul>
-      </details>}
+      {/* #847 T6: while a setup is open, saved drafts fold to one line above it; #1154: otherwise they follow the campaigns. */}
+      {showComposer && savedDraftsBlock}
       <div id="campaign-composer" hidden={!showComposer}>
       {(
         <>
-          <h2 className="mb-1 text-[17px] font-semibold text-slate-950">New campaign</h2>
+          {/* #1164: one exit above the page (Close); starting over lives with the setup it discards. */}
+          <div className="mb-1 flex flex-wrap items-center justify-between gap-x-3">
+            <h2 className="text-[17px] font-semibold text-slate-950">New campaign</h2>
+            {showComposer && <Button variant="ghost" size="sm" onClick={startNewCampaign}><Trash2 className="h-4 w-4" aria-hidden="true" />Discard and start new</Button>}
+          </div>
           {approved.length > 0 && connectedForDraft ? (
             <p aria-label="Launch preflight" className="flex items-start gap-2 pb-1 text-sm text-slate-600">
               <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-emerald-600" aria-hidden="true" />
@@ -1742,11 +1929,14 @@ function BusinessCampaigns({
           </fieldset>
           <fieldset disabled={preparing || creating || destinationRecoveryLocked} aria-describedby={showDestinationLock ? "destination-lock-reason" : undefined} className="flex flex-wrap gap-2">
             <legend className="mb-2 text-xs font-medium text-slate-500">Destination</legend>
-            {([ ["instant_form", "Instant form"], ["whatsapp", "WhatsApp chat"] ] as const).map(([value, label]) => <label key={value} className={cn("flex min-h-11 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm", destination === value ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200")}><input id={`destination-${value}`} type="radio" name="campaign-destination" value={value} checked={destination === value} onChange={() => { if (!unresolvedRecovery()) { destinationChosenRef.current = true; setDestination(value); setPrepareReview(null); } }} className="accent-blue-600" />{label}</label>)}
+            {([ ["whatsapp", "WhatsApp chat (recommended)"], ["instant_form", "Instant form"] ] as const).map(([value, label]) => <label key={value} className={cn("flex min-h-11 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm", destination === value ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200")}><input id={`destination-${value}`} type="radio" name="campaign-destination" value={value} checked={destination === value} onChange={() => { if (!unresolvedRecovery()) { destinationChosenRef.current = true; setDestination(value); setPrepareReview(null); } }} className="accent-blue-600" />{label}</label>)}
           </fieldset>
           </div>
           {showDestinationLock && <p id="destination-lock-reason" role="status" className="mb-4 text-sm text-amber-800">Destination is locked until the previous campaign request is resolved.</p>}
-          {showComposer && destination === "whatsapp" && <div className="mb-4"><WhatsAppReadyChecklist businessId={business.id} /></div>}
+          {showComposer && destination === "whatsapp" && <div className="mb-4"><WhatsAppReadyChecklist businessId={business.id} />
+            {/* #1171 (QA): WhatsApp stays the default; an owner without a linked number can still run ads today. */}
+            {whatsappStatus?.state !== "ready" && <Button type="button" variant="ghost" className="mt-1 h-11 px-0 text-blue-700" disabled={preparing || creating || destinationRecoveryLocked} onClick={() => switchDestination("instant_form")}>No WhatsApp number yet? Use an Instant form for now</Button>}
+          </div>}
           {showComposer && creationMode === "guided" && <CampaignChat
             businessId={business.id}
             destination={destination}
@@ -1842,7 +2032,7 @@ function BusinessCampaigns({
                             setAdEditNotes(null);
                             setEditingAdId(c.id);
                           }}
-                          className="h-9 w-full max-sm:absolute max-sm:bottom-1.5 max-sm:left-1.5 max-sm:h-9 max-sm:w-9 max-sm:rounded-full max-sm:bg-white/95 max-sm:p-0 max-sm:after:absolute max-sm:after:-inset-1 max-sm:after:content-['']"
+                          className="h-9 w-full max-sm:absolute max-sm:bottom-1.5 max-sm:left-1.5 max-sm:h-9 max-sm:min-h-0 max-sm:w-9 max-sm:rounded-full max-sm:bg-white/95 max-sm:p-0 max-sm:after:absolute max-sm:after:-inset-1 max-sm:after:content-['']"
                         >
                           {/* #847 T6: on a phone, Edit is a corner icon so a row of ads isn't followed by a row of buttons. */}
                           <Pencil className="h-3.5 w-3.5" aria-hidden="true" /><span className="max-sm:sr-only">Edit</span>
@@ -1906,9 +2096,30 @@ function BusinessCampaigns({
                       value={budget}
                       onChange={(e) => { setBudget(Number(e.target.value)); if (placedError?.at === "budget") setPlacedError(null); }}
                       aria-invalid={placedError?.at === "budget" || undefined}
-                      aria-describedby={placedError?.at === "budget" ? "budget-error" : undefined}
+                      aria-describedby={placedError?.at === "budget" ? "budget-error" : composerCap?.exceeds ? "budget-cap" : undefined}
                     />
+                    {/* #1163: the quick amounts sit with the budget they set. */}
+                    <div className="flex flex-wrap items-center gap-2">
+                      {BUDGET_PRESETS.map((amount) => (
+                        <button
+                          key={amount}
+                          type="button"
+                          onClick={() => { setBudget(amount); if (!unresolvedRecovery()) setPrepareReview(null); }}
+                          className={cn(
+                            "min-h-11 rounded-full border px-3 text-sm font-medium transition-colors sm:min-h-8 sm:text-xs",
+                            budget === amount
+                              ? "border-blue-500 bg-blue-50 text-blue-700"
+                              : "border-slate-200 text-slate-600 hover:border-slate-300",
+                          )}
+                        >
+                          {formatPerDay(amount)}
+                        </button>
+                      ))}
+                      {abTest && <span className="basis-full text-xs font-medium text-slate-600">Total: {formatPerDay(totalDailyBudget)} across 2 ad sets</span>}
+                    </div>
                     {placedError?.at === "budget" && <p id="budget-error" role="alert" className="text-sm font-medium text-red-800">{placedError.message}</p>}
+                    {/* #1342: an over-cap budget is refused here, where it's typed, not first at Activate. */}
+                    {placedError?.at !== "budget" && composerCap?.exceeds && <WeeklyCapLine id="budget-cap" notice={composerCap} />}
                   </div>
                   {destination === "instant_form" && <div className="flex min-w-0 flex-col gap-1.5">
                     <Label htmlFor="leadform">Lead form</Label>
@@ -1958,7 +2169,7 @@ function BusinessCampaigns({
                     <p className="text-sm text-slate-700">
                       {whatsappMessage ? "Edited for this campaign" : savedWhatsAppMessage ? "Your saved message" : "Suggested message"}
                       {" · "}
-                      <button id="whatsapp-message" type="button" onClick={() => setMessageEditorOpen(true)} className="font-medium text-blue-700 underline">Edit for this campaign</button>
+                      <button id="whatsapp-message" type="button" onClick={() => setMessageEditorOpen(true)} className="inline-flex min-h-11 items-center font-medium text-blue-700 underline">Edit for this campaign</button>
                     </p>
                     {messageEditorOpen && (() => {
                       const ads = adsFor(selected);
@@ -1995,31 +2206,11 @@ function BusinessCampaigns({
                   </div>}
                 </div>
 
-                <div className="-mt-2 flex flex-wrap items-center gap-2">
-                  {BUDGET_PRESETS.map((amount) => (
-                    <button
-                      key={amount}
-                      type="button"
-                      onClick={() => { setBudget(amount); if (!unresolvedRecovery()) setPrepareReview(null); }}
-                      className={cn(
-                        "min-h-11 rounded-full border px-3 text-sm font-medium transition-colors sm:min-h-8 sm:text-xs",
-                        budget === amount
-                          ? "border-blue-500 bg-blue-50 text-blue-700"
-                          : "border-slate-200 text-slate-600 hover:border-slate-300",
-                      )}
-                    >
-                      {formatPerDay(amount)}
-                    </button>
-                  ))}
-                  <span className="ml-auto text-xs font-medium text-slate-600">
-                    Total: {formatPerDay(totalDailyBudget)}{abTest ? " across 2 ad sets" : ""}
-                  </span>
-                </div>
-                {/* #761: what to expect, from AdBrain's own runs (#588 ledger). #1038: no lead-form figure until AdBrain has run lead forms. */}
+                {/* #761: what to expect, from AdBrain's own runs (#588 ledger; #1307: facts with n until 20 results). #1038: no lead-form figure until AdBrain has run lead forms. */}
                 <p className="-mt-2 text-xs text-slate-500">
                   What to expect: {destination === "whatsapp"
-                    ? <>in AdBrain&apos;s runs so far, a WhatsApp chat has cost about ₹150–180.</>
-                    : <>AdBrain hasn&apos;t run enough instant-form campaigns yet to quote a cost per enquiry.</>} Meta reviews new ads first, usually within 24 hours, and nothing spends until you activate.
+                    ? whatsappExpectation(whatsappLedger ?? undefined)
+                    : <>AdBrain hasn&apos;t run enough instant-form campaigns yet to quote a cost per enquiry.</>} {REVIEW_AND_SPEND}
                 </p>
 
                 {destination === "instant_form" && formsLoading && <p role="status" className="text-sm text-slate-500">Loading lead forms...</p>}
@@ -2032,6 +2223,13 @@ function BusinessCampaigns({
                   </Alert>
                 )}
 
+                <details id="who-sees-it" open={whoOpen} onToggle={(event) => setWhoOpen(event.currentTarget.open)} className="group border-y border-slate-200">
+                  <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 py-2 [&::-webkit-details-marker]:hidden">
+                    <ChevronRight className="h-4 w-4 shrink-0 text-slate-500 transition-transform group-open:rotate-90" aria-hidden="true" />
+                    <span className="text-sm font-medium text-slate-900">Change who sees it</span>
+                    <span className="min-w-0 truncate text-xs text-slate-500 max-sm:hidden">Goal, places, age, gender, A/B test</span>
+                  </summary>
+                <div className="flex flex-col gap-4 pb-4 pt-2">
                 <div className="flex flex-col gap-2">
                   <div><Label htmlFor="campaign-goal">Campaign goal</Label><Input id="campaign-goal" value={draftGoal} onChange={(event) => setDraftGoal(event.target.value)} placeholder="Qualified enquiries for the current offer" /></div>
                   <Label className="mt-4">Audience &amp; location</Label>
@@ -2059,22 +2257,10 @@ function BusinessCampaigns({
                   </div>}
                 </div>
 
-                <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-slate-200 p-3">
-                  <input
-                    type="checkbox"
-                    checked={abTest}
-                    onChange={(e) => setAbTest(e.target.checked)}
-                    className="mt-0.5 h-4 w-4 accent-blue-600"
-                  />
-                  <span className="text-sm">
-                    <span className="font-medium text-slate-800">
-                      A/B test the audience by age
-                    </span>
-                    <span className="block text-xs text-slate-500">
-                      Two ad sets, each with the entered daily budget. Total daily budget: {formatMoney(totalDailyBudget)}.
-                    </span>
-                  </span>
-                </label>
+                <CampaignTestOptions abTest={abTest} onAbTest={setAbTest} totalDailyBudget={totalDailyBudget}
+                  {...(internal ? { noFacebookReels, onNoFacebookReels: setNoFacebookReels } : {})} />
+                </div>
+                </details>
 
                 <div className="border-t border-slate-200 pt-5">
                   <CampaignLaunchReview
@@ -2083,6 +2269,7 @@ function BusinessCampaigns({
                     leadFormName={selectedLeadForm?.name}
                     destination={destination}
                     whatsappNumber={destination === "whatsapp" && chosenWhatsAppNumber ? chosenWhatsAppNumber : undefined}
+                    weeklyCap={composerCap}
                     audience={`${audiencePreview}; ${targeting.ageMode === "manual" ? `ages ${targeting.ageMin}-${targeting.ageMax === 65 ? "65+" : targeting.ageMax}` : "ages picked by AdBrain when you check"}; ${{ all: "All genders", men: "Men", women: "Women" }[targeting.gender ?? "all"]}; ${targeting.cityScope === "city_only" ? "city only (no added radius)" : `city radius ${targeting.radiusKm} km`}${targeting.audience?.interestNames.length ? `; interests: ${targeting.audience.interestNames.join(", ")}` : ""}`}
                   />
                 </div>
@@ -2093,7 +2280,7 @@ function BusinessCampaigns({
                     <Save className="h-4 w-4" aria-hidden="true" /> Save draft
                   </Button>
                   {/* #772: incomplete stays tappable (aria-disabled, so telemetry skips it) and says what's missing beside the control. */}
-                  <Button data-product-event="campaign.review" onClick={() => void prepareManualCampaign()} disabled={preparing} aria-disabled={selected.size === 0 || budget <= 0 || undefined}>
+                  <Button data-product-event="campaign.review" onClick={() => void prepareManualCampaign()} disabled={preparing} aria-disabled={selected.size === 0 || budget <= 0 || composerCap?.exceeds || undefined}>
                     {preparing ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
@@ -2122,26 +2309,25 @@ function BusinessCampaigns({
       <div>
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-lg font-semibold text-slate-900">
-            Your campaigns{" "}
+            {tc("header.title")}{" "}
             <span className="font-normal text-slate-400">
-              ({campaigns.length})
+              ({liveCount})
             </span>
           </h2>
           {metaReady && (
             <div className="flex flex-wrap items-center gap-2">
-              {lastSynced && !syncing && (
-                <span className="text-xs text-slate-400">
-                  Synced {timeAgo(lastSynced)}
-                </span>
-              )}
-              {campaigns.length > 0 && (
-                <a
-                  href="/api/campaigns/report"
-                  download
-                  className="inline-flex min-h-11 items-center gap-1.5 rounded-md px-3 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100"
-                >
-                  <FileText className="h-4 w-4" /> Export report
-                </a>
+              {liveCount > 0 && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger aria-label={tc("header.listActions")}
+                    className="inline-flex size-11 items-center justify-center rounded-md text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
+                    <MoreHorizontal className="h-5 w-5" aria-hidden="true" />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent>
+                    <DropdownMenuItem asChild>
+                      <a href="/api/campaigns/report" download><FileText className="h-4 w-4" aria-hidden="true" /> {tc("header.exportReport")}</a>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               )}
               <Button
                 size="sm"
@@ -2156,41 +2342,38 @@ function BusinessCampaigns({
                 ) : (
                   <RefreshCw className="h-4 w-4" />
                 )}
-                {syncing ? "Syncing…" : "Sync from Meta"}
+                {tc(syncing ? "header.syncing" : "header.sync")}
               </Button>
             </div>
           )}
         </div>
+        {/* #1286: one line, always there (two lines' room on a phone), for sync news: a late answer never moves the list. */}
+        {metaReady && <p data-sync-status aria-live="polite" className="-mt-1 mb-3 min-h-10 text-xs text-slate-500 sm:min-h-5">
+          {syncError ? <span className="font-medium text-danger">{syncError}</span> : lastSynced && !syncing ? tc("header.synced", { age: ageText(verdictTranslator(verdictWords), lastSynced.toISOString()) }) : null}
+        </p>}
         {(() => {
-          const ready = !(showComposer && destination === "whatsapp") && campaigns.some((c) => campaignDestination(c, results[c.id]) === "whatsapp");
-          // #794: once a WhatsApp campaign is out, point to WhatsApp's own AI reply; #847: as a line under "WhatsApp ready?".
-          const ai = campaigns.some(campaign => campaign.meta_campaign_id && campaignDestination(campaign) === "whatsapp");
-          return (ready || ai) && <div className="mb-4">{ready && <WhatsAppReadyChecklist businessId={business.id} />}{ai && <WhatsAppAiCard businessId={business.id} />}</div>;
+          const ready = !(showComposer && destination === "whatsapp") && campaigns.some((c) => !goneInMeta(c) && campaignDestination(c, results[c.id]) === "whatsapp");
+          return ready && <div className="mb-4"><WhatsAppReadyChecklist businessId={business.id} /></div>;
         })()}
-        {(campaigns.length > 0 || campaignQuery || statusFilter !== "all") && <div className="mb-5 flex flex-wrap gap-2">
-          <div className="flex min-w-0 flex-1 basis-40 items-center gap-2 rounded-md border border-slate-300 px-3"><Search size={16} className="shrink-0 text-slate-400" aria-hidden="true" /><input type="search" aria-label="Search campaigns" placeholder="Search campaigns" value={campaignQuery} onChange={event => setCampaignQuery(event.target.value)} className="h-[42px] w-full min-w-0 bg-transparent text-sm outline-none" /></div>
-          <select aria-label="Campaign status" value={statusFilter} onChange={event => setStatusFilter(event.target.value)} className="h-11 rounded-md border border-slate-300 bg-white px-3 text-sm"><option value="all">All statuses</option><option value="active">{OWNER_WORDS.running}</option><option value="paused">Paused</option><option value="draft">Draft</option><option value="completed">Completed</option></select>
+        {showListTools && <div className="mb-5 flex flex-wrap gap-2">
+          <div className="flex min-w-0 flex-1 basis-40 items-center gap-2 rounded-md border border-slate-300 px-3"><Search size={16} className="shrink-0 text-slate-400" aria-hidden="true" /><input type="search" aria-label={tc("filters.search")} placeholder={tc("filters.search")} value={campaignQuery} onChange={event => setCampaignQuery(event.target.value)} className="h-[42px] w-full min-w-0 bg-transparent text-sm outline-none" /></div>
+          <select aria-label={tc("filters.status")} value={statusFilter} onChange={event => setStatusFilter(event.target.value)} className="h-11 rounded-md border border-slate-300 bg-white px-3 text-sm">{(["all", "active", "paused", "draft", "completed"] as const).map(value => <option key={value} value={value}>{tc(`filters.${value}`)}</option>)}</select>
         </div>}
-        {campaigns.length === 0 && !campaignQuery && statusFilter === "all" ? (
-          <Card>
-            <CardContent className="flex flex-col items-center gap-1 py-10 text-center">
-              <Rocket className="h-6 w-6 text-slate-300" />
-              <p className="font-medium text-slate-600">No campaigns yet</p>
-              <p className="max-w-sm text-sm text-slate-400">
-                Launch your first one above — with AI, or by picking creatives
-                and a budget. It’s created paused, so nothing spends until you
-                say so.
-              </p>
-            </CardContent>
-          </Card>
-        ) : visibleCampaigns.length === 0 ? <div className="flex flex-col items-center gap-3 border-y border-slate-200 py-12"><Search aria-hidden="true" className="text-slate-400" /><h3 className="font-semibold">No matching campaigns</h3><Button variant="outline" onClick={() => { setCampaignQuery(""); setStatusFilter("all"); }}>Clear filters</Button></div> : (
+        {liveCount === 0 && !campaignQuery && statusFilter === "all" && (
+          <div className="flex flex-col items-center gap-3 border-y border-slate-200 py-12 text-center">
+            <h3 className="font-semibold text-slate-900">{tc(hasHistory ? "empty.noneRunning" : "empty.none")}</h3>
+            <p className="max-w-sm text-sm text-slate-600">{savedDrafts.length ? tc("empty.drafts", { n: savedDrafts.length }) : tc("empty.start")}</p>
+            {!showComposer && !hasHistory && <Button id="campaigns-empty-new" onClick={toggleComposer} aria-controls="campaign-composer"><Plus className="h-4 w-4" aria-hidden="true" />{tc("header.newCampaign")}</Button>}
+          </div>
+        )}
+        {campaigns.length === 0 && !campaignQuery && statusFilter === "all" ? null : visibleCampaigns.length === 0 ? <div className="flex flex-col items-center gap-3 border-y border-slate-200 py-12"><Search aria-hidden="true" className="text-slate-400" /><h3 className="font-semibold">{tc("filters.noMatch")}</h3><Button variant="outline" onClick={() => { setCampaignQuery(""); setStatusFilter("all"); }}>{tc("filters.clear")}</Button></div> : (
           <div className="flex flex-col border-t border-slate-200">
             {audienceEdit && (
               <EditAudienceDialog
                 campaignId={audienceEdit.id}
                 campaignName={audienceEdit.name ?? `${business.name} — ${audienceEdit.objective}`}
                 running={audienceEdit.status === "active"}
-                onClose={() => setAudienceEdit(null)}
+                onClose={() => { setAudienceEdit(null); loadWaiting(); }}
                 onSaved={(message, waitingOperationId) => {
                   setCardNotice({ id: audienceEdit.id, message });
                   if (waitingOperationId) setWaitingSwitch(current => ({ ...current, [audienceEdit.id]: waitingOperationId }));
@@ -2203,7 +2386,7 @@ function BusinessCampaigns({
                 campaignId={budgetEdit.campaign.id}
                 campaignName={budgetEdit.campaign.name ?? `${business.name} — ${budgetEdit.campaign.objective}`}
                 start={budgetEdit.start}
-                onClose={() => setBudgetEdit(null)}
+                onClose={() => { setBudgetEdit(null); loadWaiting(); }}
                 onSaved={(message, after) => {
                   const id = budgetEdit.campaign.id;
                   setCampaigns((list) => list.map((item) => (item.id === id ? applyBudget(item, after) : item)));
@@ -2217,7 +2400,8 @@ function BusinessCampaigns({
                 campaign={adEdit}
                 campaignName={adEdit.name ?? `${business.name} — ${adEdit.objective}`}
                 creatives={approved}
-                onClose={() => setAdEdit(null)}
+                hint={adEditHint}
+                onClose={() => { setAdEdit(null); setAdEditHint(undefined); loadWaiting(); }}
                 onSaved={(message, { adId, change }) => {
                   // Mirror the server's raw.adWords, so reopening the editor shows the new words.
                   setCampaigns((list) => list.map((item) => {
@@ -2229,15 +2413,20 @@ function BusinessCampaigns({
                   }));
                   setCardNotice({ id: adEdit.id, message });
                   setAdEdit(null);
+                  setAdEditHint(undefined);
                 }}
               />
             )}
-            {visibleCampaigns.map((c) => {
+            {[liveCampaigns, goneCampaigns].map((list, folded) => {
+            const cards = list.map((c) => {
               const r = results[c.id];
               const outcome = campaignDestination(c, r);
               const attention = campaignAttention(c);
               // #662: only a campaign AdBrain launched can be reviewed and resumed here.
-              const resumeElsewhere = c.status === "paused" && !!c.meta_campaign_id && !reviewableCampaign(c);
+              // #1903: paused in Meta Ads Manager is resumed there too.
+              const resumeElsewhere = (c.status === "paused" && !!c.meta_campaign_id && !reviewableCampaign(c)) || pausedInMeta(c);
+              const budgetChange = budgetChangedInMeta(c);
+              const budgetEditable = !!c.meta_campaign_id && (c.status === "paused" || (c.status === "active" && budgetFormStart(c)?.capped)) && !!reviewableCampaign(c) && !!budgetFormStart(c) && !waitingSwitch[c.id];
               return (
                 <article key={c.id} aria-labelledby={`campaign-${c.id}-name`} className="flex flex-col gap-3 border-b border-slate-200 py-5">
                     <div className="flex flex-wrap items-center justify-between gap-2">
@@ -2245,27 +2434,28 @@ function BusinessCampaigns({
                         <h3 id={`campaign-${c.id}-name`} className="min-w-0 wrap-break-word font-semibold text-slate-900">
                           {c.name ?? `${business.name} — ${c.objective}`}
                         </h3>
-                        <Status tone={goneInMeta(c) ? "neutral" : CAMPAIGN_STATUS[c.status]?.tone ?? "neutral"} className="text-sm text-slate-600">
-                          {goneInMeta(c) ?? (c.status === "active" ? OWNER_WORDS.running : CAMPAIGN_STATUS[c.status]?.label ?? c.status)}
+                        <Status tone={campaignStatus(c).tone} className="text-sm text-slate-600">
+                          {campaignStatus(c).label}
                         </Status>
-                        {reviews[c.id]?.length ? <AdReviewBadge reviews={reviews[c.id]} /> : null}
-                        {attention ? <Badge className="bg-red-50 text-red-800">Needs attention</Badge> : null}
+                        {reviews[c.id]?.length ? <AdReviewBadge reviews={reviews[c.id]} words={verdictWords} /> : null}
+                        {attention ? <Badge className="bg-red-50 text-red-800">{tc("card.attention")}</Badge> : null}
                         {madeOutsideAdBrain(c) ? <Badge className="bg-slate-100 text-slate-700">{OWNER_WORDS.madeOutside}</Badge> : null}
                       </div>
                       <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto sm:gap-3">
                         <span className="basis-full text-sm text-slate-500 sm:basis-auto">
-                          {c.daily_budget != null
-                            ? formatPerDay(c.daily_budget)
-                            : c.objective}
+                          {c.daily_budget != null ? tc("card.perDay", { money: formatMoney(c.daily_budget) }) : c.objective}
                         </span>
+                        {/* #1588: the card says it has no numbers yet, under its budget, not a line after the list. */}
+                        {!r && c.meta_campaign_id && !folded && <span className="basis-full text-sm text-slate-500">{tc("card.noResults")}</span>}
                         {resumeElsewhere ? (
-                          <a href={adsLink(c)} target="_blank" rel="noopener noreferrer" title={RESUME_IN_ADS_MANAGER}
+                          <a href={adsLink(c)} target="_blank" rel="noopener noreferrer" title={pausedInMeta(c) ? undefined : tc("card.resumeOnlyOwn")}
                             className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 text-sm font-medium text-slate-900 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
                             <ExternalLink className="h-4 w-4" aria-hidden="true" />
-                            Resume in Ads Manager
+                            {tc("card.resumeInAdsManager")}
                           </a>
                         ) : c.meta_campaign_id &&
-                          (c.status === "active" || c.status === "paused") && (
+                          // #1560: while a new audience waits, the strip's Use/Cancel are the way on; Pause always stays.
+                          (c.status === "active" || (c.status === "paused" && !waitingSwitch[c.id])) && (
                             <Button
                               variant="outline"
                               data-product-event={c.status === "active" ? "campaign.pause" : "campaign.review"}
@@ -2284,13 +2474,14 @@ function BusinessCampaigns({
                               ) : (
                                 <Play className="h-4 w-4" />
                               )}
-                              {c.status === "active" ? "Pause" : "Resume"}
+                              {tc(c.status === "active" ? "card.pause" : "card.resume")}
                             </Button>
                           )}
-                        <Button
+                        {/* #1600 (Designer #1633): nothing to fetch for a campaign deleted in Meta; ⋯ stays. */}
+                        {goneInMeta(c) !== "Deleted in Meta" && <Button
                           variant="outline"
                           onClick={() => refresh(c.id)}
-                          aria-label="Refresh results"
+                          aria-label={tc("card.refresh")}
                           disabled={refreshingId === c.id || updatingIds.includes(c.id)}
                         >
                           {refreshingId === c.id || updatingIds.includes(c.id) ? (
@@ -2298,12 +2489,12 @@ function BusinessCampaigns({
                           ) : (
                             <RefreshCw className="h-4 w-4" />
                           )}
-                          {/* #417: a real space, so the visible text reads "Refresh results" like the label. */}
-                          Refresh{" "}<span className="-ml-1 hidden sm:inline">results</span>
-                        </Button>
+                          {/* #417: the visible text is the label, or its short form on a phone. */}
+                          <span className="sm:hidden">{tc("card.refreshShort")}</span><span className="hidden sm:inline">{tc("card.refresh")}</span>
+                        </Button>}
                         <DropdownMenu>
                           <DropdownMenuTrigger
-                            aria-label={`More actions for ${c.name ?? "this campaign"}`}
+                            aria-label={tc("card.moreActions", { name: c.name ?? tc("card.thisCampaign") })}
                             disabled={deletingId === c.id}
                             className="inline-flex size-11 items-center justify-center rounded-md text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-50"
                           >
@@ -2313,45 +2504,54 @@ function BusinessCampaigns({
                             {r && (
                               <DropdownMenuItem asChild>
                                 <a href={`https://wa.me/?text=${encodeURIComponent(campaignWhatsAppSummary(c, r))}`} target="_blank" rel="noopener noreferrer" data-product-event="campaign.share_results">
-                                  <MessageCircle className="h-4 w-4" aria-hidden="true" /> Share results on WhatsApp
+                                  <MessageCircle className="h-4 w-4" aria-hidden="true" /> {tc("card.share")}
                                 </a>
                               </DropdownMenuItem>
                             )}
                             {c.meta_campaign_id && (
                               <DropdownMenuItem asChild>
                                 <a href={adsLink(c)} target="_blank" rel="noopener noreferrer">
-                                  <ExternalLink className="h-4 w-4" aria-hidden="true" /> Open in Ads Manager
+                                  <ExternalLink className="h-4 w-4" aria-hidden="true" /> {tc("card.openAdsManager")}
                                 </a>
                               </DropdownMenuItem>
                             )}
                             {c.meta_campaign_id && (c.status === "paused" || c.status === "active") && reviewableCampaign(c) && !waitingSwitch[c.id] && (
                               <DropdownMenuItem data-product-event="campaign.edit_audience" onSelect={() => setAudienceEdit(c)}>
-                                <Users className="h-4 w-4" aria-hidden="true" /> Edit audience
+                                <Users className="h-4 w-4" aria-hidden="true" /> {tc("card.editAudience")}
                               </DropdownMenuItem>
                             )}
-                            {c.meta_campaign_id && (c.status === "paused" || (c.status === "active" && budgetFormStart(c)?.capped)) && reviewableCampaign(c) && budgetFormStart(c) && !waitingSwitch[c.id] && (
+                            {budgetEditable && (
                               <DropdownMenuItem data-product-event="campaign.edit_budget" onSelect={() => setBudgetEdit({ campaign: c, start: budgetFormStart(c)! })}>
-                                <IndianRupee className="h-4 w-4" aria-hidden="true" /> Edit budget
+                                <IndianRupee className="h-4 w-4" aria-hidden="true" /> {tc("card.editBudget")}
                               </DropdownMenuItem>
                             )}
                             {c.meta_campaign_id && (c.status === "paused" || c.status === "active") && reviewableCampaign(c) && (c.meta_ad_ids?.length ?? 0) > 0 && !waitingSwitch[c.id] && (
                               <DropdownMenuItem data-product-event="campaign.edit_ad" onSelect={() => setAdEdit(c)}>
-                                <Pencil className="h-4 w-4" aria-hidden="true" /> Edit ad words
+                                <Pencil className="h-4 w-4" aria-hidden="true" /> {tc("card.editAdWords")}
                               </DropdownMenuItem>
                             )}
                             {c.meta_campaign_id && <DropdownMenuSeparator />}
+                            {c.status !== "draft" && <CampaignEnquiryDeleteItem campaign={c} askConfirm={askConfirm} onError={setCardError} onNotice={setCardNotice} />}
                             <DropdownMenuItem variant="danger" onSelect={() => void deleteCampaign(c)}>
-                              <Trash2 className="h-4 w-4" aria-hidden="true" /> Delete campaign
+                              <Trash2 className="h-4 w-4" aria-hidden="true" /> {tc("card.delete")}
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </div>
                     </div>
                     {attention ? <p className="text-sm font-medium text-red-800">{attention}</p> : null}
-                    {cardError?.id === c.id ? <p role="alert" className="text-sm font-medium text-red-800">
-                      {cardError.message}
-                      {cardError.adsManager ? <> <a href={adsLink(c)} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center gap-1 underline underline-offset-4"><ExternalLink className="h-4 w-4" aria-hidden="true" />Open in Ads Manager</a></> : null}
-                    </p> : null}
+                    {/* #1600 (CPO #1601): said only once Meta reports it deleted; results up to then stay below. */}
+                    {goneInMeta(c) === "Deleted in Meta" ? <p className="text-sm text-slate-700">{GONE_LINES.deleted}</p> : null}
+                    {/* #1903 (CPO #1601, Designer #1633): changes made in Meta Ads Manager; amber only when the budget went up. */}
+                    {pausedInMeta(c) ? <p className="text-sm text-slate-700">{OUTSIDE_LINES.paused}</p> : null}
+                    {budgetChange ? (
+                      <div className={cn("flex flex-wrap items-center gap-x-4 gap-y-2 border-l-2 pl-3", budgetChange.raised ? "border-warning" : "border-slate-300")}>
+                        <p className="text-sm text-slate-700">{OUTSIDE_LINES.budget(formatMoney(budgetChange.nowRupees), formatMoney(budgetChange.wasRupees))}</p>
+                        {budgetEditable && <Button variant="outline" data-product-event="campaign.edit_budget" onClick={() => setBudgetEdit({ campaign: c, start: budgetFormStart(c)! })}>Change budget</Button>}
+                      </div>
+                    ) : null}
+                    {endTimeChangedInMeta(c) ? <p className="border-l-2 border-slate-300 pl-3 text-sm text-slate-700">{OUTSIDE_LINES.endTime(formatDay(endTimeChangedInMeta(c)!.now))}</p> : null}
+                    <CampaignEnquiryFeedback error={cardError?.id === c.id ? cardError : undefined} adsManagerUrl={cardError?.id === c.id && cardError.adsManager ? adsLink(c) : undefined} adsManagerLabel={tc("card.openAdsManager")} />
                     {waitingSwitch[c.id] && (c.status === "active" || c.status === "paused") ? (
                       <AudienceSwitchStrip campaignId={c.id} operationId={waitingSwitch[c.id]} running={c.status === "active"} lastError={waitingError[c.id] ?? null}
                         onDone={(message) => {
@@ -2360,36 +2560,38 @@ function BusinessCampaigns({
                           void refresh(c.id);
                         }} />
                     ) : null}
-                    {cardNotice?.id === c.id && cardError?.id !== c.id ? <p role="status" className="text-sm text-slate-600">{cardNotice.message}</p> : null}
+                    <CampaignEnquiryFeedback notice={cardNotice?.id === c.id && cardError?.id !== c.id ? cardNotice : undefined} />
 
+                    {/* CPO (#1255): a weak ad outranks 1-of-N rejected (it costs money; a rejected ad doesn't). */}
+                    {reviews[c.id]?.length && !(weakAdCards.includes(c.id) && reviews[c.id].some((review) => review.state !== "rejected")) ? (
+                      <RejectedAds reviews={reviews[c.id]} spend={r?.spend ?? 0} running={c.status === "active"} vertical={business.vertical} adsManagerUrl={c.meta_campaign_id ? adsLink(c) : undefined} ownDetails={!r} words={verdictWords}
+                        onEditAd={c.meta_campaign_id && (c.status === "paused" || c.status === "active") && reviewableCampaign(c) && (c.meta_ad_ids?.length ?? 0) > 0 && !waitingSwitch[c.id]
+                          ? (hint) => { setAdEditHint(hint); setAdEdit(c); } : undefined} />
+                    ) : null}
                     {r && (
-                      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                        <Stat label="Impressions" value={formatNumber(r.impressions)} />
-                        <Stat label="Clicks" value={formatNumber(r.clicks)} />
-                        <Stat label={outcome === "whatsapp" ? "WhatsApp chats" : outcome === "instant_form" ? "Leads" : "Results unavailable"} value={outcome === "whatsapp" ? (r.conversations != null ? formatNumber(r.conversations) : "—") : outcome === "instant_form" ? formatNumber(r.leads) : "—"} />
-                        <Stat
-                          label={outcome === "whatsapp" ? "Cost / chat" : outcome === "instant_form" ? "Cost / lead" : "Cost / result"}
-                          value={outcome === "whatsapp" ? (r.conversations != null && r.cost_per_conversation != null ? formatMoney(r.cost_per_conversation) : "—") : outcome === "instant_form" && r.cpl != null ? formatMoney(r.cpl) : "—"}
-                        />
-                      </div>
+                      // #1274 (#1255): one sentence, one number, one action; the figures stay under Details.
+                      <CardResults campaign={c} result={r} outcome={outcome} comparison={lastCampaignComparison(c, campaigns, results)}
+                        waiting={waitingReplies[c.id] ?? 0} onRunAgain={() => void runAgain(c)} runAgainBusy={rerunBusy === c.id}
+                        metaMessage={reviews[c.id] ? rejectedMetaMessage(reviews[c.id], business.vertical) : null}
+                        onEditAd={c.meta_campaign_id && (c.status === "paused" || c.status === "active") && reviewableCampaign(c) && (c.meta_ad_ids?.length ?? 0) > 0 && !waitingSwitch[c.id]
+                          ? () => { setAdEditHint(tc("card.editAdHint")); setAdEdit(c); } : undefined}
+                        adsManagerUrl={c.meta_campaign_id ? adsLink(c) : undefined} perAd={adResults} onWeakAd={weakAdShown} words={verdictWords} />
                     )}
                     {r && mounted && (
                       // #1003: always say how old the numbers are.
-                      <p className="text-xs text-slate-500">{updatingIds.includes(c.id) ? "Updating results…" : `Updated ${timeAgo(new Date(r.fetched_at))}`}</p>
+                      <p className="text-xs text-slate-500">{updatingIds.includes(c.id) ? tc("card.updating") : tc("card.updated", { age: ageText(verdictTranslator(verdictWords), r.fetched_at) })}</p>
                     )}
-                    {adResults && r && c.meta_campaign_id && <AdResults campaignId={c.id} whatsapp={outcome === "whatsapp"} onRunAgain={() => void runAgain(c)} runAgainBusy={rerunBusy === c.id} runAgainError={rerunError?.id === c.id ? rerunError.message : null} />}
-                    {r && outcome === "whatsapp" && r.whatsapp_opens != null && r.conversations != null && (
-                      // #493: people reach WhatsApp and leave; show the drop-off plainly.
-                      <p className="text-sm text-slate-700">
-                        {formatNumber(r.whatsapp_opens)} opened WhatsApp, {formatNumber(r.conversations)} messaged you
-                      </p>
-                    )}
-                    {r && (r.customers ?? 0) > 0 && (
-                      // #798: what a real customer cost, beside the per-enquiry figures.
-                      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4" aria-label="Customers">
-                        <Stat label={r.customers === 1 ? "Customer" : "Customers"} value={formatNumber(r.customers ?? 0)} />
-                        <Stat label="Per customer" value={(() => { const cost = costPerCustomer(r.spend, r.customers ?? 0); return cost === null ? "—" : formatMoney(cost); })()} />
-                        <p className="col-span-2 -mt-2 text-xs text-slate-500 sm:col-span-4">From customers you marked in Enquiries.</p>
+                    {r && mounted && c.meta_campaign_id && throttleActive(metaWaitUntil) && <p className="text-xs text-slate-600">{resultsWaitLine(Date.now() - new Date(r.fetched_at).getTime())}</p>}
+                    {adResults && r && c.meta_campaign_id && <AdResults campaignId={c.id} whatsapp={outcome === "whatsapp"} words={verdictWords} offerPause={!weakAdCards.includes(c.id)} onRunAgain={() => void runAgain(c)} runAgainBusy={rerunBusy === c.id} runAgainError={rerunError?.id === c.id ? rerunError.message : null} />}
+                    {r && ((r.booked ?? 0) > 0 || (r.customers ?? 0) > 0) && (
+                      // #798: what a real customer cost, beside the per-enquiry figures. #1994: bookings, the step before, come first.
+                      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4" aria-label={tc("card.customersLabel")}>
+                        {(r.booked ?? 0) > 0 && <Stat label={bookedLabel(business.vertical, r.booked ?? 0).replace(/^./, (letter) => letter.toUpperCase())} value={formatNumber(r.booked ?? 0)} />}
+                        {(r.customers ?? 0) > 0 && <>
+                          <Stat label={tc("card.customers", { n: r.customers ?? 0 })} value={formatNumber(r.customers ?? 0)} />
+                          <Stat label={tc("card.perCustomer")} value={(() => { const cost = costPerCustomer(r.spend, r.customers ?? 0); return cost === null ? "—" : formatMoney(cost); })()} />
+                        </>}
+                        <p className="col-span-2 -mt-2 text-xs text-slate-500 sm:col-span-4">{tc("card.fromMarked")}</p>
                       </div>
                     )}
                     {/* #847: a stopped card with no chats, enquiries or customers has nothing to log. A running one always can:
@@ -2397,13 +2599,12 @@ function BusinessCampaigns({
                     {r && outcome === "whatsapp" && (c.status === "active" || r.conversations !== 0 || (r.real_enquiries ?? 0) > 0 || (r.customers ?? 0) > 0) && (
                       <WhatsAppEnquiries campaignId={c.id} spend={r.spend} enquiries={r.real_enquiries ?? 0}
                         onLogged={(count) => setResults((p) => (p[c.id] ? { ...p, [c.id]: { ...p[c.id], real_enquiries: count } } : p))}
-                        onCustomers={(customers, count) => setResults((p) => (p[c.id] ? { ...p, [c.id]: { ...p[c.id], customers, real_enquiries: count } } : p))} />
+                        onCustomers={(customers, count, booked) => setResults((p) => (p[c.id] ? { ...p, [c.id]: { ...p[c.id], customers, real_enquiries: count, ...(booked === undefined ? {} : { booked }) } } : p))} />
                     )}
-                    {r && outcome === "instant_form" && !(r.spend > 0) && (
+                    {r && outcome === "instant_form" && !(r.spend > 0) && !pausedInMeta(c) && (
                       <p className="text-sm text-slate-600">
-                        {c.status === "paused" ? `Paused — nothing has spent.${resumeElsewhere ? "" : " Resume when you're ready."}`
-                          : c.status === "active" ? "Waiting for Meta to start delivery."
-                          : "Nothing has spent yet."}
+                        {tc(c.status === "paused" ? (resumeElsewhere || waitingSwitch[c.id] ? "card.paused" : "card.pausedResume")
+                          : c.status === "active" ? "card.waitingDelivery" : "card.nothingSpent")}
                       </p>
                     )}
                     {r && outcome === "instant_form" && r.spend > 0 &&
@@ -2438,84 +2639,63 @@ function BusinessCampaigns({
                     )}
                 </article>
               );
+            });
+            return folded // #2150: Saved drafts (actionable) come before the Deleted fold (history).
+              ? list.length > 0 && [!showComposer && savedDraftsBlock && <div key="drafts" className="-mt-px">{savedDraftsBlock}</div>, <details key="gone" className="group border-b border-slate-200"><summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 text-sm font-medium text-slate-600 [&::-webkit-details-marker]:hidden"><ChevronRight className="h-4 w-4 text-slate-500 transition-transform group-open:rotate-90" aria-hidden="true" />{tc("list.deleted", { n: list.length })}</summary>{cards}</details>]
+              : cards;
             })}
-            {/* #847: said once for the list, after it, so it never pushes the cards down when results arrive (CLS). */}
-            {(() => { const waiting = visibleCampaigns.filter((item) => !results[item.id]).length; return waiting ? <p className="pt-4 text-sm text-slate-500">No results yet for {waiting === visibleCampaigns.length ? (waiting === 1 ? "this campaign" : "these campaigns") : `${waiting} of these campaigns`}. Refresh a campaign to get Meta&apos;s latest numbers.</p> : null; })()}
           </div>
         )}
         {(nextListCursor || listLoading) && <div className="mt-4 flex justify-center">
           <Button variant="outline" disabled={listLoading} onClick={() => void loadCampaignPage(true)}>
             {listLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-            {listLoading ? "Loading campaigns..." : "Load more campaigns"}
+            {tc(listLoading ? "list.loading" : "list.loadMore")}
           </Button>
         </div>}
+        {!showComposer && savedDraftsBlock && goneCampaigns.length === 0 && <div className="-mt-px">{savedDraftsBlock}</div>}
       </div>
     </div>
   );
 }
 
-/** #763: synced from Meta, not launched by AdBrain (no launch result on record). */
-function madeOutsideAdBrain(campaign: Campaign): boolean {
-  const raw = campaign.raw;
-  return !!campaign.meta_campaign_id && !(raw && typeof raw === "object" && "metaResult" in raw);
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <p className="text-lg font-bold text-slate-900">{value}</p>
-      <p className="text-xs text-slate-500">{label}</p>
+/** A launched campaign's numbers: #1255's verdict for WhatsApp and form campaigns, with the figures under Details. */
+function CardResults({ campaign, result: r, outcome, comparison, waiting, onRunAgain, runAgainBusy, adsManagerUrl, onEditAd, perAd, onWeakAd, metaMessage = null, words }: {
+  campaign: Campaign; result: CampaignResult; outcome: ReturnType<typeof campaignDestination>; comparison: Comparison | null;
+  /** #1841: Meta's own words for a rejected ad, in the card's one Details. */
+  metaMessage?: string | null;
+  waiting: number; onRunAgain: () => void; runAgainBusy: boolean; adsManagerUrl?: string; onEditAd?: () => void;
+  /** #783's per-ad rows are on; a running campaign with enough results reads them for the weak-ad state. */
+  perAd: boolean; onWeakAd: (campaignId: string, shown: boolean) => void; words?: Words<"verdict">;
+}) {
+  const [now] = useState(() => Date.now());
+  const enough = (outcome === "whatsapp" ? r.conversations ?? 0 : r.leads) >= BEST_AD_MIN_RESULTS;
+  const [weakAd, clearWeakAd] = useWeakAd(campaign.id, perAd && campaign.status === "active" && Boolean(campaign.meta_campaign_id) && enough);
+  const t = verdictTranslator(words);
+  const figures = <>
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <Stat label={t("figures.impressions")} value={formatNumber(r.impressions)} />
+      <Stat label={t("figures.clicks")} value={formatNumber(r.clicks)} />
+      <Stat label={t(outcome === "whatsapp" ? "figures.chats" : outcome === "instant_form" ? "figures.leads" : "figures.unavailable")} value={outcome === "whatsapp" ? (r.conversations != null ? formatNumber(r.conversations) : "—") : outcome === "instant_form" ? formatNumber(r.leads) : "—"} />
+      <Stat
+        label={t(outcome === "whatsapp" ? "figures.costChat" : outcome === "instant_form" ? "figures.costLead" : "figures.costResult")}
+        value={outcome === "whatsapp" ? (r.conversations != null && r.cost_per_conversation != null ? formatMoney(r.cost_per_conversation) : "—") : outcome === "instant_form" && r.cpl != null ? formatMoney(r.cpl) : "—"}
+      />
     </div>
-  );
-}
-
-const REVIEW_LABELS: Record<AdReview["state"], { label: string; style: string }> = {
-  rejected: { label: "Rejected by Meta", style: "bg-red-50 text-red-700" },
-  issues: { label: "Meta flagged issues", style: "bg-red-50 text-red-700" },
-  in_review: { label: "In Meta review", style: "bg-slate-100 text-slate-700" },
-  unknown: { label: "Review status unknown", style: "bg-slate-100 text-slate-600" },
-  approved: { label: "Approved by Meta", style: "bg-emerald-50 text-emerald-700" },
-};
-
-/** The least-ready ad decides the badge; rejection reasons are shown as Meta wrote them. */
-function AdReviewBadge({ reviews }: { reviews: AdReview[] }) {
-  const order: AdReview["state"][] = ["rejected", "issues", "in_review", "unknown", "approved"];
-  const state = order.find(candidate => reviews.some(review => review.state === candidate))!;
-  const reasons = [...new Set(reviews.filter(review => review.state === state).flatMap(review => review.reasons))];
-  const count = reviews.filter(review => review.state === state).length;
-  return (
-    <span className="inline-flex min-w-0 flex-wrap items-center gap-2">
-      <Badge className={REVIEW_LABELS[state].style}>
-        {REVIEW_LABELS[state].label}{reviews.length > 1 ? ` (${count} of ${reviews.length} ads)` : ""}
-      </Badge>
-      {reasons.length > 0 && <span className="text-xs text-slate-600">{reasons.join(" ")}</span>}
-    </span>
-  );
-}
-
-const HOW_IT_WORKS_STEPS = [
-  "We create the campaign paused — nothing spends yet.",
-  "Open it in Meta Ads Manager to review the ads and audience.",
-  "Flip it on when you're happy; leads start coming in.",
-  "Come back and hit “Refresh results” to see leads and cost per lead in plain English.",
-];
-
-function HowItWorks() {
-  return (
-    <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-        What happens next
+    {outcome === "whatsapp" && r.whatsapp_opens != null && r.conversations != null && (
+      // #493: people reach WhatsApp and leave; show the drop-off plainly.
+      <p className="text-sm text-slate-700">
+        {t("figures.opens", { opens: formatNumber(r.whatsapp_opens), conversations: formatNumber(r.conversations) })}
       </p>
-      <ol className="mt-2 flex flex-col gap-1.5">
-        {HOW_IT_WORKS_STEPS.map((step, i) => (
-          <li key={i} className="flex gap-2 text-sm text-slate-600">
-            <span className="flex h-5 w-5 flex-none items-center justify-center rounded-full bg-blue-100 text-xs font-bold text-blue-700">
-              {i + 1}
-            </span>
-            <span>{step}</span>
-          </li>
-        ))}
-      </ol>
-    </div>
-  );
+    )}
+    {metaMessage && <p className="wrap-break-word text-sm text-slate-700">{t("figures.metaMessage", { message: metaMessage })}</p>}
+  </>;
+  const input = cardVerdictInput(campaign, r, { now, waiting, weakAd, comparison });
+  const judged = input ? verdict(input, words) : null;
+  const weakShown = judged?.state === "weak_ad";
+  useEffect(() => { onWeakAd(campaign.id, weakShown); }, [campaign.id, weakShown, onWeakAd]);
+  // A paused card that never showed keeps its one "nothing has spent" line (#173), with no verdict beside it.
+  if (!input || !judged || (campaign.status !== "active" && campaign.status !== "completed" && !r.impressions)) return figures;
+  return <CampaignVerdict verdict={judged} words={words} whatsapp={input.destination === "whatsapp"} results={input.results} spend={input.spend}
+    details={figures} onRunAgain={onRunAgain} runAgainBusy={runAgainBusy} adsManagerUrl={adsManagerUrl} onEditAd={onEditAd}
+    pauseOffer={weakAd && <PauseOffer campaignId={campaign.id} suggestion={weakAd} whatsapp={input.destination === "whatsapp"} onKeep={clearWeakAd} words={words} />} />;
 }

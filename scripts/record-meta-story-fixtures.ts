@@ -9,12 +9,13 @@
  *
  *   WHATSAPP_NUMBER=+91XXXXXXXXXX npx tsx --env-file=<.env.local> scripts/record-meta-story-fixtures.ts <whatsappAdSetId> <feedHash> <storyHash>
  */
+import "./lib/meta-write-gate";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { whatsappGreeting } from "@/lib/campaign/whatsapp-greeting";
 import { placementCreativeSpec } from "@/lib/meta/client";
 
-const GRAPH = "https://graph.facebook.com/v21.0/";
+const GRAPH = "https://graph.facebook.com/v26.0/";
 const VALIDATE = JSON.stringify(["validate_only"]);
 const [adSetId, feedHash, storyHash] = process.argv.slice(2);
 if (!adSetId || !feedHash || !storyHash) throw new Error("Pass a WhatsApp ad set id and the feed and story image hashes.");

@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   requireScheduledBusiness: vi.fn(),
   withMetaConnection: vi.fn(),
   updateCampaignStatus: vi.fn(),
+  pauseCampaignTree: vi.fn(),
   getCampaignInsights: vi.fn(),
   getCustomerBalance: vi.fn(),
   confirmCustomerCampaign: vi.fn(),
@@ -16,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   settleCustomerCosts: vi.fn(),
   listSettlingBusinesses: vi.fn(),
   sweepManaged: vi.fn(),
+  saveOutsideChanges: vi.fn(),
   failedTable: "",
   failedPageAfter: "",
   updateError: null as { message: string } | null,
@@ -49,6 +51,7 @@ vi.mock("@/lib/payments/operator-funding", () => ({
   fundingMode: async (id: string) => (await mocks.isOperatorFunded(id)) ? "operator" : mocks.ownAccount ? "own" : "managed",
 }));
 vi.mock("@/lib/managed/spend-cap-wiring", () => ({ sweepManagedSpendCaps: mocks.sweepManaged }));
+vi.mock("@/lib/campaign/outside-changes", () => ({ saveOutsideChanges: mocks.saveOutsideChanges }));
 vi.mock("@/lib/meta/managed-account", async (original) => ({ ...await original<object>(), getManagedAccount: async () => null }));
 vi.mock("@/lib/meta/connection-access", () => ({
   ConnectionAccessError: class ConnectionAccessError extends Error {},
@@ -64,13 +67,16 @@ function configureAdmin(campaigns: Record<string, unknown>[], limits: Record<str
     let orderKey = "id";
     let pageSize = 100;
     const filters = new Map<string, unknown>();
+    const lists = new Map<string, unknown[]>();
     const query = {
       eq: (key: string, value: unknown) => { filters.set(key, value); return query; },
+      in: (key: string, values: unknown[]) => { lists.set(key, values); return query; },
       gt: (key: string, value: string | number) => { if (key === orderKey) after = String(value); return query; },
       order: (key: string) => { orderKey = key; return query; },
       limit: (value: number) => { pageSize = value; return query; },
       then: (resolve: (value: unknown) => unknown) => resolve({
         data: rows.filter(row => [...filters].every(([key, value]) => row[key] === value)
+          && [...lists].every(([key, values]) => values.includes(row[key]))
           && (after === null || String(row[orderKey]) > after)).slice(0, pageSize),
         error: mocks.failedTable === table || (mocks.failedPageAfter && after === mocks.failedPageAfter)
           ? { message: "private database failure" } : null,
@@ -118,7 +124,7 @@ beforeEach(() => {
   start.setUTCDate(start.getUTCDate() - (start.getUTCDay() + 6) % 7);
   mocks.getCampaignInsights.mockResolvedValue({ spend: 7000, periodStart: start.toISOString().slice(0, 10), periodEnd });
   mocks.withMetaConnection.mockImplementation(async (_context, _options, execute) =>
-    execute({ updateCampaignStatus: mocks.updateCampaignStatus, getCampaignInsights: mocks.getCampaignInsights, readLifetimeSpendPaise: mocks.readLifetimeSpendPaise, readCampaignStopped: mocks.readCampaignStopped }, {
+    execute({ updateCampaignStatus: mocks.updateCampaignStatus, pauseCampaignTree: mocks.pauseCampaignTree, getCampaignInsights: mocks.getCampaignInsights, readLifetimeSpendPaise: mocks.readLifetimeSpendPaise, readCampaignStopped: mocks.readCampaignStopped }, {
       generation: 4,
       selected: {
         metaBusinessId: null,
@@ -355,6 +361,75 @@ describe("scheduled spend binding boundary", () => {
     const response = await GET(new Request("http://localhost/api/cron/enforce-spend", { headers: { authorization: "Bearer cron-secret" } }));
     expect(response.status).toBe(200);
     expect(mocks.getCustomerBalance).not.toHaveBeenCalled();
+    expect(mocks.updateCampaignStatus).not.toHaveBeenCalled();
+  });
+
+  // #2281: the Solaride arm (own account, no reservation) stayed 'active' after its end time.
+  const endedCap = { cap: { adSetId: "capped-1", endTime: new Date(Date.now() - 30 * 60_000).toISOString(), days: 2 } };
+  it.each([["own-account", true], ["managed", false]])("stops an ended capped run with no reservation (%s, #2281)", async (_mode, own) => {
+    configureAdmin([{ ...boundCampaign, raw: endedCap }], [{ business_id: "business-1", weekly_cap_rupees: null, alert_pct: 80, auto_pause: false }]);
+    mocks.ownAccount = own;
+    const { GET } = await import("@/app/api/cron/enforce-spend/route");
+    const response = await GET(new Request("http://localhost/api/cron/enforce-spend", { headers: { authorization: "Bearer cron-secret" } }));
+    expect(response.status).toBe(200);
+    expect(mocks.updateCampaignStatus).toHaveBeenCalledWith("meta-campaign-1", "PAUSED");
+    expect(mocks.confirmCustomerCampaign).not.toHaveBeenCalled();
+    expect((await response.json()).swept).toEqual([{ businessId: "business-1", paused: ["campaign-1"] }]);
+  });
+
+  // #2290: the owner moved the end date in Ads Manager after the last refresh; Meta's time decides, not the stored one.
+  const metaState = (endTime: string) => ({ status: "ACTIVE", adSets: [{ id: "capped-1", status: "ACTIVE", lifetimeBudget: "90000", endTime }] });
+  it("keeps running an ended capped run whose end date Meta now holds later, and stores Meta's time (#2290)", async () => {
+    configureAdmin([{ ...boundCampaign, raw: endedCap }], [{ business_id: "business-1", weekly_cap_rupees: null, alert_pct: 80, auto_pause: false }]);
+    mocks.ownAccount = true;
+    const state = metaState(new Date(Date.now() + 86_400_000).toISOString().replace(/\.\d{3}Z$/, "+0000"));
+    mocks.getCampaignInsights.mockResolvedValue({ spend: 0, metaState: state });
+    mocks.saveOutsideChanges.mockResolvedValue({ changed: true, raised: false });
+    const { GET } = await import("@/app/api/cron/enforce-spend/route");
+    const response = await GET(new Request("http://localhost/api/cron/enforce-spend", { headers: { authorization: "Bearer cron-secret" } }));
+    expect(response.status).toBe(200);
+    expect(mocks.getCampaignInsights).toHaveBeenCalledWith("meta-campaign-1");
+    expect(mocks.updateCampaignStatus).not.toHaveBeenCalled();
+    expect(mocks.saveOutsideChanges).toHaveBeenCalledWith(expect.objectContaining({ businessId: "business-1" }), expect.objectContaining({ id: "campaign-1" }), state);
+    expect((await response.json()).swept).toEqual([]);
+  });
+
+  it.each([
+    ["Meta holds the same past end time", () => ({ spend: 0, metaState: metaState(endedCap.cap.endTime) })],
+    ["Meta's answer has no end time", () => ({ spend: 0, metaState: { status: "ACTIVE", adSets: [] } })],
+    ["Meta can't be read", () => Promise.reject(new Error("Meta unavailable"))],
+  ])("still stops an ended capped run when %s (#2290)", async (_case, insights) => {
+    configureAdmin([{ ...boundCampaign, raw: endedCap }], [{ business_id: "business-1", weekly_cap_rupees: null, alert_pct: 80, auto_pause: false }]);
+    mocks.ownAccount = true;
+    mocks.getCampaignInsights.mockImplementation(async () => insights());
+    const { GET } = await import("@/app/api/cron/enforce-spend/route");
+    const response = await GET(new Request("http://localhost/api/cron/enforce-spend", { headers: { authorization: "Bearer cron-secret" } }));
+    expect(response.status).toBe(200);
+    expect(mocks.updateCampaignStatus).toHaveBeenCalledWith("meta-campaign-1", "PAUSED");
+    expect(mocks.saveOutsideChanges).not.toHaveBeenCalled();
+  });
+
+  // #2301: an ended run stops whole (campaign, ad sets, ads), so its card can turn it on capped again.
+  it("pauses an ended capped run's whole tree (#2301)", async () => {
+    const raw = { ...endedCap, source: "campaign_operation", metaResult: { campaignId: "meta-campaign-1", adSetIds: ["adset-1", "capped-1"], adIds: ["ad-1", "ad-2"] } };
+    configureAdmin([{ ...boundCampaign, meta_adset_id: "adset-1", meta_ad_ids: ["ad-1", "ad-2"], raw }], [{ business_id: "business-1", weekly_cap_rupees: null, alert_pct: 80, auto_pause: false }]);
+    mocks.ownAccount = true;
+    mocks.pauseCampaignTree.mockResolvedValue({ confirmed: true, objects: [{ id: "meta-campaign-1", level: "campaign", status: "PAUSED", effectiveStatus: "PAUSED" }] });
+    const { GET } = await import("@/app/api/cron/enforce-spend/route");
+    const response = await GET(new Request("http://localhost/api/cron/enforce-spend", { headers: { authorization: `Bearer ${"cron-secret"}` } }));
+    expect(response.status).toBe(200);
+    expect(mocks.pauseCampaignTree).toHaveBeenCalledWith("meta-campaign-1", { adSetIds: ["adset-1", "capped-1"], adIds: ["ad-1", "ad-2"] });
+    expect(mocks.updateCampaignStatus).not.toHaveBeenCalled();
+    expect((await response.json()).swept).toEqual([{ businessId: "business-1", paused: ["campaign-1"] }]);
+  });
+
+  it("leaves a capped run running before its end time (#2281)", async () => {
+    const future = { cap: { adSetId: "capped-1", endTime: new Date(Date.now() + 3_600_000).toISOString(), days: 2 } };
+    configureAdmin([{ ...boundCampaign, raw: future }], [{ business_id: "business-1", weekly_cap_rupees: null, alert_pct: 80, auto_pause: false }]);
+    mocks.ownAccount = true;
+    const { GET } = await import("@/app/api/cron/enforce-spend/route");
+    const response = await GET(new Request("http://localhost/api/cron/enforce-spend", { headers: { authorization: "Bearer cron-secret" } }));
+    expect(response.status).toBe(200);
     expect(mocks.updateCampaignStatus).not.toHaveBeenCalled();
   });
 

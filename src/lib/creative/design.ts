@@ -1,6 +1,7 @@
 import type { AdAngle, BrandContext, GeneratedCopy } from "@/lib/templates/ads";
 import { fontFamilyFor } from "@/lib/brand/fonts";
 import { parsePhone } from "@/lib/brand/countries";
+import { whatsappLanguageFor } from "@/lib/campaign/whatsapp-greeting";
 import type { CreativeConcept } from "./concept";
 
 /**
@@ -12,6 +13,7 @@ import type { CreativeConcept } from "./concept";
  * testable; the actual rasterisation lives in `render.tsx`.
  */
 
+import type { PhotoFit } from "@/lib/creative/fit-photo";
 export type AdFormat = "portrait" | "square" | "story" | "landscape";
 
 /**
@@ -27,6 +29,8 @@ export interface AdDesignSpec {
   height: number;
   /** The AI-generated photo composited underneath the design (null = gradient). */
   backgroundUrl: string | null;
+  /** #1904: how the background photo meets the frame; a saliency crop unless set (owner photos may ask for 'blur'). */
+  backgroundFit?: PhotoFit;
   brandName: string;
   logoUrl: string | null;
   headline: string;
@@ -40,6 +44,8 @@ export interface AdDesignSpec {
    * instead of a number to call, because the campaign opens WhatsApp. Absent on older designs (phone).
    */
   contact?: "phone" | "whatsapp";
+  /** #1177: the WhatsApp ask in the ad's language ("WhatsApp पर मैसेज करें"); absent on older designs (English). */
+  contactLabel?: string | null;
   contactLine: string | null;
   ctaLabel: string;
   /**
@@ -169,6 +175,18 @@ function hostFromUrl(url: string | null | undefined): string | null {
 
 export const WHATSAPP_CONTACT_LABEL = "Message us on WhatsApp";
 
+/** #1177: the contact bar's WhatsApp ask in the ad's own language (stored language, else its script). */
+const WHATSAPP_LABELS = {
+  en: WHATSAPP_CONTACT_LABEL,
+  hi: "WhatsApp पर मैसेज करें",
+  hinglish: "WhatsApp par message karein",
+  pa: "WhatsApp ਤੇ ਮੈਸੇਜ ਕਰੋ",
+} as const;
+
+export function whatsappContactLabel(copy: (string | null | undefined)[], language?: string | null): string {
+  return WHATSAPP_LABELS[whatsappLanguageFor(copy.filter((text): text is string => Boolean(text)), [language])];
+}
+
 /**
  * #1147: a business whose campaigns open WhatsApp gets a WhatsApp contact bar: an India-based one
  * (WhatsApp is the default channel there, #235 and the owner's Oct 27 decision on #680) or one that
@@ -224,6 +242,8 @@ export function buildAdDesign(params: {
   angle?: AdAngle;
   backgroundUrl?: string | null;
   format?: AdFormat;
+  /** The ad's language as Create stores it ("Hindi (Devanagari)"), for the WhatsApp ask (#1177). */
+  language?: string | null;
 }): AdDesignSpec {
   const { brand, copy } = params;
   const format = params.format ?? "portrait";
@@ -244,6 +264,7 @@ export function buildAdDesign(params: {
     benefits: params.concept ? [] : pickBenefits(brand),
     phone: brand.phone?.trim() || null,
     contact: contactChannel(brand),
+    contactLabel: contactChannel(brand) === "whatsapp" ? whatsappContactLabel([headline, copy.primary_text], params.language) : null,
     contactLine: deriveContactLine({ ...brand, phone: null }),
     ctaLabel: (copy.cta ?? "").trim() || "Learn More",
     showCta: false,

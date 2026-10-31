@@ -1,6 +1,6 @@
 import { readStoredCampaignBinding } from "@/lib/campaign/binding";
 import type { ConnectionDTO } from "@/lib/meta/connect-contracts";
-import type { CampaignDeliverySnapshot } from "@/lib/meta/client";
+import type { CampaignDeliverySnapshot, MetaClient } from "@/lib/meta/client";
 import type { Campaign } from "@/lib/types";
 import { z } from "zod";
 
@@ -54,6 +54,32 @@ export function storedCappedAdSetIds(raw: unknown): string[] {
 export function cappedRunEnded(raw: unknown, now = Date.now()): boolean {
   const parsed = z.object({ cap: z.object({ endTime: z.iso.datetime({ offset: true }) }) }).safeParse(raw);
   return parsed.success && Date.parse(parsed.data.cap.endTime) <= now;
+}
+
+/**
+ * #2301: stops a capped run that reached its end time like the card's Pause: the campaign, every ad set
+ * and every ad, so its card then offers "Approve total and activate" (that needs every child PAUSED).
+ * A row without its tree on record pauses the campaign only. False when Meta didn't confirm every child.
+ */
+export async function pauseEndedRun(
+  meta: Pick<MetaClient, "pauseCampaignTree" | "updateCampaignStatus">,
+  campaign: Pick<Campaign, "meta_campaign_id" | "meta_adset_id" | "meta_ad_ids" | "raw">,
+): Promise<boolean> {
+  const children = intendedCampaignChildren(campaign);
+  if (!children) {
+    await meta.updateCampaignStatus(campaign.meta_campaign_id!, "PAUSED");
+    return true;
+  }
+  const result = await meta.pauseCampaignTree(campaign.meta_campaign_id!, { adSetIds: children.adSetIds, adIds: children.adIds });
+  if (!result.objects.some(object => object.level === "campaign" && object.status === "PAUSED")) {
+    throw new Error("Meta did not confirm the campaign pause.");
+  }
+  return result.confirmed;
+}
+
+/** #2281: delivering now. A capped run past its end time isn't, even before the sweep moves its status off 'active'. */
+export function runningNow(campaign: Pick<Campaign, "status" | "raw">, now = Date.now()): boolean {
+  return campaign.status === "active" && !cappedRunEnded(campaign.raw, now);
 }
 
 export function intendedCampaignChildren(campaign: Pick<Campaign, "meta_campaign_id" | "meta_adset_id" | "meta_ad_ids" | "raw">) {

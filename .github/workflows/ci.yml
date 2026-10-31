@@ -13,6 +13,10 @@ concurrency:
   group: ci-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# #1741: read-only unless a job asks for more; survives a repo-setting change.
+permissions:
+  contents: read
+
 jobs:
   # All jobs run in parallel; build, test, core and secrets are required.
   build:
@@ -21,13 +25,13 @@ jobs:
       NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
       NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           cache: npm
       - run: npm ci
-      - uses: actions/cache@v4
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .next/cache
           key: next-${{ hashFiles('package-lock.json') }}-${{ github.sha }}
@@ -40,8 +44,8 @@ jobs:
       NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
       NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           cache: npm
@@ -59,8 +63,8 @@ jobs:
       NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
       NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           cache: npm
@@ -73,11 +77,11 @@ jobs:
       NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
       NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # test:meta-db replays historical schema blobs with git show
           fetch-depth: 0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           cache: npm
@@ -86,13 +90,14 @@ jobs:
 
   # Required check name stays `test` (#226). `if: always()` matters: without it a
   # failed or cancelled job skips `test`, and a skipped required check counts as passing.
+  # `docs` gates too (#1918): an undocumented route or env key can't merge.
   test:
-    needs: [lint, unit, metadb]
+    needs: [lint, unit, metadb, docs]
     if: always()
     runs-on: ubuntu-latest
     steps:
       - run: |
-          for r in "${{ needs.lint.result }}" "${{ needs.unit.result }}" "${{ needs.metadb.result }}"; do
+          for r in "${{ needs.lint.result }}" "${{ needs.unit.result }}" "${{ needs.metadb.result }}" "${{ needs.docs.result }}"; do
             [ "$r" = success ] || { echo "a test job did not succeed: $r"; exit 1; }
           done
 
@@ -103,16 +108,18 @@ jobs:
       NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
       NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # the generation hold check replays a historical schema blob with git show
           fetch-depth: 0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           cache: npm
       - run: npm ci
       - run: npm run test:core
+      - name: Offline production-guard regressions (#2030)
+        run: node --experimental-vm-modules --test scripts/production-guard.test.mjs
       # Generation quota holds on real Postgres: settled partial runs must not lock Create (#138).
       - run: META_TEST_PG_BIN="$(pg_config --bindir)" npm run test:meta-db -- --generation-only
 
@@ -121,8 +128,8 @@ jobs:
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           cache: npm
@@ -132,8 +139,8 @@ jobs:
   docs:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           cache: npm
@@ -143,16 +150,37 @@ jobs:
           node --test scripts/check-docs.test.mjs
           npm run docs:check
 
+  # ADR-001 (#1792, #2070): import boundaries; the baseline in scripts/boundaries-baseline.json may only shrink.
+  boundaries:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Check boundaries
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          if [ -n "$BASE_REF" ]; then
+            git fetch --no-tags --depth=1 origin "refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF"
+            npm run boundaries -- --base "origin/$BASE_REF"
+          else
+            npm run boundaries
+          fi
+
   secrets:
     runs-on: ubuntu-latest
     permissions:
       contents: read
       pull-requests: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - uses: gitleaks/gitleaks-action@v2
+      - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_ENABLE_COMMENTS: "false"
@@ -172,20 +200,21 @@ jobs:
       NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
       BASE_REF: ${{ github.base_ref }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
       - id: changed
         run: |
-          if git diff --name-only "origin/$BASE_REF...HEAD" | grep -qE '^(src/(app|components)/|scripts/ui-gate\.mjs$|\.github/workflows/ci\.yml$)'; then
+          # #1850: dependency and Next config changes can grow the first-load JS too.
+          if git diff --name-only "origin/$BASE_REF...HEAD" | grep -qE '^(src/(app|components)/|scripts/(ui-gate|first-load-js)\.mjs$|\.github/workflows/ci\.yml$|package(-lock)?\.json$|next\.config\.[a-z]+$)'; then
             echo "ui=true" >> "$GITHUB_OUTPUT"
           else
             echo "ui=false" >> "$GITHUB_OUTPUT"
             echo "No change under src/app or src/components; nothing to compare."
           fi
       - if: steps.changed.outputs.ui == 'true'
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           cache: npm
@@ -204,17 +233,22 @@ jobs:
           timeout -k 30s 4m npx playwright install chromium
       - name: Compare public pages (base → this PR)
         if: steps.changed.outputs.ui == 'true'
+        env:
+          # #1850: intended growth; the label takes effect on a re-run of this job.
+          BUNDLE_GROWTH_OK: ${{ contains(github.event.pull_request.labels.*.name, 'bundle-growth-ok') }}
         run: |
           (cd ../base && npx next start -p 3001 > ../base.log 2>&1 &)
           npx next start -p 3002 > ../head.log 2>&1 &
           for port in 3001 3002; do
             for _ in $(seq 60); do curl -sf -o /dev/null "http://localhost:$port/login" && break; sleep 1; done
           done
+          # #1850: first-load JS of /, /login and /for/* may grow at most 10% (gzipped scripts each page loads).
+          node scripts/first-load-js.mjs --base http://localhost:3001 --head http://localhost:3002 $([ "$BUNDLE_GROWTH_OK" = true ] && echo --allow)
           # The same (this PR's) gate script measures both, so only the app differs.
           node scripts/ui-gate.mjs --public-only --origin http://localhost:3001 --out ui-gate/base
           node scripts/ui-gate.mjs --public-only --origin http://localhost:3002 --compare ui-gate/base --out ui-gate/head
       - if: failure() && steps.changed.outputs.ui == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ui-gate
           path: ui-gate/

@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { fitPhoto } from "@/lib/creative/fit-photo";
 import path from "node:path";
 import type { ReactElement } from "react";
 import { ImageResponse } from "next/og";
@@ -20,11 +21,13 @@ export { AdComposite, adMetrics, isOfferLine, logoTileWidth, type ShapedWords };
 export async function renderCompositeAd(spec: AdDesignSpec): Promise<Uint8Array> {
   let logoRatio = 1;
   const [backgroundUrl, logoUrl] = await Promise.all(
-    [spec.backgroundUrl, spec.logoUrl].map(async (url) => {
+    [spec.backgroundUrl, spec.logoUrl].map(async (url, index) => {
       if (!url) return null;
       const image = await downloadImage(url);
-      if (url === spec.logoUrl) logoRatio = await aspectRatio(image.bytes);
-      return `data:image/png;base64,${Buffer.from(image.bytes).toString("base64")}`;
+      if (index === 1) logoRatio = await aspectRatio(image.bytes);
+      // #1904: the background is fitted to the ad's exact frame first, so a phone photo's face isn't cut off.
+      const bytes = index === 0 ? await fitPhoto(image.bytes, spec.width, spec.height, spec.backgroundFit ?? "attention").catch(() => Buffer.from(image.bytes)) : image.bytes;
+      return `data:image/png;base64,${Buffer.from(bytes).toString("base64")}`;
     }),
   );
   const shaped = await shapeIndicText(spec, logoRatio);
@@ -42,6 +45,8 @@ export async function shapeIndicText(spec: AdDesignSpec, logoRatio = 1): Promise
       ? (({ size, weight, color, maxWidth }) => ({ size, weight, color, maxWidth }))(offerStripStyle(spec))
       : { size: m.subheadSize, weight: 400, color: "#e2e8f0", maxWidth: m.contentWidth }],
     ...spec.benefits.map((benefit, i): Field => [`benefit:${i}`, benefit, { size: m.benefitSize, weight: 600, color: "#ffffff", maxWidth: m.contentWidth - Math.round(90 * m.s) }]),
+    // #1177: a Hindi or Punjabi WhatsApp ask is shaped like the other on-image words.
+    ["contactAsk", spec.contact === "whatsapp" ? spec.contactLabel : null, { size: m.phoneSize, weight: 800, color: "#ffffff", maxWidth: m.contentWidth - Math.round(m.phoneSize * 1.1 + 14 * m.s) }],
     ["contact", spec.contactLine, { size: m.contactSize, weight: 400, color: "#cbd5e1", maxWidth: Math.round(m.contentWidth * 0.6) }],
   ];
   const entries = await Promise.all(fields.filter(([, text]) => text && INDIC_SCRIPT.test(text)).map(async ([key, text, style]) => [key, await shapeText(text!, style)] as const));

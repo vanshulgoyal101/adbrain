@@ -17,7 +17,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getCampaignSpend, getSpendLimits } from "@/lib/supabase/queries";
 import { createClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/types";
-import { CampaignEditError } from "./edit-service";
+import { CampaignEditError, refuseWhileSwitchPending } from "./edit-service";
 
 /**
  * #774: edit a launched campaign's daily budget, total cap or end date, in the same `campaign_edit_operations`
@@ -30,9 +30,9 @@ import { CampaignEditError } from "./edit-service";
  * Each write is a single in-place ad-set update, so a refused one changes nothing.
  */
 
-export const BUDGET_RATE_LIMITED = "Meta needs 30 seconds between budget changes. Try again in a moment.";
-export const PAUSE_FOR_DAILY = "Pause the campaign to change its daily budget; it resumes at the new amount after your review.";
-export const CONFIRM_BUDGET = "Confirm the new amount first: it's more than you approved.";
+const BUDGET_RATE_LIMITED = "Meta needs 30 seconds between budget changes. Try again in a moment.";
+const PAUSE_FOR_DAILY = "Pause the campaign to change its daily budget; it resumes at the new amount after your review.";
+const CONFIRM_BUDGET = "Confirm the new amount first: it's more than you approved.";
 
 const rupees = (max: number) => z.number().finite().positive().max(max).refine(value => Number.isInteger(Math.round(value * 100 * 1e6) / 1e6), "Use at most two decimals.");
 export const budgetChangeSchema = z.object({
@@ -142,6 +142,8 @@ export async function editCampaignBudget(context: AuthorizedBusiness, campaignId
   if (status !== "active" && status !== "paused") throw new CampaignEditError("Only a running or paused campaign's budget can be changed.", 409);
   const review = reviewableCampaign(campaign);
   if (!review) throw new CampaignEditError("AdBrain can only edit campaigns it launched.", 409);
+  // #1146: a waiting new-audience copy holds a snapshot of the budget; switch or cancel it first.
+  await refuseWhileSwitchPending(database, campaignId);
   const cap = storedCap(campaign.raw);
   if (cap && cappedRunEnded(campaign.raw)) throw new CampaignEditError("This run has ended. Start a new run instead.", 409);
   const capped = Boolean(cap && review.children.cappedAdSetIds.includes(cap.adSetId));
@@ -208,7 +210,7 @@ export async function editCampaignBudget(context: AuthorizedBusiness, campaignId
       budgets = await Promise.all(targets.map(adSetId => meta.readAdSetBudget(review.metaCampaignId, adSetId)));
       if (capped ? budgets[0].lifetimeBudgetPaise <= 0 : budgets.some(budget => budget.dailyBudgetPaise <= 0)
         || budgets.reduce((sum, budget) => sum + budget.dailyBudgetPaise, 0) !== toPaise(review.dailyBudgetRupees)) {
-        throw new CampaignDeliveryError("The budget changed in Meta. Refresh the campaign, then try again.");
+        throw new CampaignDeliveryError("The budget was changed on Meta after you opened this. Reload the page, then try again.");
       }
       before = stateOf(budgets, capped, review.dailyBudgetRupees);
       // #1094: the room left after the account's other live runs; this run's own ad set is the one being raised.
@@ -262,9 +264,12 @@ export async function editCampaignBudget(context: AuthorizedBusiness, campaignId
       const nextCap = capped && cap ? { lifetimeBudgetPaise: toPaise(after.capRupees!), endTime: after.endTime!, days: (cap.days ?? 0) + extendedDays } : null;
       try {
         const { error } = await saveCampaignBudget({ businessId: context.businessId, userId: context.userId }, campaignId, current => {
-          const raw = current.raw && typeof current.raw === "object" && !Array.isArray(current.raw) ? current.raw as Record<string, Json | undefined> : {};
+          const raw = { ...current.raw && typeof current.raw === "object" && !Array.isArray(current.raw) ? current.raw as Record<string, Json | undefined> : {} };
+          // #1903: AdBrain's own edit replaces any "changed in Meta Ads Manager" note a refresh wrote meanwhile.
+          delete raw.metaBudgetChange;
+          delete raw.metaEndTimeChange;
           const currentCap = raw.cap && typeof raw.cap === "object" && !Array.isArray(raw.cap) ? raw.cap : {};
-          return nextCap ? { raw: { ...raw, cap: { ...currentCap, ...nextCap } } as Json } : { daily_budget: after.dailyRupees };
+          return nextCap ? { raw: { ...raw, cap: { ...currentCap, ...nextCap } } as Json } : { daily_budget: after.dailyRupees, raw: raw as Json };
         });
         if (error) throw error;
       } catch {

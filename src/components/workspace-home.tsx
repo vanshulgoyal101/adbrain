@@ -1,21 +1,28 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
+import { PauseAllAds } from "@/components/pause-all-ads";
 import { Building2, CheckCircle2, ChevronRight, ImageIcon } from "lucide-react";
 import { SpendStatusBanner } from "@/components/spend-status";
 import { buildWorkQueue } from "@/lib/work-queue";
 import { setAsideIds } from "@/lib/creative/set-aside";
 import { describeAuditEvent, isBackgroundAuditAction } from "@/lib/audit-labels";
 import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
-import { formatDate, formatMoney, formatPerDay } from "@/lib/format";
-import { homeResults } from "@/lib/campaign/home-results";
+import { formatClock, formatDate, formatMoney, formatPerDay } from "@/lib/format";
+import { firstEnquiryLine } from "@/lib/trust-lines";
+import { homeCustomers, homeResults, unloggedChats } from "@/lib/campaign/home-results";
+import { homeVerdicts } from "@/lib/campaign/card-verdict";
 import { staleCampaignIds } from "@/lib/campaign/results-freshness";
 import { StaleResultsRefresher } from "@/components/stale-results-refresher";
-import { timeAgo } from "@/lib/utils";
 import type { SpendEvaluation } from "@/lib/campaign/spend";
 import type { AuditLog, Business, Campaign, CampaignResult, CreativePreview } from "@/lib/types";
 import { campaignAttention } from "@/lib/campaign/health";
 import { formatReplyTime } from "@/lib/leads/first-reply";
-import { CAMPAIGN_STATUS, Status } from "@/components/ui/status";
+import { campaignStatus, Status } from "@/components/ui/status";
+import { goneInMeta, pausableCampaigns, pausedInMeta, recentlyDeletedInMeta, recentlyRaisedInMeta } from "@/lib/campaign/gone-in-meta";
+import type { HomeAdReview } from "@/lib/campaign/home-ad-review";
+import { durationIn } from "@/i18n/duration";
+import { namespaceMessages, timeAgoIn, translator, type AppLocale } from "@/i18n/locale";
+import { ageMs, throttleActive } from "@/lib/campaign/meta-wait";
 
 export interface WorkspaceHomeProps {
   business: Business | null;
@@ -30,12 +37,32 @@ export interface WorkspaceHomeProps {
   results?: Record<string, CampaignResult>;
   /** #1049: median minutes from enquiry to the owner's first reply over the last 30 days. */
   replyMinutes?: number | null;
+  /** #1274: enquiries waiting for a first reply (the inbox's rule, #1260). */
+  waiting?: number;
+  /** #1292: the newest enquiry from the last 24 hours still waiting for a first reply. */
+  firstEnquiry?: { name: string | null; at: string } | null;
+  /** #1469: the newest live campaign is waiting on Meta's review, or Meta disapproved one of its ads. */
+  adReview?: HomeAdReview | null;
+  /** #1469: the streamed rejected-ads section, shown when `adReview` is "rejected". */
+  rejectedAds?: ReactNode;
+  /** #2032: the Brand meter card, after the next step; left out when the Brand is complete or snoozed. */
+  brandMeter?: ReactNode;
+  /** #1668: the streamed Monday "last week" card. */
+  weekSummary?: ReactNode;
+  /** #1650: the day-7 'would you pay ₹999 a month?' card, when it's due. */
+  pilotQuestion?: ReactNode;
+  /** #2036: the weekly results card for WhatsApp Status, when it's offered. */
+  resultsCard?: ReactNode;
   now?: number;
+  /** #1838: until when Meta asked us to wait before checking again; the results line says the numbers may be old. */
+  metaWaitUntil?: string | null;
+  /** #1438: the owner's app language (Settings); English by default. */
+  locale?: AppLocale;
 }
 
 const primaryClass =
   "inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary-hover";
-const linkClass = "font-medium text-blue-700 hover:underline";
+const linkClass = "inline-flex min-h-11 items-center font-medium text-blue-700 hover:underline";
 
 /** #847 "calm by default": three figures, one next step, campaigns and the latest ads. */
 export function WorkspaceHome({
@@ -49,25 +76,43 @@ export function WorkspaceHome({
   activity,
   results = {},
   replyMinutes = null,
+  waiting = 0,
+  firstEnquiry = null,
+  adReview = null,
+  rejectedAds,
+  weekSummary,
+  pilotQuestion,
+  resultsCard,
+  brandMeter,
   now,
+  metaWaitUntil = null,
+  locale = "en",
 }: WorkspaceHomeProps) {
+  const t = translator(locale, "home");
+  // #1600 (Designer #1633): a campaign deleted in Meta keeps its Home row for a week, with the CPO's line as its status.
+  const liveCampaigns = campaigns.filter((campaign) => !goneInMeta(campaign) || recentlyDeletedInMeta(campaign, now));
   const summary = business ? homeResults(campaigns, results) : null;
+  // #1292's line already names the newest person waiting, so the verdict doesn't say it twice.
+  const verdicts = business ? homeVerdicts(campaigns, results, { now, waiting: firstEnquiry ? 0 : waiting, words: { locale, messages: namespaceMessages(locale, "verdict") } }) : null;
+  const leadCampaign = verdicts?.lead ? campaigns.find((campaign) => campaign.id === verdicts.lead?.campaignId) : null;
   const stale = business ? staleCampaignIds(campaigns, results, now) : [];
-  const [next, ...later] = buildWorkQueue({ business, creatives, campaigns, metaReady, now });
+  const unlogged = business ? unloggedChats(campaigns, results) : 0;
+  const [next, ...later] = buildWorkQueue({ business, creatives, campaigns, metaReady, now, locale, unloggedChats: unlogged });
+  const customers = homeCustomers(summary, unlogged);
   const setAside = setAsideIds(creatives, now);
-  const reviewLabel = (creative: CreativePreview) => creative.status === "approved" ? "Approved" : setAside.has(creative.id) ? "Set aside" : "Needs review";
+  const reviewLabel = (creative: CreativePreview) => creative.status === "approved" ? t("approved") : setAside.has(creative.id) ? t("setAside") : t("needsReview");
   const places = business?.locations.length ? business.locations.join(", ") : null;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8" lang={locale === "en" ? undefined : locale}>
       <header className="min-w-0">
         <h1 className="break-words text-2xl font-semibold tracking-[-0.01em] text-slate-950">
-          {business?.name ?? "Welcome to AdBrain"}
+          {business?.name ?? t("welcome")}
         </h1>
         <p className="mt-1 text-xs text-slate-500">
           {business
-            ? [business.vertical || "Local business", places].filter(Boolean).join(" · ")
-            : "Start with the business behind your ads."}
+            ? [business.vertical || t("localBusiness"), places].filter(Boolean).join(" · ")
+            : t("startWithBusiness")}
         </p>
       </header>
 
@@ -75,39 +120,79 @@ export function WorkspaceHome({
         <SpendStatusBanner evaluation={spend} />
       ))}
 
+      {firstEnquiry && (
+        <section aria-label={t("newestEnquiry")} className="flex flex-col gap-3 rounded-lg border border-blue-200 bg-blue-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-slate-900">
+            {firstEnquiryLine(firstEnquiry.name, formatClock(firstEnquiry.at, now === undefined ? undefined : new Date(now)))}
+          </p>
+          <Link href="/leads" className={`${linkClass} shrink-0`}>{t("openEnquiries")}</Link>
+        </section>
+      )}
+
+      {/* #1469: the results verdict already says "Meta is checking" once a result row exists; this covers the time before it. */}
+      {adReview?.kind === "checking" && !verdicts?.lead?.verdict.state.startsWith("not_showing") && (
+        <p role="status" aria-label={t("metaReview")} className="text-sm text-slate-900">{t("metaChecking")}</p>
+      )}
+      {adReview?.kind === "rejected" && rejectedAds}
+      {weekSummary}
+      {resultsCard}
+      {pilotQuestion}
+
       {stale.length > 0 && <StaleResultsRefresher campaignIds={stale} />}
       {summary && (
         <section aria-labelledby="results-title">
-          <h2 id="results-title" className="sr-only">Results so far</h2>
+          <h2 id="results-title" className="sr-only">{t("resultsSoFar")}</h2>
+          {/* #1934 (CPO #1924): a new offer re-runs the 3 steps in returning mode. */}
+          <Link href="/brand?again=1" className="float-right ml-4 inline-flex min-h-11 items-center rounded-md border border-slate-300 bg-white px-4 text-sm font-medium text-slate-900 hover:bg-slate-50">
+            {t("newCampaign")}
+          </Link>
+          {verdicts?.lead && leadCampaign && (
+            <p className="mb-4 max-w-2xl text-[17px] leading-snug text-slate-900">
+              {verdicts.lead.verdict.sentence}{" "}
+              <Link href="/campaigns" className="text-sm font-medium text-blue-700 hover:underline">
+                {leadCampaign.name || t("untitledCampaign")}
+              </Link>
+            </p>
+          )}
           <dl className="grid grid-cols-3 gap-4 sm:flex sm:gap-16">
             {[
-              { label: "Enquiries", value: String(summary.enquiries) },
-              { label: "Spent", value: formatMoney(summary.spend) },
-              { label: "Per enquiry", value: summary.perEnquiry === null ? null : formatMoney(summary.perEnquiry) },
+              { label: summary.chatsOnly ? t("chats") : t("enquiries"), value: String(summary.enquiries) },
+              { label: t("spent"), value: formatMoney(summary.spend) },
+              { label: summary.chatsOnly ? t("perChat") : t("perEnquiry"), value: summary.perEnquiry === null ? null : formatMoney(summary.perEnquiry) },
             ].map((metric) => (
               <div key={metric.label} className="flex min-w-0 flex-col-reverse">
                 <dt className="mt-1 text-xs text-slate-600">{metric.label}</dt>
                 <dd className="break-words text-4xl font-medium tracking-[-0.02em] text-slate-950">
-                  {metric.value ?? <span className="text-slate-400" aria-label="Not yet">—</span>}
+                  {metric.value ?? <span className="text-slate-400" aria-label={t("notYet")}>—</span>}
                 </dd>
               </div>
             ))}
           </dl>
+          {customers?.kind === "line" && <p className="mt-3 text-sm text-slate-700">{t("customersLine", { n: customers.customers, cost: formatMoney(customers.perCustomer) })}</p>}
+          {customers?.kind === "ask" && <p className="mt-3 text-sm text-slate-700">
+            {t("customersAsk")}{" "}<Link href="/leads" className={linkClass}>{t("markCustomers")}</Link>
+          </p>}
           {replyMinutes !== null && <p className="mt-3 text-sm text-slate-700">
-            You reply to an enquiry in <strong className="font-medium">{formatReplyTime(replyMinutes)}</strong> (median, last 30 days).{" "}
-            <Link href="/leads" className={linkClass}>See enquiries</Link>
+            {/* #1443: the number is the owner's first WhatsApp/Call tap, not a reply AdBrain can see. */}
+            {t.rich("contactTime", { time: formatReplyTime(replyMinutes), strong: (chunks) => <strong className="font-medium">{chunks}</strong> })}{" "}
+            <Link href="/leads" className={linkClass}>{t("seeEnquiries")}</Link>
           </p>}
           <p className="mt-3 text-xs text-slate-500">
-            Updated {timeAgo(new Date(summary.oldestFetchedAt), now === undefined ? undefined : new Date(now))} ·{" "}
-            <Link href="/campaigns" className={linkClass}>See campaigns</Link>
+            {t("updated", { ago: timeAgoIn(locale, new Date(summary.oldestFetchedAt), now === undefined ? undefined : new Date(now)) })} ·{" "}
+            <Link href="/campaigns" className={linkClass}>{t("seeCampaigns")}</Link>
           </p>
+          {throttleActive(metaWaitUntil, now === undefined ? undefined : new Date(now)) && (
+            <p className="mt-1 text-xs text-slate-600">
+              {t("metaWaiting", { age: durationIn(locale, ageMs(summary.oldestFetchedAt, now)) })}
+            </p>
+          )}
         </section>
       )}
 
       <div className={business ? "grid gap-x-12 gap-y-8 xl:grid-cols-[minmax(0,1fr)_360px]" : undefined}>
         <div className="min-w-0 space-y-8">
           <section aria-labelledby="work-title">
-            <h2 id="work-title" className="sr-only">Next step</h2>
+            <h2 id="work-title" className="sr-only">{t("nextStep")}</h2>
             {next ? (
               <>
                 <div className="flex flex-col gap-4 rounded-lg border border-slate-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between sm:p-6">
@@ -117,7 +202,7 @@ export function WorkspaceHome({
                   </div>
                   <Link href={next.href} className={primaryClass}>
                     {next.href === "/brand" && !business && <Building2 size={17} aria-hidden="true" />}
-                    {business ? next.action : "Set up your business"}
+                    {business ? next.action : next.title}
                   </Link>
                 </div>
                 {later.length > 0 && (
@@ -132,54 +217,66 @@ export function WorkspaceHome({
                 )}
               </>
             ) : (
-              <div className="flex items-start gap-3 rounded-lg border border-slate-200 p-4 sm:p-6">
+              <div className="flex items-start gap-3 py-4">
                 <CheckCircle2 size={20} className="mt-0.5 shrink-0 text-blue-700" aria-hidden="true" />
                 <div>
-                  <h3 className="text-lg font-semibold text-slate-950">You&apos;re up to date</h3>
+                  <h3 className="text-lg font-semibold text-slate-950">{t("upToDate")}</h3>
                   <p className="mt-1 text-sm text-slate-600">
-                    Nothing is waiting for you. <Link href="/leads" className={linkClass}>See enquiries</Link>
+                    {t("nothingWaiting")} <Link href="/leads" className={linkClass}>{t("seeEnquiries")}</Link>
                   </p>
                 </div>
               </div>
             )}
           </section>
 
+          {brandMeter}
+
           {business && (
             <section aria-labelledby="campaigns-title" className="min-w-0">
               <div className="flex items-center justify-between gap-3">
-                <h2 id="campaigns-title" className="text-lg font-semibold text-slate-950">Campaigns</h2>
+                <h2 id="campaigns-title" className="text-lg font-semibold text-slate-950">{t("campaigns")}</h2>
                 {campaigns.length > 0 && (
                   <Link href="/campaigns" className={linkClass}>
-                    See all {campaigns.length}
+                    {t("seeAll", { count: campaigns.length })}
                   </Link>
                 )}
               </div>
-              {campaigns.length ? (
+              {/* #1150: campaigns deleted or archived in Meta stay on Campaigns, folded. */}
+              {liveCampaigns.length ? (
                 <ul className="mt-2 divide-y divide-slate-200 border-b border-slate-200">
-                  {campaigns.slice(0, 3).map((campaign) => {
-                    const status = CAMPAIGN_STATUS[campaign.status] ?? CAMPAIGN_STATUS.draft;
+                  {liveCampaigns.slice(0, 3).map((campaign) => {
+                    const status = campaignStatus(campaign);
                     const attention = campaignAttention(campaign);
+                    const judged = verdicts?.labels.get(campaign.id);
+                    const deleted = goneInMeta(campaign) === "Deleted in Meta";
+                    // #1903: paused in Meta takes the status line; a budget raised in Meta shows for a week (a lower one stays on Campaigns).
+                    const paused = pausedInMeta(campaign);
+                    const raised = recentlyRaisedInMeta(campaign, now);
                     return (
                       <li key={campaign.id} className="py-3 sm:flex sm:items-center sm:justify-between sm:gap-6">
                         <div className="min-w-0">
-                          <Link href="/campaigns" className="block truncate text-sm font-medium text-slate-950 hover:text-blue-700">
-                            {campaign.name || "Untitled campaign"}
+                          <Link href="/campaigns" className="-my-3 block truncate py-3 text-sm font-medium text-slate-950 hover:text-blue-700">
+                            {campaign.name || t("untitledCampaign")}
                           </Link>
                           {attention && <p className="mt-1 text-xs font-medium text-danger">Needs attention: {attention}</p>}
+                          {raised && <p className="mt-1 border-l-2 border-warning pl-2 text-xs text-slate-700">{t("budgetRaisedInMeta", { now: formatMoney(raised.nowRupees), was: formatMoney(raised.wasRupees) })}</p>}
                         </div>
-                        <p className="mt-1 flex shrink-0 gap-x-4 text-xs text-slate-600 sm:mt-0">
+                        {deleted || paused ? <p className="mt-1 text-sm text-slate-700 sm:mt-0 sm:max-w-xs">{t(deleted ? "deletedInMeta" : "pausedInMeta")}</p> : <p className="mt-1 flex shrink-0 gap-x-4 text-xs text-slate-600 sm:mt-0">
                           <Status tone={status.tone}>{status.label}</Status>
+                          {judged && <span>{judged}</span>}
                           {campaign.daily_budget != null && <span className="sm:w-24 sm:text-right">{formatPerDay(campaign.daily_budget)}</span>}
-                        </p>
+                        </p>}
                       </li>
                     );
                   })}
                 </ul>
               ) : (
                 <p className="mt-2 text-sm text-slate-600">
-                  No campaigns yet. Approved ads become a paused campaign you check before anything spends.
+                  {campaigns.length ? t("noLiveCampaigns") : t("noCampaigns")}
                 </p>
               )}
+              {/* #1968: a quiet secondary stop while anything runs; each campaign resumes from its own card. */}
+              <PauseAllAds locale={locale} campaigns={pausableCampaigns(campaigns)} />
             </section>
           )}
         </div>
@@ -187,8 +284,8 @@ export function WorkspaceHome({
         {creatives.length > 0 && (
           <section aria-labelledby="creatives-title" className="min-w-0">
             <div className="flex items-center justify-between gap-3">
-              <h2 id="creatives-title" className="text-lg font-semibold text-slate-950">Latest ads</h2>
-              <Link href="/studio" className={linkClass}>Review all</Link>
+              <h2 id="creatives-title" className="text-lg font-semibold text-slate-950">{t("latestAds")}</h2>
+              <Link href="/studio" className={linkClass}>{t("reviewAll")}</Link>
             </div>
             <ul className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-2">
               {creatives.slice(0, 4).map((creative) => (
@@ -217,28 +314,28 @@ export function WorkspaceHome({
         )}
       </div>
 
-      {activity ?? <RecentActivity audit={audit} />}
+      {activity ?? <RecentActivity audit={audit} locale={locale} />}
     </div>
   );
 }
 
-export function RecentActivity({ audit: all }: { audit: AuditLog[] }) {
+export function RecentActivity({ audit: all, locale = "en" }: { audit: AuditLog[]; locale?: AppLocale }) {
   const audit = all.filter((event) => !isBackgroundAuditAction(event.action));
   if (!audit.length) return null;
   return (
     <details className="group border-t border-slate-200 pt-2">
       <summary className="inline-flex min-h-11 cursor-pointer list-none items-center gap-1 text-sm font-medium text-slate-600 hover:text-slate-950 [&::-webkit-details-marker]:hidden">
         <ChevronRight size={16} aria-hidden="true" className="transition-transform group-open:rotate-90" />
-        <span id="activity-title">Recent activity</span>
+        <span id="activity-title">{translator(locale, "home")("recentActivity")}</span>
       </summary>
       <ul aria-labelledby="activity-title" className="divide-y divide-slate-200">
         {audit.map((event) => (
           <li key={event.id} className="flex flex-wrap justify-between gap-2 py-3 text-sm">
             <span className="text-slate-600">
-              {describeAuditEvent(event.action, event.reason)}
+              {describeAuditEvent(event.action, event.reason, locale)}
               {event.authority !== "server" && <span className="ml-2 text-xs text-slate-500">Unverified legacy event</span>}
             </span>
-            <time dateTime={event.created_at} className="text-xs text-slate-500">{formatDate(event.created_at)}</time>
+            <time dateTime={event.created_at} className="text-xs text-slate-500">{formatDate(event.created_at, undefined, locale)}</time>
           </li>
         ))}
       </ul>

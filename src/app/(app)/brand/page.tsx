@@ -1,6 +1,8 @@
 import { OWNER_WORDS } from "@/lib/copy/owner-words";
+import { localeChosen, setupWords } from "@/i18n/request-locale";
 import { BrandAssets } from "@/components/brand-assets";
 import { BrandForm } from "@/components/brand-form";
+import { SetupBusinessStep } from "@/components/setup-business-step";
 import { WhatsAppMessageCard, type Suggested } from "@/components/whatsapp-message-card";
 import { suggestedQuestions } from "@/lib/campaign/whatsapp-questions";
 import { whatsappGreeting } from "@/lib/campaign/whatsapp-greeting";
@@ -10,14 +12,24 @@ import {
   getAdInstructions,
   getBrandAssets,
   getPrimaryBusiness,
+  hasLaunchedCampaign,
 } from "@/lib/supabase/queries";
 import { getMetaConnection } from "@/lib/meta/credentials";
 import { readWhatsAppStatus, type WhatsAppStatus } from "@/lib/meta/whatsapp-status";
 
 export const metadata = { title: OWNER_WORDS.business };
 
-export default async function BrandPage() {
-  const business = await getPrimaryBusiness();
+export default async function BrandPage({ searchParams }: { searchParams: Promise<{ all?: string | string[]; again?: string | string[] }> }) {
+  const [business, params] = await Promise.all([getPrimaryBusiness(), searchParams]);
+  // #1269 (#1251 WS1 step 1): until a first campaign has gone live, Your business is the five-field setup step;
+  // `?all=1` opens the full page. If the check fails, the full page shows as before.
+  const setup = params.all !== "1" && (!business || !(await hasLaunchedCampaign(business.id).catch(() => true)));
+  if (setup || (params.again === "1" && business)) {
+    const words = await setupWords();
+    if (setup) return <SetupBusinessStep business={business} chooseLanguage={!(await localeChosen())} words={words} />;
+    // #1934 (CPO #1924): "New campaign" after one went live re-enters the 3 steps; step 1 asks only for the new offer.
+    return <SetupBusinessStep business={business} returning words={words} />;
+  }
   const [assets, instructions, connection] = business
     ? await Promise.all([
         getBrandAssets(business.id),
@@ -56,7 +68,7 @@ export default async function BrandPage() {
           <a
             key={href}
             href={`#${href}`}
-            className="whitespace-nowrap rounded-lg px-3 py-2 font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-950"
+            className="flex min-h-11 items-center whitespace-nowrap rounded-lg px-3 font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-950"
           >
             {label}
           </a>

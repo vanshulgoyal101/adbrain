@@ -11,13 +11,15 @@ import { formatMoney, formatNumber } from "@/lib/format";
  * #335: Meta counts chats started, not customers. The owner logs each real enquiry from a WhatsApp
  * ad's chats (details optional); it is saved to Enquiries and results show cost per real enquiry.
  */
-export function WhatsAppEnquiries({ campaignId, spend, enquiries, onLogged, onCustomers }: {
+export function WhatsAppEnquiries({ campaignId, spend, enquiries, onLogged, onCustomers, compact = false }: {
   campaignId: string;
   spend: number;
   enquiries: number;
   onLogged: (count: number) => void;
   /** #798: the campaign's customer count after "+1 customer" or its Undo. */
-  onCustomers?: (customers: number, enquiries: number) => void;
+  onCustomers?: (customers: number, enquiries: number, booked?: number) => void;
+  /** #1260: Enquiries' quiet WhatsApp strip: only the two actions, the strip's sentence says the rest. */
+  compact?: boolean;
 }) {
   const id = useId();
   const [open, setOpen] = useState(false);
@@ -37,10 +39,10 @@ export function WhatsAppEnquiries({ campaignId, spend, enquiries, onLogged, onCu
       const response = undo
         ? await fetch(`/api/campaigns/${campaignId}/enquiries?lead=${encodeURIComponent(undo)}`, { method: "DELETE" })
         : await fetch(`/api/campaigns/${campaignId}/enquiries`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ customer: true }) });
-      const data = await response.json().catch(() => ({})) as { id?: string; enquiries?: number | null; customers?: number | null; error?: string };
+      const data = await response.json().catch(() => ({})) as { id?: string; enquiries?: number | null; customers?: number | null; booked?: number | null; error?: string };
       if (!response.ok) throw new Error(data.error ?? "That couldn't be saved. Try again.");
       if (typeof data.enquiries === "number") onLogged(data.enquiries);
-      if (typeof data.customers === "number" && typeof data.enquiries === "number") onCustomers?.(data.customers, data.enquiries);
+      if (typeof data.customers === "number" && typeof data.enquiries === "number") onCustomers?.(data.customers, data.enquiries, typeof data.booked === "number" ? data.booked : undefined);
       setCustomer(undo ? { id: undo, undone: true } : data.id ? { id: data.id } : null);
       setSaved(false);
     } catch (reason) {
@@ -73,7 +75,7 @@ export function WhatsAppEnquiries({ campaignId, spend, enquiries, onLogged, onCu
 
   return (
     <section aria-label="Real enquiries" className="flex flex-col gap-3">
-      <div className="grid grid-cols-2 gap-3">
+      {!compact && <div className="grid grid-cols-2 gap-3">
         <div>
           <p className="text-lg font-semibold tabular-nums text-slate-900">{formatNumber(enquiries)}</p>
           <p className="text-xs text-slate-500">Real enquiries</p>
@@ -82,8 +84,8 @@ export function WhatsAppEnquiries({ campaignId, spend, enquiries, onLogged, onCu
           <p className="text-lg font-semibold tabular-nums text-slate-900">{cost === null ? "—" : formatMoney(cost)}</p>
           <p className="text-xs text-slate-500">Per real enquiry</p>
         </div>
-      </div>
-      {enquiries === 0 && <p className="text-xs text-slate-500">Not every chat is a customer. Add each real enquiry from these WhatsApp chats.</p>}
+      </div>}
+      {!compact && enquiries === 0 && <p className="text-xs text-slate-500">Not every chat is a customer. Add each real enquiry from these WhatsApp chats.</p>}
       {open ? (
         <form className="flex flex-col gap-2" onSubmit={(event) => { event.preventDefault(); void save(); }}>
           <div className="grid gap-2 sm:grid-cols-2">
@@ -100,7 +102,7 @@ export function WhatsAppEnquiries({ campaignId, spend, enquiries, onLogged, onCu
       ) : (
         <div className="flex flex-wrap items-center gap-3">
           <Button type="button" size="sm" variant="outline" onClick={() => { setOpen(true); setSaved(false); }}>
-            <Plus className="h-4 w-4" aria-hidden="true" /> Add enquiry
+            <Plus className="h-4 w-4" aria-hidden="true" /> {compact ? "Add an enquiry" : "Add enquiry"}
           </Button>
           <Button type="button" size="sm" variant="outline" data-product-event="lead.customer" disabled={customerBusy}
             aria-label="Got a customer? +1 (adds 1 customer from this ad)" onClick={() => void addCustomer()}>

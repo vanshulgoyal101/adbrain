@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { parseArgs } from "node:util";
 import { Client } from "pg";
 import { applyMigration, databaseConfig, migrationChecksum } from "./database-migrations.mjs";
+import { refuseHeadless } from "./lib/headless.mjs";
 
 let client;
 try {
@@ -14,6 +15,7 @@ try {
   if (!values.apply) {
     console.log("Preview only. No database connection or writes. Applying requires --apply and separate production approval.");
   } else {
+    refuseHeadless("migrate-db --apply");
     const config = databaseConfig(process.env, { target: values.target });
     client = new Client(config);
     await client.connect();

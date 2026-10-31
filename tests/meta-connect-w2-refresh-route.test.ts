@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   readAdReview: vi.fn(),
   getAdResults: vi.fn(),
   upsert: vi.fn(),
+  saveBudget: vi.fn(),
 }));
 
 const campaign = {
@@ -27,7 +28,7 @@ const campaign = {
   meta_connection_generation: 4,
 };
 
-vi.mock("@/lib/campaign/trusted-write", () => ({ saveCampaignResult: mocks.saveResult }));
+vi.mock("@/lib/campaign/trusted-write", () => ({ saveCampaignResult: mocks.saveResult, saveCampaignBudget: mocks.saveBudget }));
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
     auth: { getUser: mocks.getUser },
@@ -58,7 +59,11 @@ vi.mock("@/lib/meta/credentials", () => ({ metaClientForBusiness: mocks.metaClie
 vi.mock("@/lib/creative/summary", () => ({ summarizeInsights: mocks.summarizeInsights }));
 vi.mock("@/lib/campaign/spend-enforce", () => ({ enforceAutoPauseWithStatus: mocks.enforceAutoPauseWithStatus }));
 vi.mock("@/lib/audit", () => ({ logEvent: mocks.logEvent }));
-vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: (table: string) => ({ upsert: (rows: unknown, options: unknown) => mocks.upsert(table, rows, options) }) }) }));
+// #1138's ownership read sees no other business's row.
+vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: (table: string) => ({
+  upsert: (rows: unknown, options: unknown) => mocks.upsert(table, rows, options),
+  select: () => ({ in: async () => ({ data: [], error: null }) }),
+}) }) }));
 
 function request(): Request {
   return new Request("http://localhost/api/campaigns/campaign-1/refresh", { method: "POST" });
@@ -85,6 +90,36 @@ beforeEach(() => {
 });
 
 describe("campaign refresh binding boundary", () => {
+  it("#1903: a budget changed in Meta Ads Manager is saved and the updated row returned; Meta's raw state stays out of the answer", async () => {
+    const metaState = { status: "PAUSED", adSets: [{ id: "as1", status: "PAUSED", dailyBudget: "80000" }] };
+    mocks.withMetaConnection.mockImplementation(async (_context, _options, execute) => execute({
+      getCampaignInsights: vi.fn().mockResolvedValue({ impressions: 1, clicks: 2, leads: 1, spend: 3, cpl: 3, metaState }),
+      readAdReview: mocks.readAdReview, getAdResults: mocks.getAdResults,
+    }));
+    let update: Record<string, unknown> | undefined;
+    mocks.saveBudget.mockImplementation(async (_actor, _id, mirror: (row: unknown) => Record<string, unknown>) => {
+      update = mirror({ status: "paused", daily_budget: 500, raw: {} });
+      return { data: { id: "campaign-1" }, error: null };
+    });
+    const { POST } = await import("@/app/api/campaigns/[id]/refresh/route");
+    const response = await POST(request(), { params: Promise.resolve({ id: "campaign-1" }) });
+    const body = await response.json();
+    expect(response.status).toBe(200);
+    expect(mocks.saveBudget).toHaveBeenCalledWith({ businessId: "business-1", userId: "user-1" }, "campaign-1", expect.any(Function));
+    // AdBrain already has it paused: only the budget changed outside AdBrain.
+    expect(update).toEqual({ daily_budget: 800, raw: { metaBudgetChange: { wasRupees: 500, nowRupees: 800, at: expect.any(String) } } });
+    expect(body.campaign).toMatchObject({ id: "campaign-1" });
+    expect(body.insights).not.toHaveProperty("metaState");
+    expect(mocks.logEvent.mock.calls[0][0].details).not.toHaveProperty("metaState");
+  });
+
+  it("#1903: nothing changed in Meta, so no write and no campaign in the answer", async () => {
+    const { POST } = await import("@/app/api/campaigns/[id]/refresh/route");
+    const body = await (await POST(request(), { params: Promise.resolve({ id: "campaign-1" }) })).json();
+    expect(mocks.saveBudget).not.toHaveBeenCalled();
+    expect(body).not.toHaveProperty("campaign");
+  });
+
   it("runs spend enforcement and audit without waiting for the optional summary", async () => {
     let resolveSummary!: (summary: string) => void;
     mocks.summarizeInsights.mockReturnValue(new Promise<string>(resolve => { resolveSummary = resolve; }));

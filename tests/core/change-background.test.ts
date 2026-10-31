@@ -12,7 +12,8 @@ const IMAGE_MODEL = "openai/gpt-image-2.5-flare";
 const CREATIVE = "9a7c1f52-3b8e-4d61-9f0a-2c5e8b7d4a10";
 const angle = run4.angles[0];
 const mocks = vi.hoisted(() => ({
-  claims: new Map<string, { attempt: string; state: "processing" | "unresolved" }>(),
+  claims: new Map<string, { attempt: string; state: "processing" | "unresolved" | "stale" }>(),
+  events: [] as { action: string; details?: Record<string, unknown> }[],
   updates: [] as Record<string, unknown>[],
   usage: [] as Record<string, unknown>[],
   imageStatus: 200,
@@ -26,9 +27,9 @@ vi.mock("@/lib/supabase/admin", () => ({
     rpc: async (name: string, args: { p_creative_id: string; p_attempt_id: string; p_unresolved?: boolean }) => {
       const claim = mocks.claims.get(args.p_creative_id);
       if (name === "creative_regeneration_claim") {
-        if (claim) return { data: { action: "busy", status: claim.state }, error: null };
+        if (claim && claim.state !== "stale") return { data: { action: "busy", status: claim.state }, error: null };
         mocks.claims.set(args.p_creative_id, { attempt: args.p_attempt_id, state: "processing" });
-        return { data: { action: "start" }, error: null };
+        return { data: claim ? { action: "start", tookOver: true } : { action: "start" }, error: null };
       }
       if (name === "creative_regeneration_finish") {
         if (!claim || claim.attempt !== args.p_attempt_id || claim.state !== "processing") return { data: { status: "missing" }, error: null };
@@ -85,7 +86,7 @@ vi.mock("@/lib/creative/persist", () => ({
   renderAndPersistDesign: async () => `${SUPABASE}/storage/v1/object/public/creatives/${run4.brand.id}/ad-new.png`,
 }));
 vi.mock("@/lib/security/rate-limit", () => ({ rateLimitResponse: async () => null }));
-vi.mock("@/lib/audit", () => ({ logEvent: async () => {} }));
+vi.mock("@/lib/audit", () => ({ logEvent: async (event: { action: string; details?: Record<string, unknown> }) => { mocks.events.push(event); } }));
 
 let png: string;
 let imageBodies: string[];
@@ -97,6 +98,7 @@ beforeAll(async () => {
 beforeEach(() => {
   vi.resetModules();
   mocks.claims.clear();
+  mocks.events.length = 0;
   mocks.updates.length = 0;
   mocks.usage.length = 0;
   mocks.imageStatus = 200;
@@ -132,6 +134,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
+  vi.doUnmock("@/lib/security/ssrf");
 });
 
 async function post(instruction: unknown = "Rooftop at sunset, warm light", body: unknown = { instruction }) {
@@ -144,6 +147,20 @@ async function post(instruction: unknown = "Rooftop at sunset, warm light", body
 }
 
 describe("core: change only the background on a recorded run-4 ad", () => {
+  it("logs taking over a stale claim with the attempt its spend is filed under, and nothing on a fresh claim (#2291)", async () => {
+    expect((await post()).status).toBe(200);
+    expect(mocks.events.map(({ action }) => action)).not.toContain("creative.claim_taken_over");
+    mocks.events.length = 0;
+    mocks.usage.length = 0;
+    mocks.claims.set(CREATIVE, { attempt: "killed-attempt", state: "stale" });
+    expect((await post()).status).toBe(200);
+    const takeovers = mocks.events.filter(({ action }) => action === "creative.claim_taken_over");
+    expect(takeovers).toEqual([expect.objectContaining({ entityType: "creative", entityId: CREATIVE, details: { route: "creatives.background", attemptId: expect.any(String) } })]);
+    expect(mocks.usage.length).toBeGreaterThan(0);
+    expect(mocks.usage.every(({ requestId }) => requestId === takeovers[0].details?.attemptId)).toBe(true);
+    expect(mocks.claims.size).toBe(0);
+  });
+
   it("makes one image from the owner's direction, keeps every word and approval, and records the spend", async () => {
     const res = await post();
     expect(res.status, JSON.stringify(res.body)).toBe(200);
@@ -200,6 +217,38 @@ describe("core: change only the background on a recorded run-4 ad", () => {
     expect(imageBodies).toHaveLength(1);
   });
 
+  // #2219: AbortSignal.timeout's own error, as a slow provider throws it.
+  const timeout = () => new DOMException("The operation was aborted due to timeout", "TimeoutError");
+
+  it("releases the ad when a free picture times out: nothing was charged (#2219)", async () => {
+    vi.stubEnv("IMAGE_PROVIDER", "pollinations");
+    vi.doMock("@/lib/security/ssrf", async (original) => ({
+      ...(await original<typeof import("@/lib/security/ssrf")>()),
+      fetchPublicUrl: async () => { throw timeout(); },
+    }));
+    const res = await post();
+    expect(res).toEqual({ status: 502, body: { error: "Couldn't make a new background this time. Your ad is unchanged; try again." } });
+    expect(mocks.usage).toEqual([expect.objectContaining({ provider: "pollinations", usageKind: "image", status: "error", providerFinalStatus: "unknown" })]);
+    expect(mocks.updates).toEqual([]);
+    expect(mocks.claims.has(CREATIVE)).toBe(false);
+  });
+
+  it("still holds the ad when a paid picture times out: the charge is unknown (#2219)", async () => {
+    const replay = vi.mocked(fetch).getMockImplementation()!;
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (requestUrl(input) === "https://openrouter.ai/api/v1/images") {
+        imageBodies.push(requestBody(init));
+        throw timeout();
+      }
+      return replay(input, init);
+    }));
+    const res = await post();
+    expect(res.status).toBe(502);
+    expect(mocks.usage).toEqual([expect.objectContaining({ provider: "openrouter-image", providerFinalStatus: "unknown", status: "error" })]);
+    expect(mocks.claims.get(CREATIVE)?.state).toBe("unresolved");
+    expect(imageBodies).toHaveLength(1);
+  });
+
   it("uses the owner's own Brand photo with no image call, no spend and the same words", async () => {
     const photo = `${SUPABASE}/storage/v1/object/public/brand-assets/${run4.brand.id}/front-desk.jpg`;
     mocks.assets = [photo];
@@ -214,6 +263,33 @@ describe("core: change only the background on a recorded run-4 ad", () => {
       image: { provider: "owner-photo", estimatedCostUsd: 0 },
       imagePrompt: "[No image prompt: this ad uses the business's own photo from Brand assets.]",
     });
+    // #1904: no choice means the saliency crop.
+    expect((mocks.updates[0].generation as { design: Record<string, unknown> }).design.backgroundFit).toBe("attention");
+    expect(mocks.claims.size).toBe(0);
+  });
+
+  it("saves the owner's 'Show whole photo' choice for every later render, and a new AI picture clears it (#1904)", async () => {
+    const { buildAdDesign } = await import("@/lib/creative/design");
+    const { pictureDesign, storedPictureDesign } = await import("@/lib/creative/picture-words");
+    const photo = `${SUPABASE}/storage/v1/object/public/brand-assets/${run4.brand.id}/team.jpg`;
+    mocks.assets = [photo];
+    expect((await post(undefined, { photoUrl: photo, fit: "blur" })).status).toBe(200);
+    const saved = mocks.updates[0].generation as { design: Record<string, unknown> };
+    expect(saved.design.backgroundFit).toBe("blur");
+    // The words editor and the 9:16 launch render read the saved design back.
+    expect(storedPictureDesign(saved.design)?.backgroundFit).toBe("blur");
+    expect(pictureDesign({ ...creativeRow(), generation: saved as never }, run4.brand).backgroundFit).toBe("blur");
+
+    mocks.editedDuringImage = JSON.parse(JSON.stringify({ ...buildAdDesign({ brand: run4.brand, copy: angle.concept, concept: angle.concept as never }), backgroundUrl: undefined, backgroundFit: "blur" }));
+    expect((await post()).status).toBe(200);
+    expect((mocks.updates[1].generation as { design: Record<string, unknown> }).design).not.toHaveProperty("backgroundFit");
+  });
+
+  it("rejects an unknown fit before the claim", async () => {
+    const photo = `${SUPABASE}/storage/v1/object/public/brand-assets/${run4.brand.id}/team.jpg`;
+    mocks.assets = [photo];
+    expect((await post(undefined, { photoUrl: photo, fit: "stretch" })).status).toBe(400);
+    expect(mocks.updates).toEqual([]);
     expect(mocks.claims.size).toBe(0);
   });
 

@@ -114,12 +114,19 @@ async function handlePOST(request: Request) {
   if (isDraftExpired(draft.expiresAt, now)) return errorResponse(requestId, 404, "NOT_FOUND", "Draft not found.");
   if (draft.version !== input.draftVersion) return errorResponse(requestId, 409, "CONFLICT", "Draft changed in another tab. Review the latest version.", true);
 
-  const reviewResult = await prepareCampaignReview(buildCampaignPreflightLoaders(supabase, actor), {
-    actor,
-    draftId: input.draftId,
-    requestedDraftVersion: input.draftVersion,
-    now,
-  });
+  let reviewResult;
+  try {
+    reviewResult = await prepareCampaignReview(buildCampaignPreflightLoaders(supabase, actor), {
+      actor,
+      draftId: input.draftId,
+      requestedDraftVersion: input.draftVersion,
+      now,
+    });
+  } catch (error) {
+    // #681: a Meta read failing mid-review (Page, WhatsApp number, areas) is a retry, as on the preflight route, not a 500.
+    if (error instanceof ConnectionAccessError && error.code === "CONFLICT") return errorResponse(requestId, 409, "CONFLICT", error.message, true);
+    return errorResponse(requestId, 503, "UNAVAILABLE", "Couldn't check your campaign just now. Nothing was sent to Meta. Try again in a minute.", true);
+  }
   if (reviewResult.kind === "not_found") return errorResponse(requestId, 404, "NOT_FOUND", "Draft not found.");
   if (reviewResult.kind === "forbidden") return errorResponse(requestId, 403, "FORBIDDEN", "Draft access is not allowed.");
   if (reviewResult.kind === "stale") return errorResponse(requestId, 409, "CONFLICT", "Draft changed in another tab. Review the latest version.", true);

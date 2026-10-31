@@ -61,10 +61,12 @@ function replay(...tapes: unknown[][]) {
     const url = new URL(String(input));
     const body = init?.body instanceof URLSearchParams ? init.body : null;
     const multipart = init?.body instanceof FormData ? init.body : null;
-    tokens.add(url.searchParams.get("access_token") ?? body?.get("access_token") ?? String(multipart?.get("access_token") ?? "none"));
-    url.searchParams.delete("access_token");
+    // #1649: the token rides in the Authorization header.
+    tokens.add(new Headers(init?.headers).get("authorization")?.replace(/^Bearer /, "") ?? String(multipart?.get("access_token") ?? "none"));
+    url.searchParams.delete("appsecret_proof");
+    body?.delete("appsecret_proof");
     const method = init?.method ?? "GET";
-    const path = url.pathname.replace("/v21.0/", "") + url.search;
+    const path = url.pathname.replace("/v26.0/", "") + url.search;
     if (method === "POST") posts.push(path);
     const index = pending.findIndex((exchange) => exchange.method === method && exchange.path === path);
     if (index < 0) throw new Error(`Unrecorded Graph call: ${method} ${path}`);

@@ -1,4 +1,5 @@
 "use client";
+import { useNotices } from "@/i18n/notices";
 
 import { useRef, useState } from "react";
 import { useConfirm } from "@/components/ui/confirm-dialog";
@@ -41,6 +42,7 @@ export function BrandAssets({
   businessId: string;
   initialAssets: BrandAsset[];
 }) {
+  const tn = useNotices();
   const supabase = createClient();
   const router = useRouter();
   const [assets, setAssets] = useState<BrandAsset[]>(initialAssets);
@@ -58,15 +60,15 @@ export function BrandAssets({
     setError(null);
     const file = fileRef.current?.files?.[0];
     if (!file) {
-      setError("Choose a file first.");
+      setError(tn("brand.chooseFile"));
       return;
     }
     if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
-      setError("Choose a PNG, JPEG or WebP image.");
+      setError(tn("brand.fileType"));
       return;
     }
     if (file.size > MAX_BYTES) {
-      setError("File must be under 5 MB.");
+      setError(tn("brand.fileTooBig", { mb: MAX_BYTES / 1024 / 1024 }));
       return;
     }
 
@@ -81,7 +83,7 @@ export function BrandAssets({
           upsert: false,
         });
       if (upErr) {
-        setError(upErr.message);
+        setError(tn("brand.uploadFailed"));
         return;
       }
 
@@ -100,7 +102,7 @@ export function BrandAssets({
         .single();
       if (insErr || !row) {
         const { error: cleanupError } = await supabase.storage.from(BUCKET).remove([path]);
-        setError(cleanupError ? "Could not save the asset or clean up its uploaded file. Contact support before retrying." : insErr?.message ?? "Could not save the asset.");
+        setError(cleanupError ? tn("brand.saveCleanupFailed") : tn("brand.saveFailed"));
         return;
       }
 
@@ -115,10 +117,10 @@ export function BrandAssets({
           .eq("id", businessId)
           .select("id")
           .maybeSingle();
-        if (logoError || !updated) setError("Asset saved, but the brand logo could not be updated. Set the logo link under Your business before generating ads.");
+        if (logoError || !updated) setError(tn("brand.logoNotSet"));
       }
-    } catch (err) {
-      setError((err as Error).message);
+    } catch {
+      setError(tn("brand.somethingWrong"));
     } finally {
       setUploading(false);
       router.refresh();
@@ -137,7 +139,7 @@ export function BrandAssets({
       const { error: logoError } = await supabase.from("businesses")
         .update({ logo_url: null }).eq("id", businessId).eq("logo_url", asset.url);
       if (logoError) {
-        setError("Could not clear the brand logo reference. The asset has not been deleted.");
+        setError(tn("brand.logoNotCleared"));
         return;
       }
       const { data: deleted, error: delErr } = await supabase
@@ -148,16 +150,16 @@ export function BrandAssets({
         .select("id")
         .maybeSingle();
       if (delErr || !deleted) {
-        setError(delErr?.message ?? "Asset not found or no longer accessible.");
+        setError(delErr ? tn("brand.deleteFailed") : tn("brand.alreadyGone"));
         return;
       }
       setAssets((prev) => prev.filter((a) => a.id !== asset.id));
       if (path.startsWith(`${businessId}/`)) {
         const { error: storageError } = await supabase.storage.from(BUCKET).remove([path]);
-        if (storageError) setError("Asset removed from the library, but its stored file could not be deleted. Contact support for cleanup.");
+        if (storageError) setError(tn("brand.fileNotCleared"));
       }
-    } catch (err) {
-      setError((err as Error).message);
+    } catch {
+      setError(tn("brand.somethingWrong"));
     } finally {
       setDeleting(false);
       router.refresh();
@@ -168,7 +170,7 @@ export function BrandAssets({
     <Card>
       {confirmDialog}
       <CardHeader>
-        <CardTitle>Brand assets</CardTitle>
+        <CardTitle as="h2">Brand assets</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
         <form onSubmit={onUpload} className="flex flex-col gap-3">
@@ -250,9 +252,10 @@ export function BrandAssets({
                   data-product-event="asset.delete"
                   disabled={uploading || deleting}
                   aria-label="Delete asset"
-                  className="absolute right-1.5 top-1.5 rounded-md bg-black/60 p-1.5 text-white opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+                  // #1156: a 44 px button in the corner; the dark square inside stays 28 px (visible on touch).
+                  className="absolute right-0 top-0 grid h-11 w-11 place-items-start justify-items-end p-1.5 text-white opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 max-sm:p-0 max-sm:opacity-100"
                 >
-                  <Trash2 className="h-4 w-4" />
+                  <span className="rounded-md bg-black/60 p-1.5 max-sm:rounded-none max-sm:rounded-bl-md"><Trash2 className="h-4 w-4" /></span>
                 </button>
                 {a.notes && (
                   <p className="truncate px-2 py-1.5 text-xs text-slate-500">

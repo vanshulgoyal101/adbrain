@@ -1,21 +1,30 @@
 import { WalletCards } from "lucide-react";
+import { PauseAllAds } from "@/components/pause-all-ads";
+import { translator, type AppLocale } from "@/i18n/locale";
 import type { MetaConnection } from "@/lib/meta/credentials";
-import { DEFAULT_PAYMENT_ALLOCATION_POLICY } from "@/lib/payments/allocation";
 import { TestCheckout } from "@/components/test-checkout";
 import { ProductionCheckout } from "@/components/production-checkout";
 import { CustomerBalance } from "@/components/customer-balance";
-import type { CustomerBalance as Balance } from "@/lib/payments/customer-balance-contracts";
+import { BillingTabs, type BillingTab } from "@/components/billing-tabs";
+import type { CustomerBalanceView as Balance } from "@/lib/payments/customer-balance-contracts";
 
 type BillingConnection = Pick<MetaConnection, "adAccountId" | "ready" | "pending" | "expired">;
 
-export function ManagedBilling({ connection, testBusinessId, liveBusinessId, initialBalance = null }: {
+/** #1358: a business with any money shows its Ad budget first; one that hasn't paid yet starts on Payments. */
+export function initialBillingTab(balance: Balance | null, requested?: string | null): BillingTab {
+  if (requested === "payments" || requested === "budget") return requested;
+  const anyMoney = balance && [balance.remainingPaise, balance.reservedPaise, balance.mediaCostPaise, balance.taxCostPaise, balance.refundedPaise].some((paise) => paise > 0);
+  return anyMoney ? "budget" : "payments";
+}
+
+export function ManagedBilling({ connection, testBusinessId, liveBusinessId, initialBalance = null, billingTab }: {
   connection: BillingConnection | null; testBusinessId?: string; liveBusinessId?: string; initialBalance?: Balance | null;
+  /** `/settings?billing=payments|budget` opens that tab. */
+  billingTab?: string | null;
 }) {
-  if (liveBusinessId) return <>
-    <ProductionCheckout key={liveBusinessId} businessId={liveBusinessId} />
-    <CustomerBalance key={`allowance-${liveBusinessId}`} businessId={liveBusinessId} initialBalance={initialBalance} />
-  </>;
-  const feePercent = DEFAULT_PAYMENT_ALLOCATION_POLICY.platformFeeBps / 100;
+  if (liveBusinessId) return <BillingTabs key={liveBusinessId} initialTab={initialBillingTab(initialBalance, billingTab)}
+    budget={<CustomerBalance key={`allowance-${liveBusinessId}`} businessId={liveBusinessId} initialBalance={initialBalance} />}
+    payments={<ProductionCheckout key={liveBusinessId} businessId={liveBusinessId} />} />;
   const connectionStatus = !connection ? "Temporarily unavailable"
     : connection.expired ? "Reconnect required"
       : connection.ready ? "Connected"
@@ -40,16 +49,12 @@ export function ManagedBilling({ connection, testBusinessId, liveBusinessId, ini
       </dl>
 
       <div className="border-y border-slate-200 py-4">
-        <h3 className="text-sm font-medium text-slate-700">Pay any amount from ₹500</h3>
-        <dl className="mt-3 grid grid-cols-2 gap-4">
-          <div><dt className="text-sm text-slate-500">Service allocation</dt><dd className="mt-1 text-2xl font-semibold tabular-nums text-slate-900">{feePercent}%</dd></div>
-          <div><dt className="text-sm text-slate-500">Advertising</dt><dd className="mt-1 text-2xl font-semibold tabular-nums text-emerald-700">{100 - feePercent}%</dd></div>
-        </dl>
-        <p className="mt-3 text-xs leading-5 text-slate-500">One business, one offer and one service area for 12 months, including up to two creatives and one capped Meta campaign. Meta allocation includes applicable Meta tax. Gateway fees absorbed by AdBrain. No extra checkout charge, automatic renewal or guaranteed results.</p>
+        <p className="text-sm leading-6 text-slate-700">Pay any amount from ₹500. Your ad budget pays for Meta&apos;s ads and GST; AdBrain makes and runs the ads.</p>
+        <p className="mt-3 text-xs leading-5 text-slate-500">One business, one offer and one service area for 12 months, including up to two ads and one capped Meta campaign. Gateway fees are on us. No extra checkout charge, automatic renewal or guaranteed results.</p>
       </div>
 
-      <p className="text-sm leading-6 text-slate-600">The operator pays Meta separately. Advertising allocation is not a confirmed Meta balance. Payment confirmation does not authorize ad activation.</p>
-      <p className="text-sm leading-6 text-slate-600">Full refund before work starts. Afterward, unused advertising allocation is refundable after pending-cost reconciliation. Service allocation is earned only after the agreed creatives and campaign setup are delivered; otherwise it remains refundable.</p>
+      <p className="text-sm leading-6 text-slate-600">The operator pays Meta separately. Your ad budget is not yet a confirmed Meta balance. Payment confirmation does not authorize ad activation.</p>
+      <p className="text-sm leading-6 text-slate-600">Full refund before we start work. After that, your unused ad budget is refundable once pending Meta costs are settled. Mandatory customer rights remain applicable.</p>
       <p className="text-xs leading-5 text-slate-500">Live collection is not enabled here. No bank-to-Meta transfer or automatic account creation is performed by AdBrain.</p>
       {testBusinessId && <TestCheckout key={testBusinessId} businessId={testBusinessId} />}
     </section>
@@ -60,16 +65,37 @@ export function ManagedBilling({ connection, testBusinessId, liveBusinessId, ini
  * directly and an operator-funded business is paid by the operator, so neither is asked to pay; nor is anyone
  * while the funding mode can't be read.
  */
-export function BillingSection({ mode, ...billing }: { mode: "managed" | "own" | "operator" | null } & Parameters<typeof ManagedBilling>[0]) {
+export function BillingSection({ mode, locale = "en", runningCampaigns = [], ...billing }: {
+  mode: "managed" | "own" | "operator" | null;
+  locale?: AppLocale;
+  /** #1968 (frame 7): an own-account owner can stop everything next to "If you stop"; hidden while nothing runs. */
+  runningCampaigns?: Parameters<typeof PauseAllAds>[0]["campaigns"];
+} & Parameters<typeof ManagedBilling>[0]) {
   if (mode === "managed") return <ManagedBilling {...billing} />;
   if (mode !== "own") return null;
+  const t = translator(locale, "settings");
   return (
     <section aria-labelledby="own-billing-title" className="space-y-2 border-t border-slate-200 pt-6">
       <h2 id="own-billing-title" className="flex items-center gap-2 font-semibold text-slate-900">
         <WalletCards aria-hidden="true" className="h-5 w-5 text-blue-600" />
-        Billing
+        {t("billingTitle")}
       </h2>
-      <p className="text-sm leading-6 text-slate-600">You pay Meta directly from your ad account. AdBrain&apos;s pilot is free.</p>
+      <p className="text-sm leading-6 text-slate-600">{t("ownBilling")}</p>
+      <IfYouStop locale={locale} />
+      <PauseAllAds locale={locale} campaigns={runningCampaigns} />
     </section>
+  );
+}
+
+/** #1916 (CPO, #1880): what happens if an own-account owner stops paying, disconnects or deletes. Copy only. */
+function IfYouStop({ locale }: { locale: AppLocale }) {
+  const t = translator(locale, "settings");
+  const rows = [["payingLead", "paying"], ["disconnectLead", "disconnect"], ["deleteLead", "delete"]] as const;
+  return (
+    <ul aria-label={t("ifYouStop.title")} className="space-y-1.5 text-sm leading-6 text-slate-600">
+      {rows.map(([lead, text]) => (
+        <li key={lead}><strong className="font-medium text-slate-900">{t(`ifYouStop.${lead}`)}</strong> {t(`ifYouStop.${text}`)}</li>
+      ))}
+    </ul>
   );
 }

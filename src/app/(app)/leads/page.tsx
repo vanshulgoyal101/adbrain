@@ -1,3 +1,4 @@
+import { metaWaitFor } from "@/services/meta-throttle";
 import { Building2 } from "lucide-react";
 import Link from "next/link";
 import { LeadInbox } from "@/components/lead-inbox";
@@ -6,10 +7,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { getMetaConnection } from "@/lib/meta/credentials";
-import { getCampaigns, getLatestResultsWithEnquiries, getPrimaryBusiness } from "@/lib/supabase/queries";
-import { WhatsAppChats } from "@/components/whatsapp-chats";
-import { whatsappChatRows, type WhatsAppChatRow } from "@/lib/campaign/real-enquiries";
+import { getCampaigns, getLatestResultsWithEnquiries, getPrimaryBusiness, hasOwnPhoto } from "@/lib/supabase/queries";
+import { segmentForCategory } from "@/lib/segments";
+import { EnquiriesSections } from "@/components/enquiries-sections";
+import { enquiriesTitle, whatsappChatRows, type WhatsAppChatRow } from "@/lib/campaign/real-enquiries";
 import { getLeadPage } from "@/lib/leads/queries";
+import { inboxSummary } from "@/lib/leads/reply-time";
+import { readAlertSettings } from "@/lib/alerts/settings-read";
 
 export const metadata = { title: "Enquiries" };
 
@@ -38,7 +42,7 @@ export default async function LeadsPage() {
     );
   }
 
-  const [page, metaConnection, chatRows] = await Promise.all([
+  const [page, metaConnection, chatRows, summary, alerts, ownPhotos] = await Promise.all([
     getLeadPage(business.id),
     getMetaConnection(business.id),
     // #764: WhatsApp chats beside form leads; an unreadable read hides the section, never the inbox.
@@ -46,7 +50,19 @@ export default async function LeadsPage() {
       const launched = campaigns.filter((campaign) => campaign.meta_campaign_id);
       return launched.length ? whatsappChatRows(launched, await getLatestResultsWithEnquiries(launched.map((campaign) => campaign.id))) : [];
     }).catch((): WhatsAppChatRow[] => []),
+    // #1260: the inbox sentence; an unreadable count drops the sentence, never the list.
+    inboxSummary(business.id).catch(() => null),
+    readAlertSettings(business.id).catch(() => null),
+    // #1945: only interiors offers to share the owner's photos; an unreadable check hides that follow-up.
+    segmentForCategory(business.vertical)?.slug === "interiors" ? hasOwnPhoto(business.id).catch(() => false) : false,
   ]);
+
+  // #1260: the inbox opens on Waiting when someone waits, so its first page (and Load more) is the New list.
+  const waitingPage = summary?.waiting ? await getLeadPage(business.id, { status: "new" }).catch(() => null) : null;
+  const firstPage = waitingPage ?? page;
+  // #1597: nothing has come in at all (no form enquiry, no WhatsApp chat or logged enquiry).
+  const chatsEmpty = chatRows.every((row) => row.chats === 0 && row.realEnquiries === 0);
+  const whatsapp = chatRows[0];
 
   return (
     <div>
@@ -56,18 +72,28 @@ export default async function LeadsPage() {
         description="People who responded to your ads."
       />
       <div className="mt-6 max-sm:mt-4">
-        <LeadInbox
-          key={`${business.owner_id}:${business.id}`}
-          businessName={business.name}
-          offer={business.offers?.[0] ?? null}
-          language={replyLanguage(business.languages)}
-          initialLeads={page.leads}
-          initialTotal={page.total}
-          initialNextCursor={page.nextCursor}
-          metaReady={metaConnection.ready}
-          syncScope={`${business.owner_id}:${business.id}:${metaConnection.adAccountId ?? ""}:${metaConnection.pageId ?? ""}`}
-        />
-        <WhatsAppChats rows={chatRows} />
+        <EnquiriesSections chatRows={chatRows} formTotal={page.total} empty={chatsEmpty && page.total === 0}>
+          <LeadInbox
+            key={`${business.owner_id}:${business.id}`}
+            businessName={business.name}
+            offer={business.offers?.[0] ?? null}
+            language={replyLanguage(business.languages)}
+            vertical={business.vertical}
+            ownPhotos={ownPhotos}
+            initialLeads={firstPage.leads}
+            initialTotal={firstPage.total}
+            initialNextCursor={firstPage.nextCursor}
+            allTotal={page.total}
+            offerAlerts={Boolean(alerts && !alerts.leadAlerts && !alerts.optedOut)}
+            chatsEmpty={chatsEmpty}
+            addEnquiryFor={whatsapp ? { campaignId: whatsapp.id, spend: whatsapp.spend, enquiries: whatsapp.realEnquiries } : null}
+            metaReady={metaConnection.ready}
+            syncScope={`${business.owner_id}:${business.id}:${metaConnection.adAccountId ?? ""}:${metaConnection.pageId ?? ""}`}
+            title={enquiriesTitle(chatRows)}
+            summary={waitingPage || !summary?.waiting ? summary : { ...summary, waiting: null }}
+            metaWaitUntil={metaConnection.ready ? await metaWaitFor(business.id) : null}
+          />
+        </EnquiriesSections>
       </div>
     </div>
   );

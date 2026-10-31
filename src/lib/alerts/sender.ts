@@ -5,7 +5,8 @@
  * not paused, template not blocked, under the monthly cap) and records Meta's answer
  * (`owner_alert_settle`: 3 counted failures pause the owner).
  */
-const GRAPH = "https://graph.facebook.com/v21.0";
+import { GRAPH } from "@/lib/meta/graph-version";
+import { appSecretProof } from "@/lib/meta/appsecret-proof";
 
 /**
  * Platform-wide sends per IST month (CPO §1 on #701: ≈ ₹540 with GST at ₹0.115). `owner_alert_claim`
@@ -62,7 +63,8 @@ export async function sendTemplate(
 ): Promise<string> {
   let response: Response;
   try {
-    response = await fetchImpl(`${GRAPH}/${config.phoneNumberId}/messages`, {
+    const proof = appSecretProof(config.token);
+    response = await fetchImpl(`${GRAPH}/${config.phoneNumberId}/messages${proof ? `?appsecret_proof=${proof}` : ""}`, {
       method: "POST",
       headers: { Authorization: `Bearer ${config.token}`, "Content-Type": "application/json" },
       body: JSON.stringify({

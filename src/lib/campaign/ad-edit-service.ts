@@ -11,7 +11,7 @@ import { recordProductEvent } from "@/lib/observability/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/types";
-import { CampaignEditError } from "./edit-service";
+import { CampaignEditError, refuseWhileSwitchPending } from "./edit-service";
 
 /**
  * #775: edit a launched ad's words. Meta gets a new creative made from the stored one and the ad
@@ -21,7 +21,7 @@ import { CampaignEditError } from "./edit-service";
 
 export { BACK_TO_REVIEW } from "./ad-edit-copy";
 import { BACK_TO_REVIEW } from "./ad-edit-copy";
-export const AD_RATE_LIMITED = "Meta needs 30 seconds between ad changes. Try again in a moment.";
+const AD_RATE_LIMITED = "Meta needs 30 seconds between ad changes. Try again in a moment.";
 
 const words = (max: number) => z.string().trim().min(1).max(max);
 export const adCopyEditSchema = z.object({
@@ -69,6 +69,8 @@ export async function editAdCopy(
   const children = intendedCampaignChildren(campaign);
   if (!review || !children) throw new CampaignEditError("AdBrain can only edit campaigns it launched.", 409);
   if (!children.adIds.includes(adId)) throw new CampaignEditError("This ad isn't part of the campaign.", 404);
+  // #1146 (QA): a waiting new-audience copy holds its own copy of this ad's words; the switch would undo this edit.
+  await refuseWhileSwitchPending(database, campaignId);
 
   // Same claim checks as the owner's own copy in Studio (#280, #738), but here they block.
   const { data: business } = await supabase.from("businesses").select("offers, usps, description, vertical").eq("id", context.businessId).maybeSingle();

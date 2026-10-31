@@ -3,7 +3,7 @@ name: external-api-error-contracts
 description: "Use this skill when a product integrates with a provider API whose errors are localized, unstable, overly technical, or capable of changing business behavior such as destination, campaign type, billing or permissions."
 ---
 
-<!-- Generated from vanshulgoyal101/skills@fb8f6e0 skills/external-api-error-contracts.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
+<!-- Generated from vanshulgoyal101/skills@eb9e65d skills/external-api-error-contracts.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
 
 # External API Error Contracts
 
@@ -125,6 +125,48 @@ request.
   connection), yet its ad delivered and a chat was answered in the Business app (#286).
 - Filing a delivery-blocker fix before checking live outcomes. Hours of early 0
   impressions can be the auction/learning phase, not a configuration fault (#286).
+- Reading Meta insights without `date_preset`: it silently means last_30d excluding
+  today. Always set the window (#406).
+- Showing Meta's human-readable fields as-is: Graph localizes errors and
+  `ad_review_feedback` to the token user's locale. Send `locale=en_US` on every read
+  whose text reaches the UI, and record the fixture both ways (#635).
+- Trusting `validate_only` on an inline creative: it passed while the real
+  create-creative-then-ad sequence failed. Record the real sequence and check Meta's
+  per-format previews (#333).
+- Blaming the launch path for a `meta.<purpose>` failure: it can come from a page-render
+  read. Join on `meta.graph` by timestamp or request ID first (#615).
+- Trusting a free provider's `Retry-After`: Pollinations says 1 s but allows one image
+  per 45 s per IP, and the retries produced 404s. Pace to the documented limit (#634).
+- Checking a write path against a customer's live data without an agreed undo (delete
+  route or ops cleanup): check reads only until one exists (#335).
+- Treating a fire-and-forget call as a user commitment: verify a UI promise ("we'll
+  WhatsApp you") by blocking its request in a test (#336).
+- Calling a strict 60-minute per-item throttle exactly hourly: every other call is
+  skipped. Call more often than the throttle, or give it slack (#274).
+- Editing targeting on a Meta Advantage+ ad set after create: it's refused once the ad
+  set has interests, and WhatsApp (CONVERSATIONS) ad sets refuse any in-place targeting
+  update (100/1359202). Put every targeting rule (location exclusions included) in the
+  create payload; probe with `validate_only` on a PAUSED test campaign.
+- A targeting edit on a live ad set restarts review, and delivery stops meanwhile.
+- Meta's per-ad-set write limit (613, about 30 s) counts `validate_only`: validate in the
+  preview, not right before the write.
+- A new lifetime-budget ad set activated in the evening can show 0 impressions for about
+  12 h (pacing into the morning). Read hourly insights before calling it broken.
+- Account "room" (spend_cap − amount_spent) ignores lifetime budgets already promised;
+  read each ACTIVE ad set's `budget_remaining` at the same moment.
+- Shared ad accounts make campaign ids non-unique across businesses; ownership needs an
+  explicit rule in sync.
+- An empty child list isn't proof of a binding error; a deleted campaign still answers
+  `GET {id}`, so read the object's own status.
+- Label provider failures by HTTP code before counting validation failures; 20 of 44
+  "validation" errors were 503/429s. A catch-all error name stamped on every row of a
+  failed unit hides the real step.
+- Record what was actually sent (the payload), not the code constant.
+- A write after slow external calls must re-read the row and change only its own keys.
+- A fleet cron's per-customer failure belongs in a keyed list in the body, not the HTTP
+  status, or one customer masks every real outage.
+- A multi-step create must clean up what it made before the first child exists, and a
+  gate at activation (not only create) protects objects built before a rule existed.
 
 ## Evidence
 
@@ -143,3 +185,54 @@ fell back on 200-with-handoff responses and dropped a zero radius before
 validation. Production returned 200 in 4.4s with real targeting; the handoff and
 radius fixes each have a core test that fails without them
 ([incident](../incidents/adbrain-create-reliability-2026-10.md)).
+
+## Meta lessons (Oct 28)
+
+- Meta's `template_category_update` fires twice: 24 h ahead (`correct_category`,
+  with `new_category` still UTILITY) and when the change happens. Act on the first,
+  and test against Meta's documented payloads, not a hand-made shape (#1139).
+- A retry fix in the shared client misses every caller that builds its own `fetch`.
+  A CI check that greps `graph.facebook.com` outside the client, with an
+  allow-list, catches new ones (#1215).
+- Before blaming disconnects on Vercel, check `supportsCancellation`. Without it the
+  server always finishes (#1265).
+- When a default changes (form → WhatsApp), find every caller that relied on
+  "missing means the old default", including copies of old records (#1216).
+- A copy fix written by code must follow the ad's language, or a Hindi ad gets an
+  English line (#1198).
+
+## More lessons (Oct 28–29)
+
+- Retry only idempotent GETs, once, within the route's time budget; one 15 s try on
+  every Meta read turned a slow GET into a failed launch (#1199).
+- Check each provider's real refusal before classifying it: Gemini returns 400
+  API_KEY_INVALID for a bad key; Workers AI returns 429 for both quota (3036) and busy
+  (3040) (#1569, #1516).
+- Meta's geo search misses common local names (Zirakpur, New Chandigarh); check pilot
+  areas against the real `search` endpoint (#1550).
+- An event named after a permission gate isn't an operation count; read the operations
+  table before chasing failures (#1540).
+- Drive money-path error copy from the real SQL `raise` messages so a changed refusal
+  fails the core test (#782).
+- Before appending to a text position ("the last line"), grep every consumer of that
+  position (#1147).
+
+## Meta lessons (Oct 29)
+
+- Graph error 100/33 means "doesn't exist **or** no permission"; never treat it as
+  deleted on its own (#1678).
+- Minimum budgets and the spend-cap floor are live per ad account (`minimum_budgets`,
+  `min_campaign_group_spend_cap`), not constants. Read them, prove with `validate_only`
+  at floor−1 and at the floor, and record that response as the fixture (#1799).
+- The `X-FB-Ads-Insights-Throttle` header reports the app's access tier; one GET
+  answers "which tier are we on" (#1843).
+- Check which field a guarantee sentence qualifies: "best effort" applied to
+  `*_min_spend_target`, not `lifetime_budget`. A missing guarantee means unknown, not
+  soft (#2048).
+- A past approval or a pending review isn't current entitlement, and a renamed gate
+  isn't a change in it; record historical approval and current status as separate
+  rows (#2049).
+- Pausing only the parent object leaves its children ACTIVE. Delivery stops, but a later
+  step that needs every child PAUSED (a capped turn-on) is blocked. Pause the tree and
+  read the children's effective status back; don't trust the parent's status (#2293,
+  #2301, #2310).

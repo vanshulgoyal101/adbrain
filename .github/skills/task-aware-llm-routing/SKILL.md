@@ -3,7 +3,7 @@ name: task-aware-llm-routing
 description: "Use this skill when one product sends multiple kinds of work to several LLM providers, especially when some tasks are expensive or latency-sensitive and others are extraction, summarization, classification, or conversational glue."
 ---
 
-<!-- Generated from vanshulgoyal101/skills@fb8f6e0 skills/task-aware-llm-routing.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
+<!-- Generated from vanshulgoyal101/skills@eb9e65d skills/task-aware-llm-routing.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
 
 # Task-Aware LLM Routing
 
@@ -62,6 +62,33 @@ creative-generation settings.
 - Picking models once. Models improve every few weeks; schedule a review (a cron that
   opens one issue) that reruns the per-task quality/speed/cost check on recorded
   inputs and switches only on a clear win, under a fixed evaluation budget.
+- Burying a language rule in the system prompt: qwen 27b ignored it. State the detected
+  language in the request ("OWNER WRITES IN: …") and assert that line in a core test (#290).
+- Counting every logged provider attempt as a failed call: absorbed 429s then look like
+  outages. Measure reliability on what the request returned (#378, #612).
+- Hard-failing Create when a paid key runs out: degrade to free providers with an honest
+  message. Record the 402 at $0 by sending an unaffordable request (#449).
+- Adding an LLM route without an `onAttempt` hook: it's invisible in usage. Check that a
+  route's core test writes usage rows (#650).
+- Adding a retry knob before mutating the existing one: the router's 20 s per-provider
+  wait already covered the burst; the real bug was a fallback logged as `failed` (#612).
+- Fixing a validator rule in one route only: the spelled-currency rule (₹10,000 =
+  "10,000 rupees") broke Regenerate after the interview was fixed. Search for variants
+  when a validator rule changes (#284).
+- Sizing an advisory AI review larger than the free tier: Groq's 8k TPM cap sets the
+  diff budget. Cap the diff and list skipped files instead of failing (#423).
+- On a 429, go straight to the fastest healthy provider instead of waiting out the next
+  one's timeout serially.
+- Before fixing a 0% success metric, check it isn't a logging artefact (a ready plan was
+  never logged as success).
+- Rules applied on every generation need negative tests from everyday copy ("Fix your
+  appointment", "broke down"); substring matches ("cure" in "secure") cost paid repairs.
+- Check the platform's own free feature before pricing third-party AI (Meta's image
+  animation turned a ₹35–₹400-per-ad question into a ₹0 test).
+- A free eval tier that gives one conclusive run a day can't gate releases; approve a
+  small capped paid before/after run with an explicit no-worse gate.
+- Verify a model's "invented" facts against the exact text the route reads, not a
+  tag-stripped copy.
 
 ## Latency, deadlines and model promotion
 

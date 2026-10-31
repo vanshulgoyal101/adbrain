@@ -59,7 +59,8 @@ export function rerunPrefill(input: {
   if (draft) {
     return {
       ...shared, source: "draft", goal: draft.goal, dailyBudgetRupees: draft.dailyBudgetRupees,
-      destination: draft.destination, leadFormId: draft.leadFormId, whatsappNumber: draft.whatsappNumber,
+      // #1216: a draft saved before destinations existed is a form campaign, as preflight and launch read it.
+      destination: draft.destination ?? "instant_form", leadFormId: draft.leadFormId, whatsappNumber: draft.whatsappNumber,
       whatsappLanguage: draft.whatsappLanguage, whatsappMessage: draft.whatsappMessage,
       targeting: draft.targeting, abTest: draft.abTest,
     };

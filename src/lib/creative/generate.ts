@@ -15,7 +15,8 @@ import {
 } from "@/lib/creative/concept";
 import { downloadImage, generateImage } from "@/lib/imageGen";
 import { personSubjectLine } from "@/lib/creative/visual-rules";
-import type { ImageAttempt } from "@/lib/imageGen/types";
+import { ReferencePhotoPausedError, type ImageAttempt } from "@/lib/imageGen/types";
+import { ownerPhotoFor, pausedPhotoFor } from "./owner-photos";
 import { complete, parseJSON } from "@/lib/llm";
 import { LLMError } from "@/lib/llm/types";
 import type { LLMFailureCode, TokenUsage } from "@/lib/llm";
@@ -78,6 +79,8 @@ export interface CreateProgressEvent {
   angleName: string;
   stage: CreateProgressStage;
   at: number;
+  /** #1542: this ad's picture fell back to the slower free provider (the paid key is out). */
+  slowPictures?: true;
 }
 
 const MAX_BRIEF_CHARS = 2_000;
@@ -121,6 +124,8 @@ export async function generateVariants(params: {
   onProgress?: (event: CreateProgressEvent) => void;
   /** Stops the run early (#1123's top-up budget); the 270 s ceiling always applies. */
   signal?: AbortSignal;
+  /** #1547: concepts already validated for these angles; only their pictures are made again (no text call). */
+  concepts?: Partial<Record<string, CreativeConcept>>;
 }): Promise<GeneratedVariant[]> {
   const {
     brand: rawBrand,
@@ -146,9 +151,9 @@ export async function generateVariants(params: {
       : AD_ANGLES
   ).slice(0, count);
 
-  const progress = (angle: AdAngle, stage: CreateProgressStage) => {
+  const progress = (angle: AdAngle, stage: CreateProgressStage, extra?: Pick<CreateProgressEvent, "slowPictures">) => {
     try {
-      params.onProgress?.({ angleId: angle.id, angleName: angle.name, stage, at: Date.now() });
+      params.onProgress?.({ angleId: angle.id, angleName: angle.name, stage, at: Date.now(), ...extra });
     } catch {
       // Progress is advisory; a broken listener must not cost a paid concept.
     }
@@ -162,9 +167,9 @@ export async function generateVariants(params: {
   let planning = Promise.resolve();
   let startNext = Promise.resolve();
   const outcomes = await Promise.allSettled(
-    angles.map(async (angle, index) => {
+    angles.map(async (angle) => {
       try {
-        const ownerPhoto = index === 0 ? params.ownerPhotos?.[0] : undefined;
+        const ownerPhoto = ownerPhotoFor(angle, params.ownerPhotos);
         const input: ConceptInput = { brand, brief, angle, instructions, language, format, referenceImages, advisoryPreferences, sourceFacts, ...(ownerPhoto ? { ownerPhoto } : {}) };
         const waitForTurn = parallel ? Promise.resolve() : startNext;
         let notifyNext!: () => void;
@@ -172,10 +177,11 @@ export async function generateVariants(params: {
         const earlierConcepts = planning.then(() => {
           input.recentCopy = recentCopy.slice(0, 12);
         });
-        const planned = waitForTurn.then(() => {
+        const reused = params.concepts?.[angle.id];
+        const planned = (reused ? Promise.resolve({ concept: reused, usage: [] as GeneratedVariant["llmUsage"] }) : waitForTurn.then(() => {
           input.recentCopy = recentCopy.slice(0, 12);
           return generateConcept(input, signal, earlierConcepts, notifyNext, (stage) => progress(angle, stage));
-        }).then((result) => {
+        })).then((result) => {
           recentCopy.unshift(result.concept);
           return result;
         });
@@ -183,7 +189,8 @@ export async function generateVariants(params: {
         void planning.then(notifyNext);
         const concept = await planned;
         progress(angle, "image");
-        const variant = await renderVariant(input, signal, concept);
+        const variant = await renderVariant(input, signal, concept, () => progress(angle, "image", { slowPictures: true }),
+          pausedPhotoFor(angle, params.ownerPhotos));
         await params.onVariant?.(variant);
         progress(angle, "ready");
         return variant;
@@ -336,6 +343,7 @@ export async function generateOneVariant(
   recentCopy: ConceptInput["recentCopy"] = [],
   advisoryPreferences?: string,
   sourceFacts: string[] = [],
+  pausedPhoto?: string,
 ): Promise<GeneratedVariant> {
   brand = boundedBrand(brand);
   brief = brief.slice(0, MAX_BRIEF_CHARS);
@@ -353,13 +361,15 @@ export async function generateOneVariant(
     advisoryPreferences,
     sourceFacts: sourceFacts.slice(0, 12).map((fact) => fact.slice(0, 2_000)),
   };
-  return renderVariant(input, signal, await generateConcept(input, signal));
+  return renderVariant(input, signal, await generateConcept(input, signal), undefined, pausedPhoto);
 }
 
 async function renderVariant(
   input: ConceptInput,
   signal: AbortSignal,
   planned: { concept: CreativeConcept; usage: GeneratedVariant["llmUsage"] },
+  onFallback?: () => void,
+  pausedPhoto?: string,
 ): Promise<GeneratedVariant> {
   const { brand, angle, format, referenceImages } = input;
   const dims = formatDimensions(format ?? "portrait");
@@ -369,10 +379,12 @@ async function renderVariant(
   const ownerRaster = input.ownerPhoto
     ? await downloadImage(input.ownerPhoto, signal).catch(() => undefined)
     : undefined;
-  const ownerPhoto = ownerRaster ? input.ownerPhoto : undefined;
+  let ownerPhoto = ownerRaster ? input.ownerPhoto : undefined;
+  const fromOwner = (url: string, raster: { width: number; height: number }, fallbackFrom?: string) => ({
+    url, prompt: "", provider: OWNER_PHOTO_PROVIDER, model: "brand_assets", estimatedCostUsd: 0, width: raster.width, height: raster.height,
+    latencyMs: undefined, fallbackFrom, providerRequestId: undefined, providerFinalStatus: undefined });
   const image = ownerRaster && ownerPhoto
-    ? { url: ownerPhoto, prompt: "", provider: OWNER_PHOTO_PROVIDER, model: "brand_assets", estimatedCostUsd: 0, width: ownerRaster.width, height: ownerRaster.height,
-      latencyMs: undefined, fallbackFrom: undefined, providerRequestId: undefined, providerFinalStatus: undefined }
+    ? fromOwner(ownerPhoto, ownerRaster)
     : await generateImage({
       // #418 rule 4: a generated ad shows a person, named first so the free model reads it; an owner's own background request (background.ts) is left alone.
       prompt: [personSubjectLine(concept.visual.direction, [input.instructions, input.brief, input.advisoryPreferences], brand), conceptImagePrompt(concept, input)].filter(Boolean).join("\n"),
@@ -381,8 +393,14 @@ async function renderVariant(
       referenceImages: referenceImages?.slice(0, 3),
       signal,
       onAttempt: (entry) => imageAttempts.push(entry),
-    }).catch((error) => {
-      throw new CreativeImageError(error, usage, imageAttempts, concept);
+      onFallback,
+    }).catch(async (error) => {
+      // #2222: paid pictures are paused, so the product photo can't be redrawn; the owner's own photo is the real product, $0.
+      const paused = error instanceof ReferencePhotoPausedError ? error : undefined;
+      const raster = paused && pausedPhoto ? await downloadImage(pausedPhoto, signal).catch(() => undefined) : undefined;
+      if (!paused || !raster || !pausedPhoto) throw new CreativeImageError(error, usage, imageAttempts, concept);
+      ownerPhoto = pausedPhoto;
+      return fromOwner(pausedPhoto, raster, paused.from);
     });
 
   return {
@@ -405,6 +423,7 @@ async function renderVariant(
       angle,
       backgroundUrl: image.url,
       format,
+      language: input.language,
     }),
     llmUsage: usage,
     imageUsage: {

@@ -3,15 +3,17 @@
 // Run it in the foreground only; it gives up after --max-min (default 30), and nothing is left running.
 // It also never outlives its chat: it exits when its parent process is gone, and a second copy for
 // the same role exits at once.
-// Usage: node scripts/wait-for-work.mjs --me dev2 [--max-min 30] [--poll-sec 90] [--since <ISO time>]
+// Usage: node scripts/wait-for-work.mjs --me dev2 [--max-min 30] [--poll-sec 300] [--since <ISO time>]
 // Exit 0 = work found (printed), 3 = nothing new before --max-min, 4 = another waiter for this role
 // is already running, 5 = the chat that started it is gone.
+// #2021: every role shares one gh login's 5,000 calls/hour, so reads revalidate with ETags (304s are free),
+// a 403/429 rate limit waits for x-ratelimit-reset (or Retry-After) and retries, and polling slows when low.
 // Restart-proof (#384): on start it prints your role card, everything labelled for you with its latest
 // comment, and worktrees for your issues with uncommitted or unpushed work.
 // Work is: an item newly labelled for you; a comment on your item, addressed to you, or on an open PR
 // whose title names your issue (#309 "#274 …"); and, at start and before giving up, any item you own
 // where someone else spoke last and didn't address another role (so handoffs made while you were busy
-// are never lost). For the CTO it also reports any worker with fewer than 2 actionable items and,
+// are never lost). For the CTO it also reports any worker with fewer than 3 actionable items and,
 // at the end of each wait, workers gone quiet for 90 min and PRs untouched for 60 min.
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -20,9 +22,9 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
-export const NAMES = { dev: "Dev", dev2: "Dev 2", dev3: "Dev 3", dev4: "Dev 4", qa: "QA", qa2: "QA 2", reviewer: "Reviewer", devops: "DevOps", cpo: "CPO", analyst: "Analyst", designer: "Designer", cto: "CTO", ceo: "CEO" };
+export const NAMES = { dev: "Dev", dev2: "Dev 2", dev3: "Dev 3", dev4: "Dev 4", qa: "QA", qa2: "QA 2", reviewer: "Reviewer", devops: "DevOps", cpo: "CPO", analyst: "Analyst", designer: "Designer", docs: "Docs", cto: "CTO", ceo: "CEO" };
 // Items parked on someone outside the team never count as waiting on you.
-const PARKED = new Set(["waiting-owner", "blocked"]);
+const PARKED = new Set(["waiting-owner", "blocked", "parked"]);
 
 /** How a comment relates to `role`: written by it, addressed to it, or addressed only to someone else. */
 export function matchers(role) {
@@ -60,7 +62,8 @@ export function snoozedUntil(body) {
 }
 
 export function waitingOnMe(lastBody, m, labels = [], now = Date.now()) {
-  if (labels.some((l) => PARKED.has(l))) return false;
+  // `later` is frozen (board, #2238): a reply on it doesn't wake its owner.
+  if (labels.some((l) => PARKED.has(l) || l === "later")) return false;
   if (lastBody == null) return true;
   // Your own last word without a handoff (no "→ Role") means the item is still yours to continue;
   // idle workers otherwise slept with their queue unfinished (Oct 25). A scheduled check
@@ -71,14 +74,145 @@ export function waitingOnMe(lastBody, m, labels = [], now = Date.now()) {
     return !m.handedToOther(lastBody);
   }
   if (m.addressedToMe(lastBody)) return true;
+  // #1478: on a co-owned issue an un-arrowed FYI isn't every owner's turn; only one that names you is.
+  if (labels.filter((l) => l.startsWith("owner:")).length > 1) return false;
   return !m.handedToOther(lastBody);
 }
+
+/**
+ * #2021: every role shares one gh login (5,000 REST calls/hour). `rate_limit` itself is free. Returns ms to wait:
+ * until the reset when the budget is spent, a slowed poll when it's low, else 0.
+ */
+export function rateBackoffMs({ remaining, reset }, pollMs, now = Date.now()) {
+  if (remaining <= 50) return Math.max(0, reset * 1000 - now) + 5_000 + Math.floor(Math.random() * 30_000);
+  if (remaining < 1_000) return pollMs * 2;
+  return 0;
+}
+
+const parseResponse = (raw) => {
+  const text = String(raw ?? "");
+  const split = text.search(/\r?\n\r?\n/);
+  const head = split < 0 ? text : text.slice(0, split);
+  const body = split < 0 ? "" : text.slice(split).replace(/^\r?\n\r?\n/, "");
+  const [statusLine, ...lines] = head.split(/\r?\n/);
+  const headers = {};
+  for (const line of lines) {
+    const at = line.indexOf(":");
+    if (at > 0) headers[line.slice(0, at).trim().toLowerCase()] = line.slice(at + 1).trim();
+  }
+  return { status: Number(statusLine.split(" ")[1]) || 0, headers, body };
+};
+
+/**
+ * #2021: a gh api client that revalidates with ETags (a 304 doesn't spend the shared budget), waits out
+ * 403/429 rate limits (x-ratelimit-reset or Retry-After) instead of crashing, and slows polling from the
+ * rate headers it already has, so it never spends a call on `rate_limit`.
+ * @param {{ request: (args: string[]) => string, sleep?: (ms: number) => Promise<void>, now?: () => number, warn?: (line: string) => void }} options
+ */
+export function createGitHubApi({
+  request,
+  sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  now = () => Date.now(),
+  warn = (line) => console.error(line),
+}) {
+  const cache = new Map();
+  let rate = null;
+  async function get(path) {
+    for (let attempt = 1; ; attempt++) {
+      const cached = cache.get(path);
+      const args = ["api", "--include", path, ...(cached ? ["-H", `If-None-Match: ${cached.etag}`] : [])];
+      let raw;
+      // gh exits nonzero on 304 and on errors; with --include the response is still on stdout.
+      try { raw = request(args); } catch (error) {
+        if (!error?.stdout) throw error;
+        raw = error.stdout;
+      }
+      const { status, headers, body } = parseResponse(raw);
+      if (headers["x-ratelimit-remaining"] !== undefined) {
+        rate = { remaining: Number(headers["x-ratelimit-remaining"]), reset: Number(headers["x-ratelimit-reset"]) || 0 };
+      }
+      if (status === 304 && cached) return cached.data;
+      if (status >= 200 && status < 300) {
+        const data = body.trim() ? JSON.parse(body) : null;
+        if (headers.etag) cache.set(path, { etag: headers.etag, data });
+        else cache.delete(path);
+        return data;
+      }
+      let message = `HTTP ${status}`;
+      try { message = JSON.parse(body).message || message; } catch { /* not JSON */ }
+      const limited = status === 429 || (status === 403 && (headers["x-ratelimit-remaining"] === "0" || headers["retry-after"] !== undefined || /rate limit/i.test(message)));
+      if (!limited) throw new Error(`${message} (HTTP ${status}, ${path})`);
+      const jitter = Math.floor(Math.random() * 30_000);
+      const retryAfter = headers["retry-after"];
+      const retryMs = retryAfter === undefined ? 0
+        : /^\d+$/.test(retryAfter) ? Number(retryAfter) * 1000 : Date.parse(retryAfter) - now();
+      const resetMs = headers["x-ratelimit-remaining"] === "0"
+        ? Number(headers["x-ratelimit-reset"]) * 1000 - now() + 5_000 : 0;
+      const hints = [retryMs, resetMs].filter((ms) => Number.isFinite(ms) && ms > 0);
+      const wait = (hints.length ? Math.max(...hints) : Math.min(60_000 * 2 ** (attempt - 1), 900_000)) + jitter;
+      warn(`GitHub rate limit (HTTP ${status}); waiting ${Math.ceil(wait / 1000)} s before retrying (#2021).`);
+      await sleep(wait);
+    }
+  }
+  return { get, pollDelay: (pollMs) => pollMs + (rate ? rateBackoffMs(rate, pollMs, now()) : 0) };
+}
+
+/**
+ * #1478: comments created since the wait began; `?since=` filters on updated_at, so edits looked new.
+ * @template {{ created_at?: string }} T
+ * @param {T[]} comments
+ * @param {string} since
+ * @returns {T[]}
+ */
+export function freshComments(comments, since) {
+  return comments.filter((c) => (c.created_at ?? "") >= since);
+}
+
+/**
+ * #364: the oldest owned item you can act on now, even when your last word on it was a handoff:
+ * not parked, blocked, waiting on the owner, `later`, `standing` (channels, umbrellas) or a CEO `decision`, no open PR naming it,
+ * and not in `skip` (items snoozed by a future "Next check"). Null when there is none.
+ * @param {Array<{ number: number, title?: string, pull_request?: unknown, labels?: Array<string | { name: string }> }>} items
+ * @param {Array<{ title?: string }>} openPulls
+ * @param {Set<number>} [skip]
+ */
+export function nextItem(items, openPulls, skip = new Set()) {
+  const withPr = new Set(openPulls.flatMap((pr) => linkedIssues(pr.title)));
+  return items
+    .filter((i) => !i.pull_request && !labelNames(i).some((n) => HOLD.has(n)) && !withPr.has(i.number) && !skip.has(i.number))
+    .sort((a, b) => a.number - b.number)[0] ?? null;
+}
+
+const HOLD = new Set([...PARKED, "later", "decision", "standing"]);
+/** @param {{ labels?: Array<string | { name: string }> }} i */
+const labelNames = (i) => (i.labels ?? []).map((l) => (typeof l === "string" ? l : l.name));
+
+/**
+ * #364 (CEO, Oct 29): the owned items that stop you waiting. Everything labelled yours except held items
+ * (parked, blocked, waiting-owner, decision, later, standing) and scheduled checks not yet due (`snoozed`).
+ * A co-owned item (#1478) counts only when it is your turn (`myTurn`). Turns first, then `core`, then oldest.
+ * @param {Array<{ number: number, labels?: Array<string | { name: string }> }>} items
+ * @param {{ snoozed?: Set<number>, myTurn?: Set<number> }} [state]
+ */
+export function actionableOwned(items, { snoozed = new Set(), myTurn = new Set() } = {}) {
+  const rank = (i) => (myTurn.has(i.number) ? 0 : labelNames(i).includes("core") ? 1 : 2);
+  return items
+    .filter((i) => {
+      const names = labelNames(i);
+      if (names.some((n) => HOLD.has(n)) || snoozed.has(i.number)) return false;
+      return names.filter((n) => n.startsWith("owner:")).length < 2 || myTurn.has(i.number);
+    })
+    .sort((a, b) => rank(a) - rank(b) || a.number - b.number);
+}
+
+/** Exit code when the waiter refuses to wait because you own actionable items (#364). */
+export const OWNS_WORK = 6;
 
 /** Earliest scheduled check seen this run; the wait loop rechecks the backlog when it passes. */
 let nextDue = Infinity;
 
 /** Ready-pool lane per role: briefed, unowned issues labelled `ready` + `lane:<lane>` (#573). */
-export const LANES = { dev: "dev", dev2: "dev", dev3: "dev", dev4: "dev", qa: "qa", qa2: "qa", devops: "devops", reviewer: "review" };
+export const LANES = { dev: "dev", dev2: "dev", dev3: "dev", dev4: "dev", qa: "qa", qa2: "qa", devops: "devops", reviewer: "review", designer: "design", cpo: "product", analyst: "research", docs: "docs" };
 
 /**
  * The lane's unclaimed ready issues, core first, oldest first; at most `max`.
@@ -92,15 +226,15 @@ export function readyPool(issues, role, max = 3) {
   const names = (i) => (i.labels ?? []).map((l) => (typeof l === "string" ? l : l.name));
   return issues
     .filter((i) => !i.pull_request && names(i).includes("ready") && names(i).includes(`lane:${lane}`)
-      && !names(i).some((n) => n.startsWith("owner:") || PARKED.has(n) || n === "decision"))
+      && !names(i).some((n) => n.startsWith("owner:") || HOLD.has(n) || n === `declined:${role}`))
     .sort((a, b) => Number(names(b).includes("core")) - Number(names(a).includes("core")) || a.number - b.number)
     .slice(0, max);
 }
 
-export const WORKERS = ["dev", "dev2", "dev3", "dev4", "qa", "qa2", "reviewer", "devops", "cpo", "analyst", "designer"];
-export const MIN_QUEUE = 2;
+export const WORKERS = ["dev", "dev2", "dev3", "dev4", "qa", "qa2", "reviewer", "devops", "cpo", "analyst", "designer", "docs"];
+export const MIN_QUEUE = 3;
 
-/** Workers with fewer than MIN_QUEUE actionable open items (not parked or waiting on the CEO). The CTO refills these. */
+/** Workers with fewer than MIN_QUEUE actionable open items, owned PRs included (not parked or waiting on the CEO). The CTO refills these. */
 export function queueCounts(issues) {
   const counts = Object.fromEntries(WORKERS.map((r) => [r, 0]));
   for (const issue of issues) {
@@ -112,12 +246,11 @@ export function queueCounts(issues) {
 }
 
 /** Ready-pool items in a worker's lane count as supply: the waiter offers them, so the queue isn't dry (#573). */
-/** Roles that pick their own work when nothing is queued (Reviewer audits, Analyst research, Designer slices, DevOps ops hygiene), so the CTO doesn't refill them. */
-export const SELF_SOURCING = new Set(["reviewer", "analyst", "designer", "devops"]);
 
 export function lowQueues(issues) {
   const counts = queueCounts(issues);
-  return WORKERS.filter((r) => !SELF_SOURCING.has(r) && counts[r] + readyPool(issues, r, MIN_QUEUE).length < MIN_QUEUE).map((r) => ({ role: r, count: counts[r] }));
+  // Every role keeps ≥ MIN_QUEUE, the self-sourcing ones too (CEO, Oct 28: their queues drained in minutes, #364).
+  return WORKERS.filter((r) => counts[r] + readyPool(issues, r, MIN_QUEUE).length < MIN_QUEUE).map((r) => ({ role: r, count: counts[r] }));
 }
 
 export const QUIET_MIN = 90;
@@ -146,7 +279,7 @@ export function offTrack({ issues, comments, prs, now }) {
   return { quiet, stale };
 }
 
-/** One line from docs/ORCHESTRATION.md → Role cards ("Same as Dev" resolves to Dev's column). */
+/** One line from docs/team/orchestration.md → Role cards ("Same as Dev" resolves to Dev's column). */
 /**
  * Workflows failing on `min` or more distinct PR branches in the window: these never reach main/next pushes,
  * so without this the CTO only hears about them from the owner's inbox (#926's core-approval, Oct 27).
@@ -236,7 +369,7 @@ const { values } = parseArgs({
   options: {
     me: { type: "string" },
     "max-min": { type: "string", default: "30" },
-    "poll-sec": { type: "string", default: "90" },
+    "poll-sec": { type: "string", default: "300" },
     // #573: the supervisor's read-only check; never takes the role's lock, so a chat starting its waiter isn't refused.
     probe: { type: "boolean", default: false },
     since: { type: "string" },
@@ -284,15 +417,27 @@ const repo = values.repo;
 const label = role === "ceo" ? "decision" : `owner:${role}`;
 const since = values.since ? new Date(values.since).toISOString() : new Date().toISOString();
 const deadline = Date.now() + Number(values["max-min"]) * 60_000;
-const pollMs = Math.max(15, Number(values["poll-sec"])) * 1000;
+const pollMs = Math.max(60, Number(values["poll-sec"])) * 1000;
 
 // Chats started without a login shell (e.g. VS Code after a reboot) may lack Homebrew's bin on PATH.
 const ghEnv = { ...process.env, PATH: [process.env.PATH, "/opt/homebrew/bin", "/usr/local/bin"].filter(Boolean).join(":") };
 
-function api(path) {
-  // All chats share one gh login (5,000 requests/hour): each poll makes 4–5 calls plus one per PR updated during the wait.
-  return JSON.parse(execFileSync("gh", ["api", path], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 16 * 1024 * 1024 , env: ghEnv }));
-}
+const gh = createGitHubApi({
+  request: (args) => execFileSync("gh", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 16 * 1024 * 1024, env: ghEnv }),
+  sleep: async (ms) => {
+    const until = Date.now() + ms;
+    while (Date.now() < until) {
+      exitIfOrphaned();
+      if (Date.now() >= deadline) {
+        console.error("Wait deadline reached during GitHub rate-limit backoff; retry after the reset (#2021).");
+        process.exit(3);
+      }
+      await new Promise(resolve => setTimeout(resolve, Math.min(5_000, until - Date.now(), Math.max(1, deadline - Date.now()))));
+    }
+  },
+});
+// All chats share one gh login (5,000 requests/hour, #2021): unchanged reads come back 304 and cost nothing.
+const api = (path) => gh.get(path);
 
 const owned = () => api(`repos/${repo}/issues?state=open&labels=${encodeURIComponent(label)}&per_page=100`);
 const brief = text => text.replace(/\s+/g, " ").trim().slice(0, 200);
@@ -301,7 +446,7 @@ async function firstOwned() {
   for (let attempt = 1; ; attempt++) {
     exitIfOrphaned();
     try {
-      return owned();
+      return await owned();
     } catch (error) {
       // A failed first read would make every owned item look newly labelled later.
       if (attempt >= 5) throw error;
@@ -312,24 +457,35 @@ async function firstOwned() {
 
 const startOwned = new Set((await firstOwned()).map(item => item.number));
 // CTO only: workers about to run dry (one extra call per poll). Reported at start, then only when newly low.
-const openIssues = () => api(`repos/${repo}/issues?state=open&per_page=100`).filter(item => !item.pull_request);
+// Every open issue and PR, all pages: one page of 100 hid older owned items, so queues looked low (#2122).
+// Unchanged pages come back 304 and cost nothing (#2021).
+const openItems = async () => {
+  const all = [];
+  for (let page = 1; page <= 10; page++) {
+    const batch = await api(`repos/${repo}/issues?state=open&per_page=100&page=${page}`);
+    all.push(...batch);
+    if (batch.length < 100) break;
+  }
+  return all;
+};
+const openIssues = async () => (await openItems()).filter(item => !item.pull_request);
 const describeLow = (low) => low.map(({ role: r, count }) => `Queue low: ${NAMES[r]} has ${count} actionable item(s); refill from the CEO priorities (worker table)`);
 let startLow = new Set();
 
-function findWork() {
+async function findWork() {
   const found = [];
-  const mine = owned();
+  const mine = await owned();
   for (const item of mine) {
     if (!startOwned.has(item.number)) found.push(`#${item.number} is now labelled ${label}${withSkills(item)}: ${item.title}`);
   }
   const mineNumbers = new Set(mine.map(item => item.number));
   // A PR whose title names one of your issues is yours to watch too (QA's #309 verdict was for #274's owner).
-  const openPulls = api(`repos/${repo}/pulls?state=open&per_page=100`);
+  const openPulls = await api(`repos/${repo}/pulls?state=open&per_page=100`);
   const linkedToMine = new Set(openPulls
     .filter(pr => linkedIssues(pr.title).some(n => mineNumbers.has(n))).map(pr => pr.number));
   // Verdicts are PR reviews (#423): read reviews on PRs touched since this wait began.
   for (const pr of openPulls.filter(pr => pr.updated_at >= since)) {
-    for (const review of api(`repos/${repo}/pulls/${pr.number}/reviews?per_page=100`)) {
+    for (const review of await api(`repos/${repo}/pulls/${pr.number}/reviews?per_page=100`)) {
       const body = review.body ?? "";
       if (!body.trim() || !review.submitted_at || review.submitted_at < since || writtenByMe(body)) continue;
       if (mineNumbers.has(pr.number) || addressedToMe(body) || linkedToMine.has(pr.number)) {
@@ -338,23 +494,26 @@ function findWork() {
     }
   }
   // One repo-wide call (newest first) instead of one call per updated issue.
-  for (const comment of api(`repos/${repo}/issues/comments?since=${since}&sort=created&direction=desc&per_page=100`)) {
+  const coOwned = new Set(mine.filter(item => (item.labels ?? []).filter(l => l.name.startsWith("owner:")).length > 1).map(item => item.number));
+  for (const comment of freshComments(await api(`repos/${repo}/issues/comments?since=${since}&sort=created&direction=desc&per_page=100`), since)) {
     const number = Number(comment.issue_url.split("/").pop());
     const body = comment.body ?? "";
     if (writtenByMe(body)) continue;
+    // #1478: on a co-owned issue, a comment wakes you only when it names you.
+    if (coOwned.has(number) && !addressedToMe(body)) continue;
     if (mineNumbers.has(number) || addressedToMe(body) || linkedToMine.has(number)) {
       found.push(`#${number} new comment: "${brief(body)}" ${comment.html_url}`);
     }
   }
   if (role === "cto") {
-    const low = lowQueues(openIssues());
+    const low = lowQueues(await openItems());
     const lowNow = new Set(low.map(({ role: r }) => r));
     // A refilled worker leaves the known-low set, so running dry again alerts again.
     for (const r of startLow) if (!lowNow.has(r)) startLow.delete(r);
     for (const line of describeLow(low.filter(({ role: r }) => !startLow.has(r)))) found.push(line);
   }
   if (role === "cto" || role === "devops") {
-    const runs = api(`repos/${repo}/actions/runs?status=completed&created=${encodeURIComponent(`>=${since}`)}&per_page=100`).workflow_runs ?? [];
+    const runs = (await api(`repos/${repo}/actions/runs?status=completed&created=${encodeURIComponent(`>=${since}`)}&per_page=100`)).workflow_runs ?? [];
     for (const run of runs) {
       if (run.conclusion === "failure" && run.event !== "pull_request") {
         found.push(`CI failed: ${run.name} on ${run.head_branch} (${run.head_sha.slice(0, 7)}) ${run.html_url}`);
@@ -366,37 +525,51 @@ function findWork() {
   return found;
 }
 
+// Set by backlog(): owned items you can act on now (#364).
+let ownedActionable = [];
 // Items you own where the last word is someone else's (said while you were busy, or before this wait).
-function backlog() {
+async function backlog() {
   const found = [];
-  for (const item of owned().slice(0, 20)) {
-    const comments = item.comments ? api(`repos/${repo}/issues/${item.number}/comments?per_page=100`) : [];
-    const reviews = item.pull_request ? api(`repos/${repo}/pulls/${item.number}/reviews?per_page=100`) : [];
+  const items = await owned();
+  const snoozed = new Set();
+  const myTurn = new Set();
+  for (const item of items.slice(0, 20)) {
+    const comments = item.comments ? await api(`repos/${repo}/issues/${item.number}/comments?per_page=100`) : [];
+    const reviews = item.pull_request ? await api(`repos/${repo}/pulls/${item.number}/reviews?per_page=100`) : [];
     const last = latestWord(comments, reviews);
+    const due = last && writtenByMe(last.body ?? "") ? snoozedUntil(last.body) : null;
+    if (due !== null && Date.now() < due) snoozed.add(item.number);
     if (waitingOnMe(last?.body ?? null, m, (item.labels ?? []).map(l => l.name))) {
+      myTurn.add(item.number);
       found.push(last ? `#${item.number} is waiting on you${withSkills(item)}: "${brief(last.body)}" ${last.url}` : `#${item.number} is yours and not started${withSkills(item)}: ${item.title}`);
     }
   }
-  // Nothing of yours is actionable: pull the next briefed item from your lane instead of idling.
+  ownedActionable = actionableOwned(items, { snoozed, myTurn });
+  // #364: nothing is waiting on you, but you still own work with no open PR: continue the oldest.
   if (!found.length) {
-    for (const item of readyPool(openIssues(), role, 1)) {
-      found.push(`#${item.number} from the ready pool${withSkills(item)}: ${item.title}. Claim it first: gh issue edit ${item.number} --add-label owner:${role} --remove-label ready`);
+    const next = nextItem(items, await api(`repos/${repo}/pulls?state=open&per_page=100`), snoozed);
+    if (next) found.push(`#${next.number} is your next item${withSkills(next)}: ${next.title} (your oldest open item with no PR; continue it, ship it, or hand it off with its label)`);
+  }
+  // Nothing of yours is actionable: pull the next briefed item from your lane instead of idling.
+  if (!found.length && !ownedActionable.length) {
+    for (const item of readyPool(await openIssues(), role, 1)) {
+      found.push(`#${item.number} from the ready pool${withSkills(item)}: ${item.title}. Claim it first: gh issue edit ${item.number} --add-label owner:${role} --remove-label ready (or decline: --add-label declined:${role})`);
     }
   }
   return found;
 }
 // #384: restart-proof start. GitHub and git are the memory: role card, in-flight work, unsaved local work.
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const card = (() => { try { return roleCard(readFileSync(join(repoRoot, "docs/ORCHESTRATION.md"), "utf8"), role); } catch { return null; } })();
+const card = (() => { try { return roleCard(readFileSync(join(repoRoot, "docs/team/orchestration.md"), "utf8"), role); } catch { return null; } })();
 // The live priorities and queues are the pinned Team board issue (#580), edited without a PR.
 const BOARD_ISSUE = 580;
-const board = () => { try { return boardRow(api(`repos/${repo}/issues/${BOARD_ISSUE}`).body ?? "", role); } catch { return null; } };
-const report = (found) => {
+const board = async () => { try { return boardRow((await api(`repos/${repo}/issues/${BOARD_ISSUE}`)).body ?? "", role); } catch { return null; } };
+const report = async (found, code = 0) => {
   if (card) console.log(`Role: ${card}`);
-  const row = board();
+  const row = await board();
   if (row) console.log(`Team board #${BOARD_ISSUE} (your queue, in order):\n${row}`);
   console.log(`WORK for ${name} (${found.length}):\n- ${found.join("\n- ")}`);
-  process.exit(0);
+  process.exit(code);
 };
 const git = (cwd, args) => execFileSync("git", ["-C", cwd, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
 function localTrees() {
@@ -420,13 +593,13 @@ const withSkills = (item) => {
   const skills = skillsFor(skillRows, item.title ?? "", (item.labels ?? []).map((l) => (typeof l === "string" ? l : l.name)));
   return skills.length ? ` [skills: ${skills.join(", ")}]` : "";
 };
-function startupSummary() {
+async function startupSummary() {
   if (card) console.log(`Role: ${card}`);
-  const items = owned();
+  const items = await owned();
   console.log(items.length ? `In flight for ${name} (${items.length}):` : `Nothing labelled ${label}; take the next item in your worker-table row.`);
   for (const item of items) {
-    const comments = item.comments ? api(`repos/${repo}/issues/${item.number}/comments?per_page=100`) : [];
-    const reviews = item.pull_request ? api(`repos/${repo}/pulls/${item.number}/reviews?per_page=100`) : [];
+    const comments = item.comments ? await api(`repos/${repo}/issues/${item.number}/comments?per_page=100`) : [];
+    const reviews = item.pull_request ? await api(`repos/${repo}/pulls/${item.number}/reviews?per_page=100`) : [];
     const last = latestWord(comments, reviews)?.body;
     console.log(`- ${item.pull_request ? "PR " : ""}#${item.number} ${item.title.slice(0, 70)}${withSkills(item)}${last ? ` | last: ${brief(last.split("\n")[0]).slice(0, 120)}` : " | no comments yet"}`);
   }
@@ -435,18 +608,27 @@ function startupSummary() {
 }
 
 try {
-  startupSummary();
+  await startupSummary();
 } catch (error) {
   console.error(`Start-up summary failed, continuing: ${error.message.split("\n")[0]}`);
 }
 try {
-  const waiting = backlog();
+  const waiting = await backlog();
   if (role === "cto") {
-    const low = lowQueues(openIssues());
+    const low = lowQueues(await openItems());
     startLow = new Set(low.map(({ role: r }) => r));
-    waiting.push(...describeLow(low));
+    // Outcome first (CEO, #364 Oct 29): a thin queue is not work by itself, so it's shown but doesn't stop the wait.
+    for (const line of describeLow(low)) console.log(`(info) ${line}`);
   }
-  if (waiting.length) report(waiting);
+  // #364 (CEO, Oct 29): never wait while you own work you can act on. The top 3, then a non-zero exit.
+  if (ownedActionable.length) {
+    const top = ownedActionable.slice(0, 3).map((item) => waiting.find((line) => line.startsWith(`#${item.number} `))
+      ?? `#${item.number} is yours${withSkills(item)}: ${item.title} (work it, ship it, or move its owner: label to whoever acts next)`);
+    const rest = waiting.filter((line) => !/^#\d+ /.test(line));
+    console.error(`Not waiting: ${name} owns ${ownedActionable.length} actionable item(s), so the waiter won't wait (#2122). Work these first; park, block or hand off by label what you can't act on.`);
+    await report([...top, ...rest], OWNS_WORK);
+  }
+  if (waiting.length) await report(waiting);
 } catch (error) {
   console.error(`Queue check failed, continuing: ${error.message.split("\n")[0]}`);
 }
@@ -455,29 +637,29 @@ let warned = false;
 while (Date.now() < deadline) {
   exitIfOrphaned();
   try {
-    if (Date.now() >= nextDue) { nextDue = Infinity; const due = backlog(); if (due.length) report(due); }
-    const found = findWork();
-    if (found.length) report(found);
+    if (Date.now() >= nextDue) { nextDue = Infinity; const due = await backlog(); if (due.length) await report(due); }
+    const found = await findWork();
+    if (found.length) await report(found);
   } catch (error) {
     if (!warned) console.error(`gh api failed, will keep polling: ${error.message.split("\n")[0]}`);
     warned = true;
   }
-  await new Promise(resolve => setTimeout(resolve, pollMs));
+  await new Promise(resolve => setTimeout(resolve, gh.pollDelay(pollMs)));
 }
 try {
-  const waiting = backlog();
-  if (waiting.length) report(waiting);
+  const waiting = await backlog();
+  if (waiting.length) await report(waiting);
 } catch { /* fall through to the timeout */ }
 // CTO: a regular on-track review at the end of every wait (once per cycle, so it never spins).
 if (role === "cto") {
   try {
-    const recent = api(`repos/${repo}/issues/comments?since=${new Date(Date.now() - 3 * 3_600_000).toISOString()}&sort=created&direction=desc&per_page=100`);
-    const { quiet, stale } = offTrack({ issues: openIssues(), comments: recent, prs: api(`repos/${repo}/pulls?state=open&per_page=100`), now: Date.now() });
+    const recent = await api(`repos/${repo}/issues/comments?since=${new Date(Date.now() - 3 * 3_600_000).toISOString()}&sort=created&direction=desc&per_page=100`);
+    const { quiet, stale } = offTrack({ issues: await openIssues(), comments: recent, prs: await api(`repos/${repo}/pulls?state=open&per_page=100`), now: Date.now() });
     const lines = [
       ...quiet.map(({ role: r, minutes }) => `Off track? ${NAMES[r]} has queued work but no signed comment in ${minutes ?? "180+"} min: check their issue/PR and nudge or unblock`),
       ...stale.map(({ number, title, minutes }) => `Stale PR #${number} (${minutes} min untouched): ${title}`),
     ];
-    if (lines.length) report(lines);
+    if (lines.length) await report(lines);
   } catch { /* fall through */ }
 }
 console.log(`No new work for ${name} in ${values["max-min"]} min. Next: the next item in your worker-table row, then an unowned \`core\` issue in your area. Then run this waiter again; don't stop (owner, Oct 27).`);

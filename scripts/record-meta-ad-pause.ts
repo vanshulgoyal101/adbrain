@@ -6,6 +6,7 @@
  *
  *   npx tsx --env-file=<.env.local> scripts/record-meta-ad-pause.ts <campaignId> <liveAdId> <pausedAdId>
  */
+import "./lib/meta-write-gate";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { MetaClient } from "@/lib/meta/client";

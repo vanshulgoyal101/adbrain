@@ -1,4 +1,5 @@
 "use client";
+import { useNotices } from "@/i18n/notices";
 import { takePendingIdea } from "@/lib/ideas/pending";
 import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
 
@@ -147,6 +148,7 @@ export function AdAssistant({ business, opening = null, occasions = [], onFlowSt
   /** #760: "Brief" while the owner answers, "Create" once ads are being or have been made. */
   onFlowStep?: (step: "Brief" | "Create") => void;
 }) {
+  const tn = useNotices();
   const [goal, setGoal] = useState("");
   const [started, setStarted] = useState(false);
   const [turns, setTurns] = useState<Turn[]>([]);
@@ -157,7 +159,7 @@ export function AdAssistant({ business, opening = null, occasions = [], onFlowSt
   const [prepared, setPrepared] = useState<PreparedBrief | undefined>();
   const [recentGoals, setRecentGoals] = useState<string[]>([]);
   const [referenceBrief, setReferenceBrief] = useState<string | undefined>();
-  const [language, setLanguage] = useState<CreateLanguageId>(() => defaultAdLanguage(business.languages));
+  const [language, setLanguage] = useState<CreateLanguageId>(() => defaultAdLanguage(business.languages, business.vertical));
   // An explicit pick wins over the language the interview suggests.
   const [languagePicked, setLanguagePicked] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -175,6 +177,7 @@ export function AdAssistant({ business, opening = null, occasions = [], onFlowSt
   // #760: ads still being made after the owner moved on with the saved ones; the same request finishes them.
   const [stillMaking, setStillMaking] = useState(0);
   const [makingMore, setMakingMore] = useState(0);
+  const [makingMorePictures, setMakingMorePictures] = useState(false);
   const movedOnRef = useRef(false);
   const useSavedRef = useRef<(() => void) | null>(null);
   // #858/#1004: any goal on a Brand with offer, area and phone skips the brief review ('Edit brief' keeps it).
@@ -208,10 +211,10 @@ export function AdAssistant({ business, opening = null, occasions = [], onFlowSt
       if (saved.generationId && saved.phase !== "done" && saved.prepared) {
         setPhase("chat");
         setLastAction({ type: "generate", ...saved.prepared, count: saved.generationCount });
-        setError("An earlier generation may still be processing. Check for saved results before starting another.");
+        setError(tn("assistant.earlierRunning"));
       } else if (saved.started && saved.phase === "chat" && saved.turns.at(-1)?.role === "user") {
         setLastAction({ type: "step", answers: saved.answers });
-        setError("The last assistant response was interrupted. Retry to continue your brief.");
+        setError(tn("assistant.interrupted"));
       }
     }
   }
@@ -310,7 +313,7 @@ export function AdAssistant({ business, opening = null, occasions = [], onFlowSt
         error?: string;
       };
       if (!res.ok) {
-        setError(data.error ?? "The assistant had trouble. Please try again.");
+        setError(data.error ?? tn("assistant.replyFailed"));
         return;
       }
       if (data.ready && data.brief) {
@@ -326,10 +329,10 @@ export function AdAssistant({ business, opening = null, occasions = [], onFlowSt
         quickStartRef.current = false;
         setTurns((t) => [...t, { role: "question", question: data.question! }]);
       } else {
-        setError("The assistant had trouble. Please try again.");
+        setError(tn("assistant.replyFailed"));
       }
     } catch {
-      setError("Couldn't reach the assistant — check your connection.");
+      setError(tn("assistant.offline"));
     } finally {
       setLoading(false);
       inFlightRef.current = false;
@@ -381,7 +384,7 @@ export function AdAssistant({ business, opening = null, occasions = [], onFlowSt
       try {
         const recovered = await recoverPersistedGeneration(generationId, count, brief, language);
         if (!recovered) {
-          setError("No saved ads found yet. Check again shortly or open Review. No new ads were started.");
+          setError(tn("assistant.noSavedYet"));
           setPhase("chat");
         }
       } finally {
@@ -421,7 +424,10 @@ export function AdAssistant({ business, opening = null, occasions = [], onFlowSt
         }),
       });
       const { status, data: body } = await readCreateResponse(res, (line) => {
-        if (line.type === "topUp") setMakingMore(line.missing);
+        if (line.type === "topUp") {
+          setMakingMore(line.missing);
+          setMakingMorePictures(line.kind === "picture");
+        }
         slots = applyCreateLine(slots, line);
         if (!movedOnRef.current) setLive(slots);
       });
@@ -435,22 +441,19 @@ export function AdAssistant({ business, opening = null, occasions = [], onFlowSt
         if (status >= 500 || status === 408) {
           const recovered = await recoverPersistedGeneration(newGenerationId, count, brief, language);
           if (recovered) return;
-          setError("We can't confirm your ads were saved yet. Check again shortly or open Review. No new ads were started.");
+          setError(tn("assistant.cantConfirmSaved"));
           setPhase("chat");
           return;
         }
         setGenerationId(null);
-        setError(
-          data.error ??
-            `Couldn't create the ad (server returned ${status}). Please try again.`,
-        );
+        setError(data.error ?? tn("assistant.makeFailed"));
         setPhase("chat");
         return;
       }
       if (!data.creatives?.length) {
         const recovered = await recoverPersistedGeneration(newGenerationId, count, brief, language);
         if (recovered) return;
-        setError("Your ads finished, but none came back here. Open Review to see what was saved.");
+        setError(tn("assistant.noneCameBack"));
         setPhase("chat");
         return;
       }
@@ -459,7 +462,7 @@ export function AdAssistant({ business, opening = null, occasions = [], onFlowSt
       if (movedOnRef.current) return;
       const recovered = await recoverPersistedGeneration(newGenerationId, count, brief, language);
       if (!recovered) {
-        setError("Your ads are still being made, or the server stopped responding. Open Review shortly; don't try again yet, because finished ads may already be saved.");
+        setError(tn("assistant.stillMaking"));
         setPhase("chat");
       }
     } finally {
@@ -482,30 +485,30 @@ export function AdAssistant({ business, opening = null, occasions = [], onFlowSt
         );
         if (res.status === 429) {
           setPhase("chat");
-          setError("Too many status checks. Wait a few minutes before checking again. Do not start another generation.");
+          setError(tn("assistant.tooManyChecks"));
           return true;
         }
         if (res.ok) {
           const data = (await res.json()) as {
-            status?: "processing" | "partial" | "complete" | "failed" | "unresolved";
+            status?: "processing" | "partial" | "complete" | "failed" | "unresolved" | "ended";
             creatives?: Creative[];
           };
           if (data.creatives?.length) {
             showResult(withLiveEdits(data.creatives!), count, brief, language, data.status !== "partial" && data.status !== "processing");
             if (data.status === "partial") {
-              setError("Some ads finished while we reconnected. See them in Review; no duplicate ads were started.");
+              setError(tn("assistant.finishedWhileReconnecting"));
             }
             return true;
           }
           if (data.status === "failed") {
             setGenerationId(null);
             setPhase("chat");
-            setError("No ads were saved. This attempt failed. You can try again.");
+            setError(tn("assistant.attemptFailed"));
             return true;
           }
           if (data.status === "unresolved") {
             setPhase("chat");
-            setError("No ads were saved yet; this attempt is held for a check. Look in Review later, and don't start another one yet.");
+            setError(tn("assistant.heldForCheck"));
             return true;
           }
         }
@@ -742,7 +745,7 @@ export function AdAssistant({ business, opening = null, occasions = [], onFlowSt
           ))}
 
           {phase === "generating" && live ? (
-            <CreateProgress ads={live} makingMore={makingMore} onUseSaved={() => useSavedRef.current?.()} renderReady={(creative) => <ResultCard creative={creative} brand={business} onEdited={(edited) => liveEditsRef.current.set(edited.id, edited)} />} />
+            <CreateProgress ads={live} makingMore={makingMore} makingMorePictures={makingMorePictures} onUseSaved={() => useSavedRef.current?.()} renderReady={(creative) => <ResultCard creative={creative} brand={business} onEdited={(edited) => liveEditsRef.current.set(edited.id, edited)} />} />
           ) : (loading || phase === "generating") && (
             <div role="status" className="flex items-center gap-2 text-sm text-slate-500">
               <Loader2 className="h-4 w-4 animate-spin" /> {phase === "generating" ? "Creating images and copy…" : "Preparing your brief…"}
@@ -997,6 +1000,7 @@ function ResultCard({
   onStatus?: (status: "draft" | "approved") => void;
   onEdited?: (creative: Creative) => void;
 }) {
+  const tn = useNotices();
   const [errored, setErrored] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editNotes, setEditNotes] = useState<CopyEditNotes | null>(null);
@@ -1030,11 +1034,11 @@ function ResultCard({
         const res = await setCreativeStatus(creative.id, next ? "approved" : "draft");
         if (!res.ok) {
           setApproved(!next);
-          setSaveError("Couldn't save — try again.");
+          setSaveError(tn("assistant.choiceNotSaved"));
         }
       } catch {
         setApproved(!next);
-        setSaveError("Couldn't save — try again.");
+        setSaveError(tn("assistant.choiceNotSaved"));
       }
     });
   }

@@ -3,6 +3,9 @@ import recorded from "./fixtures/meta/ad-results.json";
 import { MetaClient } from "@/lib/meta/client";
 import { bestAd, decodeAdResults, type AdResult } from "@/lib/meta/insights";
 import { adResultViews, saveAdResults, type StoredAdResult } from "@/lib/campaign/ad-results-store";
+import { endTimeChangedInMeta, metaCapEndTime, metaDailyBudgetPaise, outsideChanges, OUTSIDE_LINES } from "@/lib/campaign/gone-in-meta";
+import { cappedRunEnded, runningNow } from "@/lib/campaign/activation";
+import { cardVerdictInput } from "@/lib/campaign/card-verdict";
 
 // #783/#789: per-ad results. Meta's real read-only answers for Solaride's live WhatsApp campaign (#499), recorded
 // by scripts/record-meta-ad-results.ts: 6 ads, of which Meta lists insights only for the 3 that delivered.
@@ -17,7 +20,7 @@ function replay() {
     url.searchParams.delete("access_token");
     const method = init?.method ?? "GET";
     if (method !== "GET") throw new Error(`Per-ad results are read-only; got ${method} ${url.pathname}`);
-    const path = url.pathname.replace("/v21.0/", "") + url.search;
+    const path = url.pathname.replace("/v26.0/", "") + url.search;
     const index = pending.findIndex(exchange => exchange.path === path);
     if (index < 0) throw new Error(`Unrecorded Graph call: ${path}`);
     const [exchange] = pending.splice(index, 1);
@@ -72,6 +75,90 @@ describe("core: results per ad (#783)", () => {
 });
 
 // #783 PR 3: what the refresh stores and what the card reads back, on the same recorded campaign.
+// #1903: the insights read's binding check also carries status and budgets (same two calls). Recorded Oct 29 for the
+// same campaign, read-only: paused, one capped ad set (lifetime ₹900) and one daily ad set (₹300); Meta sends "0" for unset budgets.
+describe("core: what Meta Ads Manager changed, from the insights read (#1903)", () => {
+  it("reads Meta's status and budgets, and counts only the uncapped daily budget", async () => {
+    const pending = replay();
+    const total = await new MetaClient(creds).getCampaignInsights(recorded.campaignId);
+    expect(total.metaState).toMatchObject({ status: "PAUSED", adSets: [
+      { id: "120253710066230526", status: "PAUSED", dailyBudget: "0", lifetimeBudget: "90000", endTime: "2026-10-29T16:49:20+0530" },
+      { id: "120253709998340526", status: "PAUSED", dailyBudget: "30000", lifetimeBudget: "0" },
+    ] });
+    expect(total.metaState!.adSets[1].endTime).toBeUndefined();
+    expect(pending.filter(exchange => exchange.path.includes("status%2Cdaily_budget"))).toEqual([]);
+    expect(metaDailyBudgetPaise(total.metaState!, ["120253710066230526"])).toBe(30000);
+    expect(metaDailyBudgetPaise(total.metaState!, [])).toBeNull();
+    const now = new Date("2026-10-29T07:00:00Z");
+    expect(outsideChanges({ status: "active", daily_budget: 300, raw: {} }, total.metaState!, ["120253710066230526"], now))
+      .toEqual({ raw: { metaPausedAt: now.toISOString() }, raised: false });
+    expect(outsideChanges({ status: "active", daily_budget: 200, raw: {} }, total.metaState!, ["120253710066230526"], now))
+      .toMatchObject({ daily_budget: 300, raised: true, raw: { metaBudgetChange: { wasRupees: 200, nowRupees: 300 } } });
+  });
+});
+
+// #2290: the same recorded read carries the capped ad set's end_time (Meta's own "+0530" form; 11:19:20Z). The stored
+// end time is set around it: a stored time before Meta's is the owner extending the run in Ads Manager, one after is shortening.
+describe("core: end date changed in Meta Ads Manager (#2290)", () => {
+  const cappedSet = "120253710066230526";
+  const metaEnd = "2026-10-29T11:19:20.000Z";
+  const row = (endTime: string, extra: Record<string, unknown> = {}) =>
+    ({ status: "active" as const, daily_budget: 300, raw: { cap: { adSetId: cappedSet, endTime, days: 3, lifetimeBudgetPaise: 90000 }, ...extra } });
+  const card = (raw: unknown, now: number) => cardVerdictInput(
+    { id: "c", status: "active", created_at: "2026-10-26T00:00:00Z", raw: raw as never, destination: "whatsapp", objective: "OUTCOME_ENGAGEMENT" },
+    { impressions: 100, spend: 50, leads: 0, conversations: 1, whatsapp_opens: 2, destination: "whatsapp" },
+    { now, waiting: 0, weakAd: null, comparison: null },
+  );
+
+  it("a later end time in Meta keeps the run going: enforce-spend's rule no longer ends it", async () => {
+    replay();
+    const { metaState } = await new MetaClient(creds).getCampaignInsights(recorded.campaignId);
+    const stored = row("2026-10-28T11:19:20.000Z");
+    expect(metaCapEndTime(stored.raw, metaState!)).toBe(metaEnd);
+    const between = Date.parse("2026-10-29T08:00:00Z");
+    expect(cappedRunEnded(stored.raw, between)).toBe(true);
+    const seen = new Date("2026-10-29T07:30:00Z");
+    const next = outsideChanges(stored, metaState!, [cappedSet], seen)!;
+    expect(next.raw).toMatchObject({ cap: { endTime: metaEnd, days: 4, adSetId: cappedSet, lifetimeBudgetPaise: 90000 },
+      metaEndTimeChange: { was: "2026-10-28T11:19:20.000Z", now: metaEnd, at: seen.toISOString() } });
+    expect(next.daily_budget).toBeUndefined();
+    expect(cappedRunEnded(next.raw, between)).toBe(false);
+    expect(runningNow({ status: "active", raw: next.raw }, between)).toBe(true);
+    expect(card(next.raw, between)?.status).toBe("active");
+    expect(OUTSIDE_LINES.endTime("29 Oct")).toBe("End date changed in Meta Ads Manager: now 29 Oct.");
+    expect(endTimeChangedInMeta({ raw: next.raw })?.now).toBe(metaEnd);
+    // Mirrored once: the next read of the same answer changes nothing.
+    expect(outsideChanges({ ...stored, raw: next.raw }, metaState!, [cappedSet], seen)).toBeNull();
+  });
+
+  it("an earlier end time in Meta reads as Ended once it passes", async () => {
+    replay();
+    const { metaState } = await new MetaClient(creds).getCampaignInsights(recorded.campaignId);
+    const stored = row("2026-10-30T11:19:20.000Z");
+    const after = Date.parse("2026-10-29T12:00:00Z");
+    expect(card(stored.raw, after)?.status).toBe("active");
+    const next = outsideChanges(stored, metaState!, [cappedSet], new Date("2026-10-29T12:00:00Z"))!;
+    expect(next.raw).toMatchObject({ cap: { endTime: metaEnd, days: 2 }, metaEndTimeChange: { was: "2026-10-30T11:19:20.000Z", now: metaEnd } });
+    expect(cappedRunEnded(next.raw, after)).toBe(true);
+    expect(card(next.raw, after)?.status).toBe("completed");
+  });
+
+  it("drops the note when Meta's end time is put back, and says nothing for an AdBrain edit made since", async () => {
+    replay();
+    const { metaState } = await new MetaClient(creds).getCampaignInsights(recorded.campaignId);
+    const putBack = row("2026-10-28T11:19:20.000Z", { metaEndTimeChange: { was: metaEnd, now: "2026-10-28T11:19:20.000Z", at: "2026-10-29T06:00:00.000Z" } });
+    const next = outsideChanges(putBack, metaState!, [cappedSet], new Date("2026-10-29T07:00:00Z"))!;
+    expect(next.raw).not.toHaveProperty("metaEndTimeChange");
+    expect(next.raw).toMatchObject({ cap: { endTime: metaEnd } });
+    // An AdBrain end-date edit moved the stored time past the note's: the card doesn't repeat Meta's.
+    expect(endTimeChangedInMeta({ raw: { cap: { adSetId: cappedSet, endTime: "2026-11-02T00:00:00.000Z" }, metaEndTimeChange: { was: "x", now: metaEnd, at: metaEnd } } })).toBeNull();
+    // Equal to the second (Meta's "+0530" against AdBrain's ISO): no change, no note.
+    expect(outsideChanges({ ...row(metaEnd), status: "paused" }, metaState!, [cappedSet], new Date())).toBeNull();
+    // A daily-budget campaign (no stored cap) is never touched by the end-time rule.
+    expect(outsideChanges({ status: "paused", daily_budget: 300, raw: {} }, metaState!, [], new Date())).toBeNull();
+  });
+});
+
 describe("core: stored per-ad results round-trip (#783)", () => {
   it("stores one lifetime row per ad and reads back the same totals, with no 'Best' at one chat", async () => {
     replay();

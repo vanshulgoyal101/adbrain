@@ -1,10 +1,11 @@
 import { getEnv } from "@/lib/env";
 import { createPollinationsProvider } from "./providers/pollinations";
 import { createOpenRouterProvider } from "./providers/openrouter";
-import { ImageProviderError, type GeneratedImage, type ImageProvider, type ImageRequest } from "./types";
+import { CLOUDFLARE_IMAGE_MODEL, cloudflareConfigured, createCloudflareProvider } from "./providers/cloudflare";
+import { FreeImageBusyError, FreeImageDailyLimitError, ImageProviderError, ReferencePhotoPausedError, type GeneratedImage, type ImageProvider, type ImageRequest, FREE_IMAGE_PROVIDERS as FREE_PROVIDERS } from "./types";
 import { MAX_IMAGE_BYTES, readBoundedResponse, validateRaster } from "./raster";
 import { fetchPublicUrl, SafeFetchError } from "@/lib/security/ssrf";
-import { freeImagesOnly } from "@/lib/llm/spend-policy";
+import { costCapped, freeImagesOnly } from "@/lib/llm/spend-policy";
 
 export type { GeneratedImage, ImageRequest } from "./types";
 
@@ -13,6 +14,9 @@ function getProvider(name = getEnv().IMAGE_PROVIDER): ImageProvider {
   switch (name) {
     case "pollinations":
       return createPollinationsProvider();
+    case "cloudflare":
+      if (!cloudflareConfigured()) throw new Error("Cloudflare image generation is selected but it is not configured.");
+      return createCloudflareProvider();
     case "openrouter":
       if (!env.OPENROUTER_API_KEYS.length) throw new Error("OpenRouter image generation is selected but no key is configured.");
       return createOpenRouterProvider();
@@ -28,7 +32,7 @@ function getFallbackProvider(): ImageProvider | null {
 }
 
 async function executeImage(provider: ImageProvider, req: ImageRequest): Promise<GeneratedImage> {
-  if (provider.name === "pollinations" && req.referenceImages?.length) throw new Error("Pollinations does not support product references. Select a reference-capable image provider.");
+  if (FREE_PROVIDERS.includes(provider.name) && req.referenceImages?.length) throw new Error(`${provider.name} does not support product references. Select a reference-capable image provider.`);
   const generated = await provider.generate(req);
   const raster = await downloadImage(generated.url, req.signal).catch((error: unknown) => {
     if (!generated.providerRequestId) throw error;
@@ -45,24 +49,57 @@ async function executeImage(provider: ImageProvider, req: ImageRequest): Promise
 const FREE_IMAGE_WAIT_CAP_MS = 90_000;
 const FREE_IMAGE_DEFAULT_WAIT_MS = 15_000;
 const FREE_IMAGE_MIN_WAIT_MS = 15_000;
+// #2153: a picture busy past the 90 s cap parks the free pictures for 2 min per instance, so the rest of the batch fails at
+// once (about 90 s, not 3 × 90 s). A paid fallback's one-retry busy-out doesn't park: its next picture may get the next slot.
+const FREE_BUSY_PARK_MS = 2 * 60_000;
+let freeBusyUntil = 0;
 let freeImageQueue: Promise<unknown> = Promise.resolve();
 
-export class FreeImageBusyError extends Error {
-  constructor() {
-    super("Free test images are busy right now. Try again in a minute.");
-    this.name = "FreeImageBusyError";
-  }
-}
-
-function queuedFreeImage(provider: ImageProvider, req: ImageRequest): Promise<GeneratedImage> {
-  const run = freeImageQueue.then(() => freeImageWithRetry(provider, req));
+/** `retries`: how many busy answers to wait out; internal accounts wait up to the cap, a paid fallback once (#1422). */
+function queuedFreeImage(provider: ImageProvider, req: ImageRequest, retries = Number.POSITIVE_INFINITY): Promise<GeneratedImage> {
+  const run = freeImageQueue.then(() => freeImageWithRetry(provider, req, retries));
   freeImageQueue = run.catch(() => undefined);
   return run;
 }
 
-async function freeImageWithRetry(provider: ImageProvider, req: ImageRequest): Promise<GeneratedImage> {
+// #2145: a busy Cloudflare gets one more try a second later (Pollinations, next in line, takes about a minute);
+// a used-up daily allowance skips Cloudflare on this instance until it resets at 00:00 UTC.
+const CLOUDFLARE_BUSY_RETRY_MS = 1_000;
+let cloudflareCappedUntil = 0;
+
+/** #1476: a free picture: Cloudflare FLUX-1-schnell when configured, Pollinations last. */
+async function freeImage(req: ImageRequest, retries = Number.POSITIVE_INFINITY): Promise<GeneratedImage> {
+  if (cloudflareConfigured() && cloudflareCappedUntil <= Date.now()) {
+    const cloudflare = createCloudflareProvider();
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        return await executeImage(cloudflare, req);
+      } catch (error) {
+        req.onAttempt?.({ provider: cloudflare.name, model: CLOUDFLARE_IMAGE_MODEL, status: "error", errorCode: imageFailureCode(error),
+          providerRequestId: error instanceof ImageProviderError ? error.providerRequestId : undefined,
+          providerFinalStatus: error instanceof ImageProviderError ? error.providerFinalStatus : "unknown" });
+        req.signal?.throwIfAborted();
+        if (error instanceof FreeImageDailyLimitError) cloudflareCappedUntil = new Date(Date.now()).setUTCHours(24, 0, 0, 0);
+        if (!(error instanceof FreeImageBusyError) || error instanceof FreeImageDailyLimitError || attempt > 0) break;
+        await wait(CLOUDFLARE_BUSY_RETRY_MS, req.signal);
+      }
+    }
+  }
+  return queuedFreeImage(getProvider("pollinations"), req, retries);
+}
+
+function wait(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    const onAbort = () => { clearTimeout(timer); reject(signal?.reason); };
+    const timer = setTimeout(() => { signal?.removeEventListener("abort", onAbort); resolve(); }, ms);
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+async function freeImageWithRetry(provider: ImageProvider, req: ImageRequest, retries: number): Promise<GeneratedImage> {
+  if (freeBusyUntil > Date.now()) throw new FreeImageBusyError();
   const started = Date.now();
-  for (;;) {
+  for (let attempt = 0; ; attempt += 1) {
     req.signal?.throwIfAborted();
     try {
       return await executeImage(provider, req);
@@ -70,19 +107,26 @@ async function freeImageWithRetry(provider: ImageProvider, req: ImageRequest): P
       // Production's fast 404s came only while another free image had just finished (#634).
       const busy = error instanceof SafeFetchError && error.code === "status" && [402, 404, 429, 503].includes(error.status ?? 0);
       if (!busy) throw error;
-      const wait = Math.max(FREE_IMAGE_MIN_WAIT_MS, error.retryAfterMs ?? FREE_IMAGE_DEFAULT_WAIT_MS);
-      if (Date.now() - started + wait > FREE_IMAGE_WAIT_CAP_MS) throw new FreeImageBusyError();
-      await new Promise<void>((resolve, reject) => {
-        const onAbort = () => { clearTimeout(timer); reject(req.signal?.reason); };
-        const timer = setTimeout(() => { req.signal?.removeEventListener("abort", onAbort); resolve(); }, wait);
-        req.signal?.addEventListener("abort", onAbort, { once: true });
-      });
+      if (attempt >= retries) throw new FreeImageBusyError();
+      const pause = Math.max(FREE_IMAGE_MIN_WAIT_MS, error.retryAfterMs ?? FREE_IMAGE_DEFAULT_WAIT_MS);
+      if (Date.now() - started + pause > FREE_IMAGE_WAIT_CAP_MS) {
+        freeBusyUntil = Date.now() + FREE_BUSY_PARK_MS;
+        throw new FreeImageBusyError();
+      }
+      await wait(pause, req.signal);
     }
   }
 }
 
+// #1422: a paid image key out of credit stays out for 15 min (as text keys do, #449), so the rest of the batch and the
+// next Creates go straight to the free pictures instead of asking it again. Per server instance.
+const CREDIT_PARK_MS = 15 * 60_000;
+const parkedUntil = new Map<string, number>();
+const isParked = (name: string) => (parkedUntil.get(name) ?? 0) > Date.now();
+
 /** A short, fixed reason for a failed image attempt, for usage rows and events (#451). */
-export function imageFailureCode(error: unknown): string {
+function imageFailureCode(error: unknown): string {
+  if (error instanceof FreeImageDailyLimitError) return "IMAGE_FREE_DAILY_LIMIT";
   if (error instanceof FreeImageBusyError) return "IMAGE_FREE_BUSY";
   if (error instanceof SafeFetchError) return error.code === "status" ? `IMAGE_HTTP_${error.status ?? "unknown"}` : `IMAGE_FETCH_${error.code.toUpperCase()}`;
   if (error instanceof ImageProviderError) return error.creditExhausted ? "IMAGE_CREDIT_EXHAUSTED" : "IMAGE_PROVIDER";
@@ -99,16 +143,20 @@ export async function generateImage(
 ): Promise<GeneratedImage> {
   const startedAt = Date.now();
   req.signal?.throwIfAborted();
-  // Internal accounts make free Pollinations images, which take no reference images (#449, #466).
+  // Internal accounts make free images (Cloudflare, then Pollinations), which take no reference images (#449, #466, #1476).
   const free = freeImagesOnly();
   if (free) req = { ...req, referenceImages: undefined };
   const provider = getProvider(free ? "pollinations" : undefined);
+  // #1717: a business over its monthly AI cost cap gets free pictures, like a parked key (with the 'taking longer' notice).
+  if (!free && costCapped() && provider.name !== "pollinations") return fallbackImage(getProvider("pollinations"), provider, req, startedAt, "allowance", true);
+  const parkedFallback = !free && isParked(provider.name) ? getFallbackProvider() ?? getProvider("pollinations") : null;
+  if (parkedFallback && parkedFallback.name !== provider.name) return fallbackImage(parkedFallback, provider, req, startedAt, "paused", true);
   try {
     const generated = {
-      ...(await (free ? queuedFreeImage(provider, req) : executeImage(provider, req))),
+      ...(await (free ? freeImage(req) : executeImage(provider, req))),
       latencyMs: Date.now() - startedAt,
     };
-    req.onAttempt?.({ provider: provider.name, model: generated.model ?? provider.name,
+    req.onAttempt?.({ provider: generated.provider, model: generated.model ?? generated.provider,
       providerRequestId: generated.providerRequestId, providerFinalStatus: generated.providerFinalStatus ?? "unknown",
       estimatedCostUsd: generated.estimatedCostUsd, status: "success" });
     return generated;
@@ -120,29 +168,44 @@ export async function generateImage(
     if (error instanceof Error && ["TimeoutError", "AbortError"].includes(error.name)) throw error;
     // #449: out of credit means free pictures, even with no fallback configured (no product references there).
     const credit = error instanceof ImageProviderError && error.creditExhausted;
+    if (credit) parkedUntil.set(provider.name, Date.now() + CREDIT_PARK_MS);
     const fallback = getFallbackProvider() ?? (credit ? getProvider("pollinations") : null);
     if (!fallback || fallback.name === provider.name) throw error;
-    const fallbackReq = fallback.name === "pollinations" ? { ...req, referenceImages: undefined } : req;
-    const generated = await executeImage(fallback, fallbackReq).catch((fallbackError: unknown) => {
-      req.onAttempt?.({ provider: fallback.name, model: fallback.name, status: "error", errorCode: imageFailureCode(fallbackError),
-        providerRequestId: fallbackError instanceof ImageProviderError ? fallbackError.providerRequestId : undefined,
-        providerFinalStatus: fallbackError instanceof ImageProviderError ? fallbackError.providerFinalStatus : "unknown" });
-      throw fallbackError;
-    });
-    req.onAttempt?.({ provider: fallback.name, model: generated.model ?? fallback.name,
-      providerRequestId: generated.providerRequestId, providerFinalStatus: generated.providerFinalStatus ?? "unknown",
-      estimatedCostUsd: generated.estimatedCostUsd, status: "success" });
-    return {
-      ...generated,
-      latencyMs: Date.now() - startedAt,
-      fallbackFrom: provider.name,
-    };
+    return fallbackImage(fallback, provider, req, startedAt, "paused", credit);
   }
 }
 
-/** The active image provider's name (for UI/diagnostics). */
-export function imageProviderName(): string {
-  return getEnv().IMAGE_PROVIDER;
+/**
+ * `waitLikeFree`: this customer is on free pictures for a while (paid key out of credit, or over the monthly cost cap),
+ * so Pollinations gets the free account's wait, not one retry (#2189).
+ */
+async function fallbackImage(fallback: ImageProvider, from: ImageProvider, req: ImageRequest, startedAt: number,
+  reason: "paused" | "allowance" = "paused", waitLikeFree = false): Promise<GeneratedImage> {
+  // #1593: the free pictures can't use the owner's product photo; an unrelated product would misrepresent what they sell.
+  if (req.referenceImages?.length && FREE_PROVIDERS.includes(fallback.name)) throw new ReferencePhotoPausedError(reason, from.name);
+  try {
+    req.onFallback?.();
+  } catch {
+    // Advisory: a broken listener must not cost the picture.
+  }
+  // #1422: Pollinations answers 404/busy right after another free picture; after a one-off paid failure, wait that out once.
+  // #2189: out of credit, wait up to the 90 s cap like a free account; one wait left 2 of a batch's 3 pictures blank.
+  // #1476: the free fallback tries Cloudflare first when it is configured.
+  const run = fallback.name === "pollinations" ? freeImage(req, waitLikeFree ? undefined : 1) : executeImage(fallback, req);
+  const generated = await run.catch((fallbackError: unknown) => {
+    req.onAttempt?.({ provider: fallback.name, model: fallback.name, status: "error", errorCode: imageFailureCode(fallbackError),
+      providerRequestId: fallbackError instanceof ImageProviderError ? fallbackError.providerRequestId : undefined,
+      providerFinalStatus: fallbackError instanceof ImageProviderError ? fallbackError.providerFinalStatus : "unknown" });
+    throw fallbackError;
+  });
+  req.onAttempt?.({ provider: generated.provider, model: generated.model ?? generated.provider,
+    providerRequestId: generated.providerRequestId, providerFinalStatus: generated.providerFinalStatus ?? "unknown",
+    estimatedCostUsd: generated.estimatedCostUsd, status: "success" });
+  return {
+    ...generated,
+    latencyMs: Date.now() - startedAt,
+    fallbackFrom: from.name,
+  };
 }
 
 /** Download image bytes (used when persisting/exporting a creative). */

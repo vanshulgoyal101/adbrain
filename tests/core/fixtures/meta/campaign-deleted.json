@@ -3,16 +3,17 @@
   "tape": [
     {
       "method": "GET",
-      "path": "120253706331870526?fields=id%2Caccount_id",
+      "path": "120253706331870526?fields=id%2Caccount_id%2Cstatus%2Cdaily_budget%2Clifetime_budget",
       "status": 200,
       "body": {
         "id": "120253706331870526",
-        "account_id": "9000000000000001"
+        "account_id": "9000000000000001",
+        "status": "DELETED"
       }
     },
     {
       "method": "GET",
-      "path": "120253706331870526/adsets?fields=promoted_object%2Cdestination_type&limit=100",
+      "path": "120253706331870526/adsets?fields=id%2Cstatus%2Cdaily_budget%2Clifetime_budget%2Cend_time%2Cpromoted_object%2Cdestination_type&limit=100",
       "status": 200,
       "body": {
         "data": []

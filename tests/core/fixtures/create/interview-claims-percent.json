@@ -1,0 +1,62 @@
+{
+  "recordedAt": "2026-10-28T15:00:08.745Z",
+  "note": "#1415: real interview replies for the Sweet Crumbs bakery Brand ('Flat 10% off', eggless cakes) with the setup step's goal; Gemini writes '100% eggless' (free providers, budget routing).",
+  "brand": {
+    "name": "SOLARIDE",
+    "vertical": "bakery",
+    "description": "Sweet Crumbs Bakery in Mohali Phase 7 specializes in eggless cakes, brownies, and custom birthday cakes, offering fresh daily products since 2016.",
+    "brand_voice": "friendly, convenient, promotional",
+    "target_audience": "Local residents in Mohali, Chandigarh, and Zirakpur looking for eggless desserts and custom cakes",
+    "usps": [
+      "Eggless cakes, brownies & custom birthday cakes",
+      "Fresh daily since 2016",
+      "Same-day delivery"
+    ],
+    "offers": [
+      "Flat 10% off on first order"
+    ],
+    "languages": [
+      "English"
+    ],
+    "locations": [
+      "Mohali Phase 7",
+      "Mohali",
+      "Chandigarh",
+      "Zirakpur"
+    ]
+  },
+  "goal": "Get WhatsApp enquiries for bakery in Mohali Phase 7, leading with: Flat 10% off on first order",
+  "replies": [
+    {
+      "run": 0,
+      "attempt": 1,
+      "valid": false,
+      "rules": [
+        "unsupported-commercial-claim:percent"
+      ],
+      "provider": "google",
+      "model": "gemini-3.6-flash",
+      "content": "{\"ready\":true,\"brief\":\"Visual feature: A close-up shot of a stunning, beautifully decorated fresh 100% eggless chocolate drip cake alongside a box of fudgy brownies on a clean wooden tabletop, lit with warm, bright morning light. Ad Copy & Mood: Friendly, appetising, and urgent local promo targeting Mohali Phase 7, Chandigarh, and Zirakpur residents. The primary hook highlights fresh daily eggless treats with the clear promo: 'Flat 10% Off Your First Order', paired with same-day delivery convenience. Call to Action: Prominently invites local customers to send a direct WhatsApp message to order or inquire about custom birthday cakes.\",\"language\":\"en\",\"angleId\":\"offer\",\"recommendations\":[{\"label\":\"Focus on custom birthday cakes\",\"prompt\":\"Shift visual focus to custom-themed birthday cakes and highlight personalized cake orders on WhatsApp.\"},{\"label\":\"Highlight eggless brownies gifting\",\"prompt\":\"Showcase an assortment box of eggless brownies framed as a perfect gift or tea-time treat with 10% off.\"}]}"
+    },
+    {
+      "run": 2,
+      "attempt": 1,
+      "valid": false,
+      "rules": [
+        "unsupported-commercial-claim:percent"
+      ],
+      "provider": "google",
+      "model": "gemini-3.6-flash",
+      "content": "{\"ready\":true,\"brief\":\"A mouth-watering creative targeting local residents in Mohali, Chandigarh, and Zirakpur. The visual features a rich, freshly baked 100% eggless custom chocolate birthday cake with elegant swirls of frosting alongside decadently layered eggless brownies on a warm bakery counter, marked with a clear '100% Eggless & Fresh Daily' badge. The copy warmly invites neighbours in Mohali Phase 7 to message on WhatsApp to order custom cakes and claim a 'Flat 10% Off on First Order' welcome offer. The mood is friendly, mouth-watering, and convenient, encouraging immediate WhatsApp enquiries.\",\"language\":\"en\",\"angleId\":\"offer\",\"recommendations\":[{\"label\":\"Focus on Custom Birthday Cakes\",\"prompt\":\"Showcase a vibrant personalized multi-tier birthday cake with festive decorations for local celebrations.\"},{\"label\":\"Highlight Brownie Gift Boxes\",\"prompt\":\"Focus the visual on an appetizing close-up of a freshly baked eggless brownie box with same-day delivery messaging.\"}]}"
+    },
+    {
+      "run": 2,
+      "attempt": 2,
+      "valid": true,
+      "rules": [],
+      "provider": "google",
+      "model": "gemini-3.6-flash",
+      "content": "{\"ready\":true,\"brief\":\"A mouth-watering creative targeting local residents in Mohali, Chandigarh, and Zirakpur. The visual features a rich, freshly baked eggless custom chocolate birthday cake with elegant swirls of frosting alongside decadently layered eggless brownies on a warm bakery counter, marked with a clear 'Fresh Daily & Eggless' badge. The copy warmly invites neighbours in Mohali Phase 7 to message on WhatsApp to order custom cakes and claim a 'Flat 10% Off on First Order' welcome offer. The mood is friendly, mouth-watering, and convenient, encouraging immediate WhatsApp enquiries.\",\"language\":\"en\",\"angleId\":\"offer\",\"recommendations\":[{\"label\":\"Focus on Custom Birthday Cakes\",\"prompt\":\"Showcase a vibrant personalized multi-tier birthday cake with festive decorations for local celebrations.\"},{\"label\":\"Highlight Brownie Gift Boxes\",\"prompt\":\"Focus the visual on an appetizing close-up of a freshly baked eggless brownie box with same-day delivery messaging.\"}]}"
+    }
+  ]
+}

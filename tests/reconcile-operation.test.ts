@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { classify, operationKey, probeResult } from "../scripts/reconcile-operation.mjs";
 
-// Shapes recorded from Graph v21.0 reads of a stuck operation's objects (#734); ids are fake.
+// Shapes recorded from Graph v26.0 reads of a stuck operation's objects (#734); ids are fake.
 const recorded = {
   campaign: { ok: true, body: { id: "1001", name: "TEST AdBrain core loop - delete", status: "DELETED", effective_status: "DELETED", objective: "OUTCOME_LEADS", created_time: "2026-10-21T23:38:12+0530" } },
   campaignAsAd: { ok: false, body: { error: { message: "(#100) Tried accessing nonexisting field (adset_id) on node type (Campaign)", type: "OAuthException", code: 100 } } },

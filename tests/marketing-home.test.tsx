@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { MarketingHome } from "@/components/marketing-home";
 import { LEGAL_LINKS } from "@/lib/legal-links";
@@ -15,7 +15,19 @@ describe("public product example", () => {
     expect(screen.getByText("Made by AdBrain for example businesses, not customers.")).toBeInTheDocument();
     expect(screen.getAllByRole("img", { name: /^An AdBrain ad for a / }).length).toBeGreaterThan(0);
     expect(screen.getByRole("heading", { name: "You approve every rupee." })).toBeInTheDocument();
-    expect(screen.getByText(/Making ads is free\. To run them, top up any amount from ₹500; 80% goes to your ads \(including Meta's GST\) and 20% to AdBrain\./)).toBeInTheDocument();
+    // #718 (CEO, path A): the price the owner sees, and the ad money goes to Meta.
+    // #1652: the pricing block and its 5 questions, at /#pricing.
+    const pricing = screen.getByRole("region", { name: "Pricing" });
+    expect(pricing).toHaveAttribute("id", "pricing");
+    expect(within(pricing).getByText("Then ₹999 a month for AdBrain.")).toBeInTheDocument();
+    expect(within(pricing).getByText(/Meta adds 18% GST to your ad spend; that's Meta's charge, not ours\./)).toBeInTheDocument();
+    expect(pricing.querySelectorAll("details")).toHaveLength(5);
+    // CEO (#1652): no GST claim on the ₹999 plan until #1845 closes; GST is only ever Meta's.
+    for (const line of pricing.querySelectorAll("li, details")) {
+      if (/999/.test(line.textContent ?? "")) expect(line.textContent).not.toMatch(/GST/);
+    }
+    // #1235 (owner): AdBrain's split or margin is never shown to customers.
+    expect(document.body.textContent).not.toMatch(/\b(80|20)\s?%|service (fee|allocation)|margin/i);
     expect(screen.queryByText(/partner/i)).toBeNull();
     expect(screen.queryByRole("link", { name: /WhatsApp us/ })).toBeNull();
   });
@@ -30,7 +42,7 @@ describe("public product example", () => {
   it("positions the product around customers without a solar identity or promised results", () => {
     const { container } = render(<MarketingHome />);
     expect(screen.getByText("Ad banao, customers paao, seedha WhatsApp par.")).toHaveAttribute("lang", "hi-Latn");
-    expect(screen.getByText("Making ads is free. You pay only when you choose to run one.")).toBeInTheDocument();
+    expect(screen.getByText("Free to try. ₹999 a month after your first month. Your ad money goes to Meta, not to us.")).toBeInTheDocument();
     // Solaride appears only as a labelled example further down, never in the hero.
     expect(container.querySelector("#hero-title")!.closest("section")!.textContent).not.toMatch(/solar/i);
     expect(container.textContent).not.toMatch(/run ads|guaranteed customers/i);

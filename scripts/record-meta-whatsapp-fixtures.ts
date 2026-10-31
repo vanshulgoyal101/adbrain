@@ -5,12 +5,13 @@
  *
  *   npx tsx --env-file=<.env.local> scripts/record-meta-whatsapp-fixtures.ts <adSetBudgetCampaignId> <whatsappAdSetId> <imageHash>
  */
+import "./lib/meta-write-gate";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { destinationCTA, destinationPlan, whatsappWelcomeMessage } from "@/lib/meta/client";
 import { whatsappGreeting } from "@/lib/campaign/whatsapp-greeting";
 
-const GRAPH = "https://graph.facebook.com/v21.0/";
+const GRAPH = "https://graph.facebook.com/v26.0/";
 const VALIDATE = JSON.stringify(["validate_only"]);
 const [campaignId, adSetId, imageHash] = process.argv.slice(2);
 if (!campaignId || !adSetId || !imageHash) throw new Error("Pass a PAUSED campaign with ad-set budgets, an existing WhatsApp ad set id and an image hash.");

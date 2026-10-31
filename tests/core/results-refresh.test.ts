@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import resultsTape from "./fixtures/meta/results.json";
 
+// #1903: the insights binding reads (campaign/ad-set status and budgets) were re-recorded read-only on Oct 29;
+// both campaigns were PAUSED by then, so their status is set back to ACTIVE as when the scenarios were recorded.
 // Graph insights and ad review reads recorded read-only by scripts/record-meta-results-fixtures.ts
 // from the live #157 run (120253678786150526; lifetime 70 impressions, ₹10.69, 1 chat on Oct 24) and a paused Solaride
 // campaign (120253164673180526) (#258). The DISAPPROVED ad below is a synthetic edit of the
@@ -77,7 +79,7 @@ function replay(edit: (exchange: Exchange) => unknown = exchange => exchange.bod
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = new URL(String(input));
     url.searchParams.delete("access_token");
-    const call = `${init?.method ?? "GET"} ${url.pathname.replace("/v21.0/", "")}${url.search}`;
+    const call = `${init?.method ?? "GET"} ${url.pathname.replace("/v26.0/", "")}${url.search}`;
     sent.push(call);
     const index = pending.findIndex(exchange => `${exchange.method} ${exchange.path}` === call);
     if (index < 0) throw new Error(`Unrecorded Graph call: ${call}`);
