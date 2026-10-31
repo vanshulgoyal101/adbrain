@@ -49,7 +49,33 @@ describe("workspace business query failures", () => {
   });
 });
 
-describe("approved ad query failures (#2371)", () => {
+describe("creative reads (#2371)", () => {
+  it("keeps Home previews narrow and scoped to the business", async () => {
+    const { getCreativePreviews } = await import("@/lib/supabase/queries");
+    expect(await getCreativePreviews("business")).toEqual([]);
+    expect(mocks.select).toHaveBeenCalledWith("id, headline, image_url, status, angle, created_at, variant_group");
+    expect(mocks.eq).toHaveBeenCalledWith("business_id", "business");
+    expect(mocks.order).toHaveBeenCalledWith("created_at", { ascending: false });
+  });
+
+  it("keeps full creative reads scoped and newest first", async () => {
+    const { getCreatives } = await import("@/lib/supabase/queries");
+    expect(await getCreatives("business")).toEqual([]);
+    expect(mocks.select).toHaveBeenCalledWith("*");
+    expect(mocks.eq).toHaveBeenCalledWith("business_id", "business");
+    expect(mocks.order).toHaveBeenCalledWith("created_at", { ascending: false });
+  });
+
+  it("keeps the setup batch bounded and reports read failures", async () => {
+    const { getSetupCreativeBatch } = await import("@/lib/supabase/queries");
+    expect(await getSetupCreativeBatch("business")).toEqual({ ads: [], newest: null });
+    expect(mocks.eq).toHaveBeenCalledWith("business_id", "business");
+    expect(mocks.order).toHaveBeenCalledWith("created_at", { ascending: false });
+    expect(mocks.limit).toHaveBeenCalledWith(12, undefined);
+    mocks.failedTable = "creatives";
+    await expect(getSetupCreativeBatch("business")).rejects.toThrow("Ads could not be loaded.");
+  });
+
   it("keeps an empty approved-ad list valid", async () => {
     const { getApprovedCreatives } = await import("@/lib/supabase/queries");
     expect(await getApprovedCreatives("business", { throwOnError: true })).toEqual([]);
