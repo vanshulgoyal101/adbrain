@@ -52,8 +52,12 @@ function network(answer: () => Response = () => Response.json({ ...cloudflare.su
     const url = new URL(String(input instanceof Request ? input.url : input));
     calls.push(`${url.hostname}${url.pathname}`);
     if (url.hostname === "api.cloudflare.com") {
-      bodies.push(JSON.parse(String(init?.body)));
+      const body = JSON.parse(String(init?.body));
+      bodies.push(body);
       headers.push(new Headers(init?.headers));
+      // #2145: Cloudflare's schema refuses any field it doesn't list (recorded 400, code 5006).
+      if (Object.keys(body).some((key) => !["prompt", "steps"].includes(key)))
+        return Response.json(cloudflare.badInput.body, { status: cloudflare.badInput.status });
       return answer();
     }
     if (url.pathname.includes("/images/models/")) return Response.json({ endpoints: [{ supported_parameters: {} }] });
@@ -82,7 +86,7 @@ describe("core: free pictures come from Cloudflare FLUX-1-schnell first (#1476)"
     expect(picture).toMatchObject({ provider: "cloudflare", model: "@cf/black-forest-labs/flux-1-schnell", estimatedCostUsd: 0, width: 1024, height: 1024 });
     expect(picture.url).toMatch(/^data:image\/png;base64,/);
     expect(calls).toEqual([`api.cloudflare.com/client/v4/accounts/${ACCOUNT}/ai/run/@cf/black-forest-labs/flux-1-schnell`]);
-    expect(bodies[0]).toEqual({ prompt: image.prompt, steps: 4, seed: 42 });
+    expect(bodies[0]).toEqual({ prompt: image.prompt, steps: 4 });
     expect(headers[0].get("authorization")).toBe("Bearer cf-test-token");
     expect(attempts.map(({ provider, status, estimatedCostUsd }) => [provider, status, estimatedCostUsd])).toEqual([["cloudflare", "success", 0]]);
   });
@@ -154,6 +158,7 @@ describe("core: free pictures come from Cloudflare FLUX-1-schnell first (#1476)"
 
   it.each([
     ["refuses the token (401)", () => Response.json(cloudflare.badToken.body, { status: cloudflare.badToken.status }), "IMAGE_PROVIDER"],
+    ["refuses the input (400)", () => Response.json(cloudflare.badInput.body, { status: cloudflare.badInput.status }), "IMAGE_PROVIDER"],
     ["answers 200 with no picture", () => Response.json({ result: {}, success: true, errors: [] }), "IMAGE_PROVIDER"],
   ])("falls to Pollinations when Cloudflare %s, recording a fixed code (#451)", async (_case, answer, code) => {
     network(answer);

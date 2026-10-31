@@ -25,13 +25,13 @@ export function createCloudflareProvider(): ImageProvider {
     async generate(req: ImageRequest): Promise<GeneratedImage> {
       const env = getEnv();
       if (!cloudflareConfigured()) throw new Error("Cloudflare image generation is not configured.");
-      const seed = req.seed ?? Math.floor(Math.random() * 1_000_000);
       const response = await fetch(
         `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(env.CLOUDFLARE_ACCOUNT_ID)}/ai/run/${CLOUDFLARE_IMAGE_MODEL}`,
         {
           method: "POST",
           headers: { Authorization: `Bearer ${env.CLOUDFLARE_AI_TOKEN}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt: req.prompt.slice(0, MAX_PROMPT), steps: STEPS, seed }),
+          // #2145: FLUX-1-schnell takes only prompt and steps; any other field (seed) is a 400 (code 5006).
+          body: JSON.stringify({ prompt: req.prompt.slice(0, MAX_PROMPT), steps: STEPS }),
           signal: req.signal ? AbortSignal.any([req.signal, AbortSignal.timeout(60_000)]) : AbortSignal.timeout(60_000),
         },
       );
@@ -56,7 +56,6 @@ export function createCloudflareProvider(): ImageProvider {
         providerRequestId: requestId,
         providerFinalStatus: "completed",
         prompt: req.prompt,
-        seed,
       };
     },
   };
