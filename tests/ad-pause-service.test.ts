@@ -30,8 +30,10 @@ vi.mock("@/lib/meta/connection-access", () => ({
 }));
 
 import { setAdDelivery } from "@/lib/campaign/ad-pause-service";
+import { MetaWriteUncertainError } from "@/lib/meta/client";
 
 const context = { businessId: "b1", userId: "u1" } as never;
+const recorded = () => (m.saved as { raw: { adPauses?: unknown[] } }[]).flatMap((row) => row.raw.adPauses ?? []);
 beforeEach(() => {
   m.campaign = { id: "c1", name: "Run", status: "active", meta_campaign_id: "100", meta_ad_ids: ["11"], raw: {} };
   m.listed = [{ meta_ad_id: "22" }];
@@ -51,14 +53,36 @@ describe("setAdDelivery (#1045)", () => {
     expect(await setAdDelivery(context, "c1", "22", "pause", "expensive")).toEqual({ adId: "22", status: "PAUSED", effectiveStatus: "PAUSED", changed: true });
     expect(m.setAdStatus).toHaveBeenCalledWith("100", "22", "PAUSED");
     expect(m.purposes).toEqual(["pause"]);
-    expect(m.saved).toEqual([{ raw: { adPauses: [expect.objectContaining({ adId: "22", action: "paused", reason: "expensive" })] } }]);
+    expect(m.saved).toEqual([
+      { raw: { adPauseIntents: [expect.objectContaining({ adId: "22", action: "paused", reason: "expensive" })] } },
+      { raw: { adPauseIntents: [], adPauses: [expect.objectContaining({ adId: "22", action: "paused", reason: "expensive" })] } },
+    ]);
   });
 
   it("records nothing when the ad was already paused in Meta, so a later Undo can't turn it on (Reviewer, #1048)", async () => {
     m.setAdStatus.mockResolvedValue({ id: "22", status: "PAUSED", effectiveStatus: "PAUSED", changed: false });
     expect((await setAdDelivery(context, "c1", "22", "pause")).changed).toBe(false);
-    expect(m.saved).toEqual([]);
+    expect(recorded()).toEqual([]);
+    expect(m.saved.at(-1)).toEqual({ raw: { adPauseIntents: [] } });
     await expect(setAdDelivery(context, "c1", "22", "undo")).rejects.toThrow("AdBrain didn't pause this ad");
+  });
+
+  // #2322/#2395: Meta may have paused the ad, so the owner is never told nothing changed or to just try again.
+  it("does not claim an ad is unchanged when a pause read-back fails", async () => {
+    m.setAdStatus.mockRejectedValueOnce(new MetaWriteUncertainError(new Error("read-back failed")));
+    const refusal = await setAdDelivery(context, "c1", "22", "pause").then(() => null, (error: unknown) => error);
+    expect(refusal).toMatchObject({ message: "Meta didn't confirm the change. Refresh the campaign before trying again.", status: 502, retryable: false });
+    expect(m.saved.at(-1)).toEqual({ raw: { adPauseIntents: [expect.objectContaining({ adId: "22", action: "paused" })] } });
+    expect(recorded()).toEqual([]);
+  });
+
+  it("records a retried pause that Meta had already made, but not from an intent older than a day", async () => {
+    m.setAdStatus.mockResolvedValue({ id: "22", status: "PAUSED", effectiveStatus: "PAUSED", changed: false });
+    m.campaign!.raw = { adPauseIntents: [{ adId: "22", action: "paused", at: new Date(Date.now() - 25 * 3600_000).toISOString() }] };
+    expect((await setAdDelivery(context, "c1", "22", "pause")).changed).toBe(false);
+    m.campaign!.raw = { adPauseIntents: [{ adId: "22", action: "paused", at: new Date().toISOString(), reason: "expensive" }] };
+    expect((await setAdDelivery(context, "c1", "22", "pause")).changed).toBe(true);
+    expect(m.saved.at(-1)).toEqual({ raw: { adPauseIntents: [], adPauses: [expect.objectContaining({ adId: "22", action: "paused", reason: "expensive" })] } });
   });
 
   it("undoes only an ad AdBrain paused, as an activation", async () => {
@@ -76,6 +100,6 @@ describe("setAdDelivery (#1045)", () => {
     m.campaign!.status = "active";
     m.setAdStatus.mockResolvedValue({ id: "22", status: "ACTIVE", effectiveStatus: "ACTIVE", changed: true });
     await expect(setAdDelivery(context, "c1", "22", "pause")).rejects.toThrow("Meta didn't confirm the change.");
-    expect(m.saved).toEqual([]);
+    expect(recorded()).toEqual([]);
   });
 });
