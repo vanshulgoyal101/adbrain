@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { coreApproval, coreFiles, syncExempt } from "../scripts/core-approval.mjs";
+import { coreApproval, coreFiles, syncExempt, wordsOnly } from "../scripts/core-approval.mjs";
 
 const head = "7612817abcdef0123456789abcdef0123456789";
 const at = (body: string, createdAt = "2026-10-27T10:00:00Z") => ({ body, createdAt, url: "u" });
@@ -146,5 +146,42 @@ describe("a main → next sync merge isn't held on main's own gated files (#2147
     // deleted at head: gated
     expect(syncExempt({ head: null, main: null, next: null, base: null })).toBe(false);
     expect(syncExempt({ head: null, main: "m", next: "b", base: "b" })).toBe(false);
+  });
+});
+
+describe("words-only changes (#364)", () => {
+  const patch = (minus: string[], plus: string[]) => ["@@ -1,3 +1,3 @@", " ctx", ...minus.map((l) => `-${l}`), ...plus.map((l) => `+${l}`)].join("\n");
+  const reworded = patch(
+    ['  return { error: "Meta didn\'t change the ad. Nothing changed.", retryable: true };', "  // old note"],
+    ['  return { error: "Meta may have paused it. Refresh before trying again.", retryable: true };', "  // new note"],
+  );
+
+  it("passes prose, Hindi and template wording, and ignores markdown", () => {
+    expect(wordsOnly(reworded)).toBe(true);
+    expect(wordsOnly(patch(['  hi: "कुछ नहीं बदला",'], ['  hi: "विज्ञापन रुका",']))).toBe(true);
+    expect(wordsOnly(patch(["  msg = `Budget ${amount} a day for ${days} days`;"], ["  msg = `Spend ${amount} each day, for ${days} days`;"]))).toBe(true);
+    expect(coreFiles(["src/lib/campaign/README.md", "src/lib/meta/README.md"])).toHaveLength(0);
+  });
+
+  it("keeps the gate on logic, keys, statuses and anything it can't parse", () => {
+    expect(wordsOnly(patch(['  if (s === "PAUSED") return;'], ['  if (s === "ACTIVE") return;']))).toBe(false);
+    expect(wordsOnly(patch(['  return { error: "Nothing changed.", retryable: true };'], ['  return { error: "Nothing changed.", retryable: false };']))).toBe(false);
+    expect(wordsOnly(patch(['  url: "https://graph.facebook.com/v21.0",'], ['  url: "https://graph.facebook.com/v22.0",']))).toBe(false);
+    expect(wordsOnly(patch(["  msg = `Budget ${amount} a day`;"], ["  msg = `Budget ${amount * 2} a day`;"]))).toBe(false);
+    expect(wordsOnly(patch(['  msg = "two', ], ['  msg = "three']))).toBe(false);
+    expect(wordsOnly(patch([], ['  label: "Pause the ad now",']))).toBe(false);
+    expect(wordsOnly(undefined)).toBe(false);
+  });
+
+  it("ships core wording on green CI; money wording needs one approval; migrations stay gated", () => {
+    const meta = { files: ["src/lib/campaign/ad-pause-service.ts"], head, headRef: "b", comments: [], patches: { "src/lib/campaign/ad-pause-service.ts": reworded } };
+    expect(coreApproval(meta).state).toBe("success");
+    expect(coreApproval({ ...meta, comments: [at("QA: changes requested at 7612817")] }).state).toBe("pending");
+    const money = { files: ["src/lib/payments/plan.ts"], head, headRef: "b", comments: [], patches: { "src/lib/payments/plan.ts": reworded } };
+    expect(coreApproval(money).state).toBe("pending");
+    expect(coreApproval({ ...money, comments: [at("Reviewer review of 7612817: **approved**.")] }).state).toBe("success");
+    const sql = { files: ["db/migrations/20261031_x.sql"], head, headRef: "b", comments: [at("Reviewer review of 7612817: **approved**.")], patches: { "db/migrations/20261031_x.sql": reworded } };
+    expect(coreApproval(sql).state).toBe("pending");
+    expect(coreApproval({ ...meta, patches: {} }).state).toBe("pending");
   });
 });

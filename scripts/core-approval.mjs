@@ -24,7 +24,76 @@ export const corePath = /^(src\/lib\/meta\/|src\/lib\/campaign\/|src\/app\/api\/
 export const tenantPath = /^src\/(app\/api\/(cron|whatsapp|privacy-requests)\/|lib\/(security|alerts)\/|lib\/internal-accounts\.(ts|json)$|lib\/privacy-requests\.ts$)/;
 
 export function coreFiles(files) {
-  return files.filter((f) => corePath.test(f) || tenantPath.test(f) || moneyPath.test(f));
+  return files.filter((f) => !/\.md$/i.test(f) && (corePath.test(f) || tenantPath.test(f) || moneyPath.test(f)));
+}
+
+/** One line's code with string literals blanked, plus the literals; null when a quote doesn't close on the line. */
+function splitLiterals(line) {
+  let code = "";
+  const literals = [];
+  for (let i = 0; i < line.length; i++) {
+    const quote = line[i];
+    if (quote !== '"' && quote !== "'" && quote !== "`") { code += quote; continue; }
+    let text = "";
+    let j = i + 1;
+    for (; j < line.length && line[j] !== quote; j++) {
+      if (line[j] === "\\") { text += line[j] + (line[j + 1] ?? ""); j++; continue; }
+      if (quote === "`" && line[j] === "$" && line[j + 1] === "{") {
+        // A template's ${…} is code: it stays in `code`; the static text, with {} for each expression, is one literal.
+        let depth = 0;
+        let expr = "";
+        for (j += 1; j < line.length; j++) {
+          if (line[j] === "{") depth++;
+          else if (line[j] === "}" && --depth === 0) break;
+          expr += line[j];
+        }
+        if (j >= line.length) return null;
+        code += `${expr}}`;
+        text += "{}";
+        continue;
+      }
+      text += line[j];
+    }
+    if (j >= line.length) return null;
+    code += quote + quote;
+    literals.push(text);
+    i = j;
+  }
+  return { code: code.trim(), literals };
+}
+
+/** Prose a person reads (a space, or Hindi and other non-ASCII letters), not a key, status, field or URL. */
+const prose = (text) => /\s/.test(text.trim()) || /[^\x00-\x7F]/.test(text);
+const comment = (line) => /^\s*(\/\/|\/\*|\*|\*\/|\{\s*\/\*)/.test(line) || !line.trim();
+
+/**
+ * #364 (owner, Oct 31): a change that only rewords what an owner reads (prose strings and comments) isn't a
+ * launch, Meta or money behaviour change. True when the removed and added lines are the same code once string
+ * literals are blanked, and every literal that changed is prose. Unparsable lines (a quote that spans lines),
+ * a missing patch or a non-prose literal (`"PAUSED"`, a field name, a URL) keep the gate.
+ * @param {string | undefined} patch GitHub's per-file unified diff (`pulls/{n}/files` → `patch`)
+ */
+export function wordsOnly(patch) {
+  if (!patch) return false;
+  const sides = { "-": { code: [], literals: [] }, "+": { code: [], literals: [] } };
+  for (const line of patch.split("\n")) {
+    const side = sides[line[0]];
+    if (!side || comment(line.slice(1))) continue;
+    const parsed = splitLiterals(line.slice(1));
+    if (!parsed) return false;
+    side.code.push(parsed.code);
+    side.literals.push(...parsed.literals);
+  }
+  const same = (a, b) => a.length === b.length && JSON.stringify([...a].sort()) === JSON.stringify([...b].sort());
+  if (!same(sides["-"].code, sides["+"].code)) return false;
+  const left = [...sides["-"].literals];
+  const changed = [];
+  for (const text of sides["+"].literals) {
+    const at = left.indexOf(text);
+    if (at >= 0) left.splice(at, 1);
+    else changed.push(text);
+  }
+  return [...left, ...changed].every(prose);
 }
 
 /**
@@ -45,7 +114,7 @@ export function syncExempt({ head, main, next, base }) {
  * `onMain(file)` says whether a sync merge's file is exempt (`syncExempt`): main takes only gated content, so a
  * person's main → next sync merge (#2106) isn't held on main's own released migration (#2147).
  */
-export function coreApproval({ files, head, headRef, headRepo = repo, baseRef = "main", labels = [], title = "", comments, samePatch = (sha) => head.toLowerCase().startsWith(sha.toLowerCase()), onMain = () => false }) {
+export function coreApproval({ files, head, headRef, headRepo = repo, baseRef = "main", labels = [], title = "", comments, samePatch = (sha) => head.toLowerCase().startsWith(sha.toLowerCase()), onMain = () => false, patches = {} }) {
   // #1740: only this repo's own next → main is the train; a fork's (public repo) or any other base's `next` isn't.
   if (headRef === "next" && headRepo === repo && baseRef === "main") return { state: "success", description: "Deploy train: its PRs were gated into next" };
   const touched = coreFiles(files);
@@ -62,6 +131,12 @@ export function coreApproval({ files, head, headRef, headRepo = repo, baseRef = 
   // A QA verdict on this head that isn't an approval ("changes requested") holds the PR, whoever else approved.
   if (qa.latest && !qa.approved) return { state: "pending", description: `QA requested changes at ${short}`, url: qa.latest.url };
   const who = reviewer?.approved ? reviewer.body.split(" ")[0].replace(/[*_:]/g, "") : "QA";
+  // #364: words only. Launch/Meta/tenant wording ships on green CI; money wording needs one approval, not two.
+  if (core.every((f) => !MIGRATION.test(f) && wordsOnly(patches[f]))) {
+    if (!core.some((f) => moneyPath.test(f))) return { state: "success", description: `Words only: prose strings and comments in ${core.length} core file(s)` };
+    if (reviewer?.approved || qa.approved) return { state: "success", description: `${who} approved ${short} (money words only)`, url: reviewer?.approved ? reviewer.url : qa.latest?.url };
+    return { state: "pending", description: `Money words only: needs one QA/Reviewer/CTO approval of ${short}: ${list}`.slice(0, 140) };
+  }
   // Money and migrations need QA and the CTO or Reviewer (AGENTS, ORCHESTRATION item 5); #1083 merged on one.
   if (core.some((f) => moneyPath.test(f) || MIGRATION.test(f))) {
     if (qa.approved && reviewer?.approved) return { state: "success", description: `QA and ${who} approved ${short} (money/migration)`, url: reviewer.url };
@@ -87,7 +162,9 @@ async function main() {
   if (!Number.isInteger(n) || n <= 0) throw new Error("--pr <number> is required");
   const pr = ghJson("api", `repos/${repo}/pulls/${n}`);
   const head = pr.head.sha;
-  const files = ghLines("api", "--paginate", `repos/${repo}/pulls/${n}/files?per_page=100`, "--jq", ".[].filename|tojson");
+  const fileRows = ghLines("api", "--paginate", `repos/${repo}/pulls/${n}/files?per_page=100`, "--jq", ".[]|{filename,patch}|tojson");
+  const files = fileRows.map((f) => f.filename);
+  const patches = Object.fromEntries(fileRows.map((f) => [f.filename, f.patch]));
   const comments = [
     ...ghLines("api", "--paginate", `repos/${repo}/issues/${n}/comments?per_page=100`, "--jq", ".[]|{body,createdAt:.created_at,url:.html_url}|tojson"),
     ...reviewVerdicts(ghLines("api", "--paginate", `repos/${repo}/pulls/${n}/reviews?per_page=100`, "--jq", ".[]|{body,state,submitted_at,html_url}|tojson")),
@@ -139,7 +216,7 @@ async function main() {
     return sync && syncExempt({ head: blob(file, head), main: blob(file, "main"), next: blob(file, "next"), base: blob(file, base) });
   };
 
-  const verdict = coreApproval({ files, head, headRef: pr.head.ref, headRepo: pr.head.repo?.full_name ?? "", baseRef: pr.base.ref, labels: pr.labels.map((l) => l.name), title: pr.title, comments, samePatch, onMain });
+  const verdict = coreApproval({ files, head, headRef: pr.head.ref, headRepo: pr.head.repo?.full_name ?? "", baseRef: pr.base.ref, labels: pr.labels.map((l) => l.name), title: pr.title, comments, samePatch, onMain, patches });
   console.log(`#${n} ${head.slice(0, 7)}: ${verdict.state} · ${verdict.description}`);
   if (values["dry-run"]) return;
   const args = ["api", "-X", "POST", `repos/${repo}/statuses/${head}`, "-f", `state=${verdict.state}`, "-f", `context=${CONTEXT}`, "-f", `description=${verdict.description}`];

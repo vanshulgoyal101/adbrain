@@ -24,6 +24,9 @@ The release process ([AGENTS.md](../../AGENTS.md)).
    **approved**` names its head (or an earlier head with the same patch). Legacy
    space-only role prefixes still work; a later negative verdict at that head
    overrides either format. Money/migrations still need QA plus CTO/Reviewer.
+   **Words only passes (#364):** markdown never gates, and a change whose core files differ only in
+   prose strings (a space or Hindi in each changed string) and comments ships on green CI; in money
+   files it needs one approval, not two. Statuses, keys, URLs, numbers and migrations stay gated.
    The deploy train (this repo's `next` → `main` only, never a fork's `next`) and a
    revert labelled `rollback` pass, and so does a main → next sync merge (head contains
    main, next doesn't) whose core files equal main's and are unchanged on next since the
