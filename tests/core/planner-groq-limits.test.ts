@@ -138,3 +138,78 @@ describe("core: after a Groq rate limit, one call probes it; parallel calls don'
     expect((await complete([{ role: "user", content: "plan 9" }], {})).provider).toBe("groq");
   });
 });
+
+// #2189: production batch 4134f1a0 (Oct 31). Gemini answered 503 to all three Create concepts, so Groq was the last
+// provider left. One concept hit Groq's 1,000 output-tokens/minute limit; when the park ended, one concept probed Groq
+// and the other two, finding the probe out, gave up with nothing to fall back to: 1 of 3 ads saved.
+describe("core: when Groq is the last provider left, parallel calls wait their turn instead of failing (#2189)", () => {
+  const otpm = (seconds: number) => groqLimit("output tokens per minute (OTPM): Limit 1000, Used 488, Requested 752", seconds)();
+
+  function lastResortChain(groqReplies: Array<() => Response | Promise<Response>>) {
+    process.env.GOOGLE_AI_API_KEYS = "gg";
+    process.env.OPENROUTER_API_KEYS = "";
+    process.env.LLM_PROVIDER_ORDER = "google,groq";
+    vi.resetModules();
+    const hosts: string[] = [];
+    let groqCalls = 0;
+    global.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("api.groq.com")) {
+        hosts.push("groq");
+        const reply = groqReplies[Math.min(groqCalls++, groqReplies.length - 1)];
+        return reply();
+      }
+      hosts.push("google");
+      return Response.json({ error: { code: 503, message: "The model is overloaded.", status: "UNAVAILABLE" } }, { status: 503 });
+    }) as unknown as typeof fetch;
+    return hosts;
+  }
+  const answer = (delayMs = 0) => async () => {
+    if (delayMs) await new Promise((resolve) => setTimeout(resolve, delayMs));
+    return Response.json({ choices: [{ message: { content: "{\"ready\":true}" } }] });
+  };
+
+  afterEach(() => { vi.useRealTimers(); });
+
+  it("Gemini 503 + a Groq per-minute limit: all three concepts are answered by Groq, none is lost", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    // 1: the limit (15 s). 2: the probe, slow so the others find it out. 3: the limit again, now 30 s (over the
+    // 20 s short wait). Then Groq answers.
+    const hosts = lastResortChain([() => otpm(15), answer(1_000), () => otpm(30), answer()]);
+    const { complete } = await import("@/lib/llm");
+    const deadline = new AbortController();
+    const settled = Promise.allSettled([1, 2, 3].map((n) =>
+      complete([{ role: "user", content: `concept ${n}` }], { signal: deadline.signal, waitOnLastProvider: true })));
+    await vi.advanceTimersByTimeAsync(180_000);
+    const results = await settled;
+    expect(results.map((result) => result.status)).toEqual(["fulfilled", "fulfilled", "fulfilled"]);
+    expect(results.map((result) => result.status === "fulfilled" && result.value.provider)).toEqual(["groq", "groq", "groq"]);
+    // Gemini is tried once per concept (a 503 skips its other keys), and Groq isn't hammered while parked.
+    expect(hosts.filter((host) => host === "google")).toHaveLength(3);
+    expect(hosts.filter((host) => host === "groq").length).toBeLessThanOrEqual(5);
+  });
+
+  it.each([
+    ["without a deadline signal", { waitOnLastProvider: true }],
+    ["for calls that don't opt in (planner, interview)", { signal: new AbortController().signal }],
+  ])("%s, the last provider still gives up on a long wait rather than hang", async (_, options) => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    lastResortChain([() => otpm(30), answer()]);
+    const { complete, AllLLMProvidersFailedError } = await import("@/lib/llm");
+    const call = complete([{ role: "user", content: "concept" }], options).catch((error: unknown) => error);
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(await call).toBeInstanceOf(AllLLMProvidersFailedError);
+  });
+
+  it("the deadline still ends a last-resort wait", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    lastResortChain([() => otpm(30), answer()]);
+    const { complete } = await import("@/lib/llm");
+    const deadline = new AbortController();
+    const call = complete([{ role: "user", content: "concept" }], { signal: deadline.signal, waitOnLastProvider: true })
+      .catch((error: unknown) => error);
+    await vi.advanceTimersByTimeAsync(10_000);
+    deadline.abort(new DOMException("deadline", "TimeoutError"));
+    expect(await call).toMatchObject({ name: "TimeoutError" });
+  });
+});

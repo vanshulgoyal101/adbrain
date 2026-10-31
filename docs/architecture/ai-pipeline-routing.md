@@ -12,7 +12,13 @@ until its Retry-After, at most 6 hours, and a named organization limit parks
 every key of that provider). When every key of a
 model is parked for 20 seconds or less, it waits once and retries that model
 before falling through; Groq keys share one organization tokens-per-minute
-limit, so rotating keys does not add capacity. A 5xx skips that model's other
+limit, so rotating keys does not add capacity. After a named limit, one call at
+a time probes the provider; the others go to the next provider. Create's concept
+calls set `waitOnLastProvider` (#2189): when no later provider can answer (for
+example Gemini returns 503 and Groq is all that's left), they wait for the probe
+and wait out a per-minute park (up to 60 seconds, six rounds, bounded by the
+batch deadline) instead of failing, so three parallel concepts take turns on
+Groq's 1,000 output tokens a minute. A 5xx skips that model's other
 keys. First successful provider response wins. Cancellation and
 terminal local errors do not mean trying every key indefinitely.
 

@@ -27,6 +27,11 @@ export interface CompletionOptions {
   nextProviders?: string[];
   /** On a brief 429, try later providers before waiting out the cooldown, then come back to it (#668). */
   fallbackBeforeRateLimitWait?: boolean;
+  /**
+   * #2189: when no later provider can answer, wait for another call's probe and out a per-minute limit (≤ 60 s,
+   * a few rounds) instead of failing. Only with `signal`, which bounds the wait; for calls with a long deadline.
+   */
+  waitOnLastProvider?: boolean;
   /** "off" asks thinking models (Gemini) not to think: for small structured outputs where speed matters. */
   thinking?: "off";
   onAttempt?: (attempt: ProviderAttempt) => void;
