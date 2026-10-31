@@ -398,9 +398,14 @@ export class MetaWriteUncertainError extends MetaError {
   }
 }
 
-/** Meta answered the write and refused it (any 4xx), or AdBrain stopped it before sending: nothing changed. */
+/** Connection failures that happen before a request can reach Meta (no address, connection refused). */
+const NOT_SENT_CODES = new Set(["ENOTFOUND", "EAI_AGAIN", "ECONNREFUSED"]);
+
+/** Meta answered the write and refused it (any 4xx), or it never left AdBrain: nothing changed. */
 function writeDefinitelyRefused(error: unknown): boolean {
   if (error instanceof ConnectionAccessError) return true;
+  const cause = error instanceof TypeError ? (error.cause as { code?: unknown } | undefined) : undefined;
+  if (typeof cause?.code === "string" && NOT_SENT_CODES.has(cause.code)) return true;
   return error instanceof MetaError && error.status !== undefined && error.status >= 400 && error.status < 500;
 }
 

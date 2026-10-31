@@ -79,6 +79,12 @@ describe("core: pause one ad (#1045)", () => {
     await expect(new MetaClient(creds).setAdStatus(recorded.campaignId, recorded.pausedAdId, "PAUSED")).rejects.toBeInstanceOf(MetaWriteUncertainError);
   });
 
+  it("keeps a connection that never reached Meta a plain failure: nothing was sent (#2395)", async () => {
+    replay("pause-paused-ad", runningFirst(), (method) => method === "POST" ? Object.assign(new TypeError("fetch failed"), { cause: Object.assign(new Error("getaddrinfo ENOTFOUND graph.facebook.com"), { code: "ENOTFOUND" }) }) : null);
+    const error = await new MetaClient(creds).setAdStatus(recorded.campaignId, recorded.pausedAdId, "PAUSED").catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(TypeError);
+  });
+
   it("keeps Meta's own 4xx refusal of the write a plain refusal (#2395)", async () => {
     const running = runningFirst();
     replay("pause-paused-ad", (exchange) => exchange.method === "POST"

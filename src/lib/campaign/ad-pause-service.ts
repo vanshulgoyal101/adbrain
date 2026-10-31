@@ -20,8 +20,11 @@ function adPauses(raw: unknown): AdPauseEntry[] {
 }
 
 const UNCONFIRMED = "Meta didn't confirm the change. Refresh the campaign before trying again.";
-/** How long an unconfirmed change of AdBrain's can still be recognised on a retry (#2395). */
-const INTENT_TTL_MS = 24 * 60 * 60 * 1000;
+/**
+ * How long an unconfirmed change of AdBrain's can still be recognised on a retry (#2395). Short, so it can't
+ * claim a pause the owner made in Meta later (Reviewer on #1048).
+ */
+const INTENT_TTL_MS = 60 * 60 * 1000;
 
 /** #2395: changes AdBrain sent to Meta but hasn't confirmed (`campaigns.raw.adPauseIntents`), at most one per ad. */
 function adPauseIntents(raw: unknown): AdPauseEntry[] {
@@ -90,7 +93,7 @@ export async function setAdDelivery(context: AuthorizedBusiness, campaignId: str
     if (error instanceof CampaignEditError) throw error;
     throw new CampaignEditError(friendlyMetaError(error, "Meta didn't change the ad. Nothing changed."), 502, true);
   }
-  if (result.status !== status) throw new CampaignEditError(UNCONFIRMED, 502, true);
+  if (result.status !== status) throw new CampaignEditError(UNCONFIRMED, 502, false);
   // Reviewer on #1048: an ad that already had this status wasn't changed by AdBrain, so nothing is recorded,
   // unless it is AdBrain's own unconfirmed change from a moment ago (#2395).
   if (!result.changed) {

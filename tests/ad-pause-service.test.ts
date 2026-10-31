@@ -76,9 +76,9 @@ describe("setAdDelivery (#1045)", () => {
     expect(recorded()).toEqual([]);
   });
 
-  it("records a retried pause that Meta had already made, but not from an intent older than a day", async () => {
+  it("records a retried pause that Meta had already made, but not from an intent older than an hour", async () => {
     m.setAdStatus.mockResolvedValue({ id: "22", status: "PAUSED", effectiveStatus: "PAUSED", changed: false });
-    m.campaign!.raw = { adPauseIntents: [{ adId: "22", action: "paused", at: new Date(Date.now() - 25 * 3600_000).toISOString() }] };
+    m.campaign!.raw = { adPauseIntents: [{ adId: "22", action: "paused", at: new Date(Date.now() - 61 * 60_000).toISOString() }] };
     expect((await setAdDelivery(context, "c1", "22", "pause")).changed).toBe(false);
     m.campaign!.raw = { adPauseIntents: [{ adId: "22", action: "paused", at: new Date().toISOString(), reason: "expensive" }] };
     expect((await setAdDelivery(context, "c1", "22", "pause")).changed).toBe(true);
@@ -99,7 +99,7 @@ describe("setAdDelivery (#1045)", () => {
     await expect(setAdDelivery(context, "c1", "22", "pause")).rejects.toThrow("Only a running campaign's ads can be paused here.");
     m.campaign!.status = "active";
     m.setAdStatus.mockResolvedValue({ id: "22", status: "ACTIVE", effectiveStatus: "ACTIVE", changed: true });
-    await expect(setAdDelivery(context, "c1", "22", "pause")).rejects.toThrow("Meta didn't confirm the change.");
+    await expect(setAdDelivery(context, "c1", "22", "pause")).rejects.toMatchObject({ message: expect.stringContaining("Meta didn't confirm the change."), retryable: false });
     expect(recorded()).toEqual([]);
   });
 });
