@@ -40,9 +40,16 @@ const COOLDOWN_MS = 60_000;
 const RATE_LIMIT_WAIT_MS = 20_000;
 const cooldownUntil = new Map<string, number>();
 // #1568: a provider that hit a named rate limit in this process is probed by one call at a time after its park;
-// calls made while that probe is out go to the next provider instead of piling onto a limit that may still hold.
+// calls made while that probe is out go to the next provider instead of piling onto a limit that may still hold
+// (with no next provider and `waitOnLastProvider`, they wait for the probe: #2189).
 const rateLimited = new Set<string>();
-const probing = new Set<string>();
+const probing = new Map<string, Promise<void>>();
+// #2189: with `waitOnLastProvider`, the last provider left waits out a limit it named (Groq's OTPM: ≤ COOLDOWN_MS a
+// round), for at most this many rounds and this much sleep per call. A bare 429 keeps the short wait.
+const LAST_RESORT_ROUNDS = 6;
+const LAST_RESORT_WAIT_BUDGET_MS = 90_000;
+// Until when a named limit parks each provider; unlike `rateLimited`, another call's success doesn't clear it.
+const namedParkUntil = new Map<string, number>();
 /** #1808: the Cerebras model, exported so the scheduled model check reads the same id. */
 export const CEREBRAS_MODEL = "llama-3.3-70b";
 // #449: a key out of credit stays parked long enough not to slow every Create; the free models answer meanwhile.
@@ -179,16 +186,27 @@ async function callProviders(
   for (let position = 0; position < queue.length; position++) {
     const entry = queue[position];
     const { provider, keys, model } = entry;
-    for (let round = 0; round < 2; round++) {
+    // #2189: with nothing after this provider, giving up loses the call; the caller's deadline bounds the wait instead.
+    const lastResort = () => Boolean(options.waitOnLastProvider && options.signal) && !queue.slice(position + 1).some(available);
+    let slept = 0;
+    for (let round = 0; ; round++) {
       const start = nextKeyStart(provider.name, keys.length);
       for (let i = 0; i < keys.length; i++) {
         options.signal?.throwIfAborted();
         const idx = (start + i) % keys.length;
         const coolKey = `${provider.name}:${idx}`;
         if ((cooldownUntil.get(coolKey) ?? 0) > Date.now()) continue;
-        if (rateLimited.has(provider.name) && probing.has(provider.name)) break;
+        const inFlightProbe = rateLimited.has(provider.name) ? probing.get(provider.name) : undefined;
+        if (inFlightProbe) {
+          if (!lastResort()) break;
+          await abortable(inFlightProbe, options.signal);
+          i--;
+          continue;
+        }
         const probe = rateLimited.has(provider.name);
-        if (probe) probing.add(provider.name);
+        let settleProbe = () => {};
+        if (probe) probing.set(provider.name, new Promise<void>((resolve) => { settleProbe = resolve; }));
+        const endProbe = () => { probing.delete(provider.name); settleProbe(); };
 
         const attemptStart = Date.now();
         try {
@@ -201,10 +219,8 @@ async function callProviders(
           options.onAttempt?.({ provider: provider.name, model, usage, providerRequestId,
             providerFinalStatus: providerFinalStatus ?? "unknown", status: "success", latencyMs: Date.now() - attemptStart });
           rateLimited.delete(provider.name);
-          if (probe) probing.delete(provider.name);
           return { text, provider: provider.name, model, usage, providerRequestId, providerFinalStatus };
         } catch (err) {
-          if (probe) probing.delete(provider.name);
           const failure: LLMFailureCode = options.signal?.aborted
             ? (options.signal.reason as { name?: string } | undefined)?.name === "TimeoutError" ? "DEADLINE" : "ABORTED"
             : err instanceof LLMError ? err.code ?? "UNKNOWN" : "UNKNOWN";
@@ -235,7 +251,10 @@ async function callProviders(
             // #1568: a limit the provider names (Groq's TPD, OTPM…) is the organization's, shared by every key.
             const parked = err.rateLimit ? keys.map((_, k) => `${provider.name}:${k}`) : [coolKey];
             for (const key of parked) cooldownUntil.set(key, Math.max(cooldownUntil.get(key) ?? 0, until));
-            if (err.rateLimit) rateLimited.add(provider.name);
+            if (err.rateLimit) {
+              rateLimited.add(provider.name);
+              namedParkUntil.set(provider.name, Math.max(namedParkUntil.get(provider.name) ?? 0, until));
+            }
           }
           // Another key on the same model would time out or truncate the same way; try the next model.
           if (err instanceof LLMError && !err.retryable && err.status === undefined) {
@@ -244,23 +263,23 @@ async function callProviders(
           }
           // A 5xx means the model is overloaded or down for every key.
           if (err instanceof LLMError && err.status !== undefined && err.status >= 500) break;
+        } finally {
+          // After the outcome is recorded, so a waiting call sees Groq answered or parked again.
+          if (probe) endProbe();
         }
       }
       // Every key is rate-limited only briefly: wait once, then retry this model.
       const wait = Math.min(...keys.map((_, idx) => cooldownUntil.get(`${provider.name}:${idx}`) ?? 0)) - Date.now();
-      if (round === 1 || wait <= 0 || wait > RATE_LIMIT_WAIT_MS) break;
+      const last = lastResort() && (namedParkUntil.get(provider.name) ?? 0) > Date.now() && slept + wait <= LAST_RESORT_WAIT_BUDGET_MS;
+      if (round + 1 >= (last ? LAST_RESORT_ROUNDS : 2) || wait <= 0 || wait > (last ? COOLDOWN_MS : RATE_LIMIT_WAIT_MS)) break;
       // #668: a fast fallback answers sooner than the cooldown ends; come back to this provider after it.
       if (options.fallbackBeforeRateLimitWait && !deferred.has(entry) && queue.slice(position + 1).some(available)) {
         deferred.add(entry);
         queue.push(entry);
         break;
       }
-      options.signal?.throwIfAborted();
-      await new Promise<void>((resolve, reject) => {
-        const onAbort = () => { clearTimeout(timer); reject(options.signal?.reason); };
-        const timer = setTimeout(() => { options.signal?.removeEventListener("abort", onAbort); resolve(); }, wait);
-        options.signal?.addEventListener("abort", onAbort, { once: true });
-      });
+      await sleep(wait, options.signal);
+      slept += wait;
     }
   }
 
@@ -271,6 +290,30 @@ async function callProviders(
   if (terminal && failures.length === 1) throw terminal;
   throw new AllLLMProvidersFailedError(failures.length === 0 ? "COOLDOWN"
     : failures.every((reason) => reason === failures[0]) ? failures[0] : "MIXED", registry.length);
+}
+
+async function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await abortable(new Promise<void>((resolve) => { timer = setTimeout(resolve, ms); }), signal);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Await `waitFor`, rejecting with the signal's reason as soon as it aborts. */
+async function abortable(waitFor: Promise<void>, signal?: AbortSignal): Promise<void> {
+  signal?.throwIfAborted();
+  if (!signal) return waitFor;
+  let onAbort = () => {};
+  try {
+    await Promise.race([waitFor, new Promise<never>((_, reject) => {
+      onAbort = () => reject(signal.reason);
+      signal.addEventListener("abort", onAbort, { once: true });
+    })]);
+  } finally {
+    signal.removeEventListener("abort", onAbort);
+  }
 }
 
 /** Run a completion in JSON mode and parse the result. */

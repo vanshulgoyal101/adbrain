@@ -164,6 +164,11 @@ describe("create smoke mode", () => {
     expect(run(smoke, { REQUESTED_MODE: "picture" }).calls).toBe("node scripts/smoke-core.mjs --picture\n");
   });
 
+  it("schedules the picture check every 4 hours, keeping Cloudflare's free pictures for customers (#2405)", () => {
+    const crons = [...workflow("create-smoke.yml").join("\n").matchAll(/- cron: "([^"]+)"/g)].map((match) => match[1]);
+    expect(crons).toEqual(["17 */4 * * *", "47 8 * * *", "37 3 * * *"]);
+  });
+
   it("runs --prepare when the daily schedule or a dispatch asks for it (#2230)", () => {
     expect(run(smoke, { REQUESTED_MODE: "prepare" }).calls).toBe("node scripts/smoke-core.mjs --prepare\n");
     const text = workflow("create-smoke.yml").join("\n");

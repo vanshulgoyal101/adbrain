@@ -8,10 +8,25 @@ const cookie = vi.hoisted(() => ({ lang: undefined as string | undefined }));
 vi.mock("next/headers", () => ({
   cookies: async () => ({ get: (name: string) => (name === "adbrain_lang" && cookie.lang ? { value: cookie.lang } : undefined) }),
 }));
-vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ auth: { getUser: async () => ({ data: { user: { id: "u1" } } }) } }) }));
+const budget = vi.hoisted(() => ({ edit: vi.fn() }));
+vi.mock("@/lib/supabase/server", () => ({
+  createClient: async () => ({
+    auth: { getUser: async () => ({ data: { user: { id: "user-1" } } }) },
+    from: () => ({ select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { business_id: "biz-1", meta_campaign_id: "meta-1" } }) }) }) }),
+  }),
+}));
+vi.mock("@/lib/campaign/campaign-owner", () => ({ ownerRefusal: async () => null }));
+vi.mock("@/lib/meta/connection-access", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/lib/meta/connection-access")>(),
+  requireOwnedBusiness: async () => ({ businessId: "biz-1", userId: "user-1" }),
+}));
+vi.mock("@/lib/campaign/budget-edit-service", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/lib/campaign/budget-edit-service")>(),
+  editCampaignBudget: budget.edit,
+}));
 vi.mock("@/lib/supabase/queries", () => ({ getPrimaryBusiness: async () => ({ id: "b1" }) }));
 
-// #2305: the #2225 plain-words errors, byte-identical in English; routes match on status and `code`, not this text.
+// #2305/#2314: owner-facing errors (#2225); routes match on status and `code`, not this text.
 const ENGLISH: Record<OwnerErrorKey, string> = {
   draftSaveUnavailable: "We couldn't save your campaign just now. Try again in a minute.",
   tooManyDrafts: "You have too many unfinished campaigns. Finish or remove one, then try again.",
@@ -103,6 +118,36 @@ const ENGLISH: Record<OwnerErrorKey, string> = {
   metaDeleteUnconfirmed: "Meta deletion could not be confirmed. The campaign remains in AdBrain so you can check its status.",
   campaignDeleteFailed: "Could not delete the campaign.",
   activationAccessUnconfirmed: "Meta has not confirmed campaign activation access.",
+  // #2314: Manage (refresh, sync, budget, ad pause).
+  notOnMetaYet: "This campaign isn't on Meta yet, so there are no results to refresh.",
+  refreshNeedsCheck: "We need to check this campaign's ad account before its results can refresh. If this doesn't clear, message us.",
+  refreshFailed: "We couldn't refresh the results just now. Try again in a minute.",
+  resultsNotSaved: "We got the new results but couldn't save them. Refresh again.",
+  syncFailed: "We couldn't bring in your campaigns from Meta just now. Your campaigns here are safe; try again.",
+  editsUnavailable: "We can't change campaigns just now. Try again in a minute.",
+  editNotRecorded: "We couldn't save that change, so nothing changed. Try again.",
+  changeInProgress: "This change is already in progress.",
+  onlyEditOwn: "AdBrain can only edit campaigns it launched.",
+  onlyChangeOwn: "AdBrain can only change campaigns it launched.",
+  budgetEarlierAttempt: "An earlier attempt may have changed the budget in Meta. Check the campaign before changing it again.",
+  budgetNotRunning: "Only a running or paused campaign's budget can be changed.",
+  runEnded: "This run has ended. Start a new run instead.",
+  cappedRunUseTotal: "This run has a total cap and an end date. Change those instead of the daily budget.",
+  pauseForDaily: "Pause the campaign to change its daily budget; it resumes at the new amount after your review.",
+  budgetSpendLimitsUnverified: "We couldn't check your spending limits just now. Try again.",
+  budgetFundingUnverified: "We couldn't check how this campaign is paid for just now. Try again.",
+  managedCapRaise: "Raising the total cap of a run paid from your AdBrain balance isn't available yet. Lower it, change the end date, or start a new run.",
+  nothingToChange: "Nothing to change: the budget, cap and end date are as they are now.",
+  confirmBudget: "Confirm the new amount first: it's more than you approved.",
+  budgetNotRecorded: "Meta changed the budget but AdBrain could not record it. Check the campaign before changing it again.",
+  budgetRateLimited: "Meta needs 30 seconds between budget changes. Try again in a moment.",
+  budgetFailed: "We couldn't change the budget just now. Try again in a minute.",
+  budgetUnconfirmed: "Meta may have changed the budget. Refresh the campaign to check before you change it again.",
+  adPauseNotRunning: "Only a running campaign's ads can be paused here.",
+  adNotInCampaign: "This ad isn't part of the campaign.",
+  adNotPausedByAdBrain: "AdBrain didn't pause this ad, so it won't turn it on. Use Meta if you want it back.",
+  adMetaUnconfirmed: "Meta didn't confirm the change. Refresh the campaign before trying again.",
+  adNotRecorded: "Meta changed the ad but AdBrain could not record it. Check the campaign before changing it again.",
   // #2330: Brand autofill and the launch planner; byte-identical, except siteRefused (was the raw "Site returned 403").
   brandInputInvalid: "A website URL of at most 2048 characters, or some text about the business, is required.",
   pasteMore: "Paste a little more about the business: what it sells, where, and how to reach it.",
@@ -179,7 +224,7 @@ const RENDERED: Partial<Record<OwnerErrorKey, string>> = {
 };
 const keys = Object.keys(ENGLISH) as OwnerErrorKey[];
 
-describe("owner errors (#2305, #2312, #2324, #2327, #2330, #2334, #2335)", () => {
+describe("owner errors (#2305, #2312, #2314, #2324, #2327, #2330, #2334, #2335)", () => {
   it("has the same keys in English and Hindi", () => {
     expect(Object.keys(en.errors).sort()).toEqual([...keys].sort());
     expect(Object.keys(hi.errors).sort()).toEqual([...keys].sort());
@@ -193,6 +238,37 @@ describe("owner errors (#2305, #2312, #2324, #2327, #2330, #2334, #2335)", () =>
     // " ({uncapped})" is punctuation around a value.
     if (key !== "committedUncappedOnly") expect(hindi).toMatch(/[\u0900-\u097F]/);
   });
+
+  it.each([
+    ["editsUnavailable", "अभी कैंपेन नहीं बदल सकते। एक मिनट बाद फिर से कोशिश करें।"],
+    ["editNotRecorded", "बदलाव सेव नहीं हो पाया, इसलिए कुछ नहीं बदला। फिर से कोशिश करें।"],
+    ["budgetFailed", "अभी बजट नहीं बदल पाया। एक मिनट बाद फिर से कोशिश करें।"],
+    ["budgetUnconfirmed", "हो सकता है Meta में बजट बदल गया हो। दोबारा बदलने से पहले कैंपेन रिफ़्रेश करके देख लें।"],
+    ["adMetaUnconfirmed", "Meta ने बदलाव पक्का नहीं किया। फिर से कोशिश करने से पहले कैंपेन रिफ़्रेश करें।"],
+    ["refreshNeedsCheck", "इस कैंपेन के ऐड अकाउंट की जाँच होनी है, उसके बाद ही नतीजे रिफ़्रेश होंगे। अगर यह ठीक न हो, तो हमें मैसेज करें।"],
+  ] as const)("%s uses the approved Hindi wording", (key, expected) => {
+    expect(ownerErrorIn("hi", key)).toBe(expected);
+  });
+
+  it.each([
+    "adPauseNotRunning",
+    "adNotInCampaign",
+    "adNotPausedByAdBrain",
+    "adNotRecorded",
+  ] as const)("%s calls an ad विज्ञापन in Hindi", (key) => {
+    const message = ownerErrorIn("hi", key);
+    expect(message).toContain("विज्ञापन");
+    expect(message).not.toContain("ऐड");
+  });
+
+  it.each(["notOnMetaYet", "refreshNeedsCheck", "refreshFailed", "resultsNotSaved", "budgetUnconfirmed", "adMetaUnconfirmed"] as const)(
+    "%s uses रिफ़्रेश in Hindi",
+    (key) => {
+      const message = ownerErrorIn("hi", key);
+      expect(message).toContain("रिफ़्रेश");
+      expect(message).not.toContain("रीफ़्रेश");
+    },
+  );
 
   it("builds a picture field's error from its translated name", () => {
     const hindi = (field: OwnerErrorKey) => ownerErrorIn("hi", field);
@@ -225,6 +301,40 @@ describe("owner errors (#2305, #2312, #2324, #2327, #2330, #2334, #2335)", () =>
     expect(await ownerError("tooManyDrafts")).toBe(hi.errors.tooManyDrafts);
     cookie.lang = "fr";
     expect(await ownerError("tooManyDrafts")).toBe(ENGLISH.tooManyDrafts);
+    cookie.lang = undefined;
+  });
+
+  it("keeps an edit refusal's English catalog message, status and retryable, and names its key (#2314)", async () => {
+    const { ownerEditError } = await import("@/lib/campaign/owner-edit-error");
+    const { CampaignEditError } = await import("@/lib/campaign/edit-service");
+    const error = ownerEditError("budgetSpendLimitsUnverified", 503, true);
+    expect(error).toBeInstanceOf(CampaignEditError);
+    expect(error).toMatchObject({ message: ENGLISH.budgetSpendLimitsUnverified, status: 503, retryable: true, ownerKey: "budgetSpendLimitsUnverified" });
+  });
+
+  it("answers budget refusals in the owner's language, with the same status and retryability (#2314)", async () => {
+    const { ownerEditError } = await import("@/lib/campaign/owner-edit-error");
+    const { POST } = await import("@/app/api/campaigns/[id]/budget/route");
+    const send = () => POST(new Request("http://localhost/api/campaigns/c-1/budget", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ change: { capRupees: 900 }, idempotencyKey: "budget-key-2314" }),
+    }), { params: Promise.resolve({ id: "c-1" }) });
+    for (const [key, status, retryable] of [
+      ["runEnded", 409, false],
+      ["budgetSpendLimitsUnverified", 503, true],
+      ["budgetFailed", 500, false],
+      ["budgetUnconfirmed", 500, false],
+    ] as const) {
+      budget.edit.mockRejectedValue(ownerEditError(key, status, retryable));
+      cookie.lang = "hi";
+      const hindi = await send();
+      expect(hindi.status).toBe(status);
+      expect(await hindi.json()).toEqual({ error: hi.errors[key], retryable });
+      cookie.lang = undefined;
+      const english = await send();
+      expect(english.status).toBe(status);
+      expect(await english.json()).toEqual({ error: ENGLISH[key], retryable });
+    }
   });
 
   it("#2334: the spend-limits route answers a Hindi owner in Hindi", async () => {

@@ -157,6 +157,7 @@ try {
   context.setDefaultTimeout(20_000);
   const page = await context.newPage();
   const errors = [];
+  const smokeBlocked = new Set();
   let loginAllowed = true;
   let skippedLeadSync = false;
   let skippedCampaignSync = false;
@@ -186,6 +187,8 @@ try {
     const source = message.location().url;
     const path = source ? new URL(source).pathname : "unknown source";
     if (path === "/api/campaigns/sync" && skippedCampaignSync) return;
+    // #2396: a write the smoke aborts on purpose (Go live's create) is not a product error.
+    if (smokeBlocked.has(path) && message.text().includes("ERR_BLOCKED_BY_CLIENT")) return;
     const status = message.text().match(/\b(?:40[0-9]|50[0-9])\b/)?.[0];
     errors.push(message.text().includes("Content Security Policy") ? `CSP violation at ${path}` : `console error at ${path}${status ? ` (HTTP ${status})` : ""}`);
   });
@@ -249,8 +252,9 @@ try {
         if (request.method() === "DELETE" && campaignDeleteCount++ === 0) return route.continue();
       }
     }
-    if (!["GET", "HEAD", "OPTIONS"].includes(request.method())) return route.abort("blockedbyclient");
-    if (url.origin === origin && (/^\/api\/(cron|scheduler)\//.test(url.pathname) || url.pathname.startsWith("/api/meta/oauth/"))) {
+    if (!["GET", "HEAD", "OPTIONS"].includes(request.method())
+      || (url.origin === origin && (/^\/api\/(cron|scheduler)\//.test(url.pathname) || url.pathname.startsWith("/api/meta/oauth/")))) {
+      if (url.origin === origin) smokeBlocked.add(url.pathname);
       return route.abort("blockedbyclient");
     }
     return route.continue();
@@ -423,6 +427,7 @@ try {
       // #2145: the smoke never buys pictures. The account must be internal and not exempt (`freeImagesOnly`).
       assert.ok(auth?.user?.id, "Signed-in identity unknown, so free pictures aren't certain; paid run was not started");
       assert.ok(makesFreePictures(auth.user), "This account would make paid pictures (not internal, or exempt); paid run was not started");
+      errors.length = 0;
       await page.goto(`${origin}/create`);
       await page.getByRole("textbox", { name: "Campaign goal" }).fill("Introduce our team to local customers using only verified Brand Brain facts. Avoid unsupported claims.");
       await page.getByRole("button", { name: /^(Start creating|Edit brief)$/ }).click(); // #1004: a complete Brand offers "Edit brief" to keep the brief review

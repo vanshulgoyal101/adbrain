@@ -18,6 +18,7 @@ import { getCampaignSpend, getSpendLimits } from "@/lib/supabase/queries";
 import { createClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/types";
 import { CampaignEditError, refuseWhileSwitchPending } from "./edit-service";
+import { OwnerEditError, ownerEditError } from "./owner-edit-error";
 
 /**
  * #774: edit a launched campaign's daily budget, total cap or end date, in the same `campaign_edit_operations`
@@ -30,9 +31,8 @@ import { CampaignEditError, refuseWhileSwitchPending } from "./edit-service";
  * Each write is a single in-place ad-set update, so a refused one changes nothing.
  */
 
-const BUDGET_RATE_LIMITED = "Meta needs 30 seconds between budget changes. Try again in a moment.";
-const PAUSE_FOR_DAILY = "Pause the campaign to change its daily budget; it resumes at the new amount after your review.";
-const CONFIRM_BUDGET = "Confirm the new amount first: it's more than you approved.";
+/** The edit row's stored text for an unexplained failure; the owner's words come from `errors.budgetFailed`/`budgetUnconfirmed`. */
+const BUDGET_FAILED_LEDGER = "Could not change the budget.";
 
 const rupees = (max: number) => z.number().finite().positive().max(max).refine(value => Number.isInteger(Math.round(value * 100 * 1e6) / 1e6), "Use at most two decimals.");
 export const budgetChangeSchema = z.object({
@@ -125,58 +125,56 @@ export async function editCampaignBudget(context: AuthorizedBusiness, campaignId
   if (!options.preview) {
     const { data, error } = await database.from("campaign_edit_operations").select("*")
       .eq("business_id", context.businessId).eq("campaign_id", campaignId).eq("idempotency_key", options.idempotencyKey).maybeSingle();
-    if (error) throw new CampaignEditError("Campaign edits are unavailable. Try again.", 503, true);
+    if (error) throw ownerEditError("editsUnavailable", 503, true);
     row = data as Row | null;
     if (row) {
       if (row.request_hash !== requestHash) throw new CampaignEditError("This idempotency key was used for a different change.", 409);
       if (row.state === "succeeded" && row.result) return { ...(row.result as unknown as BudgetEditResult), replay: true };
       if (row.state !== "failed" || row.transmitted) {
-        throw new CampaignEditError(row.state === "failed" || row.state === "needs_reconciliation"
-          ? "An earlier attempt may have changed the budget in Meta. Check the campaign before changing it again."
-          : "This change is already in progress.", 409);
+        throw ownerEditError(row.state === "failed" || row.state === "needs_reconciliation" ? "budgetEarlierAttempt" : "changeInProgress", 409);
       }
     }
   }
 
   const status = String(campaign.status).toLowerCase();
-  if (status !== "active" && status !== "paused") throw new CampaignEditError("Only a running or paused campaign's budget can be changed.", 409);
+  if (status !== "active" && status !== "paused") throw ownerEditError("budgetNotRunning", 409);
   const review = reviewableCampaign(campaign);
-  if (!review) throw new CampaignEditError("AdBrain can only edit campaigns it launched.", 409);
+  if (!review) throw ownerEditError("onlyEditOwn", 409);
   // #1146: a waiting new-audience copy holds a snapshot of the budget; switch or cancel it first.
   await refuseWhileSwitchPending(database, campaignId);
   const cap = storedCap(campaign.raw);
-  if (cap && cappedRunEnded(campaign.raw)) throw new CampaignEditError("This run has ended. Start a new run instead.", 409);
+  if (cap && cappedRunEnded(campaign.raw)) throw ownerEditError("runEnded", 409);
   const capped = Boolean(cap && review.children.cappedAdSetIds.includes(cap.adSetId));
   if (capped && change.dailyRupees !== undefined && change.dailyRupees !== review.dailyBudgetRupees) {
-    throw new CampaignEditError("This run has a total cap and an end date. Change those instead of the daily budget.", 422);
+    throw ownerEditError("cappedRunUseTotal", 422);
   }
   const targets = capped ? [cap!.adSetId] : review.children.adSetIds.filter(id => !review.children.cappedAdSetIds.includes(id));
 
   // A running campaign's daily budget is held by its AdBrain reservation (customer_ad_campaign_guard), so it
   // changes only while paused; resuming re-reserves at the new amount and checks the weekly limit (Reviewer on #901).
   if (!capped && status === "active" && change.dailyRupees !== undefined && change.dailyRupees !== review.dailyBudgetRupees) {
-    throw new CampaignEditError(PAUSE_FOR_DAILY, 409);
+    throw ownerEditError("pauseForDaily", 409);
   }
   // A running capped run's pace (cap − spent over the days left) is checked against the weekly limit; unreadable fails closed.
   let weekly: { otherActive: CampaignSpend[]; weeklyLimitRupees: number | null } = { otherActive: [], weeklyLimitRupees: null };
   if (capped && status === "active" && (change.capRupees !== undefined || change.endTime !== undefined)) {
     const loaded = await Promise.all([getSpendLimits(context.businessId), getCampaignSpend(context.businessId)]).catch(() => null);
-    if (!loaded) throw new CampaignEditError("Spend limits could not be verified. Try again.", 503, true);
+    if (!loaded) throw ownerEditError("budgetSpendLimitsUnverified", 503, true);
     weekly = { otherActive: loaded[1].filter(item => item.status === "active" && item.id !== campaignId), weeklyLimitRupees: loaded[0].weeklyCapRupees };
   }
   const raisesCap = capped && change.capRupees !== undefined && change.capRupees > (cap!.lifetimeBudgetPaise / 100);
   let mode: FundingMode | null = null;
   if (raisesCap) {
     mode = await fundingMode(context.businessId).catch(() => null);
-    if (!mode) throw new CampaignEditError("Campaign funding could not be verified. Try again.", 503, true);
+    if (!mode) throw ownerEditError("budgetFundingUnverified", 503, true);
     // A managed run's allowance was reserved at launch; reserving more is not built yet.
-    if (mode === "managed") throw new CampaignEditError("Raising the total cap of a run paid from your AdBrain balance isn't available yet. Lower it, change the end date, or start a new run.", 422);
+    if (mode === "managed") throw ownerEditError("managedCapRaise", 422);
   }
 
   const touch = async (values: Record<string, unknown>) => {
     if (!row) return;
     const { error } = await database.from("campaign_edit_operations").update({ ...values, updated_at: new Date().toISOString() }).eq("id", row.id);
-    if (error) throw new CampaignEditError("Campaign edit could not be recorded. Nothing was changed.", 503, true);
+    if (error) throw ownerEditError("editNotRecorded", 503, true);
   };
   if (!options.preview) {
     const values = { state: "running", phase: "validate", transmitted: false, sanitized_error: null, change: change as unknown as Json };
@@ -185,7 +183,7 @@ export async function editCampaignBudget(context: AuthorizedBusiness, campaignId
       const { data, error } = await database.from("campaign_edit_operations").insert({
         business_id: context.businessId, campaign_id: campaignId, kind: "budget", idempotency_key: options.idempotencyKey, request_hash: requestHash, ...values,
       }).select("*").single();
-      if (error || !data) throw new CampaignEditError(error?.code === "23505" ? "This change is already in progress." : "Campaign edits are unavailable. Try again.", error?.code === "23505" ? 409 : 503, error?.code !== "23505");
+      if (error || !data) throw ownerEditError(error?.code === "23505" ? "changeInProgress" : "editsUnavailable", error?.code === "23505" ? 409 : 503, error?.code !== "23505");
       row = data as Row;
     }
   }
@@ -225,7 +223,7 @@ export async function editCampaignBudget(context: AuthorizedBusiness, campaignId
       });
       if (!check.ok) throw new CampaignEditError(check.message, 422);
       const writes = metaChanges(budgets, capped, before, change);
-      if (!writes.length) throw new CampaignEditError("Nothing to change: the budget, cap and end date are as they are now.", 422);
+      if (!writes.length) throw ownerEditError("nothingToChange", 422);
       const digest = budgetConfirmationDigest(campaignId, review.metaCampaignId, budgets, change);
       const after = afterState(before, budgets, capped, writes);
 
@@ -233,7 +231,7 @@ export async function editCampaignBudget(context: AuthorizedBusiness, campaignId
         for (const write of writes) await meta.editAdSetBudget(review.metaCampaignId, write.adSetId, write.change, { validateOnly: true });
         return { kind: "preview" as const, preview: { before, after, needsConfirmation: check.needsConfirmation, confirmationDigest: check.needsConfirmation ? digest : null, notices: check.notices } };
       }
-      if (check.needsConfirmation && options.confirmationDigest !== digest) throw new CampaignEditError(CONFIRM_BUDGET, 409);
+      if (check.needsConfirmation && options.confirmationDigest !== digest) throw ownerEditError("confirmBudget", 409);
 
       await touch({ phase: "edit", transmitted: true, before: { capped, adSets: budgets } as unknown as Json });
       transmitted = true;
@@ -275,7 +273,7 @@ export async function editCampaignBudget(context: AuthorizedBusiness, campaignId
       } catch {
         await fail("needs_reconciliation", "Meta changed the budget but AdBrain could not record it. Check the campaign.");
         recordProductEvent({ kind: "workflow", name: "campaign.edit", outcome: "failed", businessId: context.businessId, attributes: { entityType: "campaign", count: done.length, errorCode: "EDIT_MIRROR_FAILED" } });
-        throw new CampaignEditError("Meta changed the budget but AdBrain could not record it. Check the campaign before changing it again.", 502);
+        throw ownerEditError("budgetNotRecorded", 502);
       }
       if (nextCap && nextCap.days > 0) await recordLaunchCap(database, { campaignId, cap: { ...nextCap, days: nextCap.days } }).catch(() => false);
     }
@@ -290,9 +288,12 @@ export async function editCampaignBudget(context: AuthorizedBusiness, campaignId
     });
     return { ...result, replay: false };
   } catch (error) {
-    const converted = toBudgetEditError(error);
+    const known = toBudgetEditError(error);
+    // A sent write that failed without Meta's own refusal (a timeout, a 5xx) may have changed the budget: check, don't retry.
+    const uncertain = transmitted && !(error instanceof CampaignEditError) && !(error instanceof MetaError && (error.status ?? 0) >= 400 && (error.status ?? 0) < 500);
+    const converted = uncertain ? ownerEditError("budgetUnconfirmed", known.status, false, BUDGET_FAILED_LEDGER) : known;
     // A 613 on a later A/B ad set leaves the edit to reconcile, not to retry (Reviewer on #901).
-    const mapped = converted.retryable && transmitted ? new CampaignEditError(converted.message, converted.status, false) : converted;
+    const mapped = converted.retryable && transmitted ? converted instanceof OwnerEditError ? new OwnerEditError(converted.ownerKey, converted.status, false, converted.message) : new CampaignEditError(converted.message, converted.status, false) : converted;
     if (options.preview) throw mapped;
     if (!(error instanceof CampaignEditError && error.status === 502)) {
       await fail(transmitted ? "needs_reconciliation" : "failed", mapped.message);
@@ -305,10 +306,10 @@ export async function editCampaignBudget(context: AuthorizedBusiness, campaignId
 
 function toBudgetEditError(error: unknown): CampaignEditError {
   if (error instanceof CampaignEditError) return error;
-  if (error instanceof MetaError && error.code === 613) return new CampaignEditError(BUDGET_RATE_LIMITED, 429, true);
+  if (error instanceof MetaError && error.code === 613) return ownerEditError("budgetRateLimited", 429, true);
   if (error instanceof CampaignDeliveryError) return new CampaignEditError(error.message, 409);
   if (error instanceof ConnectionAccessError) return new CampaignEditError(error.message, error.code === "UNAUTHENTICATED" ? 401 : error.code === "CONFLICT" ? 409 : 400);
   if (error instanceof MetaError) return new CampaignEditError(friendlyMetaError(error), error.status && error.status >= 500 ? 502 : 400, Boolean(error.status && error.status >= 500));
   console.error("[campaign.edit.budget]", error);
-  return new CampaignEditError("Could not change the budget.", 500);
+  return ownerEditError("budgetFailed", 500, false, BUDGET_FAILED_LEDGER);
 }

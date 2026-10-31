@@ -1,4 +1,5 @@
 import { observeRoute } from "@/lib/observability/logger";
+import { ownerError } from "@/i18n/request-locale";
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getCampaignPage, getPrimaryBusiness } from "@/lib/supabase/queries";
@@ -97,6 +98,6 @@ async function handlePOST(request?: Request) {
     return NextResponse.json({ campaigns: page.campaigns, pageCursor: page.nextCursor, ...result });
   } catch (error) {
     const status = error instanceof ConnectionAccessError ? error.code === "CONFLICT" ? 409 : error.code === "FORBIDDEN" ? 403 : 400 : 502;
-    return NextResponse.json({ error: error instanceof ConnectionAccessError ? error.message : "Campaign sync could not be completed. Existing campaigns are preserved." }, { status });
+    return NextResponse.json({ error: error instanceof ConnectionAccessError ? error.message : await ownerError("syncFailed") }, { status });
   }
 }

@@ -1,4 +1,5 @@
 import { observeRoute } from "@/lib/observability/logger";
+import { ownerError } from "@/i18n/request-locale";
 import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { adResultsEnabled, saveAdResults } from "@/lib/campaign/ad-results-store";
@@ -47,7 +48,7 @@ async function handlePOST(
   }
   if (!campaign.meta_campaign_id) {
     return NextResponse.json(
-      { error: "This campaign hasn't been launched to Meta yet" },
+      { error: await ownerError("notOnMetaYet") },
       { status: 400 },
     );
   }
@@ -62,7 +63,7 @@ async function handlePOST(
     storedBinding.metaConnectionGeneration === null
   ) {
     return NextResponse.json(
-      { error: "This campaign needs account reconciliation before it can refresh." },
+      { error: await ownerError("refreshNeedsCheck") },
       { status: 409 },
     );
   }
@@ -108,7 +109,7 @@ async function handlePOST(
     if (err instanceof ConnectionAccessError) {
       return NextResponse.json({ error: err.message, autoPaused: enforcement.paused, protectionConfirmed: enforcement.confirmed }, { status: err.code === "CONFLICT" ? 409 : 400 });
     }
-    return NextResponse.json({ error: friendlyMetaError(err, "Could not refresh campaign results."), autoPaused: enforcement.paused, protectionConfirmed: enforcement.confirmed }, { status: 502 });
+    return NextResponse.json({ error: friendlyMetaError(err, await ownerError("refreshFailed")), autoPaused: enforcement.paused, protectionConfirmed: enforcement.confirmed }, { status: 502 });
   }
 
   const { data: result, error: resultError } = await saveCampaignResult(
@@ -126,7 +127,7 @@ async function handlePOST(
     }).catch(() => ({ data: null, error: new Error("Result storage unavailable.") }));
 
   if (resultError || !result) {
-    return NextResponse.json({ error: "Could not save refreshed results. Retry the refresh.", protectionConfirmed: false }, { status: 503 });
+    return NextResponse.json({ error: await ownerError("resultsNotSaved"), protectionConfirmed: false }, { status: 503 });
   }
 
   if (ads) await saveAdResults(createAdminClient() as unknown as SupabaseClient, { businessId: campaign.business_id, campaignId: id, ads }).catch(() => false);

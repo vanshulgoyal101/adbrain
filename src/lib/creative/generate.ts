@@ -263,7 +263,7 @@ async function generateConcept(
       maxTokens: env.CREATIVE_MAX_TOKENS,
       reasoningEffort: env.CREATIVE_REASONING_EFFORT,
       attemptTimeoutMs: env.CREATIVE_ATTEMPT_TIMEOUT_MS,
-      cache: false,
+      cache: false, waitOnLastProvider: true, // #2189: parallel concepts take turns on Groq when it's the last provider.
       signal,
       onAttempt: (entry) => {
         sawProviderAttempt = true;

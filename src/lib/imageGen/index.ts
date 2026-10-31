@@ -6,6 +6,7 @@ import { FreeImageBusyError, FreeImageDailyLimitError, ImageProviderError, Refer
 import { MAX_IMAGE_BYTES, readBoundedResponse, validateRaster } from "./raster";
 import { fetchPublicUrl, SafeFetchError } from "@/lib/security/ssrf";
 import { costCapped, freeImagesOnly } from "@/lib/llm/spend-policy";
+import { recordProductEvent } from "@/lib/observability/logger";
 
 export type { GeneratedImage, ImageRequest } from "./types";
 
@@ -79,7 +80,12 @@ async function freeImage(req: ImageRequest, retries = Number.POSITIVE_INFINITY):
           providerRequestId: error instanceof ImageProviderError ? error.providerRequestId : undefined,
           providerFinalStatus: error instanceof ImageProviderError ? error.providerFinalStatus : "unknown" });
         req.signal?.throwIfAborted();
-        if (error instanceof FreeImageDailyLimitError) cloudflareCappedUntil = new Date(Date.now()).setUTCHours(24, 0, 0, 0);
+        if (error instanceof FreeImageDailyLimitError) {
+          cloudflareCappedUntil = new Date(Date.now()).setUTCHours(24, 0, 0, 0);
+          // #2404: a capped day must reach us before a customer does; the scheduled check also counts these rows.
+          recordProductEvent({ kind: "system", name: "image.free_daily_limit", outcome: "failed",
+            attributes: { provider: cloudflare.name, errorCode: imageFailureCode(error) } });
+        }
         if (!(error instanceof FreeImageBusyError) || error instanceof FreeImageDailyLimitError || attempt > 0) break;
         await wait(CLOUDFLARE_BUSY_RETRY_MS, req.signal);
       }
