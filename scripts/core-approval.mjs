@@ -41,11 +41,12 @@ export function syncExempt({ head, main, next, base }) {
 
 /**
  * @typedef {{ body: string, createdAt: string, url?: string }} Verdict
- * @param {{ files: string[], head: string, headRef: string, headRepo?: string, baseRef?: string, labels?: string[], title?: string, comments: Verdict[], samePatch?: (sha: string) => boolean, onMain?: (file: string) => boolean }} pr
+ * @param {{ files: string[], head: string, headRef: string, headRepo?: string, baseRef?: string, labels?: string[], title?: string, comments: Verdict[], samePatch?: (sha: string) => boolean, onMain?: (file: string) => boolean, wordsFiles?: Set<string> }} pr
  * The verdict for one PR. `comments` are issue comments and PR reviews ({ body, createdAt, url }), oldest first.
  * `samePatch(sha)` says whether an earlier head has the same changes as the current one.
  * `onMain(file)` says whether a sync merge's file is exempt (`syncExempt`): main takes only gated content, so a
  * person's main → next sync merge (#2106) isn't held on main's own released migration (#2147).
+ * `wordsFiles` are the core files whose change is words only (#364, `words-only.mjs`).
  */
 export function coreApproval({ files, head, headRef, headRepo = repo, baseRef = "main", labels = [], title = "", comments, samePatch = (sha) => head.toLowerCase().startsWith(sha.toLowerCase()), onMain = () => false, wordsFiles = new Set() }) {
   // #1740: only this repo's own next → main is the train; a fork's (public repo) or any other base's `next` isn't.

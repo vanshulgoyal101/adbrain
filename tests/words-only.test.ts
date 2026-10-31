@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { prose, wordRuns, wordsLine, wordsOnly } from "../scripts/words-only.mjs";
 
 const f = "src/lib/campaign/x.ts";
-const none = () => false;
+const none = (_run: string) => false;
 const words = (base: string, head: string, file = f, elsewhere = none) => wordsOnly(ts, file, base, head, elsewhere);
 const msg = (text: string) => `export function m(ok: boolean) {\n  if (!ok) return { error: "${text}", retryable: true };\n  return null;\n}\n`;
 
@@ -37,7 +37,7 @@ describe("words-only (#364)", () => {
     g("const p = rupees\n  * 100;\n", "const p = rupees\n  * 1000;\n");
     g("toast(`Budget ${a} a day`);\n", "toast(`Budget ${a * 2} a day`);\n");
     g("const r = { retryable: true };\n", "const r = { retryable: false };\n");
-    g("const u = \"https://graph.facebook.com/v21.0\";\n", "const u = \"https://graph.facebook.com/v22.0\";\n");
+    g("const u = \"https://graph.facebook.com/me\";\n", "const u = \"https://graph.facebook.com/act\";\n");
     g(msg("Nothing changed."), msg("Nothing changed.").replace("return null;", "return { error: \"Nothing changed now\" };"));
     g("const a = (;\n", "const a = (;;\n");
     expect(wordsOnly(ts, f, null, msg("New file here"), none)).toBe(false);
@@ -46,7 +46,7 @@ describe("words-only (#364)", () => {
   });
 
   it("keeps the gate on round 2 of the attack", () => {
-    const g = (base: string, head: string, elsewhere = none) => expect(words(base, head, f, elsewhere)).toBe(false);
+    const g = (base: string, head: string, elsewhere: (run: string) => boolean = none) => expect(words(base, head, f, elsewhere)).toBe(false);
     g("const AUTH = \"Invalid OAuth access token\";\nif (msg.includes(AUTH)) refresh();\n", "const AUTH = \"never matches this\";\nif (msg.includes(AUTH)) refresh();\n");
     g("if ([\"Invalid OAuth access token\", \"Session has expired\"].includes(m)) refresh();\n", "if ([\"Bad token now\", \"Session has expired\"].includes(m)) refresh();\n");
     g("if (msg.includes(\"Invalid OAuth\" + \" access token\")) r();\n", "if (msg.includes(\"Bad OAuth\" + \" access token\")) r();\n");
@@ -68,7 +68,7 @@ describe("words-only (#364)", () => {
   });
 
   it("keeps the gate on round 3 of the attack", () => {
-    const g = (base: string, head: string, elsewhere = none, file = f) => expect(words(base, head, file, elsewhere)).toBe(false);
+    const g = (base: string, head: string, elsewhere: (run: string) => boolean = none, file = f) => expect(words(base, head, file, elsewhere)).toBe(false);
     // Matchers shorter than three words, here or elsewhere (any case), and wrapped matcher arrays elsewhere.
     g("if (m.includes(\"token expired\")) r();\nthrow new Error(\"Your Meta token expired now\");\n", "if (m.includes(\"token expired\")) r();\nthrow new Error(\"Your Meta login lapsed now\");\n");
     g("if (/token expired/i.test(m)) r();\nthrow new Error(\"Your Meta token expired now\");\n", "if (/token expired/i.test(m)) r();\nthrow new Error(\"Your Meta login lapsed now\");\n");
