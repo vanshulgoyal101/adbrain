@@ -92,10 +92,10 @@ describe("words-only (#364)", () => {
     }
     expect(wordRuns("Meta token expired now")).toEqual(["Meta token expired", "token expired now"]);
     for (const line of ["if (e.message.includes(\"token expired now\"))", "const AUTH = \"Meta token expired now\";", "case \"token expired now\":",
-      "  \"Meta token expired now\",", "  auth: \"Meta token expired now\",", "if (/token expired now/i.test(m))", "  message: m.includes(\"token expired now\") ? a : b,", "if ([\"token expired now\"].includes(m)) throw new Error(\"x y\");"]) {
+      "  \"Meta token expired now\",", "  auth: \"Meta token expired now\",", "await page.getByRole(\"button\", { name: \"token expired now\" }).click();", "if (/token expired now/i.test(m))", "  message: m.includes(\"token expired now\") ? a : b,", "if ([\"token expired now\"].includes(m)) throw new Error(\"x y\");"]) {
       expect(wordsLine(line, "token expired now")).toBe(false);
     }
-    for (const line of ["  message: \"Your token expired now, reconnect.\",", "<p>Your token expired now.</p>", "// token expired now", "            or your token expired now", "throw new MetaError(\"token expired now\");", "if (typeof id !== \"string\") throw new CampaignError(\"Meta token expired now\");", "throw new CampaignDeliveryError(s === \"PAUSED\" ? \"Meta token expired now.\" : \"Other words here\");"]) {
+    for (const line of ["  message: \"Your token expired now, reconnect.\",", "<p>Your token expired now.</p>", "// token expired now", "            or your token expired now", "throw new MetaError(\"token expired now\");", "return apiError(\"Your token expired now.\", 403);", "  description=\"Your token expired now\"", "if (typeof id !== \"string\") throw new CampaignError(\"Meta token expired now\");", "throw new CampaignDeliveryError(s === \"PAUSED\" ? \"Meta token expired now.\" : \"Other words here\");"]) {
       expect(wordsLine(line, "token expired now")).toBe(true);
     }
   });

@@ -12,12 +12,12 @@ export function prose(text) {
 }
 
 // Calls whose string argument is shown to a person.
-const SHOW = /^(toast\w*|notify\w*|alert|confirm|log|info|warn|error|debug|setError|setMessage|setNotice|blocker|errorResponse|friendly\w*)$/;
+const SHOW = /^(toast\w*|notify\w*|alert|confirm|log|info|warn|error|debug|setError|setMessage|setNotice|blocker|errorResponse|apiError|refuse|fail\w*|friendly\w*)$/;
 // Calls that send or store what they get: words inside them are data (ad copy to Meta, a row), not a message.
 const DATA = /^(graph|fetch|request|post|put|patch|update|insert|upsert|rpc|send\w*)$/;
 // Properties that hold words: messages, labels and the EN/HI dictionaries.
 const WORDS_PROP = /^(message|error|title|description|label|text|body|hint|placeholder|alt|heading|subtitle|summary|detail|reason|rationale|help|tip|note|cta|actionLabel|aria\w*|en|hi)$/i;
-const WORDS_ATTR = /^(title|placeholder|alt|label|aria-[\w-]+)$/;
+const WORDS_ATTR = /^(title|placeholder|alt|label|description|aria-[\w-]+)$/;
 // Each directive with the code that follows it, so moving one counts as a change.
 const DIRECTIVE = /([@#]__(PURE|NO_SIDE_EFFECTS|INLINE)__|webpack\w*\s*:|turbopack\w*\s*:|@vite-ignore|@jsx\w*|@ts-(ignore|expect-error|nocheck)|eslint-disable)(?:[^\n*]|\*(?!\/))*(?:\*\/)?\s*\S{0,40}/g;
 // A dictionary entry read as code (`label === M.en`): its words are then data.
@@ -108,7 +108,7 @@ export function wordsLine(line, run) {
   // A comment, or JSX text wrapped onto its own line (no quotes, brackets or operators).
   if (/^(\/\/|\/\*|\*)/.test(t) || /^[^"'\x60(){}[\]=;<>]+$/.test(t)) return true;
   const r = escape(run);
-  const shownAs = String.raw`(\b(message|error|title|description|label|text|body|hint|placeholder|heading|subtitle|summary|detail|reason|rationale|help|tip|note|cta|en|hi)\s*:\s*|new \w*Error\(\s*|\b(toast\w*|notify\w*|setError|setMessage|blocker|errorResponse|friendly\w*)\([^"'\x60]*)`;
+  const shownAs = String.raw`(\b(message|error|title|description|label|text|body|hint|placeholder|heading|subtitle|summary|detail|reason|rationale|help|tip|note|cta|en|hi)\s*:\s*|new \w*Error\(\s*|\b(title|placeholder|alt|label|description|aria-[\w-]+)=\{?\s*|\b(toast\w*|notify\w*|setError|setMessage|blocker|errorResponse|apiError|refuse|fail\w*|friendly\w*)\([^"'\x60]*)`;
   if (new RegExp(`>[^<>]*${r}[^<>]*<`, "i").test(t)) return true;
   const str = `["'\x60][^"'\x60]*${r}[^"'\x60]*["'\x60]`;
   const read = new RegExp(`(\\.(includes|startsWith|endsWith|indexOf|match|test|search|has|get)\\s*\\(\\s*|[!=]==?\\s*|\\bcase\\s+|\\[\\s*)${str}|${str}\\s*([!=]==?|\\])`, "i");
