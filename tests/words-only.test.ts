@@ -1,8 +1,9 @@
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
-import { prose, wordRuns, wordsLine, wordsOnly } from "../scripts/words-only.mjs";
+import { prose, readsWords, wordRuns, wordsLine, wordsOnly } from "../scripts/words-only.mjs";
 
 const f = "src/lib/campaign/x.ts";
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const none = (_run: string) => false;
 const words = (base: string, head: string, file = f, elsewhere = none) => wordsOnly(ts, file, base, head, elsewhere);
 const msg = (text: string) => `export function m(ok: boolean) {\n  if (!ok) return { error: "${text}", retryable: true };\n  return null;\n}\n`;
@@ -82,6 +83,24 @@ describe("words-only (#364)", () => {
     g("/* @__PURE__ */ a();\nb();\n", "a();\n/* @__PURE__ */ b();\n");
   });
 
+  it("a line elsewhere gates only when it reads these words (#364 tuning)", () => {
+    const words = "Reconnect Meta and tick your ad account, or sign in with the profile that runs your ads.";
+    // Unrelated text sharing a phrase: a login locator, a JSX ternary, a message constant.
+    expect(readsWords("await page.getByRole(\"button\", { name: \"Sign in with password\" }).click();", "sign in with", words)).toBe(false);
+    expect(readsWords("{pending === \"password\" ? \"Signing in...\" : \"Sign in with password\"}", "sign in with", words)).toBe(false);
+    // A matcher or locator of these words, a constant holding them, or the run outside any string.
+    expect(readsWords("if (m.includes(\"or sign in with the profile\")) r();", "sign in with", words)).toBe(true);
+    expect(readsWords("await page.getByText(\"Reconnect Meta and tick your ad account, or sign in with the profile that runs your ads.\");", "sign in with", words)).toBe(true);
+    expect(readsWords("export const X = \"Reconnect Meta and tick your ad account, or sign in with the profile that runs your ads. More.\";", "sign in with", words)).toBe(true);
+    expect(readsWords("if (/sign in with the profile/i.test(m)) r();", "sign in with", words)).toBe(true);
+    const base = msg(words);
+    const head = msg("Reconnect Meta and tick your ad account, or use the profile that runs your ads.");
+    const lines = (hit: string) => (run: string) => (run === "sign in with" ? [hit] : []);
+    expect(wordsOnly(ts, f, base, head, lines("await page.getByRole(\"button\", { name: \"Sign in with password\" }).click();"))).toBe(true);
+    expect(wordsOnly(ts, f, base, head, lines("if (m.includes(\"or sign in with the profile\")) r();"))).toBe(false);
+    expect(wordsOnly(ts, f, base, head, () => true)).toBe(false);
+  });
+
   it("prose means words for a person, not code with spaces", () => {
     expect(prose("Refresh the campaign before trying again.")).toBe(true);
     expect(prose("₹300 a day for 2 days")).toBe(true);
@@ -95,7 +114,8 @@ describe("words-only (#364)", () => {
       "  \"Meta token expired now\",", "  auth: \"Meta token expired now\",", "await page.getByRole(\"button\", { name: \"token expired now\" }).click();", "if (/token expired now/i.test(m))", "  message: m.includes(\"token expired now\") ? a : b,", "if ([\"token expired now\"].includes(m)) throw new Error(\"x y\");"]) {
       expect(wordsLine(line, "token expired now")).toBe(false);
     }
-    for (const line of ["  message: \"Your token expired now, reconnect.\",", "<p>Your token expired now.</p>", "// token expired now", "            or your token expired now", "throw new MetaError(\"token expired now\");", "return apiError(\"Your token expired now.\", 403);", "  description=\"Your token expired now\"", "if (typeof id !== \"string\") throw new CampaignError(\"Meta token expired now\");", "throw new CampaignDeliveryError(s === \"PAUSED\" ? \"Meta token expired now.\" : \"Other words here\");"]) {
+    for (const line of ["  message: \"Your token expired now, reconnect.\",", "<p>Your token expired now.</p>", "// token expired now", "            or your token expired now",
+      "      It&apos;s yours. Your token expired now.", "throw new MetaError(\"token expired now\");", "return apiError(\"Your token expired now.\", 403);", "  description=\"Your token expired now\"", "if (typeof id !== \"string\") throw new CampaignError(\"Meta token expired now\");", "throw new CampaignDeliveryError(s === \"PAUSED\" ? \"Meta token expired now.\" : \"Other words here\");"]) {
       expect(wordsLine(line, "token expired now")).toBe(true);
     }
   });
