@@ -67,6 +67,8 @@ jobs:
           SMOKE_EMAIL: ${{ secrets.SMOKE_EMAIL }}
           SMOKE_PASSWORD: ${{ secrets.SMOKE_PASSWORD }}
           SMOKE_CREATE_CLEANUP: "1"
+          # #2412: Cloudflare's token is on production (#2145), so a 3-ad run with no Cloudflare picture fails.
+          SMOKE_EXPECT_CLOUDFLARE: "1"
         run: |
           case "${REQUESTED_MODE:-picture}" in
             picture) flag=--picture ;;
@@ -87,6 +89,8 @@ jobs:
           smoke=$(grep -E '^(PASS|FAIL|NOTE)' smoke.txt 2>/dev/null || echo "smoke did not run; see the run log")
           if grep -q '^FAIL Picture' smoke.txt 2>/dev/null; then
             cause="Free pictures are failing in production: the scheduled check could not save a new background from a free provider (#2145). It spent nothing."
+          elif grep -q '^FAIL Create.*Pictures:' smoke.txt 2>/dev/null; then
+            cause="Create saved its ads, but the pictures are wrong (#2412): reused siblings mean free pictures are busy; no Cloudflare picture means its token or account is broken. The NOTE pictures line says which; it spent nothing."
           elif grep -q '^FAIL Prepare plan' smoke.txt 2>/dev/null; then
             cause="Prepare's plan failed in production on free text (#2230): keys, a retired model, the prompt or validation. The receipts above say which; it spent nothing."
           elif [ "${REQUESTED_MODE:-picture}" != create ]; then
