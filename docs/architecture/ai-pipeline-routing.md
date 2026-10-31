@@ -87,8 +87,9 @@ quality or provider capability certification.
 
 Cerebras currently uses the registry's fixed `llama-3.3-70b`; it has no model
 environment override. Configuring OpenRouter for text also supplies image keys,
-but image routing remains independently selected. `parseJSON` can remove fences
-or recover a JSON block; a successful parse is not schema validation. Callers
+but image routing remains independently selected. `parseJSON` can remove fences,
+recover a JSON block, and escape raw control characters (line breaks) inside string
+values, which Gemini flash-lite writes in multi-line fields (#2444); a successful parse is not schema validation. Callers
 such as the interviewer/concept validator apply their own runtime checks.
 
 Cache is opt-in, in-process only, default TTL ten minutes and maximum 500 entries.
