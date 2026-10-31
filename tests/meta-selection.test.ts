@@ -57,4 +57,14 @@ describe("Meta asset selection", () => {
     });
     expect(buildCandidateDTOs(unverified)[0].eligible).toBe(false);
   });
+
+  it("tells a shop whose Page and ad account sit outside one portfolio to put both in one (#679)", () => {
+    // A personal ad account (no portfolio) next to a Page: Meta returns no shared business id.
+    const [candidate] = buildCandidateDTOs(buildDiscoveryPairs({
+      adAccounts: [account], pages: [page], relationshipPairs: [], supportedCurrencies: ["INR"],
+    }));
+    expect(candidate.eligible).toBe(false);
+    expect(candidate.blockers).toEqual([expect.objectContaining({ code: "SETUP_REQUIRED" })]);
+    expect(candidate.blockers[0].message).toMatch(/same business portfolio.*Meta Business Settings/);
+  });
 });

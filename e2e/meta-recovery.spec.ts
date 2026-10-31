@@ -53,8 +53,8 @@ for (const width of [1440, 390]) {
     await page.getByRole("button", { name: "Connect Business" }).click();
     const dialog = page.getByRole("dialog");
     await dialog.getByRole("button", { name: "Connect Business" }).click();
-    await expect(dialog.getByText(/No accessible ad account was returned/)).toBeVisible();
-    await expect(dialog.getByText(/No accessible Facebook Page was returned/)).toBeVisible();
+    await expect(dialog.getByText(/Meta shared no ad account with AdBrain/)).toBeVisible();
+    await expect(dialog.getByText(/Meta shared no Facebook Page with AdBrain/)).toBeVisible();
     await expect(dialog.getByRole("link", { name: "Open business settings" })).toHaveCount(2);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     const bounds = await dialog.boundingBox();
