@@ -1,11 +1,102 @@
 {
-  "recordedAt": null,
-  "note": "#1476 TODO(record): Cloudflare Workers AI FLUX-1-schnell, built from the documented shape (developers.cloudflare.com/workers-ai/models/flux-1-schnell, read 2026-10-28) until the owner's token is live; then replace with one real free-allowance response (scrub the account id and the image bytes may stay). The test fills result.image with a real square JPEG.",
-  "request": { "model": "@cf/black-forest-labs/flux-1-schnell", "body": { "prompt": "<prompt>", "steps": 4, "seed": 42 } },
-  "success": { "status": 200, "body": { "result": { "image": "<base64 JPEG>" }, "success": true, "errors": [], "messages": [] } },
-  "dailyLimit": { "status": 429, "body": { "result": null, "success": false, "errors": [{ "code": 4006, "message": "you have used up your daily free allocation of 10,000 neurons, please upgrade to Cloudflare's Workers Paid plan if you would like to continue usage." }], "messages": [] } },
-  "dailyLimit3036": { "status": 429, "body": { "result": null, "success": false, "errors": [{ "code": 3036, "message": "You have used up your daily free allocation of 10,000 neurons. Please upgrade to Cloudflare's Workers Paid plan if you would like to continue usage." }], "messages": [] } },
-  "outOfCapacity": { "status": 429, "body": { "result": null, "success": false, "errors": [{ "code": 3040, "message": "Capacity temporarily exceeded, please try again." }], "messages": [] } },
+  "recordedAt": "2026-10-31T14:50:00Z",
+  "note": "#1476: success, badInput and badToken recorded from Cloudflare Workers AI FLUX-1-schnell on the owner's free account (2026-10-31, account id scrubbed; the image is a real 1024x1024 JPEG of 448 KB, replaced by a placeholder the test fills). The body takes only prompt and steps: a seed answers 400 code 5006. One picture costs 172.8 neurons, so the 10,000 free neurons a day make about 57 pictures. dailyLimit, dailyLimit3036 and outOfCapacity are from the documented error shape (see errorCodesSource).",
+  "request": {
+    "model": "@cf/black-forest-labs/flux-1-schnell",
+    "body": {
+      "prompt": "<prompt>",
+      "steps": 4
+    }
+  },
+  "success": {
+    "status": 200,
+    "body": {
+      "result": {
+        "image": "<base64 JPEG>",
+        "usage": {
+          "prompt_tokens": 0,
+          "completion_tokens": 0,
+          "total_tokens": 0,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "neurons": 172.8000030517578
+        }
+      },
+      "success": true,
+      "errors": [],
+      "messages": []
+    }
+  },
+  "badInput": {
+    "status": 400,
+    "body": {
+      "errors": [
+        {
+          "message": "AiError: Bad input: Error: Additional or unevaluated properties '/seed' at '/' not allowed (9fd25b07-8750-4e89-9c54-0d6dc9d4a57e)",
+          "code": 5006
+        }
+      ],
+      "success": false,
+      "result": {},
+      "messages": []
+    }
+  },
+  "dailyLimit": {
+    "status": 429,
+    "body": {
+      "result": null,
+      "success": false,
+      "errors": [
+        {
+          "code": 4006,
+          "message": "you have used up your daily free allocation of 10,000 neurons, please upgrade to Cloudflare's Workers Paid plan if you would like to continue usage."
+        }
+      ],
+      "messages": []
+    }
+  },
+  "dailyLimit3036": {
+    "status": 429,
+    "body": {
+      "result": null,
+      "success": false,
+      "errors": [
+        {
+          "code": 3036,
+          "message": "You have used up your daily free allocation of 10,000 neurons. Please upgrade to Cloudflare's Workers Paid plan if you would like to continue usage."
+        }
+      ],
+      "messages": []
+    }
+  },
+  "outOfCapacity": {
+    "status": 429,
+    "body": {
+      "result": null,
+      "success": false,
+      "errors": [
+        {
+          "code": 3040,
+          "message": "Capacity temporarily exceeded, please try again."
+        }
+      ],
+      "messages": []
+    }
+  },
   "errorCodesSource": "3036 (daily allowance used: don't retry) and 3040 (out of capacity: retry) from developers.cloudflare.com/workers-ai/platform/errors (read 2026-10-29, #1516). 4006 is the same daily-allowance answer as reported from the REST API; both count as the cap.",
-  "badToken": { "status": 401, "body": { "result": null, "success": false, "errors": [{ "code": 10000, "message": "Authentication error" }], "messages": [] } }
+  "badToken": {
+    "status": 401,
+    "body": {
+      "result": null,
+      "success": false,
+      "errors": [
+        {
+          "code": 10000,
+          "message": "Authentication error"
+        }
+      ],
+      "messages": []
+    }
+  }
 }
