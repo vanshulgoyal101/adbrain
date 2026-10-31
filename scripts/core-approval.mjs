@@ -9,6 +9,7 @@ import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import { changedLines, ctoReviews, moneyPath, qaApproval, reviewVerdicts } from "./release.mjs";
+import { wordsLine, wordsOnly } from "./words-only.mjs";
 
 const repo = process.env.GITHUB_REPOSITORY ?? "vanshulgoyal101/adbrain";
 export const CONTEXT = "core-approval";
@@ -24,8 +25,9 @@ export const corePath = /^(src\/lib\/meta\/|src\/lib\/campaign\/|src\/app\/api\/
 export const tenantPath = /^src\/(app\/api\/(cron|whatsapp|privacy-requests)\/|lib\/(security|alerts)\/|lib\/internal-accounts\.(ts|json)$|lib\/privacy-requests\.ts$)/;
 
 export function coreFiles(files) {
-  return files.filter((f) => corePath.test(f) || tenantPath.test(f) || moneyPath.test(f));
+  return files.filter((f) => !/\.md$/i.test(f) && (corePath.test(f) || tenantPath.test(f) || moneyPath.test(f)));
 }
+
 
 /**
  * #2147: in a main → next sync merge, a core file is exempt only if the head's copy is main's (already gated
@@ -39,13 +41,14 @@ export function syncExempt({ head, main, next, base }) {
 
 /**
  * @typedef {{ body: string, createdAt: string, url?: string }} Verdict
- * @param {{ files: string[], head: string, headRef: string, headRepo?: string, baseRef?: string, labels?: string[], title?: string, comments: Verdict[], samePatch?: (sha: string) => boolean, onMain?: (file: string) => boolean }} pr
+ * @param {{ files: string[], head: string, headRef: string, headRepo?: string, baseRef?: string, labels?: string[], title?: string, comments: Verdict[], samePatch?: (sha: string) => boolean, onMain?: (file: string) => boolean, wordsFiles?: Set<string> }} pr
  * The verdict for one PR. `comments` are issue comments and PR reviews ({ body, createdAt, url }), oldest first.
  * `samePatch(sha)` says whether an earlier head has the same changes as the current one.
  * `onMain(file)` says whether a sync merge's file is exempt (`syncExempt`): main takes only gated content, so a
  * person's main → next sync merge (#2106) isn't held on main's own released migration (#2147).
+ * `wordsFiles` are the core files whose change is words only (#364, `words-only.mjs`).
  */
-export function coreApproval({ files, head, headRef, headRepo = repo, baseRef = "main", labels = [], title = "", comments, samePatch = (sha) => head.toLowerCase().startsWith(sha.toLowerCase()), onMain = () => false }) {
+export function coreApproval({ files, head, headRef, headRepo = repo, baseRef = "main", labels = [], title = "", comments, samePatch = (sha) => head.toLowerCase().startsWith(sha.toLowerCase()), onMain = () => false, wordsFiles = new Set() }) {
   // #1740: only this repo's own next → main is the train; a fork's (public repo) or any other base's `next` isn't.
   if (headRef === "next" && headRepo === repo && baseRef === "main") return { state: "success", description: "Deploy train: its PRs were gated into next" };
   const touched = coreFiles(files);
@@ -62,6 +65,12 @@ export function coreApproval({ files, head, headRef, headRepo = repo, baseRef = 
   // A QA verdict on this head that isn't an approval ("changes requested") holds the PR, whoever else approved.
   if (qa.latest && !qa.approved) return { state: "pending", description: `QA requested changes at ${short}`, url: qa.latest.url };
   const who = reviewer?.approved ? reviewer.body.split(" ")[0].replace(/[*_:]/g, "") : "QA";
+  // #364: words only. Launch/Meta/tenant wording ships on green CI; money wording needs one approval, not two.
+  if (core.every((f) => !MIGRATION.test(f) && wordsFiles.has(f))) {
+    if (!core.some((f) => moneyPath.test(f))) return { state: "success", description: `Words only: prose strings and comments in ${core.length} core file(s)` };
+    if (reviewer?.approved || qa.approved) return { state: "success", description: `${who} approved ${short} (money words only)`, url: reviewer?.approved ? reviewer.url : qa.latest?.url };
+    return { state: "pending", description: `Money words only: needs one QA/Reviewer/CTO approval of ${short}: ${list}`.slice(0, 140) };
+  }
   // Money and migrations need QA and the CTO or Reviewer (AGENTS, ORCHESTRATION item 5); #1083 merged on one.
   if (core.some((f) => moneyPath.test(f) || MIGRATION.test(f))) {
     if (qa.approved && reviewer?.approved) return { state: "success", description: `QA and ${who} approved ${short} (money/migration)`, url: reviewer.url };
@@ -81,6 +90,50 @@ const ghJson = (...args) => JSON.parse(gh(args));
 /** `--paginate --jq '.[]|…'` prints one JSON value per line, whatever the page count. */
 const ghLines = (...args) => gh(args).split("\n").filter(Boolean).map((line) => JSON.parse(line));
 
+/** The file at a commit, or null when it doesn't exist there. */
+function fileAt(file, ref) {
+  try {
+    return gh(["api", "-H", "Accept: application/vnd.github.raw", `repos/${repo}/contents/${file.split("/").map(encodeURIComponent).join("/")}?ref=${ref}`]);
+  } catch (e) {
+    if (/HTTP 404/.test(String(e.stderr ?? e.message))) return null;
+    throw e;
+  }
+}
+
+/**
+ * #364: the core files whose change is words only. Needs the TypeScript parser: the workflow installs a pinned
+ * copy at CORE_APPROVAL_TS; without it (or on any error) the set is empty and every core file stays gated.
+ */
+async function wordsOnlyFiles(core, baseRef, head) {
+  const candidates = core.filter((f) => !MIGRATION.test(f));
+  if (!candidates.length || candidates.length > 20) return new Set();
+  try {
+    const spec = process.env.CORE_APPROVAL_TS ? pathToFileURL(process.env.CORE_APPROVAL_TS).href : "typescript";
+    const mod = await import(spec);
+    const ts = mod.default ?? mod;
+    const base = ghJson("api", `repos/${repo}/compare/${baseRef}...${head}`, "--jq", "{sha: .merge_base_commit.sha}").sha;
+    // The checkout (the default branch) stands in for the base: any other source line holding a three-word run of
+    // the words (any case) that isn't itself only words (`wordsLine`) may read them as code. Fails closed.
+    const elsewhere = (file) => (run) => {
+      try {
+        const lines = execFileSync("git", ["grep", "-h", "-i", "-F", "-e", run, "--", "src", "scripts", `:!${file}`], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+        return lines.split("\n").some((line) => line.trim() && !wordsLine(line, run));
+      } catch (error) {
+        return error?.status !== 1;
+      }
+    };
+    return new Set(candidates.filter((f) => {
+      const why = [];
+      const words = wordsOnly(ts, f, fileAt(f, base), fileAt(f, head), elsewhere(f), why);
+      console.log(`${f}: ${words ? "words only" : `gated (${why[0]})`}`);
+      return words;
+    }));
+  } catch (error) {
+    console.log(`words-only check skipped (${error instanceof Error ? error.message.split("\n")[0] : error}); core files stay gated`);
+    return new Set();
+  }
+}
+
 async function main() {
   const { values } = parseArgs({ options: { pr: { type: "string" }, "dry-run": { type: "boolean", default: false } } });
   const n = Number(values.pr);
@@ -88,6 +141,7 @@ async function main() {
   const pr = ghJson("api", `repos/${repo}/pulls/${n}`);
   const head = pr.head.sha;
   const files = ghLines("api", "--paginate", `repos/${repo}/pulls/${n}/files?per_page=100`, "--jq", ".[].filename|tojson");
+  const wordsFiles = await wordsOnlyFiles(coreFiles(files), pr.base.ref, head);
   const comments = [
     ...ghLines("api", "--paginate", `repos/${repo}/issues/${n}/comments?per_page=100`, "--jq", ".[]|{body,createdAt:.created_at,url:.html_url}|tojson"),
     ...reviewVerdicts(ghLines("api", "--paginate", `repos/${repo}/pulls/${n}/reviews?per_page=100`, "--jq", ".[]|{body,state,submitted_at,html_url}|tojson")),
@@ -139,7 +193,7 @@ async function main() {
     return sync && syncExempt({ head: blob(file, head), main: blob(file, "main"), next: blob(file, "next"), base: blob(file, base) });
   };
 
-  const verdict = coreApproval({ files, head, headRef: pr.head.ref, headRepo: pr.head.repo?.full_name ?? "", baseRef: pr.base.ref, labels: pr.labels.map((l) => l.name), title: pr.title, comments, samePatch, onMain });
+  const verdict = coreApproval({ files, head, headRef: pr.head.ref, headRepo: pr.head.repo?.full_name ?? "", baseRef: pr.base.ref, labels: pr.labels.map((l) => l.name), title: pr.title, comments, samePatch, onMain, wordsFiles });
   console.log(`#${n} ${head.slice(0, 7)}: ${verdict.state} · ${verdict.description}`);
   if (values["dry-run"]) return;
   const args = ["api", "-X", "POST", `repos/${repo}/statuses/${head}`, "-f", `state=${verdict.state}`, "-f", `context=${CONTEXT}`, "-f", `description=${verdict.description}`];

@@ -354,7 +354,7 @@
     "step1": "Your business",
     "step2": "Your ads",
     "step3": "Go live",
-    "pacing": "Meta spreads it across the days, so one day can be a bit more than {d} and another less. The total never goes past the limit above.",
+    "pacing": "Meta spreads it across the days, so one day can be more than {d} and another less. The total never goes past the limit above.",
     "stepOf": "Step {n} of 3",
     "help": "Help",
     "back": "Back",
