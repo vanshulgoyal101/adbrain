@@ -9,6 +9,7 @@ import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import { changedLines, ctoReviews, moneyPath, qaApproval, reviewVerdicts } from "./release.mjs";
+import { matches, wordsOnly } from "./words-only.mjs";
 
 const repo = process.env.GITHUB_REPOSITORY ?? "vanshulgoyal101/adbrain";
 export const CONTEXT = "core-approval";
@@ -27,107 +28,6 @@ export function coreFiles(files) {
   return files.filter((f) => !/\.md$/i.test(f) && (corePath.test(f) || tenantPath.test(f) || moneyPath.test(f)));
 }
 
-/**
- * Prose a person reads: two or more words, or non-ASCII letters (Hindi), and nothing shaped like code: no
- * `= { } [ ] < > | \\ "`, no column or field list (`id, name, status`), no PostgREST filter (`status.eq.`).
- */
-export function prose(text) {
-  const t = text.trim();
-  if (!/\p{L}{2,}[\s\S]*\s[\s\S]*\p{L}/u.test(t) && !/[^\x00-\x7F]/.test(t)) return false;
-  if (/[={}[\]<>|\\"]/.test(t) || /\.\w+\./.test(t) || /^[\w.*]+(\s*,\s*[\w.*]+)+$/.test(t)) return false;
-  return !/^(https?:|\/|\.)/.test(t);
-}
-
-// Calls whose string argument is a query, a match or a lookup, not words for a person.
-const LOOKUP = new Set(["select", "or", "and", "eq", "neq", "in", "is", "like", "ilike", "filter", "match", "contains", "not",
-  "textSearch", "rpc", "from", "order", "includes", "startsWith", "endsWith", "indexOf", "lastIndexOf", "test", "exec",
-  "search", "replace", "replaceAll", "split", "parse", "RegExp", "fetch", "get", "has", "set", "delete", "getItem",
-  "setItem", "querySelector", "querySelectorAll", "require", "import", "graph", "request", "post", "put", "patch"]);
-
-/** Whether a changed literal sits where words go (a message, a label), not where code reads it. */
-function wordsPlace(ts, node) {
-  let child = node;
-  let parent = node.parent;
-  // A template part belongs to its template; judge where the whole template sits.
-  if (ts.isTemplateSpan(parent)) { child = parent.parent; parent = child.parent; }
-  else if (ts.isTemplateExpression(parent)) { child = parent; parent = child.parent; }
-  if (ts.isParenthesizedExpression(parent) || ts.isAsExpression(parent)) { child = parent; parent = child.parent; }
-  if (ts.isBinaryExpression(parent)) {
-    const op = parent.operatorToken.kind;
-    return op === ts.SyntaxKind.PlusToken || op === ts.SyntaxKind.QuestionQuestionToken || op === ts.SyntaxKind.BarBarToken;
-  }
-  if (ts.isCaseClause(parent) || ts.isElementAccessExpression(parent) || ts.isComputedPropertyName(parent)) return false;
-  if (ts.isTaggedTemplateExpression(parent) || ts.isImportDeclaration(parent) || ts.isExportDeclaration(parent)
-    || ts.isExternalModuleReference(parent) || ts.isImportTypeNode?.(parent) || ts.isLiteralTypeNode(parent)) return false;
-  if ((ts.isPropertyAssignment(parent) || ts.isPropertySignature?.(parent) || ts.isEnumMember(parent)) && parent.name === child) return false;
-  if (ts.isPropertyAssignment(parent) && /^(fields|select|url|href|src|path|endpoint|key|id|code|status|type|kind)$/i.test(parent.name.getText())) return false;
-  if (ts.isJsxAttribute(parent) && /^(href|src|action|key|id|name|type|value|pattern)$/.test(parent.name.getText())) return false;
-  if (ts.isCallExpression(parent) || ts.isNewExpression(parent)) {
-    const callee = parent.expression;
-    const name = ts.isPropertyAccessExpression(callee) ? callee.name.text : ts.isIdentifier(callee) ? callee.text
-      : callee.kind === ts.SyntaxKind.ImportKeyword ? "import" : "";
-    if (!name || LOOKUP.has(name)) return false;
-  }
-  return true;
-}
-
-/** Leaf tokens in source order (comments are trivia, so they never appear); null when the file doesn't parse. */
-function leaves(ts, fileName, text) {
-  const kind = /\.tsx$|\.jsx$/.test(fileName) ? ts.ScriptKind.TSX : /\.m?js$/.test(fileName) ? ts.ScriptKind.JS : ts.ScriptKind.TS;
-  const file = ts.createSourceFile(fileName, text, ts.ScriptTarget.Latest, true, kind);
-  if (file.parseDiagnostics?.length) return null;
-  const out = [];
-  const walk = (node) => {
-    const children = node.getChildren(file);
-    if (!children.length) {
-      if (node.kind !== ts.SyntaxKind.EndOfFileToken) out.push(node);
-      return;
-    }
-    // A string or template part is one token even when the parser gives it no children.
-    for (const child of children) walk(child);
-  };
-  walk(file);
-  return { file, out };
-}
-
-/**
- * #364 (owner, Oct 31): a change that only rewords what an owner reads isn't a launch, Meta or money behaviour
- * change. True when the base and head copies have the same tokens in the same order (comments ignored), and
- * every token that differs is a string, template part or JSX text that is prose (`prose`) in a words place
- * (`wordsPlace`). Anything else (a reorder, a moved or swapped value, a status, key, query, number, an added or
- * removed line of code, a parse error, a non-JS file, a new or deleted file) keeps the gate.
- * @param {typeof import("typescript")} ts
- * @param {string} fileName
- * @param {string | null} base the file at the PR's merge base
- * @param {string | null} head the file at the PR head
- */
-export function wordsOnly(ts, fileName, base, head) {
-  if (!ts || base == null || head == null || !/\.(ts|tsx|js|jsx|mjs)$/.test(fileName)) return false;
-  const a = leaves(ts, fileName, base);
-  const b = leaves(ts, fileName, head);
-  if (!a || !b || a.out.length !== b.out.length) return false;
-  let changed = 0;
-  for (let i = 0; i < a.out.length; i++) {
-    const x = a.out[i];
-    const y = b.out[i];
-    if (x.kind !== y.kind) return false;
-    const before = x.getText(a.file);
-    const after = y.getText(b.file);
-    if (before === after) continue;
-    const K = ts.SyntaxKind;
-    if (![K.StringLiteral, K.NoSubstitutionTemplateLiteral, K.TemplateHead, K.TemplateMiddle, K.TemplateTail, K.JsxText].includes(y.kind)) return false;
-    // A template part is judged as its whole template's words, with N for each expression.
-    const words = (node, file) => {
-      if (node.kind === K.JsxText) return node.getText(file);
-      const template = ts.isTemplateExpression(node.parent) ? node.parent : ts.isTemplateSpan(node.parent) ? node.parent.parent : null;
-      return template ? template.head.text + template.templateSpans.map((span) => `N${span.literal.text}`).join("") : node.text;
-    };
-    if (!prose(words(x, a.file)) || !prose(words(y, b.file))) return false;
-    if (!wordsPlace(ts, x) || !wordsPlace(ts, y)) return false;
-    changed++;
-  }
-  return changed > 0 || base !== head;
-}
 
 /**
  * #2147: in a main → next sync merge, a core file is exempt only if the head's copy is main's (already gated
@@ -211,7 +111,22 @@ async function wordsOnlyFiles(core, baseRef, head) {
     const mod = await import(spec);
     const ts = mod.default ?? mod;
     const base = ghJson("api", `repos/${repo}/compare/${baseRef}...${head}`, "--jq", "{sha: .merge_base_commit.sha}").sha;
-    return new Set(candidates.filter((f) => wordsOnly(ts, f, fileAt(f, base), fileAt(f, head))));
+    // The checkout (the default branch) stands in for the base: another source line that reads a three-word run of
+    // the words as code (`matches`: a matcher, or a constant a matcher reads). Fails closed.
+    const elsewhere = (file) => (run) => {
+      try {
+        const lines = execFileSync("git", ["grep", "-h", "-F", "-e", run, "--", "src", "scripts", `:!${file}`], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+        return lines.split("\n").some((line) => matches(line, run));
+      } catch (error) {
+        return error?.status !== 1;
+      }
+    };
+    return new Set(candidates.filter((f) => {
+      const why = [];
+      const words = wordsOnly(ts, f, fileAt(f, base), fileAt(f, head), elsewhere(f), why);
+      console.log(`${f}: ${words ? "words only" : `gated (${why[0]})`}`);
+      return words;
+    }));
   } catch (error) {
     console.log(`words-only check skipped (${error instanceof Error ? error.message.split("\n")[0] : error}); core files stay gated`);
     return new Set();

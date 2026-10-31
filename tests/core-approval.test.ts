@@ -1,6 +1,5 @@
-import ts from "typescript";
 import { describe, expect, it } from "vitest";
-import { coreApproval, coreFiles, prose, syncExempt, wordsOnly } from "../scripts/core-approval.mjs";
+import { coreApproval, coreFiles, syncExempt } from "../scripts/core-approval.mjs";
 
 const head = "7612817abcdef0123456789abcdef0123456789";
 const at = (body: string, createdAt = "2026-10-27T10:00:00Z") => ({ body, createdAt, url: "u" });
@@ -150,65 +149,7 @@ describe("a main → next sync merge isn't held on main's own gated files (#2147
   });
 });
 
-describe("words-only changes (#364)", () => {
-  const f = "src/lib/campaign/x.ts";
-  const words = (base: string, head: string, file = f) => wordsOnly(ts, file, base, head);
-  const msg = (text: string) => `export function m(ok: boolean) {\n  if (!ok) return { error: "${text}", retryable: true };\n  return null;\n}\n`;
-
-  it("passes reworded messages, Hindi, templates, JSX text and comments", () => {
-    expect(words(msg("Meta didn't change the ad. Nothing changed."), msg("Meta may have paused it. Refresh before trying again."))).toBe(true);
-    expect(words(msg("कुछ नहीं बदला"), msg("विज्ञापन रुका है"))).toBe(true);
-    expect(words("const m = (a: number, d: number) => `Budget ${a} a day for ${d} days`;\n", "const m = (a: number, d: number) => `Spend ${a} each day, for ${d} days`;\n")).toBe(true);
-    expect(words("export const P = () => <p>Your ad is live now</p>;\n", "export const P = () => <p>Your ad is running on Facebook</p>;\n", "src/lib/campaign/p.tsx")).toBe(true);
-    expect(words("const a = 1; // old note\n", "const a = 1; // new note\n")).toBe(true);
-    expect(coreFiles(["src/lib/campaign/README.md", "src/lib/meta/README.md"])).toHaveLength(0);
-  });
-
-  it("keeps the gate on every bypass the #364 attack found", () => {
-    const g = (base: string, head: string) => expect(words(base, head)).toBe(false);
-    // 1 and 9: commenting code out, or code after a comment on the same line
-    g("async function l() {\n  await assertSpendLimit(1, 2);\n  await launch();\n}\n", "async function l() {\n  /*\n  await assertSpendLimit(1, 2);\n  */\n  await launch();\n}\n");
-    g("async function l() {\n  await launch();\n}\n", "async function l() {\n  /* audit */ await meta.post({ status: \"ACTIVE\" });\n  await launch();\n}\n");
-    // 2: moving a guard below the action
-    g("async function l(ok: boolean) {\n  if (!ok) return;\n  await launch();\n}\n", "async function l(ok: boolean) {\n  await launch();\n  if (!ok) return;\n}\n");
-    // 3: swapping values, including prose arguments of different calls stays words; statuses don't
-    g("const on = \"ACTIVE\";\nconst off = \"PAUSED\";\n", "const on = \"PAUSED\";\nconst off = \"ACTIVE\";\n");
-    // 4: queries and field lists with spaces
-    g("q.select(\"id, status\");\n", "q.select(\"id, status, access_token, business_id\");\n");
-    g("q.or(\"status.eq.ACTIVE, status.eq.PAUSED\");\n", "q.or(\"status.eq.ACTIVE, business_id.neq.0\");\n");
-    g("const o = { fields: \"id, name, status\" };\n", "const o = { fields: \"id, name, status, daily_budget\" };\n");
-    g("const o = { other: \"id, name, status\" };\n", "const o = { other: \"id, name, status, daily_budget\" };\n");
-    // 5: error-text matching and comparisons
-    g("if (msg.includes(\"Invalid OAuth access token\")) x();\n", "if (msg.includes(\"Session has expired now\")) x();\n");
-    g("if (msg === \"Invalid OAuth access token\") x();\n", "if (msg === \"Session has expired now\") x();\n");
-    g("switch (m) { case \"rate limit hit\": x(); }\n", "switch (m) { case \"rate limit reached\": x(); }\n");
-    g("const k = { \"Invalid OAuth token\": 1 };\n", "const k = { \"Expired OAuth token\": 1 };\n");
-    // 6 and 7: query templates and JSON in a string
-    g("const w = (s: string, b: string) => `status = ${s} and business_id = ${b}`;\n", "const w = (s: string, b: string) => `status = ${s} or business_id = ${b}`;\n");
-    g("const c = JSON.parse('{\"cap\": 500}');\n", "const c = JSON.parse('{\"cap\": 500000}');\n");
-    // 8: a line starting with * that is multiplication
-    g("const p = rupees\n  * 100;\n", "const p = rupees\n  * 1000;\n");
-    // the rest: expressions, statuses, URLs, numbers, booleans, new code, regex, parse errors, new files
-    g("const m = (a: number) => `Budget ${a} a day`;\n", "const m = (a: number) => `Budget ${a * 2} a day`;\n");
-    g("const r = { retryable: true };\n", "const r = { retryable: false };\n");
-    g("const u = \"https://graph.facebook.com/v21.0\";\n", "const u = \"https://graph.facebook.com/v22.0\";\n");
-    g("const re = new RegExp(\"pause the ad\");\n", "const re = new RegExp(\"pause any ad\");\n");
-    g(msg("Nothing changed."), msg("Nothing changed.").replace("return null;", "return { error: \"Nothing changed now\" };"));
-    g("const a = (;\n", "const a = (;;\n");
-    expect(wordsOnly(ts, f, null, msg("New file here"))).toBe(false);
-    expect(wordsOnly(ts, "src/lib/internal-accounts.json", "{}", "{ }")).toBe(false);
-    expect(wordsOnly(null as never, f, msg("a b"), msg("c d"))).toBe(false);
-  });
-
-  it("prose means words for a person, not code with spaces", () => {
-    expect(prose("Refresh the campaign before trying again.")).toBe(true);
-    expect(prose("₹300 a day for 2 days")).toBe(true);
-    expect(prose("विज्ञापन")).toBe(true);
-    for (const code of ["PAUSED", "id, name, status", "status.eq.ACTIVE, x", "a = b and c", "{\"cap\": 1}", "/api/campaigns now", "https://x.y z"]) {
-      expect(prose(code)).toBe(false);
-    }
-  });
-
+describe("words-only gate (#364)", () => {
   it("ships core wording on green CI; money wording needs one approval; migrations stay gated", () => {
     const file = "src/lib/campaign/ad-pause-service.ts";
     const meta = { files: [file], head, headRef: "b", comments: [], wordsFiles: new Set([file]) };
@@ -221,5 +162,6 @@ describe("words-only changes (#364)", () => {
     const sql = { files: ["db/migrations/20261031_x.sql"], head, headRef: "b", comments: [at("Reviewer review of 7612817: **approved**.")], wordsFiles: new Set(["db/migrations/20261031_x.sql"]) };
     expect(coreApproval(sql).state).toBe("pending");
     expect(coreApproval({ ...meta, files: [file, "src/lib/meta/client.ts"] }).state).toBe("pending");
+    expect(coreFiles(["src/lib/campaign/README.md", "src/lib/meta/README.md"])).toHaveLength(0);
   });
 });
