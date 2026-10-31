@@ -115,9 +115,9 @@ sentence structure and persuasion angle, not just synonyms. Do not reuse a recen
 Write a concise Meta link description that complements the headline with a supported detail or
 next step. It is separate from on-image supportingText and must not merely repeat the headline.
 Meta shows only about the first 125 characters of primary_text on mobile before "See more". The
-first line says what and where in at most 60 characters: the service and lead.place (one place,
-never the list), with the offer in lead.ask when given. Follow lead.opening (an instruction; never copy its words),
-so the ads of one batch, written at the same time, open differently. It must never pass 125 characters.
+first line says what and where in at most 60 characters: the service and lead.place when given (one place,
+never the list), with the offer in lead.ask when given. Follow lead.opening (an instruction; never copy its words):
+the ads of one batch are written at the same time, so each must open differently. It must never pass 125 characters.
 Write primary_text as 2-3 short lines separated by \n, about 220 characters in total, never one paragraph.
 Use only supplied facts for commercial claims. Do not invent prices, offers, reviews, deadlines,
 credentials, outcomes or product features. An angle is a suggestion, not evidence: if no offer or
@@ -130,7 +130,7 @@ must come from Brand facts, active instructions or explicitly supplied user fact
 Choose an appropriate visual medium (photography, illustration, product still life, graphic art,
 or another deliberate treatment). The subject is a person giving or getting the service (an installer
 with a homeowner, a stylist with a client, a family beside their finished job), not an empty product
-shot, unless the owner's instructions or brief rule people out.
+shot, unless the owner's instructions, brief or preferences rule people out.
 Avoid stock poses and generic luxury adjectives.
 References are available to the image model, not visible to you; do not claim to have inspected them.
 Without references, do not pretend an invented person, facility or product is a documented real one.
@@ -139,7 +139,7 @@ copy that works with any genuine photo of the business and never describe or cla
 Typography and the brand logo will be composited separately: direct a text-free visual with a
 clear focal subject away from the selected textPlacement. Keep that area quiet enough for copy.
 Return only JSON, with this shape. Character limits include spaces and are hard limits:
-{"headline":"up to 40 characters","primary_text":"2-3 short lines separated by \n, about 220 characters; first line up to 60 characters naming the service, lead.place and the offer; last line quotes lead.ask","description":"nonempty Meta link description up to 100 characters","cta":"${META_CTAS.join('" | "')}",
+{"headline":"up to 40 characters","primary_text":"2-3 short lines separated by \n, about 220 characters; first line up to 60 characters naming the service, lead.place and the offer when supplied; last line quotes lead.ask when given","description":"nonempty Meta link description up to 100 characters","cta":"${META_CTAS.join('" | "')}",
 "rationale":"why this message and visual belong together for this audience; up to 600 characters",
 "visual":{"medium":"chosen medium; up to 120 characters","direction":"specific subject, setting, action, composition, palette and exclusions; 20-2400 characters","textPlacement":"top | center | bottom"},
 "supportingText":"optional on-image supporting line up to 64 characters, or null",
@@ -631,19 +631,19 @@ export function validateConcept(
 const NAMES_WHATSAPP = /whats\s?app|व्हाट्सऐप|व्हाट्सएप|ਵਟਸਐਪ/i;
 
 /**
- * #1147: a WhatsApp business's ad ends by asking for a WhatsApp message. When the model's last line doesn't
- * (Qwen on the free run, Oct 28: "Book a free survey by Nov 10."), the poster's own words are added as a
- * last line, in the ad's language. $0 and no repair; others' copy is unchanged.
+ * #1147: a WhatsApp business's ad ends by asking for a WhatsApp message. Add the poster's own words
+ * unless the last line, or the line before a quoted last line, already names WhatsApp.
  */
 function withWhatsAppAsk(concept: CreativeConcept, input: ConceptInput): string {
   if (contactChannel(input.brand) !== "whatsapp") return concept.primary_text;
   const lines = concept.primary_text.split("\n").map((line) => line.trim()).filter(Boolean);
-  if (NAMES_WHATSAPP.test(lines.at(-1) ?? "")) return concept.primary_text;
+  const quoted = Boolean(quotedAsk(concept.primary_text));
+  if (NAMES_WHATSAPP.test(lines.at(-1) ?? "") || (quoted && NAMES_WHATSAPP.test(lines.at(-2) ?? ""))) return concept.primary_text;
   const label = whatsappContactLabel([concept.headline, concept.primary_text], input.language);
   const line = `${label}${/[\u0900-\u097F\u0A00-\u0A7F]/u.test(label) ? "।" : "."}`;
   // #1364: a last line that quotes what to send (#1027's pre-typed message) stays last; the WhatsApp line goes before it.
   const parts = concept.primary_text.trimEnd().split("\n");
-  const asked = quotedAsk(concept.primary_text)
+  const asked = quoted
     ? [...parts.slice(0, -1), line, parts.at(-1)!].join("\n")
     : `${concept.primary_text.trimEnd()}\n${line}`;
   return asked.length <= (creativeConceptSchema.shape.primary_text.maxLength ?? 900) ? asked : concept.primary_text;

@@ -86,9 +86,9 @@ Part of [Architecture](README.md). [Interview and boundaries](ai-pipeline.md) ·
    #1147). The ask is in the ad's language ("Message us on WhatsApp", "WhatsApp पर मैसेज करें",
    "WhatsApp par message karein", "WhatsApp ਤੇ ਮੈਸੇਜ ਕਰੋ"; Indic words shaped like the rest, #1177).
    Others show their phone number, as do designs saved before #1147. A WhatsApp business's concept
-   gets no phone or email and is told its button opens a chat; when the copy's last line doesn't mention
-   WhatsApp, that same ask is added in the ad's language ($0, no repair). A quoted shared ask stays
-   last, with the WhatsApp line before it. Review warns, without
+   gets no phone or email and is told its button opens a chat. If neither its last line nor the
+   line before a quoted final ask mentions WhatsApp, that same ask is added in the ad's language
+   ($0, no repair). A quoted shared ask stays last, with the WhatsApp line before it. Review warns, without
    blocking, when such a picture goes to a form campaign, and offers "Switch to WhatsApp".
 6. Save usage receipts and report partial failures independently of successful rows.
 
