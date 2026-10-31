@@ -72,7 +72,7 @@ describe("Meta asset selection", () => {
   it("names the account's currency and the fix for a non-rupee ad account (#2421)", () => {
     const [candidate] = buildCandidateDTOs(buildDiscoveryPairs({
       adAccounts: [{ ...account, currency: "USD" }], pages: [page],
-      relationshipPairs: [{ adAccountId: "act_1", pageId: "page_1", metaBusinessId: "biz_1" }],
+      relationshipPairs: [{ adAccountId: "act_1", pageId: "page_1" }],
       supportedCurrencies: ["INR"],
     }));
     expect(candidate.eligible).toBe(false);
