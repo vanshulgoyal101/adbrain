@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { parseEnv } from "node:util";
 import { chromium } from "@playwright/test";
 import { makesFreePictures } from "./lib/internal-accounts.mjs";
+import { pictureSources } from "./lib/smoke-pictures.mjs";
 
 const envPath = "/Users/vanshulgoyal/Development/copilot/adbrain/.env.smoke";
 
@@ -464,6 +465,14 @@ try {
       // #904 made "Review ads" a link, not a button (QA on #1227).
       await page.getByRole("link", { name: "Review ads", exact: true }).waitFor({ state: "visible" });
       assert.equal(errors.length, 0, errors[0] ?? "Browser error after Create");
+      // #2412: 3 saved ads can hide 2 reused pictures or a dead Cloudflare token; read where each picture came from.
+      const { businessId, generationId } = generationRequest ?? {};
+      assert.ok(UUID.test(businessId ?? "") && UUID.test(generationId ?? ""), "run ids unknown; pictures not checked");
+      const runAds = await supabaseFetch(auth, `/rest/v1/creatives?business_id=eq.${businessId}&variant_group=eq.${generationId}&select=generation`);
+      assert.ok(runAds.ok, `run's ads not read (HTTP ${runAds.status})`);
+      const pictures = pictureSources(await runAds.json(), { expectCloudflare: process.env.SMOKE_EXPECT_CLOUDFLARE === "1" });
+      console.log(pictures.line);
+      assert.equal(pictures.failure, null, `Pictures: ${pictures.failure}`);
       console.log(`PASS Create: ${savedCount}/3 saved (free pictures, free text; $0)`);
       if (process.env.SMOKE_CREATE_CLEANUP === "1") {
         try {

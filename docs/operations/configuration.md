@@ -181,6 +181,7 @@ GitHub environment secrets; never in an issue. GitHub's and Vercel's own variabl
 | `SMOKE_EMAIL`, `SMOKE_PASSWORD` | `smoke-core.mjs`, `ui-gate.mjs`: the smoke account's login | Password |
 | `SMOKE_ENV_FILE` | `ui-gate.mjs`: path of the smoke env file (default `.env.smoke` in the owner's checkout) | No |
 | `SMOKE_CREATE_CLEANUP` | `smoke-core.mjs`: `1` removes what a Create smoke made | No |
+| `SMOKE_EXPECT_CLOUDFLARE` | `smoke-core.mjs`: `1` fails a Create smoke whose pictures include none from Cloudflare (#2412) | No |
 | `VERCEL_TOKEN` | `production-guard.mjs`: Vercel API for the live SHA and rollback | Yes |
 | `GH_TOKEN`, `GH_REPO` | CI scripts' GitHub token; `wait-for-work.mjs` repository override | Token |
 | `GROQ_REVIEW_API_KEY` | `ai-review.mjs`: the PR AI review's Groq key, separate from the app's pool | Yes |
