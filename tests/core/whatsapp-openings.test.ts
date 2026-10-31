@@ -63,14 +63,14 @@ describe("core: the WhatsApp message Review shows is the one launch sends (#840)
     expect(resolveWhatsAppMessage({ saved: null, suggest: () => suggestion })).toEqual({ source: "suggested", opening: suggestion, language: null });
   });
 
-  it("only an edited or saved message enters the plan hash: a business with nothing saved keeps its exact payload", () => {
+  it("every message launch sends enters the plan hash, AdBrain's suggestion too (#2452)", () => {
     const input = {
       draft: { businessId: "b", destination: "whatsapp", creativeIds: ["c"], leadFormId: null, dailyBudgetRupees: 300, abTest: false, targeting: {} },
       draftId: "d", draftVersion: 1, connection: null, creatives: [], form: null, whatsappNumber: "+919876543210",
       geo: { resolvedAreaLabel: "Mohali", unresolvedNames: [], explicitlyNationwide: false }, hash: () => "",
     } as unknown as PreflightInput;
     const payload = (whatsappMessage: PreflightInput["whatsappMessage"]) => buildCanonicalReviewPayload({ ...input, whatsappMessage });
-    expect(payload(resolveWhatsAppMessage({ saved: null, suggest: () => suggestion }))).toEqual(payload(undefined));
+    expect(payload(resolveWhatsAppMessage({ saved: null, suggest: () => suggestion })).whatsappOpening).toEqual(suggestion);
     expect(payload(resolveWhatsAppMessage({ saved: asTemplate(openings.call), suggest: () => suggestion })).whatsappOpening).toEqual(openings.call);
     expect(payload(resolveWhatsAppMessage({ edited: asTemplate(openings.ice_breakers), saved: null, suggest: () => suggestion })).whatsappOpening).toEqual(openings.ice_breakers);
   });

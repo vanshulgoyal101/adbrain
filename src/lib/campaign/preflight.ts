@@ -1,4 +1,4 @@
-import { adPolicyHits } from "@/lib/campaign/ad-policy";
+import { adPolicyHits, bannedTermKind } from "@/lib/campaign/ad-policy";
 import type { GeoTargeting } from "@/lib/meta/client";
 import { describeServiceArea } from "@/lib/meta/service-area";
 import { effectiveDailyBudget } from "@/lib/campaign/spend";
@@ -129,6 +129,12 @@ function reviewedMessage({ source, opening, language }: ResolvedWhatsAppMessage)
   };
 }
 
+/** #2452: whether the message launch rebuilt from fresh reads is the one this review checked; launch refuses otherwise. */
+export function isReviewedWhatsAppMessage(message: ResolvedWhatsAppMessage, review: Pick<ReviewDTO, "whatsappMessage">): boolean {
+  return Boolean(review.whatsappMessage)
+    && JSON.stringify(canonicalize(reviewedMessage(message))) === JSON.stringify(canonicalize(review.whatsappMessage));
+}
+
 function adName(creative: PreflightCreative): string {
   const headline = (creative.headline ?? "").trim();
   if (!headline) return "you chose";
@@ -208,9 +214,9 @@ export function buildCanonicalReviewPayload(
     // #493: only when it changes what's sent, so plans reviewed before this field keep their hash.
     ...(input.draft.destination === "whatsapp" && input.draft.whatsappLanguage && input.draft.whatsappLanguage !== "ad"
       ? { whatsappLanguage: input.draft.whatsappLanguage } : {}),
-    // #840: an edited or saved message is fixed text, so a change to it needs a new review. A
-    // suggestion is derived from what's already here, so plans without one keep their hash.
-    ...(input.draft.destination === "whatsapp" && input.whatsappMessage && input.whatsappMessage.source !== "suggested"
+    // #840/#2452: the exact message launch will send, suggested ones too: a suggestion is rebuilt from the Brand's name,
+    // offers and areas at launch, so a Brand edit after Review changes the plan and launch refuses it.
+    ...(input.draft.destination === "whatsapp" && input.whatsappMessage
       ? { whatsappOpening: input.whatsappMessage.opening } : {}),
     dailyBudgetRupees: input.draft.dailyBudgetRupees,
     abTest: input.draft.abTest,
@@ -267,7 +273,7 @@ export function runPreflight(input: PreflightInput): ReviewDTO {
   }
   const policyHit = adPolicyHits(input.creatives, input.vertical)[0];
   if (policyHit) {
-    blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_AD_POLICY", `"${policyHit.term}" in the ad "${policyHit.headline ?? "without a headline"}" is a health promise Meta rejects. Edit the ad to describe the service instead.`));
+    blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_AD_POLICY", `"${policyHit.term}" in the ad "${policyHit.headline ?? "without a headline"}" is ${bannedTermKind(policyHit.term, input.vertical)} Meta rejects. Edit the ad to describe the service instead.`));
   }
   if (draft.dailyBudgetRupees <= 0) {
     blockers.push(blocker("INVALID_INPUT", "REVIEW_BUDGET", "Set a daily budget above ₹0."));
