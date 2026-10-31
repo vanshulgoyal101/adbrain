@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { conceptImagePrompt, type CreativeConcept } from "@/lib/creative/concept";
+import type { CreativeConcept } from "@/lib/creative/concept";
+import { conceptImagePrompt } from "@/lib/creative/image-prompt";
 import type { AdDesignSpec, AdFormat } from "@/lib/creative/design";
 import type { BrandContext } from "@/lib/templates/ads";
 

@@ -2,10 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   buildConceptMessages,
   conceptValidationRules,
-  conceptImagePrompt,
   validateConcept,
   savedCreativeDescription,
 } from "@/lib/creative/concept";
+import { conceptImagePrompt } from "@/lib/creative/image-prompt";
 import { AD_ANGLES } from "@/lib/templates/ads";
 
 const input = {

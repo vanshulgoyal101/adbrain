@@ -8,11 +8,11 @@ import {
   buildConceptMessages,
   conceptValidationRules,
   creativeConceptSchema,
-  conceptImagePrompt,
   validateConcept,
   type CreativeConcept,
   type ConceptInput,
 } from "@/lib/creative/concept";
+import { conceptImagePrompt } from "@/lib/creative/image-prompt";
 import { downloadImage, generateImage } from "@/lib/imageGen";
 import { ReferencePhotoPausedError, type ImageAttempt } from "@/lib/imageGen/types";
 import { ownerPhotoFor, pausedPhotoFor } from "./owner-photos";
