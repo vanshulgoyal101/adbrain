@@ -165,6 +165,16 @@ try {
   let interviewCount = 0;
   let generationCount = 0;
   let generationRequest = null;
+  const cleanUpCreateRun = async () => {
+    if (process.env.SMOKE_CREATE_CLEANUP !== "1") return;
+    try {
+      const removed = await removeCreateRun(auth, generationRequest);
+      console.log(`PASS Cleanup: deleted ${removed.ads} ads and ${removed.files} files${removed.kept ? "; kept the newest ad for the --picture smoke" : ""}`);
+    } catch (error) {
+      console.log(`FAIL Cleanup: ${error instanceof Error ? error.message.split("\n")[0].slice(0, 180) : "Unknown error"}; delete this run's ads in Review`);
+      process.exitCode = 1;
+    }
+  };
   let campaignSetup = false;
   let goLiveSetup = false;
   let campaignReviewed = false;
@@ -474,19 +484,14 @@ try {
       console.log(pictures.line);
       assert.equal(pictures.failure, null, `Pictures: ${pictures.failure}`);
       console.log(`PASS Create: ${savedCount}/3 saved (free pictures, free text; $0)`);
-      if (process.env.SMOKE_CREATE_CLEANUP === "1") {
-        try {
-          const removed = await removeCreateRun(auth, generationRequest);
-          console.log(`PASS Cleanup: deleted ${removed.ads} ads and ${removed.files} files${removed.kept ? "; kept the newest ad for the --picture smoke" : ""}`);
-        } catch (error) {
-          console.log(`FAIL Cleanup: ${error instanceof Error ? error.message.split("\n")[0].slice(0, 180) : "Unknown error"}; delete this run's ads in Review`);
-          process.exitCode = 1;
-        }
-      }
+      await cleanUpCreateRun();
     } catch (error) {
       if (generationCount && savedCount === null) savedCount = await recoverSavedCount();
       console.log(`FAIL Create${generationCount ? `: ${savedCount ?? "unconfirmed"}/3 saved` : ""}: ${error instanceof Error ? error.message.split("\n")[0].slice(0, 180) : "Unknown error"}; ${generationCount ? "check saved work before any retry" : "no paid request sent"}`);
       process.exitCode = 1;
+      // #2189: a failed run's saved ads stayed in the smoke workspace, and the repeat rules then checked every later
+      // batch against them (12 near-identical headlines by 17:30Z), so each failure made the next one likelier.
+      if (savedCount) await cleanUpCreateRun();
     }
   }
   if (modes.has("--prepare")) {
