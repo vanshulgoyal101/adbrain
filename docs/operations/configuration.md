@@ -66,7 +66,7 @@ an application release.
 | `LLM_PROVIDER_ORDER` | `google,groq,openrouter,cerebras` | Standard routing order |
 | `LLM_BUDGET_PROVIDER_ORDER` | `groq,google,cerebras` | Budget routing; not a free-service guarantee |
 | `CREATIVE_PROVIDER_ORDER` | Unset (uses `LLM_PROVIDER_ORDER`) | Create concept routing; each attempt gets `CREATIVE_ATTEMPT_TIMEOUT_MS` before the next provider |
-| `GEMINI_MODEL` | `gemini-3.6-flash` | Google model |
+| `GEMINI_MODEL` | `gemini-3.6-flash` | Google model. Production runs `gemini-3.5-flash-lite` (#2189): the 3.6-flash free tier allows 20 requests a day per project |
 | `GROQ_MODEL` | `qwen/qwen3.8-27b` | Groq model |
 | `OPENROUTER_MODEL` | `anthropic/claude-haiku-5.5` | OpenRouter text model; a comma list is tried in order. Oct 21 Create bake-off: Haiku 5.5 saved 6/6 at 13-15 s per concept; qwen3.8-max took 65-90 s |
 | `CREATIVE_MAX_TOKENS` | `6000` | Integer 1800-16000 |
