@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/types";
 import { decryptMetaToken, encryptMetaToken, fromPostgresBytea, toPostgresBytea } from "./token-store";
 import {
+  metaVertical,
   provisionManagedAccount,
   type ManagerTokens,
   type ProvisionGraph,
@@ -22,7 +23,7 @@ export interface RunnerDeps {
   config: { parentToken: string; parentBusinessId: string; appId: string; appSecret: string };
   claim(leaseId: string): Promise<boolean>;
   release(leaseId: string): Promise<boolean>;
-  businessName(): Promise<string>;
+  business(): Promise<{ name: string; category: string | null }>;
   customerToken(tokenId: string): Promise<string | null>;
   store: ProvisionStore;
   manager: ManagerTokens;
@@ -37,7 +38,8 @@ export async function runManagedProvisioning(
   deps: RunnerDeps,
 ): Promise<ProvisionResult> {
   // Meta rejects the child-token mint without appsecret_proof (Business On Behalf Of, step 2).
-  if (!deps.config.parentToken || !deps.config.appId || !deps.config.appSecret) return { ok: false, code: "NOT_CONFIGURED", retryable: false };
+  // #2358: no default parent business, so a missing id stops here instead of provisioning under another BP.
+  if (!deps.config.parentToken || !deps.config.parentBusinessId || !deps.config.appId || !deps.config.appSecret) return { ok: false, code: "NOT_CONFIGURED", retryable: false };
   if (!input.customerTokenId) return { ok: false, code: "CUSTOMER_REAUTH_REQUIRED", retryable: false };
   // No ledger row means the Page step hasn't happened; don't report it as a run in progress.
   if (!(await deps.store.get(input.businessId))) return { ok: false, code: "PAGE_NOT_LINKED", retryable: false };
@@ -46,9 +48,11 @@ export async function runManagedProvisioning(
   try {
     const customer = await deps.customerToken(input.customerTokenId);
     if (!customer) return { ok: false, code: "CUSTOMER_REAUTH_REQUIRED", retryable: false };
+    const business = await deps.business();
     return await deps.provision({
       businessId: input.businessId,
-      businessName: await deps.businessName(),
+      businessName: business.name,
+      vertical: metaVertical(business.category),
       parentBusinessId: deps.config.parentBusinessId,
       store: deps.store,
       graph: deps.graph,
@@ -105,17 +109,17 @@ export function runnerDeps(businessId: string, userId: string): RunnerDeps {
   const table = () => admin.from("managed_meta_accounts");
   const fail = (what: string, error: { code?: string } | null) => Object.assign(new Error(`Managed account ${what} failed.`), { code: error?.code });
   return {
-    config: { parentToken: env.META_PARENT_SYSTEM_TOKEN, parentBusinessId: env.META_PARENT_BUSINESS_ID, appId: env.META_APP_ID, appSecret: env.META_APP_SECRET },
+    config: { parentToken: env.META_PARENT_SYSTEM_TOKEN, parentBusinessId: env.META_PARENT_BUSINESS_ID ?? "", appId: env.META_APP_ID, appSecret: env.META_APP_SECRET },
     claim: async (leaseId) => {
       const { data, error } = await admin.rpc("managed_meta_account_claim", { p_business_id: businessId, p_lease_id: leaseId, p_seconds: LEASE_SECONDS });
       if (error) throw fail("lease", error);
       return data === true;
     },
     release: async (leaseId) => (await admin.rpc("managed_meta_account_release", { p_business_id: businessId, p_lease_id: leaseId })).data === true,
-    businessName: async () => {
-      const { data, error } = await admin.from("businesses").select("name").eq("id", businessId).maybeSingle();
+    business: async () => {
+      const { data, error } = await admin.from("businesses").select("name, vertical").eq("id", businessId).maybeSingle();
       if (error || !data) throw fail("business read", error);
-      return data.name;
+      return { name: data.name, category: data.vertical };
     },
     customerToken: (tokenId) => readToken(admin, tokenId, businessId),
     store: {
