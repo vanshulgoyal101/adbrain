@@ -29,7 +29,7 @@ day." For every screen in detail, see [Manage](manage.md).
   from zero, so "results may be slow at first". Changing who sees a running
   campaign can mean a fresh copy that goes back to Meta's review, and "learning
   restarts". So give it time before you change things.
-- Meta spreads your money across the days: "one day can be a bit more than ₹300
+- Meta spreads your money across the days: "one day can be more than ₹300
   and another less. The total never goes past the limit above."
 
 ## Each day: check Home, reply fast
