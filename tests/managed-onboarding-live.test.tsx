@@ -95,6 +95,28 @@ describe("<ManagedOnboardingLive> (#526)", () => {
     expect(await screen.findByText("Linked: +91 ••••• 0874")).toBeInTheDocument();
   });
 
+  it("invites the card holder and reads the card from Meta, never on a click alone (#2359)", async () => {
+    let billing: unknown = { status: "invited" };
+    const fetchMock = vi.fn(async (url: string) => Response.json(url === "/api/managed/billing"
+      ? { ok: true, data: billing }
+      : { ok: true, data: { row: { state: "ad_account_created", funding_state: "none", page_id: "1", child_business_id: "2", ad_account_id: "act_3", whatsapp_number_e164: "+919999990874", waba_id: null, phone_number_id: null, last_error: null }, paid: true } }));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ManagedOnboardingLive businessId={businessId} initialAttemptId={null} />);
+    fireEvent.change(await screen.findByLabelText("Email of the person who'll add the card"), { target: { value: "owner@example.in" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send invite" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("Invite sent");
+    expect(JSON.parse(fetchMock.mock.calls.find(([url]) => url === "/api/managed/billing")![1].body)).toEqual({ action: "invite", businessId, email: "owner@example.in" });
+    billing = { status: "not_funded", reason: "NO_PAYMENT_METHOD", payer: "invited" };
+    fireEvent.click(screen.getByRole("button", { name: "Check again" }));
+    expect(await screen.findByText(/Waiting for your person to accept/)).toBeInTheDocument();
+    billing = { status: "not_funded", reason: "ACCOUNT_DISABLED", payer: "joined" };
+    fireEvent.click(screen.getByRole("button", { name: "Check again" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("disabled this ad account");
+    billing = { status: "funded" };
+    fireEvent.click(screen.getByRole("button", { name: "Check again" }));
+    expect(await screen.findByText("Card added. Your ad account can run ads.")).toBeInTheDocument();
+  });
+
   it("opens the Page step directly when it returns from a same-tab sign-in", async () => {
     render(<ManagedOnboardingLive businessId={businessId} initialAttemptId={attemptId} />);
     expect(await screen.findByText(`Page step for ${attemptId}`)).toBeInTheDocument();

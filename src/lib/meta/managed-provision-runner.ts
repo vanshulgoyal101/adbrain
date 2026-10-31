@@ -92,7 +92,7 @@ export function graphClient(appSecret: string, fetchImpl: typeof fetch = fetch):
 type Admin = ReturnType<typeof createAdminClient>;
 type ManagedUpdate = Database["public"]["Tables"]["managed_meta_accounts"]["Update"];
 
-async function readToken(admin: Admin, tokenId: string, businessId: string): Promise<string | null> {
+export async function readToken(admin: Admin, tokenId: string, businessId: string): Promise<string | null> {
   const { data, error } = await admin.rpc("meta_token_get", { p_token_id: tokenId, p_business_id: businessId });
   const row = data?.[0];
   if (error || !row || row.revoked_at || [row.expires_at, row.data_access_expires_at].some((at: string | null) => at && new Date(at).getTime() <= Date.now())) return null;

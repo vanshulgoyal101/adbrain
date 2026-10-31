@@ -14,12 +14,12 @@ const CUSTOMER: { key: CustomerStep; title: string; detail: string }[] = [
   { key: "pay", title: "Add money for ads", detail: "Your ads spend only what you add. You can stop any time." },
   { key: "page", title: "Choose your Facebook Page", detail: "Ads run from your own Page, under your business name." },
   { key: "whatsapp", title: "Connect your WhatsApp", detail: "People who tap your ad message you on this number." },
+  { key: "card", title: "Add your card in Meta", detail: "Meta charges your ads to your own card. The person who holds it adds it on Facebook." },
 ];
 
 const BACKGROUND: { key: BackgroundStep; title: string; waitingFor: string }[] = [
   { key: "childBusiness", title: "Your business on Meta", waitingFor: "Starts after you choose your Page" },
   { key: "adAccount", title: "Your ad account", waitingFor: "Starts after your business on Meta" },
-  { key: "funding", title: "Your spending limit", waitingFor: "Starts after your ad account and payment" },
 ];
 
 const FAILED_COPY: Record<CustomerStep | BackgroundStep, string> = {
@@ -28,7 +28,7 @@ const FAILED_COPY: Record<CustomerStep | BackgroundStep, string> = {
   whatsapp: "We couldn't connect that WhatsApp number. Try again.",
   childBusiness: "Meta didn't create your business. We're looking into it; nothing has been spent.",
   adAccount: "Meta didn't create your ad account. We're looking into it; nothing has been spent.",
-  funding: "Your spending limit wasn't set, so no ads can run yet. We're looking into it.",
+  card: "Meta couldn't use the card on your ad account, so no ads can run yet. Add another card on Facebook, then check again.",
 };
 
 function Marker({ status, index }: { status: StepStatus; index: number }) {
@@ -43,7 +43,7 @@ function Marker({ status, index }: { status: StepStatus; index: number }) {
 const STATUS_TEXT: Record<StepStatus, string> = { done: "Done", current: "Your turn", working: "Setting up", waiting: "Not yet", failed: "Stopped" };
 
 /**
- * #526: one screen from sign-up to 'Ready to advertise'. The owner's three steps, in order, with the
+ * #526: one screen from sign-up to 'Ready to advertise'. The owner's four steps, in order, with the
  * current one open (its content comes from `steps`), and AdBrain's background work beside them.
  */
 export function ManagedOnboarding({ progress, steps }: { progress: OnboardingProgress; steps: Record<CustomerStep, ReactNode> }) {
@@ -61,7 +61,7 @@ export function ManagedOnboarding({ progress, steps }: { progress: OnboardingPro
     <section aria-labelledby="onboarding-title" className="mx-auto grid max-w-5xl gap-10 py-8 lg:grid-cols-[minmax(0,1fr)_18rem]">
       <div className="min-w-0">
         <h1 id="onboarding-title" className="text-2xl font-semibold text-slate-950">Get ready to advertise</h1>
-        <p className="mt-2 max-w-prose text-slate-600">Three steps from you. AdBrain sets up the rest while you go.</p>
+        <p className="mt-2 max-w-prose text-slate-600">Four steps from you. AdBrain sets up the rest while you go.</p>
         {failed && (
           <Alert variant="error" className="mt-6">
             <p>{FAILED_COPY[failed.step]}</p>

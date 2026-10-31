@@ -238,6 +238,27 @@ provisioning Graph call carries `appsecret_proof` (HMAC-SHA256 of its token with
 Meta rejects the child-token mint without it), so a missing secret is `NOT_CONFIGURED`. A token
 the ledger no longer references (replaced, or saved before a failed update) is deleted.
 
+**The customer's own card (#2357, #2359).** Each customer pays Meta with their own payment method
+on their child ad account; AdBrain's card is never shared to it. Meta has no API to add a card, so
+[`managed-billing`](../../../src/lib/meta/managed-billing.ts) (via `POST /api/managed/billing`) does
+three things with the child's own token once the ad account and its grant exist: **invite**
+(`POST /{child}/business_users`, `role=EMPLOYEE`, after reading `business_users` and
+`pending_users` so a person is never invited twice; the email is validated before any call and
+goes to Meta only, never into the ledger or logs; `step_keys.payer_invite` records that it ran);
+**grant** each person who has joined the child `MANAGE` on its ad account (`MANAGE` includes
+billing; `act_/assigned_users` has no billing-only task); and **read**
+`GET /{act}?fields=account_status,funding_source_details`. The ledger moves
+`ad_account_created → funded` (`funding_state=card_attached`) only when that read shows
+`account_status=1` and a funding source whose `type` isn't 0 (UNSET) or 14 (FS_NULL), never on a
+click. A prepaid `STORED_BALANCE` (20) stays not funded until a walk records its real shape (an
+empty balance won't deliver); statuses 3/8 (payment due), 7 (risk review), 9 (grace period),
+2 (disabled) and 100/101/202 (closed) each get a plain reason. An unaccepted invite reads as
+"waiting for your person", not an error. If the Page's WhatsApp was recorded while the account
+waited, it moves on to `whatsapp_linked`. Least privilege (EMPLOYEE + MANAGE), whether a child
+made with `owned_businesses` accepts people, and the Billing deep link are confirmed on the
+first internal child's walk; until then the screen says "Business Settings → Billing &
+payments". The funding tests use Meta's documented shapes, provisional until that walk's tape.
+
 ## Recovery and Destructive Actions
 
 | Situation | Safe action |
