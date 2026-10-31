@@ -5,10 +5,13 @@ name: Create smoke
 # #2230: daily at 08:47Z (after Gemini's free quota resets at midnight Pacific) `--prepare` plans one audience on
 # free text only, $0.
 # A dispatched `create` runs the full Create (3 ads); the smoke login's words use free text only (#2230).
+# #2145: daily at 03:37Z (before India's working day) the same `create` runs on schedule, because a one-picture
+# check passed while customers' 3-ad batches saved 1 of 3 (QA 2, #679). Once a day keeps the free tiers for customers.
 on:
   schedule:
     - cron: "17 */2 * * *"
     - cron: "47 8 * * *"
+    - cron: "37 3 * * *"
   workflow_dispatch:
     inputs:
       mode:
@@ -36,7 +39,7 @@ jobs:
         shell: bash
     # The dispatch input and the schedule reach the shell only as variables, mapped to a fixed flag by `case`.
     env:
-      REQUESTED_MODE: ${{ inputs.mode || (github.event.schedule == '47 8 * * *' && 'prepare') || 'picture' }}
+      REQUESTED_MODE: ${{ inputs.mode || (github.event.schedule == '47 8 * * *' && 'prepare') || (github.event.schedule == '37 3 * * *' && 'create') || 'picture' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         timeout-minutes: 3

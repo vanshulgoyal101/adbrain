@@ -95,8 +95,9 @@ anyone watching (owner-approved automatic rollback, #111):
   sent to Meta. The smoke login (`smokeUserIds`) writes on free text only (Groq, Gemini; `freeTextOnly` in
   [spend-policy.ts](../../src/lib/llm/spend-policy.ts)); when they can't answer, the plan fails with
   `FREE_TEXT_UNAVAILABLE` instead of paying. Once a day keeps it far inside Groq's free daily cap.
-  **Dispatch `mode: create`** runs `--create` instead: 3 ads, their words on free text too (#2230), so a busy
-  free tier fails the run rather than spending. DevOps uses it before and
+  **Daily Create, 03:37Z (#2145)** (or dispatch `mode: create`) runs `--create`: 3 ads, their words on free text
+  too (#2230), so a busy free tier fails the run rather than spending. It passes only when all 3 are saved: a
+  one-picture check stayed green while customers' batches saved 1 of 3. DevOps also dispatches it before and
   after the Cloudflare token lands. A PASS deletes those ads and their files, but keeps the newest ad when the
   smoke business has no other ad.
   A failure opens one `core` `bug` issue `Create smoke failed in production` for DevOps (`FAIL Picture` says
