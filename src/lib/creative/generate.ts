@@ -425,6 +425,7 @@ async function renderVariant(
       backgroundUrl: image.url,
       format,
       language: input.language,
+      ownerPhoto: Boolean(ownerPhoto),
     }),
     llmUsage: usage,
     imageUsage: {

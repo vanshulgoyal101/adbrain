@@ -58,7 +58,7 @@ export function reuseSiblingPicture(input: ConceptInput, failure: ImageFailure, 
     imagePrompt: sibling.imagePrompt,
     design: buildAdDesign({
       brand: input.brand, copy: concept, concept, angle: input.angle, backgroundUrl: sibling.imageUrl,
-      format: input.format, language: input.language,
+      format: input.format, language: input.language, ownerPhoto: Boolean(sibling.ownerPhotoUrl),
     }),
     llmUsage: failure.usage,
     imageUsage: {

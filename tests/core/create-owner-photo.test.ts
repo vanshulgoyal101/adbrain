@@ -54,6 +54,9 @@ describe("core: Create uses the owner's own photo for one ad (#195)", () => {
     expect(variant.imageUsage).toMatchObject({ provider: "owner-photo", estimatedCostUsd: 0, width: 40, height: 60 });
     expect(variant.imageAttempts).toEqual([]);
     expect(variant.design.backgroundUrl).toBe(PHOTO);
+    // #2430: the recorded reply placed the words at the top without seeing the photo; a real photo's faces sit there.
+    expect(recorded.response.content).toContain('"textPlacement":"top"');
+    expect(variant.design.layout).toBe("bottom");
     // The model cannot see the photo, so the copy must not describe it.
     expect(`${variant.headline} ${variant.primaryText}`).not.toMatch(/\b(?:pictured|photo|shown|this image)\b/i);
   });
@@ -82,6 +85,7 @@ describe("core: Create uses the owner's own photo for one ad (#195)", () => {
     expect(byAngle["Save money / value"]).toMatchObject({ ownerPhotoUrl: PHOTO, imageUrl: PHOTO });
     expect(byAngle["Solve a pain point"]).toMatchObject({ ownerPhotoUrl: SECOND, imageUrl: SECOND });
     expect(sources).toMatchObject({ "Save money / value": "owner_photo", "Solve a pain point": "owner_photo", "Special offer / incentive": "generated" });
+    expect(byAngle["Save money / value"].design.layout).toBe("bottom");
     // Ad 3 took the AI-picture path (blocked in this test), so no owner photo was reused for it.
     expect(failures["Special offer / incentive"]).toContain("must not call the image model");
   });
