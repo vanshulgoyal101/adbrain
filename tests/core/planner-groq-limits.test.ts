@@ -201,6 +201,16 @@ describe("core: when Groq is the last provider left, parallel calls wait their t
     expect(await call).toBeInstanceOf(AllLLMProvidersFailedError);
   });
 
+  it("a bare 429 (no named limit) keeps the short wait, so an all-down Create still fails fast", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    lastResortChain([() => Response.json({ error: { message: "Too many requests" } }, { status: 429 }), answer()]);
+    const { complete, AllLLMProvidersFailedError } = await import("@/lib/llm");
+    const call = complete([{ role: "user", content: "concept" }], { signal: new AbortController().signal, waitOnLastProvider: true })
+      .catch((error: unknown) => error);
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(await call).toBeInstanceOf(AllLLMProvidersFailedError);
+  });
+
   it("the deadline still ends a last-resort wait", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
     lastResortChain([() => otpm(30), answer()]);

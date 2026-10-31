@@ -44,8 +44,12 @@ const cooldownUntil = new Map<string, number>();
 // (with no next provider and `waitOnLastProvider`, they wait for the probe: #2189).
 const rateLimited = new Set<string>();
 const probing = new Map<string, Promise<void>>();
-// #2189: with `waitOnLastProvider`, the last provider left waits out a per-minute limit (≤ COOLDOWN_MS) this many rounds.
+// #2189: with `waitOnLastProvider`, the last provider left waits out a limit it named (Groq's OTPM: ≤ COOLDOWN_MS a
+// round), for at most this many rounds and this much sleep per call. A bare 429 keeps the short wait.
 const LAST_RESORT_ROUNDS = 6;
+const LAST_RESORT_WAIT_BUDGET_MS = 90_000;
+// Until when a named limit parks each provider; unlike `rateLimited`, another call's success doesn't clear it.
+const namedParkUntil = new Map<string, number>();
 /** #1808: the Cerebras model, exported so the scheduled model check reads the same id. */
 export const CEREBRAS_MODEL = "llama-3.3-70b";
 // #449: a key out of credit stays parked long enough not to slow every Create; the free models answer meanwhile.
@@ -184,6 +188,7 @@ async function callProviders(
     const { provider, keys, model } = entry;
     // #2189: with nothing after this provider, giving up loses the call; the caller's deadline bounds the wait instead.
     const lastResort = () => Boolean(options.waitOnLastProvider && options.signal) && !queue.slice(position + 1).some(available);
+    let slept = 0;
     for (let round = 0; ; round++) {
       const start = nextKeyStart(provider.name, keys.length);
       for (let i = 0; i < keys.length; i++) {
@@ -246,7 +251,10 @@ async function callProviders(
             // #1568: a limit the provider names (Groq's TPD, OTPM…) is the organization's, shared by every key.
             const parked = err.rateLimit ? keys.map((_, k) => `${provider.name}:${k}`) : [coolKey];
             for (const key of parked) cooldownUntil.set(key, Math.max(cooldownUntil.get(key) ?? 0, until));
-            if (err.rateLimit) rateLimited.add(provider.name);
+            if (err.rateLimit) {
+              rateLimited.add(provider.name);
+              namedParkUntil.set(provider.name, Math.max(namedParkUntil.get(provider.name) ?? 0, until));
+            }
           }
           // Another key on the same model would time out or truncate the same way; try the next model.
           if (err instanceof LLMError && !err.retryable && err.status === undefined) {
@@ -262,7 +270,7 @@ async function callProviders(
       }
       // Every key is rate-limited only briefly: wait once, then retry this model.
       const wait = Math.min(...keys.map((_, idx) => cooldownUntil.get(`${provider.name}:${idx}`) ?? 0)) - Date.now();
-      const last = lastResort();
+      const last = lastResort() && (namedParkUntil.get(provider.name) ?? 0) > Date.now() && slept + wait <= LAST_RESORT_WAIT_BUDGET_MS;
       if (round + 1 >= (last ? LAST_RESORT_ROUNDS : 2) || wait <= 0 || wait > (last ? COOLDOWN_MS : RATE_LIMIT_WAIT_MS)) break;
       // #668: a fast fallback answers sooner than the cooldown ends; come back to this provider after it.
       if (options.fallbackBeforeRateLimitWait && !deferred.has(entry) && queue.slice(position + 1).some(available)) {
@@ -271,6 +279,7 @@ async function callProviders(
         break;
       }
       await sleep(wait, options.signal);
+      slept += wait;
     }
   }
 
