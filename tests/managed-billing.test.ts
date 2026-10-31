@@ -60,6 +60,13 @@ describe("funded only from Meta's read of the ad account (#2359)", () => {
     expect(fundingFromMeta({ funding_source_details: CARD.funding_source_details })).toEqual({ funded: false, reason: "ACCOUNT_NOT_ACTIVE" });
   });
 
+  it("counts only payment methods the customer adds themselves; a shared credit line or invoice, or an unknown type, fails closed", () => {
+    for (const type of [1, 12, 13, 17, 19]) expect(fundingFromMeta({ ...CARD, funding_source_details: { id: "9103", type } })).toEqual({ funded: true });
+    for (const type of [4, 6, 99]) {
+      expect(fundingFromMeta({ ...CARD, funding_source_details: { id: "9104", type } })).toEqual({ funded: false, reason: "NOT_OWN_PAYMENT_METHOD" });
+    }
+  });
+
   it("moves ad_account_created → funded (card_attached) when Meta reports the card, with the child's own token", async () => {
     const { deps, calls, writes } = fake({ funding: CARD, members: [{ id: "8801" }], assigned: [{ id: "8801", tasks: ["MANAGE"] }] });
     expect(await checkFunding(deps)).toEqual({ status: "funded" });
@@ -139,6 +146,15 @@ describe("inviting the owner's person to add the card (#2359, a Meta write on ou
       expect(await invitePayer({ email: "owner@example.in" }, deps)).toEqual({ status: "invited" });
       expect(calls.filter((call) => call.startsWith("POST"))).toEqual([]);
     }
+  });
+
+  it("refuses a new address while 3 invites are unaccepted, so the child can't send spam; a repeat address is still fine", async () => {
+    const pending = [1, 2, 3].map((n) => ({ id: `990${n}`, email: `person${n}@example.in` }));
+    const full = fake({ pending });
+    expect(await invitePayer({ email: "owner@example.in" }, full.deps)).toEqual({ status: "too_many_invites" });
+    expect(full.calls.filter((call) => call.startsWith("POST"))).toEqual([]);
+    expect(full.writes).toEqual([]);
+    expect(await invitePayer({ email: "person2@example.in" }, fake({ pending }).deps)).toEqual({ status: "invited" });
   });
 
   it("doesn't invite before the ad account is set up, after it stopped, or once it's funded", async () => {

@@ -22,11 +22,17 @@ export type FundingRead = {
 
 /** Why an ad account can't run ads yet, as the owner screen explains it. */
 export type FundingReason =
-  | "NO_PAYMENT_METHOD" | "PREPAID_UNCONFIRMED" | "PAYMENT_DUE" | "PENDING_REVIEW"
+  | "NO_PAYMENT_METHOD" | "PREPAID_UNCONFIRMED" | "NOT_OWN_PAYMENT_METHOD" | "PAYMENT_DUE" | "PENDING_REVIEW"
   | "IN_GRACE_PERIOD" | "ACCOUNT_DISABLED" | "ACCOUNT_CLOSED" | "ACCOUNT_NOT_ACTIVE";
 
 /** 0 UNSET and 14 FS_NULL: no payment method. */
 const NO_SOURCE_TYPES = [0, 14];
+/**
+ * Payment methods a customer adds themselves: 1 card, 12/13 PayPal, 17 direct debit, 19 alternative payment.
+ * An allow-list, so a credit line or invoice (4, 6) shared from a parent, or any unknown type, fails closed:
+ * AdBrain's money must never fund a child (#2357).
+ */
+const CUSTOMER_SOURCE_TYPES = [1, 12, 13, 17, 19];
 /** 20 STORED_BALANCE: a prepaid balance can be empty and then won't deliver; funded only once a walk records its shape (CTO, #2359). */
 const PREPAID_TYPE = 20;
 
@@ -38,6 +44,7 @@ export function fundingFromMeta(read: FundingRead): { funded: true } | { funded:
   const source = read.funding_source_details;
   if (!source?.id || typeof source.type !== "number" || NO_SOURCE_TYPES.includes(source.type)) return { funded: false, reason: "NO_PAYMENT_METHOD" };
   if (source.type === PREPAID_TYPE) return { funded: false, reason: "PREPAID_UNCONFIRMED" };
+  if (!CUSTOMER_SOURCE_TYPES.includes(source.type)) return { funded: false, reason: "NOT_OWN_PAYMENT_METHOD" };
   if (status === 3 || status === 8) return { funded: false, reason: "PAYMENT_DUE" };
   if (status === 7) return { funded: false, reason: "PENDING_REVIEW" };
   if (status === 9) return { funded: false, reason: "IN_GRACE_PERIOD" };
@@ -58,6 +65,7 @@ export type PayerInvite =
   | { status: "invited" }
   | { status: "funded" }
   | { status: "invalid_email" }
+  | { status: "too_many_invites" }
   | { status: "waiting_setup" }
   | { status: "unavailable" };
 
@@ -83,6 +91,8 @@ export interface BillingDeps {
 const FUNDED_STATES = ["funded", "whatsapp_linked", "ready"];
 const STOPPED_STATES = ["failed", "offboarding", "offboarded"];
 const PAYER_ROLE = "EMPLOYEE";
+/** Invites go out from a child under the AdBrain BP: refuse a new address while this many are unaccepted, so it can't send spam. */
+export const MAX_PENDING_INVITES = 3;
 const PAYER_TASKS = ["MANAGE"];
 const email = z.email().max(254);
 
@@ -113,9 +123,11 @@ export async function invitePayer(input: { email: string }, deps: BillingDeps): 
   if ("status" in ready) return ready;
   const { childId, token, keys } = ready;
   const address = parsed.data;
-  const known = (await people(deps, `${childId}/business_users?fields=id,email&limit=100`, token)).some((person) => sameEmail(person.email, address))
-    || (await people(deps, `${childId}/pending_users?fields=id,email&limit=100`, token)).some((person) => sameEmail(person.email, address));
+  const member = (await people(deps, `${childId}/business_users?fields=id,email&limit=100`, token)).some((person) => sameEmail(person.email, address));
+  const pending = member ? [] : await people(deps, `${childId}/pending_users?fields=id,email&limit=100`, token);
+  const known = member || pending.some((person) => sameEmail(person.email, address));
   const key = `invite:${deps.businessId}`;
+  if (!known && pending.length >= MAX_PENDING_INVITES) return { status: "too_many_invites" };
   if (!known) {
     await deps.event({ step: "funding", outcome: "started", idempotency_key: key });
     await deps.graph.post(`${childId}/business_users`, { email: address, role: PAYER_ROLE }, token);

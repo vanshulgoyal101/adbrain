@@ -243,14 +243,16 @@ on their child ad account; AdBrain's card is never shared to it. Meta has no API
 [`managed-billing`](../../../src/lib/meta/managed-billing.ts) (via `POST /api/managed/billing`) does
 three things with the child's own token once the ad account and its grant exist: **invite**
 (`POST /{child}/business_users`, `role=EMPLOYEE`, after reading `business_users` and
-`pending_users` so a person is never invited twice; the email is validated before any call and
+`pending_users` so a person is never invited twice, and refusing a new address while 3 invites are
+unaccepted so a child can't send spam; the email is validated before any call and
 goes to Meta only, never into the ledger or logs; `step_keys.payer_invite` records that it ran);
 **grant** each person who has joined the child `MANAGE` on its ad account (`MANAGE` includes
 billing; `act_/assigned_users` has no billing-only task); and **read**
 `GET /{act}?fields=account_status,funding_source_details`. The ledger moves
 `ad_account_created → funded` (`funding_state=card_attached`) only when that read shows
-`account_status=1` and a funding source whose `type` isn't 0 (UNSET) or 14 (FS_NULL), never on a
-click. A prepaid `STORED_BALANCE` (20) stays not funded until a walk records its real shape (an
+`account_status=1` and a funding source the customer adds themselves (`type` 1 card, 12/13 PayPal,
+17 direct debit, 19 alternative payment), never on a click. It's an allow-list: a credit line or
+invoice (4, 6) shared from a parent, or any unknown type, reads as not funded. A prepaid `STORED_BALANCE` (20) stays not funded until a walk records its real shape (an
 empty balance won't deliver); statuses 3/8 (payment due), 7 (risk review), 9 (grace period),
 2 (disabled) and 100/101/202 (closed) each get a plain reason. An unaccepted invite reads as
 "waiting for your person", not an error. If the Page's WhatsApp was recorded while the account

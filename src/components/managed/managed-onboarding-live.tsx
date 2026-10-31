@@ -57,10 +57,11 @@ function WhatsAppStep({ businessId, onLinked }: { businessId: string; onLinked: 
   );
 }
 type BillingResult =
-  | { status: "funded" | "invited" | "invalid_email" | "waiting_setup" | "unavailable" }
+  | { status: "funded" | "invited" | "invalid_email" | "too_many_invites" | "waiting_setup" | "unavailable" }
   | { status: "not_funded"; reason: FundingReason; payer: PayerStatus };
 const SETUP_MESSAGES = {
   invalid_email: "Enter a valid email address.",
+  too_many_invites: "You already have 3 invites waiting. Ask one of those people to accept Facebook's email, then check again.",
   waiting_setup: "We'll be able to check as soon as your ad account is ready, usually within a minute.",
   unavailable: "Your setup has stopped, so the card can't be checked right now. Contact AdBrain support.",
 };
@@ -71,6 +72,7 @@ const NO_CARD: Record<PayerStatus, string> = {
 };
 const FUNDING_MESSAGES: Record<Exclude<FundingReason, "NO_PAYMENT_METHOD">, string> = {
   PREPAID_UNCONFIRMED: "Your ad account has a prepaid balance, not a card. Add a card on Facebook, then check again.",
+  NOT_OWN_PAYMENT_METHOD: "Your ad account's payment method isn't a card or account of your own. Add your card on Facebook, then check again.",
   PAYMENT_DUE: "Facebook says a payment is due on your ad account. Pay it on Facebook, then check again.",
   PENDING_REVIEW: "Facebook is reviewing your ad account's payment. This can take a day; check again later.",
   IN_GRACE_PERIOD: "Facebook couldn't charge your card. Update it on Facebook, then check again.",
@@ -102,7 +104,7 @@ function CardStep({ businessId, onFunded }: { businessId: string; onFunded: () =
         setMessage(result.reason === "NO_PAYMENT_METHOD"
           ? { text: NO_CARD[result.payer], error: false }
           : { text: FUNDING_MESSAGES[result.reason], error: result.reason === "ACCOUNT_DISABLED" || result.reason === "ACCOUNT_CLOSED" });
-      } else setMessage({ text: SETUP_MESSAGES[result.status], error: result.status !== "waiting_setup" });
+      } else setMessage({ text: SETUP_MESSAGES[result.status], error: result.status === "invalid_email" || result.status === "unavailable" });
     } catch (reason) {
       setMessage({ text: reason instanceof Error ? reason.message : "Try again.", error: true });
     } finally {
