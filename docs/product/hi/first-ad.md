@@ -1,5 +1,5 @@
 # फ़ोन पर आपका पहला ऐड
-<!-- mirrors ../first-ad.md 7d83301228d1 -->
+<!-- mirrors ../first-ad.md 44dd5cbf30e8 -->
 
 यह [Your first ad on a phone](../first-ad.md) का हिंदी रूप है; अंग्रेज़ी पेज बदले तो इसे भी बदलें।
 [Features and workflows](../README.md) का हिस्सा।
@@ -162,9 +162,17 @@ ready" (या "Your N ads are ready") के साथ "Connect and go live" �
     "no Facebook Page")। "Reconnect Meta" दबाएँ और Meta की विंडो में ऐड अकाउंट और पेज
     पर टिक करें। ऐड अकाउंट नहीं है? बिज़नेस पोर्टफ़ोलियो में रुपये वाला एक बनाएँ।
   - एक पोर्टफ़ोलियो में नहीं: "This Page and ad account aren't in the same business
-    portfolio…"। अगर कोई दूसरी जोड़ी तैयार दिखे तो उसे चुनें। नहीं तो "Open business
-    settings" दबाएँ, पेज और रुपये वाला ऐड अकाउंट एक पोर्टफ़ोलियो में जोड़ें, फिर
+    portfolio…"। अगर लिस्ट में कोई दूसरी जोड़ी चुनी जा सकती है (उसके नीचे पीला नोट नहीं),
+    तो उसे चुनें। नहीं तो "Open business settings" दबाएँ, पेज और रुपये वाला ऐड अकाउंट
+    एक पोर्टफ़ोलियो में जोड़ें (पोर्टफ़ोलियो नहीं है? पहले वहीं एक बनाएँ), फिर
     "Reconnect Meta" दबाएँ।
+  - रुपये में नहीं: "This ad account uses USD. AdBrain runs ads in rupees, and Meta
+    can't change an account's currency…"। "Open business settings" दबाएँ, उसी
+    पोर्टफ़ोलियो में रुपये (INR) वाला नया ऐड अकाउंट बनाएँ, फिर "Reconnect Meta" दबाएँ
+    और नए अकाउंट पर टिक करें।
+  - करेंसी या टाइम ज़ोन नहीं: "Meta did not return a currency or time zone for
+    your ad account…"। Meta Business Settings में ऐड अकाउंट की सेटिंग खोलें, देखें कि
+    करेंसी और टाइम ज़ोन भरे हैं, फिर "Reconnect Meta" दबाएँ।
   - ऐड अकाउंट चालू नहीं: "This ad account is not active. Check Account quality
     in Meta." इसे Meta के Account quality पेज पर ठीक करें, या कोई दूसरा ऐड अकाउंट
     कनेक्ट करें।

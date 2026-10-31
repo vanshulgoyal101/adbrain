@@ -28,6 +28,18 @@ describe("batch picture reuse", () => {
     expect(borrowed.map((v) => v.imageUrl).sort()).toEqual(["a", "b"]);
   });
 
+  it("lays a borrowed owner photo out with the words at the bottom (#2430)", async () => {
+    const pictures = batchPictures(3);
+    pictures.settle(0, { ...ad("photo"), ownerPhotoUrl: "photo" });
+    pictures.settle(1, ad("ai"));
+    pictures.settle(2);
+    const input = { brand: run4.brand, angle: { id: "offer", name: "Offer" } } as never;
+    expect(run4.angles[2].concept.visual.textPlacement).toBe("top");
+    const [fromPhoto, fromAi] = [await pictures.borrow(2, input, busy(new FreeImageBusyError())), await pictures.borrow(2, input, busy(new FreeImageBusyError()))];
+    expect(fromPhoto).toMatchObject({ imageUrl: "photo", ownerPhotoUrl: "photo", design: { layout: "bottom" } });
+    expect(fromAi).toMatchObject({ imageUrl: "ai", design: { layout: "top" } });
+  });
+
   it("rethrows when the batch made no picture", async () => {
     const pictures = batchPictures(2);
     pictures.settle(0);

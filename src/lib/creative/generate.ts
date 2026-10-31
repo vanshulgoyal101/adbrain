@@ -416,13 +416,8 @@ async function renderVariant(
       ? "[Image prompt omitted because declared preferences were applied; the generated concept may reflect their style.]"
       : image.prompt,
     design: buildAdDesign({
-      brand,
-      copy: concept,
-      concept,
-      angle,
-      backgroundUrl: image.url,
-      format,
-      language: input.language,
+      brand, copy: concept, concept, angle, backgroundUrl: image.url, format, language: input.language,
+      ownerPhoto: Boolean(ownerPhoto),
     }),
     llmUsage: usage,
     imageUsage: {
