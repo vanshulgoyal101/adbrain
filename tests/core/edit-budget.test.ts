@@ -276,6 +276,27 @@ describe("core: edit a launched campaign's daily budget (#774)", () => {
     expect(mirror()).toMatchObject({ daily_budget: 250 });
   });
 
+  it("keeps the ledger message and does not advise retrying an uncertain budget write", async () => {
+    storedDaily({ daily_budget: 250 });
+    replay([daily[11], ...daily.slice(9, 13)]);
+    const recordedFetch = vi.mocked(globalThis.fetch).getMockImplementation()!;
+    let writeDispatched = false;
+    vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
+      if (init?.method === "POST" && new URL(String(input)).pathname.endsWith(`/${DAILY_AD_SET}`)) {
+        writeDispatched = true;
+        throw new DOMException("The budget write timed out", "TimeoutError");
+      }
+      return recordedFetch(input, init);
+    });
+    const { status, body } = await edit({ change: { dailyRupees: 150 } });
+    expect(writeDispatched).toBe(true);
+    expect(status).toBe(500);
+    expect(body.retryable).toBe(false);
+    expect(operations()).toMatchObject([{ state: "needs_reconciliation", transmitted: true }]);
+    expect.soft(operations()[0].sanitized_error).toBe("Could not change the budget.");
+    expect.soft(body.error).not.toContain("Try again");
+  });
+
   it("shows Meta's minimum budget in plain words (recorded 1885272, in the token user's Hindi)", async () => {
     storedDaily({ daily_budget: 150 });
     replay([refused[2], ...refused]);
