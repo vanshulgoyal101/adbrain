@@ -263,6 +263,8 @@ async function generateConcept(
       maxTokens: env.CREATIVE_MAX_TOKENS,
       reasoningEffort: env.CREATIVE_REASONING_EFFORT,
       attemptTimeoutMs: env.CREATIVE_ATTEMPT_TIMEOUT_MS,
+      // #2189: parallel concepts share Groq's 1,000 output tokens a minute; when it's the last provider, take turns.
+      waitOnLastProvider: true,
       cache: false,
       signal,
       onAttempt: (entry) => {
