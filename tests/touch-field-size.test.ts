@@ -23,4 +23,12 @@ describe("form fields on touch screens (#1793)", () => {
     expect(inbox).toMatch(/\.search input \{[^}]*font-size: var\(--text-sm\)/);
     expect(inbox).toMatch(/\.toolbar select \{[^}]*font-size: var\(--text-xs\)/);
   });
+
+  // The variables only lift a field that reads them itself; a field inheriting a parent's 15px still zooms.
+  it("gives fields that would inherit 15px their own theme size", () => {
+    expect(inbox).toMatch(/\.editor select, \.editor textarea \{[^}]*font-size: var\(--text-sm\)/);
+    const ageInputs = readFileSync("src/components/targeting-controls.tsx", "utf8").match(/className="h-10 w-20 [^"]*"/g) ?? [];
+    expect(ageInputs).toHaveLength(2);
+    for (const className of ageInputs) expect(className).toContain(" text-sm ");
+  });
 });
