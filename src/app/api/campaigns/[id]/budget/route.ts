@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { ownerError } from "@/i18n/request-locale";
+import { editErrorWords } from "@/lib/campaign/owner-edit-error";
 import { z } from "zod";
 import { apiError, readJson } from "@/lib/api";
 import { budgetChangeSchema, editCampaignBudget } from "@/lib/campaign/budget-edit-service";
@@ -44,9 +46,9 @@ export const POST = observeRoute("/api/campaigns/[id]/budget", "POST", async (
     const result = await editCampaignBudget(context, id, change, { idempotencyKey, confirmationDigest });
     return NextResponse.json({ ok: true, result });
   } catch (error) {
-    if (error instanceof CampaignEditError) return NextResponse.json({ error: error.message, retryable: error.retryable }, { status: error.status });
+    if (error instanceof CampaignEditError) return NextResponse.json({ error: await editErrorWords(error, ownerError), retryable: error.retryable }, { status: error.status });
     if (error instanceof ConnectionAccessError) return apiError(error.message, error.code === "CONFLICT" ? 409 : error.code === "UNAUTHENTICATED" ? 401 : 400);
     console.error("[campaign.edit.budget]", error);
-    return apiError("Could not change the budget.", 500);
+    return apiError(await ownerError("budgetFailed"), 500);
   }
 });
