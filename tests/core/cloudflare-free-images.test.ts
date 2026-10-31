@@ -52,8 +52,12 @@ function network(answer: () => Response = () => Response.json({ ...cloudflare.su
     const url = new URL(String(input instanceof Request ? input.url : input));
     calls.push(`${url.hostname}${url.pathname}`);
     if (url.hostname === "api.cloudflare.com") {
-      bodies.push(JSON.parse(String(init?.body)));
+      const body = JSON.parse(String(init?.body));
+      bodies.push(body);
       headers.push(new Headers(init?.headers));
+      // Like the live API: any property outside the recorded request (a seed, a size) is a 400 bad input.
+      if (Object.keys(body).some((key) => !(key in cloudflare.request.body)))
+        return Response.json(cloudflare.badInput.body, { status: cloudflare.badInput.status });
       return answer();
     }
     if (url.pathname.includes("/images/models/")) return Response.json({ endpoints: [{ supported_parameters: {} }] });
@@ -82,7 +86,7 @@ describe("core: free pictures come from Cloudflare FLUX-1-schnell first (#1476)"
     expect(picture).toMatchObject({ provider: "cloudflare", model: "@cf/black-forest-labs/flux-1-schnell", estimatedCostUsd: 0, width: 1024, height: 1024 });
     expect(picture.url).toMatch(/^data:image\/png;base64,/);
     expect(calls).toEqual([`api.cloudflare.com/client/v4/accounts/${ACCOUNT}/ai/run/@cf/black-forest-labs/flux-1-schnell`]);
-    expect(bodies[0]).toEqual({ prompt: image.prompt, steps: 4, seed: 42 });
+    expect(bodies[0]).toEqual({ prompt: image.prompt, steps: 4 });
     expect(headers[0].get("authorization")).toBe("Bearer cf-test-token");
     expect(attempts.map(({ provider, status, estimatedCostUsd }) => [provider, status, estimatedCostUsd])).toEqual([["cloudflare", "success", 0]]);
   });
