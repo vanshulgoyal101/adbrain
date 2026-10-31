@@ -88,10 +88,7 @@ const MAX_FIELD_CHARS = 1_000;
 const MAX_LIST_ITEMS = 10;
 
 function boundedBrand(brand: BrandContext): BrandContext {
-  const boundedList = (items?: string[]) =>
-    items
-      ?.slice(0, MAX_LIST_ITEMS)
-      .map((item) => item.slice(0, MAX_FIELD_CHARS));
+  const boundedList = (items?: string[]) => items?.slice(0, MAX_LIST_ITEMS).map((item) => item.slice(0, MAX_FIELD_CHARS));
   return {
     ...brand,
     name: brand.name.slice(0, MAX_FIELD_CHARS),

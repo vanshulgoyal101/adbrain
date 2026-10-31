@@ -269,6 +269,15 @@ describe("new and returning visitors", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
+  // #1793: a returning pilot tapping "Sign in" in a fresh phone browser got the sign-up tour.
+  it("opens in sign-in mode without the intro from a Sign in link, even with a gallery idea pending", async () => {
+    phoneViewport = true;
+    localStorage.setItem("adbrain:pending-idea-goal", "Get WhatsApp chats");
+    render(await LoginPage({ searchParams: Promise.resolve({ mode: "signin" }) }));
+    expect(screen.getByRole("heading", { name: "Welcome back" })).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
   it("treats an unsafe or missing redirect as a new visitor", async () => {
     render(await LoginPage({ searchParams: Promise.resolve({ redirect: "//evil.example" }) }));
     expect(screen.getByRole("heading", { name: "Create your free account" })).toBeInTheDocument();

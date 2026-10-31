@@ -28,6 +28,8 @@ describe("/for/[segment] (#1565)", () => {
     // #1632: 'How it starts' is a real numbered sequence.
     expect(within(screen.getByRole("region", { name: "How it starts" })).getAllByRole("listitem")).toHaveLength(3);
     for (const link of screen.getAllByRole("link", { name: "Start my free campaign" })) expect(link).toHaveAttribute("href", "/login");
+    // #1793: Sign in skips the phone sign-up tour.
+    expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute("href", "/login?mode=signin");
     const text = container.textContent ?? "";
     // #1235 and #1500: no margin or split, no promised results.
     expect(text).not.toMatch(/guarantee|\b20\s?%|\b80\s?%|service fee|100%/i);

@@ -1,5 +1,5 @@
 # फ़ोन पर आपका पहला ऐड
-<!-- mirrors ../first-ad.md c18f2dd38f7f -->
+<!-- mirrors ../first-ad.md 30d6d9f75578 -->
 
 यह [Your first ad on a phone](../first-ad.md) का हिंदी रूप है; अंग्रेज़ी पेज बदले तो इसे भी बदलें।
 [Features and workflows](../README.md) का हिस्सा।
@@ -44,6 +44,7 @@ you before it's due."
 - **आपको दिखेगा:** फ़ोन पर पहले एक कार्ड: "From your business to WhatsApp chats"।
   फ़ॉर्म तक जाने के लिए "Skip" (या "Create my free account") दबाएँ, जिसके ऊपर लिखा है "Create your
   free account"। पहले से अकाउंट है? "Already have an account? Sign in" दबाएँ।
+  होमपेज के ऊपर वाला "Sign in" लिंक यह कार्ड छोड़कर सीधे "Welcome back" खोलता है।
 - **टैप करें:** "Continue with Google", या अपना ईमेल डालकर "Email me a sign-in
   link" दबाएँ। "No password needed. The link creates your account."
 - **कितना समय:** एक मिनट। ईमेल से करने पर "Check your email" दिखेगा: लिंक उसी फ़ोन

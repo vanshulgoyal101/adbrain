@@ -54,7 +54,7 @@ describe("public product example", () => {
   it("keeps conversion, example, and legal navigation accessible", () => {
     const { container } = render(<MarketingHome />);
     expect(screen.getByRole("link", { name: "Make my first ad free" })).toHaveAttribute("href", "/login");
-    expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute("href", "/login");
+    expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute("href", "/login?mode=signin");
     expect(screen.getByRole("link", { name: "See how it works" })).toHaveAttribute("href", "#cycle");
     expect(screen.getByRole("region", { name: "From your business to WhatsApp chats" })).toHaveAttribute("id", "cycle");
     expect(screen.getByRole("link", { name: "Campaign ideas" })).toHaveAttribute("href", "/ideas");
