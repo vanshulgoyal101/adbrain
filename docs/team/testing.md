@@ -247,3 +247,4 @@ from the coverage denominator; build and browser checks address other risks.
 Concurrent builds share `.next` and coverage runs share output. Coordinate writers
 or validate an isolated snapshot without environment files; do not delete another
 session's artifacts or interpret mixed outputs as evidence for your exact change.
+
