@@ -8,6 +8,7 @@ Part of the [repository map](../../../docs/architecture/overview.md#repository-m
 | --- | --- |
 | [generate.ts](generate.ts) | `generateVariants()`: one concept and one picture per angle, with progress and failure callbacks |
 | [concept.ts](concept.ts) | Concept prompt, `creativeConceptSchema` and `validateConcept()` |
+| [concept-lead.ts](concept-lead.ts) | Per-angle place and opening, and the shared batch ask |
 | [interview.ts](interview.ts) | The Create interview: next question or an editable brief |
 | [design.ts](design.ts) | `AdDesignSpec`, formats and sizes, brand colour and contact labels |
 | [render.tsx](render.tsx), [ad-composite.tsx](ad-composite.tsx) | Rasterise the spec into the finished poster (Satori/resvg, bundled fonts, Indic shaping) |

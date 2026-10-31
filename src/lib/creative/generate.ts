@@ -386,7 +386,6 @@ async function renderVariant(
   const image = ownerRaster && ownerPhoto
     ? fromOwner(ownerPhoto, ownerRaster)
     : await generateImage({
-      // #418 rule 4: a generated ad shows a person, named first so the free model reads it; an owner's own background request (background.ts) is left alone.
       prompt: [personSubjectLine(concept.visual.direction, [input.instructions, input.brief, input.advisoryPreferences], brand), conceptImagePrompt(concept, input)].filter(Boolean).join("\n"),
       width: dims.width,
       height: dims.height,
