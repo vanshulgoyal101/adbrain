@@ -31,6 +31,8 @@ import { OwnerEditError, ownerEditError } from "./owner-edit-error";
  * Each write is a single in-place ad-set update, so a refused one changes nothing.
  */
 
+/** The edit row's stored text for an unexplained failure; the owner's words come from `errors.budgetFailed`/`budgetUnconfirmed`. */
+const BUDGET_FAILED_LEDGER = "Could not change the budget.";
 
 const rupees = (max: number) => z.number().finite().positive().max(max).refine(value => Number.isInteger(Math.round(value * 100 * 1e6) / 1e6), "Use at most two decimals.");
 export const budgetChangeSchema = z.object({
@@ -286,9 +288,12 @@ export async function editCampaignBudget(context: AuthorizedBusiness, campaignId
     });
     return { ...result, replay: false };
   } catch (error) {
-    const converted = toBudgetEditError(error);
+    const known = toBudgetEditError(error);
+    // A sent write that failed without Meta's own refusal (a timeout, a 5xx) may have changed the budget: check, don't retry.
+    const uncertain = transmitted && !(error instanceof CampaignEditError) && !(error instanceof MetaError && (error.status ?? 0) >= 400 && (error.status ?? 0) < 500);
+    const converted = uncertain ? ownerEditError("budgetUnconfirmed", known.status, false, BUDGET_FAILED_LEDGER) : known;
     // A 613 on a later A/B ad set leaves the edit to reconcile, not to retry (Reviewer on #901).
-    const mapped = converted.retryable && transmitted ? converted instanceof OwnerEditError ? new OwnerEditError(converted.ownerKey, converted.status, false) : new CampaignEditError(converted.message, converted.status, false) : converted;
+    const mapped = converted.retryable && transmitted ? converted instanceof OwnerEditError ? new OwnerEditError(converted.ownerKey, converted.status, false, converted.message) : new CampaignEditError(converted.message, converted.status, false) : converted;
     if (options.preview) throw mapped;
     if (!(error instanceof CampaignEditError && error.status === 502)) {
       await fail(transmitted ? "needs_reconciliation" : "failed", mapped.message);
@@ -306,5 +311,5 @@ function toBudgetEditError(error: unknown): CampaignEditError {
   if (error instanceof ConnectionAccessError) return new CampaignEditError(error.message, error.code === "UNAUTHENTICATED" ? 401 : error.code === "CONFLICT" ? 409 : 400);
   if (error instanceof MetaError) return new CampaignEditError(friendlyMetaError(error), error.status && error.status >= 500 ? 502 : 400, Boolean(error.status && error.status >= 500));
   console.error("[campaign.edit.budget]", error);
-  return ownerEditError("budgetFailed", 500);
+  return ownerEditError("budgetFailed", 500, false, BUDGET_FAILED_LEDGER);
 }

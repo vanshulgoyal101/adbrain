@@ -142,10 +142,10 @@ const ENGLISH: Record<OwnerErrorKey, string> = {
   budgetNotRecorded: "Meta changed the budget but AdBrain could not record it. Check the campaign before changing it again.",
   budgetRateLimited: "Meta needs 30 seconds between budget changes. Try again in a moment.",
   budgetFailed: "We couldn't change the budget just now. Try again in a minute.",
+  budgetUnconfirmed: "Meta may have changed the budget. Refresh the campaign to check before you change it again.",
   adPauseNotRunning: "Only a running campaign's ads can be paused here.",
   adNotInCampaign: "This ad isn't part of the campaign.",
   adNotPausedByAdBrain: "AdBrain didn't pause this ad, so it won't turn it on. Use Meta if you want it back.",
-  adMetaDidntChange: "Meta didn't make the change, so the ad is as it was. Try again.",
   adMetaUnconfirmed: "Meta didn't confirm the change. Refresh the campaign before trying again.",
   adNotRecorded: "Meta changed the ad but AdBrain could not record it. Check the campaign before changing it again.",
   // #2330: Brand autofill and the launch planner; byte-identical, except siteRefused (was the raw "Site returned 403").
@@ -243,7 +243,8 @@ describe("owner errors (#2305, #2312, #2314, #2324, #2327, #2330, #2334, #2335)"
     ["editsUnavailable", "अभी कैंपेन नहीं बदल सकते। एक मिनट बाद फिर से कोशिश करें।"],
     ["editNotRecorded", "बदलाव सेव नहीं हो पाया, इसलिए कुछ नहीं बदला। फिर से कोशिश करें।"],
     ["budgetFailed", "अभी बजट नहीं बदल पाया। एक मिनट बाद फिर से कोशिश करें।"],
-    ["adMetaDidntChange", "Meta ने बदलाव नहीं किया, विज्ञापन पहले जैसा है। फिर से कोशिश करें।"],
+    ["budgetUnconfirmed", "हो सकता है Meta में बजट बदल गया हो। दोबारा बदलने से पहले कैंपेन रिफ़्रेश करके देख लें।"],
+    ["adMetaUnconfirmed", "Meta ने बदलाव पक्का नहीं किया। फिर से कोशिश करने से पहले कैंपेन रिफ़्रेश करें।"],
     ["refreshNeedsCheck", "इस कैंपेन के ऐड अकाउंट की जाँच होनी है, उसके बाद ही नतीजे रिफ़्रेश होंगे। अगर यह ठीक न हो, तो हमें मैसेज करें।"],
   ] as const)("%s uses the approved Hindi wording", (key, expected) => {
     expect(ownerErrorIn("hi", key)).toBe(expected);
@@ -253,7 +254,6 @@ describe("owner errors (#2305, #2312, #2314, #2324, #2327, #2330, #2334, #2335)"
     "adPauseNotRunning",
     "adNotInCampaign",
     "adNotPausedByAdBrain",
-    "adMetaDidntChange",
     "adNotRecorded",
   ] as const)("%s calls an ad विज्ञापन in Hindi", (key) => {
     const message = ownerErrorIn("hi", key);
@@ -261,7 +261,7 @@ describe("owner errors (#2305, #2312, #2314, #2324, #2327, #2330, #2334, #2335)"
     expect(message).not.toContain("ऐड");
   });
 
-  it.each(["notOnMetaYet", "refreshNeedsCheck", "refreshFailed", "resultsNotSaved"] as const)(
+  it.each(["notOnMetaYet", "refreshNeedsCheck", "refreshFailed", "resultsNotSaved", "budgetUnconfirmed", "adMetaUnconfirmed"] as const)(
     "%s uses रिफ़्रेश in Hindi",
     (key) => {
       const message = ownerErrorIn("hi", key);
@@ -323,6 +323,7 @@ describe("owner errors (#2305, #2312, #2314, #2324, #2327, #2330, #2334, #2335)"
       ["runEnded", 409, false],
       ["budgetSpendLimitsUnverified", 503, true],
       ["budgetFailed", 500, false],
+      ["budgetUnconfirmed", 500, false],
     ] as const) {
       budget.edit.mockRejectedValue(ownerEditError(key, status, retryable));
       cookie.lang = "hi";

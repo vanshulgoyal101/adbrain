@@ -71,8 +71,7 @@ describe("setAdDelivery (#1045)", () => {
     if (!(refusal instanceof Error)) throw new Error("Expected an unconfirmed pause error.");
     expect(metaStatus).toBe("PAUSED");
     expect(m.saved).toEqual([]);
-    expect.soft(refusal.message).not.toContain("Meta didn't make the change");
-    expect.soft(refusal.message).not.toContain("Try again");
+    expect(refusal).toMatchObject({ message: "Meta didn't confirm the change. Refresh the campaign before trying again.", status: 502, retryable: false });
   });
 
   it("undoes only an ad AdBrain paused, as an activation", async () => {

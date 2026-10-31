@@ -293,8 +293,8 @@ describe("core: edit a launched campaign's daily budget (#774)", () => {
     expect(status).toBe(500);
     expect(body.retryable).toBe(false);
     expect(operations()).toMatchObject([{ state: "needs_reconciliation", transmitted: true }]);
-    expect.soft(operations()[0].sanitized_error).toBe("Could not change the budget.");
-    expect.soft(body.error).not.toContain("Try again");
+    expect(operations()[0].sanitized_error).toBe("Could not change the budget.");
+    expect(body.error).toBe("Meta may have changed the budget. Refresh the campaign to check before you change it again.");
   });
 
   it("shows Meta's minimum budget in plain words (recorded 1885272, in the token user's Hindi)", async () => {

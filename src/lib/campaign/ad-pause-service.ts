@@ -58,9 +58,10 @@ export async function setAdDelivery(context: AuthorizedBusiness, campaignId: str
   } catch (error) {
     recordProductEvent({ kind: "workflow", name: `campaign.ad_${action}`, outcome: "failed", businessId: context.businessId, attributes: { errorCode: metaErrorCode(error) } });
     if (error instanceof CampaignEditError) throw error;
-    const fallback = ownerErrorIn("en", "adMetaDidntChange");
+    // setAdStatus can fail after its write (on the read-back), so an unexplained failure is unconfirmed, not "nothing changed" (#2395).
+    const fallback = ownerErrorIn("en", "adMetaUnconfirmed");
     const message = friendlyMetaError(error, fallback);
-    throw message === fallback ? ownerEditError("adMetaDidntChange", 502, true) : new CampaignEditError(message, 502, true);
+    throw message === fallback ? ownerEditError("adMetaUnconfirmed", 502) : new CampaignEditError(message, 502, true);
   }
   if (result.status !== status) throw ownerEditError("adMetaUnconfirmed", 502, true);
   // Reviewer on #1048: an ad that already had this status wasn't changed by AdBrain, so nothing is recorded.
