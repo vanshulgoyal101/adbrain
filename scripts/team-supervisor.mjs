@@ -201,11 +201,14 @@ export function loadSkip({ load1, cores, availableBytes }, { maxLoadPerCore = 1.
   return null;
 }
 
-/** os.freemem() on macOS counts only never-used pages (≈0.2 GB on a healthy 8 GB Mac), so use the kernel's memory-pressure level instead. */
+/**
+ * os.freemem() on macOS counts only never-used pages (≈0.2 GB on a healthy 8 GB Mac), so use the kernel's memory-pressure
+ * level instead. Absolute path: the LaunchAgent's PATH has no /usr/sbin, and a missing sysctl fell back to freemem().
+ */
 export function machineLoad() {
   let availableBytes = freemem();
   if (process.platform === "darwin") {
-    const level = Number(spawnSync("sysctl", ["-n", "kern.memorystatus_level"], { encoding: "utf8" }).stdout?.trim());
+    const level = Number(spawnSync("/usr/sbin/sysctl", ["-n", "kern.memorystatus_level"], { encoding: "utf8" }).stdout?.trim());
     if (Number.isFinite(level) && level > 0) availableBytes = (totalmem() * level) / 100;
   }
   return { load1: loadavg()[0], cores: cpus().length, availableBytes };
