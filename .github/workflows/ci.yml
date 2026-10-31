@@ -64,12 +64,30 @@ jobs:
       NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # A PR checks out its merge commit; HEAD^1 is the base it merged onto.
+          fetch-depth: 2
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: npx vitest run --shard=${{ matrix.shard }}/3
+      - name: Full suite (push, dispatch)
+        if: github.event_name != 'pull_request'
+        run: npx vitest run --shard=${{ matrix.shard }}/3
+      # #2386: a PR runs the tests its change reaches plus every test that scans files
+      # (routes, docs, workflows) with fs instead of importing them. Infra files in
+      # vitest.config.mts forceRerunTriggers run everything; next still runs it all.
+      - name: Changed-file tests (PR)
+        if: github.event_name == 'pull_request'
+        run: npx vitest run --changed HEAD^1 --passWithNoTests --shard=${{ matrix.shard }}/3
+      - name: File-scanning tests (PR)
+        if: github.event_name == 'pull_request'
+        run: |
+          mapfile -t scans < <(grep -rlE "readFileSync|readdirSync|globSync|existsSync" tests --include='*.test.ts' --include='*.test.tsx' | sort)
+          echo "${#scans[@]} file-scanning tests"
+          [ "${#scans[@]}" -gt 0 ] || exit 0
+          npx vitest run --passWithNoTests --shard=${{ matrix.shard }}/3 "${scans[@]}"
 
   metadb:
     runs-on: ubuntu-latest

@@ -48,7 +48,7 @@ The release process ([AGENTS.md](../../AGENTS.md)).
 | Control | Verified setting |
 | --- | --- |
 | CI triggers | Pushes and PRs targeting `main` |
-| CI jobs (current source) | `build`; `lint` (lint + typecheck), `unit` (vitest in 3 shards) and `metadb` (real PostgreSQL), aggregated by the required `test` check; `core` (`test:core`, generation holds); non-blocking `audit` and `docs`; all on Node 24 |
+| CI jobs (current source) | `build`; `lint` (lint + typecheck), `unit` (vitest in 3 shards; full on push, changed-file plus file-scanning tests on PRs, #2386) and `metadb` (real PostgreSQL), aggregated by the required `test` check; `core` (`test:core`, generation holds); non-blocking `audit` and `docs`; all on Node 24 |
 | Secret job | Gitleaks with repository configuration |
 | Main protection | PR required; required checks `build`, `test`, `core` and `secrets`; branches need not be up to date |
 | Administrators | Protection applies to admins too |
