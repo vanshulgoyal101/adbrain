@@ -385,6 +385,30 @@ export function metaErrorMessage(error: GraphErrorBody | undefined, status: numb
   return error?.message || `Meta HTTP ${status}`;
 }
 
+/**
+ * #2395: a status write was sent but Meta's answer was lost (timeout, dropped connection, 5xx) or the read-back
+ * failed, so Meta may have made the change. Never report it as "nothing changed" or retry it blindly.
+ */
+export class MetaWriteUncertainError extends MetaError {
+  constructor(readonly original: unknown) {
+    super("Meta didn't confirm the change.", original instanceof MetaError ? original.status : undefined,
+      original instanceof MetaError ? original.code : undefined, original instanceof MetaError ? original.subcode : undefined,
+      original instanceof MetaError ? original.details : undefined);
+    this.name = "MetaWriteUncertainError";
+  }
+}
+
+/** Connection failures that happen before a request can reach Meta (no address, connection refused). */
+const NOT_SENT_CODES = new Set(["ENOTFOUND", "EAI_AGAIN", "ECONNREFUSED"]);
+
+/** Meta answered the write and refused it (any 4xx), or it never left AdBrain: nothing changed. */
+function writeDefinitelyRefused(error: unknown): boolean {
+  if (error instanceof ConnectionAccessError) return true;
+  const cause = error instanceof TypeError ? (error.cause as { code?: unknown } | undefined) : undefined;
+  if (typeof cause?.code === "string" && NOT_SENT_CODES.has(cause.code)) return true;
+  return error instanceof MetaError && error.status !== undefined && error.status >= 400 && error.status < 500;
+}
+
 export class CampaignDeliveryError extends MetaError {}
 /** The switch failed after the old ad set was paused and it couldn't be turned back on: reconcile in Meta. */
 export class AdSetSwitchStuckError extends CampaignDeliveryError {}
@@ -2325,8 +2349,12 @@ export class MetaClient {
       await this.graph(encodeURIComponent(adId), { method: "POST", form: { status, execution_options: JSON.stringify(["validate_only"]) } });
       return { id: adId, status: before.status ?? null, effectiveStatus: before.effective_status ?? null, changed: false };
     }
-    await this.writeStatus(adId, status);
-    const after = await read();
+    try {
+      await this.writeStatus(adId, status);
+    } catch (error) {
+      throw writeDefinitelyRefused(error) ? error : new MetaWriteUncertainError(error);
+    }
+    const after = await read().catch((error: unknown) => { throw new MetaWriteUncertainError(error); });
     return { id: adId, status: after.status ?? null, effectiveStatus: after.effective_status ?? null, changed: true };
   }
 
