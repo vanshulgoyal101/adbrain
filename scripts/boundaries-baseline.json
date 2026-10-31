@@ -796,12 +796,6 @@
       "lines": 578
     },
     {
-      "rule": "C4-file-size",
-      "from": "src/lib/supabase/queries.ts",
-      "to": "> 400 lines",
-      "lines": 424
-    },
-    {
       "rule": "C5-english-errors",
       "from": "src/app/api/brand/autofill/route.ts",
       "to": "English error literals",

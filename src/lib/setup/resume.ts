@@ -1,19 +1,19 @@
 import { setupFieldsFrom } from "@/lib/brand/setup-fields";
 import { brandUsable } from "@/lib/brand/usable";
+import { madeForSetup } from "@/lib/creative/setup-picks";
 import { firstTimer, type LiveSignals, type SetupStep } from "@/lib/setup/steps";
-import type { Business } from "@/lib/types";
+import type { Business, Creative } from "@/lib/types";
 
 /**
- * #1272 (#1251 WS1 slice 5): the setup step a first-timer resumes at, or null once a campaign has gone live
- * (normal Home). 1 until the five facts make a usable Brand, 2 until an ad is picked (approved), then 3.
+ * The first-timer's step and the ads Go live can use; the step is null after a campaign has gone live.
  */
-export function setupResumeStep({ business, creatives, campaigns }: {
+export function setupResume<T extends Pick<Creative, "status" | "generation">>({ business, creatives, campaigns }: {
   business: Pick<Business, "name" | "vertical" | "phone" | "locations" | "offers"> | null;
-  creatives: { status: string }[];
+  creatives: T[];
   campaigns: LiveSignals[];
-}): SetupStep | null {
-  if (!firstTimer(campaigns)) return null;
-  if (!business || !brandUsable({ ...business, vertical: setupFieldsFrom(business).vertical })) return 1;
-  if (!creatives.some((creative) => creative.status === "approved")) return 2;
-  return 3;
+}): { step: SetupStep | null; ready: T[] } {
+  if (!firstTimer(campaigns)) return { step: null, ready: [] };
+  if (!business || !brandUsable({ ...business, vertical: setupFieldsFrom(business).vertical })) return { step: 1, ready: [] };
+  const ready = creatives.filter((creative) => creative.status === "approved" && madeForSetup(creative, business));
+  return { step: ready.length ? 3 : 2, ready };
 }
