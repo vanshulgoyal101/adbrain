@@ -1,5 +1,5 @@
 # फ़ोन पर आपका पहला ऐड
-<!-- mirrors ../first-ad.md 30d6d9f75578 -->
+<!-- mirrors ../first-ad.md 89441fb93d39 -->
 
 यह [Your first ad on a phone](../first-ad.md) का हिंदी रूप है; अंग्रेज़ी पेज बदले तो इसे भी बदलें।
 [Features and workflows](../README.md) का हिस्सा।
@@ -15,6 +15,33 @@
 किसी भी स्टेप पर रुक सकते हैं।
 "Your first month of AdBrain is free. After that it's ₹999 a month; we'll remind
 you before it's due."
+
+## शुरू करने से पहले: Facebook तैयार करें (एक बार, लगभग 15 मिनट)
+
+यह अपने फ़ोन पर करें, Facebook में खुद (मालिक के तौर पर) साइन इन करके, हो सके तो एक दिन
+पहले। ये Meta की अपनी स्क्रीन हैं; यहाँ कोई पैसा खर्च नहीं होता।
+
+1. **AdBrain को अपनी Facebook प्रोफ़ाइल का लिंक भेजें** WhatsApp पर (Facebook › आपकी
+   प्रोफ़ाइल › ⋯ › Copy profile link)। जब तक Facebook AdBrain की जाँच कर रहा है, हम
+   आपको adBrain ऐप का tester बनाते हैं, और उसके बाद ही आप कनेक्ट कर पाएँगे।
+2. **इनवाइट स्वीकार करें:** developers.facebook.com/requests खोलें और adBrain स्वीकार
+   करें। Facebook पहले developer के तौर पर रजिस्टर करने को कह सकता है: यह मुफ़्त है और
+   आपके फ़ोन पर आए कोड से होता है।
+3. **एक बिज़नेस पोर्टफ़ोलियो:** business.facebook.com खोलें। अगर यह बिज़नेस पोर्टफ़ोलियो
+   बनाने को कहे, तो अपने बिज़नेस का नाम, अपना नाम और बिज़नेस ईमेल डालें। पहले से है?
+   वही इस्तेमाल करें। किसी और का पोर्टफ़ोलियो कभी इस्तेमाल न करें।
+4. **उसमें आपका पेज:** Settings › Accounts › Pages › Add › Add a Page, और अपने बिज़नेस
+   का Facebook पेज चुनें। पेज पर WhatsApp बटन होना चाहिए, उसी नंबर के साथ जिस पर ग्राहक
+   मैसेज करें।
+5. **रुपये वाला ऐड अकाउंट:** Settings › Accounts › Ad accounts › Add › Create a new ad
+   account। Currency **Indian Rupee (INR)** और time zone **Asia/Kolkata**: Meta इन्हें
+   बाद में नहीं बदल सकता। पूछे कि किसके लिए है, तो "My business" चुनें। रुपये वाला ऐड
+   अकाउंट पहले से है? तो उसे यहीं जोड़ें।
+6. **पेमेंट का तरीका:** उसी ऐड अकाउंट में Payment settings › Add payment method: कार्ड,
+   या UPI या नेट बैंकिंग से पहले पैसे डालें (कम से कम उतने जितना आपका रन ले सकता है;
+   AdBrain दिखाता है, जैसे ₹708)।
+
+फिर AdBrain में साइन इन करें (नीचे)। Go live पर आप यही पेज और ऐड अकाउंट कनेक्ट करेंगे।
 
 ## अगर AdBrain के किसी व्यक्ति ने आपके लिए सेटअप किया है
 
