@@ -105,7 +105,8 @@ describe("core: Create concept validation on a recorded production concept", () 
     // 'Rs.' isn't a sentence end; with no other safe cut the text stays long for the repair.
     const rupees = "Modular kitchens from Rs. 2 lakh in Mohali with free 3D design and installation in 21 days for every home";
     expect(clipToThought(rupees, 100)).toBe(rupees);
-    expect(rules({ ...recorded.concept, description: rupees })).toEqual(["schema:description:too_big"]);
+    // #2444: the cut copy is still checked, so the free offer this dental brand never stated shows up too.
+    expect(rules({ ...recorded.concept, description: rupees })).toEqual(["schema:description:too_big", "unsupported-commercial-claim"]);
     const saved = validateConcept({ ...recorded.concept, description: `${recorded.concept.description} Ask for a quote on your first visit and more.` }, input);
     expect(saved.success && saved.concept.description).toBe(recorded.concept.description);
   });

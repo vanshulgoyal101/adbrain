@@ -95,6 +95,22 @@ describe("core: the repair keeps flash-lite's draft and changes only what failed
     expect(JSON.stringify(requests[1])).not.toContain("50% off X-rays");
   });
 
+  it("an over-long headline doesn't hide an unsupported offer: the repair still starts fresh (QA #2444)", async () => {
+    const both = { ...draft, headline: "Start with a $49 new-patient exam in Cedar Park", primary_text: `50% off X-rays on your first visit.\n${draft.primary_text}` };
+    const { requests } = await create([JSON.stringify(both), offer.text.replace(draft.headline, "Your first visit in Cedar Park")]);
+
+    expect(requests[1].map((turn) => turn.role)).toEqual(["user", "user"]);
+    expect(requests[1][1].parts[0].text).toMatch(/schema:headline:too_big[\s\S]*unsupported-commercial-claim/);
+    expect(JSON.stringify(requests[1])).not.toContain("50% off X-rays");
+  });
+
+  it("a draft that isn't the concept's shape can't be checked, so its repair starts fresh", async () => {
+    const shapeless = { ...draft, cta: 42 };
+    const { requests } = await create([JSON.stringify(shapeless), offer.text.replace(draft.headline, "Your first visit in Cedar Park")]);
+
+    expect(requests[1].map((turn) => turn.role)).toEqual(["user", "user"]);
+  });
+
   it("a repair that repeats the headline again still loses the ad", async () => {
     const { variants, requests } = await create([offer.text, offer.text]);
 

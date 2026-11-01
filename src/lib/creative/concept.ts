@@ -463,18 +463,30 @@ export function validateConcept(
   const draft = normalizeDraft(value);
   const parsed = creativeConceptSchema.safeParse(draft);
   if (!parsed.success) {
-    return {
-      success: false,
-      issues: parsed.error.issues.map((issue) => {
-        const path = issue.path.join(".");
-        const field = path.replace(/\.\d+/g, ".*") || "root";
-        // The repair is told how long the text is, so it knows how much to cut (#281).
-        const text = issue.path.reduce<unknown>((node, key) => (isRecord(node) || Array.isArray(node) ? (node as Record<PropertyKey, unknown>)[key as PropertyKey] : undefined), draft);
-        const length = (issue.code === "too_big" || issue.code === "too_small") && typeof text === "string" ? `; it is ${text.trim().length} characters`
-          : issue.code === "invalid_value" && typeof text === "string" ? `; it is "${text.slice(0, 40)}"` : "";
-        return `schema:${field}:${issue.code}: ${path}: ${issue.message}${length}`;
-      }),
-    };
+    const valueAt = (root: unknown, path: PropertyKey[]) => path.reduce<unknown>((node, key) =>
+      (isRecord(node) || Array.isArray(node) ? (node as Record<PropertyKey, unknown>)[key] : undefined), root);
+    const issues = parsed.error.issues.map((issue) => {
+      const path = issue.path.join(".");
+      const field = path.replace(/\.\d+/g, ".*") || "root";
+      // The repair is told how long the text is, so it knows how much to cut (#281).
+      const text = valueAt(draft, issue.path);
+      const length = (issue.code === "too_big" || issue.code === "too_small") && typeof text === "string" ? `; it is ${text.trim().length} characters`
+        : issue.code === "invalid_value" && typeof text === "string" ? `; it is "${text.slice(0, 40)}"` : "";
+      return `schema:${field}:${issue.code}: ${path}: ${issue.message}${length}`;
+    });
+    // #2444 (QA): a too-long text hid the claim checks, so a draft with an invented offer went back for a targeted
+    // repair. Each too-long text is cut to its limit and the other checks run on that copy as well.
+    if (!parsed.error.issues.every((issue) => issue.code === "too_big" && typeof valueAt(draft, issue.path) === "string")) {
+      return { success: false, issues };
+    }
+    const cut = structuredClone(draft);
+    for (const issue of parsed.error.issues) {
+      const parent = valueAt(cut, issue.path.slice(0, -1)) as Record<PropertyKey, string>;
+      const key = issue.path.at(-1)!;
+      parent[key] = parent[key].trim().slice(0, Number((issue as { maximum?: number | bigint }).maximum));
+    }
+    const checked = validateConcept(cut, input);
+    return { success: false, issues: [...issues, ...(checked.success ? [] : checked.issues.filter((issue) => !issue.startsWith("schema:")))] };
   }
   const sources = [
     input.brand.name,
