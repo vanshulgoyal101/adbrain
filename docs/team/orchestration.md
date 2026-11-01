@@ -167,8 +167,11 @@ live worker chats (`list_sessions`, `get_session_context`) and starts each missi
 (relationship `independent`, title `AdBrain <Role>`) using `npm run team-supervisor -- --restart-prompt <role>`.
 Workers never nest inside a CEO session, so closing a CEO chat leaves them running; never delete another
 session. The outgoing CEO writes no handover: every decision and promise is already on its issue, and
-scheduled reads are `Next read <time>` comments. Nudge an idle or stuck chat with `send_message` (at most
-once per chat per 20 min). `npm run team-status` lists each role as `waiting`, `has-work`, `no-work`
+scheduled reads are `Next read <time>` comments. If workers still sit inside an earlier CEO's session, the
+owner closes it first and the new CEO then starts their independent replacements (worktrees survive). A
+running chat reads no chat messages (steers stay "processing"; queued ones land when the turn ends), so
+reach workers on GitHub (`→ <Role>:`, or the Everyone row of #580) and use `send_message` (queue) only to
+start a chat whose status is idle. `npm run team-status` lists each role as `waiting`, `has-work`, `no-work`
 or `error`.
 
 ### Ready pool (pull, don't wait)

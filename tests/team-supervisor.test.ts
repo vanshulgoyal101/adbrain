@@ -116,7 +116,9 @@ describe("team-supervisor (#573 A1)", () => {
     expect(text).toContain("--restart-prompt <role>");
     expect(text).toContain("wait-for-work.mjs --me ceo");
     for (const r of ["dev", "dev4", "qa2", "reviewer", "devops", "cto", "docs"]) expect(text).toContain(`(${r})`);
-    expect(text).toContain("safe to close");
+    expect(text).toContain("ask the owner to close that session first");
+    expect(text).toContain("a running chat reads no chat messages");
+    expect(text).not.toContain("steer one line");
     expect(text).not.toMatch(/\(ceo\)/);
   });
 });
