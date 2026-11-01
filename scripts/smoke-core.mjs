@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { parseEnv } from "node:util";
 import { chromium } from "@playwright/test";
-import { makesFreePictures } from "./lib/internal-accounts.mjs";
+import { loginAuth, loginSessionProblem, makesFreePictures } from "./lib/internal-accounts.mjs";
 import { pictureSources } from "./lib/smoke-pictures.mjs";
 
 const envPath = "/Users/vanshulgoyal/Development/copilot/adbrain/.env.smoke";
@@ -160,6 +160,7 @@ try {
   const errors = [];
   const smokeBlocked = new Set();
   let loginAllowed = true;
+  let loginSession = null;
   let skippedLeadSync = false;
   let skippedCampaignSync = false;
   let interviewCount = 0;
@@ -224,7 +225,13 @@ try {
     if (request.method() === "POST" && loginAllowed && url.hostname.endsWith(".supabase.co")
       && url.pathname === "/auth/v1/token" && url.searchParams.get("grant_type") === "password") {
       loginAllowed = false;
-      return route.continue();
+      // #2396: read the session here. After sign-in the page navigates and Chromium drops the response body,
+      // so reading it from the page's response afterwards lost the identity on some runs.
+      const response = await route.fetch().catch(() => null);
+      if (!response) return route.abort("failed");
+      loginSession = { status: response.status(), supabase: url.origin, apikey: request.headers().apikey,
+        body: await response.json().catch(() => null) };
+      return route.fulfill({ response });
     }
     if (modes.has("--create") && request.method() === "POST" && url.origin === origin) {
       if (url.pathname === "/api/creatives/assistant" && ++interviewCount <= 8) return route.continue();
@@ -288,9 +295,8 @@ try {
   const response = await loginResponse;
   assert.equal(response.status(), 200, "Login failed.");
   // #2145: who signed in decides free or paid pictures; the session also lets a scheduled run delete its own ads.
-  const session = await response.json().catch(() => null);
-  const auth = session?.access_token && session.user ? { supabase: new URL(response.url()).origin,
-    apikey: response.request().headers().apikey, token: session.access_token, user: session.user } : null;
+  const auth = loginAuth(loginSession);
+  if (!auth) console.log(`NOTE Sign-in session unreadable (${loginSessionProblem(loginSession)}); free-only steps will refuse to run`);
   await page.waitForURL((url) => url.origin === origin && !url.pathname.startsWith("/login"));
   signedIn = true;
   console.log("PASS Sign in");

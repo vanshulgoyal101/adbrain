@@ -20,6 +20,27 @@ export function makesFreePictures(user) {
   return isInternal && !internal.exemptFromFreeProviders.some((entry) => entry.userId === user.id);
 }
 
+/**
+ * #2396: the smoke's signed-in identity from the password sign-in it captured (`{ status, supabase, apikey, body }`).
+ * Anything short of a 200 with a token and a user id is null, so `makesFreePictures` refuses (fail closed).
+ */
+export function loginAuth(login) {
+  const { status, supabase, apikey, body } = login ?? {};
+  if (status !== 200 || !supabase || !apikey || !body?.access_token || !body.user?.id) return null;
+  return { supabase, apikey, token: body.access_token, user: body.user };
+}
+
+/** Why `loginAuth` returned null, in words safe for a public log (no token, email or id). */
+export function loginSessionProblem(login) {
+  if (!login) return "sign-in response not captured";
+  if (login.status !== 200) return `sign-in HTTP ${login.status}`;
+  if (!login.body) return "sign-in body unreadable";
+  if (!login.apikey) return "no apikey on the sign-in request";
+  if (!login.body.access_token) return "no access token";
+  if (!login.body.user?.id) return "no user id";
+  return "ok";
+}
+
 const quote = (value) => `'${String(value).trim().toLowerCase().replaceAll("'", "''")}'`;
 const list = (values, type) => `array[${values.map(quote).join(",")}]::${type}[]`;
 
