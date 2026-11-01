@@ -741,12 +741,14 @@ describe("core: manage routes against recorded Graph responses (#649)", () => {
       { ...adSets, path: `${DELETED}/adsets?fields=promoted_object%2Cdestination_type&limit=100` },
       state,
     ]);
+    const audited: Row[] = [];
+    store.state.rpc.append_verified_audit_event = args => { audited.push(args); return { data: null, error: null }; };
     const response = await remove();
     const body = await response.json();
     expect(response.status, JSON.stringify(body)).toBe(200);
     expect(body).toEqual({ ok: true, metaDeleted: false });
     expect(graph.sent.every(call => call.method === "GET")).toBe(true);
     expect(store.state.tables.campaigns).toEqual([]);
-    expect(audits()).toHaveLength(1);
+    expect(JSON.stringify(audited)).toContain('"metaGone":"DELETED"');
   });
 });
