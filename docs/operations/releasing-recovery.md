@@ -101,7 +101,8 @@ anyone watching (owner-approved automatic rollback, #111):
   after the Cloudflare token lands. A PASS deletes those ads and their files, but keeps the newest ad when the
   smoke business has no other ad.
   A failure opens one `core` `bug` issue `Create smoke failed in production` for DevOps (`FAIL Picture` says
-  free pictures are failing, `FAIL Prepare plan` that Prepare's free-text plan is). Repeat failures comment on that issue, and the first pass after it says so once.
+  free pictures are failing, `FAIL Prepare plan` that Prepare's free-text plan is, `FAIL Sign in` that it couldn't
+  sign in or read who signed in, so nothing was requested, #2396). Repeat failures comment on that issue, and the first pass after it says so once.
   The check never rolls back. Pause it with `gh workflow disable create-smoke.yml`.
 - **After each push to `main`, and every 15 minutes if GitHub fires the schedule**
   [`production-drift.yml`](../../.github/workflows/production-drift.yml) waits until
