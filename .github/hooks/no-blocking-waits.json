@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "hooks": {
+    "preToolUse": [
+      {
+        "type": "command",
+        "matcher": "bash",
+        "bash": "node scripts/no-blocking-waits.mjs 2>/dev/null || true",
+        "timeoutSec": 10
+      }
+    ]
+  }
+}

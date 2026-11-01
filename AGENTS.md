@@ -286,7 +286,10 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 	every 30 minutes, so your change is live within about 30 minutes of merging. **Don't
 	wait for the train** (owner, Nov 1): check the changed flow before merging (locally or
 	on the PR preview), start your next item, and smoke production on your next pass once
-	it's live. Never sleep or poll for a deploy; it blocks your chat. Hotfixes and migration/money releases go to `main` (DevOps or CTO; label
+	it's live. Never sleep or poll for a deploy; it blocks your chat. The
+	`.github/hooks/no-blocking-waits.json` hook enforces this (#2481): it refuses a sync
+	`sleep` over 60 s, a sleep loop and `gh run watch`/`--watch` (add `# allow-wait` only
+	for a short local wait such as a server start-up). Hotfixes and migration/money releases go to `main` (DevOps or CTO; label
 	`hotfix`). Required checks are build, test, core and secrets.
 - Migrations, production settings and rollbacks go through DevOps. Never
 	force-push or run `npm run db:push` against production.
