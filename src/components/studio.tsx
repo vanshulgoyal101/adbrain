@@ -507,7 +507,7 @@ export function Studio({
       {error && <Alert variant="error">{error}</Alert>}
 
       {!empty && (
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-lg font-semibold text-slate-900">
           Ads{" "}
           <span className="font-normal text-slate-400">({items.length - setAsideCount})</span>
@@ -548,7 +548,7 @@ export function Studio({
 
       {items.length > 0 && (
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <fieldset className="flex gap-1">
+          <fieldset className="flex min-w-0 flex-wrap gap-1">
             <legend className="sr-only">Ad status</legend>
             {(
               [
@@ -560,7 +560,7 @@ export function Studio({
               <label
                 key={value}
                 className={cn(
-                  "flex min-h-11 cursor-pointer items-center gap-1 whitespace-nowrap rounded-md px-3 text-sm has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-primary",
+                  "flex min-h-11 cursor-pointer items-center gap-1 whitespace-nowrap rounded-md px-2.5 text-sm sm:px-3 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-primary",
                   filter === value
                     ? "bg-slate-100 font-medium text-slate-900"
                     : "text-slate-600 hover:bg-slate-50",
