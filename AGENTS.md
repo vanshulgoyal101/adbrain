@@ -59,6 +59,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 	Send a direct chat message (`send_message`, `queue` delivery) **only** to start
 	a chat whose turn has ended (status idle): one line pointing at the issue. To stop
 	harm right now (P0), kill the harmful process by PID and post the rule on its issue.
+	A worker sitting in its waiter checks GitHub every minute; to make it look now,
+	run `node scripts/wait-for-work.mjs --wake <role>` after posting (#2473).
 	Never stack messages; replace or cancel a pending one. **Never end a turn
 	silently:** before stopping, run your waiter or post `→ <Role>` for what's next.
 - Read [docs/team/orchestration.md](docs/team/orchestration.md) before editing or using
