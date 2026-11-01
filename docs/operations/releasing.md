@@ -175,10 +175,13 @@ Vercel Hobby allows 100 production deploys a day, and every push to `main` is on
 (#461). So PRs merge into **`next`**, which Vercel doesn't deploy, and
 [deploy-train.yml](../../.github/workflows/deploy-train.yml) promotes it:
 - On every push to `next` (and at :11/:41 as a backup), if `next` has commits `main`
-  lacks, it waits until 30 minutes after the last train, then requires build, test, core
-  and secrets green on `next`'s exact commit (CI runs on pushes to `next`). Then it opens
-  and merges a `next → main` PR with a merge commit. That's at most 48 deploys a day;
-  each train gets the production guard's smoke.
+  lacks, it waits until 30 minutes after the last train, then promotes the **newest commit on
+  `next` with build, test, core and secrets all green** (CI runs on every push to `next`), so a
+  tip still in CI doesn't hold back what is green (#2528). Only `next`'s own (first-parent)
+  commits that hold all of `main`'s changes count; red or pending ones are never promoted. It
+  points the bot branch `deploy-train` at that commit and merges a `deploy-train → main` PR
+  with a merge commit. Pushes never cancel a running train: they queue as one pending run.
+  That's at most 48 deploys a day; each train gets the production guard's smoke.
 - **Vercel's limit (measured Oct 24, #461):** Hobby's '100 deployments per day'
   refusal (402 `api-deployments-free-per-day`) hit an **API/CLI redeploy**, while
   git-triggered deploys of `main` kept succeeding past 100 in 24 h (12:13, 12:29, 12:48 and
@@ -198,8 +201,8 @@ Vercel Hobby allows 100 production deploys a day, and every push to `main` is on
   once and keeps retrying for up to 10 minutes. A PR CI failure that ran jobs stops the train at once.
 - A red or stuck `next` opens one `Deploy train stuck` issue for DevOps that lists
   the changes on `next` not yet on `main` (the suspects). Fix `next` with a PR to it; production keeps the last train. The promote step's own 93-minute
-  limit leaves its alert time to run. A newer push cancels a waiting train, and a
-  cancelled run alerts nothing, so the scheduled watchdog job opens the same issue
+  limit leaves its alert time to run. A cancelled or killed run alerts nothing, so the
+  scheduled watchdog job opens the same issue
   (once) when a change has waited on `next` for 120 minutes (#2029).
 - [pr-base.yml](../../.github/workflows/pr-base.yml) retargets PRs opened against `main`
   to `next`, except the train itself, PRs labelled `hotfix` or `ready-to-ship`, and PRs

@@ -119,13 +119,14 @@ jobs:
   # Required check name stays `test` (#226). `if: always()` matters: without it a
   # failed or cancelled job skips `test`, and a skipped required check counts as passing.
   # `docs` gates too (#1918): an undocumented route or env key can't merge.
+  # `boundaries` gates too (#2530): a red ratchet merged turns `next` red.
   test:
-    needs: [lint, unit, metadb, docs]
+    needs: [lint, unit, metadb, docs, boundaries]
     if: always()
     runs-on: ubuntu-latest
     steps:
       - run: |
-          for r in "${{ needs.lint.result }}" "${{ needs.unit.result }}" "${{ needs.metadb.result }}" "${{ needs.docs.result }}"; do
+          for r in "${{ needs.lint.result }}" "${{ needs.unit.result }}" "${{ needs.metadb.result }}" "${{ needs.docs.result }}" "${{ needs.boundaries.result }}"; do
             [ "$r" = success ] || { echo "a test job did not succeed: $r"; exit 1; }
           done
 

@@ -489,7 +489,8 @@ export function validateConcept(
       parent[path.at(-1)!] = parent[path.at(-1)!].trim().slice(0, Number(maximum));
     }
     const checked = validateConcept(cut, input, uncut);
-    return { success: false, issues: [...issues, ...(checked.success ? [] : checked.issues.filter((issue) => !issue.startsWith("schema:")))] };
+    if (checked.success) return { success: false, issues };
+    return { success: false, issues: [...issues, ...checked.issues.filter((issue) => !issue.startsWith("schema:"))], ...(checked.claims ? { claims: checked.claims } : {}) };
   }
   const data = uncut.length ? structuredClone(parsed.data) : parsed.data;
   for (const [path, text] of uncut) (valueAt(data, path.slice(0, -1)) as Record<PropertyKey, string>)[path.at(-1)!] = text;

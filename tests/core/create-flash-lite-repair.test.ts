@@ -104,6 +104,13 @@ describe("core: the repair keeps flash-lite's draft and changes only what failed
     expect(JSON.stringify(requests[1])).not.toContain("50% off X-rays");
   });
 
+  it("an over-long headline keeps the uncited claim on the attempt's receipt (QA #2444)", async () => {
+    const [{ validateConcept }, { AD_ANGLES }] = await Promise.all([import("@/lib/creative/concept"), import("@/lib/templates/ads")]);
+    const input = { brand: item.brand, brief: item.brief, angle: AD_ANGLES.find((angle) => angle.id === "offer")!, sourceFacts: item.sourceFacts };
+    const both = { ...draft, headline: "Start with a $49 new-patient exam in Cedar Park", primary_text: `50% off X-rays on your first visit.\n${draft.primary_text}` };
+    expect(validateConcept(both, input)).toMatchObject({ success: false, claims: ["claim:percent:uncited"] });
+  });
+
   it("an offer past the cut point of a too-long text is still caught (review #2444)", async () => {
     const late = { ...draft, primary_text: `${draft.primary_text}\n${"Gentle care. ".repeat(70)}\nGet 50% off X-rays.` };
     const { requests } = await create([JSON.stringify(late), offer.text.replace(draft.headline, "Your first visit in Cedar Park")]);
