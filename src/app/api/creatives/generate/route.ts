@@ -1,5 +1,5 @@
 import { observeRoute, recordProductEvent, currentRequestId } from "@/lib/observability/logger";
-import { creativeFailureMessage } from "@/lib/creative/failure-message";
+import { creativeFailureMessage, creativeFailureStage, type CreativeFailureStage } from "@/lib/creative/failure-message";
 import { saveCreative } from "@/lib/creative/save";
 import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
@@ -246,7 +246,7 @@ async function generate(req: Request, live?: LiveCreate) {
   const inserted: Creative[] = [];
   // Keyed by angle: a top-up that saves the angle clears its failure; one that fails replaces it.
   const failed = new Map<string, { angle: AdAngle; error: unknown; message: string }>();
-  let failures: { angle: string; error: string }[] = [];
+  let failures: { angle: string; error: string; stage: CreativeFailureStage }[] = [];
   let topUp = 0;
   let pictureRetry = 0;
   const cost = { text: 0, image: 0 };
@@ -400,7 +400,7 @@ async function generate(req: Request, live?: LiveCreate) {
       live?.onTopUp(pictureRetry, "picture");
       await generateVariants({ ...run, angleIds: Object.keys(concepts), count: pictureRetry, concepts, ownerPhotos: undefined, recentCopy, signal: AbortSignal.timeout(retryBudget) });
     }
-    failures = [...failed.values()].map(({ angle, message }) => ({ angle: angle.name, error: message }));
+    failures = [...failed.values()].map(({ angle, message, error }) => ({ angle: angle.name, error: message, stage: creativeFailureStage(error) }));
     const noProvider = !inserted.length && failures.length === count && noProviderFailures === count;
     await progress(0, true, usageUnknown || inserted.length + failures.length < count, !inserted.length);
     if (noProvider) return NextResponse.json({ error: new NoLLMKeysError().message, code: "NO_LLM_KEYS" }, { status: 400 });
@@ -424,7 +424,7 @@ async function generate(req: Request, live?: LiveCreate) {
   recordProductEvent({ kind: "workflow", name: "creative.batch", businessId, durationMs: Date.now() - startedAt,
     outcome: !inserted.length ? "failed" : failures.length ? "partial" : "success",
     // #1468: the estimated AI cost of this Create (USD), for the top-up and image-provider decisions.
-    attributes: { count: inserted.length, expected: count, failedCount: failures.length, topUp, ...(pictureRetry ? { pictureRetry } : {}), provider: freeImagesOnly() ? (cloudflareConfigured() ? "cloudflare" : "pollinations") : "paid",
+    attributes: { count: inserted.length, expected: count, failedCount: failures.length, ...(failures.length ? { failedStages: failures.map((failure) => failure.stage) } : {}), topUp, ...(pictureRetry ? { pictureRetry } : {}), provider: freeImagesOnly() ? (cloudflareConfigured() ? "cloudflare" : "pollinations") : "paid",
       costUsd: roundUsd(cost.text + cost.image), textCostUsd: roundUsd(cost.text), imageCostUsd: roundUsd(cost.image) } });
   if (!inserted.length)
     return NextResponse.json(

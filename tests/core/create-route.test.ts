@@ -375,6 +375,7 @@ describe("core: Create route on recorded run 4", () => {
     expect(calls.filter(({ url }) => url === "https://openrouter.ai/api/v1/images")).toHaveLength(3);
     expect(mocks.progress.at(-1)).toMatchObject({ p_complete: true, p_uncertain: false });
     expect(batchEvent(info)).toMatchObject({ outcome: "success", attributes: { count: 3, failedCount: 0, topUp: 2 } });
+    expect(batchEvent(info).attributes).not.toHaveProperty("failedStages");
   });
 
   it("says 2 of 3 honestly when the top-up also fails (#1123)", async () => {
@@ -384,11 +385,11 @@ describe("core: Create route on recorded run 4", () => {
     const body = await response.json();
     expect(response.status, JSON.stringify(body)).toBe(200);
     expect(body.creatives).toHaveLength(2);
-    expect(body.failures).toEqual([{ angle: "Save money / value", error: expect.any(String) }]);
+    expect(body.failures).toEqual([{ angle: "Save money / value", error: expect.any(String), stage: "text" }]);
     // One concept and one repair per round, and only one top-up round.
     expect(valueCalls()).toHaveLength(4);
     expect(mocks.inserts).toHaveLength(2);
-    expect(batchEvent(info)).toMatchObject({ outcome: "partial", attributes: { count: 2, failedCount: 1, topUp: 1 } });
+    expect(batchEvent(info)).toMatchObject({ outcome: "partial", attributes: { count: 2, failedCount: 1, failedStages: ["text"], topUp: 1 } });
   });
 
   it("does not top up when every provider is down (#1123)", async () => {
@@ -397,7 +398,7 @@ describe("core: Create route on recorded run 4", () => {
     const response = await (await postCreate())();
     expect(response.status).toBe(502);
     expect(textCalls("openrouter")).toHaveLength(3);
-    expect(batchEvent(info)).toMatchObject({ outcome: "failed", attributes: { count: 0, failedCount: 3, topUp: 0 } });
+    expect(batchEvent(info)).toMatchObject({ outcome: "failed", attributes: { count: 0, failedCount: 3, failedStages: ["provider", "provider", "provider"], topUp: 0 } });
   });
 
   it("cuts the top-up off at its 45 s budget and returns what was saved (#1123)", async () => {

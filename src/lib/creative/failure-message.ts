@@ -1,5 +1,6 @@
-import { AllLLMProvidersFailedError } from "@/lib/llm/types";
-import { CreativeImageError } from "./generate";
+import { AllLLMProvidersFailedError, NoLLMKeysError } from "@/lib/llm/types";
+import { CreativeImageError, CreativeValidationError } from "./generate";
+import { CreativeSaveError } from "./save";
 import { ReferencePhotoPausedError } from "@/lib/imageGen/types";
 
 const GENERIC_CREATIVE_FAILURE = "This creative could not be generated or saved. Check saved results before trying again.";
@@ -20,4 +21,17 @@ export function creativeFailureMessage(error: unknown): string {
     return "This picture couldn't be made: AdBrain's paid image credit has run out and the free image model is busy. Try again in a few minutes.";
   }
   return GENERIC_CREATIVE_FAILURE;
+}
+
+export const creativeFailureStages = ["text", "picture", "provider", "save", "timeout", "other"] as const;
+export type CreativeFailureStage = (typeof creativeFailureStages)[number];
+
+/** #2515: the step that lost an ad, so `creative.batch` tells text, picture, provider and save losses apart. */
+export function creativeFailureStage(error: unknown): CreativeFailureStage {
+  if (error instanceof CreativeValidationError) return error.stage === "provider" ? "provider" : "text";
+  if (error instanceof AllLLMProvidersFailedError || error instanceof NoLLMKeysError) return "provider";
+  if (error instanceof CreativeImageError) return "picture";
+  if (error instanceof CreativeSaveError) return "save";
+  if (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")) return "timeout";
+  return "other";
 }
