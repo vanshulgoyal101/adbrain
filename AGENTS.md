@@ -51,13 +51,14 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 	issue or PR. The receiver's `wait-for-work` wakes on that. Messages sent straight
 	into another chat get folded into its running turn or sit unread, so they are not
 	a work channel.
-	Send a direct chat message (`send_message`, links in pinned #819) **only** to:
-	1. wake a chat that is idle (turn complete, no waiter running) when it has queued
-		work: one line pointing at the issue, `queue` delivery;
-	2. stop a chat doing something harmful or obsolete right now (P0), with `steer`.
-	A chat blocked in its waiter or a sleep/poll loop never reads a message (the chat
-	counts as busy). To reach one, stop that process first
-	(`kill $(cat "$TMPDIR/adbrain-wait-for-work-<role>.pid")` for a waiter), then `steer`.
+	**A running chat reads no chat messages** (Nov 1): a `steer` to a worker mid-turn
+	stayed "processing" for hours (DevOps had three), and a `queue` message lands only
+	when the turn ends. So reach a busy worker through GitHub, which its waiter and
+	`gh` calls read: the `owner:` label plus `→ <Role>:` on the issue, or a
+	team-wide rule in the Everyone row of #580 (every waiter run prints it).
+	Send a direct chat message (`send_message`, `queue` delivery) **only** to start
+	a chat whose turn has ended (status idle): one line pointing at the issue. To stop
+	harm right now (P0), kill the harmful process by PID and post the rule on its issue.
 	Never stack messages; replace or cancel a pending one. **Never end a turn
 	silently:** before stopping, run your waiter or post `→ <Role>` for what's next.
 - Read [docs/team/orchestration.md](docs/team/orchestration.md) before editing or using
