@@ -86,3 +86,34 @@ describe("GET /api/cron/sync-leads under Meta throttling (#1838)", () => {
     ]));
   });
 });
+
+describe("GET /api/cron/sync-leads when two runs overlap (#2503)", () => {
+  const raced = { ...synced, imported: 0, error: "The sync or Meta connection changed.", status: 409 };
+
+  it("a run that lost the checkpoint race is skipped, not failed: 200", async () => {
+    m.connect.mockImplementation(async (id: string) => (id === "b2" ? raced : synced));
+    const { status, body } = await run();
+    expect(status).toBe(200);
+    expect(body.ok).toBe(true);
+    expect(body.businesses[1]).toMatchObject({ businessId: "b2", skipped: "Another run is syncing." });
+    expect(body.businesses[1].error).toBeUndefined();
+  });
+
+  it("a race at sync start (thrown 409) is skipped too", async () => {
+    const { LeadSyncError } = await import("@/lib/leads/sync");
+    m.connect.mockImplementation(async (id: string) => {
+      if (id === "b1") throw new LeadSyncError("The sync or Meta connection changed.", 409);
+      return synced;
+    });
+    const { status, body } = await run();
+    expect(status).toBe(200);
+    expect(body.businesses[0]).toMatchObject({ businessId: "b1", skipped: "Another run is syncing." });
+  });
+
+  it("a real failure still returns 503", async () => {
+    m.connect.mockImplementation(async (id: string) => (id === "b3" ? { ...synced, error: "Could not read all Meta enquiries.", status: 502 } : synced));
+    const { status, body } = await run();
+    expect(status).toBe(503);
+    expect(body.businesses[2]).toMatchObject({ businessId: "b3", error: "Could not read all Meta enquiries." });
+  });
+});

@@ -24,9 +24,12 @@ export class LeadSyncError extends Error {
   constructor(message: string, public status: number) { super(message); }
 }
 
+/** #2503: 409 is `40001` from the checkpoint: another run moved this sync on (or the binding changed and the next run reads it fresh). */
+export const LOST_RACE = 409;
+
 function persistenceError(code?: string): LeadSyncError {
   if (code === "42501" || code === "P0002") return new LeadSyncError("This sync is not available for this business.", 404);
-  if (code === "40001") return new LeadSyncError("The sync or Meta connection changed. Reload and resume, or start a fresh sync after reconnecting.", 409);
+  if (code === "40001") return new LeadSyncError("The sync or Meta connection changed. Reload and resume, or start a fresh sync after reconnecting.", LOST_RACE);
   return new LeadSyncError("Could not verify the saved sync progress. Retry to resume.", 503);
 }
 
