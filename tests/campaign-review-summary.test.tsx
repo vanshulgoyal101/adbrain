@@ -3,7 +3,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { CampaignReviewSummary } from "@/components/campaign-review-summary";
-import type { CampaignDeliverySnapshot } from "@/lib/meta/client";
+import type { CampaignDeliverySnapshot } from "@/lib/meta/types";
 
 const delivery: CampaignDeliverySnapshot = {
   campaign: { id: "meta-campaign", status: "PAUSED", effectiveStatus: "CAMPAIGN_PAUSED" },

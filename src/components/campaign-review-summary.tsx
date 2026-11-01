@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { ChevronRight, TriangleAlert } from "lucide-react";
 import { formatMoney, formatPerDay } from "@/lib/format";
-import type { CampaignDeliverySnapshot } from "@/lib/meta/client";
+import type { CampaignDeliverySnapshot } from "@/lib/meta/types";
 import type { ConnectionDTO } from "@/lib/meta/connect-contracts";
 
 function metaState(status: string | null | undefined) {
