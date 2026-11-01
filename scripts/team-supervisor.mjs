@@ -25,7 +25,7 @@ const CALL_TIMEOUT_MS = 120_000;
 const execFileSync = (cmd, args, opts = {}) => rawExecFileSync(cmd, args, { timeout: CALL_TIMEOUT_MS, killSignal: "SIGKILL", ...opts });
 
 /** Handoff bottlenecks first (reviews, releases), then builders. CTO/CEO coordinate through chat tools, so they're excluded. */
-export const ORDER = ["devops", "qa", "reviewer", "qa2", "dev3", "dev", "dev2", "dev4", "cpo", "analyst", "designer", "docs"];
+export const ORDER = ["devops", "qa", "reviewer", "qa2", "dev3", "dev", "dev2", "dev4", "dev5", "dev6", "speed", "janitor", "scout", "cpo", "analyst", "designer", "docs"];
 export const LABEL = "in.adbrain.team-supervisor";
 const HOME = homedir();
 export const STATE_DIR = join(HOME, ".adbrain-supervisor");

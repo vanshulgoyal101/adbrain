@@ -98,8 +98,9 @@ describe("CTO queue watch", () => {
       issue("owner:dev3"), issue("owner:dev3"), issue("owner:dev3", "decision"),
       issue("owner:qa", "owner:dev"), issue("owner:qa"),
     ]);
-    expect(low).toEqual([{ role: "dev2", count: 1 }, { role: "dev3", count: 2 }, { role: "dev4", count: 0 }, { role: "qa", count: 2 }, { role: "qa2", count: 0 },
-      { role: "reviewer", count: 0 }, { role: "devops", count: 0 }, { role: "cpo", count: 0 }, { role: "analyst", count: 0 }, { role: "designer", count: 0 }, { role: "docs", count: 0 }]);
+    expect(low).toEqual([{ role: "dev2", count: 1 }, { role: "dev3", count: 2 }, { role: "dev4", count: 0 }, { role: "dev5", count: 0 }, { role: "dev6", count: 0 }, { role: "qa", count: 2 }, { role: "qa2", count: 0 },
+      { role: "reviewer", count: 0 }, { role: "devops", count: 0 }, { role: "cpo", count: 0 }, { role: "analyst", count: 0 }, { role: "designer", count: 0 }, { role: "docs", count: 0 },
+      { role: "speed", count: 0 }, { role: "janitor", count: 0 }, { role: "scout", count: 0 }]);
   });
 
   it("knows the Docs role (owner, Oct 29): handoffs wake it, and it isn't confused with docs/ paths", () => {
@@ -249,6 +250,22 @@ describe("Dev 4 role", () => {
   });
   it("counts Dev 4's queue", () => {
     expect(lowQueues([]).map((x) => x.role)).toContain("dev4");
+  });
+});
+
+describe("speed roles (Nov 1)", () => {
+  it("keeps Dev distinct from Dev 5 and Dev 6, and routes new-role handoffs", () => {
+    expect(matchers("dev").writtenByMe("Dev 5: fixed #2444")).toBe(false);
+    expect(matchers("dev5").writtenByMe("Dev 5: fixed #2444")).toBe(true);
+    expect(waitingOnMe("CTO: → Dev 6: take #2457.", matchers("dev6"))).toBe(true);
+    expect(waitingOnMe("CTO: → Dev 6: take #2457.", matchers("dev"))).toBe(false);
+    expect(waitingOnMe("CEO: → Janitor: next is red.", matchers("janitor"))).toBe(true);
+    expect(waitingOnMe("CEO: → Speed: local jsdom fails.", matchers("speed"))).toBe(true);
+    expect(waitingOnMe("CEO: → Scout: refill lane:dev.", matchers("scout"))).toBe(true);
+  });
+  it("counts every new role's queue", () => {
+    const roles = lowQueues([]).map((x) => x.role);
+    for (const r of ["dev5", "dev6", "speed", "janitor", "scout"]) expect(roles).toContain(r);
   });
 });
 
