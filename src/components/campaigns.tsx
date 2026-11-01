@@ -1637,11 +1637,11 @@ function BusinessCampaigns({
                 </p>}
                 {/* #1292: the trust line beside the money decision. */}
                 <p className="mt-1 font-medium">{activateTrustLine(activationReview.daily_budget ?? 0, (activationReview.daily_budget ?? 0) * capDays)}</p>
-                <p className="mt-1">The ad sets and ads listed above stay paused. Meta reviews the copied ads before they deliver.</p>
+                <p className="mt-1">Your current ad sets and ads stay paused. Meta reviews the copied ads before they deliver.</p>
                 {keptPaused.length > 0 && <p className="mt-1">{keptPaused.length === 1 ? "1 ad you paused from the card stays paused" : `${keptPaused.length} ads you paused from the card stay paused`}: AdBrain doesn&apos;t copy it back in.</p>}
               </div>
               : activationFunding
-                ? <p className="mt-2">This business is funded on Meta, so it runs only with a total limit. Pause the ad sets and ads listed above in Meta, then refresh this review.</p>
+                ? <p className="mt-2">This business is funded on Meta, so it runs only with a total limit. Pause the ad sets and ads listed under Targeting and Meta details in Meta, then refresh this review.</p>
                 : activationReady
                   ? <p className="mt-2">These ads are set to run. Meta still decides whether and when they deliver.</p>
                   : <p className="mt-2">Some listed children are on and some are paused. Pause all of them in Meta for a capped run, or turn on all of them, then refresh this review.</p>}
