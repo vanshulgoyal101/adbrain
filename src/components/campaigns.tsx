@@ -69,6 +69,7 @@ import { applyBudget, budgetFormStart } from "@/lib/campaign/budget-edit-form";
 import { EditAdDialog } from "@/components/edit-ad-dialog";
 import { OWNER_WORDS } from "@/lib/copy/owner-words";
 import { CampaignLaunchReview } from "@/components/campaign-launch-review";
+import { CampaignReviewSummary } from "@/components/campaign-review-summary";
 import { WeeklyCapLine, weeklyCapWords } from "@/components/weekly-cap-line";
 import { WhatsAppEnquiries } from "@/components/whatsapp-enquiries";
 import { LivePicture, type PicturePreview } from "@/components/live-picture";
@@ -1612,32 +1613,18 @@ function BusinessCampaigns({
       )}
       {activationReview && (
         <div ref={activationReviewRef} className="scroll-mt-4">
-        <Alert variant="warning">
-          <span className="block">
-            Review {activationReview.name ?? "this campaign"} before it can run. {activationCapped
-              ? "AdBrain will copy these ads into a new ad set with a fixed total budget and end date, then turn on only that ad set, its ads and the campaign."
-              : "AdBrain will request only the parent campaign to become active; it will not change any ad sets or ads."}
-          </span>
-          {reviewConnection?.selected && (
-            <span className="mt-2 block text-sm font-normal text-amber-900">
-              Account: {reviewConnection.selected.accountName} ({reviewConnection.selected.adAccountId}) · Page: {reviewConnection.selected.pageName} · Currency: {reviewConnection.selected.currency} · Timezone: {reviewConnection.selected.timezoneName}
-              <br />
-              Effective daily total: {activationReview.daily_budget == null ? "Unavailable" : formatMoney(activationReview.daily_budget)}
-            </span>
-          )}
+        <CampaignReviewSummary
+          name={activationReview.name}
+          dailyBudget={activationReview.daily_budget}
+          capped={activationCapped}
+          selected={reviewConnection?.selected ?? null}
+          delivery={activationDelivery}
+        >
           {activationDelivery && <div className="mt-3 text-sm font-normal text-amber-900">
-            <p>Parent: {activationDelivery.campaign.id} · Requested {activationDelivery.campaign.status} · Effective {activationDelivery.campaign.effectiveStatus ?? "unconfirmed"}</p>
-            <ul className="mt-2 list-inside list-disc">
-              {activationDelivery.adSets.map(adSet => <li key={adSet.id}>
-                Ad set {adSet.id}: {adSet.dailyBudgetPaise ? formatPerDay(adSet.dailyBudgetPaise / 100) : "campaign-level budget"}, destination {adSet.destinationType ?? "not reported"}, requested {adSet.status}, effective {adSet.effectiveStatus ?? "unconfirmed"}
-                <pre className="ml-4 max-h-32 overflow-auto whitespace-pre-wrap break-all text-xs">Targeting: {JSON.stringify(adSet.targeting)}</pre>
-              </li>)}
-              {activationDelivery.ads.map(ad => <li key={ad.id}>Ad {ad.id} (set {ad.adSetId}, creative {ad.creativeId}): requested {ad.status}, effective {ad.effectiveStatus ?? "unconfirmed"}</li>)}
-            </ul>
             {activationCapped
               ? <div className="mt-2">
                 <label htmlFor="cap-days" className="font-medium">Run for </label>
-                <select id="cap-days" value={capDays} onChange={event => setCapDays(Number(event.target.value))} className="h-9 rounded-md border border-slate-300 bg-white px-2 text-sm">
+                <select id="cap-days" value={capDays} onChange={event => setCapDays(Number(event.target.value))} className="min-h-11 rounded-md border border-slate-300 bg-white px-2 text-sm">
                   {[1, 2, 3, 4, 5, 6, 7].map(days => <option key={days} value={days}>{days} {days === 1 ? "day" : "days"}</option>)}
                 </select>
                 <p className="mt-1 font-medium">Total limit on Meta: {formatMoney((activationReview.daily_budget ?? 0) * capDays)} over {capDays} {capDays === 1 ? "day" : "days"}. Meta stops delivery at that amount or the end date, whichever comes first.</p>
@@ -1672,9 +1659,9 @@ function BusinessCampaigns({
             <a href={adsLink(activationReview)} target="_blank" rel="noopener noreferrer" className="mt-2 inline-block font-medium underline">Open campaign in Meta</a>
             <Button variant="ghost" size="sm" onClick={() => void openActivationReview(activationReview, reviewConnection!, true)}>Refresh review</Button>
           </div>}
+          <div className="mt-4 flex flex-wrap items-center gap-2">
           <Button
             size="sm"
-            className="ml-3"
             disabled={!activationDigest || !activationReady || !activationFunded || !!activationCap?.exceeds
               || statusChangingId === activationReview.id}
             onClick={() => void setCampaignStatus(activationReview, "active", true)}
@@ -1684,7 +1671,8 @@ function BusinessCampaigns({
             {activationCapped ? "Approve total and activate" : "Request activation"}
           </Button>
           <Button variant="ghost" size="sm" onClick={() => setActivationReview(null)}>Cancel</Button>
-        </Alert>
+          </div>
+        </CampaignReviewSummary>
         </div>
       )}
       {recoveryPending && !operation && !sendingNew && (
