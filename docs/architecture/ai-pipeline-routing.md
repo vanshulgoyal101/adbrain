@@ -28,7 +28,9 @@ write on the same models as customers (Haiku text is about $0.006 a Create, and 
 tiers allow 20 Gemini requests a day) but make their images free, without reference images and
 never falling back to the paid image model (#449, #466). The production smoke login (`smokeUserIds`) also
 writes on free text only (Groq, Gemini): its usage rows cost $0, and when those can't answer a call fails with
-`FREE_TEXT_UNAVAILABLE` rather than reaching OpenRouter (#2230). When `CLOUDFLARE_ACCOUNT_ID` and
+`FREE_TEXT_UNAVAILABLE` rather than reaching OpenRouter (#2230). The Creative assistant answers that as a
+503 "busy, try again" when the free models were busy, and a 500 that alerts when none is configured or a key
+was refused (#2457). When `CLOUDFLARE_ACCOUNT_ID` and
 `CLOUDFLARE_AI_TOKEN` are set, the free picture comes from Cloudflare Workers AI FLUX-1-schnell
 ([cloudflare.ts](../../src/lib/imageGen/providers/cloudflare.ts), #1476): 4 steps, prompt capped at
 2048 characters, $0 within the daily free allowance. It returns a square JPEG (no size option); the
