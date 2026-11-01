@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { apiError, readJson } from "@/lib/api";
+import { ownerError } from "@/i18n/request-locale";
 import { audienceChangeSchema, CampaignEditError, editCampaignAudience } from "@/lib/campaign/edit-service";
 import { ConnectionAccessError, requireOwnedBusiness } from "@/lib/meta/connection-access";
 import { observeRoute } from "@/lib/observability/logger";
@@ -33,7 +34,7 @@ export const POST = observeRoute("/api/campaigns/[id]/audience", "POST", async (
 
   // RLS scopes this to the user's own campaigns.
   const { data: campaign } = await supabase.from("campaigns").select("business_id,meta_campaign_id").eq("id", id).maybeSingle();
-  if (!campaign) return apiError("Campaign not found", 404);
+  if (!campaign) return apiError(await ownerError("campaignNotFound"), 404);
   const refused = await ownerRefusal(campaign.business_id, campaign.meta_campaign_id);
   if (refused) return refused;
 

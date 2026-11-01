@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { apiError } from "@/lib/api";
+import { ownerError } from "@/i18n/request-locale";
 import { adResultsEnabled, type StoredAdResult } from "@/lib/campaign/ad-results-store";
 import { draftInputSchema } from "@/lib/campaign/connect-contracts";
 import { bestCreativeId, rerunPrefill } from "@/lib/campaign/rerun";
@@ -25,7 +26,7 @@ export const GET = observeRoute("/api/campaigns/[id]/rerun", "GET", async (
   // RLS scopes every read to the owner's own business.
   const { data: campaign } = await supabase.from("campaigns")
     .select("id, business_id, name, creative_ids, daily_budget, destination").eq("id", id).maybeSingle();
-  if (!campaign) return apiError("Campaign not found", 404);
+  if (!campaign) return apiError(await ownerError("campaignNotFound"), 404);
 
   const { data: operation } = await supabase.from("campaign_operations")
     .select("draft_id").eq("campaign_id", id).eq("state", "succeeded")
