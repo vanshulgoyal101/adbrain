@@ -3,9 +3,12 @@
 // Run it in the foreground only; it gives up after --max-min (default 30), and nothing is left running.
 // It also never outlives its chat: it exits when its parent process is gone, and a second copy for
 // the same role exits at once.
-// Usage: node scripts/wait-for-work.mjs --me dev2 [--max-min 30] [--poll-sec 300] [--since <ISO time>]
-// Exit 0 = work found (printed), 3 = nothing new before --max-min, 4 = another waiter for this role
+// Usage: node scripts/wait-for-work.mjs --me dev2 [--max-min 30] [--poll-sec 60] [--since <ISO time>]
+//        node scripts/wait-for-work.mjs --wake dev2   (stops Dev 2's waiter so its chat reads a steered message, #2473)
+// Exit 0 = work found (printed) or woken, 3 = nothing new before --max-min, 4 = another waiter for this role
 // is already running, 5 = the chat that started it is gone.
+// #2473: it also wakes on the world: a red `next`/`main` run (any workflow, smokes included) for anyone, CI failing
+// on your PR, and your merged PR reaching main (smoke it).
 // #2021: every role shares one gh login's 5,000 calls/hour, so reads revalidate with ETags (304s are free),
 // a 403/429 rate limit waits for x-ratelimit-reset (or Retry-After) and retries, and polling slows when low.
 // Restart-proof (#384): on start it prints your role card, everything labelled for you with its latest
@@ -214,8 +217,12 @@ let nextDue = Infinity;
 /** Ready-pool lane per role: briefed, unowned issues labelled `ready` + `lane:<lane>` (#573). */
 export const LANES = { dev: "dev", dev2: "dev", dev3: "dev", dev4: "dev", dev5: "dev", dev6: "dev", qa: "qa", qa2: "qa", devops: "devops", reviewer: "review", designer: "design", cpo: "product", analyst: "research", docs: "docs", speed: "devops", janitor: "devops", scout: "product" };
 
+/** #2473 (E8): roles whose lane runs dry also get the Dev lane's `core` items, after their own. */
+export const BORROWS_DEV = new Set(["qa", "qa2", "reviewer", "analyst", "cpo", "docs"]);
+
 /**
- * The lane's unclaimed ready issues, core first, oldest first; at most `max`.
+ * The lane's unclaimed ready issues, core first, oldest first; at most `max`. Roles in BORROWS_DEV fill the rest
+ * with unclaimed `lane:dev` `core` items.
  * @param {Array<{ number: number, title?: string, pull_request?: unknown, labels?: Array<string | { name: string }> }>} issues
  * @param {string} role
  * @param {number} [max]
@@ -224,11 +231,14 @@ export function readyPool(issues, role, max = 3) {
   const lane = LANES[role];
   if (!lane) return [];
   const names = (i) => (i.labels ?? []).map((l) => (typeof l === "string" ? l : l.name));
-  return issues
-    .filter((i) => !i.pull_request && names(i).includes("ready") && names(i).includes(`lane:${lane}`)
-      && !names(i).some((n) => n.startsWith("owner:") || HOLD.has(n) || n === `declined:${role}`))
-    .sort((a, b) => Number(names(b).includes("core")) - Number(names(a).includes("core")) || a.number - b.number)
-    .slice(0, max);
+  const open = (i, inLane) => !i.pull_request && names(i).includes("ready") && names(i).includes(`lane:${inLane}`)
+    && !names(i).some((n) => n.startsWith("owner:") || HOLD.has(n) || n === `declined:${role}`);
+  const own = issues.filter((i) => open(i, lane))
+    .sort((a, b) => Number(names(b).includes("core")) - Number(names(a).includes("core")) || a.number - b.number);
+  const borrowed = BORROWS_DEV.has(role) && lane !== "dev"
+    ? issues.filter((i) => open(i, "dev") && names(i).includes("core") && !own.includes(i)).sort((a, b) => a.number - b.number)
+    : [];
+  return [...own, ...borrowed].slice(0, max);
 }
 
 export const WORKERS = ["dev", "dev2", "dev3", "dev4", "dev5", "dev6", "qa", "qa2", "reviewer", "devops", "cpo", "analyst", "designer", "docs", "speed", "janitor", "scout"];
@@ -281,7 +291,6 @@ export function offTrack({ issues, comments, prs, now }) {
   return { quiet, stale };
 }
 
-/** One line from docs/team/orchestration.md → Role cards ("Same as Dev" resolves to Dev's column). */
 /**
  * Workflows failing on `min` or more distinct PR branches in the window: these never reach main/next pushes,
  * so without this the CTO only hears about them from the owner's inbox (#926's core-approval, Oct 27).
@@ -308,6 +317,61 @@ export function systemicFailures(runs, min = 2) {
     .map(([name, e]) => `CI systemic: ${name} failed on ${e.branches.size} PR branches (${[...e.branches].slice(0, 4).join(", ")}); fix the check or the flaky test now ${e.url}`);
 }
 
+/** #2473: everyone's branches. A red run here wakes every waiter; the first to see it fixes forward. */
+export const SHARED_BRANCHES = ["next", "main"];
+const SHARED_EVENTS = new Set(["push", "schedule", "workflow_dispatch"]);
+const latestPerKey = (runs, key) => {
+  const seen = new Set();
+  return runs.filter((run) => { const k = key(run); if (seen.has(k)) return false; seen.add(k); return true; });
+};
+
+/**
+ * Red `next`/`main` (any workflow, production smokes included): the newest run of each workflow on that branch
+ * failed after `since`, it started a job, and no PR to that branch was opened after it (a fix is in flight).
+ * `runs` newest first, as the API returns them.
+ */
+export function redShared(runs, { since, openPulls = [] }) {
+  return latestPerKey(runs.filter((run) => SHARED_BRANCHES.includes(run.head_branch) && SHARED_EVENTS.has(run.event)),
+    (run) => `${run.name}\u0000${run.head_branch}`)
+    .filter((run) => run.status === "completed" && run.conclusion === "failure" && !ranNoJob(run) && run.updated_at >= since
+      && !openPulls.some((pr) => pr.base?.ref === run.head_branch && pr.created_at >= run.updated_at))
+    .map((run) => `Red ${run.head_branch}: ${run.name} failed at ${run.head_sha.slice(0, 7)} ${run.html_url}. No fix PR yet: take it and fix forward with a PR on top (a core break in production rolls back first).`);
+}
+
+/** Your open PRs: the title names an issue you own, it carries your owner label, or its body is signed by you. */
+export function myPulls(openPulls, role, ownedNumbers) {
+  const { writtenByMe } = matchers(role);
+  return openPulls.filter((pr) => linkedIssues(pr.title).some((n) => ownedNumbers.has(n)) || ownedNumbers.has(pr.number)
+    || writtenByMe(pr.body ?? ""));
+}
+
+/** CI that failed on one of your PR branches after `since` (newest run per workflow and branch). */
+export function failedOnMine(runs, heads, since) {
+  return latestPerKey(runs.filter((run) => run.event === "pull_request" && heads.has(run.head_branch)),
+    (run) => `${run.name}\u0000${run.head_branch}`)
+    .filter((run) => run.status === "completed" && run.conclusion === "failure" && !ranNoJob(run) && run.updated_at >= since)
+    .map((run) => `CI failed on your PR branch ${run.head_branch}: ${run.name} ${run.html_url}`);
+}
+
+/** `GET compare/<merge sha>...main` status: main contains the merge commit. */
+/** How far back a waiter starting up looks for a red `next`/`main` nobody is fixing. */
+export const RED_LOOKBACK_MS = 6 * 3_600_000;
+
+export const onMain = (status) => status === "ahead" || status === "identical";
+
+/**
+ * One merged PR of yours against main: "wait" (not there yet), "report" (it arrived during this wait, or it merged
+ * after the wait began), or "drop" (it was already on main before the wait began: nothing new to smoke).
+ */
+export function mainArrival({ pr, seenOff }, status, since) {
+  if (!onMain(status)) return "wait";
+  return seenOff || pr.merged_at >= since ? "report" : "drop";
+}
+
+/** #2473: printed on every exit, so no chat restarts a sleep loop for the train (CEO, Nov 1). */
+export const TRAIN_RULE = "Don't wait for the deploy train or sleep-poll it: this waiter wakes you when your PR reaches main. Work the next item meanwhile.";
+
+/** One line from docs/team/orchestration.md → Role cards ("Same as Dev" resolves to Dev's column). */
 export function roleCard(markdown, role) {
   const rows = {};
   for (const line of markdown.split("\n")) {
@@ -381,7 +445,9 @@ const { values } = parseArgs({
   options: {
     me: { type: "string" },
     "max-min": { type: "string", default: "30" },
-    "poll-sec": { type: "string", default: "300" },
+    "poll-sec": { type: "string", default: "60" },
+    // #2473: stop <role>'s running waiter so its chat reads a steered message now.
+    wake: { type: "string" },
     // #573: the supervisor's read-only check; never takes the role's lock, so a chat starting its waiter isn't refused.
     probe: { type: "boolean", default: false },
     since: { type: "string" },
@@ -389,17 +455,40 @@ const { values } = parseArgs({
   },
 });
 
+const lockFor = (r) => join(tmpdir(), `adbrain-wait-for-work-${r}.pid`);
+const alive = pid => { try { process.kill(pid, 0); return true; } catch { return false; } };
+const lockHolder = (r) => Number.parseInt((() => { try { return readFileSync(lockFor(r), "utf8"); } catch { return ""; } })(), 10);
+
+if (values.wake !== undefined) {
+  const target = values.wake;
+  if (!(target in NAMES)) {
+    console.error(`Usage: --wake ${Object.keys(NAMES).join("|")}`);
+    process.exit(2);
+  }
+  const pid = lockHolder(target);
+  // A recycled pid must not be signalled: only a live wait-for-work process holds the lock.
+  const command = Number.isInteger(pid) && alive(pid)
+    ? (() => { try { return execFileSync("ps", ["-o", "command=", "-p", String(pid)], { encoding: "utf8" }); } catch { return ""; } })()
+    : "";
+  if (!command.includes("wait-for-work")) {
+    console.log(`No waiter running for ${NAMES[target]}; send the message directly.`);
+    process.exit(1);
+  }
+  process.kill(pid, "SIGUSR2");
+  console.log(`Woke ${NAMES[target]}'s waiter (pid ${pid}); its chat reads your message next.`);
+  process.exit(0);
+}
+
 const role = values.me;
 if (!role || !(role in NAMES)) {
-  console.error(`Usage: --me ${Object.keys(NAMES).join("|")}`);
+  console.error(`Usage: --me ${Object.keys(NAMES).join("|")} | --wake <role>`);
   process.exit(2);
 }
 const name = NAMES[role];
 
 // One waiter per role: a second copy exits instead of piling up.
-const lock = join(tmpdir(), `adbrain-wait-for-work-${role}.pid`);
-const alive = pid => { try { process.kill(pid, 0); return true; } catch { return false; } };
-const holder = Number.parseInt((() => { try { return readFileSync(lock, "utf8"); } catch { return ""; } })(), 10);
+const lock = lockFor(role);
+const holder = lockHolder(role);
 if (Number.isInteger(holder) && holder !== process.pid && alive(holder)) {
   console.error(`Another waiter for ${name} is already running (pid ${holder}). Not starting a second one.`);
   process.exit(4);
@@ -409,6 +498,10 @@ else writeFileSync(lock, String(process.pid));
 const release = () => { try { if (readFileSync(lock, "utf8") === String(process.pid)) rmSync(lock); } catch { /* already gone */ } };
 process.on("exit", release);
 for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) process.on(signal, () => process.exit(130));
+process.on("SIGUSR2", () => {
+  console.log(`Woken by --wake (#2473): someone needs ${name} now. Read the latest comments on your issues and the #580 Everyone row, then act on them.\n${TRAIN_RULE}`);
+  process.exit(0);
+});
 
 // The chat that started this is gone once we, or the shell wrapping us (`bash -c "cd … && node …"`),
 // are re-parented to launchd/init (pid 1), or the parent died.
@@ -519,12 +612,40 @@ async function findWork() {
   if (role === "cto" || role === "devops") {
     const runs = (await api(`repos/${repo}/actions/runs?status=completed&created=${encodeURIComponent(`>=${since}`)}&per_page=100`)).workflow_runs ?? [];
     for (const run of runs) {
-      if (run.conclusion === "failure" && run.event !== "pull_request") {
+      if (run.conclusion === "failure" && run.event !== "pull_request" && !SHARED_BRANCHES.includes(run.head_branch)) {
         found.push(`CI failed: ${run.name} on ${run.head_branch} (${run.head_sha.slice(0, 7)}) ${run.html_url}`);
       }
     }
     // CTO only: one workflow failing across several PR branches is systemic (a broken check or flaky test), not one PR's bug.
     if (role === "cto") for (const line of systemicFailures(runs)) found.push(line);
+  }
+  found.push(...await worldChanges(mineNumbers, openPulls));
+  return found;
+}
+
+// #2473: wake on the world (code, CI, production), not only on talk.
+const pendingMain = new Map();
+const seenMerged = new Set();
+let lastMainSha = null;
+async function worldChanges(mineNumbers, openPulls) {
+  const found = [];
+  // Newest runs of every kind (no status filter): a run still in progress on a branch means a retry or fix is running.
+  const runs = (await api(`repos/${repo}/actions/runs?per_page=100`)).workflow_runs ?? [];
+  found.push(...redShared(runs, { since, openPulls }));
+  const heads = new Set(myPulls(openPulls, role, mineNumbers).map((pr) => pr.head?.ref).filter(Boolean));
+  found.push(...failedOnMine(runs, heads, since));
+  const merged = (await api(`repos/${repo}/pulls?state=closed&base=next&sort=updated&direction=desc&per_page=30`))
+    .filter((pr) => pr.merged_at && pr.merge_commit_sha && Date.now() - Date.parse(pr.merged_at) < 86_400_000);
+  const fresh = myPulls(merged, role, mineNumbers).filter((pr) => !seenMerged.has(pr.number));
+  const mainSha = (await api(`repos/${repo}/branches/main`)).commit?.sha ?? null;
+  if (!fresh.length && mainSha === lastMainSha) return found;
+  lastMainSha = mainSha;
+  for (const pr of fresh) { seenMerged.add(pr.number); pendingMain.set(pr.number, { pr, seenOff: false }); }
+  for (const [number, entry] of pendingMain) {
+    const verdict = mainArrival(entry, (await api(`repos/${repo}/compare/${entry.pr.merge_commit_sha}...main`)).status, since);
+    if (verdict === "wait") { entry.seenOff = true; continue; }
+    pendingMain.delete(number);
+    if (verdict === "report") found.push(`#${number} reached main (production within minutes): smoke it in production now: ${entry.pr.title}`);
   }
   return found;
 }
@@ -573,6 +694,7 @@ const report = async (found, code = 0) => {
   const row = await board();
   if (row) console.log(`Team board #${BOARD_ISSUE} (your queue, in order):\n${row}`);
   console.log(`WORK for ${name} (${found.length}):\n- ${found.join("\n- ")}`);
+  console.log(TRAIN_RULE);
   process.exit(code);
 };
 const git = (cwd, args) => execFileSync("git", ["-C", cwd, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
@@ -617,6 +739,12 @@ try {
   console.error(`Start-up summary failed, continuing: ${error.message.split("\n")[0]}`);
 }
 try {
+  // #2473: a red next/main with no fix PR comes first, even before your own items (fix forward).
+  if (!values.probe) {
+    const red = redShared((await api(`repos/${repo}/actions/runs?per_page=100`)).workflow_runs ?? [],
+      { since: new Date(Date.now() - RED_LOOKBACK_MS).toISOString(), openPulls: await api(`repos/${repo}/pulls?state=open&per_page=100`) });
+    if (red.length) await report(red);
+  }
   const waiting = await backlog();
   if (role === "cto") {
     const low = lowQueues(await openItems());
@@ -667,5 +795,6 @@ if (role === "cto") {
   } catch { /* fall through */ }
 }
 console.log(`No new work for ${name} in ${values["max-min"]} min. Next: the next item in your worker-table row, then an unowned \`core\` issue in your area. Then run this waiter again; don't stop (owner, Oct 27).`);
+console.log(TRAIN_RULE);
 process.exit(3);
 }
