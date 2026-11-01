@@ -3,7 +3,7 @@ name: ci-merge-throughput
 description: "Use when several workers merge to one main branch many times a day, when a required check blocks every PR for reasons unrelated to the change, or when a new test suite should become a required merge check."
 ---
 
-<!-- Generated from vanshulgoyal101/skills@eb9e65d skills/ci-merge-throughput.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
+<!-- Generated from vanshulgoyal101/skills@77e6db7 skills/ci-merge-throughput.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
 
 # CI Merge Throughput
 
@@ -118,3 +118,19 @@ PRs. Long-lived branches drift and fail CI on old dependencies. Observed in
   `git merge-base --is-ancestor` (#1851, #2106).
 - A component's real debounce in a test costs seconds in every test that triggers it;
   spy on that one timer in the describe (#1509).
+
+## AdBrain lessons (Oct 31)
+
+- Picking PR tests from changed files plus the import graph misses tests that read
+  fixtures, docs or config with `fs`: those files have no importers. Always run the
+  file-scanning tests on PRs, run the full suite when a PR changes any non-module file,
+  and keep the full suite on push (#2386).
+- Exempting wording-only changes from a human approval gate removed the slowest merges
+  (37–47 h waits were copy and README edits). Do not detect "words only" from patch
+  lines: an adversarial pass found 13 bypasses (code commented out, reordered lines,
+  swapped values), then 22 more through constants, helpers, ASI and bundler
+  directives. Parse base and head, compare tokens in order with comments ignored,
+  require each changed token to be text in an allowlisted words place (message, error,
+  label, toast, JSX text), require the same tree shape and directives, and keep the
+  gate when any code reads the old or new words. Fail closed when the parser is
+  missing and log why a file stays gated (#364, #2428).

@@ -3,7 +3,7 @@ name: multi-worker-delivery
 description: "Use when independent coding agents share repositories, split implementation and review, hand off idle workers, or prepare a release from several feature branches."
 ---
 
-<!-- Generated from vanshulgoyal101/skills@eb9e65d skills/multi-worker-delivery.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
+<!-- Generated from vanshulgoyal101/skills@77e6db7 skills/multi-worker-delivery.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
 
 # Multi-Worker Delivery
 
@@ -153,9 +153,11 @@ repair or integrate the same file while the user sees a growing local backlog.
    step. "Prepare: 0 of 89 runs fully succeeded" sets the order better than a walk alone.
 40. Refill idle queues from production failure data (top error codes per route), not
    from a wishlist. Each item then arrives with a target and a recorded response.
-41. A role is live only when its wake script accepts it on the deployed branch. A new
-   role merged to a staging branch failed `--me <role>` on main with a usage error, and
-   the worker sat idle for hours (#575).
+41. A role is live only when its wake script accepts it on the branch the worker
+   actually runs. Register it across the accepted-name matcher, lane/queue map,
+   worker list, supervisor ordering, role card and test expectations; probe every
+   role on the deployed branch. A role merged to staging failed `--me <role>` on
+   main and sat idle for hours (#575).
 42. A decision posted as a PR review is invisible to a waiter that polls only issue
    comments. Either poll reviews too or mirror the verdict in a comment (#390).
 43. A handoff on an item the next owner doesn't own is invisible. Make the waiter check
@@ -262,6 +264,51 @@ repair or integrate the same file while the user sees a growing local backlog.
    well as running it (#2021).
 80. Before filing a bug against a team tool, check which branch it runs from; the waiter
    ran `main`, which trailed `next` by hours while the train was blocked (#2162).
+81. Coordinate through shared state, not announcements (stigmergy). Agents start
+   from the same training, so the code on the integration branch, CI, production,
+   labels and PR state can be the status. If every agent announces every change to
+   every other agent, the messages grow much faster than the work. One week's count
+   was about 4.4 posts and 3.5 hand-off pings per merged PR, while the real outcome
+   targets stayed unmet. Comment only to hand off, record a decision or attach
+   evidence (#2360; adopted Oct 30, effect measured weekly there).
+82. Don't negotiate a change in advance: make it. If it breaks work that already
+   merged, fixing that is part of the change. Work merged later has to fit the new
+   state. One owner carries an issue from code to production smoke and hands off
+   only at a hard gate.
+83. Fix forward with a janitor. A red integration branch or a non-core production
+   break gets a new fix on top from whoever sees it first, instead of an
+   undo-and-redo cycle through the author. Keep roll-back-first for the core path
+   and for anything that can't be undone.
+84. Review inside the author's own team: before asking a human gate, a helper agent
+   that did not write the change tries to break it, and its one-line result goes in
+   the PR. Keep human or hard-coded gates only for actions in the outside world that
+   can't be undone: money, ad delivery, migrations, secrets.
+85. Run process changes as measured experiments: record a baseline from existing
+   metrics (posts per merged PR, hand-offs per PR, change-failure rate, time to
+   restore, plus the business outcome), define keep/adjust/drop targets, and review
+   weekly on one issue. Without a baseline, "the new rule helped" can't be checked.
+86. Make a team waiter's alerts count only real blockers. A "systemic CI failure" alert
+   must skip runs with zero jobs and branches that have since gone green (#2382);
+   frozen ("later") and parked PRs don't count as stale (#2376); a low queue doesn't
+   wake the lead mid-wait, because queue depth is not the outcome (#2374). Each false
+   wake costs a full context reload for the woken agent.
+87. After a feature PR merges, do not sleep or poll for the deploy train. Start the
+   next owned item and smoke the deployed change on the next pass. Ten of thirteen
+   workers were blocked by waits of up to 45 minutes; stopping the loops and handing
+   off the next executable task removed that wait (#2472).
+88. A pre-tool hook enforcing a soft workflow rule should fail open on malformed
+   input, timeout or internal error, with no deny output and a short timeout; test
+   each path and provide a narrow explicit escape hatch. This is not appropriate
+   for authorization or security boundaries, which must fail closed (#2481).
+89. A red check mark is not by itself a production failure. Identify the exact run,
+   event, PR head and deployed commit; draft/WIP commit failures and cancelled
+   deploys superseded by newer runs are different from a failed production smoke.
+   Squash feature PRs so `next`/`main` history shows the finished green result, but
+   retain merge commits where the deploy train requires them (#2479, #2483).
+90. A waiter that watches only issue comments misses changes in shared state, such
+   as a red integration branch or failed deployment. Wake on those events and
+   provide an explicit manual wake; probe each path against a running worker, not
+   only a pure matcher test (#2473).
 
 ## Discriminating checks
 

@@ -3,7 +3,7 @@ name: rendered-ui-evidence
 description: "Use when changing responsive layouts, flickering scrollbars, editable fields, image framing, canvas/WebGL effects, or controls whose DOM presence does not prove usability."
 ---
 
-<!-- Generated from vanshulgoyal101/skills@eb9e65d skills/rendered-ui-evidence.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
+<!-- Generated from vanshulgoyal101/skills@77e6db7 skills/rendered-ui-evidence.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
 
 # Rendered UI Evidence
 
