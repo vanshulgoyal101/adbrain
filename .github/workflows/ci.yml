@@ -73,31 +73,19 @@ jobs:
           cache: npm
       - run: npm ci
       # #2386: a PR runs the tests its change reaches plus every test that scans files
-      # (routes, docs, workflows) with fs instead of importing them; next still runs it all.
-      # Modules also read data with fs (JSON, fonts, AGENTS.md), which the import graph
-      # can't see, so a PR changing anything but JS/TS/CSS modules or docs/ runs it all.
-      - name: Pick full or changed-file run
+      # (routes, docs, workflows) with fs; a non-module change runs it all, and next
+      # runs it all. The rule lives in scripts/test.sh, which `npm run test:changed`
+      # runs locally (#2490).
+      - name: Unit tests
+        env:
+          EVENT: ${{ github.event_name }}
+          SHARD: ${{ matrix.shard }}
         run: |
-          full=1
-          if [ "${{ github.event_name }}" = pull_request ]; then
-            changed="$(git diff --name-only HEAD^1 HEAD)"
-            grep -qvE '^docs/|\.(ts|tsx|js|jsx|mjs|cjs|mts|cts|css)$' <<<"$changed" || full=0
+          if [ "$EVENT" = pull_request ]; then
+            TEST_BASE=HEAD^1 bash scripts/test.sh --changed --shard="$SHARD/3"
+          else
+            bash scripts/test.sh --shard="$SHARD/3"
           fi
-          echo "FULL=$full" >> "$GITHUB_ENV"
-          echo "full suite: $full"
-      - name: Full suite
-        if: env.FULL == '1'
-        run: npx vitest run --shard=${{ matrix.shard }}/3
-      - name: Changed-file tests (PR)
-        if: env.FULL == '0'
-        run: npx vitest run --changed HEAD^1 --passWithNoTests --shard=${{ matrix.shard }}/3
-      - name: File-scanning tests (PR)
-        if: env.FULL == '0'
-        run: |
-          mapfile -t scans < <(grep -rlE "readFileSync|readdirSync|globSync|existsSync" tests --include='*.test.ts' --include='*.test.tsx' | sort)
-          echo "${#scans[@]} file-scanning tests"
-          [ "${#scans[@]}" -gt 0 ] || exit 0
-          npx vitest run --passWithNoTests --shard=${{ matrix.shard }}/3 "${scans[@]}"
 
   metadb:
     runs-on: ubuntu-latest

@@ -7,6 +7,9 @@
     "type": "git",
     "url": "https://github.com/vanshulgoyal101/adbrain.git"
   },
+  "engines": {
+    "node": "24.x"
+  },
   "scripts": {
     "dev": "node --max-old-space-size=1536 ./node_modules/next/dist/bin/next dev",
     "build": "next build",
@@ -27,10 +30,11 @@
     "generate:icons": "node scripts/generate-icons.mjs",
     "env:doctor": "bash scripts/env-doctor.sh",
     "env:doctor:strict": "bash scripts/env-doctor.sh --strict",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage --pool=threads --maxWorkers=2",
-    "test:core": "vitest run tests/core",
+    "test": "bash scripts/test.sh",
+    "test:watch": "bash scripts/test.sh --watch",
+    "test:changed": "bash scripts/test.sh --changed",
+    "test:coverage": "bash scripts/test.sh --coverage --pool=threads --maxWorkers=2",
+    "test:core": "bash scripts/test.sh tests/core",
     "ui-gate": "node scripts/ui-gate.mjs",
     "test:workspace-browser": "node --env-file-if-exists=.env.local ./node_modules/@playwright/test/cli.js test",
     "test:workspace-ux": "node --env-file-if-exists=.env.local scripts/check-workspace-ux.mjs",
