@@ -557,11 +557,16 @@ describe("wake on the world (#2473)", () => {
   const run = (o: Record<string, unknown>) => ({ name: "CI", event: "push", head_branch: "next", head_sha: "7aa95032aa", status: "completed",
     conclusion: "failure", run_started_at: "2026-11-01T12:01:00Z", updated_at: "2026-11-01T12:05:00Z", html_url: "u", ...o });
 
-  it("wakes everyone on a red next or main from any workflow, production smokes included", () => {
-    const lines = redShared([run({ name: "boundaries" }), run({ name: "Create smoke", event: "schedule", head_branch: "main" })], { since });
+  it("wakes everyone on red next or main code (push runs of any workflow), once per run", () => {
+    const lines = redShared([run({ id: 1, name: "boundaries" }), run({ id: 2, name: "CI", head_branch: "main" })], { since });
     expect(lines).toHaveLength(2);
-    expect(lines[0]).toMatch(/^Red next: boundaries failed at 7aa9503 u\. No fix PR yet/);
-    expect(lines[1]).toMatch(/^Red main: Create smoke failed/);
+    expect(lines[0]).toMatch(/^Red next: boundaries failed at 7aa9503 u\. No PR names 7aa9503 yet/);
+    expect(lines[1]).toMatch(/^Red main: CI failed/);
+    expect(redShared([run({ id: 1, name: "boundaries" }), run({ id: 2, name: "CI", head_branch: "main" })], { since, seen: new Set([1]) })).toHaveLength(1);
+  });
+
+  it("leaves scheduled runs (production smokes, drift, the train) to their own alert issues", () => {
+    expect(redShared([run({ name: "Create smoke", event: "schedule", head_branch: "main" }), run({ name: "train", event: "workflow_dispatch" })], { since })).toEqual([]);
   });
 
   it("stays quiet when the newest run passed or is still running, nothing ran, it's old, a fix PR is open, or it isn't shared", () => {
@@ -569,8 +574,8 @@ describe("wake on the world (#2473)", () => {
     expect(redShared([run({ status: "in_progress", conclusion: null }), run({})], { since })).toEqual([]);
     expect(redShared([run({ updated_at: "2026-11-01T12:01:10Z" })], { since })).toEqual([]); // no job started (#878)
     expect(redShared([run({ updated_at: "2026-11-01T11:59:00Z", run_started_at: "2026-11-01T11:50:00Z" })], { since })).toEqual([]);
-    expect(redShared([run({})], { since, openPulls: [{ base: { ref: "next" }, created_at: "2026-11-01T12:07:00Z" }] })).toEqual([]);
-    expect(redShared([run({})], { since, openPulls: [{ base: { ref: "next" }, created_at: "2026-11-01T11:00:00Z" }] })).toHaveLength(1);
+    expect(redShared([run({})], { since, openPulls: [{ title: "#1 Fix forward 7aa9503", body: "" }] })).toEqual([]);
+    expect(redShared([run({})], { since, openPulls: [{ title: "#2 Unrelated", body: "fixes #2" }] })).toHaveLength(1);
     expect(redShared([run({ head_branch: "work/issue-1" }), run({ event: "issue_comment", head_branch: "main" })], { since })).toEqual([]);
   });
 
@@ -588,13 +593,13 @@ describe("wake on the world (#2473)", () => {
     expect(failedOnMine([prRun({ conclusion: "success" }), prRun({})], new Set(["a"]), since)).toEqual([]);
   });
 
-  it("reports your PR reaching main once: arrived during the wait or merged after it began, never stale ones", () => {
-    const pr = (merged_at: string) => ({ merged_at });
-    expect(mainArrival({ pr: pr("2026-11-01T11:00:00Z"), seenOff: false }, "diverged", since)).toBe("wait");
-    expect(mainArrival({ pr: pr("2026-11-01T11:00:00Z"), seenOff: false }, "behind", since)).toBe("wait");
-    expect(mainArrival({ pr: pr("2026-11-01T11:00:00Z"), seenOff: true }, "ahead", since)).toBe("report");
-    expect(mainArrival({ pr: pr("2026-11-01T12:30:00Z"), seenOff: false }, "identical", since)).toBe("report");
-    expect(mainArrival({ pr: pr("2026-11-01T11:00:00Z"), seenOff: false }, "ahead", since)).toBe("drop");
+  it("reports your PR reaching main once per role, even if it arrived between waits", () => {
+    const reported = new Set([7]);
+    expect(mainArrival({ number: 8 }, "diverged", reported)).toBe("wait");
+    expect(mainArrival({ number: 8 }, "behind", reported)).toBe("wait");
+    expect(mainArrival({ number: 8 }, "ahead", reported)).toBe("report");
+    expect(mainArrival({ number: 8 }, "identical", reported)).toBe("report");
+    expect(mainArrival({ number: 7 }, "ahead", reported)).toBe("drop");
   });
 
   it("gives dry lanes the Dev lane's core items after their own (E8); builders and DevOps don't borrow", () => {
@@ -614,6 +619,9 @@ describe("wake on the world (#2473)", () => {
     try {
       writeFileSync(join(dir, "gh"), "#!/bin/sh\nprintf 'HTTP/2.0 200 OK\\r\\n\\r\\n[]'\n", { mode: 0o755 });
       expect(spawnSync(process.execPath, [script, "--wake", "qa"], { env, encoding: "utf8" }).status).toBe(1);
+      // A stale lock whose pid now belongs to another role's waiter (or anything else) is never signalled.
+      writeFileSync(join(dir, "adbrain-wait-for-work-dev.pid"), String(process.pid));
+      expect(spawnSync(process.execPath, [script, "--wake", "dev"], { env, encoding: "utf8" }).status).toBe(1);
       let out = "";
       waiter = spawn(process.execPath, [script, "--me", "qa", "--max-min", "5"], { env, stdio: ["ignore", "pipe", "pipe"] });
       waiter.stdout!.on("data", (chunk) => { out += chunk; });
