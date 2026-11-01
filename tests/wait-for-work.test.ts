@@ -448,7 +448,7 @@ process.exit(1);
 `, { mode: 0o755 });
       const result = spawnSync(process.execPath, [
         fileURLToPath(new URL("../scripts/wait-for-work.mjs", import.meta.url)), "--me", "cto", "--probe",
-      ], { env: { ...process.env, PATH: `${dir}:${process.env.PATH}` }, encoding: "utf8", timeout: 5_000 });
+      ], { env: { ...process.env, TMPDIR: dir, PATH: `${dir}:${process.env.PATH}` }, encoding: "utf8", timeout: 5_000 });
       expect(result.error).toBeUndefined();
       expect(result.status).toBe(3);
       expect(result.stderr).toContain("Wait deadline reached during GitHub rate-limit backoff");
