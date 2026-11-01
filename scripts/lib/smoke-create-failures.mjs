@@ -35,7 +35,7 @@ function reasonCode(row) {
  * NOTE lines for a short run: one per missing ad (from the result's `failures`), then the failed attempts by
  * reason, provider and model. The create-smoke alert copies every NOTE line.
  * @param {{ expected: number, saved: number | null, failures?: { angle?: string, error?: string }[] | null,
- *   usage?: { usage_kind?: string, provider?: string, model?: string, error_code?: string | null, metadata?: any }[] | null }} run
+ *   usage?: { usage_kind?: string, provider?: string, model?: string, status?: string, error_code?: string | null, metadata?: any }[] | null }} run
  * @returns {string[]}
  */
 export function createFailureLines({ expected, saved, failures, usage }) {
