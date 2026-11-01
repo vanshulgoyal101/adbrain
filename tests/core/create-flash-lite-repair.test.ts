@@ -77,6 +77,24 @@ describe("core: the repair keeps flash-lite's draft and changes only what failed
     expect(variants).toHaveLength(1);
   });
 
+  it("a headline over 40 characters goes back with its length, and the draft's copy is kept", async () => {
+    const long = { ...draft, headline: "Start with a $49 new-patient exam in Cedar Park" };
+    const { variants, requests } = await create([JSON.stringify(long), offer.text.replace(draft.headline, "Your first visit in Cedar Park")]);
+
+    expect(requests[1].map((turn) => turn.role)).toEqual(["user", "model", "user"]);
+    expect(requests[1][2].parts[0].text).toMatch(/schema:headline:too_big: .*; it is 47 characters/);
+    expect(variants[0].concept.primary_text).toBe(draft.primary_text);
+  });
+
+  it("a draft with an unsupported offer isn't sent back: its repair starts fresh (Oct 1)", async () => {
+    const invented = { ...draft, primary_text: `50% off X-rays on your first visit.\n${draft.primary_text}` };
+    const { requests } = await create([JSON.stringify(invented), offer.text.replace(draft.headline, "Your first visit in Cedar Park")]);
+
+    expect(requests[1].map((turn) => turn.role)).toEqual(["user", "user"]);
+    expect(requests[1][1].parts[0].text).toMatch(/^Generate a fresh, complete JSON concept[\s\S]*unsupported-commercial-claim/);
+    expect(JSON.stringify(requests[1])).not.toContain("50% off X-rays");
+  });
+
   it("a repair that repeats the headline again still loses the ad", async () => {
     const { variants, requests } = await create([offer.text, offer.text]);
 
