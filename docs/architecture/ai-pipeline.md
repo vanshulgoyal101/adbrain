@@ -148,7 +148,11 @@ visit, free pictures) an ad that lost only its picture is not remade: once the f
 ends, it gets one more free picture with the words that already passed (no text call,
 ₹0), if at least 45 s remain before 250 s (`PROSPECT_PICTURE_RETRY_*`). The stream sends
 `{ type: "topUp", missing, kind: "picture" }`, the page says "N pictures didn't come
-through. Trying again…", and `creative.batch` records `pictureRetry` (#1547). A refused commercial claim in Create adds a
+through. Trying again…", and `creative.batch` records `pictureRetry` (#1547). A finished ad
+(words passed, picture stored) is saved by [save.ts](../../src/lib/creative/save.ts) under an id made
+before the insert: a failed insert is read back (it may have landed) and retried once unless its
+database code would fail again (`22`/`23`/`42`/`PGRST2`), and each failed attempt records
+`creative.save` with that code (#2494). A refused commercial claim in Create adds a
 `claim:<class>:<reason>` validation rule to its usage row (class `free`/`percent`/
 `currency`/`guarantee`; reason `uncited`, or `negated-quote` when a quote cited it but a
 negation elsewhere in that quote refused it), never the term or the copy (#687).

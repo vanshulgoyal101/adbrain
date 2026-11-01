@@ -1,5 +1,6 @@
 import { observeRoute, recordProductEvent, currentRequestId } from "@/lib/observability/logger";
 import { creativeFailureMessage } from "@/lib/creative/failure-message";
+import { saveCreative } from "@/lib/creative/save";
 import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { logEvent } from "@/lib/audit";
@@ -334,26 +335,12 @@ async function generate(req: Request, live?: LiveCreate) {
           photoUrl,
           variant.imageUrl,
         );
-        const { data, error } = await supabase
-          .from("creatives")
-          .insert({
-            business_id: businessId,
-            brief,
-            angle: variant.angleName,
-            image_url: imageUrl,
-            headline: variant.headline,
-            primary_text: variant.primaryText,
-            cta: variant.cta,
-            variant_group: variantGroup,
-            status: "draft",
-            generation: generationReceipt(variant, language, referenceImages, sourceFacts, photoUrl, requestId),
-          })
-          .select("*")
-          .single();
-        if (error || !data)
-          throw new Error(
-            "Could not save the creative. Check the generation schema migration.",
-          );
+        const data = await saveCreative(supabase, {
+          business_id: businessId, brief, angle: variant.angleName, image_url: imageUrl,
+          headline: variant.headline, primary_text: variant.primaryText, cta: variant.cta,
+          variant_group: variantGroup, status: "draft",
+          generation: generationReceipt(variant, language, referenceImages, sourceFacts, photoUrl, requestId),
+        });
         inserted.push(data);
         failed.delete(variant.angleId);
         live?.onCreative(variant.angleId, data);
