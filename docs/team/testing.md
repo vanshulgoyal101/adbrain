@@ -35,7 +35,8 @@ tools beyond Node; inspect their prerequisites before executing.
 | `typecheck` | TypeScript no-emit check; Next generated types may need a build first |
 | `docs:check` | Read-only Markdown links/anchors, fences, JSON examples, command names, source inventories and quoted labels in `docs/product` (must appear in app copy; examples go in `LABEL_PROSE`) and its ₹ amounts and percentages (derived from the constants in `MONEY_SOURCES`; worked examples go in `MONEY_EXAMPLES`), and every cron (workflows, `vercel.json`, pg_cron) listed in `docs/operations/scheduled-jobs.md`, each `docs/product/hi` page's `<!-- mirrors -->` stamp matching its English page's headings and quoted labels (restamp after a refresh: `npm run docs:check -- --stamp docs/product/hi/x.md`), and every variable `scripts/` reads listed in `docs/operations/configuration.md` (no row for one nothing reads), and each code table (`CODE_TABLES`: Review's blocker codes in `docs/product/review.md` and the campaign card's `VerdictState` in `docs/product/manage.md`, each with its Hindi page) having exactly one row per code its source file has; no application imports or external requests |
 | `audit:dependencies` | npm registry advisory check; fails at high severity for runtime dependencies and critical for dev tooling (unpatched `braces` advisory GHSA-vfj7-8cjw-p6xm in ESLint tooling, #102); requires network |
-| `test` | One Vitest run in Node, components opt into jsdom |
+| `test` | One Vitest run in Node, components opt into jsdom. Like every `test*` script it goes through [`scripts/test.sh`](../../scripts/test.sh): Node from `.nvmrc` (24; jsdom fails on Node 22) and `node_modules` from the lockfile cache when the worktree has none |
+| `test:changed` | What CI's `unit` job runs for a PR: tests your change reaches plus the file-scanning tests, or the whole suite when a non-module file changed. Diffs against the merge-base with `origin/next` (or `TEST_BASE`), counting uncommitted and untracked files |
 | `test:watch` | Persistent Vitest watcher; stop it when finished |
 | `test:coverage` | V8 coverage, two thread workers, threshold gate and artifacts |
 | `test:core` | Offline core regression gate (`tests/core`); no network, credentials or provider cost |
@@ -186,7 +187,8 @@ Fixtures in `tests/core/fixtures` come from production recordings and `evals/cre
 ### Focused Local Loop
 
 ```sh
-npm run test -- tests/spend.test.ts
+npm run test:changed                    # what CI runs for this PR
+npm run test -- tests/spend.test.ts     # one file
 npm run lint
 npm run typecheck
 ```
@@ -220,7 +222,7 @@ Supabase configuration and Node 24. Every job runs in parallel after its own `np
 |---|---|
 | `build` | `npm run build` |
 | `lint` | `npm run lint`, `npm run typecheck` |
-| `unit` (3 shards) | push to `main`/`next`: `npx vitest run --shard=N/3`. PR (#2386): if it changes only JS/TS/CSS modules and `docs/`, `vitest run --changed HEAD^1` (tests the change reaches) plus every test that reads files with `fs` (`readFileSync`, `readdirSync`, `globSync`, `existsSync`); any other changed file (JSON, fonts, SQL, workflows, `AGENTS.md`) runs everything, since modules read those with `fs` outside the import graph. The train promotes only a green full run on `next` |
+| `unit` (3 shards) | push to `main`/`next`: `bash scripts/test.sh --shard=N/3` (the whole suite). PR (#2386): `scripts/test.sh --changed` with `TEST_BASE=HEAD^1`, the same rule as `npm run test:changed`: if it changes only JS/TS/CSS modules and `docs/`, `vitest run --changed HEAD^1` (tests the change reaches) plus every test that reads files with `fs` (`readFileSync`, `readdirSync`, `globSync`, `existsSync`); any other changed file (JSON, fonts, SQL, workflows, `AGENTS.md`) runs everything, since modules read those with `fs` outside the import graph. The train promotes only a green full run on `next` |
 | `metadb` | `META_TEST_PG_BIN="$(pg_config --bindir)" npm run test:meta-db` |
 | `test` | aggregator: fails unless `lint`, every `unit` shard and `metadb` succeeded |
 | `core` | `npm run test:core`, then `test:meta-db -- --generation-only` |

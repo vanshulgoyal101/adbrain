@@ -27,7 +27,7 @@ candidate rules and hosted environment scope before publication; verify observed
 suppression afterward. Preview SSO and absent preview credentials are separate
 controls, not consequences of JSON.
 
-Use Node 24, matching CI and verified production, install with `npm ci` in the
+Use Node 24 (`.nvmrc`, `engines` `24.x`, which Vercel also reads), matching CI and verified production, install with `npm ci` in the
 target's own checkout, and keep framework build/output defaults unless a reviewed
 change requires otherwise. Configure adequate Node runtime duration and memory for generation;
 declaring `maxDuration` in a route does not override hosting-plan limits.
