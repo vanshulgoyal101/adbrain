@@ -83,7 +83,7 @@ describe("task-aware LLM routing", () => {
     });
     expect(result.provider).toBe("openrouter");
     expect(urls.map((url) => new URL(url).hostname)).toEqual(["api.groq.com", "generativelanguage.googleapis.com", "api.cerebras.ai", "openrouter.ai"]);
-    expect(bodies.google).toMatchObject({ generationConfig: { thinkingConfig: { thinkingBudget: 0 }, maxOutputTokens: 3000 } });
+    expect(bodies.google).toMatchObject({ generationConfig: { thinkingConfig: { thinkingLevel: "minimal" }, maxOutputTokens: 3000 } });
   });
 
   it("still keeps other budget tasks off OpenRouter", async () => {
