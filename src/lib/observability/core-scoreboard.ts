@@ -170,8 +170,7 @@ export function buildScoreboard(input: {
     const allCreates = named("business.create");
     const creates = allCreates.filter((create) => !(create.user_id && owners.get(create.user_id)?.internal));
     const team = allCreates.length - creates.length;
-    // #1136: minutes from sign-up (an owner who signed up in the 24 h before creating it) or else from creating the
-    // business, to its first save with what Prepare needs (brand/usable.ts).
+    // #1136: minutes from sign-up (if within 24 h) or else business creation, to its first save Prepare can use (brand/usable.ts).
     const saves = [...creates, ...named("business.update")];
     const measured = saves.some((event) => typeof event.attributes?.brandUsable === "boolean");
     const minutes = creates.flatMap((create) => {
@@ -221,15 +220,14 @@ export function buildScoreboard(input: {
   const onFreePath = (row: { user_id: string | null }) => Boolean(row.user_id && free.has(row.user_id));
   for (const [step, freePath] of [["Create (customers, paid images)", false], ["Create (internal, free images)", true]] as const) {
     const batches = named("creative.batch").filter((event) => onFreePath(event) === freePath);
-    // #2499: a batch is full when it saved what it asked for (`expected`; batches before it asked for 3).
+    // #2499: a batch is full when it saved what it asked for (`expected`, else 3); a `fallback` call saved its
+    // picture on the next provider, so it is recovered, not failed. #1468: median estimated AI cost per Create.
     const full = batches.filter((event) => event.outcome === "success" && Number(event.attributes?.count ?? 0) >= Number(event.attributes?.expected ?? 3)).length;
     const rate = percent(full, batches.length);
     const calls = ai("creatives.generate").filter((call) => onFreePath(call) === freePath);
-    // A `fallback` call saved its picture on the next provider, so it is recovered, not failed (#2499).
     const failedCalls = calls.filter((call) => call.status === "error").length;
     const fellBack = calls.filter((call) => call.status === "fallback").length;
     const seconds = p90(requestOutcomes(calls).map((request) => (request.end - request.start) / 1000));
-    // #1468: the median estimated AI cost of a Create, from batches that recorded it.
     const costs = batches.map((event) => event.attributes?.costUsd).filter((usd): usd is number => typeof usd === "number").sort((a, b) => a - b);
     const median = costs.length ? costs[Math.floor((costs.length - 1) / 2)] : null;
     const cost = median === null ? "" : `; median $${median.toFixed(4)} (≈₹${(median * INR_PER_USD).toFixed(2)}) per Create`;
@@ -555,8 +553,7 @@ export function northStarRows(events: ScoreEvent[], data: NorthStarData): ScoreR
   }
 
   {
-    // Active at any point in the week: active when it began (its last change before then was a resume, or no change on
-    // record and it's active now), or resumed during it.
+    // Active in the week: active at its start (last earlier change a resume, or none and active now), or resumed in it.
     const changesOf = new Map<string, typeof data.campaignChanges>();
     for (const change of data.campaignChanges) changesOf.set(change.campaign_id, [...(changesOf.get(change.campaign_id) ?? []), change]);
     const activeOwners = new Set(data.campaigns.filter((campaign) => {
