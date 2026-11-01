@@ -51,6 +51,7 @@ export function LoginForm({ newVisitor = false, onSucceeded, onCallbackDismiss }
   const emailRef = useRef<HTMLInputElement>(null);
   const googleRef = useRef<HTMLButtonElement>(null);
   const restoreEmailFocus = useRef(false);
+  const focusGoogle = useRef(false);
   const [status, setStatus] = useState<"idle" | "sending" | "sent">("idle");
   const [pending, setPending] = useState<"magic" | "password" | "google" | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -67,6 +68,14 @@ export function LoginForm({ newVisitor = false, onSucceeded, onCallbackDismiss }
       restoreEmailFocus.current = false;
     }
   }, [status]);
+
+  // #2498: the Google button is disabled until `pending` clears, so focus it after that commit.
+  useEffect(() => {
+    if (pending === null && focusGoogle.current) {
+      googleRef.current?.focus();
+      focusGoogle.current = false;
+    }
+  }, [pending]);
 
   function remember() {
     onSucceeded?.();
@@ -96,7 +105,7 @@ export function LoginForm({ newVisitor = false, onSucceeded, onCallbackDismiss }
         if (code === "over_email_send_rate_limit") {
           setError(EMAIL_LIMIT_WORDS);
           setStatus("idle");
-          requestAnimationFrame(() => googleRef.current?.focus());
+          focusGoogle.current = true;
           return;
         }
         throw new Error(error.message);
