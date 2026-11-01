@@ -162,7 +162,7 @@ Each tick:
 
 **CEO handover and restarts (#2476).** The owner rotates CEO chats often and closes the old one, and a
 VS Code restart ends every chat. Either way, GitHub and git are the memory. Start a new CEO with the text
-from `npm run -s team-supervisor -- --restart-prompt ceo`. It reads the board and its `decision` queue, adopts
+from `npm run team-supervisor -- --restart-prompt ceo`. It reads the board and its `decision` queue, adopts
 live worker chats (`list_sessions`, `get_session_context`) and starts each missing role with `create_session`
 (relationship `independent`, title `AdBrain <Role>`) using `npm run team-supervisor -- --restart-prompt <role>`.
 Workers never nest inside a CEO session, so closing a CEO chat leaves them running; never delete another
