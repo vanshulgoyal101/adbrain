@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { apiError, readJson, serverError } from "@/lib/api";
 import { logEvent } from "@/lib/audit";
 import { wouldExceedCap } from "@/lib/campaign/spend";
-import { CampaignDeliveryError, MetaError, friendlyMetaError, isMetaReauthError, type CampaignDeliverySnapshot, type CappedActivation, type PausedCampaignTree } from "@/lib/meta/client";
+import { CampaignDeliveryError, CampaignGoneError, MetaError, friendlyMetaError, isMetaReauthError, type CampaignDeliverySnapshot, type CappedActivation, type PausedCampaignTree } from "@/lib/meta/client";
 import {
   ConnectionAccessError,
   recheckMetaConnection,
@@ -402,6 +402,7 @@ async function handleDELETE(
   if (elsewhere === null) return NextResponse.json({ error: say("campaignStorageUnavailable") }, { status: 503 });
 
   let metaDeleted = false;
+  let metaGone: string | null = null;
   if (!elsewhere) {
     const storedBinding = readStoredCampaignBinding(campaign);
     if (
@@ -434,7 +435,9 @@ async function handleDELETE(
       if (err instanceof ConnectionAccessError) {
         return NextResponse.json({ error: err.message }, { status: err.code === "CONFLICT" ? 409 : 400 });
       }
-      return NextResponse.json({ error: say("metaDeleteUnconfirmed") }, { status: 502 });
+      // #1479: already deleted or archived in Meta, so there is nothing left there to remove.
+      if (!(err instanceof CampaignGoneError)) return NextResponse.json({ error: say("metaDeleteUnconfirmed") }, { status: 502 });
+      metaGone = err.metaStatus;
     }
   }
 
@@ -451,7 +454,7 @@ async function handleDELETE(
     entityId: id,
     metaObjectId: campaign.meta_campaign_id,
     reason: elsewhere ? `Removed duplicate of another business's campaign "${campaign.name ?? id}"` : `Deleted campaign "${campaign.name ?? id}"`,
-    details: { metaDeleted, ...elsewhere ? { ownedElsewhere: true } : {} },
+    details: { metaDeleted, ...elsewhere ? { ownedElsewhere: true } : {}, ...metaGone ? { metaGone } : {} },
   });
 
   return NextResponse.json({ ok: true, metaDeleted });
