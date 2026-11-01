@@ -8,14 +8,14 @@ Use [Your first ad on a phone](../../product/first-ad.md) for the owner's screen
 and [Prospect Account Hand-over](prospect-handover.md) for a prepared sample account.
 Keep customer details in the private store, never in this runbook or public issues.
 
-1. **Sign in on the owner's phone, Google first (#2416):** tap **Continue with
-   Google**, using the same email supplied for a hand-over. Google's screen names
-   `…supabase.co`, AdBrain's sign-in service. Use **Email me a sign-in link** only
-   without a Google account: the documented limit is **2 sign-in emails an hour,
-   project-wide** (#1777), shared with staff sign-ins and resends. Space email
-   sign-ins 30 minutes apart and send no staff links that hour. If the screen says
-   "Too many sign-in emails", use Google or wait an hour; repeated resends do not
-   bypass the cap. A Google redirect is not proof that a non-team account can
+1. **Sign in on the owner's phone, Google first (#2416):** say "On your phone,
+   choose Continue with Google and use the same address you gave us. If you have
+   no Google account or sign-in fails, tell us and we will help." Google's screen
+   names `…supabase.co`, AdBrain's sign-in service. For **Email me a sign-in link**,
+   the documented limit is **2 sign-in emails an hour, project-wide** (#1777),
+   shared with staff sign-ins and resends. If the screen says "Too many sign-in
+   emails", help the owner with Google or the email fallback; do not promise a
+   fixed wait or send repeated links. A Google redirect is not proof that a non-team account can
    sign in: #2416 still needs that result; the CEO batches the owner's Google
    publishing-status or non-team sign-in step. Do not promise email delivery
    from the default mailer while custom SMTP remains open on #1777.
