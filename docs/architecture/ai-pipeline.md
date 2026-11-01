@@ -153,7 +153,10 @@ through. Trying again…", and `creative.batch` records `pictureRetry` (#1547). 
 (words passed, picture stored) is saved by [save.ts](../../src/lib/creative/save.ts) under an id made
 before the insert: a failed insert is read back (it may have landed) and retried once unless its
 database code would fail again (`22`/`23`/`42`/`PGRST2`), and each failed attempt records
-`creative.save` with that code (#2494). A refused commercial claim in Create adds a
+`creative.save` with that code (#2494). Each lost ad carries the step that lost it
+(`stage`: `text`, `picture`, `provider`, `save`, `timeout` or `other`, from
+[failure-message.ts](../../src/lib/creative/failure-message.ts)) in the response and audit
+details, and `creative.batch` lists them as `failedStages` (#2515). A refused commercial claim in Create adds a
 `claim:<class>:<reason>` validation rule to its usage row (class `free`/`percent`/
 `currency`/`guarantee`; reason `uncited`, or `negated-quote` when a quote cited it but a
 negation elsewhere in that quote refused it), never the term or the copy (#687).
