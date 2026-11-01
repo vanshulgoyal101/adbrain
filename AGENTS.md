@@ -55,6 +55,9 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 	1. wake a chat that is idle (turn complete, no waiter running) when it has queued
 		work: one line pointing at the issue, `queue` delivery;
 	2. stop a chat doing something harmful or obsolete right now (P0), with `steer`.
+	A chat blocked in its waiter or a sleep/poll loop never reads a message (the chat
+	counts as busy). To reach one, stop that process first
+	(`kill $(cat "$TMPDIR/adbrain-wait-for-work-<role>.pid")` for a waiter), then `steer`.
 	Never stack messages; replace or cancel a pending one. **Never end a turn
 	silently:** before stopping, run your waiter or post `→ <Role>` for what's next.
 - Read [docs/team/orchestration.md](docs/team/orchestration.md) before editing or using
@@ -280,8 +283,10 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 	`origin/next` (`bash scripts/wt.sh <issue>` does it), open a PR to **`next`**, enable
 	auto-merge. A PR opened against `main` is retargeted to `next` automatically.
 	`main` is production; the deploy train promotes a green `next` to `main` at most
-	every 30 minutes, so your change is live within about 30 minutes of merging. Smoke it
-	then. Hotfixes and migration/money releases go to `main` (DevOps or CTO; label
+	every 30 minutes, so your change is live within about 30 minutes of merging. **Don't
+	wait for the train** (owner, Nov 1): check the changed flow before merging (locally or
+	on the PR preview), start your next item, and smoke production on your next pass once
+	it's live. Never sleep or poll for a deploy; it blocks your chat. Hotfixes and migration/money releases go to `main` (DevOps or CTO; label
 	`hotfix`). Required checks are build, test, core and secrets.
 - Migrations, production settings and rollbacks go through DevOps. Never
 	force-push or run `npm run db:push` against production.

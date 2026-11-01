@@ -77,8 +77,9 @@ Routine steps never wait for the CEO or the CTO.
    change: run `gh pr merge <n> --auto --squash`. GitHub merges when CI passes
    (about 3 minutes) into `next`, and the deploy train ships `next` to production
    at most every 30 minutes (#461). Branches don't need to be up to date to merge.
-   After the train deploys it, smoke the changed flow in production,
-   close the issue with the PR link (plus one `Lesson:` line if you learned
+   Don't wait for the train: start your next item, and once it's live smoke the
+   changed flow in production on your next pass (never sleep or poll for a deploy),
+   then close the issue with the PR link (plus one `Lesson:` line if you learned
    something reusable) and start your next issue.
    **Ship the same day.** Open the PR as soon as one small slice works; do not
    hold finished work on a branch or batch it. A green PR that is still open after
