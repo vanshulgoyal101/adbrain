@@ -586,7 +586,7 @@ describe("wake on the world (#2473)", () => {
       { number: 3, title: "#9 x", body: "Dev 2: fixes #9", head: { ref: "c" } },
       { number: 4, title: "Owned PR", body: "", head: { ref: "d" } },
     ];
-    expect(myPulls(pulls, "dev3", new Set([2473, 4])).map((p) => p.number)).toEqual([1, 2, 4]);
+    expect(myPulls(pulls, "dev3", new Set([2473, 4])).map((p: { number: number }) => p.number)).toEqual([1, 2, 4]);
     const prRun = (o: Record<string, unknown>) => run({ event: "pull_request", head_branch: "a", ...o });
     expect(failedOnMine([prRun({ name: "core" }), prRun({ head_branch: "c" })], new Set(["a"]), since))
       .toEqual(["CI failed on your PR branch a: core u"]);
