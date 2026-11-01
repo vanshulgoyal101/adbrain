@@ -276,6 +276,8 @@ async function callProviders(
           }
           // A 5xx means the model is overloaded or down for every key.
           if (err instanceof LLMError && err.status !== undefined && err.status >= 500) break;
+          // #2502: Gemini's 400 is the request's shape (every key gets it) unless it names the key.
+          if (err instanceof LLMError && err.provider === "google" && err.status === 400 && !/api key/i.test(err.message)) break;
         } finally {
           // After the outcome is recorded, so a waiting call sees Groq answered or parked again.
           if (probe) endProbe();
