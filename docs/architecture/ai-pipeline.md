@@ -139,8 +139,9 @@ estimated AI cost (`costUsd`, `textCostUsd`, `imageCostUsd`; the scoreboard show
 asked for (`expected`; the scoreboard counts a batch full when `count` reaches it, #2499), so
 Create speed is timed per path; usage rows are written when the batch ends and
 can't time it (#681). When the first pass saves fewer ads than asked, one top-up
-round remakes the angles whose concept or image failed (never "no provider" or every
-provider down), in parallel and in the same request, through the same validators and
+round remakes the angles whose concept or image failed, or whose picture couldn't be
+stored or rendered (that loss logs `AD_NOT_SAVED` with its step and error, #2444; never
+"no provider" or every provider down), in parallel and in the same request, through the same validators and
 repair. It starts only if the first pass ended within 60 s and is cut off after 45 s
 (`CREATE_TOP_UP_*` in [stream.ts](../../src/lib/creative/stream.ts)); the stream sends
 `{ type: "topUp", missing }`, the page says "Making N more…", and `creative.batch`
