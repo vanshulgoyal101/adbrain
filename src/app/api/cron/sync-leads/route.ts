@@ -1,7 +1,7 @@
 import { observeRoute } from "@/lib/observability/logger";
 import { NextResponse } from "next/server";
 import { getEnv } from "@/lib/env";
-import { LeadSyncError, syncMetaLeads } from "@/lib/leads/sync";
+import { LeadSyncError, LOST_RACE, syncMetaLeads } from "@/lib/leads/sync";
 import { friendlyMetaError, MetaThrottledError } from "@/lib/meta/client";
 import { appThrottledUntil, recordThrottle, throttledBusinesses } from "@/services/meta-throttle";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -25,7 +25,11 @@ type Outcome = {
   alerts?: LeadAlertRun;
   /** #1838: Meta is throttling this business's account (or the app); retried on a later run, not a failure. */
   throttled?: { scope: MetaThrottledError["scope"]; retryAfterMs: number };
+  /** #2503: another run held this business's sync; it resumes on the next run, not a failure. */
+  skipped?: string;
 };
+
+const SKIPPED_RACE = "Another run is syncing.";
 
 /**
  * Scheduled lead import (#165). For each business with a connected Meta Page it
@@ -93,15 +97,15 @@ async function handleGET(request: Request) {
         (meta, connection) => syncMetaLeads(context, connection, recordMetaErrors(meta, metaErrors), undefined, signal),
       );
       outcome = {
-        businessId, imported: synced.imported, sync: synced.sync,
-        failedForms: synced.failedForms.length, ...(synced.error ? { error: synced.error } : {}),
+        businessId, imported: synced.imported, sync: synced.sync, failedForms: synced.failedForms.length,
+        ...(synced.error ? synced.status === LOST_RACE ? { skipped: SKIPPED_RACE } : { error: synced.error } : {}),
       };
     } catch (error) {
       metaErrors.push(error);
-      outcome = {
-        businessId, imported: 0, failedForms: 0,
-        error: error instanceof LeadSyncError ? error.message : friendlyMetaError(error, "Could not sync leads."),
-      };
+      outcome = error instanceof LeadSyncError && error.status === LOST_RACE
+        ? { businessId, imported: 0, failedForms: 0, skipped: SKIPPED_RACE }
+        : { businessId, imported: 0, failedForms: 0,
+          error: error instanceof LeadSyncError ? error.message : friendlyMetaError(error, "Could not sync leads.") };
     }
     if (alertConfig && !deadline.aborted) {
       try {

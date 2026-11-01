@@ -249,6 +249,16 @@ describe("core: scheduled lead sync against recorded Graph pages (#165)", () => 
     expect(db.leads.size).toBe(1);
   });
 
+  it("#2503: two overlapping runs both return 200; the one that lost the checkpoint is skipped and the lead lands once", async () => {
+    replay();
+    const outcomes = await Promise.all([run(), run()]);
+    expect(outcomes.map(({ status }) => status)).toEqual([200, 200]);
+    const businesses = outcomes.map(({ body }) => body.businesses[0]);
+    expect(businesses.filter((business) => business.skipped === "Another run is syncing.")).toHaveLength(1);
+    expect(businesses.every((business) => !business.error)).toBe(true);
+    expect(db.leads.size).toBe(1);
+  });
+
   describe("#701 v1: the owner's WhatsApp lead alert after the import", () => {
     beforeEach(() => {
       // The recorded test lead arrived at 05:39:35Z; the run is 20 minutes later.
