@@ -4,6 +4,7 @@ import { parseEnv } from "node:util";
 import { chromium } from "@playwright/test";
 import { loginAuth, loginSessionProblem, makesFreePictures } from "./lib/internal-accounts.mjs";
 import { pictureSources } from "./lib/smoke-pictures.mjs";
+import { forgiveRecoveredBusyTurns } from "./lib/smoke-console.mjs";
 
 const envPath = "/Users/vanshulgoyal/Development/copilot/adbrain/.env.smoke";
 
@@ -158,6 +159,8 @@ try {
   context.setDefaultTimeout(20_000);
   const page = await context.newPage();
   const errors = [];
+  /** @type {Promise<boolean>[]} one per 503 assistant turn: whether its code was AI_BUSY (#2396) */
+  const assistantBusy = [];
   const smokeBlocked = new Set();
   let loginAllowed = true;
   let loginSession = null;
@@ -203,6 +206,10 @@ try {
     if (smokeBlocked.has(path) && message.text().includes("ERR_BLOCKED_BY_CLIENT")) return;
     const status = message.text().match(/\b(?:40[0-9]|50[0-9])\b/)?.[0];
     errors.push(message.text().includes("Content Security Policy") ? `CSP violation at ${path}` : `console error at ${path}${status ? ` (HTTP ${status})` : ""}`);
+  });
+  page.on("response", (response) => {
+    if (response.status() !== 503 || new URL(response.url()).pathname !== "/api/creatives/assistant") return;
+    assistantBusy.push(response.json().then((body) => body?.code === "AI_BUSY", () => false));
   });
   await context.route("**/*", async (route) => {
     const request = route.request();
@@ -449,6 +456,7 @@ try {
       assert.ok(auth?.user?.id, "Signed-in identity unknown, so free pictures aren't certain; paid run was not started");
       assert.ok(makesFreePictures(auth.user), "This account would make paid pictures (not internal, or exempt); paid run was not started");
       errors.length = 0;
+      assistantBusy.length = 0;
       await page.goto(`${origin}/create`);
       await page.getByRole("textbox", { name: "Campaign goal" }).fill("Introduce our team to local customers using only verified Brand Brain facts. Avoid unsupported claims.");
       await page.getByRole("button", { name: /^(Start creating|Edit brief)$/ }).click(); // #1004: a complete Brand offers "Edit brief" to keep the brief review
@@ -484,7 +492,9 @@ try {
       assert.equal(savedCount, 3, `Create saved ${savedCount}/3 ads; do not retry before checking saved work`);
       // #904 made "Review ads" a link, not a button (QA on #1227).
       await page.getByRole("link", { name: "Review ads", exact: true }).waitFor({ state: "visible" });
-      assert.equal(errors.length, 0, errors[0] ?? "Browser error after Create");
+      const busy = forgiveRecoveredBusyTurns(errors, (await Promise.all(assistantBusy)).filter(Boolean).length);
+      if (busy.note) console.log(busy.note);
+      assert.equal(busy.errors.length, 0, busy.errors[0] ?? "Browser error after Create");
       // #2412: 3 saved ads can hide 2 reused pictures or a dead Cloudflare token; read where each picture came from.
       const { businessId, generationId } = generationRequest ?? {};
       assert.ok(UUID.test(businessId ?? "") && UUID.test(generationId ?? ""), "run ids unknown; pictures not checked");
