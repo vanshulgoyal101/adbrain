@@ -2,7 +2,6 @@ import { affirmedInFact, negatedTerm } from "./claim-support";
 import { z } from "zod";
 import type { ChatMessage } from "@/lib/llm";
 import {
-  AD_ANGLES,
   META_CTAS,
   type AdAngle,
   type BrandContext,
@@ -12,10 +11,14 @@ import { quotedAsk } from "@/lib/campaign/whatsapp-greeting";
 import { bannedClaimsForVertical, capitalWords, HEALTH_VERTICAL, MEDICAL_BANNED_CLAIMS, scanAdCopy } from "@/lib/creative/slopScan";
 import { policyFindings } from "@/lib/creative/policy-rules";
 import { emptyScene } from "@/lib/creative/visual-rules";
+import { batchAsk, conceptLead } from "./concept-lead";
 import { plainDigits, rateDropIssues, spelledAmountIndex, spelledCurrency, spelledRupeeAmounts } from "./currency";
 import { contactsInCopy } from "./contact-in-copy";
 
-export const CONCEPT_VERSION = "creative-concept-v3";
+export { batchAsk, conceptLead };
+
+// v4: #418 rules 1, 4, 5 and 7 (what + where first line, a person, a proof, the ask = the WhatsApp prefill).
+export const CONCEPT_VERSION = "creative-concept-v4";
 // Primary text Meta shows on mobile before "See more" (#194).
 const FOLD_CHARACTERS = 125;
 
@@ -57,24 +60,6 @@ export interface ConceptInput {
   sourceFacts?: string[];
 }
 
-// #1035/#713: parallel concepts can't see each other, and "Rooftop solar for your home in Chandigarh,
-// Mohali & Panchkula" opened all three (Oct 27 14:00Z), so two were lost to repeated-opening even after
-// the repair. Each angle gets its own place and its own way in.
-// Written as instructions: a bare "with the offer" was copied into the ad itself (Qwen, free eval Oct 28).
-const OPENINGS: Record<string, string> = {
-  value: "Open by naming the service and the place.",
-  // Never a question about the reader's body or traits (personal-attribute; free eval Oct 28).
-  problem: "Open by stating the problem the service fixes as a fact about the situation (a rising bill, a deadline, a broken AC). Never ask the reader about themselves.",
-  offer: "Open by stating the offer.",
-  trust: "Open by stating the proof.",
-};
-
-export function conceptLead(input: Pick<ConceptInput, "brand" | "angle">): { place: string | null; opening: string } {
-  const index = Math.max(0, AD_ANGLES.findIndex((angle) => angle.id === input.angle.id));
-  const places = (input.brand.locations ?? []).map((place) => place.trim()).filter(Boolean);
-  return { place: places.length ? places[index % places.length] : null, opening: OPENINGS[input.angle.id] ?? OPENINGS.value };
-}
-
 export function buildConceptMessages(input: ConceptInput): ChatMessage[] {
   const format = input.format ?? "portrait";
   // Same rule as the poster's contact bar (#1167): an India-based phone or a saved WhatsApp message.
@@ -85,19 +70,25 @@ export function buildConceptMessages(input: ConceptInput): ChatMessage[] {
       content: `You are the creative director for a business advertising campaign.
 Design ONE coherent ad concept: its message, copy and visual execution must serve the same idea.
 Write a distinct hook and argument for this brief and angle, not a summary of the brand profile.
-Choose one relevant benefit and one supporting fact; do not repeat the full credentials,
-service-area list and savings claim in every ad. Avoid generic slogan triplets, forced metaphors,
-and references to incidental objects in the picture. End with a plain, relevant next step. When contact
-is "whatsapp", the ad's button opens a WhatsApp chat: the last line asks people to message on WhatsApp,
-and the ad never asks them to call, phone or email (and never picks "Call Now").
+Choose one relevant benefit and one proof from the Brand facts when they have one: a number (years
+in business, jobs done), a named credential or a warranty length, cited in sourceQuotes. A bare
+"trusted" or "experienced" is not proof. Do not repeat the full credentials, service-area list and
+savings claim in every ad. Avoid generic slogan triplets, forced metaphors, and references to
+incidental objects in the picture. End with a plain, relevant next step. When contact
+is "whatsapp", the ad's button opens a WhatsApp chat: ask people to message on WhatsApp,
+and never ask them to call, phone or email (and never pick "Call Now"). If lead.ask is given, put
+the WhatsApp request before the final quoted ask. When lead.ask is given, the last line
+asks for it by quoting it word for word in “ ”, without naming a channel, because the ad may run
+to WhatsApp or a form (for example: Book your “Free site survey” today). Every ad of the batch quotes
+the same words; on WhatsApp they become the message the customer sends.
 Recent copy is supplied only to avoid repetition, not as evidence for claims. Change the opening,
 sentence structure and persuasion angle, not just synonyms. Do not reuse a recent headline or hook.
 Write a concise Meta link description that complements the headline with a supported detail or
 next step. It is separate from on-image supportingText and must not merely repeat the headline.
-Follow lead.opening (an instruction; never copy its words into the ad) and name lead.place when given
-(one place, never the list): the ads of one batch are written at the same time, so each must open differently.
-Meta shows only about the first 125 characters of primary_text on mobile before "See more". Put the
-hook, and the supplied offer when the brief is about one, in the first line (at most 125 characters).
+Meta shows only about the first 125 characters of primary_text on mobile before "See more". The
+first line says what and where in at most 60 characters: the service and lead.place when given (one place,
+never the list), with the offer in lead.ask when given. Follow lead.opening (an instruction; never copy its words):
+the ads of one batch are written at the same time, so each must open differently. It must never pass 125 characters.
 Write primary_text as 2-3 short lines separated by \n, about 220 characters in total, never one paragraph.
 Use only supplied facts for commercial claims. Do not invent prices, offers, reviews, deadlines,
 credentials, outcomes or product features. An angle is a suggestion, not evidence: if no offer or
@@ -108,7 +99,10 @@ never use advisory preferences as evidence for commercial claims or sourceQuotes
 The brief may be AI-derived: it is direction, not claim evidence. Source quotes
 must come from Brand facts, active instructions or explicitly supplied user facts.
 Choose an appropriate visual medium (photography, illustration, product still life, graphic art,
-or another deliberate treatment). Do not default to stock people or generic luxury adjectives.
+or another deliberate treatment). The subject is a person giving or getting the service (an installer
+with a homeowner, a stylist with a client, a family beside their finished job), not an empty product
+shot, unless the owner's instructions, brief or preferences rule people out.
+Avoid stock poses and generic luxury adjectives.
 References are available to the image model, not visible to you; do not claim to have inspected them.
 Without references, do not pretend an invented person, facility or product is a documented real one.
 When imageSource is "owner_photo", the ad image is the business's own photo, which you cannot see: write
@@ -116,7 +110,7 @@ copy that works with any genuine photo of the business and never describe or cla
 Typography and the brand logo will be composited separately: direct a text-free visual with a
 clear focal subject away from the selected textPlacement. Keep that area quiet enough for copy.
 Return only JSON, with this shape. Character limits include spaces and are hard limits:
-{"headline":"up to 40 characters","primary_text":"2-3 short lines separated by \n, about 220 characters; first line up to 125 characters with the hook and offer","description":"nonempty Meta link description up to 100 characters","cta":"${META_CTAS.join('" | "')}",
+{"headline":"up to 40 characters","primary_text":"2-3 short lines separated by \n, about 220 characters; first line up to 60 characters naming the service, lead.place and the offer when supplied; last line quotes lead.ask when given","description":"nonempty Meta link description up to 100 characters","cta":"${META_CTAS.join('" | "')}",
 "rationale":"why this message and visual belong together for this audience; up to 600 characters",
 "visual":{"medium":"chosen medium; up to 120 characters","direction":"specific subject, setting, action, composition, palette and exclusions; 20-2400 characters","textPlacement":"top | center | bottom"},
 "supportingText":"optional on-image supporting line up to 64 characters, or null",
@@ -137,7 +131,7 @@ prices, numbers, ratings and phone numbers in English digits (₹499, 4.8★, 50
         language:
           input.language || input.brand.languages?.join(" and ") || "English",
         angle: { name: input.angle.name, intent: input.angle.description },
-        lead: conceptLead(input),
+        lead: { ...conceptLead(input), ask: batchAsk(input.brand.offers) },
         placement: { format, ...formatDimensions(format) },
         referenceImageCount: input.referenceImages?.slice(0, 3).length ?? 0,
         imageSource: input.ownerPhoto ? "owner_photo" : "generated",
@@ -608,19 +602,19 @@ export function validateConcept(
 const NAMES_WHATSAPP = /whats\s?app|व्हाट्सऐप|व्हाट्सएप|ਵਟਸਐਪ/i;
 
 /**
- * #1147: a WhatsApp business's ad ends by asking for a WhatsApp message. When the model's last line doesn't
- * (Qwen on the free run, Oct 28: "Book a free survey by Nov 10."), the poster's own words are added as a
- * last line, in the ad's language. $0 and no repair; others' copy is unchanged.
+ * #1147: a WhatsApp business's ad ends by asking for a WhatsApp message. Add the poster's own words
+ * unless the last line, or the line before a quoted last line, already names WhatsApp.
  */
 function withWhatsAppAsk(concept: CreativeConcept, input: ConceptInput): string {
   if (contactChannel(input.brand) !== "whatsapp") return concept.primary_text;
   const lines = concept.primary_text.split("\n").map((line) => line.trim()).filter(Boolean);
-  if (NAMES_WHATSAPP.test(lines.at(-1) ?? "")) return concept.primary_text;
+  const quoted = Boolean(quotedAsk(concept.primary_text));
+  if (NAMES_WHATSAPP.test(lines.at(-1) ?? "") || (quoted && NAMES_WHATSAPP.test(lines.at(-2) ?? ""))) return concept.primary_text;
   const label = whatsappContactLabel([concept.headline, concept.primary_text], input.language);
   const line = `${label}${/[\u0900-\u097F\u0A00-\u0A7F]/u.test(label) ? "।" : "."}`;
   // #1364: a last line that quotes what to send (#1027's pre-typed message) stays last; the WhatsApp line goes before it.
   const parts = concept.primary_text.trimEnd().split("\n");
-  const asked = quotedAsk(concept.primary_text)
+  const asked = quoted
     ? [...parts.slice(0, -1), line, parts.at(-1)!].join("\n")
     : `${concept.primary_text.trimEnd()}\n${line}`;
   return asked.length <= (creativeConceptSchema.shape.primary_text.maxLength ?? 900) ? asked : concept.primary_text;

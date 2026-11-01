@@ -1,3 +1,4 @@
+import { offerPhrase } from "@/lib/brand/offer";
 import { isRomanHindi } from "@/lib/creative/roman-hindi";
 
 export type WhatsAppGreeting = { autofill: string; greeting: string };
@@ -6,12 +7,6 @@ export type WhatsAppGreeting = { autofill: string; greeting: string };
 function mentions(copy: string, phrase: string): boolean {
   const escaped = phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   return new RegExp(`(?<![\\p{L}\\p{N}])${escaped}(?![\\p{L}\\p{N}])`, "iu").test(copy);
-}
-
-/** "Diwali offer: 10% off" → "10% off"; "Diwali offer:" → "Diwali offer". */
-function offerPhrase(offer: string): string {
-  const trimmed = offer.trim().replace(/:+$/, "").trim();
-  return (trimmed.split(":").pop() ?? "").trim() || trimmed;
 }
 
 /**

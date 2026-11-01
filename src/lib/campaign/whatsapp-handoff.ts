@@ -1,3 +1,5 @@
+import { offerPhrase } from "@/lib/brand/offer";
+
 /**
  * #1081 (W2): the business's past WhatsApp handoff, people who opened WhatsApp from an ad vs those
  * who then sent a message, and whether a pre-typed ask is too general to send.
@@ -25,12 +27,6 @@ export function handoffLine({ opens, messages }: Handoff): string {
 
 const GREETING = /^(hi|hii+|hello|hey|namaste|namaskar|नमस्ते|ਸਤ ਸ੍ਰੀ ਅਕਾਲ)\b[!,.\s]*/iu;
 const INFO_ONLY = /\b(info|information|details?|know more|more about|interested|enquiry|inquiry|jaankari|jankari)\b|जानकारी|ਜਾਣਕਾਰੀ/iu;
-
-/** "Diwali offer: 10% off" → "10% off". */
-function offerPhrase(offer: string): string {
-  const trimmed = offer.trim().replace(/:+$/, "").trim();
-  return (trimmed.split(":").pop() ?? "").trim() || trimmed;
-}
 
 /**
  * A pre-typed ask that names nothing concrete: "Hi", "I want info", "I'd like to know more about
