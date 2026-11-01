@@ -183,19 +183,33 @@ async function callProviders(
   const deferred = new Set<RegisteredProvider>();
   const available = ({ provider, keys }: RegisteredProvider) =>
     keys.some((_, idx) => (cooldownUntil.get(`${provider.name}:${idx}`) ?? 0) <= Date.now());
+  // #2462: hold the reserve for any later provider that is usable by the time it would be handed the call.
+  const reserve = options.fallbackReserve;
+  const usableAtHandoff = ({ provider, keys }: RegisteredProvider) => !reserve ||
+    keys.some((_, idx) => (cooldownUntil.get(`${provider.name}:${idx}`) ?? 0) <= reserve.deadlineAt - reserve.reserveMs);
+  const reservedMs = (position: number) => !reserve ? Infinity
+    : reserve.deadlineAt - Date.now() - (queue.slice(position + 1).some(usableAtHandoff) ? reserve.reserveMs : 0);
   for (let position = 0; position < queue.length; position++) {
     const entry = queue[position];
     const { provider, keys, model } = entry;
     // #2189: with nothing after this provider, giving up loses the call; the caller's deadline bounds the wait instead.
     const lastResort = () => Boolean(options.waitOnLastProvider && options.signal) && !queue.slice(position + 1).some(available);
     let slept = 0;
-    for (let round = 0; ; round++) {
+    let outOfTime = false;
+    for (let round = 0; !outOfTime; round++) {
       const start = nextKeyStart(provider.name, keys.length);
       for (let i = 0; i < keys.length; i++) {
         options.signal?.throwIfAborted();
         const idx = (start + i) % keys.length;
         const coolKey = `${provider.name}:${idx}`;
         if ((cooldownUntil.get(coolKey) ?? 0) > Date.now()) continue;
+        const capMs = options.providerAttemptTimeoutMs?.[provider.name] ?? options.attemptTimeoutMs;
+        const attemptTimeoutMs = reserve ? Math.min(capMs ?? Infinity, reservedMs(position)) : capMs;
+        if (attemptTimeoutMs !== undefined && attemptTimeoutMs <= 0) {
+          outOfTime = true;
+          failures.push("TIMEOUT");
+          break;
+        }
         const inFlightProbe = rateLimited.has(provider.name) ? probing.get(provider.name) : undefined;
         if (inFlightProbe) {
           if (!lastResort()) break;
@@ -210,7 +224,6 @@ async function callProviders(
 
         const attemptStart = Date.now();
         try {
-          const attemptTimeoutMs = options.providerAttemptTimeoutMs?.[provider.name] ?? options.attemptTimeoutMs;
           const maxTokens = options.providerMaxTokens?.[provider.name] ?? options.maxTokens;
           const { text, usage, providerRequestId, providerFinalStatus } = await provider.complete(messages, { ...options, attemptTimeoutMs, maxTokens }, {
             apiKey: keys[idx],
@@ -268,10 +281,12 @@ async function callProviders(
           if (probe) endProbe();
         }
       }
+      if (outOfTime) break;
       // Every key is rate-limited only briefly: wait once, then retry this model.
       const wait = Math.min(...keys.map((_, idx) => cooldownUntil.get(`${provider.name}:${idx}`) ?? 0)) - Date.now();
       const last = lastResort() && (namedParkUntil.get(provider.name) ?? 0) > Date.now() && slept + wait <= LAST_RESORT_WAIT_BUDGET_MS;
       if (round + 1 >= (last ? LAST_RESORT_ROUNDS : 2) || wait <= 0 || wait > (last ? COOLDOWN_MS : RATE_LIMIT_WAIT_MS)) break;
+      if (wait >= reservedMs(position)) break;
       // #668: a fast fallback answers sooner than the cooldown ends; come back to this provider after it.
       if (options.fallbackBeforeRateLimitWait && !deferred.has(entry) && queue.slice(position + 1).some(available)) {
         deferred.add(entry);

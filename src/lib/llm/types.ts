@@ -32,6 +32,11 @@ export interface CompletionOptions {
    * (≤ 60 s a round, ≤ 90 s a call) instead of failing. Only with `signal`, which bounds the wait; for long deadlines.
    */
   waitOnLastProvider?: boolean;
+  /**
+   * #2462: the caller's request deadline. While a later provider can still answer, each attempt also ends `reserveMs`
+   * before `deadlineAt` (a provider with no time left is skipped), so the last one keeps that time; it gets the rest.
+   */
+  fallbackReserve?: { deadlineAt: number; reserveMs: number };
   /** "off" asks thinking models (Gemini) not to think: for small structured outputs where speed matters. */
   thinking?: "off";
   onAttempt?: (attempt: ProviderAttempt) => void;

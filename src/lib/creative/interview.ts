@@ -388,6 +388,9 @@ If you have enough to write a great ad, return:
   ];
 }
 
+const INTERVIEW_DEADLINE_MS = 45_000;
+const FALLBACK_RESERVE_MS = 12_000;
+
 export async function runInterview(
   input: InterviewInput,
   options: {
@@ -398,7 +401,8 @@ export async function runInterview(
   } = {},
 ): Promise<InterviewResult> {
   const messages = buildInterviewMessages(input);
-  const timeout = AbortSignal.timeout(45_000);
+  const deadlineAt = Date.now() + INTERVIEW_DEADLINE_MS;
+  const timeout = AbortSignal.timeout(INTERVIEW_DEADLINE_MS);
   const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
   let last: { result: InterviewResult; issues: string[] } | null = null;
   for (let attempt = 0; attempt < 2; attempt++) {
@@ -414,6 +418,8 @@ export async function runInterview(
       // #2249: a hanging Gemini once used the whole 45 s and the paid fallback never ran. Its slowest success in 14 days
       // took 22.2 s; 25 s keeps those and leaves 20 s for OpenRouter (slowest 11.9 s).
       providerAttemptTimeoutMs: { google: 25_000 },
+      // #2462: on the repair turn too, and for a hanging Groq, the last provider keeps OpenRouter's p90 success (11.2 s).
+      fallbackReserve: { deadlineAt, reserveMs: FALLBACK_RESERVE_MS },
       promptVersion: INTERVIEW_PROMPT_VERSION,
       json: true,
       responseSchema: resultSchema,
