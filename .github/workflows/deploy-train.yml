@@ -17,10 +17,49 @@ permissions:
   statuses: write # core-approval on the train PR (#1002)
 
 jobs:
+  kick:
+    # Pushes and the schedule only start a promotion, so no run of theirs waits in the promote queue where
+    # GitHub would replace (cancel) it: a next commit shows a red X only when a real check fails (#2528).
+    if: github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        shell: bash
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Start a promotion unless one is already waiting
+        timeout-minutes: 4
+        run: |
+          set -euo pipefail
+          repo="$GITHUB_REPOSITORY"
+          ahead=$(gh api "repos/$repo/compare/main...next" --jq '.ahead_by')
+          [ "$ahead" -gt 0 ] || { echo "next has nothing main lacks."; exit 0; }
+          # A promote job that hasn't started takes whatever is green on next when it runs, so one is enough.
+          # A run whose jobs aren't listed yet counts as waiting.
+          for rid in $(gh api "repos/$repo/actions/workflows/deploy-train.yml/runs?event=workflow_dispatch&per_page=10" \
+            --jq '.workflow_runs[] | select(.status != "completed") | .id'); do
+            started=$(gh api "repos/$repo/actions/runs/$rid/jobs" \
+              --jq '[.jobs[] | select(.name == "promote" and (.status == "in_progress" or .status == "completed"))] | length')
+            if [ "$started" -eq 0 ]; then echo "Run $rid's promotion is waiting; it carries this change."; exit 0; fi
+          done
+          t0=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          gh workflow run deploy-train.yml -R "$repo" --ref main
+          # Wait until the run is listed, so a push a moment later finds it instead of starting a second one.
+          for i in $(seq 1 10); do
+            n=$(gh api "repos/$repo/actions/workflows/deploy-train.yml/runs?event=workflow_dispatch&per_page=5" \
+              --jq "[.workflow_runs[] | select(.created_at >= \"$t0\")] | length")
+            [ "$n" -eq 0 ] || { echo "Promotion started."; exit 0; }
+            sleep 3
+          done
+          echo "::warning::dispatched promotion not listed after 30s"
+
   promote:
-    # One promotion at a time; a push never cancels the running one (#2528: 45 of 60 runs were cancelled
-    # past the gap). Newer pushes queue as one pending run (GitHub replaces an older pending one), and the
-    # running promotion already takes the newest green commit. Job-level, so the watchdog is never queued.
+    # Only kick (or a person) dispatches this, on main, and only when no promote is already waiting, so it
+    # never gets replaced. One promotion at a time; the running one is never cancelled and takes the newest
+    # green commit on next (#2528).
+    if: github.event_name == 'workflow_dispatch'
     concurrency:
       group: deploy-train
       cancel-in-progress: false
