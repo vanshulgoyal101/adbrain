@@ -10,6 +10,11 @@ running campaign's existing emergency stop, one at a time. It reports success
 only when every pause is confirmed, otherwise a partial result with Try again
 and Open in Ads Manager. Resume remains per campaign.
 
+**Resume** opens an activation review with the campaign state, daily total,
+duration, funding and approval warnings, and the next action visible. **Targeting
+and Meta details** expands the exact targeting and object identifiers; it does
+not change the reviewed audience or activation request.
+
 Each campaign with stored results has **Share results on WhatsApp** (#372): a
 `wa.me` link with a plain summary built from the stored results and the campaign
 (spend against the capped run's limit or the daily budget, chats or enquiries plus

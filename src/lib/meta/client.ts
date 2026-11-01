@@ -3,6 +3,7 @@ import { GRAPH } from "@/lib/meta/graph-version";
 import { z } from "zod";
 import { FACEBOOK_FEED_POSITIONS, FACEBOOK_POSITIONS_WITHOUT_REELS, WHATSAPP_PUBLISHER_PLATFORMS } from "@/lib/meta/placements";
 import type { SetupReads } from "@/lib/meta/setup-checklist";
+import type { CampaignDeliverySnapshot } from "./types";
 import { destinationFromAdSets, type CampaignDestination } from "@/lib/campaign/outcomes";
 import type { CampaignSkipReason } from "@/lib/campaign/sync-skips";
 import { minCampaignSpendCapPaise, type SpendCapMinimumAccount } from "@/lib/campaign/spend-cap-minimum";
@@ -18,6 +19,7 @@ import { fetchAdImage, readAdVideo, startAdVideo, uploadAdImageBytes, type AdVid
 import { buildGeoLocations, clampRadiusKm, geoLabel, hasGeo, pickBestGeoMatch } from "./geo";
 export { buildGeoLocations, geoItemsToTargeting, hasGeo, pickBestGeoMatch } from "./geo";
 export type { AdResult, CampaignInsights, MetaCampaignState } from "./insights";
+export type { CampaignDeliverySnapshot } from "./types";
 
 export interface MetaCredentials {
   adAccountId: string;
@@ -420,12 +422,6 @@ export class CampaignGoneError extends MetaError {
     this.name = "CampaignGoneError";
   }
 }
-
-export type CampaignDeliverySnapshot = {
-  campaign: { id: string; status: string; effectiveStatus: string | null };
-  adSets: Array<{ id: string; status: string; effectiveStatus: string | null; dailyBudgetPaise: number; pageId: string; destinationType: string | null; targeting: unknown }>;
-  ads: Array<{ id: string; status: string; effectiveStatus: string | null; adSetId: string; creativeId: string }>;
-};
 
 export type PausedCampaignTree = {
   confirmed: boolean;
