@@ -36,6 +36,8 @@ day." For every screen in detail, see [Manage](manage.md).
 
 - **Home** shows your results so far: "Chats" (or "Enquiries" if you run a form
   ad), "Spent" and "Per chat". "—" means not yet. Below it: "Updated 4m ago".
+  On narrow phones, whole figures move to the next row instead of splitting
+  currency digits; **New campaign** sits separately above the figures.
 - Above the numbers is one line on how it's going, such as "Each chat costs ₹45."
   If people are waiting, it starts with "1 person is waiting for your reply." and
   shows "Reply now".

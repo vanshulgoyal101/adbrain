@@ -32,6 +32,11 @@ export interface CompletionOptions {
    * (≤ 60 s a round, ≤ 90 s a call) instead of failing. Only with `signal`, which bounds the wait; for long deadlines.
    */
   waitOnLastProvider?: boolean;
+  /**
+   * #2462: the caller's request deadline. While a later provider can still answer, each attempt also ends `reserveMs`
+   * before `deadlineAt` (a provider with no time left is skipped), so the last one keeps that time; it gets the rest.
+   */
+  fallbackReserve?: { deadlineAt: number; reserveMs: number };
   /** "off" asks thinking models (Gemini) not to think: for small structured outputs where speed matters. */
   thinking?: "off";
   onAttempt?: (attempt: ProviderAttempt) => void;
@@ -151,7 +156,7 @@ export class LLMError extends Error {
 export type ProviderFailureReason = "CREDIT_EXHAUSTED" | "RATE_LIMIT" | "PROVIDER_SERVER" | "PROVIDER_CLIENT" | "TRANSPORT" | "TIMEOUT" | "TRUNCATED" | "UNKNOWN" | "MIXED" | "COOLDOWN" | "FREE_TEXT_UNAVAILABLE";
 
 export class AllLLMProvidersFailedError extends Error {
-  constructor(readonly reason: ProviderFailureReason, providerCount: number) {
+  constructor(readonly reason: ProviderFailureReason, readonly providerCount: number) {
     super(`All LLM providers failed (${providerCount} tried)`);
     this.name = "AllLLMProvidersFailedError";
   }

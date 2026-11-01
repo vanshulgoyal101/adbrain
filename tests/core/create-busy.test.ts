@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import internal from "@/lib/internal-accounts.json";
 import recorded from "./fixtures/create/interview-non-answer.json";
 import { openAIReply, requestUrl, settleInVirtualTime, useVirtualDeadlines } from "./replay";
 
@@ -36,10 +37,16 @@ const KEY_LIMIT = () => Response.json({ error: {
   code: 403, metadata: { limit_source: "openrouter_key_limit" },
 } }, { status: 403 });
 
-const mocks = vi.hoisted(() => ({ rows: [] as Record<string, unknown>[] }));
+const CUSTOMER = { id: "8c1f4f0e-5a43-4c55-9b1f-3f7a3f0c2a10" };
+const SMOKE = { id: internal.smokeUserIds[0], email: "smoke@example.com", email_confirmed_at: "2026-10-01T00:00:00Z" };
+const mocks = vi.hoisted(() => ({ rows: [] as Record<string, unknown>[], user: null as unknown }));
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
-    auth: { getUser: async () => ({ data: { user: { id: "8c1f4f0e-5a43-4c55-9b1f-3f7a3f0c2a10" } } }) },
+    auth: { getUser: async () => {
+      const { observeVerifiedUser } = await import("@/lib/observability/context");
+      observeVerifiedUser(mocks.user as never);
+      return { data: { user: mocks.user } };
+    } },
     from: () => ({ select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: recorded.brand, error: null }) }) }) }),
   }),
 }));
@@ -59,6 +66,7 @@ vi.mock("@/lib/security/rate-limit", () => ({ rateLimitResponse: async () => nul
 beforeEach(() => {
   vi.resetModules();
   mocks.rows = [];
+  mocks.user = CUSTOMER;
   for (const [name, value] of Object.entries({
     NEXT_PUBLIC_SUPABASE_URL: "https://core-test.supabase.co",
     NEXT_PUBLIC_SUPABASE_ANON_KEY: "anon",
@@ -177,5 +185,59 @@ describe("core: Create step 1 when the AI providers are busy (#410)", () => {
       ["success", "openrouter", null],
     ]);
     expect(events().some((event) => event.name === "creative.interview" && event.outcome === "failed")).toBe(false);
+  });
+});
+
+// #2457: the smoke login writes on free text only (#2230). Oct 31 14:13Z its turn met Groq's per-minute output limit,
+// then a Gemini 503 (QA on #2249); the route called that a 500 "assistant trouble", which alerts and failed the smoke
+// (#2396). Busy free models are load, so the owner sees "busy, try again"; a missing free provider still alerts.
+describe("core: the smoke login's assistant when the free models are busy (#2457)", () => {
+  const groqOutputPerMinute = () => Response.json({ error: {
+    message: "Rate limit reached for model `qwen/qwen3.8-27b` in organization `org_core` service tier `on_demand` on output tokens per minute (OTPM): Limit 1000, Used 0, Requested 1066. Please try again in 57.2s.",
+    type: "tokens", code: "rate_limit_exceeded",
+  } }, { status: 429, headers: { "retry-after": "58" } });
+  const geminiOverloaded = () => Response.json({ error: { code: 503, message: "The model is overloaded.", status: "UNAVAILABLE" } }, { status: 503 });
+
+  it("returns 503 'busy, try again' and never reaches the paid model", async () => {
+    mocks.user = SMOKE;
+    const calls = providers({ groq: groqOutputPerMinute, google: geminiOverloaded });
+    const events = productEvents();
+
+    const { response } = await startCreating(useVirtualDeadlines);
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("retry-after")).toBe("10");
+    expect(await response.json()).toEqual({ error: "AdBrain is busy right now. Tap Try again in a few seconds.", code: "AI_BUSY" });
+    expect(calls).not.toContain("openrouter");
+    expect(calls).toContain("google");
+    expect(events().filter((event) => event.name === "creative.interview").map((event) => [event.outcome, event.attributes.errorCode]))
+      .toEqual([["failed", "ASSISTANT_EXHAUSTED_FREE_TEXT_UNAVAILABLE"]]);
+  });
+
+  it("still returns 500 when a free key is refused for good, so it alerts", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    mocks.user = SMOKE;
+    const calls = providers({ groq: groqOutputPerMinute,
+      google: () => Response.json({ error: { code: 400, message: "API key not valid. Please pass a valid API key.", status: "INVALID_ARGUMENT" } }, { status: 400 }) });
+
+    const { response } = await startCreating(useVirtualDeadlines);
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).not.toHaveProperty("code", "AI_BUSY");
+    expect(calls).not.toContain("openrouter");
+  });
+
+  it("still returns 500 when no free model is configured, so it alerts", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.stubEnv("GROQ_API_KEYS", "");
+    vi.stubEnv("GOOGLE_AI_API_KEYS", "");
+    mocks.user = SMOKE;
+    const calls = providers({});
+
+    const { response } = await startCreating(useVirtualDeadlines);
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).not.toHaveProperty("code", "AI_BUSY");
+    expect(calls).toEqual([]);
   });
 });

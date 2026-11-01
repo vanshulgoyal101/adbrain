@@ -296,7 +296,11 @@ try {
   assert.equal(response.status(), 200, "Login failed.");
   // #2145: who signed in decides free or paid pictures; the session also lets a scheduled run delete its own ads.
   const auth = loginAuth(loginSession);
-  if (!auth) console.log(`NOTE Sign-in session unreadable (${loginSessionProblem(loginSession)}); free-only steps will refuse to run`);
+  // #2396: Create, Prepare and Picture need the identity; failing here reports it as sign-in, not as their own step.
+  // Read-only runs (the post-deploy guard) don't use it, so they only note it.
+  const identityProblem = auth ? null : `identity unreadable (${loginSessionProblem(loginSession)}) (#2396); no paid or free-quota request sent`;
+  assert.ok(!identityProblem || !["--create", "--prepare", "--picture"].some((mode) => modes.has(mode)), identityProblem);
+  if (identityProblem) console.log(`NOTE Sign in: ${identityProblem}`);
   await page.waitForURL((url) => url.origin === origin && !url.pathname.startsWith("/login"));
   signedIn = true;
   console.log("PASS Sign in");

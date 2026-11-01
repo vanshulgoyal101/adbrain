@@ -142,27 +142,29 @@ export function WorkspaceHome({
       {summary && (
         <section aria-labelledby="results-title">
           <h2 id="results-title" className="sr-only">{t("resultsSoFar")}</h2>
-          {/* #1934 (CPO #1924): a new offer re-runs the 3 steps in returning mode. */}
-          <Link href="/brand?again=1" className="float-right ml-4 inline-flex min-h-11 items-center rounded-md border border-slate-300 bg-white px-4 text-sm font-medium text-slate-900 hover:bg-slate-50">
-            {t("newCampaign")}
-          </Link>
-          {verdicts?.lead && leadCampaign && (
-            <p className="mb-4 max-w-2xl text-[17px] leading-snug text-slate-900">
-              {verdicts.lead.verdict.sentence}{" "}
-              <Link href="/campaigns" className="text-sm font-medium text-blue-700 hover:underline">
-                {leadCampaign.name || t("untitledCampaign")}
-              </Link>
-            </p>
-          )}
-          <dl className="grid grid-cols-3 gap-4 sm:flex sm:gap-16">
+          <div className="mb-5 flex flex-col items-start gap-3 sm:flex-row sm:justify-between">
+            {verdicts?.lead && leadCampaign && (
+              <p className="min-w-0 max-w-2xl break-words text-[17px] leading-snug text-slate-900">
+                {verdicts.lead.verdict.sentence}{" "}
+                <Link href="/campaigns" className="text-sm font-medium text-blue-700 hover:underline">
+                  {leadCampaign.name || t("untitledCampaign")}
+                </Link>
+              </p>
+            )}
+            {/* #1934 (CPO #1924): a new offer re-runs the 3 steps in returning mode. */}
+            <Link href="/brand?again=1" className="inline-flex min-h-11 max-w-full items-center rounded-md border border-slate-300 bg-white px-4 text-sm font-medium text-slate-900 hover:bg-slate-50 sm:ml-auto sm:shrink-0">
+              {t("newCampaign")}
+            </Link>
+          </div>
+          <dl className="flex flex-wrap gap-x-8 gap-y-5 sm:gap-x-16">
             {[
               { label: summary.chatsOnly ? t("chats") : t("enquiries"), value: String(summary.enquiries) },
               { label: t("spent"), value: formatMoney(summary.spend) },
               { label: summary.chatsOnly ? t("perChat") : t("perEnquiry"), value: summary.perEnquiry === null ? null : formatMoney(summary.perEnquiry) },
             ].map((metric) => (
-              <div key={metric.label} className="flex min-w-0 flex-col-reverse">
+              <div key={metric.label} className="flex shrink-0 flex-col-reverse">
                 <dt className="mt-1 text-xs text-slate-600">{metric.label}</dt>
-                <dd className="break-words text-4xl font-medium tracking-[-0.02em] text-slate-950">
+                <dd className="whitespace-nowrap text-3xl font-medium tabular-nums tracking-[-0.02em] text-slate-950 sm:text-4xl">
                   {metric.value ?? <span className="text-slate-400" aria-label={t("notYet")}>—</span>}
                 </dd>
               </div>

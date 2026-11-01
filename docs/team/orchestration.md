@@ -77,8 +77,9 @@ Routine steps never wait for the CEO or the CTO.
    change: run `gh pr merge <n> --auto --squash`. GitHub merges when CI passes
    (about 3 minutes) into `next`, and the deploy train ships `next` to production
    at most every 30 minutes (#461). Branches don't need to be up to date to merge.
-   After the train deploys it, smoke the changed flow in production,
-   close the issue with the PR link (plus one `Lesson:` line if you learned
+   Don't wait for the train: start your next item, and once it's live smoke the
+   changed flow in production on your next pass (never sleep or poll for a deploy),
+   then close the issue with the PR link (plus one `Lesson:` line if you learned
    something reusable) and start your next issue.
    **Ship the same day.** Open the PR as soon as one small slice works; do not
    hold finished work on a branch or batch it. A green PR that is still open after
@@ -159,11 +160,15 @@ Each tick:
 3. Log: `~/.adbrain-supervisor/supervisor.log`; stop role runs with `touch ~/.adbrain-supervisor/OFF` (scheduled-job dispatch and the nightly backup keep running, #1525);
    `--dry-run` shows who it would wake; `--install`/`--uninstall` manage the LaunchAgent.
 
-**After a VS Code restart** the old chats can't be messaged. The CEO (CTO as backup) starts one
-chat per role with `create_session` and the text from `npm run team-supervisor -- --restart-prompt all`;
-GitHub is the memory. Chats still help when they're alive: the CEO (or the CTO) can nudge an idle or
-stuck chat with `list_sessions`, `get_session_context` and `send_message` (at most once per
-chat per 20 min). `npm run team-status` lists each role as `waiting`, `has-work`, `no-work`
+**CEO handover and restarts (#2476).** The owner rotates CEO chats often and closes the old one, and a
+VS Code restart ends every chat. Either way, GitHub and git are the memory. Start a new CEO with the text
+from `npm run team-supervisor -- --restart-prompt ceo`. It reads the board and its `decision` queue, adopts
+live worker chats (`list_sessions`, `get_session_context`) and starts each missing role with `create_session`
+(relationship `independent`, title `AdBrain <Role>`) using `npm run team-supervisor -- --restart-prompt <role>`.
+Workers never nest inside a CEO session, so closing a CEO chat leaves them running; never delete another
+session. The outgoing CEO writes no handover: every decision and promise is already on its issue, and
+scheduled reads are `Next read <time>` comments. Nudge an idle or stuck chat with `send_message` (at most
+once per chat per 20 min). `npm run team-status` lists each role as `waiting`, `has-work`, `no-work`
 or `error`.
 
 ### Ready pool (pull, don't wait)
