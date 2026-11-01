@@ -281,7 +281,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 - **Deploy train (#461; Vercel Hobby allows 100 deploys a day).** Branch from current
 	`origin/next` (`bash scripts/wt.sh <issue>` does it), open a PR to **`next`**, enable
-	auto-merge. A PR opened against `main` is retargeted to `next` automatically.
+	auto-merge with `gh pr merge <n> --auto --squash` (one green commit per PR; only the train's
+	sync and promotion PRs use `--merge`, #2479). A PR opened against `main` is retargeted to `next` automatically.
 	`main` is production; the deploy train promotes a green `next` to `main` at most
 	every 30 minutes, so your change is live within about 30 minutes of merging. **Don't
 	wait for the train** (owner, Nov 1): check the changed flow before merging (locally or
