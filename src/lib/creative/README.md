@@ -19,7 +19,7 @@ Part of the [repository map](../../../docs/architecture/overview.md#repository-m
 ## Rules
 
 - Generated copy is used only after `validateConcept` passes ([concept.ts](concept.ts)). It runs the schema, [slopScan.ts](slopScan.ts) and [policy-rules.ts](policy-rules.ts); claims are checked against the supplied facts.
-- A concept gets at most two text calls: the first, then one repair listing the failed rules ([generate.ts](generate.ts)). Then it fails with `CreativeValidationError`; picture failures are `CreativeImageError`.
+- A concept gets at most two text calls: the first, then one repair that shows the model its own draft and the failed rules, and asks it to rewrite only those ([concept-repair.ts](concept-repair.ts), #2444). Then it fails with `CreativeValidationError`; picture failures are `CreativeImageError`.
 - Concept calls use `routing: "creative"`, no cache, and `CREATIVE_*` env settings for tokens, reasoning and per-attempt timeout. A whole `generateVariants` run is capped at 270 s.
 - Inputs are bounded before prompting (brief, instructions, preferences, at most 12 source facts, at most 3 reference images).
 - Every provider attempt, including failures, is kept in `llmUsage` / `imageAttempts` so the route can write usage rows ([receipt.ts](receipt.ts)).

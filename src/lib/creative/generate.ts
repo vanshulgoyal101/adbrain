@@ -17,6 +17,7 @@ import { downloadImage, generateImage } from "@/lib/imageGen";
 import { ReferencePhotoPausedError, type ImageAttempt } from "@/lib/imageGen/types";
 import { ownerPhotoFor, pausedPhotoFor } from "./owner-photos";
 import { batchPictures } from "./batch-reuse";
+import { repairMessages } from "./concept-repair";
 import { complete, parseJSON } from "@/lib/llm";
 import { LLMError } from "@/lib/llm/types";
 import type { LLMFailureCode, TokenUsage } from "@/lib/llm";
@@ -322,10 +323,7 @@ async function generateConcept(
     if (usage.length > usageBeforeAttempt) {
       usage[usage.length - 1].validation = { stage, rules: [...conceptValidationRules(issues), ...claims].slice(0, 12) };
     }
-    messages.push({
-      role: "user",
-      content: `Generate a fresh, complete JSON concept for the original brief. Fix these validation failures using only supplied facts, without inventing claims:\n${issues.join("\n")}`,
-    });
+    messages.push(...repairMessages(value, issues));
     if (attempt === 0) onRepair?.();
   }
   throw new CreativeValidationError(issues, usage, stage);

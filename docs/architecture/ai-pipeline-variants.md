@@ -12,7 +12,8 @@ Part of [Architecture](README.md). [Interview and boundaries](ai-pipeline.md) ·
 2. Choose up to six configured marketing angles; default batch count is three.
 3. For each angle, request a structured concept with caching disabled. First
    attempt temperature is 0.8; one repair attempt uses 0.4 and is told each
-   failed check, with the actual length when text is too long (#281). Max output and
+   failed check, with the actual length when text is too long (#281). The repair sees its own
+   draft and rewrites only what failed (#2444); a reply that wasn't JSON gets a fresh try. Max output and
    reasoning effort are configured. Failed validation stops the variant.
    Before validation, cosmetic slips are normalized once:
    - Over-long `visual.medium`, `visual.direction` and rationale are clipped at a word. An over-long link
