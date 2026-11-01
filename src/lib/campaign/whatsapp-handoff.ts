@@ -20,7 +20,7 @@ export function handoffRate(results: { whatsapp_opens?: number | null; conversat
 
 export function handoffLine({ opens, messages }: Handoff): string {
   const percent = Math.round((messages / opens) * 100);
-  return `Your past WhatsApp ads: ${opens.toLocaleString("en-IN")} opened WhatsApp, ${messages.toLocaleString("en-IN")} sent a message (${percent}%).`;
+  return `Your past WhatsApp ads: ${opens.toLocaleString("en-IN")} taps on the WhatsApp button, ${messages.toLocaleString("en-IN")} sent a message (${percent}%).`;
 }
 
 const GREETING = /^(hi|hii+|hello|hey|namaste|namaskar|नमस्ते|ਸਤ ਸ੍ਰੀ ਅਕਾਲ)\b[!,.\s]*/iu;
