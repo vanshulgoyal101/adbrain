@@ -547,7 +547,7 @@ export function Studio({
       {exportOk && <Alert variant="success">Ad pack downloaded.</Alert>}
 
       {items.length > 0 && (
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <fieldset className="flex min-w-0 flex-wrap gap-1">
             <legend className="sr-only">Ad status</legend>
             {(
@@ -578,7 +578,7 @@ export function Studio({
               </label>
             ))}
           </fieldset>
-          <label className="relative min-w-0">
+          <label className="relative min-w-0 lg:shrink-0">
             <span className="sr-only">Search ads</span>
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
             <input
@@ -586,7 +586,7 @@ export function Studio({
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search ads"
-              className="h-11 w-full rounded-md border border-slate-300 pl-9 pr-3 text-sm sm:w-60"
+              className="h-11 w-full rounded-md border border-slate-300 pl-9 pr-3 text-sm lg:w-60"
             />
           </label>
         </div>
