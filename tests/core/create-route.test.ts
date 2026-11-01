@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   ownerPhotos: [] as string[],
   ownerPhotoStatus: 200,
   usage: [] as Record<string, unknown>[],
+  renderFailures: new Map<string, number>(),
 }));
 
 vi.mock("@/lib/supabase/admin", () => ({
@@ -54,7 +55,12 @@ vi.mock("@/lib/preferences/store", () => ({ preferenceContext: async () => "" })
 vi.mock("@/lib/creative/persist", () => ({
   persistCreativeImage: async (_client: unknown, businessId: string, group: string, angle: string) =>
     `${SUPABASE}/storage/v1/object/public/creatives/${businessId}/${group}/${angle}.webp`,
-  renderAndPersistDesign: async (_client: unknown, _businessId: string, _group: string, _angle: string, _design: unknown, photoUrl: string) => photoUrl,
+  renderAndPersistDesign: async (_client: unknown, _businessId: string, _group: string, angle: string, _design: unknown, photoUrl: string) => {
+    const failures = mocks.renderFailures.get(angle) ?? 0;
+    if (failures) mocks.renderFailures.set(angle, failures - 1);
+    if (failures) throw new Error("Could not store the generated image. No finished creative was saved.");
+    return photoUrl;
+  },
 }));
 vi.mock("@/lib/llm/persist", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/llm/persist")>()),
@@ -112,6 +118,7 @@ beforeEach(() => {
   mocks.ownerPhotos = [];
   mocks.ownerPhotoStatus = 200;
   mocks.usage.length = 0;
+  mocks.renderFailures.clear();
   calls = [];
   for (const [name, value] of Object.entries({
     NEXT_PUBLIC_SUPABASE_URL: SUPABASE,
@@ -390,6 +397,32 @@ describe("core: Create route on recorded run 4", () => {
     expect(valueCalls()).toHaveLength(4);
     expect(mocks.inserts).toHaveLength(2);
     expect(batchEvent(info)).toMatchObject({ outcome: "partial", attributes: { count: 2, failedCount: 1, failedStages: ["text"], topUp: 1 } });
+  });
+
+  it("#2444: an ad whose words and picture passed but whose save failed is logged and topped up", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    mocks.renderFailures.set("offer", 1);
+    stubProviders();
+    const response = await (await postCreate())();
+    const body = await response.json();
+    expect(response.status, JSON.stringify(body)).toBe(200);
+    expect(body.creatives).toHaveLength(3);
+    expect(batchEvent(info)).toMatchObject({ outcome: "success", attributes: { count: 3, failedCount: 0, topUp: 1 } });
+    expect(JSON.parse(String(error.mock.calls.find(([entry]) => String(entry).includes("AD_NOT_SAVED"))![0]))).toEqual({
+      source: "adbrain.creative", code: "AD_NOT_SAVED", angle: "offer", savedUpTo: "render",
+      message: "Could not store the generated image. No finished creative was saved.",
+    });
+  });
+
+  it("#2444: a save that fails again is reported as a lost ad", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    mocks.renderFailures.set("offer", 2);
+    stubProviders();
+    const body = await (await (await postCreate())()).json();
+    expect(body.creatives).toHaveLength(2);
+    expect(batchEvent(info)).toMatchObject({ outcome: "partial", attributes: { count: 2, failedCount: 1, failedStages: ["other"], topUp: 1 } });
   });
 
   it("does not top up when every provider is down (#1123)", async () => {
