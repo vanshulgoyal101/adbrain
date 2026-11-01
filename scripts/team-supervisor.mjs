@@ -7,7 +7,7 @@
 //   node scripts/team-supervisor.mjs [--dry-run] [--roles devops,qa,…]   one tick (what launchd runs)
 //   node scripts/team-supervisor.mjs --install | --uninstall              the LaunchAgent (StartInterval 600 s)
 //   node scripts/team-supervisor.mjs --smoke                              prove the CLI runs headless here
-//   node scripts/team-supervisor.mjs --restart-prompt <role|all>          the prompt to resend with create_session
+//   node scripts/team-supervisor.mjs --restart-prompt <role|all|ceo>      the prompt to start a chat with create_session (#2476)
 // Each tick also dispatches scheduled-jobs.yml when GitHub's own schedule has lapsed (#692), and once a
 // night exports production to ~/.adbrain-backups and restore-drills it (#884).
 // Kill switch for role runs: touch ~/.adbrain-supervisor/OFF (scheduled-job dispatch and the nightly backup keep running). Log: ~/.adbrain-supervisor/supervisor.log.
@@ -171,12 +171,34 @@ export function prompt(role, items, runMin) {
   ].join("\n");
 }
 
-/** The restart prompt a supervisor chat resends with create_session after a VS Code restart (#573; GitHub is the memory). */
+/** Worker roles a CEO keeps one live chat for (everyone but the CEO). */
+export const WORKER_ROLES = Object.keys(NAMES).filter((r) => r !== "ceo");
+
+/**
+ * #2476: the owner rotates CEO chats often and closes the old one. The new CEO inherits everything from GitHub and
+ * git, adopts the live worker chats and respawns missing ones as independent sessions, so closing a CEO chat never
+ * takes a worker down with it.
+ */
+function ceoPrompt() {
+  const roles = WORKER_ROLES.map((r) => `${NAMES[r]} (${r})`).join(", ");
+  return [
+    `You are AdBrain's CEO. The owner closed the previous CEO chat on purpose and will rotate CEO chats often. GitHub and git are your memory, not chat history; you have the owner's full authority.`,
+    `1. Read AGENTS.md, then docs/team/orchestration.md (Current Dispatch, role cards, "CEO handover"), Team board #580 with today's priorities, experiments #2360, and .github/skills/multi-worker-delivery/SKILL.md.`,
+    `2. Check in, in this order: CI on next and main (\`gh run list --branch next --limit 5\`); open PRs stuck green or red; production smoke and the deploy train; then everything addressed to you: \`gh issue list -l decision --state open\`, \`-l waiting-owner\`, and comments with "→ CEO". Commitments made by earlier CEOs live there or as "Next read <time>" comments; nothing else carries over.`,
+    `3. The team: one live chat per role: ${roles}. Run list_sessions (workspace adbrain) and match chats by title "AdBrain <Role>" or a first prompt starting "You are AdBrain's <Role>". Read each chat's latest turn with get_session_context; adopt every live one, and never start a second chat for a role that has one. For each missing role, create_session with relationship "independent", workspace adbrain, title "AdBrain <Role>", and the prompt from \`npm run -s team-supervisor -- --restart-prompt <role>\`. Never nest worker chats in your own session and never delete another session: closing your chat must not take a worker down. Worker chats nested inside an earlier CEO's session end when the owner closes it: steer each to push its branch and end its turn, start its independent replacement, then tell the owner the old session is safe to close.`,
+    `4. Reaching a chat: queue to an idle one, steer a busy one. A chat blocked in its waiter or a sleep loop reads nothing until the command ends: \`kill $(cat "$TMPDIR/adbrain-wait-for-work-<role>.pid")\`, then steer one line. Direct messages are only for waking a chat or stopping harm; work goes through GitHub labels and "→ <Role>:" comments.`,
+    `5. Your job: delegate, decide, keep labels and priorities honest, and remove waits. Never build product code. Keep every worker on the #580 outcome filter. Money, Meta writes, secrets, migrations and production settings keep their gates. Ask the owner only in one batched list (label waiting-owner). Answer the owner with one line first, then a short table of what you saw / what it is / status, and at most one owner action.`,
+    `6. Leave nothing in chat memory: every decision or promise goes on its GitHub issue the moment you make it, so the next CEO can take over at any time. Between owner requests, run \`node scripts/wait-for-work.mjs --me ceo\` in the foreground from a worktree on current origin/main, and run it again when it exits.`,
+  ].join("\n");
+}
+
+/** The prompt a CEO sends with create_session to (re)start a role's chat (#573, #2476; GitHub is the memory). */
 export function restartPrompt(role) {
   const name = NAMES[role];
   if (!name) throw new Error(`unknown role ${role}`);
+  if (role === "ceo") return ceoPrompt();
   return [
-    `You are AdBrain's ${name}. Your old chat was lost in a VS Code restart, so start fresh.`,
+    `You are AdBrain's ${name}. Your old chat ended (a VS Code restart or a CEO handover), so start fresh.`,
     `Read AGENTS.md, then the Current Dispatch and your role card in docs/team/orchestration.md, then your row and today's priorities on Team board #580.`,
     `Your queue: \`gh issue list -R vanshulgoyal101/adbrain -l owner:${role} --state open\`; work the top item of your #580 row first.`,
     `Work only in your own worktree under ~/Development/copilot/adbrain-wt/ (\`bash scripts/wt.sh <issue>\`). Run commands in the foreground only and never leave anything running. Sign your comments "${name}:".`,
@@ -444,7 +466,7 @@ async function main() {
   const domain = `gui/${process.getuid()}`;
 
   if (values["restart-prompt"]) {
-    const which = values["restart-prompt"] === "all" ? Object.keys(NAMES).filter((r) => r !== "ceo") : [values["restart-prompt"]];
+    const which = values["restart-prompt"] === "all" ? WORKER_ROLES : [values["restart-prompt"]];
     return console.log(which.map((r) => `## ${NAMES[r]}\n${restartPrompt(r)}`).join("\n\n"));
   }
   if (values.install || values.uninstall) {
