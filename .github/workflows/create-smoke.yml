@@ -100,7 +100,7 @@ jobs:
           elif [ "${REQUESTED_MODE:-picture}" != create ]; then
             cause="The scheduled \$0 check ($REQUESTED_MODE) failed outside its own step; see the lines above (#2145)."
           else
-            cause="Free pictures are the usual cause (#2145). A FAIL Create with saved ads keeps them in the smoke workspace; a FAIL Cleanup leaves the ads of that run in Review."
+            cause="Create saved fewer ads than it asked for or stopped (#2504): the NOTE missing ad lines name each one and NOTE failed attempts gives the reasons, provider and model. A FAIL Create with saved ads keeps them in the smoke workspace; a FAIL Cleanup leaves the ads of that run in Review."
           fi
           body="$(printf 'Run: %s\n\n```\n%s\n```\n%s\n' "$run" "$smoke" "$cause")"
           # One open alert at a time: a repeat failure comments on it.
