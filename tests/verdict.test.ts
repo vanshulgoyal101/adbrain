@@ -63,7 +63,7 @@ describe("verdict (#1255)", () => {
     expect(v({ results: 0, spend: 299 })).toMatchObject({ state: "early" });
     expect(v({ results: 0, spend: 299, comparison: { ...solar, typical: 250 } })).toMatchObject({ state: "early" });
     expect(v({ results: 0, spend: 375, comparison: { ...solar, typical: 250 } })).toMatchObject({ state: "no_results" });
-    expect(v({ results: 0, spend: 300, opens: 10 }).sentence).toBe("₹300 spent, no chats yet. 10 people opened WhatsApp but didn't send the message.");
+    expect(v({ results: 0, spend: 300, opens: 10 }).sentence).toBe("₹300 spent, no chats yet. 10 taps on the WhatsApp button.");
     expect(v({ results: 0, spend: 300, destination: "instant_form", opens: null })).toMatchObject({ sentence: "₹300 spent, no enquiries yet.", action: null });
   });
 
@@ -96,7 +96,7 @@ describe("verdict (#1255)", () => {
 
   it("people waiting prefix any live state, and Reply is the action only where the state has none", () => {
     expect(v({ waiting: 2 })).toMatchObject({ state: "about_average", action: "reply", sentence: "2 people are waiting for your reply. Each chat costs ₹150, about the same as usual for solar ads AdBrain has run (about ₹200 each)." });
-    expect(v({ waiting: 1, results: 0, spend: 400, comparison: null })).toMatchObject({ action: "edit_message", sentence: "1 person is waiting for your reply. ₹400 spent, no chats yet. 40 people opened WhatsApp but didn't send the message." });
+    expect(v({ waiting: 1, results: 0, spend: 400, comparison: null })).toMatchObject({ action: "edit_message", sentence: "1 person is waiting for your reply. ₹400 spent, no chats yet. 40 taps on the WhatsApp button." });
     expect(v({ waiting: 3, status: "completed", results: 1, spend: 33 }).sentence).toBe("It ended with 1 chat, too few to judge yet. Run it again for longer?");
   });
 
@@ -131,7 +131,7 @@ describe("verdict in Hindi (#1438)", () => {
     expect(h({ results: 3, spend: 300 })).toMatchObject({ label: "अभी शुरुआत है", sentence: "अब तक 3 चैट। 5 के बाद AdBrain बताएगा कि यह काम कर रहा है या नहीं।" });
     expect(h({ results: 0, spend: 100 }).sentence).toBe("आपके विज्ञापन अब तक 5,000 बार दिखे हैं। अभी कोई चैट नहीं; बहुत लोग शाम को मैसेज करते हैं।");
     expect(h({ results: 0, spend: 400, opens: 12, comparison: null })).toMatchObject({ label: "अभी कोई चैट नहीं",
-      sentence: "₹400 खर्च हुए, अभी तक कोई चैट नहीं। 12 लोगों ने WhatsApp खोला पर मैसेज नहीं भेजा।" });
+      sentence: "₹400 खर्च हुए, अभी तक कोई चैट नहीं। WhatsApp बटन पर 12 टैप हुए।" });
     expect(h({ destination: "instant_form", results: 0, spend: 400, opens: null, comparison: null })).toMatchObject({ label: "अभी कोई पूछताछ नहीं",
       sentence: "₹400 खर्च हुए, अभी तक कोई पूछताछ नहीं।" });
     expect(h({ impressions: 0, results: 0, spend: 0, liveSince: "2026-10-27T10:00:00Z" })).toMatchObject({ label: "अभी दिख नहीं रहा",

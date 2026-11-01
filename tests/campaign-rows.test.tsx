@@ -274,12 +274,12 @@ describe("Campaigns rows (#403 S5)", () => {
     });
   });
 
-  it("shows how many opened WhatsApp and how many messaged (#493)", async () => {
+  it("shows WhatsApp button taps and messages as separate counts (#493)", async () => {
     const whatsapp = { ...active, id: "campaign-3", name: "Solar WhatsApp", raw: { destination: "whatsapp" } } as unknown as Campaign;
     render(<Campaigns business={business} approved={[]} initialCampaigns={[whatsapp]} leadForms={[]} leadFormError={null} metaReady={false} adAccountId="act_999"
       initialResults={{ [whatsapp.id]: { ...result, destination: "whatsapp", leads: 0, cpl: null, conversations: 1, cost_per_conversation: 162, whatsapp_opens: 12 } as CampaignResult }} />);
     const row = (await screen.findByRole("heading", { name: "Solar WhatsApp" })).closest("article") as HTMLElement;
-    expect(within(row).getByText("12 opened WhatsApp, 1 messaged you")).toBeInTheDocument();
+    expect(within(row).getByText("12 taps on the WhatsApp button, 1 messaged you")).toBeInTheDocument();
     // #783: the card's figures and 'Which ad worked' both call them chats.
     expect(within(row).getByText("WhatsApp chats")).toBeInTheDocument();
     expect(within(row).getByText("Cost / chat")).toBeInTheDocument();
