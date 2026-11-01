@@ -87,6 +87,18 @@ function brandLine(brand: BrandContext): string {
 const MAX_INTERVIEW_ANSWERS = 3;
 export const INTERVIEW_PROMPT_VERSION = "interview-v5";
 
+export const INTERVIEW_MAX_TOKENS = 2400;
+/**
+ * #2249: Groq counts the `max_tokens` reservation against its 1,000 output tokens a minute, so 2,400 tripped it on a
+ * second quick turn (smoke, Oct 31 14:13Z). Its interview replies peak at 532 tokens (p99 532, 63 successes, Oct 25 to
+ * Nov 1); 800 is 1.5× that, so a reply is never cut and one Groq turn a minute fits. Gemini follows.
+ */
+export const INTERVIEW_GROQ_MAX_TOKENS = 800;
+
+export function interviewMaxTokens(provider: string): number {
+  return provider === "groq" ? INTERVIEW_GROQ_MAX_TOKENS : INTERVIEW_MAX_TOKENS;
+}
+
 const OWNER_LANGUAGES = { hi: "Hindi in Devanagari script", pa: "Punjabi in Gurmukhi script", hinglish: "Hinglish (Hindi in Roman script)" } as const;
 
 /** The language the owner types in: Devanagari Hindi, Gurmukhi Punjabi or Roman-script Hindi (#290). */
@@ -422,7 +434,8 @@ export async function runInterview(
       json: true,
       responseSchema: resultSchema,
       temperature: attempt ? 0.2 : 0.5,
-      maxTokens: 2400,
+      maxTokens: INTERVIEW_MAX_TOKENS,
+      providerMaxTokens: { groq: INTERVIEW_GROQ_MAX_TOKENS },
       cache: false,
       signal,
       onAttempt: (entry) => {
