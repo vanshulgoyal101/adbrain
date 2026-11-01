@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { INTERNAL_DOMAINS, INTERNAL_USER_IDS, internalUserIdsSql, isInternalUserSql, makesFreePictures } from "../scripts/lib/internal-accounts.mjs";
+import { INTERNAL_DOMAINS, INTERNAL_USER_IDS, internalUserIdsSql, isInternalUserSql, loginAuth, loginSessionProblem, makesFreePictures } from "../scripts/lib/internal-accounts.mjs";
 import internal from "@/lib/internal-accounts.json";
 import { isExemptFromFreeProviders, isInternalUser } from "@/lib/internal-accounts";
 import { eventsSql } from "../scripts/product-events.mjs";
@@ -39,6 +39,30 @@ describe("smoke Create free-pictures check (#2145)", () => {
     expect(makesFreePictures(null)).toBe(false);
     expect(makesFreePictures({ email: "qa@adbrain.vanshul.com", email_confirmed_at: confirmed })).toBe(false);
     for (const { userId } of internal.exemptFromFreeProviders) expect(makesFreePictures({ id: userId, email: "x@adbrain.vanshul.com", email_confirmed_at: confirmed })).toBe(false);
+  });
+});
+
+describe("smoke sign-in identity (#2396)", () => {
+  const user = { id: internal.smokeUserIds[0], email: "smoke@adbrain.vanshul.com", email_confirmed_at: "2026-10-01T00:00:00Z" };
+  const login = { status: 200, supabase: "https://x.supabase.co", apikey: "anon", body: { access_token: "tok", user } };
+
+  it("keeps the captured session so the free-pictures check sees the real user", () => {
+    expect(loginAuth(login)).toEqual({ supabase: "https://x.supabase.co", apikey: "anon", token: "tok", user });
+    expect(makesFreePictures(loginAuth(login)?.user)).toBe(true);
+    expect(loginSessionProblem(login)).toBe("ok");
+  });
+
+  it.each([
+    [null, "sign-in response not captured"],
+    [{ ...login, status: 400 }, "sign-in HTTP 400"],
+    [{ ...login, body: null }, "sign-in body unreadable"],
+    [{ ...login, apikey: undefined }, "no apikey on the sign-in request"],
+    [{ ...login, body: { user } }, "no access token"],
+    [{ ...login, body: { access_token: "tok", user: { email: user.email } } }, "no user id"],
+  ])("fails closed on %o", (bad, problem) => {
+    expect(loginAuth(bad)).toBeNull();
+    expect(makesFreePictures(loginAuth(bad)?.user)).toBe(false);
+    expect(loginSessionProblem(bad)).toBe(problem);
   });
 });
 
