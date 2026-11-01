@@ -37,6 +37,11 @@ label it for the owner instead of doing it.
 | **Reviewer** | High-risk code review (money, migration, tenant/auth); when no review is waiting, pick your own audit of a failing #681 row and file findings into the pool (the CTO doesn't refill this row): `gh pr review <n> --comment --body "Reviewer review of <sha>: **approved**. …"`, accepted by `release.mjs` where the CTO's is; reviews in parallel with QA, within an hour | Design and priority calls (CTO, CEO); fixing code (the author) |
 | **DevOps** | When no release waits, pick your own ops hygiene (Supabase advisors, slow queries, costs, alerts, the train); the CTO doesn't refill this row. Migrations, money/tenant/config releases, secrets and production settings, rollback, scheduler, CI and the production guard | Feature work; priority (CEO) |
 | **Dev 4** | The pre-launch Review step (#681): every rejection says in plain words what to fix, with a one-tap path to fix it, plus issues assigned to you | Same as Dev |
+| **Dev 5** | Create reliability (#2444, #2457, #2378): every Create batch saves 3 of 3 ads on free models; plus issues assigned to you | Same as Dev |
+| **Dev 6** | Pilot blockers (#679, #1221) and the Launch → Manage loop in production; plus issues assigned to you | Same as Dev |
+| **Speed** | Delivery speed for the whole team: local test and worktree setup, affected-tests runs, CI wall time, the deploy train, waiter and hooks (#2481); measures before and after with `npm run team-metrics`; labelled `owner:speed` | Product code (the area owner); production settings and secrets (DevOps) |
+| **Janitor** | Fix forward anything red: `next` or `main` CI on any check, failed scheduled jobs and smokes, flaky tests, stale branches and worktrees; a small fix PR on top, no author ping (AGENTS.md "Fix forward"); a core break in production still rolls back first via DevOps | Root-cause redesigns (file to the area owner); rollback (DevOps) |
+| **Scout** | Keeps every lane's ready pool at 3 or more: turns production failures (top error codes per route, failed smokes, Create success rate) into briefed `ready` + `lane:<lane>` issues with a target and evidence; labelled `owner:scout` | Ranking (CPO); building (the lane) |
 | **CPO** | Product: research and the ranked roadmap (#703), feature proposals with evidence, cost and the smallest test (#694), labelled `owner:cpo` | Building (CTO assigns); priority and money (CEO) |
 | **Analyst** | Market and competitor research (#750), evidence-backed lessons filed as `later` issues for the CPO to rank; picks its own research when empty, labelled `owner:analyst` | Product ranking (CPO); building (CTO assigns); priority and money (CEO) |
 | **Designer** | The product's look and feel (#847): screen audits, one type/colour/spacing system, design slices built and shipped as small UI PRs with QA's 390/1440 check; labelled `owner:designer` | Feature logic and Meta/money code (the step owner); priority (CEO) |
@@ -78,7 +83,9 @@ Routine steps never wait for the CEO or the CTO.
    (about 3 minutes) into `next`, and the deploy train ships `next` to production
    at most every 30 minutes (#461). Branches don't need to be up to date to merge.
    Don't wait for the train: start your next item, and once it's live smoke the
-   changed flow in production on your next pass (never sleep or poll for a deploy),
+   changed flow in production on your next pass (never sleep or poll for a deploy;
+   the `.github/hooks/no-deploy-wait.json` hook refuses sync `sleep ≥60s`, sleep
+   loops and `gh run watch`, escape with `# allow-wait`, #2481),
    then close the issue with the PR link (plus one `Lesson:` line if you learned
    something reusable) and start your next issue.
    **Ship the same day.** Open the PR as soon as one small slice works; do not
@@ -167,8 +174,11 @@ live worker chats (`list_sessions`, `get_session_context`) and starts each missi
 (relationship `independent`, title `AdBrain <Role>`) using `npm run team-supervisor -- --restart-prompt <role>`.
 Workers never nest inside a CEO session, so closing a CEO chat leaves them running; never delete another
 session. The outgoing CEO writes no handover: every decision and promise is already on its issue, and
-scheduled reads are `Next read <time>` comments. Nudge an idle or stuck chat with `send_message` (at most
-once per chat per 20 min). `npm run team-status` lists each role as `waiting`, `has-work`, `no-work`
+scheduled reads are `Next read <time>` comments. If workers still sit inside an earlier CEO's session, the
+owner closes it first and the new CEO then starts their independent replacements (worktrees survive). A
+running chat reads no chat messages (steers stay "processing"; queued ones land when the turn ends), so
+reach workers on GitHub (`→ <Role>:`, or the Everyone row of #580) and use `send_message` (queue) only to
+start a chat whose status is idle. `npm run team-status` lists each role as `waiting`, `has-work`, `no-work`
 or `error`.
 
 ### Ready pool (pull, don't wait)

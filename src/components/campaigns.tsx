@@ -1656,7 +1656,7 @@ function BusinessCampaigns({
                 ))}
               </ul>
             ) : null}
-            <a href={adsLink(activationReview)} target="_blank" rel="noopener noreferrer" className="mt-2 inline-block font-medium underline">Open campaign in Meta</a>
+            <a href={adsLink(activationReview)} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex min-h-11 items-center font-medium underline">Open campaign in Meta</a>
             <Button variant="ghost" size="sm" onClick={() => void openActivationReview(activationReview, reviewConnection!, true)}>Refresh review</Button>
           </div>}
           <div className="mt-4 flex flex-wrap items-center gap-2">

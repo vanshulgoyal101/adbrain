@@ -12,7 +12,7 @@ export interface CampaignInsights {
   cpl: number | null;
   conversations?: number;
   costPerConversation?: number | null;
-  /** #493: link clicks on a WhatsApp ad, i.e. people who opened the chat (vs `conversations`, who sent). */
+  /** Meta link_click: WhatsApp button taps, not verified chat opens or a count of non-senders. */
   whatsappOpens?: number;
   /** Meta returned no rows: nothing delivered in the requested period. */
   noDelivery?: true;
