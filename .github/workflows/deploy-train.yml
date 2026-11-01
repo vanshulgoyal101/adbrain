@@ -107,7 +107,7 @@ jobs:
             git -C "$RUNNER_TEMP/train" fetch -q --filter=tree:0 --no-tags "$GITHUB_SERVER_URL/$repo" \
               +refs/heads/main:refs/remotes/origin/main +refs/heads/next:refs/remotes/origin/next
             pending=""
-            for c in $(git -C "$RUNNER_TEMP/train" log --first-parent --format=%H origin/main..origin/next | head -n 30); do
+            for c in $(git -C "$RUNNER_TEMP/train" log --first-parent --format=%H origin/main..origin/next); do
               if [ -z "${final[$c]:-}" ]; then
                 # A run GitHub cancelled (a newer run on the same commit replaced it) can still report test=failure
                 # from its always() aggregate job (#983); its suite is "cancelled", so leave it out.
@@ -115,7 +115,8 @@ jobs:
                 cancelled=$(gh api "repos/$repo/commits/$c/check-suites?per_page=100" --jq '[.check_suites[] | select(.conclusion == "cancelled") | .id]')
                 states=$(jq -rn --argjson runs "$runs" --argjson cancelled "$cancelled" '[$runs[] | . as $r | select($cancelled | index($r.suite) | not) | "\(.name)=\(.state)"] | unique | join(" ")')
                 if grep -Eq '=(failure|cancelled|timed_out|action_required)' <<<"$states"; then final[$c]="red ($states)"
-                elif [ "$(grep -o '=success' <<<"$states" | wc -l)" -eq 4 ]; then
+                # Green means exactly these four, each success only: a queued rerun beside an old success is pending.
+                elif [ "$states" = "build=success core=success secrets=success test=success" ]; then
                   if [ "$(gh api "repos/$repo/compare/$c...main" --jq '.files | length')" -eq 0 ]; then final[$c]=green
                   else final[$c]="lacks main's changes"; fi
                 else echo "${c::7}: ${states:-no checks yet}"; pending=1; continue; fi
@@ -170,6 +171,11 @@ jobs:
           done
           merged=""; rerun=""
           for i in $(seq 1 30); do
+            # --match-head-commit pins the head only: a hotfix landing on main since the check would merge into a
+            # tree CI never saw, so stop and let the next run sync it first.
+            if [ "$(gh api "repos/$repo/compare/$sha...main" --jq '.files | length')" -ne 0 ]; then
+              echo "::error::main changed since ${sha::7} was checked; the next train syncs it first."; exit 1
+            fi
             if gh pr merge "$pr" -R "$repo" --merge --match-head-commit "$sha"; then merged=1; break; fi
             run=$(gh api "repos/$repo/actions/runs?head_sha=$sha&event=pull_request&per_page=20" \
               --jq '[.workflow_runs[] | select(.name == "CI")] | sort_by(.created_at) | last // empty | "\(.id) \(.status) \(.conclusion)"')
