@@ -437,7 +437,7 @@ async function generate(req: Request, live?: LiveCreate) {
   recordProductEvent({ kind: "workflow", name: "creative.batch", businessId, durationMs: Date.now() - startedAt,
     outcome: !inserted.length ? "failed" : failures.length ? "partial" : "success",
     // #1468: the estimated AI cost of this Create (USD), for the top-up and image-provider decisions.
-    attributes: { count: inserted.length, failedCount: failures.length, topUp, ...(pictureRetry ? { pictureRetry } : {}), provider: freeImagesOnly() ? (cloudflareConfigured() ? "cloudflare" : "pollinations") : "paid",
+    attributes: { count: inserted.length, expected: count, failedCount: failures.length, topUp, ...(pictureRetry ? { pictureRetry } : {}), provider: freeImagesOnly() ? (cloudflareConfigured() ? "cloudflare" : "pollinations") : "paid",
       costUsd: roundUsd(cost.text + cost.image), textCostUsd: roundUsd(cost.text), imageCostUsd: roundUsd(cost.image) } });
   if (!inserted.length)
     return NextResponse.json(
