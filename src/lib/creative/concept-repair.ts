@@ -16,8 +16,8 @@ const FRESH_RULES = new Set([
 export function repairMessages(draft: unknown, issues: string[]): ChatMessage[] {
   const failures = `using only supplied facts, without inventing claims:\n${issues.join("\n")}`;
   // A draft that isn't the concept's shape can't be checked for claims (QA #2444), so only a too-long text goes back.
-  const unchecked = (rule: string) => rule.startsWith("schema:") && !rule.endsWith(":too_big");
-  if (draft === undefined || conceptValidationRules(issues).some((rule) => FRESH_RULES.has(rule) || unchecked(rule))) {
+  const unchecked = issues.some((issue) => issue.startsWith("schema:") && !/^schema:[^:]+:too_big: .*; it is \d+ characters$/.test(issue));
+  if (draft === undefined || unchecked || conceptValidationRules(issues).some((rule) => FRESH_RULES.has(rule))) {
     return [{ role: "user", content: `Generate a fresh, complete JSON concept for the original brief. Fix these validation failures ${failures}` }];
   }
   return [

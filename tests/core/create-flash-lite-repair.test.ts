@@ -104,9 +104,19 @@ describe("core: the repair keeps flash-lite's draft and changes only what failed
     expect(JSON.stringify(requests[1])).not.toContain("50% off X-rays");
   });
 
-  it("a draft that isn't the concept's shape can't be checked, so its repair starts fresh", async () => {
-    const shapeless = { ...draft, cta: 42 };
-    const { requests } = await create([JSON.stringify(shapeless), offer.text.replace(draft.headline, "Your first visit in Cedar Park")]);
+  it("an offer past the cut point of a too-long text is still caught (review #2444)", async () => {
+    const late = { ...draft, primary_text: `${draft.primary_text}\n${"Gentle care. ".repeat(70)}\nGet 50% off X-rays.` };
+    const { requests } = await create([JSON.stringify(late), offer.text.replace(draft.headline, "Your first visit in Cedar Park")]);
+
+    expect(requests[1].map((turn) => turn.role)).toEqual(["user", "user"]);
+    expect(requests[1][1].parts[0].text).toMatch(/schema:primary_text:too_big[\s\S]*unsupported-commercial-claim/);
+  });
+
+  it.each([
+    ["isn't the concept's shape", { cta: 42 }],
+    ["has too many quotes", { sourceQuotes: Array(9).fill("Free 15-minute spine check") }],
+  ])("a draft that %s can't be checked, so its repair starts fresh", async (_, change) => {
+    const { requests } = await create([JSON.stringify({ ...draft, ...change }), offer.text.replace(draft.headline, "Your first visit in Cedar Park")]);
 
     expect(requests[1].map((turn) => turn.role)).toEqual(["user", "user"]);
   });
