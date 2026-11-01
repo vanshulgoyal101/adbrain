@@ -3,7 +3,7 @@ name: task-aware-llm-routing
 description: "Use this skill when one product sends multiple kinds of work to several LLM providers, especially when some tasks are expensive or latency-sensitive and others are extraction, summarization, classification, or conversational glue."
 ---
 
-<!-- Generated from vanshulgoyal101/skills@eb9e65d skills/task-aware-llm-routing.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
+<!-- Generated from vanshulgoyal101/skills@77e6db7 skills/task-aware-llm-routing.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
 
 # Task-Aware LLM Routing
 
