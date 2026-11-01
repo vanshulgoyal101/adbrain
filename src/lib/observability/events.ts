@@ -31,6 +31,8 @@ export const productEventSchema = z.object({
     /** #1543: the scoreboard's Manage snapshot: oldest and p90 results age (minutes) across active campaigns. */
     worstMinutes: z.number().int().nonnegative().max(1_000_000).optional(),
     p90Minutes: z.number().int().nonnegative().max(1_000_000).optional(),
+    /** #2515: the step that lost each missing Create ad (creative/failure-message.ts `creativeFailureStage`). */
+    failedStages: z.array(z.enum(["text", "picture", "provider", "save", "timeout", "other"])).max(6).optional(),
     /** #1123: ads the Create top-up round retried. */
     topUp: z.number().int().nonnegative().max(6).optional(),
     /** #1547: missing ads whose picture a +prospect batch tried once more (same words, free picture). */
