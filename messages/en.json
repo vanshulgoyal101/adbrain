@@ -42,7 +42,7 @@
     "perChat": "Per chat",
     "weekTitle": "Last week: {chats, plural, one {# chat} other {# chats}}, {enquiries, plural, one {# real enquiry} other {# real enquiries}}, {spend} spent",
     "weekBest": "Best ad so far: ''{name}''.",
-    "weekQuickQuestions": "Few people who open WhatsApp send a message. Try quick questions on your next run.",
+    "weekQuickQuestions": "Few messages were sent compared with taps on the WhatsApp button. Try quick questions on your next run.",
     "weekAddEnquiries": "Add which chats were real enquiries, so you can see what each one costs.",
     "weekRunAgain": "Nothing is running. Run your best ad again?",
     "weekOpenCampaigns": "Open Campaigns",
@@ -155,7 +155,7 @@
     "endedCostlyEnquiries": "It didn't bring enquiries at a good price. Try new ads?",
     "weakAd": "One ad costs {k} times as much per {chat} as your others. Pausing it leaves more of your budget for the ones that work.",
     "weakAdNone": "One ad has spent {amount} with {none} while your others bring them. Pausing it leaves more of your budget for the ones that work.",
-    "opens": " {opens} people opened WhatsApp but didn't send the message.",
+    "opens": " {opens} taps on the WhatsApp button.",
     "noResults": "{amount} spent, {none} yet.{opens}",
     "notShowingDay": "Your ads haven't started showing after a day. Check what Meta says.",
     "notShowing": "Meta checks your ads first. This usually takes a few hours, sometimes up to a day.",
@@ -265,7 +265,7 @@
       "costChat": "Cost / chat",
       "costLead": "Cost / lead",
       "costResult": "Cost / result",
-      "opens": "{opens} opened WhatsApp, {conversations} messaged you",
+      "opens": "{opens} taps on the WhatsApp button, {conversations} messaged you",
       "metaMessage": "Meta's message about the ad it didn't approve: “{message}”"
     },
     "review": {

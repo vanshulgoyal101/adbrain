@@ -84,6 +84,10 @@ A result is a chat (WhatsApp ads) or an enquiry (form ads). The usual cost is wh
 AdBrain's other ads in your kind of business paid per result, or your own last campaign,
 counted only when at least 20 results sit behind it.
 
+WhatsApp button taps are Meta's `link_click` count, not verified chat opens,
+unique people or a count of people who did not send a message. The results and
+handoff figures are unchanged; chats are reported separately from button taps.
+
 | State | Card says | What it means | What to do |
 | --- | --- | --- | --- |
 | `weak_ad` | "Costly" | One ad costs at least 2 times as much per result as your best ad, or has spent that much with no result while your others bring them. | Tap "Pause this ad", or "Keep" to leave it running (the offer hides for 3 days). |
