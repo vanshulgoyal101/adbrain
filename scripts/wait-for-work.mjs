@@ -4,7 +4,7 @@
 // It also never outlives its chat: it exits when its parent process is gone, and a second copy for
 // the same role exits at once.
 // Usage: node scripts/wait-for-work.mjs --me dev2 [--max-min 30] [--poll-sec 60] [--since <ISO time>]
-//        node scripts/wait-for-work.mjs --wake dev2   (stops Dev 2's waiter so its chat reads a steered message, #2473)
+//        node scripts/wait-for-work.mjs --wake dev2   (stops Dev 2's waiter so its chat reads GitHub now, #2473)
 // Exit 0 = work found (printed) or woken, 3 = nothing new before --max-min, 4 = another waiter for this role
 // is already running, 5 = the chat that started it is gone.
 // #2473: it also wakes on the world: a red `next`/`main` run (any workflow, smokes included) for anyone, CI failing
@@ -453,7 +453,7 @@ const { values } = parseArgs({
     me: { type: "string" },
     "max-min": { type: "string", default: "30" },
     "poll-sec": { type: "string", default: "60" },
-    // #2473: stop <role>'s running waiter so its chat reads a steered message now.
+    // #2473: stop <role>'s running waiter so its chat reads GitHub now.
     wake: { type: "string" },
     // #573: the supervisor's read-only check; never takes the role's lock, so a chat starting its waiter isn't refused.
     probe: { type: "boolean", default: false },
@@ -486,7 +486,7 @@ if (values.wake !== undefined) {
     console.log(`No waiter running for ${NAMES[target]}; send the message directly.`);
     process.exit(1);
   }
-  console.log(`Woke ${NAMES[target]}'s waiter (pid ${pid}); its chat reads your message next.`);
+  console.log(`Woke ${NAMES[target]}'s waiter (pid ${pid}); its chat reads its issues next.`);
   process.exit(0);
 }
 
