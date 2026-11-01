@@ -17,8 +17,8 @@ list may only shrink.
 | Local, like CI on a PR | `npm run boundaries -- --base origin/next` |
 | CI | job `boundaries` in [`ci.yml`](../../.github/workflows/ci.yml): `npm run boundaries -- --base origin/<base>` on PRs, plain `npm run boundaries` on pushes |
 
-`boundaries` is not a required check yet. The required checks on `next` are `build`, `test`,
-`core`, `secrets` and `core-approval`.
+`boundaries` gates merges through the required `test` check (#2530): a PR with a red
+`boundaries` can't merge.
 
 The check fails when:
 
