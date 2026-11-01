@@ -15,9 +15,8 @@ Keep customer details in the private store, never in this runbook or public issu
    the documented limit is **2 sign-in emails an hour, project-wide** (#1777),
    shared with staff sign-ins and resends. If the screen says "Too many sign-in
    emails", help the owner with Google or the email fallback; do not promise a
-   fixed wait or send repeated links. A Google redirect is not proof that a non-team account can
-   sign in: #2416 still needs that result; the CEO batches the owner's Google
-   publishing-status or non-team sign-in step. Do not promise email delivery
+   fixed wait or send repeated links. Outside people have signed in to production
+   with Google (owner, Nov 1; #2416 closed). Do not promise email delivery
    from the default mailer while custom SMTP remains open on #1777.
 2. **Prepare or take ownership:** fill Brand, then make and pick the ads. With a
    prepared prospect, tap **Make it mine** within the 30-minute hand-over window;
@@ -27,7 +26,7 @@ Keep customer details in the private store, never in this runbook or public issu
    3 ads. Keep the saved ads; **Make another** can replace a missing one. If the
    batch is still running, use **Check again**, not another batch. No paid
    provider runs or repeated test generations are authorized by this workaround.
-3. **Get Meta ready before Connect (#1928, #2366):** while App Review (#156) is
+3. **Get Meta ready before Connect (#1928):** while App Review (#156) is
    pending, the owner must be invited as an adBrain **Tester** and accept at
    developers.facebook.com/requests. The CEO batches the profile-link/invite and
    missing pilot settings with the owner; a failed connection is not fixed by
@@ -44,8 +43,9 @@ Keep customer details in the private store, never in this runbook or public issu
    #1146/#1147 are shipped fixes, not prerequisites to wait for.
 5. **Manage after a real launch:** sync, check delivery/results and use Pause
    when needed. An internal phone/preflight check is not an outside activation
-   or fresh Results/Manage pass. Follow #1221's current go/no-go: #2366's accepted
-   Tester-to-Review check and #2416's non-team login remain unproven; #2396's
+   or fresh Results/Manage pass. Follow #1221's current go/no-go: outside-connect
+   proof comes from real owners' sessions, not a staged Tester dry run (#2366
+   closed); #2396's
    smoke-identity blocker is separate from #2444's partial batches, and #1324's
    test-ad-account blocker is not proof that an owner's account cannot work.
 
