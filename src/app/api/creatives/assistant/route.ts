@@ -121,12 +121,14 @@ const BUSY_EXHAUSTED = new Set(["RATE_LIMIT", "PROVIDER_SERVER", "TIMEOUT", "TRA
 /**
  * Why no AI provider answered (#410). Load (rate limits, outages, timeouts) is `busy`: worth a retry.
  * A refused key or request (401, 403, 400) is ours to fix, so it stays a 500 that alerts (#449).
+ * The smoke login's free-only text (#2230) is busy when its free models were tried or parked, not missing (#2457).
  * Null for errors that aren't provider failures at all.
  */
 function providerFailure(err: unknown, refused: string[]): { code: string; busy: boolean } | null {
   const permanent = refused.find((code) => code !== "ABORTED" && !TRANSIENT.test(code));
   if (err instanceof AllLLMProvidersFailedError) {
-    return permanent ? { code: permanent, busy: false } : { code: `EXHAUSTED_${err.reason}`, busy: BUSY_EXHAUSTED.has(err.reason) };
+    const busy = BUSY_EXHAUSTED.has(err.reason) || (err.reason === "FREE_TEXT_UNAVAILABLE" && err.providerCount > 0);
+    return permanent ? { code: permanent, busy: false } : { code: `EXHAUSTED_${err.reason}`, busy };
   }
   if (err instanceof LLMError) {
     const code = err.code ?? "UNKNOWN";

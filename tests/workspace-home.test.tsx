@@ -664,6 +664,21 @@ describe("Home results row (#764)", () => {
     expect(within(screen.getByRole("region", { name: "Results so far" })).getByRole("link", { name: "New campaign" })).toHaveAttribute("href", "/brand?again=1");
   });
 
+  it("#2455: wraps whole metrics, never currency digits, and keeps the new campaign action out of the metrics row", () => {
+    const large = { ...results, "c-wa": { ...results["c-wa"], spend: 1234407 } };
+    render(<WorkspaceHome {...empty} business={business} campaigns={[chats, forms]} results={large} now={now} />);
+    const row = screen.getByRole("region", { name: "Results so far" });
+    const spent = within(row).getByText("Spent").nextElementSibling!;
+    expect(spent).toHaveTextContent("₹12,34,567");
+    expect(spent).toHaveClass("whitespace-nowrap", "tabular-nums");
+    expect(spent).not.toHaveClass("break-words");
+    expect(spent.parentElement).toHaveClass("shrink-0");
+    expect(row.querySelector("dl")).toHaveClass("flex", "flex-wrap");
+    expect(within(row).getByRole("link", { name: "New campaign" })).not.toHaveClass("float-right");
+    expect(within(row).getByText("Enquiries").nextElementSibling).toHaveTextContent("7");
+    expect(within(row).getByText("Per enquiry").nextElementSibling).toHaveTextContent("₹1,76,367");
+  });
+
   // #1774 (QA): in Hindi the freshness line was the one English phrase left in the row.
   it("#1774: in Hindi, says how fresh in Hindi; English keeps '10m ago'", () => {
     const old = { ...results, "c-form": { ...results["c-form"], fetched_at: new Date(now - 2 * 86_400_000).toISOString() } } as Record<string, CampaignResult>;

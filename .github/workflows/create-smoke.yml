@@ -87,7 +87,11 @@ jobs:
         run: |
           run="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
           smoke=$(grep -E '^(PASS|FAIL|NOTE)' smoke.txt 2>/dev/null || echo "smoke did not run; see the run log")
-          if grep -q '^FAIL Picture' smoke.txt 2>/dev/null; then
+          if grep -q '^FAIL Sign in' smoke.txt 2>/dev/null; then
+            cause="The smoke could not sign in or read who signed in (#2396), so it stopped before any Create, Prepare or picture request. It spent nothing; the reason is in the FAIL Sign in line."
+          elif grep -q '^FAIL Create:.*no paid request sent' smoke.txt 2>/dev/null; then
+            cause="Create stopped before generating: a guard refused before the request (see the FAIL Create line). It spent nothing and saved no ads."
+          elif grep -q '^FAIL Picture' smoke.txt 2>/dev/null; then
             cause="Free pictures are failing in production: the scheduled check could not save a new background from a free provider (#2145). It spent nothing."
           elif grep -q '^FAIL Create.*Pictures:' smoke.txt 2>/dev/null; then
             cause="Create saved its ads, but the pictures are wrong (#2412): reused siblings mean free pictures are busy; no Cloudflare picture means its token or account is broken. The NOTE pictures line says which; it spent nothing."
