@@ -32,7 +32,8 @@ export function createGeminiProvider(config?: {
         ...(system ? [{ role: "system" as const, content: system }] : []),
         ...turns,
       ], options, options.maxTokens ? options.maxTokens + (options.thinking === "off" ? 0 : THINKING_HEADROOM) : undefined,
-      options.thinking === "off" ? { google: { thinkingConfig: { thinkingBudget: 0 } } } : undefined);
+      // #2502: the SDK picks the per-model shape; flash-lite rejects `thinkingBudget: 0` with HTTP 400.
+      options.thinking === "off" ? { reasoning: "none" } : undefined);
     },
   };
 }

@@ -142,6 +142,18 @@ describe("core: Prepare audience", () => {
     }));
   });
 
+  // #2502: real gemini-3.5-flash-lite reply with thinking off (`thinkingLevel: "minimal"`; `thinkingBudget: 0` got HTTP 400).
+  it("accepts the real flash-lite fallback reply", async () => {
+    const lite = fallbackReplies.geminiThinkingOff;
+    mocks.complete.mockResolvedValue({ text: lite.text, provider: "google", model: lite.model, usage });
+    const { status, body } = await prepare();
+    expect(lite.model).toBe("gemini-3.5-flash-lite");
+    expect(status).toBe(200);
+    expect(body.fallback).toBeUndefined();
+    expect(body.targeting.audience.interestNames).toEqual(parseJSON<{ plan: { interests: string[] } }>(lite.text!).plan.interests);
+    expect(body.targeting.location).toMatchObject({ cityScope: "city_only" });
+  });
+
   it("keeps only interests Meta has (real Cedar Ridge reply and Graph search, Oct 21)", async () => {
     const plan = { ...plannerPlan, interests: ["Chiropractic", "Sports medicine", "Posture", "Physical therapy", "Wellness"] };
     mocks.complete.mockResolvedValue({ text: JSON.stringify({ ready: true, plan }), provider: "groq", model: "qwen/qwen3.8-27b", usage });
