@@ -116,7 +116,7 @@ function requestOutcomes(calls: ScoreAiCall[]) {
     const key = call.request_id ?? `call-${index}`;
     const end = Date.parse(call.created_at);
     const start = end - (call.latency_ms ?? 0);
-    const ok = call.status === "success";
+    const ok = call.status !== "error";
     const current = requests.get(key);
     requests.set(key, current
       ? { ok: current.ok || ok, start: Math.min(current.start, start), end: Math.max(current.end, end) }
@@ -221,10 +221,13 @@ export function buildScoreboard(input: {
   const onFreePath = (row: { user_id: string | null }) => Boolean(row.user_id && free.has(row.user_id));
   for (const [step, freePath] of [["Create (customers, paid images)", false], ["Create (internal, free images)", true]] as const) {
     const batches = named("creative.batch").filter((event) => onFreePath(event) === freePath);
-    const full = batches.filter((event) => event.outcome === "success" && Number(event.attributes?.count ?? 0) >= 3).length;
+    // #2499: a batch is full when it saved what it asked for (`expected`; batches before it asked for 3).
+    const full = batches.filter((event) => event.outcome === "success" && Number(event.attributes?.count ?? 0) >= Number(event.attributes?.expected ?? 3)).length;
     const rate = percent(full, batches.length);
     const calls = ai("creatives.generate").filter((call) => onFreePath(call) === freePath);
-    const failedCalls = calls.filter((call) => call.status !== "success").length;
+    // A `fallback` call saved its picture on the next provider, so it is recovered, not failed (#2499).
+    const failedCalls = calls.filter((call) => call.status === "error").length;
+    const fellBack = calls.filter((call) => call.status === "fallback").length;
     const seconds = p90(requestOutcomes(calls).map((request) => (request.end - request.start) / 1000));
     // #1468: the median estimated AI cost of a Create, from batches that recorded it.
     const costs = batches.map((event) => event.attributes?.costUsd).filter((usd): usd is number => typeof usd === "number").sort((a, b) => a - b);
@@ -233,7 +236,7 @@ export function buildScoreboard(input: {
     rows.push({
       step,
       now: batches.length
-        ? `${plural(batches.length, "batch", "batches")}: ${fmtPct(rate)} gave 3 ads; AI calls ${failedCalls}/${calls.length} failed; p90 ${seconds === null ? "n/a" : `${Math.round(seconds)} s`}${cost}`
+        ? `${plural(batches.length, "batch", "batches")}: ${fmtPct(rate)} saved every ad asked; AI calls ${failedCalls}/${calls.length} failed${fellBack ? ` (${fellBack} fell back)` : ""}; p90 ${seconds === null ? "n/a" : `${Math.round(seconds)} s`}${cost}`
         : "no batches",
       target: freePath ? "not a target: free images, internal only" : "≥ 95% of batches give 3 usable ads, p90 < 30 s",
       met: freePath || !batches.length ? null : rate >= 95 && seconds !== null && seconds < 30,

@@ -302,7 +302,7 @@ describe("core: Create route on recorded run 4", () => {
     expect(Math.min(...clock.llmAttemptDeadlines)).toBeGreaterThan(value.textAttempts[0].latencyMs);
     // #681: the batch event carries the run's own wall time and path, for the scoreboard.
     const batch = info.mock.calls.map(([entry]) => String(entry)).find((entry) => entry.includes('"name":"creative.batch"'));
-    expect(JSON.parse(batch!)).toMatchObject({ outcome: "success", durationMs: elapsed, attributes: { count: 3, provider: "paid" } });
+    expect(JSON.parse(batch!)).toMatchObject({ outcome: "success", durationMs: elapsed, attributes: { count: 3, expected: 3, provider: "paid" } });
     // #1468: the run's estimated AI cost, from the same usage rows it saved.
     const { attributes } = JSON.parse(batch!) as { attributes: { costUsd: number; textCostUsd: number; imageCostUsd: number } };
     expect(attributes.textCostUsd).toBeGreaterThan(0);

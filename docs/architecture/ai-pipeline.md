@@ -135,7 +135,8 @@ interest counts, never the names (#686); `durationMs` is Prepare's end-to-end ti
 refused as `no-subject` before any image is paid for, and repaired once ([visual-rules.ts](../../src/lib/creative/visual-rules.ts), #760). The `creative.batch` event carries the
 batch's wall time (`durationMs`, from the request to the saved batch) and its image
 path (`provider`: `cloudflare` or `pollinations` for internal accounts, `paid` for customers) and its
-estimated AI cost (`costUsd`, `textCostUsd`, `imageCostUsd`; the scoreboard shows the median, #1468), so
+estimated AI cost (`costUsd`, `textCostUsd`, `imageCostUsd`; the scoreboard shows the median, #1468) and how many ads it
+asked for (`expected`; the scoreboard counts a batch full when `count` reaches it, #2499), so
 Create speed is timed per path; usage rows are written when the batch ends and
 can't time it (#681). When the first pass saves fewer ads than asked, one top-up
 round remakes the angles whose concept or image failed (never "no provider" or every
