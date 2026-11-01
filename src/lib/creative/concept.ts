@@ -454,28 +454,45 @@ export function copyClaimWarnings(
   return warnings;
 }
 
+const valueAt = (root: unknown, path: PropertyKey[]) => path.reduce<unknown>((node, key) =>
+  (isRecord(node) || Array.isArray(node) ? (node as Record<PropertyKey, unknown>)[key] : undefined), root);
+
 export function validateConcept(
   value: unknown,
   input: ConceptInput,
+  /** #2444: the full texts a length-only failure had cut, put back so every check reads all of them. */
+  uncut: [PropertyKey[], string][] = [],
 ):
   | { success: true; concept: CreativeConcept }
   | { success: false; issues: string[]; claims?: string[] } {
   const draft = normalizeDraft(value);
   const parsed = creativeConceptSchema.safeParse(draft);
   if (!parsed.success) {
-    return {
-      success: false,
-      issues: parsed.error.issues.map((issue) => {
-        const path = issue.path.join(".");
-        const field = path.replace(/\.\d+/g, ".*") || "root";
-        // The repair is told how long the text is, so it knows how much to cut (#281).
-        const text = issue.path.reduce<unknown>((node, key) => (isRecord(node) || Array.isArray(node) ? (node as Record<PropertyKey, unknown>)[key as PropertyKey] : undefined), draft);
-        const length = (issue.code === "too_big" || issue.code === "too_small") && typeof text === "string" ? `; it is ${text.trim().length} characters`
-          : issue.code === "invalid_value" && typeof text === "string" ? `; it is "${text.slice(0, 40)}"` : "";
-        return `schema:${field}:${issue.code}: ${path}: ${issue.message}${length}`;
-      }),
-    };
+    const issues = parsed.error.issues.map((issue) => {
+      const path = issue.path.join(".");
+      const field = path.replace(/\.\d+/g, ".*") || "root";
+      // The repair is told how long the text is, so it knows how much to cut (#281).
+      const text = valueAt(draft, issue.path);
+      const length = (issue.code === "too_big" || issue.code === "too_small") && typeof text === "string" ? `; it is ${text.trim().length} characters`
+        : issue.code === "invalid_value" && typeof text === "string" ? `; it is "${text.slice(0, 40)}"` : "";
+      return `schema:${field}:${issue.code}: ${path}: ${issue.message}${length}`;
+    });
+    // #2444 (QA): a too-long text hid the claim checks, so a draft with an invented offer went back for a targeted
+    // repair. A copy cut to the limits gives the concept's shape; the checks then read the full texts.
+    if (uncut.length || !parsed.error.issues.every((issue) => issue.code === "too_big" && typeof valueAt(draft, issue.path) === "string")) {
+      return { success: false, issues };
+    }
+    const cut = structuredClone(draft);
+    for (const { path, maximum } of parsed.error.issues as { path: PropertyKey[]; maximum?: number | bigint }[]) {
+      const parent = valueAt(cut, path.slice(0, -1)) as Record<PropertyKey, string>;
+      uncut.push([path, parent[path.at(-1)!]]);
+      parent[path.at(-1)!] = parent[path.at(-1)!].trim().slice(0, Number(maximum));
+    }
+    const checked = validateConcept(cut, input, uncut);
+    return { success: false, issues: [...issues, ...(checked.success ? [] : checked.issues.filter((issue) => !issue.startsWith("schema:")))] };
   }
+  const data = uncut.length ? structuredClone(parsed.data) : parsed.data;
+  for (const [path, text] of uncut) (valueAt(data, path.slice(0, -1)) as Record<PropertyKey, string>)[path.at(-1)!] = text;
   const sources = [
     input.brand.name,
     input.brand.description,
@@ -486,15 +503,15 @@ export function validateConcept(
     input.instructions ?? "",
     ...(input.sourceFacts ?? []),
   ].filter((value): value is string => typeof value === "string");
-  const quotes = parsed.data.sourceQuotes.map((quote) => ({ quote, verbatim: verbatimQuote(quote, sources) }));
+  const quotes = data.sourceQuotes.map((quote) => ({ quote, verbatim: verbatimQuote(quote, sources) }));
   const verbatimQuotes = quotes.flatMap(({ verbatim }) => (verbatim === null ? [] : [verbatim]));
   // #713: a stray quote beside verbatim ones is dropped, not repaired; claims are still checked against the rest.
   const quoteIssues = verbatimQuotes.length
     ? []
     : quotes.map(({ quote }) => `sourceQuotes: quote not present in supplied facts: ${quote}`);
   const concept = {
-    ...parsed.data,
-    sourceQuotes: verbatimQuotes.length ? verbatimQuotes : parsed.data.sourceQuotes,
+    ...data,
+    sourceQuotes: verbatimQuotes.length ? verbatimQuotes : data.sourceQuotes,
   };
   const normalizeCopy = (text: string) => text.toLocaleLowerCase().replace(/[^\p{L}\p{M}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
   const opening = (text: string) => normalizeCopy(text).split(" ").slice(0, 8).join(" ");

@@ -3,7 +3,7 @@ name: validated-multimodal-generation
 description: "Use this skill when an LLM plans copy and an image, video, audio, layout, or other generated artifact must remain coherent, grounded and attributable."
 ---
 
-<!-- Generated from vanshulgoyal101/skills@eb9e65d skills/validated-multimodal-generation.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
+<!-- Generated from vanshulgoyal101/skills@77e6db7 skills/validated-multimodal-generation.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
 
 # Validated Multimodal Generation
 

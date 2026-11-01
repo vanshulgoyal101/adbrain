@@ -95,6 +95,32 @@ describe("core: the repair keeps flash-lite's draft and changes only what failed
     expect(JSON.stringify(requests[1])).not.toContain("50% off X-rays");
   });
 
+  it("an over-long headline doesn't hide an unsupported offer: the repair still starts fresh (QA #2444)", async () => {
+    const both = { ...draft, headline: "Start with a $49 new-patient exam in Cedar Park", primary_text: `50% off X-rays on your first visit.\n${draft.primary_text}` };
+    const { requests } = await create([JSON.stringify(both), offer.text.replace(draft.headline, "Your first visit in Cedar Park")]);
+
+    expect(requests[1].map((turn) => turn.role)).toEqual(["user", "user"]);
+    expect(requests[1][1].parts[0].text).toMatch(/schema:headline:too_big[\s\S]*unsupported-commercial-claim/);
+    expect(JSON.stringify(requests[1])).not.toContain("50% off X-rays");
+  });
+
+  it("an offer past the cut point of a too-long text is still caught (review #2444)", async () => {
+    const late = { ...draft, primary_text: `${draft.primary_text}\n${"Gentle care. ".repeat(70)}\nGet 50% off X-rays.` };
+    const { requests } = await create([JSON.stringify(late), offer.text.replace(draft.headline, "Your first visit in Cedar Park")]);
+
+    expect(requests[1].map((turn) => turn.role)).toEqual(["user", "user"]);
+    expect(requests[1][1].parts[0].text).toMatch(/schema:primary_text:too_big[\s\S]*unsupported-commercial-claim/);
+  });
+
+  it.each([
+    ["isn't the concept's shape", { cta: 42 }],
+    ["has too many quotes", { sourceQuotes: Array(9).fill("Free 15-minute spine check") }],
+  ])("a draft that %s can't be checked, so its repair starts fresh", async (_, change) => {
+    const { requests } = await create([JSON.stringify({ ...draft, ...change }), offer.text.replace(draft.headline, "Your first visit in Cedar Park")]);
+
+    expect(requests[1].map((turn) => turn.role)).toEqual(["user", "user"]);
+  });
+
   it("a repair that repeats the headline again still loses the ad", async () => {
     const { variants, requests } = await create([offer.text, offer.text]);
 

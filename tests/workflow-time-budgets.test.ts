@@ -205,8 +205,10 @@ describe("create smoke mode", () => {
   });
 
   it("keeps the Create wording for a dispatched create", () => {
-    const { gh } = run("Alert on failure", { REQUESTED_MODE: "create" }, "FAIL Create: 1/3 saved\n");
+    const { gh } = run("Alert on failure", { REQUESTED_MODE: "create" },
+      "FAIL Create: 1/3 saved\nNOTE missing ad \"Price\": Could not write this ad.\n");
     expect(gh).not.toContain("Free pictures are failing");
-    expect(gh).toContain("Free pictures are the usual cause");
+    expect(gh).toContain("NOTE missing ad");
+    expect(gh).toContain("Create saved fewer ads than it asked for or stopped (#2504)");
   });
 });

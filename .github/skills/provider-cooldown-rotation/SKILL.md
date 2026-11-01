@@ -3,7 +3,7 @@ name: provider-cooldown-rotation
 description: "When a product calls multiple external providers, models, accounts, or API keys for the same operation."
 ---
 
-<!-- Generated from vanshulgoyal101/skills@eb9e65d skills/provider-cooldown-rotation.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
+<!-- Generated from vanshulgoyal101/skills@77e6db7 skills/provider-cooldown-rotation.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
 
 # Provider Cooldown Rotation
 

@@ -1,5 +1,6 @@
 import { observeRoute, recordProductEvent, currentRequestId } from "@/lib/observability/logger";
-import { creativeFailureMessage } from "@/lib/creative/failure-message";
+import { creativeFailureMessage, creativeFailureStage, type CreativeFailureStage } from "@/lib/creative/failure-message";
+import { saveCreative } from "@/lib/creative/save";
 import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { logEvent } from "@/lib/audit";
@@ -244,8 +245,10 @@ async function generate(req: Request, live?: LiveCreate) {
   const variantGroup = body.generationId ?? crypto.randomUUID();
   const inserted: Creative[] = [];
   // Keyed by angle: a top-up that saves the angle clears its failure; one that fails replaces it.
-  const failed = new Map<string, { angle: AdAngle; error: unknown; message: string }>();
-  let failures: { angle: string; error: string }[] = [];
+  const failed = new Map<string, { angle: AdAngle; error: unknown; message: string; savedUpTo?: string }>();
+  // #2444: the step a finished ad (words and picture passed) reached when its save failed; it used to vanish unlogged.
+  const saving = new Map<string, string>();
+  let failures: { angle: string; error: string; stage: CreativeFailureStage }[] = [];
   let topUp = 0;
   let pictureRetry = 0;
   const cost = { text: 0, image: 0 };
@@ -317,49 +320,29 @@ async function generate(req: Request, live?: LiveCreate) {
         const recorded = await persistLLMUsage(events);
         if (recorded) recordedAngles.add(variant.angleId);
         else usageUnknown = true;
+        saving.set(variant.angleId, "progress");
         await progress(recorded ? events.reduce((total, event) => total + event.usage.totalTokens, 0) : 0, false, !recorded);
-        const photoUrl = await persistCreativeImage(
-          supabase,
-          businessId,
-          variantGroup,
-          variant.angleId,
-          variant.imageUrl,
-        );
-        const imageUrl = await renderAndPersistDesign(
-          supabase,
-          businessId,
-          variantGroup,
-          variant.angleId,
-          variant.design,
-          photoUrl,
-          variant.imageUrl,
-        );
-        const { data, error } = await supabase
-          .from("creatives")
-          .insert({
-            business_id: businessId,
-            brief,
-            angle: variant.angleName,
-            image_url: imageUrl,
-            headline: variant.headline,
-            primary_text: variant.primaryText,
-            cta: variant.cta,
-            variant_group: variantGroup,
-            status: "draft",
-            generation: generationReceipt(variant, language, referenceImages, sourceFacts, photoUrl, requestId),
-          })
-          .select("*")
-          .single();
-        if (error || !data)
-          throw new Error(
-            "Could not save the creative. Check the generation schema migration.",
-          );
+        saving.set(variant.angleId, "picture-store");
+        const photoUrl = await persistCreativeImage(supabase, businessId, variantGroup, variant.angleId, variant.imageUrl);
+        saving.set(variant.angleId, "render");
+        const imageUrl = await renderAndPersistDesign(supabase, businessId, variantGroup, variant.angleId, variant.design, photoUrl, variant.imageUrl);
+        saving.set(variant.angleId, "insert");
+        const data = await saveCreative(supabase, {
+          business_id: businessId, brief, angle: variant.angleName, image_url: imageUrl,
+          headline: variant.headline, primary_text: variant.primaryText, cta: variant.cta,
+          variant_group: variantGroup, status: "draft",
+          generation: generationReceipt(variant, language, referenceImages, sourceFacts, photoUrl, requestId),
+        });
         inserted.push(data);
+        saving.delete(variant.angleId);
         failed.delete(variant.angleId);
         live?.onCreative(variant.angleId, data);
         await progress();
       },
       onFailure: async (angle: AdAngle, error: unknown) => {
+        const savedUpTo = saving.get(angle.id);
+        saving.delete(angle.id);
+        if (savedUpTo) console.error(JSON.stringify({ source: "adbrain.creative", code: "AD_NOT_SAVED", angle: angle.id, savedUpTo, message: (error instanceof Error ? error.message : String(error)).slice(0, 300) }));
         const events = failedVariantUsage(error, {
             businessId,
             userId: user.id,
@@ -374,7 +357,7 @@ async function generate(req: Request, live?: LiveCreate) {
           || error instanceof NoLLMKeysError || recordedAngles.has(angle.id));
         if (unknown) usageUnknown = true;
         await progress(recorded ? events.reduce((total, event) => total + event.usage.totalTokens, 0) : 0, false, unknown);
-        failed.set(angle.id, { angle, error, message: creativeFailureMessage(error) });
+        failed.set(angle.id, { angle, error, message: creativeFailureMessage(error), savedUpTo });
       },
     };
     await generateVariants({ ...run, count, ownerPhotos, recentCopy });
@@ -385,7 +368,8 @@ async function generate(req: Request, live?: LiveCreate) {
     const prospectPictures = isProspectAccount(user) && freeImagesOnly();
     const pictureOnly = (error: unknown): error is CreativeImageError => prospectPictures && error instanceof CreativeImageError && Boolean(error.concept);
     const retry = [...failed.values()]
-      .filter(({ error }) => !pictureOnly(error) && (error instanceof CreativeImageError || (error instanceof CreativeValidationError && error.stage !== "provider")))
+      .filter(({ error, savedUpTo }) => savedUpTo === "picture-store" || savedUpTo === "render"
+        || (!pictureOnly(error) && (error instanceof CreativeImageError || (error instanceof CreativeValidationError && error.stage !== "provider"))))
       .map(({ angle }) => angle)
       .sort((a, b) => firstPass.indexOf(a) - firstPass.indexOf(b))
       .slice(0, count - inserted.length);
@@ -413,7 +397,7 @@ async function generate(req: Request, live?: LiveCreate) {
       live?.onTopUp(pictureRetry, "picture");
       await generateVariants({ ...run, angleIds: Object.keys(concepts), count: pictureRetry, concepts, ownerPhotos: undefined, recentCopy, signal: AbortSignal.timeout(retryBudget) });
     }
-    failures = [...failed.values()].map(({ angle, message }) => ({ angle: angle.name, error: message }));
+    failures = [...failed.values()].map(({ angle, message, error }) => ({ angle: angle.name, error: message, stage: creativeFailureStage(error) }));
     const noProvider = !inserted.length && failures.length === count && noProviderFailures === count;
     await progress(0, true, usageUnknown || inserted.length + failures.length < count, !inserted.length);
     if (noProvider) return NextResponse.json({ error: new NoLLMKeysError().message, code: "NO_LLM_KEYS" }, { status: 400 });
@@ -437,7 +421,7 @@ async function generate(req: Request, live?: LiveCreate) {
   recordProductEvent({ kind: "workflow", name: "creative.batch", businessId, durationMs: Date.now() - startedAt,
     outcome: !inserted.length ? "failed" : failures.length ? "partial" : "success",
     // #1468: the estimated AI cost of this Create (USD), for the top-up and image-provider decisions.
-    attributes: { count: inserted.length, failedCount: failures.length, topUp, ...(pictureRetry ? { pictureRetry } : {}), provider: freeImagesOnly() ? (cloudflareConfigured() ? "cloudflare" : "pollinations") : "paid",
+    attributes: { count: inserted.length, expected: count, failedCount: failures.length, ...(failures.length ? { failedStages: failures.map((failure) => failure.stage) } : {}), topUp, ...(pictureRetry ? { pictureRetry } : {}), provider: freeImagesOnly() ? (cloudflareConfigured() ? "cloudflare" : "pollinations") : "paid",
       costUsd: roundUsd(cost.text + cost.image), textCostUsd: roundUsd(cost.text), imageCostUsd: roundUsd(cost.image) } });
   if (!inserted.length)
     return NextResponse.json(

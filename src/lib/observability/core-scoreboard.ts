@@ -8,7 +8,9 @@
  */
 
 import { medianReplyMinutes } from "@/lib/leads/first-reply";
-import { isMetaTestLead } from "@/lib/leads/test-lead";
+import { pilotRows, type PilotData } from "./scoreboard-pilots";
+
+export { PROSPECT_HANDED_OVER, pilotData, pilotRows, type PilotData } from "./scoreboard-pilots";
 
 /** #1468: the rupee rate the CEO uses for AI money ($5 ≈ ₹420 on #1129); for reading, never billing. */
 const INR_PER_USD = 84;
@@ -116,7 +118,7 @@ function requestOutcomes(calls: ScoreAiCall[]) {
     const key = call.request_id ?? `call-${index}`;
     const end = Date.parse(call.created_at);
     const start = end - (call.latency_ms ?? 0);
-    const ok = call.status === "success";
+    const ok = call.status !== "error";
     const current = requests.get(key);
     requests.set(key, current
       ? { ok: current.ok || ok, start: Math.min(current.start, start), end: Math.max(current.end, end) }
@@ -170,8 +172,7 @@ export function buildScoreboard(input: {
     const allCreates = named("business.create");
     const creates = allCreates.filter((create) => !(create.user_id && owners.get(create.user_id)?.internal));
     const team = allCreates.length - creates.length;
-    // #1136: minutes from sign-up (an owner who signed up in the 24 h before creating it) or else from creating the
-    // business, to its first save with what Prepare needs (brand/usable.ts).
+    // #1136: minutes from sign-up (if within 24 h) or else business creation, to its first save Prepare can use (brand/usable.ts).
     const saves = [...creates, ...named("business.update")];
     const measured = saves.some((event) => typeof event.attributes?.brandUsable === "boolean");
     const minutes = creates.flatMap((create) => {
@@ -221,19 +222,21 @@ export function buildScoreboard(input: {
   const onFreePath = (row: { user_id: string | null }) => Boolean(row.user_id && free.has(row.user_id));
   for (const [step, freePath] of [["Create (customers, paid images)", false], ["Create (internal, free images)", true]] as const) {
     const batches = named("creative.batch").filter((event) => onFreePath(event) === freePath);
-    const full = batches.filter((event) => event.outcome === "success" && Number(event.attributes?.count ?? 0) >= 3).length;
+    // #2499: a batch is full when it saved what it asked for (`expected`, else 3); a `fallback` call saved its
+    // picture on the next provider, so it is recovered, not failed. #1468: median estimated AI cost per Create.
+    const full = batches.filter((event) => event.outcome === "success" && Number(event.attributes?.count ?? 0) >= Number(event.attributes?.expected ?? 3)).length;
     const rate = percent(full, batches.length);
     const calls = ai("creatives.generate").filter((call) => onFreePath(call) === freePath);
-    const failedCalls = calls.filter((call) => call.status !== "success").length;
+    const failedCalls = calls.filter((call) => call.status === "error").length;
+    const fellBack = calls.filter((call) => call.status === "fallback").length;
     const seconds = p90(requestOutcomes(calls).map((request) => (request.end - request.start) / 1000));
-    // #1468: the median estimated AI cost of a Create, from batches that recorded it.
     const costs = batches.map((event) => event.attributes?.costUsd).filter((usd): usd is number => typeof usd === "number").sort((a, b) => a - b);
     const median = costs.length ? costs[Math.floor((costs.length - 1) / 2)] : null;
     const cost = median === null ? "" : `; median $${median.toFixed(4)} (≈₹${(median * INR_PER_USD).toFixed(2)}) per Create`;
     rows.push({
       step,
       now: batches.length
-        ? `${plural(batches.length, "batch", "batches")}: ${fmtPct(rate)} gave 3 ads; AI calls ${failedCalls}/${calls.length} failed; p90 ${seconds === null ? "n/a" : `${Math.round(seconds)} s`}${cost}`
+        ? `${plural(batches.length, "batch", "batches")}: ${fmtPct(rate)} saved every ad asked; AI calls ${failedCalls}/${calls.length} failed${fellBack ? ` (${fellBack} fell back)` : ""}; p90 ${seconds === null ? "n/a" : `${Math.round(seconds)} s`}${cost}`
         : "no batches",
       target: freePath ? "not a target: free images, internal only" : "≥ 95% of batches give 3 usable ads, p90 < 30 s",
       met: freePath || !batches.length ? null : rate >= 95 && seconds !== null && seconds < 30,
@@ -353,80 +356,6 @@ function manageTrendRow(history: ScoreManageSnapshot[]): ScoreRow {
     target: "every day ≤ 15 min (oldest results at the daily run)",
     met: measured.length ? measured.every((cell) => cell.met) : null,
   };
-}
-
-/** #1697: hand-over is recorded by the prospect runbook's last step (#1486, #1670) as this product event. */
-export const PROSPECT_HANDED_OVER = "prospect.handed_over";
-
-export type PilotData = {
-  /** Businesses still owned by a `+prospect` account with at least one creative. */
-  prospectBusinessIds: string[];
-  /** Businesses with a `prospect.handed_over` event. */
-  handedOverBusinessIds: string[];
-  /** First `campaigns.launched_at` per business. */
-  firstLaunch: Record<string, string>;
-  /** Each business's latest `pilot_day7` answer (#1650). */
-  day7Answers: Record<string, "yes" | "maybe" | "no">;
-  /** #1965: form and logged WhatsApp enquiries (`created_at`), Meta test leads already out. */
-  recentEnquiries: { business_id: string; created_at: string }[];
-  excludedBusinessIds: string[];
-  now: Date;
-};
-
-/** #1697: builds PilotData from the raw reads the route and the local script both make. */
-export function pilotData({ prospectCreatives, pilotEvents, launchedRows, leads, excludedBusinessIds, now }: {
-  prospectCreatives: { business_id: string }[];
-  pilotEvents: { business_id: string | null; name: string; attributes: { answer?: string } | null; created_at: string }[];
-  launchedRows: { business_id: string; launched_at: string }[];
-  /** `meta_form` and `whatsapp_manual` leads from at least the last 24 h. */
-  leads: { business_id: string; created_at: string; full_name?: string | null }[];
-  excludedBusinessIds: string[];
-  now: Date;
-}): PilotData {
-  const firstLaunch: Record<string, string> = {};
-  for (const row of launchedRows) if (!firstLaunch[row.business_id] || row.launched_at < firstLaunch[row.business_id]) firstLaunch[row.business_id] = row.launched_at;
-  const day7Answers: PilotData["day7Answers"] = {};
-  for (const event of [...pilotEvents].sort((a, b) => a.created_at.localeCompare(b.created_at))) {
-    const answer = event.attributes?.answer;
-    if (event.name === "pilot_day7" && event.business_id && (answer === "yes" || answer === "maybe" || answer === "no")) day7Answers[event.business_id] = answer;
-  }
-  return {
-    prospectBusinessIds: [...new Set(prospectCreatives.map((row) => row.business_id))],
-    handedOverBusinessIds: [...new Set(pilotEvents.filter((event) => event.name === PROSPECT_HANDED_OVER && event.business_id).map((event) => event.business_id as string))],
-    firstLaunch, day7Answers, excludedBusinessIds, now,
-    recentEnquiries: leads.filter((lead) => !isMetaTestLead({ full_name: lead.full_name ?? null })).map(({ business_id, created_at }) => ({ business_id, created_at })),
-  };
-}
-
-/**
- * #1697 (CPO #1685): the pilot funnel, counts only and cumulative: prepared (still with the rep, or handed over) →
- * handed over → live (a handed-over business with a Go live) → Day 7 → its answers; plus how many reach Day 7 in
- * the next 48 h so the rep can book the visit, and (#1965) real enquiries on live pilots in the last 24 h. No names;
- * nothing until the first pilot.
- */
-export function pilotRows(data: PilotData): ScoreRow[] {
-  const excluded = new Set(data.excludedBusinessIds);
-  const handedOver = new Set(data.handedOverBusinessIds.filter((id) => !excluded.has(id)));
-  const prepared = new Set([...data.prospectBusinessIds.filter((id) => !excluded.has(id)), ...handedOver]);
-  if (!prepared.size) return [];
-  const live = [...handedOver].filter((id) => data.firstLaunch[id]);
-  const age = (id: string) => data.now.getTime() - Date.parse(data.firstLaunch[id]);
-  const day7 = live.filter((id) => age(id) >= 7 * DAY);
-  const due = live.filter((id) => age(id) < 7 * DAY && age(id) >= 5 * DAY).length;
-  const answers = { yes: 0, maybe: 0, no: 0 };
-  for (const id of day7) { const answer = data.day7Answers[id]; if (answer) answers[answer] += 1; }
-  const liveIds = new Set(live);
-  const enquiries = data.recentEnquiries.filter((lead) => liveIds.has(lead.business_id) && data.now.getTime() - Date.parse(lead.created_at) < DAY).length;
-  return [
-    {
-      step: "Pilots",
-      now: `${prepared.size} prepared → ${handedOver.size} handed over → ${live.length} live → ${day7.length} at Day 7 (answers: yes ${answers.yes}, maybe ${answers.maybe}, no ${answers.no})`,
-      target: "3 pilots live (#1315)",
-      met: null,
-    },
-    { step: "Pilots: Day 7 due in 48 h", now: String(due), target: "book the Day 7 visit", met: null },
-    { step: "Pilots: enquiries in 24 h", now: String(enquiries), target: "real enquiries on live pilots", met: null },
-  ];
 }
 
 const IST_MS = 5.5 * 3_600_000;
@@ -552,8 +481,7 @@ export function northStarRows(events: ScoreEvent[], data: NorthStarData): ScoreR
   }
 
   {
-    // Active at any point in the week: active when it began (its last change before then was a resume, or no change on
-    // record and it's active now), or resumed during it.
+    // Active in the week: active at its start (last earlier change a resume, or none and active now), or resumed in it.
     const changesOf = new Map<string, typeof data.campaignChanges>();
     for (const change of data.campaignChanges) changesOf.set(change.campaign_id, [...(changesOf.get(change.campaign_id) ?? []), change]);
     const activeOwners = new Set(data.campaigns.filter((campaign) => {

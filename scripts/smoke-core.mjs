@@ -5,6 +5,7 @@ import { chromium } from "@playwright/test";
 import { loginAuth, loginSessionProblem, makesFreePictures } from "./lib/internal-accounts.mjs";
 import { pictureSources } from "./lib/smoke-pictures.mjs";
 import { forgiveRecoveredBusyTurns } from "./lib/smoke-console.mjs";
+import { createFailureLines, parseCreateStream } from "./lib/smoke-create-failures.mjs";
 
 const envPath = "/Users/vanshulgoyal/Development/copilot/adbrain/.env.smoke";
 
@@ -41,14 +42,18 @@ async function readCreateResponse(response) {
   if (!contentType?.includes("application/x-ndjson")) {
     return { status: response.status(), data: await response.json().catch(() => ({})) };
   }
-  const text = await response.text();
-  let result;
-  for (const rawLine of text.split("\n")) {
-    const line = rawLine.trim();
-    if (!line) continue;
-    const event = JSON.parse(line);
-    if (event.type === "result") result = event;
-  }
+  return createStreamResult(await response.text());
+}
+
+/** #2504: the Create response from text the page teed; JSON when Create refused before streaming. */
+async function createFromText(text, status, contentType) {
+  try {
+    return contentType?.includes("application/x-ndjson") ? createStreamResult(text) : { status, data: JSON.parse(text) };
+  } catch { return null; }
+}
+
+function createStreamResult(text) {
+  const { result } = parseCreateStream(text);
   assert.ok(result, "Create stream ended without a result.");
   return { status: result.status, data: result.body };
 }
@@ -157,6 +162,24 @@ try {
   browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({ serviceWorkers: "block" });
   context.setDefaultTimeout(20_000);
+  if (modes.has("--create")) {
+    // #2504: Chrome drops a long Create stream's body before Playwright reads it (#1123), so a short run never said
+    // which ad failed. Tee the stream in the page; the page still reads its own copy as it arrives.
+    await context.addInitScript(() => {
+      const send = window.fetch;
+      window.fetch = async (input, init) => {
+        const response = await send(input, init);
+        try {
+          const url = new URL(typeof input === "string" || input instanceof URL ? input : input.url, location.href);
+          const method = (init?.method ?? (input instanceof Request ? input.method : "GET")).toUpperCase();
+          if (method === "POST" && url.pathname === "/api/creatives/generate") {
+            window.__smokeCreateStream = response.clone().text().catch(() => null);
+          }
+        } catch { /* never break the page's own request */ }
+        return response;
+      };
+    });
+  }
   const page = await context.newPage();
   const errors = [];
   /** @type {Promise<boolean>[]} one per 503 assistant turn: whether its code was AI_BUSY (#2396) */
@@ -439,6 +462,21 @@ try {
   }
   if (modes.has("--create")) {
     let savedCount = null;
+    let createFailures = null;
+    let explained = false;
+    // #2504: one NOTE per missing ad and the run's failed attempts by reason, so a short run says why.
+    async function explainShortRun() {
+      if (explained) return;
+      explained = true;
+      let usage = null;
+      const { businessId, generationId } = generationRequest ?? {};
+      if (auth && UUID.test(businessId ?? "") && UUID.test(generationId ?? "")) {
+        const rows = await supabaseFetch(auth, `/rest/v1/llm_usage_events?business_id=eq.${businessId}&metadata->>generationId=eq.${generationId}`
+          + "&status=eq.error&select=usage_kind,provider,model,status,error_code,metadata&order=created_at").catch(() => null);
+        if (rows?.ok) usage = await rows.json().catch(() => null);
+      }
+      for (const line of createFailureLines({ expected: 3, saved: savedCount, failures: createFailures, usage })) console.log(line);
+    }
     async function recoverSavedCount() {
       if (!generationRequest?.generationId || !generationRequest?.businessId) return null;
       try {
@@ -479,16 +517,21 @@ try {
       const result = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/creatives/generate" && response.request().method() === "POST", { timeout: 300_000 });
       await generate.click();
       const response = await result;
-      // Chrome can drop a long stream's body before Playwright reads it (#1123: 131 s, "No data found
-      // for resource"); the page read it, so the saved-results check below decides instead.
-      const create = await readCreateResponse(response).catch(() => null);
+      // #2504: read the page's tee of the stream. Playwright's copy is a fallback only: Chrome can drop a long stream's
+      // body before Playwright reads it (#1123: 131 s, "No data found for resource").
+      const teed = await page.evaluate(() => window.__smokeCreateStream ?? null).catch(() => null);
+      const create = teed == null ? await readCreateResponse(response).catch(() => null)
+        : await createFromText(teed, response.status(), await response.headerValue("content-type"));
+      createFailures = Array.isArray(create?.data?.failures) ? create.data.failures : null;
       savedCount = Array.isArray(create?.data?.creatives) ? create.data.creatives.length : null;
       if (create?.status !== 200 || savedCount !== 3) {
         savedCount = await recoverSavedCount();
       }
       assert.equal(generationCount, 1, "Paid Create request was blocked");
       if (create) assert.equal(create.status, 200, `Create returned HTTP ${create.status}`);
-      else console.log("NOTE Create stream body was not kept by the browser; counted the saved ads instead");
+      else console.log(teed == null ? "NOTE Create stream body was not kept by the browser; counted the saved ads instead"
+        : "NOTE Create stream ended without a result; counted the saved ads instead");
+      if (savedCount !== 3) await explainShortRun();
       assert.equal(savedCount, 3, `Create saved ${savedCount}/3 ads; do not retry before checking saved work`);
       // #904 made "Review ads" a link, not a button (QA on #1227).
       await page.getByRole("link", { name: "Review ads", exact: true }).waitFor({ state: "visible" });
@@ -507,6 +550,7 @@ try {
       await cleanUpCreateRun();
     } catch (error) {
       if (generationCount && savedCount === null) savedCount = await recoverSavedCount();
+      if (generationCount && savedCount !== 3) await explainShortRun().catch(() => {});
       console.log(`FAIL Create${generationCount ? `: ${savedCount ?? "unconfirmed"}/3 saved` : ""}: ${error instanceof Error ? error.message.split("\n")[0].slice(0, 180) : "Unknown error"}; ${generationCount ? "check saved work before any retry" : "no paid request sent"}`);
       process.exitCode = 1;
       // #2189: a failed run's saved ads stayed in the smoke workspace, and the repeat rules then checked every later
