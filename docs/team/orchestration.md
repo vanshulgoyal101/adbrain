@@ -78,7 +78,9 @@ Routine steps never wait for the CEO or the CTO.
    (about 3 minutes) into `next`, and the deploy train ships `next` to production
    at most every 30 minutes (#461). Branches don't need to be up to date to merge.
    Don't wait for the train: start your next item, and once it's live smoke the
-   changed flow in production on your next pass (never sleep or poll for a deploy),
+   changed flow in production on your next pass (never sleep or poll for a deploy;
+   the `.github/hooks/no-deploy-wait.json` hook refuses sync `sleep ≥60s`, sleep
+   loops and `gh run watch`, escape with `# allow-wait`, #2481),
    then close the issue with the PR link (plus one `Lesson:` line if you learned
    something reusable) and start your next issue.
    **Ship the same day.** Open the PR as soon as one small slice works; do not
