@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "hooks": {
+    "preToolUse": [
+      {
+        "type": "command",
+        "bash": "node scripts/no-deploy-wait.mjs || true",
+        "cwd": ".",
+        "timeoutSec": 5
+      }
+    ]
+  }
+}
