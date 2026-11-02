@@ -115,6 +115,7 @@ export interface CanonicalReviewPayload {
   destination: ReviewDestination;
   whatsappNumber: string | null;
   websiteUrl?: string | null;
+  websiteGoal?: Exclude<DraftInput["websiteGoal"], "visits">;
   dailyBudgetRupees: number;
   abTest: boolean;
   excludeFacebookReels?: true;
@@ -180,6 +181,8 @@ export function buildCanonicalReviewPayload(
     whatsappNumber: input.draft.destination === "whatsapp" ? input.whatsappNumber ?? null : null,
     // #2599: only for website ads, so other plans keep their hash; a Brand website edit after Review changes the plan.
     ...(reviewDestination(input.draft) === "website" ? { websiteUrl: websiteAdLink(input.website) } : {}),
+    // #2710: visits keep the phase-1 hash; conversion goals must never review as traffic.
+    ...(input.draft.destination === "website" && input.draft.websiteGoal && input.draft.websiteGoal !== "visits" ? { websiteGoal: input.draft.websiteGoal } : {}),
     // #493: only when it changes what's sent, so plans reviewed before this field keep their hash.
     ...(input.draft.destination === "whatsapp" && input.draft.whatsappLanguage && input.draft.whatsappLanguage !== "ad"
       ? { whatsappLanguage: input.draft.whatsappLanguage } : {}),
@@ -331,6 +334,7 @@ export function runPreflight(input: PreflightInput): ReviewDTO {
     destination: draft.destination ?? "instant_form",
     whatsappNumber: draft.destination === "whatsapp" ? input.whatsappNumber ?? null : null,
     ...(payload.websiteUrl !== undefined ? { websiteUrl: payload.websiteUrl } : {}),
+    ...(payload.websiteGoal ? { websiteGoal: payload.websiteGoal } : {}),
     currency: "INR",
     perAdSetDailyBudgetRupees,
     adSetCount,
