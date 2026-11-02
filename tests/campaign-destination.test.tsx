@@ -3,7 +3,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import en from "../messages/en.json";
 import hi from "../messages/hi.json";
-import { DestinationChoice, WebsiteDestinationFields, WebsiteReviewFact, WebsiteReviewFacts, websiteHref } from "@/components/campaign-destination";
+import { DestinationChoice, WebsiteDestinationFields, WebsiteReviewFact, WebsiteReviewFacts, reviewWebsiteUrl, websiteHref } from "@/components/campaign-destination";
 import { CampaignLaunchReview } from "@/components/campaign-launch-review";
 import { buildManualDraftInput } from "@/lib/campaign/manual-draft-input";
 import { draftInputSchema } from "@/lib/campaign/connect-contracts";
@@ -68,6 +68,12 @@ describe("#2600 website destination", () => {
     expect(screen.getByText("Needs a working link")).toBeInTheDocument();
     expect(screen.getByText("Button: Shop now")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Open" })).toBeNull();
+  });
+
+  it("never falls back to Brand once preflight finds no usable link", () => {
+    expect(reviewWebsiteUrl(undefined, "example.com")).toBe("example.com");
+    expect(reviewWebsiteUrl(null, "facebook.com/mypage")).toBeNull();
+    expect(reviewWebsiteUrl("https://example.com/offer", "example.com")).toBe("https://example.com/offer");
   });
 
   it("saves the button on a website draft, never a lead form", () => {

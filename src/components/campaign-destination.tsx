@@ -24,6 +24,11 @@ export function websiteHref(raw?: string | null): string | null {
   }
 }
 
+/** Review's link: preflight's `websiteUrl` once it has checked (null = no usable link); the Brand website only before that. */
+export function reviewWebsiteUrl(checked: string | null | undefined, brandWebsite?: string | null): string | null | undefined {
+  return checked === undefined ? brandWebsite : checked;
+}
+
 /** The link as an owner reads it: host, then the path, without the protocol. */
 function websiteParts(href: string): { host: string; rest: string } {
   const url = new URL(href);
