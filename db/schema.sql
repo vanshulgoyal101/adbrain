@@ -768,15 +768,12 @@ create index if not exists campaign_results_campaign_fetched_idx
 
 alter table public.campaigns
   add column if not exists destination text not null default 'unknown'
-    check (destination in ('instant_form', 'whatsapp', 'call', 'website', 'mixed', 'unknown'));
+    check (destination in ('instant_form', 'whatsapp', 'call', 'mixed', 'unknown'));
 alter table public.campaign_results
   add column if not exists destination text not null default 'unknown'
-    check (destination in ('instant_form', 'whatsapp', 'call', 'website', 'mixed', 'unknown')),
+    check (destination in ('instant_form', 'whatsapp', 'call', 'mixed', 'unknown')),
   add column if not exists period_start date,
-  add column if not exists period_end date,
-  -- Meta's landing_page_view action for website campaigns (#2595).
-  add column if not exists landing_page_views bigint not null default 0
-    constraint campaign_results_landing_page_views_safe check (landing_page_views between 0 and 9007199254740991);
+  add column if not exists period_end date;
 
 alter table public.campaign_results enable row level security;
 
