@@ -86,34 +86,14 @@ jobs:
           state=$(gh api "repos/$repo/actions/runs/$core" --jq '"\(.status) \(.conclusion)"')
           echo "Before cancellation: $state"
           [ "$state" = "completed action_required" ] || { echo "::error::Core probe was not approval-required"; exit 1; }
-          cancel_requested=0
-          if gh api -X POST "repos/$repo/actions/runs/$core/cancel" >/dev/null 2>"$RUNNER_TEMP/cancel.err"; then
-            echo "Normal cancellation endpoint accepted the approval-required run."
-            cancel_requested=1
-          elif gh api -X POST "repos/$repo/actions/runs/$core/force-cancel" >/dev/null 2>>"$RUNNER_TEMP/cancel.err"; then
-            echo "Force cancellation endpoint accepted the approval-required run."
-            cancel_requested=1
+          if gh api -X DELETE "repos/$repo/actions/runs/$core" >/dev/null 2>"$RUNNER_TEMP/delete.err"; then
+            echo "Delete endpoint accepted the approval-required run."
           else
-            echo "Both cancellation endpoints rejected the approval-required run: $(tr '\n' ' ' < "$RUNNER_TEMP/cancel.err" | cut -c1-300)"
+            echo "::error::Delete rejected: $(tr '\n' ' ' < "$RUNNER_TEMP/delete.err" | cut -c1-300)"; exit 1
           fi
-          if [ "$cancel_requested" = 1 ]; then
-            for i in $(seq 1 10); do
-              state=$(gh api "repos/$repo/actions/runs/$core" --jq '"\(.status) \(.conclusion // "pending")"')
-              if [ "$state" = "completed cancelled" ]; then echo "After cancellation: $state"; exit 0; fi
-              sleep 3
-            done
-            echo "Cancellation did not clear the run: $state"
-          fi
-          if [ "$cancel_requested" = 0 ] || [ "$state" = "completed action_required" ]; then
-            gh api -X POST "repos/$repo/actions/runs/$core/approve" >/dev/null
-            for i in $(seq 1 20); do
-              state=$(gh api "repos/$repo/actions/runs/$core" --jq '"\(.status) \(.conclusion // "pending")"')
-              if [ "$state" = "completed success" ]; then echo "Core cleanup: $state"; exit 0; fi
-              if [[ "$state" = completed* ]]; then echo "::error::Unexpected core cleanup result: $state"; exit 1; fi
-              sleep 3
-            done
-            echo "::error::Core cleanup did not finish in time"
-            exit 1
-          fi
-          echo "::error::Unexpected cancellation result: $state"
-          exit 1
+          sleep 3
+          code=$(gh api "repos/$repo/actions/runs/$core" --silent -i 2>/dev/null | head -1 || true)
+          echo "After delete, GET run: ${code:-error (404 expected)}"
+          left=$(gh api "repos/$repo/actions/runs?event=pull_request&head_sha=$sha&per_page=50" --jq '[.workflow_runs[] | "\(.name)=\(.conclusion)"] | join(" ")')
+          echo "Runs left on probe sha: $left"
+          gh pr view "$pr" -R "$repo" --json statusCheckRollup --jq '[.statusCheckRollup[] | "\(.name // .context)=\(.conclusion // .state)"] | join(" ")'
