@@ -17,7 +17,6 @@ import { AD_LANGUAGE_KEYS, storedLocales } from "./locales";
 import { expandPlaceAliases } from "./geo-aliases";
 import { fetchAdImage, readAdVideo, startAdVideo, uploadAdImageBytes, type AdVideoState } from "./media";
 import { buildGeoLocations, clampRadiusKm, geoLabel, hasGeo, pickBestGeoMatch } from "./geo";
-import type { LeadDestination } from "@/lib/types/campaign";
 export { buildGeoLocations, geoItemsToTargeting, hasGeo, pickBestGeoMatch } from "./geo";
 export type { AdResult, CampaignInsights, MetaCampaignState } from "./insights";
 export type { CampaignDeliverySnapshot } from "./types";
@@ -507,8 +506,8 @@ export function friendlyMetaError(
   return fallback;
 }
 
-/** Where leads land: an in-ad instant form, a WhatsApp chat, or a phone call. */
-export type AdDestination = Exclude<LeadDestination, "website">;
+/** Where leads land: an in-ad instant form, a WhatsApp chat, or a phone call (LeadDestination minus website until #2595 B). */
+export type AdDestination = Exclude<CampaignDestination, "website" | "mixed" | "unknown">;
 
 /** #680: WhatsApp and lead-form ads get the 9:16 placement creative and leave Audience Network out, so an A/B differs only in destination. */
 function hasPlacementCreative(destination: AdDestination): boolean {

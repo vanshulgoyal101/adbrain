@@ -58,7 +58,6 @@ import {
   type TargetingValue,
 } from "@/components/targeting-controls";
 import { CampaignChat } from "@/components/campaign-chat";
-import type { LeadDestination } from "@/lib/types/campaign";
 import { AdResults, PauseOffer, useWeakAd } from "@/components/ad-results";
 import { RejectedAds, rejectedMetaMessage } from "@/components/rejected-ads";
 import { BEST_AD_MIN_RESULTS } from "@/lib/meta/insights";
@@ -106,7 +105,7 @@ import { targetingFromEditor, targetingToEditor } from "@/lib/campaign/editor-ta
 import { buildManualDraftInput, pickWhatsAppNumber } from "@/lib/campaign/manual-draft-input";
 import { maskWhatsAppNumber, maskedWhatsAppNumberPattern, parseWhatsAppStatus, type WhatsAppStatus } from "@/lib/meta/whatsapp-status-shared";
 import type { ConnectIntent, ConnectionDTO } from "@/lib/meta/connect-contracts";
-import type { Business, Campaign, CampaignResult, Creative, Json } from "@/lib/types";
+import type { Business, Campaign, CampaignResult, Creative, Json, LeadDestination } from "@/lib/types";
 import {
   BUDGET_PRESETS,
   campaignNarrative,
