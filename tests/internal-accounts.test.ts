@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { INTERNAL_DOMAINS, INTERNAL_USER_IDS, internalUserIdsSql, isInternalUserSql, loginAuth, loginSessionProblem, makesFreePictures } from "../scripts/lib/internal-accounts.mjs";
+import { INTERNAL_DOMAINS, INTERNAL_USER_IDS, internalUserIdsSql, isInternalUserSql, loginAuth, loginSessionProblem, makesFreePictures, testLoginEmails } from "../scripts/lib/internal-accounts.mjs";
 import internal from "@/lib/internal-accounts.json";
 import { isExemptFromFreeProviders, isInternalUser } from "@/lib/internal-accounts";
 import { eventsSql } from "../scripts/product-events.mjs";
@@ -17,6 +17,22 @@ describe("internal accounts (#379)", () => {
     expect(sql).toContain("lower(coalesce(u.email, '')) = any(array['smoke@example.com','o''brien@example.com']::text[])");
     expect(isInternalUserSql("x", [])).toContain("array[]::text[]");
     expect(internalUserIdsSql([])).toMatch(/^select u\.id from auth\.users u where /);
+  });
+
+  it("counts reserved test domains as internal in reports (#2538), matched as whole domain labels", () => {
+    const sql = isInternalUserSql("u", []);
+    const pattern = new RegExp(sql.match(/~ '([^']+)'/)![1]);
+    for (const domain of ["example.com", "example.org", "mail.example.net", "qa.test", "x.invalid", "localhost", "a.example"]) {
+      expect(pattern.test(domain), domain).toBe(true);
+    }
+    for (const domain of ["gmail.com", "myexample.com", "example.co.in", "contest.in", "testing.com"]) {
+      expect(pattern.test(domain), domain).toBe(false);
+    }
+  });
+
+  it("takes every test login's email from .env.smoke (#2538)", () => {
+    expect(testLoginEmails({ SMOKE_EMAIL: "s@x.in", PROSPECT_BIO3_EMAIL: "p@x.in", SMOKE_PASSWORD: "pw", EMPTY_EMAIL: "" }))
+      .toEqual(["s@x.in", "p@x.in"]);
   });
 });
 

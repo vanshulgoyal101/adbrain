@@ -44,10 +44,17 @@ export function loginSessionProblem(login) {
 const quote = (value) => `'${String(value).trim().toLowerCase().replaceAll("'", "''")}'`;
 const list = (values, type) => `array[${values.map(quote).join(",")}]::${type}[]`;
 
-/** SQL boolean: is the auth.users row `alias` internal? `emails` are extra local emails (smoke, demo). */
+/**
+ * #2538: reserved test domains (RFC 2606/6761) can't be a customer's: retired team logins are renamed to them.
+ * Reports only; the app's internal rule (spend, free pictures) stays the JSON list.
+ */
+const RESERVED_TEST_DOMAIN = String.raw`'(^|\.)(example\.(com|net|org)|example|test|invalid|localhost)$'`;
+
+/** SQL boolean: is the auth.users row `alias` internal? `emails` are extra local emails (every test login). */
 export function isInternalUserSql(alias, emails) {
   const email = `lower(coalesce(${alias}.email, ''))`;
   return `(split_part(${email}, '@', 2) = any(${list(INTERNAL_DOMAINS, "text")})`
+    + ` or split_part(${email}, '@', 2) ~ ${RESERVED_TEST_DOMAIN}`
     + ` or ${alias}.id = any(${list(INTERNAL_USER_IDS, "uuid")})`
     + ` or ${email} = any(${list(emails, "text")}))`;
 }
@@ -58,12 +65,17 @@ export function internalUserIdsSql(emails) {
 
 const smokeEnvPath = "/Users/vanshulgoyal/Development/copilot/adbrain/.env.smoke";
 
-/** The smoke and demo emails from the owner's .env.smoke, or from the environment. */
+/** #2538: every test login lives in .env.smoke (AGENTS.md), each as `<NAME>_EMAIL`. */
+export function testLoginEmails(env) {
+  return Object.entries(env).filter(([key, value]) => key.endsWith("_EMAIL") && value?.includes("@")).map(([, value]) => value);
+}
+
+/** Every test login's email (`*_EMAIL`) in the owner's .env.smoke (#2538), plus smoke and demo from the environment. */
 export async function localInternalEmails() {
   const emails = [process.env.SMOKE_EMAIL, process.env.DEMO_USER_EMAIL];
   try {
     const env = parseEnv(await readFile(smokeEnvPath, "utf8"));
-    emails.push(env.SMOKE_EMAIL, env.DEMO_USER_EMAIL);
+    emails.push(...testLoginEmails(env));
   } catch {
     // Domains and ids still apply; the smoke account is on an internal domain today.
   }
