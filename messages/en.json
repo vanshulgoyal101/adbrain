@@ -266,6 +266,8 @@
     "figures": {
       "impressions": "Impressions",
       "clicks": "Clicks",
+      "linkClicks": "Link clicks",
+      "cpc": "CPC",
       "chats": "WhatsApp chats",
       "leads": "Leads",
       "visits": "Website visits",

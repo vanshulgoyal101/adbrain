@@ -266,6 +266,8 @@
     "figures": {
       "impressions": "कितनी बार दिखा",
       "clicks": "क्लिक",
+      "linkClicks": "लिंक क्लिक",
+      "cpc": "खर्च / क्लिक (CPC)",
       "chats": "WhatsApp चैट",
       "leads": "पूछताछ",
       "visits": "वेबसाइट विज़िट",
