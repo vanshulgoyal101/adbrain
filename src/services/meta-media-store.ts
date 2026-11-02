@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { MediaAsset, MetaMediaStore, MetaUploadPatch, MetaUploadRow, NewMetaUpload } from "./meta-media";
 
-/** #749: `media_meta_uploads` (20261102_media_meta_uploads.sql) and the `media_assets` it points at, service role only. */
+/** #749: `media_meta_uploads` (20261104_media_meta_uploads.sql) and the `media_assets` it points at, service role only. */
 type Admin = Pick<SupabaseClient, "from" | "storage">;
 
 const UPLOAD_COLUMNS = "id, business_id, media_asset_id, ad_account_id, kind, attempt, upload_name, image_hash, video_id, status, problem, width, height, length_ms, instagram_eligible, claimed_at, checked_at";
