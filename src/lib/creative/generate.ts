@@ -15,7 +15,7 @@ import {
 import { conceptImagePrompt } from "@/lib/creative/image-prompt";
 import { downloadImage, generateImage } from "@/lib/imageGen";
 import { ReferencePhotoPausedError, type ImageAttempt } from "@/lib/imageGen/types";
-import { ownerPhotoFor, pausedPhotoFor } from "./owner-photos";
+import { ownerPhotoInput, pausedPhotoFor, type OwnerPhotoNotes } from "./owner-photos";
 import { batchPictures } from "./batch-reuse";
 import { repairMessages } from "./concept-repair";
 import { complete, parseJSON } from "@/lib/llm";
@@ -114,8 +114,7 @@ export async function generateVariants(params: {
   referenceImages?: string[];
   /** The business's own photos; the first ad uses the newest one as its image (#195). */
   ownerPhotos?: string[];
-  /** #780: what each owner photo (by URL) shows, so its ad's words fit it. */
-  ownerPhotoNotes?: Readonly<Record<string, NonNullable<ConceptInput["ownerPhotoNotes"]>>>;
+  ownerPhotoNotes?: Readonly<Record<string, OwnerPhotoNotes>>;
   recentCopy?: ConceptInput["recentCopy"];
   advisoryPreferences?: string;
   sourceFacts?: string[];
@@ -170,10 +169,7 @@ export async function generateVariants(params: {
   const outcomes = await Promise.allSettled(
     angles.map(async (angle, index) => {
       try {
-        const ownerPhoto = ownerPhotoFor(angle, params.ownerPhotos);
-        const ownerPhotoNotes = ownerPhoto ? params.ownerPhotoNotes?.[ownerPhoto] : undefined;
-        const input: ConceptInput = { brand, brief, angle, instructions, language, format, referenceImages, advisoryPreferences, sourceFacts,
-          ...(ownerPhoto ? { ownerPhoto } : {}), ...(ownerPhotoNotes ? { ownerPhotoNotes } : {}) };
+        const input: ConceptInput = { brand, brief, angle, instructions, language, format, referenceImages, advisoryPreferences, sourceFacts, ...ownerPhotoInput(angle, params.ownerPhotos, params.ownerPhotoNotes) };
         const waitForTurn = parallel ? Promise.resolve() : startNext;
         let notifyNext!: () => void;
         startNext = new Promise<void>((resolve) => { notifyNext = resolve; });
@@ -377,11 +373,9 @@ async function renderVariant(
   const dims = formatDimensions(format ?? "portrait");
   const { concept, usage } = planned;
   const imageAttempts: ImageAttempt[] = [];
-  // A photo that can't be read falls back to a generated image rather than losing the ad.
-  const ownerRaster = input.ownerPhoto
-    ? await downloadImage(input.ownerPhoto, signal).catch(() => undefined)
-    : undefined;
-  // #780: words written for this photo must not ship over a generated picture; the top-up writes new ones.
+  // A photo that can't be read falls back to a generated image rather than losing the ad; #780: one whose words were
+  // written for it fails instead (they must not ship over a generated picture), and the top-up writes new ones.
+  const ownerRaster = input.ownerPhoto ? await downloadImage(input.ownerPhoto, signal).catch(() => undefined) : undefined;
   if (input.ownerPhotoNotes && !ownerRaster) throw new CreativeImageError(new Error("The owner's photo could not be read."), usage, imageAttempts);
   let ownerPhoto = ownerRaster ? input.ownerPhoto : undefined;
   const fromOwner = (url: string, raster: { width: number; height: number }, fallbackFrom?: string) => ({

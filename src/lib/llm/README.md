@@ -9,6 +9,7 @@ Part of the [repository map](../../../docs/architecture/overview.md#repository-m
 | [index.ts](index.ts) | `complete()` and `completeJSON()`: provider order, key round-robin, 429/credit parking, free-model fallback |
 | [types.ts](types.ts) | Messages, completion options, `LLMError` and failure codes |
 | [providers/](providers/) | Google and OpenAI-compatible (Groq, OpenRouter, Cerebras) adapters on the AI SDK ([sdk.ts](providers/sdk.ts)) |
+| [parse.ts](parse.ts) | `parseJSON()`: model JSON wrapped in prose or fences, raw newlines in strings repaired |
 | [cache.ts](cache.ts) | Opt-in, process-local response cache with single-flight |
 | [usage.ts](usage.ts) | Process-local token totals, including tokens saved by the cache |
 | [persist.ts](persist.ts) | `llm_usage_events` writes, monthly token usage and the configured limit |

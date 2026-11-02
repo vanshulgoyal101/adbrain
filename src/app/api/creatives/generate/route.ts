@@ -27,8 +27,8 @@ import { applyMonthlyCostCap } from "@/lib/llm/cost-cap";
 import { preferenceContext } from "@/lib/preferences/store";
 import { ownerError } from "@/i18n/request-locale";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { adPhotos, describeUsageEvent, MAX_AD_PHOTOS, pickedMedia, readAdPhotos, type AdPhoto, type ReadPhoto } from "@/lib/media/ad-photos";
-import { MediaError, mediaUploadsEnabled, type MediaRow } from "@/lib/media/store";
+import { MAX_AD_PHOTOS } from "@/lib/media/ad-photos";
+import { describePickedPhotos, readPickedPhotos } from "@/lib/media/route-helpers";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -216,19 +216,8 @@ async function generate(req: Request, live?: LiveCreate) {
     return NextResponse.json({ error: await ownerError("businessNotFound") }, { status: 404 });
   }
 
-  let pickedRows: MediaRow[] = [];
-  let readPhotos: ReadPhoto[] = [];
-  if (body.mediaIds) {
-    if (!mediaUploadsEnabled()) return NextResponse.json({ error: "Not found" }, { status: 404 });
-    try {
-      pickedRows = await pickedMedia(supabase as unknown as SupabaseClient, businessId, body.mediaIds);
-      // Reads before admission: a photo that can't be read must not strand a paid batch's hold.
-      readPhotos = await readAdPhotos(createAdminClient() as unknown as SupabaseClient, pickedRows);
-    } catch (error) {
-      if (error instanceof MediaError) return NextResponse.json({ error: error.message, code: error.code }, { status: error.status });
-      throw error;
-    }
-  }
+  const readPhotos = body.mediaIds ? await readPickedPhotos(supabase as unknown as SupabaseClient, businessId, body.mediaIds) : [];
+  if (readPhotos instanceof NextResponse) return readPhotos;
 
   const monthlyLimit = configuredMonthlyTokenLimit(user);
   await applyMonthlyCostCap(businessId, user);
@@ -247,6 +236,7 @@ async function generate(req: Request, live?: LiveCreate) {
   const requestId = currentRequestId();
   const userId = user.id;
   const variantGroup = body.generationId ?? crypto.randomUUID();
+  const usageContext = { businessId, userId, route: "creatives.generate", requestId, generationId: variantGroup };
   const inserted: Creative[] = [];
   // Keyed by angle: a top-up that saves the angle clears its failure; one that fails replaces it.
   const failed = new Map<string, { angle: AdAngle; error: unknown; message: string; savedUpTo?: string }>();
@@ -275,7 +265,7 @@ async function generate(req: Request, live?: LiveCreate) {
       creativeAssets(supabase, businessId),
       recentCreativeCopy(supabase, businessId),
     ]);
-    const requestHash = createHash("sha256").update(JSON.stringify([businessId, brief, count, language, body.format, ...(sourceFacts.length ? [sourceFacts] : []), ...(pickedRows.length ? [pickedRows.map((row) => row.id)] : [])])).digest("hex");
+    const requestHash = createHash("sha256").update(JSON.stringify([businessId, brief, count, language, body.format, ...(sourceFacts.length ? [sourceFacts] : []), ...(readPhotos.length ? [readPhotos.map((photo) => photo.row.id)] : [])])).digest("hex");
     admin = createAdminClient();
     const { data: admission, error: admissionError } = await admin.rpc("creative_generation_admit", {
       p_business_id: businessId,
@@ -298,34 +288,23 @@ async function generate(req: Request, live?: LiveCreate) {
     }
     admitted = true;
     live?.onAdmitted();
-    // #780: one paid vision call per new library photo (inside the admitted reservation), so each ad's words fit its photo.
-    let photos: AdPhoto[] = [];
-    if (readPhotos.length) {
-      const visionEvents: Parameters<typeof persistLLMUsage>[0] = [];
-      try {
-        photos = await adPhotos(admin as unknown as SupabaseClient, readPhotos, {
-          onAttempt: (attempt, mediaId) => visionEvents.push(describeUsageEvent(attempt, mediaId,
-            { businessId, userId, route: "creatives.generate", requestId, generationId: variantGroup })),
-        });
-      } finally {
-        if (visionEvents.length) {
-          const add = usageCostUsd(visionEvents);
-          cost.text += add.text;
-          const recorded = await persistLLMUsage(visionEvents);
-          if (!recorded) usageUnknown = true;
-          await progress(recorded ? visionEvents.reduce((total, event) => total + event.usage.totalTokens, 0) : 0, false, !recorded);
-        }
-      }
-    }
-    const ownerPhotos = photos.length ? photos.map((photo) => photo.url) : brandPhotos;
-    const ownerPhotoNotes = Object.fromEntries(photos.flatMap((photo) => photo.notes ? [[photo.url, photo.notes] as const] : []));
-    const mediaIdFor = new Map(photos.map((photo) => [photo.url, photo.mediaId]));
-    const advisoryPreferences = await preferenceContext(businessId, "creative", [brief, instructions].filter(Boolean).join("\n")).catch(() => "");
     const addCost = (events: Parameters<typeof usageCostUsd>[0]) => {
       const add = usageCostUsd(events);
       cost.text += add.text;
       cost.image += add.image;
     };
+    // #780: one paid vision call per new library photo (inside the admitted reservation), so each ad's words fit its photo.
+    const { photos, events: visionEvents } = await describePickedPhotos(admin as unknown as SupabaseClient, readPhotos, usageContext);
+    if (visionEvents.length) {
+      addCost(visionEvents);
+      const recorded = await persistLLMUsage(visionEvents);
+      if (!recorded) usageUnknown = true;
+      await progress(recorded ? visionEvents.reduce((total, event) => total + event.usage.totalTokens, 0) : 0, false, !recorded);
+    }
+    const ownerPhotos = photos.length ? photos.map((photo) => photo.url) : brandPhotos;
+    const ownerPhotoNotes = Object.fromEntries(photos.flatMap((photo) => photo.notes ? [[photo.url, photo.notes] as const] : []));
+    const mediaIdFor = new Map(photos.map((photo) => [photo.url, photo.mediaId]));
+    const advisoryPreferences = await preferenceContext(businessId, "creative", [brief, instructions].filter(Boolean).join("\n")).catch(() => "");
     const run = {
       brand: business,
       brief,
@@ -338,13 +317,7 @@ async function generate(req: Request, live?: LiveCreate) {
       ownerPhotoNotes,
       onProgress: live?.onProgress,
       onVariant: async (variant: GeneratedVariant) => {
-        const events = variantUsageEvents(variant, {
-            businessId,
-            userId: user.id,
-            route: "creatives.generate",
-            requestId,
-            generationId: variantGroup,
-          });
+        const events = variantUsageEvents(variant, usageContext);
         addCost(events);
         const recorded = await persistLLMUsage(events);
         if (recorded) recordedAngles.add(variant.angleId);
@@ -375,13 +348,7 @@ async function generate(req: Request, live?: LiveCreate) {
         const savedUpTo = saving.get(angle.id);
         saving.delete(angle.id);
         if (savedUpTo) console.error(JSON.stringify({ source: "adbrain.creative", code: "AD_NOT_SAVED", angle: angle.id, savedUpTo, message: (error instanceof Error ? error.message : String(error)).slice(0, 300) }));
-        const events = failedVariantUsage(error, {
-            businessId,
-            userId: user.id,
-            route: "creatives.generate",
-            requestId,
-            generationId: variantGroup,
-          });
+        const events = failedVariantUsage(error, usageContext);
         addCost(events);
         const recorded = await persistLLMUsage(events);
         if (recorded && error instanceof NoLLMKeysError) noProviderFailures++;
