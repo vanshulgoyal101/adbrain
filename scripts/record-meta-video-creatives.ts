@@ -85,15 +85,16 @@ async function main() {
       scrubs.push([campaign.body.id, "CAMPAIGN"]);
       const adSet = await graph("POST", `${account}/adsets`, launchForm(destination, "adsets", { PAGE: pageId, [launch.inputs.phone]: phone, CAMPAIGN: campaign.body.id }));
       if (typeof adSet.body.id !== "string") throw new Error(`adset ${adSet.status} ${JSON.stringify(adSet.body)}`);
+      created.push(adSet.body.id);
       scrubs.push([adSet.body.id, "ADSET"]);
 
-      const input: VideoCreativeInput = {
-        pageId, videoId: video.id, thumbnailUrl: video.thumbnailUrl, destination,
+      const words = {
+        pageId, videoId: video.id, thumbnailUrl: video.thumbnailUrl,
         message: launch.inputs.creative.message, headline: launch.inputs.creative.headline, description: launch.inputs.creative.description,
-        ...(destination === "whatsapp"
-          ? { welcomeMessage: whatsappWelcomeMessage(launch.inputs.whatsappGreeting) }
-          : { leadFormId: leadForm.id }),
       };
+      const input: VideoCreativeInput = destination === "whatsapp"
+        ? { ...words, destination, welcomeMessage: whatsappWelcomeMessage(launch.inputs.whatsappGreeting) }
+        : { ...words, destination, leadFormId: leadForm.id };
       const form = { name: launch.inputs.creative.headline, object_story_spec: JSON.stringify(videoStorySpec(input)) };
       const validated = await graph("POST", `${account}/adcreatives`, { ...form, execution_options: VALIDATE });
       tape.push({ destination, kind: "adcreatives", form, status: validated.status, body: validated.body });
@@ -119,8 +120,14 @@ async function main() {
       console.log(destination, "ads", ad.status, JSON.stringify(ad.body).slice(0, 300));
     }
   } finally {
-    // Creatives first, then campaigns (an ad set goes with its campaign).
-    for (const id of [...created].reverse()) console.log("delete", (await graph("DELETE", id)).status);
+    // Newest first (creative, ad set, campaign), each on its own so one failure can't strand the rest.
+    const left: string[] = [];
+    for (const id of [...created].reverse()) {
+      const deleted = await graph("DELETE", id).catch((error: unknown) => ({ status: 0, body: { error: String(error) } as Record<string, unknown> }));
+      if (deleted.status !== 200 || deleted.body.success !== true) left.push(id);
+    }
+    console.log(`deleted ${created.length - left.length}/${created.length}`);
+    if (left.length) throw new Error(`Delete these by hand in Ads Manager (all PAUSED, no ads): ${left.join(", ")}`);
   }
   writeFileSync(join(FIXTURES, "video-creative-validate.json"),
     `${JSON.stringify(scrub({ recordedAt: new Date().toISOString(), tape }), null, 2)}\n`);

@@ -192,11 +192,11 @@ export type VideoCreativeInput = {
   message: string;
   headline: string;
   description?: string | null;
-  destination: "whatsapp" | "instant_form";
-  leadFormId?: string;
-  /** `whatsappWelcomeMessage(opening)`, already serialized. */
-  welcomeMessage?: string;
-};
+} & (
+  | { destination: "instant_form"; leadFormId: string }
+  /** `welcomeMessage`: `whatsappWelcomeMessage(opening)`, already serialized. */
+  | { destination: "whatsapp"; welcomeMessage?: string }
+);
 
 /**
  * #749: the `object_story_spec` for an owner's video ad, the video twin of the launch's `link_data` image creative:
@@ -206,6 +206,8 @@ export type VideoCreativeInput = {
  */
 export function videoStorySpec(input: VideoCreativeInput): { page_id: string; video_data: Record<string, unknown> } {
   const description = input.description?.trim();
+  if (!input.videoId || !input.thumbnailUrl) throw new MetaError("This video isn't ready at Meta yet.");
+  if (input.destination === "instant_form" && !input.leadFormId) throw new MetaError("Choose a lead form for this ad.");
   return {
     page_id: input.pageId,
     video_data: {
@@ -215,7 +217,7 @@ export function videoStorySpec(input: VideoCreativeInput): { page_id: string; vi
       title: input.headline,
       ...(description ? { link_description: description } : {}),
       ...(input.destination === "whatsapp" && input.welcomeMessage ? { page_welcome_message: input.welcomeMessage } : {}),
-      call_to_action: destinationCTA(input.destination, { leadFormId: input.leadFormId }),
+      call_to_action: destinationCTA(input.destination, input.destination === "instant_form" ? { leadFormId: input.leadFormId } : {}),
     },
   };
 }

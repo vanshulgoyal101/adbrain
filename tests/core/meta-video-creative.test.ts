@@ -14,10 +14,10 @@ const base = {
   pageId: "PAGE", videoId: "VIDEO", thumbnailUrl: "https://scontent.example/video-thumbnail.jpg",
   message: launch.inputs.creative.message, headline: launch.inputs.creative.headline, description: launch.inputs.creative.description,
 };
-const inputs: Record<"instant_form" | "whatsapp", VideoCreativeInput> = {
+const inputs = {
   instant_form: { ...base, destination: "instant_form", leadFormId: "LEAD_FORM" },
   whatsapp: { ...base, destination: "whatsapp", welcomeMessage: whatsappWelcomeMessage(launch.inputs.whatsappGreeting) },
-};
+} satisfies Record<"instant_form" | "whatsapp", VideoCreativeInput>;
 
 describe("core: an owner's video ad is a payload Meta accepted (#749)", () => {
   for (const destination of ["instant_form", "whatsapp"] as const) {
@@ -45,5 +45,11 @@ describe("core: an owner's video ad is a payload Meta accepted (#749)", () => {
     expect(lead).not.toHaveProperty("page_welcome_message");
     expect(videoStorySpec(inputs.whatsapp).video_data.page_welcome_message).toBe(inputs.whatsapp.welcomeMessage);
     expect(videoStorySpec({ ...inputs.instant_form, description: "  " }).video_data).not.toHaveProperty("link_description");
+  });
+
+  it("refuses a lead ad with no form, or a video Meta hasn't finished (no id or thumbnail), instead of sending it", () => {
+    expect(() => videoStorySpec({ ...inputs.instant_form, leadFormId: "" })).toThrow("Choose a lead form");
+    expect(() => videoStorySpec({ ...inputs.whatsapp, thumbnailUrl: "" })).toThrow("isn't ready");
+    expect(() => videoStorySpec({ ...inputs.whatsapp, videoId: "" })).toThrow("isn't ready");
   });
 });
