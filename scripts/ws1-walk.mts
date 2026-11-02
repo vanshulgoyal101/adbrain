@@ -100,7 +100,7 @@ try {
   const page = await context.newPage();
 
   // #2574: a minted session, not the password form, so Supabase CAPTCHA (#1777) can stay on.
-  await signInBrowser(context, origin, email, { config: testSessionConfig(env) });
+  await signInBrowser(context, origin, email, { config: testSessionConfig(env, origin) });
 
   cdp = await context.newCDPSession(page);
   await cdp.send("Network.enable");

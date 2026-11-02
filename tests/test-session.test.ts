@@ -38,7 +38,32 @@ describe("test sign-in without the password grant (#2574)", () => {
     expect(testSessionConfig({ SUPABASE_SERVICE_ROLE_KEY: serviceKey, NEXT_PUBLIC_SUPABASE_URL: "https://other.supabase.co", NEXT_PUBLIC_SUPABASE_ANON_KEY: "sb_publishable_x" }))
       .toEqual({ url: "https://other.supabase.co", serviceRoleKey: serviceKey, apikey: "sb_publishable_x" });
     expect(() => testSessionConfig({})).toThrow(/SUPABASE_SERVICE_ROLE_KEY/);
-    expect(() => testSessionConfig({ SUPABASE_SERVICE_ROLE_KEY: "sb_secret_abc" })).toThrow(/NEXT_PUBLIC_SUPABASE_URL/);
+    expect(() => testSessionConfig({ SUPABASE_SERVICE_ROLE_KEY: "sb_secret_abc" })).toThrow(/SUPABASE_SERVICE_ROLE_KEY/);
+  });
+
+  it("mints through the app when TEST_SESSION_SECRET is set, so CI never holds the service key", async () => {
+    const config = testSessionConfig({ TEST_SESSION_SECRET: " t0k ", SUPABASE_SERVICE_ROLE_KEY: serviceKey }, "https://adbrain.vanshul.com/x");
+    expect(config).toEqual({ route: "https://adbrain.vanshul.com/api/internal/test-session", secret: "t0k" });
+    expect(testSessionConfig({ TEST_SESSION_SECRET: "t0k", SUPABASE_SERVICE_ROLE_KEY: serviceKey })).toHaveProperty("serviceRoleKey");
+
+    const calls: { url: string; init?: RequestInit }[] = [];
+    const fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      calls.push({ url: String(input), init });
+      const headers = new Headers({ "content-type": "application/json" });
+      headers.append("set-cookie", `sb-${ref}-auth-token=base64-abc%3D; Path=/; Max-Age=34560000; SameSite=lax`);
+      headers.append("set-cookie", `sb-${ref}-auth-token-code-verifier=; Path=/; Max-Age=0`);
+      return new Response(JSON.stringify({ user: { id: user.id, email: user.email }, accessToken: "at-1", supabase: "https://x.supabase.co", apikey: "sb_publishable_x" }), { headers });
+    }) as typeof globalThis.fetch;
+    const minted = await mintTestSession(" smoke@example.test ", { config, fetch });
+    expect(calls).toHaveLength(1);
+    expect(calls[0].url).toBe("https://adbrain.vanshul.com/api/internal/test-session");
+    expect(new Headers(calls[0].init?.headers).get("authorization")).toBe("Bearer t0k");
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({ email: "smoke@example.test" });
+    expect(minted).toEqual({ session: { access_token: "at-1" }, user: { id: user.id, email: user.email },
+      cookies: [{ name: `sb-${ref}-auth-token`, value: "base64-abc=" }], supabase: "https://x.supabase.co", apikey: "sb_publishable_x" });
+
+    const refused = (async () => Response.json({ error: "Forbidden" }, { status: 403 })) as typeof globalThis.fetch;
+    await expect(mintTestSession("smoke@example.test", { config, fetch: refused })).rejects.toThrow(/^test sign-in: the app refused \(403\)$/);
   });
 
   it("mints a recovery token (an unknown email is refused, never signed up), verifies it and returns the app's session cookie, never the password grant", async () => {

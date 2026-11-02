@@ -156,6 +156,8 @@ decrypt old tokens; rotation requires a reviewed migration. See
 | `CAMPAIGN_EXECUTION_MODE` | Unset/`inline` for compatibility; `worker` opts in | Web enqueue vs synchronous creation; unknown nonempty values block creation |
 | `CAMPAIGN_WORKER_TARGET` | Required by standalone worker | Exact Supabase URL origin, explicitly confirms worker target |
 | `TRAFFIC_GENERATOR_ALLOWED_EMAILS` | Empty list | Production: disabled; nonproduction: any signed-in user when empty |
+| `TEST_SESSION_SECRET` | Empty disables `/api/internal/test-session` (404) | #2574: bearer the smokes send to mint a session; also a GitHub repo secret. Never the service key |
+| `TEST_SESSION_EMAILS` | Empty list disables the route | #2574: the only emails it signs in (smoke/QA logins, e.g. `SMOKE_EMAIL`, `WS1_EMAIL`); never an owner or customer |
 | `TRAFFIC_GENERATOR_MAX_ROUNDS` | `20`, integer 1-100 | Internal runner round cap |
 
 The current internal HTTP runner rejects `createDraftCampaigns=true` with 400;
@@ -197,7 +199,7 @@ GitHub environment secrets; never in an issue. GitHub's and Vercel's own variabl
 
 | Variable | Read by and purpose | Secret |
 | --- | --- | --- |
-| `SMOKE_EMAIL` | `smoke-core.mjs`, `ui-gate.mjs`, `perf-pages.mjs`: the smoke account, signed in by a session `scripts/lib/test-session.mjs` mints with `SUPABASE_SERVICE_ROLE_KEY` (no password, so Supabase CAPTCHA can stay on; #2574) | No |
+| `SMOKE_EMAIL` | `smoke-core.mjs`, `ui-gate.mjs`, `perf-pages.mjs`: the smoke account, signed in by a session `scripts/lib/test-session.mjs` mints: through `/api/internal/test-session` with `TEST_SESSION_SECRET` in CI, or with the local `SUPABASE_SERVICE_ROLE_KEY` (no password, so Supabase CAPTCHA can stay on; #2574) | No |
 | `SMOKE_CREATE_CLEANUP` | `smoke-core.mjs`: `1` removes what a Create smoke made | No |
 | `CORE_APPROVAL_TS` | `core-approval.mjs`: path to a pinned `typescript.js` for the words-only check (#364); unset uses the repo's, missing keeps every core file gated | No |
 | `SMOKE_EXPECT_CLOUDFLARE` | `smoke-core.mjs`: `1` fails a Create smoke whose pictures include none from Cloudflare (#2412) | No |

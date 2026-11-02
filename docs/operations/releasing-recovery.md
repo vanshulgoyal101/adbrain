@@ -123,7 +123,7 @@ opens the issue and does not roll back. If the browser install also fails, the
 issue says "smoke did not run". Each smoke attempt gets 10 minutes; a hang
 counts as a FAIL.
 
-It needs repository secrets `SMOKE_EMAIL`, `SUPABASE_SERVICE_ROLE_KEY` (mints the smoke's session; #2574) and `VERCEL_TOKEN`.
+It needs repository secrets `SMOKE_EMAIL`, `TEST_SESSION_SECRET` (the app mints the smoke's session for an allowlisted email; #2574; the service key stays in Vercel) and `VERCEL_TOKEN`.
 Without `VERCEL_TOKEN`, the rollback, the wait-for-commit step and the drift
 check are skipped. Steps run in `bash` with pipefail, so `| tee` cannot turn a
 failed smoke green (#153). To prove that, run the workflow manually with

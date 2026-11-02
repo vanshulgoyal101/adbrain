@@ -50,7 +50,7 @@ async function throttle(page) {
 async function smokeSession() {
   const env = await localEnv();
   assert.ok(env.SMOKE_EMAIL, "Set SMOKE_EMAIL (or the ignored .env.smoke).");
-  return mintTestSession(env.SMOKE_EMAIL, { config: testSessionConfig(env) });
+  return mintTestSession(env.SMOKE_EMAIL, { config: testSessionConfig(env, origin) });
 }
 
 /** Allows reads; answers background syncs and telemetry locally. */

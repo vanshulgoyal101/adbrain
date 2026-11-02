@@ -1,13 +1,17 @@
 // #2574: sign a test login in without the password grant, so Supabase CAPTCHA (#1777) can stay on.
-// The service role mints a one-time sign-in token (admin API: no email is sent, no CAPTCHA) and /verify trades it for
-// a session (no CAPTCHA either). The token is a `recovery` one: for an existing user GoTrue stores it exactly as a magic
-// link, but for an unknown email it answers 404, where `magiclink` would sign a new user up in production. Scripts, e2e and CI only: the app never imports this, and the key never reaches a page.
+// CI and production: with TEST_SESSION_SECRET, the app's /api/internal/test-session mints the session for an
+// allowlisted email (the service key stays in Vercel). Locally: the service role in .env.local mints a one-time
+// `recovery` token (admin API: no email, no CAPTCHA) and /verify trades it for a session. `recovery`, not `magiclink`:
+// for an unknown email GoTrue answers 404, where `magiclink` would sign a new user up in production.
+// Scripts, e2e and CI only: the app never imports this, and no key reaches a page.
 import { readFile } from "node:fs/promises";
 import { parseEnv } from "node:util";
 import { createServerClient } from "@supabase/ssr";
 import { createClient } from "@supabase/supabase-js";
 
-/** @typedef {{ url: string, serviceRoleKey: string, apikey: string }} TestSessionConfig */
+/** @typedef {{ session: { access_token: string, refresh_token?: string }, user: { id: string, email?: string },
+ *   cookies: { name: string, value: string }[], supabase: string, apikey: string }} MintedSession */
+/** @typedef {{ route: string, secret: string } | { url: string, serviceRoleKey: string, apikey: string }} TestSessionConfig */
 
 const ownerCheckout = "/Users/vanshulgoyal/Development/copilot/adbrain";
 
@@ -34,18 +38,49 @@ export function projectUrlFromKey(key) {
 }
 
 /**
- * Where and how to mint. CI needs only SUPABASE_SERVICE_ROLE_KEY: the project URL comes from the key, and without
- * a publishable key the server client sends the service key as `apikey` (the session's own token still decides access).
+ * Where and how to mint: through the app at `origin` when TEST_SESSION_SECRET is set (CI), else with the local
+ * service role. Without a publishable key the local server client sends the service key as `apikey` (the session's
+ * own token still decides access).
  * @param {Record<string, string | undefined>} [env]
+ * @param {string} [origin] the app to sign in to; needed for the TEST_SESSION_SECRET route
  * @returns {TestSessionConfig}
  */
-export function testSessionConfig(env = process.env) {
+export function testSessionConfig(env = process.env, origin) {
+  const secret = env.TEST_SESSION_SECRET?.trim();
+  if (secret && origin) return { route: new URL("/api/internal/test-session", origin).href, secret };
   const serviceRoleKey = env.SUPABASE_SERVICE_ROLE_KEY?.trim();
   const url = env.NEXT_PUBLIC_SUPABASE_URL?.trim() || projectUrlFromKey(serviceRoleKey);
   if (!serviceRoleKey || !url) {
-    throw new Error("Set SUPABASE_SERVICE_ROLE_KEY (and NEXT_PUBLIC_SUPABASE_URL for a non-JWT key) to sign a test login in (#2574).");
+    throw new Error("Set TEST_SESSION_SECRET (CI) or SUPABASE_SERVICE_ROLE_KEY (local) to sign a test login in (#2574).");
   }
   return { url, serviceRoleKey, apikey: env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim() || serviceRoleKey };
+}
+
+/** `name=value` from each Set-Cookie header, skipping deletions. */
+function responseCookies(response) {
+  return response.headers.getSetCookie().flatMap((header) => {
+    const [pair, ...attributes] = header.split(";");
+    const at = pair.indexOf("=");
+    const value = decodeURIComponent(pair.slice(at + 1).trim());
+    const expired = attributes.some((attribute) => /^\s*max-age=0\s*$/i.test(attribute));
+    return at > 0 && value && !expired ? [{ name: pair.slice(0, at).trim(), value }] : [];
+  });
+}
+
+/**
+ * Mints through the app's /api/internal/test-session (#2574): the app writes the session cookie itself.
+ * @param {string} email
+ * @param {{ route: string, secret: string }} config
+ * @param {typeof globalThis.fetch} fetch
+ */
+async function mintThroughApp(email, { route, secret }, fetch) {
+  const response = await fetch(route, { method: "POST", redirect: "manual",
+    headers: { authorization: `Bearer ${secret}`, "content-type": "application/json" }, body: JSON.stringify({ email }) });
+  if (!response.ok) throw new Error(`test sign-in: the app refused (${response.status})`);
+  const body = await response.json();
+  const cookies = responseCookies(response);
+  if (!cookies.length || !body?.accessToken || !body.user?.id) throw new Error("test sign-in: no session cookie written");
+  return { session: { access_token: body.accessToken }, user: body.user, cookies, supabase: body.supabase, apikey: body.apikey };
 }
 
 /**
@@ -53,11 +88,11 @@ export function testSessionConfig(env = process.env) {
  * never the email or a token: CI logs are public.
  * @param {string | undefined} email
  * @param {{ config?: TestSessionConfig, fetch?: typeof globalThis.fetch }} [options]
- * @returns {Promise<{ session: import("@supabase/supabase-js").Session, user: import("@supabase/supabase-js").User,
- *   cookies: { name: string, value: string }[], supabase: string, apikey: string }>}
+ * @returns {Promise<MintedSession>}
  */
 export async function mintTestSession(email, { config = testSessionConfig(), fetch } = {}) {
   if (!email?.trim()) throw new Error("test sign-in: no email");
+  if ("route" in config) return mintThroughApp(email.trim(), config, fetch ?? globalThis.fetch);
   const global = fetch ? { fetch } : undefined;
   const admin = createClient(config.url, config.serviceRoleKey, { auth: { persistSession: false, autoRefreshToken: false }, global });
   const link = await admin.auth.admin.generateLink({ type: "recovery", email: email.trim() });

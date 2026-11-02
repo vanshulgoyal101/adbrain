@@ -17,7 +17,7 @@ try {
   const context = await browser.newContext({ serviceWorkers: "block" });
   // Read-only: block every write. #2574: signed in by a minted session, not the password form (CAPTCHA, #1777).
   await context.route("**/*", (route) => ["GET", "HEAD", "OPTIONS"].includes(route.request().method()) ? route.continue() : route.fulfill({ status: 204, body: "" }));
-  await signInBrowser(context, origin, env.SMOKE_EMAIL, { config: testSessionConfig(env) });
+  await signInBrowser(context, origin, env.SMOKE_EMAIL, { config: testSessionConfig(env, origin) });
   const page = await context.newPage();
   page.setDefaultTimeout(30_000);
   console.log(`page          runs  ttfb p50/p90   dcl p50/p90    load p50/p90  (ms, ${new Date().toISOString().slice(0, 16)}Z)`);

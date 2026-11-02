@@ -303,7 +303,7 @@ try {
   }
   assert.ok(await passwordField.isVisible(), "The sign-in page never opened its password form.");
   // #2145: who signed in decides free or paid pictures; the session also lets a scheduled run delete its own ads.
-  const minted = await signInBrowser(context, origin, email, { config: testSessionConfig(env) });
+  const minted = await signInBrowser(context, origin, email, { config: testSessionConfig(env, origin) });
   const auth = { supabase: minted.supabase, apikey: minted.apikey, token: minted.session.access_token, user: minted.user };
   await page.goto(`${origin}/dashboard`, { waitUntil: "domcontentloaded" });
   assert.ok(!new URL(page.url()).pathname.startsWith("/login"), "The app sent the minted session to /login.");
