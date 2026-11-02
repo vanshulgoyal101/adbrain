@@ -1,6 +1,7 @@
 import { campaignDestination } from "@/lib/campaign/outcomes";
 import { segmentForCategory } from "@/lib/segments";
 import type { Campaign, CampaignResult } from "@/lib/types";
+import { enquiriesTranslator, type Words } from "@/i18n/words";
 
 /**
  * Adds each campaign's logged WhatsApp enquiries (#335) and its enquiries that became customers (#798, any
@@ -56,6 +57,6 @@ export function whatsappChatRows(campaigns: Campaign[], results: Record<string, 
 }
 
 /** #1223/#1835: "Form enquiries" only while the list below the chat strips holds form leads alone; logged chats make it plain "Enquiries". */
-export function enquiriesTitle(rows: WhatsAppChatRow[]): string {
-  return rows.length && rows.every((row) => row.realEnquiries === 0) ? "Form enquiries" : "Enquiries";
+export function enquiriesTitle(rows: WhatsAppChatRow[], words?: Words<"enquiries">): string {
+  return enquiriesTranslator(words)(rows.length && rows.every((row) => row.realEnquiries === 0) ? "formTitle" : "title");
 }

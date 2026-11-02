@@ -1,3 +1,5 @@
+import { enquiriesTranslator, type Words } from "@/i18n/words";
+
 /**
  * #1049: reply to an enquiry in one tap. "WhatsApp them" opens a chat with the lead pre-filled with a
  * first reply in the business's language (with its name and offer); "Call" dials. The first tap is
@@ -81,9 +83,9 @@ export function formatReplyTime(minutes: number): string {
 }
 
 /** #1260 (CPO words): 'Contacted' is the owner's first tap on WhatsApp them/Call, not a confirmed reply. */
-export function contactedLabel(minutes: number): string {
-  if (!Number.isFinite(minutes) || minutes < 0) return "Contacted";
-  if (minutes < 24 * 60) return `Contacted in ${formatReplyTime(minutes)}`;
-  const days = Math.floor(minutes / (24 * 60));
-  return `Contacted after ${days} ${days === 1 ? "day" : "days"}`;
+export function contactedLabel(minutes: number, words?: Words<"enquiries">): string {
+  const t = enquiriesTranslator(words);
+  if (!Number.isFinite(minutes) || minutes < 0) return t("state.contacted");
+  if (minutes < 24 * 60) return t("state.contactedIn", { time: formatReplyTime(minutes) });
+  return t("state.contactedAfter", { days: Math.floor(minutes / (24 * 60)) });
 }
