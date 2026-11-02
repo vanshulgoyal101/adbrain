@@ -156,8 +156,8 @@ decrypt old tokens; rotation requires a reviewed migration. See
 | `CAMPAIGN_EXECUTION_MODE` | Unset/`inline` for compatibility; `worker` opts in | Web enqueue vs synchronous creation; unknown nonempty values block creation |
 | `CAMPAIGN_WORKER_TARGET` | Required by standalone worker | Exact Supabase URL origin, explicitly confirms worker target |
 | `TRAFFIC_GENERATOR_ALLOWED_EMAILS` | Empty list | Production: disabled; nonproduction: any signed-in user when empty |
-| `TEST_SESSION_SECRET` | Empty disables `/api/internal/test-session` (404) | #2574: bearer the smokes send to mint a session; also a GitHub repo secret. Never the service key |
-| `TEST_SESSION_EMAILS` | Empty list disables the route | #2574: the only emails it signs in (smoke/QA logins, e.g. `SMOKE_EMAIL`, `WS1_EMAIL`); never an owner or customer |
+| `TEST_SESSION_SECRET` | Empty or under 32 characters disables `/api/internal/test-session` (404) | #2574: bearer the smokes send to mint a session; also a GitHub repo secret. Never the service key |
+| `TEST_SESSION_EMAILS` | Empty list disables the route | #2574: the only emails it signs in (dedicated smoke/QA logins only: the smoke and WS1-walk accounts); never an account of an owner or customer business |
 | `TRAFFIC_GENERATOR_MAX_ROUNDS` | `20`, integer 1-100 | Internal runner round cap |
 
 The current internal HTTP runner rejects `createDraftCampaigns=true` with 400;

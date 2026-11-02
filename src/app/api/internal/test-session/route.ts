@@ -28,7 +28,8 @@ function reject(status: 401 | 403 | 422 | 502, error: string) {
  */
 async function handlePOST(request: Request) {
   const { TEST_SESSION_SECRET: secret, TEST_SESSION_EMAILS: emails } = getEnv();
-  if (!secret || !emails.length) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  // A short secret would make every allowlisted login guessable, so it counts as unset.
+  if (secret.length < 32 || !emails.length) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   // The platform sets x-real-ip and appends the caller to x-forwarded-for; a script can only prepend.
   const address = request.headers.get("x-real-ip")?.trim()

@@ -2,9 +2,9 @@
 // a 360 px phone over slow 4G, run by the post-deploy guard. Read-only on Meta: every Meta write is blocked, and
 // nothing is launched. Step 1 fills only empty fields from a pasted bio, and step 2 makes ads only if the account has none.
 //
-//   WS1_EMAIL=… SUPABASE_SERVICE_ROLE_KEY=… npx tsx scripts/ws1-walk.mts [--plant]
+//   WS1_EMAIL=… npx tsx scripts/ws1-walk.mts [--plant]
 //
-// WS1_EMAIL must be a confirmed internal address (free image providers, #466) whose business has never gone live.
+// Signs in with TEST_SESSION_SECRET (CI) or the local service role (#2574). WS1_EMAIL must be a confirmed internal address (free image providers, #466) whose business has never gone live.
 // --plant injects a promise into step 3 and slows step 2's pictures, so the run must FAIL (proves the checks bite).
 import assert from "node:assert/strict";
 import { chromium, type CDPSession, type Page } from "@playwright/test";
@@ -13,7 +13,7 @@ import { localEnv, signInBrowser, testSessionConfig } from "./lib/test-session.m
 
 const origin = "https://adbrain.vanshul.com";
 const env = await localEnv();
-const email = env.WS1_EMAIL;
+const { WS1_EMAIL: email } = process.env;
 const plant = process.argv.includes("--plant");
 const LCP_MS = 2500;
 const CLS_MAX = 0.1;

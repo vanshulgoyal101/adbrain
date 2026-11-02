@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { POST } from "@/app/api/internal/test-session/route";
 
 const mocks = vi.hoisted(() => ({
-  env: { TEST_SESSION_SECRET: "s3cret", TEST_SESSION_EMAILS: ["smoke@example.test"] },
+  env: { TEST_SESSION_SECRET: "s3cret-0123456789-0123456789-0123", TEST_SESSION_EMAILS: ["smoke@example.test"] },
   record: vi.fn(), rate: vi.fn(), generateLink: vi.fn(), verifyOtp: vi.fn(),
 }));
 vi.mock("@/lib/env", () => ({ getEnv: () => mocks.env }));
@@ -11,7 +11,7 @@ vi.mock("@/lib/security/rate-limit", () => ({ rateLimitResponse: mocks.rate }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ auth: { admin: { generateLink: mocks.generateLink } } }) }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ auth: { verifyOtp: mocks.verifyOtp } }) }));
 
-function mint(body: unknown, authorization: string | null = "Bearer s3cret") {
+function mint(body: unknown, authorization: string | null = "Bearer s3cret-0123456789-0123456789-0123") {
   return POST(new Request("https://adbrain.example/api/internal/test-session", {
     method: "POST", body: JSON.stringify(body),
     headers: { "x-real-ip": "203.0.113.9", ...(authorization === null ? {} : { authorization }) },
@@ -21,7 +21,7 @@ const outcomes = () => mocks.record.mock.calls.map(([event]) => [event.name, eve
 
 beforeEach(() => {
   vi.resetAllMocks();
-  mocks.env = { TEST_SESSION_SECRET: "s3cret", TEST_SESSION_EMAILS: ["Smoke@Example.test"] };
+  mocks.env = { TEST_SESSION_SECRET: "s3cret-0123456789-0123456789-0123", TEST_SESSION_EMAILS: ["Smoke@Example.test"] };
   mocks.rate.mockResolvedValue(null);
   mocks.generateLink.mockResolvedValue({ data: { properties: { hashed_token: "hash-1" } }, error: null });
   mocks.verifyOtp.mockResolvedValue({ data: { session: { access_token: "at-1", user: { id: "u1", email: "smoke@example.test" } } }, error: null });
@@ -41,7 +41,8 @@ describe("POST /api/internal/test-session (#2574)", () => {
 
   it.each([
     ["no secret", { TEST_SESSION_SECRET: "", TEST_SESSION_EMAILS: ["smoke@example.test"] }],
-    ["no allowlist", { TEST_SESSION_SECRET: "s3cret", TEST_SESSION_EMAILS: [] }],
+    ["a secret under 32 characters", { TEST_SESSION_SECRET: "x".repeat(31), TEST_SESSION_EMAILS: ["smoke@example.test"] }],
+    ["no allowlist", { TEST_SESSION_SECRET: "s3cret-0123456789-0123456789-0123", TEST_SESSION_EMAILS: [] }],
   ])("is not found with %s", async (_case, env) => {
     mocks.env = env;
     expect((await mint({ email: "smoke@example.test" })).status).toBe(404);
@@ -51,9 +52,9 @@ describe("POST /api/internal/test-session (#2574)", () => {
 
   it.each([
     ["no bearer", null],
-    ["a wrong secret", "Bearer s3cres"],
-    ["a longer secret", "Bearer s3cret-and-more"],
-    ["the bare secret", "s3cret"],
+    ["a wrong secret", "Bearer s3cret-0123456789-0123456789-0124"],
+    ["a longer secret", "Bearer s3cret-0123456789-0123456789-0123-and-more"],
+    ["the bare secret", "s3cret-0123456789-0123456789-0123"],
   ])("refuses %s before reading the body", async (_case, authorization) => {
     expect((await mint({ email: "smoke@example.test" }, authorization)).status).toBe(401);
     expect(mocks.generateLink).not.toHaveBeenCalled();
