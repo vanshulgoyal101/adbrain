@@ -110,9 +110,22 @@ export function buildLaunchSnapshot(input: LaunchSnapshotInput) {
 
 /**
  * #789: the library asset each creative was made from, for the ledger. Best effort like the ledger itself:
- * any error (including a database without #2625's `media_asset_id` yet) gives no media, never a failed launch.
+ * any error or a read slower than 1.5 s (including a database without #2625's `media_asset_id` yet) gives no media, never a failed launch.
  */
-export async function readCreativeMedia(database: SupabaseClient, businessId: string, creativeIds: string[]): Promise<Map<string, CreativeMedia>> {
+export async function readCreativeMedia(database: SupabaseClient, businessId: string, creativeIds: string[], timeoutMs = MEDIA_READ_TIMEOUT_MS): Promise<Map<string, CreativeMedia>> {
+  // Launch awaits this after Meta's create and before the campaign row is saved, so a stalled read must not hold it.
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timedOut = new Promise<Map<string, CreativeMedia>>(resolve => { timer = setTimeout(() => resolve(new Map()), timeoutMs); });
+  try {
+    return await Promise.race([lookupCreativeMedia(database, businessId, creativeIds), timedOut]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+const MEDIA_READ_TIMEOUT_MS = 1500;
+
+async function lookupCreativeMedia(database: SupabaseClient, businessId: string, creativeIds: string[]): Promise<Map<string, CreativeMedia>> {
   const media = new Map<string, CreativeMedia>();
   try {
     if (!creativeIds.length) return media;

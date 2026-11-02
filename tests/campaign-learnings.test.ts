@@ -125,6 +125,9 @@ describe("learning ledger snapshot (#588)", () => {
     expect((await readCreativeMedia(database({ creatives, media_assets: { data: null, error: { code: "42P01" } } }) as never, "b1", ["c1"])).size).toBe(0);
     expect((await readCreativeMedia({ from: () => { throw new Error("no table"); } } as never, "b1", ["c1"])).size).toBe(0);
     expect((await readCreativeMedia(database({}) as never, "b1", [])).size).toBe(0);
+    // A stalled read gives up rather than hold the launch.
+    const hung = { from: () => ({ select: () => ({ in: () => ({ eq: () => new Promise(() => {}) }) }) }) };
+    expect((await readCreativeMedia(hung as never, "b1", ["c1"], 20)).size).toBe(0);
   });
 
   it("copes with lead-form launches and old creatives without a receipt", () => {

@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   refuseExclusions: false,
   whatsappTemplate: null as unknown,
   description: null as string | null,
+  mediaAssetId: null as string | null,
   submittedCreative: vi.fn(),
 }));
 
@@ -190,7 +191,7 @@ vi.mock("@/lib/supabase/server", () => ({
         };
       }
       if (table === "creatives") {
-        const creativeData = { data: [{ id: creativeId, business_id: businessId, status: "approved", image_url: "https://example.com/ad.png", headline: "Headline", primary_text: "Message", cta: "Learn More", generation: { concept: { description: mocks.description } } }], error: null };
+        const creativeData = { data: [{ id: creativeId, business_id: businessId, status: "approved", image_url: "https://example.com/ad.png", headline: "Headline", primary_text: "Message", cta: "Learn More", generation: { concept: { description: mocks.description } }, media_asset_id: mocks.mediaAssetId }], error: null };
         mocks.creativeReads++;
         if (mocks.changeCreativeBeforeExecution && mocks.creativeReads > 1) creativeData.data[0].primary_text = "Unreviewed copy";
         type CreativeResult = { data: typeof creativeData.data; error: null };
@@ -204,6 +205,10 @@ vi.mock("@/lib/supabase/server", () => ({
             in: () => creativeResult(),
           }),
         };
+      }
+      if (table === "media_assets") {
+        const assets = { data: [{ id: mocks.mediaAssetId, kind: "image", source: "upload" }], error: null };
+        return { select: () => ({ in: () => ({ eq: async () => assets }) }) };
       }
       if (table === "businesses") {
         return {
@@ -253,6 +258,7 @@ beforeEach(() => {
   mocks.refuseExclusions = false;
   mocks.whatsappTemplate = null;
   mocks.description = null;
+  mocks.mediaAssetId = null;
   mocks.getUser.mockResolvedValue({ data: { user: { id: userId } } });
   mocks.requireOwnedBusiness.mockResolvedValue({ businessId, userId });
   mocks.getConnectionStatus.mockResolvedValue({
@@ -393,6 +399,8 @@ describe("durable campaign create route", () => {
 
   it.each(["valid", "forged", "changed number", "missing number"])("checks the WhatsApp review before creation: %s", async (scenario) => {
     mocks.learnings = [];
+    // #789: the ad was made from a library photo.
+    mocks.mediaAssetId = "e123e123-e123-4123-8123-e123e123e123";
     mocks.draftRow = draftRow({ input: { ...draftInput, destination: "whatsapp", leadFormId: null, targeting: { ...draftInput.targeting, gender: "women" } } });
     // #672: like the real client, report the payloads sent and the creative each ad runs on.
     const create = vi.fn().mockImplementation(async (params: { onPlanned?: (plan: { adSets: Record<string, string>[]; creatives: Record<string, string>[] }) => void }) => {
@@ -421,8 +429,9 @@ describe("durable campaign create route", () => {
         snapshot: expect.objectContaining({ destination: "whatsapp", objective: "OUTCOME_ENGAGEMENT", formats: ["4:5"],
           whatsapp: expect.objectContaining({ prefill: "Hi! I'd like to know more about Solaride in Jaipur." }),
           audience: expect.objectContaining({ areas: ["Jaipur"], gender: "women", advantageAudience: 1 }),
-          version: 3, metaCreativeIds: ["meta-creative-1"], cap: null, media: [],
-          creatives: [expect.objectContaining({ id: creativeId, mediaAssetId: null })] }) })]);
+          version: 3, metaCreativeIds: ["meta-creative-1"], cap: null,
+          media: [{ mediaAssetId: mocks.mediaAssetId, kind: "image", source: "upload" }],
+          creatives: [expect.objectContaining({ id: creativeId, mediaAssetId: mocks.mediaAssetId })] }) })]);
     } else {
       expect(response.status).toBeGreaterThanOrEqual(400);
       expect(create).not.toHaveBeenCalled();
