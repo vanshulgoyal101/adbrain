@@ -62,7 +62,8 @@ describe("Create page business details (#169)", () => {
     mediaOn.value = true;
     try {
       render(await CreatePage());
-      expect(screen.getByText("Make ads with AI")).toHaveAttribute("aria-current", "page");
+      expect(screen.getByRole("link", { name: "Make ads with AI" })).toHaveAttribute("aria-current", "page");
+      expect(screen.getByRole("link", { name: "Make ads with AI" })).toHaveAttribute("href", "#create-flow");
       expect(screen.getByRole("link", { name: "Use my photos & videos" })).toHaveAttribute("href", "/assets");
     } finally { mediaOn.value = false; }
   });

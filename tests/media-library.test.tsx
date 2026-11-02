@@ -56,6 +56,8 @@ describe("<MediaLibrary> (#778 slice 3a)", () => {
 
   it("#1317: a prospect's sample ads keep no Download; the owner's own photos keep theirs", () => {
     render(<MediaLibrary business={biz} media={[photo()]} creatives={[ad]} brandAssets={[]} sample />);
-    expect(screen.getAllByRole("button", { name: "Download" })).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: "Download" })).not.toBeInTheDocument();
+    fireEvent.keyDown(screen.getByRole("button", { name: /^More for / }), { key: "Enter" });
+    expect(screen.getByRole("menuitem", { name: "Download" })).toBeInTheDocument();
   });
 });
