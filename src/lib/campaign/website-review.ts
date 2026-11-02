@@ -19,21 +19,24 @@ export function websiteAdLink(website: string | null | undefined): string | null
   return normalized?.startsWith("http://") ? `https://${normalized.slice("http://".length)}` : normalized;
 }
 
+/** #2599: why a website ad can't open the advertiser's site, by its `review` message key (#2333); null when it can. */
+export type WebsiteBlocker =
+  | { missing: true; key: "websiteMissing" }
+  | { missing: false; key: "websiteUnreachable" | "websiteBlocked"; host: string }
+  | { missing: false; key: "websiteStatus"; host: string; status: string }
+  | { missing: false; key: "websiteRedirect"; host: string; finalHost: string };
+
 /** #2599: a website ad opens the advertiser's own site, so the site must exist, answer and stay on its own domain. */
-export function websiteBlockerMessage(website: string | null, reach: WebsiteReach | undefined): { missing: boolean; message: string } | null {
+export function websiteBlocker(website: string | null, reach: WebsiteReach | undefined): WebsiteBlocker | null {
   // Launch's own rule (isWebsiteLink), so a site Review passes is never refused at launch.
   const link = websiteAdLink(website);
-  if (!link || !isAdvertiserWebsite(website) || !isWebsiteLink(link)) {
-    return { missing: true, message: "Add your business website on the Your business page. A website ad opens your own site, so AdBrain needs its address." };
-  }
+  if (!link || !isAdvertiserWebsite(website) || !isWebsiteLink(link)) return { missing: true, key: "websiteMissing" };
   // CPO on #2634: only a check of this exact link counts, never one of another page or an older address.
   const checked = reach?.url === link ? reach : undefined;
   if (checked?.ok) return null;
   const host = new URL(link).hostname;
-  const check = "Check the address on the Your business page, or make sure the site is up, then review again.";
-  const message = !checked || checked.problem === "unreachable" ? `AdBrain couldn't open your website ${host}. ${check}`
-    : checked.problem === "status" ? `Your website ${host} answered with an error${checked.status ? ` (${checked.status})` : ""} when AdBrain opened it. ${check}`
-    : checked.problem === "blocked" ? `${host} isn't a public website address. Add your business's public site on the Your business page.`
-    : `Your website ${host} sends visitors on to ${checked.finalHost ?? "another site"}. Add the address of your own site on the Your business page, so the ad opens your business.`;
-  return { missing: false, message };
+  if (!checked || checked.problem === "unreachable") return { missing: false, key: "websiteUnreachable", host };
+  if (checked.problem === "status") return { missing: false, key: "websiteStatus", host, status: checked.status ? String(checked.status) : "" };
+  if (checked.problem === "blocked") return { missing: false, key: "websiteBlocked", host };
+  return { missing: false, key: "websiteRedirect", host, finalHost: checked.finalHost ?? "" };
 }

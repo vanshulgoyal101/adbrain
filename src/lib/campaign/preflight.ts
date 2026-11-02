@@ -1,4 +1,4 @@
-import { adPolicyHits, bannedTermKind } from "@/lib/campaign/ad-policy";
+import { adPolicyHits, isHealthPromise } from "@/lib/campaign/ad-policy";
 import type { GeoTargeting } from "@/lib/meta/client";
 import { describeServiceArea } from "@/lib/meta/service-area";
 import { effectiveDailyBudget } from "@/lib/campaign/spend";
@@ -8,8 +8,10 @@ import { askMismatchWarning, QUOTED_ASK_WITH_QUESTIONS, reviewWarnings, WHATSAPP
 import { quotedAsk, sameWords } from "@/lib/campaign/whatsapp-greeting";
 import { batchProofWarning } from "@/lib/creative/proof-line";
 import type { ResolvedWhatsAppMessage } from "@/lib/campaign/whatsapp-template";
+import { translator, type AppLocale } from "@/i18n/locale";
 import type { WebsiteReach } from "@/lib/campaign/website-reach";
-import { isAdvertiserWebsite, websiteAdLink, websiteBlockerMessage } from "@/lib/campaign/website-review";
+import { isAdvertiserWebsite, websiteAdLink, websiteBlocker } from "@/lib/campaign/website-review";
+import { creativesBlockerMessage, named, websiteBlockerWords } from "@/lib/campaign/review-blocker-words";
 
 /** #1799: Meta's minimum daily budget per impression-billed ad set in INR (₹95.46, Oct 29), rounded up. */
 export const META_MIN_DAILY_BUDGET_RUPEES = 96;
@@ -80,6 +82,8 @@ export interface PreflightInput {
   costPerResultRupees?: number | null;
   /** #2274: what Prepare changed on the pictures (the chat number), shown first among the notes. */
   pictureNotice?: string | null;
+  /** #2333: the owner's app language for the blocker sentences; English when absent. */
+  locale?: AppLocale;
 }
 
 export type ReviewFreshnessInput = {
@@ -137,42 +141,6 @@ function reviewedMessage({ source, opening, language }: ResolvedWhatsAppMessage)
 export function isReviewedWhatsAppMessage(message: ResolvedWhatsAppMessage, review: Pick<ReviewDTO, "whatsappMessage">): boolean {
   return Boolean(review.whatsappMessage)
     && JSON.stringify(canonicalize(reviewedMessage(message))) === JSON.stringify(canonicalize(review.whatsappMessage));
-}
-
-function adName(creative: PreflightCreative): string {
-  const headline = (creative.headline ?? "").trim();
-  if (!headline) return "you chose";
-  // Whole characters, so a Hindi matra or an emoji is never split.
-  const graphemes = Array.from(new Intl.Segmenter("en", { granularity: "grapheme" }).segment(headline), (part) => part.segment);
-  if (graphemes.length <= 40) return `"${headline}"`;
-  const cut = graphemes.slice(0, 40).join("");
-  return `"${(cut.lastIndexOf(" ") > 20 ? cut.slice(0, cut.lastIndexOf(" ")) : cut).trimEnd()}…"`;
-}
-
-/** #681: which chosen ad is wrong and what to do about it, not one sentence for every fault. */
-function creativesBlockerMessage(draft: PreflightInput["draft"], creatives: PreflightCreative[]): string | null {
-  if (draft.creativeIds.length === 0) return "Choose at least one ad to send to Meta.";
-  const unique = new Set(draft.creativeIds).size === draft.creativeIds.length;
-  const found = creatives.filter((creative) => creative.businessId === draft.businessId && draft.creativeIds.includes(creative.id));
-  if (!unique || new Set(creatives.map((creative) => creative.id)).size !== creatives.length || found.length !== creatives.length || found.length !== draft.creativeIds.length) {
-    return "One of the ads you chose isn't available any more. Choose your ads again.";
-  }
-  const problems = found.flatMap((creative) => {
-    if (!creative.headline) return ["An ad you chose has no headline. Take it out of this campaign and choose another ad."];
-    if (!creative.approved) return [`The ad ${adName(creative)} isn't approved yet. Approve it on the Review page, or take it out of this campaign.`];
-    if (!creative.imageUrl) return [`The ad ${adName(creative)} has no picture yet. Take it out of this campaign and choose another ad.`];
-    return [];
-  });
-  if (!problems.length) return null;
-  const more = problems.length - 1;
-  return more ? `${problems[0]} ${more} more ${more === 1 ? "ad needs" : "ads need"} fixing too.` : problems[0];
-}
-
-/** #740: name what Meta didn't recognise, so the owner knows which line to fix. */
-function named(names: string[]): string {
-  const shown = names.slice(0, 5).map((name) => `"${name}"`);
-  const more = names.length > shown.length ? ` and ${names.length - shown.length} more` : "";
-  return shown.length > 1 ? `${shown.slice(0, -1).join(", ")} and ${shown.at(-1)}${more}` : `${shown[0]}${more}`;
 }
 
 /** The destination Review checks; a draft saved before destinations existed is a form campaign. */
@@ -245,76 +213,80 @@ export function buildCreativeReviewPayload(creatives: PreflightCreative[]) {
 export function runPreflight(input: PreflightInput): ReviewDTO {
   const blockers: ReviewDTO["blockers"] = [];
   const { draft } = input;
+  const say = translator(input.locale ?? "en", "review");
   const destination = reviewDestination(draft);
 
   if (!input.connection?.selected) {
-    blockers.push(blocker("SETUP_REQUIRED", "REVIEW_NO_META_CONNECTION", "Connect Facebook and choose your Page and ad account."));
+    blockers.push(blocker("SETUP_REQUIRED", "REVIEW_NO_META_CONNECTION", say("noMetaConnection")));
   } else if (input.connection.selected.currency !== "INR") {
-    blockers.push(blocker("UNSUPPORTED_CURRENCY", "REVIEW_CURRENCY", "Choose an ad account that pays in Indian rupees (INR)."));
+    blockers.push(blocker("UNSUPPORTED_CURRENCY", "REVIEW_CURRENCY", say("currency")));
   }
   // No connection is one fix (connect), not two (#688).
   if (input.connection && !input.connection.canCreatePaused) {
-    blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_META_ACCESS", "Meta hasn't confirmed AdBrain can create campaigns in this ad account. Connect Facebook again and allow every permission it asks for."));
+    blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_META_ACCESS", say("metaAccess")));
   }
 
-  const creativesProblem = creativesBlockerMessage(draft, input.creatives);
+  const creativesProblem = creativesBlockerMessage(draft, input.creatives, say);
   if (creativesProblem) blockers.push(blocker("FORBIDDEN", "REVIEW_CREATIVES", creativesProblem));
   if (draft.destination === "whatsapp") {
     // #681: without Meta access the number can't be read; the connection blocker above is the one fix.
     if (input.connection?.canCreatePaused && (!input.whatsappNumber || !/^\+[1-9]\d{6,14}$/.test(input.whatsappNumber))) {
-      blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_WHATSAPP_NOT_LINKED", "Your Facebook Page has no WhatsApp number linked yet, so the ad's button has nowhere to open a chat. Link the number in Settings, then review again."));
+      blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_WHATSAPP_NOT_LINKED", say("whatsappNotLinked")));
     }
     if (input.whatsappMessageProblem) {
-      blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_WHATSAPP_MESSAGE", `Your WhatsApp message: ${input.whatsappMessageProblem}`));
+      blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_WHATSAPP_MESSAGE", say("whatsappMessage", { problem: input.whatsappMessageProblem })));
     }
   } else if (destination === "instant_form" && (!draft.leadFormId || !input.form || input.form.id !== draft.leadFormId || input.form.businessId !== draft.businessId || !input.form.active)) {
-    blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_NO_LEAD_FORM", "Choose an active lead form from your Facebook Page in the Lead form field."));
+    blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_NO_LEAD_FORM", say("noLeadForm")));
   }
   if (destination === "website") {
-    const websiteProblem = websiteBlockerMessage(input.website ?? null, input.websiteReach);
+    const websiteProblem = websiteBlocker(input.website ?? null, input.websiteReach);
     if (websiteProblem) {
       const reason = websiteProblem.missing ? "REVIEW_NO_WEBSITE" : "REVIEW_WEBSITE_UNREACHABLE";
-      blockers.push(blocker("PREFLIGHT_BLOCKED", reason, websiteProblem.message, { kind: "open_brand" }));
+      blockers.push(blocker("PREFLIGHT_BLOCKED", reason, websiteBlockerWords(websiteProblem, say), { kind: "open_brand" }));
     }
   } else if (destination !== "whatsapp" && input.website !== undefined && !isAdvertiserWebsite(input.website)) {
-    blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_NO_WEBSITE", "Add your business website on the Your business page. Meta lead ads must link to the advertiser's own website, not Facebook.", { kind: "open_brand" }));
+    blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_NO_WEBSITE", say("noWebsite"), { kind: "open_brand" }));
   }
   const policyHit = adPolicyHits(input.creatives, input.vertical)[0];
   if (policyHit) {
-    blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_AD_POLICY", `"${policyHit.term}" in the ad "${policyHit.headline ?? "without a headline"}" is ${bannedTermKind(policyHit.term, input.vertical)} Meta rejects. Edit the ad to describe the service instead.`));
+    blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_AD_POLICY", say("adPolicy", {
+      term: policyHit.term, named: policyHit.headline == null ? "no" : "yes", headline: policyHit.headline ?? "",
+      kind: isHealthPromise(policyHit.term, input.vertical) ? "health" : "other",
+    })));
   }
   if (draft.dailyBudgetRupees <= 0) {
-    blockers.push(blocker("INVALID_INPUT", "REVIEW_BUDGET", "Set a daily budget above ₹0."));
+    blockers.push(blocker("INVALID_INPUT", "REVIEW_BUDGET", say("budgetZero")));
   } else if (draft.dailyBudgetRupees < META_MIN_DAILY_BUDGET_RUPEES) {
     // #1799: Meta refuses an ad set under its INR minimum (₹95.46 a day for impression-billed WhatsApp and form
     // ad sets, read from the account on Oct 29). Each ad set gets the full daily budget, so this is the floor.
-    blockers.push(blocker("INVALID_INPUT", "REVIEW_BUDGET", `Meta needs at least ₹${META_MIN_DAILY_BUDGET_RUPEES} a day. Set a daily budget of ₹${META_MIN_DAILY_BUDGET_RUPEES} or more.`));
+    blockers.push(blocker("INVALID_INPUT", "REVIEW_BUDGET", say("budgetLow", { min: String(META_MIN_DAILY_BUDGET_RUPEES) })));
   }
   const age = draft.targeting.age;
   if (age?.mode === "ai" || age?.min === undefined || age.max === undefined || age.min > age.max) {
-    blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_NO_AGE_RANGE", "Choose an age range, or let AdBrain recommend one, before reviewing."));
+    blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_NO_AGE_RANGE", say("noAgeRange")));
   }
   const location = draft.targeting.location;
   const radii = [location?.radiusKm, ...(location?.included ?? []).filter((place) => place.type === "city").map((place) => place.radiusKm), ...(location?.excluded ?? []).filter((place) => place.type === "city").map((place) => place.radiusKm)];
   if (location?.cityScope !== "city_only" && radii.some((radius) => radius !== undefined && (radius < 17 || radius > 80))) {
-    blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_RADIUS", "Set the city radius between 17 and 80 km; Meta allows nothing outside that range."));
+    blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_RADIUS", say("radius")));
   }
   if (location?.cityScope === "city_only" && [...(input.geo.location?.cities ?? []), ...(input.geo.excludedLocation?.cities ?? [])].some((city) => city.radius !== undefined || city.distance_unit !== undefined)) {
-    blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_CITY_RADIUS", "\"City only\" came back from Meta with a radius. Choose the locations again."));
+    blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_CITY_RADIUS", say("cityRadius")));
   }
   if (input.geo.unresolvedNames.length || (!input.geo.resolvedAreaLabel && !input.geo.explicitlyNationwide)) {
     const names = input.geo.unresolvedNames;
     blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_AREAS_UNRESOLVED", names.length
-      ? `Meta didn't recognise the area${names.length === 1 ? "" : "s"} ${named(names)}. Fix or remove ${names.length === 1 ? "it" : "them"}, or choose nationwide targeting.`
-      : "Meta didn't recognise some of your areas. Fix or remove them, or choose nationwide targeting."));
+      ? say("areasNamed", { count: names.length, names: named(names, say) })
+      : say("areasUnnamed")));
   }
   if (!draft.targeting.audience) {
-    blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_NO_AUDIENCE", "Let AdBrain recommend the audience (Recommend audience) before reviewing."));
+    blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_NO_AUDIENCE", say("noAudience")));
   } else if (draft.targeting.audience.interestNames.length && (input.geo.unresolvedInterests?.length || !input.geo.audienceInterests?.length)) {
     const names = input.geo.unresolvedInterests ?? [];
     blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_INTERESTS_UNRESOLVED", names.length
-      ? `Meta didn't recognise the interest${names.length === 1 ? "" : "s"} ${named(names)}. Edit or remove ${names.length === 1 ? "it" : "them"}.`
-      : "Meta didn't recognise some audience interests. Edit or remove them."));
+      ? say("interestsNamed", { count: names.length, names: named(names, say) })
+      : say("interestsUnnamed")));
   }
 
   const adSetCount = draft.abTest ? 2 : 1;
