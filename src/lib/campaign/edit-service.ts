@@ -326,10 +326,8 @@ export async function editCampaignAudience(context: AuthorizedBusiness, campaign
   }
 }
 
-/**
- * #773 (CEO, Nov 2): a running campaign's audience change is saved for its next run, with no Meta call. The form must
- * be the change the owner checked (it keeps the place names for the paused edit and "Run this again" to prefill).
- */
+/** #773 (CEO, Nov 2): a running campaign's audience change is saved for its next run, with no Meta call. The form must be
+ * the change the owner checked (it keeps the place names for the paused edit and "Run this again" to prefill). */
 async function prepareForNextRun(context: AuthorizedBusiness, campaign: Campaign, change: AudienceChange, options: Options): Promise<AudienceEditPreview | AudienceEditResult & { replay: boolean }> {
   const built = options.form ? audienceChangeFromForm(options.form) : null;
   if (!built || "error" in built || audienceChangeDigest(built.change as AudienceChange) !== audienceChangeDigest(change)) {
