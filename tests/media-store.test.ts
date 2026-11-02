@@ -123,15 +123,16 @@ describe("signUpload (#1209)", () => {
     expect(db.tables.media_assets).toEqual([]);
   });
 
-  // Reviewer (#1245): an upload token never overwrites; a retry gets a new path on the same row, and the old object goes.
-  it("a retry of an unfinished upload gets a new path on the same row; tokens can't overwrite; a finished one is a duplicate", async () => {
+  // Reviewer (#1245): an upload token never overwrites. Dev 7 (#1245 attack): a retry keeps the row's one upload path,
+  // so old tokens can't store uncounted files elsewhere; the unverified object from the earlier try goes.
+  it("a retry of an unfinished upload reuses the row and its one path; tokens can't overwrite; a finished one is a duplicate", async () => {
     const bytes = await photo(1080, 1350);
     const first = await signed(bytes);
     db.objects.set(first.duplicate ? "" : first.path, bytes);
     const again = await signed(bytes);
     if (first.duplicate || again.duplicate) throw new Error("unexpected duplicate");
     expect(again.id).toBe(first.id);
-    expect(again.path).not.toBe(first.path);
+    expect(again.path).toBe(first.path);
     expect(db.objects.has(first.path)).toBe(false);
     expect(db.uploadOptions.every((call) => call.upsert === false)).toBe(true);
     db.objects.set(again.path, bytes);
@@ -151,7 +152,7 @@ describe("finalizeUpload (#1209)", () => {
     const result = await signed(bytes);
     if (result.duplicate) throw new Error("unexpected duplicate");
     db.objects.set(result.path, stored);
-    return db.tables.media_assets.find((row) => row.id === result.id) as MediaRow;
+    return { ...db.tables.media_assets.find((row) => row.id === result.id) } as MediaRow;
   }
 
   it("re-reads the stored photo, records its real size and fit, and lists it with a signed URL", async () => {
@@ -189,7 +190,7 @@ describe("finalizeUpload (#1209)", () => {
     expect((await sharp(withGps).metadata()).exif).toBeDefined();
     const row = await pending(withGps);
     await finalizeUpload(db.client, row);
-    const stored = db.objects.get(row.path)!;
+    const stored = db.objects.get(String(db.tables.media_assets[0].path))!;
     expect((await sharp(stored).metadata()).exif).toBeUndefined();
     expect(db.tables.media_assets[0]).toMatchObject({ status: "ready", bytes: stored.length, checks: expect.objectContaining({ storedSha256: sha(stored) }) });
   });
@@ -202,6 +203,42 @@ describe("finalizeUpload (#1209)", () => {
     await expect(readVerifiedMedia(db.client, ready)).resolves.toBeInstanceOf(Uint8Array);
     db.objects.set(ready.path, await photo(1080, 1351));
     await expect(readVerifiedMedia(db.client, ready)).rejects.toMatchObject({ code: "MEDIA_CHANGED" });
+  });
+
+  // Dev 7 (#1245 attack): a ready photo's bytes sit at a path no upload token was signed for.
+  it("moves the checked bytes to a path no token was signed for, and drops the upload path", async () => {
+    const bytes = await photo(1080, 1350);
+    const row = await pending(bytes);
+    await finalizeUpload(db.client, row);
+    const ready = db.tables.media_assets[0] as MediaRow;
+    expect(ready.path).not.toBe(row.path);
+    expect(ready.path).toMatch(new RegExp(`^${BUSINESS}/[0-9a-f-]{36}\\.jpg$`));
+    expect(db.uploadOptions.map((call) => call.path)).not.toContain(ready.path);
+    expect(db.objects.has(row.path)).toBe(false);
+    expect(sha(db.objects.get(ready.path)!)).toBe(sha(bytes));
+  });
+
+  it("a re-sign while finalize runs: the row isn't marked ready from the old read, and the checked copy goes", async () => {
+    const bytes = await photo(1080, 1350);
+    const row = await pending(bytes);
+    const stale = { ...row, path: `${BUSINESS}/00000000-0000-4000-8000-000000000000.jpg` };
+    db.objects.set(stale.path, bytes);
+    await expect(finalizeUpload(db.client, stale)).rejects.toMatchObject({ status: 409, code: "MEDIA_CHANGED" });
+    expect(db.tables.media_assets[0]).toMatchObject({ status: "pending", path: row.path });
+    expect([...db.objects.keys()].sort()).toEqual([row.path, stale.path].sort());
+  });
+
+  it("two finalizes of one upload: the second answers with the first's photo and leaves no extra copy", async () => {
+    const bytes = await photo(1080, 1350);
+    const row = await pending(bytes);
+    const first = await finalizeUpload(db.client, { ...row });
+    db.objects.set(row.path, bytes);
+    const second = await finalizeUpload(db.client, { ...row });
+    expect(second.id).toBe(first.id);
+    expect([...db.objects.keys()].sort()).toEqual([row.path, String(db.tables.media_assets[0].path)].sort());
+    db.objects.set(row.path, await photo(1080, 1351));
+    await expect(finalizeUpload(db.client, { ...row })).rejects.toMatchObject({ code: "MEDIA_CHANGED" });
+    expect(db.tables.media_assets[0]).toMatchObject({ id: first.id, status: "ready" });
   });
 
   it("asks to retry when the upload never arrived, and keeps the row for that retry", async () => {
