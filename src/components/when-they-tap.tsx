@@ -1,5 +1,6 @@
 import type { ReviewDTO } from "@/lib/campaign/connect-contracts";
 import { WhatsAppPreview, type PreviewAd } from "@/components/whatsapp-message-card";
+import { setupTranslator } from "@/i18n/setup-words";
 import { handoffLine, isGenericAsk, type Handoff } from "@/lib/campaign/whatsapp-handoff";
 
 type Message = NonNullable<ReviewDTO["whatsappMessage"]>;
@@ -8,13 +9,17 @@ type Language = "en" | "hi" | "hinglish" | "pa";
 const LANGUAGE_NAMES: Record<Language, string> = { en: "English", hi: "Hindi", hinglish: "Hinglish", pa: "Punjabi" };
 const SOURCE: Record<Message["source"], string> = { edited: "Edited for this campaign", saved: "Your saved message", suggested: "Suggested by AdBrain" };
 
-/** One plain line for what the customer sees after tapping, e.g. "…a Call now button, and 'Can I get more info on this' ready to send." */
-export function whenTheyTapLine(message: Message): string {
+/**
+ * One plain line for what the customer sees after tapping, e.g. "…a Call now button, and 'Can I get more info on this' ready to send."
+ * #2749: in the owner's language on step 3; the review on Campaigns passes nothing and reads English.
+ */
+export function whenTheyTapLine(message: Message, t: ReturnType<typeof setupTranslator> = setupTranslator()): string {
+  const quote = (text: string) => `'${text}'`;
   const questions = message.iceBreakers ?? [];
-  if (questions.length) return `Customers see your welcome and ${questions.length === 1 ? "a question" : `${questions.length} questions`} to tap: ${questions.map((question) => `'${question}'`).join(", ")}.`;
-  const ready = message.autofill ? `'${message.autofill}' ready to send` : "";
-  if (message.callButton) return ready ? `Customers see your welcome, a Call now button, and ${ready}.` : "Customers see your welcome and a Call now button.";
-  return ready ? `Customers see your welcome and ${ready}.` : "Customers see your welcome.";
+  if (questions.length) return t("goLive.tapQuestions", { n: questions.length, questions: questions.map(quote).join(", ") });
+  const text = message.autofill ? quote(message.autofill) : "";
+  if (message.callButton) return text ? t("goLive.tapCallReady", { text }) : t("goLive.tapCall");
+  return text ? t("goLive.tapReady", { text }) : t("goLive.tapWelcome");
 }
 
 /**

@@ -19,10 +19,11 @@ const body = z.object({
   sha256: z.string().regex(/^[0-9a-f]{64}$/),
   width: z.number().int().positive().max(20_000),
   height: z.number().int().positive().max(20_000),
+  durationMs: z.number().positive().max(24 * 3_600_000).optional(),
   name: z.string().max(200).optional(),
 }).strict();
 
-/** #1209: a one-time upload URL for one photo into the private `media` bucket (the bytes go browser → Storage). */
+/** #1209, #748: a one-time upload URL for one photo or video into the private `media` bucket (bytes go browser → Storage). */
 export const POST = observeRoute("/api/media/sign", "POST", async (req: Request) => {
   const session = await mediaSession();
   if (session instanceof NextResponse) return session;
