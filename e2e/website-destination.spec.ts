@@ -106,10 +106,10 @@ const LAUNCH_KINDS = ["campaigns", "adsets", "adcreatives", "ads"];
 const IDS: Record<string, string> = { campaigns: "CAMPAIGN", adsets: "ADSET", adcreatives: "CREATIVE", ads: "AD" };
 
 /**
- * The payloads the Meta adapter sends for the owner's link and button. Graph is stubbed in this test process only:
- * nothing leaves the machine, so nothing spends. Inputs other than link and button are the taped ones.
+ * The payloads the Meta adapter sends for the owner's link; each ad keeps its own button (no composer choice, QA on #2660). Graph is stubbed in this test process only:
+ * nothing leaves the machine, so nothing spends. Inputs other than the link are the taped ones.
  */
-async function launchPayloads(link: string, websiteCta: string) {
+async function launchPayloads(link: string) {
   const sent: { kind: string; form: Record<string, string> }[] = [];
   const realFetch = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -130,7 +130,7 @@ async function launchPayloads(link: string, websiteCta: string) {
     await meta.createLeadCampaign({
       name: inputs.name, dailyBudgetRupees: inputs.dailyBudgetRupees, link, ageMin: inputs.ageMin, ageMax: inputs.ageMax,
       gender: inputs.gender as "all", location: inputs.location, interests: inputs.interests,
-      creatives: [{ imageUrl: "https://adbrain.vanshul.com/solar-example.jpg", ...inputs.creative, cta: websiteCta }],
+      creatives: [{ imageUrl: "https://adbrain.vanshul.com/solar-example.jpg", ...inputs.creative }],
       destination: "website",
     });
   } finally {
@@ -139,9 +139,8 @@ async function launchPayloads(link: string, websiteCta: string) {
   return sent;
 }
 
-/** What Meta accepted with validate_only for this button, moved to the owner's link. */
-function acceptedFor(link: string, websiteCta: string) {
-  const type = websiteCta.toUpperCase();
+/** What Meta accepted with validate_only for this button type, moved to the owner's link. */
+function acceptedFor(link: string, type: "LEARN_MORE" | "SHOP_NOW" | "SIGN_UP") {
   const accepted = (kind: string) => {
     const exchange = tape.find(e => e.kind === kind)!;
     expect(exchange, kind).toMatchObject({ status: 200, body: { success: true } });
@@ -158,32 +157,32 @@ const reviewPanel = (page: Page) => page.locator("div").filter({ has: page.getBy
 const fitsWidth = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth);
 
 for (const width of [1440, 390]) {
-  test(`website destination: URL and button reach Review and a paused create at ${width}px`, async ({ page, context }, testInfo) => {
+  test(`website destination: URL reaches Review and a paused create at ${width}px`, async ({ page, context }, testInfo) => {
     const admin = adminClient();
     const headline = `Website fixture ${width}`;
     const cleanup = await seed(admin, width === 390 ? "77777777-7777-4777-8777-777777777390" : "77777777-7777-4777-8777-777777771440", headline, "example.com/rooftop-solar");
-    const seen = await mockMeta(context, body => reviewFor(body, { destination: "website", websiteUrl: website, websiteCta: "shop_now", whatsappNumber: null }));
+    const seen = await mockMeta(context, body => reviewFor(body, { destination: "website", websiteUrl: website, whatsappNumber: null }));
     try {
       await signInBrowser(context, "http://localhost:3939", process.env.DEV_LOGIN_EMAIL!);
       await openComposer(page, headline, width);
       await expect(page.locator("#destination-whatsapp")).toBeChecked();
       await page.locator("#destination-website").check();
-      // The landing page is the Brand Website (a bare domain gets https), and the button defaults to Learn more.
-      await expect(page.locator("#website-destination")).toHaveAttribute("href", website);
-      await expect(page.locator("#website-cta-learn_more")).toBeChecked();
-      await page.locator("#website-cta-shop_now").check();
+      // The landing page is the Brand Website (a bare domain gets https); the button is each ad's own, not chosen here.
+      await expect(page.locator("#website-destination").getByRole("link", { name: "Open" })).toHaveAttribute("href", website);
+      await expect(page.locator('input[name="website-cta"]')).toHaveCount(0);
       await page.getByRole("button", { name: "Check my campaign (nothing spends)" }).click();
 
       const panel = reviewPanel(page);
       await expect(panel).toBeVisible();
-      await expect(panel.getByRole("link", { name: website })).toHaveAttribute("href", website);
-      await expect(panel.getByText("Button: Shop now")).toBeVisible();
+      await expect(panel.getByRole("link", { name: "Open" })).toHaveAttribute("href", website);
+      await expect(panel).not.toContainText("Button:");
       await expect(panel).not.toContainText("WhatsApp");
       await expect(panel).not.toContainText("Instant lead form");
 
       expect(seen.preflight).toHaveLength(1);
       const input = await storedInput(admin, seen.preflight[0].draftId);
-      expect(input).toMatchObject({ destination: "website", websiteCta: "shop_now", leadFormId: null });
+      expect(input).toMatchObject({ destination: "website", leadFormId: null });
+      expect(input).not.toHaveProperty("websiteCta");
       expect(input).not.toHaveProperty("whatsappNumber");
       expect(input).not.toHaveProperty("whatsappMessage");
       expect(await fitsWidth(page)).toBe(true);
@@ -196,8 +195,9 @@ for (const width of [1440, 390]) {
       expect(await fitsWidth(page)).toBe(true);
 
       // The launch for what Review passed: a paused website-visits campaign, exactly as Meta accepted with validate_only.
-      const sent = await launchPayloads(website, String(input.websiteCta));
-      expect(sent).toEqual(acceptedFor(website, "shop_now"));
+      // The taped creative's "Get Quote" maps to Learn more.
+      const sent = await launchPayloads(website);
+      expect(sent).toEqual(acceptedFor(website, "LEARN_MORE"));
       expect(sent.filter(s => "status" in s.form).map(s => s.form.status)).toEqual(["PAUSED", "PAUSED", "PAUSED"]);
     } finally {
       await cleanup(seen);
@@ -210,7 +210,7 @@ test("website destination without a Brand website: Review blocks the send and of
   const headline = "Website fixture no site";
   const cleanup = await seed(admin, "77777777-7777-4777-8777-777777770000", headline, null);
   const blocker = { code: "PREFLIGHT_BLOCKED", reason: "REVIEW_NO_WEBSITE", message: "Add your business website on the Your business page.", action: { kind: "open_brand" } };
-  const seen = await mockMeta(context, body => reviewFor(body, { destination: "website", websiteUrl: null, websiteCta: "learn_more", canCreatePaused: false, planHash: null, blockers: [blocker] }));
+  const seen = await mockMeta(context, body => reviewFor(body, { destination: "website", websiteUrl: null, canCreatePaused: false, planHash: null, blockers: [blocker] }));
   try {
     await signInBrowser(context, "http://localhost:3939", process.env.DEV_LOGIN_EMAIL!);
     await openComposer(page, headline, 390);

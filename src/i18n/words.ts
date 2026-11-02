@@ -19,6 +19,11 @@ export function campaignsTranslator(words?: Words<"campaigns">) {
   return createTranslator({ locale: words?.locale ?? "en", messages: { campaigns: words?.messages ?? en.campaigns }, namespace: "campaigns" });
 }
 
+/** Settings' client panels (preferences, privacy requests, WhatsApp status); English when none are passed. */
+export function settingsTranslator(words?: Words<"settings">) {
+  return createTranslator({ locale: words?.locale ?? "en", messages: { settings: words?.messages ?? en.settings }, namespace: "settings" });
+}
+
 /** #2345: client fallbacks (no reply, a dropped connection) in the owner's language; English when none are passed. */
 export function noticesTranslator(words?: Words<"notices">) {
   return createTranslator({ locale: words?.locale ?? "en", messages: { notices: words?.messages ?? en.notices }, namespace: "notices" });
