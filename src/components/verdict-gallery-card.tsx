@@ -21,7 +21,6 @@ export function VerdictGalleryCard({ card, words }: { card: GalleryCard; words?:
   const judged = verdict(card.input, words);
   // #1854: the real card opens the words editor with the row's hint; here it says which.
   const [hint, setHint] = useState<string | null>(null);
-  const whatsapp = card.input.destination === "whatsapp";
   return (
     <li className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4 sm:p-6">
       <div className="flex flex-wrap items-center gap-2">
@@ -36,7 +35,7 @@ export function VerdictGalleryCard({ card, words }: { card: GalleryCard; words?:
       {card.reviews && <RejectedAds reviews={card.reviews} spend={card.input.spend} running={card.input.status === "active"} vertical={card.vertical ?? null} words={words}
         onEditAd={(editHint) => setHint(editHint ?? "")} />}
       {hint !== null && <p role="status" className="text-sm text-slate-700">Opens the words editor{hint ? ` with: ${hint}` : "."}</p>}
-      <CampaignVerdict verdict={judged} words={words} whatsapp={whatsapp} results={card.input.results} spend={card.input.spend}
+      <CampaignVerdict verdict={judged} words={words} destination={card.input.destination} results={card.input.results} spend={card.input.spend}
         onRunAgain={nothing} onEditAd={nothing}
         adsManagerUrl="https://adsmanager.facebook.com/adsmanager/manage/campaigns"
         pauseOffer={card.input.weakAd && (
@@ -45,7 +44,7 @@ export function VerdictGalleryCard({ card, words }: { card: GalleryCard; words?:
             <div className="mt-2 flex gap-2"><Button type="button" variant="outline" size="sm" className="min-h-11">Pause this ad</Button><Button type="button" variant="ghost" size="sm" className="min-h-11">Keep</Button></div>
           </div>
         )}
-        details={<p className="text-sm text-slate-700">{formatNumber(card.input.impressions)} impressions · {formatNumber(card.input.results)} {whatsapp ? "chats" : "leads"} · {formatMoney(card.input.spend)}</p>} />
+        details={<p className="text-sm text-slate-700">{formatNumber(card.input.impressions)} impressions · {formatNumber(card.input.results)} {{ whatsapp: "chats", instant_form: "leads", website: "visits" }[card.input.destination]} · {formatMoney(card.input.spend)}</p>} />
     </li>
   );
 }

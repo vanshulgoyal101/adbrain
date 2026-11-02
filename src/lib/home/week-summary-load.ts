@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { adResultsEnabled, adResultViews, type StoredAdResult } from "@/lib/campaign/ad-results-store";
+import { AD_RESULT_COLUMNS, adResultsEnabled, adResultViews, type StoredAdResult } from "@/lib/campaign/ad-results-store";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { Campaign } from "@/lib/types";
@@ -20,9 +20,9 @@ async function bestAdName(database: Store, campaigns: Pick<Campaign, "id" | "des
   if (!adResultsEnabled()) return null;
   for (const campaign of campaigns) {
     const { data } = await database.from("ad_results")
-      .select("meta_ad_id,ad_name,effective_status,delivered,impressions,link_clicks,conversations,leads,spend_paise,synced_at")
+      .select(AD_RESULT_COLUMNS)
       .eq("campaign_id", campaign.id).is("period_start", null).is("period_end", null).limit(100);
-    const best = adResultViews((data ?? []) as StoredAdResult[], campaign.destination === "whatsapp").ads.find((ad) => ad.best);
+    const best = adResultViews((data ?? []) as StoredAdResult[], campaign.destination).ads.find((ad) => ad.best);
     if (best?.name) return best.name;
   }
   return null;
