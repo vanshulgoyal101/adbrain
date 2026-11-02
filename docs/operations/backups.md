@@ -28,7 +28,10 @@ so Supabase can't restore anything (paid backups are a CEO call, #884). Our own 
 - **Nightly (#884):** the team supervisor's tick runs the export after 20:00Z (01:30 IST) into
   `~/.adbrain-backups/<UTC time>` (0700, the owner's Mac) and restore-drills it. Then it seals it
   as `<UTC time>.tar.gz.cms` (0600, CMS-encrypted to `.github/backup/backup-cert.crt`, like `db-backup.yml`),
-  deletes the plaintext and keeps the newest 7 (#1762). To read one: decrypt with the keychain key
+  deletes the plaintext and keeps the newest 7 (#1762). If the restore drill fails, the sealed file is
+  named `<UTC time>.unverified.tar.gz.cms`, the next supervisor tick retries, and at most 7 unverified
+  exports are kept separately from the verified ones. Older files without that marker may predate this
+  safeguard; check the restore log before relying on them. To read one: decrypt with the keychain key
   (releasing-recovery.md › restore drill: `openssl cms -decrypt …`), then `tar -xzf` and
   `node scripts/db-export.mjs restore <folder>`.
   After a good export it also runs `scripts/prune-smoke-storage.mjs --apply` (#1891): the core smoke's own
