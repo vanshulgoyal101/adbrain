@@ -5,11 +5,16 @@ export type ChatRole = "system" | "user" | "assistant";
 export interface ChatMessage {
   role: ChatRole;
   content: string;
+  /** #780: pictures sent with a user turn; only the `vision` route accepts them. */
+  images?: { data: Uint8Array; mediaType: string }[];
 }
 
 export interface CompletionOptions {
-  /** Select the provider pool for this task. Budget excludes OpenRouter. */
-  routing?: "standard" | "budget" | "creative";
+  /**
+   * Select the provider pool for this task. Budget excludes OpenRouter. Vision (#780) is OpenRouter's paid
+   * `VISION_MODEL` only: customers' photos never reach a free tier, so it has no free fallback and no cache.
+   */
+  routing?: "standard" | "budget" | "creative" | "vision";
   task?: string;
   temperature?: number;
   maxTokens?: number;
