@@ -247,17 +247,33 @@ describe("Hindi app bar and menu (#1877)", () => {
     vi.stubGlobal("fetch", vi.fn(async () => Response.json({ count: 0 })));
     render(<WorkspaceShell email={null} businessName="Fixture" ownerId="owner" businessId="business" labels={namespaceMessages("hi", "shell")}><p>Workspace</p></WorkspaceShell>);
     expect(screen.getByRole("banner")).toHaveTextContent("होम");
-    const menu = within(screen.getByRole("complementary", { name: "Main sidebar" })).getByRole("navigation", { name: "Workspace navigation" });
+    const menu = within(screen.getByRole("complementary", { name: "मुख्य साइडबार" })).getByRole("navigation", { name: "वर्कस्पेस के पेज" });
     expect(within(menu).getAllByRole("link").map((link) => link.textContent)).toEqual(["होम", "विज्ञापन बनाएँ", "विज्ञापन जाँचें", "कैंपेन", "पूछताछ", "बिज़नेस", "फ़ोटो", "सेटिंग"]);
+  });
+
+  // #1438: the rest of the shell (account, sign-out, legal links, phone controls) follows the menu.
+  it("says the account area, sign-out, legal links and phone controls in Hindi", () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ count: 0 })));
+    render(<WorkspaceShell email={null} businessName={null} ownerId="owner" businessId={null} supportUrl="https://wa.me/910000000000" firstAd
+      labels={namespaceMessages("hi", "shell")} locale="hi"><p>Workspace</p></WorkspaceShell>);
+    const sidebar = within(screen.getByRole("complementary", { name: "मुख्य साइडबार" }));
+    expect(sidebar.getByText("अपना बिज़नेस सेट करें")).toHaveAttribute("lang", "hi");
+    expect(sidebar.getByText("आपका खाता")).toHaveAttribute("lang", "hi");
+    expect(sidebar.getByRole("link", { name: "WhatsApp पर मदद" })).toHaveAttribute("lang", "hi");
+    const legal = within(sidebar.getByRole("navigation", { name: "कानूनी" }));
+    expect(legal.getAllByRole("link").map((link) => link.textContent)).toEqual(["गोपनीयता", "शर्तें", "डेटा हटाना"]);
+    expect(screen.getByRole("link", { name: "सीधे वर्कस्पेस पर जाएँ" })).toHaveAttribute("href", "#workspace-main");
+    expect(screen.getByRole("button", { name: "मेन्यू खोलें" })).toHaveAttribute("lang", "hi");
+    expect(screen.getByRole("link", { name: "अपना पहला विज्ञापन पूरा करें" })).toHaveAttribute("href", "/create");
   });
 
   // #1895: the root <html lang> stays "en" (static pages, mostly English app); the Hindi parts say so themselves (WCAG 3.1.2).
   it("marks the Hindi menu words, section name and business label lang='hi', and nothing else", () => {
     vi.stubGlobal("fetch", vi.fn(async () => Response.json({ count: 0 })));
     render(<WorkspaceShell email={null} businessName="Fixture" ownerId="owner" businessId="business" labels={namespaceMessages("hi", "shell")} locale="hi"><p>Workspace</p></WorkspaceShell>);
-    const sidebar = screen.getByRole("complementary", { name: "Main sidebar" });
-    const menu = within(sidebar).getByRole("navigation", { name: "Workspace navigation" });
-    expect(menu).not.toHaveAttribute("lang");
+    const sidebar = screen.getByRole("complementary", { name: "मुख्य साइडबार" });
+    const menu = within(sidebar).getByRole("navigation", { name: "वर्कस्पेस के पेज" });
+    expect(menu).toHaveAttribute("lang", "hi");
     expect(within(menu).getAllByRole("link").map((link) => link.querySelector("[lang]")?.getAttribute("lang"))).toEqual(Array(8).fill("hi"));
     expect(within(screen.getByRole("banner")).getByText("होम")).toHaveAttribute("lang", "hi");
     expect(within(sidebar).getByText("बिज़नेस", { selector: "small" })).toHaveAttribute("lang", "hi");

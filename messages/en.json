@@ -728,7 +728,24 @@
     "business": "Your business",
     "assets": "Assets",
     "settings": "Settings",
-    "getStarted": "Get started"
+    "getStarted": "Get started",
+    "workspace": "Workspace",
+    "setUpBusiness": "Set up your business",
+    "yourAccount": "Your account",
+    "help": "Help on WhatsApp",
+    "signOut": "Sign out",
+    "signOutFailed": "Could not sign out. Please try again.",
+    "legal": "Legal",
+    "privacy": "Privacy",
+    "terms": "Terms",
+    "dataDeletion": "Data deletion",
+    "skip": "Skip to workspace",
+    "sidebar": "Main sidebar",
+    "navigation": "Workspace navigation",
+    "menu": "Workspace menu",
+    "openNav": "Open navigation",
+    "closeNav": "Close navigation",
+    "continueFirstAd": "Continue your first ad"
   },
   "campaigns": {
     "header": {
