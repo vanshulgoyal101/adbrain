@@ -187,7 +187,7 @@ describe("create smoke mode", () => {
   });
 
   // #2545: the chooser's answer reaches later steps only as one of the three modes.
-  it("Choose mode passes the chooser's mode on, falls back to the scheduled one, and refuses anything else", () => {
+  it("Choose mode passes the chooser's mode on, falls back to picture (prepare stays), and refuses anything else", () => {
     const chosen = (node: string, scheduled = "picture") => {
       const work = mkdtempSync(join(process.cwd(), ".create-smoke-test-"));
       made.push(work);
@@ -203,6 +203,9 @@ describe("create smoke mode", () => {
     };
     expect(chosen("echo create").env).toBe("REQUESTED_MODE=create\n");
     expect(chosen("exit 1", "prepare").env).toBe("REQUESTED_MODE=prepare\n");
+    // #2593: a failed chooser never creates (today's may have run) and never passes `auto` on.
+    expect(chosen("exit 1", "auto").env).toBe("REQUESTED_MODE=picture\n");
+    expect(chosen("exit 1", "create").env).toBe("REQUESTED_MODE=picture\n");
     expect(chosen("printf 'create\\nPWNED=1'").env).toBe("REQUESTED_MODE=invalid\n");
   });
 

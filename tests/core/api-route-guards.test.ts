@@ -54,6 +54,7 @@ const ROUTES: Record<string, Entry> = {
   "cron/access-requests": { kind: "cron", methods: ["GET"] },
   "cron/campaign-reconciliation": { kind: "cron", methods: ["GET"] },
   "cron/core-scoreboard": { kind: "cron", methods: ["GET"] },
+  "cron/dispatch-workflows": { kind: "cron", methods: ["GET"] },
   "cron/enforce-spend": { kind: "cron", methods: ["GET"] },
   "cron/keepalive": { kind: "cron", methods: ["GET"] },
   "cron/llm-credit": { kind: "cron", methods: ["GET"] },

@@ -25,7 +25,7 @@ not isolation.
 | Classification | Variables | Handling |
 | --- | --- | --- |
 | Public application configuration | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_SITE_URL`, public feature flags | Browser-visible; the public Supabase key is safe only with correct RLS |
-| Privileged backend secret | `SUPABASE_SERVICE_ROLE_KEY`, `META_TOKEN_ENCRYPTION_KEY`, `META_PARENT_SYSTEM_TOKEN`, `CRON_SECRET` | Server/process only; never use public prefixes or expose through diagnostics |
+| Privileged backend secret | `SUPABASE_SERVICE_ROLE_KEY`, `META_TOKEN_ENCRYPTION_KEY`, `META_PARENT_SYSTEM_TOKEN`, `CRON_SECRET`, `GITHUB_DISPATCH_TOKEN` | Server/process only; never use public prefixes or expose through diagnostics |
 | Provider secret | All four `*_API_KEYS` pools, `META_APP_SECRET`, `META_SYSTEM_USER_TOKEN`, `FALAI_API_KEY`, `OPENAI_API_KEY`, Razorpay key/webhook secrets | Can grant paid/external access; least privilege and target-specific storage |
 | Identifier or policy | Model names, provider order, Meta app/config/account/Page IDs, Razorpay key/account IDs, limits and rollout values | Not secrets, but keep tenant/account details out of examples |
 | Login/test fixture material | `DEV_LOGIN_PASSWORD`, `DEMO_USER_PASSWORD`, `ADBRAIN_REVIEWER_PASSWORD` and their emails | Passwords are secrets; emails may be personal data; use synthetic examples |
@@ -153,6 +153,7 @@ decrypt old tokens; rotation requires a reviewed migration. See
 | Variable | Default / bounds | Meaning |
 | --- | --- | --- |
 | `CRON_SECRET` | Empty disables cron routes with 404 | Scheduled request Bearer secret |
+| `GITHUB_DISPATCH_TOKEN` | Empty makes `/api/cron/dispatch-workflows` a 503 | Fine-grained token, Actions read and write on this repo only (#2593); Vercel only, never in the database |
 | `CAMPAIGN_EXECUTION_MODE` | Unset/`inline` for compatibility; `worker` opts in | Web enqueue vs synchronous creation; unknown nonempty values block creation |
 | `CAMPAIGN_WORKER_TARGET` | Required by standalone worker | Exact Supabase URL origin, explicitly confirms worker target |
 | `TRAFFIC_GENERATOR_ALLOWED_EMAILS` | Empty list | Production: disabled; nonproduction: any signed-in user when empty |
