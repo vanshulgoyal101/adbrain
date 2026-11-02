@@ -1,5 +1,6 @@
 import { adResultViews, type StoredAdResult } from "./ad-results-store";
 import type { DraftInput, TargetingInputDTO } from "./connect-contracts";
+import { defaultTargeting, targetingFromEditor, targetingToEditor, type AudienceEditForm } from "./editor-targeting";
 import type { LeadDestination } from "@/lib/types/campaign";
 import { whatsappTemplateSchema } from "./whatsapp-template";
 
@@ -14,6 +15,8 @@ export type RerunCampaign = {
   creative_ids: string[];
   daily_budget: number | null;
   destination?: string | null;
+  /** #773: the audience change saved for this campaign's next run (Edit audience on a running campaign). */
+  prepared?: AudienceEditForm | null;
 };
 
 export type RerunPrefill = {
@@ -79,7 +82,7 @@ export function rerunPrefill(input: {
       // #1216: a draft saved before destinations existed is a form campaign, as preflight and launch read it.
       destination: draft.destination === "website" ? undefined : draft.destination ?? "instant_form", leadFormId: draft.leadFormId, whatsappNumber: draft.whatsappNumber,
       whatsappLanguage: draft.whatsappLanguage, whatsappMessage: draft.destination === "whatsapp" ? nextRunMessage(draft.whatsappMessage, input.savedMessage) : draft.whatsappMessage,
-      targeting: draft.targeting, abTest: draft.abTest,
+      targeting: withPreparedAudience(draft.targeting, campaign.prepared), abTest: draft.abTest,
     };
   }
   const destination = campaign.destination === "whatsapp" || campaign.destination === "instant_form" ? campaign.destination : undefined;
@@ -88,7 +91,25 @@ export function rerunPrefill(input: {
     dailyBudgetRupees: campaign.daily_budget && campaign.daily_budget > 0 ? Math.round(campaign.daily_budget) : DEFAULT_BUDGET_RUPEES,
     destination, leadFormId: null, abTest: false,
     ...(destination === "whatsapp" ? { whatsappMessage: nextRunMessage(undefined, input.savedMessage) } : {}),
+    ...campaign.prepared ? { targeting: withPreparedAudience(undefined, campaign.prepared) } : {},
   };
+}
+
+/**
+ * #773: the copy runs with the audience change saved while the campaign ran: a new area replaces the old one, exclusions
+ * are added, and set ages and gender win. Languages and the out-of-area option have no place in the draft yet; review adds
+ * out-of-area exclusions to every new campaign anyway.
+ */
+export function withPreparedAudience(targeting: TargetingInputDTO | undefined, form: AudienceEditForm | null | undefined): TargetingInputDTO | undefined {
+  if (!form) return targeting;
+  const value = targeting ? targetingToEditor(targeting) : { ...defaultTargeting };
+  const area = form.included.length > 0;
+  if (area) Object.assign(value, { locationMode: "manual", included: form.included, cityScope: form.cityScope, radiusKm: form.radiusKm });
+  const seen = new Set(value.excluded.map(place => `${place.type}:${place.key}`));
+  value.excluded = [...value.excluded, ...form.excluded.filter(place => !seen.has(`${place.type}:${place.key}`))];
+  if (form.ageMin !== null && form.ageMax !== null) Object.assign(value, { ageMode: "manual", ageMin: form.ageMin, ageMax: form.ageMax });
+  if (form.gender !== "keep") value.gender = form.gender;
+  return targetingFromEditor(value, area ? [] : targeting?.location?.includedNames ?? [], targeting?.location?.excludedNames ?? []);
 }
 
 /** The creative behind the campaign's Best ad (#783's rule), through the launch's ad → creative links. */

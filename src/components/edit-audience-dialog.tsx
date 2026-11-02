@@ -10,15 +10,14 @@ import { LocationPicker } from "@/components/targeting-controls";
 import { audienceChangeFromForm, emptyAudienceEdit, type AudienceEditForm } from "@/lib/campaign/editor-targeting";
 import { AD_LANGUAGES } from "@/lib/meta/locales";
 
-type Preview = { adSets: Array<{ mode: "patch" | "rebuild" | "copy" }>; consequence: string | null };
+type Preview = { adSets: Array<{ mode: "patch" | "rebuild" }>; consequence: string | null };
 
-/** #765 (b): the CPO's words when Meta can't change a running ad set in place. */
-const MAKE_COPY_WORDS = "Meta doesn't allow this change on a running campaign. We'll make a fresh copy with your change (paused, back to review, learning restarts) and stop the old one when you turn the new one on.";
-const needsCopy = (preview: Preview) => preview.adSets.some(adSet => adSet.mode === "copy");
+/** #773 (CEO, Nov 2): a running campaign is never changed in Meta; the change waits for its next run. */
+const NEXT_RUN_WORDS = "This campaign is running, so we won't touch it in Meta and its learning carries on. Your change is saved for its next run.";
+const SAVED_WORDS = "Saved for your next run. The running campaign isn't changed, so its learning carries on.";
 
 /** What the owner reads before saving: which ad sets change and what that costs them. */
 function previewWords(preview: Preview): string {
-  if (needsCopy(preview)) return MAKE_COPY_WORDS;
   const count = preview.adSets.length;
   const sets = count === 1 ? "1 ad set" : `${count} ad sets`;
   return preview.consequence
@@ -40,19 +39,21 @@ async function send(campaignId: string, body: object): Promise<{ ok: true; data:
 }
 
 /**
- * #773/#765: change a paused or running campaign's audience (area, extra exclusions, ages, gender, language). Meta checks the
- * change first (nothing is written), the owner reads the consequence, then saves. Exclusions only grow.
+ * #773: change a campaign's audience (area, extra exclusions, ages, gender, language). On a paused campaign Meta checks
+ * the change first (nothing is written), the owner reads the consequence, then saves. On a running campaign the change
+ * is saved for its next run with no Meta call. Exclusions only grow.
  */
-export function EditAudienceDialog({ campaignId, campaignName, running = false, onClose, onSaved }: {
+export function EditAudienceDialog({ campaignId, campaignName, running = false, prepared = null, onClose, onSaved }: {
   campaignId: string;
   campaignName: string;
-  /** #765: a running campaign keeps running; only ad sets Meta can change in place are edited. */
+  /** #773: a running campaign isn't changed; Save keeps the change for its next run. */
   running?: boolean;
+  /** The change saved earlier for the next run; the form starts from it. */
+  prepared?: AudienceEditForm | null;
   onClose: () => void;
-  /** `waitingOperationId`: a paused copy now waits on the card for the owner to turn it on (#765 b). */
-  onSaved: (message: string, waitingOperationId?: string) => void;
+  onSaved: (message: string) => void;
 }) {
-  const [form, setForm] = React.useState<AudienceEditForm>(emptyAudienceEdit);
+  const [form, setForm] = React.useState<AudienceEditForm>(prepared ?? emptyAudienceEdit);
   const [preview, setPreview] = React.useState<Preview | null>(null);
   const [busy, setBusy] = React.useState<"check" | "save" | null>(null);
   const [error, setError] = React.useState<string | null>(null);
@@ -82,19 +83,17 @@ export function EditAudienceDialog({ campaignId, campaignName, running = false, 
 
   const save = async () => {
     const built = audienceChangeFromForm(form);
-    if ("error" in built || !key.current) return;
+    if ("error" in built) { setError(built.error); return; }
+    if (!running && !key.current) return;
+    key.current ??= crypto.randomUUID();
     setBusy("save");
     setError(null);
-    const copy = preview && needsCopy(preview);
-    const outcome = await send(campaignId, { change: built.change, idempotencyKey: key.current, ...copy ? { copy: true } : {} });
+    const outcome = await send(campaignId, { change: built.change, idempotencyKey: key.current, ...running ? { form } : {} });
     setBusy(null);
     if (!outcome.ok) { setError(outcome.message); return; }
-    const result = outcome.data.result as { consequence?: string | null; awaitingSwitch?: { operationId: string } } | undefined;
-    if (result?.awaitingSwitch) {
-      onSaved("New audience ready on this campaign. Your current audience keeps running until you turn the new one on.", result.awaitingSwitch.operationId);
-      return;
-    }
-    onSaved(`Audience changed. The campaign ${running ? "keeps running" : "stays paused"}.${result?.consequence ? ` ${result.consequence}` : ""}`);
+    const result = outcome.data.result as { consequence?: string | null; prepared?: true } | undefined;
+    if (result?.prepared) { onSaved(SAVED_WORDS); return; }
+    onSaved(`Audience changed. The campaign stays paused.${result?.consequence ? ` ${result.consequence}` : ""}`);
   };
 
   return (
@@ -199,15 +198,16 @@ export function EditAudienceDialog({ campaignId, campaignName, running = false, 
             )}
           </div>
 
+          {running && <p className="rounded-md bg-slate-50 p-3 text-sm text-slate-700">{NEXT_RUN_WORDS}</p>}
           {error && <p role="alert" className="text-sm font-medium text-red-800">{error}</p>}
           {preview && <p role="status" className="rounded-md bg-amber-50 p-3 text-sm text-amber-900">{previewWords(preview)}</p>}
         </div>
 
         <footer className="sticky bottom-0 flex flex-col-reverse gap-2 border-t border-slate-200 bg-white px-5 py-4 sm:flex-row sm:justify-end">
           <Button variant="outline" className="h-11" onClick={onClose} disabled={!!busy}>Cancel</Button>
-          {preview ? (
+          {running || preview ? (
             <Button className="h-11" onClick={() => void save()} disabled={!!busy}>
-              {busy === "save" && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />} {needsCopy(preview) ? "Make the copy" : "Save change"}
+              {busy === "save" && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />} {running ? "Save for next run" : "Save change"}
             </Button>
           ) : (
             <Button className="h-11" onClick={() => void check()} disabled={!!busy}>

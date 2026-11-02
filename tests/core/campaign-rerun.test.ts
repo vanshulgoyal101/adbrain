@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { bestCreativeId, rerunPrefill } from "@/lib/campaign/rerun";
 import type { DraftInput } from "@/lib/campaign/connect-contracts";
+import { emptyAudienceEdit } from "@/lib/campaign/editor-targeting";
 import type { StoredAdResult } from "@/lib/campaign/ad-results-store";
 
 // #1050 "Run this again": a campaign that worked is copied into New campaign, Best ad first. Nothing is
@@ -74,6 +75,29 @@ describe("core: Run this again (#1050)", () => {
       .toEqual({ name: "Campaign (again)", goal: "", creativeIds: [A, B], dailyBudgetRupees: 450, destination: "instant_form", leadFormId: null, abTest: false, dropped: 0, source: "campaign" });
     expect(rerunPrefill({ campaign: { name: "Old", creative_ids: [A], daily_budget: null, destination: "mixed" }, draft: null, approvedIds: [A], bestCreativeId: null }))
       .toMatchObject({ dailyBudgetRupees: 300, destination: undefined });
+  });
+
+  // #773 (CEO, Nov 2): Edit audience on a running campaign saves the change for its next run; the copy starts with it.
+  it("starts the copy with the audience change saved while the campaign ran", () => {
+    const prepared = { ...emptyAudienceEdit, included: [{ key: "1029599", name: "Mohali", type: "city" }], excluded: [{ key: "1743", name: "Rajasthan", type: "region" }],
+      cityScope: "radius" as const, radiusKm: 15, ageMin: 30, ageMax: 60, gender: "women" as const };
+    const targeting = { gender: "all", location: { mode: "ai", included: [{ key: "2295", name: "Delhi", type: "city" }], excluded: [{ key: "1743", name: "Rajasthan", type: "region" }, { key: "6", name: "Goa", type: "region" }], cityScope: "city_only", includedNames: ["Delhi NCR"], excludedNames: ["Shimla"] }, age: { mode: "ai", min: 25, max: 55 } } as DraftInput["targeting"];
+    const prefill = rerunPrefill({ campaign: { ...campaign, prepared }, draft: { ...draft, targeting }, approvedIds: [A], bestCreativeId: null });
+    expect(prefill).toMatchObject({ source: "draft", targeting: {
+      gender: "women",
+      location: {
+        mode: "manual", included: [{ key: "1029599", name: "Mohali", type: "city", radiusKm: 15 }], cityScope: "radius", radiusKm: 15, excludedNames: ["Shimla"],
+        excluded: [{ key: "1743", name: "Rajasthan", type: "region", radiusKm: 15 }, { key: "6", name: "Goa", type: "region", radiusKm: 15 }],
+      },
+      age: { mode: "manual", min: 30, max: 60 },
+    } });
+    expect((prefill as { targeting: DraftInput["targeting"] }).targeting.location).not.toHaveProperty("includedNames");
+    // Only what the owner set changes; without a saved change the draft's targeting is kept as it was.
+    expect(rerunPrefill({ campaign: { ...campaign, prepared: { ...emptyAudienceEdit, gender: "men" } }, draft: { ...draft, targeting }, approvedIds: [A], bestCreativeId: null }))
+      .toMatchObject({ targeting: { gender: "men", location: { mode: "ai", included: [{ key: "2295" }], includedNames: ["Delhi NCR"] }, age: { mode: "ai", min: 25, max: 55 } } });
+    expect(rerunPrefill({ campaign: { ...campaign, prepared: null }, draft: { ...draft, targeting }, approvedIds: [A], bestCreativeId: null })).toMatchObject({ targeting });
+    expect(rerunPrefill({ campaign: { ...campaign, prepared: { ...emptyAudienceEdit, ageMin: 30, ageMax: 60 } }, draft: null, approvedIds: [A], bestCreativeId: null }))
+      .toMatchObject({ source: "campaign", targeting: { age: { mode: "manual", min: 30, max: 60 } } });
   });
 
   it("finds the Best ad's creative through the launch's ad links (#783's rule: 5+ results, 30% cheaper)", () => {
