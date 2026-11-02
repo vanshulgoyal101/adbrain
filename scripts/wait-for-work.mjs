@@ -80,7 +80,9 @@ export function scheduledRead(lastBody, m, labels = []) {
 /**
  * #2572: owned items whose last word backlog() must read. Items a time can't lift (`waiting-owner`, `parked`,
  * `later`) are skipped to save the shared API budget; every other one is read, so no scheduled read is missed.
- * @param {Array<{ labels?: Array<string | { name: string }> }>} items
+ * @template {{ labels?: Array<string | { name: string }> }} T
+ * @param {T[]} items
+ * @returns {T[]}
  */
 export function backlogReads(items) {
   return items.filter((i) => !labelNames(i).some((n) => TIMER_HOLDS.has(n)));
