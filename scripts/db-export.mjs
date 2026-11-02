@@ -84,7 +84,8 @@ export async function loadPg({
     .filter((name) => !name.startsWith(".") && existsSync(join(cacheRoot, name, "pg", "package.json")))
     .sort((a, b) => (b === lockHash) - (a === lockHash) || statSync(join(cacheRoot, b)).mtimeMs - statSync(join(cacheRoot, a)).mtimeMs);
   if (!cached.length) throw new Error(`Cannot find package 'pg' here or in ${cacheRoot}: run npm ci, or bash scripts/wt.sh once to fill the cache`);
-  execFileSync("cp", ["-cR", join(cacheRoot, cached[0]), target]);
+  // -c clones on APFS (seconds, no extra disk), as wt.sh does; plain copies elsewhere.
+  execFileSync("cp", [process.platform === "darwin" ? "-cR" : "-R", join(cacheRoot, cached[0]), target]);
   return (await importLocal()).default;
 }
 
