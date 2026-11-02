@@ -163,6 +163,10 @@ const ENGLISH: Record<OwnerErrorKey, string> = {
   // #2327: Enquiries and the Facebook connect path (the leads 404 reuses #2312's campaignNotFound).
   signInRequired: "Sign in required.",
   businessMissing: "Business not found.",
+  // #1209: the upload rights gate (/api/media/sign).
+  mediaRightsRequired: "Confirm you own these photos or have permission to use them.",
+  mediaPeopleRequired: "Confirm that everyone recognisable has agreed to appear in your ads.",
+  mediaConsentNotSaved: "Your confirmation couldn't be saved. Try again.",
   chooseCampaign: "Choose a campaign.",
   enquiriesNotDeleted: "The enquiries couldn't be deleted. Try again.",
   enquiryNotDeleted: "The enquiry couldn't be deleted. Try again.",
