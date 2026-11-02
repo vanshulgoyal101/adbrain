@@ -114,6 +114,11 @@ const schema = z.object({
   // Shared secret Vercel Cron sends as `Authorization: Bearer <secret>`.
   // Empty disables the cron endpoints (they 404).
   CRON_SECRET: z.string().optional().default(""),
+
+  // #2574: smokes mint a session at /api/internal/test-session with this bearer, only for these emails (smoke/QA
+  // logins, never an owner or customer). Either empty, or a secret under 32 characters, disables the route (404).
+  TEST_SESSION_SECRET: z.string().optional().default(""),
+  TEST_SESSION_EMAILS: commaList,
 });
 
 export type Env = z.infer<typeof schema>;
