@@ -222,6 +222,7 @@ Supabase configuration and Node 24. Every job runs in parallel after its own `np
 | `build` | `npm run build` |
 | `lint` | `npm run lint`, `npm run typecheck` |
 | `unit` (3 shards) | push to `main`/`next`: `npx vitest run --shard=N/3`. PR (#2386): if it changes only JS/TS/CSS modules and `docs/`, `vitest run --changed HEAD^1` (tests the change reaches) plus every test that reads files with `fs` (`readFileSync`, `readdirSync`, `globSync`, `existsSync`); any other changed file (JSON, fonts, SQL, workflows, `AGENTS.md`) runs everything, since modules read those with `fs` outside the import graph. The train promotes only a green full run on `next` |
+| `flaky` | after `unit`, not required (#618): CI retries a failed test once; one that passes on the retry keeps the shard green and gets one `flaky` issue (`bug`, `ready`, `lane:dev`), or a comment on its open one. A real failure fails both tries |
 | `metadb` | `META_TEST_PG_BIN="$(pg_config --bindir)" npm run test:meta-db` |
 | `test` | aggregator: fails unless `lint`, every `unit` shard, `metadb`, `docs` and `boundaries` succeeded |
 | `core` | `npm run test:core`, then `test:meta-db -- --generation-only` |

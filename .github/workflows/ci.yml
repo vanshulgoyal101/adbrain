@@ -62,6 +62,8 @@ jobs:
     env:
       NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
       NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
+      # #618: tests that passed only on their retry (vitest.config.mts), filed by the flaky job.
+      FLAKY_REPORT: flaky/shard-${{ matrix.shard }}.json
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -98,6 +100,40 @@ jobs:
           echo "${#scans[@]} file-scanning tests"
           [ "${#scans[@]}" -gt 0 ] || exit 0
           npx vitest run --passWithNoTests --shard=${{ matrix.shard }}/3 "${scans[@]}"
+      - name: Keep flaky-test report
+        if: always() && hashFiles('flaky/*.json') != ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: flaky-${{ matrix.shard }}
+          path: flaky/
+          retention-days: 3
+
+  # #618: one `flaky` issue per test that only passed on its retry (comment if it's open). Not a required check.
+  # Own job so only it can write issues; same-repo PRs and pushes only (a fork PR's token can't write).
+  flaky:
+    needs: unit
+    # Advisory: filing issues must never turn a PR red.
+    continue-on-error: true
+    if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: scripts/file-flaky.mjs
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: flaky-*
+          path: flaky
+          merge-multiple: true
+      - name: File flaky tests
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/file-flaky.mjs flaky
 
   metadb:
     runs-on: ubuntu-latest
