@@ -15,7 +15,9 @@ import { ConnectionAccessError } from "./connection-access-error";
 import { EXCLUDABLE_CITIES, INDIA_REGION_KEYS, mergeExclusions, serviceAreaExclusions, TargetingExclusionsMissingError, type IncludedPlace } from "./service-area";
 import { AD_LANGUAGE_KEYS, storedLocales } from "./locales";
 import { expandPlaceAliases } from "./geo-aliases";
-import { fetchAdImage, readAdVideo, startAdVideo, uploadAdImageBytes, type AdVideoState } from "./media";
+import {
+  fetchAdImage, findAdVideoByName, readAdVideo, startAdVideo, uploadAdImageBytes, type AdVideoLookup, type AdVideoState,
+} from "./media";
 import { buildGeoLocations, clampRadiusKm, geoLabel, hasGeo, pickBestGeoMatch } from "./geo";
 import { destinationCTA, destinationPlan, hasPlacementCreative, isWebsiteLink, leavesAudienceNetworkOut, websiteUrlTags, type AdDestination } from "./destinations";
 export { destinationCTA, destinationPlan, websiteUrlTags, type AdDestination, type DestinationPlan } from "./destinations";
@@ -776,6 +778,11 @@ export class MetaClient {
     private readonly writes: "all" | "pause-only" = "all",
   ) {}
 
+  /** The ad account every call of this client goes to. */
+  get adAccountId(): string {
+    return this.creds.adAccountId;
+  }
+
   private async graph<T>(
     path: string,
     opts: {
@@ -1184,6 +1191,11 @@ export class MetaClient {
 
   readAdVideo(videoId: string): Promise<AdVideoState> {
     return readAdVideo((path, opts) => this.graph(path, opts), videoId);
+  }
+
+  /** #749: settle a video upload whose answer never came back by the name AdBrain gave it. */
+  findAdVideoByName(name: string, since: Date): Promise<AdVideoLookup> {
+    return findAdVideoByName((path, opts) => this.graph(path, opts), this.creds.adAccountId, name, since);
   }
 
   /**

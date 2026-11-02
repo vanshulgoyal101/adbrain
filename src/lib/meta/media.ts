@@ -25,6 +25,8 @@ export type AdVideoProblem = {
   message: string;
 };
 
+export type AdVideoLookup = { status: "found"; videoId: string } | { status: "absent" } | { status: "unknown" };
+
 /** Meta's video title limit is "less than 255 characters". */
 const TITLE_MAX = 254;
 const CANT_FETCH_URL = 389;
@@ -89,6 +91,34 @@ export async function startAdVideo(
   return created.id;
 }
 
+/** `title` echoes the `name` sent to `advideos` (recorded); reading `name` is refused (12). */
+export const AD_VIDEO_LIST_FIELDS = "id,title,created_time";
+const LIST_PAGE = 50;
+const LIST_PAGES = 4;
+
+/**
+ * After an `advideos` POST whose answer never arrived, finds the video by the unique name it was sent with, so it is
+ * never uploaded twice. Graph refuses `filtering` on title (100, recorded), so this reads the list (newest-first,
+ * recorded but not promised) and calls it absent only after a whole page older than `since` (the claim time) or the
+ * end of the list. `unknown` when 200 videos didn't settle it: never re-upload then.
+ */
+export async function findAdVideoByName(graph: MetaGraph, adAccountId: string, name: string, since: Date): Promise<AdVideoLookup> {
+  let after: string | null = null;
+  for (let page = 0; page < LIST_PAGES; page++) {
+    const cursor: string = after ? `&after=${encodeURIComponent(after)}` : "";
+    const data: { data?: { id?: string; title?: string; created_time?: string }[]; paging?: { cursors?: { after?: string }; next?: string } } =
+      await graph(`${adAccountId}/advideos?fields=${encodeURIComponent(AD_VIDEO_LIST_FIELDS)}&limit=${LIST_PAGE}${cursor}`);
+    const videos = data.data ?? [];
+    const match = videos.find((video) => video.id && video.title === name);
+    if (match?.id) return { status: "found", videoId: match.id };
+    const older = (video: { created_time?: string }) => Date.parse(video.created_time ?? "") < since.getTime();
+    if (videos.length > 0 && videos.every(older)) return { status: "absent" };
+    after = data.paging?.next ? data.paging.cursors?.after ?? null : null;
+    if (!after) return { status: "absent" };
+  }
+  return { status: "unknown" };
+}
+
 export async function readAdVideo(graph: MetaGraph, videoId: string): Promise<AdVideoState> {
   return decodeAdVideo(await graph<AdVideoNode>(`${videoId}?fields=${encodeURIComponent(AD_VIDEO_FIELDS)}`));
 }
@@ -125,15 +155,30 @@ export function decodeAdVideo(node: AdVideoNode): AdVideoState {
   };
 }
 
+export const VIDEO_PROBLEM_WORDS: Record<AdVideoProblem["kind"], string> = {
+  unreachable: "Couldn't send your video to Meta. Try again.",
+  format: "Meta can't read this kind of video. Use an MP4 or MOV from your phone.",
+  file: "Meta couldn't use this video file. Try another video.",
+  too_small: "This video is too small for Meta. Use a longer or larger video.",
+  invalid: "Meta couldn't accept this video. Try another video.",
+  reconnect: "Reconnect Facebook to send videos to Meta.",
+  throttled: "Meta is busy. We'll try again in a minute.",
+  unknown: "Meta couldn't take this video right now. Try again.",
+};
+
 /** Plain words for the owner; codes from Meta's Ad Videos reference. */
 export function adVideoProblem(error: unknown): AdVideoProblem {
-  const code = error instanceof MetaError ? error.code : undefined;
-  if (code === CANT_FETCH_URL) return { kind: "unreachable", message: "Couldn't send your video to Meta. Try again." };
-  if (code === 352) return { kind: "format", message: "Meta can't read this kind of video. Use an MP4 or MOV from your phone." };
-  if (code === 351 || code === 6000 || code === 6001) return { kind: "file", message: "Meta couldn't use this video file. Try another video." };
-  if (code === 382) return { kind: "too_small", message: "This video is too small for Meta. Use a longer or larger video." };
-  if (code === 100) return { kind: "invalid", message: "Meta couldn't accept this video. Try another video." };
-  if (code === 190 || code === 200) return { kind: "reconnect", message: "Reconnect Facebook to send videos to Meta." };
-  if (isThrottleCode(code)) return { kind: "throttled", message: "Meta is busy. We'll try again in a minute." };
-  return { kind: "unknown", message: "Meta couldn't take this video right now. Try again." };
+  const kind = adVideoProblemKind(error instanceof MetaError ? error.code : undefined);
+  return { kind, message: VIDEO_PROBLEM_WORDS[kind] };
+}
+
+function adVideoProblemKind(code: number | undefined): AdVideoProblem["kind"] {
+  if (code === CANT_FETCH_URL) return "unreachable";
+  if (code === 352) return "format";
+  if (code === 351 || code === 6000 || code === 6001) return "file";
+  if (code === 382) return "too_small";
+  if (code === 100) return "invalid";
+  if (code === 190 || code === 200) return "reconnect";
+  if (isThrottleCode(code)) return "throttled";
+  return "unknown";
 }
