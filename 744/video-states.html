@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="only light">
+<title>Video upload states · #744 / #748 / #778</title>
+<style>
+  @font-face { font-family: "DM Sans"; src: url("../node_modules/@fontsource-variable/dm-sans/files/dm-sans-latin-wght-normal.woff2") format("woff2"); font-weight: 100 900; font-display: swap; }
+  :root { color-scheme: only light; --canvas: #f6f7f4; --ink: #1b2420; --muted: #5a6660; --line: #e2e6df; --leaf: #13784a; --amber: #a15c07; --amber-soft: #fdf3e2; --red: #b42318; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--canvas); color: var(--ink); font: 15px/1.5 "DM Sans", "Noto Sans Devanagari", "Kohinoor Devanagari", sans-serif; }
+  :lang(hi) body, html[lang="hi"] body { line-height: 1.6; }
+  h1, h2, h3, p { margin: 0; }
+  h1 { font-size: 22px; line-height: 1.3; font-weight: 600; text-wrap: balance; }
+  h2 { font-size: 16px; line-height: 1.4; font-weight: 600; }
+  h3 { font-size: 15px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .meta { font-size: 13px; color: var(--muted); }
+  .intro { padding: 24px; max-width: 760px; }
+  .intro p { margin-top: 8px; color: var(--muted); }
+  .boards { display: grid; grid-template-columns: repeat(auto-fit, 390px); gap: 24px; padding: 0 24px 24px; align-items: start; }
+  .frame { background: white; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .caption { padding: 12px 16px; background: var(--ink); color: white; font-size: 13px; }
+  .bar { min-height: 56px; padding: 8px 16px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line); }
+  .content { padding: 16px; }
+  .content > * + * { margin-top: 14px; }
+  .button { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; gap: 6px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 8px; font-weight: 600; text-align: center; white-space: nowrap; background: white; }
+  .primary { color: white; background: var(--leaf); border-color: var(--leaf); }
+  .dashed { border-style: dashed; border-color: #b9c1b8; }
+  .full { display: flex; width: 100%; }
+  .sheet { margin-top: 24px; border-top: 1px solid var(--line); border-radius: 16px 16px 0 0; box-shadow: 0 -8px 24px rgb(0 0 0 / .06); }
+  .handle { width: 40px; height: 4px; border-radius: 4px; background: var(--line); margin: 10px auto 0; }
+  .panel { padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--canvas); }
+  .panel p + p, .panel h2 + p { margin-top: 4px; }
+  .limits { display: grid; gap: 2px; }
+  .limits strong { font-weight: 600; }
+  .rights { display: flex; gap: 12px; align-items: flex-start; }
+  .check { flex: 0 0 22px; height: 22px; border-radius: 4px; margin-top: 2px; background: var(--leaf); color: white; display: grid; place-items: center; font-size: 14px; }
+  .rows { list-style: none; padding: 0; }
+  .row { display: flex; gap: 12px; align-items: flex-start; padding: 14px 0; border-bottom: 1px solid var(--line); }
+  .row:last-child { border-bottom: 0; }
+  .poster { position: relative; flex: 0 0 56px; width: 56px; border-radius: 8px; background: linear-gradient(160deg, #cfd6cc, #9aa598); display: grid; place-items: center; color: white; overflow: hidden; }
+  .poster.tall { aspect-ratio: 9/16; }
+  .poster.wide { aspect-ratio: 16/9; align-self: center; }
+  .poster.dim { opacity: .55; }
+  .poster svg { width: 22px; height: 22px; fill: white; stroke: none; }
+  .dur { position: absolute; right: 3px; bottom: 3px; background: rgb(0 0 0 / .65); color: white; font-size: 11px; line-height: 1; padding: 3px 4px; border-radius: 4px; }
+  .details { min-width: 0; flex: 1; }
+  .status { display: block; font-size: 14px; font-weight: 600; margin-top: 2px; }
+  .ready { color: var(--leaf); }
+  .warning { color: var(--amber); }
+  .error { color: var(--red); }
+  .rule { margin-top: 6px; padding-left: 10px; border-left: 2px solid var(--amber); }
+  .rule.blocked { border-color: var(--red); }
+  .rule p + p { margin-top: 2px; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  progress { display: block; width: 100%; height: 6px; margin: 8px 0 2px; accent-color: var(--leaf); }
+  .foot { padding: 12px 16px 16px; border-top: 1px solid var(--line); }
+  .foot .meta { margin-bottom: 10px; }
+  .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .tile { min-width: 0; }
+  .tile .poster { width: 100%; flex: none; aspect-ratio: 4/5; }
+  .tile p { font-size: 13px; padding-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tile .status { font-size: 12px; }
+  .tag { position: absolute; left: 3px; top: 3px; background: white; color: var(--ink); font-size: 11px; line-height: 1; padding: 3px 5px; border-radius: 4px; }
+  .tabs { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+  .tab { flex: none; min-height: 40px; display: flex; align-items: center; padding: 6px 12px; border: 1px solid var(--line); border-radius: 24px; font-size: 13px; }
+  .tab.selected { background: var(--ink); color: white; border-color: var(--ink); }
+  .heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .alt { border-top: 1px dashed var(--line); padding-top: 14px; }
+  .alt-label { font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+  .notes { margin: 0 24px 32px; max-width: 840px; padding: 16px 20px; background: white; border: 1px solid var(--line); border-radius: 10px; font-size: 14px; }
+  .notes h2 { margin-bottom: 8px; }
+  .notes li + li { margin-top: 6px; }
+  svg.i { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; }
+  @media (max-width: 437px) { .intro { padding: 20px 16px; } .boards { grid-template-columns: minmax(0, 1fr); padding: 0; gap: 16px; } .frame { border-radius: 0; border-left: 0; border-right: 0; } .notes { margin: 16px 0 0; border-radius: 0; } }
+</style>
+<svg aria-hidden="true" width="0" height="0" style="position:absolute"><defs>
+  <symbol id="play" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></symbol>
+  <symbol id="add" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="retry" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></symbol>
+</defs></svg>
+
+<header class="intro">
+  <h1 data-t="introTitle"></h1>
+  <p>Designer, for Dev 7's #748 video slice and Dev 5's #778 sheet. Static frames, not a working uploader. Grey posters are placeholders. Limits are the CEO's #2653 = A: MP4/MOV, 50 MB, 3 videos per business per month. The 60 s length cap is my proposal (see notes). EN and HI from the same file: <code>?lang=hi</code>.</p>
+</header>
+
+<main class="boards">
+  <!-- 1 · Pick -->
+  <section class="frame" aria-labelledby="f1">
+    <p class="caption">1 · Pick: limits shown before the picker, a fit line per video</p>
+    <div class="bar"><span>AdBrain</span><span class="meta" data-t="library"></span></div>
+    <div class="sheet">
+      <div class="handle"></div>
+      <div class="content">
+        <div><h1 id="f1" data-t="sheetTitle"></h1><p class="meta" data-t="sheetSub"></p></div>
+        <div class="panel limits">
+          <p><strong data-t="quotaLeft"></strong></p>
+          <p class="meta" data-t="limitsLine"></p>
+          <p class="meta" data-t="tallTip"></p>
+        </div>
+        <span class="button dashed full"><svg class="i"><use href="#add"/></svg><span data-t="choose"></span></span>
+        <div class="panel rights"><span class="check" aria-hidden="true">✓</span><p data-t="rights"></p></div>
+        <ul class="rows">
+          <li class="row"><div class="poster tall"><svg><use href="#play"/></svg><span class="dur">0:24</span></div>
+            <div class="details"><h3>Shop tour</h3><span class="status ready" data-t="fitTall"></span><p class="meta">0:24 · 31 MB</p></div></li>
+          <li class="row"><div class="poster wide"><svg><use href="#play"/></svg></div>
+            <div class="details"><h3>Kitchen before-after</h3><div class="rule"><p class="warning" data-t="fitWide"></p><p data-t="fitWideFix"></p></div><p class="meta">0:18 · 22 MB</p></div></li>
+        </ul>
+      </div>
+      <div class="foot"><p class="meta" data-t="countsAfter"></p><span class="button primary full" data-t="add2"></span></div>
+    </div>
+  </section>
+
+  <!-- 2 · Can't add -->
+  <section class="frame" aria-labelledby="f2">
+    <p class="caption">2 · Too long / too big: the reason and the fix on the phone</p>
+    <div class="bar"><span>AdBrain</span><span class="meta" data-t="library"></span></div>
+    <div class="sheet">
+      <div class="handle"></div>
+      <div class="content">
+        <h1 id="f2" data-t="sheetTitle"></h1>
+        <ul class="rows">
+          <li class="row"><div class="poster tall"><svg><use href="#play"/></svg><span class="dur">0:24</span></div>
+            <div class="details"><h3>Shop tour</h3><span class="status ready" data-t="fitTall"></span><p class="meta">0:24 · 31 MB</p></div></li>
+          <li class="row"><div class="poster tall"><svg><use href="#play"/></svg><span class="dur">0:48</span></div>
+            <div class="details"><h3>Team at work</h3><div class="rule blocked"><p class="error" data-t="tooBig"></p><p data-t="tooBigFix"></p></div></div></li>
+          <li class="row"><div class="poster tall"><svg><use href="#play"/></svg><span class="dur">2:10</span></div>
+            <div class="details"><h3>Full site walk</h3><div class="rule blocked"><p class="error" data-t="tooLong"></p><p data-t="tooLongFix"></p></div></div></li>
+        </ul>
+        <div class="panel"><h2 data-t="howTrimTitle"></h2><p data-t="howTrim"></p></div>
+        <div class="alt"><p class="alt-label">Instead, when the month's 3 are used</p>
+          <div class="panel" style="margin-top:8px"><h2 data-t="quotaUsed"></h2><p data-t="quotaUsedFix"></p></div></div>
+      </div>
+      <div class="foot"><span class="button primary full" data-t="add1"></span></div>
+    </div>
+  </section>
+
+  <!-- 3 · Uploading and processing -->
+  <section class="frame" aria-labelledby="f3">
+    <p class="caption">3 · Uploading, then "getting it ready": not pickable until Ready</p>
+    <div class="bar"><span>AdBrain</span><span class="meta" data-t="library"></span></div>
+    <div class="content">
+      <div class="heading"><h1 id="f3" data-t="library"></h1><span class="button"><svg class="i"><use href="#add"/></svg><span data-t="addShort"></span></span></div>
+      <div class="panel" role="status">
+        <h2 data-t="adding"></h2>
+        <p data-t="uploadingBytes"></p>
+        <progress value="58" max="100">58%</progress>
+        <p class="meta" data-t="keepOpen"></p>
+      </div>
+      <div class="tabs"><span class="tab" data-t="tabAll"></span><span class="tab" data-t="tabYours"></span><span class="tab" data-t="tabAi"></span><span class="tab selected" data-t="tabVideos"></span></div>
+      <div class="grid">
+        <div class="tile"><div class="poster dim"><span class="tag" data-t="video"></span><svg><use href="#play"/></svg></div><p>Shop tour</p><span class="status" data-t="pct"></span></div>
+        <div class="tile"><div class="poster"><span class="tag" data-t="video"></span><svg><use href="#play"/></svg><span class="dur">0:18</span></div><p>Kitchen before-after</p><span class="status" data-t="processing"></span></div>
+        <div class="tile"><div class="poster"><span class="tag" data-t="video"></span><svg><use href="#play"/></svg><span class="dur">0:31</span></div><p>Owner intro</p><span class="status ready" data-t="readyTall"></span></div>
+      </div>
+      <div class="alt"><p class="alt-label">After 60 s still getting ready</p>
+        <p style="margin-top:6px" data-t="stillProcessing"></p></div>
+    </div>
+  </section>
+
+  <!-- 4 · Failed -->
+  <section class="frame" aria-labelledby="f4">
+    <p class="caption">4 · Failed: retry what can be retried; never "Use anyway"</p>
+    <div class="bar"><span>AdBrain</span><span class="meta" data-t="library"></span></div>
+    <div class="content">
+      <h1 id="f4" data-t="failTitle"></h1>
+      <ul class="rows">
+        <li class="row"><div class="poster tall dim"><svg><use href="#play"/></svg><span class="dur">0:24</span></div>
+          <div class="details"><h3>Shop tour</h3><div class="rule blocked"><p class="error" data-t="stopped"></p><p data-t="stoppedFix"></p></div>
+            <div class="actions"><span class="button"><svg class="i"><use href="#retry"/></svg><span data-t="tryAgain"></span></span><span class="button" data-t="remove"></span></div></div></li>
+        <li class="row"><div class="poster tall dim"><svg><use href="#play"/></svg><span class="dur">0:18</span></div>
+          <div class="details"><h3>Kitchen before-after</h3><div class="rule blocked"><p class="error" data-t="rejected"></p><p data-t="rejectedFix"></p></div>
+            <div class="actions"><span class="button" data-t="chooseAnother"></span></div></div></li>
+        <li class="row"><div class="poster tall dim"><svg><use href="#play"/></svg><span class="dur">0:31</span></div>
+          <div class="details"><h3>Owner intro</h3><div class="rule"><p class="warning" data-t="uncheckable"></p><p data-t="uncheckableFix"></p></div>
+            <div class="actions"><span class="button"><svg class="i"><use href="#retry"/></svg><span data-t="tryAgain"></span></span></div></div></li>
+      </ul>
+      <p class="meta" data-t="quotaKept"></p>
+    </div>
+  </section>
+</main>
+
+<section class="notes" lang="en">
+  <h2>Notes for Dev 7 (#748) and Dev 5 (#778)</h2>
+  <ol>
+    <li><b>Show the limit before the picker</b> (CPO, #744): "2 of 3 videos left this month · MP4 or MOV, up to 50 MB and 60 seconds". At 0 left the picker still opens for photos and video rows say the month is used. A video counts only once it's <i>Ready</i>; a refused, failed or removed-before-ready one doesn't use one of the 3.</li>
+    <li><b>Length cap: I propose 60 s.</b> It is Stories' own per-card cap, so one clip fits every placement; the Analyst's Tricity sample (#1858) is a median ~31 s. At 50 MB the size is usually what bites first (a 1080p Android clip is ~60–130 MB a minute), so the too-big line computes a target: <code>floor(duration × 50 / size / 5) × 5</code> seconds ("about 25 seconds"). Hide the number if it'd be under 5 s and say "a shorter part" instead. CTO can change 60; the words take <code>{max}</code>.</li>
+    <li><b>Too big / too long / wrong type are red with one fix, never "Use anyway".</b> Fit (wide 16:9) is amber and can be added: "Feed only". Size and type need no decoding; length comes from the browser's <code>&lt;video&gt;</code> metadata. If the phone can't read it, that is a refusal ("Save it as MP4 and try again"), not a pass.</li>
+    <li><b>Upload is one request on the Free plan (no resume)</b>, so progress shows MB, and the keep-open line says the honest thing: if the page closes, it starts again. Keep the <code>beforeunload</code> ask while a video is uploading.</li>
+    <li><b>"Getting it ready…"</b> = finalize plus the poster frame. The tile shows the poster as soon as the browser has it, isn't pickable until Ready, and after 60 s gets the still-going line (polite live region, no focus move). Meta's own processing at launch is #749's state, not this one.</li>
+    <li><b>Check unavailable fails closed</b> (CPO, Nov 2): amber "couldn't check just now · Try again", no "Use anyway". This supersedes the photo frame on #1222 for mandatory checks; only an optional helper may offer it.</li>
+    <li>Sheet title and button follow the picks: "Add photos &amp; videos" / "Add 2 videos" / "Add 1 photo and 1 video". The sheet's button is blue on #1973 today; use the leaf primary (<code>bg-primary</code>) like the rest of the app.</li>
+    <li>Words go to #1868's EN/HI keys; the HI here is a draft for the CPO's words check. Rendered at 390 and 360 in both: no overflow, no target under 44 px, no button text on two lines.</li>
+  </ol>
+</section>
+
+<script>
+const T = {
+  en: {
+    introTitle: "Videos: picking, limits, uploading, failing",
+    library: "Photos & videos",
+    sheetTitle: "Add photos & videos",
+    sheetSub: "Your own work: finished jobs, your shop, your team.",
+    quotaLeft: "Videos: 2 of 3 left this month",
+    limitsLine: "MP4 or MOV · up to 50 MB · up to 60 seconds",
+    tallTip: "Tall (9:16) videos work in Feed, Stories and Reels.",
+    choose: "Choose photos or videos",
+    rights: "I own these photos and videos, or have permission to use them, including any music and the people shown.",
+    fitTall: "✓ Tall (9:16): Feed, Stories and Reels",
+    fitWide: "Wide (16:9): Feed only",
+    fitWideFix: "Stories and Reels need a tall video.",
+    countsAfter: "Uses 2 of your 3 videos this month once they're ready.",
+    add2: "Add 2 videos",
+    add1: "Add 1 video",
+    addShort: "Add",
+    tooBig: "Too big: 82 MB. The limit is 50 MB.",
+    tooBigFix: "Trim it to about 25 seconds in your Gallery, then add it again.",
+    tooLong: "Too long: 2 min 10 s. The limit is 60 seconds.",
+    tooLongFix: "Trim it in your Gallery, then add it again.",
+    howTrimTitle: "How to trim",
+    howTrim: "Open the video in your phone's Gallery or Photos, tap Edit, drag the ends and save a copy.",
+    quotaUsed: "You've added this month's 3 videos",
+    quotaUsedFix: "You can add more from 1 Dec. Photos still work.",
+    adding: "Adding 2 videos · 1 of 2",
+    uploadingBytes: "Uploading Shop tour… 18 of 31 MB",
+    keepOpen: "Keep this page open until it finishes. If it closes, the upload starts again.",
+    tabAll: "All", tabYours: "Your photos", tabAi: "AI pictures", tabVideos: "Videos",
+    video: "Video",
+    pct: "Uploading 58%",
+    processing: "Getting it ready…",
+    readyTall: "✓ Ready · 9:16",
+    stillProcessing: "Still getting it ready. You can keep going; we'll mark it when it's ready.",
+    failTitle: "3 videos weren't added yet",
+    stopped: "Upload stopped at 58%.",
+    stoppedFix: "Check your connection and tap Try again. It starts from the beginning.",
+    tryAgain: "Try again",
+    remove: "Remove",
+    rejected: "We can't use this video.",
+    rejectedFix: "The file may be damaged. Save it again as MP4 from your Gallery and add it.",
+    chooseAnother: "Choose another video",
+    uncheckable: "We couldn't check this video just now.",
+    uncheckableFix: "Try again in a few minutes. It won't go in an ad until it's checked.",
+    quotaKept: "Videos that didn't make it don't use up any of your 3 this month.",
+  },
+  hi: {
+    introTitle: "वीडियो: चुनना, सीमा, अपलोड, गड़बड़ी",
+    library: "फ़ोटो और वीडियो",
+    sheetTitle: "फ़ोटो और वीडियो जोड़ें",
+    sheetSub: "आपका अपना काम: पूरे हुए काम, आपकी दुकान, आपकी टीम।",
+    quotaLeft: "इस महीने 3 में से 2 वीडियो बाकी",
+    limitsLine: "MP4 या MOV · 50 MB तक · 60 सेकंड तक",
+    tallTip: "खड़े (9:16) वीडियो Feed, Stories और Reels तीनों में चलते हैं।",
+    choose: "फ़ोटो या वीडियो चुनें",
+    rights: "ये फ़ोटो और वीडियो मेरे हैं, या मुझे इन्हें इस्तेमाल करने की अनुमति है, इनमें दिखने वाले लोगों और संगीत समेत।",
+    fitTall: "✓ खड़ा (9:16): Feed, Stories और Reels",
+    fitWide: "चौड़ा (16:9): सिर्फ़ Feed",
+    fitWideFix: "Stories और Reels के लिए खड़ा वीडियो चाहिए।",
+    countsAfter: "तैयार होने पर इस महीने के 3 में से 2 वीडियो गिने जाएँगे।",
+    add2: "2 वीडियो जोड़ें",
+    add1: "1 वीडियो जोड़ें",
+    addShort: "जोड़ें",
+    tooBig: "बहुत बड़ा: 82 MB। सीमा 50 MB है।",
+    tooBigFix: "गैलरी में इसे लगभग 25 सेकंड का ट्रिम करें, फिर दोबारा जोड़ें।",
+    tooLong: "बहुत लंबा: 2 मिनट 10 सेकंड। सीमा 60 सेकंड है।",
+    tooLongFix: "गैलरी में इसे ट्रिम करें, फिर दोबारा जोड़ें।",
+    howTrimTitle: "ट्रिम कैसे करें",
+    howTrim: "फ़ोन की गैलरी या Photos में वीडियो खोलें, Edit दबाएँ, दोनों सिरे खींचें और कॉपी सेव करें।",
+    quotaUsed: "इस महीने के 3 वीडियो जुड़ चुके हैं",
+    quotaUsedFix: "1 दिसंबर से और जोड़ सकते हैं। फ़ोटो अभी भी जोड़ सकते हैं।",
+    adding: "2 वीडियो जोड़ रहे हैं · 2 में से 1",
+    uploadingBytes: "Shop tour अपलोड हो रहा है… 31 में से 18 MB",
+    keepOpen: "पूरा होने तक यह पेज खुला रखें। पेज बंद हुआ तो अपलोड शुरू से होगा।",
+    tabAll: "सभी", tabYours: "आपकी फ़ोटो", tabAi: "AI तस्वीरें", tabVideos: "वीडियो",
+    video: "वीडियो",
+    pct: "अपलोड 58%",
+    processing: "तैयार कर रहे हैं…",
+    readyTall: "✓ तैयार · 9:16",
+    stillProcessing: "अभी तैयार हो रहा है। आप आगे बढ़ सकते हैं; तैयार होते ही बता देंगे।",
+    failTitle: "3 वीडियो अभी नहीं जुड़े",
+    stopped: "अपलोड 58% पर रुक गया।",
+    stoppedFix: "कनेक्शन जाँचें और फिर से कोशिश करें दबाएँ। अपलोड शुरू से होगा।",
+    tryAgain: "फिर से कोशिश करें",
+    remove: "हटाएँ",
+    rejected: "यह वीडियो इस्तेमाल नहीं हो सकता।",
+    rejectedFix: "फ़ाइल खराब हो सकती है। गैलरी से इसे MP4 में दोबारा सेव करके जोड़ें।",
+    chooseAnother: "दूसरा वीडियो चुनें",
+    uncheckable: "अभी यह वीडियो जाँच नहीं पाए।",
+    uncheckableFix: "कुछ मिनट बाद फिर से कोशिश करें। जाँच पूरी होने तक यह किसी विज्ञापन में नहीं जाएगा।",
+    quotaKept: "जो वीडियो नहीं जुड़ पाए, वे इस महीने के 3 में नहीं गिने जाते।",
+  },
+};
+const lang = new URLSearchParams(location.search).get("lang") === "hi" ? "hi" : "en";
+document.documentElement.lang = lang;
+document.querySelectorAll("[data-t]").forEach((el) => { el.textContent = T[lang][el.dataset.t]; });
+</script>
+</html>
