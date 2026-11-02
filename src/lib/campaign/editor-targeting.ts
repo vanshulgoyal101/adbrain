@@ -106,6 +106,12 @@ export function preparedAudienceForm(raw: unknown): AudienceEditForm | null {
   return parsed.success ? parsed.data : null;
 }
 
+/** #773: the campaign row as the server stores it after a running Save, so reopening Edit audience starts from the saved form. */
+export function withPreparedAudienceForm<T extends { raw: unknown }>(campaign: T, form: AudienceEditForm): T {
+  const raw = campaign.raw && typeof campaign.raw === "object" && !Array.isArray(campaign.raw) ? campaign.raw : {};
+  return { ...campaign, raw: { ...raw, preparedAudience: { form } } };
+}
+
 type GeoSpec = {
   cities?: Array<{ key: string; radius?: number; distance_unit?: "kilometer" }>;
   regions?: Array<{ key: string }>;

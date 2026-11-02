@@ -97,14 +97,14 @@ export function rerunPrefill(input: {
 
 /**
  * #773: the copy runs with the audience change saved while the campaign ran: a new area replaces the old one, exclusions
- * are added, and set ages and gender win. Languages and the out-of-area option have no place in the draft yet; review adds
- * out-of-area exclusions to every new campaign anyway.
+ * are added, set ages and gender win, and the distance fits the composer's 5–80 km. A running Save refuses language and
+ * out-of-area changes (the draft has no languages, and review adds out-of-area exclusions to every new campaign).
  */
 export function withPreparedAudience(targeting: TargetingInputDTO | undefined, form: AudienceEditForm | null | undefined): TargetingInputDTO | undefined {
   if (!form) return targeting;
   const value = targeting ? targetingToEditor(targeting) : { ...defaultTargeting };
   const area = form.included.length > 0;
-  if (area) Object.assign(value, { locationMode: "manual", included: form.included, cityScope: form.cityScope, radiusKm: form.radiusKm });
+  if (area) Object.assign(value, { locationMode: "manual", included: form.included, cityScope: form.cityScope, radiusKm: Math.min(80, Math.max(5, form.radiusKm)) });
   const seen = new Set(value.excluded.map(place => `${place.type}:${place.key}`));
   value.excluded = [...value.excluded, ...form.excluded.filter(place => !seen.has(`${place.type}:${place.key}`))];
   if (form.ageMin !== null && form.ageMax !== null) Object.assign(value, { ageMode: "manual", ageMin: form.ageMin, ageMax: form.ageMax });

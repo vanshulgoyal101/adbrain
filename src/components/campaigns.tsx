@@ -97,7 +97,7 @@ import { handoffRate } from "@/lib/campaign/whatsapp-handoff";
 import { reviewBlockerAlternative, reviewBlockerFix } from "@/lib/campaign/review-fix";
 import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
 import { useCampaignPreparation } from "@/lib/meta-connect-ui/use-campaign-preparation";
-import { preparedAudienceForm, targetingFromEditor, targetingToEditor } from "@/lib/campaign/editor-targeting";
+import { preparedAudienceForm, targetingFromEditor, withPreparedAudienceForm, targetingToEditor } from "@/lib/campaign/editor-targeting";
 import { buildManualDraftInput, pickWhatsAppNumber } from "@/lib/campaign/manual-draft-input";
 import { maskWhatsAppNumber, maskedWhatsAppNumberPattern, parseWhatsAppStatus, type WhatsAppStatus } from "@/lib/meta/whatsapp-status-shared";
 import type { ConnectIntent, ConnectionDTO } from "@/lib/meta/connect-contracts";
@@ -2361,7 +2361,7 @@ function BusinessCampaigns({
                 campaignName={audienceEdit.name ?? `${business.name} — ${audienceEdit.objective}`}
                 running={audienceEdit.status === "active"} prepared={preparedAudienceForm(audienceEdit.raw)}
                 onClose={() => { setAudienceEdit(null); loadWaiting(); }}
-                onSaved={message => { setCardNotice({ id: audienceEdit.id, message }); setAudienceEdit(null); }}
+                onSaved={(message, form) => { const id = audienceEdit.id; if (form) setCampaigns(list => list.map(item => item.id === id ? withPreparedAudienceForm(item, form) : item)); setCardNotice({ id, message }); setAudienceEdit(null); }}
               />
             )}
             {budgetEdit && (

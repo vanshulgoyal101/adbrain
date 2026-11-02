@@ -118,7 +118,11 @@ describe("EditAudienceDialog", () => {
     expect(screen.queryByRole("button", { name: /Check with Meta/ })).toBeNull();
     fireEvent.change(screen.getByLabelText("Who sees the ads"), { target: { value: "women" } });
     fireEvent.click(screen.getByRole("button", { name: /Save for next run/ }));
-    await waitFor(() => expect(onSaved).toHaveBeenCalledWith("Saved for your next run. The running campaign isn't changed, so its learning carries on."));
+    // The saved form goes back to the page, so reopening the dialog (and the next Save) starts from it.
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith("Saved for your next run. The running campaign isn't changed, so its learning carries on.", { ...emptyAudienceEdit, gender: "women" }));
+    // Only a paused edit changes languages or adds out-of-area exclusions; the next run's draft can't carry them.
+    expect(screen.queryByLabelText("Language")).toBeNull();
+    expect(screen.queryByText("Leave out places outside the area")).toBeNull();
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(sent(0)).toEqual({ change: { gender: "women" }, idempotencyKey: expect.any(String), form: { ...emptyAudienceEdit, gender: "women" } });
   });

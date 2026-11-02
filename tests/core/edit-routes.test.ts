@@ -402,6 +402,8 @@ describe("core: edit a launched campaign's audience (#773)", () => {
     expect(await edit({ preview: true, form: FORM })).toMatchObject({ status: 200, body: { preview: { prepared: true, adSets: [], consequence: null } } });
     expect((await edit({ form: { ...FORM, ageMin: 25 } })).status).toBe(400);
     expect((await edit({ copy: true, form: FORM })).status).toBe(400);
+    // A running Save keeps only what "Run this again" carries: the draft has no languages and review adds out-of-area exclusions.
+    expect(await edit({ change: { ...CHANGE, languages: [] }, form: { ...FORM, languageMode: "any" } })).toMatchObject({ status: 400, body: { error: expect.stringMatching(/only on a paused campaign/) } });
     // A dialog opened while the campaign was paused can't reach Meta once it runs, and the reverse.
     expect(await edit({})).toMatchObject({ status: 409, body: { error: expect.stringMatching(/running now/) } });
     expect(graph.sent).toEqual([]);

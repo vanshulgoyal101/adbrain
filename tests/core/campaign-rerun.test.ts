@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { bestCreativeId, rerunPrefill } from "@/lib/campaign/rerun";
-import type { DraftInput } from "@/lib/campaign/connect-contracts";
-import { emptyAudienceEdit } from "@/lib/campaign/editor-targeting";
+import { targetingInputSchema, type DraftInput } from "@/lib/campaign/connect-contracts";
+import { emptyAudienceEdit, preparedAudienceForm, withPreparedAudienceForm } from "@/lib/campaign/editor-targeting";
 import type { StoredAdResult } from "@/lib/campaign/ad-results-store";
 
 // #1050 "Run this again": a campaign that worked is copied into New campaign, Best ad first. Nothing is
@@ -98,6 +98,18 @@ describe("core: Run this again (#1050)", () => {
     expect(rerunPrefill({ campaign: { ...campaign, prepared: null }, draft: { ...draft, targeting }, approvedIds: [A], bestCreativeId: null })).toMatchObject({ targeting });
     expect(rerunPrefill({ campaign: { ...campaign, prepared: { ...emptyAudienceEdit, ageMin: 30, ageMax: 60 } }, draft: null, approvedIds: [A], bestCreativeId: null }))
       .toMatchObject({ source: "campaign", targeting: { age: { mode: "manual", min: 30, max: 60 } } });
+    // A paused edit allows 1 km, the composer 5 km: the copy's draft must still save.
+    const near = rerunPrefill({ campaign: { ...campaign, prepared: { ...prepared, radiusKm: 3 } }, draft: null, approvedIds: [A], bestCreativeId: null });
+    expect(targetingInputSchema.safeParse((near as { targeting: unknown }).targeting).success).toBe(true);
+    expect(near).toMatchObject({ targeting: { location: { radiusKm: 5, included: [{ radiusKm: 5 }] } } });
+  });
+
+  it("a running Save's form reaches the page row, so a second edit starts from the first", () => {
+    const form = { ...emptyAudienceEdit, included: [{ key: "2295", name: "Delhi", type: "city" as const }] };
+    const row = withPreparedAudienceForm({ id: "c-1", raw: { metaResult: { campaignId: "1" } } }, form);
+    expect(row.raw).toMatchObject({ metaResult: { campaignId: "1" } });
+    expect(preparedAudienceForm(row.raw)).toEqual(form);
+    expect(preparedAudienceForm(withPreparedAudienceForm({ raw: null }, form).raw)).toEqual(form);
   });
 
   it("finds the Best ad's creative through the launch's ad links (#783's rule: 5+ results, 30% cheaper)", () => {

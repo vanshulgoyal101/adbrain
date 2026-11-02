@@ -333,6 +333,7 @@ async function prepareForNextRun(context: AuthorizedBusiness, campaign: Campaign
   if (!built || "error" in built || audienceChangeDigest(built.change as AudienceChange) !== audienceChangeDigest(change)) {
     throw new CampaignEditError("Send the Edit audience form with its change.", 400);
   }
+  if (options.form!.languageMode !== "keep" || options.form!.areaExclusions) throw new CampaignEditError("Language and leaving out places outside the area change only on a paused campaign. Keep them as they are to save for the next run.", 400);
   if (options.preview) return { prepared: true, adSets: [], consequence: null };
   const prepared: PreparedAudience = { change, form: options.form!, savedAt: new Date().toISOString() };
   const saved = await saveCampaignPreparedAudience({ businessId: context.businessId, userId: context.userId }, campaign.id, prepared as unknown as Json).catch(() => null);

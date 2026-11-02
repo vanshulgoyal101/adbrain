@@ -51,7 +51,8 @@ export function EditAudienceDialog({ campaignId, campaignName, running = false, 
   /** The change saved earlier for the next run; the form starts from it. */
   prepared?: AudienceEditForm | null;
   onClose: () => void;
-  onSaved: (message: string) => void;
+  /** `prepared` is the form a running Save kept for the next run. */
+  onSaved: (message: string, prepared?: AudienceEditForm) => void;
 }) {
   const [form, setForm] = React.useState<AudienceEditForm>(prepared ?? emptyAudienceEdit);
   const [preview, setPreview] = React.useState<Preview | null>(null);
@@ -92,7 +93,7 @@ export function EditAudienceDialog({ campaignId, campaignName, running = false, 
     setBusy(null);
     if (!outcome.ok) { setError(outcome.message); return; }
     const result = outcome.data.result as { consequence?: string | null; prepared?: true } | undefined;
-    if (result?.prepared) { onSaved(SAVED_WORDS); return; }
+    if (result?.prepared) { onSaved(SAVED_WORDS, form); return; }
     onSaved(`Audience changed. The campaign stays paused.${result?.consequence ? ` ${result.consequence}` : ""}`);
   };
 
@@ -120,7 +121,7 @@ export function EditAudienceDialog({ campaignId, campaignName, running = false, 
             <h3 className="text-sm font-medium text-slate-900">Also leave out</h3>
             <p className="text-xs text-slate-600">Added to the places already left out. Nothing left out is ever put back.</p>
             <LocationPicker value={form.excluded} onChange={excluded => update({ excluded })} placeholder="Search a place to leave out" tone="exclude" />
-            {!form.included.length && (
+            {!running && !form.included.length && (
               <label className="flex min-h-11 cursor-pointer items-start gap-3 rounded-md border border-slate-200 p-3 text-sm text-slate-800">
                 <input type="checkbox" className="mt-0.5 h-4 w-4" checked={form.areaExclusions} onChange={event => update({ areaExclusions: event.target.checked })} />
                 <span>
@@ -141,7 +142,7 @@ export function EditAudienceDialog({ campaignId, campaignName, running = false, 
                 </Select>
                 {form.cityScope === "radius" && (
                   <label className="flex items-center gap-2 text-sm text-slate-700">
-                    <Input type="number" inputMode="numeric" min={1} max={80} value={form.radiusKm} aria-label="Distance around each city in km"
+                    <Input type="number" inputMode="numeric" min={running ? 5 : 1} max={80} value={form.radiusKm} aria-label="Distance around each city in km"
                       onChange={event => update({ radiusKm: Number(event.target.value) || 1 })} className="h-11 w-20" /> km
                   </label>
                 )}
@@ -172,7 +173,7 @@ export function EditAudienceDialog({ campaignId, campaignName, running = false, 
             </Select>
           </div>
 
-          <div className="flex flex-col gap-2">
+          {!running && <div className="flex flex-col gap-2">
             <label htmlFor={ids.language} className="text-sm font-medium text-slate-900">Language</label>
             <Select id={ids.language} value={form.languageMode} onChange={event => update({ languageMode: event.target.value as AudienceEditForm["languageMode"] })} className="h-11">
               <option value="keep">Keep as it is</option>
@@ -196,7 +197,7 @@ export function EditAudienceDialog({ campaignId, campaignName, running = false, 
                 </div>
               </>
             )}
-          </div>
+          </div>}
 
           {running && <p className="rounded-md bg-slate-50 p-3 text-sm text-slate-700">{NEXT_RUN_WORDS}</p>}
           {error && <p role="alert" className="text-sm font-medium text-red-800">{error}</p>}
