@@ -20,16 +20,21 @@ const runSchema = z.object({
 type Progress = z.infer<typeof progressSchema>;
 type Run = z.infer<typeof runSchema>;
 
+export const CHECKPOINT_RACE = "checkpoint_race" as const;
+const READ_FAILURE = "Could not read all Meta enquiries. Saved progress is available to retry.";
+
 export class LeadSyncError extends Error {
-  constructor(message: string, public status: number) { super(message); }
+  constructor(message: string, public status: number, public reason?: typeof CHECKPOINT_RACE) { super(message); }
 }
 
-/** #2503: 409 is `40001` from the checkpoint: another run moved this sync on (or the binding changed and the next run reads it fresh). */
-export const LOST_RACE = 409;
-
-function persistenceError(code?: string): LeadSyncError {
+function persistenceError(error?: { code?: string; message?: string }, checkpoint = false): LeadSyncError {
+  const { code, message } = error ?? {};
   if (code === "42501" || code === "P0002") return new LeadSyncError("This sync is not available for this business.", 404);
-  if (code === "40001") return new LeadSyncError("The sync or Meta connection changed. Reload and resume, or start a fresh sync after reconnecting.", LOST_RACE);
+  if (code === "40001") {
+    // The start function also uses 40001 for changed bindings, including when called by the checkpoint.
+    const reason = checkpoint && message === "Sync progress changed; reload and resume" ? CHECKPOINT_RACE : undefined;
+    return new LeadSyncError("The sync or Meta connection changed. Reload and resume, or start a fresh sync after reconnecting.", 409, reason);
+  }
   return new LeadSyncError("Could not verify the saved sync progress. Retry to resume.", 503);
 }
 
@@ -48,7 +53,7 @@ export async function syncMetaLeads(
     p_generation: connection.generation, p_ad_account_id: connection.selected.adAccountId, p_page_id: connection.selected.pageId,
   };
   const started = await db.rpc("lead_sync_start", scope).abortSignal(AbortSignal.timeout(3_000));
-  if (started.error) throw persistenceError(started.error.code);
+  if (started.error) throw persistenceError(started.error);
   const parsed = runSchema.safeParse(started.data?.[0]);
   if (!parsed.success) throw persistenceError();
   let run = parsed.data;
@@ -63,7 +68,7 @@ export async function syncMetaLeads(
       ...scope, p_sync_id: run.id, p_version: run.version,
       p_rows: rows as unknown as Json, p_progress: progress as unknown as Json,
     }).abortSignal(AbortSignal.timeout(3_000));
-    if (saved.error) throw persistenceError(saved.error.code);
+    if (saved.error) throw persistenceError(saved.error, true);
     const checkpoint = z.object({ run: runSchema, imported: z.number().int().nonnegative() }).safeParse(saved.data);
     if (!checkpoint.success) throw persistenceError();
     run = checkpoint.data.run;
@@ -102,7 +107,10 @@ export async function syncMetaLeads(
           const page = await meta.listLeadsForFormPage(form.id, { after: form.after });
           if (page.after && form.seen.includes(page.after)) throw new Error("Repeated cursor");
           return page;
-        } catch { return null; }
+        } catch {
+          failedThisRequest.add(form.id);
+          return null;
+        }
       }));
       for (let index = 0; index < batch.length; index++) {
         const form = batch[index];
@@ -111,7 +119,6 @@ export async function syncMetaLeads(
         next.pending = next.pending.filter(pending => pending.id !== form.id);
         next.discover = true;
         if (!page) {
-          failedThisRequest.add(form.id);
           next.pending.push({ ...form, failed: true });
           await save(next);
           continue;
@@ -130,13 +137,23 @@ export async function syncMetaLeads(
     }
   } catch (error) {
     const failure = error instanceof LeadSyncError ? error : persistenceError();
-    return { sync: summary(run), imported, failedForms: run.progress.pending.filter(form => form.failed).map(({ id, name }) => ({ id, name })), error: failure.message, status: failure.status };
+    const failedReads = failedThisRequest.size + Number(discoveryFailed);
+    const race = failure.reason === CHECKPOINT_RACE;
+    return {
+      sync: summary(run), imported, failedForms: run.progress.pending.filter(form => form.failed).map(({ id, name }) => ({ id, name })),
+      error: race && failedReads ? READ_FAILURE : failure.message,
+      status: race && failedReads ? 502 : failure.status,
+      failure: race ? (failedReads ? "meta" as const : CHECKPOINT_RACE) : "persistence" as const,
+      failedReads,
+    };
   }
   const failedForms = run.progress.pending.filter(form => form.failed).map(({ id, name }) => ({ id, name }));
-  const readFailed = failedThisRequest.size > 0 || discoveryFailed;
+  const failedReads = failedThisRequest.size + Number(discoveryFailed);
   return {
     sync: summary(run), imported, failedForms,
-    error: readFailed ? "Could not read all Meta enquiries. Saved progress is available to retry." : undefined,
-    status: readFailed ? 502 : 200,
+    error: failedReads ? READ_FAILURE : undefined,
+    status: failedReads ? 502 : 200,
+    failure: failedReads ? "meta" as const : undefined,
+    failedReads,
   };
 }

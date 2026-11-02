@@ -1,7 +1,7 @@
 import { observeRoute } from "@/lib/observability/logger";
 import { NextResponse } from "next/server";
 import { getEnv } from "@/lib/env";
-import { LeadSyncError, LOST_RACE, syncMetaLeads } from "@/lib/leads/sync";
+import { CHECKPOINT_RACE, LeadSyncError, syncMetaLeads } from "@/lib/leads/sync";
 import { friendlyMetaError, MetaThrottledError } from "@/lib/meta/client";
 import { appThrottledUntil, recordThrottle, throttledBusinesses } from "@/services/meta-throttle";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -25,7 +25,7 @@ type Outcome = {
   alerts?: LeadAlertRun;
   /** #1838: Meta is throttling this business's account (or the app); retried on a later run, not a failure. */
   throttled?: { scope: MetaThrottledError["scope"]; retryAfterMs: number };
-  /** #2503: another run held this business's sync; it resumes on the next run, not a failure. */
+  /** #2503: another run advanced this checkpoint, so this invocation stopped without failing. */
   skipped?: string;
 };
 
@@ -35,7 +35,7 @@ const SKIPPED_RACE = "Another run is syncing.";
  * Scheduled lead import (#165). For each business with a connected Meta Page it
  * resumes (or starts) the same bounded lead sync as `/api/leads/sync`: at most
  * 24 Graph reads per business per run, deduplicated by Meta lead id. A business
- * whose owner must reconnect Meta is listed in `reauth` and does not fail the run (#758).
+ * whose owner must reconnect Meta is listed by an opaque key in `reauth` (#758).
  * With `OWNER_ALERTS_ENABLED`, each opted-in owner then gets one WhatsApp alert per new lead under
  * 24 h old (#701 v1); an alert failure is reported under `alerts` and never fails the sync.
  *
@@ -69,6 +69,7 @@ async function handleGET(request: Request) {
   const alertStore = supabaseAlertStore(admin as unknown as Parameters<typeof supabaseAlertStore>[0]);
   const businesses: Outcome[] = [];
   const reauth: ReauthEntry[] = [];
+  let imported = 0;
   // #1838 slice 2: what earlier runs learned; the app-wide limit skips every business, a throttled account its own.
   const store = admin as unknown as SupabaseClient;
   let appThrottled = Boolean(await appThrottledUntil(store));
@@ -89,6 +90,7 @@ async function handleGET(request: Request) {
     const signal = AbortSignal.any([deadline, AbortSignal.timeout(20_000)]);
     const metaErrors: unknown[] = [];
     let outcome: Outcome;
+    let onlyThrottled = false;
     try {
       const context = await requireScheduledBusiness(businessId, request);
       const synced = await withMetaConnection(
@@ -96,16 +98,18 @@ async function handleGET(request: Request) {
         { purpose: "read_leads", signal },
         (meta, connection) => syncMetaLeads(context, connection, recordMetaErrors(meta, metaErrors), undefined, signal),
       );
+      // Local read failures, such as a repeated cursor, are not recorded by the Meta proxy.
+      onlyThrottled = synced.failure === "meta" && synced.failedReads > 0 && synced.failedReads === metaErrors.length
+        && metaErrors.every(error => error instanceof MetaThrottledError);
       outcome = {
         businessId, imported: synced.imported, sync: synced.sync, failedForms: synced.failedForms.length,
-        ...(synced.error ? synced.status === LOST_RACE ? { skipped: SKIPPED_RACE } : { error: synced.error } : {}),
+        ...(synced.error ? synced.failure === CHECKPOINT_RACE && metaErrors.length === 0 ? { skipped: SKIPPED_RACE } : { error: synced.error } : {}),
       };
     } catch (error) {
+      onlyThrottled = metaErrors.length === 0 && error instanceof MetaThrottledError;
       metaErrors.push(error);
-      outcome = error instanceof LeadSyncError && error.status === LOST_RACE
-        ? { businessId, imported: 0, failedForms: 0, skipped: SKIPPED_RACE }
-        : { businessId, imported: 0, failedForms: 0,
-          error: error instanceof LeadSyncError ? error.message : friendlyMetaError(error, "Could not sync leads.") };
+      outcome = { businessId, imported: 0, failedForms: 0,
+        error: error instanceof LeadSyncError ? error.message : friendlyMetaError(error, "Could not sync leads.") };
     }
     if (alertConfig && !deadline.aborted) {
       try {
@@ -120,21 +124,24 @@ async function handleGET(request: Request) {
     }
     const throttle = metaErrors.find((error): error is MetaThrottledError => error instanceof MetaThrottledError);
     if (throttle) {
-      outcome = { businessId, imported: outcome.imported, failedForms: 0, ...(outcome.sync ? { sync: outcome.sync } : {}),
-        ...(outcome.alerts ? { alerts: outcome.alerts } : {}), throttled: { scope: throttle.scope, retryAfterMs: throttle.retryAfterMs } };
+      if (onlyThrottled) {
+        outcome = { businessId, imported: outcome.imported, failedForms: 0, ...(outcome.sync ? { sync: outcome.sync } : {}),
+          ...(outcome.alerts ? { alerts: outcome.alerts } : {}), throttled: { scope: throttle.scope, retryAfterMs: throttle.retryAfterMs } };
+      }
       await recordThrottle(store, businessId, throttle);
       if (throttle.scope === "app") appThrottled = true;
     }
+    imported += outcome.imported;
     const dead = outcome.error && metaErrors.some(isTokenFailure) ? await reauthEntry(businessId, metaErrors) : null;
     if (dead) reauth.push(dead);
     else businesses.push(outcome);
   }
 
-  const ok = businesses.every(business => !business.error);
+  const ok = reauth.length === 0 && businesses.every(business => !business.error);
   return NextResponse.json({
     ok,
     at: new Date().toISOString(),
-    imported: businesses.reduce((total, business) => total + business.imported, 0),
+    imported,
     businesses,
     reauth,
   }, { status: ok ? 200 : 503 });
