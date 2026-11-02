@@ -4,7 +4,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { actionableOwned, backlogReads, dueWake, lastWordOn, scanBacklog, scheduledRead, OWNS_WORK, createGitHubApi, readyPool, redShared, myPulls, failedOnMine, mainArrival, TRAIN_RULE, BORROWS_DEV, boardRow, systemicFailures, snoozedUntil, latestWord, linkedIssues, lowQueues, matchers, nextItem, freshComments, offTrack, rateBackoffMs, roleCard, unsavedWork, waitingOnMe } from "../scripts/wait-for-work.mjs";
+import { actionableOwned, commentsSince, HANDOFF_LOOKBACK_MS, missedHandoffs, backlogReads, dueWake, lastWordOn, scanBacklog, scheduledRead, OWNS_WORK, createGitHubApi, readyPool, redShared, myPulls, failedOnMine, mainArrival, TRAIN_RULE, BORROWS_DEV, boardRow, systemicFailures, snoozedUntil, latestWord, linkedIssues, lowQueues, matchers, nextItem, freshComments, offTrack, rateBackoffMs, roleCard, unsavedWork, waitingOnMe } from "../scripts/wait-for-work.mjs";
 
 describe("PR reviews count as the latest word (#423)", () => {
   it("picks a review posted after the last comment, and ignores empty approvals", () => {
@@ -288,6 +288,19 @@ describe("startup reads the newest comment page (#2576)", () => {
     const shrunk = fakeApi(thread(99));
     expect((await lastWordOn(shrunk.api, repo, { number: 1, comments: 182 }))?.url).toBe("c98");
   });
+  it("steps back past a newest page of bot posts to your future read, which stays snoozed (CEO repro)", async () => {
+    const comments = [...thread(100, "Dev 3: checked. Next read 2026-11-02T09:00Z."),
+      { body: "<!-- core-scoreboard -->\nscore", created_at: at(200), html_url: "bot" }];
+    const { api, calls } = fakeApi(comments);
+    expect((await lastWordOn(api, repo, { number: 7, comments: 101 }))?.url).toBe("c99");
+    expect(calls.length).toBe(2);
+    const scan = await scanBacklog([{ number: 7, comments: 101, labels: [{ name: "owner:dev3" }] }],
+      { api: fakeApi(comments).api, repo, m: dev3, now: Date.parse("2026-11-02T08:00Z") });
+    expect([scan.turns, [...scan.snoozed]]).toEqual([[], [7]]);
+    expect(actionableOwned([{ number: 7, labels: [{ name: "owner:dev3" }] }], scan)).toEqual([]);
+    const bots = Array.from({ length: 150 }, (_, k) => ({ body: "<!-- ai-review -->", created_at: at(k), html_url: `b${k}` }));
+    expect(await lastWordOn(fakeApi(bots).api, repo, { number: 8, comments: 150 })).toBeNull();
+  });
   it("reads every review page on a PR", async () => {
     const reviews = Array.from({ length: 130 }, (_, k) => ({ body: k === 129 ? "QA: approved. → Dev 3: merge it." : "QA: note.", submitted_at: at(500 + k), html_url: `r${k}` }));
     const { api } = fakeApi(thread(3), reviews);
@@ -311,6 +324,42 @@ describe("startup reads the newest comment page (#2576)", () => {
     expect([timed.turns, [...timed.snoozed]]).toEqual([[], [6]]);
     expect(dueWake(Date.parse("2026-11-02T08:59Z"))).toBe(false);
     expect(dueWake(Date.parse("2026-11-02T09:00Z"))).toBe(true);
+  });
+});
+
+describe("handoffs between waiter runs (#2576)", () => {
+  const dev = matchers("dev");
+  const c = (id: number, issue: number, created_at: string, body: string) =>
+    ({ id, body, created_at, issue_url: `https://api.github.com/repos/o/r/issues/${issue}`, html_url: `h${id}` });
+  // CEO repro: the #2573 comment to Dev at 07:51:55; Dev's previous poll saved its cursor at 07:49:00 and the next waiter started 07:52:14.
+  const handoff = c(1, 2573, "2026-11-02T07:51:55Z", "CTO: → Dev: take #2573.");
+  const since = "2026-11-02T07:52:14.000Z";
+  it("recovers an addressed comment on a non-owned item posted between runs, exactly once", () => {
+    const comments = [handoff, c(2, 2573, "2026-11-02T07:51:00Z", "Dev: → QA: ready."), c(3, 9, "2026-11-02T07:50:00Z", "CTO: general note.")];
+    const got = missedHandoffs(comments, { cursor: "2026-11-02T07:49:00Z", since, m: dev });
+    expect(got.map((x) => x.id)).toEqual([1]);
+    expect(missedHandoffs(comments, { cursor: "2026-11-02T07:49:00Z", since, ids: new Set([1]), m: dev })).toEqual([]);
+    expect(missedHandoffs(comments, { cursor: since, since: "2026-11-02T08:30:00Z", m: dev })).toEqual([]);
+  });
+  it("leaves owned items (and their holds) to the backlog, ignores bots and anything after this run began", () => {
+    expect(missedHandoffs([handoff], { cursor: "2026-11-02T07:49:00Z", since, owned: new Set([2573]), m: dev })).toEqual([]);
+    expect(missedHandoffs([c(4, 5, "2026-11-02T07:51:00Z", "<!-- ai-review -->\n→ Dev: fix")], { cursor: "2026-11-02T07:49:00Z", since, m: dev })).toEqual([]);
+    expect(missedHandoffs([c(5, 5, "2026-11-02T07:53:00Z", "CTO: → Dev: later one.")], { cursor: "2026-11-02T07:49:00Z", since, m: dev })).toEqual([]);
+  });
+  it("is bounded: no saved cursor recovers nothing, and an old cursor looks back at most a day", () => {
+    expect(missedHandoffs([handoff], { cursor: null, since, m: dev })).toEqual([]);
+    const old = c(6, 5, new Date(Date.parse(since) - HANDOFF_LOOKBACK_MS - 60_000).toISOString(), "CTO: → Dev: stale.");
+    expect(missedHandoffs([old, handoff], { cursor: "2026-10-01T00:00:00Z", since, m: dev }).map((x) => x.id)).toEqual([1]);
+  });
+  it("reads newest-first pages only until it passes the window, at most five", async () => {
+    const calls: string[] = [];
+    const rows = (page: number) => Array.from({ length: 100 }, (_, k) => c(page * 1000 + k, 1, new Date(Date.parse(since) - (page * 100 + k) * 1000).toISOString(), "x"));
+    const api = async (path: string) => { calls.push(path); return rows(Number(/[?&]page=(\d+)/.exec(path)![1])); };
+    await commentsSince(api, "o/r", new Date(Date.parse(since) - 250 * 1000).toISOString());
+    expect(calls.length).toBe(2);
+    calls.length = 0;
+    await commentsSince(api, "o/r", "2026-01-01T00:00:00Z");
+    expect(calls.length).toBe(5);
   });
 });
 

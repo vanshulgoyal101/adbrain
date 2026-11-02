@@ -471,27 +471,70 @@ export function skillsFor(map, title, labels = []) {
 const BOT_MARKERS = ["<!-- ai-review -->", "<!-- core-scoreboard -->"];
 
 const PAGE = 100;
+
+/** How far back a restarted waiter looks for handoffs missed between runs (#2576). */
+export const HANDOFF_LOOKBACK_MS = 24 * 3_600_000;
+/** The poll cursor is saved this far behind the request, so clock skew can't drop a comment (ids dedupe). */
+export const CURSOR_SKEW_MS = 120_000;
+const issueOf = (comment) => Number((comment.issue_url ?? "").split("/").pop());
+
+/**
+ * #2576: comments addressed to you that landed between two waiter runs, on items you don't own (owned items,
+ * holds included, are the backlog's job). The window is [saved cursor, this run's start), at most a day back;
+ * with no saved cursor there is nothing to recover. Already-reported ids never wake twice.
+ * @param {Array<{ id: number, body?: string, created_at?: string, issue_url?: string }>} comments
+ * @param {{ cursor: string | null, since: string, ids?: Set<number>, owned?: Set<number>, m: ReturnType<typeof matchers> }} state
+ */
+export function missedHandoffs(comments, { cursor, since, ids = new Set(), owned = new Set(), m }) {
+  if (!cursor) return [];
+  const from = new Date(Math.max(Date.parse(cursor), Date.parse(since) - HANDOFF_LOOKBACK_MS)).toISOString();
+  return comments.filter((c) => {
+    const body = c.body ?? "";
+    const at = c.created_at ?? "";
+    return at >= from && at < since && !ids.has(c.id) && !owned.has(issueOf(c))
+      && !BOT_MARKERS.some((marker) => body.startsWith(marker)) && !m.writtenByMe(body) && m.addressedToMe(body);
+  }).sort((a, b) => (a.created_at ?? "").localeCompare(b.created_at ?? ""));
+}
+
+/**
+ * Repo-wide comments created at or after `from`, newest first, at most `maxPages` pages (bounded API budget).
+ * @param {(path: string) => Promise<any>} api
+ * @param {string} repo
+ * @param {string} from
+ */
+export async function commentsSince(api, repo, from, maxPages = 5) {
+  const all = [];
+  for (let page = 1; page <= maxPages; page++) {
+    const rows = (await api(`repos/${repo}/issues/comments?since=${from}&sort=created&direction=desc&per_page=${PAGE}&page=${page}`)) ?? [];
+    all.push(...rows);
+    if (rows.length < PAGE || (rows.at(-1)?.created_at ?? "") < from) break;
+  }
+  return all;
+}
 /**
  * #2576: the latest word on an owned item. GitHub lists issue comments oldest first (sort/direction are
- * ignored), so read the page holding the newest comment (from the item's `comments` count), step back if
- * deletions emptied it, and keep reading while a page is full (a comment may land after the count was taken).
- * Every review page is read: reviews have no count on the issue list.
+ * ignored), so read the page holding the newest comment (from the item's `comments` count) and keep reading
+ * while a page is full (a comment may land after the count was taken). Then step back a page at a time while
+ * nothing read counts as a word: deletions emptied it, or it holds only bot posts. Every review page is read:
+ * reviews have no count on the issue list.
  * @param {(path: string) => Promise<any>} api
  * @param {string} repo
  * @param {{ number: number, comments?: number, pull_request?: unknown }} item
  */
 export async function lastWordOn(api, repo, item) {
-  const pages = async (path, first) => {
+  const read = async (path, page) => (await api(`${path}?per_page=${PAGE}&page=${page}`)) ?? [];
+  const pages = async (path, first, counts) => {
     let page = first;
-    let rows = await api(`${path}?per_page=${PAGE}&page=${page}`) ?? [];
-    while (!rows.length && page > 1) rows = await api(`${path}?per_page=${PAGE}&page=${--page}`) ?? [];
+    let rows = await read(path, page);
     let all = rows;
-    while (rows.length === PAGE) { rows = await api(`${path}?per_page=${PAGE}&page=${++page}`) ?? []; all = all.concat(rows); }
+    while (rows.length === PAGE) { rows = await read(path, ++page); all = all.concat(rows); }
+    for (let back = first - 1; back >= 1 && !all.some(counts); back--) all = (await read(path, back)).concat(all);
     return all;
   };
+  const human = (c) => !BOT_MARKERS.some((marker) => (c.body ?? "").startsWith(marker));
   // No count (not from the issue list) means unknown, not none: start at page 1.
-  const comments = item.comments === 0 ? [] : await pages(`repos/${repo}/issues/${item.number}/comments`, Math.max(1, Math.ceil((item.comments ?? 1) / PAGE)));
-  const reviews = item.pull_request ? await pages(`repos/${repo}/pulls/${item.number}/reviews`, 1) : [];
+  const comments = item.comments === 0 ? [] : await pages(`repos/${repo}/issues/${item.number}/comments`, Math.max(1, Math.ceil((item.comments ?? 1) / PAGE)), human);
+  const reviews = item.pull_request ? await pages(`repos/${repo}/pulls/${item.number}/reviews`, 1, () => true) : [];
   return latestWord(comments, reviews);
 }
 
@@ -689,15 +732,23 @@ async function findWork() {
   }
   // One repo-wide call (newest first) instead of one call per updated issue.
   const coOwned = new Set(mine.filter(item => (item.labels ?? []).filter(l => l.name.startsWith("owner:")).length > 1).map(item => item.number));
+  const polledAt = Date.now();
+  seenWorld ??= loadSeen();
   for (const comment of freshComments(await api(`repos/${repo}/issues/comments?since=${since}&sort=created&direction=desc&per_page=100`), since)) {
     const number = Number(comment.issue_url.split("/").pop());
     const body = comment.body ?? "";
     if (writtenByMe(body)) continue;
     // #1478: on a co-owned issue, a comment wakes you only when it names you.
     if (coOwned.has(number) && !addressedToMe(body)) continue;
+    if (seenWorld.handoffs.has(comment.id)) continue;
     if (mineNumbers.has(number) || addressedToMe(body) || linkedToMine.has(number)) {
+      if (addressedToMe(body)) seenWorld.handoffs.add(comment.id);
       found.push(`#${number} new comment: "${brief(body)}" ${comment.html_url}`);
     }
+  }
+  if (!values.probe) {
+    const cursor = new Date(Math.max(Date.parse(since), polledAt - CURSOR_SKEW_MS)).toISOString();
+    if (cursor !== seenWorld.cursor || found.length) { seenWorld.cursor = cursor; saveSeen(seenWorld); }
   }
   if (role === "cto" || role === "devops") {
     const runs = (await api(`repos/${repo}/actions/runs?status=completed&created=${encodeURIComponent(`>=${since}`)}&per_page=100`)).workflow_runs ?? [];
@@ -718,13 +769,27 @@ async function findWork() {
 const stateFile = () => join(tmpdir(), `adbrain-wait-for-work-${role}.seen.json`);
 function loadSeen() {
   try {
-    const { red = [], reached = [] } = JSON.parse(readFileSync(stateFile(), "utf8"));
-    return { red: new Set(red), reached: new Set(reached), fresh: false };
-  } catch { return { red: new Set(), reached: new Set(), fresh: true }; }
+    const { red = [], reached = [], cursor = null, handoffs = [] } = JSON.parse(readFileSync(stateFile(), "utf8"));
+    return { red: new Set(red), reached: new Set(reached), cursor, handoffs: new Set(handoffs), fresh: false };
+  } catch { return { red: new Set(), reached: new Set(), cursor: null, handoffs: new Set(), fresh: true }; }
 }
 const saveSeen = (seen) => {
-  try { writeFileSync(stateFile(), JSON.stringify({ red: [...seen.red].slice(-200), reached: [...seen.reached].slice(-200) })); } catch { /* best effort */ }
+  try {
+    writeFileSync(stateFile(), JSON.stringify({ red: [...seen.red].slice(-200), reached: [...seen.reached].slice(-200),
+      cursor: seen.cursor, handoffs: [...seen.handoffs].slice(-200) }));
+  } catch { /* best effort */ }
 };
+// #2576: handoffs to you on items you don't own, posted after your last poll and before this run began.
+async function recoverHandoffs(seen) {
+  const mine = new Set((await owned()).map((item) => item.number));
+  const from = seen.cursor ? new Date(Math.max(Date.parse(seen.cursor), Date.parse(since) - HANDOFF_LOOKBACK_MS)).toISOString() : null;
+  const missed = from ? missedHandoffs(await commentsSince(api, repo, from), { cursor: seen.cursor, since, ids: seen.handoffs, owned: mine, m }) : [];
+  for (const c of missed) seen.handoffs.add(c.id);
+  seen.cursor = since;
+  saveSeen(seen);
+  // Not "#N …" first: the exit-6 report keeps only non-"#N" lines beside your top owned items.
+  return missed.map((c) => `Addressed to you while the waiter was off, on #${issueOf(c)}: "${brief(c.body ?? "")}" ${c.html_url}`);
+}
 // Narrow, slow-changing reads so ETag 304s keep a 60-second poll cheap for twelve chats.
 const sharedPushRuns = async () => (await Promise.all(SHARED_BRANCHES.map((branch) =>
   api(`repos/${repo}/actions/runs?branch=${branch}&event=push&per_page=20`)))).flatMap((page) => page.workflow_runs ?? []);
@@ -850,6 +915,7 @@ try {
     }
   }
   const waiting = await backlog();
+  if (!values.probe) waiting.push(...await recoverHandoffs(seenWorld ??= loadSeen()));
   if (role === "cto") {
     const low = lowQueues(await openItems());
     // Outcome first (CEO, #364 Oct 29; AGENTS.md Oct 30): a thin queue is not work by itself, so it's shown at

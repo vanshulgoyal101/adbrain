@@ -175,7 +175,7 @@ jobs:
             if [ "$opened" -ge 5 ]; then waiting=$((waiting + 1)); continue; fi
             opened=$((opened + 1))
             last=$(gh issue create -R "$GITHUB_REPOSITORY" -l core -l waiting-owner -t "Facebook access request ($key)" \
-              -b "$(printf 'An outside owner tapped **Ask for Facebook access** %s h ago. The app told them: we will WhatsApp you within a working day.\n\n→ CEO: ask the owner to add them as a Tester on the Meta app (#679), then WhatsApp them.\nFind their name, business and WhatsApp number (key %s): docs/operations/scheduled-jobs.md#scheduled-jobs\nRun: %s/%s/actions/runs/%s\n' "$hours" "$key" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")")
+              -b "$(printf 'An outside owner tapped **Ask for Facebook access** %s h ago. The app told them: we will WhatsApp you within a working day.\n\n→ CEO: WhatsApp them privately about this request and where Meta App Review stands (#156); do not promise Facebook connect works yet.\nFind their name, business and WhatsApp number (key %s): docs/operations/scheduled-jobs.md#scheduled-jobs\nRun: %s/%s/actions/runs/%s\n' "$hours" "$key" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")")
           done
           if [ -n "$last" ] && [ "$waiting" -gt 0 ]; then
             gh issue comment "$last" -R "$GITHUB_REPOSITORY" --body "$waiting more access requests are waiting; the next runs open them."
