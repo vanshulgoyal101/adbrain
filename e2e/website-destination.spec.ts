@@ -1,12 +1,15 @@
 import { test, expect, type BrowserContext, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import { signInBrowser } from "../scripts/lib/test-session.mjs";
+import recorded from "../tests/core/fixtures/meta/launch-validate-website.json";
+import { MetaClient } from "@/lib/meta/client";
 
 /**
  * #2595 phase 1 acceptance: an owner sends ads to their website, and WhatsApp (the default) is unchanged.
  * Meta is never reached: connection, preflight and create are answered at the API boundary, so nothing spends.
  * The real draft API and local database store the input, so the draft contract is checked as saved.
- * The validate_only launch payload itself is proven by tests/core/launch-validate-website.test.ts (#2598).
+ * The launch step runs the real Meta adapter on the owner's Review choices with only Graph stubbed, and every
+ * payload must equal one Meta accepted with validate_only (tests/core/fixtures/meta/launch-validate-website.json).
  * Done when slices C (#2599, preflight) and D (#2600, composer and Review) are on next.
  */
 
@@ -97,6 +100,60 @@ async function openComposer(page: Page, headline: string, width: number) {
   await page.locator("#budget").fill("400");
 }
 
+type Exchange = { kind: string; form: Record<string, string>; status: number; body: unknown };
+const tape = recorded.tape as unknown as Exchange[];
+const LAUNCH_KINDS = ["campaigns", "adsets", "adcreatives", "ads"];
+const IDS: Record<string, string> = { campaigns: "CAMPAIGN", adsets: "ADSET", adcreatives: "CREATIVE", ads: "AD" };
+
+/**
+ * The payloads the Meta adapter sends for the owner's link and button. Graph is stubbed in this test process only:
+ * nothing leaves the machine, so nothing spends. Inputs other than link and button are the taped ones.
+ */
+async function launchPayloads(link: string, websiteCta: string) {
+  const sent: { kind: string; form: Record<string, string> }[] = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = new URL(String(input));
+    if (url.hostname !== "graph.facebook.com") return new Response(new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]));
+    if ((init?.method ?? "GET") !== "POST") {
+      if (url.searchParams.get("type") === "adgeolocationmeta") return Response.json(recorded.geoMeta.body, { status: recorded.geoMeta.status });
+      throw new Error(`Unexpected Graph read during the website launch: ${url.pathname}`);
+    }
+    const kind = url.pathname.split("/").pop()!;
+    if (kind === "adimages") return Response.json({ images: { image: { hash: "FEED_HASH" } } });
+    sent.push({ kind, form: Object.fromEntries([...(init!.body as URLSearchParams)].filter(([key]) => key !== "access_token")) });
+    return Response.json({ id: IDS[kind] });
+  }) as typeof fetch;
+  try {
+    const inputs = recorded.inputs;
+    const meta = new MetaClient({ adAccountId: "act_ACCOUNT", pageId: "PAGE", accessToken: "test-token" });
+    await meta.createLeadCampaign({
+      name: inputs.name, dailyBudgetRupees: inputs.dailyBudgetRupees, link, ageMin: inputs.ageMin, ageMax: inputs.ageMax,
+      gender: inputs.gender as "all", location: inputs.location, interests: inputs.interests,
+      creatives: [{ imageUrl: "https://adbrain.vanshul.com/solar-example.jpg", ...inputs.creative, cta: websiteCta }],
+      destination: "website",
+    });
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+  return sent;
+}
+
+/** What Meta accepted with validate_only for this button, moved to the owner's link. */
+function acceptedFor(link: string, websiteCta: string) {
+  const type = websiteCta.toUpperCase();
+  const accepted = (kind: string) => {
+    const exchange = tape.find(e => e.kind === kind)!;
+    expect(exchange, kind).toMatchObject({ status: 200, body: { success: true } });
+    return exchange.form;
+  };
+  const creative = accepted(type === "LEARN_MORE" ? "adcreatives" : `adcreatives-cta-${type}`);
+  const story = JSON.parse(creative.object_story_spec);
+  story.link_data.link = link;
+  story.link_data.call_to_action = { type, value: { link } };
+  return LAUNCH_KINDS.map(kind => ({ kind, form: kind === "adcreatives" ? { ...creative, object_story_spec: JSON.stringify(story) } : accepted(kind) }));
+}
+
 const reviewPanel = (page: Page) => page.locator("div").filter({ has: page.getByRole("heading", { name: "Campaign review" }) }).last();
 const fitsWidth = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth);
 
@@ -137,6 +194,11 @@ for (const width of [1440, 390]) {
       expect(seen.create).toEqual([expect.objectContaining({ businessId, draftId: seen.preflight[0].draftId, draftVersion: seen.preflight[0].draftVersion, planHash, connectionGeneration: 1 })]);
       expect(seen.unexpected).toEqual([]);
       expect(await fitsWidth(page)).toBe(true);
+
+      // The launch for what Review passed: a paused website-visits campaign, exactly as Meta accepted with validate_only.
+      const sent = await launchPayloads(website, String(input.websiteCta));
+      expect(sent).toEqual(acceptedFor(website, "shop_now"));
+      expect(sent.filter(s => "status" in s.form).map(s => s.form.status)).toEqual(["PAUSED", "PAUSED", "PAUSED"]);
     } finally {
       await cleanup(seen);
     }
