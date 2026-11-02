@@ -7,7 +7,7 @@ import { Status } from "@/components/ui/status";
 import { AssetTile, slugify } from "@/components/assets-library";
 import { MediaUploadSheet, useMediaUploads } from "@/components/media-upload";
 import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
-import type { Codec, UploadDeps } from "@/lib/media/client-upload";
+import { UPLOAD_WORDS, type Codec, type UploadDeps } from "@/lib/media/client-upload";
 import type { MediaView } from "@/lib/media/store";
 import type { BrandAsset, CreativePreview } from "@/lib/types";
 
@@ -217,7 +217,7 @@ export function MediaLibrary({ business, media: initialMedia, creatives, brandAs
       )}
       {deleteError && <p role="alert" className="text-sm text-red-700">{deleteError}</p>}
       {uploads.progress && !sheetOpen && (
-        <p role="status" className="text-sm text-slate-700">{uploads.progress} <span className="text-slate-500">You can keep going; uploads finish in the background.</span></p>
+        <p role="status" className="text-sm text-slate-700">{uploads.progress} <span className="text-slate-500">{UPLOAD_WORDS.keepOpen}</span></p>
       )}
       <MediaUploadSheet open={sheetOpen} onOpenChange={setSheetOpen} uploads={uploads} businessId={business.id} vertical={business.vertical}
         consented={rightsDone} onConsented={() => setRightsDone(true)} />

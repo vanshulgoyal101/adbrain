@@ -12,7 +12,11 @@ import type { MediaView } from "@/lib/media/store";
 import { createClient } from "@/lib/supabase/client";
 
 type ItemStatus = "checking" | "ready" | "refused" | "uploading" | "added" | "duplicate" | "failed";
-export type UploadItem = { key: string; name: string; status: ItemStatus; message: string | null; prepared?: Prepared };
+export type UploadItem = { key: string; name: string; status: ItemStatus; message: string | null; prepared?: Prepared; thumb?: string };
+
+// Owners don't recognise "IMG_2041.jpg", so each pick shows its own picture (Designer, #1973 review item 2).
+const thumbFor = (file: File) => typeof URL.createObjectURL === "function" ? URL.createObjectURL(file) : undefined;
+const dropThumb = (item: UploadItem) => { if (item.thumb) URL.revokeObjectURL(item.thumb); };
 
 const defaultDeps = (): UploadDeps => ({
   fetch: (...args) => fetch(...args),
@@ -33,6 +37,9 @@ export function useMediaUploads({ businessId, onAdded, deps, codec }: {
   const [limitNote, setLimitNote] = useState<string | null>(null);
   const [batch, setBatch] = useState({ total: 0, done: 0, running: 0 });
   const counter = useRef(0);
+  const live = useRef<UploadItem[]>([]);
+  live.current = items;
+  useEffect(() => () => live.current.forEach(dropThumb), []);
   const update = useCallback((key: string, change: Partial<UploadItem>) => {
     setItems((current) => current.map((item) => item.key === key ? { ...item, ...change } : item));
   }, []);
@@ -40,9 +47,13 @@ export function useMediaUploads({ businessId, onAdded, deps, codec }: {
   const pick = useCallback(async (files: File[]) => {
     const chosen = files.slice(0, MEDIA_PICK_MAX);
     setLimitNote(files.length > MEDIA_PICK_MAX ? UPLOAD_WORDS.limitCount(MEDIA_PICK_MAX) : null);
-    const fresh = chosen.map((file) => ({ file, item: { key: `pick-${++counter.current}`, name: file.name, status: "checking" as const, message: null } }));
+    const fresh = chosen.map((file) => ({ file, item: { key: `pick-${++counter.current}`, name: file.name, status: "checking" as const, message: null, thumb: thumbFor(file) } }));
     // Finished uploads drop off the sheet when the owner picks again; anything waiting or failed stays.
-    setItems((current) => [...current.filter((item) => item.status !== "added" && item.status !== "duplicate"), ...fresh.map(({ item }) => item)]);
+    setItems((current) => {
+      const done = (item: UploadItem) => item.status === "added" || item.status === "duplicate";
+      current.filter(done).forEach(dropThumb);
+      return [...current.filter((item) => !done(item)), ...fresh.map(({ item }) => item)];
+    });
     await Promise.all(fresh.map(async ({ file, item }) => {
       try {
         const prepared = await prepareImage(file, codec);
@@ -92,6 +103,7 @@ function ItemLine({ item, onRetry }: { item: UploadItem; onRetry: () => void }) 
   const tone = item.status === "refused" || item.status === "failed" ? "text-red-700" : item.status === "added" ? "text-emerald-700" : usableWithLimits ? "text-amber-800" : "text-slate-600";
   return (
     <li className="flex items-start gap-3 py-2">
+      {item.thumb && <img src={item.thumb} alt="" className="h-11 w-11 shrink-0 rounded-md bg-slate-100 object-cover" />}
       <span className="mt-0.5 shrink-0" aria-hidden="true">
         {item.status === "added" || item.status === "duplicate" ? <Check className="h-4 w-4 text-emerald-600" />
           : item.status === "refused" || item.status === "failed" ? <TriangleAlert className="h-4 w-4 text-red-600" />
@@ -133,6 +145,8 @@ export function MediaUploadSheet({ open, onOpenChange, uploads, businessId, vert
   const ready = uploads.items.filter((item) => item.status === "ready");
   const busy = uploads.items.some((item) => item.status === "uploading" || item.status === "checking");
   const progress = uploads.progress;
+  // The rights tick comes first; Add stays off until it's ticked (Designer, #1973 review item 1).
+  const needsTick = !consented && !mediaConsentComplete(consent, vertical);
 
   async function next() {
     setError(null);
@@ -182,19 +196,20 @@ export function MediaUploadSheet({ open, onOpenChange, uploads, businessId, vert
             <ImagePlus className="h-4 w-4" aria-hidden="true" /> Choose photos
           </button>
           {uploads.limitNote && <p className="text-sm text-amber-800">{uploads.limitNote}</p>}
+          {!consented && <MediaRightsConsent vertical={vertical} value={consent} onChange={setConsent} />}
           {uploads.items.length > 0 && (
             <ul aria-label="Your picks" className="divide-y divide-slate-100">
               {uploads.items.map((item) => <ItemLine key={item.key} item={item} onRetry={() => void uploads.send([item])} />)}
             </ul>
           )}
-          {!consented && ready.length > 0 && <MediaRightsConsent vertical={vertical} value={consent} onChange={setConsent} />}
           {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
           {progress && (
             <p role="status" className="text-sm text-slate-700">
-              {progress} <span className="text-slate-500">You can close this box. Stay on this page until it finishes.</span>
+              {progress} <span className="text-slate-500">{UPLOAD_WORDS.keepOpen}</span>
             </p>
           )}
-          <button type="button" onClick={() => void next()} disabled={!ready.length || saving || busy}
+          {needsTick && ready.length > 0 && <p className="text-sm text-slate-600">{UPLOAD_WORDS.rightsRequired}</p>}
+          <button type="button" onClick={() => void next()} disabled={!ready.length || saving || busy || needsTick}
             className="inline-flex min-h-11 items-center justify-center rounded-md bg-blue-600 px-4 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">
             {addLabel(ready.length)}
           </button>
