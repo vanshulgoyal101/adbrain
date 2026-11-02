@@ -14,7 +14,7 @@ const base: VerdictInput = { destination: "whatsapp", status: "active", liveSinc
   opens: 40, waiting: 0, weakAd: null, comparison: null, now: NOW };
 function card(change: Partial<VerdictInput>, props: Partial<React.ComponentProps<typeof CampaignVerdict>> = {}) {
   const input = { ...base, ...change };
-  return render(<CampaignVerdict verdict={verdict(input)} whatsapp={input.destination === "whatsapp"} results={input.results} spend={input.spend}
+  return render(<CampaignVerdict verdict={verdict(input)} destination={input.destination} results={input.results} spend={input.spend}
     details={<p>Impressions 5,000</p>} adsManagerUrl="https://adsmanager.facebook.com/x" {...props} />);
 }
 const region = () => within(screen.getByRole("group", { name: "How it's going" }));
@@ -118,7 +118,7 @@ describe("<CampaignVerdict> in Hindi (#1438)", () => {
   it("reports button taps separately from no chats in Hindi", () => {
     const words = { locale: "hi" as const, messages: hi.verdict };
     const input = { ...base, results: 0, spend: 450, opens: 38 };
-    render(<CampaignVerdict verdict={verdict(input, words)} words={words} whatsapp results={input.results} spend={input.spend} details={<p>x</p>} />);
+    render(<CampaignVerdict verdict={verdict(input, words)} words={words} destination="whatsapp" results={input.results} spend={input.spend} details={<p>x</p>} />);
     const group = within(screen.getByRole("group", { name: "कैसा चल रहा है" }));
     expect(group.getByText("₹450 खर्च हुए, अभी तक कोई चैट नहीं। WhatsApp बटन पर 38 टैप हुए।")).toBeInTheDocument();
   });
@@ -126,7 +126,7 @@ describe("<CampaignVerdict> in Hindi (#1438)", () => {
   it("names the group, the number line, the action and Details in Hindi", () => {
     const words = { locale: "hi" as const, messages: hi.verdict };
     const input = { ...base, waiting: 1 };
-    render(<CampaignVerdict verdict={verdict(input, words)} words={words} whatsapp results={input.results} spend={input.spend} details={<p>x</p>} />);
+    render(<CampaignVerdict verdict={verdict(input, words)} words={words} destination="whatsapp" results={input.results} spend={input.spend} details={<p>x</p>} />);
     const group = within(screen.getByRole("group", { name: "कैसा चल रहा है" }));
     expect(group.getByText(/^1 व्यक्ति आपके जवाब का इंतज़ार कर रहा है। हर चैट ₹150 की पड़ रही है।$/)).toBeInTheDocument();
     expect(group.getByText("प्रति चैट · 10 चैट, ₹1,500 खर्च")).toBeInTheDocument();

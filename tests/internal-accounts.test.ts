@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { INTERNAL_DOMAINS, INTERNAL_USER_IDS, internalUserIdsSql, isInternalUserSql, loginAuth, loginSessionProblem, makesFreePictures } from "../scripts/lib/internal-accounts.mjs";
+import { INTERNAL_DOMAINS, INTERNAL_USER_IDS, internalUserIdsSql, isInternalUserSql, makesFreePictures, testLoginEmails } from "../scripts/lib/internal-accounts.mjs";
 import internal from "@/lib/internal-accounts.json";
 import { isExemptFromFreeProviders, isInternalUser } from "@/lib/internal-accounts";
 import { eventsSql } from "../scripts/product-events.mjs";
@@ -17,6 +17,22 @@ describe("internal accounts (#379)", () => {
     expect(sql).toContain("lower(coalesce(u.email, '')) = any(array['smoke@example.com','o''brien@example.com']::text[])");
     expect(isInternalUserSql("x", [])).toContain("array[]::text[]");
     expect(internalUserIdsSql([])).toMatch(/^select u\.id from auth\.users u where /);
+  });
+
+  it("counts reserved test domains as internal in reports (#2538), matched as whole domain labels", () => {
+    const sql = isInternalUserSql("u", []);
+    const pattern = new RegExp(sql.match(/~ '([^']+)'/)![1]);
+    for (const domain of ["example.com", "example.org", "mail.example.net", "qa.test", "x.invalid", "localhost", "a.example"]) {
+      expect(pattern.test(domain), domain).toBe(true);
+    }
+    for (const domain of ["gmail.com", "myexample.com", "example.co.in", "contest.in", "testing.com"]) {
+      expect(pattern.test(domain), domain).toBe(false);
+    }
+  });
+
+  it("takes every test login's email from .env.smoke (#2538)", () => {
+    expect(testLoginEmails({ SMOKE_EMAIL: "s@x.in", PROSPECT_BIO3_EMAIL: "p@x.in", SMOKE_PASSWORD: "pw", EMPTY_EMAIL: "" }))
+      .toEqual(["s@x.in", "p@x.in"]);
   });
 });
 
@@ -39,30 +55,6 @@ describe("smoke Create free-pictures check (#2145)", () => {
     expect(makesFreePictures(null)).toBe(false);
     expect(makesFreePictures({ email: "qa@adbrain.vanshul.com", email_confirmed_at: confirmed })).toBe(false);
     for (const { userId } of internal.exemptFromFreeProviders) expect(makesFreePictures({ id: userId, email: "x@adbrain.vanshul.com", email_confirmed_at: confirmed })).toBe(false);
-  });
-});
-
-describe("smoke sign-in identity (#2396)", () => {
-  const user = { id: internal.smokeUserIds[0], email: "smoke@adbrain.vanshul.com", email_confirmed_at: "2026-10-01T00:00:00Z" };
-  const login = { status: 200, supabase: "https://x.supabase.co", apikey: "anon", body: { access_token: "tok", user } };
-
-  it("keeps the captured session so the free-pictures check sees the real user", () => {
-    expect(loginAuth(login)).toEqual({ supabase: "https://x.supabase.co", apikey: "anon", token: "tok", user });
-    expect(makesFreePictures(loginAuth(login)?.user)).toBe(true);
-    expect(loginSessionProblem(login)).toBe("ok");
-  });
-
-  it.each([
-    [null, "sign-in response not captured"],
-    [{ ...login, status: 400 }, "sign-in HTTP 400"],
-    [{ ...login, body: null }, "sign-in body unreadable"],
-    [{ ...login, apikey: undefined }, "no apikey on the sign-in request"],
-    [{ ...login, body: { user } }, "no access token"],
-    [{ ...login, body: { access_token: "tok", user: { email: user.email } } }, "no user id"],
-  ])("fails closed on %o", (bad, problem) => {
-    expect(loginAuth(bad)).toBeNull();
-    expect(makesFreePictures(loginAuth(bad)?.user)).toBe(false);
-    expect(loginSessionProblem(bad)).toBe(problem);
   });
 });
 

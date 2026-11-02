@@ -4,11 +4,13 @@ import { describeServiceArea } from "@/lib/meta/service-area";
 import { effectiveDailyBudget } from "@/lib/campaign/spend";
 import type { DraftInput, ReviewDTO } from "@/lib/campaign/connect-contracts";
 import type { ReviewBlockerReason, SelectedAssets } from "@/lib/meta/connect-contracts";
-import { normalizeWebsite } from "@/lib/brand/validation";
-import { askMismatchWarning, QUOTED_ASK_WITH_QUESTIONS, reviewWarnings, WHATSAPP_PICTURE_ON_FORM } from "@/lib/campaign/plan-check";
+import { askMismatchWarning, QUOTED_ASK_WITH_QUESTIONS, reviewWarnings, WHATSAPP_PICTURE_ON_FORM, WHATSAPP_PICTURE_ON_WEBSITE, type ReviewDestination } from "@/lib/campaign/plan-check";
 import { quotedAsk, sameWords } from "@/lib/campaign/whatsapp-greeting";
 import { batchProofWarning } from "@/lib/creative/proof-line";
 import type { ResolvedWhatsAppMessage } from "@/lib/campaign/whatsapp-template";
+import type { LeadDestination } from "@/lib/types/campaign";
+import type { WebsiteReach } from "@/lib/campaign/website-reach";
+import { isAdvertiserWebsite, websiteAdLink, websiteBlockerMessage } from "@/lib/campaign/website-review";
 
 /** #1799: Meta's minimum daily budget per impression-billed ad set in INR (₹95.46, Oct 29), rounded up. */
 export const META_MIN_DAILY_BUDGET_RUPEES = 96;
@@ -71,6 +73,8 @@ export interface PreflightInput {
   brandFacts?: string[];
   /** Business website; undefined when the caller does not check it. */
   website?: string | null;
+  /** #2599: whether a website ad's link opens the advertiser's own site; a website ad without it is blocked. */
+  websiteReach?: WebsiteReach;
   geo: PreflightGeo;
   hash: (payload: string) => string;
   /** The business's own cost per chat or lead for this kind of campaign (#419 2b); unknown when absent. */
@@ -105,8 +109,9 @@ export interface CanonicalReviewPayload {
   creativeIds: string[];
   creatives: ReturnType<typeof buildCreativeReviewPayload>;
   leadFormId: string | null;
-  destination: "instant_form" | "whatsapp";
+  destination: Exclude<LeadDestination, "call" | "website">;
   whatsappNumber: string | null;
+  websiteUrl?: string | null;
   dailyBudgetRupees: number;
   abTest: boolean;
   excludeFacebookReels?: true;
@@ -171,14 +176,9 @@ function named(names: string[]): string {
   return shown.length > 1 ? `${shown.slice(0, -1).join(", ")} and ${shown.at(-1)}${more}` : `${shown[0]}${more}`;
 }
 
-function isAdvertiserWebsite(website: string | null): boolean {
-  // Brands saved before #470 may hold a bare domain.
-  const normalized = normalizeWebsite(website);
-  if (!normalized) return false;
-  const url = new URL(normalized);
-  const host = url.hostname.toLowerCase().replace(/^www\./, "");
-  return (url.protocol === "https:" || url.protocol === "http:") &&
-    !["facebook.com", "fb.com", "fb.me", "instagram.com", "m.me", "wa.me"].some((blocked) => host === blocked || host.endsWith(`.${blocked}`));
+/** The destination Review checks; a draft saved before destinations existed is a form campaign. */
+function reviewDestination(draft: DraftInput): ReviewDestination {
+  return draft.destination ?? "instant_form";
 }
 
 function canonicalize(value: unknown): unknown {
@@ -208,9 +208,11 @@ export function buildCanonicalReviewPayload(
     selected: input.connection?.selected ?? null,
     creativeIds: [...input.draft.creativeIds].sort(),
     creatives: buildCreativeReviewPayload(input.creatives),
-    leadFormId: input.draft.destination === "whatsapp" ? null : input.draft.leadFormId,
+    leadFormId: reviewDestination(input.draft) === "instant_form" ? input.draft.leadFormId : null,
     destination: input.draft.destination ?? "instant_form",
     whatsappNumber: input.draft.destination === "whatsapp" ? input.whatsappNumber ?? null : null,
+    // #2599: only for website ads, so other plans keep their hash; a Brand website edit after Review changes the plan.
+    ...(reviewDestination(input.draft) === "website" ? { websiteUrl: websiteAdLink(input.website) } : {}),
     // #493: only when it changes what's sent, so plans reviewed before this field keep their hash.
     ...(input.draft.destination === "whatsapp" && input.draft.whatsappLanguage && input.draft.whatsappLanguage !== "ad"
       ? { whatsappLanguage: input.draft.whatsappLanguage } : {}),
@@ -244,6 +246,7 @@ export function buildCreativeReviewPayload(creatives: PreflightCreative[]) {
 export function runPreflight(input: PreflightInput): ReviewDTO {
   const blockers: ReviewDTO["blockers"] = [];
   const { draft } = input;
+  const destination = reviewDestination(draft);
 
   if (!input.connection?.selected) {
     blockers.push(blocker("SETUP_REQUIRED", "REVIEW_NO_META_CONNECTION", "Connect Facebook and choose your Page and ad account."));
@@ -265,10 +268,16 @@ export function runPreflight(input: PreflightInput): ReviewDTO {
     if (input.whatsappMessageProblem) {
       blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_WHATSAPP_MESSAGE", `Your WhatsApp message: ${input.whatsappMessageProblem}`));
     }
-  } else if (!draft.leadFormId || !input.form || input.form.id !== draft.leadFormId || input.form.businessId !== draft.businessId || !input.form.active) {
+  } else if (destination === "instant_form" && (!draft.leadFormId || !input.form || input.form.id !== draft.leadFormId || input.form.businessId !== draft.businessId || !input.form.active)) {
     blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_NO_LEAD_FORM", "Choose an active lead form from your Facebook Page in the Lead form field."));
   }
-  if (draft.destination !== "whatsapp" && input.website !== undefined && !isAdvertiserWebsite(input.website)) {
+  if (destination === "website") {
+    const websiteProblem = websiteBlockerMessage(input.website ?? null, input.websiteReach);
+    if (websiteProblem) {
+      const reason = websiteProblem.missing ? "REVIEW_NO_WEBSITE" : "REVIEW_WEBSITE_UNREACHABLE";
+      blockers.push(blocker("PREFLIGHT_BLOCKED", reason, websiteProblem.message, { kind: "open_brand" }));
+    }
+  } else if (destination !== "whatsapp" && input.website !== undefined && !isAdvertiserWebsite(input.website)) {
     blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_NO_WEBSITE", "Add your business website on the Your business page. Meta lead ads must link to the advertiser's own website, not Facebook.", { kind: "open_brand" }));
   }
   const policyHit = adPolicyHits(input.creatives, input.vertical)[0];
@@ -316,7 +325,7 @@ export function runPreflight(input: PreflightInput): ReviewDTO {
   const creativeHash = input.hash(JSON.stringify(buildCreativeReviewPayload(input.creatives)));
   const planHash = blockers.length ? null : input.hash(canonicalJson(payload));
   const planWarnings = reviewWarnings({
-    destination: draft.destination ?? "instant_form",
+    destination,
     storyReady: input.creatives.length > 0 && input.creatives.every((creative) => creative.storyReady === true),
     perAdSetDailyBudgetRupees, costPerResultRupees: input.costPerResultRupees,
   });
@@ -336,7 +345,9 @@ export function runPreflight(input: PreflightInput): ReviewDTO {
   const proof = batchProofWarning(input.creatives.map((creative) => [creative.headline, creative.primaryText].filter(Boolean).join("\n")), input.brandFacts ?? []);
   if (proof) planWarnings.push(proof);
   // #1177: the picture says "Message us on WhatsApp" but the button opens a form. Never a blocker.
-  if ((draft.destination ?? "instant_form") !== "whatsapp" && input.creatives.some((creative) => creative.asksWhatsApp)) planWarnings.push(WHATSAPP_PICTURE_ON_FORM);
+  if (destination !== "whatsapp" && input.creatives.some((creative) => creative.asksWhatsApp)) {
+    planWarnings.push(destination === "website" ? WHATSAPP_PICTURE_ON_WEBSITE : WHATSAPP_PICTURE_ON_FORM);
+  }
 
   return {
     draftId: input.draftId,

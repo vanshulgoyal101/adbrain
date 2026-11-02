@@ -140,6 +140,13 @@ exclude entire test directories or suppress uninvestigated findings.
   SQL if the head moved or an approval was withdrawn meanwhile (#2187).
 - **Release a money or migration PR (#228, DevOps):**
   `node scripts/release.mjs --pr <n> --dry-run`, then the same without `--dry-run`.
+  Add `--no-wait` to return after the merge without polling for a deployment (#2472).
+  All approval, checksum, backup and migration gates still run; the receipt explicitly
+  says production smoke is pending, not passed. On the next pass, inspect
+  `gh run list --workflow production-guard.yml --commit <merge-sha> --limit 5`
+  and its completed run log. Rerun without `--no-wait` only after the guard has
+  completed to obtain the verified receipt. This flag skips only deployment waiting;
+  a pending migration still requires the fresh backup before applying.
   Preflight is read-only: the PR targets `main` without conflicts, the required
   checks are green on its head, the latest QA verdict naming that head (or an earlier
   head with the same `git patch-id` against the base, or the same changed lines in order when a
@@ -175,10 +182,18 @@ Vercel Hobby allows 100 production deploys a day, and every push to `main` is on
 (#461). So PRs merge into **`next`**, which Vercel doesn't deploy, and
 [deploy-train.yml](../../.github/workflows/deploy-train.yml) promotes it:
 - On every push to `next` (and at :11/:41 as a backup), if `next` has commits `main`
-  lacks, it waits until 30 minutes after the last train, then requires build, test, core
-  and secrets green on `next`'s exact commit (CI runs on pushes to `next`). Then it opens
-  and merges a `next → main` PR with a merge commit. That's at most 48 deploys a day;
-  each train gets the production guard's smoke.
+  lacks, it waits until 15 minutes after the last train (#2609), then promotes the **newest commit on
+  `next` with build, test, core and secrets all green** (CI runs on every push to `next`), so a
+  tip still in CI doesn't hold back what is green (#2528). Only `next`'s own (first-parent)
+  commits that hold all of `main`'s changes count; red or pending ones are never promoted. It
+  points the bot branch `deploy-train` at that commit and merges a `deploy-train → main` PR
+  with a merge commit. A push (or the schedule) only runs a `kick` job that dispatches the
+  `promote` job on `main` unless one is already waiting, so no train run is ever cancelled
+  and a `next` commit shows a red ✗ only for a real failure. Each successful promotion kicks
+  again, so a commit it left behind gets the next train. Kicks take turns through the
+  `deploy-train-kick-lock` branch (a lock, not a queue); a lock left by a killed kick clears
+  itself when no other kick is running. Running the workflow by hand runs a kick too.
+  That's at most 48 deploys a day; each train gets the production guard's smoke.
 - **Vercel's limit (measured Oct 24, #461):** Hobby's '100 deployments per day'
   refusal (402 `api-deployments-free-per-day`) hit an **API/CLI redeploy**, while
   git-triggered deploys of `main` kept succeeding past 100 in 24 h (12:13, 12:29, 12:48 and
@@ -198,8 +213,8 @@ Vercel Hobby allows 100 production deploys a day, and every push to `main` is on
   once and keeps retrying for up to 10 minutes. A PR CI failure that ran jobs stops the train at once.
 - A red or stuck `next` opens one `Deploy train stuck` issue for DevOps that lists
   the changes on `next` not yet on `main` (the suspects). Fix `next` with a PR to it; production keeps the last train. The promote step's own 93-minute
-  limit leaves its alert time to run. A newer push cancels a waiting train, and a
-  cancelled run alerts nothing, so the scheduled watchdog job opens the same issue
+  limit leaves its alert time to run. A cancelled or killed run alerts nothing, so the
+  scheduled watchdog job opens the same issue
   (once) when a change has waited on `next` for 120 minutes (#2029).
 - [pr-base.yml](../../.github/workflows/pr-base.yml) retargets PRs opened against `main`
   to `next`, except the train itself, PRs labelled `hotfix` or `ready-to-ship`, and PRs

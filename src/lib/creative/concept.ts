@@ -14,6 +14,8 @@ import { policyFindings } from "@/lib/creative/policy-rules";
 import { emptyScene } from "@/lib/creative/visual-rules";
 import { plainDigits, rateDropIssues, spelledAmountIndex, spelledCurrency, spelledRupeeAmounts } from "./currency";
 import { contactsInCopy } from "./contact-in-copy";
+import { repeatIssues } from "./sibling-repeats";
+import { fitHeadline } from "./fit-headline";
 
 export const CONCEPT_VERSION = "creative-concept-v3";
 // Primary text Meta shows on mobile before "See more" (#194).
@@ -278,9 +280,9 @@ function normalizeDraft(value: unknown): unknown {
   };
 }
 
-const foldQuote = (text: string) => text.toLowerCase().replace(/[\u2018\u2019]/g, "'").replace(/[\u201c\u201d]/g, '"');
+const foldQuote = (text: string) => text.toLowerCase().replace(/[\u2018\u2019]/g, "'").replace(/[\u201c\u201d]/g, '"').replace(/[।॥。｡．]/gu, ".");
 
-// A quote that differs from a fact only in case or curly quotes is stored as the fact's exact text.
+// A quote differing from a fact only in case, curly quotes or full-stop mark (#2541: 。 for ।) is stored as the fact.
 function verbatimQuote(quote: string, sources: string[]): string | null {
   if (sources.some((source) => source.includes(quote))) return quote;
   // #713: Haiku prefixed "the" to the owner's "…or cost of the solar installation…" and the ad was lost
@@ -454,28 +456,50 @@ export function copyClaimWarnings(
   return warnings;
 }
 
+const valueAt = (root: unknown, path: PropertyKey[]) => path.reduce<unknown>((node, key) =>
+  (isRecord(node) || Array.isArray(node) ? (node as Record<PropertyKey, unknown>)[key] : undefined), root);
+
 export function validateConcept(
   value: unknown,
   input: ConceptInput,
+  /** #2444: the full texts a length-only failure had cut, put back so every check reads all of them. */
+  uncut: [PropertyKey[], string][] = [],
 ):
   | { success: true; concept: CreativeConcept }
   | { success: false; issues: string[]; claims?: string[] } {
   const draft = normalizeDraft(value);
   const parsed = creativeConceptSchema.safeParse(draft);
   if (!parsed.success) {
-    return {
-      success: false,
-      issues: parsed.error.issues.map((issue) => {
-        const path = issue.path.join(".");
-        const field = path.replace(/\.\d+/g, ".*") || "root";
-        // The repair is told how long the text is, so it knows how much to cut (#281).
-        const text = issue.path.reduce<unknown>((node, key) => (isRecord(node) || Array.isArray(node) ? (node as Record<PropertyKey, unknown>)[key as PropertyKey] : undefined), draft);
-        const length = (issue.code === "too_big" || issue.code === "too_small") && typeof text === "string" ? `; it is ${text.trim().length} characters`
-          : issue.code === "invalid_value" && typeof text === "string" ? `; it is "${text.slice(0, 40)}"` : "";
-        return `schema:${field}:${issue.code}: ${path}: ${issue.message}${length}`;
-      }),
-    };
+    const issues = parsed.error.issues.map((issue) => {
+      const path = issue.path.join(".");
+      const field = path.replace(/\.\d+/g, ".*") || "root";
+      // The repair is told how long the text is, so it knows how much to cut (#281).
+      const text = valueAt(draft, issue.path);
+      const length = (issue.code === "too_big" || issue.code === "too_small") && typeof text === "string" ? `; it is ${text.trim().length} characters`
+        : issue.code === "invalid_value" && typeof text === "string" ? `; it is "${text.slice(0, 40)}"` : "";
+      return `schema:${field}:${issue.code}: ${path}: ${issue.message}${length}`;
+    });
+    // #2444 (QA): a too-long text hid the claim checks, so a draft with an invented offer went back for a targeted
+    // repair. A copy cut to the limits gives the concept's shape; the checks then read the full texts.
+    if (uncut.length || !parsed.error.issues.every((issue) => issue.code === "too_big" && typeof valueAt(draft, issue.path) === "string")) {
+      return { success: false, issues };
+    }
+    const cut = structuredClone(draft);
+    for (const { path, maximum } of parsed.error.issues as { path: PropertyKey[]; maximum?: number | bigint }[]) {
+      const parent = valueAt(cut, path.slice(0, -1)) as Record<PropertyKey, string>;
+      uncut.push([path, parent[path.at(-1)!]]);
+      parent[path.at(-1)!] = parent[path.at(-1)!].trim().slice(0, Number(maximum));
+    }
+    const checked = validateConcept(cut, input, uncut);
+    // #2541: a headline over only by a trailing call to action passed every check in full, so it loses the tail, not
+    // the ad. Its fit is checked again; QA (#2567): the fit's tail patterns are quadratic on long blank runs.
+    const long = issues.length === 1 && parsed.error.issues[0].path.join(".") === "headline" && String(valueAt(draft, ["headline"]));
+    const headline = long && long.length <= 160 ? fitHeadline(long) : null;
+    if (checked.success) return headline ? validateConcept({ ...(draft as object), headline }, input) : { success: false, issues };
+    return { success: false, issues: [...issues, ...checked.issues.filter((issue) => !issue.startsWith("schema:"))], ...(checked.claims ? { claims: checked.claims } : {}) };
   }
+  const data = uncut.length ? structuredClone(parsed.data) : parsed.data;
+  for (const [path, text] of uncut) (valueAt(data, path.slice(0, -1)) as Record<PropertyKey, string>)[path.at(-1)!] = text;
   const sources = [
     input.brand.name,
     input.brand.description,
@@ -486,38 +510,21 @@ export function validateConcept(
     input.instructions ?? "",
     ...(input.sourceFacts ?? []),
   ].filter((value): value is string => typeof value === "string");
-  const quotes = parsed.data.sourceQuotes.map((quote) => ({ quote, verbatim: verbatimQuote(quote, sources) }));
+  const quotes = data.sourceQuotes.map((quote) => ({ quote, verbatim: verbatimQuote(quote, sources) }));
   const verbatimQuotes = quotes.flatMap(({ verbatim }) => (verbatim === null ? [] : [verbatim]));
   // #713: a stray quote beside verbatim ones is dropped, not repaired; claims are still checked against the rest.
   const quoteIssues = verbatimQuotes.length
     ? []
     : quotes.map(({ quote }) => `sourceQuotes: quote not present in supplied facts: ${quote}`);
   const concept = {
-    ...parsed.data,
-    sourceQuotes: verbatimQuotes.length ? verbatimQuotes : parsed.data.sourceQuotes,
+    ...data,
+    sourceQuotes: verbatimQuotes.length ? verbatimQuotes : data.sourceQuotes,
   };
-  const normalizeCopy = (text: string) => text.toLocaleLowerCase().replace(/[^\p{L}\p{M}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
-  const opening = (text: string) => normalizeCopy(text).split(" ").slice(0, 8).join(" ");
   const allowedCaps = capitalWords(sources.join(" "));
-  const issues = scanAdCopy(
-    [concept.headline, concept.primary_text, concept.supportingText]
-      .filter(Boolean)
-      .join(" "),
-    {
-      maxWords: 85,
-      bannedClaims: bannedClaimsForVertical(input.brand.vertical),
-      allowedCaps,
-    },
-  ).map((finding) => `${finding.rule}: ${finding.detail}`);
-  for (const previous of input.recentCopy ?? []) {
-    if (normalizeCopy(concept.headline) === normalizeCopy(previous.headline)) {
-      issues.push(`repeated-headline: "${previous.headline.slice(0, 60)}" is a recent ad's headline; write a different one`);
-    }
-    if (opening(concept.primary_text) === opening(previous.primary_text)) {
-      // #1035: quoting the opening lets the one repair avoid it; "write a different hook" alone repeated it (Oct 27).
-      issues.push(`repeated-opening: a recent ad opens "${previous.primary_text.split(/\s+/).slice(0, 8).join(" ")}"; start primary_text with different words`);
-    }
-  }
+  const issues = scanAdCopy([concept.headline, concept.primary_text, concept.supportingText].filter(Boolean).join(" "), {
+    maxWords: 85, bannedClaims: bannedClaimsForVertical(input.brand.vertical), allowedCaps,
+  }).map((finding) => `${finding.rule}: ${finding.detail}`);
+  issues.push(...repeatIssues(concept, input.recentCopy ?? []));
   issues.push(...scanAdCopy(concept.description, {
     bannedClaims: bannedClaimsForVertical(input.brand.vertical),
     allowedCaps,

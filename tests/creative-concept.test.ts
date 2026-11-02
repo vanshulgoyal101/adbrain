@@ -56,7 +56,8 @@ describe("creative concept contract", () => {
     const result = validateConcept({ ...concept, headline: "x".repeat(41), sourceQuotes: ["ok", ""] }, input);
     expect(result.success).toBe(false);
     const rules = conceptValidationRules(result.success ? [] : result.issues);
-    expect(rules).toEqual(["schema:headline:too_big"]);
+    // #2444: the other checks run on the cut copy, so the invented quote shows up beside the length.
+    expect(rules).toEqual(["schema:headline:too_big", "sourceQuotes"]);
     expect(JSON.stringify(rules)).not.toContain("xxx");
     const withoutLine: Record<string, unknown> = { ...concept };
     delete withoutLine.supportingText;

@@ -25,7 +25,7 @@ not isolation.
 | Classification | Variables | Handling |
 | --- | --- | --- |
 | Public application configuration | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_SITE_URL`, public feature flags | Browser-visible; the public Supabase key is safe only with correct RLS |
-| Privileged backend secret | `SUPABASE_SERVICE_ROLE_KEY`, `META_TOKEN_ENCRYPTION_KEY`, `META_PARENT_SYSTEM_TOKEN`, `CRON_SECRET` | Server/process only; never use public prefixes or expose through diagnostics |
+| Privileged backend secret | `SUPABASE_SERVICE_ROLE_KEY`, `META_TOKEN_ENCRYPTION_KEY`, `META_PARENT_SYSTEM_TOKEN`, `CRON_SECRET`, `GITHUB_DISPATCH_TOKEN` | Server/process only; never use public prefixes or expose through diagnostics |
 | Provider secret | All four `*_API_KEYS` pools, `META_APP_SECRET`, `META_SYSTEM_USER_TOKEN`, `FALAI_API_KEY`, `OPENAI_API_KEY`, Razorpay key/webhook secrets | Can grant paid/external access; least privilege and target-specific storage |
 | Identifier or policy | Model names, provider order, Meta app/config/account/Page IDs, Razorpay key/account IDs, limits and rollout values | Not secrets, but keep tenant/account details out of examples |
 | Login/test fixture material | `DEV_LOGIN_PASSWORD`, `DEMO_USER_PASSWORD`, `ADBRAIN_REVIEWER_PASSWORD` and their emails | Passwords are secrets; emails may be personal data; use synthetic examples |
@@ -50,6 +50,25 @@ settings, credentials and encryption keys are DevOps-owned changes; see the
 | `NEXT_PUBLIC_DEV_AUTH_BYPASS` | Empty; exact `true` outside production | UI identity fallback, not general API authentication |
 | `DEV_LOGIN_EMAIL`, `DEV_LOGIN_PASSWORD` | Empty | Development login credentials |
 | `DEMO_USER_EMAIL` | `demo@adbrain.vanshul.com`, email | Demo identity; not a sandbox guarantee |
+| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | Empty (off); Cloudflare Turnstile site key | Sign-in check on email link and password sign-in (#1777); adds `challenges.cloudflare.com` to CSP `script-src`/`frame-src`. Public; needs a rebuild |
+
+### Sign-in check
+
+Off by default. The site key turns on the browser widget; Supabase only enforces
+it after **Auth → Bot and Abuse Protection** is set to Turnstile with the secret
+key (the secret lives only there). Google sign-in and email-link verification are
+never checked.
+
+- **Before enabling:** the core smoke (`scripts/smoke-core.mjs`), `ui-gate`,
+  `perf-pages`, `check-*`, `seed-demo-clinic` scripts and e2e specs sign in with
+  the password grant and will fail once Supabase enforces the check. Move them to
+  a check-free sign-in first.
+- **Enable:** set the site key in Vercel, redeploy, confirm the widget loads on
+  `/login`, then turn on Supabase CAPTCHA.
+- **Roll back:** turn off Supabase CAPTCHA first, then clear the site key.
+  Supabase on without the site key blocks every email and password sign-in.
+  The key is built in: while Supabase CAPTCHA is on, never promote or roll back
+  to a deployment built before the key was set; turn Supabase CAPTCHA off first.
 
 ## Text Models
 
@@ -117,7 +136,7 @@ lower cost.
 | `META_PARENT_SYSTEM_TOKEN` | Empty | Privileged secret (Vercel Sensitive): the parent's 'AdBrain provisioning' system-user token. Checked read-only after each deploy (`/api/cron/meta-parent-health`); rotation in OPERATIONS |
 | `META_CONNECT_ROLLOUT` | Unset | `disabled`, `pilot`, `enabled`; unset allows nonproduction only |
 | `META_CONNECT_PILOT_USER_ID` | Unset | Exact app user allowed in pilot mode |
-| `META_APP_REVIEW_PENDING` | on | #1989: while Meta App Review (#156) is pending, WS1 step 3 asks a not-yet-Tester owner to accept the app invite before Connect, and offers Try again after a return with nothing connected. Exactly `false` hides it; DevOps sets that once #156 is approved. No secret |
+| `META_APP_REVIEW_PENDING` | on | #1989: while Meta App Review (#156) is pending, WS1 step 3 tells a not-yet-Tester owner that only added people can connect, and after a return with nothing connected sends the access request (#2538) and offers Try again. Exactly `false` hides it; DevOps sets that once #156 is approved. No secret |
 | `META_SYSTEM_USER_TOKEN`, `META_AD_ACCOUNT_ID`, `META_PAGE_ID` | Empty | **Local fixture recording only** (`.env.local`, read by `scripts/lib/meta-env.ts`). The app doesn't read them (#520), and they aren't set in Vercel |
 
 Rollout variables are read directly, outside `getEnv()`. Unknown values deny
@@ -134,9 +153,12 @@ decrypt old tokens; rotation requires a reviewed migration. See
 | Variable | Default / bounds | Meaning |
 | --- | --- | --- |
 | `CRON_SECRET` | Empty disables cron routes with 404 | Scheduled request Bearer secret |
+| `GITHUB_DISPATCH_TOKEN` | Empty makes `/api/cron/dispatch-workflows` a 503 | Fine-grained token, Actions read and write on this repo only (#2593); Vercel only, never in the database |
 | `CAMPAIGN_EXECUTION_MODE` | Unset/`inline` for compatibility; `worker` opts in | Web enqueue vs synchronous creation; unknown nonempty values block creation |
 | `CAMPAIGN_WORKER_TARGET` | Required by standalone worker | Exact Supabase URL origin, explicitly confirms worker target |
 | `TRAFFIC_GENERATOR_ALLOWED_EMAILS` | Empty list | Production: disabled; nonproduction: any signed-in user when empty |
+| `TEST_SESSION_SECRET` | Empty or under 32 characters disables `/api/internal/test-session` (404) | #2574: bearer the smokes send to mint a session; also a GitHub repo secret. Never the service key |
+| `TEST_SESSION_EMAILS` | Empty list disables the route | #2574: the only emails it signs in (dedicated smoke/QA logins only: the smoke and WS1-walk accounts); never an account of an owner or customer business |
 | `TRAFFIC_GENERATOR_MAX_ROUNDS` | `20`, integer 1-100 | Internal runner round cap |
 
 The current internal HTTP runner rejects `createDraftCampaigns=true` with 400;
@@ -178,19 +200,19 @@ GitHub environment secrets; never in an issue. GitHub's and Vercel's own variabl
 
 | Variable | Read by and purpose | Secret |
 | --- | --- | --- |
-| `SMOKE_EMAIL`, `SMOKE_PASSWORD` | `smoke-core.mjs`, `ui-gate.mjs`: the smoke account's login | Password |
-| `SMOKE_ENV_FILE` | `ui-gate.mjs`: path of the smoke env file (default `.env.smoke` in the owner's checkout) | No |
+| `SMOKE_EMAIL` | `smoke-core.mjs`, `ui-gate.mjs`, `perf-pages.mjs`: the smoke account, signed in by a session `scripts/lib/test-session.mjs` mints: through `/api/internal/test-session` with `TEST_SESSION_SECRET` in CI, or with the local `SUPABASE_SERVICE_ROLE_KEY` (no password, so Supabase CAPTCHA can stay on; #2574) | No |
 | `SMOKE_CREATE_CLEANUP` | `smoke-core.mjs`: `1` removes what a Create smoke made | No |
 | `CORE_APPROVAL_TS` | `core-approval.mjs`: path to a pinned `typescript.js` for the words-only check (#364); unset uses the repo's, missing keeps every core file gated | No |
 | `SMOKE_EXPECT_CLOUDFLARE` | `smoke-core.mjs`: `1` fails a Create smoke whose pictures include none from Cloudflare (#2412) | No |
 | `VERCEL_TOKEN` | `production-guard.mjs`: Vercel API for the live SHA and rollback | Yes |
 | `GH_TOKEN`, `GH_REPO` | CI scripts' GitHub token; `wait-for-work.mjs` repository override | Token |
+| `FLAKY_REPORT` | `vitest.config.mts`, `flaky-reporter.mjs`: CI unit job's path for tests that passed only on their retry; `file-flaky.mjs` files them as `flaky` issues (#618) | No |
 | `GROQ_REVIEW_API_KEY` | `ai-review.mjs`: the PR AI review's Groq key, separate from the app's pool | Yes |
 | `ADBRAIN_ALLOW_META_WRITES` | `scripts/lib/meta-write-gate.ts`: `1` lets a `record-meta-*` script make non-GET Graph calls | No |
 | `ADBRAIN_HEADLESS` | Set by `team-supervisor.mjs` for role runs; refuses releases, migrations and Meta writes | No |
 | `ADBRAIN_SUPERVISOR_CLI`, `ADBRAIN_SUPERVISOR_MAX_LOAD`, `ADBRAIN_SUPERVISOR_MIN_FREE_GB` | `team-supervisor.mjs`: the CLI command (JSON array), and the load and free-disk limits for starting a run | No |
 | `TEST_BASE`, `NVM_DIR` | `scripts/test.sh`: the ref `--changed` diffs against (CI: `HEAD^1`; default the merge-base with `origin/next`), and where to find the `.nvmrc` Node (default `~/.nvm`) | No |
-| `WS1_EMAIL`, `WS1_PASSWORD` | `ws1-walk.mts`: an internal account that has never gone live | Password |
+| `WS1_EMAIL` | `ws1-walk.mts`: an internal account that has never gone live, signed in like `SMOKE_EMAIL` | No |
 | `META_CONNECT_UI_BASE_URL`, `META_CONNECT_UI_STATIC_ONLY`, `META_OAUTH_INTERACTIVE`, `META_TEST_TRANSFER_SQL` | Local Meta connect checks (`check-meta-connect-ui.mjs`, `check-meta-oauth-entry.mjs`, `check-meta-connect-db.mjs`): target URL, static-only and interactive switches, transfer SQL path | No |
 | `META_TEST_PG_BIN` | `check-meta-connect-db.mjs`, `db-export.mjs`, `restore-drill.mjs`: Postgres binary folder | No |
 | `WORKSPACE_CHECK_URL`, `WORKSPACE_CHECK_WIDTH` | `check-workspace-ux.mjs`: target URL and viewport width | No |

@@ -34,7 +34,7 @@ beforeEach(() => {
   mocks.secret = "cron-secret";
   mocks.error = null;
   mocks.calls = [];
-  mocks.rows = [run("enforce-spend", 3), run("sync-leads", 8), run("refresh-results", 50)];
+  mocks.rows = [run("enforce-spend", 3), run("sync-leads", 8), run("refresh-results", 50), run("dispatch-workflows", 6)];
 });
 
 describe("GET /api/cron/scheduler-health (#274)", () => {
@@ -52,14 +52,15 @@ describe("GET /api/cron/scheduler-health (#274)", () => {
       { job: "enforce-spend", everyMinutes: 15, lastRunMinutesAgo: 3, lastSuccessMinutesAgo: 3, overdue: false },
       { job: "sync-leads", everyMinutes: 15, lastRunMinutesAgo: 8, lastSuccessMinutesAgo: 8, overdue: false },
       { job: "refresh-results", everyMinutes: 60, lastRunMinutesAgo: 50, lastSuccessMinutesAgo: 50, overdue: false },
+      { job: "dispatch-workflows", everyMinutes: 15, lastRunMinutesAgo: 6, lastSuccessMinutesAgo: 6, overdue: false },
     ] });
     expect(mocks.calls).toContainEqual(["from", "product_events"]);
     expect(mocks.calls).toContainEqual(["eq", "name", "http.request"]);
-    expect(mocks.calls).toContainEqual(["in", "attributes->>route", ["/api/cron/enforce-spend", "/api/cron/sync-leads", "/api/cron/refresh-results"]]);
+    expect(mocks.calls).toContainEqual(["in", "attributes->>route", ["/api/cron/enforce-spend", "/api/cron/sync-leads", "/api/cron/refresh-results", "/api/cron/dispatch-workflows"]]);
   });
 
   it("flags a job with no successful run in twice its interval, and keeps its last failed attempt for triage", async () => {
-    mocks.rows = [run("enforce-spend", 4, "failed"), run("enforce-spend", 31), run("enforce-spend", 45), run("sync-leads", 8), run("refresh-results", 119)];
+    mocks.rows = [run("enforce-spend", 4, "failed"), run("enforce-spend", 31), run("enforce-spend", 45), run("sync-leads", 8), run("refresh-results", 119), run("dispatch-workflows", 40, "failed"), run("dispatch-workflows", 55)];
     const { status, body } = await call();
     expect(status).toBe(200);
     expect(body.ok).toBe(false);
@@ -67,11 +68,12 @@ describe("GET /api/cron/scheduler-health (#274)", () => {
       { job: "enforce-spend", everyMinutes: 15, lastRunMinutesAgo: 4, lastSuccessMinutesAgo: 31, overdue: true },
       { job: "sync-leads", everyMinutes: 15, lastRunMinutesAgo: 8, lastSuccessMinutesAgo: 8, overdue: false },
       { job: "refresh-results", everyMinutes: 60, lastRunMinutesAgo: 119, lastSuccessMinutesAgo: 119, overdue: false },
+      { job: "dispatch-workflows", everyMinutes: 15, lastRunMinutesAgo: 40, lastSuccessMinutesAgo: 55, overdue: true },
     ]);
   });
 
   it("flags a job that has not run in the last day and ignores rejected (unauthorized) calls", async () => {
-    mocks.rows = [run("enforce-spend", 3), run("sync-leads", 2, "rejected"), run("refresh-results", 50)];
+    mocks.rows = [run("enforce-spend", 3), run("sync-leads", 2, "rejected"), run("refresh-results", 50), run("dispatch-workflows", 6)];
     const { body } = await call();
     expect(body.ok).toBe(false);
     expect(body.jobs[1]).toEqual({ job: "sync-leads", everyMinutes: 15, lastRunMinutesAgo: null, lastSuccessMinutesAgo: null, overdue: true });

@@ -135,11 +135,13 @@ interest counts, never the names (#686); `durationMs` is Prepare's end-to-end ti
 refused as `no-subject` before any image is paid for, and repaired once ([visual-rules.ts](../../src/lib/creative/visual-rules.ts), #760). The `creative.batch` event carries the
 batch's wall time (`durationMs`, from the request to the saved batch) and its image
 path (`provider`: `cloudflare` or `pollinations` for internal accounts, `paid` for customers) and its
-estimated AI cost (`costUsd`, `textCostUsd`, `imageCostUsd`; the scoreboard shows the median, #1468), so
+estimated AI cost (`costUsd`, `textCostUsd`, `imageCostUsd`; the scoreboard shows the median, #1468) and how many ads it
+asked for (`expected`; the scoreboard counts a batch full when `count` reaches it, #2499), so
 Create speed is timed per path; usage rows are written when the batch ends and
 can't time it (#681). When the first pass saves fewer ads than asked, one top-up
-round remakes the angles whose concept or image failed (never "no provider" or every
-provider down), in parallel and in the same request, through the same validators and
+round remakes the angles whose concept or image failed, or whose picture couldn't be
+stored or rendered (that loss logs `AD_NOT_SAVED` with its step and error, #2444; never
+"no provider" or every provider down), in parallel and in the same request, through the same validators and
 repair. It starts only if the first pass ended within 60 s and is cut off after 45 s
 (`CREATE_TOP_UP_*` in [stream.ts](../../src/lib/creative/stream.ts)); the stream sends
 `{ type: "topUp", missing }`, the page says "Making N more…", and `creative.batch`
@@ -148,7 +150,14 @@ visit, free pictures) an ad that lost only its picture is not remade: once the f
 ends, it gets one more free picture with the words that already passed (no text call,
 ₹0), if at least 45 s remain before 250 s (`PROSPECT_PICTURE_RETRY_*`). The stream sends
 `{ type: "topUp", missing, kind: "picture" }`, the page says "N pictures didn't come
-through. Trying again…", and `creative.batch` records `pictureRetry` (#1547). A refused commercial claim in Create adds a
+through. Trying again…", and `creative.batch` records `pictureRetry` (#1547). A finished ad
+(words passed, picture stored) is saved by [save.ts](../../src/lib/creative/save.ts) under an id made
+before the insert: a failed insert is read back (it may have landed) and retried once unless its
+database code would fail again (`22`/`23`/`42`/`PGRST2`), and each failed attempt records
+`creative.save` with that code (#2494). Each lost ad carries the step that lost it
+(`stage`: `text`, `picture`, `provider`, `save`, `timeout` or `other`, from
+[failure-message.ts](../../src/lib/creative/failure-message.ts)) in the response and audit
+details, and `creative.batch` lists them as `failedStages` (#2515). A refused commercial claim in Create adds a
 `claim:<class>:<reason>` validation rule to its usage row (class `free`/`percent`/
 `currency`/`guarantee`; reason `uncited`, or `negated-quote` when a quote cited it but a
 negation elsewhere in that quote refused it), never the term or the copy (#687).

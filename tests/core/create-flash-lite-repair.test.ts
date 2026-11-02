@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import recorded from "./fixtures/gemini/flash-lite-concepts.json";
 import evalCases from "../eval/cases.json";
 import { googleReply, requestBody, requestUrl } from "./replay";
+import batches from "./fixtures/gemini/flash-lite-batch-replies.json";
 
 // #2444: on production's free text model (gemini-3.5-flash-lite, #2189), repeated headlines were the top rejection
 // (~18 of 32 calls on Oct 31). The one repair asked for a fresh concept, so flash-lite wrote the same lines again and the
@@ -95,10 +96,90 @@ describe("core: the repair keeps flash-lite's draft and changes only what failed
     expect(JSON.stringify(requests[1])).not.toContain("50% off X-rays");
   });
 
+  it("an over-long headline doesn't hide an unsupported offer: the repair still starts fresh (QA #2444)", async () => {
+    const both = { ...draft, headline: "Start with a $49 new-patient exam in Cedar Park", primary_text: `50% off X-rays on your first visit.\n${draft.primary_text}` };
+    const { requests } = await create([JSON.stringify(both), offer.text.replace(draft.headline, "Your first visit in Cedar Park")]);
+
+    expect(requests[1].map((turn) => turn.role)).toEqual(["user", "user"]);
+    expect(requests[1][1].parts[0].text).toMatch(/schema:headline:too_big[\s\S]*unsupported-commercial-claim/);
+    expect(JSON.stringify(requests[1])).not.toContain("50% off X-rays");
+  });
+
+  it("an over-long headline keeps the uncited claim on the attempt's receipt (QA #2444)", async () => {
+    const [{ validateConcept }, { AD_ANGLES }] = await Promise.all([import("@/lib/creative/concept"), import("@/lib/templates/ads")]);
+    const input = { brand: item.brand, brief: item.brief, angle: AD_ANGLES.find((angle) => angle.id === "offer")!, sourceFacts: item.sourceFacts };
+    const both = { ...draft, headline: "Start with a $49 new-patient exam in Cedar Park", primary_text: `50% off X-rays on your first visit.\n${draft.primary_text}` };
+    expect(validateConcept(both, input)).toMatchObject({ success: false, claims: ["claim:percent:uncited"] });
+  });
+
+  it("an offer past the cut point of a too-long text is still caught (review #2444)", async () => {
+    const late = { ...draft, primary_text: `${draft.primary_text}\n${"Gentle care. ".repeat(70)}\nGet 50% off X-rays.` };
+    const { requests } = await create([JSON.stringify(late), offer.text.replace(draft.headline, "Your first visit in Cedar Park")]);
+
+    expect(requests[1].map((turn) => turn.role)).toEqual(["user", "user"]);
+    expect(requests[1][1].parts[0].text).toMatch(/schema:primary_text:too_big[\s\S]*unsupported-commercial-claim/);
+  });
+
+  it.each([
+    ["isn't the concept's shape", { cta: 42 }],
+    ["has too many quotes", { sourceQuotes: Array(9).fill("Free 15-minute spine check") }],
+  ])("a draft that %s can't be checked, so its repair starts fresh", async (_, change) => {
+    const { requests } = await create([JSON.stringify({ ...draft, ...change }), offer.text.replace(draft.headline, "Your first visit in Cedar Park")]);
+
+    expect(requests[1].map((turn) => turn.role)).toEqual(["user", "user"]);
+  });
+
   it("a repair that repeats the headline again still loses the ad", async () => {
     const { variants, requests } = await create([offer.text, offer.text]);
 
     expect(requests).toHaveLength(2);
     expect(variants).toHaveLength(0);
+  });
+});
+
+describe("core: a quote that differs from its fact only in the full-stop mark is the fact's own words (#2541)", () => {
+  it("stores batch 5's offer quote, ended with 。 for the fact's ।, as the fact's exact text", async () => {
+    const { validateConcept } = await import("@/lib/creative/concept");
+    const { AD_ANGLES } = await import("@/lib/templates/ads");
+    const hindi = evalCases.cases.find((entry) => entry.id === "solaride-factory-hi")!;
+    const reply = batches.batches[4].calls.find((call) => call.angle === "Special offer / incentive" && call.attempt === 0)!;
+    const draft = JSON.parse(reply.text.replace(/^```json\s*|\s*```\s*$/g, "")) as { sourceQuotes: string[] };
+    expect(draft.sourceQuotes[0].endsWith("。")).toBe(true);
+    const result = validateConcept(draft, {
+      brand: hindi.brand, brief: hindi.brief, language: hindi.language, sourceFacts: hindi.sourceFacts,
+      angle: AD_ANGLES.find((angle) => angle.id === "offer")!,
+    });
+    expect(result.success ? result.concept.sourceQuotes[0] : result.issues).toBe(hindi.sourceFacts[0]);
+  });
+});
+
+describe("core: a headline over 40 only by a trailing call to action is fitted, not sent to repair (#2541, #2543)", () => {
+  async function check(headline: string, recent: typeof recentCopy = []) {
+    const { validateConcept } = await import("@/lib/creative/concept");
+    const { AD_ANGLES } = await import("@/lib/templates/ads");
+    return validateConcept({ ...JSON.parse(offer.text.replace(/\n/g, "\\n")), headline }, {
+      brand: item.brand, brief: item.brief, language: item.language, sourceFacts: item.sourceFacts,
+      angle: AD_ANGLES.find((angle) => angle.id === "offer")!, recentCopy: recent,
+    });
+  }
+  const fitted = "New patients seen the same day.";
+
+  it("drops flash-lite's recorded offer draft's trailing 'Learn more.' and keeps every check", async () => {
+    const result = await check(`${fitted} Learn more.`);
+    expect(result.success ? result.concept.headline : result.issues).toBe(fitted);
+    const repeated = await check(`${fitted} Learn more.`, [{ headline: fitted, primary_text: recentCopy[0].primary_text }]);
+    expect(repeated.success ? repeated.concept : repeated.issues.join("\n")).toMatch(/repeated-headline/);
+  });
+
+  it("still sends an over-long headline whose words make an unsupported claim to repair", async () => {
+    const result = await check("Every cleaning 90% off today. Learn more.");
+    expect(result.success ? result.concept : result.issues.join("\n")).toMatch(/schema:headline:too_big[\s\S]*unsupported-commercial-claim/);
+  });
+
+  it("leaves a whitespace-padded headline to repair without running the fit (QA: quadratic tails)", async () => {
+    const started = performance.now();
+    const result = await check(`${fitted}${" ".repeat(50_000)}Learn more.`);
+    expect(result.success ? result.concept : result.issues[0]).toMatch(/^schema:headline:too_big/);
+    expect(performance.now() - started).toBeLessThan(1_000);
   });
 });

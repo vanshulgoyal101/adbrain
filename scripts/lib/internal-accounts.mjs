@@ -20,34 +20,20 @@ export function makesFreePictures(user) {
   return isInternal && !internal.exemptFromFreeProviders.some((entry) => entry.userId === user.id);
 }
 
-/**
- * #2396: the smoke's signed-in identity from the password sign-in it captured (`{ status, supabase, apikey, body }`).
- * Anything short of a 200 with a token and a user id is null, so `makesFreePictures` refuses (fail closed).
- */
-export function loginAuth(login) {
-  const { status, supabase, apikey, body } = login ?? {};
-  if (status !== 200 || !supabase || !apikey || !body?.access_token || !body.user?.id) return null;
-  return { supabase, apikey, token: body.access_token, user: body.user };
-}
-
-/** Why `loginAuth` returned null, in words safe for a public log (no token, email or id). */
-export function loginSessionProblem(login) {
-  if (!login) return "sign-in response not captured";
-  if (login.status !== 200) return `sign-in HTTP ${login.status}`;
-  if (!login.body) return "sign-in body unreadable";
-  if (!login.apikey) return "no apikey on the sign-in request";
-  if (!login.body.access_token) return "no access token";
-  if (!login.body.user?.id) return "no user id";
-  return "ok";
-}
-
 const quote = (value) => `'${String(value).trim().toLowerCase().replaceAll("'", "''")}'`;
 const list = (values, type) => `array[${values.map(quote).join(",")}]::${type}[]`;
 
-/** SQL boolean: is the auth.users row `alias` internal? `emails` are extra local emails (smoke, demo). */
+/**
+ * #2538: reserved test domains (RFC 2606/6761) can't be a customer's: retired team logins are renamed to them.
+ * Reports only; the app's internal rule (spend, free pictures) stays the JSON list.
+ */
+const RESERVED_TEST_DOMAIN = String.raw`'(^|\.)(example\.(com|net|org)|example|test|invalid|localhost)$'`;
+
+/** SQL boolean: is the auth.users row `alias` internal? `emails` are extra local emails (every test login). */
 export function isInternalUserSql(alias, emails) {
   const email = `lower(coalesce(${alias}.email, ''))`;
   return `(split_part(${email}, '@', 2) = any(${list(INTERNAL_DOMAINS, "text")})`
+    + ` or split_part(${email}, '@', 2) ~ ${RESERVED_TEST_DOMAIN}`
     + ` or ${alias}.id = any(${list(INTERNAL_USER_IDS, "uuid")})`
     + ` or ${email} = any(${list(emails, "text")}))`;
 }
@@ -58,12 +44,17 @@ export function internalUserIdsSql(emails) {
 
 const smokeEnvPath = "/Users/vanshulgoyal/Development/copilot/adbrain/.env.smoke";
 
-/** The smoke and demo emails from the owner's .env.smoke, or from the environment. */
+/** #2538: every test login lives in .env.smoke (AGENTS.md), each as `<NAME>_EMAIL`. */
+export function testLoginEmails(env) {
+  return Object.entries(env).filter(([key, value]) => key.endsWith("_EMAIL") && value?.includes("@")).map(([, value]) => value);
+}
+
+/** Every test login's email (`*_EMAIL`) in the owner's .env.smoke (#2538), plus smoke and demo from the environment. */
 export async function localInternalEmails() {
   const emails = [process.env.SMOKE_EMAIL, process.env.DEMO_USER_EMAIL];
   try {
     const env = parseEnv(await readFile(smokeEnvPath, "utf8"));
-    emails.push(env.SMOKE_EMAIL, env.DEMO_USER_EMAIL);
+    emails.push(...testLoginEmails(env));
   } catch {
     // Domains and ids still apply; the smoke account is on an internal domain today.
   }

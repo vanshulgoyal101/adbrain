@@ -6,6 +6,7 @@ import {
   interviewRequestSchema,
   InterviewValidationError,
   INTERVIEW_PROMPT_VERSION,
+  interviewMaxTokens,
 } from "@/lib/creative/interview";
 import { NoLLMKeysError } from "@/lib/llm";
 import { AllLLMProvidersFailedError, LLMError } from "@/lib/llm/types";
@@ -72,7 +73,7 @@ async function handlePOST(req: Request) {
           provider: completion.provider, model: completion.model, usage: completion.usage,
           promptVersion: INTERVIEW_PROMPT_VERSION, inputChars: completion.inputChars,
           outputChars: completion.outputChars, latencyMs: completion.latencyMs,
-          attempt, maxTokens: 2400, temperature: attempt === 1 ? 0.5 : 0.2,
+          attempt, maxTokens: interviewMaxTokens(completion.provider), temperature: attempt === 1 ? 0.5 : 0.2,
           status: valid ? "success" : "error", errorCode: valid ? undefined : "INTERVIEW_VALIDATION",
           metadata: { answerCount: answers.length, repaired: attempt > 1, ...(valid ? {} : { validationRules: rules }) },
         }]);
@@ -84,7 +85,7 @@ async function handlePOST(req: Request) {
           provider: failure.provider, model: failure.model,
           usage: failure.usage ?? { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
           promptVersion: INTERVIEW_PROMPT_VERSION, latencyMs: failure.latencyMs,
-          attempt, maxTokens: 2400, temperature: attempt === 1 ? 0.5 : 0.2,
+          attempt, maxTokens: interviewMaxTokens(failure.provider), temperature: attempt === 1 ? 0.5 : 0.2,
           status: "error", failure: failure.failure, errorCode: `LLM_${failure.failure ?? "UNKNOWN"}`, rateLimit: failure.rateLimit,
           providerRequestId: failure.providerRequestId, providerFinalStatus: failure.providerFinalStatus,
           metadata: { answerCount: answers.length, repaired: attempt > 1 },

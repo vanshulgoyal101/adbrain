@@ -8,7 +8,7 @@ use_pinned_node() {
   want="$(tr -d ' v\n' < "$root/.nvmrc")"
   have="$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo none)"
   [[ "$have" == "$want" ]] && return 0
-  dir="$(ls -d "${NVM_DIR:-$HOME/.nvm}/versions/node/v$want".* 2>/dev/null | sort -V | tail -n 1)"
+  dir="$(ls -d "${NVM_DIR:-$HOME/.nvm}/versions/node/v$want".* 2>/dev/null | sort -V | tail -n 1 || true)"
   [[ -z "$dir" && -x "/opt/homebrew/opt/node@$want/bin/node" ]] && dir="/opt/homebrew/opt/node@$want"
   if [[ -z "$dir" ]]; then
     echo "Node $want is required (found $have). Install it: nvm install $want" >&2
@@ -25,19 +25,23 @@ use_pinned_node() {
 # checks out), is moved into place when its hash matches the lockfile, else deleted.
 ensure_node_modules() {
   local root="$1" prepared="${2:-}" prepared_hash="${3:-}" cache_root cache seed
-  if [[ -e "$root/node_modules" ]]; then
+  # A finished install writes node_modules/.package-lock.json last; anything else is partial.
+  if [[ -f "$root/node_modules/.package-lock.json" ]]; then
     if [[ -n "$prepared" ]]; then rm -rf "$prepared"; fi
     return 0
   fi
+  rm -rf "$root/node_modules"
   cache_root="$HOME/Library/Caches/adbrain/node_modules"
   cache="$cache_root/$(lockfile_hash "$root")"
   if [[ -n "$prepared" && -f "$prepared/.package-lock.json" && "$prepared_hash" == "$(basename "$cache")" ]]; then
     mv "$prepared" "$root/node_modules"
   else
     if [[ -n "$prepared" ]]; then rm -rf "$prepared"; fi
-    if [[ -f "$cache/.package-lock.json" ]] && cp -cR "$cache" "$root/node_modules"; then
-      :
+    # Clone beside the target, then rename, so an interrupted copy never looks installed.
+    if [[ -f "$cache/.package-lock.json" ]] && rm -rf "$root/.node_modules.tmp" && cp -cR "$cache" "$root/.node_modules.tmp"; then
+      mv "$root/.node_modules.tmp" "$root/node_modules"
     else
+      rm -rf "$root/.node_modules.tmp"
       rm -rf "$root/node_modules"
       (cd "$root" && npm ci --prefer-offline --no-audit --no-fund)
       mkdir -p "$cache_root"
@@ -49,9 +53,9 @@ ensure_node_modules() {
       fi
     fi
   fi
-  # Keep only lockfile caches used in the last 14 days.
+  # Mark this cache used (-c: never create it as a file), then keep only caches used in the last 14 days.
+  touch -c "$cache" 2>/dev/null || true
   find "$cache_root" -mindepth 1 -maxdepth 1 -type d ! -name '.seed-*' -mtime +14 -exec rm -rf {} + 2>/dev/null || true
-  touch "$cache" 2>/dev/null || true
 }
 
 lockfile_hash() {

@@ -27,6 +27,12 @@ esac
 base="${TEST_BASE:-$(git merge-base HEAD origin/next)}"
 changed="$( (git diff --name-only "$base"; git ls-files --others --exclude-standard) | sort -u)"
 if [[ -z "$changed" ]]; then
+  # CI never skips: an empty diff there means the base is wrong, so test everything.
+  if [[ -n "${CI:-}" ]]; then
+    echo "No changes since $base; CI runs the whole suite."
+    vitest run "$@"
+    exit
+  fi
   echo "No changes since $base; nothing to test."
   exit 0
 fi

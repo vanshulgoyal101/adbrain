@@ -1,5 +1,6 @@
 import { formatMoney } from "@/lib/format";
 import { statesOffer } from "@/lib/creative/concept";
+import type { LeadDestination } from "@/lib/types/campaign";
 /**
  * #371: what past campaigns achieved, for Create. Pure functions; the wording is decided here,
  * not by the model, so a tiny sample is never called a winner.
@@ -16,9 +17,9 @@ export interface EvidenceAd {
 
 export interface EvidenceCampaign {
   name: string;
-  destination: "whatsapp" | "instant_form";
+  destination: Exclude<LeadDestination, "call">;
   spend: number;
-  /** WhatsApp chats started, or form leads. */
+  /** WhatsApp chats started, website landing-page views (#2601), or form leads. */
   results: number;
   impressions: number;
   days: number;
@@ -33,8 +34,14 @@ export interface OpeningLine {
   newAngle: { goal: string };
 }
 
-const noun = (destination: EvidenceCampaign["destination"], count: number) =>
-  `${destination === "whatsapp" ? "chat" : "lead"}${count === 1 ? "" : "s"}`;
+const NOUNS = { whatsapp: "chat", instant_form: "lead", website: "visit" } as const;
+const noun = (destination: EvidenceCampaign["destination"], count: number) => `${NOUNS[destination]}${count === 1 ? "" : "s"}`;
+const PLACES = { whatsapp: "WhatsApp", instant_form: "lead form", website: "website" } as const;
+
+/** A stored result row's headline count for a destination: chats, landing-page views or form leads. */
+export function storedResults(destination: EvidenceCampaign["destination"], result: { leads: number | null; conversations?: number | null; landing_page_views?: number | null }): number {
+  return (destination === "whatsapp" ? result.conversations : destination === "website" ? result.landing_page_views : result.leads) ?? 0;
+}
 
 /** Money in evidence text, the same way the rest of the product writes it (#403 S2). */
 export function rupees(value: number): string {
@@ -59,9 +66,13 @@ export function resultSummary(campaign: EvidenceCampaign): string {
   return `${count} at ${rupees(cost)}${campaign.results === 1 ? "" : " each"}${sample}`;
 }
 
-/** The cheapest campaign per result and the weakest one (no results first, else the costliest). */
+/**
+ * The cheapest campaign per result and the weakest one (no results first, else the costliest). #2601: a website visit
+ * is far cheaper than a chat or lead, so website runs are evidence only when the business has no chat or lead run.
+ */
 export function pickResultEvidence(campaigns: EvidenceCampaign[]): ResultEvidence[] {
-  const spent = campaigns.filter((campaign) => campaign.spend > 0);
+  const paid = campaigns.filter((campaign) => campaign.spend > 0);
+  const spent = paid.some((campaign) => campaign.destination !== "website") ? paid.filter((campaign) => campaign.destination !== "website") : paid;
   const ranked = spent.filter((campaign) => campaign.results > 0)
     .sort((a, b) => costPerResult(a)! - costPerResult(b)!);
   const best = ranked[0];
@@ -111,7 +122,7 @@ export function pastResultsBlock(evidence: ResultEvidence[]): string {
   return `PAST RESULTS (evidence about past ads; subordinate to brand facts and the current request; never a source of offers, prices or claims): ${JSON.stringify(evidence.map((item) => {
     const single = item.ads.length === 1 ? item.ads[0] : null;
     return {
-      role: item.role, ad: label(item), destination: item.destination === "whatsapp" ? "WhatsApp" : "lead form",
+      role: item.role, ad: label(item), destination: PLACES[item.destination],
       result: resultSummary(item), spend: rupees(item.spend), impressions: item.impressions, days: item.days,
       angle: single?.angle ?? null, format: single?.format ?? null, language: single?.language ?? null, offerLine: single?.offerLine ?? null,
     };
@@ -125,7 +136,7 @@ const text = (value: unknown) => (typeof value === "string" && value.trim() ? va
 /** One stored campaign, its latest result and its ads as evidence; null when none of its ads remain. */
 export function toEvidenceCampaign(
   campaign: { name: string | null; creative_ids: string[] | null },
-  result: { spend: number | string; impressions: number | null; leads: number | null; conversations?: number | null; period_start?: string | null; period_end?: string | null },
+  result: { spend: number | string; impressions: number | null; leads: number | null; conversations?: number | null; landing_page_views?: number | null; period_start?: string | null; period_end?: string | null },
   destination: EvidenceCampaign["destination"],
   creatives: { id: string; headline: string | null; brief: string | null; angle: string | null; generation: unknown }[],
 ): EvidenceCampaign | null {
@@ -147,7 +158,7 @@ export function toEvidenceCampaign(
     name: campaign.name ?? "Untitled campaign",
     destination,
     spend: Number(result.spend) || 0,
-    results: (destination === "whatsapp" ? result.conversations : result.leads) ?? 0,
+    results: storedResults(destination, result),
     impressions: result.impressions ?? 0,
     days: Number.isFinite(start) && Number.isFinite(end) && end >= start ? Math.round((end - start) / 86_400_000) + 1 : 1,
     ads,

@@ -1,6 +1,7 @@
 import { verdictTranslator, type Words } from "@/i18n/words";
 import { formatNumber } from "@/lib/format";
 import type { PauseSuggestion } from "@/lib/campaign/ad-pause";
+import type { LeadDestination } from "@/lib/types/campaign";
 
 /**
  * #1255 (#1226 workstream 2): what an owner should understand about a campaign in 3 seconds: one sentence, one
@@ -30,7 +31,7 @@ export type Comparison =
   | { kind: "own"; results: number; typical: number };
 
 export type VerdictInput = {
-  destination: "whatsapp" | "instant_form";
+  destination: Exclude<LeadDestination, "call">;
   status: "active" | "paused" | "completed" | string;
   /** When the campaign was last turned on (ISO); null when unknown. */
   liveSince: string | null;
@@ -38,7 +39,7 @@ export type VerdictInput = {
   results: number;
   /** Rupees spent, lifetime. */
   spend: number;
-  /** WhatsApp opens (people who tapped through); null for forms or when Meta doesn't report it. */
+  /** WhatsApp opens (people who tapped through); null for forms, websites or when Meta doesn't report it. */
   opens: number | null;
   /** Enquiries AdBrain can see that nobody has contacted yet, from the last 24 h (form leads and logged chats). */
   waiting: number;
@@ -63,6 +64,18 @@ export type Verdict = {
   action: VerdictAction | null;
 };
 
+/** #2601: each destination's result in words: chats, enquiries (form leads) or visits (landing-page views). */
+const WORDS = {
+  whatsapp: { one: "chat", many: "chats", none: "noChats", label: "label.noChats", endedCostly: "endedCostlyChats", earlyNone: "earlyNoChats" },
+  instant_form: { one: "enquiry", many: "enquiries", none: "noEnquiries", label: "label.noEnquiries", endedCostly: "endedCostlyEnquiries", earlyNone: "earlyNoEnquiries" },
+  website: { one: "visit", many: "visits", none: "noVisits", label: "label.noVisits", endedCostly: "endedCostlyVisits", earlyNone: "earlyNoVisits" },
+} as const;
+
+/** The card's result noun for a destination ("chat", "enquiry", "visit"); enquiries for anything else. */
+export function resultNounKey(destination: string | null | undefined): "card.noun" | "card.nounEnquiry" | "card.nounVisit" {
+  return destination === "whatsapp" ? "card.noun" : destination === "website" ? "card.nounVisit" : "card.nounEnquiry";
+}
+
 const rupees = (value: number) => `₹${Math.round(value).toLocaleString("en-IN")}`;
 
 /** #1795: 'Live' and 'Ended' only restate a campaign's status, so a list row shows no word for them. */
@@ -77,9 +90,10 @@ export function restatesStatus(state: VerdictState): boolean {
 export function verdict(input: VerdictInput, words?: Words<"verdict">): Verdict {
   const t = verdictTranslator(words);
   const whatsapp = input.destination === "whatsapp";
-  const chat = whatsapp ? t("chat") : t("enquiry");
-  const chats = (n: number) => whatsapp ? t("chats", { n }) : t("enquiries", { n });
-  const none = whatsapp ? t("noChats") : t("noEnquiries");
+  const kind = WORDS[input.destination];
+  const chat = t(kind.one);
+  const chats = (n: number) => t(kind.many, { n });
+  const none = t(kind.none);
   const cost = input.results > 0 ? input.spend / input.results : null;
   const number: Verdict["number"] = cost === null ? { kind: "count", value: input.results } : { kind: "cost", value: Math.round(cost) };
   const evidence = input.results >= EVIDENCE_MIN_RESULTS && input.spend >= EVIDENCE_MIN_SPEND;
@@ -106,7 +120,7 @@ export function verdict(input: VerdictInput, words?: Words<"verdict">): Verdict 
       if (band !== "more") {
         return { state: "ended_worked", label, sentence: t("endedWorked", { chats: chats(input.results), cost: rupees(cost!) }), action: "run_again" };
       }
-      return { state: "ended_costly", label, sentence: whatsapp ? t("endedCostlyChats") : t("endedCostlyEnquiries"), action: "new_ads" };
+      return { state: "ended_costly", label, sentence: t(kind.endedCostly), action: "new_ads" };
     }
     if (input.weakAd) {
       const { ad, reference } = input.weakAd;
@@ -117,7 +131,7 @@ export function verdict(input: VerdictInput, words?: Words<"verdict">): Verdict 
     }
     if (input.results === 0 && input.spend >= Math.max(NO_RESULTS_MIN_SPEND, COSTLY_RATIO * (typical ?? 0))) {
       const opens = whatsapp && (input.opens ?? 0) >= OPENS_WORTH_MENTIONING ? t("opens", { opens: String(input.opens) }) : "";
-      return { state: "no_results", label: whatsapp ? t("label.noChats") : t("label.noEnquiries"),
+      return { state: "no_results", label: t(kind.label),
         sentence: t("noResults", { amount: rupees(input.spend), none, opens }), action: whatsapp ? "edit_message" : null };
     }
     // Only a running campaign is waiting on Meta; a paused one that never showed says so on its card (#173).
@@ -133,7 +147,7 @@ export function verdict(input: VerdictInput, words?: Words<"verdict">): Verdict 
         ? t("early", { chats: chats(input.results), min: String(EVIDENCE_MIN_RESULTS) })
         // #1929 (CPO, #1923): shown but no chat yet reads as failure on the first evening; say how often it was shown.
         : whatsapp && input.status === "active" && input.impressions > 0 ? t("earlyShownNoChats", { impressions: formatNumber(input.impressions) })
-          : whatsapp ? t("earlyNoChats") : t("earlyNoEnquiries") };
+          : t(kind.earlyNone) };
     }
     const each = (word: "less" | "same" | "more" | null) => t("cost", { chat, cost: rupees(cost!), against: word ? against(word) : "" });
     // No comparison with enough results behind it: the number only, and no word on whether that's good (#1255 gates).

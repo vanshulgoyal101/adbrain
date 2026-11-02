@@ -1,11 +1,10 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
-import { parseEnv } from "node:util";
 import { chromium } from "@playwright/test";
-import { loginAuth, loginSessionProblem, makesFreePictures } from "./lib/internal-accounts.mjs";
+import { makesFreePictures } from "./lib/internal-accounts.mjs";
+import { localEnv, signInBrowser, testSessionConfig } from "./lib/test-session.mjs";
 import { pictureSources } from "./lib/smoke-pictures.mjs";
-
-const envPath = "/Users/vanshulgoyal/Development/copilot/adbrain/.env.smoke";
+import { forgiveRecoveredBusyTurns } from "./lib/smoke-console.mjs";
+import { createFailureLines, parseCreateStream } from "./lib/smoke-create-failures.mjs";
 
 const origin = "https://adbrain.vanshul.com";
 const modes = new Set(process.argv.slice(2));
@@ -40,14 +39,18 @@ async function readCreateResponse(response) {
   if (!contentType?.includes("application/x-ndjson")) {
     return { status: response.status(), data: await response.json().catch(() => ({})) };
   }
-  const text = await response.text();
-  let result;
-  for (const rawLine of text.split("\n")) {
-    const line = rawLine.trim();
-    if (!line) continue;
-    const event = JSON.parse(line);
-    if (event.type === "result") result = event;
-  }
+  return createStreamResult(await response.text());
+}
+
+/** #2504: the Create response from text the page teed; JSON when Create refused before streaming. */
+async function createFromText(text, status, contentType) {
+  try {
+    return contentType?.includes("application/x-ndjson") ? createStreamResult(text) : { status, data: JSON.parse(text) };
+  } catch { return null; }
+}
+
+function createStreamResult(text) {
+  const { result } = parseCreateStream(text);
   assert.ok(result, "Create stream ended without a result.");
   return { status: result.status, data: result.body };
 }
@@ -145,10 +148,9 @@ async function removeReplacedPictures(auth, before) {
   return files.length;
 }
 
-const { SMOKE_EMAIL: email, SMOKE_PASSWORD: password } = process.env.SMOKE_EMAIL
-  ? process.env
-  : parseEnv(await readFile(envPath, "utf8"));
-assert.ok(email && password, "Set SMOKE_EMAIL and SMOKE_PASSWORD in the ignored .env.smoke file.");
+const env = await localEnv();
+const email = env.SMOKE_EMAIL;
+assert.ok(email, "Set SMOKE_EMAIL in the ignored .env.smoke file.");
 
 let browser;
 let signedIn = false;
@@ -156,11 +158,29 @@ try {
   browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({ serviceWorkers: "block" });
   context.setDefaultTimeout(20_000);
+  if (modes.has("--create")) {
+    // #2504: Chrome drops a long Create stream's body before Playwright reads it (#1123), so a short run never said
+    // which ad failed. Tee the stream in the page; the page still reads its own copy as it arrives.
+    await context.addInitScript(() => {
+      const send = window.fetch;
+      window.fetch = async (input, init) => {
+        const response = await send(input, init);
+        try {
+          const url = new URL(typeof input === "string" || input instanceof URL ? input : input.url, location.href);
+          const method = (init?.method ?? (input instanceof Request ? input.method : "GET")).toUpperCase();
+          if (method === "POST" && url.pathname === "/api/creatives/generate") {
+            window.__smokeCreateStream = response.clone().text().catch(() => null);
+          }
+        } catch { /* never break the page's own request */ }
+        return response;
+      };
+    });
+  }
   const page = await context.newPage();
   const errors = [];
+  /** @type {Promise<boolean>[]} one per 503 assistant turn: whether its code was AI_BUSY (#2396) */
+  const assistantBusy = [];
   const smokeBlocked = new Set();
-  let loginAllowed = true;
-  let loginSession = null;
   let skippedLeadSync = false;
   let skippedCampaignSync = false;
   let interviewCount = 0;
@@ -204,6 +224,10 @@ try {
     const status = message.text().match(/\b(?:40[0-9]|50[0-9])\b/)?.[0];
     errors.push(message.text().includes("Content Security Policy") ? `CSP violation at ${path}` : `console error at ${path}${status ? ` (HTTP ${status})` : ""}`);
   });
+  page.on("response", (response) => {
+    if (response.status() !== 503 || new URL(response.url()).pathname !== "/api/creatives/assistant") return;
+    assistantBusy.push(response.json().then((body) => body?.code === "AI_BUSY", () => false));
+  });
   await context.route("**/*", async (route) => {
     const request = route.request();
     const url = new URL(request.url());
@@ -221,17 +245,6 @@ try {
     }
     if (request.method() === "POST" && url.hostname.endsWith(".supabase.co") && url.pathname === "/rest/v1/web_events") {
       return route.fulfill({ status: 201, json: [] });
-    }
-    if (request.method() === "POST" && loginAllowed && url.hostname.endsWith(".supabase.co")
-      && url.pathname === "/auth/v1/token" && url.searchParams.get("grant_type") === "password") {
-      loginAllowed = false;
-      // #2396: read the session here. After sign-in the page navigates and Chromium drops the response body,
-      // so reading it from the page's response afterwards lost the identity on some runs.
-      const response = await route.fetch().catch(() => null);
-      if (!response) return route.abort("failed");
-      loginSession = { status: response.status(), supabase: url.origin, apikey: request.headers().apikey,
-        body: await response.json().catch(() => null) };
-      return route.fulfill({ response });
     }
     if (modes.has("--create") && request.method() === "POST" && url.origin === origin) {
       if (url.pathname === "/api/creatives/assistant" && ++interviewCount <= 8) return route.continue();
@@ -278,30 +291,22 @@ try {
     return route.continue();
   });
 
-  await page.goto(`${origin}/login`, { waitUntil: "domcontentloaded" });
-  const emailField = page.getByLabel("Email", { exact: true });
+  // #2574: the guard still proves the sign-in page renders and hydrates (a click opens the password form), but never
+  // submits it: the session is minted with the service role, so Supabase CAPTCHA (#1777) can stay on.
+  const loginResponse = await page.goto(`${origin}/login`, { waitUntil: "domcontentloaded" });
+  assert.equal(loginResponse?.status(), 200, "The sign-in page did not answer 200.");
   const passwordField = page.getByLabel("Password", { exact: true });
-  await emailField.waitFor();
-  // #289: a new browser opens on "Create your free account"; an existing user taps "Sign in" for the password form.
-  // A click before hydration does nothing, so retry until the password field shows.
+  await page.getByLabel("Email", { exact: true }).waitFor();
   for (let attempt = 0; attempt < 5 && !(await passwordField.isVisible()); attempt++) {
     await page.getByRole("button", { name: "Sign in", exact: true }).click();
     await passwordField.waitFor({ state: "visible", timeout: 3_000 }).catch(() => {});
   }
-  await emailField.fill(email);
-  await passwordField.fill(password);
-  const loginResponse = page.waitForResponse((response) => new URL(response.url()).pathname === "/auth/v1/token" && response.request().method() === "POST");
-  await page.getByRole("button", { name: "Sign in with password", exact: true }).click();
-  const response = await loginResponse;
-  assert.equal(response.status(), 200, "Login failed.");
+  assert.ok(await passwordField.isVisible(), "The sign-in page never opened its password form.");
   // #2145: who signed in decides free or paid pictures; the session also lets a scheduled run delete its own ads.
-  const auth = loginAuth(loginSession);
-  // #2396: Create, Prepare and Picture need the identity; failing here reports it as sign-in, not as their own step.
-  // Read-only runs (the post-deploy guard) don't use it, so they only note it.
-  const identityProblem = auth ? null : `identity unreadable (${loginSessionProblem(loginSession)}) (#2396); no paid or free-quota request sent`;
-  assert.ok(!identityProblem || !["--create", "--prepare", "--picture"].some((mode) => modes.has(mode)), identityProblem);
-  if (identityProblem) console.log(`NOTE Sign in: ${identityProblem}`);
-  await page.waitForURL((url) => url.origin === origin && !url.pathname.startsWith("/login"));
+  const minted = await signInBrowser(context, origin, email, { config: testSessionConfig(env, origin) });
+  const auth = { supabase: minted.supabase, apikey: minted.apikey, token: minted.session.access_token, user: minted.user };
+  await page.goto(`${origin}/dashboard`, { waitUntil: "domcontentloaded" });
+  assert.ok(!new URL(page.url()).pathname.startsWith("/login"), "The app sent the minted session to /login.");
   signedIn = true;
   console.log("PASS Sign in");
 
@@ -432,6 +437,21 @@ try {
   }
   if (modes.has("--create")) {
     let savedCount = null;
+    let createFailures = null;
+    let explained = false;
+    // #2504: one NOTE per missing ad and the run's failed attempts by reason, so a short run says why.
+    async function explainShortRun() {
+      if (explained) return;
+      explained = true;
+      let usage = null;
+      const { businessId, generationId } = generationRequest ?? {};
+      if (auth && UUID.test(businessId ?? "") && UUID.test(generationId ?? "")) {
+        const rows = await supabaseFetch(auth, `/rest/v1/llm_usage_events?business_id=eq.${businessId}&metadata->>generationId=eq.${generationId}`
+          + "&status=eq.error&select=usage_kind,provider,model,status,error_code,metadata&order=created_at").catch(() => null);
+        if (rows?.ok) usage = await rows.json().catch(() => null);
+      }
+      for (const line of createFailureLines({ expected: 3, saved: savedCount, failures: createFailures, usage })) console.log(line);
+    }
     async function recoverSavedCount() {
       if (!generationRequest?.generationId || !generationRequest?.businessId) return null;
       try {
@@ -449,6 +469,7 @@ try {
       assert.ok(auth?.user?.id, "Signed-in identity unknown, so free pictures aren't certain; paid run was not started");
       assert.ok(makesFreePictures(auth.user), "This account would make paid pictures (not internal, or exempt); paid run was not started");
       errors.length = 0;
+      assistantBusy.length = 0;
       await page.goto(`${origin}/create`);
       await page.getByRole("textbox", { name: "Campaign goal" }).fill("Introduce our team to local customers using only verified Brand Brain facts. Avoid unsupported claims.");
       await page.getByRole("button", { name: /^(Start creating|Edit brief)$/ }).click(); // #1004: a complete Brand offers "Edit brief" to keep the brief review
@@ -471,20 +492,27 @@ try {
       const result = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/creatives/generate" && response.request().method() === "POST", { timeout: 300_000 });
       await generate.click();
       const response = await result;
-      // Chrome can drop a long stream's body before Playwright reads it (#1123: 131 s, "No data found
-      // for resource"); the page read it, so the saved-results check below decides instead.
-      const create = await readCreateResponse(response).catch(() => null);
+      // #2504: read the page's tee of the stream. Playwright's copy is a fallback only: Chrome can drop a long stream's
+      // body before Playwright reads it (#1123: 131 s, "No data found for resource").
+      const teed = await page.evaluate(() => window.__smokeCreateStream ?? null).catch(() => null);
+      const create = teed == null ? await readCreateResponse(response).catch(() => null)
+        : await createFromText(teed, response.status(), await response.headerValue("content-type"));
+      createFailures = Array.isArray(create?.data?.failures) ? create.data.failures : null;
       savedCount = Array.isArray(create?.data?.creatives) ? create.data.creatives.length : null;
       if (create?.status !== 200 || savedCount !== 3) {
         savedCount = await recoverSavedCount();
       }
       assert.equal(generationCount, 1, "Paid Create request was blocked");
       if (create) assert.equal(create.status, 200, `Create returned HTTP ${create.status}`);
-      else console.log("NOTE Create stream body was not kept by the browser; counted the saved ads instead");
+      else console.log(teed == null ? "NOTE Create stream body was not kept by the browser; counted the saved ads instead"
+        : "NOTE Create stream ended without a result; counted the saved ads instead");
+      if (savedCount !== 3) await explainShortRun();
       assert.equal(savedCount, 3, `Create saved ${savedCount}/3 ads; do not retry before checking saved work`);
       // #904 made "Review ads" a link, not a button (QA on #1227).
       await page.getByRole("link", { name: "Review ads", exact: true }).waitFor({ state: "visible" });
-      assert.equal(errors.length, 0, errors[0] ?? "Browser error after Create");
+      const busy = forgiveRecoveredBusyTurns(errors, (await Promise.all(assistantBusy)).filter(Boolean).length);
+      if (busy.note) console.log(busy.note);
+      assert.equal(busy.errors.length, 0, busy.errors[0] ?? "Browser error after Create");
       // #2412: 3 saved ads can hide 2 reused pictures or a dead Cloudflare token; read where each picture came from.
       const { businessId, generationId } = generationRequest ?? {};
       assert.ok(UUID.test(businessId ?? "") && UUID.test(generationId ?? ""), "run ids unknown; pictures not checked");
@@ -497,6 +525,7 @@ try {
       await cleanUpCreateRun();
     } catch (error) {
       if (generationCount && savedCount === null) savedCount = await recoverSavedCount();
+      if (generationCount && savedCount !== 3) await explainShortRun().catch(() => {});
       console.log(`FAIL Create${generationCount ? `: ${savedCount ?? "unconfirmed"}/3 saved` : ""}: ${error instanceof Error ? error.message.split("\n")[0].slice(0, 180) : "Unknown error"}; ${generationCount ? "check saved work before any retry" : "no paid request sent"}`);
       process.exitCode = 1;
       // #2189: a failed run's saved ads stayed in the smoke workspace, and the repeat rules then checked every later
