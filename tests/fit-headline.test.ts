@@ -42,6 +42,19 @@ describe("fitHeadline (#2543)", () => {
     expect(fitHeadline("Your first exam is for. Learn more.", 24)).toBeNull();
   });
 
+  it.each([
+    ["Best solar deals of. Learn more.", 24],
+    ["Save fifty percent at. Learn more.", 26],
+    ["Solar installs offered by. Learn more.", 30],
+    ["Get the best offer on. Learn more.", 26],
+    ["Get the best offer from. Learn more.", 26],
+    ["Exams as. Learn more.", 10],
+    ["सोलर सर्वे के। अधिक जानकारी के लिए संपर्क करें।", 20],
+    ["सोलर सर्वे पर। अधिक जानकारी के लिए संपर्क करें।", 20],
+  ] as const)("does not mistake a terminal function word for a thought: %s", (text, max) => {
+    expect(fitHeadline(text, max)).toBeNull();
+  });
+
   it("does not drop the rest of a long core when boilerplate is removed", () => {
     expect(fitHeadline("Start with a $49 new-patient exam in Cedar Park. Learn more.")).toBeNull();
   });

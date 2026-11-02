@@ -2,7 +2,7 @@ import { shortenHeadline } from "./design";
 
 const TRAILING_CTA = /(?<=[.!?।])\s+(?:learn more|book now|message us(?: to learn more)?|(?:पूरी|अधिक) जानकारी के लिए संपर्क करें)[.!?।]?$/iu;
 const TRAILING_QUALIFIER = /(?:,\s+|\s+[-–—]\s+)(?:made simple|with confidence|without the hassle)[.!?]?$/iu;
-const UNFINISHED = /(?:^|\s)(?:a|an|the|your|our|and|or|but|for|in|to|with|without|is|are|that|से|में|और|या|लिए)[.!?।]*$/iu;
+const UNFINISHED = /(?:^|\s)(?:a|an|the|your|our|and|or|but|for|in|to|with|without|is|are|that|of|at|by|on|as|from|into|about|over|under|before|after|than|if|unless|until|because|not|से|में|और|या|लिए|के|की|का|को|पर|तक|बिना|साथ|कि)[.!?।]*$/iu;
 
 /**
  * Remove only recognized trailing boilerplate, never arbitrary words or facts.
