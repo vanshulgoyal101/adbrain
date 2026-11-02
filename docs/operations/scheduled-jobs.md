@@ -28,6 +28,8 @@ repository secret and Vault together.
 only thing that opens issues. GitHub's 15-minute schedule actually runs every few hours, so the
 team supervisor's 10-minute tick dispatches it when its latest run started over 9 minutes ago (so every tick) and
 none is queued or running (#692; the OFF switch stops only role runs, not this, #1525).
+`--install` also loads `in.adbrain.keep-awake` (`caffeinate -s`): with `pmset sleep 1` the Mac slept
+between ticks and this dispatch lapsed for ~2 h at a time (#766). It holds off sleep on the charger only.
 It first calls `scheduler-health` and opens one `Scheduled job overdue: <job>` `core`
 bug for DevOps per job with no successful run in twice its interval. It then calls
 enforce-spend, `sync-leads`, `payment-health` and `refresh-results` itself. It needs
