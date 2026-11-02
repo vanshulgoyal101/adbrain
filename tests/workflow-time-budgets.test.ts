@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -238,5 +238,79 @@ describe("create smoke mode", () => {
     expect(gh).not.toContain("Free pictures are failing");
     expect(gh).toContain("NOTE missing ad");
     expect(gh).toContain("Create saved fewer ads than it asked for or stopped (#2504)");
+  });
+});
+
+describe("scheduled parent-token health check", () => {
+  function runParentCheck(scenario: string) {
+    dir = mkdtempSync(join(tmpdir(), "parent-health-step-"));
+    writeFileSync(join(dir, "curl"), `#!/bin/bash
+count=0
+[ -f calls ] && count=$(wc -l < calls)
+count=$((count + 1))
+printf '%s\\n' "$*" >> calls
+output=""
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = -o ]; then output="$2"; shift; fi
+  shift
+done
+case "$SCENARIO:$count" in
+  timeout:*) echo '{"ok":true,"configured":true,"enabled":false}' > "$output"; echo 'curl: (28) Connection timed out' >&2; printf 000; exit 28 ;;
+  recover:1) echo 'curl: (28) Connection timed out' >&2; printf 000; exit 28 ;;
+  tls:*) echo 'curl: (60) Certificate verification failed' >&2; printf 000; exit 60 ;;
+  refused:*) echo '{"ok":false,"configured":true,"enabled":false,"errorCode":"META_190"}' > "$output"; printf 503; exit 0 ;;
+esac
+echo '{"ok":true,"configured":true,"enabled":false}' > "$output"
+printf 200
+`);
+    chmodSync(join(dir, "curl"), 0o755);
+    const result = spawnSync("bash", ["--noprofile", "--norc", "-eo", "pipefail", "-c",
+      stepScript("scheduled-jobs.yml", "2-Tier parent token")], {
+      cwd: dir,
+      encoding: "utf8",
+      timeout: 5000,
+      env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, CRON_SECRET: "test-cron-secret", SCENARIO: scenario },
+    });
+    const calls = readFileSync(join(dir, "calls"), "utf8").trim().split("\n");
+    return { ...result, calls };
+  }
+
+  it("retries one timed-out read-only check and succeeds when the retry succeeds", () => {
+    const result = runParentCheck("recover");
+    expect(result.status).toBe(0);
+    expect(result.calls).toHaveLength(2);
+    expect(result.calls[0]).toContain("--connect-timeout 10 --max-time 30");
+    expect(result.calls[1]).toContain("--connect-timeout 10 --max-time 10");
+    for (const call of result.calls) {
+      expect(call).toContain("Authorization: Bearer test-cron-secret");
+      expect(call).toContain("https://adbrain.vanshul.com/api/cron/meta-parent-health");
+    }
+    expect(result.stdout).toContain("retry");
+    expect(result.stdout).toContain("HTTP 200");
+    expect(result.stdout + result.stderr).not.toContain("test-cron-secret");
+  });
+
+  it("fails after a second timeout rather than hiding a persistent outage", () => {
+    const result = runParentCheck("timeout");
+    expect(result.status).toBe(1);
+    expect(result.calls).toHaveLength(2);
+    expect(result.stdout).toContain("FAIL 2-Tier parent token: HTTP 000");
+    expect(result.stdout).toContain('"error":"request failed"');
+    expect(result.stdout).not.toContain('"ok":true');
+  });
+
+  it("does not retry or hide an HTTP error from the health endpoint", () => {
+    const result = runParentCheck("refused");
+    expect(result.status).toBe(1);
+    expect(result.calls).toHaveLength(1);
+    expect(result.stdout).toContain("HTTP 503");
+    expect(result.stdout).toContain("META_190");
+  });
+
+  it("does not retry a non-timeout curl error", () => {
+    const result = runParentCheck("tls");
+    expect(result.status).toBe(1);
+    expect(result.calls).toHaveLength(1);
+    expect(result.stdout).toContain("FAIL 2-Tier parent token: HTTP 000");
   });
 });

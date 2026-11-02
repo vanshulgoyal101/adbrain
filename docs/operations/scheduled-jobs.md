@@ -35,7 +35,9 @@ bug for DevOps per job with no successful run in twice its interval. It then cal
 enforce-spend, `sync-leads`, `payment-health` and `refresh-results` itself. It needs
 the `CRON_SECRET` secret of the **`production-secrets`** environment (deployments from `main` only, #1893) equal to the production value, logs only counts, fails
 red on any non-200 and opens one `Scheduled jobs failed twice in a row` `core` bug on
-two consecutive failures. Pause it with `gh workflow disable scheduled-jobs.yml`; resume
+two consecutive failures. The read-only parent-token check retries once after a curl timeout
+(10-second retry); HTTP errors and a second timeout remain failures, and the retry is logged.
+Pause it with `gh workflow disable scheduled-jobs.yml`; resume
 with `gh workflow enable scheduled-jobs.yml`; run once with `gh workflow run scheduled-jobs.yml`.
 Each run also scans issue/PR bodies and comments since the previous run for customer data
 ([scan-public-data.mjs](../../scripts/scan-public-data.mjs), #1627: Indian mobiles, emails, Meta ids, tokens, JWTs,
