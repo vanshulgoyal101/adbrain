@@ -2,7 +2,7 @@
 <html lang="en">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Website signups and sales: Tracking, goal and Review · #2595 D2 (#2715)</title>
+<title>Website leads and sales: Tracking, goal and Review · #2595 D2 (#2715)</title>
 <style>
   @font-face { font-family: "DM Sans"; src: url("dm-sans.woff2") format("woff2"); font-weight: 100 900; }
   :root { --ink: #0f172a; --body: #334155; --muted: #64748b; --line: #e2e8f0; --soft: #f8fafc; --blue: #1d4ed8; --blue-bg: #eff6ff; --blue-line: #93c5fd; --amber: #92400e; --amber-bg: #fffbeb; --amber-line: #fcd34d; --green: #166534; --green-bg: #f0fdf4; --primary: #1d4ed8; }
@@ -72,14 +72,14 @@
 </style>
 <body>
 <header class="intro">
-  <h1>Website signups and sales: Brand Tracking, goal chips, Review</h1>
+  <h1>Website leads and sales: Brand Tracking, goal chips, Review</h1>
   <p>Designer, for Dev 2's D2 (#2715), on the CTO's design (#2595, 6581991068). States are <code>TrackingStatus</code>: none · unreadable · quiet · event_missing · ready. Illustrative data. Visits, WhatsApp and form are unchanged. EN at 390; <code>?lang=hi</code> renders the HI draft.</p>
 </header>
 <div class="boards">
 
   <!-- 1 · Brand Tracking: ready for one goal, event missing for the other -->
   <section class="frame">
-    <div class="caption"><b>1 · Brand → Website tracking.</b> Ready for signups; sales event not seen yet (event_missing). One pixel is picked; the goal implies the event.</div>
+    <div class="caption"><b>1 · Brand → Website tracking.</b> Ready for website leads; sales event not seen yet (event_missing). One pixel is picked; the goal implies the event.</div>
     <div class="content">
       <div class="card ann"><span class="pin">1</span>
         <div class="card-head"><h2 data-t="brandTitle"></h2><p class="muted" data-t="brandSub"></p></div>
@@ -107,7 +107,7 @@
     <div class="content">
       <p class="alt-label">none</p>
       <div class="state ann"><span class="pin">2</span><b data-t="noneTitle"></b><span data-t="noneBody"></span>
-        <div class="actions"><span class="btn" data-t="setup"></span><span class="btn" data-t="checkAgain"></span></div>
+        <div class="actions"><span class="btn" data-t="checkAccess"></span><a class="link" data-t="setup"></a></div>
         <span class="muted" data-t="noneFoot"></span></div>
       <p class="alt-label">unreadable</p>
       <div class="state ann"><span class="pin">3</span><b data-t="unreadTitle"></b><span data-t="unreadBody"></span>
@@ -146,7 +146,7 @@
 
   <!-- 4 · Sales chosen -->
   <section class="frame">
-    <div class="caption"><b>4 · Sales chosen (ready).</b> The 50-a-week line sits right above Make my ads. Budget is untouched.</div>
+    <div class="caption"><b>4 · Sales chosen (ready).</b> The few-purchases line sits right above Make my ads. Budget is untouched.</div>
     <div class="content">
       <fieldset>
         <span class="legend" data-t="goalLegend"></span>
@@ -158,7 +158,6 @@
         <p class="hint" data-t="hintSales"></p>
         <p class="hint" data-t="pageHintSales"></p>
       </fieldset>
-      <p class="muted" data-t="budgetSame"></p>
       <p class="state info ann"><span class="pin">6</span><span data-t="sales50"></span></p>
       <span class="btn primary" data-t="makeAds"></span>
     </div>
@@ -166,7 +165,7 @@
 
   <!-- 5 · Review ready -->
   <section class="frame">
-    <div class="caption"><b>5 · Review, ready (signups).</b> Goal first, then the tracking that was checked, then link and button.</div>
+    <div class="caption"><b>5 · Review, ready (website leads).</b> Goal, the tracking that was checked, link and button, then the campaign's own attribution window.</div>
     <div class="content">
       <div><h2 data-t="reviewReady"></h2><p class="muted" data-t="paused"></p></div>
       <div class="card">
@@ -174,6 +173,7 @@
           <div><dt data-t="goal"></dt><dd data-t="goalSignups"></dd><dd class="sub" data-t="goalSignupsSub"></dd></div>
           <div class="ann"><span class="pin">7</span><dt data-t="tracking"></dt><dd>Shop website</dd><dd class="sub" data-t="trackingSub"></dd></div>
           <div><dt data-t="reviewWebsite"></dt><dd class="url"><span class="host">shop.example.in</span><span class="path">/pricing</span></dd><dd class="sub" data-t="buttonsSignup"></dd></div>
+          <div class="ann"><span class="pin">7b</span><dt data-t="attribution"></dt><dd data-t="attributionVal"></dd><dd class="sub" data-t="attributionSub"></dd></div>
           <div><dt data-t="budget"></dt><dd data-t="budgetVal"></dd></div>
         </dl>
         <p class="muted" data-t="expectSignups"></p>
@@ -201,12 +201,12 @@
   <h3>Notes for Dev 2 (D2), after C2's DTO</h3>
   <ol>
     <li><span class="pin">1</span><span><b>Brand card "Website tracking"</b>, shown only when Meta is connected and Brand has a website; it sits after Contact details. One radio row per pixel: name, last event, and a ✓/! line for Lead and Purchase over the checked window. Footer: Check again (44 px) + Events Manager ↗ link + "Checked 14:05 · last 7 days". <code>brand-form.tsx</code> is 613 lines; put the card in its own <code>brand-tracking-card.tsx</code>. The words say "tracking"; "pixel" only where Meta shows it.</span></li>
-    <li><span class="pin">2</span><span><b>none:</b> Meta's guide is the fix; name Shopify, WooCommerce and WordPress. AdBrain never installs anything.</span></li>
+    <li><span class="pin">2</span><span><b>none</b> means this ad account can't see a source, not that the site sends nothing (CPO). Lead with <b>Check Meta access</b>; Events Manager setup is the second option. Never tell a tracked business to add a second pixel. AdBrain never installs anything.</span></li>
     <li><span class="pin">3</span><span><b>unreadable</b> means "we couldn't check", never "another business owns it" (CTO). The share advice is conditional ("If another business manages…").</span></li>
     <li><span class="pin">4</span><span><b>Goal chips</b> are a radio group, 3 equal columns (fits HI at 360). Visits is the default and is always available. A goal whose tracking isn't ready stays in the row as <code>aria-disabled</code> with "Needs tracking" under its name, so the owner sees it exists; tapping it focuses the reason below. Never auto-switch to it or away from it.</span></li>
     <li><span class="pin">5</span><span>The reason uses the same state words as Brand (event_missing here) and one button, <b>Finish tracking setup</b> → <code>/brand#tracking</code>. With no tracking at all, one combined line covers both goals.</span></li>
-    <li><span class="pin">6</span><span>The CPO's sales line shows only for Sales, directly above Make my ads, as information (not amber). No budget change, no goal switch.</span></li>
-    <li><span class="pin">7</span><span><b>Review "Tracking"</b> appears only for signups/sales: what Review pinned (pixel + event, checked time). Button line comes from the ads' own words (#2703), so it says "Buttons:" when ads differ.</span></li>
+    <li><span class="pin">6</span><span>The CPO's few-purchases line (no 50-sales promise) shows only for Sales, directly above Make my ads, as information (not amber). No budget change, no goal switch.</span></li>
+    <li><span class="pin">7</span><span><b>Review "Tracking"</b> appears only for leads/sales: what Review pinned (pixel + event, checked time). Button line comes from the ads' own words (#2703), so it says "Buttons:" when ads differ. <b>7b</b> "Results counted within" shows the attribution setting read from the campaign, never fixed copy. "Website leads" names the Lead goal; SIGN_UP stays a real button choice.</span></li>
     <li><span class="pin">8</span><span>Blockers: tracking none/unreadable/quiet/event_missing → <b>Check tracking</b> (re-reads; the body shows the window and checked time). Goal ↔ button mismatch → <b>Review ads</b>. Send stays off until both clear.</span></li>
     <li><span class="pin">9</span><span>"Run as website visits instead" is a link-style button: it changes the goal to visits and re-runs Review. Nothing falls back on its own.</span></li>
     <li><span class="pin">✓</span><span>Rendered EN 390 and HI 360: no overflow, every target ≥ 44 px, no button text on two lines. HI is a draft for the CPO's words check; add keys only (<code>campaigns.goal.*</code>, <code>brand.tracking.*</code>).</span></li>
@@ -217,20 +217,20 @@
 const T = {
   en: {
     brandTitle: "Website tracking",
-    brandSub: "Only needed for signups or sales from your website. WhatsApp, forms and website visits work without it.",
+    brandSub: "Only needed for website leads or sales. WhatsApp, forms and website visits work without it.",
     pickLegend: "Which pixel should AdBrain use?",
     last2h: "Last event 2 hours ago",
-    leadSeen: "Signups (Lead): seen 12 times",
+    leadSeen: "Website leads (Lead): seen 12 times",
     purchaseNot: "Sales (Purchase): not seen",
     last12: "Last event 12 days ago",
     noEvents7: "Nothing in the last 7 days",
-    selectedNote: "Ready for signup campaigns. For sales, Meta first needs to see a Purchase on your site.",
+    selectedNote: "Ready for website lead campaigns. For sales, Meta first needs to see a Purchase on your site.",
     checkAgain: "Check again",
     eventsManager: "Open Events Manager ↗",
     checkedAt: "Checked at 14:05 · last 7 days",
     counts: "Counts are what Meta reports for this window, not orders AdBrain has checked.",
-    noneTitle: "Your website isn't sending results to Meta yet.",
-    noneBody: "Add a Meta pixel to your site in Events Manager. Shopify, WooCommerce and WordPress have a Meta setup that does it for you.",
+    noneTitle: "No website tracking source is available to this ad account.",
+    noneBody: "If your site already uses a Meta pixel, check that this ad account can use it. If not, set one up in Events Manager.",
     setup: "Set up in Events Manager ↗",
     noneFoot: "Until then, run website visits.",
     unreadTitle: "We couldn't check tracking for this ad account.",
@@ -239,57 +239,61 @@ const T = {
     quietBody: "Meta hasn't seen anything from your site this week. Fix the pixel on your site, then check again. Website visits still work.",
     websiteLink: "Your ads open",
     goalLegend: "What do you want from your website?",
-    chipVisits: "Visits", chipSignups: "Signups", chipSales: "Sales",
+    chipVisits: "Visits", chipSignups: "Website leads", chipSales: "Sales",
     needsTracking: "Needs tracking",
-    hintSignups: "Meta finds people likely to sign up. Tracked by Shop website: Lead seen 12 times this week.",
-    pageHintSignups: "People should be able to sign up on this page.",
+    hintSignups: "Meta finds people likely to become leads on your site. Tracked by Shop website: Lead seen 12 times this week.",
+    pageHintSignups: "People should be able to send their details on this page.",
     salesNotReady: "Sales: Meta hasn't seen a Purchase on Shop website this week.",
     finish: "Finish tracking setup",
-    noTracking: "Signups and sales need website tracking.",
+    noTracking: "Website leads and sales need website tracking.",
     noTrackingBody: "Website visits work now.",
     hintSales: "Meta finds people likely to buy. Tracked by Shop website: Purchase seen 34 times this week.",
     pageHintSales: "People should be able to buy on this page.",
     budgetSame: "Your budget stays as you set it.",
-    sales50: "Sales campaigns need about 50 sales a week to settle. With fewer, Meta may spend unevenly.",
+    sales50: "With few recent purchases, results and spending can vary. We won't increase your budget or change your goal.",
     makeAds: "Make my ads",
     reviewReady: "Ready for campaign review",
     reviewBlocked: "Review before creation",
     paused: "AdBrain creates this campaign paused. Nothing spends until you activate it.",
     goal: "Goal",
-    goalSignups: "Signups on your website",
-    goalSignupsSub: "Meta counts signups your site reports (Lead)",
+    goalSignups: "Website leads",
+    goalSignupsSub: "Meta counts Lead events your website sends. These aren't customers AdBrain has verified.",
     tracking: "Tracking",
     trackingSub: "Lead seen 12 times in 7 days · checked 14:05",
     reviewWebsite: "People will go to",
     buttonsSignup: "Button: Sign up",
     budget: "Budget",
     budgetVal: "₹500 a day · up to ₹3,500 a week",
-    expectSignups: "AdBrain hasn't run enough signup campaigns yet to quote a cost per signup.",
+    expectSignups: "AdBrain hasn't run enough website lead campaigns yet to quote a cost per lead.",
     send: "Send to Meta (paused)",
     block1Title: "Meta hasn't seen a sale on your site this week",
     block1Body: "Shop website reported no Purchase from 26 Oct to 2 Nov (checked 14:05). Fix your checkout's tracking, then check again.",
     checkTracking: "Check tracking",
     block2Title: "2 ads say “Sign up”, but this campaign is for sales",
-    block2Body: "Change their button to Shop now or Buy now, or pick the Signups goal.",
+    block2Body: "Change their button to Shop now, or pick the Website leads goal.",
     reviewAds: "Review ads",
     switchVisits: "Run as website visits instead",
+    checkAccess: "Check Meta access",
+    attribution: "Results counted within",
+    attributionVal: "7 days after a click · 1 day after a view",
+    attributionSub: "Meta counts results that come within this window after a click or a view of your ad.",
   },
   hi: {
     brandTitle: "वेबसाइट ट्रैकिंग",
-    brandSub: "सिर्फ़ वेबसाइट से साइनअप या बिक्री के लिए चाहिए। WhatsApp, फ़ॉर्म और वेबसाइट विज़िट इसके बिना चलते हैं।",
+    brandSub: "सिर्फ़ वेबसाइट लीड या बिक्री के लिए चाहिए। WhatsApp, फ़ॉर्म और वेबसाइट विज़िट इसके बिना चलते हैं।",
     pickLegend: "AdBrain कौन-सा पिक्सेल इस्तेमाल करे?",
     last2h: "आख़िरी इवेंट 2 घंटे पहले",
-    leadSeen: "साइनअप (Lead): 12 बार दिखा",
+    leadSeen: "वेबसाइट लीड (Lead): 12 बार दिखा",
     purchaseNot: "बिक्री (Purchase): नहीं दिखा",
     last12: "आख़िरी इवेंट 12 दिन पहले",
     noEvents7: "पिछले 7 दिन में कुछ नहीं",
-    selectedNote: "साइनअप कैंपेन के लिए तैयार। बिक्री के लिए Meta को पहले आपकी साइट पर एक Purchase दिखना चाहिए।",
+    selectedNote: "वेबसाइट लीड कैंपेन के लिए तैयार। बिक्री के लिए Meta को पहले आपकी साइट पर एक Purchase दिखना चाहिए।",
     checkAgain: "फिर से जाँचें",
     eventsManager: "Events Manager खोलें ↗",
     checkedAt: "14:05 पर जाँचा · पिछले 7 दिन",
     counts: "ये संख्याएँ इस अवधि के लिए Meta की बताई हुई हैं, AdBrain के जाँचे हुए ऑर्डर नहीं।",
-    noneTitle: "आपकी वेबसाइट अभी Meta को नतीजे नहीं भेज रही।",
-    noneBody: "Events Manager में अपनी साइट पर Meta पिक्सेल लगाएँ। Shopify, WooCommerce और WordPress में Meta सेटअप है जो यह आपके लिए कर देता है।",
+    noneTitle: "इस विज्ञापन खाते के लिए वेबसाइट ट्रैकिंग का कोई स्रोत उपलब्ध नहीं है।",
+    noneBody: "अगर आपकी साइट पहले से Meta पिक्सेल इस्तेमाल करती है, तो देखें कि यह विज्ञापन खाता उसे इस्तेमाल कर सकता है। नहीं तो Events Manager में एक सेट करें।",
     setup: "Events Manager में सेट करें ↗",
     noneFoot: "तब तक वेबसाइट विज़िट चलाएँ।",
     unreadTitle: "इस विज्ञापन खाते की ट्रैकिंग हम जाँच नहीं पाए।",
@@ -298,40 +302,44 @@ const T = {
     quietBody: "इस हफ़्ते Meta को आपकी साइट से कुछ नहीं मिला। साइट पर पिक्सेल ठीक करें, फिर दोबारा जाँचें। वेबसाइट विज़िट अब भी चलते हैं।",
     websiteLink: "आपके विज्ञापन यह पेज खोलेंगे",
     goalLegend: "आपको वेबसाइट से क्या चाहिए?",
-    chipVisits: "विज़िट", chipSignups: "साइनअप", chipSales: "बिक्री",
+    chipVisits: "विज़िट", chipSignups: "वेबसाइट लीड", chipSales: "बिक्री",
     needsTracking: "ट्रैकिंग चाहिए",
-    hintSignups: "Meta उन लोगों को ढूँढता है जो साइनअप कर सकते हैं। Shop website से ट्रैक होगा: इस हफ़्ते Lead 12 बार दिखा।",
-    pageHintSignups: "लोग इसी पेज पर साइनअप कर सकें।",
+    hintSignups: "Meta उन लोगों को ढूँढता है जो आपकी साइट पर लीड बन सकते हैं। Shop website से ट्रैक होगा: इस हफ़्ते Lead 12 बार दिखा।",
+    pageHintSignups: "लोग इसी पेज पर अपनी जानकारी भेज सकें।",
     salesNotReady: "बिक्री: इस हफ़्ते Meta को Shop website पर कोई Purchase नहीं दिखा।",
     finish: "ट्रैकिंग सेटअप पूरा करें",
-    noTracking: "साइनअप और बिक्री के लिए वेबसाइट ट्रैकिंग चाहिए।",
+    noTracking: "वेबसाइट लीड और बिक्री के लिए वेबसाइट ट्रैकिंग चाहिए।",
     noTrackingBody: "वेबसाइट विज़िट अभी चल सकते हैं।",
     hintSales: "Meta उन लोगों को ढूँढता है जो खरीद सकते हैं। Shop website से ट्रैक होगा: इस हफ़्ते Purchase 34 बार दिखा।",
     pageHintSales: "लोग इसी पेज पर खरीद सकें।",
     budgetSame: "आपका बजट वैसा ही रहेगा जैसा आपने रखा है।",
-    sales50: "बिक्री वाले कैंपेन को जमने के लिए हफ़्ते में लगभग 50 बिक्री चाहिए। इससे कम पर Meta असमान खर्च कर सकता है।",
+    sales50: "हाल में कम खरीदारी हुई हो, तो नतीजों और खर्च में उतार-चढ़ाव आ सकता है। हम आपका बजट नहीं बढ़ाएँगे और लक्ष्य नहीं बदलेंगे।",
     makeAds: "मेरे विज्ञापन बनाएँ",
     reviewReady: "कैंपेन रिव्यू के लिए तैयार",
     reviewBlocked: "बनाने से पहले रिव्यू करें",
     paused: "AdBrain यह कैंपेन रुका हुआ बनाता है। जब तक आप चालू नहीं करते, कुछ खर्च नहीं होता।",
     goal: "लक्ष्य",
-    goalSignups: "वेबसाइट पर साइनअप",
-    goalSignupsSub: "Meta आपकी साइट से आए साइनअप (Lead) गिनता है",
+    goalSignups: "वेबसाइट लीड",
+    goalSignupsSub: "Meta आपकी वेबसाइट से भेजे गए Lead इवेंट गिनता है। ये AdBrain से सत्यापित ग्राहक नहीं हैं।",
     tracking: "ट्रैकिंग",
     trackingSub: "7 दिन में Lead 12 बार · 14:05 पर जाँचा",
     reviewWebsite: "लोग यहाँ जाएँगे",
     buttonsSignup: "बटन: साइन अप करें",
     budget: "बजट",
     budgetVal: "₹500 रोज़ · हफ़्ते में ₹3,500 तक",
-    expectSignups: "AdBrain ने अभी इतने साइनअप कैंपेन नहीं चलाए हैं कि प्रति साइनअप खर्च बता सके।",
+    expectSignups: "AdBrain ने अभी इतने वेबसाइट लीड कैंपेन नहीं चलाए हैं कि प्रति लीड खर्च बता सके।",
     send: "Meta को भेजें (रुका हुआ)",
     block1Title: "इस हफ़्ते Meta को आपकी साइट पर कोई बिक्री नहीं दिखी",
     block1Body: "26 अक्टूबर से 2 नवंबर तक Shop website से कोई Purchase नहीं आया (14:05 पर जाँचा)। checkout की ट्रैकिंग ठीक करें, फिर दोबारा जाँचें।",
     checkTracking: "ट्रैकिंग जाँचें",
     block2Title: "2 विज्ञापनों पर “साइन अप करें” लिखा है, पर यह कैंपेन बिक्री के लिए है",
-    block2Body: "उनका बटन “अभी खरीदें” करें, या साइनअप लक्ष्य चुनें।",
+    block2Body: "उनका बटन ‘अभी खरीदें’ (Shop now) करें, या वेबसाइट लीड लक्ष्य चुनें।",
     reviewAds: "विज्ञापन देखें",
     switchVisits: "इसके बजाय वेबसाइट विज़िट चलाएँ",
+    checkAccess: "Meta का ऐक्सेस जाँचें",
+    attribution: "नतीजे गिनने की अवधि",
+    attributionVal: "क्लिक के 7 दिन · देखने के 1 दिन बाद तक",
+    attributionSub: "Meta इस अवधि के क्लिक या विज्ञापन देखने के बाद आए नतीजे गिनता है।",
   },
 };
 const lang = new URLSearchParams(location.search).get("lang") === "hi" ? "hi" : "en";
