@@ -8,8 +8,10 @@ import { createHash, randomUUID } from "node:crypto";
 import pg from "pg";
 import { applyMigration } from "./database-migrations.mjs";
 import { appendedMigrations, buildSchema, readBaseSchema } from "./build-schema.mjs";
+import { createDefaultPrivilegeFixtures, verifyDefaultPrivilegeLedger, verifyDefaultPrivileges } from "./check-default-privileges.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const defaultPrivilegesMigration = await readFile(join(root, "db/migrations/20261102_default_public_privileges.sql"), "utf8");
 const operatorPaymentMigration = await readFile(join(root, "db/migrations/20260926_production_payment_policy_v2.sql"), "utf8");
 const customerAllowanceMigration = await readFile(join(root, "db/migrations/20260926_customer_ad_allowance.sql"), "utf8");
 const creativeIntentMigration = await readFile(join(root, "db/migrations/20260927_creative_generation_intents.sql"), "utf8");
@@ -69,7 +71,14 @@ const bootstrap = `
   grant usage on schema auth, public to anon, authenticated, service_role;
   alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
   alter default privileges in schema public grant all on sequences to anon, authenticated, service_role;
+  alter default privileges for role postgres in schema public grant all on tables to anon, authenticated, service_role;
+  alter default privileges for role postgres in schema public grant all on sequences to anon, authenticated, service_role;
+  alter default privileges for role postgres in schema public grant execute on functions to anon, authenticated, service_role;
+  alter default privileges for role supabase_admin in schema public grant all on tables to anon, authenticated, service_role;
+  alter default privileges for role supabase_admin in schema public grant all on sequences to anon, authenticated, service_role;
+  alter default privileges for role supabase_admin in schema public grant execute on functions to anon, authenticated, service_role;
   create schema storage;
+  alter default privileges for role postgres in schema storage grant execute on functions to anon, authenticated, service_role;
   create table storage.buckets (id text primary key, name text, public boolean, file_size_limit bigint, allowed_mime_types text[]);
   create table storage.objects (id uuid primary key default gen_random_uuid(), bucket_id text, name text);
   alter table storage.objects enable row level security;
@@ -89,6 +98,19 @@ async function check(label, run) {
     failures.push(label);
     console.error(`FAIL ${label}: ${error.message}`);
   }
+}
+
+async function verifyDefaultPrivilegeMigrationLedger() {
+  const admin = client();
+  await admin.connect();
+  try { await admin.query("create database default_privilege_ledger"); }
+  finally { await admin.end(); }
+  const db = client("default_privilege_ledger");
+  await db.connect();
+  try {
+    await db.query(bootstrap);
+    await verifyDefaultPrivilegeLedger(db, check, defaultPrivilegesMigration);
+  } finally { await db.end(); }
 }
 
 async function verifyRollback() {
@@ -3197,7 +3219,12 @@ async function verify(database, source, integrityMigration, customerOnly = false
   await db.connect();
   try {
     await db.query(bootstrap);
+    const defaultPrivilegeFixtures = customerOnly ? await createDefaultPrivilegeFixtures(db) : undefined;
+    if (database === "customer_upgrade") {
+      await db.query("alter default privileges for role postgres in schema public revoke execute on functions from anon");
+    }
     await db.query(source);
+    if (customerOnly) await verifyDefaultPrivileges(db, database, check, defaultPrivilegesMigration, defaultPrivilegeFixtures);
     if (process.argv.includes("--analytics-only") || database.startsWith("analytics_")) {
       const installed = (await db.query("select to_regclass('public.product_event_daily') is not null as installed")).rows[0].installed;
       if (!installed) {
@@ -4470,7 +4497,11 @@ try {
   started = true;
   const admin = client();
   await admin.connect();
-  await admin.query("create role anon; create role authenticated; create role service_role bypassrls");
+  await admin.query(`create role anon; create role authenticated; create role service_role bypassrls;
+    do $$ begin
+      if not exists (select 1 from pg_roles where rolname = 'postgres') then create role postgres superuser; end if;
+      if not exists (select 1 from pg_roles where rolname = 'supabase_admin') then create role supabase_admin superuser; end if;
+    end $$;`);
   await admin.end();
   if (process.argv.includes("--rollback-only")) {
     await verifyRollback();
@@ -4533,6 +4564,7 @@ try {
     await verify("ordered_upgrade", `${baseline}\n${metaMigration}\n${campaignMigration}\n${trustedUsageMigration}\n${trustedUsageMigration}\n${productEventsMigration}\n${productEventsMigration}\n${whatsappMigration}\n${whatsappMigration}\n${reportingMigration}\n${reportingMigration}\n${workerMigration}\n${workerMigration}\n${billingMigration}\n${billingMigration}\n${billingEventsMigration}\n${billingEventsMigration}\n${testPaymentsMigration}\n${testPaymentsMigration}\n${productionPaymentsMigration}\n${productionPaymentsMigration}\n${draftAuthorityMigration}\n${trustedCampaignMigration}\n${legacyLead}\n${leadFollowUpMigration}\n${leadFollowUpMigration}\n${leadSyncMigration}\n${leadSyncMigration}`, integrityMigration);
   }
   if (!process.argv.includes("--analytics-only") && !process.argv.includes("--pricing-only") && !process.argv.includes("--leads-only") && !process.argv.includes("--generation-only")) {
+    await verifyDefaultPrivilegeMigrationLedger();
     await verify("customer_fresh",schema,undefined,true);
     await verify("customer_upgrade",`${baseline}\n${metaMigration}\n${campaignMigration}\n${billingMigration}\n${productionPaymentsMigration}\n${trustedCampaignMigration}`,undefined,true);
     if (!process.argv.includes("--customer-only")) {
