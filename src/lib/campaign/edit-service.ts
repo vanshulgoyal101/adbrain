@@ -4,7 +4,8 @@ import { z } from "zod";
 import { logEvent } from "@/lib/audit";
 import { intendedCampaignChildren, reviewableCampaign } from "@/lib/campaign/activation";
 import { pausedAdIds } from "@/lib/campaign/ad-pause";
-import { saveCampaignChildren } from "@/lib/campaign/trusted-write";
+import { audienceChangeFromForm, type AudienceEditForm } from "@/lib/campaign/editor-targeting";
+import { saveCampaignChildren, saveCampaignPreparedAudience } from "@/lib/campaign/trusted-write";
 import { AdSetSwitchStuckError, CampaignDeliveryError, MetaError, friendlyMetaError, needsRebuild, type AudienceChanges, type AudienceEdit, type GeoTargeting } from "@/lib/meta/client";
 import { ConnectionAccessError, withMetaConnection, type AuthorizedBusiness } from "@/lib/meta/connection-access";
 import { mergeExclusions, TargetingExclusionsMissingError } from "@/lib/meta/service-area";
@@ -18,8 +19,6 @@ import type { Campaign, Json } from "@/lib/types";
 
 const RESTARTS_LEARNING = "This restarts Meta's learning; results may be slower for 2–3 days.";
 const PAUSE_FIRST = "Part of this campaign is still running in Meta. Pause the campaign, then edit the audience.";
-/** #765: Meta refuses an in-place audience change on these ad sets; the owner confirms a PAUSED copy instead (CPO's words). */
-const RUNNING_NEEDS_COPY = "Meta doesn't allow this change on a running campaign. We'll make a fresh copy with your change (paused, back to review, learning restarts) and stop the old one when you turn the new one on.";
 const SWITCH_PENDING = "A new audience is waiting for this campaign. Turn it on or cancel it first.";
 const NO_AREA_EXCLUSIONS = "This campaign covers a whole country, so there are no out-of-area places to leave out.";
 const ALREADY_EXCLUDED = "Every ad set already leaves out the places outside its area. Nothing to change.";
@@ -46,27 +45,32 @@ export const audienceChangeSchema = z.object({
   .refine(change => Boolean(change.location || change.excludedLocation || change.age || change.gender || change.languages || change.areaExclusions), "Change something about the audience.");
 export type AudienceChange = z.infer<typeof audienceChangeSchema>;
 
+/** #773 (CEO, Nov 2): a running campaign's audience change, saved in `campaigns.raw` until its next run. */
+export type PreparedAudience = { change: AudienceChange; form: AudienceEditForm; savedAt: string };
+
 /** #765 (b): a running ad set's PAUSED copy, waiting for the owner to switch to it or cancel it. */
 export type PendingCopy = { from: { adSetId: string; adIds: string[] }; to: { adSetId: string; adIds: string[] } };
 export type AudienceEditResult = {
+  /** #773: a running campaign's change was saved for its next run; Meta wasn't called. */
+  prepared?: true;
   adSets: Array<{ adSetId: string; previousAdSetId: string | null; mode: "patch" | "rebuild" | "copy" }>;
   count: number;
   consequence: string | null;
   /** Set when copies wait for the owner: switch or cancel with this operation id. */
   awaitingSwitch?: { operationId: string; pending: PendingCopy[] };
 };
-export type AudienceEditPreview = { adSets: Array<{ adSetId: string; mode: "patch" | "rebuild" | "copy"; validated: boolean }>; consequence: string | null };
+export type AudienceEditPreview = { prepared?: true; adSets: Array<{ adSetId: string; mode: "patch" | "rebuild"; validated: boolean }>; consequence: string | null };
 
 export class CampaignEditError extends Error {
-  constructor(message: string, readonly status: number, readonly retryable = false, readonly code?: "needs_copy" | "switch_pending") {
+  constructor(message: string, readonly status: number, readonly retryable = false, readonly code?: "switch_pending") {
     super(message);
     this.name = "CampaignEditError";
   }
 }
 
 type Row = { id: string; state: string; phase: string; transmitted: boolean; request_hash: string; result: Json | null; sanitized_error: string | null };
-/** `copy`: the owner confirmed a PAUSED copy for running ad sets Meta can't change in place (#765 b). */
-type Options = { preview?: boolean; idempotencyKey: string; copy?: boolean };
+/** `form`: the owner's Edit audience form; required for a running campaign, whose change is saved for its next run. */
+type Options = { preview?: boolean; idempotencyKey: string; form?: PreparedAudience["form"] };
 
 const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
 
@@ -139,6 +143,8 @@ export function mirroredChildren(
   if (Array.isArray(raw.cappedAdSetIds)) next.cappedAdSetIds = (raw.cappedAdSetIds as string[]).map(adSet);
   const cap = raw.cap;
   if (cap && typeof cap === "object" && !Array.isArray(cap) && typeof cap.adSetId === "string") next.cap = { ...cap, adSetId: adSet(cap.adSetId) };
+  // #773: the confirmed edit replaces any change saved for the next run.
+  delete next.preparedAudience;
   // #1146: an ad paused from the card stays paused under its copy's id, so Resume (#1055) and the card's Undo keep track.
   const carried = pausedAdIds(raw).flatMap(adId => adMap.has(adId) ? [{ adId: adMap.get(adId)!, action: "paused" as const, at: new Date().toISOString(), reason: "Kept paused on the new audience" }] : []);
   if (carried.length) next.adPauses = [...(Array.isArray(raw.adPauses) ? raw.adPauses : []), ...carried].slice(-50) as Json;
@@ -187,6 +193,11 @@ export async function editCampaignAudience(context: AuthorizedBusiness, campaign
   const review = reviewableCampaign(campaign);
   if (!review) throw new CampaignEditError("AdBrain can only edit campaigns it launched.", 409);
   await refuseWhileSwitchPending(database, campaignId);
+  // #773 (CEO, Nov 2): never edit a live run; the change waits for the next run and nothing goes to Meta. The form says
+  // the owner chose "Save for next run"; a dialog opened before the campaign started or stopped must reopen, not edit Meta.
+  if (status === "active" && !options.form) throw new CampaignEditError("This campaign is running now. Close Edit audience and open it again; your change will be saved for its next run.", 409);
+  if (status === "paused" && options.form) throw new CampaignEditError("This campaign is paused now. Close Edit audience and open it again to check the change with Meta.", 409);
+  if (status === "active") return prepareForNextRun(context, campaign as Campaign, change, options);
 
   const touch = async (values: Record<string, unknown>) => {
     if (!row) return;
@@ -206,7 +217,6 @@ export async function editCampaignAudience(context: AuthorizedBusiness, campaign
   }
 
   const done: Array<{ from: { adSetId: string; adIds: string[] }; to: AudienceEdit }> = [];
-  const built: PendingCopy[] = [];
   let transmitted = false;
   const fail = async (state: "failed" | "needs_reconciliation", message: string) => {
     await touch({ state, transmitted, sanitized_error: message.slice(0, 500) }).catch(() => undefined);
@@ -224,7 +234,7 @@ export async function editCampaignAudience(context: AuthorizedBusiness, campaign
       // A paused campaign's whole tree is paused (pauseCampaignTree); a running one may keep paused siblings (a capped run).
       if (status === "paused" && tree.adSets.some(adSet => adSet.status !== "PAUSED")) throw new CampaignEditError(PAUSE_FIRST, 409);
       const treeTargets = tree.adSets.map(adSet => ({
-        adSetId: adSet.id, adIds: tree.ads.filter(ad => ad.adSetId === adSet.id).map(ad => ad.id), running: adSet.status === "ACTIVE",
+        adSetId: adSet.id, adIds: tree.ads.filter(ad => ad.adSetId === adSet.id).map(ad => ad.id),
         mode: needsRebuild({ targeting: adSet.targeting, destination_type: adSet.destinationType }) ? "rebuild" as const : "patch" as const, targeting: adSet.targeting,
       }));
       if (treeTargets.some(target => !target.adIds.length)) throw new CampaignDeliveryError("Part of this campaign has no ads left on Meta, so it can't be changed here. Open it in Meta Ads Manager to fix it.");
@@ -249,28 +259,23 @@ export async function editCampaignAudience(context: AuthorizedBusiness, campaign
       }
       const targets = treeTargets.filter(target => changesFor.has(target.adSetId));
       if (!targets.length) throw new CampaignEditError(ALREADY_EXCLUDED, 409);
-      // #765 (b): Meta can't change a running WhatsApp or interest-based ad set in place. With the owner's OK it gets
-      // a PAUSED copy and keeps running until the owner switches; without it, nothing is written.
-      const copies = (target: (typeof targets)[number]) => target.running && target.mode === "rebuild";
-      if (!options.preview && !options.copy && targets.some(copies)) throw new CampaignEditError(RUNNING_NEEDS_COPY, 409, false, "needs_copy");
       const changesOf = (adSetId: string) => changesFor.get(adSetId)!;
 
       const validated = new Map<string, boolean>();
       for (const target of targets.filter(item => item.mode === "rebuild")) {
-        await meta.editAdSetTargeting(review.metaCampaignId, { adSetId: target.adSetId, adIds: target.adIds, changes: changesOf(target.adSetId) }, { validateOnly: true, copyOnly: copies(target) });
+        await meta.editAdSetTargeting(review.metaCampaignId, { adSetId: target.adSetId, adIds: target.adIds, changes: changesOf(target.adSetId) }, { validateOnly: true });
         validated.set(target.adSetId, true);
       }
-      const consequence = targets.some(target => target.mode === "rebuild" || target.running) ? RESTARTS_LEARNING : null;
-      if (options.preview) return { preview: { adSets: targets.map(target => ({ adSetId: target.adSetId, mode: copies(target) ? "copy" as const : target.mode, validated: validated.has(target.adSetId) })), consequence } };
+      const consequence = targets.some(target => target.mode === "rebuild") ? RESTARTS_LEARNING : null;
+      if (options.preview) return { preview: { adSets: targets.map(target => ({ adSetId: target.adSetId, mode: target.mode, validated: validated.has(target.adSetId) })), consequence } };
 
       await touch({ phase: "edit", transmitted: true, before: { adSets: targets.map(target => ({ id: target.adSetId, mode: target.mode, audience: audienceOf(target.targeting) })) } as unknown as Json });
       transmitted = true;
       let failure: unknown = null;
       for (const target of targets) {
         try {
-          const to = await meta.editAdSetTargeting(review.metaCampaignId, { adSetId: target.adSetId, adIds: target.adIds, changes: changesOf(target.adSetId) }, { copyOnly: copies(target) });
-          if (copies(target)) built.push({ from: { adSetId: target.adSetId, adIds: target.adIds }, to: { adSetId: to.adSetId, adIds: to.adIds } });
-          else done.push({ from: { adSetId: target.adSetId, adIds: target.adIds }, to });
+          const to = await meta.editAdSetTargeting(review.metaCampaignId, { adSetId: target.adSetId, adIds: target.adIds, changes: changesOf(target.adSetId) });
+          done.push({ from: { adSetId: target.adSetId, adIds: target.adIds }, to });
         } catch (error) {
           failure = error;
           // Meta refused the very first in-place patch for its 30 s limit: nothing was written.
@@ -278,8 +283,6 @@ export async function editCampaignAudience(context: AuthorizedBusiness, campaign
           break;
         }
       }
-      // A copy is only useful with the rest of the change: on a failure, the copies built so far are deleted.
-      if (failure) for (const copy of built.splice(0)) await meta.deleteAdSetCopy(review.metaCampaignId, copy.to.adSetId).catch(() => undefined);
       return { consequence, failure };
     });
 
@@ -301,28 +304,13 @@ export async function editCampaignAudience(context: AuthorizedBusiness, campaign
     if (failure) throw failure;
 
     const result: AudienceEditResult = {
-      adSets: [
-        ...done.map(({ from, to }) => ({ adSetId: to.adSetId, previousAdSetId: to.retiredAdSetId ?? (to.adSetId === from.adSetId ? null : from.adSetId), mode: to.mode })),
-        ...built.map(({ from, to }) => ({ adSetId: to.adSetId, previousAdSetId: from.adSetId, mode: "copy" as const })),
-      ],
-      count: done.length + built.length, consequence,
-      ...built.length ? { awaitingSwitch: { operationId: row!.id, pending: built } } : {},
+      adSets: done.map(({ from, to }) => ({ adSetId: to.adSetId, previousAdSetId: to.retiredAdSetId ?? (to.adSetId === from.adSetId ? null : from.adSetId), mode: to.mode })),
+      count: done.length, consequence,
     };
-    if (built.length) {
-      // The partial unique index keeps one waiting copy per campaign; losing that race deletes this one.
-      const { error } = await database.from("campaign_edit_operations")
-        .update({ state: "awaiting_switch", phase: "copy", result: result as unknown as Json, updated_at: new Date().toISOString() }).eq("id", row!.id);
-      if (error) {
-        await removeCopies(context, review, built);
-        await fail("failed", SWITCH_PENDING);
-        throw new CampaignEditError(error.code === "23505" ? SWITCH_PENDING : "Campaign edit could not be recorded. The copy was removed.", 409, error.code !== "23505", error.code === "23505" ? "switch_pending" : undefined);
-      }
-    } else await touch({ state: "succeeded", phase: "complete", result: result as unknown as Json });
+    await touch({ state: "succeeded", phase: "complete", result: result as unknown as Json });
     await logEvent({
       businessId: context.businessId, action: "campaign.edit", entityType: "campaign", entityId: campaignId, metaObjectId: campaign.meta_campaign_id,
-      reason: built.length
-        ? `Made a paused copy of "${campaign.name ?? campaignId}" with a new audience (${describeChange(change)}), waiting to be turned on`
-        : `Changed the audience of "${campaign.name ?? campaignId}" (${describeChange(change)})`,
+      reason: `Changed the audience of "${campaign.name ?? campaignId}" (${describeChange(change)})`,
       details: { ad_sets: result.adSets.map(adSet => ({ id: adSet.adSetId, mode: adSet.mode })) },
     });
     return { ...result, replay: false };
@@ -338,7 +326,25 @@ export async function editCampaignAudience(context: AuthorizedBusiness, campaign
   }
 }
 
-type Review = NonNullable<ReturnType<typeof reviewableCampaign>>;
+/** #773 (CEO, Nov 2): a running campaign's audience change is saved for its next run, with no Meta call. The form must be
+ * the change the owner checked (it keeps the place names for the paused edit and "Run this again" to prefill). */
+async function prepareForNextRun(context: AuthorizedBusiness, campaign: Campaign, change: AudienceChange, options: Options): Promise<AudienceEditPreview | AudienceEditResult & { replay: boolean }> {
+  const built = options.form ? audienceChangeFromForm(options.form) : null;
+  if (!built || "error" in built || audienceChangeDigest(built.change as AudienceChange) !== audienceChangeDigest(change)) {
+    throw new CampaignEditError("Send the Edit audience form with its change.", 400);
+  }
+  if (options.form!.languageMode !== "keep" || options.form!.areaExclusions) throw new CampaignEditError("Language and leaving out places outside the area change only on a paused campaign. Keep them as they are to save for the next run.", 400);
+  if (options.preview) return { prepared: true, adSets: [], consequence: null };
+  const prepared: PreparedAudience = { change, form: options.form!, savedAt: new Date().toISOString() };
+  const saved = await saveCampaignPreparedAudience({ businessId: context.businessId, userId: context.userId }, campaign.id, prepared as unknown as Json).catch(() => null);
+  if (!saved || saved.error || !saved.data) throw new CampaignEditError("The change couldn't be saved. Nothing changed; try again.", 503, true);
+  await logEvent({
+    businessId: context.businessId, action: "campaign.edit", entityType: "campaign", entityId: campaign.id, metaObjectId: campaign.meta_campaign_id,
+    reason: `Saved an audience change (${describeChange(change)}) to "${campaign.name ?? campaign.id}" for its next run`,
+    details: { prepared: true },
+  });
+  return { prepared: true, adSets: [], count: 0, consequence: null, replay: false };
+}
 
 /** #1146: the copies of ads the owner paused from the card, which stay paused on the new audience (copies keep the ads' order). */
 export function keptPausedCopies(copy: PendingCopy, raw: unknown): string[] {
@@ -346,18 +352,12 @@ export function keptPausedCopies(copy: PendingCopy, raw: unknown): string[] {
   return copy.from.adIds.flatMap((adId, index) => paused.has(adId) && copy.to.adIds[index] ? [copy.to.adIds[index]] : []);
 }
 
+// TODO(#2665): #773 makes no new copies; delete the switch flow below once no `awaiting_switch` row remains.
 /** #765 (b): while a copy waits, the Meta tree has an extra ad set; other edits wait until it is switched or cancelled. */
 export async function refuseWhileSwitchPending(database: Pick<SupabaseClient, "from">, campaignId: string) {
   const { data, error } = await database.from("campaign_edit_operations").select("id").eq("campaign_id", campaignId).eq("state", "awaiting_switch").limit(1);
   if (error) throw new CampaignEditError("Campaign edits are unavailable. Try again.", 503, true);
   if (data?.length) throw new CampaignEditError(SWITCH_PENDING, 409, false, "switch_pending");
-}
-
-/** Deletes waiting copies (only the copies; the running ad sets are never written). */
-async function removeCopies(context: AuthorizedBusiness, review: Review, copies: PendingCopy[]) {
-  await withMetaConnection(context, { purpose: "delete", binding: { adAccountId: review.adAccountId, pageId: review.pageId }, expectedGeneration: review.generation }, async meta => {
-    for (const copy of copies) await meta.deleteAdSetCopy(review.metaCampaignId, copy.to.adSetId);
-  });
 }
 
 export type AudienceSwitchResult = { action: "switch" | "cancel"; adSets: Array<{ adSetId: string; previousAdSetId: string }>; replay: boolean };

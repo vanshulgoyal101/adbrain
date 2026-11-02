@@ -1,6 +1,8 @@
 import { adResultViews, type StoredAdResult } from "./ad-results-store";
 import type { DraftInput, TargetingInputDTO } from "./connect-contracts";
+import { defaultTargeting, targetingFromEditor, targetingToEditor, type AudienceEditForm } from "./editor-targeting";
 import type { LeadDestination } from "@/lib/types/campaign";
+import { whatsappTemplateSchema } from "./whatsapp-template";
 
 /**
  * #1050 "Run this again": a campaign whose Best ad is known is copied into a new paused campaign. The
@@ -13,6 +15,8 @@ export type RerunCampaign = {
   creative_ids: string[];
   daily_budget: number | null;
   destination?: string | null;
+  /** #773: the audience change saved for this campaign's next run (Edit audience on a running campaign). */
+  prepared?: AudienceEditForm | null;
 };
 
 export type RerunPrefill = {
@@ -37,11 +41,25 @@ export type RerunPrefill = {
 const NAME_MAX = 120;
 const DEFAULT_BUDGET_RUPEES = 300;
 
+/** #1174 (CEO): the next run starts with the Call now button off; runs without it got more chats. The owner can turn it back on. */
+function withoutCallButton(message: DraftInput["whatsappMessage"]): DraftInput["whatsappMessage"] {
+  return message?.opening.kind === "prefill" && message.opening.callButton ? { ...message, opening: { ...message.opening, callButton: false } } : message;
+}
+
+/** The run's own message with Call off; a run that sent the Brand's saved Call-on message gets that message, Call off, as its own. */
+function nextRunMessage(own: DraftInput["whatsappMessage"], saved: unknown): DraftInput["whatsappMessage"] {
+  if (own) return withoutCallButton(own);
+  const parsed = whatsappTemplateSchema.safeParse(saved);
+  return parsed.success && parsed.data.opening.kind === "prefill" && parsed.data.opening.callButton ? withoutCallButton(parsed.data) : undefined;
+}
+
 export function rerunPrefill(input: {
   campaign: RerunCampaign;
   draft: DraftInput | null;
   approvedIds: Iterable<string>;
   bestCreativeId: string | null;
+  /** `businesses.whatsapp_template`: what a WhatsApp run without its own message sent. */
+  savedMessage?: unknown;
 }): RerunPrefill | { error: string } {
   const { campaign, draft } = input;
   const approved = new Set(input.approvedIds);
@@ -63,8 +81,8 @@ export function rerunPrefill(input: {
       ...shared, source: "draft", goal: draft.goal, dailyBudgetRupees: draft.dailyBudgetRupees,
       // #1216: a draft saved before destinations existed is a form campaign, as preflight and launch read it.
       destination: draft.destination === "website" ? undefined : draft.destination ?? "instant_form", leadFormId: draft.leadFormId, whatsappNumber: draft.whatsappNumber,
-      whatsappLanguage: draft.whatsappLanguage, whatsappMessage: draft.whatsappMessage,
-      targeting: draft.targeting, abTest: draft.abTest,
+      whatsappLanguage: draft.whatsappLanguage, whatsappMessage: draft.destination === "whatsapp" ? nextRunMessage(draft.whatsappMessage, input.savedMessage) : draft.whatsappMessage,
+      targeting: withPreparedAudience(draft.targeting, campaign.prepared), abTest: draft.abTest,
     };
   }
   const destination = campaign.destination === "whatsapp" || campaign.destination === "instant_form" ? campaign.destination : undefined;
@@ -72,7 +90,26 @@ export function rerunPrefill(input: {
     ...shared, source: "campaign", goal: "",
     dailyBudgetRupees: campaign.daily_budget && campaign.daily_budget > 0 ? Math.round(campaign.daily_budget) : DEFAULT_BUDGET_RUPEES,
     destination, leadFormId: null, abTest: false,
+    ...(destination === "whatsapp" ? { whatsappMessage: nextRunMessage(undefined, input.savedMessage) } : {}),
+    ...campaign.prepared ? { targeting: withPreparedAudience(undefined, campaign.prepared) } : {},
   };
+}
+
+/**
+ * #773: the copy runs with the audience change saved while the campaign ran: a new area replaces the old one, exclusions
+ * are added, set ages and gender win, and the distance fits the composer's 5–80 km. A running Save refuses language and
+ * out-of-area changes (the draft has no languages, and review adds out-of-area exclusions to every new campaign).
+ */
+export function withPreparedAudience(targeting: TargetingInputDTO | undefined, form: AudienceEditForm | null | undefined): TargetingInputDTO | undefined {
+  if (!form) return targeting;
+  const value = targeting ? targetingToEditor(targeting) : { ...defaultTargeting };
+  const area = form.included.length > 0;
+  if (area) Object.assign(value, { locationMode: "manual", included: form.included, cityScope: form.cityScope, radiusKm: Math.min(80, Math.max(5, form.radiusKm)) });
+  const seen = new Set(value.excluded.map(place => `${place.type}:${place.key}`));
+  value.excluded = [...value.excluded, ...form.excluded.filter(place => !seen.has(`${place.type}:${place.key}`))];
+  if (form.ageMin !== null && form.ageMax !== null) Object.assign(value, { ageMode: "manual", ageMin: form.ageMin, ageMax: form.ageMax });
+  if (form.gender !== "keep") value.gender = form.gender;
+  return targetingFromEditor(value, area ? [] : targeting?.location?.includedNames ?? [], targeting?.location?.excludedNames ?? []);
 }
 
 /** The creative behind the campaign's Best ad (#783's rule), through the launch's ad → creative links. */

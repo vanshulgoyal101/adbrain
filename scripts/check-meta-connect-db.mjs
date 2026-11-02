@@ -37,6 +37,7 @@ const learningsMigration = await readFile(join(root, "db/migrations/20261026_cam
 const editOperationsMigration = await readFile(join(root, "db/migrations/20261026_campaign_edit_operations.sql"), "utf8");
 const editAdCreativeMigration = await readFile(join(root, "db/migrations/20261026_campaign_edit_operations_ad_creative.sql"), "utf8");
 const adResultsMigration = await readFile(join(root, "db/migrations/20261026_campaign_ads_ad_results.sql"), "utf8");
+const mediaLibraryMigration = await readFile(join(root, "db/migrations/20261103_media_library.sql"), "utf8");
 const ownerAlertsMigration = await readFile(join(root, "db/migrations/20261027_owner_whatsapp_alerts.sql"), "utf8");
 const ownerAlertSendsMigration = await readFile(join(root, "db/migrations/20261027_owner_whatsapp_alerts_sends.sql"), "utf8");
 const planPeriodsMigration = await readFile(join(root, "db/migrations/20261029_plan_periods.sql"), "utf8");
@@ -1585,6 +1586,97 @@ async function verifyLeadFirstContacted(db, database) {
   });
 }
 
+async function verifyMediaAssets(db, database) {
+  const owner = randomUUID(), other = randomUUID(), business = randomUUID(), otherBusiness = randomUUID();
+  await db.query("insert into auth.users(id) values ($1),($2)", [owner, other]);
+  await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Media'),($3,$4,'Other media')", [business, owner, otherBusiness, other]);
+  // Supabase grants authenticated these on storage.objects; RLS decides the rows.
+  await db.query("grant usage on schema storage to authenticated, service_role; grant select, insert, update, delete on storage.objects to authenticated, service_role");
+  const sha = (n) => String(n).repeat(64).slice(0, 64);
+  const as = async (role, user, run) => {
+    const session = client(database);
+    await session.connect();
+    try {
+      await session.query("begin");
+      await session.query(`set local role ${role}`);
+      if (user) await session.query("select set_config('request.jwt.claim.sub',$1,true)", [user]);
+      return await run(session);
+    } finally { await session.query("rollback").catch(() => {}); await session.end(); }
+  };
+  await check(`${database}: media library: owners read only their own photos, only the server writes, one live row per file (#1209)`, async () => {
+    await as("service_role", null, async (session) => {
+      await session.query("insert into public.media_assets(business_id,path,sha256,bytes,mime,width,height,status) values ($1::uuid,$1::text||'/a.jpg',$3,1000,'image/jpeg',1080,1350,'ready'),($2::uuid,$2::text||'/b.jpg',$3,1000,'image/jpeg',1080,1080,'ready')", [business, otherBusiness, sha(1)]);
+      await session.query("insert into storage.objects(bucket_id,name) values ('media',$1::text||'/a.jpg'),('media',$2::text||'/b.jpg')", [business, otherBusiness]);
+      for (const [sql, params, code] of [
+        ["insert into public.media_assets(business_id,path,sha256) values ($1::uuid,$2::text||'/c.jpg',$3)", [business, otherBusiness, sha(2)], "23514"],
+        ["insert into public.media_assets(business_id,path,sha256) values ($1::uuid,$1::text||'/d.jpg','not-a-hash')", [business], "23514"],
+        ["insert into public.media_assets(business_id,path,sha256,mime) values ($1::uuid,$1::text||'/e.heic',$2,'image/heic')", [business, sha(3)], "23514"],
+        ["insert into public.media_assets(business_id,path,sha256) values ($1::uuid,$1::text||'/f.jpg',$2)", [business, sha(1)], "23505"],
+        ["insert into public.media_assets(business_id,path,sha256,mime) values ($1::uuid,$1::text||'/g.mp4',$2,'video/mp4')", [business, sha(5)], "23514"],
+        ["insert into public.media_assets(business_id,kind,path,sha256,mime) values ($1::uuid,'video',$1::text||'/h.jpg',$2,'image/jpeg')", [business, sha(6)], "23514"],
+        ["insert into public.media_assets(business_id,kind,path,sha256,mime,poster_path) values ($1::uuid,'video',$1::text||'/i.mp4',$3,'video/mp4',$2::text||'/i.jpg')", [business, otherBusiness, sha(7)], "23514"],
+      ]) {
+        await session.query("savepoint s");
+        await assert.rejects(session.query(sql, params), { code }, sql);
+        await session.query("rollback to savepoint s");
+      }
+      // Phase 2 rows (#744 videos) fit the table already; the bucket below still refuses video bytes.
+      await session.query("insert into public.media_assets(business_id,kind,path,sha256,mime,duration_ms,poster_path) values ($1::uuid,'video',$1::text||'/v.mp4',$2,'video/mp4',15000,$1::text||'/v.jpg')", [business, sha(8)]);
+      await session.query("delete from public.media_assets where path=$1::text||'/v.mp4'", [business]);
+      await session.query("update public.media_assets set deleted_at=now() where business_id=$1", [business]);
+      await session.query("insert into public.media_assets(business_id,path,sha256) values ($1::uuid,$1::text||'/again.jpg',$2)", [business, sha(1)]);
+      await session.query("delete from public.media_assets where path=$1::text||'/again.jpg'", [business]);
+      await session.query("update public.media_assets set deleted_at=null where path=$1::text||'/a.jpg'", [business]);
+      await session.query("select set_config('request.jwt.claim.sub',$1,true)", [owner]);
+      await session.query("set local role authenticated");
+      assert.deepEqual((await session.query("select path from public.media_assets order by path")).rows.map(row => row.path), [`${business}/a.jpg`]);
+      assert.deepEqual((await session.query("select name from storage.objects where bucket_id='media'")).rows.map(row => row.name), [`${business}/a.jpg`]);
+      for (const [sql, params] of [
+        ["insert into public.media_assets(business_id,path,sha256) values ($1::uuid,$1::text||'/x.jpg',$2)", [business, sha(4)]],
+        ["update public.media_assets set name='mine' where business_id=$1", [business]],
+        ["delete from public.media_assets where business_id=$1", [business]],
+      ]) {
+        await session.query("savepoint s");
+        await assert.rejects(session.query(sql, params), { code: "42501" }, sql);
+        await session.query("rollback to savepoint s");
+      }
+      // No write policy on the private bucket: uploads only through the server's signed URL.
+      await session.query("savepoint s");
+      await assert.rejects(session.query("insert into storage.objects(bucket_id,name) values ('media',$1::text||'/own.jpg')", [business]), { code: "42501" });
+      await session.query("rollback to savepoint s");
+    });
+    const bucket = (await db.query("select public, file_size_limit::int as size, allowed_mime_types as types from storage.buckets where id='media'")).rows[0];
+    assert.deepEqual(bucket, { public: false, size: 8388608, types: ["image/jpeg", "image/png", "image/webp"] });
+    assert.ok((await db.query("select 1 from information_schema.columns where table_schema='public' and table_name='creatives' and column_name='media_asset_id'")).rowCount);
+  });
+  await check(`${database}: media library: an ad links only to its own business's photo; anon reads nothing (#1209)`, async () => {
+    await db.query("grant usage on schema storage to anon; grant select on storage.objects to anon");
+    const [mine, theirs] = (await db.query("insert into public.media_assets(business_id,path,sha256,status) values ($1::uuid,$1::text||'/link.jpg',$3,'ready'),($2::uuid,$2::text||'/link.jpg',$3,'ready') returning id", [business, otherBusiness, sha(9)])).rows.map(row => row.id);
+    const creative = (await db.query("insert into public.creatives(business_id,brief) values ($1,'Own photo') returning id", [business])).rows[0].id;
+    await as("authenticated", owner, async (session) => {
+      await session.query("savepoint s");
+      await assert.rejects(session.query("update public.creatives set media_asset_id=$1 where id=$2", [theirs, creative]), { code: "23503" });
+      await session.query("rollback to savepoint s");
+      assert.equal((await session.query("update public.creatives set media_asset_id=$1 where id=$2", [mine, creative])).rowCount, 1);
+    });
+    await db.query("update public.creatives set media_asset_id=$1 where id=$2", [mine, creative]);
+    await db.query("delete from public.media_assets where id=$1", [mine]);
+    assert.deepEqual((await db.query("select business_id, media_asset_id from public.creatives where id=$1", [creative])).rows, [{ business_id: business, media_asset_id: null }]);
+    if ((await db.query("select to_regclass('public.campaign_ads') is not null as installed")).rows[0].installed) {
+      const campaign = randomUUID();
+      await db.query("insert into public.campaigns(id,business_id,daily_budget) values ($1,$2,300)", [campaign, business]);
+      await assert.rejects(db.query("insert into public.campaign_ads(business_id,campaign_id,meta_ad_id,media_asset_id) values ($1,$2,'1',$3)", [business, campaign, theirs]), { code: "23503" });
+    }
+    await as("anon", null, async (session) => {
+      await session.query("savepoint s");
+      await assert.rejects(session.query("select 1 from public.media_assets"), { code: "42501" });
+      await session.query("rollback to savepoint s");
+      // Supabase grants anon select on storage.objects too; only the policies keep the private bucket closed.
+      assert.equal((await session.query("select count(*)::int as n from storage.objects where bucket_id='media'")).rows[0].n, 0);
+    });
+  });
+}
+
 async function verifyCampaignAdsAndResults(db, database) {
   const owner = randomUUID(), other = randomUUID(), business = randomUUID(), otherBusiness = randomUUID(), campaign = randomUUID(), otherCampaign = randomUUID();
   await db.query("insert into auth.users(id) values ($1),($2)", [owner, other]);
@@ -2111,6 +2203,64 @@ async function verifyOwnerAlertSends(db, database) {
     assert.deepEqual(await claim("blocked-1"), { claimed: false, reason: "template_blocked" });
     await as("service_role", null, (session) => session.query("select public.owner_alert_stop('+919800000009')"));
     assert.deepEqual(await claim("stop-1", { template: "lead_alert_hi" }), { claimed: false, reason: "opted_out" });
+  });
+}
+
+async function verifyMediaConsents(db, database) {
+  const owner = randomUUID(), other = randomUUID(), business = randomUUID(), otherBusiness = randomUUID();
+  await db.query("insert into auth.users(id) values ($1),($2)", [owner, other]);
+  await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Media'),($3,$4,'Other media')", [business, owner, otherBusiness, other]);
+  const as = async (role, user, run) => {
+    const session = client(database);
+    await session.connect();
+    try {
+      await session.query("begin");
+      await session.query(`set local role ${role}`);
+      if (user) await session.query("select set_config('request.jwt.claim.sub',$1,true)", [user]);
+      const result = await run(session);
+      await session.query("commit");
+      return result;
+    } catch (error) { await session.query("rollback").catch(() => {}); throw error; } finally { await session.end(); }
+  };
+  await check(`${database}: media consent: owners record it only for their own business through the function, append-only (#784)`, async () => {
+    await as("authenticated", owner, async (session) => {
+      await session.query("select public.media_consent_record($1,'2026-10-28',true)", [business]);
+      await session.query("savepoint s");
+      await assert.rejects(session.query("select public.media_consent_record($1,'2026-10-28',false)", [otherBusiness]), { code: "42501" });
+      await session.query("rollback to savepoint s");
+      await assert.rejects(session.query("select public.media_consent_record($1,'latest',false)", [business]), { code: "22023" });
+      await session.query("rollback to savepoint s");
+      await assert.rejects(session.query("insert into public.media_consents(business_id,user_id,terms_version) values ($1,$2,'2026-10-28')", [business, owner]), { code: "42501" });
+      await session.query("rollback to savepoint s");
+      await assert.rejects(session.query("update public.media_consents set people_confirmed=false where business_id=$1", [business]), { code: "42501" });
+      await session.query("rollback to savepoint s");
+      await assert.rejects(session.query("delete from public.media_consents where business_id=$1", [business]), { code: "42501" });
+      await session.query("rollback to savepoint s");
+      assert.deepEqual((await session.query("select terms_version, people_confirmed, user_id from public.media_consents")).rows,
+        [{ terms_version: "2026-10-28", people_confirmed: true, user_id: owner }]);
+    });
+    await as("authenticated", other, async (session) => {
+      assert.equal((await session.query("select count(*)::int as n from public.media_consents")).rows[0].n, 0);
+    });
+    await as("anon", null, async (session) => {
+      await session.query("savepoint s");
+      await assert.rejects(session.query("select 1 from public.media_consents"), { code: "42501" });
+      await session.query("rollback to savepoint s");
+      await assert.rejects(session.query("select public.media_consent_record($1,'2026-10-28',true)", [business]), { code: "42501" });
+      await session.query("rollback to savepoint s");
+    });
+  });
+  await check(`${database}: media consent: deleting the confirming user keeps the record and clears only user_id; a business deletion removes it (#784)`, async () => {
+    const helper = randomUUID();
+    await db.query("insert into auth.users(id) values ($1)", [helper]);
+    await db.query("insert into public.media_consents(business_id,user_id,terms_version,people_confirmed) values ($1,$2,'2026-10-29',true)", [business, helper]);
+    await db.query("delete from auth.users where id=$1", [helper]);
+    assert.deepEqual((await db.query("select user_id, people_confirmed from public.media_consents where business_id=$1 and terms_version='2026-10-29'", [business])).rows,
+      [{ user_id: null, people_confirmed: true }]);
+    await db.query("delete from auth.users where id=$1", [other]);
+    assert.equal((await db.query("select count(*)::int as n from public.businesses where id=$1", [otherBusiness])).rows[0].n, 0);
+    await db.query("delete from auth.users where id=$1", [owner]);
+    assert.equal((await db.query("select count(*)::int as n from public.media_consents where business_id=$1", [business])).rows[0].n, 0);
   });
 }
 
@@ -3202,6 +3352,10 @@ async function verify(database, source, integrityMigration, customerOnly = false
       await db.query(reauthMigration);
       await db.query(reauthMigration);
       await verifyConnectionReauth(db,database);
+      await db.query(mediaLibraryMigration);
+      await db.query(mediaLibraryMigration);
+      await verifyMediaAssets(db,database);
+      await verifyMediaConsents(db,database);
       if ((await db.query("select to_regclass('public.lead_sync_runs') is not null as installed")).rows[0].installed) {
         await db.query(leadCampaignLinkMigration);
         await db.query(leadCampaignLinkMigration);
