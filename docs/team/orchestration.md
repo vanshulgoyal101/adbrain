@@ -199,7 +199,10 @@ it. Not for you? Add `declined:<you>` and it isn't offered to you again. QA's wa
   with `node_modules` cloned from a shared lockfile cache in seconds (a full `npm ci`
   only when the lockfile changed). Not `/tmp`, which is wiped on restart. Push your branch at each coherent step.
   Never edit the owner's checkout (`adbrain/`).
-- **Checks.** Run the tests for what you changed plus typecheck; CI runs the rest.
+- **Checks.** Run only the tests for what you changed (`npx vitest run <files>`), then push:
+  CI's `lint` job typechecks and lints in under a minute (17 s + 24 s), while a local
+  `tsc` on the shared Mac took 10–15 min and slowed every other worker (#2617). Run
+  `npm run typecheck`, `lint`, the full suite or `build` locally only to fix a CI failure.
   Do not rerun full suites or re-review unchanged code.
 - **Subagents.** Split your issue across subagents and do small cross-role tasks
   yourself instead of handing them off; rules in [AGENTS.md](../../AGENTS.md#subagents).
