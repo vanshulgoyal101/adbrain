@@ -8,7 +8,6 @@ import { askMismatchWarning, QUOTED_ASK_WITH_QUESTIONS, reviewWarnings, WHATSAPP
 import { quotedAsk, sameWords } from "@/lib/campaign/whatsapp-greeting";
 import { batchProofWarning } from "@/lib/creative/proof-line";
 import type { ResolvedWhatsAppMessage } from "@/lib/campaign/whatsapp-template";
-import type { LeadDestination } from "@/lib/types/campaign";
 import type { WebsiteReach } from "@/lib/campaign/website-reach";
 import { isAdvertiserWebsite, websiteAdLink, websiteBlockerMessage } from "@/lib/campaign/website-review";
 
@@ -113,7 +112,7 @@ export interface CanonicalReviewPayload {
   creativeIds: string[];
   creatives: ReturnType<typeof buildCreativeReviewPayload>;
   leadFormId: string | null;
-  destination: Exclude<LeadDestination, "call" | "website">;
+  destination: ReviewDestination;
   whatsappNumber: string | null;
   websiteUrl?: string | null;
   dailyBudgetRupees: number;
@@ -284,9 +283,7 @@ export function runPreflight(input: PreflightInput): ReviewDTO {
   } else if (destination !== "whatsapp" && input.website !== undefined && !isAdvertiserWebsite(input.website)) {
     blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_NO_WEBSITE", "Add your business website on the Your business page. Meta lead ads must link to the advertiser's own website, not Facebook.", { kind: "open_brand" }));
   }
-  if (input.mediaConsent === false && input.creatives.some((creative) => creative.ownMedia)) {
-    blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_MEDIA_RIGHTS", "Your ads use your own photos. Confirm you own them, or have permission to use them, before they go to Meta."));
-  }
+  if (input.mediaConsent === false && input.creatives.some((creative) => creative.ownMedia)) blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_MEDIA_RIGHTS", "Your ads use your own photos. Confirm you own them, or have permission to use them, before they go to Meta."));
   const policyHit = adPolicyHits(input.creatives, input.vertical)[0];
   if (policyHit) {
     blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_AD_POLICY", `"${policyHit.term}" in the ad "${policyHit.headline ?? "without a headline"}" is ${bannedTermKind(policyHit.term, input.vertical)} Meta rejects. Edit the ad to describe the service instead.`));
@@ -366,6 +363,7 @@ export function runPreflight(input: PreflightInput): ReviewDTO {
     creativeHash,
     destination: draft.destination ?? "instant_form",
     whatsappNumber: draft.destination === "whatsapp" ? input.whatsappNumber ?? null : null,
+    ...(payload.websiteUrl !== undefined ? { websiteUrl: payload.websiteUrl } : {}),
     currency: "INR",
     perAdSetDailyBudgetRupees,
     adSetCount,

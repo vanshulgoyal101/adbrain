@@ -61,7 +61,7 @@ export const productEventSchema = z.object({
     /** #1136: on business.create/update, whether the saved Brand has what Prepare needs (brand/usable.ts). */
     brandUsable: z.boolean().optional(),
     /** #366: which campaign kind a Prepare was for, so WhatsApp timings can be read separately. */
-    destination: z.enum(["instant_form", "whatsapp"]).optional(),
+    destination: z.enum(["instant_form", "whatsapp", "website"]).optional(),
     /** #378: names of the validation rules a rejected AI reply broke; never the reply's text. */
     validationRules: z.array(z.string().regex(/^[a-zA-Z0-9_.:*/[\]-]{1,80}$/)).max(12).optional(),
     /** #688: the reason of every blocker on a rejected campaign review, e.g. REVIEW_NO_WEBSITE. */

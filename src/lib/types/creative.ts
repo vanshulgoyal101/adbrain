@@ -139,7 +139,7 @@ export type CreativeFunctions = {
   creative_generation_admit: {
     Args: { p_business_id: string; p_user_id: string; p_generation_id: string; p_request_hash: string;
       p_expected_count: number; p_reserved_tokens: number; p_image_floor_tokens: number; p_monthly_limit: number };
-    Returns: { action: "start" | "recover" | "missing" | "conflict" | "quota"; status?: string; expectedCount?: number };
+    Returns: { action: "start" | "recover" | "missing" | "conflict" | "quota" | "running"; status?: string; expectedCount?: number; generationId?: string };
   };
   creative_generation_status: {
     Args: { p_business_id: string; p_user_id: string; p_generation_id: string };
