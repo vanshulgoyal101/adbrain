@@ -1,5 +1,5 @@
 # सपोर्ट के जवाब
-<!-- mirrors ../support-replies.md 65c403de9386 -->
+<!-- mirrors ../support-replies.md d2dd52567e12 -->
 
 यह [Support replies](../support-replies.md) का हिंदी रूप है; अंग्रेज़ी पेज बदले तो इसे भी बदलें।
 [Features and workflows](../README.md) का हिस्सा।
@@ -56,8 +56,8 @@
   "बार-बार फिर से पूछ रहा है"।
 - **स्क्रीन पर दिखता है:** Go live स्टेप पर, "Facebook Page" के नीचे: "Not connected" और
   "Facebook is still reviewing AdBrain, so only people we've added can connect. Tap
-  Connect; if Facebook says the app isn't available, come back here and we'll add you.
-  Already invited? Accept adBrain in your invites first." के साथ "Open my invites"।
+  Connect; if Facebook says the app isn't available, come back here and we\'ll add you."
+  and "Already invited? Accept … in your invites first." (… यानी adBrain) के साथ "Open my invites"।
   कोशिश फ़ेल होने के बाद: "Didn't connect? We've asked our team to add you and will
   WhatsApp you within a working day. Accept our invite, then try again." उस कोशिश से
   ऐक्सेस रिक्वेस्ट चली जाती है, इसलिए अगली शेड्यूल्ड रन पर `waiting-owner` वाला

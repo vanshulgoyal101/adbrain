@@ -1,5 +1,5 @@
 # फ़ोन पर आपका पहला ऐड
-<!-- mirrors ../first-ad.md 44dd5cbf30e8 -->
+<!-- mirrors ../first-ad.md 6a07d4dd0d03 -->
 
 यह [Your first ad on a phone](../first-ad.md) का हिंदी रूप है; अंग्रेज़ी पेज बदले तो इसे भी बदलें।
 [Features and workflows](../README.md) का हिस्सा।
@@ -141,8 +141,8 @@ ready" (या "Your N ads are ready") के साथ "Connect and go live" �
   - "Your Page, your ad account, your card. AdBrain never holds your ad money."
 - **टैप करें:** जब तक Facebook AdBrain की जाँच कर रहा है, Facebook Page वाली लाइन में लिखा होगा
   "Facebook is still reviewing AdBrain, so only people we've added can connect. Tap
-  Connect; if Facebook says the app isn't available, come back here and we'll add you.
-  Already invited? Accept adBrain in your invites first." इनवाइट मिल चुका है तो "Open my
+  Connect; if Facebook says the app isn't available, come back here and we\'ll add you."
+  and "Already invited? Accept … in your invites first." (… यानी adBrain) इनवाइट मिल चुका है तो "Open my
   invites" दबाकर adBrain स्वीकार करें। फिर "Connect Facebook Page" दबाएँ।
   Meta की विंडो खुलेगी: "Connect
   Business" दबाएँ, Facebook में साइन इन करें, अपना पेज और ऐड अकाउंट चुनें, "Use

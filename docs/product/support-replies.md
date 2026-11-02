@@ -49,8 +49,8 @@ Tell the CTO on the issue if many owners report this in the same hour.
   "it keeps asking again".
 - **Screen shows:** on the Go live step, under "Facebook Page": "Not connected" and
   "Facebook is still reviewing AdBrain, so only people we've added can connect. Tap
-  Connect; if Facebook says the app isn't available, come back here and we'll add you.
-  Already invited? Accept adBrain in your invites first." with "Open my invites".
+  Connect; if Facebook says the app isn't available, come back here and we\'ll add you."
+  and "Already invited? Accept … in your invites first." (… is adBrain) with "Open my invites".
   After a failed try: "Didn't connect? We've asked our team to add you and will
   WhatsApp you within a working day. Accept our invite, then try again." That try
   already sent the access request, so the scheduled job opens a `waiting-owner`

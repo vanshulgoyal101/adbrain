@@ -134,8 +134,8 @@ ads were made from older details or in Studio, Home takes you back to Your ads i
   - "Your Page, your ad account, your card. AdBrain never holds your ad money."
 - **Tap:** while Facebook is still reviewing AdBrain, the Facebook Page row says
   "Facebook is still reviewing AdBrain, so only people we've added can connect. Tap
-  Connect; if Facebook says the app isn't available, come back here and we'll add you.
-  Already invited? Accept adBrain in your invites first." If you have our invite, tap
+  Connect; if Facebook says the app isn't available, come back here and we\'ll add you."
+  and "Already invited? Accept … in your invites first." (… is adBrain) If you have our invite, tap
   "Open my invites" and accept adBrain. Then tap "Connect Facebook Page". A Meta window opens: tap "Connect
   Business", sign in to Facebook, choose your Page and ad account, tap "Use
   selected business", then "Continue to review". The row now says "Connected"
