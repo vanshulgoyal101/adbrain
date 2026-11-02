@@ -413,6 +413,8 @@ describe("core: Create route on recorded run 4", () => {
       source: "adbrain.creative", code: "AD_NOT_SAVED", angle: "offer", savedUpTo: "render",
       message: "Could not store the generated image. No finished creative was saved.",
     });
+    // #2546: the remake reached onVariant, so its usage is recorded.
+    expect(mocks.progress.at(-1)).toMatchObject({ p_complete: true, p_uncertain: false });
   });
 
   it("#2444: a save that fails again is reported as a lost ad", async () => {
@@ -422,7 +424,7 @@ describe("core: Create route on recorded run 4", () => {
     stubProviders();
     const body = await (await (await postCreate())()).json();
     expect(body.creatives).toHaveLength(2);
-    expect(batchEvent(info)).toMatchObject({ outcome: "partial", attributes: { count: 2, failedCount: 1, failedStages: ["other"], topUp: 1 } });
+    expect(batchEvent(info)).toMatchObject({ outcome: "partial", attributes: { count: 2, failedCount: 1, failedStages: ["other"], topUp: 1 } });    expect(mocks.progress.at(-1)).toMatchObject({ p_complete: true, p_uncertain: false });
   });
 
   // #2546 (QA): a remade ad's untyped failure (here a bare abort) can hide provider calls its remake made, so the
