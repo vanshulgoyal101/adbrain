@@ -38,12 +38,12 @@ const review = {
 const operation = { operationId: "o1", businessId: "b1", kind: "campaign_create", idempotencyKey: "k", requestHash: "h", connectionGeneration: 1,
   state: "running", phase: "campaign", leaseUntil: null, attemptCount: 1, campaignId: null, externalIds: [] as string[], sanitizedError: null } satisfies OperationRecord;
 
-function launch(website: string) {
+function launch(website: string, reviewed: string | null = websiteAdLink(website)) {
   const business = { name: "Cedar Ridge Chiropractic", website, locations: ["Austin, Texas"], offers: [], whatsapp_template: null };
   const businesses = { select: () => businesses, eq: () => businesses, maybeSingle: async () => ({ data: business, error: null }) };
   const creatives = { select: () => creatives, in: () => creatives, eq: () => creatives, then: (resolve: (value: unknown) => void) => resolve({ data: [creative], error: null }) };
   const database = { from: (table: string) => (table === "businesses" ? businesses : creatives) } as never;
-  return executeReviewedCampaign({ database, operationDatabase: database, actor: { businessId: "b1" } as never, draft, review, operation: { ...operation, externalIds: [] } });
+  return executeReviewedCampaign({ database, operationDatabase: database, actor: { businessId: "b1" } as never, draft, review: { ...review, websiteUrl: reviewed }, operation: { ...operation, externalIds: [] } });
 }
 
 beforeEach(() => {
@@ -71,5 +71,16 @@ describe("core: website launch (#2599)", () => {
   it("saves the campaign as traffic, so results never read it as a form campaign", async () => {
     await launch("https://cedarridgechiro.com");
     expect(meta.saveCampaign.mock.calls[0][1]).toMatchObject({ destination: "website", objective: "traffic" });
+  });
+
+  it("sends Review's link even if the Brand website changes between Review and launch", async () => {
+    await launch("https://someone-else.example", "https://cedarridgechiro.com");
+    expect(meta.createLeadCampaign.mock.calls[0][0].link).toBe("https://cedarridgechiro.com");
+  });
+
+  it("refuses before Meta when Review carries no website link", async () => {
+    const result = await launch("https://cedarridgechiro.com", null);
+    expect(result.kind).not.toBe("succeeded");
+    expect(meta.createLeadCampaign).not.toHaveBeenCalled();
   });
 });
