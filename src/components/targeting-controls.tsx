@@ -506,7 +506,7 @@ export function TargetingControls({
               // isn't fought by the clamp.
               onChange={(e) => setAge("ageMin", e.target.value)}
               onBlur={() => settleAges()}
-              className="h-10 w-20 rounded-lg border border-slate-300 bg-white px-3 text-center outline-none"
+              className="h-10 w-20 rounded-lg border border-slate-300 bg-white px-3 text-center text-sm outline-none"
             />
             <span className="text-slate-400">to</span>
             <input
@@ -517,7 +517,7 @@ export function TargetingControls({
               value={value.ageMax}
               onChange={(e) => setAge("ageMax", e.target.value)}
               onBlur={() => settleAges()}
-              className="h-10 w-20 rounded-lg border border-slate-300 bg-white px-3 text-center outline-none"
+              className="h-10 w-20 rounded-lg border border-slate-300 bg-white px-3 text-center text-sm outline-none"
             />
           </div>
         )}

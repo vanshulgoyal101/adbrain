@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { VerdictGalleryCard } from "@/components/verdict-gallery-card";
+import { requestWords } from "@/i18n/request-locale";
 import { galleryCards } from "@/lib/campaign/verdict-gallery";
 import { isInternalUser } from "@/lib/internal-accounts";
 import { createClient } from "@/lib/supabase/server";
@@ -10,6 +11,8 @@ export const metadata = { title: "Card states" };
 export default async function VerdictGalleryPage() {
   const { data: { user } } = await (await createClient()).auth.getUser();
   if (!isInternalUser(user)) notFound();
+  // #1438: the verdicts in the language picked in Settings, so a Hindi walk sees the Hindi card.
+  const words = await requestWords("verdict");
   return (
     <div className="space-y-6">
       <header>
@@ -17,7 +20,7 @@ export default async function VerdictGalleryPage() {
         <p className="mt-1 text-sm text-slate-600">Examples for the team&apos;s walks. Nothing here is a real campaign; buttons don&apos;t change anything.</p>
       </header>
       <ul className="grid gap-4 lg:grid-cols-2">
-        {galleryCards().map((card) => <VerdictGalleryCard key={card.name} card={card} />)}
+        {galleryCards().map((card) => <VerdictGalleryCard key={card.name} card={card} words={words} />)}
       </ul>
     </div>
   );

@@ -12,17 +12,33 @@ export type FundingShortfall =
   | { kind: "unverified" };
 
 
+/** #2312: the committed-spend phrases in the owner's language (the `errors.committed*` keys); English when omitted. */
+export type CommittedSay = (
+  key: "committedRuns" | "committedUncapped" | "committedBoth" | "committedUncappedOnly",
+  values: Record<string, string | number>,
+) => string;
+
+const englishCommitted: CommittedSay = (key, v) => {
+  if (key === "committedRuns") return ` after ${v.money} for your ${v.runs} other live ${v.runs === 1 ? "run" : "runs"}`;
+  if (key === "committedUncapped") return `${v.money} a day also runs on ${v.adSets} uncapped ad ${v.adSets === 1 ? "set" : "sets"}`;
+  return key === "committedBoth" ? `${v.runs}, and ${v.uncapped}` : ` (${v.uncapped})`;
+};
+
 /**
  * #1058/#1094: " after ₹500.00 for your 2 other live runs", plus what uncapped ad sets spend a day (named, never
  * subtracted: they have no total), or "" with neither.
  */
-export function committedWords(committed: AccountFunding["committed"], money: (rupees: number) => string = formatMoneyExact): string {
-  const runs = committed?.runs ? ` after ${money(committed.remainingPaise / 100)} for your ${committed.runs} other live ${committed.runs === 1 ? "run" : "runs"}` : "";
+export function committedWords(
+  committed: AccountFunding["committed"],
+  money: (rupees: number) => string = formatMoneyExact,
+  say: CommittedSay = englishCommitted,
+): string {
+  const runs = committed?.runs ? say("committedRuns", { money: money(committed.remainingPaise / 100), runs: committed.runs }) : "";
   const uncapped = committed?.uncapped?.adSets
-    ? `${money(committed.uncapped.dailyPaise / 100)} a day also runs on ${committed.uncapped.adSets} uncapped ad ${committed.uncapped.adSets === 1 ? "set" : "sets"}`
+    ? say("committedUncapped", { money: money(committed.uncapped.dailyPaise / 100), adSets: committed.uncapped.adSets })
     : "";
   if (!uncapped) return runs;
-  return runs ? `${runs}, and ${uncapped}` : ` (${uncapped})`;
+  return runs ? say("committedBoth", { runs, uncapped }) : say("committedUncappedOnly", { uncapped });
 }
 
 /** #1058/#1094: the account's room and what its other running capped runs may still spend, read together. */

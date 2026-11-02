@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { ManagedOnboarding } from "@/components/managed/managed-onboarding";
 import { onboardingProgress, type ManagedAccountProgressRow } from "@/lib/managed/onboarding";
 
-const steps = { pay: <button type="button">Pay with Razorpay</button>, page: <button type="button">Use Solaride</button>, whatsapp: <button type="button">Link WhatsApp</button> };
+const steps = { pay: <button type="button">Pay with Razorpay</button>, page: <button type="button">Use Solaride</button>, whatsapp: <button type="button">Link WhatsApp</button>, card: <button type="button">Invite</button> };
 const row = (patch: Partial<ManagedAccountProgressRow>): ManagedAccountProgressRow => ({
   state: "requested", funding_state: "none", page_id: null, child_business_id: null, ad_account_id: null,
   waba_id: null, phone_number_id: null, last_error: null, ...patch,
@@ -14,7 +14,7 @@ describe("<ManagedOnboarding> (#526)", () => {
   it("opens only the owner's current step and shows AdBrain's background work", () => {
     render(<ManagedOnboarding progress={onboardingProgress(row({ state: "page_linked", funding_state: "card_attached", page_id: "1" }), { paid: true })} steps={steps} />);
     const yours = screen.getByRole("list", { name: "Your steps" });
-    expect(within(yours).getAllByRole("listitem").map((item) => item.getAttribute("aria-current"))).toEqual([null, null, "step"]);
+    expect(within(yours).getAllByRole("listitem").map((item) => item.getAttribute("aria-current"))).toEqual([null, null, "step", null]);
     expect(screen.getByRole("button", { name: "Link WhatsApp" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Pay with Razorpay" })).toBeNull();
     const background = screen.getByRole("complementary", { name: "What AdBrain is doing" });

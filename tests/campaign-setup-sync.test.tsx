@@ -254,12 +254,22 @@ describe("campaign sync feedback", () => {
     render(<Campaigns business={business} approved={[creative]} initialCampaigns={[campaign]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady={false} adAccountId="act_1" />);
     fireEvent.click(screen.getByRole("button", { name: "Resume" }));
     await act(async () => { mocks.dialog.current!.onConnected({ authorization: "connected", selected, generation: 1 } as ConnectionDTO); });
-    expect(await screen.findByText(/Targeting:.*"IN"/)).toBeInTheDocument();
+    const targeting = await screen.findByText(/Targeting:.*"IN"/);
+    expect(targeting).not.toBeVisible();
+    const details = screen.getByText("Targeting and Meta details").closest("details")!;
+    expect(details).not.toHaveAttribute("open");
+    expect(screen.getByRole("heading", { name: "Review Saved campaign before it can run." })).toBeVisible();
+    expect(screen.getByText("Effective daily total").nextElementSibling).toHaveTextContent("₹500");
+    expect(screen.getByText("Existing ad set schedule in Meta")).toBeVisible();
+    expect(screen.getByText("Paused in Meta")).toBeVisible();
     // #662: the review opens above the list, so it's brought on screen on a phone.
-    expect(scrollIntoView).toHaveBeenCalledWith({ block: "start" });
+    await waitFor(() => expect(scrollIntoView).toHaveBeenCalledWith({ block: "start" }));
     delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
     // #419 item 2: resuming after AdBrain paused it 10 days ago restarts Meta's learning; a note, not a block.
     expect(screen.getByRole("list", { name: "Before you activate" })).toHaveTextContent("Paused for 10 days: Meta restarts learning");
+    fireEvent.click(screen.getByText("Targeting and Meta details"));
+    expect(details).toHaveAttribute("open");
+    expect(targeting).toBeVisible();
     expect(screen.getByText(/Ad set set-1:.*₹500.*destination ON_AD/)).toBeInTheDocument();
     expect(screen.getByText(/Ad ad-1 .*creative creative-1/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Request activation" })).toBeEnabled();

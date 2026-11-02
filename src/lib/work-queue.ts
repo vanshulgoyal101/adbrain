@@ -16,8 +16,6 @@ type QueueBusiness = Pick<
   "name" | "description" | "brand_voice" | "target_audience" | "locations"
 >;
 
-type BrandField = "description" | "voice" | "audience" | "areas";
-
 /**
  * #1630 (CPO, #1604): the ₹999 plan's status, as #1442's `readPlan` returns it, or null while PLAN_BILLING_ENABLED is
  * off or the business isn't on the plan. Home is where a pilot owner lives, so the free month's end shows there.
@@ -39,20 +37,6 @@ function planItem(plan: QueuePlan | null | undefined, locale: AppLocale): WorkIt
   return null;
 }
 
-function missingFields(business: QueueBusiness): BrandField[] {
-  return ([
-    !business.description?.trim() && "description",
-    !business.brand_voice?.trim() && "voice",
-    !business.target_audience?.trim() && "audience",
-    !business.locations.some((location) => location.trim()) && "areas",
-  ] as const).filter((field): field is BrandField => Boolean(field));
-}
-
-export function missingBrandContext(business: QueueBusiness, locale: AppLocale = "en"): string[] {
-  const t = translator(locale, "workQueue");
-  return missingFields(business).map((field) => t(`field.${field}`));
-}
-
 export function buildWorkQueue({
   business,
   creatives,
@@ -60,6 +44,7 @@ export function buildWorkQueue({
   metaReady,
   now = Date.now(),
   locale = "en",
+  unloggedChats = 0,
   plan = null,
 }: {
   business: QueueBusiness | null;
@@ -69,6 +54,8 @@ export function buildWorkQueue({
   now?: number;
   /** #1438: the owner's app language. */
   locale?: AppLocale;
+  /** #1624: WhatsApp chats with no real enquiry or customer logged yet (`unloggedChats`). */
+  unloggedChats?: number;
   /** #1630: the ₹999 plan, when billing is on (see `QueuePlan`). */
   plan?: QueuePlan | null;
 }): WorkItem[] {
@@ -99,7 +86,6 @@ export function buildWorkQueue({
   const unusedApproved = creatives.filter(
     (creative) => creative.status === "approved" && !usedIds.has(creative.id),
   ).length;
-  const missing = missingBrandContext(business, locale);
   const paused = campaigns.filter(
     (campaign) => campaign.status === "paused",
   ).length;
@@ -116,14 +102,14 @@ export function buildWorkQueue({
       action: t("reviewAction"),
       tone: "work",
     });
-  if (missing.length)
+  if (unloggedChats > 0)
     queue.push({
-      id: "context",
-      title: t("contextTitle"),
-      detail: t("contextDetail", { fields: missing.join(", ") }),
-      href: "/brand",
-      action: t("contextAction"),
-      tone: "attention",
+      id: "chats",
+      title: t("chatsTitle", { n: unloggedChats }),
+      detail: t("chatsDetail"),
+      href: "/leads",
+      action: t("chatsAction"),
+      tone: "work",
     });
   if (!creatives.length)
     queue.push({

@@ -1,5 +1,6 @@
 import { formatMoney } from "@/lib/format";
 import { statesOffer } from "@/lib/creative/concept";
+import type { LeadDestination } from "@/lib/types/campaign";
 /**
  * #371: what past campaigns achieved, for Create. Pure functions; the wording is decided here,
  * not by the model, so a tiny sample is never called a winner.
@@ -16,7 +17,7 @@ export interface EvidenceAd {
 
 export interface EvidenceCampaign {
   name: string;
-  destination: "whatsapp" | "instant_form";
+  destination: Exclude<LeadDestination, "call" | "website">;
   spend: number;
   /** WhatsApp chats started, or form leads. */
   results: number;

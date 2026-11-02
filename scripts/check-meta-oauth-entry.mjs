@@ -1,20 +1,14 @@
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
-import { createServerClient } from "@supabase/ssr";
+import { signInBrowser, testSessionConfig } from "./lib/test-session.mjs";
 
 assert.ok(["127.0.0.1", "localhost"].includes(new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).hostname), "OAuth smoke requires local storage.");
 const origin = "http://localhost:3939";
-let cookies = [];
-const auth = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY, {
-  cookies: { getAll: () => [], setAll: updates => { cookies = updates.map(({ name, value }) => ({ name, value, domain: "localhost", path: "/", sameSite: "Lax" })); } },
-});
-const signedIn = await auth.auth.signInWithPassword({ email: process.env.DEV_LOGIN_EMAIL, password: process.env.DEV_LOGIN_PASSWORD });
-assert.equal(signedIn.error, null);
 const interactive = process.env.META_OAUTH_INTERACTIVE === "true";
 const browser = await chromium.launch({ headless: !interactive });
 try {
   const context = await browser.newContext();
-  await context.addCookies(cookies);
+  await signInBrowser(context, origin, process.env.DEV_LOGIN_EMAIL, { config: testSessionConfig() });
   await context.route("**/api/**", route => {
     const url = new URL(route.request().url());
     if (url.origin !== origin) return route.continue();

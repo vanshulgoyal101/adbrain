@@ -84,6 +84,10 @@ export type LeadsFunctions = {
     };
     Returns: Json;
   };
+  leads_erase: {
+    Args: { p_business_id: string; p_lead_id?: string; p_campaign_id?: string };
+    Returns: number;
+  };
   lead_sync_checkpoint: {
     Args: LeadSyncScopeArgs & { p_sync_id: string; p_version: number; p_rows: Json; p_progress: Json };
     Returns: Json;

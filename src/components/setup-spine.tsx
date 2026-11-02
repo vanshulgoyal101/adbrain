@@ -74,7 +74,7 @@ export function SetupSpine({ step, saved = null, beforeLeave, primary, again = f
               <ChevronLeft size={20} aria-hidden="true" />
             </button>
           )}
-          <h1 className="truncate text-base font-semibold text-slate-900">{t("title")}</h1>
+          <h1 className="truncate text-base font-semibold text-slate-900">{t(again ? "titleAgain" : "title")}</h1>
         </div>
         <HelpOnWhatsApp label={t("help")} />
       </div>

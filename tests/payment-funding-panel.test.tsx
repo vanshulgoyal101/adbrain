@@ -7,6 +7,8 @@ import { TestCheckout, type TestCheckoutOptions } from "@/components/test-checko
 import { ProductionCheckout } from "@/components/production-checkout";
 import { createAnnualPaymentQuote, createVerificationPaymentQuote } from "@/lib/payments/allocation";
 
+// #1968: own-account billing mounts Pause all, which reads the app router.
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock("next/script", () => ({ default: ({ onReady, onError }: { onReady: () => void; onError: () => void }) =>
   <img alt="" data-testid="checkout-script" onLoad={onReady} onError={onError} /> }));
 vi.mock("@/components/customer-balance", () => ({ CustomerBalance: ({ businessId }: { businessId: string }) =>

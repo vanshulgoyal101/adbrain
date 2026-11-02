@@ -3,9 +3,14 @@
 // Run it in the foreground only; it gives up after --max-min (default 30), and nothing is left running.
 // It also never outlives its chat: it exits when its parent process is gone, and a second copy for
 // the same role exits at once.
-// Usage: node scripts/wait-for-work.mjs --me dev2 [--max-min 30] [--poll-sec 90] [--since <ISO time>]
-// Exit 0 = work found (printed), 3 = nothing new before --max-min, 4 = another waiter for this role
+// Usage: node scripts/wait-for-work.mjs --me dev2 [--max-min 30] [--poll-sec 60] [--since <ISO time>]
+//        node scripts/wait-for-work.mjs --wake dev2   (stops Dev 2's waiter so its chat reads GitHub now, #2473)
+// Exit 0 = work found (printed) or woken, 3 = nothing new before --max-min, 4 = another waiter for this role
 // is already running, 5 = the chat that started it is gone.
+// #2473: it also wakes on the world: a red `next`/`main` run (any workflow, smokes included) for anyone, CI failing
+// on your PR, and your merged PR reaching main (smoke it).
+// #2021: every role shares one gh login's 5,000 calls/hour, so reads revalidate with ETags (304s are free),
+// a 403/429 rate limit waits for x-ratelimit-reset (or Retry-After) and retries, and polling slows when low.
 // Restart-proof (#384): on start it prints your role card, everything labelled for you with its latest
 // comment, and worktrees for your issues with uncommitted or unpushed work.
 // Work is: an item newly labelled for you; a comment on your item, addressed to you, or on an open PR
@@ -14,13 +19,13 @@
 // are never lost). For the CTO it also reports any worker with fewer than 3 actionable items and,
 // at the end of each wait, workers gone quiet for 90 min and PRs untouched for 60 min.
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
-export const NAMES = { dev: "Dev", dev2: "Dev 2", dev3: "Dev 3", dev4: "Dev 4", qa: "QA", qa2: "QA 2", reviewer: "Reviewer", devops: "DevOps", cpo: "CPO", analyst: "Analyst", designer: "Designer", docs: "Docs", cto: "CTO", ceo: "CEO" };
+export const NAMES = { dev: "Dev", dev2: "Dev 2", dev3: "Dev 3", dev4: "Dev 4", dev5: "Dev 5", dev6: "Dev 6", dev7: "Dev 7", dev8: "Dev 8", qa: "QA", qa2: "QA 2", reviewer: "Reviewer", devops: "DevOps", cpo: "CPO", analyst: "Analyst", designer: "Designer", docs: "Docs", speed: "Speed", janitor: "Janitor", scout: "Scout", cto: "CTO", ceo: "CEO" };
 // Items parked on someone outside the team never count as waiting on you.
 const PARKED = new Set(["waiting-owner", "blocked", "parked"]);
 
@@ -28,8 +33,8 @@ const PARKED = new Set(["waiting-owner", "blocked", "parked"]);
 export function matchers(role) {
   const build = (r) => {
     const name = NAMES[r];
-    // "Dev" must not match "Dev 2" / "Dev 3" / "Dev 4", nor "QA" match "QA 2"; "DevOps" never matches \bDev\b.
-    const notOther = r === "dev" ? "(?! ?[234])" : r === "qa" ? "(?! ?2)" : "";
+    // "Dev" must not match "Dev 2" … "Dev 8", nor "QA" match "QA 2"; "DevOps" never matches \bDev\b.
+    const notOther = r === "dev" ? "(?! ?[2-8])" : r === "qa" ? "(?! ?2)" : "";
     return {
       writtenBy: new RegExp(`^[\\s*#>_\`-]*${name}\\b${notOther}`),
       addressedTo: new RegExp(`(?:^|[\\s>(*_-])${name}${notOther}\\*{0,2}\\s*[:,]|→\\s*\\**${name}\\b${notOther}|@${r}\\b`, "m"),
@@ -59,21 +64,126 @@ export function snoozedUntil(body) {
   return Number.isNaN(t) ? null : t;
 }
 
+/** Holds a timed read never overrides: only the owner or a later decision can lift them (#2572). */
+const TIMER_HOLDS = new Set(["waiting-owner", "parked", "later"]);
+
+/**
+ * #2572: when your own last word schedules a read ("Next read <ISO time>Z"), its due time (ms), else null.
+ * The timer survives `blocked` (a timed read often waits on the outside world) but not `waiting-owner`,
+ * `parked` or `later`; someone else's time never schedules you.
+ */
+export function scheduledRead(lastBody, m, labels = []) {
+  if (lastBody == null || !m.writtenByMe(lastBody) || labels.some((l) => TIMER_HOLDS.has(l))) return null;
+  return snoozedUntil(lastBody);
+}
+
+/**
+ * #2572: owned items whose last word backlog() must read. Items a time can't lift (`waiting-owner`, `parked`,
+ * `later`) are skipped to save the shared API budget; every other one is read, so no scheduled read is missed.
+ * @template {{ labels?: Array<string | { name: string }> }} T
+ * @param {T[]} items
+ * @returns {T[]}
+ */
+export function backlogReads(items) {
+  return items.filter((i) => !labelNames(i).some((n) => TIMER_HOLDS.has(n)));
+}
+
 export function waitingOnMe(lastBody, m, labels = [], now = Date.now()) {
-  if (labels.some((l) => PARKED.has(l))) return false;
+  // A scheduled check (QA 2's live-run reads, #575) keeps the item quiet until its time, then reports it
+  // even when the comment also handed something on or the item is `blocked` (#2572).
+  const due = scheduledRead(lastBody, m, labels);
+  if (due !== null) {
+    if (now < due) { nextDue = Math.min(nextDue, due); return false; }
+    return true;
+  }
+  // `later` is frozen (board, #2238): a reply on it doesn't wake its owner.
+  if (labels.some((l) => PARKED.has(l) || l === "later")) return false;
   if (lastBody == null) return true;
   // Your own last word without a handoff (no "→ Role") means the item is still yours to continue;
-  // idle workers otherwise slept with their queue unfinished (Oct 25). A scheduled check
-  // ("Next read <ISO time>Z") keeps it quiet until that time (QA 2's live-run reads, #575).
-  if (m.writtenByMe(lastBody)) {
-    const due = snoozedUntil(lastBody);
-    if (due !== null && now < due) { nextDue = Math.min(nextDue, due); return false; }
-    return !m.handedToOther(lastBody);
-  }
+  // idle workers otherwise slept with their queue unfinished (Oct 25).
+  if (m.writtenByMe(lastBody)) return !m.handedToOther(lastBody);
   if (m.addressedToMe(lastBody)) return true;
   // #1478: on a co-owned issue an un-arrowed FYI isn't every owner's turn; only one that names you is.
   if (labels.filter((l) => l.startsWith("owner:")).length > 1) return false;
   return !m.handedToOther(lastBody);
+}
+
+/**
+ * #2021: every role shares one gh login (5,000 REST calls/hour). `rate_limit` itself is free. Returns ms to wait:
+ * until the reset when the budget is spent, a slowed poll when it's low, else 0.
+ */
+export function rateBackoffMs({ remaining, reset }, pollMs, now = Date.now()) {
+  if (remaining <= 50) return Math.max(0, reset * 1000 - now) + 5_000 + Math.floor(Math.random() * 30_000);
+  if (remaining < 1_000) return pollMs * 2;
+  return 0;
+}
+
+const parseResponse = (raw) => {
+  const text = String(raw ?? "");
+  const split = text.search(/\r?\n\r?\n/);
+  const head = split < 0 ? text : text.slice(0, split);
+  const body = split < 0 ? "" : text.slice(split).replace(/^\r?\n\r?\n/, "");
+  const [statusLine, ...lines] = head.split(/\r?\n/);
+  const headers = {};
+  for (const line of lines) {
+    const at = line.indexOf(":");
+    if (at > 0) headers[line.slice(0, at).trim().toLowerCase()] = line.slice(at + 1).trim();
+  }
+  return { status: Number(statusLine.split(" ")[1]) || 0, headers, body };
+};
+
+/**
+ * #2021: a gh api client that revalidates with ETags (a 304 doesn't spend the shared budget), waits out
+ * 403/429 rate limits (x-ratelimit-reset or Retry-After) instead of crashing, and slows polling from the
+ * rate headers it already has, so it never spends a call on `rate_limit`.
+ * @param {{ request: (args: string[]) => string, sleep?: (ms: number) => Promise<void>, now?: () => number, warn?: (line: string) => void }} options
+ */
+export function createGitHubApi({
+  request,
+  sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  now = () => Date.now(),
+  warn = (line) => console.error(line),
+}) {
+  const cache = new Map();
+  let rate = null;
+  async function get(path) {
+    for (let attempt = 1; ; attempt++) {
+      const cached = cache.get(path);
+      const args = ["api", "--include", path, ...(cached ? ["-H", `If-None-Match: ${cached.etag}`] : [])];
+      let raw;
+      // gh exits nonzero on 304 and on errors; with --include the response is still on stdout.
+      try { raw = request(args); } catch (error) {
+        if (!error?.stdout) throw error;
+        raw = error.stdout;
+      }
+      const { status, headers, body } = parseResponse(raw);
+      if (headers["x-ratelimit-remaining"] !== undefined) {
+        rate = { remaining: Number(headers["x-ratelimit-remaining"]), reset: Number(headers["x-ratelimit-reset"]) || 0 };
+      }
+      if (status === 304 && cached) return cached.data;
+      if (status >= 200 && status < 300) {
+        const data = body.trim() ? JSON.parse(body) : null;
+        if (headers.etag) cache.set(path, { etag: headers.etag, data });
+        else cache.delete(path);
+        return data;
+      }
+      let message = `HTTP ${status}`;
+      try { message = JSON.parse(body).message || message; } catch { /* not JSON */ }
+      const limited = status === 429 || (status === 403 && (headers["x-ratelimit-remaining"] === "0" || headers["retry-after"] !== undefined || /rate limit/i.test(message)));
+      if (!limited) throw new Error(`${message} (HTTP ${status}, ${path})`);
+      const jitter = Math.floor(Math.random() * 30_000);
+      const retryAfter = headers["retry-after"];
+      const retryMs = retryAfter === undefined ? 0
+        : /^\d+$/.test(retryAfter) ? Number(retryAfter) * 1000 : Date.parse(retryAfter) - now();
+      const resetMs = headers["x-ratelimit-remaining"] === "0"
+        ? Number(headers["x-ratelimit-reset"]) * 1000 - now() + 5_000 : 0;
+      const hints = [retryMs, resetMs].filter((ms) => Number.isFinite(ms) && ms > 0);
+      const wait = (hints.length ? Math.max(...hints) : Math.min(60_000 * 2 ** (attempt - 1), 900_000)) + jitter;
+      warn(`GitHub rate limit (HTTP ${status}); waiting ${Math.ceil(wait / 1000)} s before retrying (#2021).`);
+      await sleep(wait);
+    }
+  }
+  return { get, pollDelay: (pollMs) => pollMs + (rate ? rateBackoffMs(rate, pollMs, now()) : 0) };
 }
 
 /**
@@ -96,22 +206,57 @@ export function freshComments(comments, since) {
  * @param {Set<number>} [skip]
  */
 export function nextItem(items, openPulls, skip = new Set()) {
-  const hold = new Set([...PARKED, "later", "decision", "standing"]);
   const withPr = new Set(openPulls.flatMap((pr) => linkedIssues(pr.title)));
-  const names = (i) => (i.labels ?? []).map((l) => (typeof l === "string" ? l : l.name));
   return items
-    .filter((i) => !i.pull_request && !names(i).some((n) => hold.has(n)) && !withPr.has(i.number) && !skip.has(i.number))
+    .filter((i) => !i.pull_request && !labelNames(i).some((n) => HOLD.has(n)) && !withPr.has(i.number) && !skip.has(i.number))
     .sort((a, b) => a.number - b.number)[0] ?? null;
 }
 
-/** Earliest scheduled check seen this run; the wait loop rechecks the backlog when it passes. */
-let nextDue = Infinity;
-
-/** Ready-pool lane per role: briefed, unowned issues labelled `ready` + `lane:<lane>` (#573). */
-export const LANES = { dev: "dev", dev2: "dev", dev3: "dev", dev4: "dev", qa: "qa", qa2: "qa", devops: "devops", reviewer: "review", designer: "design", cpo: "product", analyst: "research", docs: "docs" };
+const HOLD = new Set([...PARKED, "later", "decision", "standing"]);
+/** @param {{ labels?: Array<string | { name: string }> }} i */
+const labelNames = (i) => (i.labels ?? []).map((l) => (typeof l === "string" ? l : l.name));
 
 /**
- * The lane's unclaimed ready issues, core first, oldest first; at most `max`.
+ * #364 (CEO, Oct 29): the owned items that stop you waiting. Everything labelled yours except held items
+ * (parked, blocked, waiting-owner, decision, later, standing) and scheduled checks not yet due (`snoozed`).
+ * A `blocked` item whose own scheduled read is due (`due`, #2572) counts again.
+ * A co-owned item (#1478) counts only when it is your turn (`myTurn`). Turns first, then `core`, then oldest.
+ * @param {Array<{ number: number, labels?: Array<string | { name: string }> }>} items
+ * @param {{ snoozed?: Set<number>, myTurn?: Set<number>, due?: Set<number> }} [state]
+ */
+export function actionableOwned(items, { snoozed = new Set(), myTurn = new Set(), due = new Set() } = {}) {
+  const rank = (i) => (myTurn.has(i.number) ? 0 : labelNames(i).includes("core") ? 1 : 2);
+  return items
+    .filter((i) => {
+      const names = labelNames(i);
+      const holds = (n) => HOLD.has(n) && !(n === "blocked" && due.has(i.number));
+      if (names.some(holds) || snoozed.has(i.number)) return false;
+      return names.filter((n) => n.startsWith("owner:")).length < 2 || myTurn.has(i.number);
+    })
+    .sort((a, b) => rank(a) - rank(b) || a.number - b.number);
+}
+
+/** Exit code when the waiter refuses to wait because you own actionable items (#364). */
+export const OWNS_WORK = 6;
+
+/** Earliest scheduled check seen this run; the wait loop rechecks the backlog when it passes. */
+let nextDue = Infinity;
+/** True once when the earliest scheduled check is due at `now`; the wait loop then rereads the backlog. */
+export function dueWake(now = Date.now()) {
+  if (now < nextDue) return false;
+  nextDue = Infinity;
+  return true;
+}
+
+/** Ready-pool lane per role: briefed, unowned issues labelled `ready` + `lane:<lane>` (#573). */
+export const LANES = { dev: "dev", dev2: "dev", dev3: "dev", dev4: "dev", dev5: "dev", dev6: "dev", dev7: "dev", dev8: "dev", qa: "qa", qa2: "qa", devops: "devops", reviewer: "review", designer: "design", cpo: "product", analyst: "research", docs: "docs", speed: "devops", janitor: "devops", scout: "product" };
+
+/** #2473 (E8): roles whose lane runs dry also get the Dev lane's `core` items, after their own. */
+export const BORROWS_DEV = new Set(["qa", "qa2", "reviewer", "analyst", "cpo", "docs"]);
+
+/**
+ * The lane's unclaimed ready issues, core first, oldest first; at most `max`. Roles in BORROWS_DEV fill the rest
+ * with unclaimed `lane:dev` `core` items.
  * @param {Array<{ number: number, title?: string, pull_request?: unknown, labels?: Array<string | { name: string }> }>} issues
  * @param {string} role
  * @param {number} [max]
@@ -120,17 +265,20 @@ export function readyPool(issues, role, max = 3) {
   const lane = LANES[role];
   if (!lane) return [];
   const names = (i) => (i.labels ?? []).map((l) => (typeof l === "string" ? l : l.name));
-  return issues
-    .filter((i) => !i.pull_request && names(i).includes("ready") && names(i).includes(`lane:${lane}`)
-      && !names(i).some((n) => n.startsWith("owner:") || PARKED.has(n) || n === "decision" || n === `declined:${role}`))
-    .sort((a, b) => Number(names(b).includes("core")) - Number(names(a).includes("core")) || a.number - b.number)
-    .slice(0, max);
+  const open = (i, inLane) => !i.pull_request && names(i).includes("ready") && names(i).includes(`lane:${inLane}`)
+    && !names(i).some((n) => n.startsWith("owner:") || HOLD.has(n) || n === `declined:${role}`);
+  const own = issues.filter((i) => open(i, lane))
+    .sort((a, b) => Number(names(b).includes("core")) - Number(names(a).includes("core")) || a.number - b.number);
+  const borrowed = BORROWS_DEV.has(role) && lane !== "dev"
+    ? issues.filter((i) => open(i, "dev") && names(i).includes("core") && !own.includes(i)).sort((a, b) => a.number - b.number)
+    : [];
+  return [...own, ...borrowed].slice(0, max);
 }
 
-export const WORKERS = ["dev", "dev2", "dev3", "dev4", "qa", "qa2", "reviewer", "devops", "cpo", "analyst", "designer", "docs"];
+export const WORKERS = ["dev", "dev2", "dev3", "dev4", "dev5", "dev6", "dev7", "dev8", "qa", "qa2", "reviewer", "devops", "cpo", "analyst", "designer", "docs", "speed", "janitor", "scout"];
 export const MIN_QUEUE = 3;
 
-/** Workers with fewer than MIN_QUEUE actionable open items (not parked or waiting on the CEO). The CTO refills these. */
+/** Workers with fewer than MIN_QUEUE actionable open items, owned PRs included (not parked or waiting on the CEO). The CTO refills these. */
 export function queueCounts(issues) {
   const counts = Object.fromEntries(WORKERS.map((r) => [r, 0]));
   for (const issue of issues) {
@@ -170,20 +318,31 @@ export function offTrack({ issues, comments, prs, now }) {
   }
   const quiet = WORKERS.filter((r) => counts[r] > 0 && !(now - (lastSeen[r] ?? 0) < QUIET_MIN * 60_000))
     .map((r) => ({ role: r, minutes: lastSeen[r] ? Math.floor((now - lastSeen[r]) / 60_000) : null }));
-  const stale = prs.filter((pr) => !pr.draft && now - Date.parse(pr.updated_at) >= STALE_PR_MIN * 60_000)
+  // Frozen (`later`) and parked PRs wait on purpose; only live work can go stale.
+  const frozen = (pr) => (pr.labels ?? []).some((l) => { const n = typeof l === "string" ? l : l.name; return n === "later" || PARKED.has(n); });
+  const stale = prs.filter((pr) => !pr.draft && !frozen(pr) && now - Date.parse(pr.updated_at) >= STALE_PR_MIN * 60_000)
     .map((pr) => ({ number: pr.number, title: pr.title, minutes: Math.floor((now - Date.parse(pr.updated_at)) / 60_000) }));
   return { quiet, stale };
 }
 
-/** One line from docs/ORCHESTRATION.md → Role cards ("Same as Dev" resolves to Dev's column). */
 /**
  * Workflows failing on `min` or more distinct PR branches in the window: these never reach main/next pushes,
  * so without this the CTO only hears about them from the owner's inbox (#926's core-approval, Oct 27).
  */
+// A run that ends within 30 s never started a job: the merge-ref race (#878), which the train retries itself.
+const NO_JOB_MS = 30_000;
+const ranNoJob = (run) => run.run_started_at && run.updated_at && Date.parse(run.updated_at) - Date.parse(run.run_started_at) < NO_JOB_MS;
+
+/** `runs` newest first (as the API returns them). A branch whose latest run of that workflow passed is fixed, not systemic. */
 export function systemicFailures(runs, min = 2) {
   const byName = new Map();
+  const seen = new Set();
   for (const run of runs) {
-    if (run.event !== "pull_request" || run.conclusion !== "failure") continue;
+    if (run.event !== "pull_request") continue;
+    const key = `${run.name}\u0000${run.head_branch}`;
+    const latest = !seen.has(key);
+    seen.add(key);
+    if (!latest || run.conclusion !== "failure" || ranNoJob(run)) continue;
     const entry = byName.get(run.name) ?? { branches: new Set(), url: run.html_url };
     entry.branches.add(run.head_branch);
     byName.set(run.name, entry);
@@ -192,6 +351,68 @@ export function systemicFailures(runs, min = 2) {
     .map(([name, e]) => `CI systemic: ${name} failed on ${e.branches.size} PR branches (${[...e.branches].slice(0, 4).join(", ")}); fix the check or the flaky test now ${e.url}`);
 }
 
+/** #2473: everyone's branches. A red run here wakes every waiter; the first to see it fixes forward. */
+export const SHARED_BRANCHES = ["next", "main"];
+const latestPerKey = (runs, key) => {
+  const seen = new Set();
+  return runs.filter((run) => { const k = key(run); if (seen.has(k)) return false; seen.add(k); return true; });
+};
+
+/**
+ * Red `next`/`main` code: the newest push run of each workflow on that branch failed after `since`, it started a
+ * job, it isn't in `seen` (run ids already reported to this role) and no open PR names its commit (a fix is in
+ * flight). Scheduled runs are left to their own alert issues, so a standing production failure can't wake every
+ * chat every 15 minutes. `runs` newest first, as the API returns them.
+ */
+export function redRuns(runs, { since, openPulls = [], seen = new Set() }) {
+  return latestPerKey(runs.filter((run) => SHARED_BRANCHES.includes(run.head_branch) && run.event === "push"),
+    (run) => `${run.name}\u0000${run.head_branch}`)
+    .filter((run) => run.status === "completed" && run.conclusion === "failure" && !ranNoJob(run) && run.updated_at >= since
+      && !seen.has(run.id)
+      && !openPulls.some((pr) => `${pr.title} ${pr.body ?? ""}`.includes(run.head_sha.slice(0, 7))));
+}
+
+export const redLine = (run) => {
+  const sha = run.head_sha.slice(0, 7);
+  return `Red ${run.head_branch}: ${run.name} failed at ${sha} ${run.html_url}. No PR names ${sha} yet: take it and fix forward with a PR on top whose title names ${sha} (a core break in production rolls back first).`;
+};
+
+export const redShared = (runs, options) => redRuns(runs, options).map(redLine);
+
+/** Your open PRs: the title names an issue you own, it carries your owner label, or its body is signed by you. */
+export function myPulls(openPulls, role, ownedNumbers) {
+  const { writtenByMe } = matchers(role);
+  return openPulls.filter((pr) => linkedIssues(pr.title).some((n) => ownedNumbers.has(n)) || ownedNumbers.has(pr.number)
+    || writtenByMe(pr.body ?? ""));
+}
+
+/** CI that failed on one of your PR branches after `since` (newest run per workflow and branch). */
+export function failedOnMine(runs, heads, since) {
+  return latestPerKey(runs.filter((run) => run.event === "pull_request" && heads.has(run.head_branch)),
+    (run) => `${run.name}\u0000${run.head_branch}`)
+    .filter((run) => run.status === "completed" && run.conclusion === "failure" && !ranNoJob(run) && run.updated_at >= since)
+    .map((run) => `CI failed on your PR branch ${run.head_branch}: ${run.name} ${run.html_url}`);
+}
+
+/** `GET compare/<merge sha>...main` status: main contains the merge commit. */
+/** How far back a waiter starting up looks for a red `next`/`main` nobody is fixing. */
+export const RED_LOOKBACK_MS = 6 * 3_600_000;
+
+export const onMain = (status) => status === "ahead" || status === "identical";
+
+/**
+ * One merged PR of yours: "wait" (not on main yet), "report" (on main and never reported to this role, across
+ * waits, so it isn't lost while the chat was working) or "drop" (already reported).
+ */
+export function mainArrival(pr, status, reported) {
+  if (reported.has(pr.number)) return "drop";
+  return onMain(status) ? "report" : "wait";
+}
+
+/** #2473: printed on every exit, so no chat restarts a sleep loop for the train (CEO, Nov 1). */
+export const TRAIN_RULE = "Don't wait for the deploy train or sleep-poll it: this waiter wakes you when your PR reaches main. Work the next item meanwhile.";
+
+/** One line from docs/team/orchestration.md → Role cards ("Same as Dev" resolves to Dev's column). */
 export function roleCard(markdown, role) {
   const rows = {};
   for (const line of markdown.split("\n")) {
@@ -249,6 +470,95 @@ export function skillsFor(map, title, labels = []) {
 /** Bot posts that are not a word: the advisory AI review (#587) would wake the PR owner on every push, the daily core scoreboard (#681) every role on #681. */
 const BOT_MARKERS = ["<!-- ai-review -->", "<!-- core-scoreboard -->"];
 
+const PAGE = 100;
+
+/** How far back a restarted waiter looks for handoffs missed between runs (#2576). */
+export const HANDOFF_LOOKBACK_MS = 24 * 3_600_000;
+/** The poll cursor is saved this far behind the request, so clock skew can't drop a comment (ids dedupe). */
+export const CURSOR_SKEW_MS = 120_000;
+const issueOf = (comment) => Number((comment.issue_url ?? "").split("/").pop());
+
+/**
+ * #2576: comments addressed to you that landed between two waiter runs, on items you don't own (owned items,
+ * holds included, are the backlog's job). The window is [saved cursor, this run's start), at most a day back;
+ * with no saved cursor there is nothing to recover. Already-reported ids never wake twice.
+ * @param {Array<{ id: number, body?: string, created_at?: string, issue_url?: string }>} comments
+ * @param {{ cursor: string | null, since: string, ids?: Set<number>, owned?: Set<number>, m: ReturnType<typeof matchers> }} state
+ */
+export function missedHandoffs(comments, { cursor, since, ids = new Set(), owned = new Set(), m }) {
+  if (!cursor) return [];
+  const from = new Date(Math.max(Date.parse(cursor), Date.parse(since) - HANDOFF_LOOKBACK_MS)).toISOString();
+  return comments.filter((c) => {
+    const body = c.body ?? "";
+    const at = c.created_at ?? "";
+    return at >= from && at < since && !ids.has(c.id) && !owned.has(issueOf(c))
+      && !BOT_MARKERS.some((marker) => body.startsWith(marker)) && !m.writtenByMe(body) && m.addressedToMe(body);
+  }).sort((a, b) => (a.created_at ?? "").localeCompare(b.created_at ?? ""));
+}
+
+/**
+ * Repo-wide comments created at or after `from`, newest first, at most `maxPages` pages (bounded API budget).
+ * `complete` is false when the cap cut the window short: the caller must not move its cursor past it.
+ * @param {(path: string) => Promise<any>} api
+ * @param {string} repo
+ * @param {string} from
+ */
+export async function commentsSince(api, repo, from, maxPages = 5) {
+  const comments = [];
+  for (let page = 1; page <= maxPages; page++) {
+    const rows = (await api(`repos/${repo}/issues/comments?since=${from}&sort=created&direction=desc&per_page=${PAGE}&page=${page}`)) ?? [];
+    comments.push(...rows);
+    if (rows.length < PAGE || (rows.at(-1)?.created_at ?? "") < from) return { comments, complete: true };
+  }
+  return { comments, complete: false };
+}
+/**
+ * #2576: the latest word on an owned item. GitHub lists issue comments oldest first (sort/direction are
+ * ignored), so read the page holding the newest comment (from the item's `comments` count) and keep reading
+ * while a page is full (a comment may land after the count was taken). Then step back a page at a time while
+ * nothing read counts as a word: deletions emptied it, or it holds only bot posts. Every review page is read:
+ * reviews have no count on the issue list.
+ * @param {(path: string) => Promise<any>} api
+ * @param {string} repo
+ * @param {{ number: number, comments?: number, pull_request?: unknown }} item
+ */
+export async function lastWordOn(api, repo, item) {
+  const read = async (path, page) => (await api(`${path}?per_page=${PAGE}&page=${page}`)) ?? [];
+  const pages = async (path, first, counts) => {
+    let page = first;
+    let rows = await read(path, page);
+    let all = rows;
+    while (rows.length === PAGE) { rows = await read(path, ++page); all = all.concat(rows); }
+    for (let back = first - 1; back >= 1 && !all.some(counts); back--) all = (await read(path, back)).concat(all);
+    return all;
+  };
+  const human = (c) => !BOT_MARKERS.some((marker) => (c.body ?? "").startsWith(marker));
+  // No count (not from the issue list) means unknown, not none: start at page 1.
+  const comments = item.comments === 0 ? [] : await pages(`repos/${repo}/issues/${item.number}/comments`, Math.max(1, Math.ceil((item.comments ?? 1) / PAGE)), human);
+  const reviews = item.pull_request ? await pages(`repos/${repo}/pulls/${item.number}/reviews`, 1, () => true) : [];
+  return latestWord(comments, reviews);
+}
+
+/**
+ * The startup and due-time backlog scan (#364, #2572, #2576): whose turn each owned item is, and its timed reads.
+ * @param {Array<{ number: number, comments?: number, pull_request?: unknown, labels?: Array<string | { name: string }> }>} items
+ * @param {{ api: (path: string) => Promise<any>, repo: string, m: ReturnType<typeof matchers>, now?: number }} ctx
+ */
+export async function scanBacklog(items, { api, repo, m, now = Date.now() }) {
+  const snoozed = new Set();
+  const myTurn = new Set();
+  const dueNow = new Set();
+  const turns = [];
+  for (const item of backlogReads(items)) {
+    const last = await lastWordOn(api, repo, item);
+    const labels = labelNames(item);
+    const due = scheduledRead(last?.body ?? null, m, labels);
+    if (due !== null) (now < due ? snoozed : dueNow).add(item.number);
+    if (waitingOnMe(last?.body ?? null, m, labels, now)) { myTurn.add(item.number); turns.push({ item, last }); }
+  }
+  return { snoozed, myTurn, dueNow, turns };
+}
+
 /** The latest word on an item across issue comments and PR reviews (verdicts are reviews since #423), bot posts left out. */
 export function latestWord(comments = [], reviews = []) {
   const words = [
@@ -265,7 +575,9 @@ const { values } = parseArgs({
   options: {
     me: { type: "string" },
     "max-min": { type: "string", default: "30" },
-    "poll-sec": { type: "string", default: "90" },
+    "poll-sec": { type: "string", default: "60" },
+    // #2473: stop <role>'s running waiter so its chat reads GitHub now.
+    wake: { type: "string" },
     // #573: the supervisor's read-only check; never takes the role's lock, so a chat starting its waiter isn't refused.
     probe: { type: "boolean", default: false },
     since: { type: "string" },
@@ -273,17 +585,44 @@ const { values } = parseArgs({
   },
 });
 
+const lockFor = (r) => join(tmpdir(), `adbrain-wait-for-work-${r}.pid`);
+const alive = pid => { try { process.kill(pid, 0); return true; } catch { return false; } };
+const lockHolder = (r) => Number.parseInt((() => { try { return readFileSync(lockFor(r), "utf8"); } catch { return ""; } })(), 10);
+
+if (values.wake !== undefined) {
+  const target = values.wake;
+  if (!(target in NAMES)) {
+    console.error(`Usage: --wake ${Object.keys(NAMES).join("|")}`);
+    process.exit(2);
+  }
+  const pid = lockHolder(target);
+  // A recycled pid must not be signalled: only a live wait-for-work process holds the lock.
+  const command = Number.isInteger(pid) && alive(pid)
+    ? (() => { try { return execFileSync("ps", ["-o", "command=", "-p", String(pid)], { encoding: "utf8" }); } catch { return ""; } })()
+    : "";
+  // The lock can outlive a SIGKILLed waiter and its pid be reused, so the holder must be this role's waiter.
+  if (!command.includes("wait-for-work") || !new RegExp(`--me[ =]${target}(\\s|$)`).test(command.trim())) {
+    console.log(`No waiter running for ${NAMES[target]}; send the message directly.`);
+    process.exit(1);
+  }
+  try { process.kill(pid, "SIGUSR2"); } catch {
+    console.log(`No waiter running for ${NAMES[target]}; send the message directly.`);
+    process.exit(1);
+  }
+  console.log(`Woke ${NAMES[target]}'s waiter (pid ${pid}); its chat reads its issues next.`);
+  process.exit(0);
+}
+
 const role = values.me;
 if (!role || !(role in NAMES)) {
-  console.error(`Usage: --me ${Object.keys(NAMES).join("|")}`);
+  console.error(`Usage: --me ${Object.keys(NAMES).join("|")} | --wake <role>`);
   process.exit(2);
 }
 const name = NAMES[role];
 
 // One waiter per role: a second copy exits instead of piling up.
-const lock = join(tmpdir(), `adbrain-wait-for-work-${role}.pid`);
-const alive = pid => { try { process.kill(pid, 0); return true; } catch { return false; } };
-const holder = Number.parseInt((() => { try { return readFileSync(lock, "utf8"); } catch { return ""; } })(), 10);
+const lock = lockFor(role);
+const holder = lockHolder(role);
 if (Number.isInteger(holder) && holder !== process.pid && alive(holder)) {
   console.error(`Another waiter for ${name} is already running (pid ${holder}). Not starting a second one.`);
   process.exit(4);
@@ -293,6 +632,10 @@ else writeFileSync(lock, String(process.pid));
 const release = () => { try { if (readFileSync(lock, "utf8") === String(process.pid)) rmSync(lock); } catch { /* already gone */ } };
 process.on("exit", release);
 for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) process.on(signal, () => process.exit(130));
+process.on("SIGUSR2", () => {
+  console.log(`Woken by --wake (#2473): someone needs ${name} now. Read the latest comments on your issues and the #580 Everyone row, then act on them.\n${TRAIN_RULE}`);
+  process.exit(0);
+});
 
 // The chat that started this is gone once we, or the shell wrapping us (`bash -c "cd … && node …"`),
 // are re-parented to launchd/init (pid 1), or the parent died.
@@ -313,15 +656,27 @@ const repo = values.repo;
 const label = role === "ceo" ? "decision" : `owner:${role}`;
 const since = values.since ? new Date(values.since).toISOString() : new Date().toISOString();
 const deadline = Date.now() + Number(values["max-min"]) * 60_000;
-const pollMs = Math.max(15, Number(values["poll-sec"])) * 1000;
+const pollMs = Math.max(60, Number(values["poll-sec"])) * 1000;
 
 // Chats started without a login shell (e.g. VS Code after a reboot) may lack Homebrew's bin on PATH.
 const ghEnv = { ...process.env, PATH: [process.env.PATH, "/opt/homebrew/bin", "/usr/local/bin"].filter(Boolean).join(":") };
 
-function api(path) {
-  // All chats share one gh login (5,000 requests/hour): each poll makes 4–5 calls plus one per PR updated during the wait.
-  return JSON.parse(execFileSync("gh", ["api", path], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 16 * 1024 * 1024 , env: ghEnv }));
-}
+const gh = createGitHubApi({
+  request: (args) => execFileSync("gh", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 16 * 1024 * 1024, env: ghEnv }),
+  sleep: async (ms) => {
+    const until = Date.now() + ms;
+    while (Date.now() < until) {
+      exitIfOrphaned();
+      if (Date.now() >= deadline) {
+        console.error("Wait deadline reached during GitHub rate-limit backoff; retry after the reset (#2021).");
+        process.exit(3);
+      }
+      await new Promise(resolve => setTimeout(resolve, Math.min(5_000, until - Date.now(), Math.max(1, deadline - Date.now()))));
+    }
+  },
+});
+// All chats share one gh login (5,000 requests/hour, #2021): unchanged reads come back 304 and cost nothing.
+const api = (path) => gh.get(path);
 
 const owned = () => api(`repos/${repo}/issues?state=open&labels=${encodeURIComponent(label)}&per_page=100`);
 const brief = text => text.replace(/\s+/g, " ").trim().slice(0, 200);
@@ -330,7 +685,7 @@ async function firstOwned() {
   for (let attempt = 1; ; attempt++) {
     exitIfOrphaned();
     try {
-      return owned();
+      return await owned();
     } catch (error) {
       // A failed first read would make every owned item look newly labelled later.
       if (attempt >= 5) throw error;
@@ -341,24 +696,34 @@ async function firstOwned() {
 
 const startOwned = new Set((await firstOwned()).map(item => item.number));
 // CTO only: workers about to run dry (one extra call per poll). Reported at start, then only when newly low.
-const openIssues = () => api(`repos/${repo}/issues?state=open&per_page=100`).filter(item => !item.pull_request);
+// Every open issue and PR, all pages: one page of 100 hid older owned items, so queues looked low (#2122).
+// Unchanged pages come back 304 and cost nothing (#2021).
+const openItems = async () => {
+  const all = [];
+  for (let page = 1; page <= 10; page++) {
+    const batch = await api(`repos/${repo}/issues?state=open&per_page=100&page=${page}`);
+    all.push(...batch);
+    if (batch.length < 100) break;
+  }
+  return all;
+};
+const openIssues = async () => (await openItems()).filter(item => !item.pull_request);
 const describeLow = (low) => low.map(({ role: r, count }) => `Queue low: ${NAMES[r]} has ${count} actionable item(s); refill from the CEO priorities (worker table)`);
-let startLow = new Set();
 
-function findWork() {
+async function findWork() {
   const found = [];
-  const mine = owned();
+  const mine = await owned();
   for (const item of mine) {
     if (!startOwned.has(item.number)) found.push(`#${item.number} is now labelled ${label}${withSkills(item)}: ${item.title}`);
   }
   const mineNumbers = new Set(mine.map(item => item.number));
   // A PR whose title names one of your issues is yours to watch too (QA's #309 verdict was for #274's owner).
-  const openPulls = api(`repos/${repo}/pulls?state=open&per_page=100`);
+  const openPulls = await api(`repos/${repo}/pulls?state=open&per_page=100`);
   const linkedToMine = new Set(openPulls
     .filter(pr => linkedIssues(pr.title).some(n => mineNumbers.has(n))).map(pr => pr.number));
   // Verdicts are PR reviews (#423): read reviews on PRs touched since this wait began.
   for (const pr of openPulls.filter(pr => pr.updated_at >= since)) {
-    for (const review of api(`repos/${repo}/pulls/${pr.number}/reviews?per_page=100`)) {
+    for (const review of await api(`repos/${repo}/pulls/${pr.number}/reviews?per_page=100`)) {
       const body = review.body ?? "";
       if (!body.trim() || !review.submitted_at || review.submitted_at < since || writtenByMe(body)) continue;
       if (mineNumbers.has(pr.number) || addressedToMe(body) || linkedToMine.has(pr.number)) {
@@ -368,59 +733,128 @@ function findWork() {
   }
   // One repo-wide call (newest first) instead of one call per updated issue.
   const coOwned = new Set(mine.filter(item => (item.labels ?? []).filter(l => l.name.startsWith("owner:")).length > 1).map(item => item.number));
-  for (const comment of freshComments(api(`repos/${repo}/issues/comments?since=${since}&sort=created&direction=desc&per_page=100`), since)) {
+  const polledAt = Date.now();
+  const reported = [];
+  seenWorld ??= loadSeen();
+  for (const comment of freshComments(await api(`repos/${repo}/issues/comments?since=${since}&sort=created&direction=desc&per_page=100`), since)) {
     const number = Number(comment.issue_url.split("/").pop());
     const body = comment.body ?? "";
     if (writtenByMe(body)) continue;
     // #1478: on a co-owned issue, a comment wakes you only when it names you.
     if (coOwned.has(number) && !addressedToMe(body)) continue;
+    if (seenWorld.handoffs.has(comment.id)) continue;
     if (mineNumbers.has(number) || addressedToMe(body) || linkedToMine.has(number)) {
+      if (addressedToMe(body)) reported.push(comment.id);
       found.push(`#${number} new comment: "${brief(body)}" ${comment.html_url}`);
     }
   }
-  if (role === "cto") {
-    const low = lowQueues(openIssues());
-    const lowNow = new Set(low.map(({ role: r }) => r));
-    // A refilled worker leaves the known-low set, so running dry again alerts again.
-    for (const r of startLow) if (!lowNow.has(r)) startLow.delete(r);
-    for (const line of describeLow(low.filter(({ role: r }) => !startLow.has(r)))) found.push(line);
-  }
   if (role === "cto" || role === "devops") {
-    const runs = api(`repos/${repo}/actions/runs?status=completed&created=${encodeURIComponent(`>=${since}`)}&per_page=100`).workflow_runs ?? [];
+    const runs = (await api(`repos/${repo}/actions/runs?status=completed&created=${encodeURIComponent(`>=${since}`)}&per_page=100`)).workflow_runs ?? [];
     for (const run of runs) {
-      if (run.conclusion === "failure" && run.event !== "pull_request") {
+      if (run.conclusion === "failure" && run.event !== "pull_request" && !SHARED_BRANCHES.includes(run.head_branch)) {
         found.push(`CI failed: ${run.name} on ${run.head_branch} (${run.head_sha.slice(0, 7)}) ${run.html_url}`);
       }
     }
     // CTO only: one workflow failing across several PR branches is systemic (a broken check or flaky test), not one PR's bug.
     if (role === "cto") for (const line of systemicFailures(runs)) found.push(line);
   }
+  found.push(...await worldChanges(mineNumbers, openPulls, seenWorld ??= loadSeen()));
+  // #2576: commit the comment cursor only once the whole poll succeeded, so a failed read loses nothing.
+  if (!values.probe) {
+    for (const id of reported) seenWorld.handoffs.add(id);
+    const cursor = new Date(Math.max(Date.parse(since), polledAt - CURSOR_SKEW_MS)).toISOString();
+    if (cursor !== seenWorld.cursor || reported.length) { seenWorld.cursor = cursor; saveSeen(seenWorld); }
+  }
   return found;
 }
 
-// Items you own where the last word is someone else's (said while you were busy, or before this wait).
-function backlog() {
+// #2473: wake on the world (code, CI, production), not only on talk. What was already reported to this role
+// survives between waits in a small state file, so nothing re-wakes and nothing is lost while the chat works.
+const stateFile = () => join(tmpdir(), `adbrain-wait-for-work-${role}.seen.json`);
+function loadSeen() {
+  try {
+    const { red = [], reached = [], cursor = null, handoffs = [] } = JSON.parse(readFileSync(stateFile(), "utf8"));
+    return { red: new Set(red), reached: new Set(reached), cursor, handoffs: new Set(handoffs), fresh: false };
+  } catch { return { red: new Set(), reached: new Set(), cursor: null, handoffs: new Set(), fresh: true }; }
+}
+const saveSeen = (seen) => {
+  // Write then rename, so a crash mid-write never leaves a torn file that resets every cursor.
+  try {
+    const tmp = `${stateFile()}.${process.pid}`;
+    writeFileSync(tmp, JSON.stringify({ red: [...seen.red].slice(-200), reached: [...seen.reached].slice(-200),
+      cursor: seen.cursor, handoffs: [...seen.handoffs].slice(-200) }));
+    renameSync(tmp, stateFile());
+  } catch { /* best effort */ }
+};
+let commitRecovered = () => {};
+// #2576: handoffs to you on items you don't own, posted after your last poll and before this run began.
+async function recoverHandoffs(seen) {
+  const mine = new Set((await owned()).map((item) => item.number));
+  const from = seen.cursor ? new Date(Math.max(Date.parse(seen.cursor), Date.parse(since) - HANDOFF_LOOKBACK_MS)).toISOString() : null;
+  const { comments, complete } = from ? await commentsSince(api, repo, from) : { comments: [], complete: true };
+  const missed = missedHandoffs(comments, { cursor: seen.cursor, since, ids: seen.handoffs, owned: mine, m });
+  // Saved only when these lines are reported (or there were none), so a later start-up failure loses nothing.
+  // A capped read keeps the old cursor (ids stop repeats); a full one moves it to this run's start.
+  commitRecovered = () => {
+    for (const c of missed) seen.handoffs.add(c.id);
+    if (complete) seen.cursor = since;
+    saveSeen(seen);
+    commitRecovered = () => {};
+  };
+  // Not "#N …" first: the exit-6 report keeps only non-"#N" lines beside your top owned items.
+  return missed.map((c) => `Addressed to you while the waiter was off, on #${issueOf(c)}: "${brief(c.body ?? "")}" ${c.html_url}`);
+}
+// Narrow, slow-changing reads so ETag 304s keep a 60-second poll cheap for twelve chats.
+const sharedPushRuns = async () => (await Promise.all(SHARED_BRANCHES.map((branch) =>
+  api(`repos/${repo}/actions/runs?branch=${branch}&event=push&per_page=20`)))).flatMap((page) => page.workflow_runs ?? []);
+let lastMainSha = null;
+let seenWorld = null;
+async function worldChanges(mineNumbers, openPulls, seen) {
   const found = [];
-  const items = owned();
-  const snoozed = new Set();
-  for (const item of items.slice(0, 20)) {
-    const comments = item.comments ? api(`repos/${repo}/issues/${item.number}/comments?per_page=100`) : [];
-    const reviews = item.pull_request ? api(`repos/${repo}/pulls/${item.number}/reviews?per_page=100`) : [];
-    const last = latestWord(comments, reviews);
-    const due = last && writtenByMe(last.body ?? "") ? snoozedUntil(last.body) : null;
-    if (due !== null && Date.now() < due) snoozed.add(item.number);
-    if (waitingOnMe(last?.body ?? null, m, (item.labels ?? []).map(l => l.name))) {
-      found.push(last ? `#${item.number} is waiting on you${withSkills(item)}: "${brief(last.body)}" ${last.url}` : `#${item.number} is yours and not started${withSkills(item)}: ${item.title}`);
-    }
+  const before = JSON.stringify([seen.red.size, seen.reached.size]);
+  const red = redRuns(await sharedPushRuns(), { since, openPulls, seen: seen.red });
+  for (const run of red) { seen.red.add(run.id); found.push(redLine(run)); }
+  for (const pr of myPulls(openPulls, role, mineNumbers).filter((pr) => pr.head?.ref)) {
+    const runs = (await api(`repos/${repo}/actions/runs?branch=${encodeURIComponent(pr.head.ref)}&event=pull_request&per_page=20`)).workflow_runs ?? [];
+    found.push(...failedOnMine(runs, new Set([pr.head.ref]), since));
   }
+  // Your merged PRs can only reach main when main moves.
+  const mainSha = (await api(`repos/${repo}/branches/main`)).commit?.sha ?? null;
+  if (mainSha !== lastMainSha) {
+    lastMainSha = mainSha;
+    const merged = (await api(`repos/${repo}/pulls?state=closed&base=next&sort=updated&direction=desc&per_page=30`))
+      .filter((pr) => pr.merged_at && pr.merge_commit_sha && Date.now() - Date.parse(pr.merged_at) < 86_400_000);
+    for (const pr of myPulls(merged, role, mineNumbers).filter((pr) => !seen.reached.has(pr.number))) {
+      if (mainArrival(pr, (await api(`repos/${repo}/compare/${pr.merge_commit_sha}...main`)).status, seen.reached) !== "report") continue;
+      seen.reached.add(pr.number);
+      // First run on this Mac: remember what's already on main without waking for it.
+      if (!seen.fresh) found.push(`#${pr.number} reached main (production within minutes): smoke it in production now: ${pr.title}`);
+    }
+    seen.fresh = false;
+  }
+  if (JSON.stringify([seen.red.size, seen.reached.size]) !== before) saveSeen(seen);
+  return found;
+}
+
+// Set by backlog(): owned items you can act on now (#364).
+let ownedActionable = [];
+// Items you own where the last word is someone else's (said while you were busy, or before this wait).
+async function backlog() {
+  const found = [];
+  const items = await owned();
+  const { snoozed, myTurn, dueNow, turns } = await scanBacklog(items, { api, repo, m });
+  for (const { item, last } of turns) {
+    found.push(last ? `#${item.number} is waiting on you${withSkills(item)}: "${brief(last.body)}" ${last.url}` : `#${item.number} is yours and not started${withSkills(item)}: ${item.title}`);
+  }
+  ownedActionable = actionableOwned(items, { snoozed, myTurn, due: dueNow });
   // #364: nothing is waiting on you, but you still own work with no open PR: continue the oldest.
   if (!found.length) {
-    const next = nextItem(items, api(`repos/${repo}/pulls?state=open&per_page=100`), snoozed);
+    const next = nextItem(items, await api(`repos/${repo}/pulls?state=open&per_page=100`), snoozed);
     if (next) found.push(`#${next.number} is your next item${withSkills(next)}: ${next.title} (your oldest open item with no PR; continue it, ship it, or hand it off with its label)`);
   }
   // Nothing of yours is actionable: pull the next briefed item from your lane instead of idling.
-  if (!found.length) {
-    for (const item of readyPool(openIssues(), role, 1)) {
+  if (!found.length && !ownedActionable.length) {
+    for (const item of readyPool(await openIssues(), role, 1)) {
       found.push(`#${item.number} from the ready pool${withSkills(item)}: ${item.title}. Claim it first: gh issue edit ${item.number} --add-label owner:${role} --remove-label ready (or decline: --add-label declined:${role})`);
     }
   }
@@ -428,16 +862,18 @@ function backlog() {
 }
 // #384: restart-proof start. GitHub and git are the memory: role card, in-flight work, unsaved local work.
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const card = (() => { try { return roleCard(readFileSync(join(repoRoot, "docs/ORCHESTRATION.md"), "utf8"), role); } catch { return null; } })();
+const card = (() => { try { return roleCard(readFileSync(join(repoRoot, "docs/team/orchestration.md"), "utf8"), role); } catch { return null; } })();
 // The live priorities and queues are the pinned Team board issue (#580), edited without a PR.
 const BOARD_ISSUE = 580;
-const board = () => { try { return boardRow(api(`repos/${repo}/issues/${BOARD_ISSUE}`).body ?? "", role); } catch { return null; } };
-const report = (found) => {
+const board = async () => { try { return boardRow((await api(`repos/${repo}/issues/${BOARD_ISSUE}`)).body ?? "", role); } catch { return null; } };
+const report = async (found, code = 0) => {
+  commitRecovered();
   if (card) console.log(`Role: ${card}`);
-  const row = board();
+  const row = await board();
   if (row) console.log(`Team board #${BOARD_ISSUE} (your queue, in order):\n${row}`);
   console.log(`WORK for ${name} (${found.length}):\n- ${found.join("\n- ")}`);
-  process.exit(0);
+  console.log(TRAIN_RULE);
+  process.exit(code);
 };
 const git = (cwd, args) => execFileSync("git", ["-C", cwd, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
 function localTrees() {
@@ -461,13 +897,13 @@ const withSkills = (item) => {
   const skills = skillsFor(skillRows, item.title ?? "", (item.labels ?? []).map((l) => (typeof l === "string" ? l : l.name)));
   return skills.length ? ` [skills: ${skills.join(", ")}]` : "";
 };
-function startupSummary() {
+async function startupSummary() {
   if (card) console.log(`Role: ${card}`);
-  const items = owned();
+  const items = await owned();
   console.log(items.length ? `In flight for ${name} (${items.length}):` : `Nothing labelled ${label}; take the next item in your worker-table row.`);
   for (const item of items) {
-    const comments = item.comments ? api(`repos/${repo}/issues/${item.number}/comments?per_page=100`) : [];
-    const reviews = item.pull_request ? api(`repos/${repo}/pulls/${item.number}/reviews?per_page=100`) : [];
+    const comments = item.comments ? await api(`repos/${repo}/issues/${item.number}/comments?per_page=100`) : [];
+    const reviews = item.pull_request ? await api(`repos/${repo}/pulls/${item.number}/reviews?per_page=100`) : [];
     const last = latestWord(comments, reviews)?.body;
     console.log(`- ${item.pull_request ? "PR " : ""}#${item.number} ${item.title.slice(0, 70)}${withSkills(item)}${last ? ` | last: ${brief(last.split("\n")[0]).slice(0, 120)}` : " | no comments yet"}`);
   }
@@ -476,51 +912,80 @@ function startupSummary() {
 }
 
 try {
-  startupSummary();
+  await startupSummary();
 } catch (error) {
   console.error(`Start-up summary failed, continuing: ${error.message.split("\n")[0]}`);
 }
+let recovered = [];
 try {
-  const waiting = backlog();
-  if (role === "cto") {
-    const low = lowQueues(openIssues());
-    startLow = new Set(low.map(({ role: r }) => r));
-    waiting.push(...describeLow(low));
+  // #2473: a red next/main with no fix PR comes first, even before your own items (fix forward).
+  if (!values.probe) {
+    // Each red run is reported once per role, so restarting the waiter doesn't loop on it.
+    const seen = seenWorld = loadSeen();
+    // #2576: recover between-runs handoffs first, so a red-run report can't defer them.
+    recovered = await recoverHandoffs(seen).catch(() => []);
+    const red = redRuns(await sharedPushRuns(), { since: new Date(Date.now() - RED_LOOKBACK_MS).toISOString(),
+      openPulls: await api(`repos/${repo}/pulls?state=open&per_page=100`), seen: seen.red });
+    if (red.length) {
+      for (const run of red) seen.red.add(run.id);
+      saveSeen(seen);
+      await report([...red.map(redLine), ...recovered]);
+    }
   }
-  if (waiting.length) report(waiting);
+  const waiting = await backlog();
+  waiting.push(...recovered);
+  if (role === "cto") {
+    const low = lowQueues(await openItems());
+    // Outcome first (CEO, #364 Oct 29; AGENTS.md Oct 30): a thin queue is not work by itself, so it's shown at
+    // start-up but never wakes the CTO mid-wait.
+    for (const line of describeLow(low)) console.log(`(info) ${line}`);
+  }
+  // #364 (CEO, Oct 29): never wait while you own work you can act on. The top 3, then a non-zero exit.
+  if (ownedActionable.length) {
+    const top = ownedActionable.slice(0, 3).map((item) => waiting.find((line) => line.startsWith(`#${item.number} `))
+      ?? `#${item.number} is yours${withSkills(item)}: ${item.title} (work it, ship it, or move its owner: label to whoever acts next)`);
+    const rest = waiting.filter((line) => !/^#\d+ /.test(line));
+    console.error(`Not waiting: ${name} owns ${ownedActionable.length} actionable item(s), so the waiter won't wait (#2122). Work these first; park, block or hand off by label what you can't act on.`);
+    await report([...top, ...rest], OWNS_WORK);
+  }
+  if (waiting.length) await report(waiting);
 } catch (error) {
   console.error(`Queue check failed, continuing: ${error.message.split("\n")[0]}`);
 }
+// A failed start-up check still delivers recovered handoffs; with none, the cursor moves on now.
+if (recovered.length) await report(recovered);
+commitRecovered();
 console.log(`Waiting for work for ${name} since ${since} (up to ${values["max-min"]} min)...`);
 let warned = false;
 while (Date.now() < deadline) {
   exitIfOrphaned();
   try {
-    if (Date.now() >= nextDue) { nextDue = Infinity; const due = backlog(); if (due.length) report(due); }
-    const found = findWork();
-    if (found.length) report(found);
+    if (dueWake()) { const due = await backlog(); if (due.length) await report(due); }
+    const found = await findWork();
+    if (found.length) await report(found);
   } catch (error) {
     if (!warned) console.error(`gh api failed, will keep polling: ${error.message.split("\n")[0]}`);
     warned = true;
   }
-  await new Promise(resolve => setTimeout(resolve, pollMs));
+  await new Promise(resolve => setTimeout(resolve, gh.pollDelay(pollMs)));
 }
 try {
-  const waiting = backlog();
-  if (waiting.length) report(waiting);
+  const waiting = await backlog();
+  if (waiting.length) await report(waiting);
 } catch { /* fall through to the timeout */ }
 // CTO: a regular on-track review at the end of every wait (once per cycle, so it never spins).
 if (role === "cto") {
   try {
-    const recent = api(`repos/${repo}/issues/comments?since=${new Date(Date.now() - 3 * 3_600_000).toISOString()}&sort=created&direction=desc&per_page=100`);
-    const { quiet, stale } = offTrack({ issues: openIssues(), comments: recent, prs: api(`repos/${repo}/pulls?state=open&per_page=100`), now: Date.now() });
+    const recent = await api(`repos/${repo}/issues/comments?since=${new Date(Date.now() - 3 * 3_600_000).toISOString()}&sort=created&direction=desc&per_page=100`);
+    const { quiet, stale } = offTrack({ issues: await openIssues(), comments: recent, prs: await api(`repos/${repo}/pulls?state=open&per_page=100`), now: Date.now() });
     const lines = [
       ...quiet.map(({ role: r, minutes }) => `Off track? ${NAMES[r]} has queued work but no signed comment in ${minutes ?? "180+"} min: check their issue/PR and nudge or unblock`),
       ...stale.map(({ number, title, minutes }) => `Stale PR #${number} (${minutes} min untouched): ${title}`),
     ];
-    if (lines.length) report(lines);
+    if (lines.length) await report(lines);
   } catch { /* fall through */ }
 }
 console.log(`No new work for ${name} in ${values["max-min"]} min. Next: the next item in your worker-table row, then an unowned \`core\` issue in your area. Then run this waiter again; don't stop (owner, Oct 27).`);
+console.log(TRAIN_RULE);
 process.exit(3);
 }

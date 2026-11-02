@@ -65,18 +65,18 @@ describe("<WhatsAppEnquiries> one-tap customer (#798)", () => {
   it("adds a customer in one tap and Undo removes it", async () => {
     const onCustomers = vi.fn();
     const fetch = vi.fn(async (_url: string, init?: RequestInit) => init?.method === "DELETE"
-      ? Response.json({ enquiries: 1, customers: 0 })
-      : Response.json({ id: "40000000-0000-4000-8000-000000000001", enquiries: 2, customers: 1 }, { status: 201 }));
+      ? Response.json({ enquiries: 1, customers: 0, booked: 0 })
+      : Response.json({ id: "40000000-0000-4000-8000-000000000001", enquiries: 2, customers: 1, booked: 1 }, { status: 201 }));
     vi.stubGlobal("fetch", fetch);
     render(<WhatsAppEnquiries campaignId={CAMPAIGN} spend={140} enquiries={1} onLogged={vi.fn()} onCustomers={onCustomers} />);
     fireEvent.click(screen.getByRole("button", { name: "Got a customer? +1 (adds 1 customer from this ad)" }));
     expect(await screen.findByText("Added 1 customer.")).toBeInTheDocument();
     expect(fetch).toHaveBeenCalledWith(`/api/campaigns/${CAMPAIGN}/enquiries`, expect.objectContaining({ method: "POST", body: JSON.stringify({ customer: true }) }));
-    expect(onCustomers).toHaveBeenLastCalledWith(1, 2);
+    expect(onCustomers).toHaveBeenLastCalledWith(1, 2, 1);
     fireEvent.click(screen.getByRole("button", { name: "Undo" }));
     expect(await screen.findByText("Removed that customer.")).toBeInTheDocument();
     expect(fetch).toHaveBeenLastCalledWith(`/api/campaigns/${CAMPAIGN}/enquiries?lead=40000000-0000-4000-8000-000000000001`, { method: "DELETE" });
-    expect(onCustomers).toHaveBeenLastCalledWith(0, 1);
+    expect(onCustomers).toHaveBeenLastCalledWith(0, 1, 0);
   });
 });
 
@@ -125,11 +125,33 @@ describe("<Campaigns> real enquiries on results (#335)", () => {
     render(<Campaigns business={business} approved={[]} initialCampaigns={[form, none]}
       initialResults={{ [form.id]: result(form.id, { spend: 900, leads: 3, cpl: 300, customers: 2 }), [none.id]: result(none.id, { leads: 1, cpl: 140, customers: 0 }) }}
       leadForms={[]} leadFormError={null} metaReady adAccountId="act_1" />);
-    const panels = screen.getAllByLabelText("Customers");
+    const panels = screen.getAllByLabelText("Bookings and customers");
     expect(panels).toHaveLength(1);
     expect(within(panels[0]).getByText("Per customer")).toBeInTheDocument();
-    expect(within(panels[0]).getByText("From customers you marked in Enquiries.")).toBeInTheDocument();
+    expect(within(panels[0]).getByText("From enquiries you marked in Enquiries.")).toBeInTheDocument();
     expect(within(panels[0]).getByText("₹450")).toBeInTheDocument();
     expect(within(panels[0]).getByText("2")).toBeInTheDocument();
+  });
+
+  // #1994: '{n} {label} booked' before Customers, hidden at 0; a customer counts as booked too.
+  it("shows bookings named for the segment before Customers, and nothing at 0", () => {
+    localStorage.setItem(`campaign-sync:${business.owner_id}:${business.id}:act_1`, String(Date.now()));
+    const booked = { ...campaign("40000000-0000-4000-8000-000000000008", "instant_form"), name: "booked run" } as Campaign;
+    const won = { ...campaign("40000000-0000-4000-8000-000000000009", "instant_form"), name: "won run" } as Campaign;
+    const quiet = { ...campaign("40000000-0000-4000-8000-000000000010", "instant_form"), name: "quiet run" } as Campaign;
+    render(<Campaigns business={{ ...business, vertical: "Interior designer" }} approved={[]} initialCampaigns={[booked, won, quiet]}
+      initialResults={{
+        [booked.id]: result(booked.id, { spend: 900, leads: 3, cpl: 300, booked: 2, customers: 0 }),
+        [won.id]: result(won.id, { spend: 900, leads: 3, cpl: 300, booked: 1, customers: 1 }),
+        [quiet.id]: result(quiet.id, { leads: 1, cpl: 140, booked: 0, customers: 0 }),
+      }}
+      leadForms={[]} leadFormError={null} metaReady adAccountId="act_1" />);
+    const card = (name: string) => screen.getByRole("heading", { name }).closest("article") as HTMLElement;
+    const grid = within(card("booked run")).getByLabelText("Bookings and customers");
+    expect(within(grid).getByText("Consultations booked").previousElementSibling).toHaveTextContent("2");
+    expect(within(grid).queryByText("Per customer")).toBeNull();
+    const wonGrid = within(card("won run")).getByLabelText("Bookings and customers");
+    expect(within(wonGrid).getAllByText(/^(Consultation booked|Customer)$/).map((node) => node.textContent)).toEqual(["Consultation booked", "Customer"]);
+    expect(within(card("quiet run")).queryByLabelText("Bookings and customers")).toBeNull();
   });
 });

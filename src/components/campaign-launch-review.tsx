@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils";
 import { formatPerDay } from "@/lib/format";
 import type { WeeklyCapNotice } from "@/lib/campaign/spend";
 import { WeeklyCapLine } from "@/components/weekly-cap-line";
+import type { LeadDestination } from "@/lib/types/campaign";
 
 export function CampaignLaunchReview({
   selectedCount,
@@ -16,7 +17,7 @@ export function CampaignLaunchReview({
   selectedCount: number;
   budget: number;
   leadFormName?: string;
-  destination?: "instant_form" | "whatsapp";
+  destination?: Exclude<LeadDestination, "call" | "website">;
   /** The chosen WhatsApp button number, masked as the owner sees it. */
   whatsappNumber?: string;
   audience: string;

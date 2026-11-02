@@ -5,6 +5,7 @@ import { observeRoute, recordProductEvent } from "@/lib/observability/logger";
 import { rateLimitResponse } from "@/lib/security/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { ownerError } from "@/i18n/request-locale";
 
 export const runtime = "nodejs";
 
@@ -29,7 +30,7 @@ async function handlePOST(req: Request) {
   const { data: existing, error: readError } = await admin.from("audit_log").select("id")
     .eq("action", "meta.access_request").eq("actor_id", user.id).gte("created_at", `${today}T00:00:00Z`)
     .limit(1).abortSignal(AbortSignal.timeout(5_000));
-  if (readError) return apiError("We couldn't send your request. Try again.", 503);
+  if (readError) return apiError(await ownerError("requestNotSent"), 503);
   if (!existing?.length) {
     // The RPC refuses a business this user doesn't own.
     const { error } = await admin.rpc("append_verified_audit_event", {
@@ -37,7 +38,7 @@ async function handlePOST(req: Request) {
       p_entity_type: "business", p_entity_id: parsed.data.businessId,
     }).abortSignal(AbortSignal.timeout(5_000));
     if (error) {
-      return error.code === "42501" ? apiError("Business not found.", 404) : apiError("We couldn't send your request. Try again.", 503);
+      return error.code === "42501" ? apiError(await ownerError("businessMissing"), 404) : apiError(await ownerError("requestNotSent"), 503);
     }
     recordProductEvent({ kind: "workflow", name: "meta.access_request", outcome: "success", businessId: parsed.data.businessId });
   }

@@ -34,7 +34,7 @@ type AccountingDatabase = Database & { public: { Functions: {
 } } };
 
 /** #782: why the AdBrain balance can't cover a run; UNVERIFIED is the generic, unreadable case. */
-export type CustomerBalanceCode = "UNVERIFIED" | "BALANCE_INSUFFICIENT" | "BALANCE_HELD" | "BALANCE_UNAVAILABLE" | "ACTIVATION_PENDING" | "BINDING_CHANGED";
+export type CustomerBalanceCode = "UNVERIFIED" | "BALANCE_INSUFFICIENT" | "BALANCE_HELD" | "BALANCE_UNAVAILABLE" | "ACTIVATION_PENDING" | "BINDING_CHANGED" | "SPEND_CAP_TOO_LOW";
 
 export class CustomerBalanceError extends Error {
   constructor(
@@ -72,7 +72,10 @@ async function checked<Schema extends z.ZodType>(query: {
 }
 
 /** #782: the reserve's refusals (customer_ad_reserve's raise sites), each with its one action. */
-async function reserveRefusal(actor: Actor, message: string, capPaise: number): Promise<CustomerBalanceError | null> {
+async function reserveRefusal(actor: Actor, message: string, capPaise: number, minimumPaise?: number): Promise<CustomerBalanceError | null> {
+  if (/Meta campaign spend cap minimum/.test(message) && minimumPaise) {
+    return new CustomerBalanceError(`Meta needs at least ${formatMoney(minimumPaise / 100)} as a campaign's total limit. Choose how many days to run (a run with a day limit has no such minimum), or add funds.`, "SPEND_CAP_TOO_LOW");
+  }
   const balance = () => getCustomerBalance(actor).catch(() => null);
   const cap = formatMoney(capPaise / 100);
   if (/Insufficient customer advertising allowance/.test(message)) {
@@ -103,9 +106,14 @@ export async function getCustomerBalance(actor: Actor): Promise<CustomerBalance>
   return balance;
 }
 
-/** `lifetimeCapPaise` is the Meta lifetime budget of a capped run; it replaces the 7-day reserve (#208). */
+/**
+ * `lifetimeCapPaise` is the Meta lifetime budget of a capped run; it replaces the 7-day reserve (#208).
+ * `minMediaLimitPaise` (#1799) is Meta's live campaign spend_cap minimum: an uncapped reserve under it is refused
+ * in the same transaction, so nothing is held.
+ */
 export async function reserveCustomerCampaign(actor: Actor, input: {
   campaignId: string; adAccountId: string; connectionGeneration: number; dailyBudgetRupees: number; requestKey: string; lifetimeCapPaise?: number;
+  minMediaLimitPaise?: number;
 }, reviewOnly = false) {
   const { database, scope } = accounting(actor);
   const rupees = z.number().positive().multipleOf(0.01).parse(input.dailyBudgetRupees);
@@ -118,8 +126,9 @@ export async function reserveCustomerCampaign(actor: Actor, input: {
     p_request_key: z.string().regex(/^[a-f0-9]{64}$/).parse(input.requestKey),
     p_review_only: reviewOnly,
     ...(input.lifetimeCapPaise === undefined ? {} : { p_lifetime_cap_paise: paise.positive().parse(input.lifetimeCapPaise) }),
+    ...(input.minMediaLimitPaise === undefined ? {} : { p_min_media_limit_paise: paise.positive().parse(input.minMediaLimitPaise) }),
   }), z.object({ reservationId: z.uuid(), mediaLimitPaise: paise.positive(), balance: customerBalanceSchema }),
-  (message) => reserveRefusal(actor, message, capPaise));
+  (message) => reserveRefusal(actor, message, capPaise, input.minMediaLimitPaise));
   if (result.balance.businessId !== actor.businessId) throw new CustomerBalanceError();
   if (result.balance.held) throw new CustomerBalanceError("Your AdBrain balance is on hold while we check a payment. We'll clear it; you can't start ads until then.", "BALANCE_HELD");
   return result;

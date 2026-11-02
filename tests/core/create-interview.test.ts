@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import recorded from "./fixtures/create/interview-non-answer.json";
-import { openAIReply, requestUrl } from "./replay";
+import { openAIReply, requestBody, requestUrl } from "./replay";
 import type { BrandContext } from "@/lib/templates/ads";
 
 // interview-non-answer.json: real Solaride interview replies recorded on 2026-10-24 by
@@ -48,6 +48,25 @@ async function interview(answers: typeof recorded.nonAnswer[] = []) {
 }
 
 describe("core: Create never gets stuck on a non-answer (#284)", () => {
+  it("#1966: includes the owner's saved first USP as a fact in the recorded Create replay", async () => {
+    const { setupFieldsFrom } = await import("@/lib/brand/setup-fields");
+    const savedBrand = { ...brand, usps: ["80 homes installed in Mohali", "Our own installation team"] };
+    expect(setupFieldsFrom(savedBrand).usp).toBe("80 homes installed in Mohali");
+    const bodies: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      expect(requestUrl(input)).toBe("https://api.groq.com/openai/v1/chat/completions");
+      bodies.push(requestBody(init));
+      return openAIReply(recorded.replies.find((item) => item.turn === "non-answer")!.content, "qwen/qwen3.8-27b");
+    }));
+    const { runInterview } = await import("@/lib/creative/interview");
+    const result = await runInterview({ brand: savedBrand, goal: recorded.goal, answers: [recorded.nonAnswer] });
+    expect(result).toMatchObject({ ready: false, question: { field: "offer" } });
+    expect(bodies).toHaveLength(1);
+    const request = JSON.parse(bodies[0]) as { messages: { content: string }[] };
+    expect(request.messages.map((message) => message.content).join("\n"))
+      .toContain("USPs: 80 homes installed in Mohali; Our own installation team");
+  });
+
   it("re-asks the offer after a 'type it below' chip instead of failing the repeat rule", async () => {
     const reply = recorded.replies.find((item) => item.turn === "non-answer")!;
     replay([reply.content]);

@@ -32,3 +32,20 @@ export function wentLive(campaign: LiveSignals): boolean {
 export function firstTimer(campaigns: LiveSignals[]): boolean {
   return !campaigns.some(wentLive);
 }
+
+/**
+ * #1934 (#1475): step 1's Make my ads tap, kept for one arrival at step 2. A returning owner's step 2 starts a paid
+ * batch only with it, so a reload, bookmark or Back to `/create?again=1` shows the Make 3 ads tap instead.
+ */
+const MAKE_TAP_MS = 2 * 60 * 1000;
+const makeTapKey = (businessId: string) => `setup-make-tap:${businessId}`;
+export function markMakeTap(businessId: string) {
+  try { window.sessionStorage.setItem(makeTapKey(businessId), String(Date.now())); } catch { /* step 2 shows the tap */ }
+}
+export function takeMakeTap(businessId: string): boolean {
+  try {
+    const at = Number(window.sessionStorage.getItem(makeTapKey(businessId)));
+    window.sessionStorage.removeItem(makeTapKey(businessId));
+    return at > 0 && Date.now() - at < MAKE_TAP_MS;
+  } catch { return false; }
+}

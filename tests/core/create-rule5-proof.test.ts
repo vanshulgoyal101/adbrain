@@ -49,6 +49,14 @@ describe("core: a proof line from the Brand (#418 rule 5)", () => {
     expect(citedProofs("Call 9812345678", proofs)).toEqual([]);
   });
 
+  // #2120: a Hindi owner's job counts (and English "kitchens") are proof; a word that only starts like one isn't.
+  it("counts Hindi job counts and kitchens as proof", () => {
+    const proofs = proofFacts(["'500' घरों में लगाया", "120 kitchens done", "200 छात्र", "50 किचन", "300+ ग्राहकों का भरोसा", "40 परिवारों के लिए"]);
+    expect(proofs.map((proof) => proof.keys)).toEqual([["500"], ["120"], ["200"], ["50"], ["300"], ["40"]]);
+    expect(proofFacts(["5 घरेलू उपकरण", "10 सिस्टमैटिक"])).toEqual([]);
+    expect(citedProofs("मोहाली में 500 घरों पर सोलर", proofs).map((proof) => proof.fact)).toEqual(["'500' घरों में लगाया"]);
+  });
+
   it("is a Review warning, never a blocker, and doesn't change the plan", () => {
     const base = {
       draft: { businessId: "b1", name: "Lever 2", goal: "Enquiries", mode: "manual" as const, destination: "whatsapp" as const, creativeIds: ["c1"], dailyBudgetRupees: 450, abTest: false,

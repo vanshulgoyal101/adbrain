@@ -4,6 +4,7 @@ import { daysSinceLaunch, type PilotDay7Reason, PILOT_DAY7_ANSWERS, PILOT_DAY7_D
 import { pilotDay7Facts } from "@/lib/feedback/pilot-day7-store";
 import { ConnectionAccessError, requireOwnedBusiness } from "@/lib/meta/connection-access";
 import { observeRoute, recordProductEvent } from "@/lib/observability/logger";
+import { ownerError } from "@/i18n/request-locale";
 
 export const runtime = "nodejs";
 
@@ -18,14 +19,14 @@ const bodySchema = z.union([
 
 async function handlePOST(request: Request) {
   const parsed = bodySchema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: "Choose one of the answers." }, { status: 400 });
+  if (!parsed.success) return NextResponse.json({ error: await ownerError("chooseAnswer") }, { status: 400 });
   const body = parsed.data;
   try {
     const { businessId } = await requireOwnedBusiness(body.businessId);
     const facts = await pilotDay7Facts(businessId);
     const now = new Date();
     // One answer per business, only while the question is actually showing.
-    if (!pilotDay7Visible({ ...facts, now }) || !facts.firstLaunchAt) return NextResponse.json({ error: "This question isn't open." }, { status: 409 });
+    if (!pilotDay7Visible({ ...facts, now }) || !facts.firstLaunchAt) return NextResponse.json({ error: await ownerError("questionNotOpen") }, { status: 409 });
     if ("dismiss" in body) {
       recordProductEvent({ kind: "action", name: PILOT_DAY7_DISMISSED, outcome: "success", businessId });
     } else {
@@ -38,6 +39,6 @@ async function handlePOST(request: Request) {
       const status = { UNAUTHENTICATED: 401, NOT_FOUND: 404, FORBIDDEN: 403, CONFLICT: 409, UNAVAILABLE: 503 }[error.code] ?? 503;
       return NextResponse.json({ error: error.message }, { status });
     }
-    return NextResponse.json({ error: "Your answer couldn't be saved. Try again." }, { status: 503 });
+    return NextResponse.json({ error: await ownerError("answerNotSaved") }, { status: 503 });
   }
 }

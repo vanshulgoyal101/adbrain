@@ -14,10 +14,13 @@ describe("Meta attempt recovery", () => {
   it("distinguishes missing account and Page access without claiming they do not exist", () => {
     const blockers = buildAttemptBlockers(setup);
     expect(blockers.map(blocker => blocker.message)).toEqual([
-      expect.stringContaining("No accessible ad account was returned"),
-      expect.stringContaining("No accessible Facebook Page was returned"),
+      expect.stringContaining("Meta shared no ad account with AdBrain"),
+      expect.stringContaining("Meta shared no Facebook Page with AdBrain"),
     ]);
     for (const blocker of blockers) {
+      // #679: a one-person shop is its own admin, so the fix is to tick the asset when reconnecting.
+      expect(blocker.message).toContain("Reconnect Meta and tick your");
+      expect(blocker.message).not.toMatch(/business admin/i);
       expect(blockerSchema.safeParse(blocker).success).toBe(true);
       expect(blocker.action).toMatchObject({ kind: "open_meta", url: "https://business.facebook.com/settings/" });
     }
@@ -47,6 +50,24 @@ describe("Meta attempt recovery", () => {
     const blockers = buildAttemptBlockers({ ...setup, snapshot: [{ token: "not-a-real-token" }] });
     expect(blockers[0].code).toBe("SETUP_REQUIRED");
     expect(JSON.stringify(blockers)).not.toContain("not-a-real-token");
+  });
+
+  it("adds the business-settings link to a candidate's portfolio blocker", () => {
+    const candidate = {
+      pairId: "act_1:page_1",
+      assets: { metaBusinessId: null, adAccountId: "act_1", accountName: "Shop", pageId: "page_1", pageName: "Shop", currency: "INR", timezoneName: "Asia/Kolkata" },
+      eligible: false,
+      blockers: [{ code: "SETUP_REQUIRED" as const, message: "Put both in one portfolio.", action: null }],
+    };
+    const blockers = buildAttemptBlockers({ ...setup, snapshot: { adAccounts: [{ id: "act_1" }], pages: [{ tasks: ["ADVERTISE"] }] }, candidates: [candidate] });
+    expect(blockers).toEqual([expect.objectContaining({ code: "SETUP_REQUIRED", message: "Put both in one portfolio.",
+      action: { kind: "open_meta", url: "https://business.facebook.com/settings/", label: "Open business settings" } })]);
+  });
+
+  it("names currency or time zone when assets exist but no pair can be checked", () => {
+    const [blocker] = buildAttemptBlockers({ ...setup, snapshot: { adAccounts: [{ id: "act_1" }], pages: [{ tasks: ["ADVERTISE"] }] } });
+    expect(blocker.message).toContain("currency or time zone");
+    expect(blocker.message).not.toMatch(/business admin/i);
   });
 
   it("does not show setup advice after a successful connection", () => {

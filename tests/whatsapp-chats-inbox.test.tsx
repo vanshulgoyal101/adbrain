@@ -39,10 +39,9 @@ describe("WhatsApp chats on Enquiries (#764)", () => {
     expect(screen.getByRole("article")).toHaveTextContent("No chats started yet from “Solaride | WhatsApp”.");
   });
 
-  // #1835 (QA, CPO words): after logging a chat, nothing on /leads may say none started or call it a form enquiry.
-  it("says how many chats were logged when Meta counted none", () => {
-    render(<WhatsAppChats rows={[{ id: "c-wa", name: "Solaride | WhatsApp", chats: 0, spend: 0, realEnquiries: 1 }]} />);
-    expect(screen.getByRole("article")).toHaveTextContent("1 chat logged from “Solaride | WhatsApp”.");
+  it.each([{ count: 1, noun: "enquiry" }, { count: 3, noun: "enquiries" }])("counts $count owner-added real enquiries separately when Meta counted no chats", ({ count, noun }) => {
+    render(<WhatsAppChats rows={[{ id: "c-wa", name: "Solaride | WhatsApp", chats: 0, spend: 0, realEnquiries: count }]} />);
+    expect(screen.getByRole("article")).toHaveTextContent(`You added ${count} real ${noun} from “Solaride | WhatsApp”.`);
     expect(screen.getByRole("article")).not.toHaveTextContent("No chats started yet");
   });
 

@@ -362,7 +362,9 @@ describe("MetaClient.updateCampaignStatus", () => {
     expect(init?.method).toBe("POST");
     const body = String(init?.body);
     expect(body).toContain("status=PAUSED");
-    expect(body).toContain("access_token=tok");
+    // #1649: the token is a Bearer header, never in the body.
+    expect(body).not.toContain("access_token");
+    expect(new Headers(init?.headers).get("authorization")).toBe("Bearer tok");
   });
 
   it("resumes with ACTIVE", async () => {

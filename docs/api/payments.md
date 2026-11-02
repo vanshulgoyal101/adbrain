@@ -42,7 +42,7 @@ zero service/ad allocation and a `verificationAllocationPaise` equal to the tota
 The eligible owner may refresh a verification quote before creating an order,
 but an existing order cannot be repriced or replaced while unresolved. Captures
 and refunds use saved amounts, and the one-time verification order remains visible
-ahead of recent annual orders. See [configuration and restoration](../CONFIGURATION.md#configurable-live-amounts).
+ahead of recent annual orders. See [configuration and restoration](../operations/configuration-payments.md#configurable-live-amounts).
 
 For an eligible pilot without a saved verification order, GET returns
 `verificationAmountRange: {minPaise:100,maxPaise:<configured ceiling>}`; otherwise
@@ -116,7 +116,7 @@ operator-only (#216). For paused runs the sweep confirms the whole Meta tree
 is stopped and records settle reads (`customer_ad_settle_costs`); two equal
 reads 30 minutes apart, at least 3 hours after the pause, finalize the run and
 close its reservation without an operator. Capped runs past their Meta end time
-are paused by the sweep first (#221). Capturing payment
+are paused by the sweep first (#221), with or without a reservation (#2281), ad sets and ads included (#2301). Capturing payment
 does not earn service fees or activate ads. Review precedes an atomic reservation
 for one campaign. Before ACTIVE, the Meta cap must be written and read back
 within the reserved media allowance; unsupported or rejected caps block

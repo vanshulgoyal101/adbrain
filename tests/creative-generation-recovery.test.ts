@@ -8,6 +8,12 @@ const mocks = vi.hoisted(() => ({
   rateLimit: vi.fn(),
   audit: vi.fn(),
   auditFilters: [] as [string, string][],
+  lang: undefined as string | undefined,
+}));
+// #2305: the owner's language cookie; unset means English.
+vi.mock("next/headers", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("next/headers")>()),
+  cookies: async () => ({ get: (name: string) => (name === "adbrain_lang" && mocks.lang ? { value: mocks.lang } : undefined) }),
 }));
 // #1407: the batch's closing audit row, read only when a batch looks unfinished.
 function auditChain() {
@@ -50,6 +56,18 @@ beforeEach(() => {
 });
 
 describe("creative generation recovery", () => {
+  // #2553: a pilot owner got 39 status reads answered 429 while two pollers checked one batch. The status budget must
+  // cover two tabs each running step 2's checks (24 in 4 min) and Studio's (20 per 5 min), plus one assistant recovery (15).
+  it("#2553: the status budget covers a pilot's normal polling across two tabs", async () => {
+    const { GET } = await import("@/app/api/creatives/generate/route");
+    await GET(new Request("http://localhost/api/creatives/generate?businessId=business&generationId=11111111-1111-4111-8111-111111111111"));
+    const [key, opts] = mocks.rateLimit.mock.calls[0] as [string, { limit: number; windowMs: number }];
+    expect(key).toBe("generate-status:owner");
+    const perFiveMinutes = opts.limit * (5 * 60_000) / opts.windowMs;
+    expect(perFiveMinutes).toBeGreaterThanOrEqual(2 * (24 + 20) + 15);
+    expect(perFiveMinutes).toBeLessThanOrEqual(300);
+  });
+
   // #1407 (QA): a batch that finished 2 of 3 read 'partial' for 5 more minutes, so Studio said 'still being made'.
   it("#1407: a short batch whose closing audit row exists is 'ended', not 'partial'", async () => {
     mocks.intent.mockResolvedValue({ data: { status: "partial", expectedCount: 3 }, error: null });
@@ -129,7 +147,20 @@ describe("creative generation recovery", () => {
     const { GET } = await import("@/app/api/creatives/generate/route");
     const response = await GET(new Request("http://localhost/api/creatives/generate?businessId=business&generationId=11111111-1111-4111-8111-111111111111"));
     expect(response.status).toBe(503);
-    await expect(response.json()).resolves.toEqual({ error: "Generation status is unavailable." });
+    await expect(response.json()).resolves.toEqual({ error: "We couldn't check on your ads just now. Try again in a minute." });
+  });
+
+  it("answers in the owner's language when they picked Hindi (#2305)", async () => {
+    mocks.lang = "hi";
+    try {
+      mocks.select.mockResolvedValue({ data: null, error: { message: "private database details" } });
+      const { GET } = await import("@/app/api/creatives/generate/route");
+      const response = await GET(new Request("http://localhost/api/creatives/generate?businessId=business&generationId=11111111-1111-4111-8111-111111111111"));
+      expect(response.status).toBe(503);
+      await expect(response.json()).resolves.toEqual({ error: "हम अभी आपके विज्ञापन नहीं देख पाए। एक मिनट बाद फिर से कोशिश करें।" });
+    } finally {
+      mocks.lang = undefined;
+    }
   });
 
   it.each(["0", "7", "1.5", "invalid"])("rejects an invalid expected count: %s", async (count) => {

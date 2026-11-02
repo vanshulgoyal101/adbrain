@@ -1,12 +1,18 @@
 name: Deploy train
 on:
   # PRs merge into `next` (no Vercel deploy). This promotes `next` to `main` (one production
-  # deploy) at most every 30 minutes, only when `next` is green (#461, Hobby: 100 deploys/day).
+  # deploy) at most every 15 minutes, only when `next` is green (#461; #2609: at most 96 a day, under Hobby's 100).
   push:
     branches: [next]
   schedule:
     - cron: "11,41 * * * *"
   workflow_dispatch:
+    inputs:
+      promote:
+        # Only kick sets this. A person dispatching runs kick, so manual runs take the same lock (#2528).
+        description: "Internal: run the promotion (leave false; kick decides)"
+        type: boolean
+        default: false
 
 permissions:
   contents: write # merging the train PR writes to main
@@ -16,28 +22,55 @@ permissions:
   actions: write # dispatches the drift check; a GITHUB_TOKEN merge triggers no workflows
   statuses: write # core-approval on the train PR (#1002)
 
-concurrency:
-  # A newer push replaces a waiting run, so one promotion carries everything merged meanwhile.
-  group: deploy-train
-  cancel-in-progress: true
-
 jobs:
   promote:
+    # Only kick (or a person) dispatches this, on main, and only when no promote is already waiting, so it
+    # never gets replaced. One promotion at a time; the running one is never cancelled and takes the newest
+    # green commit on next (#2528).
+    if: github.event_name == 'workflow_dispatch' && inputs.promote
+    concurrency:
+      group: deploy-train
+      cancel-in-progress: false
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # Each step has its own bound and they sum to at most this (#2029): a job timeout kills the
+    # runner before an if: failure() alert, a step timeout doesn't. Worst case of promote is ~87 min.
+    timeout-minutes: 100
     defaults:
       run:
         shell: bash
     env:
       GH_TOKEN: ${{ github.token }}
-      GAP_MINUTES: "30"
+      GAP_MINUTES: "15"
     steps:
       - name: Promote next to main
+        timeout-minutes: 93
         run: |
           set -euo pipefail
           repo="$GITHUB_REPOSITORY"
           ahead=$(gh api "repos/$repo/compare/main...next" --jq '.ahead_by')
           [ "$ahead" -gt 0 ] || { echo "next has nothing main lacks."; exit 0; }
+          # At most one production deploy per GAP_MINUTES. Trains were next → main PRs until #2528, deploy-train since.
+          last=$(gh pr list -R "$repo" --state merged --base main --limit 30 --json mergedAt,headRefName \
+            --jq '[.[] | select(.headRefName == "next" or .headRefName == "deploy-train") | .mergedAt] | max // empty')
+          if [ -n "$last" ]; then
+            wait=$(jq -rn --arg t "$last" --argjson gap "$GAP_MINUTES" '($gap * 60) - (now - ($t | fromdateiso8601)) | floor')
+            if [ "$wait" -gt 0 ]; then echo "Last train left at $last; waiting ${wait}s."; sleep "$wait"; fi
+          fi
+          # Advisory only (#461): GitHub's count isn't what Vercel limits; git-triggered deploys kept succeeding past it.
+          since=$(date -u -d '24 hours ago' +%Y-%m-%dT%H:%M:%SZ)
+          used=$(gh api "repos/$repo/deployments?environment=Production&per_page=100" --jq "[.[] | select(.created_at >= \"$since\")] | length")
+          echo "production deploys in last 24h (GitHub, advisory): $used"
+          # Hold only on Vercel's real answer: the newest production deploy failed less than an hour ago.
+          last=$(gh api "repos/$repo/deployments?environment=Production&per_page=1" --jq '.[0].id // empty')
+          if [ -n "$last" ]; then
+            read -r state age desc < <(gh api "repos/$repo/deployments/$last/statuses?per_page=1" \
+              --jq '.[0] | "\(.state) \((now - (.created_at | fromdateiso8601)) / 60 | floor) \(.description // "" | gsub("\\s+"; "_"))"')
+            echo "newest production deploy: $state, ${age} min ago"
+            if [[ "$state" =~ ^(failure|error)$ ]] && [ "$age" -lt 60 ]; then
+              echo "Vercel refused or failed the last production deploy ${age} min ago (${desc//_/ }); holding for an hour." > "$RUNNER_TEMP/reason"
+              echo "::error::$(cat "$RUNNER_TEMP/reason")"; exit 1
+            fi
+          fi
           # A hotfix or migration on main that next lacks would ship a merged tree no CI has seen.
           # Count changed files, not commits: every train leaves a merge commit on main that changes nothing.
           behind=$(gh api "repos/$repo/compare/next...main" --jq '.files | length')
@@ -70,50 +103,59 @@ jobs:
             gh workflow run ci.yml -R "$repo" --ref next
             sleep 20
           fi
-          # At most one production deploy per GAP_MINUTES.
-          last=$(gh pr list -R "$repo" --state merged --base main --head next --limit 1 --json mergedAt --jq '.[0].mergedAt // empty')
-          if [ -n "$last" ]; then
-            wait=$(jq -rn --arg t "$last" --argjson gap "$GAP_MINUTES" '($gap * 60) - (now - ($t | fromdateiso8601)) | floor')
-            if [ "$wait" -gt 0 ]; then echo "Last train left at $last; waiting ${wait}s."; sleep "$wait"; fi
-          fi
-          # Advisory only (#461): GitHub's count isn't what Vercel limits; git-triggered deploys kept succeeding past it.
-          since=$(date -u -d '24 hours ago' +%Y-%m-%dT%H:%M:%SZ)
-          used=$(gh api "repos/$repo/deployments?environment=Production&per_page=100" --jq "[.[] | select(.created_at >= \"$since\")] | length")
-          echo "production deploys in last 24h (GitHub, advisory): $used"
-          # Hold only on Vercel's real answer: the newest production deploy failed less than an hour ago.
-          last=$(gh api "repos/$repo/deployments?environment=Production&per_page=1" --jq '.[0].id // empty')
-          if [ -n "$last" ]; then
-            read -r state age desc < <(gh api "repos/$repo/deployments/$last/statuses?per_page=1" \
-              --jq '.[0] | "\(.state) \((now - (.created_at | fromdateiso8601)) / 60 | floor) \(.description // "" | gsub("\\s+"; "_"))"')
-            echo "newest production deploy: $state, ${age} min ago"
-            if [[ "$state" =~ ^(failure|error)$ ]] && [ "$age" -lt 60 ]; then
-              echo "Vercel refused or failed the last production deploy ${age} min ago (${desc//_/ }); holding for an hour." > "$RUNNER_TEMP/reason"
+          # Promote the newest commit on next whose required checks are all green (#2528), not only next's tip:
+          # a tip still in CI doesn't hold back what is already green. Only next's first-parent commits count
+          # (each is one push to next, so CI ran on that exact tree); a merged branch's own commits never do.
+          # A candidate must also hold every file change on main, or the merge would ship a tree no CI saw.
+          git init -q "$RUNNER_TEMP/train"
+          declare -A final=()
+          sha=""
+          for i in $(seq 1 60); do
+            git -C "$RUNNER_TEMP/train" fetch -q --filter=tree:0 --no-tags "$GITHUB_SERVER_URL/$repo" \
+              +refs/heads/main:refs/remotes/origin/main +refs/heads/next:refs/remotes/origin/next
+            pending=""
+            for c in $(git -C "$RUNNER_TEMP/train" log --first-parent --format=%H origin/main..origin/next); do
+              if [ -z "${final[$c]:-}" ]; then
+                # A run GitHub cancelled (a newer run on the same commit replaced it) can still report test=failure
+                # from its always() aggregate job (#983); its suite is "cancelled", so leave it out.
+                runs=$(gh api "repos/$repo/commits/$c/check-runs?per_page=100" --jq '[.check_runs[] | select(.name == "build" or .name == "test" or .name == "core" or .name == "secrets") | {name, state: (.conclusion // .status), suite: .check_suite.id}]')
+                cancelled=$(gh api "repos/$repo/commits/$c/check-suites?per_page=100" --jq '[.check_suites[] | select(.conclusion == "cancelled") | .id]')
+                states=$(jq -rn --argjson runs "$runs" --argjson cancelled "$cancelled" '[$runs[] | . as $r | select($cancelled | index($r.suite) | not) | "\(.name)=\(.state)"] | unique | join(" ")')
+                if grep -Eq '=(failure|cancelled|timed_out|action_required)' <<<"$states"; then final[$c]="red ($states)"
+                # Green means exactly these four, each success only: a queued rerun beside an old success is pending.
+                elif [ "$states" = "build=success core=success secrets=success test=success" ]; then
+                  if [ "$(gh api "repos/$repo/compare/$c...main" --jq '.files | length')" -eq 0 ]; then final[$c]=green
+                  else final[$c]="lacks main's changes"; fi
+                else echo "${c::7}: ${states:-no checks yet}"; pending=1; continue; fi
+              fi
+              echo "${c::7}: ${final[$c]}"
+              if [ "${final[$c]}" = green ]; then sha=$c; break; fi
+            done
+            [ -z "$sha" ] || break
+            if [ -z "$pending" ]; then
+              echo "No commit on next is green with main's changes, and none is still checking." > "$RUNNER_TEMP/reason"
               echo "::error::$(cat "$RUNNER_TEMP/reason")"; exit 1
             fi
-          fi
-          sha=$(gh api "repos/$repo/commits/next" --jq .sha)
-          echo "Promoting next at ${sha::7} ($ahead commits)."
-          # Required checks must be green on that exact commit (CI runs on every push to next).
-          for i in $(seq 1 60); do
-            # A run GitHub cancelled (a newer run on the same commit replaced it) can still report test=failure
-            # from its always() aggregate job (#983); its suite is "cancelled", so leave it out.
-            runs=$(gh api "repos/$repo/commits/$sha/check-runs?per_page=100" --jq '[.check_runs[] | select(.name == "build" or .name == "test" or .name == "core" or .name == "secrets") | {name, state: (.conclusion // .status), suite: .check_suite.id}]')
-            cancelled=$(gh api "repos/$repo/commits/$sha/check-suites?per_page=100" --jq '[.check_suites[] | select(.conclusion == "cancelled") | .id]')
-            states=$(jq -rn --argjson runs "$runs" --argjson cancelled "$cancelled" '[$runs[] | . as $r | select($cancelled | index($r.suite) | not) | "\(.name)=\(.state)"] | unique | join(" ")')
-            echo "checks: ${states:-none yet}"
-            if grep -Eq '=(failure|cancelled|timed_out|action_required)' <<<"$states"; then echo "::error::next ${sha::7} is red; not promoting."; exit 1; fi
-            [ "$(grep -o '=success' <<<"$states" | wc -l)" -eq 4 ] && break
-            [ "$i" -lt 60 ] || { echo "::error::checks on ${sha::7} did not finish in 30 min"; exit 1; }
+            [ "$i" -lt 60 ] || { echo "::error::no commit on next turned green in 30 min"; exit 1; }
             sleep 30
           done
-          pr=$(gh pr list -R "$repo" --state open --base main --head next --json number --jq '.[0].number // empty')
-          if [ -z "$pr" ]; then
-            pr=$(gh pr create -R "$repo" --base main --head next --title "Deploy train $(date -u +%H:%MZ): next → main" \
-              --body "Automatic promotion of \`next\` (${sha::7}) to production (#461). Merged PRs: see the commits.")
+          count=$(git -C "$RUNNER_TEMP/train" rev-list --count "origin/main..$sha")
+          tip=$(git -C "$RUNNER_TEMP/train" rev-parse origin/next)
+          echo "Promoting ${sha::7} ($count commits; next is at ${tip::7})."
+          # main takes PRs only, so the train PR's head is a bot branch set to that commit. Merging deletes it
+          # (delete_branch_on_merge); a leftover from a failed run is moved. Vercel deploys main only.
+          gh api -X PATCH "repos/$repo/git/refs/heads/deploy-train" -f sha="$sha" -F force=true >/dev/null 2>&1 \
+            || gh api -X POST "repos/$repo/git/refs" -f ref=refs/heads/deploy-train -f sha="$sha" >/dev/null
+          title="Deploy train $(date -u +%H:%MZ): next → main"
+          body="Automatic promotion of \`next\` at ${sha::7}, its newest green commit, to production (#461, #2528). Merged PRs: see the commits."
+          pr=$(gh pr list -R "$repo" --state open --base main --head deploy-train --json number --jq '.[0].number // empty')
+          if [ -n "$pr" ]; then gh pr edit "$pr" -R "$repo" --title "$title" --body "$body" >/dev/null
+          else
+            pr=$(gh pr create -R "$repo" --base main --head deploy-train --title "$title" --body "$body")
             pr=${pr##*/}
           fi
-          # core-approval.yml never runs for this PR (a GITHUB_TOKEN-opened PR triggers no workflows), and
-          # its rule passes every next → main PR anyway: each PR was gated into next (#1002). Set it here.
+          # core-approval.yml never runs for this PR (a GITHUB_TOKEN-opened PR triggers no workflows), and its
+          # head is a commit on next, so each of its PRs was already gated into next (#1002). Set it here.
           gh api -X POST "repos/$repo/statuses/$sha" -f state=success -f context=core-approval \
             -f description="Deploy train: its PRs were gated into next" >/dev/null
           # A merge commit keeps next's history, so the next train needs no rebase.
@@ -136,6 +178,11 @@ jobs:
           done
           merged=""; rerun=""
           for i in $(seq 1 30); do
+            # --match-head-commit pins the head only: a hotfix landing on main since the check would merge into a
+            # tree CI never saw, so stop and let the next run sync it first.
+            if [ "$(gh api "repos/$repo/compare/$sha...main" --jq '.files | length')" -ne 0 ]; then
+              echo "::error::main changed since ${sha::7} was checked; the next train syncs it first."; exit 1
+            fi
             if gh pr merge "$pr" -R "$repo" --merge --match-head-commit "$sha"; then merged=1; break; fi
             run=$(gh api "repos/$repo/actions/runs?head_sha=$sha&event=pull_request&per_page=20" \
               --jq '[.workflow_runs[] | select(.name == "CI")] | sort_by(.created_at) | last // empty | "\(.id) \(.status) \(.conclusion)"')
@@ -155,10 +202,121 @@ jobs:
           gh workflow run production-drift.yml -R "$repo" --ref main || echo "::warning::drift check not dispatched"
       - name: Alert once when the train is stuck
         if: failure()
+        timeout-minutes: 5
         run: |
           title="Deploy train stuck"
           open=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search "in:title \"$title\"" --json number --jq '.[0].number // empty')
-          reason=$(cat "$RUNNER_TEMP/reason" 2>/dev/null || echo "Red or slow checks on next, or a merge error.")
-          body="$(printf 'next could not be promoted to main. %s\n\nRun: %s/%s/actions/runs/%s\nFix next, or ship a hotfix PR to main (DevOps/CTO). Runbook: docs/RELEASING.md#deploy-train\n' "$reason" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+          reason=$(cat "$RUNNER_TEMP/reason" 2>/dev/null || echo "Red or slow checks on next, a merge error, or the promote step hit its time limit.")
+          # #2361 (E5): name the suspects, the changes on next that main lacks, so whoever sees it fixes forward.
+          suspects=$(gh api "repos/$GITHUB_REPOSITORY/compare/main...next" \
+            --jq '.commits[-15:][] | "- \(.sha[0:7]) \(.commit.message | split("\n")[0])"' 2>/dev/null || echo "- (could not list next's commits)")
+          body="$(printf 'next could not be promoted to main. %s\n\nRun: %s/%s/actions/runs/%s\nChanges on next not yet on main (latest 15):\n%s\n\nFix forward on next (whoever sees it first, #2360 E3), or ship a hotfix PR to main (DevOps/CTO). Runbook: docs/operations/releasing.md#deploy-train\n' "$reason" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" "$suspects")"
           if [ -n "$open" ]; then gh issue comment "$open" -R "$GITHUB_REPOSITORY" -b "$body"
           else gh issue create -R "$GITHUB_REPOSITORY" -l core -l bug -l owner:devops -t "$title" -b "$body"; fi
+
+  kick:
+    # Pushes and the schedule only start a promotion, so no run of theirs waits in the promote queue where
+    # GitHub would replace (cancel) it: a next commit shows a red X only when a real check fails (#2528).
+    # It also runs after each successful promote: a change that promotion left behind (its CI wasn't green
+    # yet) gets the next train even if no push or schedule comes. Kicks hold a ref lock, not a concurrency
+    # group (a queued kick would be replaced and show cancelled), so two can't both dispatch (a second
+    # waiting promote would replace the first). A kick that loses the lock is covered: the holder reads
+    # next after this commit landed, or the promote it finds running kicks again when it succeeds.
+    needs: promote
+    if: always() && (!inputs.promote || needs.promote.result == 'success')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        shell: bash
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Start a promotion unless one is already waiting
+        id: kick
+        timeout-minutes: 4
+        run: |
+          set -euo pipefail
+          repo="$GITHUB_REPOSITORY"
+          lock=refs/heads/deploy-train-kick-lock
+          # Every unfinished train run but this one, however many runs are newer.
+          active_runs() {
+            for st in requested queued pending waiting in_progress; do
+              gh api --paginate "repos/$repo/actions/workflows/deploy-train.yml/runs?status=$st&per_page=100" \
+                --jq ".workflow_runs[] | select(.id != $GITHUB_RUN_ID) | .id"
+            done | sort -u
+          }
+          take() { gh api -X POST "repos/$repo/git/refs" -f ref=$lock -f sha="$GITHUB_SHA" >/dev/null 2>&1; }
+          if ! take; then
+            # A kick killed before its release step leaves the lock; it is stale when no other kick is running.
+            others=0
+            for rid in $(active_runs); do
+              n=$(gh api "repos/$repo/actions/runs/$rid/jobs" --jq '[.jobs[] | select(.name == "kick" and .status == "in_progress")] | length')
+              others=$((others + n))
+            done
+            [ "$others" -eq 0 ] || { echo "Another kick holds the lock; it covers this change."; exit 0; }
+            gh api -X DELETE "repos/$repo/git/$lock" >/dev/null 2>&1 || true
+            take || { echo "Another kick took the lock; it covers this change."; exit 0; }
+          fi
+          echo "held=1" >> "$GITHUB_OUTPUT"
+          ahead=$(gh api "repos/$repo/compare/main...next" --jq '.ahead_by')
+          [ "$ahead" -gt 0 ] || { echo "next has nothing main lacks."; exit 0; }
+          # A promote job that hasn't started takes whatever is green on next when it runs, so one is enough.
+          # A dispatched run whose jobs aren't listed yet counts as waiting. A push or schedule run's promote
+          # still going (from before kick existed) counts too, so a dispatch never queues behind it.
+          for rid in $(active_runs); do
+            event=$(gh api "repos/$repo/actions/runs/$rid" --jq .event)
+            started=$(gh api "repos/$repo/actions/runs/$rid/jobs" \
+              --jq '[.jobs[] | select(.name == "promote" and (.status == "in_progress" or .status == "completed"))] | length')
+            active=$(gh api "repos/$repo/actions/runs/$rid/jobs" \
+              --jq '[.jobs[] | select(.name == "promote" and .status != "completed")] | length')
+            if [ "$event" = workflow_dispatch ] && [ "$started" -eq 0 ]; then echo "Run $rid's promotion is waiting; it carries this change."; exit 0; fi
+            if [ "$event" != workflow_dispatch ] && [ "$active" -gt 0 ]; then echo "Run $rid ($event) is still promoting; the next kick follows it."; exit 0; fi
+          done
+          t0=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          gh workflow run deploy-train.yml -R "$repo" --ref main -f promote=true
+          # Wait until the run is listed, so a push a moment later finds it instead of starting a second one.
+          for i in $(seq 1 10); do
+            n=$(gh api "repos/$repo/actions/workflows/deploy-train.yml/runs?event=workflow_dispatch&per_page=5" \
+              --jq "[.workflow_runs[] | select(.created_at >= \"$t0\")] | length")
+            [ "$n" -eq 0 ] || { echo "Promotion started."; exit 0; }
+            sleep 3
+          done
+          echo "::warning::dispatched promotion not listed after 30s"
+      - name: Release the lock
+        if: always() && steps.kick.outputs.held == '1'
+        timeout-minutes: 1
+        run: gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/deploy-train-kick-lock" >/dev/null
+
+  watchdog:
+    # A promote that is cancelled or killed runs no failure alert (#2029), and a replaced pending run never
+    # starts. A change that waits OVERDUE_MINUTES on next is not normal.
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+    env:
+      GH_TOKEN: ${{ github.token }}
+      OVERDUE_MINUTES: "120"
+    steps:
+      - name: Alert when next has waited too long for production
+        timeout-minutes: 8
+        run: |
+          set -euo pipefail
+          git init -q "$RUNNER_TEMP/train" && cd "$RUNNER_TEMP/train"
+          git fetch -q --filter=tree:0 --no-tags "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
+            +refs/heads/main:refs/remotes/origin/main +refs/heads/next:refs/remotes/origin/next
+          # next's first parents are its PR merges; their commit time is when each landed on next.
+          # (A merged branch's own commits can be days older, so don't count those.)
+          oldest=$(git log --first-parent --format=%ct origin/main..origin/next | tail -n 1)
+          [ -n "$oldest" ] || { echo "next has nothing main lacks."; exit 0; }
+          age=$(( ($(date +%s) - oldest) / 60 ))
+          echo "Oldest change waiting on next landed ${age} min ago (alert at ${OVERDUE_MINUTES})."
+          [ "$age" -ge "$OVERDUE_MINUTES" ] || exit 0
+          title="Deploy train stuck"
+          open=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search "in:title \"$title\"" --json number --jq '.[0].number // empty')
+          if [ -n "$open" ]; then echo "Already alerted in #$open."; exit 0; fi
+          body="$(printf 'next has had changes waiting for production for %s min (no train finished). Promote runs keep being cancelled or timing out.\n\nRun: %s/%s/actions/runs/%s\nCheck the latest Deploy train runs and the checks on next. Runbook: docs/operations/releasing.md#deploy-train\n' "$age" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+          gh issue create -R "$GITHUB_REPOSITORY" -l core -l bug -l owner:devops -t "$title" -b "$body"

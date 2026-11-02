@@ -55,7 +55,7 @@ describe("core: Review warns from Meta's new-advertiser guidance, never blocks (
     expect(await getCostPerResult("solaride", "instant_form")).toBeNull();
   });
 
-  it("on the recorded ₹280 WhatsApp plan, warns only that its ad has no 9:16; at ₹50 a day, also that Meta can't learn", async () => {
+  it("on the recorded ₹280 WhatsApp plan, warns only that its ad has no 9:16; at ₹50 a day, also that Meta can't learn (and blocks under Meta's minimum)", async () => {
     const { getCostPerResult } = await import("@/lib/campaign/result-evidence-store");
     const cost = await getCostPerResult("solaride", "whatsapp");
     expect(launchTape.inputs.dailyBudgetRupees).toBe(280);
@@ -64,7 +64,9 @@ describe("core: Review warns from Meta's new-advertiser guidance, never blocks (
     // ₹50 a day at ₹10.69 a chat is about 32 chats a week, under Meta's ~50.
     const small = review(50, cost);
     expect(small.planWarnings).toEqual([REVIEW_WARNINGS.story, REVIEW_WARNINGS.budget]);
-    for (const result of [recorded, small]) expect(result).toMatchObject({ canCreatePaused: true, blockers: [] });
+    expect(recorded).toMatchObject({ canCreatePaused: true, blockers: [] });
+    // #1799: ₹50 is also under Meta's ₹95.46 minimum per ad set, so Review blocks it before Meta would.
+    expect(small.blockers.map((blocker) => blocker.reason)).toEqual(["REVIEW_BUDGET"]);
   });
 
   // #419 item 2: edits that restart Meta's learning, on the activation review, priced from the same

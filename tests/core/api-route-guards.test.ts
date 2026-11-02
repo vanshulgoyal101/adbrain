@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 // businessId without an ownership check is a cross-tenant read or write. Every src/app/api route is classified here,
 // and its file must call that class's guard; a new, renamed or reclassified route fails until it is listed.
 
-type Kind = "owner" | "session" | "cron" | "webhook" | "delegated" | "public";
+type Kind = "owner" | "session" | "cron" | "secret" | "webhook" | "delegated" | "public";
 type Entry = { kind: Kind; methods: string[]; why?: string };
 
 /** The guard each class must call. `session` routes are scoped by RLS or an owner-checking RPC; `why` says which. */
@@ -14,6 +14,7 @@ const GUARD: Record<Exclude<Kind, "public">, RegExp> = {
   owner: /\b(?:requireOwnedBusiness|ownedManagedAttempt|managedRouteUser|requireScheduledBusiness|ownedManagedBusiness)\(/,
   session: /\bauth\.getUser\(|\bgetPrimaryBusiness\(|\bmediaSession\(/,
   cron: /\bcronAuthError\(|CRON_SECRET/,
+  secret: /\bTEST_SESSION_SECRET\b/,
   webhook: /[Ss]ignature|signed_request/,
   delegated: /\b(?:handleProductionPayments|handleTestPayments)\(/,
 };
@@ -44,6 +45,7 @@ const ROUTES: Record<string, Entry> = {
   "campaigns/report": { kind: "session", methods: ["GET"], why: "session: RLS client (the owner's own campaigns)" },
   "campaigns/sync": { kind: "owner", methods: ["POST"] },
   "creatives/[id]/background": { kind: "session", methods: ["POST"], why: "session: business loaded through RLS before creative_regeneration_claim (#1723)" },
+  "creatives/[id]/photo-fit": { kind: "session", methods: ["GET"], why: "session: RLS client (the owner's own creative and Brand photos, #1904)" },
   "creatives/[id]/picture": { kind: "session", methods: ["POST"], why: "session: RLS client (the owner's own creative)" },
   "creatives/[id]/regenerate": { kind: "session", methods: ["POST"], why: "session: business loaded through RLS before creative_regeneration_claim (#1723)" },
   "creatives/assistant": { kind: "session", methods: ["POST"], why: "session: RLS client" },
@@ -52,6 +54,7 @@ const ROUTES: Record<string, Entry> = {
   "cron/access-requests": { kind: "cron", methods: ["GET"] },
   "cron/campaign-reconciliation": { kind: "cron", methods: ["GET"] },
   "cron/core-scoreboard": { kind: "cron", methods: ["GET"] },
+  "cron/dispatch-workflows": { kind: "cron", methods: ["GET"] },
   "cron/enforce-spend": { kind: "cron", methods: ["GET"] },
   "cron/keepalive": { kind: "cron", methods: ["GET"] },
   "cron/llm-credit": { kind: "cron", methods: ["GET"] },
@@ -66,10 +69,12 @@ const ROUTES: Record<string, Entry> = {
   "events": { kind: "session", methods: ["POST"], why: "session: business from getPrimaryBusiness(), never from input" },
   "feedback/pilot-day7": { kind: "owner", methods: ["POST"] },
   "internal/meta-traffic": { kind: "session", methods: ["POST"], why: "session: email allowlist, rate-limited, 404 in production without it (#1723)" },
-  "leads": { kind: "session", methods: ["GET"], why: "session: RLS client (the owner's own leads)" },
-  "leads/[id]": { kind: "session", methods: ["PATCH"], why: "session: RLS client (the owner's own leads)" },
+  "internal/test-session": { kind: "secret", methods: ["POST"], why: "#2574: TEST_SESSION_SECRET bearer (constant time, ≥ 32 chars) and a TEST_SESSION_EMAILS allowlist; 404 when unset" },
+  "leads": { kind: "session", methods: ["DELETE", "GET"], why: "session: RLS client (the owner's own leads)" },
+  "leads/[id]": { kind: "session", methods: ["DELETE", "PATCH"], why: "session: RLS client (the owner's own leads); DELETE runs leads_erase as the caller (#1761)" },
   "leads/sync": { kind: "owner", methods: ["POST"] },
   "leads/unseen": { kind: "session", methods: ["GET"], why: "session: RLS client (the owner's own leads)" },
+  "managed/billing": { kind: "owner", methods: ["POST"] },
   "managed/onboarding": { kind: "owner", methods: ["GET"] },
   "managed/whatsapp": { kind: "owner", methods: ["POST"] },
   media: { kind: "session", methods: ["GET"], why: "session: mediaSession (auth.getUser); business checked through RLS before any read" },
@@ -106,6 +111,9 @@ const ROUTES: Record<string, Entry> = {
   "preferences": { kind: "session", methods: ["GET", "POST"], why: "session: RLS client (the owner's own preferences)" },
   "privacy-requests": { kind: "session", methods: ["GET", "POST"], why: "session: RLS client (the user's own requests)" },
   "privacy-requests/operator": { kind: "session", methods: ["GET", "PATCH"], why: "session: privacy_request_operator_allowed (a user-ID grant table, #1723)" },
+  "prospect/claim": { kind: "session", methods: ["POST"], why: "session client; business_transfer_claim/decline check auth.uid() is the invited, confirmed email" },
+  "prospect/transfer": { kind: "session", methods: ["DELETE", "POST"], why: "prospect account + owner_id = caller via RLS client; the admin RPCs re-check owner_id = p_from_user_id" },
+  "results-card": { kind: "owner", methods: ["GET", "POST"] },
   "spend-limits": { kind: "session", methods: ["POST"], why: "session: business from getPrimaryBusiness(), never from input" },
   "whatsapp/webhook": { kind: "webhook", methods: ["GET", "POST"] },
 };

@@ -20,7 +20,10 @@ restrictions.
 A new campaign is named after its first chosen ad until the owner types a name:
 headline · WhatsApp or Lead form · day, e.g. "Free 15-minute spine check · WhatsApp ·
 Oct 28" (the day appears once the browser has loaded). Preparing exactly the same ads
-again updates their saved draft instead of adding another (#1151).
+again updates their saved draft instead of adding another (#1151). If that draft has
+expired or was removed in another tab, the owner's current choices are saved as a
+new draft instead, and a tab whose remembered draft is gone forgets it on load
+(unless a creation was in flight) rather than showing "Draft not found." (#681).
 
 Starting a replacement review invalidates the old send action immediately.
 A failed validation, save, or reconnect does not erase a confirmed operation's
@@ -45,7 +48,7 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
 
 - **Publishing requires a verified Page-linked number.** Eligible reviews offer
   Send to Meta (paused); missing or unreadable linkage still blocks publishing.
-  In the earlier 2026-09-19 read-only check, Solaride's Page omitted its linkage/number fields
+  In the earlier 2026-09-19 read-only check, the first pilot's Page omitted its linkage/number fields
   with both Page and system-user tokens. An existing ad set's historical recipient
   is not accepted as proof of the current linkage. No test campaign was created.
 - Select WhatsApp chat in either manual or guided setup. No lead form is required
@@ -58,8 +61,8 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
   button can differ from the phone printed on the ad. It is accepted only if it is the
   Page's number or a number on a WhatsApp Business Account owned by the ad account's
   own Meta business; Meta accepts those for the Page's WhatsApp ad sets (#157).
-- Brand and Settings show early whether WhatsApp chat ads can run ("Ready: +91 ••••• 4842" or
-  "Not linked yet") with a short linking guide and a Check again button (#235).
+- Brand and Settings show early whether WhatsApp chat ads can run ("Ready: +91 ••••• 4842
+  (linked to your Page)" or "Not linked yet") with a short linking guide and a Check again button (#235).
 - In manual setup, the campaign form lists those numbers (masked; full numbers never
   reach the browser before review) as **WhatsApp button number** and saves the chosen
   mask in the draft; preflight resolves it to the full number. A new campaign, and a plan
@@ -72,6 +75,12 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
   number until it is prepared again from manual setup.
 - Review displays and hashes the verified number. Creation rechecks it before
   any mutation. WhatsApp never silently falls back to a form.
+- When a chosen ad's picture prints a different phone from that number, Prepare redraws
+  the picture's phone with it over the saved background (no AI, like the owner's picture
+  edit) and saves it on the ad, before the review hash. Review's first note says "Your
+  pictures now show your WhatsApp number …4842, the one the chat opens." Pictures with
+  no printed phone and lead-form ads are left alone; a failed redraw is a note, never a
+  blocker (#2274).
 - The WhatsApp creation adapter uses `OUTCOME_ENGAGEMENT`, `CONVERSATIONS`, `WHATSAPP`,
   a recipient-bound promoted object and `wa.me` creative link. Campaigns, ad sets,
   and ads are created PAUSED; activation remains a separate confirmation.
@@ -122,9 +131,9 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
   undone on the card; Keep hides it for 3 days. Never automatic, never a budget change. Turning the campaign
   back on keeps that ad paused (#1055): a capped resume copies only the other ads, and the review says so.
 - **Daily results on WhatsApp** (#1022, dark behind `OWNER_ALERTS_ENABLED`): from 09:00 IST, each opted-in
-  owner gets one `adbrain_daily_results` line for yesterday (IST): ₹ spent, enquiries (form leads plus
-  WhatsApp chats, the same per-ad numbers as "Which ad worked"), ₹ each or "none yet", and the ad to name
-  (#783's best, else the most enquiries, else the most WhatsApp taps). No line on a day with no spend and
+  owner gets one `adbrain_daily_results` line for yesterday (IST): ₹ spent, how many people messaged or filled a
+  form (the same per-ad numbers as "Which ad worked"), ₹ each or "none yet", and the ad to name with its
+  people count (#783's best, else the most people, else the most WhatsApp taps; #1720 dropped "enquiries"). No line on a day with no spend and
   no enquiry; at the monthly cap only this line pauses.
 - WhatsApp and new lead-form ad sets run on Facebook, Instagram and Messenger only (#906, #680), so a
   WhatsApp vs lead-form A/B differs only in destination: `publisher_platforms`
@@ -133,6 +142,13 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
   passes it, and the #588 ledger records `placements: "advantage:facebook,instagram,messenger"`.
   An audience edit to a WhatsApp ad set applies the same rule; an edit to an older lead-form ad set keeps
   its placements.
+- No-Facebook-Reels test (#2273, for #680): an internal-only checkbox in the composer ("No Facebook Reels
+  (team test)", shown only to `internal-accounts.ts` users) saves `excludeFacebookReels: true` on the draft.
+  WhatsApp and lead-form ad sets then also name `facebook_positions` (every Facebook position except
+  `facebook_reels`; Meta refuses `video_feeds` as discontinued), the 9:16 creative's story rule drops
+  `facebook_reels`, the plan check calls it the no-Reels test, and the ledger records
+  `advantage:facebook,instagram,messenger -facebook_reels`. Off by default; the field is in the reviewed
+  plan only when on, so older reviews keep their hash. Re-run copies of a campaign start with it off.
 - Every launch checks the payloads it sent against Meta's new-advertiser guidance
   (Advantage+ audience and placements, one ad set, budget vs learning, 4:5 and 9:16
   images) and logs `campaign.plan_check` (#419). Review shows two plain, non-blocking warnings
@@ -168,4 +184,4 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
 - Meta Page field references were checked; mocked provider tests do not certify
   actual account eligibility, delivery, or Graph v21 payload acceptance. Perform
   an explicitly authorized real-account PAUSED creation test before rollout.
-  No live Solaride campaign is modified by this implementation.
+  No live pilot campaign is modified by this implementation.

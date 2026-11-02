@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { LoginForm } from "@/components/login-form";
 import LoginPage from "@/app/login/page";
 
@@ -67,6 +67,28 @@ describe("sign-in outcomes reach the server without the email (#451 L4)", () => 
     fireEvent.click(screen.getByRole("button", { name: /Google/ }));
     await waitFor(() => expect(beacons()).toHaveLength(2));
     expect(beacons()).toEqual([{ method: "email_link", outcome: "failed", code: "over_email_send_rate_limit" }, { method: "google", outcome: "failed", code: "other" }]);
+  });
+
+  // #2415: Supabase's default mailer sends 2 emails an hour for the whole project; Google is the way through.
+  it("words the email limit plainly and moves focus to Google", async () => {
+    // #2498: a frame that runs before React re-enables the button must not lose the focus.
+    const raf = vi.spyOn(window, "requestAnimationFrame").mockImplementation(cb => { cb(0); return 0; });
+    onTestFinished(() => raf.mockRestore());
+    mocks.signInWithOtp.mockResolvedValueOnce({ error: Object.assign(new Error("email rate limit exceeded"), { code: "over_email_send_rate_limit" }) });
+    render(<LoginForm newVisitor />);
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "owner@example.test" } });
+    fireEvent.submit(screen.getByLabelText("Email").closest("form")!);
+    expect(await screen.findByRole("alert")).toHaveTextContent("Too many sign-in emails right now. Continue with Google, or try again in an hour.");
+    expect(screen.queryByText(/rate limit exceeded/i)).toBeNull();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Continue with Google" })).toHaveFocus());
+    expect(beacons()).toEqual([{ method: "email_link", outcome: "failed", code: "over_email_send_rate_limit" }]);
+  });
+});
+
+describe("Google's sign-in screen (#2415)", () => {
+  it("says the supabase.co address on Google's screen is AdBrain", () => {
+    render(<LoginForm newVisitor />);
+    expect(screen.getByText("Google shows our sign-in service's address (…supabase.co). That's AdBrain.")).toBeInTheDocument();
   });
 });
 
@@ -265,6 +287,15 @@ describe("new and returning visitors", () => {
   it("opens in sign-in mode without the intro when sent from an app page", async () => {
     phoneViewport = true;
     render(await LoginPage({ searchParams: Promise.resolve({ redirect: "/campaigns" }) }));
+    expect(screen.getByRole("heading", { name: "Welcome back" })).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  // #1793: a returning pilot tapping "Sign in" in a fresh phone browser got the sign-up tour.
+  it("opens in sign-in mode without the intro from a Sign in link, even with a gallery idea pending", async () => {
+    phoneViewport = true;
+    localStorage.setItem("adbrain:pending-idea-goal", "Get WhatsApp chats");
+    render(await LoginPage({ searchParams: Promise.resolve({ mode: "signin" }) }));
     expect(screen.getByRole("heading", { name: "Welcome back" })).toBeInTheDocument();
     expect(screen.queryByRole("dialog")).toBeNull();
   });

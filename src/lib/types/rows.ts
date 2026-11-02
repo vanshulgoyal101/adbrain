@@ -13,6 +13,8 @@ export type CampaignResult =
     real_enquiries?: number;
     /** Enquiries the owner marked "Became a customer" (#798); not a stored column. */
     customers?: number;
+    /** #1994: enquiries marked Booked or Customer; not a stored column. */
+    booked?: number;
   };
 export type AdInstruction =
   Database["public"]["Tables"]["ad_instructions"]["Row"];

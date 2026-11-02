@@ -40,9 +40,8 @@ describe("core: no third-party contact survives the final ad-text gate (#1889)",
     expect(flagged(inField(field, text))).toBe(true);
   });
 
-  // Written forms the gate misses today (#1947): each would ship a third party's contact in a live ad.
-  // `it.fails` keeps CI green while documenting the gap; when the gate is fixed these fail, so flip them to `it`.
-  it.fails.each([
+  // #1947: written forms #1840's gate used to miss; each would ship a third party's contact in a live ad.
+  it.each([
     ["a US-style number with brackets", "Call (987) 654-3210 today."],
     ["a number with dots", "Call 98765.43210 today."],
     ["a number split by a slash", "Call 98765/43210 today."],
@@ -51,7 +50,25 @@ describe("core: no third-party contact survives the final ad-text gate (#1889)",
     ["a wa.link WhatsApp link", "Chat on wa.link/abc123 now."],
     ["a .xyz domain", "See clinicdeals.xyz for prices."],
     ["a one-letter domain (Telegram t.me)", "Join t.me/clinicoffers today."],
-  ])("refuses %s (gap)", (_label, text) => {
+    ["a landline with its STD code", "Call 0172-2345678 today."],
+    ["a +91 mobile with dashes", "Call +91-98765-43210 today."],
+    ["a 0-prefixed mobile", "Call 098765 43210 today."],
+    ["a Gurmukhi-digit mobile", "ਕਾਲ ਕਰੋ ੯੮੭੬੫੪੩੨੧੦ ਅੱਜ ਹੀ।"],
+    ["a full-width-digit mobile", "Call ９８７６５４３２１０ today."],
+    ["a US number", "Call 512-555-0199 today."],
+  ])("refuses %s", (_label, text) => {
     expect(flagged(inField("primary_text", text))).toBe(true);
+  });
+
+  // #1947 (CPO): numbers that aren't phones must pass, or the repair strips a real offer from the ad.
+  it.each([
+    ["a year range", "Admissions 2026-2027 open now."],
+    ["a session range with a slash", "Batch 2026/2027, apply today."],
+    ["a dotted date", "Offer till 31.12.2026 only."],
+    ["a slashed date", "Offer till 31/12/2026 only."],
+    ["a doctor's name without a space", "Meet Dr.Mehta on Saturday."],
+    ["prices and counts", "₹1,49,999 for 3 kW, 25 years, 500+ homes."],
+  ])("lets %s through", (_label, text) => {
+    expect(flagged(inField("primary_text", text))).toBe(false);
   });
 });

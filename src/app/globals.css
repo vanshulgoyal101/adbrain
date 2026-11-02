@@ -155,6 +155,17 @@ select:focus {
   box-shadow: none;
 }
 
+/* #1793: iOS Safari zooms the page into any focused field under 16px. Lift only the small theme sizes, so larger field text is untouched. */
+@media (pointer: coarse) {
+  input,
+  textarea,
+  select {
+    --text-xs: 1rem;
+    --text-sm: 1rem;
+    --text-base: 1rem;
+  }
+}
+
 .scrollbar-stable {
   scrollbar-gutter: stable;
 }

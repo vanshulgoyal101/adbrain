@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { requireOwnedBusiness } from "@/lib/meta/connection-access";
 import { z } from "zod";
+import { ownerError } from "@/i18n/request-locale";
 
 export const runtime = "nodejs";
 
@@ -23,7 +24,7 @@ async function handlePOST(request: NextRequest) {
   }).safeParse(await request.json().catch(() => null));
   if (!body.success) {
     return NextResponse.json(
-      { error: "Pick both an ad account and a page." },
+      { error: await ownerError("pickAccountAndPage") },
       { status: 422 },
     );
   }

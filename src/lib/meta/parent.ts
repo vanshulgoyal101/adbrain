@@ -1,6 +1,7 @@
 import { GRAPH } from "@/lib/meta/graph-version";
 import { z } from "zod";
 import { getEnv } from "@/lib/env";
+import { appSecretProof } from "@/lib/meta/appsecret-proof";
 
 const meSchema = z.object({ id: z.string() });
 const businessSchema = z.object({ id: z.string(), verification_status: z.string().optional() });
@@ -20,8 +21,11 @@ export async function checkParentAccess(fetchImpl: typeof fetch = fetch): Promis
   const enabled = env.MANAGED_ACCOUNTS_ENABLED;
   const token = env.META_PARENT_SYSTEM_TOKEN;
   if (!token) return { configured: false, enabled };
+  const parentId = env.META_PARENT_BUSINESS_ID;
+  if (!parentId) return { configured: true, enabled, ok: false, errorCode: "NOT_CONFIGURED" };
   async function read(path: string) {
-    const response = await fetchImpl(`${GRAPH}/${path}`, {
+    const proof = appSecretProof(token);
+    const response = await fetchImpl(`${GRAPH}/${path}${proof ? `${path.includes("?") ? "&" : "?"}appsecret_proof=${proof}` : ""}`, {
       headers: { Authorization: `Bearer ${token}` }, cache: "no-store", signal: AbortSignal.timeout(10_000),
     });
     const body = await response.json().catch(() => null);
@@ -34,8 +38,8 @@ export async function checkParentAccess(fetchImpl: typeof fetch = fetch): Promis
   }
   try {
     meSchema.parse(await read("me?fields=id"));
-    const business = businessSchema.parse(await read(`${encodeURIComponent(env.META_PARENT_BUSINESS_ID)}?fields=id,verification_status`));
-    if (business.id !== env.META_PARENT_BUSINESS_ID) return { configured: true, enabled, ok: false, errorCode: "BUSINESS_MISMATCH" };
+    const business = businessSchema.parse(await read(`${encodeURIComponent(parentId)}?fields=id,verification_status`));
+    if (business.id !== parentId) return { configured: true, enabled, ok: false, errorCode: "BUSINESS_MISMATCH" };
     return { configured: true, enabled, ok: true, businessVerified: business.verification_status === "verified" };
   } catch (error) {
     const code = error instanceof Error && /^(META|HTTP)_[\w?]+$/.test(error.message) ? error.message : "UNREADABLE_RESPONSE";

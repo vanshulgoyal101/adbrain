@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { runPreflight } from "@/lib/campaign/preflight";
-import { resolveWhatsAppMessage } from "@/lib/campaign/whatsapp-template";
+import { campaignWhatsAppMessage } from "@/lib/campaign/campaign-whatsapp-message";
 import type { DraftInput } from "@/lib/campaign/connect-contracts";
 
 const mocks = vi.hoisted(() => ({
@@ -107,8 +107,11 @@ function reviewPlanHash(): string {
   runPreflight({
     draft: input,
     whatsappNumber: input.destination === "whatsapp" ? "+919876543210" : null,
-    // #840: only an edited or saved message reaches the hash, so the suggestion's words don't matter here.
-    whatsappMessage: input.destination === "whatsapp" ? resolveWhatsAppMessage({ edited: input.whatsappMessage, saved: mocks.whatsappTemplate, suggest: () => ({ greeting: "", autofill: "" }) }) : null,
+    // #2452: every message is in the hash, so this builds it from the same business and ad rows the route reads.
+    whatsappMessage: input.destination === "whatsapp" ? campaignWhatsAppMessage({
+      draft: input, business: { name: "Solaride", locations: ["Jaipur"], offers: [], whatsapp_template: mocks.whatsappTemplate },
+      creatives: [{ headline: "Headline", primary_text: "Message", generation: { concept: { description: mocks.description } } }],
+    }) : null,
     draftId,
     draftVersion: 1,
     connection: {
@@ -358,6 +361,22 @@ describe("durable campaign create route", () => {
     const reviewed = await (await preflight(post({ businessId, draftId, draftVersion: 1 }))).json();
     expect(reviewed.data.canCreatePaused).toBe(false);
     expect(reviewed.data.blockers).toEqual([expect.objectContaining({ reason: "REVIEW_WHATSAPP_MESSAGE", message: expect.stringMatching(/^Your WhatsApp message: .*[Gg]uaranteed/) })]);
+  });
+
+  it("#681: when Meta's WhatsApp read fails, Review and Send say try again (retryable 503), never 'link your number', and nothing is sent", async () => {
+    mocks.draftRow = draftRow({ input: { ...draftInput, destination: "whatsapp", leadFormId: null } });
+    const create = vi.fn();
+    mocks.withMetaConnection.mockImplementation(async (_context, _options, execute) => execute({ getWhatsAppNumber: async () => { throw new Error("Meta request failed (500)."); }, createLeadCampaign: create, readActiveLeadForm: vi.fn(), resolveGeoTargeting: vi.fn(), resolveAudienceInterests: async () => ({ interests: [{ id: "12345", name: "Solar energy" }], unresolved: [] }) }, await mocks.getConnectionStatus()));
+    const { POST: preflight } = await import("@/app/api/campaigns/preflight/route");
+    const reviewed = await preflight(post({ businessId, draftId, draftVersion: 1 }));
+    expect(reviewed.status).toBe(503);
+    expect((await reviewed.json()).error).toMatchObject({ code: "UNAVAILABLE", retryable: true, message: expect.stringMatching(/Try again in a minute/) });
+    const { POST } = await import("@/app/api/campaigns/create/route");
+    const response = await POST(post({ businessId, draftId, draftVersion: 1, planHash: reviewPlanHash(), connectionGeneration, idempotencyKey }));
+    expect(response.status).toBe(503);
+    expect((await response.json()).error).toMatchObject({ code: "UNAVAILABLE", retryable: true, message: expect.stringMatching(/Nothing was sent to Meta/) });
+    expect(create).not.toHaveBeenCalled();
+    expect(mocks.rpc).not.toHaveBeenCalled();
   });
 
   it("sends the campaign's chosen WhatsApp language (#493)", async () => {

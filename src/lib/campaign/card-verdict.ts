@@ -1,13 +1,16 @@
+import { cappedRunEnded } from "@/lib/campaign/activation";
 import type { PauseSuggestion } from "@/lib/campaign/ad-pause";
 import { readCampaignHealth } from "@/lib/campaign/health";
 import { campaignDestination } from "@/lib/campaign/outcomes";
-import { verdict, type Comparison, type Verdict, type VerdictInput } from "@/lib/campaign/verdict";
+import type { Words } from "@/i18n/words";
+import { restatesStatus, verdict, type Comparison, type Verdict, type VerdictInput } from "@/lib/campaign/verdict";
 import type { Campaign, CampaignResult } from "@/lib/types";
+import type { LeadDestination } from "@/lib/types/campaign";
 
 type CardCampaign = Pick<Campaign, "id" | "status" | "created_at" | "raw" | "destination" | "objective">;
 type CardResult = Pick<CampaignResult, "impressions" | "spend" | "leads" | "conversations" | "whatsapp_opens" | "destination">;
 
-const resultsOf = (destination: "whatsapp" | "instant_form", result: CardResult) =>
+const resultsOf = (destination: Exclude<LeadDestination, "call" | "website">, result: CardResult) =>
   destination === "whatsapp" ? result.conversations ?? 0 : result.leads ?? 0;
 
 /**
@@ -20,7 +23,8 @@ export function cardVerdictInput(campaign: CardCampaign, result: CardResult, ext
   const destination = campaignDestination(campaign, result);
   if (destination !== "whatsapp" && destination !== "instant_form") return null;
   return {
-    destination, status: campaign.status, liveSince: readCampaignHealth(campaign.raw)?.activeSince ?? null,
+    // #2281: a capped run past its end time has ended, whatever its row says (results-summary agrees).
+    destination, status: campaign.status !== "draft" && cappedRunEnded(campaign.raw, extra.now) ? "completed" : campaign.status, liveSince: readCampaignHealth(campaign.raw)?.activeSince ?? null,
     impressions: result.impressions ?? 0, results: resultsOf(destination, result), spend: Number(result.spend ?? 0),
     opens: destination === "whatsapp" ? result.whatsapp_opens ?? null : null,
     waiting: extra.waiting, weakAd: extra.weakAd, comparison: extra.comparison, now: extra.now,
@@ -46,9 +50,9 @@ const HOME_ORDER: string[] = ["working", "about_average", "measured", "early", "
 
 /**
  * Home's one sentence and number: the best running campaign's verdict, with the account's waiting enquiries in front,
- * plus each listed campaign's one-word verdict. Null when no running campaign has results.
+ * plus each listed campaign's one-word verdict (none when it would only repeat the status). Null when no running campaign has results.
  */
-export function homeVerdicts(campaigns: Array<CardCampaign & { id: string }>, results: Record<string, CardResult | undefined>, extra: { now?: number; waiting: number }) {
+export function homeVerdicts(campaigns: Array<CardCampaign & { id: string }>, results: Record<string, CardResult | undefined>, extra: { now?: number; waiting: number; words?: Words<"verdict"> }) {
   const now = extra.now ?? Date.now();
   const labels = new Map<string, string>();
   const live: Array<{ id: string; verdict: Verdict; input: VerdictInput }> = [];
@@ -57,10 +61,11 @@ export function homeVerdicts(campaigns: Array<CardCampaign & { id: string }>, re
     if (!result) continue;
     const input = cardVerdictInput(campaign, result, { now, waiting: 0, weakAd: null, comparison: lastCampaignComparison(campaign, campaigns, results) });
     if (!input) continue;
-    const judged = verdict(input);
-    labels.set(campaign.id, judged.label);
-    if (campaign.status === "active") live.push({ id: campaign.id, verdict: judged, input });
+    const judged = verdict(input, extra.words);
+    // #1795: 'Live' and 'Ended' restate the row's status ('Ended · Ended', 'Paused · Live'), so the row shows no word.
+    if (!restatesStatus(judged.state)) labels.set(campaign.id, judged.label);
+    if (input.status === "active") live.push({ id: campaign.id, verdict: judged, input });
   }
   const best = live.sort((a, b) => HOME_ORDER.indexOf(a.verdict.state) - HOME_ORDER.indexOf(b.verdict.state))[0];
-  return { labels, lead: best ? { campaignId: best.id, verdict: verdict({ ...best.input, waiting: extra.waiting }), input: best.input } : null };
+  return { labels, lead: best ? { campaignId: best.id, verdict: verdict({ ...best.input, waiting: extra.waiting }, extra.words), input: best.input } : null };
 }

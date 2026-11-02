@@ -7,7 +7,7 @@
 //   node scripts/team-supervisor.mjs [--dry-run] [--roles devops,qa,…]   one tick (what launchd runs)
 //   node scripts/team-supervisor.mjs --install | --uninstall              the LaunchAgent (StartInterval 600 s)
 //   node scripts/team-supervisor.mjs --smoke                              prove the CLI runs headless here
-//   node scripts/team-supervisor.mjs --restart-prompt <role|all>          the prompt to resend with create_session
+//   node scripts/team-supervisor.mjs --restart-prompt <role|all|ceo>      the prompt to start a chat with create_session (#2476)
 // Each tick also dispatches scheduled-jobs.yml when GitHub's own schedule has lapsed (#692), and once a
 // night exports production to ~/.adbrain-backups and restore-drills it (#884).
 // Kill switch for role runs: touch ~/.adbrain-supervisor/OFF (scheduled-job dispatch and the nightly backup keep running). Log: ~/.adbrain-supervisor/supervisor.log.
@@ -25,8 +25,11 @@ const CALL_TIMEOUT_MS = 120_000;
 const execFileSync = (cmd, args, opts = {}) => rawExecFileSync(cmd, args, { timeout: CALL_TIMEOUT_MS, killSignal: "SIGKILL", ...opts });
 
 /** Handoff bottlenecks first (reviews, releases), then builders. CTO/CEO coordinate through chat tools, so they're excluded. */
-export const ORDER = ["devops", "qa", "reviewer", "qa2", "dev3", "dev", "dev2", "dev4", "cpo", "analyst", "designer"];
+export const ORDER = ["devops", "qa", "reviewer", "qa2", "dev3", "dev", "dev2", "dev4", "dev5", "dev6", "dev7", "dev8", "speed", "janitor", "scout", "cpo", "analyst", "designer", "docs"];
 export const LABEL = "in.adbrain.team-supervisor";
+// #766: with `pmset sleep 1` the Mac slept between ticks and the alert dispatch lapsed for ~2 h at a time.
+// `caffeinate -s` holds off system sleep on the charger only (no sudo; on battery the Mac still sleeps).
+export const AWAKE_LABEL = "in.adbrain.keep-awake";
 const HOME = homedir();
 export const STATE_DIR = join(HOME, ".adbrain-supervisor");
 const SESSIONS = join(HOME, ".copilot", "session-state");
@@ -41,7 +44,7 @@ export function roleFromPrompt(text) {
   // the first role name in the next few words. Helpers ("CTO helper") are separate chats, not the role itself.
   const m = /You are AdBrain's ([^.,;:(\n]{1,60})/i.exec(String(text ?? ""));
   if (!m) return null;
-  const said = ` ${m[1].toLowerCase().replace(/\s+/g, " ").trim()} `;
+  const said = ` ${m[1].replace(/[*_`]/g, "").toLowerCase().replace(/\s+/g, " ").trim()} `;
   if (/ helper /.test(said)) return null;
   const names = Object.entries(NAMES).sort((a, b) => b[1].length - a[1].length);
   let best = null;
@@ -161,7 +164,7 @@ export function prompt(role, items, runMin) {
   const name = NAMES[role];
   return [
     `You are AdBrain's ${name}, started headless by the #573 A1 supervisor because no ${name} chat is alive.`,
-    `Repo: ${WT} (current origin/main). Read AGENTS.md and the ${name} role card in docs/ORCHESTRATION.md first.`,
+    `Repo: ${WT} (current origin/main). Read AGENTS.md and the ${name} role card in docs/team/orchestration.md first.`,
     `Do ONE unit of work end to end: the first item below. Edit only in your own worktree (\`bash scripts/wt.sh <issue>\`), open a PR, and hand off with the owner label plus one arrow line. Sign every GitHub comment "${name} (headless):".`,
     `Your queue (from wait-for-work):`,
     ...items.slice(0, 3).map((i) => `- ${i}`),
@@ -171,13 +174,35 @@ export function prompt(role, items, runMin) {
   ].join("\n");
 }
 
-/** The restart prompt a supervisor chat resends with create_session after a VS Code restart (#573; GitHub is the memory). */
+/** Worker roles a CEO keeps one live chat for (everyone but the CEO). */
+export const WORKER_ROLES = Object.keys(NAMES).filter((r) => r !== "ceo");
+
+/**
+ * #2476: the owner rotates CEO chats often and closes the old one. The new CEO inherits everything from GitHub and
+ * git, adopts the live worker chats and respawns missing ones as independent sessions, so closing a CEO chat never
+ * takes a worker down with it.
+ */
+function ceoPrompt() {
+  const roles = WORKER_ROLES.map((r) => `${NAMES[r]} (${r})`).join(", ");
+  return [
+    `You are AdBrain's CEO. The owner closed the previous CEO chat on purpose and will rotate CEO chats often. GitHub and git are your memory, not chat history; you have the owner's full authority.`,
+    `1. Read AGENTS.md, then docs/team/orchestration.md (Current Dispatch, role cards, "CEO handover"), Team board #580 with today's priorities, experiments #2360, and .github/skills/multi-worker-delivery/SKILL.md.`,
+    `2. Check in, in this order: CI on next and main (\`gh run list --branch next --limit 5\`); open PRs stuck green or red; production smoke and the deploy train; then everything addressed to you: \`gh issue list -l decision --state open\`, \`-l waiting-owner\`, and comments with "→ CEO". Commitments made by earlier CEOs live there or as "Next read <time>" comments; nothing else carries over.`,
+    `3. The team: one live chat per role: ${roles}. Run list_sessions (workspace adbrain) and match chats by title "AdBrain <Role>" or a first prompt starting "You are AdBrain's <Role>". Read each chat's latest turn with get_session_context; adopt every live one, and never start a second chat for a role that has one. For each missing role, create_session with relationship "independent", workspace adbrain, title "AdBrain <Role>", and the prompt from \`npm run team-supervisor -- --restart-prompt <role>\`. Never nest worker chats in your own session and never delete another session: closing your chat must not take a worker down. If worker chats are nested inside an earlier CEO's session, ask the owner to close that session first (their worktrees and branches stay on disk, and each replacement's waiter lists its unsaved worktree), then start the independent replacements, so no role ever has two writers.`,
+    `4. Reaching a chat: a running chat reads no chat messages (a steer stays "processing" for hours; a queued one lands only when the turn ends). Reach workers through GitHub: the owner label plus "→ <Role>:" on the issue, or a team-wide rule in the Everyone row of #580, which every waiter run prints. Use send_message (queue) only to start a chat whose status is idle. To stop harm now, kill the process by PID and post the rule on its issue.`,
+    `5. Your job: delegate, decide, keep labels and priorities honest, and remove waits. Never build product code. Keep every worker on the #580 outcome filter. Money, Meta writes, secrets, migrations and production settings keep their gates. Ask the owner only in one batched list (label waiting-owner). Answer the owner with one line first, then a short table of what you saw / what it is / status, and at most one owner action.`,
+    `6. Leave nothing in chat memory: every decision or promise goes on its GitHub issue the moment you make it, so the next CEO can take over at any time. Between owner requests, run \`node scripts/wait-for-work.mjs --me ceo\` in the foreground from a worktree on current origin/main, and run it again when it exits.`,
+  ].join("\n");
+}
+
+/** The prompt a CEO sends with create_session to (re)start a role's chat (#573, #2476; GitHub is the memory). */
 export function restartPrompt(role) {
   const name = NAMES[role];
   if (!name) throw new Error(`unknown role ${role}`);
+  if (role === "ceo") return ceoPrompt();
   return [
-    `You are AdBrain's ${name}. Your old chat was lost in a VS Code restart, so start fresh.`,
-    `Read AGENTS.md, then the Current Dispatch and your role card in docs/ORCHESTRATION.md, then your row and today's priorities on Team board #580.`,
+    `You are AdBrain's ${name}. Your old chat ended (a VS Code restart or a CEO handover), so start fresh.`,
+    `Read AGENTS.md, then the Current Dispatch and your role card in docs/team/orchestration.md, then your row and today's priorities on Team board #580.`,
     `Your queue: \`gh issue list -R vanshulgoyal101/adbrain -l owner:${role} --state open\`; work the top item of your #580 row first.`,
     `Work only in your own worktree under ~/Development/copilot/adbrain-wt/ (\`bash scripts/wt.sh <issue>\`). Run commands in the foreground only and never leave anything running. Sign your comments "${name}:".`,
     `This task never completes: do not call task_complete and do not end your turn after an item. Loop: work → \`node scripts/wait-for-work.mjs --me ${role}\` in the foreground from a worktree on current origin/main → work. Stop only when the waiter times out.`,
@@ -201,11 +226,14 @@ export function loadSkip({ load1, cores, availableBytes }, { maxLoadPerCore = 1.
   return null;
 }
 
-/** os.freemem() on macOS counts only never-used pages (≈0.2 GB on a healthy 8 GB Mac), so use the kernel's memory-pressure level instead. */
+/**
+ * os.freemem() on macOS counts only never-used pages (≈0.2 GB on a healthy 8 GB Mac), so use the kernel's memory-pressure
+ * level instead. Absolute path: the LaunchAgent's PATH has no /usr/sbin, and a missing sysctl fell back to freemem().
+ */
 export function machineLoad() {
   let availableBytes = freemem();
   if (process.platform === "darwin") {
-    const level = Number(spawnSync("sysctl", ["-n", "kern.memorystatus_level"], { encoding: "utf8" }).stdout?.trim());
+    const level = Number(spawnSync("/usr/sbin/sysctl", ["-n", "kern.memorystatus_level"], { encoding: "utf8" }).stdout?.trim());
     if (Number.isFinite(level) && level > 0) availableBytes = (totalmem() * level) / 100;
   }
   return { load1: loadavg()[0], cores: cpus().length, availableBytes };
@@ -249,6 +277,16 @@ export function encryptExport(dir, run = spawnSync) {
 
 const folderTime = (name) => `${name.slice(0, 13)}:${name.slice(14, 16)}:00Z`;
 
+/** #1857: once a UTC day, warn 90 days before the Meta API version we call is retired (scripts/graph-sunset.mjs). */
+function dailyGraphSunsetCheck(dry) {
+  const stamp = join(STATE_DIR, `graph-sunset-${new Date().toISOString().slice(0, 10)}`);
+  if (existsSync(stamp)) return;
+  if (dry) return console.log("would check the Meta API version's retirement date");
+  const result = spawnSync(process.execPath, ["scripts/graph-sunset.mjs"], { cwd: WT, encoding: "utf8", timeout: 60_000 });
+  log(`graph sunset: ${`${result.stdout ?? ""}${result.stderr ?? ""}`.trim().split("\n").join(" | ").slice(0, 240)}`);
+  if (result.status === 0) writeFileSync(stamp, "");
+}
+
 /** Nightly free-plan backup (#884): export, restore-drill it, prune, and open one issue when it fails. */
 function nightlyExport(dry) {
   mkdirSync(BACKUP_DIR, { recursive: true, mode: 0o700 });
@@ -286,7 +324,7 @@ function nightlyExport(dry) {
     const open = JSON.parse(execFileSync("gh", ["issue", "list", "-R", REPO, "--state", "open", "--search", `in:title "${title}"`, "--json", "number"], { encoding: "utf8" }));
     if (open.length) return;
     execFileSync("gh", ["issue", "create", "-R", REPO, "-l", "core", "-l", "bug", "-l", "owner:devops", "-t", title, "-b",
-      `The supervisor's nightly export (#884) failed at ${name}. Export exit ${exported.status}; restore drill exit ${restored?.status ?? "not run"}; encrypted ${sealed}.\nLast lines: ${tail(restored ?? exported).slice(0, 300)}\n\nRerun by hand: \`node scripts/db-export.mjs export ~/.adbrain-backups/<now>\` then \`restore\` (docs/OPERATIONS.md#data-safety-and-recovery). Until an export succeeds, no destructive migration.`], { stdio: "ignore" });
+      `The supervisor's nightly export (#884) failed at ${name}. Export exit ${exported.status}; restore drill exit ${restored?.status ?? "not run"}; encrypted ${sealed}.\nLast lines: ${tail(restored ?? exported).slice(0, 300)}\n\nRerun by hand: \`node scripts/db-export.mjs export ~/.adbrain-backups/<now>\` then \`restore\` (docs/operations/backups.md#data-safety-and-recovery). Until an export succeeds, no destructive migration.`], { stdio: "ignore" });
   } catch (error) {
     log(`nightly export alert failed: ${String(error?.message ?? error).split("\n")[0].slice(0, 160)}`);
   }
@@ -388,15 +426,27 @@ export const agentArgs = (text, credits, wt = WT) => [
   "--max-ai-credits", String(credits), "-s",
 ];
 
+const xml = (text) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+export const awakePlist = () => `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>${AWAKE_LABEL}</string>
+  <key>ProgramArguments</key><array><string>/usr/bin/caffeinate</string><string>-s</string></array>
+  <key>KeepAlive</key><true/>
+  <key>RunAtLoad</key><true/>
+</dict></plist>
+`;
+
 /** `roles` null = every role in ORDER at tick time, so new roles need no reinstall. */
-function plist(roles) {
+export function plist(roles) {
   const path = [dirname(process.execPath), "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin"].join(":");
   const cmd = `cd '${WT}' && exec '${process.execPath}' scripts/team-supervisor.mjs${roles ? ` --roles ${roles.join(",")}` : ""}`;
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
   <key>Label</key><string>${LABEL}</string>
-  <key>ProgramArguments</key><array><string>/bin/sh</string><string>-c</string><string>${cmd}</string></array>
+  <key>ProgramArguments</key><array><string>/bin/sh</string><string>-c</string><string>${xml(cmd)}</string></array>
   <key>EnvironmentVariables</key><dict><key>PATH</key><string>${path}</string></dict>
   <key>StartInterval</key><integer>600</integer>
   <key>RunAtLoad</key><true/>
@@ -431,16 +481,23 @@ async function main() {
   const domain = `gui/${process.getuid()}`;
 
   if (values["restart-prompt"]) {
-    const which = values["restart-prompt"] === "all" ? Object.keys(NAMES).filter((r) => r !== "ceo") : [values["restart-prompt"]];
+    const which = values["restart-prompt"] === "all" ? WORKER_ROLES : [values["restart-prompt"]];
     return console.log(which.map((r) => `## ${NAMES[r]}\n${restartPrompt(r)}`).join("\n\n"));
   }
   if (values.install || values.uninstall) {
-    try { execFileSync("launchctl", ["bootout", domain, agentFile], { stdio: "ignore" }); } catch { /* not loaded */ }
-    if (values.uninstall) { rmSync(agentFile, { force: true }); return console.log(`removed ${LABEL}`); }
+    const awakeFile = join(HOME, "Library", "LaunchAgents", `${AWAKE_LABEL}.plist`);
+    for (const file of [agentFile, awakeFile]) {
+      try { execFileSync("launchctl", ["bootout", domain, file], { stdio: "ignore" }); } catch { /* not loaded */ }
+    }
+    if (values.uninstall) {
+      for (const file of [agentFile, awakeFile]) rmSync(file, { force: true });
+      return console.log(`removed ${LABEL} and ${AWAKE_LABEL}`);
+    }
     mkdirSync(STATE_DIR, { recursive: true });
     writeFileSync(agentFile, plist(values.roles ? roles : null));
-    execFileSync("launchctl", ["bootstrap", domain, agentFile]);
-    return console.log(`installed ${LABEL}: every 10 min from ${WT} for ${roles.join(",")}`);
+    writeFileSync(awakeFile, awakePlist());
+    for (const file of [agentFile, awakeFile]) execFileSync("launchctl", ["bootstrap", domain, file]);
+    return console.log(`installed ${LABEL}: every 10 min from ${WT} for ${roles.join(",")}; ${AWAKE_LABEL} keeps the Mac awake on the charger`);
   }
 
   mkdirSync(STATE_DIR, { recursive: true });
@@ -452,6 +509,7 @@ async function main() {
   // OFF stops only the headless role runs (#1525): production's scheduled jobs and the nightly backup depend on these dispatches.
   dispatchScheduledJobs(values["dry-run"]);
   dispatchBackup(values["dry-run"]);
+  dailyGraphSunsetCheck(values["dry-run"]);
   const fresh = values["dry-run"] ? true : refresh();
   nightlyExport(values["dry-run"]);
   dailyUsageCheck(values["dry-run"]);

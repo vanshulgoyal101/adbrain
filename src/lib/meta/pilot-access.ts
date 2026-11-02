@@ -11,3 +11,10 @@ export function canUseMetaConnect(
   if (config.rollout === "enabled") return true;
   return config.environment !== "production" && !config.rollout;
 }
+/**
+ * #1989: until Meta's App Review passes (#156), only people with a role on the app (Testers) can log in to it.
+ * On unless set to exactly `false`, which DevOps does once #156 is approved.
+ */
+export function metaAppReviewPending(value = process.env.META_APP_REVIEW_PENDING): boolean {
+  return value !== "false";
+}

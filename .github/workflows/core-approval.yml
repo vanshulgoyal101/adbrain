@@ -37,7 +37,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number || github.event.issue.number }}
+          CORE_APPROVAL_TS: ${{ runner.temp }}/ts/node_modules/typescript/lib/typescript.js
         run: |
           # The script runs from the default branch; until the train promotes it there, skip quietly.
           if [ ! -f scripts/core-approval.mjs ]; then echo "core-approval.mjs not on the default branch yet; skipping."; exit 0; fi
+          # #364: the words-only check parses files with a pinned TypeScript (no install scripts). If this fails,
+          # the check is skipped and core files stay gated.
+          npm install --prefix "$RUNNER_TEMP/ts" --ignore-scripts --no-audit --no-fund --no-save typescript@6.0.3 >/dev/null 2>&1 || true
           node scripts/core-approval.mjs --pr "$PR"

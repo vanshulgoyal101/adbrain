@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getEnv } from "@/lib/env";
 import { isInternalUser, isScoreboardExcluded, type AccountIdentity } from "@/lib/internal-accounts";
+import type { LeadDestination } from "@/lib/types/campaign";
 
 /**
  * #1307 (#1255): AdBrain's own pooled results, from the #588 ledger: every AdBrain-made run (a `campaign_learnings`
@@ -10,7 +11,7 @@ import { isInternalUser, isScoreboardExcluded, type AccountIdentity } from "@/li
  * results can be read from it (Reviewer on #1400). Team, smoke, demo and prospect businesses never count.
  */
 export type LedgerTotals = { results: number; spendRupees: number; runs: number };
-type Destination = "whatsapp" | "instant_form";
+type Destination = Exclude<LeadDestination, "call" | "website">;
 type LedgerRead = { spend?: number | string | null; conversations?: number | null; leads?: number | null };
 export type LedgerRun = LedgerRead & { businessId?: string | null; destination?: string | null; status?: string | null };
 
@@ -87,9 +88,4 @@ async function excludedBusinesses(admin: ReturnType<typeof createAdminClient>, b
   const known = new Set((businesses ?? []).map((business) => business.id));
   return new Set([...businessIds.filter((id) => !known.has(id)),
     ...(businesses ?? []).filter((business) => owners.get(business.owner_id) !== false).map((business) => business.id)]);
-}
-
-/** For tests: forget the hourly read. */
-export function resetLedgerCache() {
-  cached = null;
 }

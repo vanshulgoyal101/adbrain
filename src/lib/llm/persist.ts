@@ -5,6 +5,7 @@ import type { LLMFailureCode, RateLimitInfo, TokenUsage } from "./types";
 import type { Json } from "@/lib/types";
 import { recordProductEvent } from "@/lib/observability/logger";
 import { isInternalUser, type AccountIdentity } from "@/lib/internal-accounts";
+import { FREE_TEXT_PROVIDERS, freeTextOnly } from "./spend-policy";
 
 export interface LLMUsageEvent {
   /** Null before a business exists (Brand autofill on first setup): the ai.completion event only. */
@@ -62,6 +63,13 @@ function estimatedCost(model: string, usage: TokenUsage): number {
     (usage.promptTokens * rate.input + usage.completionTokens * rate.output) /
     1_000_000
   );
+}
+
+/** #2230: the smoke login's text runs only on free tiers (`freeTextOnly`), so its text rows cost $0. */
+function eventCost(event: LLMUsageEvent): number {
+  if (event.estimatedCostUsd !== undefined) return event.estimatedCostUsd;
+  const freeText = (event.usageKind ?? "text") === "text" && FREE_TEXT_PROVIDERS.includes(event.provider) && freeTextOnly();
+  return freeText ? 0 : estimatedCost(event.model, event.usage);
 }
 
 function monthStart(): string {
@@ -141,7 +149,7 @@ export function usageErrorCode(event: Pick<LLMUsageEvent, "failure" | "errorCode
 /** #1468: what usage events cost (USD, the same estimate the rows store), text and images apart. */
 export function usageCostUsd(events: LLMUsageEvent[]): { text: number; image: number } {
   const cost = { text: 0, image: 0 };
-  for (const event of events) cost[event.usageKind ?? "text"] += event.estimatedCostUsd ?? estimatedCost(event.model, event.usage);
+  for (const event of events) cost[event.usageKind ?? "text"] += eventCost(event);
   return cost;
 }
 
@@ -154,7 +162,7 @@ export async function persistLLMUsage(events: LLMUsageEvent[]): Promise<boolean>
     durationMs: event.latencyMs,
     attributes: { provider: event.provider, model: event.model, inputTokens: event.usage.promptTokens,
       outputTokens: event.usage.completionTokens, totalTokens: event.usage.totalTokens,
-      estimatedCostUsd: event.estimatedCostUsd ?? estimatedCost(event.model, event.usage),
+      estimatedCostUsd: eventCost(event),
       usageKind: event.usageKind ?? "text", attempt: event.attempt ?? 1, cacheHit: event.cacheHit ?? false,
       ...(usageErrorCode(event) ? { errorCode: usageErrorCode(event)! } : {}),
       ...(event.rateLimit ? { rateLimitType: event.rateLimit.type, rateLimitLimit: event.rateLimit.limit,
@@ -176,8 +184,7 @@ export async function persistLLMUsage(events: LLMUsageEvent[]): Promise<boolean>
         prompt_tokens: event.usage.promptTokens,
         completion_tokens: event.usage.completionTokens,
         total_tokens: event.usage.totalTokens,
-        estimated_cost_usd:
-          event.estimatedCostUsd ?? estimatedCost(event.model, event.usage),
+        estimated_cost_usd: eventCost(event),
         prompt_version: event.promptVersion ?? null,
         input_chars: event.inputChars ?? 0,
         output_chars: event.outputChars ?? 0,
