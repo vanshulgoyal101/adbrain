@@ -275,62 +275,63 @@ describe("#1901: Go live says whose picture each ad is", () => {
 });
 });
 
-// #1989 (CPO #1983): until App Review passes (#156) only Testers can log in to the app; anyone else gets Meta's
-// "app not available" page inside the Facebook dialog, which AdBrain can't see. Step 3 says so before and after.
-describe("core: step 3 asks a not-yet-Tester owner to accept the invite (#1989)", () => {
-  const hint = /Facebook is still reviewing AdBrain/;
-  const retry = /^Didn't connect\?/;
+// #1989/#2697: until App Review passes (#156) a new Facebook account can't connect; Meta shows "app not available"
+// inside the Facebook dialog, which AdBrain can't see. Step 3 says Meta's review is pending, before and after a try,
+// with no Tester invite or date promise, and says whether the access request (#2538) was recorded.
+describe("core: step 3 says Meta's review is pending and what a request does (#1989, #2697)", () => {
+  const pending = "Facebook is still reviewing AdBrain. You can make, approve and download ads now. Connecting a new Facebook account must wait for Meta to approve access.";
+  const requested = "Request received. Sending a request does not switch on Facebook access; Meta approval is still pending.";
+  const failed = "Your request did not send. Check your connection and try again.";
+  const obsolete = /Tester|invite|working day|we'll add you|we need to add you/i;
   function step3({ pageConnected = false, appReviewPending = true, locale = "en" as "en" | "hi" } = {}) {
-    render(<SetupGoLive business={business} ads={ads} pageConnected={pageConnected} funding="own" appReviewPending={appReviewPending}
+    return render(<SetupGoLive business={business} ads={ads} pageConnected={pageConnected} funding="own" appReviewPending={appReviewPending}
       words={locale === "hi" ? { locale, messages: hi.setup } : undefined} whatsappNumber="+91 ••••• 3210" weeklyCap={{ capRupees: null, active: [] }} />);
   }
   beforeEach(() => { cleanup(); window.sessionStorage.clear(); });
 
-  it("flag on, before the first tap: the invite hint and 'Open my invites' in a new tab", () => {
-    step3();
-    expect(screen.getByText(hint)).toBeInTheDocument();
-    const link = screen.getByRole("link", { name: "Open my invites" });
-    expect(link).toHaveAttribute("href", "https://developers.facebook.com/requests");
-    expect(link).toHaveAttribute("target", "_blank");
-    expect(screen.queryByText(retry)).toBeNull();
+  it("before the first tap: the review status beside Connect, and no invite link or Try again", () => {
+    const { container } = step3();
+    expect(screen.getByText(pending)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /invites/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+    expect(container.textContent).not.toMatch(obsolete);
   });
 
-  it("back from Facebook with nothing connected: the retry block; Try again reopens Connect", () => {
+  it("back from Facebook with nothing connected: the status and Try again, which reopens Connect", () => {
     step3();
     fireEvent.click(bar().getByRole("button", { name: "Connect Facebook Page" }));
     fireEvent.click(screen.getByRole("button", { name: "Meta dialog: closed" }));
-    expect(screen.getByText(retry)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Open my invites" })).toHaveAttribute("href", "https://developers.facebook.com/requests");
-    expect(screen.queryByText(hint)).toBeNull();
+    expect(screen.getByText(pending).closest("[role=status]")).not.toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(screen.getByRole("button", { name: "Meta dialog: connected" })).toBeInTheDocument();
   });
 
-  it("back on step 3 after Facebook in this tab (oauth_cancelled, or 'app not available'): the retry block", () => {
+  it("back on step 3 after Facebook in this tab (oauth_cancelled, or 'app not available'): Try again", () => {
     step3();
     fireEvent.click(bar().getByRole("button", { name: "Connect Facebook Page" }));
     cleanup();
     step3();
-    expect(screen.getByText(retry)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
   });
 
   // #2538: the one real outsider tapped Connect twice and hit Facebook's wall; nobody on the team heard.
   const stubFetch = (impl: () => Promise<Response>) => { const fn = vi.fn(impl); vi.stubGlobal("fetch", fn); return fn; };
   const accessCall = ["/api/meta/access-request", expect.objectContaining({ method: "POST", keepalive: true, body: JSON.stringify({ businessId: "b1" }) })];
 
-  it("a try that didn't connect asks the team to add the owner, once, and says it reached us", async () => {
+  it("a try that didn't connect records one request and says it doesn't switch access on", async () => {
     const fetchMock = stubFetch(async () => new Response("{}"));
     try {
-      step3();
-      expect(screen.getByText(/come back here and we'll add you/)).toBeInTheDocument();
+      const { container } = step3();
       fireEvent.click(bar().getByRole("button", { name: "Connect Facebook Page" }));
       expect(fetchMock).not.toHaveBeenCalled();
       fireEvent.click(screen.getByRole("button", { name: "Meta dialog: closed" }));
-      expect(await screen.findByText(/We've asked our team to add you and will WhatsApp you within a working day/)).toBeInTheDocument();
+      expect(await screen.findByText(requested)).toBeInTheDocument();
       expect(fetchMock).toHaveBeenCalledWith(...accessCall);
+      expect(container.textContent).not.toMatch(obsolete);
+      expect(screen.getByText("Not connected")).toBeInTheDocument();
       fireEvent.click(screen.getByRole("button", { name: "Try again" }));
       fireEvent.click(screen.getByRole("button", { name: "Meta dialog: closed" }));
-      await screen.findByText(/We've asked our team/);
+      await screen.findByText(requested);
       expect(fetchMock).toHaveBeenCalledTimes(1);
     } finally { vi.unstubAllGlobals(); }
   });
@@ -344,13 +345,14 @@ describe("core: step 3 asks a not-yet-Tester owner to accept the invite (#1989)"
     } finally { vi.unstubAllGlobals(); }
   });
 
-  it("a request that didn't reach us says so, never blocks Connect, and Try again sends it again", async () => {
+  it("a request that didn't send says so, never blocks Connect, and Try again sends it again", async () => {
     const fetchMock = stubFetch(async () => new Response("{}", { status: 503 }));
     try {
       step3();
       fireEvent.click(bar().getByRole("button", { name: "Connect Facebook Page" }));
       fireEvent.click(screen.getByRole("button", { name: "Meta dialog: closed" }));
-      expect(await screen.findByText(/your request didn't reach us/)).toBeInTheDocument();
+      expect(await screen.findByText(failed)).toBeInTheDocument();
+      expect(screen.queryByText(requested)).toBeNull();
       fireEvent.click(screen.getByRole("button", { name: "Try again" }));
       expect(screen.getByRole("button", { name: "Meta dialog: connected" })).toBeInTheDocument();
       fireEvent.click(screen.getByRole("button", { name: "Meta dialog: closed" }));
@@ -358,7 +360,7 @@ describe("core: step 3 asks a not-yet-Tester owner to accept the invite (#1989)"
     } finally { vi.unstubAllGlobals(); }
   });
 
-  it("a Tester who connects, an owner already connected, or after App Review: nothing is sent", async () => {
+  it("an owner who connects, one already connected, or after App Review: nothing is sent", async () => {
     const fetchMock = stubFetch(async () => new Response("{}"));
     try {
       step3();
@@ -374,32 +376,34 @@ describe("core: step 3 asks a not-yet-Tester owner to accept the invite (#1989)"
     } finally { vi.unstubAllGlobals(); }
   });
 
-  it("connected: today's ✓ row and no hint, even after a try", () => {
+  it("connected: today's ✓ row and no review status, even after a try", () => {
     window.sessionStorage.setItem("adbrain.setup.connectTried", "1");
     step3({ pageConnected: true });
     expect(screen.getByText("Connected")).toBeInTheDocument();
-    expect(screen.queryByText(hint)).toBeNull();
-    expect(screen.queryByText(retry)).toBeNull();
-    expect(screen.queryByRole("link", { name: "Open my invites" })).toBeNull();
+    expect(screen.queryByText(pending)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
   });
 
-  it("flag off (after App Review): no hint and no retry block anywhere", () => {
+  it("review-pending=false (after App Review): no status and no Try again anywhere", () => {
     step3({ appReviewPending: false });
-    expect(screen.queryByText(hint)).toBeNull();
+    expect(screen.queryByText(pending)).toBeNull();
     fireEvent.click(bar().getByRole("button", { name: "Connect Facebook Page" }));
     fireEvent.click(screen.getByRole("button", { name: "Meta dialog: closed" }));
-    expect(screen.queryByText(retry)).toBeNull();
-    expect(screen.queryByRole("link", { name: "Open my invites" })).toBeNull();
+    expect(screen.queryByText(pending)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
   });
 
-  it("Hindi: the CPO's words", () => {
-    step3({ locale: "hi" });
-    expect(screen.getByText(/Facebook अभी AdBrain की जाँच कर रहा है/)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "मेरे इनवाइट खोलें" })).toBeInTheDocument();
-    fireEvent.click(bar().getByRole("button", { name: "Facebook पेज जोड़ें" }));
-    fireEvent.click(screen.getByRole("button", { name: "Meta dialog: closed" }));
-    expect(screen.getByText(/जुड़ा नहीं\? अगर Facebook ने कहा कि ऐप उपलब्ध नहीं है/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "फिर से कोशिश करें" })).toBeInTheDocument();
+  it("Hindi: the same status, recorded request and Try again", async () => {
+    const fetchMock = stubFetch(async () => new Response("{}"));
+    try {
+      step3({ locale: "hi" });
+      expect(screen.getByText(hi.setup.access.pending)).toBeInTheDocument();
+      fireEvent.click(bar().getByRole("button", { name: "Facebook पेज जोड़ें" }));
+      fireEvent.click(screen.getByRole("button", { name: "Meta dialog: closed" }));
+      expect(await screen.findByText(hi.setup.access.requested)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "फिर से कोशिश करें" })).toBeInTheDocument();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    } finally { vi.unstubAllGlobals(); }
   });
 
   it("#1438 Hindi: the summary, checklist and price in the CPO's words", () => {

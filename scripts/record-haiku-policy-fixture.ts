@@ -6,7 +6,7 @@
  * `byEffort.<effort>` instead, for the Create p90 replay (tests/core/create-p90.test.ts).
  *
  *   CREATIVE_PROVIDER_ORDER=openrouter OPENROUTER_MODEL=anthropic/claude-haiku-5.5 [CREATIVE_REASONING_EFFORT=low] \
- *     npx tsx --env-file=.env.local scripts/record-haiku-policy-fixture.ts [--all-angles]
+ *     npx tsx --import ./scripts/trusted-server-cli.mjs --env-file=.env.local scripts/record-haiku-policy-fixture.ts [--all-angles]
  */
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";

@@ -2,7 +2,7 @@
  * Records real Graph reads for the test:core settle fixture (#221): whether Meta
  * confirms a campaign's whole tree stopped, and its lifetime spend. Read-only: no Meta writes.
  *
- *   npx tsx --env-file=.env.local scripts/record-meta-stop-fixtures.ts <campaign-id>...
+ *   npx tsx --import ./scripts/trusted-server-cli.mjs --env-file=.env.local scripts/record-meta-stop-fixtures.ts <campaign-id>...
  *
  * Uses META_SYSTEM_USER_TOKEN / META_AD_ACCOUNT_ID / META_PAGE_ID; tokens are stripped.
  */

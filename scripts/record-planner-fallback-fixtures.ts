@@ -4,7 +4,7 @@
  * route builds for the core test's Cedar Ridge case (captured from tests/core/campaign-prepare.test.ts).
  * Text only; writes no data.
  *
- *   MESSAGES_JSON=<file> npx tsx --env-file=.env.local scripts/record-planner-fallback-fixtures.ts
+ *   MESSAGES_JSON=<file> npx tsx --import ./scripts/trusted-server-cli.mjs --env-file=.env.local scripts/record-planner-fallback-fixtures.ts
  */
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";

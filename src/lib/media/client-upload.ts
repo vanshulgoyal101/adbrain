@@ -12,6 +12,8 @@ export const UPLOAD_WORDS = {
   failed: "This didn't upload. Check your connection and tap Try again.",
   duplicate: "You already added this one; using the saved copy.",
   rightsRequired: "Tick the box above to add your photos.",
+  // Uploads stop if the page closes, so the sheet and the library say the same thing (Designer, #1973 review item 3).
+  keepOpen: "You can close this. Keep this page open until it finishes.",
   limitCount: (max: number) => `You can add up to ${max} at a time. Add the rest after these finish.`,
   tooBig: (size: string, max: string) => `This file is ${size}; the limit is ${max}. Trim or compress it in your gallery and add it again.`,
 };

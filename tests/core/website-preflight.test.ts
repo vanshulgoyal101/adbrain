@@ -1,4 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
+import { createHash } from "node:crypto";
+import { draftInputSchema, reviewDtoSchema } from "@/lib/campaign/connect-contracts";
+import * as websiteRules from "@/lib/campaign/website-review";
 import { buildCanonicalReviewPayload, runPreflight, type PreflightInput } from "@/lib/campaign/preflight";
 import { prepareCampaignReview, type PreflightLoaders } from "@/lib/campaign/preflight-service";
 import { WHATSAPP_PICTURE_ON_FORM, WHATSAPP_PICTURE_ON_WEBSITE } from "@/lib/campaign/plan-check";
@@ -36,6 +39,54 @@ function input(destination: "instant_form" | "whatsapp" | "website" = "website")
 }
 
 describe("Review of a website ad (#2599)", () => {
+  it.each([
+    ["website", "f27ca52fdf20f4cf1d33c4be363e68ebe08b6b4a5de2b39bf46535357a805e68"],
+    ["whatsapp", "3bd4804e5401affd3a5576b60d9e699dffcc22c53b82755ca36e5deafdb43dfe"],
+    ["instant_form", "8170f95e6ab7f0c3749854b6102480e5b50a8e6d52101b76422c0140e0755f4c"],
+  ] as const)("keeps the phase-1 %s plan hash unchanged (#2710)", (destination, expectedHash) => {
+    const value = input(destination);
+    value.hash = (payload) => createHash("sha256").update(payload).digest("hex");
+    expect(runPreflight(value).planHash).toBe(expectedHash);
+  });
+
+  it("accepts explicit visits without changing the existing website hash or adding goal/tracking fields", () => {
+    const value = input();
+    const before = runPreflight(value);
+    value.draft = draftInputSchema.parse({ ...value.draft, websiteGoal: "visits" });
+    expect(runPreflight(value).planHash).toBe(before.planHash);
+    expect(buildCanonicalReviewPayload(value)).not.toHaveProperty("websiteGoal");
+    expect(buildCanonicalReviewPayload(value)).not.toHaveProperty("pixelId");
+  });
+
+  it.each(["leads", "sales"] as const)("keeps the %s website goal in the schema, Review and canonical payload", (websiteGoal) => {
+    const value = input();
+    const before = runPreflight(value);
+    value.draft = draftInputSchema.parse({ ...value.draft, websiteGoal });
+    expect(buildCanonicalReviewPayload(value)).toMatchObject({ websiteGoal });
+    const review = runPreflight(value);
+    expect(review.planHash).not.toBe(before.planHash);
+    expect(reviewDtoSchema.parse({ ...review, planHash: "a".repeat(64), creativeHash: "b".repeat(64) })).toMatchObject({ websiteGoal });
+  });
+
+  it.each([
+    [undefined, "traffic"], ["visits", "traffic"], ["leads", "leads"], ["sales", "sales"],
+  ] as const)("maps website goal %s to stored objective %s", (goal, objective) => {
+    expect(websiteRules.websiteGoalObjective(goal)).toBe(objective);
+  });
+
+  it("keeps a legacy draft and Review without a materialized goal", () => {
+    expect(draftInputSchema.parse(input().draft)).not.toHaveProperty("websiteGoal");
+    const review = runPreflight(input());
+    expect(reviewDtoSchema.parse({ ...review, planHash: "a".repeat(64), creativeHash: "b".repeat(64) })).not.toHaveProperty("websiteGoal");
+  });
+
+  it.each(["whatsapp", "instant_form", undefined] as const)("rejects conversion goals in a %s Review DTO", (destination) => {
+    const review = runPreflight(input());
+    for (const websiteGoal of ["leads", "sales"]) {
+      expect(reviewDtoSchema.safeParse({ ...review, destination, websiteGoal, planHash: "a".repeat(64), creativeHash: "b".repeat(64) }).success).toBe(false);
+    }
+  });
+
   it("passes with the advertiser's reachable website and no lead form", () => {
     expect(runPreflight(input()).blockers).toEqual([]);
   });

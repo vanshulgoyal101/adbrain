@@ -3,6 +3,8 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import hi from "../messages/hi.json";
 import { MetaConnectionPanel } from "@/components/meta-connection";
+import { SpendGuardrails } from "@/components/spend-guardrails";
+import { evaluateSpend } from "@/lib/campaign/spend";
 import { PreferenceSettings } from "@/components/preference-settings";
 import { PrivacyRequests } from "@/components/privacy-requests";
 import { WhatsAppStatusPanel } from "@/components/whatsapp-status";
@@ -44,5 +46,15 @@ describe("Settings in Hindi (#1438)", () => {
     expect(screen.getByText(hi.settings.meta.expired)).toBeTruthy();
     expect(screen.getByRole("button", { name: "Facebook फिर से जोड़ें" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Facebook हटाएँ" })).toBeTruthy();
+  });
+
+  it("shows spend guardrails and the spend meter in Hindi", () => {
+    const limits = { weeklyCapRupees: 7000, alertPct: 80, autoPause: false };
+    render(<SpendGuardrails limits={limits} evaluation={evaluateSpend([{ id: "c1", status: "active", dailyBudget: 500, spend: 0 }], limits)} words={words} />);
+    expect(screen.getByRole("heading", { name: "खर्च की सीमा" })).toBeTruthy();
+    expect(screen.getByLabelText("हफ़्ते की सीमा (₹)")).toBeTruthy();
+    expect(screen.getByText("इस हफ़्ते")).toBeTruthy();
+    expect(screen.getByText(/% खर्च · .* बाकी$/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "सीमा सेव करें" })).toBeTruthy();
   });
 });

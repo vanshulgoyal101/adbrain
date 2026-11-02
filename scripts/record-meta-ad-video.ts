@@ -5,7 +5,7 @@
  * Also one `file_url` Meta can't fetch (it answers 389; nothing is created) and a read of a video already in
  * the account. Only POST act_<id>/advideos and DELETE of a video made here may leave the process.
  *
- *   ADBRAIN_ALLOW_META_WRITES=1 npx tsx --env-file=<.env.local> scripts/record-meta-ad-video.ts
+ *   ADBRAIN_ALLOW_META_WRITES=1 npx tsx --import ./scripts/trusted-server-cli.mjs --env-file=<.env.local> scripts/record-meta-ad-video.ts
  */
 import "./lib/meta-write-gate";
 import { writeFileSync } from "node:fs";

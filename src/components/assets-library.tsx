@@ -16,7 +16,7 @@ const ASSET_TYPE_LABEL: Record<string, string> = {
   past_ad: "Past ad",
 };
 
-async function downloadImage(url: string, filename: string) {
+export async function downloadImage(url: string, filename: string) {
   const res = await fetch(url, { signal: AbortSignal.timeout(30_000) });
   if (!res.ok) throw new Error("Image download failed.");
   const blob = await res.blob();
@@ -41,6 +41,7 @@ export function AssetTile({
   meta,
   filename,
   actions = true,
+  children,
 }: {
   /** #778: null when the private photo's signed URL couldn't be made; the tile shows a placeholder and no actions. */
   url: string | null;
@@ -49,6 +50,8 @@ export function AssetTile({
   meta?: React.ReactNode;
   filename: string;
   actions?: boolean;
+  /** #778: extra controls under the standard actions (own photos: Rename, Delete). */
+  children?: React.ReactNode;
 }) {
   const [copied, setCopied] = useState(false);
   const [broken, setBroken] = useState(!url);
@@ -127,6 +130,7 @@ export function AssetTile({
             <ExternalLink className="h-4 w-4" aria-hidden="true" />
           </a>
         </div>}
+        {children}
         {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
       </CardContent>
     </Card>

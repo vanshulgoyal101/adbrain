@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { MEDIA_MONTHLY_UPLOADS, mediaFit } from "@/lib/media/rules";
 const CONFIRMED = "2026-10-28T10:00:00.000Z";
-import { deleteMedia, finalizeUpload, listMedia, monthlyUploads, monthStartIst, ownMedia, readVerifiedMedia, signUpload, type MediaRow } from "@/lib/media/store";
+import { deleteMedia, finalizeUpload, listMedia, mediaViews, monthlyUploads, monthStartIst, ownMedia, readVerifiedMedia, signUpload, updateMedia, type MediaRow } from "@/lib/media/store";
 
 vi.mock("@/lib/env", () => ({ getEnv: () => ({ MEDIA_UPLOADS_ENABLED: true }) }));
 
@@ -15,6 +15,7 @@ function fakeSupabase() {
   const objects = new Map<string, Uint8Array>();
   const uploadOptions: { path: string; upsert?: boolean }[] = [];
   const removed: string[] = [];
+  const insertErrors: { code: string; message: string }[] = [];
   const query = (table: string) => {
     const filters: ((row: Row) => boolean)[] = [];
     let order: { column: string; ascending: boolean } | null = null;
@@ -24,6 +25,7 @@ function fakeSupabase() {
     const run = () => {
       const rows = tables[table];
       if (action.kind === "insert") {
+        if (insertErrors.length) return { data: null, error: insertErrors.shift()! };
         const row: Row = { id: crypto.randomUUID(), tags: [], checks: {}, status: "pending", deleted_at: null, source: "upload", created_at: new Date().toISOString(), confirmed_at: new Date().toISOString(), ...action.row };
         if (table === "media_assets" && rows.some((other) => other.business_id === row.business_id && other.sha256 === row.sha256 && !other.deleted_at)) {
           return { data: null, error: { code: "23505", message: "duplicate" } };
@@ -72,7 +74,7 @@ function fakeSupabase() {
       }),
     },
   };
-  return { client: client as unknown as SupabaseClient, tables, objects, removed, uploadOptions };
+  return { client: client as unknown as SupabaseClient, tables, objects, removed, uploadOptions, insertErrors };
 }
 
 const BUSINESS = "11111111-1111-4111-8111-111111111111";
@@ -144,6 +146,39 @@ describe("signUpload (#1209)", () => {
   it(`stops at ${MEDIA_MONTHLY_UPLOADS} uploads this month`, async () => {
     for (let index = 0; index < MEDIA_MONTHLY_UPLOADS; index++) db.tables.media_assets.push({ business_id: BUSINESS, source: "upload", sha256: String(index).padStart(64, "0"), created_at: new Date().toISOString(), deleted_at: new Date().toISOString() });
     await expect(signed(await photo(1080, 1350))).rejects.toMatchObject({ status: 429, code: "MEDIA_QUOTA" });
+  });
+
+  // Reviewer (#2644): parallel requests can all pass the count; the database's trigger refuses the insert past the limit.
+  it("answers 429 when the database's monthly limit refuses a request the count let through", async () => {
+    db.insertErrors.push({ code: "P0001", message: "MEDIA_QUOTA" });
+    await expect(signed(await photo(1080, 1350))).rejects.toMatchObject({ status: 429, code: "MEDIA_QUOTA" });
+    expect(db.tables.media_assets).toEqual([]);
+  });
+
+  // #2644 attack: the limit is checked on insert, so last month's unfinished rows can't be finished uncounted this month.
+  it("retires an unfinished upload from an earlier month and signs a new row the limit counts", async () => {
+    const bytes = await photo(1080, 1350);
+    const first = await signed(bytes);
+    if (first.duplicate) throw new Error("unexpected duplicate");
+    const stale = db.tables.media_assets[0];
+    stale.created_at = new Date(Date.parse(monthStartIst()) - 60_000).toISOString();
+    const again = await signed(bytes);
+    if (again.duplicate) throw new Error("unexpected duplicate");
+    expect(again.id).not.toBe(first.id);
+    expect(again.path).not.toBe(first.path);
+    expect(stale.deleted_at).toBeTruthy();
+    expect(db.tables.media_assets).toHaveLength(2);
+  });
+});
+
+describe("pending rows (Reviewer, #2644)", () => {
+  it("get no signed URL, and can't be renamed, until finalize has checked the bytes", async () => {
+    const result = await signed(await photo(1080, 1350));
+    if (result.duplicate) throw new Error("unexpected duplicate");
+    const row = db.tables.media_assets[0] as MediaRow;
+    expect((await mediaViews(db.client, [row]))[0].url).toBeNull();
+    await expect(updateMedia(db.client, row, { name: "x" })).rejects.toMatchObject({ status: 409, code: "MEDIA_NOT_UPLOADED" });
+    expect(row.name ?? null).toBeNull();
   });
 });
 

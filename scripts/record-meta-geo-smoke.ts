@@ -3,7 +3,7 @@
  * MetaClient.resolveGeoTargeting sends it, so a rule change that breaks the smoke's data fails CI (#1745).
  * Records both the current qualified names and #1745's bare ones (the test shows those fail).
  *
- *   npx tsx --env-file=<.env.local> scripts/record-meta-geo-smoke.ts
+ *   npx tsx --import ./scripts/trusted-server-cli.mjs --env-file=<.env.local> scripts/record-meta-geo-smoke.ts
  */
 import "./lib/meta-write-gate";
 import { writeFileSync } from "node:fs";

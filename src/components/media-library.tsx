@@ -1,13 +1,14 @@
 "use client";
 
-import { useCallback, useState } from "react";
-import { ImagePlus } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Download, ImagePlus, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Status } from "@/components/ui/status";
-import { AssetTile, slugify } from "@/components/assets-library";
+import { AssetTile, downloadImage, slugify } from "@/components/assets-library";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { MediaUploadSheet, useMediaUploads } from "@/components/media-upload";
 import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
-import type { Codec, UploadDeps } from "@/lib/media/client-upload";
+import { UPLOAD_WORDS, type Codec, type UploadDeps } from "@/lib/media/client-upload";
 import type { MediaView } from "@/lib/media/store";
 import type { BrandAsset, CreativePreview } from "@/lib/types";
 
@@ -18,6 +19,80 @@ const TABS = [
   { id: "made", label: "Made by AdBrain" },
 ] as const;
 type Tab = (typeof TABS)[number]["id"];
+
+const UNDO_MS = 6_000;
+
+/** #778 slice 3c: one ⋯ menu (Rename · Download · Delete) on the owner's own photo (Designer, #1973 review 4). */
+function OwnPhotoControls({ asset, request, onRenamed, onDelete }: {
+  asset: MediaView;
+  request: typeof fetch;
+  onRenamed: (asset: MediaView) => void;
+  onDelete: (asset: MediaView) => void;
+}) {
+  const label = asset.name || "Photo";
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(asset.name ?? "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState(false);
+
+  async function save() {
+    setSaving(true);
+    setError(null);
+    try {
+      const response = await request(`/api/media/${asset.id}`, {
+        method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: name.trim() || null }), signal: AbortSignal.timeout(15_000),
+      });
+      const body = await response.json().catch(() => ({})) as { asset?: MediaView; error?: string };
+      if (!response.ok || !body.asset) throw new Error(body.error);
+      onRenamed(body.asset);
+      setEditing(false);
+    } catch (caught) {
+      setError(caught instanceof Error && caught.message ? caught.message : "Couldn't save the change. Try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (editing) {
+    return (
+      <form className="flex flex-col gap-2" onSubmit={(event) => { event.preventDefault(); void save(); }}>
+        <input aria-label="Name" value={name} maxLength={120} onChange={(event) => setName(event.target.value)} autoFocus
+          className="min-h-11 rounded-md border border-slate-300 px-3 text-sm" />
+        <div className="flex gap-2">
+          <button type="submit" disabled={saving} className="inline-flex min-h-11 items-center rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary-hover disabled:opacity-50">Save</button>
+          <button type="button" onClick={() => { setEditing(false); setName(asset.name ?? ""); setError(null); }} className="inline-flex min-h-11 items-center rounded-md px-3 text-sm text-slate-700 hover:bg-slate-100">Cancel</button>
+        </div>
+        {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
+      </form>
+    );
+  }
+  const url = asset.url;
+  return (
+    <div className="-mx-2 flex items-center">
+      <DropdownMenu>
+        <DropdownMenuTrigger aria-label={`More for ${label}`} disabled={downloading}
+          className="inline-flex size-11 items-center justify-center rounded-md text-slate-600 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-50">
+          <MoreHorizontal className="h-5 w-5" aria-hidden="true" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent>
+          <DropdownMenuItem onSelect={() => setEditing(true)}><Pencil className="h-4 w-4" aria-hidden="true" /> Rename</DropdownMenuItem>
+          {url && (
+            <DropdownMenuItem onSelect={async () => {
+              setError(null);
+              setDownloading(true);
+              try { await downloadImage(url, `adbrain-${slugify(asset.name ?? "photo", asset.id.slice(0, 6))}.jpg`); }
+              catch { setError("Download failed. Try again."); }
+              finally { setDownloading(false); }
+            }}><Download className="h-4 w-4" aria-hidden="true" /> Download</DropdownMenuItem>
+          )}
+          <DropdownMenuItem variant="danger" onSelect={() => onDelete(asset)}><Trash2 className="h-4 w-4" aria-hidden="true" /> Delete</DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
+    </div>
+  );
+}
 
 const ASSET_TYPE_LABEL: Record<string, string> = { logo: "Logo", product_photo: "Product photo", past_ad: "Past ad" };
 const PAGE = 24;
@@ -50,10 +125,70 @@ export function MediaLibrary({ business, media: initialMedia, creatives, brandAs
   const [rightsDone, setRightsDone] = useState(consented);
   const onAdded = useCallback((asset: MediaView) => setMedia((current) => [asset, ...current.filter((item) => item.id !== asset.id)]), []);
   const uploads = useMediaUploads({ businessId: business.id, onAdded, deps, codec });
+  const { request } = uploads;
+  const onRenamed = useCallback((asset: MediaView) => setMedia((current) => current.map((item) => item.id === asset.id ? asset : item)), []);
+
+  // #778 slice 3c: Delete hides the photo at once with "Deleted · Undo"; the delete is sent after UNDO_MS (the
+  // server removes the stored file, so there's nothing to restore later). Refused (in a running ad) → it comes back.
+  const [deleted, setDeleted] = useState<{ asset: MediaView; index: number } | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const restore = useCallback((asset: MediaView, index: number) => setMedia((current) => {
+    const next = current.filter((item) => item.id !== asset.id);
+    next.splice(Math.min(index, next.length), 0, asset);
+    return next;
+  }), []);
+  const pending = useRef<{ asset: MediaView; index: number } | null>(null);
+  const commit = useCallback(async (asset: MediaView, index: number) => {
+    if (pending.current?.asset.id === asset.id) pending.current = null;
+    setDeleted((current) => current?.asset.id === asset.id ? null : current);
+    try {
+      const response = await request(`/api/media/${asset.id}`, { method: "DELETE", signal: AbortSignal.timeout(30_000) });
+      if (response.ok) return;
+      const body = await response.json().catch(() => ({})) as { error?: string };
+      setDeleteError(response.status < 500 && body.error ? body.error : "Couldn't delete the photo. Try again.");
+    } catch {
+      setDeleteError("Couldn't delete the photo. Try again.");
+    }
+    restore(asset, index);
+  }, [request, restore]);
+  const onDelete = useCallback((asset: MediaView) => {
+    // A second delete sends the first one now.
+    if (timer.current) clearTimeout(timer.current);
+    if (deleted) void commit(deleted.asset, deleted.index);
+    const index = media.findIndex((item) => item.id === asset.id);
+    setDeleteError(null);
+    setMedia((current) => current.filter((item) => item.id !== asset.id));
+    setDeleted({ asset, index });
+    pending.current = { asset, index };
+    timer.current = setTimeout(() => { timer.current = null; void commit(asset, index); }, UNDO_MS);
+  }, [commit, deleted, media]);
+  const undo = () => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = null;
+    pending.current = null;
+    if (deleted) restore(deleted.asset, deleted.index);
+    setDeleted(null);
+  };
+  // Leaving the page or the library sends a pending delete now (keepalive outlives the page) instead of dropping it.
+  // `request` changes every render, so the effect reads it through a ref and runs once.
+  const requestRef = useRef(request);
+  useEffect(() => { requestRef.current = request; }, [request]);
+  useEffect(() => {
+    const flush = () => {
+      if (timer.current) clearTimeout(timer.current);
+      timer.current = null;
+      const item = pending.current;
+      pending.current = null;
+      if (item) void requestRef.current(`/api/media/${item.asset.id}`, { method: "DELETE", keepalive: true }).catch(() => undefined);
+    };
+    window.addEventListener("pagehide", flush);
+    return () => { window.removeEventListener("pagehide", flush); flush(); };
+  }, []);
   const addButton = (
     <button type="button" onClick={() => setSheetOpen(true)}
-      className="inline-flex min-h-11 items-center gap-2 rounded-md bg-blue-600 px-4 text-sm font-medium text-white hover:bg-blue-700">
-      <ImagePlus className="h-4 w-4" aria-hidden="true" /> Add photos & videos
+      className="inline-flex min-h-11 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary-hover">
+      <ImagePlus className="h-4 w-4" aria-hidden="true" /> Add photos
     </button>
   );
   const [shown, setShown] = useState(PAGE);
@@ -63,15 +198,17 @@ export function MediaLibrary({ business, media: initialMedia, creatives, brandAs
   const own = ownCount === 0 ? (
     <Card>
       <CardContent className="flex flex-col items-start gap-4 p-6 text-sm text-slate-600">
-        <p>No photos or videos yet. Add your own work: finished jobs, your shop, your team.</p>
+        <p>No photos yet. Add your own work: finished jobs, your shop, your team.</p>
         {addButton}
       </CardContent>
     </Card>
   ) : (
     <Grid>
       {media.map((m) => (
-        <AssetTile key={m.id} url={m.url} title={m.name || "Photo"} meta={m.fit?.message}
-          filename={`adbrain-${slugify(m.name ?? "photo", m.id.slice(0, 6))}.jpg`} />
+        <AssetTile key={m.id} url={m.url} title={m.name || "Photo"} meta={m.fit?.message} actions={false}
+          filename={`adbrain-${slugify(m.name ?? "photo", m.id.slice(0, 6))}.jpg`}>
+          <OwnPhotoControls key={m.name ?? ""} asset={m} request={request} onRenamed={onRenamed} onDelete={onDelete} />
+        </AssetTile>
       ))}
       {brandAssets.map((a) => (
         <AssetTile key={a.id} url={a.url} title={a.notes || ASSET_TYPE_LABEL[a.type] || "Asset"}
@@ -106,8 +243,25 @@ export function MediaLibrary({ business, media: initialMedia, creatives, brandAs
   return (
     <div className="flex flex-col gap-6">
       {ownCount > 0 && <div>{addButton}</div>}
+      {/* Delete feedback lives in one bottom toast, so a scrolled owner sees why a photo came back (Designer, #2008). */}
+      {(deleted || deleteError) && (
+        <div className="fixed inset-x-4 bottom-4 z-50 mx-auto flex max-w-md flex-col gap-2">
+          {deleteError && (
+            <p role="alert" className="flex items-center justify-between gap-2 rounded-lg bg-red-700 py-1 pl-4 pr-1 text-sm text-white shadow-lg">
+              <span className="min-w-0">{deleteError}</span>
+              <button type="button" onClick={() => setDeleteError(null)} className="inline-flex min-h-11 shrink-0 items-center rounded-md px-3 font-medium hover:bg-white/10">OK</button>
+            </p>
+          )}
+          {deleted && (
+            <p role="status" className="flex items-center justify-between gap-2 rounded-lg bg-slate-900 py-1 pl-4 pr-1 text-sm text-white shadow-lg">
+              <span className="min-w-0 truncate">Deleted ‘{deleted.asset.name || "Photo"}’</span>
+              <button type="button" onClick={undo} className="inline-flex min-h-11 shrink-0 items-center rounded-md px-3 font-medium text-blue-200 hover:bg-white/10">Undo</button>
+            </p>
+          )}
+        </div>
+      )}
       {uploads.progress && !sheetOpen && (
-        <p role="status" className="text-sm text-slate-700">{uploads.progress} <span className="text-slate-500">You can keep going; uploads finish in the background.</span></p>
+        <p role="status" className="text-sm text-slate-700">{uploads.progress} <span className="text-slate-500">{UPLOAD_WORDS.keepOpen}</span></p>
       )}
       <MediaUploadSheet open={sheetOpen} onOpenChange={setSheetOpen} uploads={uploads} businessId={business.id} vertical={business.vertical}
         consented={rightsDone} onConsented={() => setRightsDone(true)} />
@@ -115,7 +269,7 @@ export function MediaLibrary({ business, media: initialMedia, creatives, brandAs
         {TABS.map((t) => (
           <button key={t.id} type="button" role="tab" id={`media-tab-${t.id}`} aria-selected={tab === t.id} aria-controls="media-panel"
             onClick={() => setTab(t.id)}
-            className={`min-h-11 shrink-0 border-b-2 px-3 text-sm font-medium ${tab === t.id ? "border-blue-600 text-blue-700" : "border-transparent text-slate-600 hover:text-slate-900"}`}>
+            className={`min-h-11 shrink-0 border-b-2 px-3 text-sm font-medium ${tab === t.id ? "border-primary text-primary" : "border-transparent text-slate-600 hover:text-slate-900"}`}>
             {t.label}
           </button>
         ))}

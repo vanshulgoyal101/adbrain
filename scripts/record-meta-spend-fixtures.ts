@@ -2,7 +2,7 @@
  * Records real Graph lifetime-spend reads for the test:core cost evidence
  * fixture (#216). Read-only: no Meta writes.
  *
- *   npx tsx --env-file=.env.local scripts/record-meta-spend-fixtures.ts <undelivered-campaign-id> <spent-campaign-id>
+ *   npx tsx --import ./scripts/trusted-server-cli.mjs --env-file=.env.local scripts/record-meta-spend-fixtures.ts <undelivered-campaign-id> <spent-campaign-id>
  *
  * Uses META_SYSTEM_USER_TOKEN / META_AD_ACCOUNT_ID / META_PAGE_ID; tokens are stripped.
  */

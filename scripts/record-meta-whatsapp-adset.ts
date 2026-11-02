@@ -3,7 +3,7 @@
  * temporary empty PAUSED Engagement campaign that is deleted afterwards. Phone numbers
  * come from the business's WhatsApp Business Accounts and are redacted in the tape.
  *
- *   npx tsx --env-file=<.env.local> scripts/record-meta-whatsapp-adset.ts <businessId>
+ *   npx tsx --import ./scripts/trusted-server-cli.mjs --env-file=<.env.local> scripts/record-meta-whatsapp-adset.ts <businessId>
  */
 import "./lib/meta-write-gate";
 import { writeFileSync } from "node:fs";

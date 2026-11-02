@@ -7,7 +7,7 @@
  *
  *   AD_DESIGN_OVERLAY=true IMAGE_PROVIDER=openrouter OPENROUTER_IMAGE_MODEL=openai/gpt-image-2.5-flare \
  *   CREATIVE_PROVIDER_ORDER=openrouter OPENROUTER_MODEL=anthropic/claude-haiku-5.5 \
- *     npx tsx --env-file=.env.local scripts/make-idea-ads.ts [slug ...]
+ *     npx tsx --import ./scripts/trusted-server-cli.mjs --env-file=.env.local scripts/make-idea-ads.ts [slug ...]
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";

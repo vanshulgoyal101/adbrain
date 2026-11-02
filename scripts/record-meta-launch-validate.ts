@@ -15,7 +15,7 @@
  * #2598: `--website` records a website-visits launch (traffic campaign, WEBSITE ad set, link ad with UTM tags)
  * into launch-validate-website.json, plus validate_only creatives for the Shop now and Sign up buttons.
  *
- *   npx tsx --env-file=<.env.local> scripts/record-meta-launch-validate.ts [--no-facebook-reels | --website]
+ *   npx tsx --import ./scripts/trusted-server-cli.mjs --env-file=<.env.local> scripts/record-meta-launch-validate.ts [--no-facebook-reels | --website]
  */
 import "./lib/meta-write-gate";
 import { writeFileSync } from "node:fs";

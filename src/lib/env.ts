@@ -1,3 +1,5 @@
+import "server-only";
+
 import { z } from "zod";
 
 /** Split a comma-separated env value into a trimmed, non-empty list. */

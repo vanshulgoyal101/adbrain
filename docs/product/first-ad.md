@@ -14,23 +14,21 @@ you before it's due."
 Do this on your phone, signed in to Facebook as yourself (the owner), a day before
 if you can. Meta's own screens; nothing here spends money.
 
-1. **Send AdBrain your Facebook profile link** on WhatsApp (Facebook › your profile ›
-   ⋯ › Copy profile link). While Facebook is still reviewing AdBrain, we add you as a
-   tester of the adBrain app, and you can only connect after that.
-2. **Accept the invite:** open developers.facebook.com/requests and accept adBrain.
-   Facebook may ask you to register as a developer first: it's free and needs a code
-   sent to your phone.
-3. **A business portfolio:** open business.facebook.com. If it asks you to create a
+Facebook is still reviewing AdBrain (Meta App Review, #156). Until Meta approves it, a
+new Facebook account can't connect; you can still make, approve and download ads.
+Getting the steps below done now means Go live is quick once Meta approves.
+
+1. **A business portfolio:** open business.facebook.com. If it asks you to create a
    business portfolio, use your business's name, your own name and your business
    email. Already have one? Use it. Never use someone else's portfolio.
-4. **Your Page in it:** Settings › Accounts › Pages › Add › Add a Page, and choose
+2. **Your Page in it:** Settings › Accounts › Pages › Add › Add a Page, and choose
    your business's Facebook Page. Your Page should have a WhatsApp button with the
    number customers should message.
-5. **An ad account in rupees:** Settings › Accounts › Ad accounts › Add › Create a
+3. **An ad account in rupees:** Settings › Accounts › Ad accounts › Add › Create a
    new ad account. Currency **Indian Rupee (INR)** and time zone **Asia/Kolkata**:
    Meta can't change these later. Choose "My business" when it asks who it's for.
    Already have an ad account in rupees? Add it here instead.
-6. **A way to pay:** in that ad account, Payment settings › Add payment method: a
+4. **A way to pay:** in that ad account, Payment settings › Add payment method: a
    card, or UPI or net banking with money added first (at least what your run
    costs; AdBrain shows it, for example ₹708).
 
@@ -133,10 +131,9 @@ ads were made from older details or in Studio, Home takes you back to Your ads i
   - "Stops at ₹708": the most this run can ever cost.
   - "Your Page, your ad account, your card. AdBrain never holds your ad money."
 - **Tap:** while Facebook is still reviewing AdBrain, the Facebook Page row says
-  "Facebook is still reviewing AdBrain, so only people we've added can connect. Tap
-  Connect; if Facebook says the app isn't available, come back here and we\'ll add you."
-  and "Already invited? Accept … in your invites first." (… is adBrain) If you have our invite, tap
-  "Open my invites" and accept adBrain. Then tap "Connect Facebook Page". A Meta window opens: tap "Connect
+  "Facebook is still reviewing AdBrain. You can make, approve and download ads now.
+  Connecting a new Facebook account must wait for Meta to approve access." Once Meta
+  has approved AdBrain, tap "Connect Facebook Page". A Meta window opens: tap "Connect
   Business", sign in to Facebook, choose your Page and ad account, tap "Use
   selected business", then "Continue to review". The row now says "Connected"
   and the button becomes "Go live · ₹300 a day". Tap it.
@@ -148,11 +145,11 @@ ads were made from older details or in Studio, Home takes you back to Your ads i
 - **If it fails:** nothing is spent when something fails. What the screen says:
   - Meta connect: "Meta has not finished yet. Complete the Meta window, then check
     again. Your draft is saved." Finish in the Meta window, then tap "Check again".
-    "Didn't connect? We've asked our team to add you and will WhatsApp you within a
-    working day. Accept our invite, then try again.": Facebook let you in only once
-    we add you (#2538); AdBrain has already told the team. When our invite arrives, tap
-    "Open my invites", accept, then "Try again". "…your request didn't reach us": check
-    your connection and tap "Try again".
+    After a try that didn't connect: "Request received. Sending a request does not
+    switch on Facebook access; Meta approval is still pending." AdBrain recorded that
+    you're waiting (#2538); it isn't a connection, and there is no date yet. Tap "Try
+    again" once Meta has approved AdBrain. "Your request did not send. Check your
+    connection and try again.": check your connection and tap "Try again".
   - No ad account or Page shared: "Meta shared no ad account with AdBrain…" (or
     "no Facebook Page"). Tap "Reconnect Meta" and tick the ad account and Page in
     Meta's window. No ad account yet? Create one in rupees in the business portfolio.

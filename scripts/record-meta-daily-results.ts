@@ -6,7 +6,7 @@
  * campaign, ad set, ad, creative) become stable fake numbers, a WhatsApp number keeps only its last 4
  * digits, and paging cursors are dropped.
  *
- *   npx tsx --env-file=<.env.local> scripts/record-meta-daily-results.ts <campaignId> <YYYY-MM-DD>
+ *   npx tsx --import ./scripts/trusted-server-cli.mjs --env-file=<.env.local> scripts/record-meta-daily-results.ts <campaignId> <YYYY-MM-DD>
  */
 import "./lib/meta-write-gate";
 import { writeFileSync } from "node:fs";

@@ -37,7 +37,7 @@ const OTHER_WRITERS: Record<string, string> = {
 };
 
 const READS = new Set([
-  "readAdVideo",
+  "readAdVideo", "findAdVideoByName",
   "getPageAccessToken", "getPageInstagramId", "getWhatsAppNumber", "setupReads", "whatsappNumbers", "listLeadForms", "readActiveLeadForm",
   "listLeadFormsPage", "listLeadsForForm", "listLeadsForFormPage", "searchGeoLocations", "serviceAreaExclusionsFor",
   "resolveGeoTargeting", "resolveAudienceInterests", "listCampaigns", "listCampaignsPage", "listGoneCampaigns", "readBoundCampaign",
