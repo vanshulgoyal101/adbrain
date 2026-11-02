@@ -3,6 +3,8 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Campaigns } from "@/components/campaigns";
 import { WhenTheyTap, whenTheyTapLine } from "@/components/when-they-tap";
+import { setupTranslator } from "@/i18n/setup-words";
+import hi from "../messages/hi.json";
 import type { DraftDTO, DraftInput, ReviewDTO } from "@/lib/campaign/connect-contracts";
 import type { Business, Creative } from "@/lib/types";
 
@@ -166,6 +168,16 @@ describe("When they tap (#840)", () => {
   it("says it in one plain line for each kind of opening", () => {
     expect(whenTheyTapLine({ source: "edited", language: "en", greeting: "Hi", autofill: "", iceBreakers: ["Price?", "Visit?"] })).toBe("Customers see your welcome and 2 questions to tap: 'Price?', 'Visit?'.");
     expect(whenTheyTapLine({ source: "saved", language: "en", greeting: "Hi", autofill: "Tell me more" })).toBe("Customers see your welcome and 'Tell me more' ready to send.");
+    expect(whenTheyTapLine({ source: "saved", language: "en", greeting: "Hi", autofill: "Hi {there}", callButton: true })).toBe("Customers see your welcome, a Call now button, and 'Hi {there}' ready to send.");
+    expect(whenTheyTapLine({ source: "saved", language: "en", greeting: "Hi", autofill: "", iceBreakers: ["Price?"] })).toBe("Customers see your welcome and a question to tap: 'Price?'.");
+    expect(whenTheyTapLine({ source: "saved", language: "en", greeting: "Hi", autofill: "", callButton: true })).toBe("Customers see your welcome and a Call now button.");
+    expect(whenTheyTapLine({ source: "saved", language: "en", greeting: "Hi", autofill: "" })).toBe("Customers see your welcome.");
+  });
+
+  it("speaks the owner's language on step 3 (#2749)", () => {
+    const t = setupTranslator({ locale: "hi", messages: hi.setup });
+    expect(whenTheyTapLine({ source: "saved", language: "hi", greeting: "नमस्ते", autofill: "", iceBreakers: ["दाम?", "पता?"] }, t)).toBe("ग्राहकों को आपका स्वागत मैसेज और टैप करने के लिए 2 सवाल दिखेंगे: 'दाम?', 'पता?'।");
+    expect(whenTheyTapLine({ source: "saved", language: "hi", greeting: "नमस्ते", autofill: "जानकारी दें" }, t)).toBe("ग्राहकों को आपका स्वागत मैसेज और भेजने के लिए तैयार 'जानकारी दें' दिखेगा।");
   });
 
   it("has no note when the message follows the ads", () => {
