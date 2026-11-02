@@ -182,7 +182,10 @@ Vercel Hobby allows 100 production deploys a day, and every push to `main` is on
   points the bot branch `deploy-train` at that commit and merges a `deploy-train → main` PR
   with a merge commit. A push (or the schedule) only runs a `kick` job that dispatches the
   `promote` job on `main` unless one is already waiting, so no train run is ever cancelled
-  and a `next` commit shows a red ✗ only for a real failure.
+  and a `next` commit shows a red ✗ only for a real failure. Each successful promotion kicks
+  again, so a commit it left behind gets the next train. Kicks take turns through the
+  `deploy-train-kick-lock` branch (a lock, not a queue); a lock left by a killed kick clears
+  itself when no other kick is running.
   That's at most 48 deploys a day; each train gets the production guard's smoke.
 - **Vercel's limit (measured Oct 24, #461):** Hobby's '100 deployments per day'
   refusal (402 `api-deployments-free-per-day`) hit an **API/CLI redeploy**, while
