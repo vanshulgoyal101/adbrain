@@ -868,6 +868,35 @@
       "reviewWebsite": "People will go to",
       "needsLink": "Needs a working link",
       "expectWebsite": "What to expect: AdBrain hasn’t run enough website campaigns yet to quote a cost per visit. Meta reviews new ads first, usually within 24 hours, and nothing spends until you go live."
+    },
+    "editAd": {
+      "title": "Edit ad words",
+      "ad": "Ad",
+      "headline": "Headline",
+      "message": "Ad text",
+      "description": "Description",
+      "backToReview": "Your ad goes back to Meta review (usually 5–10 minutes) and stops showing until it's approved.",
+      "unchanged": "The picture, audience and budget don't change.",
+      "noChange": "Change the headline, text or description first.",
+      "failed": "Couldn't change the ad. Nothing changed.",
+      "offline": "No connection. Nothing changed; try again.",
+      "cancel": "Cancel",
+      "save": "Save and send to review",
+      "saved": "New words saved. {backToReview}"
+    },
+    "audienceSwitch": {
+      "title": "New audience ready",
+      "running": "Your current audience keeps running until you turn the new one on.",
+      "paused": "It takes the current audience's place when you use it; nothing starts running. Use or cancel it before you resume the campaign.",
+      "cancel": "Cancel new audience",
+      "turnOn": "Turn it on",
+      "use": "Use the new audience",
+      "lastTry": "Last try: {error}",
+      "failed": "Couldn't reach Meta. Nothing changed; try again.",
+      "offline": "No connection. Nothing changed; try again.",
+      "switchedRunning": "New audience is on and the old one is stopped. Meta reviews the ads again and learning restarts.",
+      "switchedPaused": "New audience is in place. The campaign stays paused until you resume it.",
+      "cancelled": "New audience cancelled. The current one keeps running."
     }
   },
   "errors": {
