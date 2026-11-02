@@ -67,6 +67,8 @@ never checked.
   `/login`, then turn on Supabase CAPTCHA.
 - **Roll back:** turn off Supabase CAPTCHA first, then clear the site key.
   Supabase on without the site key blocks every email and password sign-in.
+  The key is built in: while Supabase CAPTCHA is on, never promote or roll back
+  to a deployment built before the key was set; turn Supabase CAPTCHA off first.
 
 ## Text Models
 
