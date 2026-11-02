@@ -25,7 +25,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
-export const NAMES = { dev: "Dev", dev2: "Dev 2", dev3: "Dev 3", dev4: "Dev 4", dev5: "Dev 5", dev6: "Dev 6", dev7: "Dev 7", dev8: "Dev 8", qa: "QA", qa2: "QA 2", reviewer: "Reviewer", devops: "DevOps", cpo: "CPO", analyst: "Analyst", designer: "Designer", docs: "Docs", speed: "Speed", janitor: "Janitor", scout: "Scout", cto: "CTO", ceo: "CEO" };
+export const NAMES = { dev: "Dev", dev2: "Dev 2", dev3: "Dev 3", dev4: "Dev 4", dev5: "Dev 5", dev6: "Dev 6", dev7: "Dev 7", dev8: "Dev 8", qa: "QA", qa2: "QA 2", reviewer: "Reviewer", devops: "DevOps", devops2: "DevOps 2", devops3: "DevOps 3", cpo: "CPO", analyst: "Analyst", designer: "Designer", docs: "Docs", speed: "Speed", janitor: "Janitor", scout: "Scout", cto: "CTO", ceo: "CEO" };
 // Items parked on someone outside the team never count as waiting on you.
 const PARKED = new Set(["waiting-owner", "blocked", "parked"]);
 
@@ -33,8 +33,8 @@ const PARKED = new Set(["waiting-owner", "blocked", "parked"]);
 export function matchers(role) {
   const build = (r) => {
     const name = NAMES[r];
-    // "Dev" must not match "Dev 2" … "Dev 8", nor "QA" match "QA 2"; "DevOps" never matches \bDev\b.
-    const notOther = r === "dev" ? "(?! ?[2-8])" : r === "qa" ? "(?! ?2)" : "";
+    // "Dev" must not match "Dev 2" … "Dev 8", "QA" "QA 2", nor "DevOps" "DevOps 2"/"DevOps 3"; "DevOps" never matches \bDev\b.
+    const notOther = r === "dev" ? "(?! ?[2-8])" : r === "qa" ? "(?! ?2)" : r === "devops" ? "(?! ?[23])" : "";
     return {
       writtenBy: new RegExp(`^[\\s*#>_\`-]*${name}\\b${notOther}`),
       addressedTo: new RegExp(`(?:^|[\\s>(*_-])${name}${notOther}\\*{0,2}\\s*[:,]|→\\s*\\**${name}\\b${notOther}|@${r}\\b`, "m"),
@@ -249,7 +249,7 @@ export function dueWake(now = Date.now()) {
 }
 
 /** Ready-pool lane per role: briefed, unowned issues labelled `ready` + `lane:<lane>` (#573). */
-export const LANES = { dev: "dev", dev2: "dev", dev3: "dev", dev4: "dev", dev5: "dev", dev6: "dev", dev7: "dev", dev8: "dev", qa: "qa", qa2: "qa", devops: "devops", reviewer: "review", designer: "design", cpo: "product", analyst: "research", docs: "docs", speed: "devops", janitor: "devops", scout: "product" };
+export const LANES = { dev: "dev", dev2: "dev", dev3: "dev", dev4: "dev", dev5: "dev", dev6: "dev", dev7: "dev", dev8: "dev", qa: "qa", qa2: "qa", devops: "devops", devops2: "devops", devops3: "devops", reviewer: "review", designer: "design", cpo: "product", analyst: "research", docs: "docs", speed: "devops", janitor: "devops", scout: "product" };
 
 /** #2473 (E8): roles whose lane runs dry also get the Dev lane's `core` items, after their own. */
 export const BORROWS_DEV = new Set(["qa", "qa2", "reviewer", "analyst", "cpo", "docs"]);
@@ -275,7 +275,7 @@ export function readyPool(issues, role, max = 3) {
   return [...own, ...borrowed].slice(0, max);
 }
 
-export const WORKERS = ["dev", "dev2", "dev3", "dev4", "dev5", "dev6", "dev7", "dev8", "qa", "qa2", "reviewer", "devops", "cpo", "analyst", "designer", "docs", "speed", "janitor", "scout"];
+export const WORKERS = ["dev", "dev2", "dev3", "dev4", "dev5", "dev6", "dev7", "dev8", "qa", "qa2", "reviewer", "devops", "devops2", "devops3", "cpo", "analyst", "designer", "docs", "speed", "janitor", "scout"];
 export const MIN_QUEUE = 3;
 
 /** Workers with fewer than MIN_QUEUE actionable open items, owned PRs included (not parked or waiting on the CEO). The CTO refills these. */
@@ -748,7 +748,7 @@ async function findWork() {
       found.push(`#${number} new comment: "${brief(body)}" ${comment.html_url}`);
     }
   }
-  if (role === "cto" || role === "devops") {
+  if (role === "cto" || role === "devops" || role === "devops2") {
     const runs = (await api(`repos/${repo}/actions/runs?status=completed&created=${encodeURIComponent(`>=${since}`)}&per_page=100`)).workflow_runs ?? [];
     for (const run of runs) {
       if (run.conclusion === "failure" && run.event !== "pull_request" && !SHARED_BRANCHES.includes(run.head_branch)) {
