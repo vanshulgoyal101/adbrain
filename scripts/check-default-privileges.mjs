@@ -74,15 +74,17 @@ export async function verifyDefaultPrivileges(db, database, check, migration, be
         for (const row of await privileges(db, ...args)) {
           assert.equal(row.allowed, row.role === "service_role", `${row.role} ${row.kind} ${row.privilege}`);
         }
-        assert.equal((await db.query(`select has_function_privilege('anon',
-          'default_privileges_other.helper()', 'EXECUTE') as allowed`)).rows[0].allowed, false,
-        "the global PUBLIC default cannot grant anon execution in another schema");
+        for (const role of ["anon", "authenticated", "service_role"]) {
+          assert.equal((await db.query(`select has_function_privilege($1,
+            'default_privileges_other.helper()', 'EXECUTE') as allowed`, [role])).rows[0].allowed, false,
+          `the global PUBLIC default no longer grants ${role} execution in another schema`);
+        }
 
         await db.query(`
           grant select on public.default_privileges_new_table to authenticated;
           grant usage on sequence public.default_privileges_new_sequence to authenticated;
           grant execute on function public.default_privileges_new_function() to authenticated;
-          grant execute on function default_privileges_other.helper() to authenticated;
+          grant execute on function default_privileges_other.helper() to authenticated, service_role;
         `);
         for (const row of await privileges(db, ...args)) {
           const explicit = row.role === "authenticated" && (
@@ -92,9 +94,11 @@ export async function verifyDefaultPrivileges(db, database, check, migration, be
           );
           assert.equal(row.allowed, row.role === "service_role" || explicit, `${row.role} ${row.kind} ${row.privilege}`);
         }
-        assert.equal((await db.query(`select has_function_privilege('authenticated',
-          'default_privileges_other.helper()', 'EXECUTE') as allowed`)).rows[0].allowed, true,
-        "an explicit grant restores access to a helper in another schema");
+        for (const role of ["authenticated", "service_role"]) {
+          assert.equal((await db.query(`select has_function_privilege($1,
+            'default_privileges_other.helper()', 'EXECUTE') as allowed`, [role])).rows[0].allowed, true,
+          `an explicit grant restores ${role} access to a helper in another schema`);
+        }
 
         await db.query(`
           set local role supabase_admin;
