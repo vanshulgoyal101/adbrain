@@ -10,6 +10,7 @@ name: Create smoke
 # check passed while customers' 3-ad batches saved 1 of 3 (QA 2, #679). Once a day keeps the free tiers for customers.
 # #2545: GitHub drops crons, so a scheduled picture run after 03:37Z runs that day's `create` if no run has yet
 # (scripts/smoke-mode.mjs); a late 03:37Z run after that runs `picture`. Still at most one scheduled create a day.
+# #2593: when GitHub drops every slot, /api/cron/dispatch-workflows dispatches mode `auto`, chosen like a schedule.
 on:
   schedule:
     - cron: "17 */4 * * *"
@@ -18,9 +19,9 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "picture: free, $0. prepare: one audience plan on free text, $0. create: 3 ads (free text)."
+        description: "picture: free, $0. prepare: one audience plan on free text, $0. create: 3 ads (free text). auto: as the schedule would (#2593)."
         type: choice
-        options: [picture, prepare, create]
+        options: [picture, prepare, create, auto]
         default: picture
 permissions:
   contents: read
@@ -72,7 +73,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          mode=$(node scripts/smoke-mode.mjs) || mode="$SCHEDULED_MODE"
+          # If the chooser fails, never a create: it can't tell whether today's already ran.
+          mode=$(node scripts/smoke-mode.mjs) || { [ "$SCHEDULED_MODE" = prepare ] && mode=prepare || mode=picture; }
           case "$mode" in picture|prepare|create) ;; *) mode=invalid ;; esac
           echo "REQUESTED_MODE=$mode" >> "$GITHUB_ENV"
       # No retry: a second attempt only spends more of the free tiers. Each mode deletes what it replaced or made after a PASS.
