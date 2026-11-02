@@ -1,4 +1,5 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
@@ -221,6 +222,81 @@ describe("nightly export encryption (#1762)", () => {
     expect(encryptExport(folder, run as never)).toBe(false);
     expect(existsSync(folder)).toBe(false);
     expect(existsSync(`${folder}.tar.gz.cms`)).toBe(false);
+  });
+  it("keeps a failed restore encrypted without naming it as a completed backup", () => {
+    const folder = join(dir, "2026-11-02T02-32Z");
+    const plaintext = "private backup fixture";
+    mkdirSync(folder);
+    writeFileSync(join(folder, "leads.json"), plaintext);
+
+    expect(encryptExport(folder, spawnSync, false)).toBe(true);
+    expect(existsSync(folder)).toBe(false);
+    expect(existsSync(`${folder}.tar.gz`)).toBe(false);
+    expect(existsSync(`${folder}.tar.gz.cms`)).toBe(false);
+    const sealed = `${folder}.unverified.tar.gz.cms`;
+    expect(statSync(sealed).mode & 0o777).toBe(0o600);
+    expect(readFileSync(sealed).includes(Buffer.from(plaintext))).toBe(false);
+  });
+  it("retries failed restore drills, keeps their archives bounded, and stops after a verified backup", async () => {
+    const { nightlyExport } = await import("../scripts/team-supervisor.mjs");
+    const backupDir = join(dir, "retry-backups");
+    mkdirSync(backupDir);
+    const verified = "2026-11-01T10-35Z.tar.gz.cms";
+    writeFileSync(join(backupDir, verified), "previous verified backup");
+    for (let day = 24; day <= 30; day++) {
+      writeFileSync(join(backupDir, `2026-10-${day}T00-00Z.unverified.tar.gz.cms`), "older unverified backup");
+    }
+
+    let attempts = 0;
+    let cleanups = 0;
+    let notifications = 0;
+    const runScript = (script: string, args: string[]) => {
+      if (script === "scripts/db-export.mjs" && args[0] === "export") {
+        attempts++;
+        mkdirSync(args[1]);
+        writeFileSync(join(args[1], "data.json"), "private backup fixture");
+        return { status: 0, stdout: "exported", stderr: "" };
+      }
+      if (script === "scripts/db-export.mjs" && args[0] === "restore") {
+        return { status: attempts < 3 ? 1 : 0, stdout: "restore drill", stderr: "" };
+      }
+      if (script === "scripts/prune-smoke-storage.mjs") {
+        cleanups++;
+        return { status: 0, stdout: "cleanup", stderr: "" };
+      }
+      throw new Error(`Unexpected script: ${script}`);
+    };
+    const options = {
+      backupDir,
+      runScript,
+      logLine: () => {},
+      notifyFailure: () => {
+        notifications++;
+        expect(readdirSync(backupDir).filter((name) => name.endsWith(".unverified.tar.gz.cms"))).toHaveLength(7);
+      },
+    };
+
+    nightlyExport(false, { ...options, now: new Date("2026-11-02T02:32:00Z") });
+    expect(existsSync(join(backupDir, "2026-11-02T02-32Z.unverified.tar.gz.cms"))).toBe(true);
+    expect(existsSync(join(backupDir, "2026-11-02T02-32Z.tar.gz.cms"))).toBe(false);
+    expect(existsSync(join(backupDir, verified))).toBe(true);
+    expect(readdirSync(backupDir).filter((name) => name.endsWith(".unverified.tar.gz.cms"))).toHaveLength(7);
+    expect(existsSync(join(backupDir, "2026-10-24T00-00Z.unverified.tar.gz.cms"))).toBe(false);
+    expect(cleanups).toBe(0);
+    expect(notifications).toBe(1);
+
+    nightlyExport(false, { ...options, now: new Date("2026-11-02T02:42:00Z") });
+    expect(existsSync(join(backupDir, "2026-11-02T02-42Z.unverified.tar.gz.cms"))).toBe(true);
+    expect(cleanups).toBe(0);
+    expect(notifications).toBe(2);
+
+    nightlyExport(false, { ...options, now: new Date("2026-11-02T02:52:00Z") });
+    expect(existsSync(join(backupDir, "2026-11-02T02-52Z.tar.gz.cms"))).toBe(true);
+    expect(cleanups).toBe(1);
+    nightlyExport(false, { ...options, now: new Date("2026-11-02T03:02:00Z") });
+    expect(attempts).toBe(3);
+    expect(cleanups).toBe(1);
+    expect(notifications).toBe(2);
   });
 });
 
