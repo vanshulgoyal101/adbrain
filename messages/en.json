@@ -906,5 +906,175 @@
       "imported": "{count, plural, one {# new enquiry} other {# new enquiries}} from Meta.",
       "someUnchecked": "Some enquiries on Meta couldn't be checked. The ones below are saved; tap Check now to try again."
     }
+  },
+  "enquiries": {
+    "title": "Enquiries",
+    "formTitle": "Form enquiries",
+    "description": "People who responded to your ads.",
+    "noBusiness": "Set up your business and launch a campaign first. Enquiries land here.",
+    "setUpBusiness": "Set up your business",
+    "formFold": "Form enquiries (0)",
+    "status": {
+      "new": "New",
+      "contacted": "Contacted",
+      "qualified": "Qualified",
+      "booked": "Booked",
+      "customer": "Customer",
+      "closed": "Closed"
+    },
+    "view": {
+      "label": "Show",
+      "waiting": "Waiting",
+      "all": "All",
+      "customers": "Customers"
+    },
+    "age": {
+      "now": "just now",
+      "m": "{n}m ago",
+      "h": "{n}h ago",
+      "d": "{n}d ago"
+    },
+    "state": {
+      "test": "Test from Meta",
+      "notInterested": "Not interested",
+      "contacted": "Contacted",
+      "contactedIn": "Contacted in {time}",
+      "contactedAfter": "{days, plural, one {Contacted after {days} day} other {Contacted after {days} days}}"
+    },
+    "arrival": {
+      "title": "No enquiries yet",
+      "ready": "Enquiries from your ads show up here: form enquiries on their own, WhatsApp chats when you add them. Reply fast: people often pick the first business that answers.",
+      "notReady": "Connect your Facebook Page to run ads. Enquiries from them show up here.",
+      "connect": "Connect Facebook Page",
+      "alerts": "Get a WhatsApp alert for form enquiries",
+      "campaigns": "See your campaigns"
+    },
+    "sync": {
+      "notConnected": "Meta isn’t connected, so new enquiries can’t come in yet. <link>Connect your account in Settings</link>.",
+      "checking": "Checking Meta for new enquiries…",
+      "updated": "Updated {age}",
+      "checkNow": "Check now",
+      "keepChecking": "Keep checking",
+      "waitLine": "Meta is limiting how often we can check right now. New form enquiries may show up to {age} late; WhatsApp chats still reach your phone as usual.",
+      "checkLater": "Meta asked us to wait. We'll check again at {time}.",
+      "soFar": "{count, plural, one {{count} new enquiry so far} other {{count} new enquiries so far}}",
+      "unread": "Couldn't read: {forms}. {soFar}.",
+      "noAnswer": "Some forms didn't answer. {soFar}; Keep checking to try again.",
+      "stillChecking": "Still checking Meta. {soFar}; Keep checking to finish."
+    },
+    "summary": {
+      "nobody": "Nobody is waiting.",
+      "waiting": "{count, plural, one {{count} person is waiting for you.} other {{count} people are waiting for you.}}",
+      "replyTime": "You usually contact people within {time}."
+    },
+    "list": {
+      "retry": "Retry list",
+      "search": "Search enquiries",
+      "searchPlaceholder": "Search name, contact, city, or form",
+      "clearSearch": "Clear search",
+      "filter": "Filter",
+      "filterSet": "Filter, {count} set",
+      "contact": "Contact availability",
+      "allContacts": "All contacts",
+      "hasContact": "Has contact details",
+      "missingContact": "Missing contact details",
+      "workflow": "Workflow status",
+      "allStatuses": "All follow-up statuses",
+      "sort": "Sort enquiries",
+      "newest": "Newest first",
+      "oldest": "Oldest first",
+      "byName": "Name A–Z",
+      "loading": "Loading enquiries...",
+      "loadingLabel": "Loading enquiries",
+      "count": "{shown} of {total} enquiries",
+      "clearFilters": "Clear filters",
+      "loadMore": "Load more enquiries",
+      "table": "Customer enquiries",
+      "columns": {
+        "name": "Name",
+        "contact": "Contact",
+        "city": "City",
+        "form": "Form",
+        "when": "When",
+        "followUp": "Follow-up",
+        "received": "Received"
+      }
+    },
+    "empty": {
+      "seeAll": "See all enquiries",
+      "noCustomers": "No customers yet.",
+      "customersHint": "Tap Became a customer on an enquiry when they buy.",
+      "none": "No enquiries yet. When someone fills your form or messages you on WhatsApp from an ad, they'll show up here.",
+      "replyFast": "Reply fast: people often go with the first business that answers.",
+      "alertEach": "Get a WhatsApp alert for each enquiry",
+      "noMatch": "No matching enquiries"
+    },
+    "editor": {
+      "label": "Enquiry follow-up",
+      "heading": "Follow up: {name}",
+      "unsaved": "Unsaved changes",
+      "close": "Close follow-up",
+      "status": "Follow-up status",
+      "note": "Follow-up note",
+      "save": "Save follow-up",
+      "saved": "Follow-up saved."
+    },
+    "lead": {
+      "unnamed": "Unnamed enquiry",
+      "this": "this enquiry",
+      "thisCapital": "This enquiry",
+      "fallback": "enquiry",
+      "whatsappChat": "WhatsApp chat",
+      "whatsappAdded": "WhatsApp chat (added by you)",
+      "whatsapp": "WhatsApp them",
+      "call": "Call",
+      "email": "Email",
+      "replied": "Replied",
+      "repliedAfter": "Replied {time} after the enquiry",
+      "followUp": "Follow up {name}",
+      "followUpStatus": "Follow up {name}, status {status}",
+      "becameCustomer": "Became a customer",
+      "becameCustomerLabel": "{name} became a customer",
+      "more": "More",
+      "moreFor": "More for {name}",
+      "edit": "Edit",
+      "delete": "Delete enquiry",
+      "from": "Enquiry from {name}",
+      "opensWith": "Opens WhatsApp with:",
+      "answers": "Their answers"
+    },
+    "reply": {
+      "followUp": "Follow up",
+      "choose": "Choose a first reply",
+      "description": "Opens WhatsApp to {name} with this message. You can change it there before you send.",
+      "close": "Close replies"
+    },
+    "chats": {
+      "heading": "WhatsApp chats",
+      "from": "WhatsApp chats from {name}",
+      "started": "{count, plural, one {{chats} chat started} other {{chats} chats started}} from “{name}” on WhatsApp. The messages are in your WhatsApp Business app. Add the real enquiries here to see which ad brings customers.",
+      "added": "{count, plural, one {You added {logged} real enquiry} other {You added {logged} real enquiries}} from “{name}”.",
+      "none": "No chats started yet from “{name}”."
+    },
+    "log": {
+      "label": "Real enquiries",
+      "perReal": "Per real enquiry",
+      "hint": "Not every chat is a customer. Add each real enquiry from these WhatsApp chats.",
+      "name": "Name (optional)",
+      "phone": "Phone (optional)",
+      "note": "Note (optional)",
+      "save": "Save enquiry",
+      "cancel": "Cancel",
+      "add": "Add enquiry",
+      "addAn": "Add an enquiry",
+      "customer": "Got a customer? +1",
+      "customerLabel": "Got a customer? +1 (adds 1 customer from this ad)",
+      "removed": "Removed that customer.",
+      "added": "Added 1 customer.",
+      "undo": "Undo",
+      "saved": "Saved to Enquiries.",
+      "saveFailed": "That couldn't be saved. Try again.",
+      "enquiryFailed": "The enquiry could not be saved. Try again."
+    }
   }
 }
