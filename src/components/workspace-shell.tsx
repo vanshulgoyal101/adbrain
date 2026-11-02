@@ -88,6 +88,13 @@ export function WorkspaceShell({ children, email, ownerId, businessId, businessN
 
   const account = <div className={styles.account}><HelpOnWhatsApp className={styles.help} label={labels.help} lang={lang} /><div><span className={styles.avatar} aria-hidden="true">{(email || "A").slice(0, 1).toUpperCase()}</span><span title={email || undefined} lang={email ? undefined : lang}>{email || labels.yourAccount}</span></div><SignOutButton label={labels.signOut} failed={labels.signOutFailed} lang={lang} /><nav aria-label={labels.legal} lang={lang} className={styles.legal}>{LEGAL_LINKS.map(link => <Link key={link.href} href={link.href} prefetch={false}>{labels[link.key]}</Link>)}</nav></div>;
 
+  // #2747: showModal() focuses the first link (the logo), and WebKit draws the focus ring on a tap. Focus the
+  // drawer itself instead; Tab still reaches the logo first, Esc closes and focus returns to the menu button.
+  const openDrawer = () => {
+    drawer.current?.showModal();
+    drawer.current?.focus();
+  };
+
   return <SupportLinkProvider url={supportUrl}><div className={styles.shell}>
     <a className={styles.skip} href="#workspace-main" lang={lang}>{labels.skip}</a>
     <aside className={styles.sidebar} aria-label={labels.sidebar}>
@@ -98,14 +105,14 @@ export function WorkspaceShell({ children, email, ownerId, businessId, businessN
     </aside>
     <div className={styles.body}>
       <header className={styles.header}>
-        <button className={styles.menu} type="button" title={labels.openNav} aria-label={labels.openNav} lang={lang} aria-haspopup="dialog" onClick={() => drawer.current?.showModal()}><Menu size={21} aria-hidden="true" /></button>
+        <button className={styles.menu} type="button" title={labels.openNav} aria-label={labels.openNav} lang={lang} aria-haspopup="dialog" onClick={openDrawer}><Menu size={21} aria-hidden="true" /></button>
         {/* #847: phones only. On wider screens the sidebar holds Create ads and the H1 names the page. */}
         <div className={styles.breadcrumb}><strong lang={lang}>{section}</strong></div>
         {!pathname.startsWith("/create") && <Link className={styles.create} href="/create" aria-label={firstAd ? labels.continueFirstAd : labels.create} title={firstAd ? labels.continueFirstAd : labels.create} lang={lang}><Plus size={20} aria-hidden="true" /></Link>}
       </header>
       <main id="workspace-main" tabIndex={-1} className={styles.main}>{children}</main>
     </div>
-    <dialog ref={drawer} className={styles.drawer} aria-label={labels.menu} onClick={event => {
+    <dialog ref={drawer} tabIndex={-1} className={styles.drawer} aria-label={labels.menu} onClick={event => {
       if (event.target === event.currentTarget || (event.target instanceof Element && event.target.closest("a"))) drawer.current?.close();
     }}>
       <div className={styles.drawerBody}>
