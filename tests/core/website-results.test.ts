@@ -11,6 +11,7 @@ import { destinationFromAdSets } from "@/lib/campaign/outcomes";
 import { homeResults } from "@/lib/campaign/home-results";
 import { campaignWhatsAppSummary } from "@/lib/campaign/results-summary";
 import type { Campaign, CampaignResult } from "@/lib/types";
+import { cardFigures, cardResultCount } from "@/lib/campaign/card-figures";
 import hi from "../../messages/hi.json";
 
 // #2601 (#2595 slice E): a website campaign's result is a landing-page view, said as "visits", never "chats".
@@ -74,7 +75,7 @@ describe("core: website verdict says visits (#2601)", () => {
   });
 
   it("speaks Hindi for a Hindi owner", () => {
-    const words = { locale: "hi", messages: hi.verdict };
+    const words = { locale: "hi" as const, messages: hi.verdict };
     expect(verdict({ ...base, results: 0, spend: 400 }, words).sentence).toContain(hi.verdict.noVisits);
     expect(verdict({ ...base, results: 3, spend: 30 }, words).sentence).not.toMatch(/चैट|पूछताछ/);
   });
@@ -127,7 +128,18 @@ describe("core: website card, ledger, evidence and rerun (#2601)", () => {
   it("Run this again leaves a website copy's destination open until website launch ships", () => {
     const prefill = rerunPrefill({ campaign: { name: "Site", creative_ids: ["a"], daily_budget: 300, destination: "website" }, draft: null, approvedIds: ["a"], bestCreativeId: null });
     expect(prefill).toMatchObject({ source: "campaign", creativeIds: ["a"] });
-    expect(prefill.destination).toBeUndefined();
+    expect("error" in prefill ? "error" : prefill.destination).toBeUndefined();
+  });
+
+  it("the card shows website visits and cost per visit; chat and form figures are unchanged", () => {
+    const stored = { spend: 412.5, leads: 3, cpl: 40, conversations: 7, cost_per_conversation: 20, landing_page_views: 55 };
+    expect(cardResultCount("website", stored)).toBe(55);
+    expect(cardFigures("website", stored)).toEqual({ label: "figures.visits", value: "55", costLabel: "figures.costVisit", cost: "₹7.50" });
+    expect(cardFigures("website", { ...stored, landing_page_views: 0 })).toMatchObject({ value: "0", cost: "—" });
+    expect(cardFigures("whatsapp", stored)).toEqual({ label: "figures.chats", value: "7", costLabel: "figures.costChat", cost: "₹20" });
+    expect(cardFigures("instant_form", stored)).toEqual({ label: "figures.leads", value: "3", costLabel: "figures.costLead", cost: "₹40" });
+    expect(cardFigures("unknown", stored)).toEqual({ label: "figures.unavailable", value: "—", costLabel: "figures.costResult", cost: "—" });
+    expect([cardResultCount("whatsapp", stored), cardResultCount("instant_form", stored)]).toEqual([7, 3]);
   });
 
   it("reads a Meta WEBSITE ad set as a website campaign", () => {

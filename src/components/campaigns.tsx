@@ -137,6 +137,7 @@ import { useMounted } from "@/lib/use-mounted";
 import { refreshIfStale, staleCampaignIds } from "@/lib/campaign/results-freshness";
 import { GONE_LINES, OUTSIDE_LINES, budgetChangedInMeta, endTimeChangedInMeta, goneInMeta, madeOutsideAdBrain, pausedInMeta } from "@/lib/campaign/gone-in-meta";
 import { CampaignTestOptions } from "@/components/campaign-test-options";
+import { cardFigures, cardResultCount } from "@/lib/campaign/card-figures";
 import { formatDate, formatDay, formatMoney, formatMoneyExact, formatNumber, formatPerDay } from "@/lib/format";
 
 const subscribeNever = () => () => {};
@@ -2656,21 +2657,16 @@ function CardResults({ campaign, result: r, outcome, comparison, waiting, onRunA
   perAd: boolean; onWeakAd: (campaignId: string, shown: boolean) => void; words?: Words<"verdict">;
 }) {
   const [now] = useState(() => Date.now());
-  const enough = (outcome === "whatsapp" ? r.conversations ?? 0 : outcome === "website" ? r.landing_page_views ?? 0 : r.leads) >= BEST_AD_MIN_RESULTS;
+  const enough = cardResultCount(outcome, r) >= BEST_AD_MIN_RESULTS;
+  const shown = cardFigures(outcome, r);
   const [weakAd, clearWeakAd] = useWeakAd(campaign.id, perAd && campaign.status === "active" && Boolean(campaign.meta_campaign_id) && enough);
   const t = verdictTranslator(words);
   const figures = <>
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
       <Stat label={t("figures.impressions")} value={formatNumber(r.impressions)} />
       <Stat label={t("figures.clicks")} value={formatNumber(r.clicks)} />
-      <Stat label={t(outcome === "whatsapp" ? "figures.chats" : outcome === "instant_form" ? "figures.leads" : outcome === "website" ? "figures.visits" : "figures.unavailable")}
-        value={outcome === "whatsapp" ? (r.conversations != null ? formatNumber(r.conversations) : "—") : outcome === "instant_form" ? formatNumber(r.leads) : outcome === "website" ? formatNumber(r.landing_page_views ?? 0) : "—"} />
-      <Stat
-        label={t(outcome === "whatsapp" ? "figures.costChat" : outcome === "instant_form" ? "figures.costLead" : outcome === "website" ? "figures.costVisit" : "figures.costResult")}
-        value={outcome === "whatsapp" ? (r.conversations != null && r.cost_per_conversation != null ? formatMoney(r.cost_per_conversation) : "—")
-          : outcome === "instant_form" && r.cpl != null ? formatMoney(r.cpl)
-            : outcome === "website" && r.landing_page_views ? formatMoney(Number(r.spend) / r.landing_page_views) : "—"}
-      />
+      <Stat label={t(shown.label)} value={shown.value} />
+      <Stat label={t(shown.costLabel)} value={shown.cost} />
     </div>
     {outcome === "whatsapp" && r.whatsapp_opens != null && r.conversations != null && (
       // #493: people reach WhatsApp and leave; show the drop-off plainly.
