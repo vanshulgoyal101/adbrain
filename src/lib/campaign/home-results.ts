@@ -13,7 +13,9 @@ export type HomeResults = { enquiries: number; spend: number; perEnquiry: number
  * counts it (WhatsApp chats for chat campaigns, form leads otherwise). Null until any result exists.
  */
 export function homeResults(campaigns: Campaign[], results: Record<string, CampaignResult>): HomeResults | null {
-  const rows = campaigns.flatMap((campaign) => (results[campaign.id] ? [{ campaign, result: results[campaign.id] }] : []));
+  // #2601: website campaigns bring visits, not enquiries, so their spend would inflate "₹ per enquiry".
+  const rows = campaigns.flatMap((campaign) => (results[campaign.id] && campaignDestination(campaign, results[campaign.id]) !== "website"
+    ? [{ campaign, result: results[campaign.id] }] : []));
   if (!rows.length) return null;
   const enquiries = rows.reduce((sum, { campaign, result }) =>
     sum + (campaignDestination(campaign, result) === "whatsapp" ? result.conversations ?? 0 : result.leads), 0);

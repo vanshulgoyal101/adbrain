@@ -7,6 +7,10 @@ import { cardVerdictInput, lastCampaignComparison } from "@/lib/campaign/card-ve
 import { poolLedger } from "@/lib/campaign/ledger";
 import { costPerResultFrom, pastResultsBlock, pickResultEvidence, resultSummary, toEvidenceCampaign, type EvidenceCampaign } from "@/lib/campaign/result-evidence";
 import { rerunPrefill } from "@/lib/campaign/rerun";
+import { destinationFromAdSets } from "@/lib/campaign/outcomes";
+import { homeResults } from "@/lib/campaign/home-results";
+import { campaignWhatsAppSummary } from "@/lib/campaign/results-summary";
+import type { Campaign, CampaignResult } from "@/lib/types";
 import hi from "../../messages/hi.json";
 
 // #2601 (#2595 slice E): a website campaign's result is a landing-page view, said as "visits", never "chats".
@@ -120,8 +124,32 @@ describe("core: website card, ledger, evidence and rerun (#2601)", () => {
     expect(costPerResultFrom([evidence("website", 400, 50), evidence("whatsapp", 1000, 5)], "website")).toBe(8);
   });
 
-  it("Run this again keeps a website campaign a website campaign", () => {
+  it("Run this again leaves a website copy's destination open until website launch ships", () => {
     const prefill = rerunPrefill({ campaign: { name: "Site", creative_ids: ["a"], daily_budget: 300, destination: "website" }, draft: null, approvedIds: ["a"], bestCreativeId: null });
-    expect(prefill).toMatchObject({ destination: "website", source: "campaign" });
+    expect(prefill).toMatchObject({ source: "campaign", creativeIds: ["a"] });
+    expect(prefill.destination).toBeUndefined();
+  });
+
+  it("reads a Meta WEBSITE ad set as a website campaign", () => {
+    expect(destinationFromAdSets([{ destination_type: "WEBSITE" }])).toBe("website");
+    expect(destinationFromAdSets([{ destination_type: "WEBSITE" }, { destination_type: "WHATSAPP" }])).toBe("mixed");
+  });
+
+  it("Home's enquiries and cost per enquiry leave website campaigns out", () => {
+    const row = (id: string, destination: string) => ({ id, destination, objective: "leads", status: "active" }) as unknown as Campaign;
+    const stored = (r: Partial<CampaignResult>) => ({ spend: 0, leads: 0, conversations: null, fetched_at: "2026-11-05T00:00:00Z", ...r }) as CampaignResult;
+    const summary = homeResults([row("w", "whatsapp"), row("s", "website")], {
+      w: stored({ destination: "whatsapp", spend: 500, conversations: 10 }),
+      s: stored({ destination: "website", spend: 400, landing_page_views: 55 }),
+    });
+    expect(summary).toMatchObject({ enquiries: 10, spend: 500, perEnquiry: 50, chatsOnly: true });
+  });
+
+  it("the shared summary says website visits and cost per visit", () => {
+    const text = campaignWhatsAppSummary({ name: "Site", status: "active", daily_budget: 300, objective: "traffic", destination: "website", raw: {} },
+      { spend: 412.5, leads: 0, conversations: null, landing_page_views: 55, destination: "website", cpl: null } as unknown as CampaignResult);
+    expect(text).toContain("55 website visits");
+    expect(text).toContain("₹7.50 per visit");
+    expect(text).not.toMatch(/enquir/);
   });
 });

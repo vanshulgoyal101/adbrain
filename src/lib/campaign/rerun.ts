@@ -20,7 +20,8 @@ export type RerunPrefill = {
   goal: string;
   creativeIds: string[];
   dailyBudgetRupees: number;
-  destination?: Exclude<LeadDestination, "call">;
+  // TODO(#2595): add "website" once Create can launch website campaigns (slices B to D); until then a copy picks its destination again.
+  destination?: Exclude<LeadDestination, "call" | "website">;
   leadFormId: string | null;
   whatsappNumber?: string;
   whatsappLanguage?: DraftInput["whatsappLanguage"];
@@ -66,7 +67,7 @@ export function rerunPrefill(input: {
       targeting: draft.targeting, abTest: draft.abTest,
     };
   }
-  const destination = campaign.destination === "whatsapp" || campaign.destination === "instant_form" || campaign.destination === "website" ? campaign.destination : undefined;
+  const destination = campaign.destination === "whatsapp" || campaign.destination === "instant_form" ? campaign.destination : undefined;
   return {
     ...shared, source: "campaign", goal: "",
     dailyBudgetRupees: campaign.daily_budget && campaign.daily_budget > 0 ? Math.round(campaign.daily_budget) : DEFAULT_BUDGET_RUPEES,
