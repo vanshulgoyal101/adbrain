@@ -21,16 +21,16 @@ describe("per-ad results view (#783)", () => {
       row("3", { effective_status: "ARCHIVED", conversations: 9, spend_paise: 270_000 }),
       row("4", { delivered: false, impressions: 0 }),
     ];
-    const whatsapp = adResultViews(rows, true);
+    const whatsapp = adResultViews(rows, "whatsapp");
     expect(whatsapp.ads.map(ad => [ad.adId, ad.best, ad.replaced])).toEqual([["1", true, false], ["2", false, false], ["4", false, false], ["3", false, true]]);
     expect(whatsapp.ads[0]).toMatchObject({ results: 6, spend: 600, costPerResult: 100 });
     expect(whatsapp.syncedAt).toBe("2026-10-26T17:05:00.000Z");
     // The same rows on a form campaign count enquiries (leads), so there are none and no Best.
-    expect(adResultViews(rows, false).ads.every(ad => ad.results === 0 && !ad.best)).toBe(true);
+    expect(adResultViews(rows, "instant_form").ads.every(ad => ad.results === 0 && !ad.best)).toBe(true);
   });
 
   it("has no Best ad and no update time with no rows", () => {
-    expect(adResultViews([], true)).toEqual({ ads: [], syncedAt: null });
+    expect(adResultViews([], "whatsapp")).toEqual({ ads: [], syncedAt: null });
   });
 
   // Reviewer on #960: an ad gone from Meta's listing (deleted) is stored as DELETED, so it is replaced, never Best.
@@ -42,7 +42,7 @@ describe("per-ad results view (#783)", () => {
       { adId: "1", name: "Live", effectiveStatus: "ACTIVE", creativeId: null, delivered: true, impressions: 10, clicks: 1, spend: 600, results: 6, costPerResult: 100, whatsappOpens: 1, replaced: false },
     ] });
     expect(stored.map(row => row.effective_status)).toEqual(["DELETED", "ACTIVE"]);
-    const view = adResultViews(stored, true);
+    const view = adResultViews(stored, "whatsapp");
     expect(view.ads.find(ad => ad.adId === "9")).toMatchObject({ replaced: true, best: false });
   });
 
@@ -77,7 +77,7 @@ describe("per-ad results view (#783)", () => {
   it("shows each ad's headline and picture, and hides a capped run's earlier ads that never delivered", () => {
     const links = adCreativeLinks(lever2, creativeIds);
     const rows = lever2.meta_ad_ids.map((id, index) => row(id, { ad_name: index < 3 ? "Ad" : "Ad - कॉपी", delivered: false, impressions: 0, effective_status: index < 3 ? "PAUSED" : "ACTIVE" }));
-    const view = adResultViews(rows, true, { links, creatives });
+    const view = adResultViews(rows, "whatsapp", { links, creatives });
     expect(view.ads.map(ad => [ad.adId.slice(-6), ad.creative?.headline, ad.creative?.imageUrl ?? null, ad.earlier])).toEqual([
       ["880526", "Your rooftop could cut power bills", "https://x/value.png", false],
       ["680526", "Rooftop solar, planned before install", "https://x/problem.png", false],
@@ -85,10 +85,10 @@ describe("per-ad results view (#783)", () => {
     ]);
     // An earlier ad that did deliver keeps its history, marked as from the earlier run.
     rows[0] = row(lever2.meta_ad_ids[0], { effective_status: "PAUSED", conversations: 2, spend_paise: 20_000 });
-    const withHistory = adResultViews(rows, true, { links, creatives });
+    const withHistory = adResultViews(rows, "whatsapp", { links, creatives });
     expect(withHistory.ads).toHaveLength(4);
     expect(withHistory.ads.find(ad => ad.adId === lever2.meta_ad_ids[0])).toMatchObject({ earlier: true, creative: { headline: "Your rooftop could cut power bills" } });
     // Without links every row stays, under Meta's name.
-    expect(adResultViews(rows, true).ads.every(ad => ad.creative === null && !ad.earlier)).toBe(true);
+    expect(adResultViews(rows, "whatsapp").ads.every(ad => ad.creative === null && !ad.earlier)).toBe(true);
   });
 });

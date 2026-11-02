@@ -124,6 +124,7 @@ async function handlePOST(
       spend: insights.spend,
       cpl: insights.cpl,
       ...(insights.conversations !== undefined ? { conversations: insights.conversations, cost_per_conversation: insights.costPerConversation ?? null, whatsapp_opens: insights.whatsappOpens ?? null } : {}),
+      ...(insights.landingPageViews !== undefined ? { landing_page_views: insights.landingPageViews } : {}),
     }).catch(() => ({ data: null, error: new Error("Result storage unavailable.") }));
 
   if (resultError || !result) {

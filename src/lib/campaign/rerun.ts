@@ -20,7 +20,7 @@ export type RerunPrefill = {
   goal: string;
   creativeIds: string[];
   dailyBudgetRupees: number;
-  destination?: Exclude<LeadDestination, "call" | "website">;
+  destination?: Exclude<LeadDestination, "call">;
   leadFormId: string | null;
   whatsappNumber?: string;
   whatsappLanguage?: DraftInput["whatsappLanguage"];
@@ -66,7 +66,7 @@ export function rerunPrefill(input: {
       targeting: draft.targeting, abTest: draft.abTest,
     };
   }
-  const destination = campaign.destination === "whatsapp" || campaign.destination === "instant_form" ? campaign.destination : undefined;
+  const destination = campaign.destination === "whatsapp" || campaign.destination === "instant_form" || campaign.destination === "website" ? campaign.destination : undefined;
   return {
     ...shared, source: "campaign", goal: "",
     dailyBudgetRupees: campaign.daily_budget && campaign.daily_budget > 0 ? Math.round(campaign.daily_budget) : DEFAULT_BUDGET_RUPEES,
@@ -78,8 +78,8 @@ export function rerunPrefill(input: {
 export function bestCreativeId(
   rows: StoredAdResult[],
   links: { meta_ad_id: string; creative_id: string | null }[],
-  whatsapp: boolean,
+  destination: string | null | undefined,
 ): string | null {
-  const best = adResultViews(rows, whatsapp).ads.find((ad) => ad.best);
+  const best = adResultViews(rows, destination).ads.find((ad) => ad.best);
   return best ? links.find((link) => link.meta_ad_id === best.adId)?.creative_id ?? null : null;
 }

@@ -2570,7 +2570,7 @@ function BusinessCampaigns({
                       <p className="text-xs text-slate-500">{updatingIds.includes(c.id) ? tc("card.updating") : tc("card.updated", { age: ageText(verdictTranslator(verdictWords), r.fetched_at) })}</p>
                     )}
                     {r && mounted && c.meta_campaign_id && throttleActive(metaWaitUntil) && <p className="text-xs text-slate-600">{resultsWaitLine(Date.now() - new Date(r.fetched_at).getTime())}</p>}
-                    {adResults && r && c.meta_campaign_id && <AdResults campaignId={c.id} whatsapp={outcome === "whatsapp"} words={verdictWords} offerPause={!weakAdCards.includes(c.id)} onRunAgain={() => void runAgain(c)} runAgainBusy={rerunBusy === c.id} runAgainError={rerunError?.id === c.id ? rerunError.message : null} />}
+                    {adResults && r && c.meta_campaign_id && <AdResults campaignId={c.id} destination={outcome} words={verdictWords} offerPause={!weakAdCards.includes(c.id)} onRunAgain={() => void runAgain(c)} runAgainBusy={rerunBusy === c.id} runAgainError={rerunError?.id === c.id ? rerunError.message : null} />}
                     {r && ((r.booked ?? 0) > 0 || (r.customers ?? 0) > 0) && (
                       // #798: what a real customer cost, beside the per-enquiry figures. #1994: bookings, the step before, come first.
                       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4" aria-label={tc("card.customersLabel")}>
@@ -2656,17 +2656,20 @@ function CardResults({ campaign, result: r, outcome, comparison, waiting, onRunA
   perAd: boolean; onWeakAd: (campaignId: string, shown: boolean) => void; words?: Words<"verdict">;
 }) {
   const [now] = useState(() => Date.now());
-  const enough = (outcome === "whatsapp" ? r.conversations ?? 0 : r.leads) >= BEST_AD_MIN_RESULTS;
+  const enough = (outcome === "whatsapp" ? r.conversations ?? 0 : outcome === "website" ? r.landing_page_views ?? 0 : r.leads) >= BEST_AD_MIN_RESULTS;
   const [weakAd, clearWeakAd] = useWeakAd(campaign.id, perAd && campaign.status === "active" && Boolean(campaign.meta_campaign_id) && enough);
   const t = verdictTranslator(words);
   const figures = <>
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
       <Stat label={t("figures.impressions")} value={formatNumber(r.impressions)} />
       <Stat label={t("figures.clicks")} value={formatNumber(r.clicks)} />
-      <Stat label={t(outcome === "whatsapp" ? "figures.chats" : outcome === "instant_form" ? "figures.leads" : "figures.unavailable")} value={outcome === "whatsapp" ? (r.conversations != null ? formatNumber(r.conversations) : "—") : outcome === "instant_form" ? formatNumber(r.leads) : "—"} />
+      <Stat label={t(outcome === "whatsapp" ? "figures.chats" : outcome === "instant_form" ? "figures.leads" : outcome === "website" ? "figures.visits" : "figures.unavailable")}
+        value={outcome === "whatsapp" ? (r.conversations != null ? formatNumber(r.conversations) : "—") : outcome === "instant_form" ? formatNumber(r.leads) : outcome === "website" ? formatNumber(r.landing_page_views ?? 0) : "—"} />
       <Stat
-        label={t(outcome === "whatsapp" ? "figures.costChat" : outcome === "instant_form" ? "figures.costLead" : "figures.costResult")}
-        value={outcome === "whatsapp" ? (r.conversations != null && r.cost_per_conversation != null ? formatMoney(r.cost_per_conversation) : "—") : outcome === "instant_form" && r.cpl != null ? formatMoney(r.cpl) : "—"}
+        label={t(outcome === "whatsapp" ? "figures.costChat" : outcome === "instant_form" ? "figures.costLead" : outcome === "website" ? "figures.costVisit" : "figures.costResult")}
+        value={outcome === "whatsapp" ? (r.conversations != null && r.cost_per_conversation != null ? formatMoney(r.cost_per_conversation) : "—")
+          : outcome === "instant_form" && r.cpl != null ? formatMoney(r.cpl)
+            : outcome === "website" && r.landing_page_views ? formatMoney(Number(r.spend) / r.landing_page_views) : "—"}
       />
     </div>
     {outcome === "whatsapp" && r.whatsapp_opens != null && r.conversations != null && (
@@ -2683,7 +2686,7 @@ function CardResults({ campaign, result: r, outcome, comparison, waiting, onRunA
   useEffect(() => { onWeakAd(campaign.id, weakShown); }, [campaign.id, weakShown, onWeakAd]);
   // A paused card that never showed keeps its one "nothing has spent" line (#173), with no verdict beside it.
   if (!input || !judged || (campaign.status !== "active" && campaign.status !== "completed" && !r.impressions)) return figures;
-  return <CampaignVerdict verdict={judged} words={words} whatsapp={input.destination === "whatsapp"} results={input.results} spend={input.spend}
+  return <CampaignVerdict verdict={judged} words={words} destination={input.destination} results={input.results} spend={input.spend}
     details={figures} onRunAgain={onRunAgain} runAgainBusy={runAgainBusy} adsManagerUrl={adsManagerUrl} onEditAd={onEditAd}
-    pauseOffer={weakAd && <PauseOffer campaignId={campaign.id} suggestion={weakAd} whatsapp={input.destination === "whatsapp"} onKeep={clearWeakAd} words={words} />} />;
+    pauseOffer={weakAd && <PauseOffer campaignId={campaign.id} suggestion={weakAd} destination={input.destination} onKeep={clearWeakAd} words={words} />} />;
 }

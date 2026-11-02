@@ -5,23 +5,27 @@ import { campaignDestination } from "@/lib/campaign/outcomes";
 import type { Words } from "@/i18n/words";
 import { restatesStatus, verdict, type Comparison, type Verdict, type VerdictInput } from "@/lib/campaign/verdict";
 import type { Campaign, CampaignResult } from "@/lib/types";
-import type { LeadDestination } from "@/lib/types/campaign";
 
 type CardCampaign = Pick<Campaign, "id" | "status" | "created_at" | "raw" | "destination" | "objective">;
-type CardResult = Pick<CampaignResult, "impressions" | "spend" | "leads" | "conversations" | "whatsapp_opens" | "destination">;
+type CardResult = Pick<CampaignResult, "impressions" | "spend" | "leads" | "conversations" | "whatsapp_opens" | "landing_page_views" | "destination">;
+type Judged = VerdictInput["destination"];
 
-const resultsOf = (destination: Exclude<LeadDestination, "call" | "website">, result: CardResult) =>
-  destination === "whatsapp" ? result.conversations ?? 0 : result.leads ?? 0;
+const judged = (destination: string): destination is Judged =>
+  destination === "whatsapp" || destination === "instant_form" || destination === "website";
+
+/** #2601: the stored headline result: chats, landing-page views (website) or form leads. */
+const resultsOf = (destination: Judged, result: CardResult) =>
+  destination === "whatsapp" ? result.conversations ?? 0 : destination === "website" ? result.landing_page_views ?? 0 : result.leads ?? 0;
 
 /**
- * #1274 (#1255 slice 2): a campaign card's stored numbers as `verdict()` input. Only WhatsApp and form campaigns
- * get a verdict; others keep their figures. `liveSince` is when the run last started showing (health, #258).
+ * #1274 (#1255 slice 2): a campaign card's stored numbers as `verdict()` input. Only WhatsApp, form and website
+ * (#2601) campaigns get a verdict; others keep their figures. `liveSince` is when the run last started showing (health, #258).
  */
 export function cardVerdictInput(campaign: CardCampaign, result: CardResult, extra: {
   now: number; waiting: number; weakAd: PauseSuggestion | null; comparison: Comparison | null;
 }): VerdictInput | null {
   const destination = campaignDestination(campaign, result);
-  if (destination !== "whatsapp" && destination !== "instant_form") return null;
+  if (!judged(destination)) return null;
   return {
     // #2281: a capped run past its end time has ended, whatever its row says (results-summary agrees).
     destination, status: campaign.status !== "draft" && cappedRunEnded(campaign.raw, extra.now) ? "completed" : campaign.status, liveSince: readCampaignHealth(campaign.raw)?.activeSince ?? null,
@@ -34,7 +38,7 @@ export function cardVerdictInput(campaign: CardCampaign, result: CardResult, ext
 /** The owner's own last campaign with the same destination, made before this one, as a comparison (gates apply in verdict()). */
 export function lastCampaignComparison(campaign: CardCampaign, campaigns: CardCampaign[], results: Record<string, CardResult | undefined>): Comparison | null {
   const destination = campaignDestination(campaign, results[campaign.id]);
-  if (destination !== "whatsapp" && destination !== "instant_form") return null;
+  if (!judged(destination)) return null;
   const before = Date.parse(campaign.created_at ?? "");
   const previous = campaigns
     .filter((other) => other.id !== campaign.id && results[other.id] && Date.parse(other.created_at ?? "") < before
