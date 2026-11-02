@@ -56,6 +56,18 @@ beforeEach(() => {
 });
 
 describe("creative generation recovery", () => {
+  // #2553: a pilot owner got 39 status reads answered 429 while two pollers checked one batch. The status budget must
+  // cover two tabs each running step 2's checks (24 in 4 min) and Studio's (20 per 5 min), plus one assistant recovery (15).
+  it("#2553: the status budget covers a pilot's normal polling across two tabs", async () => {
+    const { GET } = await import("@/app/api/creatives/generate/route");
+    await GET(new Request("http://localhost/api/creatives/generate?businessId=business&generationId=11111111-1111-4111-8111-111111111111"));
+    const [key, opts] = mocks.rateLimit.mock.calls[0] as [string, { limit: number; windowMs: number }];
+    expect(key).toBe("generate-status:owner");
+    const perFiveMinutes = opts.limit * (5 * 60_000) / opts.windowMs;
+    expect(perFiveMinutes).toBeGreaterThanOrEqual(2 * (24 + 20) + 15);
+    expect(perFiveMinutes).toBeLessThanOrEqual(300);
+  });
+
   // #1407 (QA): a batch that finished 2 of 3 read 'partial' for 5 more minutes, so Studio said 'still being made'.
   it("#1407: a short batch whose closing audit row exists is 'ended', not 'partial'", async () => {
     mocks.intent.mockResolvedValue({ data: { status: "partial", expectedCount: 3 }, error: null });
