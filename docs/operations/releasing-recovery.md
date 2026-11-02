@@ -96,7 +96,10 @@ anyone watching (owner-approved automatic rollback, #111):
   [spend-policy.ts](../../src/lib/llm/spend-policy.ts)); when they can't answer, the plan fails with
   `FREE_TEXT_UNAVAILABLE` instead of paying. Once a day keeps it far inside Groq's free daily cap.
   **Daily Create, 03:37Z (#2145)** (or dispatch `mode: create`) runs `--create`: 3 ads, their words on free text
-  too (#2230), so a busy free tier fails the run rather than spending. It passes only when all 3 are saved: a
+  too (#2230), so a busy free tier fails the run rather than spending. When GitHub drops the 03:37Z cron, the next
+  scheduled picture run that day runs `create` instead, and a late 03:37Z run after that runs `picture`
+  ([smoke-mode.mjs](../../scripts/smoke-mode.mjs), #2545): the Smoke step marks each run's mode with a `Smoke mode`
+  annotation, and a failed lookup or a re-run does `picture`, so there is still at most one scheduled create a day. It passes only when all 3 are saved: a
   one-picture check stayed green while customers' batches saved 1 of 3. DevOps also dispatches it before and
   after the Cloudflare token lands. A PASS deletes those ads and their files, but keeps the newest ad when the
   smoke business has no other ad.
