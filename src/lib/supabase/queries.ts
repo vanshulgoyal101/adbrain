@@ -340,6 +340,7 @@ export async function getPerformanceRows(
 
   return campaigns.map((c) => {
     const r = results[c.id];
+    const destination = campaignDestination(c, r);
     const raw = (c.raw ?? {}) as { plan?: { area?: string }; area?: string };
     const angles = [
       ...new Set(
@@ -350,7 +351,7 @@ export async function getPerformanceRows(
     ];
     return {
       name: c.name ?? `${c.objective} campaign`,
-      destination: campaignDestination(c, r),
+      destination,
       angles,
       area: raw.plan?.area ?? raw.area ?? null,
       dailyBudget: c.daily_budget ?? null,
@@ -361,6 +362,7 @@ export async function getPerformanceRows(
       spend: r?.spend ?? 0,
       cpl: r?.cpl ?? null,
       ...(r?.conversations != null ? { conversations: r.conversations, costPerConversation: r.cost_per_conversation ?? null } : {}),
+      ...(destination === "website" ? { landingPageViews: r?.landing_page_views ?? 0 } : {}),
     };
   });
 }
