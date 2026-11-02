@@ -77,6 +77,7 @@ const bootstrap = `
   alter default privileges for role supabase_admin in schema public grant all on sequences to anon, authenticated, service_role;
   alter default privileges for role supabase_admin in schema public grant execute on functions to anon, authenticated, service_role;
   create schema storage;
+  alter default privileges for role postgres in schema storage grant execute on functions to anon, authenticated, service_role;
   create table storage.buckets (id text primary key, name text, public boolean, file_size_limit bigint, allowed_mime_types text[]);
   create table storage.objects (id uuid primary key default gen_random_uuid(), bucket_id text, name text);
   alter table storage.objects enable row level security;
@@ -3056,6 +3057,9 @@ async function verify(database, source, integrityMigration, customerOnly = false
   try {
     await db.query(bootstrap);
     const defaultPrivilegeFixtures = customerOnly ? await createDefaultPrivilegeFixtures(db) : undefined;
+    if (database === "customer_upgrade") {
+      await db.query("alter default privileges for role postgres in schema public revoke execute on functions from anon");
+    }
     await db.query(source);
     if (customerOnly) await verifyDefaultPrivileges(db, database, check, defaultPrivilegesMigration, defaultPrivilegeFixtures);
     if (process.argv.includes("--analytics-only") || database.startsWith("analytics_")) {
