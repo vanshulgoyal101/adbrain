@@ -4,8 +4,9 @@ set local statement_timeout = '30s';
 
 -- #749 (#744): the contract between an owner's file and Meta. One row per (media asset, ad account): the image hash or
 -- video id Meta gave that account for it, so a file is never uploaded twice and an owner who changes ad account gets a
--- fresh upload. A video row is claimed ('starting', with the unique upload_name) before the POST, so an answer that
--- never arrived is found again by that name instead of uploading a second copy. Needs 20261103_media_library.sql.
+-- fresh upload. A video row is claimed ('starting', with an upload_name built from the asset id and attempt) before
+-- the POST, so an answer that never arrived is found again by that name instead of uploading a second copy.
+-- Needs 20261103_media_library.sql.
 -- Owners read their own rows; only the service role writes. Additive.
 -- The row's business is its asset's business: the FK uses media_assets' unique (business_id, id) from 20261103.
 create table if not exists public.media_meta_uploads (
