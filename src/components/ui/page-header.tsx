@@ -7,6 +7,7 @@ export function PageHeader({
   actions,
   className,
   titleInTopBarOnPhone = false,
+  lang,
 }: {
   /** @deprecated #403: no eyebrow labels; kept so call sites compile until S3 removes them. */
   eyebrow?: string;
@@ -16,9 +17,12 @@ export function PageHeader({
   description?: ReactNode;
   actions?: ReactNode;
   className?: string;
+  /** #1438: the language of the title and description when it isn't the page's (Hindi). */
+  lang?: string;
 }) {
   return (
     <header
+      lang={lang}
       className={cn(
         "flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between",
         className,

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import type { Business } from "@/lib/types";
 
 const getPrimaryBusiness = vi.hoisted(() => vi.fn());
@@ -15,6 +15,9 @@ vi.mock("@/components/setup-ads-step", () => ({ SetupAdsStep: (props: unknown) =
 const mediaOn = vi.hoisted(() => ({ value: false }));
 vi.mock("@/lib/media/store", () => ({ mediaUploadsEnabled: () => mediaOn.value }));
 vi.mock("@/components/ad-assistant", () => ({ AdAssistant: () => <div>Assistant</div> }));
+// #1438: the owner's language comes from the app-language cookie; unset is English.
+const appLanguage = vi.hoisted(() => ({ value: undefined as string | undefined }));
+vi.mock("next/headers", () => ({ cookies: async () => ({ get: (name: string) => name === "adbrain_lang" && appLanguage.value ? { name, value: appLanguage.value } : undefined }) }));
 
 const sparse = {
   id: "b1",
@@ -26,6 +29,9 @@ const sparse = {
   offers: [],
   phone: null,
 } as unknown as Business;
+
+// The page's first import is slow on a loaded machine; load it once outside any test's 15s budget.
+beforeAll(() => import("@/app/(app)/create/page"), 60_000);
 
 describe("Create page business details (#169)", () => {
   it("names the Brand facts a new business has not added yet", async () => {
@@ -47,7 +53,7 @@ describe("Create page business details (#169)", () => {
     });
     const { default: CreatePage } = await import("@/app/(app)/create/page");
     render(await CreatePage());
-    expect(screen.getByText(/Using New Bakery's details/)).toBeInTheDocument();
+    expect(screen.getByText("Using New Bakery's details.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Edit your business" })).toHaveAttribute("href", "/brand");
     expect(screen.queryByText("Rs 99 loaf")).not.toBeInTheDocument();
     expect(screen.queryByText(/Not added yet/)).not.toBeInTheDocument();
@@ -174,4 +180,41 @@ describe("Create page for a first-timer (#1270)", () => {
     await expect(CreatePage({ searchParams: Promise.resolve({}) })).rejects.toThrow("NEXT_REDIRECT");
   });
 
+});
+
+describe("Create page in Hindi (#1438)", () => {
+  it("says the header, entry choice, steps and business details in Hindi, marked lang='hi'", async () => {
+    getPrimaryBusiness.mockResolvedValue(sparse);
+    getBrandAssets.mockResolvedValue([]);
+    hasLaunchedCampaign.mockResolvedValue(true);
+    appLanguage.value = "hi";
+    mediaOn.value = true;
+    try {
+      const { default: CreatePage } = await import("@/app/(app)/create/page");
+      render(await CreatePage());
+      expect(screen.getByRole("heading", { name: "विज्ञापन बनाएँ" }).closest("header")).toHaveAttribute("lang", "hi");
+      expect(screen.getByRole("navigation", { name: "विज्ञापन कैसे बनाएँ" })).toHaveAttribute("lang", "hi");
+      expect(screen.getByRole("link", { name: "AI से विज्ञापन बनाएँ" })).toHaveAttribute("href", "#create-flow");
+      expect(screen.getByRole("link", { name: "अपनी फ़ोटो लगाएँ" })).toHaveAttribute("href", "/assets");
+      expect(screen.getByRole("list", { name: "विज्ञापन के चरण" }).textContent).toBe("ब्रीफ़बनाएँजाँचेंलॉन्च");
+      const details = screen.getByRole("complementary", { name: "आपके बिज़नेस की जानकारी" });
+      expect(details).not.toHaveAttribute("lang");
+      expect(screen.getByText("New Bakery की जानकारी इस्तेमाल हो रही है।")).toHaveAttribute("lang", "hi");
+      expect(screen.getByText("अभी नहीं जोड़ा: ऑफ़र या दाम, सेवा वाले इलाके, फ़ोन नंबर। विज्ञापनों में ये नहीं होंगे।")).toHaveAttribute("lang", "hi");
+      expect(screen.getByText(/अपना लोगो और 1–3 असली फ़ोटो .* जोड़ें ताकि विज्ञापन आपके बिज़नेस जैसे दिखें।/)).toHaveAttribute("lang", "hi");
+      expect(screen.getByRole("link", { name: "फ़ोटो जोड़ें" })).toHaveAttribute("href", "/brand#brand-assets");
+      expect(document.body.textContent).not.toMatch(/Create ads|Not added yet|Edit your business|Steps to an ad/);
+    } finally { appLanguage.value = undefined; mediaOn.value = false; }
+  });
+
+  it("asks for a business first in Hindi", async () => {
+    getPrimaryBusiness.mockResolvedValue(null);
+    appLanguage.value = "hi";
+    try {
+      const { default: CreatePage } = await import("@/app/(app)/create/page");
+      render(await CreatePage());
+      expect(screen.getByRole("heading", { name: "विज्ञापन बनाएँ" })).toHaveAttribute("lang", "hi");
+      expect(screen.getByRole("button", { name: "अपना बिज़नेस सेट करें" })).toHaveAttribute("lang", "hi");
+    } finally { appLanguage.value = undefined; }
+  });
 });
