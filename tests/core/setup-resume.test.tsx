@@ -19,6 +19,13 @@ describe("core: setupResume (#1272)", () => {
     expect(setupResume({ business: { ...usable, vertical: "local business" }, creatives: [], campaigns: [] }).step).toBe(1);
   });
 
+  it("#2646: a website business resumes past step 1 with its link and no phone; without the link it stays", () => {
+    const site = { ...usable, phone: null, website: "https://sunpeak.in/offer", default_destination: "website" as const };
+    expect(setupResume({ business: site, creatives: [], campaigns: [] }).step).toBe(2);
+    expect(setupResume({ business: { ...site, website: null }, creatives: [], campaigns: [] }).step).toBe(1);
+    expect(setupResume({ business: { ...site, default_destination: undefined }, creatives: [], campaigns: [] }).step).toBe(1);
+  });
+
   it("five facts, no ad picked yet: step 2 (drafts don't count)", () => {
     expect(setupResume({ business: usable, creatives: [{ ...current, status: "draft" }], campaigns: [] })).toEqual({ step: 2, ready: [] });
   });

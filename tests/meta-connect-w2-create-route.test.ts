@@ -315,6 +315,18 @@ describe("durable campaign create route", () => {
     } finally { vi.unstubAllEnvs(); }
   });
 
+  // #2688: launch recomputes Review, so an outside account's website draft stops there, before any claim or Meta call.
+  it("refuses a website draft from an outside account with no claim and no Meta call", async () => {
+    mocks.draftRow = draftRow({ input: { ...draftInput, destination: "website", leadFormId: null } });
+    const { POST } = await import("@/app/api/campaigns/create/route");
+    const response = await POST(post({ businessId, draftId, draftVersion: 1, planHash: reviewPlanHash(), connectionGeneration, idempotencyKey }));
+    expect(response.status).toBe(403);
+    expect((await response.json()).error.message).toBe("Website ads aren't open yet. Choose WhatsApp chat or a lead form.");
+    expect(mocks.rpc).not.toHaveBeenCalled();
+    expect(mocks.withMetaConnection).not.toHaveBeenCalled();
+    expect(mocks.submittedCreative).not.toHaveBeenCalled();
+  });
+
   it("submits the saved and reviewed description to Meta", async () => {
     mocks.description = "Discuss your rooftop plans.";
     const { POST } = await import("@/app/api/campaigns/create/route");

@@ -30,6 +30,17 @@ export async function saveCampaignResult(actor: Actor, values: ResultInsert, dat
   return database.from("campaign_results").insert(values).select("*").single();
 }
 
+/** #773: save an audience change for a running campaign's next run in `raw.preparedAudience`, keeping the rest of `raw`. */
+export async function saveCampaignPreparedAudience(actor: Actor, campaignId: string, prepared: Json, database: Store = createAdminClient()) {
+  await checkOwner(database, actor);
+  const { data, error } = await database.from("campaigns").select("raw")
+    .eq("business_id", actor.businessId).eq("id", campaignId).eq("status", "active").maybeSingle();
+  if (error || !data) return { data: null, error: error ?? new Error("The running campaign could not be read.") };
+  const raw = data.raw && typeof data.raw === "object" && !Array.isArray(data.raw) ? data.raw : {};
+  return database.from("campaigns").update({ raw: { ...raw, preparedAudience: prepared } })
+    .eq("business_id", actor.businessId).eq("id", campaignId).eq("status", "active").select("id").maybeSingle();
+}
+
 /** #258: merge `raw.health` into a still-active campaign, re-reading `raw` so stored children and caps are kept. */
 export async function saveCampaignHealth(actor: Actor, campaignId: string, health: Json, database: Store = createAdminClient()) {
   await checkOwner(database, actor);

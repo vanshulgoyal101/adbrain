@@ -21,6 +21,7 @@ export const ACCEPTED = {
   "authenticated_security_definer_function_executable:public.business_transfer_mine": "returns only the signed-in, email-confirmed user's own pending transfer (#1783)",
   "authenticated_security_definer_function_executable:public.business_transfer_decline": "only the signed-in, email-confirmed target can decline their own transfer (#1783)",
   "authenticated_security_definer_function_executable:public.business_transfer_claim": "requires auth.uid(); private.business_transfer_complete re-checks target, owner and locks (#1783)",
+  "authenticated_security_definer_function_executable:public.media_consent_record": "requires auth.uid() and business ownership; append-only consent with an empty search_path (#784)",
   // HaveIBeenPwned checks need the Supabase Pro plan (402 on the Free plan); a CEO money decision (#359).
   "auth_leaked_password_protection:.": "needs the Supabase Pro plan",
 };

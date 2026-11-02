@@ -8,13 +8,16 @@ import { createHash, randomUUID } from "node:crypto";
 import pg from "pg";
 import { applyMigration } from "./database-migrations.mjs";
 import { appendedMigrations, buildSchema, readBaseSchema } from "./build-schema.mjs";
+import { createDefaultPrivilegeFixtures, verifyDefaultPrivilegeLedger, verifyDefaultPrivileges } from "./check-default-privileges.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const defaultPrivilegesMigration = await readFile(join(root, "db/migrations/20261102_default_public_privileges.sql"), "utf8");
 const operatorPaymentMigration = await readFile(join(root, "db/migrations/20260926_production_payment_policy_v2.sql"), "utf8");
 const customerAllowanceMigration = await readFile(join(root, "db/migrations/20260926_customer_ad_allowance.sql"), "utf8");
 const creativeIntentMigration = await readFile(join(root, "db/migrations/20260927_creative_generation_intents.sql"), "utf8");
 const creativeReconcileMigration = await readFile(join(root, "db/migrations/20260930_creative_generation_reconcile.sql"), "utf8");
 const creativeSettleMigration = await readFile(join(root, "db/migrations/20261021_creative_generation_settle_holds.sql"), "utf8");
+const creativeOneBatchMigration = await readFile(join(root, "db/migrations/20261102_creative_generation_one_batch.sql"), "utf8");
 const regenerationClaimsMigration = await readFile(join(root, "db/migrations/20261001_creative_regeneration_claims.sql"), "utf8");
 const regenerationStaleMigration = await readFile(join(root, "db/migrations/20261029_creative_regeneration_stale_claims.sql"), "utf8");
 const configurablePaymentMigration = await readFile(join(root, "db/migrations/20260927_configurable_payment_quotes.sql"), "utf8");
@@ -23,6 +26,7 @@ const cappedBoundMigration = await readFile(join(root, "db/migrations/20261023_c
 const spendCapMinimumMigration = await readFile(join(root, "db/migrations/20261029_reserve_spend_cap_minimum.sql"), "utf8");
 const customAmountMigration = await readFile(join(root, "db/migrations/20261023_custom_payment_amount.sql"), "utf8");
 const paymentTermsV2Migration = await readFile(join(root, "db/migrations/20261028_payment_terms_v2.sql"), "utf8");
+const paymentReviewAlertMigration = await readFile(join(root, "db/migrations/20261029_payment_review_alert.sql"), "utf8");
 const metaCostMigration = await readFile(join(root, "db/migrations/20261023_meta_cost_observation.sql"), "utf8");
 const metaSettleMigration = await readFile(join(root, "db/migrations/20261023_meta_cost_settle.sql"), "utf8");
 const operatorFundedMigration = await readFile(join(root, "db/migrations/20261023_operator_funded_businesses.sql"), "utf8");
@@ -37,6 +41,7 @@ const learningsMigration = await readFile(join(root, "db/migrations/20261026_cam
 const editOperationsMigration = await readFile(join(root, "db/migrations/20261026_campaign_edit_operations.sql"), "utf8");
 const editAdCreativeMigration = await readFile(join(root, "db/migrations/20261026_campaign_edit_operations_ad_creative.sql"), "utf8");
 const adResultsMigration = await readFile(join(root, "db/migrations/20261026_campaign_ads_ad_results.sql"), "utf8");
+const mediaLibraryMigration = await readFile(join(root, "db/migrations/20261103_media_library.sql"), "utf8");
 const ownerAlertsMigration = await readFile(join(root, "db/migrations/20261027_owner_whatsapp_alerts.sql"), "utf8");
 const ownerAlertSendsMigration = await readFile(join(root, "db/migrations/20261027_owner_whatsapp_alerts_sends.sql"), "utf8");
 const planPeriodsMigration = await readFile(join(root, "db/migrations/20261029_plan_periods.sql"), "utf8");
@@ -68,7 +73,14 @@ const bootstrap = `
   grant usage on schema auth, public to anon, authenticated, service_role;
   alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
   alter default privileges in schema public grant all on sequences to anon, authenticated, service_role;
+  alter default privileges for role postgres in schema public grant all on tables to anon, authenticated, service_role;
+  alter default privileges for role postgres in schema public grant all on sequences to anon, authenticated, service_role;
+  alter default privileges for role postgres in schema public grant execute on functions to anon, authenticated, service_role;
+  alter default privileges for role supabase_admin in schema public grant all on tables to anon, authenticated, service_role;
+  alter default privileges for role supabase_admin in schema public grant all on sequences to anon, authenticated, service_role;
+  alter default privileges for role supabase_admin in schema public grant execute on functions to anon, authenticated, service_role;
   create schema storage;
+  alter default privileges for role postgres in schema storage grant execute on functions to anon, authenticated, service_role;
   create table storage.buckets (id text primary key, name text, public boolean, file_size_limit bigint, allowed_mime_types text[]);
   create table storage.objects (id uuid primary key default gen_random_uuid(), bucket_id text, name text);
   alter table storage.objects enable row level security;
@@ -88,6 +100,19 @@ async function check(label, run) {
     failures.push(label);
     console.error(`FAIL ${label}: ${error.message}`);
   }
+}
+
+async function verifyDefaultPrivilegeMigrationLedger() {
+  const admin = client();
+  await admin.connect();
+  try { await admin.query("create database default_privilege_ledger"); }
+  finally { await admin.end(); }
+  const db = client("default_privilege_ledger");
+  await db.connect();
+  try {
+    await db.query(bootstrap);
+    await verifyDefaultPrivilegeLedger(db, check, defaultPrivilegesMigration);
+  } finally { await db.end(); }
 }
 
 async function verifyRollback() {
@@ -603,6 +628,28 @@ async function verifyConfigurablePayments(db, database) {
     assert.equal(after.events7d,1,'a duplicate delivery is stored once');
     assert.equal(after.unprocessed,0,'unprocessed counts only events older than an hour');
     assert.equal((await service("select public.production_payment_webhook_health('acc_other') as result")).events7d,0);
+  });
+  await check(`${database}: webhook health counts captured orders held for review until they're refunded (#1684)`, async () => {
+    const health = () => service("select public.production_payment_webhook_health('acc_pricing') as result");
+    const before = await health();
+    const order = (await db.query("select id,key_id from private.production_payment_orders where account_id='acc_pricing' and captured_paise>0 and not review_required and refunded_paise=0 limit 1")).rows[0];
+    assert.ok(order,'a clean captured order to flag');
+    await service("select public.production_payment_order_review($1,'acc_pricing',$2) as result",[order.id,order.key_id]);
+    assert.equal((await health()).reviewRequired,before.reviewRequired+1,'a captured order sent to review alerts');
+    // The operator resolves it by refunding the customer; review_required stays set, but the money is no longer held.
+    await db.query("update private.production_payment_orders set refunded_paise=amount_paise,provider_refunded_paise=amount_paise where id=$1",[order.id]);
+    assert.equal((await health()).reviewRequired,before.reviewRequired,'a refunded order stops alerting');
+    // The headline case (Reviewer on #1710): Razorpay captured a payment that doesn't match the quote, so it never
+    // verifies and captured_paise stays 0, yet the customer's money is held.
+    const pending = (await db.query("select id,key_id,provider_order_id from private.production_payment_orders where account_id='acc_pricing' and captured_paise=0 and provider_order_id is not null and not review_required limit 1")).rows[0];
+    assert.ok(pending,'an unpaid order to receive a mismatched capture');
+    await service("select public.production_payment_event_receive('acc_pricing',$1,$2,$3,$4,'pay_mismatch',$5,null,'capture') as result",[pending.key_id,randomUUID(),'evt_mismatch','b'.repeat(64),pending.provider_order_id]);
+    const observed = await service("select public.production_payment_observe($1,'acc_pricing',$2,'pay_mismatch',false,0,true,$3) as result",[pending.id,pending.key_id,'c'.repeat(64)]);
+    assert.equal(observed.state,'review_required');
+    assert.equal(observed.captured_paise,0,'a mismatched capture is never credited');
+    assert.equal((await health()).reviewRequired,before.reviewRequired+1,'money held on a mismatched capture alerts');
+    await db.query("update private.production_payment_orders set provider_refunded_paise=amount_paise where id=$1",[pending.id]);
+    assert.equal((await health()).reviewRequired,before.reviewRequired,'a full provider refund stops alerting');
   });
   await check(`${database}: pricing objects remain inaccessible to browser roles`, async () => {
     for (const role of ['anon','authenticated']) {
@@ -1585,6 +1632,97 @@ async function verifyLeadFirstContacted(db, database) {
   });
 }
 
+async function verifyMediaAssets(db, database) {
+  const owner = randomUUID(), other = randomUUID(), business = randomUUID(), otherBusiness = randomUUID();
+  await db.query("insert into auth.users(id) values ($1),($2)", [owner, other]);
+  await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Media'),($3,$4,'Other media')", [business, owner, otherBusiness, other]);
+  // Supabase grants authenticated these on storage.objects; RLS decides the rows.
+  await db.query("grant usage on schema storage to authenticated, service_role; grant select, insert, update, delete on storage.objects to authenticated, service_role");
+  const sha = (n) => String(n).repeat(64).slice(0, 64);
+  const as = async (role, user, run) => {
+    const session = client(database);
+    await session.connect();
+    try {
+      await session.query("begin");
+      await session.query(`set local role ${role}`);
+      if (user) await session.query("select set_config('request.jwt.claim.sub',$1,true)", [user]);
+      return await run(session);
+    } finally { await session.query("rollback").catch(() => {}); await session.end(); }
+  };
+  await check(`${database}: media library: owners read only their own photos, only the server writes, one live row per file (#1209)`, async () => {
+    await as("service_role", null, async (session) => {
+      await session.query("insert into public.media_assets(business_id,path,sha256,bytes,mime,width,height,status) values ($1::uuid,$1::text||'/a.jpg',$3,1000,'image/jpeg',1080,1350,'ready'),($2::uuid,$2::text||'/b.jpg',$3,1000,'image/jpeg',1080,1080,'ready')", [business, otherBusiness, sha(1)]);
+      await session.query("insert into storage.objects(bucket_id,name) values ('media',$1::text||'/a.jpg'),('media',$2::text||'/b.jpg')", [business, otherBusiness]);
+      for (const [sql, params, code] of [
+        ["insert into public.media_assets(business_id,path,sha256) values ($1::uuid,$2::text||'/c.jpg',$3)", [business, otherBusiness, sha(2)], "23514"],
+        ["insert into public.media_assets(business_id,path,sha256) values ($1::uuid,$1::text||'/d.jpg','not-a-hash')", [business], "23514"],
+        ["insert into public.media_assets(business_id,path,sha256,mime) values ($1::uuid,$1::text||'/e.heic',$2,'image/heic')", [business, sha(3)], "23514"],
+        ["insert into public.media_assets(business_id,path,sha256) values ($1::uuid,$1::text||'/f.jpg',$2)", [business, sha(1)], "23505"],
+        ["insert into public.media_assets(business_id,path,sha256,mime) values ($1::uuid,$1::text||'/g.mp4',$2,'video/mp4')", [business, sha(5)], "23514"],
+        ["insert into public.media_assets(business_id,kind,path,sha256,mime) values ($1::uuid,'video',$1::text||'/h.jpg',$2,'image/jpeg')", [business, sha(6)], "23514"],
+        ["insert into public.media_assets(business_id,kind,path,sha256,mime,poster_path) values ($1::uuid,'video',$1::text||'/i.mp4',$3,'video/mp4',$2::text||'/i.jpg')", [business, otherBusiness, sha(7)], "23514"],
+      ]) {
+        await session.query("savepoint s");
+        await assert.rejects(session.query(sql, params), { code }, sql);
+        await session.query("rollback to savepoint s");
+      }
+      // Phase 2 rows (#744 videos) fit the table already; the bucket below still refuses video bytes.
+      await session.query("insert into public.media_assets(business_id,kind,path,sha256,mime,duration_ms,poster_path) values ($1::uuid,'video',$1::text||'/v.mp4',$2,'video/mp4',15000,$1::text||'/v.jpg')", [business, sha(8)]);
+      await session.query("delete from public.media_assets where path=$1::text||'/v.mp4'", [business]);
+      await session.query("update public.media_assets set deleted_at=now() where business_id=$1", [business]);
+      await session.query("insert into public.media_assets(business_id,path,sha256) values ($1::uuid,$1::text||'/again.jpg',$2)", [business, sha(1)]);
+      await session.query("delete from public.media_assets where path=$1::text||'/again.jpg'", [business]);
+      await session.query("update public.media_assets set deleted_at=null where path=$1::text||'/a.jpg'", [business]);
+      await session.query("select set_config('request.jwt.claim.sub',$1,true)", [owner]);
+      await session.query("set local role authenticated");
+      assert.deepEqual((await session.query("select path from public.media_assets order by path")).rows.map(row => row.path), [`${business}/a.jpg`]);
+      assert.deepEqual((await session.query("select name from storage.objects where bucket_id='media'")).rows.map(row => row.name), [`${business}/a.jpg`]);
+      for (const [sql, params] of [
+        ["insert into public.media_assets(business_id,path,sha256) values ($1::uuid,$1::text||'/x.jpg',$2)", [business, sha(4)]],
+        ["update public.media_assets set name='mine' where business_id=$1", [business]],
+        ["delete from public.media_assets where business_id=$1", [business]],
+      ]) {
+        await session.query("savepoint s");
+        await assert.rejects(session.query(sql, params), { code: "42501" }, sql);
+        await session.query("rollback to savepoint s");
+      }
+      // No write policy on the private bucket: uploads only through the server's signed URL.
+      await session.query("savepoint s");
+      await assert.rejects(session.query("insert into storage.objects(bucket_id,name) values ('media',$1::text||'/own.jpg')", [business]), { code: "42501" });
+      await session.query("rollback to savepoint s");
+    });
+    const bucket = (await db.query("select public, file_size_limit::int as size, allowed_mime_types as types from storage.buckets where id='media'")).rows[0];
+    assert.deepEqual(bucket, { public: false, size: 8388608, types: ["image/jpeg", "image/png", "image/webp"] });
+    assert.ok((await db.query("select 1 from information_schema.columns where table_schema='public' and table_name='creatives' and column_name='media_asset_id'")).rowCount);
+  });
+  await check(`${database}: media library: an ad links only to its own business's photo; anon reads nothing (#1209)`, async () => {
+    await db.query("grant usage on schema storage to anon; grant select on storage.objects to anon");
+    const [mine, theirs] = (await db.query("insert into public.media_assets(business_id,path,sha256,status) values ($1::uuid,$1::text||'/link.jpg',$3,'ready'),($2::uuid,$2::text||'/link.jpg',$3,'ready') returning id", [business, otherBusiness, sha(9)])).rows.map(row => row.id);
+    const creative = (await db.query("insert into public.creatives(business_id,brief) values ($1,'Own photo') returning id", [business])).rows[0].id;
+    await as("authenticated", owner, async (session) => {
+      await session.query("savepoint s");
+      await assert.rejects(session.query("update public.creatives set media_asset_id=$1 where id=$2", [theirs, creative]), { code: "23503" });
+      await session.query("rollback to savepoint s");
+      assert.equal((await session.query("update public.creatives set media_asset_id=$1 where id=$2", [mine, creative])).rowCount, 1);
+    });
+    await db.query("update public.creatives set media_asset_id=$1 where id=$2", [mine, creative]);
+    await db.query("delete from public.media_assets where id=$1", [mine]);
+    assert.deepEqual((await db.query("select business_id, media_asset_id from public.creatives where id=$1", [creative])).rows, [{ business_id: business, media_asset_id: null }]);
+    if ((await db.query("select to_regclass('public.campaign_ads') is not null as installed")).rows[0].installed) {
+      const campaign = randomUUID();
+      await db.query("insert into public.campaigns(id,business_id,daily_budget) values ($1,$2,300)", [campaign, business]);
+      await assert.rejects(db.query("insert into public.campaign_ads(business_id,campaign_id,meta_ad_id,media_asset_id) values ($1,$2,'1',$3)", [business, campaign, theirs]), { code: "23503" });
+    }
+    await as("anon", null, async (session) => {
+      await session.query("savepoint s");
+      await assert.rejects(session.query("select 1 from public.media_assets"), { code: "42501" });
+      await session.query("rollback to savepoint s");
+      // Supabase grants anon select on storage.objects too; only the policies keep the private bucket closed.
+      assert.equal((await session.query("select count(*)::int as n from storage.objects where bucket_id='media'")).rows[0].n, 0);
+    });
+  });
+}
+
 async function verifyCampaignAdsAndResults(db, database) {
   const owner = randomUUID(), other = randomUUID(), business = randomUUID(), otherBusiness = randomUUID(), campaign = randomUUID(), otherCampaign = randomUUID();
   await db.query("insert into auth.users(id) values ($1),($2)", [owner, other]);
@@ -2111,6 +2249,64 @@ async function verifyOwnerAlertSends(db, database) {
     assert.deepEqual(await claim("blocked-1"), { claimed: false, reason: "template_blocked" });
     await as("service_role", null, (session) => session.query("select public.owner_alert_stop('+919800000009')"));
     assert.deepEqual(await claim("stop-1", { template: "lead_alert_hi" }), { claimed: false, reason: "opted_out" });
+  });
+}
+
+async function verifyMediaConsents(db, database) {
+  const owner = randomUUID(), other = randomUUID(), business = randomUUID(), otherBusiness = randomUUID();
+  await db.query("insert into auth.users(id) values ($1),($2)", [owner, other]);
+  await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Media'),($3,$4,'Other media')", [business, owner, otherBusiness, other]);
+  const as = async (role, user, run) => {
+    const session = client(database);
+    await session.connect();
+    try {
+      await session.query("begin");
+      await session.query(`set local role ${role}`);
+      if (user) await session.query("select set_config('request.jwt.claim.sub',$1,true)", [user]);
+      const result = await run(session);
+      await session.query("commit");
+      return result;
+    } catch (error) { await session.query("rollback").catch(() => {}); throw error; } finally { await session.end(); }
+  };
+  await check(`${database}: media consent: owners record it only for their own business through the function, append-only (#784)`, async () => {
+    await as("authenticated", owner, async (session) => {
+      await session.query("select public.media_consent_record($1,'2026-10-28',true)", [business]);
+      await session.query("savepoint s");
+      await assert.rejects(session.query("select public.media_consent_record($1,'2026-10-28',false)", [otherBusiness]), { code: "42501" });
+      await session.query("rollback to savepoint s");
+      await assert.rejects(session.query("select public.media_consent_record($1,'latest',false)", [business]), { code: "22023" });
+      await session.query("rollback to savepoint s");
+      await assert.rejects(session.query("insert into public.media_consents(business_id,user_id,terms_version) values ($1,$2,'2026-10-28')", [business, owner]), { code: "42501" });
+      await session.query("rollback to savepoint s");
+      await assert.rejects(session.query("update public.media_consents set people_confirmed=false where business_id=$1", [business]), { code: "42501" });
+      await session.query("rollback to savepoint s");
+      await assert.rejects(session.query("delete from public.media_consents where business_id=$1", [business]), { code: "42501" });
+      await session.query("rollback to savepoint s");
+      assert.deepEqual((await session.query("select terms_version, people_confirmed, user_id from public.media_consents")).rows,
+        [{ terms_version: "2026-10-28", people_confirmed: true, user_id: owner }]);
+    });
+    await as("authenticated", other, async (session) => {
+      assert.equal((await session.query("select count(*)::int as n from public.media_consents")).rows[0].n, 0);
+    });
+    await as("anon", null, async (session) => {
+      await session.query("savepoint s");
+      await assert.rejects(session.query("select 1 from public.media_consents"), { code: "42501" });
+      await session.query("rollback to savepoint s");
+      await assert.rejects(session.query("select public.media_consent_record($1,'2026-10-28',true)", [business]), { code: "42501" });
+      await session.query("rollback to savepoint s");
+    });
+  });
+  await check(`${database}: media consent: deleting the confirming user keeps the record and clears only user_id; a business deletion removes it (#784)`, async () => {
+    const helper = randomUUID();
+    await db.query("insert into auth.users(id) values ($1)", [helper]);
+    await db.query("insert into public.media_consents(business_id,user_id,terms_version,people_confirmed) values ($1,$2,'2026-10-29',true)", [business, helper]);
+    await db.query("delete from auth.users where id=$1", [helper]);
+    assert.deepEqual((await db.query("select user_id, people_confirmed from public.media_consents where business_id=$1 and terms_version='2026-10-29'", [business])).rows,
+      [{ user_id: null, people_confirmed: true }]);
+    await db.query("delete from auth.users where id=$1", [other]);
+    assert.equal((await db.query("select count(*)::int as n from public.businesses where id=$1", [otherBusiness])).rows[0].n, 0);
+    await db.query("delete from auth.users where id=$1", [owner]);
+    assert.equal((await db.query("select count(*)::int as n from public.media_consents where business_id=$1", [business])).rows[0].n, 0);
   });
 }
 
@@ -2877,7 +3073,12 @@ async function verifyCreativeGenerationAdmission(db, database) {
   });
   await check(`${database}: concurrent tenants cannot exceed the remaining quota`, async () => {
     const results=await Promise.all([admit(randomUUID(),otherBusiness,otherOwner),admit(randomUUID(),otherBusiness,otherOwner)]);
-    assert.deepEqual(results.map(result=>result.action).sort(),['quota','start']);
+    // #1402: the second simultaneous start follows the first batch, so it can't spend the allowance either.
+    assert.deepEqual(results.map(result=>result.action).sort(),['running','start']);
+    const {rows:[held]}=await db.query("select generation_id from private.creative_generation_intents where business_id=$1",[otherBusiness]);
+    await db.query("update private.creative_generation_intents set updated_at=clock_timestamp()-interval '6 minutes' where generation_id=$1",[held.generation_id]);
+    assert.equal((await admit(randomUUID(),otherBusiness,otherOwner)).action,'quota');
+    await db.query("update private.creative_generation_intents set updated_at=clock_timestamp() where generation_id=$1",[held.generation_id]);
   });
   await check(`${database}: an unknown recovery lookup fences a delayed producer`, async () => {
     const id=randomUUID();
@@ -2896,13 +3097,34 @@ async function verifyCreativeGenerationAdmission(db, database) {
     await db.query("insert into public.llm_usage_events(business_id,user_id,route,provider,model,total_tokens) values ($1,$2,'creatives.generate','fixture','fixture',40)",[business,owner]);
     const progress=await service("select public.creative_generation_progress($1,$2,$3,40,false,false,false) as result",[business,owner,first]);
     assert.equal(progress.status,'processing');
+    // #1402: a batch with no ad saved yet blocks a second start until it has been silent for 5 minutes, even at quota.
+    assert.equal((await admit(randomUUID(),business,owner,'b'.repeat(64),51)).action,'running');
+    const stale=id=>db.query("update private.creative_generation_intents set updated_at=clock_timestamp()-interval '6 minutes' where generation_id=$1",[id]);
+    await stale(first);
     assert.equal((await admit(randomUUID(),business,owner,'b'.repeat(64),51)).action,'quota');
-    assert.equal((await admit(randomUUID(),business,owner,'b'.repeat(64),50)).action,'start');
+    const second=randomUUID();
+    assert.equal((await admit(second,business,owner,'b'.repeat(64),50)).action,'start');
+    await stale(second);
     await db.query("insert into public.creatives(business_id,brief,variant_group) values ($1,'Fixture',$2)",[business,first]);
     assert.equal((await service("select public.creative_generation_progress($1,$2,$3,0,true,false,false) as result",[business,owner,first])).status,'complete');
     assert.equal((await admit(randomUUID(),business,owner,'c'.repeat(64),60)).action,'quota');
     assert.equal((await admit(randomUUID(),business,owner,'c'.repeat(64),50)).action,'start');
     assert.equal((await admit(first)).action,'recover');
+  });
+  await check(`${database}: a second device's start follows the batch still making its first ad (#1402)`, async () => {
+    const tenant=randomUUID();
+    await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Second device')",[tenant,owner]);
+    const raced=await Promise.all([admit(randomUUID(),tenant,owner,'d'.repeat(64),10,1000),admit(randomUUID(),tenant,owner,'e'.repeat(64),10,1000)]);
+    assert.deepEqual(raced.map(result=>result.action).sort(),['running','start']);
+    const {rows}=await db.query("select generation_id,request_hash from private.creative_generation_intents where business_id=$1",[tenant]);
+    assert.equal(rows.length,1);
+    const first=rows[0].generation_id;
+    const follow=await admit(randomUUID(),tenant,owner,'f'.repeat(64),10,1000);
+    assert.deepEqual([follow.action,follow.generationId,follow.status,follow.expectedCount],['running',first,'processing',1]);
+    assert.equal((await admit(first,tenant,owner,rows[0].request_hash,10,1000)).action,'recover');
+    await db.query("insert into public.creatives(business_id,brief,variant_group) values ($1,'Fixture',$2)",[tenant,first]);
+    assert.equal((await service("select public.creative_generation_progress($1,$2,$3,0,false,false,false) as result",[tenant,owner,first])).status,'partial');
+    assert.equal((await admit(randomUUID(),tenant,owner,'f'.repeat(64),10,1000)).action,'start');
   });
   await check(`${database}: timeout and uncertain provider outcome retain identity and hold`, async () => {
     const id=(await db.query("select generation_id from private.creative_generation_intents where business_id=$1 and state='processing' limit 1",[otherBusiness])).rows[0].generation_id;
@@ -3005,6 +3227,8 @@ async function verifyCreativeGenerationAdmission(db, database) {
       [freshBusiness,owner,id,'d'.repeat(64)]);
     assert.equal(first.action,'start');
     await service("select public.creative_generation_progress($1,$2,$3,0,false,false,true) as result",[freshBusiness,owner,id]);
+    // Past the #1402 follow window, so the hold itself (not the running batch) refuses the next admission.
+    await db.query("update private.creative_generation_intents set updated_at=clock_timestamp()-interval '6 minutes' where generation_id=$1",[id]);
     const second=await admit(randomUUID(),freshBusiness,owner,'e'.repeat(64),100);
     await db.query("insert into public.creatives(business_id,brief,variant_group) values ($1,'Still running',$2)",[freshBusiness,id]);
     const late=await service("select public.creative_generation_progress($1,$2,$3,0,false,false,false) as result",[freshBusiness,owner,id]);
@@ -3047,7 +3271,12 @@ async function verify(database, source, integrityMigration, customerOnly = false
   await db.connect();
   try {
     await db.query(bootstrap);
+    const defaultPrivilegeFixtures = customerOnly ? await createDefaultPrivilegeFixtures(db) : undefined;
+    if (database === "customer_upgrade") {
+      await db.query("alter default privileges for role postgres in schema public revoke execute on functions from anon");
+    }
     await db.query(source);
+    if (customerOnly) await verifyDefaultPrivileges(db, database, check, defaultPrivilegesMigration, defaultPrivilegeFixtures);
     if (process.argv.includes("--analytics-only") || database.startsWith("analytics_")) {
       const installed = (await db.query("select to_regclass('public.product_event_daily') is not null as installed")).rows[0].installed;
       if (!installed) {
@@ -3098,6 +3327,12 @@ async function verify(database, source, integrityMigration, customerOnly = false
           assert.equal(await applyMigration(db,"20261028_payment_terms_v2.sql",paymentTermsV2Migration),'already_applied');
         });
       }
+      if (!(await db.query("select pg_get_functiondef('public.production_payment_webhook_health(text)'::regprocedure) like '%reviewRequired%' as installed")).rows[0].installed) {
+        await check(`${database}: payment review alert migration applies once and skips replay (#1684)`,async () => {
+          assert.equal(await applyMigration(db,"20261029_payment_review_alert.sql",paymentReviewAlertMigration),'applied');
+          assert.equal(await applyMigration(db,"20261029_payment_review_alert.sql",paymentReviewAlertMigration),'already_applied');
+        });
+      }
       await verifyConfigurablePayments(db,database);
       return;
     }
@@ -3108,6 +3343,8 @@ async function verify(database, source, integrityMigration, customerOnly = false
       await db.query(creativeReconcileMigration);
       await db.query(creativeSettleMigration);
       await db.query(creativeSettleMigration);
+      await db.query(creativeOneBatchMigration);
+      await db.query(creativeOneBatchMigration);
       await verifyCreativeGenerationAdmission(db, database);
       await verifyRegenerationClaims(db, database);
       return;
@@ -3202,6 +3439,10 @@ async function verify(database, source, integrityMigration, customerOnly = false
       await db.query(reauthMigration);
       await db.query(reauthMigration);
       await verifyConnectionReauth(db,database);
+      await db.query(mediaLibraryMigration);
+      await db.query(mediaLibraryMigration);
+      await verifyMediaAssets(db,database);
+      await verifyMediaConsents(db,database);
       if ((await db.query("select to_regclass('public.lead_sync_runs') is not null as installed")).rows[0].installed) {
         await db.query(leadCampaignLinkMigration);
         await db.query(leadCampaignLinkMigration);
@@ -4316,7 +4557,11 @@ try {
   started = true;
   const admin = client();
   await admin.connect();
-  await admin.query("create role anon; create role authenticated; create role service_role bypassrls");
+  await admin.query(`create role anon; create role authenticated; create role service_role bypassrls;
+    do $$ begin
+      if not exists (select 1 from pg_roles where rolname = 'postgres') then create role postgres superuser; end if;
+      if not exists (select 1 from pg_roles where rolname = 'supabase_admin') then create role supabase_admin superuser; end if;
+    end $$;`);
   await admin.end();
   if (process.argv.includes("--rollback-only")) {
     await verifyRollback();
@@ -4379,6 +4624,7 @@ try {
     await verify("ordered_upgrade", `${baseline}\n${metaMigration}\n${campaignMigration}\n${trustedUsageMigration}\n${trustedUsageMigration}\n${productEventsMigration}\n${productEventsMigration}\n${whatsappMigration}\n${whatsappMigration}\n${reportingMigration}\n${reportingMigration}\n${workerMigration}\n${workerMigration}\n${billingMigration}\n${billingMigration}\n${billingEventsMigration}\n${billingEventsMigration}\n${testPaymentsMigration}\n${testPaymentsMigration}\n${productionPaymentsMigration}\n${productionPaymentsMigration}\n${draftAuthorityMigration}\n${trustedCampaignMigration}\n${legacyLead}\n${leadFollowUpMigration}\n${leadFollowUpMigration}\n${leadSyncMigration}\n${leadSyncMigration}`, integrityMigration);
   }
   if (!process.argv.includes("--analytics-only") && !process.argv.includes("--pricing-only") && !process.argv.includes("--leads-only") && !process.argv.includes("--generation-only")) {
+    await verifyDefaultPrivilegeMigrationLedger();
     await verify("customer_fresh",schema,undefined,true);
     await verify("customer_upgrade",`${baseline}\n${metaMigration}\n${campaignMigration}\n${billingMigration}\n${productionPaymentsMigration}\n${trustedCampaignMigration}`,undefined,true);
     if (!process.argv.includes("--customer-only")) {

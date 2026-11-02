@@ -1,5 +1,5 @@
 # Go live के बाद आपका पहला हफ़्ता
-<!-- mirrors ../first-week.md cef133946f83 -->
+<!-- mirrors ../first-week.md 18dd933eeb24 -->
 
 यह [Your first week after Go live](../first-week.md) का हिंदी रूप है; अंग्रेज़ी पेज बदले तो इसे भी बदलें।
 [Features and workflows](../README.md) का हिस्सा।
@@ -35,8 +35,8 @@ start within a day." हर स्क्रीन की पूरी जान�
   if it's working after 5."
 - Meta को भी यह सीखने में समय लगता है कि कौन लोग जवाब देते हैं। हर नई रन में यह सीखना
   शून्य से शुरू होता है, इसलिए "results may be slow at first"। चलते हुए कैंपेन में यह
-  बदलना कि ऐड किसे दिखें, उसकी एक नई कॉपी बना सकता है जो फिर से Meta की जाँच में जाती
-  है, और "learning restarts"। इसलिए कुछ भी बदलने से पहले थोड़ा समय दें।
+  बदलना कि ऐड किसे दिखें, उसे नहीं छूता: बदलाव "Saved for your next run" हो जाता है,
+  इसलिए उसका सीखना जारी रहता है। इसलिए कुछ भी बदलने से पहले थोड़ा समय दें।
 - Meta आपका पैसा दिनों में बाँटकर खर्च करता है: "one day can be more than ₹300
   and another less. The total never goes past the limit above."
 

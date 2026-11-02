@@ -34,4 +34,16 @@ describe("advisors gate (#359)", () => {
     ];
     expect(newFindings(findings)).toEqual(findings);
   });
+
+  it("accepts only the reviewed signed-in media consent RPC finding", () => {
+    const unreviewed = [
+      lint("WARN", "anon_security_definer_function_executable", "public", "media_consent_record"),
+      lint("WARN", "authenticated_security_definer_function_executable", "private", "media_consent_record"),
+      lint("WARN", "authenticated_security_definer_function_executable", "public", "media_consent_record_v2"),
+    ];
+    expect(newFindings([
+      lint("WARN", "authenticated_security_definer_function_executable", "public", "media_consent_record"),
+      ...unreviewed,
+    ])).toEqual(unreviewed);
+  });
 });

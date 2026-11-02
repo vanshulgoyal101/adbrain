@@ -13,6 +13,7 @@ import { applyCreateLine, readCreateResponse, type LiveAd } from "@/components/c
 import { SampleViewer } from "@/components/sample-viewer";
 import { SetupSpine } from "@/components/setup-spine";
 import { takeMakeTap } from "@/lib/setup/steps";
+import { forget, keep, publish, publishedWithin, readKept, readResult } from "@/lib/setup/batch-memory";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
@@ -38,57 +39,10 @@ export function storyFor(slots: LiveAd[] | null): Story {
   return "writing";
 }
 
-const generationKey = (businessId: string) => `setup-generation:${businessId}`;
-/** A batch takes 1–3 minutes; a kept id older than this is a leftover, not a run in progress. */
-const KEEP_MS = 15 * 60_000;
 // #1402, #2553: the status GET allows 150 reads per 5 minutes per owner; every 10 s for 4 minutes stays well inside it.
 const POLL_MS = 10_000;
 const POLLS = 24;
 const RATE_LIMIT_WAIT_MS = 60_000;
-
-/** #1402: the run in progress lives in localStorage, so a second tab resumes it instead of paying for another. */
-function readKept(businessId: string): { id: string; count: number } | null {
-  try {
-    const [id, count, at] = (window.localStorage.getItem(generationKey(businessId)) ?? "").split(":");
-    if (!id || Date.now() - Number(at) > KEEP_MS) return null;
-    return { id, count: Number(count) || FULL_BATCH };
-  } catch { return null; }
-}
-function keep(businessId: string, id: string, count: number) {
-  try { window.localStorage.setItem(generationKey(businessId), `${id}:${count}:${Date.now()}`); } catch { /* private mode: this tab still guards itself */ }
-}
-function forget(businessId: string) {
-  try { window.localStorage.removeItem(generationKey(businessId)); } catch { /* nothing kept */ }
-}
-/**
- * #1534: the tab that gets a batch's ads publishes them, so other tabs waiting on the same batch show them at once
- * instead of polling the status route (150 reads per 5 minutes per owner, shared by every tab) into 429s.
- */
-const resultKey = (businessId: string) => `setup-generation-result:${businessId}`;
-function readResult(businessId: string, id: string, raw?: string | null): Creative[] | null {
-  try {
-    const value = JSON.parse(raw ?? window.localStorage.getItem(resultKey(businessId)) ?? "null") as { id?: string; at?: number; creatives?: Creative[] } | null;
-    if (value && Date.now() - Number(value.at) > KEEP_MS) { window.localStorage.removeItem(resultKey(businessId)); return null; }
-    return value?.id === id && Array.isArray(value.creatives) && value.creatives.length ? value.creatives : null;
-  } catch { return null; }
-}
-function publish(businessId: string, id: string, creatives: Creative[]) {
-  if (!creatives.length) return;
-  try { window.localStorage.setItem(resultKey(businessId), JSON.stringify({ id, at: Date.now(), creatives })); } catch { /* the other tabs keep polling */ }
-}
-/** Waits up to `ms` for another tab to publish this batch; null if none did. */
-function publishedWithin(businessId: string, id: string, ms: number): Promise<Creative[] | null> {
-  return new Promise((resolve) => {
-    const done = (value: Creative[] | null) => { window.clearTimeout(timer); window.removeEventListener("storage", heard); resolve(value); };
-    const heard = (event: StorageEvent) => {
-      if (event.key !== resultKey(businessId)) return;
-      const found = readResult(businessId, id, event.newValue);
-      if (found) done(found);
-    };
-    const timer = window.setTimeout(() => done(readResult(businessId, id)), ms);
-    window.addEventListener("storage", heard);
-  });
-}
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 // The generate route stops by 300 s, so a batch whose first ad is older has ended, whatever its status says (#1289).
 const BATCH_DEADLINE_MS = 6 * 60 * 1000;
@@ -137,7 +91,7 @@ export function SetupAdsStep({ business, initialAds, sample = false, earlier = f
   useEffect(() => {
     if (startedRef.current || initialAds.length) return;
     // #1475: a batch already running (another tab) is still picked up; a new one waits for the tap (#1934: or step 1's).
-    if (earlier && !readKept(business.id) && !(again && takeMakeTap(business.id))) return;
+    if (earlier && !readKept(business.id, FULL_BATCH) && !(again && takeMakeTap(business.id))) return;
     startedRef.current = true;
     void makeAds(FULL_BATCH);
     // Runs once per visit; makeAds reads only stable props.
@@ -239,7 +193,7 @@ export function SetupAdsStep({ business, initialAds, sample = false, earlier = f
     setError(null);
     setMaking(true);
     setSlots(null);
-    const kept = readKept(business.id);
+    const kept = readKept(business.id, FULL_BATCH);
     if (kept) {
       const saved = await savedBatch(kept.id, kept.count);
       if (saved?.length) return finish(saved, kept.count, false);
@@ -266,6 +220,17 @@ export function SetupAdsStep({ business, initialAds, sample = false, earlier = f
       if (status >= 200 && status < 300 && saved.length) {
         publish(business.id, generationId, saved);
         return finish(saved, count, count === FULL_BATCH);
+      }
+      const running = data as { code?: string; variantGroup?: string; expectedCount?: number } | null;
+      if (status === 409 && running?.code === "CREATE_RUNNING" && running.variantGroup && UUID.test(running.variantGroup)) {
+        // #1402: another device is already making this business's ads; follow that batch, never pay for a second.
+        const expected = running.expectedCount || count;
+        generationId = running.variantGroup;
+        keep(business.id, generationId, expected);
+        const followed = await savedBatch(generationId, expected);
+        if (followed?.length) return finish(followed, expected, expected === FULL_BATCH);
+        if (followed === null) { setMaking(false); setSlots(null); setError("busy"); return; }
+        throw new Error("none");
       }
       if (status >= 400 && status < 500 && status !== 408) {
         // Refused before anything was made: nothing to recover.
