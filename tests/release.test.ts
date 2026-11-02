@@ -1,10 +1,65 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { managementMigrationSql, migrationChecksum } from "../scripts/database-migrations.mjs";
 import { changedLines, ctoApproval, releaseGate, ctoReviews, failingChecks, moneyPath, qaApproval, releaseMigrations, reviewVerdicts, smokeCounts, supersededBy, backupFresh, commitStatuses, guardRun } from "../scripts/release.mjs";
 
 const head = "c30aabaf55338d92d4f0ac9ca01eac027190aceb";
 const comment = (body: string, createdAt: string) => ({ body, createdAt, url: `https://example.test/${createdAt}` });
+
+describe("non-blocking release CLI (#2621)", () => {
+  const run = (state: "OPEN" | "MERGED") => {
+    const dir = mkdtempSync(join(tmpdir(), "adbrain-release-"));
+    try {
+      writeFileSync(join(dir, "gh"), `#!${process.execPath}
+const args = process.argv.slice(2).join(" ");
+if (args.startsWith("pr view ")) {
+  console.log(JSON.stringify({number:7,state:${JSON.stringify(state)},baseRefName:"main",headRefOid:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",mergeCommit:{oid:"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},closingIssuesReferences:[]}));
+} else if (args.includes("/pulls/7/files")) {
+  process.stdout.write("");
+} else if (args.includes("/protection/required_status_checks")) {
+  console.log("core-approval");
+} else if (args.includes("/check-runs")) {
+  process.stdout.write("");
+} else if (args.includes("/statuses")) {
+  console.log("[]");
+} else {
+  console.error("Unexpected GitHub call: " + args);
+  process.exit(1);
+}
+`, { mode: 0o700 });
+      return spawnSync(process.execPath, [
+        fileURLToPath(new URL("../scripts/release.mjs", import.meta.url)), "--pr", "7", "--no-wait",
+      ], {
+        encoding: "utf8", timeout: 5_000,
+        env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, ADBRAIN_HEADLESS: "0" },
+      });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  };
+
+  it("returns a pending smoke receipt without querying or waiting for the production guard", () => {
+    const result = run("MERGED");
+    expect(result.error).toBeUndefined();
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain("Production smoke pending");
+    expect(result.stdout).toContain("bbbbbbb");
+    expect(result.stdout).not.toContain("passed the core smoke");
+  });
+
+  it("still refuses an open release whose required approval check is pending", () => {
+    const result = run("OPEN");
+    expect(result.error).toBeUndefined();
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("Required checks not green");
+    expect(result.stderr).toContain("core-approval");
+    expect(result.stdout).not.toContain("Production smoke pending");
+  });
+});
 
 describe("QA approval", () => {
   it("accepts QA's approval of the exact head and keeps its reviewed hashes", () => {

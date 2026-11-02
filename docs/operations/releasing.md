@@ -140,6 +140,13 @@ exclude entire test directories or suppress uninvestigated findings.
   SQL if the head moved or an approval was withdrawn meanwhile (#2187).
 - **Release a money or migration PR (#228, DevOps):**
   `node scripts/release.mjs --pr <n> --dry-run`, then the same without `--dry-run`.
+  Add `--no-wait` to return after the merge without polling for a deployment (#2472).
+  All approval, checksum, backup and migration gates still run; the receipt explicitly
+  says production smoke is pending, not passed. On the next pass, inspect
+  `gh run list --workflow production-guard.yml --commit <merge-sha> --limit 5`
+  and its completed run log. Rerun without `--no-wait` only after the guard has
+  completed to obtain the verified receipt. This flag skips only deployment waiting;
+  a pending migration still requires the fresh backup before applying.
   Preflight is read-only: the PR targets `main` without conflicts, the required
   checks are green on its head, the latest QA verdict naming that head (or an earlier
   head with the same `git patch-id` against the base, or the same changed lines in order when a
