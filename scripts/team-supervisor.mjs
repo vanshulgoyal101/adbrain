@@ -27,6 +27,9 @@ const execFileSync = (cmd, args, opts = {}) => rawExecFileSync(cmd, args, { time
 /** Handoff bottlenecks first (reviews, releases), then builders. CTO/CEO coordinate through chat tools, so they're excluded. */
 export const ORDER = ["devops", "qa", "reviewer", "qa2", "dev3", "dev", "dev2", "dev4", "dev5", "dev6", "speed", "janitor", "scout", "cpo", "analyst", "designer", "docs"];
 export const LABEL = "in.adbrain.team-supervisor";
+// #766: with `pmset sleep 1` the Mac slept between ticks and the alert dispatch lapsed for ~2 h at a time.
+// `caffeinate -s` holds off system sleep on the charger only (no sudo; on battery the Mac still sleeps).
+export const AWAKE_LABEL = "in.adbrain.keep-awake";
 const HOME = homedir();
 export const STATE_DIR = join(HOME, ".adbrain-supervisor");
 const SESSIONS = join(HOME, ".copilot", "session-state");
@@ -423,15 +426,27 @@ export const agentArgs = (text, credits, wt = WT) => [
   "--max-ai-credits", String(credits), "-s",
 ];
 
+const xml = (text) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+export const awakePlist = () => `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>${AWAKE_LABEL}</string>
+  <key>ProgramArguments</key><array><string>/usr/bin/caffeinate</string><string>-s</string></array>
+  <key>KeepAlive</key><true/>
+  <key>RunAtLoad</key><true/>
+</dict></plist>
+`;
+
 /** `roles` null = every role in ORDER at tick time, so new roles need no reinstall. */
-function plist(roles) {
+export function plist(roles) {
   const path = [dirname(process.execPath), "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin"].join(":");
   const cmd = `cd '${WT}' && exec '${process.execPath}' scripts/team-supervisor.mjs${roles ? ` --roles ${roles.join(",")}` : ""}`;
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
   <key>Label</key><string>${LABEL}</string>
-  <key>ProgramArguments</key><array><string>/bin/sh</string><string>-c</string><string>${cmd}</string></array>
+  <key>ProgramArguments</key><array><string>/bin/sh</string><string>-c</string><string>${xml(cmd)}</string></array>
   <key>EnvironmentVariables</key><dict><key>PATH</key><string>${path}</string></dict>
   <key>StartInterval</key><integer>600</integer>
   <key>RunAtLoad</key><true/>
@@ -470,12 +485,19 @@ async function main() {
     return console.log(which.map((r) => `## ${NAMES[r]}\n${restartPrompt(r)}`).join("\n\n"));
   }
   if (values.install || values.uninstall) {
-    try { execFileSync("launchctl", ["bootout", domain, agentFile], { stdio: "ignore" }); } catch { /* not loaded */ }
-    if (values.uninstall) { rmSync(agentFile, { force: true }); return console.log(`removed ${LABEL}`); }
+    const awakeFile = join(HOME, "Library", "LaunchAgents", `${AWAKE_LABEL}.plist`);
+    for (const file of [agentFile, awakeFile]) {
+      try { execFileSync("launchctl", ["bootout", domain, file], { stdio: "ignore" }); } catch { /* not loaded */ }
+    }
+    if (values.uninstall) {
+      for (const file of [agentFile, awakeFile]) rmSync(file, { force: true });
+      return console.log(`removed ${LABEL} and ${AWAKE_LABEL}`);
+    }
     mkdirSync(STATE_DIR, { recursive: true });
     writeFileSync(agentFile, plist(values.roles ? roles : null));
-    execFileSync("launchctl", ["bootstrap", domain, agentFile]);
-    return console.log(`installed ${LABEL}: every 10 min from ${WT} for ${roles.join(",")}`);
+    writeFileSync(awakeFile, awakePlist());
+    for (const file of [agentFile, awakeFile]) execFileSync("launchctl", ["bootstrap", domain, file]);
+    return console.log(`installed ${LABEL}: every 10 min from ${WT} for ${roles.join(",")}; ${AWAKE_LABEL} keeps the Mac awake on the charger`);
   }
 
   mkdirSync(STATE_DIR, { recursive: true });
