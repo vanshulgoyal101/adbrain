@@ -28,6 +28,7 @@
 .main { width: 100%; max-width: 1296px; margin: 0 auto; padding: 48px; flex: 1; outline: none; }
 .menu { display: grid; place-items: center; flex-shrink: 0; width: 44px; height: 44px; border-radius: 10px; }
 .drawer { position: fixed; inset: 0 auto 0 0; width: min(320px, calc(100vw - 32px)); height: 100dvh; max-height: 100dvh; max-width: none; padding: 0; margin: 0; border: 0; background: var(--surface-subtle); color: var(--foreground); }
+.drawer:focus-visible { outline: none; }
 .drawer::backdrop { background: rgb(27 36 32 / 0.4); }
 .drawerBody { min-height: 100%; display: flex; flex-direction: column; padding: 16px 12px 12px; }
 .drawerHeading { display: flex; align-items: center; justify-content: space-between; }

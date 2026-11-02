@@ -18,6 +18,8 @@ export const metadata: Metadata = {
   creator: siteConfig.author,
   publisher: siteConfig.name,
   category: "technology",
+  // #2747: iOS Safari otherwise turns plain emails, phone numbers and addresses into blue underlined links.
+  formatDetection: { email: false, telephone: false, address: false },
   alternates: { canonical: "/" },
   openGraph: {
     type: "website",
