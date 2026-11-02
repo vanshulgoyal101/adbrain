@@ -65,7 +65,7 @@ export function ChooseAds({ ads, initial = [], dailyBudgetInr = 300, onUse }: {
         ))}
       </div>
       {shown.length === 0 ? (
-        <p className="rounded-lg bg-slate-50 p-4 text-sm text-slate-600">{tab === "adbrain" ? "No ads made yet." : "No photos or videos yet."}</p>
+        <p className="rounded-lg bg-slate-50 p-4 text-sm text-slate-600">{tab === "adbrain" ? "No ads made yet." : "No photos yet."}</p>
       ) : (
         <ul className="grid grid-cols-3 gap-2">
           {shown.map((ad) => {

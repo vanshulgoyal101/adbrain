@@ -17,9 +17,9 @@ const logo = { id: "a1", business_id: "b1", url: "https://example.com/logo.png",
 describe("<MediaLibrary> (#778 slice 3a)", () => {
   it("shows the CPO's empty state with one action when the owner has no photos yet", () => {
     render(<MediaLibrary business={biz} media={[]} creatives={[ad]} brandAssets={[]} />);
-    expect(screen.getByText("No photos or videos yet. Add your own work: finished jobs, your shop, your team.")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Add photos & videos" }));
-    expect(screen.getByRole("dialog", { name: "Add photos & videos" })).toBeInTheDocument();
+    expect(screen.getByText("No photos yet. Add your own work: finished jobs, your shop, your team.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Add photos" }));
+    expect(screen.getByRole("dialog", { name: "Add photos" })).toBeInTheDocument();
   });
 
   it("lists own photos with their fit line, and the ads AdBrain made, under All", () => {
@@ -29,7 +29,7 @@ describe("<MediaLibrary> (#778 slice 3a)", () => {
     expect(screen.getByText("Ready for Feed, Stories and Reels")).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "Slash your power bill" })).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "Logo" })).toBeInTheDocument();
-    expect(screen.queryByText(/No photos or videos yet/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/No photos yet/)).not.toBeInTheDocument();
   });
 
   it("filters by tab: Photos is the owner's own, Made by AdBrain is the ads; no Videos tab until videos ship", () => {

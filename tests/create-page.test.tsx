@@ -53,7 +53,7 @@ describe("Create page business details (#169)", () => {
     expect(screen.queryByText(/Not added yet/)).not.toBeInTheDocument();
   });
 
-  it("#778: with uploads on, offers the entry choice: Make ads with AI · Use my photos & videos; off, no choice", async () => {
+  it("#778: with uploads on, offers the entry choice: Make ads with AI · Use my photos; off, no choice", async () => {
     getPrimaryBusiness.mockResolvedValue(sparse);
     const { default: CreatePage } = await import("@/app/(app)/create/page");
     const { unmount } = render(await CreatePage());
@@ -64,7 +64,7 @@ describe("Create page business details (#169)", () => {
       render(await CreatePage());
       expect(screen.getByRole("link", { name: "Make ads with AI" })).toHaveAttribute("aria-current", "page");
       expect(screen.getByRole("link", { name: "Make ads with AI" })).toHaveAttribute("href", "#create-flow");
-      expect(screen.getByRole("link", { name: "Use my photos & videos" })).toHaveAttribute("href", "/assets");
+      expect(screen.getByRole("link", { name: "Use my photos" })).toHaveAttribute("href", "/assets");
     } finally { mediaOn.value = false; }
   });
 

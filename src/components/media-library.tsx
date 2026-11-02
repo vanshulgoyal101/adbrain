@@ -188,7 +188,7 @@ export function MediaLibrary({ business, media: initialMedia, creatives, brandAs
   const addButton = (
     <button type="button" onClick={() => setSheetOpen(true)}
       className="inline-flex min-h-11 items-center gap-2 rounded-md bg-blue-600 px-4 text-sm font-medium text-white hover:bg-blue-700">
-      <ImagePlus className="h-4 w-4" aria-hidden="true" /> Add photos & videos
+      <ImagePlus className="h-4 w-4" aria-hidden="true" /> Add photos
     </button>
   );
   const [shown, setShown] = useState(PAGE);
@@ -198,7 +198,7 @@ export function MediaLibrary({ business, media: initialMedia, creatives, brandAs
   const own = ownCount === 0 ? (
     <Card>
       <CardContent className="flex flex-col items-start gap-4 p-6 text-sm text-slate-600">
-        <p>No photos or videos yet. Add your own work: finished jobs, your shop, your team.</p>
+        <p>No photos yet. Add your own work: finished jobs, your shop, your team.</p>
         {addButton}
       </CardContent>
     </Card>
@@ -243,13 +243,23 @@ export function MediaLibrary({ business, media: initialMedia, creatives, brandAs
   return (
     <div className="flex flex-col gap-6">
       {ownCount > 0 && <div>{addButton}</div>}
-      {deleted && (
-        <p role="status" className="fixed inset-x-4 bottom-4 z-50 mx-auto flex max-w-md items-center justify-between gap-2 rounded-lg bg-slate-900 py-1 pl-4 pr-1 text-sm text-white shadow-lg">
-          <span className="min-w-0 truncate">Deleted ‘{deleted.asset.name || "Photo"}’</span>
-          <button type="button" onClick={undo} className="inline-flex min-h-11 shrink-0 items-center rounded-md px-3 font-medium text-blue-200 hover:bg-white/10">Undo</button>
-        </p>
+      {/* Delete feedback lives in one bottom toast, so a scrolled owner sees why a photo came back (Designer, #2008). */}
+      {(deleted || deleteError) && (
+        <div className="fixed inset-x-4 bottom-4 z-50 mx-auto flex max-w-md flex-col gap-2">
+          {deleteError && (
+            <p role="alert" className="flex items-center justify-between gap-2 rounded-lg bg-red-700 py-1 pl-4 pr-1 text-sm text-white shadow-lg">
+              <span className="min-w-0">{deleteError}</span>
+              <button type="button" onClick={() => setDeleteError(null)} className="inline-flex min-h-11 shrink-0 items-center rounded-md px-3 font-medium hover:bg-white/10">OK</button>
+            </p>
+          )}
+          {deleted && (
+            <p role="status" className="flex items-center justify-between gap-2 rounded-lg bg-slate-900 py-1 pl-4 pr-1 text-sm text-white shadow-lg">
+              <span className="min-w-0 truncate">Deleted ‘{deleted.asset.name || "Photo"}’</span>
+              <button type="button" onClick={undo} className="inline-flex min-h-11 shrink-0 items-center rounded-md px-3 font-medium text-blue-200 hover:bg-white/10">Undo</button>
+            </p>
+          )}
+        </div>
       )}
-      {deleteError && <p role="alert" className="text-sm text-red-700">{deleteError}</p>}
       {uploads.progress && !sheetOpen && (
         <p role="status" className="text-sm text-slate-700">{uploads.progress} <span className="text-slate-500">{UPLOAD_WORDS.keepOpen}</span></p>
       )}

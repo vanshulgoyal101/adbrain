@@ -58,7 +58,7 @@ export default async function AssetsPage({ searchParams }: { searchParams?: Prom
     ]);
     return (
       <div>
-        <PageHeader title="Photos & videos" description={<p>Your own photos for {business.name}&apos;s ads, and every ad AdBrain made.</p>} />
+        <PageHeader title="Photos" description={<p>Your own photos for {business.name}&apos;s ads, and every ad AdBrain made.</p>} />
         <div className="mt-6">
           <MediaLibrary business={{ id: business.id, vertical: business.vertical ?? null }} media={media} creatives={creatives}
             brandAssets={brandAssets} sample={sample} consented={consented} startOpen={params.add === "1"} />

@@ -179,7 +179,7 @@ export function MediaUploadSheet({ open, onOpenChange, uploads, businessId, vert
       <DialogContent className="sm:max-w-lg">
         <div className="flex items-start justify-between gap-3 border-b border-slate-200 p-4">
           <div>
-            <DialogTitle className="text-lg font-semibold text-slate-900">Add photos & videos</DialogTitle>
+            <DialogTitle className="text-lg font-semibold text-slate-900">Add photos</DialogTitle>
             <DialogDescription className="text-sm text-slate-600">Your own work: finished jobs, your shop, your team.</DialogDescription>
           </div>
           <DialogClose aria-label="Close">×</DialogClose>

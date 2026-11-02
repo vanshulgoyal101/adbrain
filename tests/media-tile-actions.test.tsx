@@ -73,6 +73,10 @@ describe("own-photo tile actions (#778 slice 3c)", () => {
     vi.useRealTimers();
     await waitFor(() => expect(screen.getByRole("img", { name: "Kitchen" })).toBeInTheDocument());
     expect(screen.getByRole("alert")).toHaveTextContent("\"Diwali offer\" uses this photo. Pause that campaign first.");
+    expect(screen.getByRole("alert")).toHaveClass("rounded-lg");
+    expect(screen.getByRole("alert").parentElement).toHaveClass("fixed", "bottom-4");
+    fireEvent.click(screen.getByRole("button", { name: "OK" }));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
   it("leaving the page sends a pending delete now instead of dropping it", () => {

@@ -23,7 +23,7 @@ function setup({ consented = true, vertical = "Interior design", fetch = vi.fn()
   const uploadToSignedUrl = vi.fn(async () => ({ error: null }));
   render(<MediaLibrary business={{ id: "b1", vertical }} media={[]} creatives={[]} brandAssets={[]} consented={consented} startOpen
     deps={{ fetch, uploadToSignedUrl }} codec={codec} />);
-  return { fetch, uploadToSignedUrl, sheet: screen.getByRole("dialog", { name: "Add photos & videos" }) };
+  return { fetch, uploadToSignedUrl, sheet: screen.getByRole("dialog", { name: "Add photos" }) };
 }
 
 describe("upload sheet (#778 slice 3b)", () => {
