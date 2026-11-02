@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getEnv } from "@/lib/env";
 import { isInternalUser, isScoreboardExcluded, type AccountIdentity } from "@/lib/internal-accounts";
 import type { LeadDestination } from "@/lib/types/campaign";
+import { outcomeDefinition } from "@/lib/campaign/outcomes";
 
 /**
  * #1307 (#1255): AdBrain's own pooled results, from the #588 ledger: every AdBrain-made run (a `campaign_learnings`
@@ -24,7 +25,7 @@ const pooled = (destination: string | null | undefined): destination is Destinat
 
 /** A run's headline result: chats, form leads, or landing-page views for a website run (#2601). */
 const resultOf = (run: LedgerRun & { destination: Destination }) =>
-  run.destination === "whatsapp" ? run.conversations ?? 0 : run.destination === "website" ? run.landing_page_views ?? 0 : run.leads ?? 0;
+  run[outcomeDefinition(run.destination).campaignField] ?? 0;
 
 /** The pooled totals per destination from each run's latest results; null until the pool is big enough. Running campaigns wait until they stop. */
 export function poolLedger(runs: LedgerRun[]): Record<Destination, LedgerTotals | null> {

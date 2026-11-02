@@ -2,7 +2,7 @@
  * Records real Graph responses for the test:core campaign fixtures from ONE
  * PAUSED test campaign, then pauses and archives it. Never sets ACTIVE.
  *
- *   npx tsx --env-file=.env.local scripts/record-meta-core-fixtures.ts <imageUrl>
+ *   npx tsx --import ./scripts/trusted-server-cli.mjs --env-file=.env.local scripts/record-meta-core-fixtures.ts <imageUrl>
  *
  * Uses META_SYSTEM_USER_TOKEN / META_AD_ACCOUNT_ID / META_PAGE_ID. Tokens are
  * stripped from the fixtures; image bytes are replaced with a placeholder.

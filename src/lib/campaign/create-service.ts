@@ -20,7 +20,7 @@ import { draftAreaNames } from "./draft-targeting";
 import { normalizeWebsite } from "@/lib/brand/validation";
 import { checkPlan, planCheckEvent } from "./plan-check";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { buildLaunchSnapshot, saveLaunchSnapshot } from "./learnings";
+import { buildLaunchSnapshot, readCreativeMedia, saveLaunchSnapshot } from "./learnings";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 /** The stored objective label; website matches what sync maps OUTCOME_TRAFFIC to, so it never reads as a form campaign. */
@@ -102,6 +102,8 @@ export async function executeReviewedCampaign(input: {
           // #2599: a website ad sends the link Review opened and hashed, not a Brand read taken after it.
           const websiteLink = draft.input.destination === "website" ? review.websiteUrl : undefined;
           if (draft.input.destination === "website" && !websiteLink) throw new OperationPhaseError("Website link missing from review.", { transmitted: false });
+          // #789: for the ledger, read alongside Meta's create; never rejects.
+          const mediaRead = readCreativeMedia(database as unknown as SupabaseClient, actor.businessId, creativeInputs.map(creative => creative.id));
           metaResult = await meta.createLeadCampaign({
             name: draft.input.name, dailyBudgetRupees: draft.input.dailyBudgetRupees,
             leadFormId: (draft.input.destination ?? "instant_form") === "instant_form" ? draft.input.leadFormId ?? undefined : undefined,
@@ -134,6 +136,7 @@ export async function executeReviewedCampaign(input: {
             throw error;
           });
           // #588: what this launch tried, for the learning ledger (saved once the campaign row exists). Never fails the launch (#603).
+          const media = await mediaRead;
           try {
             launchSnapshot = buildLaunchSnapshot({
               destination: metaResult.destination, objective: campaignObjective(metaResult.destination),
@@ -142,7 +145,7 @@ export async function executeReviewedCampaign(input: {
               interests: (review.audienceInterests ?? []).map(interest => interest.name),
               whatsappLanguage: draft.input.whatsappLanguage ?? null, prefill, prefillSource: message?.source,
               storyFormat: storyRendered, sentTargetings, metaCreativeIds: metaResult.creativeIds,
-              creatives: creativeInputs.map(creative => ({ id: creative.id, angle: creative.angle ?? null, generation: creative.generation })),
+              creatives: creativeInputs.map(creative => ({ id: creative.id, angle: creative.angle ?? null, generation: creative.generation, media: media.get(creative.id) ?? null })),
             });
           } catch {
             launchSnapshot = null;

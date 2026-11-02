@@ -6,7 +6,7 @@
  *
  *   LLM_BUDGET_PROVIDER_ORDER=groq,google GROQ_MODEL=qwen/qwen3.8-27b CREATIVE_PROVIDER_ORDER=openrouter \
  *   OPENROUTER_MODEL=anthropic/claude-haiku-5.5 \
- *     npx tsx --env-file=.env.local scripts/record-hindi-create-fixtures.ts <business-id>
+ *     npx tsx --import ./scripts/trusted-server-cli.mjs --env-file=.env.local scripts/record-hindi-create-fixtures.ts <business-id>
  */
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";

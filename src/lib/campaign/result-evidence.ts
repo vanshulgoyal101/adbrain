@@ -1,6 +1,7 @@
 import { formatMoney } from "@/lib/format";
 import { statesOffer } from "@/lib/creative/concept";
 import type { LeadDestination } from "@/lib/types/campaign";
+import { outcomeDefinition } from "@/lib/campaign/outcomes";
 /**
  * #371: what past campaigns achieved, for Create. Pure functions; the wording is decided here,
  * not by the model, so a tiny sample is never called a winner.
@@ -34,13 +35,12 @@ export interface OpeningLine {
   newAngle: { goal: string };
 }
 
-const NOUNS = { whatsapp: "chat", instant_form: "lead", website: "visit" } as const;
-const noun = (destination: EvidenceCampaign["destination"], count: number) => `${NOUNS[destination]}${count === 1 ? "" : "s"}`;
+const noun = (destination: EvidenceCampaign["destination"], count: number) => `${outcomeDefinition(destination).unit}${count === 1 ? "" : "s"}`;
 const PLACES = { whatsapp: "WhatsApp", instant_form: "lead form", website: "website" } as const;
 
 /** A stored result row's headline count for a destination: chats, landing-page views or form leads. */
 export function storedResults(destination: EvidenceCampaign["destination"], result: { leads: number | null; conversations?: number | null; landing_page_views?: number | null }): number {
-  return (destination === "whatsapp" ? result.conversations : destination === "website" ? result.landing_page_views : result.leads) ?? 0;
+  return result[outcomeDefinition(destination).campaignField] ?? 0;
 }
 
 /** Money in evidence text, the same way the rest of the product writes it (#403 S2). */
@@ -72,7 +72,8 @@ export function resultSummary(campaign: EvidenceCampaign): string {
  */
 export function pickResultEvidence(campaigns: EvidenceCampaign[]): ResultEvidence[] {
   const paid = campaigns.filter((campaign) => campaign.spend > 0);
-  const spent = paid.some((campaign) => campaign.destination !== "website") ? paid.filter((campaign) => campaign.destination !== "website") : paid;
+  const enquiries = paid.filter((campaign) => outcomeDefinition(campaign.destination).countsAsEnquiry);
+  const spent = enquiries.length ? enquiries : paid;
   const ranked = spent.filter((campaign) => campaign.results > 0)
     .sort((a, b) => costPerResult(a)! - costPerResult(b)!);
   const best = ranked[0];

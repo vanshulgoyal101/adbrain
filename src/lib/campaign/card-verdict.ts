@@ -1,7 +1,7 @@
 import { cappedRunEnded } from "@/lib/campaign/activation";
 import type { PauseSuggestion } from "@/lib/campaign/ad-pause";
 import { readCampaignHealth } from "@/lib/campaign/health";
-import { campaignDestination } from "@/lib/campaign/outcomes";
+import { campaignDestination, outcomeDefinition } from "@/lib/campaign/outcomes";
 import type { Words } from "@/i18n/words";
 import { restatesStatus, verdict, type Comparison, type Verdict, type VerdictInput } from "@/lib/campaign/verdict";
 import type { Campaign, CampaignResult } from "@/lib/types";
@@ -11,11 +11,11 @@ type CardResult = Pick<CampaignResult, "impressions" | "spend" | "leads" | "conv
 type Judged = VerdictInput["destination"];
 
 const judged = (destination: string): destination is Judged =>
-  destination === "whatsapp" || destination === "instant_form" || destination === "website";
+  outcomeDefinition(destination).comparable;
 
 /** #2601: the stored headline result: chats, landing-page views (website) or form leads. */
 const resultsOf = (destination: Judged, result: CardResult) =>
-  destination === "whatsapp" ? result.conversations ?? 0 : destination === "website" ? result.landing_page_views ?? 0 : result.leads ?? 0;
+  result[outcomeDefinition(destination).campaignField] ?? 0;
 
 /**
  * #1274 (#1255 slice 2): a campaign card's stored numbers as `verdict()` input. Only WhatsApp, form and website

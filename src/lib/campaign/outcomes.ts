@@ -3,6 +3,42 @@ import { z } from "zod";
 export const campaignDestinationSchema = z.enum(["instant_form", "whatsapp", "call", "website", "mixed", "unknown"]);
 export type CampaignDestination = z.infer<typeof campaignDestinationSchema>;
 
+const DEFINITIONS = {
+  whatsapp: {
+    campaignField: "conversations", adField: "conversations", insightField: "conversations",
+    metaActions: ["onsite_conversion.messaging_conversation_started_7d"], metaValueActions: [],
+    unit: "chat", summaryUnit: { one: "WhatsApp chat", many: "WhatsApp chats", per: "chat" },
+    figure: "figures.chats", costFigure: "figures.costChat",
+    costField: "cost_per_conversation", insightCostField: "costPerConversation",
+    comparable: true, performanceRank: 1, countsAsEnquiry: true,
+  },
+  instant_form: {
+    campaignField: "leads", adField: "leads", insightField: "leads",
+    metaActions: ["lead", "onsite_conversion.lead_grouped"], metaValueActions: [],
+    unit: "lead", summaryUnit: { one: "enquiry", many: "enquiries", per: "enquiry" },
+    figure: "figures.leads", costFigure: "figures.costLead",
+    costField: "cpl", insightCostField: "cpl",
+    comparable: true, performanceRank: 0, countsAsEnquiry: true,
+  },
+  website: {
+    campaignField: "landing_page_views", adField: "landing_page_views", insightField: "landingPageViews",
+    metaActions: ["landing_page_view", "omni_landing_page_view"], metaValueActions: [],
+    unit: "visit", summaryUnit: { one: "website visit", many: "website visits", per: "visit" },
+    figure: "figures.visits", costFigure: "figures.costVisit",
+    costField: null, insightCostField: null,
+    comparable: true, performanceRank: 2, countsAsEnquiry: false,
+  },
+} as const;
+const UNJUDGED = { ...DEFINITIONS.instant_form, comparable: false, performanceRank: 3 } as const;
+
+/** Objectives do not change the result yet. Unjudged destinations retain readers' legacy lead fallback. */
+export function outcomeDefinition(destination: string | null | undefined, _objective?: string | null) {
+  void _objective;
+  if (destination === "whatsapp") return DEFINITIONS.whatsapp;
+  if (destination === "website") return DEFINITIONS.website;
+  return destination === "instant_form" ? DEFINITIONS.instant_form : UNJUDGED;
+}
+
 const storedOutcomeSchema = z.object({
   metaResult: z.object({ destination: campaignDestinationSchema }).optional(),
 });

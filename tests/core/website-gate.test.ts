@@ -10,9 +10,9 @@ const businessId = "b123b123-b123-4123-8123-b123b123b123";
 const draftId = "d123d123-d123-4123-8123-d123d123d123";
 const actor = { businessId, userId: "owner-1" };
 
-function loaders(destination: "website" | "whatsapp" | "instant_form") {
+function loaders(destination: "website" | "whatsapp" | "instant_form", websiteGoal?: "visits" | "leads" | "sales") {
   const record = { id: draftId, businessId, ownerId: actor.userId, version: 1, expiresAt: "2999-01-01T00:00:00Z",
-    input: { businessId, name: "Visits", goal: "Visits", mode: "manual", creativeIds: [], dailyBudgetRupees: 500, leadFormId: null, targeting: {}, abTest: false, destination } } as unknown as DraftRecord;
+    input: { businessId, name: "Visits", goal: "Visits", mode: "manual", creativeIds: [], dailyBudgetRupees: 500, leadFormId: null, targeting: {}, abTest: false, destination, ...(websiteGoal ? { websiteGoal } : {}) } } as unknown as DraftRecord;
   const loadFailed = () => { throw new Error("stop after the gate"); };
   return { findDraft: vi.fn(async () => record), getConnection: vi.fn(loadFailed), findCreatives: vi.fn(loadFailed),
     resolveGeo: vi.fn(loadFailed), hash: () => "a".repeat(64) } as unknown as PreflightLoaders & { getConnection: ReturnType<typeof vi.fn> };
@@ -21,6 +21,12 @@ const review = (value: PreflightLoaders, websiteOpen?: () => boolean | Promise<b
   prepareCampaignReview(value, { actor, draftId, requestedDraftVersion: 1, now: "2026-11-01T00:00:00Z", websiteOpen });
 
 describe("core: website ads stay internal-only (#2688)", () => {
+  it.each(["leads", "sales"] as const)("keeps %s closed even for internal accounts until recorded conversion gates exist (#2710)", async (websiteGoal) => {
+    const value = loaders("website", websiteGoal);
+    expect(await review(value, () => true)).toEqual({ kind: "website_closed" });
+    expect(value.getConnection).not.toHaveBeenCalled();
+  });
+
   it.each([["no account check is passed", undefined], ["the account isn't internal", () => false], ["the async check says no", async () => false]])(
     "refuses a website draft before any Meta read when %s", async (_name, websiteOpen) => {
       const value = loaders("website");

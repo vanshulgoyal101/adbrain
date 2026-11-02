@@ -6,7 +6,7 @@
  *   - refused: Meta's answer to a daily budget below its minimum (validate_only)
  * Meta allows one budget update per ad set per 30 s (#613, recorded once as edit-budget-rate-limited).
  *
- *   npx tsx --env-file=<path to .env.local> scripts/record-meta-edit-budget.ts <imageUrl>
+ *   npx tsx --import ./scripts/trusted-server-cli.mjs --env-file=<path to .env.local> scripts/record-meta-edit-budget.ts <imageUrl>
  *
  * Uses META_SYSTEM_USER_TOKEN / META_AD_ACCOUNT_ID / META_PAGE_ID. Tokens are stripped from the fixtures.
  */

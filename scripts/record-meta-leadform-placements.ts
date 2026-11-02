@@ -6,7 +6,7 @@
  * Controls: Audience Network alone (Meta must read publisher_platforms) and a placement creative with
  * no form id (Meta must read the form). The tape is scrubbed (scripts/lib/scrub-meta.ts) before it is written.
  *
- *   npx tsx --env-file=<.env.local> scripts/record-meta-leadform-placements.ts <leadCampaignId> <leadAdSetId> <targetingSourceAdSetId> <formId> <feedHash> <storyHash>
+ *   npx tsx --import ./scripts/trusted-server-cli.mjs --env-file=<.env.local> scripts/record-meta-leadform-placements.ts <leadCampaignId> <leadAdSetId> <targetingSourceAdSetId> <formId> <feedHash> <storyHash>
  */
 import "./lib/meta-write-gate";
 import { writeFileSync } from "node:fs";

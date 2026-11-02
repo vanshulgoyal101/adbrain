@@ -78,6 +78,7 @@ const ROUTES: Record<string, Entry> = {
   "managed/onboarding": { kind: "owner", methods: ["GET"] },
   "managed/whatsapp": { kind: "owner", methods: ["POST"] },
   media: { kind: "session", methods: ["GET"], why: "session: mediaSession (auth.getUser); business checked through RLS before any read" },
+  "media/consent": { kind: "session", methods: ["POST"], why: "session: ownedBusiness (RLS), and media_consent_record refuses another owner's business" },
   "media/[id]": { kind: "session", methods: ["DELETE", "PATCH"], why: "session: the asset is read through RLS (media assets: read own) before the service-role write" },
   "media/finalize": { kind: "session", methods: ["POST"], why: "session: the upload row is read through RLS before the service-role write" },
   "media/sign": { kind: "session", methods: ["POST"], why: "session: ownedBusiness (RLS) and current consent before signing" },
