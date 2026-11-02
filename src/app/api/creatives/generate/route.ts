@@ -26,6 +26,9 @@ import { cloudflareConfigured } from "@/lib/imageGen/providers/cloudflare";
 import { applyMonthlyCostCap } from "@/lib/llm/cost-cap";
 import { preferenceContext } from "@/lib/preferences/store";
 import { ownerError } from "@/i18n/request-locale";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { adPhotos, describeUsageEvent, MAX_AD_PHOTOS, pickedMedia, type AdPhoto } from "@/lib/media/ad-photos";
+import { MediaError, mediaUploadsEnabled, type MediaRow } from "@/lib/media/store";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -186,6 +189,8 @@ async function generate(req: Request, live?: LiveCreate) {
       format: z
         .enum(["portrait", "square", "story", "landscape"])
         .default("portrait"),
+      // #780: photos picked from the owner's library, one per ad (ads 1-3), in place of Brand photos.
+      mediaIds: z.array(z.string().uuid()).min(1).max(MAX_AD_PHOTOS).optional(),
     })
     .safeParse(await req.json().catch(() => null));
   if (!parsed.success)
@@ -209,6 +214,17 @@ async function generate(req: Request, live?: LiveCreate) {
     .maybeSingle();
   if (!business) {
     return NextResponse.json({ error: await ownerError("businessNotFound") }, { status: 404 });
+  }
+
+  let pickedRows: MediaRow[] = [];
+  if (body.mediaIds) {
+    if (!mediaUploadsEnabled()) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    try {
+      pickedRows = await pickedMedia(supabase as unknown as SupabaseClient, businessId, body.mediaIds);
+    } catch (error) {
+      if (error instanceof MediaError) return NextResponse.json({ error: error.message, code: error.code }, { status: error.status });
+      throw error;
+    }
   }
 
   const monthlyLimit = configuredMonthlyTokenLimit(user);
@@ -251,12 +267,12 @@ async function generate(req: Request, live?: LiveCreate) {
     if (error || !data || data.status === "unknown") throw new Error("Generation progress is unavailable");
   }
   try {
-    const [instructions, { references: referenceImages, photos: ownerPhotos }, recentCopy] = await Promise.all([
+    const [instructions, { references: referenceImages, photos: brandPhotos }, recentCopy] = await Promise.all([
       getActiveInstructionsText(businessId),
       creativeAssets(supabase, businessId),
       recentCreativeCopy(supabase, businessId),
     ]);
-    const requestHash = createHash("sha256").update(JSON.stringify([businessId, brief, count, language, body.format, ...(sourceFacts.length ? [sourceFacts] : [])])).digest("hex");
+    const requestHash = createHash("sha256").update(JSON.stringify([businessId, brief, count, language, body.format, ...(sourceFacts.length ? [sourceFacts] : []), ...(pickedRows.length ? [pickedRows.map((row) => row.id)] : [])])).digest("hex");
     admin = createAdminClient();
     const { data: admission, error: admissionError } = await admin.rpc("creative_generation_admit", {
       p_business_id: businessId,
@@ -279,6 +295,28 @@ async function generate(req: Request, live?: LiveCreate) {
     }
     admitted = true;
     live?.onAdmitted();
+    // #780: one paid vision call per new library photo (inside the admitted reservation), so each ad's words fit its photo.
+    let photos: AdPhoto[] = [];
+    if (pickedRows.length) {
+      const visionEvents: Parameters<typeof persistLLMUsage>[0] = [];
+      try {
+        photos = await adPhotos(admin as unknown as SupabaseClient, pickedRows, {
+          onAttempt: (attempt, mediaId) => visionEvents.push(describeUsageEvent(attempt, mediaId,
+            { businessId, userId, route: "creatives.generate", requestId, generationId: variantGroup })),
+        });
+      } finally {
+        if (visionEvents.length) {
+          const add = usageCostUsd(visionEvents);
+          cost.text += add.text;
+          const recorded = await persistLLMUsage(visionEvents);
+          if (!recorded) usageUnknown = true;
+          await progress(recorded ? visionEvents.reduce((total, event) => total + event.usage.totalTokens, 0) : 0, false, !recorded);
+        }
+      }
+    }
+    const ownerPhotos = photos.length ? photos.map((photo) => photo.url) : brandPhotos;
+    const ownerPhotoNotes = Object.fromEntries(photos.flatMap((photo) => photo.notes ? [[photo.url, photo.notes] as const] : []));
+    const mediaIdFor = new Map(photos.map((photo) => [photo.url, photo.mediaId]));
     const advisoryPreferences = await preferenceContext(businessId, "creative", [brief, instructions].filter(Boolean).join("\n")).catch(() => "");
     const addCost = (events: Parameters<typeof usageCostUsd>[0]) => {
       const add = usageCostUsd(events);
@@ -294,6 +332,7 @@ async function generate(req: Request, live?: LiveCreate) {
       referenceImages,
       advisoryPreferences,
       sourceFacts,
+      ownerPhotoNotes,
       onProgress: live?.onProgress,
       onVariant: async (variant: GeneratedVariant) => {
         const events = variantUsageEvents(variant, {
@@ -314,11 +353,14 @@ async function generate(req: Request, live?: LiveCreate) {
         saving.set(variant.angleId, "render");
         const imageUrl = await renderAndPersistDesign(supabase, businessId, variantGroup, variant.angleId, variant.design, photoUrl, variant.imageUrl);
         saving.set(variant.angleId, "insert");
+        // A library photo's signed URL (and its token) isn't kept in the receipt; its id is.
+        const mediaId = variant.ownerPhotoUrl ? mediaIdFor.get(variant.ownerPhotoUrl) : undefined;
         const data = await saveCreative(supabase, {
           business_id: businessId, brief, angle: variant.angleName, image_url: imageUrl,
           headline: variant.headline, primary_text: variant.primaryText, cta: variant.cta,
           variant_group: variantGroup, status: "draft",
-          generation: generationReceipt(variant, language, referenceImages, sourceFacts, photoUrl, requestId),
+          ...(mediaId ? { media_asset_id: mediaId } : {}),
+          generation: generationReceipt(mediaId ? { ...variant, ownerPhotoUrl: `media:${mediaId}` } : variant, language, referenceImages, sourceFacts, photoUrl, requestId),
         });
         inserted.push(data);
         saving.delete(variant.angleId);

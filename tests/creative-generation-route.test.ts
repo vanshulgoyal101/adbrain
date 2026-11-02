@@ -30,6 +30,9 @@ const mocks = vi.hoisted(() => ({
   regenerateClaimError: false,
   persist: vi.fn(),
   progress: vi.fn(),
+  pickedMedia: vi.fn(),
+  adPhotos: vi.fn(),
+  mediaEnabled: true,
   user: { id: "owner" } as { id: string; email?: string; email_confirmed_at?: string },
   free: false,
 }));
@@ -136,6 +139,15 @@ vi.mock("@/lib/security/rate-limit", () => ({
   rateLimitResponse: async () => null,
 }));
 vi.mock("@/lib/audit", () => ({ logEvent: async () => {} }));
+vi.mock("@/lib/media/ad-photos", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/media/ad-photos")>()),
+  pickedMedia: mocks.pickedMedia,
+  adPhotos: mocks.adPhotos,
+}));
+vi.mock("@/lib/media/store", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/media/store")>()),
+  mediaUploadsEnabled: () => mocks.mediaEnabled,
+}));
 
 const variant = {
   angleId: "value",
@@ -179,6 +191,7 @@ beforeEach(() => {
   mocks.lostIds.clear();
   mocks.user = { id: "owner" };
   mocks.free = false;
+  mocks.mediaEnabled = true;
   mocks.persist.mockResolvedValue(true);
   process.env.NEXT_PUBLIC_SUPABASE_URL = "https://test.supabase.co";
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "anon";
@@ -204,6 +217,57 @@ beforeEach(() => {
 });
 
 describe("creative generation route", () => {
+  const mediaId = "7d6f1c1e-1d2b-4c3a-9e8f-0a1b2c3d4e5f";
+  const signed = "https://test.supabase.co/storage/v1/object/sign/media/business/photo.jpg?token=signed-secret";
+
+  it("hides library photos from Create while uploads are off (#780)", async () => {
+    mocks.mediaEnabled = false;
+    const { POST } = await import("@/app/api/creatives/generate/route");
+    const response = await POST(request({ businessId: "business", brief: "Installation", format: "story", mediaIds: [mediaId] }));
+    expect(response.status).toBe(404);
+    expect(mocks.pickedMedia).not.toHaveBeenCalled();
+    expect(mocks.generateVariants).not.toHaveBeenCalled();
+  });
+
+  it("refuses another Brand's or an unready photo before admitting a paid batch (#780)", async () => {
+    const { MediaError } = await import("@/lib/media/store");
+    mocks.pickedMedia.mockRejectedValueOnce(new MediaError(404, "MEDIA_NOT_FOUND", "Photo not found."));
+    const { POST } = await import("@/app/api/creatives/generate/route");
+    const response = await POST(request({ businessId: "business", brief: "Installation", format: "story", mediaIds: [mediaId] }));
+    expect(response.status).toBe(404);
+    expect(mocks.admitted.size).toBe(0);
+    expect(mocks.adPhotos).not.toHaveBeenCalled();
+    expect(mocks.generateVariants).not.toHaveBeenCalled();
+  });
+
+  it("writes each ad's words for its library photo, bills the vision call and keeps the signed link out of the receipt (#780)", async () => {
+    const row = { id: mediaId, business_id: "business" };
+    const notes = { description: "A hand-painted sign on a salon wall.", visibleText: "Haircut ₹149" };
+    mocks.pickedMedia.mockResolvedValueOnce([row]);
+    mocks.adPhotos.mockImplementationOnce(async (_admin, rows, options) => {
+      expect(rows).toEqual([row]);
+      options.onAttempt({ provider: "openrouter", model: "google/gemini-3.6-flash", status: "success", latencyMs: 900,
+        usage: { promptTokens: 1255, completionTokens: 60, totalTokens: 1315 } }, mediaId);
+      return [{ mediaId, url: signed, notes }];
+    });
+    mocks.generateVariants.mockImplementationOnce(async (params) => {
+      expect(params.ownerPhotos).toEqual([signed]);
+      expect(params.ownerPhotoNotes).toEqual({ [signed]: notes });
+      const photoVariant = { ...variant, ownerPhotoUrl: signed };
+      await params.onVariant(photoVariant);
+      return [photoVariant];
+    });
+    const { POST } = await import("@/app/api/creatives/generate/route");
+    const response = await POST(request({ businessId: "business", brief: "Installation", format: "story", mediaIds: [mediaId] }));
+    expect(response.status).toBe(200);
+    expect(mocks.pickedMedia).toHaveBeenCalledWith(expect.anything(), "business", [mediaId]);
+    const vision = mocks.persist.mock.calls.flatMap(([events]) => events).filter((event: { metadata?: { task?: string } }) => event.metadata?.task === "media.describe");
+    expect(vision).toEqual([expect.objectContaining({ model: "google/gemini-3.6-flash", metadata: expect.objectContaining({ mediaId }) })]);
+    const saved = mocks.insert.mock.calls.find(([table]) => table === "creatives")?.[1];
+    expect(saved).toMatchObject({ media_asset_id: mediaId });
+    expect(JSON.stringify(saved)).not.toContain("signed-secret");
+  });
+
   it("stops before paid generation when saved instructions cannot be loaded", async () => {
     mocks.instructions.mockRejectedValueOnce(new Error("private database detail"));
     const { POST } = await import("@/app/api/creatives/generate/route");

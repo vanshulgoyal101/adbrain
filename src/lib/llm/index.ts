@@ -23,6 +23,7 @@ export type {
   CompletionOptions,
   CompletionResult,
   LLMFailureCode,
+  ProviderAttempt,
   TokenUsage,
 } from "./types";
 export { AllLLMProvidersFailedError, LLMError, NoLLMKeysError } from "./types";
@@ -54,6 +55,8 @@ const LAST_RESORT_WAIT_BUDGET_MS = 90_000;
 const namedParkUntil = new Map<string, number>();
 /** #1808: the Cerebras model, exported so the scheduled model check reads the same id. */
 export const CEREBRAS_MODEL = "llama-3.3-70b";
+/** #780: the paid vision model for customers' photos (OpenRouter list price $0.75/M in, Nov 2). */
+export const VISION_MODEL = "google/gemini-3.6-flash";
 // #449: a key out of credit stays parked long enough not to slow every Create; the free models answer meanwhile.
 const CREDIT_COOLDOWN_MS = 15 * 60_000;
 // #1568: a daily limit parks the provider until its own retry-after, up to this long.
@@ -61,9 +64,20 @@ const DAILY_PARK_MAX_MS = 6 * 3_600_000;
 // Round-robin cursor per provider so load spreads across a key pool.
 const rrCursor = new Map<string, number>();
 
-function buildRegistry(routing: "standard" | "budget" | "creative" = "standard", extraProviders: string[] = [], nextProviders: string[] = []): RegisteredProvider[] {
+function buildRegistry(routing: "standard" | "budget" | "creative" | "vision" = "standard", extraProviders: string[] = [], nextProviders: string[] = []): RegisteredProvider[] {
   const env = getEnv();
-
+  if (routing === "vision") {
+    return env.OPENROUTER_API_KEYS.length ? [{
+      provider: createOpenAICompatibleProvider({
+        name: "openrouter",
+        baseUrl: "https://openrouter.ai/api/v1/chat/completions",
+        defaultModel: VISION_MODEL,
+        extraHeaders: { "HTTP-Referer": env.NEXT_PUBLIC_SITE_URL, "X-Title": "AdBrain" },
+      }),
+      keys: env.OPENROUTER_API_KEYS,
+      model: VISION_MODEL,
+    }] : [];
+  }
   const registry: Record<string, RegisteredProvider[] | RegisteredProvider | null> = {
     google: env.GOOGLE_AI_API_KEYS.length
       ? {
@@ -145,6 +159,8 @@ export async function complete(
 ): Promise<CompletionResult> {
   // #2230: the smoke login never pays for text; when the free models can't answer, it fails with a clear reason.
   const freeOnly = freeTextOnly();
+  const vision = options.routing === "vision";
+  if (!vision && messages.some((message) => message.images?.length)) throw new Error("Pictures go only through the vision route (#780).");
   const registry = buildRegistry(options.routing, options.extraProviders, options.nextProviders)
     .filter(({ provider }) => !freeOnly || FREE_TEXT_PROVIDERS.includes(provider.name));
   if (registry.length === 0) throw freeOnly ? new AllLLMProvidersFailedError("FREE_TEXT_UNAVAILABLE", 0) : new NoLLMKeysError();
@@ -152,8 +168,9 @@ export async function complete(
   const startedAt = Date.now();
   const result = await withCache(
     cacheKey(messages, options),
-    options.cache,
-    () => callProviders(messages, options, registry, freeOnly ? [] : buildRegistry("standard")
+    vision ? false : options.cache,
+    // #780: a photo never falls back to a free model, which may keep it.
+    () => callProviders(messages, options, registry, freeOnly || vision ? [] : buildRegistry("standard")
       .filter(({ provider }) => FREE_TEXT_PROVIDERS.includes(provider.name) && !registry.some((entry) => entry.provider.name === provider.name)))
       .catch((error: unknown) => {
         throw freeOnly && error instanceof AllLLMProvidersFailedError ? new AllLLMProvidersFailedError("FREE_TEXT_UNAVAILABLE", registry.length) : error;

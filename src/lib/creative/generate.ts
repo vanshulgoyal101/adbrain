@@ -114,6 +114,8 @@ export async function generateVariants(params: {
   referenceImages?: string[];
   /** The business's own photos; the first ad uses the newest one as its image (#195). */
   ownerPhotos?: string[];
+  /** #780: what each owner photo (by URL) shows, so its ad's words fit it. */
+  ownerPhotoNotes?: Readonly<Record<string, NonNullable<ConceptInput["ownerPhotoNotes"]>>>;
   recentCopy?: ConceptInput["recentCopy"];
   advisoryPreferences?: string;
   sourceFacts?: string[];
@@ -169,7 +171,9 @@ export async function generateVariants(params: {
     angles.map(async (angle, index) => {
       try {
         const ownerPhoto = ownerPhotoFor(angle, params.ownerPhotos);
-        const input: ConceptInput = { brand, brief, angle, instructions, language, format, referenceImages, advisoryPreferences, sourceFacts, ...(ownerPhoto ? { ownerPhoto } : {}) };
+        const ownerPhotoNotes = ownerPhoto ? params.ownerPhotoNotes?.[ownerPhoto] : undefined;
+        const input: ConceptInput = { brand, brief, angle, instructions, language, format, referenceImages, advisoryPreferences, sourceFacts,
+          ...(ownerPhoto ? { ownerPhoto } : {}), ...(ownerPhotoNotes ? { ownerPhotoNotes } : {}) };
         const waitForTurn = parallel ? Promise.resolve() : startNext;
         let notifyNext!: () => void;
         startNext = new Promise<void>((resolve) => { notifyNext = resolve; });
@@ -377,6 +381,8 @@ async function renderVariant(
   const ownerRaster = input.ownerPhoto
     ? await downloadImage(input.ownerPhoto, signal).catch(() => undefined)
     : undefined;
+  // #780: words written for this photo must not ship over a generated picture; the top-up writes new ones.
+  if (input.ownerPhotoNotes && !ownerRaster) throw new CreativeImageError(new Error("The owner's photo could not be read."), usage, imageAttempts);
   let ownerPhoto = ownerRaster ? input.ownerPhoto : undefined;
   const fromOwner = (url: string, raster: { width: number; height: number }, fallbackFrom?: string) => ({
     url, prompt: "", provider: OWNER_PHOTO_PROVIDER, model: "brand_assets", estimatedCostUsd: 0, width: raster.width, height: raster.height,

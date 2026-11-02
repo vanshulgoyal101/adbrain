@@ -19,6 +19,7 @@ Part of the [repository map](../../../docs/architecture/overview.md#repository-m
 
 - All text calls go through `complete()` or `completeJSON()` in [index.ts](index.ts). Do not call a provider SDK or endpoint directly; the only direct provider call outside this folder is the OpenRouter credit read in the `llm-credit` cron.
 - Order comes from `LLM_PROVIDER_ORDER`, `LLM_BUDGET_PROVIDER_ORDER` or `CREATIVE_PROVIDER_ORDER` (by `routing`). A 429 parks that key (a named organization limit parks every key of the provider, a daily limit up to 6 h); out of credit parks the key for 15 min and falls back to the free Google/Groq models. Parking state is per server instance.
+- Pictures go only through `routing: "vision"` (#780): OpenRouter's paid `VISION_MODEL` with `data_collection: deny`, no cache and no free fallback. Every other route refuses a message with `images`.
 - Each provider attempt has its own deadline (`attemptTimeoutMs`, 90 s by default in [sdk.ts](providers/sdk.ts)); an aborted caller signal stops rotation.
 - Every completion is counted by `recordUsage` ([usage.ts](usage.ts)), and callers get one `onAttempt` per provider attempt. Routes that need a durable record pass those to `persistLLMUsage` ([persist.ts](persist.ts)); it is best effort and must never store prompts, keys, response bodies or image bytes.
 - The cache is off unless a caller opts in, and it is only for low-variance calls; it is keyed on the request and model, never the API key.
