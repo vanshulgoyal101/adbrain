@@ -8,6 +8,7 @@ import { jpegIfWebp } from "@/lib/imageGen/encode";
 import { readBoundedResponse } from "@/lib/imageGen/raster";
 import { fetchPublicUrl } from "@/lib/security/ssrf";
 import { MetaError, isThrottleCode } from "./client";
+import { destinationCTA } from "./destinations";
 
 export type MetaGraph = <T>(path: string, opts?: { method?: string; form?: Record<string, string> }) => Promise<T>;
 
@@ -181,4 +182,40 @@ function adVideoProblemKind(code: number | undefined): AdVideoProblem["kind"] {
   if (code === 190 || code === 200) return "reconnect";
   if (isThrottleCode(code)) return "throttled";
   return "unknown";
+}
+
+export type VideoCreativeInput = {
+  pageId: string;
+  videoId: string;
+  /** The video's own thumbnail (`readAdVideo().thumbnailUrl` once ready); Meta needs one on `video_data`. */
+  thumbnailUrl: string;
+  message: string;
+  headline: string;
+  description?: string | null;
+  destination: "whatsapp" | "instant_form";
+  leadFormId?: string;
+  /** `whatsappWelcomeMessage(opening)`, already serialized. */
+  welcomeMessage?: string;
+};
+
+/**
+ * #749: the `object_story_spec` for an owner's video ad, the video twin of the launch's `link_data` image creative:
+ * same words, same call to action (`destinationCTA`), same WhatsApp welcome. Meta accepted these (validate_only,
+ * tests/core/fixtures/meta/video-creative-validate.json). One recorded difference: on `video_data` Meta refuses a
+ * `link` in the WhatsApp button (code 105, subcode 1815630), so the number comes from the ad set's promoted object.
+ */
+export function videoStorySpec(input: VideoCreativeInput): { page_id: string; video_data: Record<string, unknown> } {
+  const description = input.description?.trim();
+  return {
+    page_id: input.pageId,
+    video_data: {
+      video_id: input.videoId,
+      image_url: input.thumbnailUrl,
+      message: input.message,
+      title: input.headline,
+      ...(description ? { link_description: description } : {}),
+      ...(input.destination === "whatsapp" && input.welcomeMessage ? { page_welcome_message: input.welcomeMessage } : {}),
+      call_to_action: destinationCTA(input.destination, { leadFormId: input.leadFormId }),
+    },
+  };
 }
