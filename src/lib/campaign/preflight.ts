@@ -8,7 +8,6 @@ import { askMismatchWarning, QUOTED_ASK_WITH_QUESTIONS, reviewWarnings, WHATSAPP
 import { quotedAsk, sameWords } from "@/lib/campaign/whatsapp-greeting";
 import { batchProofWarning } from "@/lib/creative/proof-line";
 import type { ResolvedWhatsAppMessage } from "@/lib/campaign/whatsapp-template";
-import type { LeadDestination } from "@/lib/types/campaign";
 import type { WebsiteReach } from "@/lib/campaign/website-reach";
 import { isAdvertiserWebsite, websiteAdLink, websiteBlockerMessage } from "@/lib/campaign/website-review";
 
@@ -109,7 +108,7 @@ export interface CanonicalReviewPayload {
   creativeIds: string[];
   creatives: ReturnType<typeof buildCreativeReviewPayload>;
   leadFormId: string | null;
-  destination: Exclude<LeadDestination, "call" | "website">;
+  destination: ReviewDestination;
   whatsappNumber: string | null;
   websiteUrl?: string | null;
   dailyBudgetRupees: number;

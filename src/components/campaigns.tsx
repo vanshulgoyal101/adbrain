@@ -571,7 +571,8 @@ function BusinessCampaigns({
     setSelected(new Set(input.creativeIds));
     setBudget(input.dailyBudgetRupees);
     setLeadFormId(input.leadFormId ?? "");
-    setDestination(input.destination ?? "instant_form");
+    // TODO(#2600): D adds website to this composer; until then a website draft keeps the composer's destination.
+    if (input.destination !== "website") setDestination(input.destination ?? "instant_form");
     // The form names numbers by their mask; a full number from an older draft shows as its mask.
     setWhatsAppNumber(!input.whatsappNumber || maskedWhatsAppNumberPattern.test(input.whatsappNumber) ? input.whatsappNumber ?? "" : maskWhatsAppNumber(input.whatsappNumber));
     setWhatsAppLanguage(input.whatsappLanguage ?? "ad");
