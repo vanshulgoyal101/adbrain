@@ -68,6 +68,7 @@ jobs:
           [ -n "$rid" ] || { echo "::error::Probe workflow was not created"; exit 1; }
           state=$(gh api "repos/$repo/actions/runs/$rid" --jq '"\(.status) \(.conclusion)"')
           echo "Before approval: $state"
+          gh api "repos/$repo/actions/runs/$rid" --jq '{id,path,head_branch,head_sha,pull_requests:[.pull_requests[].number]}'
           [ "$state" = "completed action_required" ] || { echo "::error::Probe was not approval-required"; exit 1; }
           gh api -X POST "repos/$repo/actions/runs/$rid/approve" >/dev/null
           echo "Approval endpoint accepted the workflow token."
