@@ -1561,10 +1561,10 @@ function BusinessCampaigns({
   }
 
   const savedDraftsBlock = savedDrafts.length > 0 && (
-    <details aria-label="Saved drafts" className="group border-y border-slate-200 py-3">
+    <details aria-label={tc("header.savedDrafts")} className="group border-y border-slate-200 py-3">
       <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 text-sm font-semibold text-slate-900 [&::-webkit-details-marker]:hidden">
         <ChevronRight className="h-4 w-4 text-slate-500 transition-transform group-open:rotate-90" aria-hidden="true" />
-        <h2>Saved drafts</h2>
+        <h2>{tc("header.savedDrafts")}</h2>
         <span className="font-normal text-slate-500">({savedDrafts.length})</span>
       </summary>
       <ul className="mt-1 divide-y divide-slate-100">
