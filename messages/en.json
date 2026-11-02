@@ -67,7 +67,7 @@
     "launchDetail": "{n, plural, one {# approved ad is} other {# approved ads are}} ready. Choose where to show them and how much to spend.",
     "launchAction": "Launch a campaign",
     "readyTitle": "Your ads are ready",
-    "readyDetail": "Share them on WhatsApp or download them now. Launching on Facebook and Instagram opens soon.",
+    "readyDetail": "Share them on WhatsApp or download them now. Running them on Facebook and Instagram needs a Facebook connection; Campaigns shows where that stands.",
     "readyAction": "Share your ads",
     "approvedTitle": "{n, plural, one {# approved ad is} other {# approved ads are}} available",
     "approvedDetail": "Not in a campaign yet. Put them in a campaign or export them.",
@@ -609,6 +609,29 @@
       "billingRequired": "Meta needs a way to pay first: a card, or money added by UPI or net banking. Add it in Meta, then tap Go live again. Nothing was spent.",
       "savedPaused": "Your campaign is saved, paused. Nothing was spent.",
       "openCampaigns": "Open Campaigns"
+    },
+    "access": {
+      "pending": "Facebook is still reviewing AdBrain. You can make, approve and download ads now. Connecting a new Facebook account must wait for Meta to approve access.",
+      "requested": "Request received. Sending a request does not switch on Facebook access; Meta approval is still pending.",
+      "requestFailed": "Your request did not send. Check your connection and try again.",
+      "again": "Try again"
+    },
+    "readyAds": {
+      "title": "Your ads are ready",
+      "connectFirst": "Connect Facebook to run them on Facebook and Instagram. Until then, share your ads with customers yourself.",
+      "yourAd": "Your ad: {headline}",
+      "newestAd": "Your newest approved ad",
+      "preparing": "Preparing download…",
+      "downloadOne": "Download your ad",
+      "downloadAll": "Download all {n} ads",
+      "downloadFailed": "The download didn't finish. Check your connection and try again.",
+      "seeAll": "See all approved ads",
+      "runTitle": "Want to run them on Facebook?",
+      "askBody": "Ask for Facebook access so we know you're waiting. You approve every rupee before anything runs.",
+      "ask": "Ask for Facebook access",
+      "asking": "Sending request…",
+      "haveAccess": "Already have access?",
+      "connect": "Connect Facebook"
     }
   },
   "pauseAll": {

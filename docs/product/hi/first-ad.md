@@ -1,5 +1,5 @@
 # फ़ोन पर आपका पहला ऐड
-<!-- mirrors ../first-ad.md 6a07d4dd0d03 -->
+<!-- mirrors ../first-ad.md 4eae1040cddd -->
 
 यह [Your first ad on a phone](../first-ad.md) का हिंदी रूप है; अंग्रेज़ी पेज बदले तो इसे भी बदलें।
 [Features and workflows](../README.md) का हिस्सा।
@@ -21,23 +21,21 @@ you before it's due."
 यह अपने फ़ोन पर करें, Facebook में खुद (मालिक के तौर पर) साइन इन करके, हो सके तो एक दिन
 पहले। ये Meta की अपनी स्क्रीन हैं; यहाँ कोई पैसा खर्च नहीं होता।
 
-1. **AdBrain को अपनी Facebook प्रोफ़ाइल का लिंक भेजें** WhatsApp पर (Facebook › आपकी
-   प्रोफ़ाइल › ⋯ › Copy profile link)। जब तक Facebook AdBrain की जाँच कर रहा है, हम
-   आपको adBrain ऐप का tester बनाते हैं, और उसके बाद ही आप कनेक्ट कर पाएँगे।
-2. **इनवाइट स्वीकार करें:** developers.facebook.com/requests खोलें और adBrain स्वीकार
-   करें। Facebook पहले developer के तौर पर रजिस्टर करने को कह सकता है: यह मुफ़्त है और
-   आपके फ़ोन पर आए कोड से होता है।
-3. **एक बिज़नेस पोर्टफ़ोलियो:** business.facebook.com खोलें। अगर यह बिज़नेस पोर्टफ़ोलियो
+Facebook अभी AdBrain की जाँच कर रहा है (Meta App Review, #156)। Meta की मंज़ूरी तक नया
+Facebook अकाउंट कनेक्ट नहीं हो सकता; विज्ञापन बनाना, मंज़ूर करना और डाउनलोड करना अभी भी
+होता है। नीचे के स्टेप अभी कर लेने से Meta की मंज़ूरी के बाद Go live जल्दी हो जाएगा।
+
+1. **एक बिज़नेस पोर्टफ़ोलियो:** business.facebook.com खोलें। अगर यह बिज़नेस पोर्टफ़ोलियो
    बनाने को कहे, तो अपने बिज़नेस का नाम, अपना नाम और बिज़नेस ईमेल डालें। पहले से है?
    वही इस्तेमाल करें। किसी और का पोर्टफ़ोलियो कभी इस्तेमाल न करें।
-4. **उसमें आपका पेज:** Settings › Accounts › Pages › Add › Add a Page, और अपने बिज़नेस
+2. **उसमें आपका पेज:** Settings › Accounts › Pages › Add › Add a Page, और अपने बिज़नेस
    का Facebook पेज चुनें। पेज पर WhatsApp बटन होना चाहिए, उसी नंबर के साथ जिस पर ग्राहक
    मैसेज करें।
-5. **रुपये वाला ऐड अकाउंट:** Settings › Accounts › Ad accounts › Add › Create a new ad
+3. **रुपये वाला ऐड अकाउंट:** Settings › Accounts › Ad accounts › Add › Create a new ad
    account। Currency **Indian Rupee (INR)** और time zone **Asia/Kolkata**: Meta इन्हें
    बाद में नहीं बदल सकता। पूछे कि किसके लिए है, तो "My business" चुनें। रुपये वाला ऐड
    अकाउंट पहले से है? तो उसे यहीं जोड़ें।
-6. **पेमेंट का तरीका:** उसी ऐड अकाउंट में Payment settings › Add payment method: कार्ड,
+4. **पेमेंट का तरीका:** उसी ऐड अकाउंट में Payment settings › Add payment method: कार्ड,
    या UPI या नेट बैंकिंग से पहले पैसे डालें (कम से कम उतने जितना आपका रन ले सकता है;
    AdBrain दिखाता है, जैसे ₹708)।
 
@@ -140,10 +138,9 @@ ready" (या "Your N ads are ready") के साथ "Connect and go live" �
   - "Stops at ₹708": इस रन का ज़्यादा से ज़्यादा खर्च।
   - "Your Page, your ad account, your card. AdBrain never holds your ad money."
 - **टैप करें:** जब तक Facebook AdBrain की जाँच कर रहा है, Facebook Page वाली लाइन में लिखा होगा
-  "Facebook is still reviewing AdBrain, so only people we've added can connect. Tap
-  Connect; if Facebook says the app isn't available, come back here and we\'ll add you."
-  and "Already invited? Accept … in your invites first." (… यानी adBrain) इनवाइट मिल चुका है तो "Open my
-  invites" दबाकर adBrain स्वीकार करें। फिर "Connect Facebook Page" दबाएँ।
+  "Facebook अभी AdBrain की जाँच कर रहा है। आप अभी विज्ञापन बना, मंज़ूर और डाउनलोड कर सकते हैं।
+  नया Facebook अकाउंट जोड़ने के लिए Meta की मंज़ूरी का इंतज़ार करना होगा।" Meta की मंज़ूरी के बाद
+  "Connect Facebook Page" दबाएँ।
   Meta की विंडो खुलेगी: "Connect
   Business" दबाएँ, Facebook में साइन इन करें, अपना पेज और ऐड अकाउंट चुनें, "Use
   selected business" दबाएँ, फिर "Continue to review"। अब लाइन में "Connected" लिखा
@@ -156,11 +153,10 @@ ready" (या "Your N ads are ready") के साथ "Connect and go live" �
 - **अगर काम न करे:** कुछ भी फ़ेल हो तो कोई पैसा खर्च नहीं होता। स्क्रीन पर क्या लिखा आता है:
   - Meta कनेक्ट: "Meta has not finished yet. Complete the Meta window, then check
     again. Your draft is saved." Meta की विंडो में काम पूरा करें, फिर "Check again" दबाएँ।
-    "Didn't connect? We've asked our team to add you and will WhatsApp you within a
-    working day. Accept our invite, then try again.": हमारे जोड़ने के बाद ही Facebook आपको
-    अंदर आने देगा (#2538); AdBrain ने टीम को बता दिया है। इनवाइट आने पर "Open my invites"
-    दबाएँ, स्वीकार करें, फिर "Try again"। "…your request didn't reach us" दिखे तो इंटरनेट
-    देखें और "Try again" दबाएँ।
+    कनेक्ट न होने के बाद: "अनुरोध मिल गया। अनुरोध भेजने से Facebook एक्सेस चालू नहीं होता;
+    Meta की मंज़ूरी अभी बाकी है।" AdBrain ने दर्ज कर लिया है कि आप इंतज़ार कर रहे हैं (#2538);
+    यह कनेक्शन नहीं है, और अभी कोई तारीख नहीं है। Meta की मंज़ूरी के बाद "फिर से कोशिश करें"
+    दबाएँ। "आपका अनुरोध नहीं भेजा जा सका।…" दिखे तो इंटरनेट देखें और "फिर से कोशिश करें" दबाएँ।
   - ऐड अकाउंट या पेज शेयर नहीं हुआ: "Meta shared no ad account with AdBrain…" (या
     "no Facebook Page")। "Reconnect Meta" दबाएँ और Meta की विंडो में ऐड अकाउंट और पेज
     पर टिक करें। ऐड अकाउंट नहीं है? बिज़नेस पोर्टफ़ोलियो में रुपये वाला एक बनाएँ।
