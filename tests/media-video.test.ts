@@ -12,7 +12,7 @@ vi.mock("@/lib/env", () => ({ getEnv: () => env }));
 // #748: real files made with ffmpeg 6: a tall H.264 MP4 (moov first), a wide MOV with AAC and an ISO 6709 location in
 // its user data (moov last), the same MOV turned portrait by a 90° matrix (how phones store it), and a 61 s clip.
 const fixture = (name: string) => new Uint8Array(readFileSync(`tests/fixtures/media/${name}`));
-const tall = fixture("tall.mp4"), wideGps = fixture("wide-gps.mov"), rotated = fixture("rotated.mov"), long = fixture("long.mp4");
+const tall = fixture("tall.mp4"), wideGps = fixture("wide-gps.mov"), rotated = fixture("rotated.mov"), long = fixture("long.mp4"), dataTrack = fixture("data-track.mp4");
 const GPS = Buffer.from("077.5946");
 const sha = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 const BUSINESS = "11111111-1111-4111-8111-111111111111";
@@ -61,6 +61,24 @@ describe("MP4/MOV reader (#748)", () => {
     expect(Buffer.from(clean).includes(GPS)).toBe(false);
     expect(readVideo(clean)).toEqual(readVideo(wideGps));
     expect(readVideo(stripVideoMetadata(rotated))).toEqual(readVideo(rotated));
+  });
+
+  it("drops tracks other than picture and sound, samples included (a GPS or metadata stream)", () => {
+    const secret = Buffer.from("TRACKSECRET");
+    expect(Buffer.from(dataTrack).includes(secret)).toBe(true);
+    const clean = Buffer.from(stripVideoMetadata(dataTrack));
+    expect(clean.includes(secret)).toBe(false);
+    expect(clean.includes(Buffer.from("sbtl"))).toBe(false);
+    expect(clean.includes(Buffer.from("soun"))).toBe(true);
+    expect(readVideo(clean)).toEqual(readVideo(dataTrack));
+  });
+
+  it("survives broken sample tables without reading past the file", () => {
+    const broken = Buffer.from(dataTrack);
+    const stco = broken.lastIndexOf(Buffer.from("stco"));
+    broken.writeUInt32BE(0xffffffff, stco + 8);
+    broken.writeUInt32BE(0x7fffffff, stco + 12);
+    expect(() => stripVideoMetadata(broken)).not.toThrow();
   });
 });
 

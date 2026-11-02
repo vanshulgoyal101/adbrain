@@ -28,6 +28,11 @@ function boxes(bytes: Uint8Array, from: number, to: number): Box[] {
 const child = (bytes: Uint8Array, box: Box | undefined, type: string) =>
   box ? boxes(bytes, box.content, box.end).find((item) => item.type === type) : undefined;
 
+const handler = (bytes: Uint8Array, trak: Box) => {
+  const hdlr = child(bytes, child(bytes, trak, "mdia"), "hdlr");
+  return hdlr && hdlr.end - hdlr.content >= 12 ? String.fromCharCode(...bytes.subarray(hdlr.content + 8, hdlr.content + 12)) : "";
+};
+
 /** Container, duration and display size, or null if this isn't a playable MP4/MOV with a video track. */
 export function readVideo(bytes: Uint8Array): VideoInfo | null {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
@@ -45,8 +50,7 @@ export function readVideo(bytes: Uint8Array): VideoInfo | null {
   if (!timescale || !duration) return null;
 
   for (const trak of boxes(bytes, moov.content, moov.end).filter((box) => box.type === "trak")) {
-    const hdlr = child(bytes, child(bytes, trak, "mdia"), "hdlr");
-    if (!hdlr || hdlr.end - hdlr.content < 12 || String.fromCharCode(...bytes.subarray(hdlr.content + 8, hdlr.content + 12)) !== "vide") continue;
+    if (handler(bytes, trak) !== "vide") continue;
     const tkhd = child(bytes, trak, "tkhd");
     const base = tkhd && bytes[tkhd.content] === 1 ? 52 : 40;
     if (!tkhd || tkhd.end - tkhd.content < base + 44) return null;
@@ -63,19 +67,59 @@ export function readVideo(bytes: Uint8Array): VideoInfo | null {
 }
 
 const PRIVATE = new Set(["udta", "meta", "uuid", "XMP_"]);
+const KEPT_TRACKS = new Set(["vide", "soun"]);
+
+/** Zero the samples a track points at in `mdat` (stsz sizes, stsc chunk runs, stco/co64 chunk offsets). */
+function zeroSamples(out: Uint8Array, trak: Box) {
+  const view = new DataView(out.buffer, out.byteOffset, out.byteLength);
+  const stbl = child(out, child(out, child(out, trak, "mdia"), "minf"), "stbl");
+  const stsz = child(out, stbl, "stsz");
+  const stsc = child(out, stbl, "stsc");
+  const stco = child(out, stbl, "stco") ?? child(out, stbl, "co64");
+  if (!stsz || !stsc || !stco || stsz.end - stsz.content < 12 || stsc.end - stsc.content < 8 || stco.end - stco.content < 8) return;
+  const fixed = view.getUint32(stsz.content + 4);
+  const samples = Math.min(view.getUint32(stsz.content + 8), fixed ? Infinity : (stsz.end - stsz.content - 12) / 4);
+  const runs = Math.min(view.getUint32(stsc.content + 4), (stsc.end - stsc.content - 8) / 12);
+  const wide = stco.type === "co64";
+  const chunks = Math.min(view.getUint32(stco.content + 4), (stco.end - stco.content - 8) / (wide ? 8 : 4));
+  let sample = 0;
+  let run = 0;
+  for (let chunk = 1; chunk <= chunks && sample < samples; chunk++) {
+    while (run + 1 < runs && view.getUint32(stsc.content + 8 + (run + 1) * 12) <= chunk) run++;
+    const perChunk = runs ? view.getUint32(stsc.content + 8 + run * 12 + 4) : 0;
+    let at = wide ? Number(view.getBigUint64(stco.content + 8 + (chunk - 1) * 8)) : view.getUint32(stco.content + 8 + (chunk - 1) * 4);
+    const count = Math.min(perChunk, samples - sample);
+    if (fixed) {
+      out.fill(0, Math.min(at, out.length), Math.min(at + fixed * count, out.length));
+      sample += count;
+      continue;
+    }
+    for (let i = 0; i < count && at < out.length; i++, sample++) {
+      const size = view.getUint32(stsz.content + 12 + sample * 4);
+      out.fill(0, at, Math.min(at + size, out.length));
+      at += size;
+    }
+  }
+}
 
 /**
  * A copy with user data, metadata and XMP boxes (an iPhone's location, the device, times) blanked: each becomes a
  * same-size `free` box of zeros, so every offset into `mdat` stays right and nothing is re-encoded (Reviewer, #1245:
- * no location leaves with an owner's media).
+ * no location leaves with an owner's media). Tracks other than picture and sound (an iPhone's timed metadata, a
+ * GoPro's GPS stream) go too: their samples in `mdat` are zeroed first, then their `trak` is blanked.
  */
 export function stripVideoMetadata(bytes: Uint8Array): Uint8Array {
   const out = bytes.slice();
+  const toFree = (box: Box) => {
+    out.set([0x66, 0x72, 0x65, 0x65], box.start + 4);
+    out.fill(0, box.content, box.end);
+  };
   const blank = (from: number, to: number, depth: number) => {
     for (const box of boxes(out, from, to)) {
-      if (PRIVATE.has(box.type)) {
-        out.set([0x66, 0x72, 0x65, 0x65], box.start + 4);
-        out.fill(0, box.content, box.end);
+      if (PRIVATE.has(box.type)) toFree(box);
+      else if (box.type === "trak" && !KEPT_TRACKS.has(handler(out, box))) {
+        zeroSamples(out, box);
+        toFree(box);
       } else if (depth < 2 && (box.type === "moov" || box.type === "trak")) blank(box.content, box.end, depth + 1);
     }
   };
