@@ -16,10 +16,15 @@ so Supabase can't restore anything (paid backups are a CEO call, #884). Our own 
   `auth.users` (id, email) and Storage object paths, as JSON through the read-only
   Management API (`BEGIN READ ONLY`). It took **100 s** for 56 tables and 33,287 rows (24 MB
   database, mostly `product_events`). `<dir>` holds customer data and encrypted Meta
-  tokens: keep it private and delete it when done.
+  tokens: keep it private and delete it when done. Each page is a separate query, so it pages on
+  the primary key: ctid paging returned a row updated mid-export twice and failed the drill (#2537).
+  Nov 2: 66 tables, 108,159 rows in 171 s.
 - `node scripts/db-export.mjs restore <dir>` builds git's schema in a throwaway local
   Postgres 17, loads every row with triggers and FK checks off, prints exported vs restored
-  counts and deletes the cluster. It took **4 s**, with 0 rows lost.
+  counts and deletes the cluster. It took **4 s**, with 0 rows lost. In a checkout with no
+  `node_modules` (the supervisor's can lose them, #2537) it first clones wt.sh's lockfile cache there.
+  A table whose insert fails is named with Postgres's error code and constraint only (never
+  the message or DETAIL, which can quote a row), and the drill carries on to the other tables.
 - To bring production back from an export: create a new Supabase project, apply git's
   schema the same way, load the export (the restore's insert step), set `META_TOKEN_ENCRYPTION_KEY`
   to the same value so stored tokens decrypt, and point Vercel at it. Owners sign in again
@@ -27,7 +32,10 @@ so Supabase can't restore anything (paid backups are a CEO call, #884). Our own 
 - **Nightly (#884):** the team supervisor's tick runs the export after 20:00Z (01:30 IST) into
   `~/.adbrain-backups/<UTC time>` (0700, the owner's Mac) and restore-drills it. Then it seals it
   as `<UTC time>.tar.gz.cms` (0600, CMS-encrypted to `.github/backup/backup-cert.crt`, like `db-backup.yml`),
-  deletes the plaintext and keeps the newest 7 (#1762). To read one: decrypt with the keychain key
+  deletes the plaintext and keeps the newest 7 (#1762). If the restore drill fails, the sealed file is
+  named `<UTC time>.unverified.tar.gz.cms`, the next supervisor tick retries, and at most 7 unverified
+  exports are kept separately from the verified ones. Older files without that marker may predate this
+  safeguard; check the restore log before relying on them. To read one: decrypt with the keychain key
   (releasing-recovery.md › restore drill: `openssl cms -decrypt …`), then `tar -xzf` and
   `node scripts/db-export.mjs restore <folder>`.
   After a good export it also runs `scripts/prune-smoke-storage.mjs --apply` (#1891): the core smoke's own

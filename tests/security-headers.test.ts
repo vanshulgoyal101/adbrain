@@ -29,6 +29,16 @@ describe("SECURITY_HEADERS", () => {
     expect(map.size).toBe(SECURITY_HEADERS.length);
   });
 
+  it("#2570: allows Cloudflare's sign-in check script and frame only when its site key is set", () => {
+    const policy = () => getSecurityHeaders("https://project.supabase.co").find(header => header.key === "Content-Security-Policy")!.value;
+    vi.stubEnv("NEXT_PUBLIC_TURNSTILE_SITE_KEY", "");
+    expect(policy()).not.toContain("challenges.cloudflare.com");
+    vi.stubEnv("NEXT_PUBLIC_TURNSTILE_SITE_KEY", "0x4AAAAAAA-site-key");
+    expect(policy()).toContain("script-src 'self' 'unsafe-inline' https://vanshul.com https://challenges.cloudflare.com;");
+    expect(policy()).toContain("frame-src 'self' https://accounts.google.com https://www.facebook.com https://challenges.cloudflare.com;");
+    expect(policy()).not.toMatch(/connect-src[^;]*cloudflare/);
+  });
+
   it("adds only explicit Razorpay origins for opted-in local checkout", () => {
     vi.stubEnv("NODE_ENV", "development");
     vi.stubEnv("VERCEL_ENV", "");

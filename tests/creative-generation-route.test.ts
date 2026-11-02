@@ -18,8 +18,13 @@ const mocks = vi.hoisted(() => ({
   savedGeneration: null as unknown,
   schemaError: null as unknown,
   saveError: false,
+  /** #2494: inserts that fail in transit before the database takes the ad. */
+  saveFailures: 0,
+  lostIds: new Set<string>(),
   used: 0 as number | null,
   admitted: new Map<string, { business: string; hash: string }>(),
+  /** #1402: another device's batch still making its first ad. */
+  running: null as string | null,
   states: new Map<string, string>(),
   regenerateClaims: new Map<string, { attempt: string; state: "processing" | "unresolved" }>(),
   regenerateClaimError: false,
@@ -54,6 +59,7 @@ vi.mock("@/lib/supabase/admin", () => ({
       }
       if (mocks.used === null) return { data: null, error: { message: "Unavailable" } };
       const existing = mocks.admitted.get(args.p_generation_id);
+      if (!existing && mocks.running) return { data: { action: "running", generationId: mocks.running, status: "processing", expectedCount: 3 }, error: null };
       const action = existing ? existing.business !== args.p_business_id ? "missing" :
         existing.hash !== args.p_request_hash ? "conflict" : "recover" : "start";
       if (!existing) mocks.admitted.set(args.p_generation_id, { business: args.p_business_id, hash: args.p_request_hash ?? "" });
@@ -68,7 +74,7 @@ vi.mock("@/lib/supabase/server", () => ({
       select: () => ({
         eq: (_key: string, value: string) => ({
           maybeSingle: async () => ({
-            data: table === "creatives" ? {
+            data: table === "creatives" && mocks.lostIds.has(value) ? null : table === "creatives" ? {
               id: value, business_id: "business", name: "Example", brief: "Installation",
               headline: "Previous ad", primary_text: "Previous opening",
               generation: mocks.savedGeneration,
@@ -84,11 +90,13 @@ vi.mock("@/lib/supabase/server", () => ({
       update: (row: unknown) => ({ eq: () => ({ select: () => ({ single: async () => ({ data: row, error: null }) }) }) }),
       insert: (row: unknown) => {
         mocks.insert(table, row);
+        const failed = mocks.saveError || (mocks.saveFailures > 0 && mocks.saveFailures-- > 0);
+        if (failed) mocks.lostIds.add((row as { id: string }).id);
         return {
           select: () => ({
             single: async () => ({
-              data: mocks.saveError ? null : { id: "creative", ...(row as object) },
-              error: mocks.saveError ? { message: "Unavailable" } : null,
+              data: failed ? null : { ...(row as object), id: "creative" },
+              error: failed ? { code: "", message: "Unavailable" } : null,
             }),
           }),
         };
@@ -162,10 +170,13 @@ const request = (
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.admitted.clear();
+  mocks.running = null;
   mocks.states.clear();
   mocks.regenerateClaims.clear();
   mocks.regenerateClaimError = false;
   mocks.saveError = false;
+  mocks.saveFailures = 0;
+  mocks.lostIds.clear();
   mocks.user = { id: "owner" };
   mocks.free = false;
   mocks.persist.mockResolvedValue(true);
@@ -362,6 +373,15 @@ describe("creative generation route", () => {
     expect(mocks.generateVariants).toHaveBeenCalledTimes(1);
   });
 
+  it("#1402: a start while another device's batch makes its first ad returns that batch and pays for nothing", async () => {
+    const { POST } = await import("@/app/api/creatives/generate/route");
+    mocks.running = "22222222-2222-4222-8222-222222222222";
+    const response = await POST(request({ businessId: "business", brief: "Installation", format: "story", generationId: "11111111-1111-4111-8111-111111111111" }));
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ code: "CREATE_RUNNING", variantGroup: mocks.running, expectedCount: 3 });
+    expect(mocks.generateVariants).not.toHaveBeenCalled();
+  });
+
   it("reads tenant-scoped advisory context only after admission, never on replay", async () => {
     mocks.preferenceContext.mockResolvedValue("PAST DECLARED PREFERENCES: tone: warm");
     const { POST } = await import("@/app/api/creatives/generate/route");
@@ -470,6 +490,18 @@ describe("creative generation route", () => {
     expect(replay.status).toBe(202);
     await expect(replay.json()).resolves.toMatchObject({ status: "unresolved" });
     expect(mocks.generateVariants).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a finished ad whose first save failed in transit (#2494, run 41306939001)", async () => {
+    mocks.saveFailures = 1;
+    const { POST } = await import("@/app/api/creatives/generate/route");
+    const response = await POST(request());
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.creatives).toHaveLength(1);
+    expect(body.failures.map((failure: { angle: string }) => failure.angle)).toEqual([AD_ANGLES[1].name]);
+    expect(mocks.insert).toHaveBeenCalledTimes(2);
+    expect(mocks.insert.mock.calls[1][1].id).toBe(mocks.insert.mock.calls[0][1].id);
   });
 
   it("does not release a paid intent when its usage ledger write fails", async () => {

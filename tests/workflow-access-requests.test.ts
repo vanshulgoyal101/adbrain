@@ -28,7 +28,7 @@ function runStep(response: unknown, existingKeys: string[] = []) {
   writeFileSync(join(dir, "gh"), `#!/bin/bash
 echo "$*" >> "${dir}/gh.log"
 if [ "$1 $2" = "issue list" ]; then for k in ${existingKeys.join(" ")}; do [[ "$*" == *"$k"* ]] && { echo 1; exit 0; }; done; echo 0; exit 0; fi
-if [ "$1 $2" = "issue create" ]; then echo "https://github.com/o/r/issues/$RANDOM"; fi
+if [ "$1 $2" = "issue create" ]; then while [ $# -gt 0 ]; do [ "$1" = -b ] && printf '%s\0' "$2" >> "${dir}/bodies"; shift; done; echo "https://github.com/o/r/issues/$RANDOM"; fi
 `);
   chmodSync(join(dir, "curl"), 0o755);
   chmodSync(join(dir, "gh"), 0o755);
@@ -41,6 +41,10 @@ if [ "$1 $2" = "issue create" ]; then echo "https://github.com/o/r/issues/$RANDO
   let log = "";
   try { log = readFileSync(join(dir, "gh.log"), "utf8"); } catch { /* no gh calls */ }
   return log.trim().split("\n").filter(Boolean);
+}
+
+function createdBodies(): string[] {
+  try { return readFileSync(join(dir, "bodies"), "utf8").split("\0").filter(Boolean); } catch { return []; }
 }
 
 const key = (n: number) => n.toString(16).padStart(12, "a");
@@ -60,5 +64,17 @@ describe("scheduled job: Facebook access requests (#692, #725)", () => {
     const calls = runStep({ ok: true, requests: [{ key: key(1), hours: 1 }, { key: "bad;key", hours: 1 }, { key: key(2), hours: 2 }], more: 0 }, [key(1)]);
     expect(calls.filter((call) => call.startsWith("issue create"))).toEqual([expect.stringContaining(`(${key(2)})`)]);
     expect(calls.some((call) => call.startsWith("issue comment"))).toBe(false);
+  });
+
+  it("asks for a private follow-up and App Review tracking, never a Tester invite (#2582)", () => {
+    runStep({ ok: true, requests: [{ key: key(3), hours: 4 }], more: 0 });
+    const [body, ...rest] = createdBodies();
+    expect(rest).toEqual([]);
+    expect(body).toContain("The app told them: we will WhatsApp you within a working day.");
+    expect(body).toContain(`(key ${key(3)})`);
+    expect(body).toMatch(/→ CEO: WhatsApp them privately about this request/);
+    expect(body).toContain("#156");
+    expect(body).not.toMatch(/tester/i);
+    expect(body).not.toMatch(/#679/);
   });
 });

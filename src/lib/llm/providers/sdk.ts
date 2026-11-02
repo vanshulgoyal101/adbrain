@@ -12,6 +12,17 @@ export function rateLimitInfo(body: string | undefined): RateLimitInfo | undefin
   return { type, ...number("Limit"), ...number("Used"), ...number("Requested") };
 }
 
+/** #2502: Gemini's own reason for a 4xx ("INVALID_ARGUMENT: Budget 0 is invalid…"), bounded; never the request. */
+function errorReason(body: string | undefined): string {
+  try {
+    const error = (JSON.parse(body ?? "") as { error?: { status?: unknown; message?: unknown } }).error;
+    const reason = [error?.status, error?.message].filter((part) => typeof part === "string" && part).join(": ");
+    return reason ? ` ${reason.replace(/\s+/g, " ").slice(0, 200)}` : "";
+  } catch {
+    return "";
+  }
+}
+
 function providerId(value: unknown): string | undefined {
   return typeof value === "string" && /^[\w.:-]{1,256}$/.test(value) ? value : undefined;
 }
@@ -22,7 +33,7 @@ export async function sdkCompletion(
   messages: ChatMessage[],
   options: CompletionOptions,
   maxOutputTokens = options.maxTokens,
-  providerOptions?: Parameters<typeof generateText>[0]["providerOptions"],
+  settings?: Pick<Parameters<typeof generateText>[0], "providerOptions" | "reasoning">,
 ): Promise<ProviderCompletion> {
   options.signal?.throwIfAborted();
   const deadline = AbortSignal.timeout(options.attemptTimeoutMs ?? 90_000);
@@ -42,7 +53,7 @@ export async function sdkCompletion(
       include: { responseBody: true },
       abortSignal: signal,
       output,
-      ...(providerOptions ? { providerOptions } : {}),
+      ...settings,
     }).catch((error: unknown) => {
       if (!NoObjectGeneratedError.isInstance(error)) throw error;
       return {
@@ -95,7 +106,8 @@ export async function sdkCompletion(
       const retryAfter = Number(headers?.["retry-after"]);
       // #449: out of credit (OpenRouter 402, or 403 "Key limit exceeded"); the router parks the key and tries free models.
       const creditExhausted = status === 402 || (status === 403 && /key limit|credit/i.test(error.responseBody ?? ""));
-      throw new LLMError(`${provider}: ${status ? `HTTP ${status}` : "provider request failed"}`, {
+      const reason = provider === "google" && status && status >= 400 && status < 500 && status !== 429 ? errorReason(error.responseBody) : "";
+      throw new LLMError(`${provider}: ${status ? `HTTP ${status}${reason}` : "provider request failed"}`, {
         provider, status, providerFinalStatus: "unknown", code: creditExhausted ? "CREDIT_EXHAUSTED" : status ? `HTTP_${status}` : "TRANSPORT",
         retryAfterMs: Number.isFinite(retryAfter) && retryAfter >= 0 ? retryAfter * 1000 : undefined,
         ...(status === 429 ? { rateLimit: rateLimitInfo(error.responseBody) } : {}),

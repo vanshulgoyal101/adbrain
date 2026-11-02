@@ -175,7 +175,7 @@ jobs:
             if [ "$opened" -ge 5 ]; then waiting=$((waiting + 1)); continue; fi
             opened=$((opened + 1))
             last=$(gh issue create -R "$GITHUB_REPOSITORY" -l core -l waiting-owner -t "Facebook access request ($key)" \
-              -b "$(printf 'An outside owner tapped **Ask for Facebook access** %s h ago. The app told them: we will WhatsApp you within a working day.\n\n→ CEO: ask the owner to add them as a Tester on the Meta app (#679), then WhatsApp them.\nFind their name, business and WhatsApp number (key %s): docs/operations/scheduled-jobs.md#scheduled-jobs\nRun: %s/%s/actions/runs/%s\n' "$hours" "$key" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")")
+              -b "$(printf 'An outside owner tapped **Ask for Facebook access** %s h ago. The app told them: we will WhatsApp you within a working day.\n\n→ CEO: WhatsApp them privately about this request and where Meta App Review stands (#156); do not promise Facebook connect works yet.\nFind their name, business and WhatsApp number (key %s): docs/operations/scheduled-jobs.md#scheduled-jobs\nRun: %s/%s/actions/runs/%s\n' "$hours" "$key" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")")
           done
           if [ -n "$last" ] && [ "$waiting" -gt 0 ]; then
             gh issue comment "$last" -R "$GITHUB_REPOSITORY" --body "$waiting more access requests are waiting; the next runs open them."
@@ -308,9 +308,27 @@ jobs:
         if: always()
         run: |
           [ -n "$CRON_SECRET" ] || { echo "CRON_SECRET not set; parent token check skipped"; exit 0; }
-          code=$(curl -sS --max-time 30 -o parent.json -w '%{http_code}' -H "Authorization: Bearer $CRON_SECRET" https://adbrain.vanshul.com/api/cron/meta-parent-health) || code=000
+          parent_health() {
+            rm -f parent.json &&
+              curl -sS --connect-timeout 10 --max-time "$1" -o parent.json -w '%{http_code}' -H "Authorization: Bearer $CRON_SECRET" https://adbrain.vanshul.com/api/cron/meta-parent-health
+          }
+          if code=$(parent_health 30); then
+            :
+          else
+            error=$?
+            if [ "$error" -eq 28 ]; then
+              echo "2-Tier parent token request timed out; retrying once."
+              code=$(parent_health 10) || code=000
+            else
+              code=000
+            fi
+          fi
           # Codes only (public repo): never the token or Meta's message.
-          summary=$(jq -c '{ok, configured, enabled, errorCode}' parent.json 2>/dev/null || echo '{"ok":false,"error":"no JSON body"}')
+          if [ "$code" = 000 ]; then
+            summary='{"ok":false,"error":"request failed"}'
+          else
+            summary=$(jq -c '{ok, configured, enabled, errorCode}' parent.json 2>/dev/null || echo '{"ok":false,"error":"no JSON body"}')
+          fi
           echo "HTTP $code $summary"
           [ "$code" = 404 ] && { echo "Route not deployed yet; skipped"; exit 0; }
           [ "$code" = 200 ] && exit 0

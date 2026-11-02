@@ -19,13 +19,13 @@
 // are never lost). For the CTO it also reports any worker with fewer than 3 actionable items and,
 // at the end of each wait, workers gone quiet for 90 min and PRs untouched for 60 min.
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
-export const NAMES = { dev: "Dev", dev2: "Dev 2", dev3: "Dev 3", dev4: "Dev 4", dev5: "Dev 5", dev6: "Dev 6", qa: "QA", qa2: "QA 2", reviewer: "Reviewer", devops: "DevOps", cpo: "CPO", analyst: "Analyst", designer: "Designer", docs: "Docs", speed: "Speed", janitor: "Janitor", scout: "Scout", cto: "CTO", ceo: "CEO" };
+export const NAMES = { dev: "Dev", dev2: "Dev 2", dev3: "Dev 3", dev4: "Dev 4", dev5: "Dev 5", dev6: "Dev 6", dev7: "Dev 7", dev8: "Dev 8", qa: "QA", qa2: "QA 2", reviewer: "Reviewer", devops: "DevOps", devops2: "DevOps 2", devops3: "DevOps 3", cpo: "CPO", analyst: "Analyst", designer: "Designer", docs: "Docs", speed: "Speed", janitor: "Janitor", scout: "Scout", cto: "CTO", ceo: "CEO" };
 // Items parked on someone outside the team never count as waiting on you.
 const PARKED = new Set(["waiting-owner", "blocked", "parked"]);
 
@@ -33,8 +33,8 @@ const PARKED = new Set(["waiting-owner", "blocked", "parked"]);
 export function matchers(role) {
   const build = (r) => {
     const name = NAMES[r];
-    // "Dev" must not match "Dev 2" … "Dev 6", nor "QA" match "QA 2"; "DevOps" never matches \bDev\b.
-    const notOther = r === "dev" ? "(?! ?[2-6])" : r === "qa" ? "(?! ?2)" : "";
+    // "Dev" must not match "Dev 2" … "Dev 8", "QA" "QA 2", nor "DevOps" "DevOps 2"/"DevOps 3"; "DevOps" never matches \bDev\b.
+    const notOther = r === "dev" ? "(?! ?[2-8])" : r === "qa" ? "(?! ?2)" : r === "devops" ? "(?! ?[23])" : "";
     return {
       writtenBy: new RegExp(`^[\\s*#>_\`-]*${name}\\b${notOther}`),
       addressedTo: new RegExp(`(?:^|[\\s>(*_-])${name}${notOther}\\*{0,2}\\s*[:,]|→\\s*\\**${name}\\b${notOther}|@${r}\\b`, "m"),
@@ -64,18 +64,44 @@ export function snoozedUntil(body) {
   return Number.isNaN(t) ? null : t;
 }
 
+/** Holds a timed read never overrides: only the owner or a later decision can lift them (#2572). */
+const TIMER_HOLDS = new Set(["waiting-owner", "parked", "later"]);
+
+/**
+ * #2572: when your own last word schedules a read ("Next read <ISO time>Z"), its due time (ms), else null.
+ * The timer survives `blocked` (a timed read often waits on the outside world) but not `waiting-owner`,
+ * `parked` or `later`; someone else's time never schedules you.
+ */
+export function scheduledRead(lastBody, m, labels = []) {
+  if (lastBody == null || !m.writtenByMe(lastBody) || labels.some((l) => TIMER_HOLDS.has(l))) return null;
+  return snoozedUntil(lastBody);
+}
+
+/**
+ * #2572: owned items whose last word backlog() must read. Items a time can't lift (`waiting-owner`, `parked`,
+ * `later`) are skipped to save the shared API budget; every other one is read, so no scheduled read is missed.
+ * @template {{ labels?: Array<string | { name: string }> }} T
+ * @param {T[]} items
+ * @returns {T[]}
+ */
+export function backlogReads(items) {
+  return items.filter((i) => !labelNames(i).some((n) => TIMER_HOLDS.has(n)));
+}
+
 export function waitingOnMe(lastBody, m, labels = [], now = Date.now()) {
+  // A scheduled check (QA 2's live-run reads, #575) keeps the item quiet until its time, then reports it
+  // even when the comment also handed something on or the item is `blocked` (#2572).
+  const due = scheduledRead(lastBody, m, labels);
+  if (due !== null) {
+    if (now < due) { nextDue = Math.min(nextDue, due); return false; }
+    return true;
+  }
   // `later` is frozen (board, #2238): a reply on it doesn't wake its owner.
   if (labels.some((l) => PARKED.has(l) || l === "later")) return false;
   if (lastBody == null) return true;
   // Your own last word without a handoff (no "→ Role") means the item is still yours to continue;
-  // idle workers otherwise slept with their queue unfinished (Oct 25). A scheduled check
-  // ("Next read <ISO time>Z") keeps it quiet until that time (QA 2's live-run reads, #575).
-  if (m.writtenByMe(lastBody)) {
-    const due = snoozedUntil(lastBody);
-    if (due !== null && now < due) { nextDue = Math.min(nextDue, due); return false; }
-    return !m.handedToOther(lastBody);
-  }
+  // idle workers otherwise slept with their queue unfinished (Oct 25).
+  if (m.writtenByMe(lastBody)) return !m.handedToOther(lastBody);
   if (m.addressedToMe(lastBody)) return true;
   // #1478: on a co-owned issue an un-arrowed FYI isn't every owner's turn; only one that names you is.
   if (labels.filter((l) => l.startsWith("owner:")).length > 1) return false;
@@ -193,16 +219,18 @@ const labelNames = (i) => (i.labels ?? []).map((l) => (typeof l === "string" ? l
 /**
  * #364 (CEO, Oct 29): the owned items that stop you waiting. Everything labelled yours except held items
  * (parked, blocked, waiting-owner, decision, later, standing) and scheduled checks not yet due (`snoozed`).
+ * A `blocked` item whose own scheduled read is due (`due`, #2572) counts again.
  * A co-owned item (#1478) counts only when it is your turn (`myTurn`). Turns first, then `core`, then oldest.
  * @param {Array<{ number: number, labels?: Array<string | { name: string }> }>} items
- * @param {{ snoozed?: Set<number>, myTurn?: Set<number> }} [state]
+ * @param {{ snoozed?: Set<number>, myTurn?: Set<number>, due?: Set<number> }} [state]
  */
-export function actionableOwned(items, { snoozed = new Set(), myTurn = new Set() } = {}) {
+export function actionableOwned(items, { snoozed = new Set(), myTurn = new Set(), due = new Set() } = {}) {
   const rank = (i) => (myTurn.has(i.number) ? 0 : labelNames(i).includes("core") ? 1 : 2);
   return items
     .filter((i) => {
       const names = labelNames(i);
-      if (names.some((n) => HOLD.has(n)) || snoozed.has(i.number)) return false;
+      const holds = (n) => HOLD.has(n) && !(n === "blocked" && due.has(i.number));
+      if (names.some(holds) || snoozed.has(i.number)) return false;
       return names.filter((n) => n.startsWith("owner:")).length < 2 || myTurn.has(i.number);
     })
     .sort((a, b) => rank(a) - rank(b) || a.number - b.number);
@@ -213,9 +241,15 @@ export const OWNS_WORK = 6;
 
 /** Earliest scheduled check seen this run; the wait loop rechecks the backlog when it passes. */
 let nextDue = Infinity;
+/** True once when the earliest scheduled check is due at `now`; the wait loop then rereads the backlog. */
+export function dueWake(now = Date.now()) {
+  if (now < nextDue) return false;
+  nextDue = Infinity;
+  return true;
+}
 
 /** Ready-pool lane per role: briefed, unowned issues labelled `ready` + `lane:<lane>` (#573). */
-export const LANES = { dev: "dev", dev2: "dev", dev3: "dev", dev4: "dev", dev5: "dev", dev6: "dev", qa: "qa", qa2: "qa", devops: "devops", reviewer: "review", designer: "design", cpo: "product", analyst: "research", docs: "docs", speed: "devops", janitor: "devops", scout: "product" };
+export const LANES = { dev: "dev", dev2: "dev", dev3: "dev", dev4: "dev", dev5: "dev", dev6: "dev", dev7: "dev", dev8: "dev", qa: "qa", qa2: "qa", devops: "devops", devops2: "devops", devops3: "devops", reviewer: "review", designer: "design", cpo: "product", analyst: "research", docs: "docs", speed: "devops", janitor: "devops", scout: "product" };
 
 /** #2473 (E8): roles whose lane runs dry also get the Dev lane's `core` items, after their own. */
 export const BORROWS_DEV = new Set(["qa", "qa2", "reviewer", "analyst", "cpo", "docs"]);
@@ -241,7 +275,7 @@ export function readyPool(issues, role, max = 3) {
   return [...own, ...borrowed].slice(0, max);
 }
 
-export const WORKERS = ["dev", "dev2", "dev3", "dev4", "dev5", "dev6", "qa", "qa2", "reviewer", "devops", "cpo", "analyst", "designer", "docs", "speed", "janitor", "scout"];
+export const WORKERS = ["dev", "dev2", "dev3", "dev4", "dev5", "dev6", "dev7", "dev8", "qa", "qa2", "reviewer", "devops", "devops2", "devops3", "cpo", "analyst", "designer", "docs", "speed", "janitor", "scout"];
 export const MIN_QUEUE = 3;
 
 /** Workers with fewer than MIN_QUEUE actionable open items, owned PRs included (not parked or waiting on the CEO). The CTO refills these. */
@@ -436,6 +470,95 @@ export function skillsFor(map, title, labels = []) {
 /** Bot posts that are not a word: the advisory AI review (#587) would wake the PR owner on every push, the daily core scoreboard (#681) every role on #681. */
 const BOT_MARKERS = ["<!-- ai-review -->", "<!-- core-scoreboard -->"];
 
+const PAGE = 100;
+
+/** How far back a restarted waiter looks for handoffs missed between runs (#2576). */
+export const HANDOFF_LOOKBACK_MS = 24 * 3_600_000;
+/** The poll cursor is saved this far behind the request, so clock skew can't drop a comment (ids dedupe). */
+export const CURSOR_SKEW_MS = 120_000;
+const issueOf = (comment) => Number((comment.issue_url ?? "").split("/").pop());
+
+/**
+ * #2576: comments addressed to you that landed between two waiter runs, on items you don't own (owned items,
+ * holds included, are the backlog's job). The window is [saved cursor, this run's start), at most a day back;
+ * with no saved cursor there is nothing to recover. Already-reported ids never wake twice.
+ * @param {Array<{ id: number, body?: string, created_at?: string, issue_url?: string }>} comments
+ * @param {{ cursor: string | null, since: string, ids?: Set<number>, owned?: Set<number>, m: ReturnType<typeof matchers> }} state
+ */
+export function missedHandoffs(comments, { cursor, since, ids = new Set(), owned = new Set(), m }) {
+  if (!cursor) return [];
+  const from = new Date(Math.max(Date.parse(cursor), Date.parse(since) - HANDOFF_LOOKBACK_MS)).toISOString();
+  return comments.filter((c) => {
+    const body = c.body ?? "";
+    const at = c.created_at ?? "";
+    return at >= from && at < since && !ids.has(c.id) && !owned.has(issueOf(c))
+      && !BOT_MARKERS.some((marker) => body.startsWith(marker)) && !m.writtenByMe(body) && m.addressedToMe(body);
+  }).sort((a, b) => (a.created_at ?? "").localeCompare(b.created_at ?? ""));
+}
+
+/**
+ * Repo-wide comments created at or after `from`, newest first, at most `maxPages` pages (bounded API budget).
+ * `complete` is false when the cap cut the window short: the caller must not move its cursor past it.
+ * @param {(path: string) => Promise<any>} api
+ * @param {string} repo
+ * @param {string} from
+ */
+export async function commentsSince(api, repo, from, maxPages = 5) {
+  const comments = [];
+  for (let page = 1; page <= maxPages; page++) {
+    const rows = (await api(`repos/${repo}/issues/comments?since=${from}&sort=created&direction=desc&per_page=${PAGE}&page=${page}`)) ?? [];
+    comments.push(...rows);
+    if (rows.length < PAGE || (rows.at(-1)?.created_at ?? "") < from) return { comments, complete: true };
+  }
+  return { comments, complete: false };
+}
+/**
+ * #2576: the latest word on an owned item. GitHub lists issue comments oldest first (sort/direction are
+ * ignored), so read the page holding the newest comment (from the item's `comments` count) and keep reading
+ * while a page is full (a comment may land after the count was taken). Then step back a page at a time while
+ * nothing read counts as a word: deletions emptied it, or it holds only bot posts. Every review page is read:
+ * reviews have no count on the issue list.
+ * @param {(path: string) => Promise<any>} api
+ * @param {string} repo
+ * @param {{ number: number, comments?: number, pull_request?: unknown }} item
+ */
+export async function lastWordOn(api, repo, item) {
+  const read = async (path, page) => (await api(`${path}?per_page=${PAGE}&page=${page}`)) ?? [];
+  const pages = async (path, first, counts) => {
+    let page = first;
+    let rows = await read(path, page);
+    let all = rows;
+    while (rows.length === PAGE) { rows = await read(path, ++page); all = all.concat(rows); }
+    for (let back = first - 1; back >= 1 && !all.some(counts); back--) all = (await read(path, back)).concat(all);
+    return all;
+  };
+  const human = (c) => !BOT_MARKERS.some((marker) => (c.body ?? "").startsWith(marker));
+  // No count (not from the issue list) means unknown, not none: start at page 1.
+  const comments = item.comments === 0 ? [] : await pages(`repos/${repo}/issues/${item.number}/comments`, Math.max(1, Math.ceil((item.comments ?? 1) / PAGE)), human);
+  const reviews = item.pull_request ? await pages(`repos/${repo}/pulls/${item.number}/reviews`, 1, () => true) : [];
+  return latestWord(comments, reviews);
+}
+
+/**
+ * The startup and due-time backlog scan (#364, #2572, #2576): whose turn each owned item is, and its timed reads.
+ * @param {Array<{ number: number, comments?: number, pull_request?: unknown, labels?: Array<string | { name: string }> }>} items
+ * @param {{ api: (path: string) => Promise<any>, repo: string, m: ReturnType<typeof matchers>, now?: number }} ctx
+ */
+export async function scanBacklog(items, { api, repo, m, now = Date.now() }) {
+  const snoozed = new Set();
+  const myTurn = new Set();
+  const dueNow = new Set();
+  const turns = [];
+  for (const item of backlogReads(items)) {
+    const last = await lastWordOn(api, repo, item);
+    const labels = labelNames(item);
+    const due = scheduledRead(last?.body ?? null, m, labels);
+    if (due !== null) (now < due ? snoozed : dueNow).add(item.number);
+    if (waitingOnMe(last?.body ?? null, m, labels, now)) { myTurn.add(item.number); turns.push({ item, last }); }
+  }
+  return { snoozed, myTurn, dueNow, turns };
+}
+
 /** The latest word on an item across issue comments and PR reviews (verdicts are reviews since #423), bot posts left out. */
 export function latestWord(comments = [], reviews = []) {
   const words = [
@@ -610,17 +733,22 @@ async function findWork() {
   }
   // One repo-wide call (newest first) instead of one call per updated issue.
   const coOwned = new Set(mine.filter(item => (item.labels ?? []).filter(l => l.name.startsWith("owner:")).length > 1).map(item => item.number));
+  const polledAt = Date.now();
+  const reported = [];
+  seenWorld ??= loadSeen();
   for (const comment of freshComments(await api(`repos/${repo}/issues/comments?since=${since}&sort=created&direction=desc&per_page=100`), since)) {
     const number = Number(comment.issue_url.split("/").pop());
     const body = comment.body ?? "";
     if (writtenByMe(body)) continue;
     // #1478: on a co-owned issue, a comment wakes you only when it names you.
     if (coOwned.has(number) && !addressedToMe(body)) continue;
+    if (seenWorld.handoffs.has(comment.id)) continue;
     if (mineNumbers.has(number) || addressedToMe(body) || linkedToMine.has(number)) {
+      if (addressedToMe(body)) reported.push(comment.id);
       found.push(`#${number} new comment: "${brief(body)}" ${comment.html_url}`);
     }
   }
-  if (role === "cto" || role === "devops") {
+  if (role === "cto" || role === "devops" || role === "devops2") {
     const runs = (await api(`repos/${repo}/actions/runs?status=completed&created=${encodeURIComponent(`>=${since}`)}&per_page=100`)).workflow_runs ?? [];
     for (const run of runs) {
       if (run.conclusion === "failure" && run.event !== "pull_request" && !SHARED_BRANCHES.includes(run.head_branch)) {
@@ -631,6 +759,12 @@ async function findWork() {
     if (role === "cto") for (const line of systemicFailures(runs)) found.push(line);
   }
   found.push(...await worldChanges(mineNumbers, openPulls, seenWorld ??= loadSeen()));
+  // #2576: commit the comment cursor only once the whole poll succeeded, so a failed read loses nothing.
+  if (!values.probe) {
+    for (const id of reported) seenWorld.handoffs.add(id);
+    const cursor = new Date(Math.max(Date.parse(since), polledAt - CURSOR_SKEW_MS)).toISOString();
+    if (cursor !== seenWorld.cursor || reported.length) { seenWorld.cursor = cursor; saveSeen(seenWorld); }
+  }
   return found;
 }
 
@@ -639,13 +773,37 @@ async function findWork() {
 const stateFile = () => join(tmpdir(), `adbrain-wait-for-work-${role}.seen.json`);
 function loadSeen() {
   try {
-    const { red = [], reached = [] } = JSON.parse(readFileSync(stateFile(), "utf8"));
-    return { red: new Set(red), reached: new Set(reached), fresh: false };
-  } catch { return { red: new Set(), reached: new Set(), fresh: true }; }
+    const { red = [], reached = [], cursor = null, handoffs = [] } = JSON.parse(readFileSync(stateFile(), "utf8"));
+    return { red: new Set(red), reached: new Set(reached), cursor, handoffs: new Set(handoffs), fresh: false };
+  } catch { return { red: new Set(), reached: new Set(), cursor: null, handoffs: new Set(), fresh: true }; }
 }
 const saveSeen = (seen) => {
-  try { writeFileSync(stateFile(), JSON.stringify({ red: [...seen.red].slice(-200), reached: [...seen.reached].slice(-200) })); } catch { /* best effort */ }
+  // Write then rename, so a crash mid-write never leaves a torn file that resets every cursor.
+  try {
+    const tmp = `${stateFile()}.${process.pid}`;
+    writeFileSync(tmp, JSON.stringify({ red: [...seen.red].slice(-200), reached: [...seen.reached].slice(-200),
+      cursor: seen.cursor, handoffs: [...seen.handoffs].slice(-200) }));
+    renameSync(tmp, stateFile());
+  } catch { /* best effort */ }
 };
+let commitRecovered = () => {};
+// #2576: handoffs to you on items you don't own, posted after your last poll and before this run began.
+async function recoverHandoffs(seen) {
+  const mine = new Set((await owned()).map((item) => item.number));
+  const from = seen.cursor ? new Date(Math.max(Date.parse(seen.cursor), Date.parse(since) - HANDOFF_LOOKBACK_MS)).toISOString() : null;
+  const { comments, complete } = from ? await commentsSince(api, repo, from) : { comments: [], complete: true };
+  const missed = missedHandoffs(comments, { cursor: seen.cursor, since, ids: seen.handoffs, owned: mine, m });
+  // Saved only when these lines are reported (or there were none), so a later start-up failure loses nothing.
+  // A capped read keeps the old cursor (ids stop repeats); a full one moves it to this run's start.
+  commitRecovered = () => {
+    for (const c of missed) seen.handoffs.add(c.id);
+    if (complete) seen.cursor = since;
+    saveSeen(seen);
+    commitRecovered = () => {};
+  };
+  // Not "#N …" first: the exit-6 report keeps only non-"#N" lines beside your top owned items.
+  return missed.map((c) => `Addressed to you while the waiter was off, on #${issueOf(c)}: "${brief(c.body ?? "")}" ${c.html_url}`);
+}
 // Narrow, slow-changing reads so ETag 304s keep a 60-second poll cheap for twelve chats.
 const sharedPushRuns = async () => (await Promise.all(SHARED_BRANCHES.map((branch) =>
   api(`repos/${repo}/actions/runs?branch=${branch}&event=push&per_page=20`)))).flatMap((page) => page.workflow_runs ?? []);
@@ -684,20 +842,11 @@ let ownedActionable = [];
 async function backlog() {
   const found = [];
   const items = await owned();
-  const snoozed = new Set();
-  const myTurn = new Set();
-  for (const item of items.slice(0, 20)) {
-    const comments = item.comments ? await api(`repos/${repo}/issues/${item.number}/comments?per_page=100`) : [];
-    const reviews = item.pull_request ? await api(`repos/${repo}/pulls/${item.number}/reviews?per_page=100`) : [];
-    const last = latestWord(comments, reviews);
-    const due = last && writtenByMe(last.body ?? "") ? snoozedUntil(last.body) : null;
-    if (due !== null && Date.now() < due) snoozed.add(item.number);
-    if (waitingOnMe(last?.body ?? null, m, (item.labels ?? []).map(l => l.name))) {
-      myTurn.add(item.number);
-      found.push(last ? `#${item.number} is waiting on you${withSkills(item)}: "${brief(last.body)}" ${last.url}` : `#${item.number} is yours and not started${withSkills(item)}: ${item.title}`);
-    }
+  const { snoozed, myTurn, dueNow, turns } = await scanBacklog(items, { api, repo, m });
+  for (const { item, last } of turns) {
+    found.push(last ? `#${item.number} is waiting on you${withSkills(item)}: "${brief(last.body)}" ${last.url}` : `#${item.number} is yours and not started${withSkills(item)}: ${item.title}`);
   }
-  ownedActionable = actionableOwned(items, { snoozed, myTurn });
+  ownedActionable = actionableOwned(items, { snoozed, myTurn, due: dueNow });
   // #364: nothing is waiting on you, but you still own work with no open PR: continue the oldest.
   if (!found.length) {
     const next = nextItem(items, await api(`repos/${repo}/pulls?state=open&per_page=100`), snoozed);
@@ -718,6 +867,7 @@ const card = (() => { try { return roleCard(readFileSync(join(repoRoot, "docs/te
 const BOARD_ISSUE = 580;
 const board = async () => { try { return boardRow((await api(`repos/${repo}/issues/${BOARD_ISSUE}`)).body ?? "", role); } catch { return null; } };
 const report = async (found, code = 0) => {
+  commitRecovered();
   if (card) console.log(`Role: ${card}`);
   const row = await board();
   if (row) console.log(`Team board #${BOARD_ISSUE} (your queue, in order):\n${row}`);
@@ -766,20 +916,24 @@ try {
 } catch (error) {
   console.error(`Start-up summary failed, continuing: ${error.message.split("\n")[0]}`);
 }
+let recovered = [];
 try {
   // #2473: a red next/main with no fix PR comes first, even before your own items (fix forward).
   if (!values.probe) {
     // Each red run is reported once per role, so restarting the waiter doesn't loop on it.
     const seen = seenWorld = loadSeen();
+    // #2576: recover between-runs handoffs first, so a red-run report can't defer them.
+    recovered = await recoverHandoffs(seen).catch(() => []);
     const red = redRuns(await sharedPushRuns(), { since: new Date(Date.now() - RED_LOOKBACK_MS).toISOString(),
       openPulls: await api(`repos/${repo}/pulls?state=open&per_page=100`), seen: seen.red });
     if (red.length) {
       for (const run of red) seen.red.add(run.id);
       saveSeen(seen);
-      await report(red.map(redLine));
+      await report([...red.map(redLine), ...recovered]);
     }
   }
   const waiting = await backlog();
+  waiting.push(...recovered);
   if (role === "cto") {
     const low = lowQueues(await openItems());
     // Outcome first (CEO, #364 Oct 29; AGENTS.md Oct 30): a thin queue is not work by itself, so it's shown at
@@ -798,12 +952,15 @@ try {
 } catch (error) {
   console.error(`Queue check failed, continuing: ${error.message.split("\n")[0]}`);
 }
+// A failed start-up check still delivers recovered handoffs; with none, the cursor moves on now.
+if (recovered.length) await report(recovered);
+commitRecovered();
 console.log(`Waiting for work for ${name} since ${since} (up to ${values["max-min"]} min)...`);
 let warned = false;
 while (Date.now() < deadline) {
   exitIfOrphaned();
   try {
-    if (Date.now() >= nextDue) { nextDue = Infinity; const due = await backlog(); if (due.length) await report(due); }
+    if (dueWake()) { const due = await backlog(); if (due.length) await report(due); }
     const found = await findWork();
     if (found.length) await report(found);
   } catch (error) {

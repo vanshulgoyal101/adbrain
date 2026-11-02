@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { LoginForm } from "@/components/login-form";
 import LoginPage from "@/app/login/page";
 
@@ -71,6 +71,9 @@ describe("sign-in outcomes reach the server without the email (#451 L4)", () => 
 
   // #2415: Supabase's default mailer sends 2 emails an hour for the whole project; Google is the way through.
   it("words the email limit plainly and moves focus to Google", async () => {
+    // #2498: a frame that runs before React re-enables the button must not lose the focus.
+    const raf = vi.spyOn(window, "requestAnimationFrame").mockImplementation(cb => { cb(0); return 0; });
+    onTestFinished(() => raf.mockRestore());
     mocks.signInWithOtp.mockResolvedValueOnce({ error: Object.assign(new Error("email rate limit exceeded"), { code: "over_email_send_rate_limit" }) });
     render(<LoginForm newVisitor />);
     fireEvent.change(screen.getByLabelText("Email"), { target: { value: "owner@example.test" } });

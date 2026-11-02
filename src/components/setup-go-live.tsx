@@ -64,27 +64,34 @@ const INVITES_URL = "https://developers.facebook.com/requests";
 const noSubscription = () => () => {};
 const inviteWords = {
   en: {
-    hintBefore: "Facebook is still reviewing AdBrain. Until then, your Facebook account needs our invite: open your invites and accept ",
-    hintAfter: ", then tap Connect.",
-    retry: "Didn't connect? If Facebook said the app isn't available, accept the invite first, then try again.",
+    hintBefore: "Facebook is still reviewing AdBrain, so only people we've added can connect. Tap Connect; if Facebook says the app isn't available, come back here and we'll add you. Already invited? Accept ",
+    hintAfter: " in your invites first.",
+    retry: "Didn't connect? If Facebook said the app isn't available, we need to add you first.",
+    retrySent: "Didn't connect? We've asked our team to add you and will WhatsApp you within a working day. Accept our invite, then try again.",
+    retryFailed: "Didn't connect? We need to add you first, but your request didn't reach us. Check your connection and tap Try again.",
     open: "Open my invites",
     again: "Try again",
   },
   hi: {
-    hintBefore: "Facebook अभी AdBrain की जाँच कर रहा है। तब तक आपके Facebook अकाउंट को हमारा इनवाइट चाहिए: अपने इनवाइट खोलें और ",
-    hintAfter: " स्वीकार करें, फिर Connect दबाएँ।",
-    retry: "जुड़ा नहीं? अगर Facebook ने कहा कि ऐप उपलब्ध नहीं है, तो पहले इनवाइट स्वीकार करें, फिर दोबारा कोशिश करें।",
+    hintBefore: "Facebook अभी AdBrain की जाँच कर रहा है, इसलिए अभी सिर्फ़ वही लोग जुड़ सकते हैं जिन्हें हमने जोड़ा है। Connect दबाएँ; अगर Facebook कहे कि ऐप उपलब्ध नहीं है, तो यहाँ लौटें, हम आपको जोड़ देंगे। इनवाइट मिल चुका है? पहले अपने इनवाइट में ",
+    hintAfter: " स्वीकार करें।",
+    retry: "जुड़ा नहीं? अगर Facebook ने कहा कि ऐप उपलब्ध नहीं है, तो पहले हमें आपको जोड़ना होगा।",
+    retrySent: "जुड़ा नहीं? हमारी टीम को आपका अनुरोध मिल गया है, हम एक कार्यदिवस के भीतर WhatsApp करेंगे। हमारा इनवाइट स्वीकार करें, फिर दोबारा कोशिश करें।",
+    retryFailed: "जुड़ा नहीं? पहले हमें आपको जोड़ना होगा, पर आपका अनुरोध हम तक नहीं पहुँचा। अपना इंटरनेट कनेक्शन जाँचें और ‘फिर से कोशिश करें’ दबाएँ।",
     open: "मेरे इनवाइट खोलें",
     again: "फिर से कोशिश करें",
   },
 } satisfies Record<AppLocale, Record<string, string>>;
 
+type AccessRequest = "idle" | "sent" | "failed";
+
 /**
  * #1989 (CPO #1983): before App Review only Testers can log in, and anyone else gets Meta's "app not available"
  * page inside the Facebook window, which AdBrain can't detect. Before the first tap say so; once the owner is
- * back with nothing connected, say what to do and offer Connect again.
+ * back with nothing connected, say what to do and offer Connect again. #2538: no invite exists until the team
+ * adds them, so a try that didn't connect asks the team (the access request) and says whether it reached us.
  */
-function TesterInviteHint({ tried, locale, onRetry }: { tried: boolean; locale: AppLocale; onRetry: () => void }) {
+function TesterInviteHint({ tried, request, locale, onRetry }: { tried: boolean; request: AccessRequest; locale: AppLocale; onRetry: () => void }) {
   const words = inviteWords[locale];
   const invites = <a href={INVITES_URL} target="_blank" rel="noopener noreferrer" className={linkClass}>{words.open}</a>;
   if (!tried) {
@@ -97,7 +104,7 @@ function TesterInviteHint({ tried, locale, onRetry }: { tried: boolean; locale: 
   }
   return (
     <div role="status" className="mt-1 text-sm text-slate-950">
-      <p>{words.retry}</p>
+      <p>{request === "sent" ? words.retrySent : request === "failed" ? words.retryFailed : words.retry}</p>
       <div className="flex flex-wrap gap-x-4">
         {invites}
         <button type="button" onClick={onRetry} className={linkClass}>{words.again}</button>
@@ -145,6 +152,24 @@ export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNum
   useEffect(() => {
     if (pageConnected) sessionStore()?.removeItem(CONNECT_TRIED_KEY);
   }, [pageConnected]);
+
+  // #2538: a try that didn't connect (dialog closed, or back from Facebook in this tab) asks the team to add the
+  // owner as a Tester. The server keeps one a day; Testers who connect never send it.
+  const [accessRequest, setAccessRequest] = useState<AccessRequest>("idle");
+  const accessAsked = useRef(false);
+  const tryFailed = showInviteHint && connectTried;
+  useEffect(() => {
+    if (!tryFailed || accessAsked.current) return;
+    accessAsked.current = true;
+    fetch("/api/meta/access-request", {
+      method: "POST", keepalive: true, headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ businessId: business.id }),
+    }).then((res) => setAccessRequest(res.ok ? "sent" : "failed"), () => setAccessRequest("failed"));
+  }, [tryFailed, business.id]);
+  function retryConnect() {
+    if (accessRequest === "failed") accessAsked.current = false;
+    setConnectOpen(true);
+  }
 
   function setConnectOpen(open: boolean) {
     if (open) sessionStore()?.setItem(CONNECT_TRIED_KEY, "1");
@@ -259,7 +284,7 @@ export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNum
 
       <ul aria-label={t("goLive.before")} className="mt-4 divide-y divide-slate-200 border-y border-slate-200">
         <Row labels={rowLabels} done={pageConnected} title={t("goLive.page")} status={pageConnected ? t("goLive.connected") : t("goLive.notConnected")}
-          action={showInviteHint ? <TesterInviteHint tried={connectTried} locale={locale} onRetry={() => setConnectOpen(true)} /> : undefined} />
+          action={showInviteHint ? <TesterInviteHint tried={connectTried} request={accessRequest} locale={locale} onRetry={retryConnect} /> : undefined} />
         {payMetaRow ? (
           returning ? <Row labels={rowLabels} done title={t("goLive.payMeta")} status={t("goLive.payLast")} /> : <Row labels={rowLabels} done={false} title={t("goLive.payMeta")} status={t("goLive.payAdd")}
             action={<><p className="mt-1 text-sm text-slate-600">{t("goLive.payHow", { runTotal: formatMoney(total) })}</p><a href={META_PAYMENT_URL} target="_blank" rel="noopener noreferrer" className={linkClass}>{t("goLive.payLink")}</a></>} />

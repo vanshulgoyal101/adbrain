@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { ExternalLink, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { verdictTranslator, type Words } from "@/i18n/words";
-import type { Verdict } from "@/lib/campaign/verdict";
+import { resultNounKey, type Verdict, type VerdictInput } from "@/lib/campaign/verdict";
 import { formatMoney, formatNumber } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -16,9 +16,9 @@ const outline = cn(link, "border border-slate-300 bg-white text-slate-900 hover:
  * #1274 (#1255 slice 2): a campaign card answers "Is it working? What should I do?" with one sentence, one number and
  * at most one action. The figures it replaces stay one tap away under Details.
  */
-export function CampaignVerdict({ verdict, whatsapp, results, spend, details, onRunAgain, runAgainBusy = false, adsManagerUrl, onEditAd, pauseOffer, words }: {
+export function CampaignVerdict({ verdict, destination, results, spend, details, onRunAgain, runAgainBusy = false, adsManagerUrl, onEditAd, pauseOffer, words }: {
   verdict: Verdict;
-  whatsapp: boolean;
+  destination: VerdictInput["destination"];
   results: number;
   spend: number;
   details: ReactNode;
@@ -33,7 +33,7 @@ export function CampaignVerdict({ verdict, whatsapp, results, spend, details, on
   words?: Words<"verdict">;
 }) {
   const t = verdictTranslator(words);
-  const noun = (n: number) => whatsapp ? t("card.noun", { n }) : t("card.nounEnquiry", { n });
+  const noun = (n: number) => t(resultNounKey(destination), { n });
   const action = (() => {
     switch (verdict.action) {
       case "reply":

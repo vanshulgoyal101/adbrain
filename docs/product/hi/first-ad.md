@@ -1,5 +1,5 @@
 # फ़ोन पर आपका पहला ऐड
-<!-- mirrors ../first-ad.md 44dd5cbf30e8 -->
+<!-- mirrors ../first-ad.md 6a07d4dd0d03 -->
 
 यह [Your first ad on a phone](../first-ad.md) का हिंदी रूप है; अंग्रेज़ी पेज बदले तो इसे भी बदलें।
 [Features and workflows](../README.md) का हिस्सा।
@@ -140,9 +140,10 @@ ready" (या "Your N ads are ready") के साथ "Connect and go live" �
   - "Stops at ₹708": इस रन का ज़्यादा से ज़्यादा खर्च।
   - "Your Page, your ad account, your card. AdBrain never holds your ad money."
 - **टैप करें:** जब तक Facebook AdBrain की जाँच कर रहा है, Facebook Page वाली लाइन में लिखा होगा
-  "Facebook is still reviewing AdBrain. Until then, your Facebook account needs our
-  invite: open your invites and accept adBrain, then tap Connect." "Open my
-  invites" दबाएँ, adBrain का इनवाइट स्वीकार करें, वापस आएँ, फिर "Connect Facebook Page" दबाएँ।
+  "Facebook is still reviewing AdBrain, so only people we've added can connect. Tap
+  Connect; if Facebook says the app isn't available, come back here and we\'ll add you."
+  and "Already invited? Accept … in your invites first." (… यानी adBrain) इनवाइट मिल चुका है तो "Open my
+  invites" दबाकर adBrain स्वीकार करें। फिर "Connect Facebook Page" दबाएँ।
   Meta की विंडो खुलेगी: "Connect
   Business" दबाएँ, Facebook में साइन इन करें, अपना पेज और ऐड अकाउंट चुनें, "Use
   selected business" दबाएँ, फिर "Continue to review"। अब लाइन में "Connected" लिखा
@@ -155,9 +156,11 @@ ready" (या "Your N ads are ready") के साथ "Connect and go live" �
 - **अगर काम न करे:** कुछ भी फ़ेल हो तो कोई पैसा खर्च नहीं होता। स्क्रीन पर क्या लिखा आता है:
   - Meta कनेक्ट: "Meta has not finished yet. Complete the Meta window, then check
     again. Your draft is saved." Meta की विंडो में काम पूरा करें, फिर "Check again" दबाएँ।
-    "Didn't connect? If Facebook said the app isn't available, accept the invite
-    first, then try again.": आपने ऊपर वाला इनवाइट छोड़ दिया। "Open my invites" दबाएँ,
-    स्वीकार करें, फिर "Try again"।
+    "Didn't connect? We've asked our team to add you and will WhatsApp you within a
+    working day. Accept our invite, then try again.": हमारे जोड़ने के बाद ही Facebook आपको
+    अंदर आने देगा (#2538); AdBrain ने टीम को बता दिया है। इनवाइट आने पर "Open my invites"
+    दबाएँ, स्वीकार करें, फिर "Try again"। "…your request didn't reach us" दिखे तो इंटरनेट
+    देखें और "Try again" दबाएँ।
   - ऐड अकाउंट या पेज शेयर नहीं हुआ: "Meta shared no ad account with AdBrain…" (या
     "no Facebook Page")। "Reconnect Meta" दबाएँ और Meta की विंडो में ऐड अकाउंट और पेज
     पर टिक करें। ऐड अकाउंट नहीं है? बिज़नेस पोर्टफ़ोलियो में रुपये वाला एक बनाएँ।

@@ -12,6 +12,7 @@ import { reportAuthOutcome } from "@/lib/observability/auth-beacon";
 import { authCode } from "@/lib/observability/auth-events";
 import { CALLBACK_ERRORS, hashCallbackError, parseCallbackError, type CallbackAction } from "@/lib/auth-callback-error";
 import { HelpOnWhatsApp } from "@/components/support-link";
+import { SIGN_IN_CHECK_WORDS, useSignInCheck } from "@/components/sign-in-check";
 
 const primaryClass = "bg-primary font-semibold text-primary-foreground shadow-xs hover:bg-primary-hover";
 const outlineLink = "inline-flex h-11 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 text-sm font-medium text-slate-900 hover:bg-slate-50";
@@ -51,9 +52,11 @@ export function LoginForm({ newVisitor = false, onSucceeded, onCallbackDismiss }
   const emailRef = useRef<HTMLInputElement>(null);
   const googleRef = useRef<HTMLButtonElement>(null);
   const restoreEmailFocus = useRef(false);
+  const focusGoogle = useRef(false);
   const [status, setStatus] = useState<"idle" | "sending" | "sent">("idle");
   const [pending, setPending] = useState<"magic" | "password" | "google" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const check = useSignInCheck();
 
   useEffect(() => {
     if (resendIn <= 0) return;
@@ -68,6 +71,14 @@ export function LoginForm({ newVisitor = false, onSucceeded, onCallbackDismiss }
     }
   }, [status]);
 
+  // #2498: the Google button is disabled until `pending` clears, so focus it after that commit.
+  useEffect(() => {
+    if (pending === null && focusGoogle.current) {
+      googleRef.current?.focus();
+      focusGoogle.current = false;
+    }
+  }, [pending]);
+
   function remember() {
     onSucceeded?.();
     rememberReturningVisitor();
@@ -81,6 +92,15 @@ export function LoginForm({ newVisitor = false, onSucceeded, onCallbackDismiss }
   async function sendMagicLink(address = email) {
     if (pending) return;
     if (address === email && emailRef.current && !emailRef.current.reportValidity()) return;
+    const ready = check.take();
+    if ("problem" in ready) {
+      // The form (with its own check) shows why, with the address kept for the next try.
+      reportAuthOutcome({ method: "email_link", outcome: "failed", code: "captcha_failed" });
+      setEmail(address);
+      setError(ready.problem);
+      setStatus("idle");
+      return;
+    }
     setError(null);
     setStatus("sending");
     setPending("magic");
@@ -88,15 +108,15 @@ export function LoginForm({ newVisitor = false, onSucceeded, onCallbackDismiss }
       const supabase = createClient();
       const { error } = await supabase.auth.signInWithOtp({
         email: address,
-        options: { emailRedirectTo: callbackUrl("email") },
+        options: { emailRedirectTo: callbackUrl("email"), ...ready.options },
       });
       if (error) {
         const code = authCode(error);
         reportAuthOutcome({ method: "email_link", outcome: "failed", code });
-        if (code === "over_email_send_rate_limit") {
-          setError(EMAIL_LIMIT_WORDS);
+        if (code === "over_email_send_rate_limit" || code === "captcha_failed") {
+          setError(code === "captcha_failed" ? SIGN_IN_CHECK_WORDS.rejected : EMAIL_LIMIT_WORDS);
           setStatus("idle");
-          requestAnimationFrame(() => googleRef.current?.focus());
+          focusGoogle.current = code === "over_email_send_rate_limit";
           return;
         }
         throw new Error(error.message);
@@ -111,6 +131,7 @@ export function LoginForm({ newVisitor = false, onSucceeded, onCallbackDismiss }
       setError(error instanceof Error ? error.message : "Could not send a sign-in link. Please try again.");
       setStatus("idle");
     } finally {
+      check.reset();
       setPending(null);
     }
   }
@@ -140,14 +161,21 @@ export function LoginForm({ newVisitor = false, onSucceeded, onCallbackDismiss }
   async function signInWithPassword(e: React.FormEvent) {
     e.preventDefault();
     if (pending) return;
+    const ready = check.take();
+    if ("problem" in ready) {
+      reportAuthOutcome({ method: "password", outcome: "failed", code: "captcha_failed" });
+      setError(ready.problem);
+      return;
+    }
     setError(null);
     setPending("password");
     try {
       const supabase = createClient();
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      const { error } = await supabase.auth.signInWithPassword({ email, password, ...(ready.options.captchaToken ? { options: ready.options } : {}) });
       if (error) {
-        reportAuthOutcome({ method: "password", outcome: "failed", code: authCode(error) });
-        throw new Error(error.message);
+        const code = authCode(error);
+        reportAuthOutcome({ method: "password", outcome: "failed", code });
+        throw new Error(code === "captcha_failed" ? SIGN_IN_CHECK_WORDS.rejected : error.message);
       }
       reportAuthOutcome({ method: "password", outcome: "success" });
       remember();
@@ -155,6 +183,8 @@ export function LoginForm({ newVisitor = false, onSucceeded, onCallbackDismiss }
     } catch (error) {
       setError(error instanceof Error ? error.message : "Could not sign in. Please try again.");
       setPending(null);
+    } finally {
+      check.reset();
     }
   }
 
@@ -189,6 +219,7 @@ export function LoginForm({ newVisitor = false, onSucceeded, onCallbackDismiss }
           </p>
         </div>
         <div className="flex flex-col gap-3">
+          {check.widget}
           <a href="mailto:" className={`inline-flex h-11 items-center justify-center gap-2 rounded-md px-4 text-sm ${primaryClass}`}>
             <Mail size={16} aria-hidden="true" /> Open email app
           </a>
@@ -228,6 +259,7 @@ export function LoginForm({ newVisitor = false, onSucceeded, onCallbackDismiss }
         </div>
         {error && <p role="alert" className="break-words text-sm leading-6 text-red-700">{error}</p>}
         <div className="flex flex-col gap-3">
+          {check.widget}
           {button(panel.primary, true)}
           {panel.secondary && button(panel.secondary, false)}
         </div>
@@ -308,6 +340,7 @@ export function LoginForm({ newVisitor = false, onSucceeded, onCallbackDismiss }
           </div>
         </div>}
         {error && <p role="alert" className="break-words border-l-2 border-red-500 pl-3 text-sm leading-6 text-red-700">{error}</p>}
+        {check.widget}
         {passwordMode ? <>
         <Button type="submit" className={`h-11 ${primaryClass}`} disabled={pending !== null || !email || !password}>
           {pending === "password" && <Loader2 size={16} aria-hidden="true" className="animate-spin" />}

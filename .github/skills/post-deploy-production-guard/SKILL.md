@@ -3,7 +3,7 @@ name: post-deploy-production-guard
 description: "Use when merges auto-deploy to production and a CI workflow should smoke each deploy, roll back a bad one, run a scheduled smoke, or alert when production stops serving the main branch."
 ---
 
-<!-- Generated from vanshulgoyal101/skills@77e6db7 skills/post-deploy-production-guard.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
+<!-- Generated from vanshulgoyal101/skills@5d0975e skills/post-deploy-production-guard.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
 
 # Post-Deploy Production Guard
 

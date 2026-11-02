@@ -94,7 +94,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 	or a PR whose title names it, or someone addresses you (`→ QA:`, `→ CEO`). Do the
 	work, then wait again. Before waiting, finish your row on the [Team board](https://github.com/vanshulgoyal101/adbrain/issues/580) in order.
 	A scheduled check (live-run reads) ends your comment with `Next read 2026-10-25T16:00Z`:
-	the item stays quiet until then, and the waiter wakes you when it's due.
+	the item stays quiet until then, and the waiter wakes you when it's due, even if the comment
+	also hands off or the item is `blocked` (#2572). `waiting-owner`, `parked` and `later` still hold it.
 	**Never idle with briefed work around (pull, don't wait):** when nothing you own is
 	actionable, the waiter offers the oldest `ready` issue in your lane (`lane:dev`,
 	`lane:qa`, `lane:devops`, `lane:review`; core first). Claim it with the printed command
@@ -128,15 +129,21 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 	under `~/Development/copilot/adbrain-wt/`. `main` is the only long-lived branch: the
 	CEO and CTO ship docs edits there as small docs PRs with auto-merge. Never leave a
 	merge, staged files or local edits behind.
-- **Delete as you go** (owner, Oct 23: lean systems). When work is done, delete its
-	branch, worktree, one-off scripts and temporary files. Don't commit dated
-	reports, audits or handoffs; evidence goes in the issue or PR. Docs hold current
-	truth only, and git keeps the history.
+- **Delete as you go** (owner, Oct 23: lean systems). When work is done and the
+	preservation checks below pass, delete its branch, worktree, one-off scripts
+	and temporary files. Don't commit dated reports, audits or handoffs; evidence
+	goes in the issue or PR. Docs hold current truth only, and git keeps the history.
 - **Never lose built work** (owner, Oct 28). Paused work gets the `parked` label
 	and a row with its resume trigger in #1258; keep its PRs open as drafts and its
-	branches. Before deleting any branch or worktree, `git cherry origin/main <branch>`
-	shows no `+` lines (or the work is in an open PR or #1258), and uncommitted edits
-	are pushed to a branch first. Removed product features go in #1173.
+	branches. Preserve all backup branches, dirty worktrees and `deploy-train*` refs.
+	Before deleting any other branch or worktree, confirm it is clearly finished, has
+	no active writer and has no unpreserved tracked, untracked or ignored files.
+	`git cherry origin/main <branch>` must show no `+` lines, but that is not proof:
+	it omits merge commits. List `git log --merges --format='%H %P' origin/main..<branch>`
+	and inspect each divergent merge's parent histories and tree, including conflict
+	resolutions or stash payloads; prove the work is present on `main`. If provenance,
+	ownership or preservation is uncertain, keep it. An open PR or #1258 does not
+	replace these checks. Removed product features go in #1173.
 - **Two env files only** (owner, Oct 29: neat repo). Secrets go in `.env.local`, every
 	test login in `.env.smoke` (in the owner's checkout), and the committed template is
 	`.env.example`. Never create another `.env.*` file or leave files in the owner's
@@ -287,7 +294,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 	auto-merge with `gh pr merge <n> --auto --squash` (one green commit per PR; only the train's
 	sync and promotion PRs use `--merge`, #2479). A PR opened against `main` is retargeted to `next` automatically.
 	`main` is production; the deploy train promotes a green `next` to `main` at most
-	every 30 minutes, so your change is live within about 30 minutes of merging. **Don't
+	every 15 minutes (#2609), so your change is live within about 20 minutes of merging. **Don't
 	wait for the train** (owner, Nov 1): check the changed flow before merging (locally or
 	on the PR preview), start your next item, and smoke production on your next pass once
 	it's live. Never sleep or poll for a deploy; it blocks your chat. Hotfixes and migration/money releases go to `main` (DevOps or CTO; label
@@ -303,3 +310,6 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Start temporary browser-validation servers with `npm run dev` so the configured memory limit applies.
 - Stop any server you start as soon as browser validation is complete unless the user explicitly asks to keep it running.
 - Do not leave dev servers detached or orphaned after an agent session.
+- **Local checks (#2617):** run only the test files you changed (`npm run test -- tests/<file>.test.ts`) and push;
+	CI typechecks in 17 s. `typecheck`, `lint`, the full suite or `build` on the shared Mac take 10–15 min and slow
+	every worker: run them locally only to fix a CI failure.

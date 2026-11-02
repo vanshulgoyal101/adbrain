@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { chromium, expect } from "@playwright/test";
-import { createServerClient } from "@supabase/ssr";
+import { browserCookies, mintTestSession } from "./lib/test-session.mjs";
 
 if (process.argv.includes("--offline-assets-focus")) {
   await checkOfflineAssetsFocus();
@@ -15,12 +15,7 @@ const origin = process.env.WORKSPACE_CHECK_URL ?? "http://localhost:3000";
 if (new URL(origin).hostname !== "localhost") throw new Error("Workspace checks are restricted to localhost.");
 const output = fileURLToPath(new URL("../test-results/workspace-ux/", import.meta.url));
 await mkdir(output, { recursive: true });
-let cookies = [];
-const client = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY, {
-  cookies: { getAll: () => [], setAll: updates => { cookies = updates.map(({ name, value }) => ({ name, value, domain: "localhost", path: "/", sameSite: "Lax" })); } },
-});
-const { error } = await client.auth.signInWithPassword({ email: process.env.DEV_LOGIN_EMAIL, password: process.env.DEV_LOGIN_PASSWORD });
-if (error) throw new Error("Development account sign-in failed.");
+const cookies = browserCookies((await mintTestSession(process.env.DEV_LOGIN_EMAIL)).cookies, origin);
 const fixtures = [
   { id: "qa-1", full_name: "Asha Verma", phone: "+919876543210", email: "asha@example.com", city: "Bengaluru", form_name: "Consultation enquiry", created_time: "2026-09-06T10:00:00Z" },
   { id: "qa-2", full_name: "Ravi Shah", phone: null, email: "ravi.shah@example.com", city: "Pune", form_name: "Weekend appointment", created_time: "2026-09-05T10:00:00Z" },

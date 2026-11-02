@@ -136,6 +136,27 @@ describe("gemini provider", () => {
       }),
     ).rejects.toBeInstanceOf(LLMError);
   });
+
+  // #2502: gemini-3.5-flash-lite answers `thinkingBudget: 0` with 400 INVALID_ARGUMENT (live probe, Nov 1);
+  // `thinkingLevel: "minimal"` returns 200 on 3.5-flash-lite and 3.6-flash.
+  it.each([
+    ["gemini-3.5-flash-lite", { thinkingLevel: "minimal" }],
+    ["gemini-3.6-flash", { thinkingLevel: "minimal" }],
+    ["gemini-2.5-flash", { thinkingBudget: 0 }],
+  ])("turns thinking off in the shape %s accepts", async (model, thinkingConfig) => {
+    mockFetch({ ok: true, json: { candidates: [{ content: { parts: [{ text: "{}" }] } }] } });
+    await createGeminiProvider().complete([{ role: "user", content: "hi" }], { thinking: "off", maxTokens: 100 }, { apiKey: "k", model });
+    const body = JSON.parse((vi.mocked(global.fetch).mock.calls[0][1] as RequestInit).body as string);
+    expect(body.generationConfig.thinkingConfig).toEqual(thinkingConfig);
+    expect(body.generationConfig.maxOutputTokens).toBe(100);
+  });
+
+  it("names Gemini's 400 reason in the error", async () => {
+    mockFetch({ ok: false, status: 400, json: { error: { code: 400, message: "Budget 0 is invalid. This model only works in thinking mode.", status: "INVALID_ARGUMENT" } } });
+    const error = await createGeminiProvider().complete([{ role: "user", content: "hi" }], {}, { apiKey: "k", model: "gemini-3.5-flash-lite" }).catch((e: unknown) => e);
+    expect(error).toMatchObject({ status: 400, code: "HTTP_400", retryable: false });
+    expect((error as Error).message).toBe("google: HTTP 400 INVALID_ARGUMENT: Budget 0 is invalid. This model only works in thinking mode.");
+  });
 });
 
 describe.each(["groq", "google"] as const)("%s SDK compatibility", (name) => {
