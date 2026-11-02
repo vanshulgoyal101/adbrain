@@ -1,5 +1,5 @@
 import sharp from "sharp";
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import run4 from "./fixtures/create/cedar-ridge-run4.json";
 import evalRows from "./fixtures/create/eval-concepts.json";
 import { googleReply, openAIReply, requestBody, requestUrl, settleInVirtualTime, useVirtualDeadlines, wait } from "./replay";
@@ -423,6 +423,30 @@ describe("core: Create route on recorded run 4", () => {
     const body = await (await (await postCreate())()).json();
     expect(body.creatives).toHaveLength(2);
     expect(batchEvent(info)).toMatchObject({ outcome: "partial", attributes: { count: 2, failedCount: 1, failedStages: ["other"], topUp: 1 } });
+  });
+
+  // #2546 (QA): a remade ad's untyped failure (here a bare abort) can hide provider calls its remake made, so the
+  // first pass's recorded usage for that ad no longer accounts for it. A replayed provider abort arrives typed, with its
+  // usage, so the top-up round itself fails untyped here.
+  it("#2546: a recorded ad whose remake fails untyped leaves the batch's usage uncertain", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    mocks.renderFailures.set("offer", 1);
+    onTestFinished(() => { vi.doUnmock("@/lib/creative/generate"); });
+    vi.doMock("@/lib/creative/generate", async (importOriginal) => {
+      const actual = await importOriginal<typeof import("@/lib/creative/generate")>();
+      const { AD_ANGLES } = await import("@/lib/templates/ads");
+      let round = 0;
+      return { ...actual, generateVariants: async (params: Parameters<typeof actual.generateVariants>[0]) => {
+        if (round++ === 0) return actual.generateVariants(params);
+        for (const angle of AD_ANGLES.filter((item) => params.angleIds?.includes(item.id))) await params.onFailure?.(angle, new Error("This operation was aborted"));
+        return [];
+      } };
+    });
+    stubProviders();
+    const body = await (await (await postCreate())()).json();
+    expect(body.creatives).toHaveLength(2);
+    expect(mocks.progress.at(-1)).toMatchObject({ p_complete: true, p_uncertain: true });
   });
 
   it("does not top up when every provider is down (#1123)", async () => {
