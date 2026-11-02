@@ -252,7 +252,7 @@ function keptLeadForm(current: string, forms: { id: string }[], lastUsed = ""): 
 const currentTime = () => Date.now();
 
 function refreshNotice(previous: CampaignResult | undefined, next: CampaignResult | undefined, t: ReturnType<typeof campaignsTranslator>): string {
-  const keys = ["impressions", "clicks", "leads", "spend", "conversations", "whatsapp_opens"] as const;
+  const keys = ["impressions", "clicks", "leads", "spend", "conversations", "whatsapp_opens", "landing_page_views", "link_clicks"] as const;
   if (!next) return t("notices.checkedNone");
   if (!previous || keys.some(key => (previous[key] ?? null) !== (next[key] ?? null))) return t("notices.updatedNow");
   return t("notices.checkedSince", { since: formatDate(previous.fetched_at) });
@@ -2656,9 +2656,10 @@ function CardResults({ campaign, result: r, outcome, comparison, waiting, onRunA
   const [weakAd, clearWeakAd] = useWeakAd(campaign.id, perAd && campaign.status === "active" && Boolean(campaign.meta_campaign_id) && enough);
   const t = verdictTranslator(words);
   const figures = <>
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+    <div className={`grid grid-cols-2 gap-3 ${outcome === "website" ? "sm:grid-cols-5" : "sm:grid-cols-4"}`}>
       <Stat label={t("figures.impressions")} value={formatNumber(r.impressions)} />
-      <Stat label={t("figures.clicks")} value={formatNumber(r.clicks)} />
+      <Stat label={t(outcome === "website" ? "figures.linkClicks" : "figures.clicks")} value={shown.linkClicks ?? formatNumber(r.clicks)} />
+      {shown.cpc !== undefined && <Stat label={t("figures.cpc")} value={shown.cpc} />}
       <Stat label={t(shown.label)} value={shown.value} />
       <Stat label={t(shown.costLabel)} value={shown.cost} />
     </div>

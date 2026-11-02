@@ -2,6 +2,13 @@
 
 Drafts, the planner, review, durable creation, activation, pause, delete and per-campaign edits. Conventions: [API reference](README.md).
 
+Website results from manual and scheduled refresh store `link_clicks` separately
+from all `clicks` (#2635). The card's Details show Link clicks, CPC (spend divided
+by link clicks), website visits and cost per visit. Null/missing link clicks mean
+unread and display as “—”; zero clicks display as 0 with no CPC. WhatsApp and form
+figures are unchanged. The website insights tape remains explicitly provisional
+until a real website campaign can be read; code tests do not prove live delivery.
+
 ## Routes
 
 `Envelope` means the typed family in [Response Families](README.md#response-families); `plain` means route-specific JSON.
