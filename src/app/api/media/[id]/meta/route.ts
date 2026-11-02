@@ -4,6 +4,7 @@ import { z } from "zod";
 import { apiError } from "@/lib/api";
 import { mediaErrorResponse, mediaSession } from "@/lib/media/route-helpers";
 import { ownMedia, readVerifiedMedia } from "@/lib/media/store";
+import { ConnectionAccessError } from "@/lib/meta/connection-access-error";
 import { metaClientForBusiness } from "@/lib/meta/credentials";
 import { observeRoute } from "@/lib/observability/logger";
 import { rateLimitResponse } from "@/lib/security/rate-limit";
@@ -12,7 +13,8 @@ import { ensureMetaMedia, metaMediaPort, type MetaMediaResult } from "@/services
 import { signedMediaUrl, supabaseMetaMediaStore } from "@/services/meta-media-store";
 
 export const runtime = "nodejs";
-// A video start is at most two 15 s Graph calls (one 389 retry) plus one status read.
+// A video start is two 15 s Graph calls (one 389 retry) plus a status read; a stuck claim's lookup can run past this,
+// and a cut-off call stays `starting`, which the next call's name lookup settles without a second upload.
 export const maxDuration = 60;
 
 type Params = { params: Promise<{ id: string }> };
@@ -58,6 +60,10 @@ export const POST = observeRoute("/api/media/[id]/meta", "POST", async (req: Req
     if (result.status === "refused") return refused(result.reason);
     return NextResponse.json({ ok: true, ...result });
   } catch (error) {
+    if (error instanceof ConnectionAccessError) {
+      const status = { UNAUTHENTICATED: 401, NOT_FOUND: 404, FORBIDDEN: 403, CONFLICT: 409, UNAVAILABLE: 503 }[error.code];
+      return NextResponse.json({ error: error.message, code: `META_${error.code}` }, { status });
+    }
     return mediaErrorResponse(error);
   }
 });

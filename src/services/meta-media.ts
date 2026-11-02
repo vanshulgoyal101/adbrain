@@ -8,6 +8,7 @@
  * name at Meta before anything is sent again, and an unsettled lookup never re-sends.
  */
 import { MetaError, isThrottleCode, type MetaClient } from "@/lib/meta/client";
+import { ConnectionAccessError } from "@/lib/meta/connection-access-error";
 import { VIDEO_PROBLEM_WORDS, adVideoProblem, type AdVideoLookup, type AdVideoProblem, type AdVideoState } from "@/lib/meta/media";
 
 export type MediaAsset = {
@@ -195,6 +196,11 @@ async function postVideo(deps: MetaMediaDeps, asset: MediaAsset, claim: MetaUplo
   try {
     videoId = await deps.meta.startVideo({ fileUrl, name, title: name });
   } catch (error) {
+    // The client refused before sending (e.g. the pause-only smoke account): free the claim so it isn't settled as lost.
+    if (error instanceof ConnectionAccessError) {
+      await deps.store.update(claim.id, expect, { status: "error", problem: "unreachable", checkedAt: nowIso(deps) });
+      throw error;
+    }
     // Only a refusal Meta actually answered means no video was made; anything else stays `starting` for the lookup.
     if (!refused(error)) return { status: "processing", kind: "video", videoId: null };
     const problem = adVideoProblem(error);

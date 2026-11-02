@@ -88,4 +88,12 @@ describe("POST /api/media/[id]/meta (#749)", () => {
     expect(failed.status).toBe(200);
     expect(await failed.json()).toEqual({ ok: true, status: "error", kind: "video", problem });
   });
+
+  it("the pause-only smoke account is told plainly it can't send, not to try again", async () => {
+    const { ConnectionAccessError } = await import("@/lib/meta/connection-access-error");
+    m.ensure.mockRejectedValueOnce(new ConnectionAccessError("FORBIDDEN", "The test account can only check and pause on this Meta ad account."));
+    const response = await post();
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({ error: "The test account can only check and pause on this Meta ad account.", code: "META_FORBIDDEN" });
+  });
 });
