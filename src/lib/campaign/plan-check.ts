@@ -129,7 +129,7 @@ export function planCheckEvent(findings: PlanFinding[], destination: string) {
   return {
     outcome: findings.some((finding) => finding.status === "warn" || finding.status === "fail") ? "partial" as const : "success" as const,
     attributes: {
-      ...(destination === "instant_form" || destination === "whatsapp" ? { destination: destination as Exclude<LeadDestination, "call" | "website"> } : {}),
+      ...(destination === "instant_form" || destination === "whatsapp" || destination === "website" ? { destination: destination as ReviewDestination } : {}),
       count: findings.length,
       failedCount: findings.filter((finding) => finding.status === "fail").length,
       validationRules: findings.filter((finding) => finding.status !== "pass").map((finding) => `${ruleSlug(finding.rule)}:${finding.status}`),

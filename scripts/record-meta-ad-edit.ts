@@ -37,7 +37,8 @@ async function main() {
   const creative = await call("POST", `${account}/adcreatives`, { ...form, execution_options: VALIDATE });
   // The swap is validated against the ad's current creative: the edited one isn't created here.
   const swap = await call("POST", adId, { creative: JSON.stringify({ creative_id: adBody.creative.id }), execution_options: VALIDATE });
-  const scrub = (value: unknown) => JSON.parse(JSON.stringify(value).split(account).join("act_ACCOUNT").split(adId).join("AD"));
+  const pairs: [string, string][] = [[account, "act_ACCOUNT"], [account.slice(4), "9000000000000001"], [process.env.META_PAGE_ID ?? "", "900000000000002"], [adId, "AD"]];
+  const scrub = (value: unknown) => JSON.parse(pairs.filter(([real]) => real).reduce((text, [real, label]) => text.split(real).join(label), JSON.stringify(value)));
   const tape = scrub({ recordedAt: new Date().toISOString(), edit: EDIT, ad: ad.body, form, validated: { creative, swap } });
   writeFileSync(join(process.cwd(), "tests/core/fixtures/meta/ad-edit.json"), `${JSON.stringify(tape, null, 2)}\n`);
   console.log("ad-edit:", creative.status, JSON.stringify(creative.body), swap.status, JSON.stringify(swap.body));

@@ -880,6 +880,31 @@
       "alreadyGone": "That picture is already gone. Reload the page.",
       "fileNotCleared": "Picture removed from your library, but its stored file couldn't be deleted. Message us and we'll clear it.",
       "somethingWrong": "Something went wrong. Check your connection and try again."
+    },
+    "goLive": {
+      "formsLoadFailed": "Could not load Page forms. Your draft is saved.",
+      "formsUnavailable": "Page forms are temporarily unavailable.",
+      "resolveBeforeDraft": "Resolve the current campaign operation before opening another draft.",
+      "resolveBeforeStart": "Resolve the current campaign operation before starting another campaign.",
+      "checkBeforeDestination": "Check the existing campaign operation before changing the destination.",
+      "checkBeforeConnect": "Check the existing campaign operation before connecting again.",
+      "selectCreative": "Select at least one creative.",
+      "enterBudget": "Enter a daily budget.",
+      "adChangeFailed": "The ad couldn't be changed. Edit its last line, then check again.",
+      "checkBeforePrepare": "Check the existing campaign operation before preparing another campaign.",
+      "confirmUnavailable": "Activation confirmation is unavailable in this browser.",
+      "deliveryReviewUnavailable": "Campaign delivery review is unavailable.",
+      "fundsReconcile": "Customer advertising funds must be reconciled before activation.",
+      "reviewConnection": "Review the current connection before activating this campaign.",
+      "checkOperationBeforeConnect": "Check the existing operation before connecting again."
+    },
+    "enquiries": {
+      "followUpSaveFailed": "Follow-up could not be saved. Your edits are still here; retry to save them.",
+      "saveOffline": "Couldn't save that. Check your connection and try again.",
+      "checkFailed": "Couldn't check Meta for enquiries. The ones below are still here.",
+      "checkOffline": "Couldn't check Meta for enquiries. Check your connection.",
+      "imported": "{count, plural, one {# new enquiry} other {# new enquiries}} from Meta.",
+      "someUnchecked": "Some enquiries on Meta couldn't be checked. The ones below are saved; tap Check now to try again."
     }
   }
 }

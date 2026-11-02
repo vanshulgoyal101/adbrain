@@ -56,6 +56,8 @@ const scrub = <T>(value: T): T => JSON.parse(scrubs.reduce((text, [real, label])
 const created: { kind: string; id: string }[] = [];
 /** #741: Meta's answer to the service-area read (region and country of each included place). */
 let geoMeta: { path: string; status: number; body: unknown } | null = null;
+/** #1932: each real creative's enhancement settings as Meta stored them, read before it is deleted. */
+const creativeReadbacks: { destination: AdDestination; status: number; body: unknown }[] = [];
 
 const realFetch = globalThis.fetch;
 let destination: AdDestination = "instant_form";
@@ -103,6 +105,11 @@ globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
   const real = await graphPost(path, form);
   if (real.status !== 200 || typeof real.body.id !== "string") return Response.json(real.body, { status: real.status });
   created.push({ kind, id: real.body.id });
+  if (kind === "adcreatives") {
+    const res = await realFetch(`${GRAPH}${real.body.id}?fields=degrees_of_freedom_spec&access_token=${encodeURIComponent(token)}`);
+    creativeReadbacks.push({ destination, status: res.status, body: await res.json() });
+    console.log(destination, "creative read-back", res.status);
+  }
   scrubs.push([real.body.id, { campaigns: "CAMPAIGN", adsets: "ADSET", adcreatives: "CREATIVE" }[kind]!]);
   return Response.json({ id: real.body.id });
 };
@@ -185,7 +192,7 @@ async function main() {
   }
   const file = join(process.cwd(), `tests/core/fixtures/meta/${NO_FACEBOOK_REELS ? "no-facebook-reels-validate" : WEBSITE ? "launch-validate-website" : "launch-validate"}.json`);
   const name = NO_FACEBOOK_REELS ? { name: noReels.name } : WEBSITE ? { name: "AdBrain #2598 validate (PAUSED, deleted after)" } : {};
-  writeFileSync(file, `${JSON.stringify(scrub({ recordedAt: new Date().toISOString(), inputs: { ...LAUNCH_INPUTS, ...name, phone: PLACEHOLDER_PHONE }, geoMeta, tape }), null, 2)}\n`);
+  writeFileSync(file, `${JSON.stringify(scrub({ recordedAt: new Date().toISOString(), inputs: { ...LAUNCH_INPUTS, ...name, phone: PLACEHOLDER_PHONE }, geoMeta, creativeReadbacks, tape }), null, 2)}\n`);
   console.log(`launch-validate: ${tape.length} validated objects`);
 }
 
