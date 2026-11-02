@@ -117,7 +117,7 @@ function ItemLine({ item, onRetry }: { item: UploadItem; onRetry: () => void }) 
         </span>
       </span>
       {item.status === "failed" && item.prepared && (
-        <button type="button" onClick={onRetry} className="inline-flex min-h-11 shrink-0 items-center gap-1 rounded-md px-3 text-sm font-medium text-blue-700 hover:bg-blue-50">
+        <button type="button" onClick={onRetry} className="inline-flex min-h-11 shrink-0 items-center gap-1 rounded-md px-3 text-sm font-medium text-primary hover:bg-primary/10">
           <RotateCcw className="h-4 w-4" aria-hidden="true" /> Try again
         </button>
       )}
@@ -210,7 +210,7 @@ export function MediaUploadSheet({ open, onOpenChange, uploads, businessId, vert
           )}
           {needsTick && ready.length > 0 && <p className="text-sm text-slate-600">{UPLOAD_WORDS.rightsRequired}</p>}
           <button type="button" onClick={() => void next()} disabled={!ready.length || saving || busy || needsTick}
-            className="inline-flex min-h-11 items-center justify-center rounded-md bg-blue-600 px-4 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">
+            className="inline-flex min-h-11 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary-hover disabled:opacity-50">
             {addLabel(ready.length)}
           </button>
         </div>

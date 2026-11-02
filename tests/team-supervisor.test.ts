@@ -105,6 +105,9 @@ describe("team-supervisor (#573 A1)", () => {
     expect(text).toContain("-l owner:dev2");
     expect(text).toContain("wait-for-work.mjs --me dev2");
     expect(text).toMatch(/never completes: do not call task_complete/);
+    expect(text).toMatch(/Never end your turn/);
+    expect(text).toContain("timed out), run it again");
+    expect(text).not.toMatch(/Stop only when the waiter times out/);
     expect(text).toContain('"Dev 2:"');
     expect(() => restartPrompt("nobody")).toThrow();
   });
