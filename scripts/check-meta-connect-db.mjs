@@ -15,6 +15,7 @@ const customerAllowanceMigration = await readFile(join(root, "db/migrations/2026
 const creativeIntentMigration = await readFile(join(root, "db/migrations/20260927_creative_generation_intents.sql"), "utf8");
 const creativeReconcileMigration = await readFile(join(root, "db/migrations/20260930_creative_generation_reconcile.sql"), "utf8");
 const creativeSettleMigration = await readFile(join(root, "db/migrations/20261021_creative_generation_settle_holds.sql"), "utf8");
+const creativeOneBatchMigration = await readFile(join(root, "db/migrations/20261102_creative_generation_one_batch.sql"), "utf8");
 const regenerationClaimsMigration = await readFile(join(root, "db/migrations/20261001_creative_regeneration_claims.sql"), "utf8");
 const regenerationStaleMigration = await readFile(join(root, "db/migrations/20261029_creative_regeneration_stale_claims.sql"), "utf8");
 const configurablePaymentMigration = await readFile(join(root, "db/migrations/20260927_configurable_payment_quotes.sql"), "utf8");
@@ -2877,7 +2878,12 @@ async function verifyCreativeGenerationAdmission(db, database) {
   });
   await check(`${database}: concurrent tenants cannot exceed the remaining quota`, async () => {
     const results=await Promise.all([admit(randomUUID(),otherBusiness,otherOwner),admit(randomUUID(),otherBusiness,otherOwner)]);
-    assert.deepEqual(results.map(result=>result.action).sort(),['quota','start']);
+    // #1402: the second simultaneous start follows the first batch, so it can't spend the allowance either.
+    assert.deepEqual(results.map(result=>result.action).sort(),['running','start']);
+    const {rows:[held]}=await db.query("select generation_id from private.creative_generation_intents where business_id=$1",[otherBusiness]);
+    await db.query("update private.creative_generation_intents set updated_at=clock_timestamp()-interval '6 minutes' where generation_id=$1",[held.generation_id]);
+    assert.equal((await admit(randomUUID(),otherBusiness,otherOwner)).action,'quota');
+    await db.query("update private.creative_generation_intents set updated_at=clock_timestamp() where generation_id=$1",[held.generation_id]);
   });
   await check(`${database}: an unknown recovery lookup fences a delayed producer`, async () => {
     const id=randomUUID();
@@ -2896,13 +2902,34 @@ async function verifyCreativeGenerationAdmission(db, database) {
     await db.query("insert into public.llm_usage_events(business_id,user_id,route,provider,model,total_tokens) values ($1,$2,'creatives.generate','fixture','fixture',40)",[business,owner]);
     const progress=await service("select public.creative_generation_progress($1,$2,$3,40,false,false,false) as result",[business,owner,first]);
     assert.equal(progress.status,'processing');
+    // #1402: a batch with no ad saved yet blocks a second start until it has been silent for 5 minutes, even at quota.
+    assert.equal((await admit(randomUUID(),business,owner,'b'.repeat(64),51)).action,'running');
+    const stale=id=>db.query("update private.creative_generation_intents set updated_at=clock_timestamp()-interval '6 minutes' where generation_id=$1",[id]);
+    await stale(first);
     assert.equal((await admit(randomUUID(),business,owner,'b'.repeat(64),51)).action,'quota');
-    assert.equal((await admit(randomUUID(),business,owner,'b'.repeat(64),50)).action,'start');
+    const second=randomUUID();
+    assert.equal((await admit(second,business,owner,'b'.repeat(64),50)).action,'start');
+    await stale(second);
     await db.query("insert into public.creatives(business_id,brief,variant_group) values ($1,'Fixture',$2)",[business,first]);
     assert.equal((await service("select public.creative_generation_progress($1,$2,$3,0,true,false,false) as result",[business,owner,first])).status,'complete');
     assert.equal((await admit(randomUUID(),business,owner,'c'.repeat(64),60)).action,'quota');
     assert.equal((await admit(randomUUID(),business,owner,'c'.repeat(64),50)).action,'start');
     assert.equal((await admit(first)).action,'recover');
+  });
+  await check(`${database}: a second device's start follows the batch still making its first ad (#1402)`, async () => {
+    const tenant=randomUUID();
+    await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Second device')",[tenant,owner]);
+    const raced=await Promise.all([admit(randomUUID(),tenant,owner,'d'.repeat(64),10,1000),admit(randomUUID(),tenant,owner,'e'.repeat(64),10,1000)]);
+    assert.deepEqual(raced.map(result=>result.action).sort(),['running','start']);
+    const {rows}=await db.query("select generation_id,request_hash from private.creative_generation_intents where business_id=$1",[tenant]);
+    assert.equal(rows.length,1);
+    const first=rows[0].generation_id;
+    const follow=await admit(randomUUID(),tenant,owner,'f'.repeat(64),10,1000);
+    assert.deepEqual([follow.action,follow.generationId,follow.status,follow.expectedCount],['running',first,'processing',1]);
+    assert.equal((await admit(first,tenant,owner,rows[0].request_hash,10,1000)).action,'recover');
+    await db.query("insert into public.creatives(business_id,brief,variant_group) values ($1,'Fixture',$2)",[tenant,first]);
+    assert.equal((await service("select public.creative_generation_progress($1,$2,$3,0,false,false,false) as result",[tenant,owner,first])).status,'partial');
+    assert.equal((await admit(randomUUID(),tenant,owner,'f'.repeat(64),10,1000)).action,'start');
   });
   await check(`${database}: timeout and uncertain provider outcome retain identity and hold`, async () => {
     const id=(await db.query("select generation_id from private.creative_generation_intents where business_id=$1 and state='processing' limit 1",[otherBusiness])).rows[0].generation_id;
@@ -3005,6 +3032,8 @@ async function verifyCreativeGenerationAdmission(db, database) {
       [freshBusiness,owner,id,'d'.repeat(64)]);
     assert.equal(first.action,'start');
     await service("select public.creative_generation_progress($1,$2,$3,0,false,false,true) as result",[freshBusiness,owner,id]);
+    // Past the #1402 follow window, so the hold itself (not the running batch) refuses the next admission.
+    await db.query("update private.creative_generation_intents set updated_at=clock_timestamp()-interval '6 minutes' where generation_id=$1",[id]);
     const second=await admit(randomUUID(),freshBusiness,owner,'e'.repeat(64),100);
     await db.query("insert into public.creatives(business_id,brief,variant_group) values ($1,'Still running',$2)",[freshBusiness,id]);
     const late=await service("select public.creative_generation_progress($1,$2,$3,0,false,false,false) as result",[freshBusiness,owner,id]);
@@ -3108,6 +3137,8 @@ async function verify(database, source, integrityMigration, customerOnly = false
       await db.query(creativeReconcileMigration);
       await db.query(creativeSettleMigration);
       await db.query(creativeSettleMigration);
+      await db.query(creativeOneBatchMigration);
+      await db.query(creativeOneBatchMigration);
       await verifyCreativeGenerationAdmission(db, database);
       await verifyRegenerationClaims(db, database);
       return;
