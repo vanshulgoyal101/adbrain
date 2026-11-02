@@ -1923,6 +1923,8 @@ function BusinessCampaigns({
             {/* #1171 (QA): WhatsApp stays the default; an owner without a linked number can still run ads today. */}
             {whatsappStatus?.state !== "ready" && <Button type="button" variant="ghost" className="mt-1 h-11 px-0 text-blue-700" disabled={preparing || creating || destinationRecoveryLocked} onClick={() => switchDestination("instant_form")}>No WhatsApp number yet? Use an Instant form for now</Button>}
           </div>}
+          {/* Designer (#2660): Website's link and button open right under the switch, where WhatsApp's number and tips go. */}
+          {showComposer && creationMode === "manual" && destination === "website" && <div className="mb-4"><WebsiteDestinationFields website={business.website} cta={websiteCta} onCta={(cta) => { setWebsiteCta(cta); if (!unresolvedRecovery()) setPrepareReview(null); }} disabled={preparing || creating} words={campaignWords} /></div>}
           {showComposer && creationMode === "guided" && <CampaignChat
             businessId={business.id}
             destination={destination === "website" ? undefined : destination /* TODO(#2595): the planner learns website in slice C. */}
@@ -2128,7 +2130,6 @@ function BusinessCampaigns({
                     {/* #1004: from Create, choosing the form is the last step before Review opens. */}
                     {autoReviewPending && !leadFormId && !formsLoading && availableForms.length > 1 && <p role="status" className="text-sm text-slate-600">Choose the form for these enquiries, and Review opens.</p>}
                   </div>}
-                  {destination === "website" && <WebsiteDestinationFields website={business.website} cta={websiteCta} onCta={(cta) => { setWebsiteCta(cta); if (!unresolvedRecovery()) setPrepareReview(null); }} disabled={preparing || creating} words={campaignWords} />}
                   {destination === "whatsapp" && <div className="flex min-w-0 flex-col gap-1.5">
                     {whatsappOptions.length ? <>
                       <Label htmlFor="whatsapp-number">WhatsApp button number</Label>
@@ -2195,9 +2196,9 @@ function BusinessCampaigns({
 
                 {/* #761: what to expect, from AdBrain's own runs (#588 ledger; #1307: facts with n until 20 results). #1038: no lead-form figure until AdBrain has run lead forms. */}
                 <p className="-mt-2 text-xs text-slate-500">
-                  What to expect: {destination === "whatsapp"
+                  {destination === "website" ? tc("destination.expectWebsite") : <>What to expect: {destination === "whatsapp"
                     ? whatsappExpectation(whatsappLedger ?? undefined)
-                    : destination === "website" ? tc("destination.expectWebsite") : <>AdBrain hasn&apos;t run enough instant-form campaigns yet to quote a cost per enquiry.</>} {REVIEW_AND_SPEND}
+                    : <>AdBrain hasn&apos;t run enough instant-form campaigns yet to quote a cost per enquiry.</>} {REVIEW_AND_SPEND}</>}
                 </p>
 
                 {destination === "instant_form" && formsLoading && <p role="status" className="text-sm text-slate-500">Loading lead forms...</p>}
