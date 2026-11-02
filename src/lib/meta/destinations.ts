@@ -1,5 +1,6 @@
 // #2598: where an ad sends people, and the Meta ad-set plan and button for each destination.
 import type { LeadDestination, WebsiteGoal } from "@/lib/types/campaign";
+export type { WebsiteGoal };
 
 /** Where people land: an in-ad instant form, a WhatsApp chat, a phone call, or the business's website (#2595). */
 export type AdDestination = LeadDestination;
@@ -43,6 +44,29 @@ export interface DestinationPlan {
 /** #2713: the pixel event a website leads/sales goal optimises for; visits has none. */
 export function websiteConversionEvent(goal: WebsiteGoal | undefined): "LEAD" | "PURCHASE" | null {
   return goal === "leads" ? "LEAD" : goal === "sales" ? "PURCHASE" : null;
+}
+
+/** Why a launch can't go to this destination yet, checked before Meta is called; null when it can. */
+export function destinationProblem(dest: AdDestination, p: { leadFormId?: string; link: string; websiteGoal?: WebsiteGoal; pixelId?: string; whatsappNumber?: string }): string | null {
+  if (dest === "instant_form" && !p.leadFormId) return "Choose an active lead form before creating ads.";
+  if (dest === "website" && !isWebsiteLink(p.link)) return "Add the business's own website (starting https://) before creating website ads.";
+  // #2713: a goal only on a website ad; leads/sales need the account's pixel, and a pixel needs one of them.
+  if (p.websiteGoal !== undefined && (dest !== "website" || !["visits", "leads", "sales"].includes(p.websiteGoal))) return "Choose a supported website goal before creating ads.";
+  const event = websiteConversionEvent(p.websiteGoal);
+  if (event && !/^\d+$/.test(p.pixelId ?? "")) return "Connect website tracking before creating website leads or sales ads.";
+  if (!event && p.pixelId !== undefined) return "Website tracking applies only to website leads or sales ads.";
+  if (dest === "whatsapp" && !/^\+[1-9]\d{6,14}$/.test(p.whatsappNumber ?? "")) return "Review the Page-linked WhatsApp Business number before creating ads.";
+  return null;
+}
+
+/** The ad set's promoted object. #2713: a conversion ad set also names the Page, so sync, pause and edit still recognise it as ours. */
+export function promotedObject(dest: AdDestination, p: { pageId: string; whatsappNumber?: string; websiteGoal?: WebsiteGoal; pixelId?: string }): string {
+  const event = websiteConversionEvent(p.websiteGoal);
+  return JSON.stringify({
+    page_id: p.pageId,
+    ...(dest === "whatsapp" ? { whatsapp_phone_number: p.whatsappNumber } : {}),
+    ...(event ? { pixel_id: p.pixelId, custom_event_type: event } : {}),
+  });
 }
 
 /** #2713: the campaign objective for a destination; a website leads/sales goal gets Meta's leads/sales objective. */

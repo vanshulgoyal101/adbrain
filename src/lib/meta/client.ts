@@ -21,8 +21,7 @@ import {
   fetchAdImage, findAdVideoByName, readAdVideo, startAdVideo, uploadAdImageBytes, type AdVideoLookup, type AdVideoState,
 } from "./media";
 import { buildGeoLocations, clampRadiusKm, geoLabel, hasGeo, pickBestGeoMatch } from "./geo";
-import { campaignObjective, destinationCTA, destinationPlan, hasPlacementCreative, isWebsiteLink, leavesAudienceNetworkOut, websiteConversionEvent, websiteUrlTags, type AdDestination } from "./destinations";
-import type { WebsiteGoal } from "@/lib/types/campaign";
+import { campaignObjective, destinationCTA, destinationPlan, destinationProblem, hasPlacementCreative, leavesAudienceNetworkOut, promotedObject, websiteUrlTags, type AdDestination, type WebsiteGoal } from "./destinations";
 export { destinationCTA, destinationPlan, websiteUrlTags, type AdDestination, type DestinationPlan } from "./destinations";
 import { CREATIVE_OPT_OUT_FORM } from "./creative-opt-out";
 export { CREATIVE_FEATURES_OPT_OUT, CREATIVE_OPT_OUT_FORM } from "./creative-opt-out";
@@ -1242,10 +1241,7 @@ export class MetaClient {
     location?: GeoTargeting;
     excludedLocation?: GeoTargeting;
     destination?: AdDestination;
-    /** #2713: a website ad's goal; leads/sales optimise for the pixel's Lead/Purchase event. Absent means visits. */
-    websiteGoal?: WebsiteGoal;
-    /** #2713: the pixel a website leads/sales ad set promotes. */
-    pixelId?: string;
+    websiteGoal?: WebsiteGoal; pixelId?: string; // #2713: a website goal (absent: visits); leads/sales optimise for this pixel's Lead/Purchase
     whatsappNumber?: string;
     /** Numbers bound to this AdBrain business (#253); a non-Page number must be one of them. */
     boundWhatsAppNumbers?: readonly string[];
@@ -1286,17 +1282,9 @@ export class MetaClient {
       throw new MetaError("Choose a supported gender demographic before creating ads.");
     }
     const requested = params.destination ?? "instant_form";
-    if (requested === "instant_form" && !params.leadFormId) throw new MetaError("Choose an active lead form before creating ads.");
-    if (requested === "website" && !isWebsiteLink(params.link)) throw new MetaError("Add the business's own website (starting https://) before creating website ads.");
-    if (params.websiteGoal !== undefined && (requested !== "website" || !["visits", "leads", "sales"].includes(params.websiteGoal))) {
-      throw new MetaError("Choose a supported website goal before creating ads.");
-    }
-    const conversionEvent = websiteConversionEvent(params.websiteGoal);
-    if (conversionEvent ? !/^\d+$/.test(params.pixelId ?? "") : params.pixelId !== undefined) {
-      throw new MetaError(conversionEvent ? "Connect website tracking before creating website leads or sales ads." : "Website tracking applies only to website leads or sales ads.");
-    }
+    const problem = destinationProblem(requested, params);
+    if (problem) throw new MetaError(problem);
     if (requested === "whatsapp") {
-      if (!params.whatsappNumber || !/^\+[1-9]\d{6,14}$/.test(params.whatsappNumber)) throw new MetaError("Review the Page-linked WhatsApp Business number before creating ads.");
       if (await this.getWhatsAppNumber(params.whatsappNumber, params.boundWhatsAppNumbers ?? []) !== params.whatsappNumber) throw new MetaError("The Page-linked WhatsApp number changed. Review the campaign again.");
     }
 
@@ -1419,12 +1407,7 @@ export class MetaClient {
         optimization_goal: dp.optimizationGoal,
         bid_strategy: "LOWEST_COST_WITHOUT_CAP",
         destination_type: dp.destinationType,
-        // #2713: a conversion ad set also names the Page, so sync, pause and edit still recognise it as ours.
-        promoted_object: JSON.stringify({
-          page_id: this.creds.pageId,
-          ...(dest === "whatsapp" ? { whatsapp_phone_number: params.whatsappNumber } : {}),
-          ...(conversionEvent ? { pixel_id: params.pixelId, custom_event_type: conversionEvent } : {}),
-        }),
+        promoted_object: promotedObject(dest, { ...params, pageId: this.creds.pageId }),
         targeting: targetingFor(v, dest),
       };
       const created = await this.graph<{ id: string }>(`${acct}/adsets`, { method: "POST", form });
