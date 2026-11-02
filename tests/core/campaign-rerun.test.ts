@@ -44,6 +44,19 @@ describe("core: Run this again (#1050)", () => {
     expect(rerunPrefill({ campaign, draft: questions, approvedIds: [A], bestCreativeId: null })).toMatchObject({ whatsappMessage: questions.whatsappMessage });
   });
 
+  it("a run that sent the Brand's saved Call-on message starts the next run with that message, Call off (#1174)", () => {
+    const saved = { greeting: "Namaste!", opening: { kind: "prefill", prefill: "Free site survey", callButton: true }, language: "hinglish" };
+    const off = { ...saved, opening: { ...saved.opening, callButton: false } };
+    const usedSaved: DraftInput = { ...draft, whatsappMessage: undefined };
+    expect(rerunPrefill({ campaign, draft: usedSaved, approvedIds: [A], bestCreativeId: null, savedMessage: saved })).toMatchObject({ whatsappMessage: off });
+    expect(rerunPrefill({ campaign, draft: null, approvedIds: [A], bestCreativeId: null, savedMessage: saved })).toMatchObject({ source: "campaign", whatsappMessage: off });
+    // A saved message with Call off, or none, stays the Brand's: the next run keeps following it.
+    expect(rerunPrefill({ campaign, draft: usedSaved, approvedIds: [A], bestCreativeId: null, savedMessage: off })).not.toMatchObject({ whatsappMessage: expect.anything() });
+    expect(rerunPrefill({ campaign, draft: usedSaved, approvedIds: [A], bestCreativeId: null, savedMessage: null })).not.toMatchObject({ whatsappMessage: expect.anything() });
+    // A form run never picks up a WhatsApp message.
+    expect(rerunPrefill({ campaign, draft: { ...usedSaved, destination: "instant_form" }, approvedIds: [A], bestCreativeId: null, savedMessage: saved })).not.toMatchObject({ whatsappMessage: expect.anything() });
+  });
+
   it("copies an old lead-form draft saved before destinations existed as a form campaign (#1216)", () => {
     const old = { ...draft, destination: undefined, leadFormId: "900000000000216", whatsappMessage: undefined, whatsappLanguage: undefined };
     expect(rerunPrefill({ campaign: { ...campaign, destination: "instant_form" }, draft: old, approvedIds: [A], bestCreativeId: null }))
@@ -142,5 +155,14 @@ describe("GET /api/campaigns/[id]/rerun (#1050)", () => {
     const { status, body } = await call();
     expect(status).toBe(409);
     expect(body).toMatchObject({ error: expect.stringMatching(/approved anymore/) });
+  });
+
+  it("reads the Brand's saved message only for a WhatsApp run without its own, and turns its Call button off (#1174)", async () => {
+    state.tables.businesses = { whatsapp_template: { greeting: "Hi", opening: { kind: "prefill", prefill: "Price?", callButton: true }, language: "en" } };
+    expect((await call()).body).toMatchObject({ prefill: { whatsappMessage: draft.whatsappMessage } });
+    expect(state.filters).not.toContain("businesses.id=b1");
+    state.tables.campaign_drafts = { input: { ...draft, whatsappMessage: undefined } };
+    expect((await call()).body).toMatchObject({ prefill: { whatsappMessage: { greeting: "Hi", opening: { kind: "prefill", prefill: "Price?", callButton: false } } } });
+    expect(state.filters).toContain("businesses.id=b1");
   });
 });

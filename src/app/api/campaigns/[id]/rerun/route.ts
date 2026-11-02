@@ -56,7 +56,12 @@ export const GET = observeRoute("/api/campaigns/[id]/rerun", "GET", async (
     }
   }
 
-  const prefill = rerunPrefill({ campaign, draft, approvedIds: (approved ?? []).map((row) => row.id), bestCreativeId: best });
+  // #1174: a WhatsApp run without its own message sent the saved one; the next run copies it with Call off.
+  const whatsapp = (draft ? draft.destination : campaign.destination) === "whatsapp" && !draft?.whatsappMessage;
+  const { data: business } = whatsapp
+    ? await supabase.from("businesses").select("whatsapp_template").eq("id", campaign.business_id).maybeSingle()
+    : { data: null };
+  const prefill = rerunPrefill({ campaign, draft, approvedIds: (approved ?? []).map((row) => row.id), bestCreativeId: best, savedMessage: business?.whatsapp_template });
   if ("error" in prefill) return apiError(prefill.error, 409);
   return NextResponse.json({ ok: true, prefill });
 });
