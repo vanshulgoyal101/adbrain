@@ -93,4 +93,4 @@ jobs:
           open=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search "in:title \"$title\"" --json number --jq length)
           [ "$open" = 0 ] || exit 0
           gh issue create -R "$GITHUB_REPOSITORY" -l core -l bug -l owner:devops -t "$title" \
-            -b "$(printf 'The nightly pg_dump (#884) failed. Until a backup succeeds, no migration (release.mjs refuses).\n\nRunbook: docs/RELEASING.md#backups-and-restore\nRun: %s/%s/actions/runs/%s\n' "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+            -b "$(printf 'The nightly pg_dump (#884) failed. Until a backup succeeds, no migration (release.mjs refuses).\n\nRunbook: docs/operations/releasing-recovery.md#backups-and-restore\nRun: %s/%s/actions/runs/%s\n' "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"

@@ -67,11 +67,11 @@ export async function saveCampaignChildren(
  */
 export async function saveCampaignBudget(
   actor: Actor, campaignId: string,
-  mirror: (current: Pick<Database["public"]["Tables"]["campaigns"]["Row"], "daily_budget" | "raw">) => Partial<Pick<CampaignInsert, "daily_budget" | "raw">>,
+  mirror: (current: Pick<Database["public"]["Tables"]["campaigns"]["Row"], "daily_budget" | "raw" | "status">) => Partial<Pick<CampaignInsert, "daily_budget" | "raw">>,
   database: Store = createAdminClient(),
 ) {
   await checkOwner(database, actor);
-  const { data, error } = await database.from("campaigns").select("meta_adset_id, daily_budget, raw")
+  const { data, error } = await database.from("campaigns").select("meta_adset_id, daily_budget, raw, status")
     .eq("business_id", actor.businessId).eq("id", campaignId).maybeSingle();
   if (error || !data?.meta_adset_id) return { data: null, error: error ?? new Error("The campaign could not be read.") };
   return database.from("campaigns").update(mirror(data))

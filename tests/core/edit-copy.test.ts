@@ -35,6 +35,10 @@ describe("core: editing a recorded production concept (warn mode)", () => {
     expect(warn({ description: "Now $490 for the full plan" })).toEqual([
       "\"$490\" isn't in your Brand. Check it's true, or add it to your Brand's offers.",
     ]);
+    // #2166: Devanagari digits are the same price, and the warning shows what the owner typed.
+    expect(warn({ headline: "सिर्फ़ $३९ में जाँच" })).toEqual([
+      "\"$३९\" isn't in your Brand. Check it's true, or add it to your Brand's offers.",
+    ]);
   });
 
   it("keeps a Brand-backed free offer quiet and flags health claims for a clinic", () => {

@@ -233,6 +233,16 @@ describe("core: edit a launched campaign's daily budget (#774)", () => {
     expect(mirror()).toMatchObject({ daily_budget: 150 });
   });
 
+  it("clears a 'changed in Meta Ads Manager' note a refresh wrote meanwhile, keeping the rest of raw (#1903)", async () => {
+    storedDaily({ daily_budget: 250 });
+    const row = mirror();
+    row.raw = { ...row.raw as Row, metaBudgetChange: { wasRupees: 200, nowRupees: 250, at: "2026-10-29T09:00:00.000Z" } };
+    replay([daily[11], ...daily.slice(9, 14)]);
+    expect((await edit({ change: { dailyRupees: 150 } })).status).toBe(200);
+    expect(mirror()).toMatchObject({ daily_budget: 150, raw: { source: "campaign_operation", metaResult: { campaignId: CAMPAIGN } } });
+    expect(mirror().raw).not.toHaveProperty("metaBudgetChange");
+  });
+
   // #1146: a waiting new-audience copy holds the budget it was made with; the switch would drop this change.
   it("refuses while a new audience waits to be switched on, before any Meta call", async () => {
     storedDaily({ daily_budget: 250 });
@@ -264,6 +274,27 @@ describe("core: edit a launched campaign's daily budget (#774)", () => {
     expect(writes()).toEqual([expect.objectContaining({ form: { daily_budget: "15000" } })]);
     expect(operations()).toMatchObject([{ state: "needs_reconciliation", transmitted: true }]);
     expect(mirror()).toMatchObject({ daily_budget: 250 });
+  });
+
+  it("keeps the ledger message and does not advise retrying an uncertain budget write", async () => {
+    storedDaily({ daily_budget: 250 });
+    replay([daily[11], ...daily.slice(9, 13)]);
+    const recordedFetch = vi.mocked(globalThis.fetch).getMockImplementation()!;
+    let writeDispatched = false;
+    vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
+      if (init?.method === "POST" && new URL(String(input)).pathname.endsWith(`/${DAILY_AD_SET}`)) {
+        writeDispatched = true;
+        throw new DOMException("The budget write timed out", "TimeoutError");
+      }
+      return recordedFetch(input, init);
+    });
+    const { status, body } = await edit({ change: { dailyRupees: 150 } });
+    expect(writeDispatched).toBe(true);
+    expect(status).toBe(500);
+    expect(body.retryable).toBe(false);
+    expect(operations()).toMatchObject([{ state: "needs_reconciliation", transmitted: true }]);
+    expect(operations()[0].sanitized_error).toBe("Could not change the budget.");
+    expect(body.error).toBe("Meta may have changed the budget. Refresh the campaign to check before you change it again.");
   });
 
   it("shows Meta's minimum budget in plain words (recorded 1885272, in the token user's Hindi)", async () => {

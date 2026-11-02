@@ -113,6 +113,22 @@ describe("sampleWatermark (#1317, #1471)", () => {
   });
 });
 
+// The amber dot of the pill on a 400×500 picture (see the pill geometry above); white when unmarked.
+async function dotPixel(bytes: Uint8Array) {
+  const { data, info } = await sharp(bytes).raw().toBuffer({ resolveWithObject: true });
+  const s = 16, x = s + Math.round(s * 0.9 + s * 0.29), y = 500 - s - Math.round(s * 0.84);
+  return [0, 1, 2].map((c) => data[(y * info.width + x) * info.channels + c]);
+}
+// #1897: downloadImage hands back PNG, so the pack's picture is re-encoded as a JPEG of the same size.
+async function exportedJpeg() {
+  const call = mocks.file.mock.calls.find(([name]) => /^ad-/.test(String(name)));
+  expect(call?.[0]).toBe("ad-1-offer.jpg");
+  const bytes = call![1] as Uint8Array;
+  const meta = await sharp(bytes).metadata();
+  expect([meta.width, meta.height, meta.format]).toEqual([400, 500, "jpeg"]);
+  return bytes;
+}
+
 describe("export for a prospect (#1317)", () => {
   it("marks every picture and says so in copy.txt", async () => {
     const original = await picture("png");
@@ -120,8 +136,8 @@ describe("export for a prospect (#1317)", () => {
     const { POST } = await import("@/app/api/creatives/export/route");
     const response = await POST(new Request("http://localhost/api/creatives/export", { method: "POST", body: JSON.stringify({ creativeIds: [ID] }) }));
     expect(response.status).toBe(200);
-    const [, bytes] = mocks.file.mock.calls.find(([name]) => String(name).endsWith(".png"))!;
-    expect(Buffer.compare(Buffer.from(bytes as Uint8Array), Buffer.from(original))).not.toBe(0);
+    const [r, g, b] = await dotPixel(await exportedJpeg());
+    expect(r).toBeGreaterThan(200); expect(g).toBeGreaterThan(120); expect(g).toBeLessThan(200); expect(b).toBeLessThan(100);
     expect(mocks.file).toHaveBeenCalledWith("copy.txt", expect.stringMatching(/^Sample ad: not live yet\. Made by AdBrain to show what your ads could look like\. They don't run, and you pay nothing, until you sign up and tap Go live\./));
     // #1471: the note card comes first in the zip.
     expect(mocks.file.mock.calls[0][0]).toBe("00-sample-note.png");
@@ -132,17 +148,16 @@ describe("export for a prospect (#1317)", () => {
     const { POST } = await import("@/app/api/creatives/export/route");
     const response = await POST(new Request("http://localhost/api/creatives/export", { method: "POST", body: JSON.stringify({ creativeIds: [ID] }) }));
     expect(response.headers.get("X-Images-Skipped")).toBe("1");
-    expect(mocks.file.mock.calls.filter(([name]) => /^ad-.*\.png$/.test(String(name)))).toHaveLength(0);
+    expect(mocks.file.mock.calls.filter(([name]) => /^ad-/.test(String(name)))).toHaveLength(0);
   });
 
-  it("leaves an owner's export as it was", async () => {
+  it("leaves an owner's export unmarked, as a JPEG", async () => {
     mocks.user = { id: "owner", email: "owner@gmail.com", email_confirmed_at: "2026-10-28" };
     const original = await picture("png");
     mocks.download.mockResolvedValue({ bytes: original, contentType: "image/png" });
     const { POST } = await import("@/app/api/creatives/export/route");
     await POST(new Request("http://localhost/api/creatives/export", { method: "POST", body: JSON.stringify({ creativeIds: [ID] }) }));
-    const [, bytes] = mocks.file.mock.calls.find(([name]) => String(name).endsWith(".png"))!;
-    expect(bytes).toBe(original);
+    expect(Math.min(...await dotPixel(await exportedJpeg()))).toBeGreaterThan(245);
     expect(mocks.file).toHaveBeenCalledWith("copy.txt", expect.not.stringContaining("Sample ad"));
     expect(mocks.file.mock.calls.map(([name]) => name)).not.toContain("00-sample-note.png");
   });

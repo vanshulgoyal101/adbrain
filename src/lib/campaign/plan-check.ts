@@ -3,7 +3,8 @@
  * run on the exact Graph payloads AdBrain would send. No Meta call, no spend.
  */
 import { formatMoney, formatPerDay } from "@/lib/format";
-import { WHATSAPP_PUBLISHER_PLATFORMS } from "@/lib/meta/placements";
+import { FACEBOOK_POSITIONS_WITHOUT_REELS, WHATSAPP_PUBLISHER_PLATFORMS } from "@/lib/meta/placements";
+import type { LeadDestination } from "@/lib/types/campaign";
 
 /** Meta's learning phase ends after about 50 optimisation events within 7 days of the last significant edit. */
 const LEARNING_EVENTS_PER_WEEK = 50;
@@ -42,13 +43,20 @@ export function checkPlan(plan: PlannedCampaign): PlanFinding[] {
   });
 
   const pinned = targetings.flatMap((t) => PLACEMENT_KEYS.filter((key) => key in t));
+  const sameAs = (value: unknown, expected: string[]) => JSON.stringify(value) === JSON.stringify(expected);
   // #906/#680: WhatsApp and lead-form ad sets name only the platforms (no Audience Network); positions stay automatic.
   const withoutAudienceNetwork = pinned.length > 0 && pinned.every((key) => key === "publisher_platforms")
-    && targetings.every((t) => JSON.stringify(t.publisher_platforms) === JSON.stringify(WHATSAPP_PUBLISHER_PLATFORMS));
+    && targetings.every((t) => sameAs(t.publisher_platforms, WHATSAPP_PUBLISHER_PLATFORMS));
+  // #2273: the intentional no-Reels test also names every Facebook position but Reels.
+  const withoutFacebookReels = pinned.includes("facebook_positions")
+    && pinned.every((key) => key === "publisher_platforms" || key === "facebook_positions")
+    && targetings.every((t) => sameAs(t.publisher_platforms, WHATSAPP_PUBLISHER_PLATFORMS) && sameAs(t.facebook_positions, FACEBOOK_POSITIONS_WITHOUT_REELS));
   findings.push({
     rule: "Advantage+ placements",
-    status: pinned.length && !withoutAudienceNetwork ? "warn" : "pass",
-    detail: withoutAudienceNetwork
+    status: pinned.length && !withoutAudienceNetwork && !withoutFacebookReels ? "warn" : "pass",
+    detail: withoutFacebookReels
+      ? "No-Reels test (#680): automatic on Facebook, Instagram and Messenger except Facebook Reels; Audience Network is left out too."
+      : withoutAudienceNetwork
       ? "Automatic on Facebook, Instagram and Messenger; Audience Network is left out, where taps were mostly accidental (#906)."
       : pinned.length ? `Placements are pinned (${[...new Set(pinned)].join(", ")}); Meta can't move budget to the cheapest placement.` : "Automatic: Meta places the ad wherever results are cheapest.",
   });
@@ -107,7 +115,7 @@ export function planCheckEvent(findings: PlanFinding[], destination: string) {
   return {
     outcome: findings.some((finding) => finding.status === "warn" || finding.status === "fail") ? "partial" as const : "success" as const,
     attributes: {
-      ...(destination === "instant_form" || destination === "whatsapp" ? { destination: destination as "instant_form" | "whatsapp" } : {}),
+      ...(destination === "instant_form" || destination === "whatsapp" ? { destination: destination as Exclude<LeadDestination, "call" | "website"> } : {}),
       count: findings.length,
       failedCount: findings.filter((finding) => finding.status === "fail").length,
       validationRules: findings.filter((finding) => finding.status !== "pass").map((finding) => `${ruleSlug(finding.rule)}:${finding.status}`),
@@ -138,7 +146,7 @@ export function askMismatchWarning(ask: string, prefill: string): string {
  * nothing rather than guess.
  */
 export function reviewWarnings(input: {
-  destination: "instant_form" | "whatsapp";
+  destination: Exclude<LeadDestination, "call" | "website">;
   storyReady: boolean;
   perAdSetDailyBudgetRupees: number;
   costPerResultRupees?: number | null;

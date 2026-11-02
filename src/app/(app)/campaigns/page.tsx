@@ -1,5 +1,6 @@
+import { metaWaitFor } from "@/services/meta-throttle";
 import { reconnectByLabel } from "@/lib/meta/token-expiry";
-import { requestLocale } from "@/i18n/request-locale";
+import { requestWords, setupWords } from "@/i18n/request-locale";
 import { Alert } from "@/components/ui/alert";
 import { clientCreative } from "@/lib/creative/client-receipt";
 import { madeForSetup } from "@/lib/creative/setup-picks";
@@ -13,7 +14,7 @@ import { BUDGET_PRESETS } from "@/lib/campaign/budget";
 import { setupPhone } from "@/lib/brand/setup-fields";
 import { maskWhatsAppNumber } from "@/lib/meta/whatsapp-status-shared";
 import { fundingMode } from "@/lib/payments/operator-funding";
-import { canUseMetaConnect } from "@/lib/meta/pilot-access";
+import { canUseMetaConnect, metaAppReviewPending } from "@/lib/meta/pilot-access";
 import { adResultsEnabled } from "@/lib/campaign/ad-results-store";
 import { ledgerTotals } from "@/lib/campaign/ledger";
 import { draftDtoSchema, type DraftDTO } from "@/lib/campaign/connect-contracts";
@@ -22,6 +23,7 @@ import { requireOwnedBusiness } from "@/lib/meta/connection-access";
 import { createClient } from "@/lib/supabase/server";
 import { ReadyAdsNextStep } from "@/components/ready-ads-next-step";
 import { isProspectSession } from "@/lib/prospect-session";
+import { isInternalUser } from "@/lib/internal-accounts";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
@@ -128,7 +130,7 @@ export default async function CampaignsPage({
     const initialDaily = lastDaily === null ? undefined
       : BUDGET_PRESETS.reduce((best, amount) => Math.abs(amount - lastDaily) < Math.abs(best - lastDaily) ? amount : best);
     return <SetupGoLive business={business} ads={ads} pageConnected={metaReady} funding={funding} returning={again} initialDaily={initialDaily}
-      whatsappNumber={masked ? maskWhatsAppNumber(`+91${masked}`) : null} weeklyCap={weeklyCap} welcome={welcome} locale={await requestLocale()} />;
+      whatsappNumber={masked ? maskWhatsAppNumber(`+91${masked}`) : null} weeklyCap={weeklyCap} welcome={welcome} words={await setupWords()} appReviewPending={metaAppReviewPending()} />;
   }
 
   return (
@@ -162,7 +164,11 @@ export default async function CampaignsPage({
           whatsappLedger={ledger?.whatsapp ? { chats: ledger.whatsapp.results, spendRupees: ledger.whatsapp.spendRupees } : null}
           adAccountId={connection.adAccountId ?? ""}
           weeklyCap={weeklyCap}
+          verdictWords={await requestWords("verdict")}
+          campaignWords={await requestWords("campaigns")}
+          metaWaitUntil={campaigns.some((campaign) => campaign.meta_campaign_id) ? await metaWaitFor(business.id) : null}
           newCampaign={params.new === "1" ? { creativeIds: requested, review: params.review === "1", budget: chosenBudget } : undefined}
+          internal={await createClient().then((supabase) => supabase.auth.getUser()).then(({ data }) => isInternalUser(data.user)).catch(() => false)}
         />}
       </div>
     </div>

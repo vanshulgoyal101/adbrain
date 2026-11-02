@@ -14,8 +14,9 @@ Brand autofill, the interview, generation, editing and export. Conventions, resp
 | GET | `/api/creatives/generate` | Business/group/count -> saved status | DB lookup/unknown-ID fence, no generation |
 | POST | `/api/creatives/[id]/regenerate` | No body -> `{creative}` | Paid work, overwrite, reset approval |
 | POST | `/api/creatives/[id]/picture` | `{headline,subhead,phone,ctaLabel,showCta?}` -> `{creative,liveNotice?}` | Re-renders the overlay, no AI; new `image_url`, status kept. `showCta` paints the button on the picture (off for new ads, #760); omitted keeps it as is |
-| POST | `/api/creatives/[id]/background` | `{instruction}` (3-300) or `{photoUrl}` -> `{creative,liveNotice?}` | Paid image (like Regenerate) or the owner's Brand photo (free), same claim; keeps copy, overlay words and status |
-| POST | `/api/creatives/export` | IDs -> ZIP; a sales prospect's account (internal `+prospect` address, #1317) gets `00-sample-note.png` first (#1471), every picture with a 'Sample ad: not live yet' pill in its bottom-left corner, and the note's sentence atop copy.txt, which ends with the WhatsApp follow-up and `/for/<segment>` link when the Brand category is solar, IELTS/study-abroad or interiors (#1582); a picture that can't be marked is left out (`X-Images-Skipped`) | Downloads selected media |
+| POST | `/api/creatives/[id]/background` | `{instruction}` (3-300) or `{photoUrl,fit?}` -> `{creative,liveNotice?}` | Paid image (like Regenerate) or the owner's Brand photo (free), same claim; keeps copy, overlay words and status |
+| GET | `/api/creatives/[id]/photo-fit` | `?photo=<Brand photo URL>&fit=attention\|blur&shape=ad\|square` -> PNG | Preview of how a Brand photo fits the ad's frame or 1:1 (#1904); no AI, nothing saved |
+| POST | `/api/creatives/export` | IDs -> ZIP; each picture is a JPEG, transparency on white (#1897); a sales prospect's account (internal `+prospect` address, #1317) gets `00-sample-note.png` first (#1471), every picture with a 'Sample ad: not live yet' pill in its bottom-left corner, and the note's sentence atop copy.txt, which ends with the WhatsApp follow-up and `/for/<segment>` link when the Brand category is solar, IELTS/study-abroad or interiors (#1582); a picture that can't be marked is left out (`X-Images-Skipped`) | Downloads selected media |
 | POST | `/api/media/sign` | `{businessId,mime,bytes,sha256,width,height,name?}` -> `{ok,duplicate:false,id,path,token,fit}` or `{ok,duplicate:true,asset}` (#1209). Checks the owner's confirmation of the current rights terms (#784: #1248's `hasCurrentMediaConsent`, with the people clause where the business needs it; **409** `MEDIA_RIGHTS_REQUIRED` until then; this route never writes consent), JPEG/PNG/WebP (**415**), ≤ 8 MB (**413**), ≥ 600 px short side (**422**), 50 uploads a month (**429**), duplicate sha256; inserts a `pending` row (a retry of a pending row gets a new path; upload tokens can't overwrite, `upsert: false`); the browser uploads with `uploadToSignedUrl`. **404** while `MEDIA_UPLOADS_ENABLED` is off | Service-role row + signed upload URL on the private `media` bucket; no bytes through Vercel |
 | POST | `/api/media/finalize` | `{id}` -> `{ok,asset}` (#1209): downloads the stored object, checks size, sha256, real type and pixel size (sharp), re-encodes server-side without EXIF/XMP/IPTC (GPS, camera, times; orientation applied) and records the stored object's hash (`checks.storedSha256`, re-checked by `readVerifiedMedia` before any use), sets `ready` with its fit; on a mismatch deletes the object and row (**413/415/422**); **409** `MEDIA_NOT_UPLOADED` when the object isn't there yet | RLS read proves the owner; service-role write |
 | GET | `/api/media?businessId=&before=` | -> `{ok,items:[{id,name,tags,width,height,bytes,fit,url,createdAt}],next,uploads:{used,limit}}` (#1209): the owner's ready photos, newest first, 30 a page, each with a 1 h signed URL | RLS reads; signed URLs |
@@ -62,7 +63,8 @@ historical input. Returns either `{ready:false, question, promptVersion}` or
 `{ready:true, brief, language?, angleId?, recommendations?, promptVersion}`.
 Questions carry `id`, `field`, `question`, optional help, options and input flags.
 When no AI provider answers because of load (rate limits, provider 5xx, timeouts or
-the 45 s deadline), it returns `503 {error, code: "AI_BUSY"}` with `Retry-After: 10`;
+the 45 s deadline), it returns `503 {error, code: "AI_BUSY"}` with `Retry-After: 10`.
+Gemini gets at most 25 s of that, so a hanging Gemini still leaves the paid fallback time (#2249);
 the page shows the message with a one-tap Try again (#410). A refused key or request
 (401, 403, 400, such as a key over its spending limit, #449) stays a 500 so it alerts.
 Optional recommendations contain 2-3 distinct `{label,prompt}` records.
@@ -150,7 +152,8 @@ can free unused quota after the batch has settled; one failed angle cannot free
 its still-running siblings' hold. The failed UUID remains non-reusable. Omitted `generationId` gets
 a new server UUID and cannot be replayed safely after a lost response.
 
-Recovery uses `GET /api/creatives/generate?businessId=...&generationId=...&expectedCount=3`.
+Recovery uses `GET /api/creatives/generate?businessId=...&generationId=...&expectedCount=3`
+(150 reads per 5 minutes per owner across all tabs, 429 with `Retry-After` beyond; #2553).
 `generationId` must be UUID; optional `expectedCount` is integer 1-6 and, if
 provided, must match the claimed count (409 otherwise). The source candidate
 returns `{status, creatives, count, expectedCount}` based on the persisted
@@ -174,6 +177,14 @@ unavailable admission returns 503 before paid work. A confirmed save or pre-prov
 failure releases the claim. So does a fact-check rejection whose text attempts all
 completed and were receipted: it returns 422 with a plain message naming any
 uncited claim (for example "10%, free"), and the creative is unchanged (#281).
+A picture that failed on a free provider (Pollinations, Cloudflare) or that the provider
+refused, after copy whose attempts all finished and were receipted, also releases it
+with a 502 retry message (#2219). After the
+[stale-claim migration](../../db/migrations/20261029_creative_regeneration_stale_claims.sql),
+a `processing` claim untouched for 15 minutes (a request killed past the 300-second
+limit or by a deploy) is taken over by the next attempt; `unresolved` never is.
+A takeover writes a `creative.claim_taken_over` audit row (`details: {route, attemptId}`, #2291),
+because the killed attempt may have paid for a picture it never recorded.
 An uncertain paid failure returns 502 and retains the claim for operator review.
 
 `POST /api/creatives/[id]/picture` redraws the words printed on the picture
@@ -194,13 +205,21 @@ direction) and redraws the same overlay words on it (#280). It shares Regenerate
 rate limit, monthly AI limit and `creative_regeneration_claim`, so only one paid job
 runs per ad. Usage is recorded as `creatives.background`. The copy, overlay words
 and status are kept; the receipt gets the new `photoUrl`, `imagePrompt`, image usage
-and `backgroundInstruction`. If the provider confirms every attempt failed, the claim
-is released with a retry message. Any other failure (OpenRouter reports `unknown`)
-holds the claim as `unresolved` with a 502, exactly like Regenerate.
+and `backgroundInstruction`. If every attempt was a free picture or the provider
+confirmed it failed, the claim is released with a retry message, so a Pollinations
+timeout never locks the ad (#2219). Any other paid failure (OpenRouter reports
+`unknown`) holds the claim as `unresolved` with a 502, exactly like Regenerate.
 With `{photoUrl}` instead, the URL must be one of the business's `product_photo`
 Brand assets (else 400 before the claim). There is no image call, no usage row and
 no monthly-limit check; the photo is copied through the guarded downloader, the
-receipt records `ownerPhoto`, and a failure releases the claim.
+receipt records `ownerPhoto`, and a failure releases the claim. `fit` (#1904) is how
+the photo meets the frame: `attention` (default, a saliency crop that keeps faces) or
+`blur` (the whole photo over a soft copy of itself). It is saved as
+`design.backgroundFit` and used by every later render of the ad (words, 9:16); a new
+AI background clears it. `GET /api/creatives/[id]/photo-fit` draws the same fit at
+preview size (520 px wide for the ad's frame, 96 px for `shape=square`) for the
+"Check how your photo fits" sheet: same Brand-photo check, own rate limit (120 per
+5 minutes), private one-hour cache.
 The claim's attempt UUID is the request ID in usage receipts. It does not expire
 automatically, and there is no customer-facing regeneration recovery endpoint.
 

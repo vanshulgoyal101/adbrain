@@ -23,7 +23,7 @@ const PROMISES = [
   { icon: MessageCircle, title: "Enquiries come to your WhatsApp", body: "Customers tap the ad and message you directly." },
 ];
 
-export default async function LoginPage({ searchParams }: { searchParams?: Promise<{ redirect?: string | string[]; error?: string | string[] }> }) {
+export default async function LoginPage({ searchParams }: { searchParams?: Promise<{ redirect?: string | string[]; error?: string | string[]; mode?: string | string[] }> }) {
   const params = await searchParams;
   const redirect = params?.redirect;
   // Only a real in-app destination counts; the default /dashboard fallback does not.
@@ -40,7 +40,7 @@ export default async function LoginPage({ searchParams }: { searchParams?: Promi
           <div className={styles.formInner}>
             {/* #1418: 'Help on WhatsApp' on the failed-sign-in panel, only when the support number is set (#850). */}
             <SupportLinkProvider url={supportWhatsAppUrl(process.env.SUPPORT_WHATSAPP, null)}>
-              <LoginExperience deepLink={deepLink} failedSignIn={Boolean(params?.error)} />
+              <LoginExperience deepLink={deepLink} signIn={params?.mode === "signin"} failedSignIn={Boolean(params?.error)} />
             </SupportLinkProvider>
           </div>
         </section>

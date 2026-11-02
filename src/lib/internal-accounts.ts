@@ -15,10 +15,15 @@ export function isExemptFromFreeProviders(user: AccountIdentity): boolean {
   return Boolean(user && internal.exemptFromFreeProviders.some((entry) => entry.userId === user.id));
 }
 
-/** #1317: a sales prospect's account: an internal team address with `+prospect` (docs/OPERATIONS.md, Prospect accounts). */
+/** #1317: a sales prospect's account: an internal team address with `+prospect` (docs/operations/runbooks/prospect-handover.md). */
 export function isProspectAccount(user: AccountIdentity): boolean {
   const local = user?.email?.trim().toLowerCase().split("@")[0] ?? "";
   return isInternalUser(user) && /\+prospect(?:-|$)/.test(local);
+}
+
+/** #1324/#2230: the production smoke login (a listed auth user id). */
+export function isSmokeUser(user: AccountIdentity): boolean {
+  return Boolean(user && internal.smokeUserIds.includes(user.id));
 }
 
 /**
@@ -36,7 +41,7 @@ export function metaWriteMode(ownerId: string, adAccountId: string | null | unde
  */
 export function isScoreboardExcluded(user: AccountIdentity, demoEmail?: string | null): boolean {
   if (!user) return false;
-  if (internal.smokeUserIds.includes(user.id)) return true;
+  if (isSmokeUser(user)) return true;
   if (demoEmail && user.email?.trim().toLowerCase() === demoEmail.trim().toLowerCase()) return true;
   return isProspectAccount(user);
 }

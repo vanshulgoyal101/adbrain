@@ -145,6 +145,32 @@ describe("core: internal accounts write on Haiku and make free images (#449, #46
     expect(calls.every((call) => call === "image.pollinations.ai/prompt")).toBe(true);
   });
 
+  // #2153 (#2145): one busy-out parks the free pictures for 2 minutes, so a batch fails in about 90 s, not 3 × 90 s.
+  it("fails the rest of a batch at once after one free picture busies out, and asks Pollinations again 2 minutes later", async () => {
+    let busy = true;
+    const { calls } = network({ pollinations: () => (busy ? PAYMENT_REQUIRED() : undefined) });
+    const pollinationsCalls = () => calls.filter((call) => call === "image.pollinations.ai/prompt").length;
+    const { generateImage } = await import("@/lib/imageGen");
+    const clock = useVirtualDeadlines();
+    const settledAt: number[] = [];
+    const batch = await settleInVirtualTime(asUser(INTERNAL, () => Promise.allSettled([0, 1, 2].map((index) =>
+      generateImage(image).finally(() => { settledAt[index] = Date.now() - clock.startedAt; })))));
+    expect(batch.map((result) => result.status)).toEqual(["rejected", "rejected", "rejected"]);
+    for (const result of batch) expect((result as PromiseRejectedResult).reason).toMatchObject({ name: "FreeImageBusyError" });
+    expect(settledAt[0]).toBeLessThanOrEqual(92_000);
+    expect(settledAt[1]).toBe(settledAt[0]);
+    expect(settledAt[2]).toBe(settledAt[0]);
+    const afterBatch = pollinationsCalls();
+
+    busy = false;
+    vi.advanceTimersByTime(119_000);
+    await expect(settleInVirtualTime(asUser(INTERNAL, () => generateImage(image)))).rejects.toMatchObject({ name: "FreeImageBusyError" });
+    expect(pollinationsCalls()).toBe(afterBatch);
+    vi.advanceTimersByTime(2_000);
+    await expect(settleInVirtualTime(asUser(INTERNAL, () => generateImage(image)))).resolves.toMatchObject({ provider: "pollinations" });
+    expect(pollinationsCalls()).toBe(afterBatch + 1);
+  });
+
   it.each([
     ["stays busy past the cap", () => PAYMENT_REQUIRED(), "IMAGE_FREE_BUSY"],
     ["is down", () => new Response("Bad gateway", { status: 502 }), "IMAGE_HTTP_502"],

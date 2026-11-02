@@ -218,50 +218,6 @@
     },
     {
       "method": "GET",
-      "path": "120253709994100526?fields=id%2Caccount_id",
-      "status": 200,
-      "body": {
-        "id": "120253709994100526",
-        "account_id": "9000000000000001"
-      }
-    },
-    {
-      "method": "GET",
-      "path": "120253709994100526/adsets?fields=promoted_object%2Cdestination_type&limit=100",
-      "status": 200,
-      "body": {
-        "data": [
-          {
-            "promoted_object": {
-              "page_id": "900000000000002",
-              "smart_pse_enabled": false,
-              "whats_app_business_phone_number_id": "1113229925200671",
-              "whatsapp_phone_number": "910000000000"
-            },
-            "destination_type": "WHATSAPP",
-            "id": "120253710066230526"
-          },
-          {
-            "promoted_object": {
-              "page_id": "900000000000002",
-              "smart_pse_enabled": false,
-              "whats_app_business_phone_number_id": "1113229925200671",
-              "whatsapp_phone_number": "910000000000"
-            },
-            "destination_type": "WHATSAPP",
-            "id": "120253709998340526"
-          }
-        ],
-        "paging": {
-          "cursors": {
-            "before": "QVFIVE9RLV83NVFBT0ljS2RkZADNQdzhRZA3djeEVxZAjF1STJud09hRkR0UXhra1ZAFUHFwS1FERjVVZA2p2OC1tUXhIUTBseTM5NjNoZAHc4MTdHVVNaRXdNNEpn",
-            "after": "QVFIVEtya2JCUUdBQUluemNJLTB4VUU4OXdxdWU2MVpabkRQMXJzMmx0WVBWcHpFdlppNGV1TXN5RkkyeUc2eUgwOWFvS3llcWNLekY1WnJRTFBPMGZAxS1NB"
-          }
-        }
-      }
-    },
-    {
-      "method": "GET",
       "path": "120253709994100526/insights?fields=impressions%2Cclicks%2Cspend%2Cactions%2Cdate_start%2Cdate_stop&date_preset=maximum",
       "status": 200,
       "body": {
@@ -335,6 +291,59 @@
           }
         }
       }
+    },
+    {
+      "method": "GET",
+      "path": "120253709994100526?fields=id%2Caccount_id%2Cstatus%2Cdaily_budget%2Clifetime_budget",
+      "status": 200,
+      "body": {
+        "id": "120253709994100526",
+        "account_id": "9000000000000001",
+        "status": "PAUSED"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "120253709994100526/adsets?fields=id%2Cstatus%2Cdaily_budget%2Clifetime_budget%2Cend_time%2Cpromoted_object%2Cdestination_type&limit=100",
+      "status": 200,
+      "body": {
+        "data": [
+          {
+            "id": "120253710066230526",
+            "status": "PAUSED",
+            "daily_budget": "0",
+            "lifetime_budget": "90000",
+            "end_time": "2026-10-29T16:49:20+0530",
+            "promoted_object": {
+              "page_id": "900000000000002",
+              "smart_pse_enabled": false,
+              "whats_app_business_phone_number_id": "1113229925200671",
+              "whatsapp_phone_number": "910000000000"
+            },
+            "destination_type": "WHATSAPP"
+          },
+          {
+            "id": "120253709998340526",
+            "status": "PAUSED",
+            "daily_budget": "30000",
+            "lifetime_budget": "0",
+            "promoted_object": {
+              "page_id": "900000000000002",
+              "smart_pse_enabled": false,
+              "whats_app_business_phone_number_id": "1113229925200671",
+              "whatsapp_phone_number": "910000000000"
+            },
+            "destination_type": "WHATSAPP"
+          }
+        ],
+        "paging": {
+          "cursors": {
+            "before": "QVFIVE9RLV83NVFBT0ljS2RkZADNQdzhRZA3djeEVxZAjF1STJud09hRkR0UXhra1ZAFUHFwS1FERjVVZA2p2OC1tUXhIUTBseTM5NjNoZAHc4MTdHVVNaRXdNNEpn",
+            "after": "QVFIVEtya2JCUUdBQUluemNJLTB4VUU4OXdxdWU2MVpabkRQMXJzMmx0WVBWcHpFdlppNGV1TXN5RkkyeUc2eUgwOWFvS3llcWNLekY1WnJRTFBPMGZAxS1NB"
+          }
+        }
+      }
     }
-  ]
+  ],
+  "stateRecordedAt": "2026-10-29T16:37:39.864Z"
 }

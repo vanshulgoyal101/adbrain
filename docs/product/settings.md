@@ -2,6 +2,16 @@
 
 Part of [Features and workflows](README.md).
 
+## Stopping and Disconnecting
+
+Own-account billing explains in English and Hindi that stopping payment leaves
+running Meta ads, results and enquiries intact; new ads and campaigns wait for
+payment. Disconnecting Facebook does not pause ads and prevents AdBrain from
+pausing them or updating their results. The disconnect confirmation repeats that
+warning and offers **Keep connected**. Data deletion uses **Privacy and data
+requests**; campaigns remain in the owner's Meta account. Managed, operator and
+unknown funding modes do not show the own-account billing promises.
+
 ## Spend Guardrails
 
 Settings accept a positive whole-rupee weekly cap or explicit `null` for no cap,
@@ -36,7 +46,8 @@ at most five relevant advisory notes (up to 1000 characters of serialized notes)
 alongside the current request. Generation gives these notes to concept and image
 providers only after an accepted request; a replay does not launch another provider
 call or reread notes.
-"Ignore preferences" and "fresh direction" omit them for that request. Notes
+A request whose text says "ignore preferences" (or skip, without, forget) or
+"fresh direction" omits them for that request (typed words, not a button). Notes
 cannot authorize spend, justify a commercial claim, override an explicit current
 brief, or turn an old tagline into required copy. Explicit Brand and legal
 requirements remain separate. A model-written Create brief is direction only,

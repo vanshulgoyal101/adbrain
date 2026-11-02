@@ -56,7 +56,7 @@ describe("upload sheet (#778 slice 3b)", () => {
     const { sheet } = setup({ fetch: fetch as never });
     await pick(["tall.jpg"]);
     fireEvent.click(within(sheet).getByRole("button", { name: "Add 1 photo" }));
-    await waitFor(() => expect(within(sheet).getByRole("status")).toHaveTextContent("Uploading 1 of 1… You can close this. Keep this page open until it finishes."));
+    await waitFor(() => expect(within(sheet).getByRole("status")).toHaveTextContent("Uploading 1 of 1… You can close this box. Stay on this page until it finishes."));
     const leaving = new Event("beforeunload", { cancelable: true });
     window.dispatchEvent(leaving);
     expect(leaving.defaultPrevented).toBe(true);

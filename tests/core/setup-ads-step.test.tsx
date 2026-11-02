@@ -12,6 +12,7 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ push: mocks.push }) }));
 vi.mock("@/app/(app)/studio/actions", () => ({ setCreativeStatus: mocks.setCreativeStatus }));
 vi.mock("@/app/(app)/brand/actions", () => ({ saveAdLanguage: mocks.saveAdLanguage }));
 import { SetupAdsStep, storyFor } from "@/components/setup-ads-step";
+import hi from "../../messages/hi.json";
 
 const business = { id: "11111111-1111-4111-8111-111111111111", name: "SunPeak Solar", vertical: "Rooftop solar", locations: ["Jaipur"],
   offers: ["Free site survey"], phone: "9876543210", languages: [] } as unknown as Business;
@@ -151,6 +152,35 @@ describe("core: <SetupAdsStep> (#1270)", () => {
     await waitFor(() => expect(generate).toHaveBeenCalledTimes(1));
     expect(generate.mock.calls[0][0]).toMatchObject({ language: "hi" });
     expect(screen.queryByRole("group", { name: "Your ads will be in" })).toBeNull();
+  });
+
+  it("#1934: a returning owner's step 2 starts a batch once from step 1's tap; a reload or Back shows Make 3 ads", async () => {
+    const generate = vi.fn();
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "/api/creatives/assistant") return Response.json({ ready: true, brief: "b" });
+      generate(JSON.parse(String(init?.body)));
+      return Response.json({ creatives: [ad("a"), ad("b"), ad("c")] });
+    }));
+    const { markMakeTap } = await import("@/lib/setup/steps");
+    markMakeTap(business.id);
+    const first = render(<SetupAdsStep business={business} initialAds={[]} earlier again />);
+    expect(await screen.findByRole("heading", { name: "Your ads are ready" })).toBeInTheDocument();
+    expect(generate).toHaveBeenCalledTimes(1);
+    first.unmount();
+    localStorage.clear();
+    render(<SetupAdsStep business={business} initialAds={[]} earlier again />);
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
+    expect(generate).toHaveBeenCalledTimes(1);
+    expect(bar().getByRole("button", { name: "Make 3 ads" })).toBeInTheDocument();
+  });
+
+  it("#1934: an old tap (over 2 minutes) doesn't start a batch", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({})));
+    sessionStorage.setItem(`setup-make-tap:${business.id}`, String(Date.now() - 3 * 60 * 1000));
+    render(<SetupAdsStep business={business} initialAds={[]} earlier again />);
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
+    expect(fetch).not.toHaveBeenCalled();
+    expect(sessionStorage.getItem(`setup-make-tap:${business.id}`)).toBeNull();
   });
 
   it("#1475: earlier ads but a batch already running (another tab) resumes it, still never a new one", async () => {
@@ -373,9 +403,22 @@ describe("#1901: each ad says whose picture it is", () => {
     expect(screen.getByText("Your photo")).toBeInTheDocument();
     expect(screen.getByText("AI picture")).toBeInTheDocument();
     unmount();
-    render(<SetupAdsStep business={business} initialAds={[yours, ai]} locale="hi" />);
+    render(<SetupAdsStep business={business} initialAds={[yours, ai]} words={{ locale: "hi", messages: hi.setup }} />);
     expect(screen.getByText("आपकी फ़ोटो")).toBeInTheDocument();
     expect(screen.getByText("AI तस्वीर")).toBeInTheDocument();
+  });
+});
+
+describe("#1438: step 2 in Hindi (CPO #1251, #1707)", () => {
+  it("says ready, picked and Continue in the CPO's words", () => {
+    render(<SetupAdsStep business={business} initialAds={[ad("a"), ad("b"), ad("c")]} words={{ locale: "hi", messages: hi.setup }} />);
+    expect(screen.getByRole("heading", { name: "आपके विज्ञापन तैयार हैं" })).toBeInTheDocument();
+    expect(screen.getByText(/^हमने सबसे अच्छे 2 चुने हैं।/)).toBeInTheDocument();
+    expect(screen.getAllByText("चुना गया")).toHaveLength(2);
+    expect(screen.getByText("चुनने के लिए टैप करें")).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: /के शब्द बदलें$/ })).toHaveLength(3);
+    expect(screen.getByRole("button", { name: "2 विज्ञापन के साथ आगे बढ़ें" })).toBeInTheDocument();
+    expect(screen.queryByText(/Continue with|Picked|Tap to pick/)).toBeNull();
   });
 });
 });

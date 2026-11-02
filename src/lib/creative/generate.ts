@@ -8,13 +8,16 @@ import {
   buildConceptMessages,
   conceptValidationRules,
   creativeConceptSchema,
-  conceptImagePrompt,
   validateConcept,
   type CreativeConcept,
   type ConceptInput,
 } from "@/lib/creative/concept";
+import { conceptImagePrompt } from "@/lib/creative/image-prompt";
 import { downloadImage, generateImage } from "@/lib/imageGen";
-import type { ImageAttempt } from "@/lib/imageGen/types";
+import { ReferencePhotoPausedError, type ImageAttempt } from "@/lib/imageGen/types";
+import { ownerPhotoFor, pausedPhotoFor } from "./owner-photos";
+import { batchPictures } from "./batch-reuse";
+import { repairMessages } from "./concept-repair";
 import { complete, parseJSON } from "@/lib/llm";
 import { LLMError } from "@/lib/llm/types";
 import type { LLMFailureCode, TokenUsage } from "@/lib/llm";
@@ -86,10 +89,7 @@ const MAX_FIELD_CHARS = 1_000;
 const MAX_LIST_ITEMS = 10;
 
 function boundedBrand(brand: BrandContext): BrandContext {
-  const boundedList = (items?: string[]) =>
-    items
-      ?.slice(0, MAX_LIST_ITEMS)
-      .map((item) => item.slice(0, MAX_FIELD_CHARS));
+  const boundedList = (items?: string[]) => items?.slice(0, MAX_LIST_ITEMS).map((item) => item.slice(0, MAX_FIELD_CHARS));
   return {
     ...brand,
     name: brand.name.slice(0, MAX_FIELD_CHARS),
@@ -101,18 +101,6 @@ function boundedBrand(brand: BrandContext): BrandContext {
     languages: boundedList(brand.languages),
     locations: boundedList(brand.locations),
   };
-}
-
-/** Ads that use the owner's own photos before AI pictures (#1901). */
-const OWNER_PHOTO_ADS = 3;
-
-/**
- * #1901: ads 1..min(k, 3) each use a different owner photo (newest first); the rest get AI pictures.
- * Tied to the angle's place, so a retried ad keeps its own photo.
- */
-export function ownerPhotoFor(angle: AdAngle, photos: readonly string[] | undefined): string | undefined {
-  const place = AD_ANGLES.findIndex((item) => item.id === angle.id);
-  return place >= 0 && place < OWNER_PHOTO_ADS ? photos?.[place] : undefined;
 }
 
 export async function generateVariants(params: {
@@ -176,8 +164,9 @@ export async function generateVariants(params: {
   const parallel = getEnv().CREATIVE_CONCEPT_SCHEDULE === "parallel";
   let planning = Promise.resolve();
   let startNext = Promise.resolve();
+  const pictures = batchPictures(angles.length);
   const outcomes = await Promise.allSettled(
-    angles.map(async (angle) => {
+    angles.map(async (angle, index) => {
       try {
         const ownerPhoto = ownerPhotoFor(angle, params.ownerPhotos);
         const input: ConceptInput = { brand, brief, angle, instructions, language, format, referenceImages, advisoryPreferences, sourceFacts, ...(ownerPhoto ? { ownerPhoto } : {}) };
@@ -199,11 +188,14 @@ export async function generateVariants(params: {
         void planning.then(notifyNext);
         const concept = await planned;
         progress(angle, "image");
-        const variant = await renderVariant(input, signal, concept, () => progress(angle, "image", { slowPictures: true }));
+        // #2378: a free picture that busied out reuses a sibling's picture under this ad's own copy.
+        const variant = await renderVariant(input, signal, concept, () => progress(angle, "image", { slowPictures: true }),
+          pausedPhotoFor(angle, params.ownerPhotos)).then((made) => pictures.settle(index, made), (error) => pictures.borrow(index, input, error, signal));
         await params.onVariant?.(variant);
         progress(angle, "ready");
         return variant;
       } catch (error) {
+        pictures.settle(index);
         progress(angle, "failed");
         await params.onFailure?.(angle, error);
         throw error;
@@ -272,7 +264,7 @@ async function generateConcept(
       maxTokens: env.CREATIVE_MAX_TOKENS,
       reasoningEffort: env.CREATIVE_REASONING_EFFORT,
       attemptTimeoutMs: env.CREATIVE_ATTEMPT_TIMEOUT_MS,
-      cache: false,
+      cache: false, waitOnLastProvider: true, // #2189: parallel concepts take turns on Groq when it's the last provider.
       signal,
       onAttempt: (entry) => {
         sawProviderAttempt = true;
@@ -331,10 +323,7 @@ async function generateConcept(
     if (usage.length > usageBeforeAttempt) {
       usage[usage.length - 1].validation = { stage, rules: [...conceptValidationRules(issues), ...claims].slice(0, 12) };
     }
-    messages.push({
-      role: "user",
-      content: `Generate a fresh, complete JSON concept for the original brief. Fix these validation failures using only supplied facts, without inventing claims:\n${issues.join("\n")}`,
-    });
+    messages.push(...repairMessages(value, issues));
     if (attempt === 0) onRepair?.();
   }
   throw new CreativeValidationError(issues, usage, stage);
@@ -352,6 +341,7 @@ export async function generateOneVariant(
   recentCopy: ConceptInput["recentCopy"] = [],
   advisoryPreferences?: string,
   sourceFacts: string[] = [],
+  pausedPhoto?: string,
 ): Promise<GeneratedVariant> {
   brand = boundedBrand(brand);
   brief = brief.slice(0, MAX_BRIEF_CHARS);
@@ -369,7 +359,7 @@ export async function generateOneVariant(
     advisoryPreferences,
     sourceFacts: sourceFacts.slice(0, 12).map((fact) => fact.slice(0, 2_000)),
   };
-  return renderVariant(input, signal, await generateConcept(input, signal));
+  return renderVariant(input, signal, await generateConcept(input, signal), undefined, pausedPhoto);
 }
 
 async function renderVariant(
@@ -377,6 +367,7 @@ async function renderVariant(
   signal: AbortSignal,
   planned: { concept: CreativeConcept; usage: GeneratedVariant["llmUsage"] },
   onFallback?: () => void,
+  pausedPhoto?: string,
 ): Promise<GeneratedVariant> {
   const { brand, angle, format, referenceImages } = input;
   const dims = formatDimensions(format ?? "portrait");
@@ -386,10 +377,12 @@ async function renderVariant(
   const ownerRaster = input.ownerPhoto
     ? await downloadImage(input.ownerPhoto, signal).catch(() => undefined)
     : undefined;
-  const ownerPhoto = ownerRaster ? input.ownerPhoto : undefined;
+  let ownerPhoto = ownerRaster ? input.ownerPhoto : undefined;
+  const fromOwner = (url: string, raster: { width: number; height: number }, fallbackFrom?: string) => ({
+    url, prompt: "", provider: OWNER_PHOTO_PROVIDER, model: "brand_assets", estimatedCostUsd: 0, width: raster.width, height: raster.height,
+    latencyMs: undefined, fallbackFrom, providerRequestId: undefined, providerFinalStatus: undefined });
   const image = ownerRaster && ownerPhoto
-    ? { url: ownerPhoto, prompt: "", provider: OWNER_PHOTO_PROVIDER, model: "brand_assets", estimatedCostUsd: 0, width: ownerRaster.width, height: ownerRaster.height,
-      latencyMs: undefined, fallbackFrom: undefined, providerRequestId: undefined, providerFinalStatus: undefined }
+    ? fromOwner(ownerPhoto, ownerRaster)
     : await generateImage({
       prompt: conceptImagePrompt(concept, input),
       width: dims.width,
@@ -398,8 +391,13 @@ async function renderVariant(
       signal,
       onAttempt: (entry) => imageAttempts.push(entry),
       onFallback,
-    }).catch((error) => {
-      throw new CreativeImageError(error, usage, imageAttempts, concept);
+    }).catch(async (error) => {
+      // #2222: paid pictures are paused, so the product photo can't be redrawn; the owner's own photo is the real product, $0.
+      const paused = error instanceof ReferencePhotoPausedError ? error : undefined;
+      const raster = paused && pausedPhoto ? await downloadImage(pausedPhoto, signal).catch(() => undefined) : undefined;
+      if (!paused || !raster || !pausedPhoto) throw new CreativeImageError(error, usage, imageAttempts, concept);
+      ownerPhoto = pausedPhoto;
+      return fromOwner(pausedPhoto, raster, paused.from);
     });
 
   return {
@@ -416,13 +414,8 @@ async function renderVariant(
       ? "[Image prompt omitted because declared preferences were applied; the generated concept may reflect their style.]"
       : image.prompt,
     design: buildAdDesign({
-      brand,
-      copy: concept,
-      concept,
-      angle,
-      backgroundUrl: image.url,
-      format,
-      language: input.language,
+      brand, copy: concept, concept, angle, backgroundUrl: image.url, format, language: input.language,
+      ownerPhoto: Boolean(ownerPhoto),
     }),
     llmUsage: usage,
     imageUsage: {

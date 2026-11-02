@@ -10,7 +10,9 @@ import { requireScheduledBusiness, withMetaConnection } from "@/lib/meta/connect
 import { isTokenFailure, reauthEntry, type ReauthEntry } from "@/lib/meta/reauth";
 import { readStoredCampaignBinding } from "@/lib/campaign/binding";
 import { saveCampaign, saveCampaignHealth, saveCampaignResult } from "@/lib/campaign/trusted-write";
+import { saveOutsideChanges } from "@/lib/campaign/outside-changes";
 import { CampaignGoneError, MetaError, MetaThrottledError, metaErrorCode } from "@/lib/meta/client";
+import { appThrottledUntil, recordThrottle, throttledBusinesses } from "@/services/meta-throttle";
 import { ConnectionAccessError } from "@/lib/meta/connection-access-error";
 import { assessCampaignHealth, readCampaignHealth, type CampaignHealth } from "@/lib/campaign/health";
 import { PAUSE_ACTIONS, pausedResultsReadDue } from "@/lib/campaign/paused-results";
@@ -61,17 +63,26 @@ async function handleGET(request: Request) {
   let refreshed = 0, pausedReads = 0, skipped = 0, failed = 0, hasMore = false;
   // #1592: which campaigns didn't refresh, by opaque key only (public workflow logs), and why.
   const failures: { key: string; code: string }[] = [], ended: string[] = [], unbound: string[] = [];
-  const goneAlerts: { kind: "ended"; key: string }[] = [];
+  const goneAlerts: { kind: "ended" | "budget_raised"; key: string }[] = [];
   const opaque = (id: string) => createHash("sha256").update(`refresh:${id}`).digest("hex").slice(0, 12);
   const reauth = new Map<string, ReauthEntry>();
   // #1838: Meta is throttling an account (skip that business for this run) or the whole app (stop). Not failures.
   const throttled: { key: string; scope: MetaThrottledError["scope"]; retryAfterMs: number }[] = [];
-  const throttledBusinesses = new Set<string>();
+  const throttledBusinessIds = new Set<string>();
+  // Slice 2: what earlier runs learned. The app-wide limit skips the whole run; a throttled account skips its business.
+  const appUntil = await appThrottledUntil(admin as unknown as SupabaseClient);
+  if (appUntil) {
+    return NextResponse.json({ ok: true, refreshed: 0, pausedReads: 0, skipped: campaigns.length, failed: 0, hasMore: false, alerts: [], reauth: [],
+      failures: [], ended: [], unbound: [], throttled: [{ key: "app", scope: "app", retryAfterMs: Math.max(0, Date.parse(appUntil) - Date.now()) }] });
+  }
+  for (const [businessId] of await throttledBusinesses(admin as unknown as SupabaseClient, campaigns.map((campaign) => campaign.business_id))) {
+    throttledBusinessIds.add(businessId);
+  }
   const health = new Map<string, CampaignHealth | null>(campaigns.filter(campaign => campaign.status === "active")
     .map(campaign => [campaign.id, readCampaignHealth(campaign.raw)]));
   for (const campaign of campaigns) {
     if (Date.now() - started > START_BUDGET_MS) { hasMore = true; break; }
-    if (reauth.has(campaign.business_id) || throttledBusinesses.has(campaign.business_id)) { skipped++; continue; }
+    if (reauth.has(campaign.business_id) || throttledBusinessIds.has(campaign.business_id)) { skipped++; continue; }
     const binding = readStoredCampaignBinding(campaign);
     if (!campaign.meta_campaign_id || !binding.metaAdAccountId || !binding.metaPageId || binding.metaConnectionGeneration === null) {
       skipped++;
@@ -110,8 +121,14 @@ async function handleGET(request: Request) {
       });
       if (resultError) throw new Error("Result storage unavailable.");
       if (ads) await saveAdResults(admin as unknown as SupabaseClient, { businessId: campaign.business_id, campaignId: campaign.id, ads }).catch(() => false);
-      // A paused campaign's delivery flags would only be false alarms.
+      // #1903: paused or daily budget changed in Meta Ads Manager. Only a raise is an alert (money went up outside AdBrain).
+      // The key hashes `${id}:budget_raised:${raw.metaBudgetChange.at}`, as health flags hash their `since`.
+      const seenAt = new Date(started);
+      const outside = await saveOutsideChanges(context, campaign, insights.metaState, seenAt).catch(() => ({ changed: false, raised: false }));
+      if (outside.raised) goneAlerts.push({ kind: "budget_raised", key: createHash("sha256").update(`${campaign.id}:budget_raised:${seenAt.toISOString()}`).digest("hex").slice(0, 12) });
+      // A paused campaign's delivery flags would only be false alarms, paused here or in Meta (#1903).
       if (paused) { pausedReads++; continue; }
+      if (insights.metaState?.status === "PAUSED") { health.delete(campaign.id); refreshed++; continue; }
       const assessed = assessCampaignHealth({
         raw: campaign.raw, now: new Date(), impressions: insights.impressions, review,
         key: (kind, since) => createHash("sha256").update(`${campaign.id}:${kind}:${since}`).digest("hex").slice(0, 12),
@@ -123,8 +140,9 @@ async function handleGET(request: Request) {
     } catch (error) {
       if (error instanceof MetaThrottledError) {
         throttled.push({ key: opaque(campaign.business_id), scope: error.scope, retryAfterMs: error.retryAfterMs });
+        await recordThrottle(admin as unknown as SupabaseClient, campaign.business_id, error);
         if (error.scope === "app") break;
-        throttledBusinesses.add(campaign.business_id);
+        throttledBusinessIds.add(campaign.business_id);
         continue;
       }
       // #1592: deleted in Meta (or no longer there at all): end it as the manual refresh does (#721); not a failure.
@@ -157,7 +175,7 @@ async function handleGET(request: Request) {
 
   const alerts = [...health.values()].flatMap(current => current?.flags ?? [])
     .filter(flag => Date.now() - Date.parse(flag.since) <= ALERT_WINDOW_MS)
-    .map(({ kind, key }) => ({ kind, key }))
+    .map(({ kind, key }): { kind: string; key: string } => ({ kind, key }))
     .concat(goneAlerts.map(({ kind, key }) => ({ kind, key })));
   return NextResponse.json({ ok: failed === 0, refreshed, pausedReads, skipped, failed, hasMore, alerts, reauth: [...reauth.values()],
     failures, ended, unbound, throttled }, { status: failed ? 503 : 200 });

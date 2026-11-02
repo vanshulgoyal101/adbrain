@@ -3,7 +3,7 @@ import JSZip from "jszip";
 import { NextResponse } from "next/server";
 import { apiError, MAX_BATCH_IDS } from "@/lib/api";
 import { downloadImage } from "@/lib/imageGen";
-import { jpegIfWebp } from "@/lib/imageGen/encode";
+import { downloadJpeg } from "@/lib/imageGen/encode";
 import { createClient } from "@/lib/supabase/server";
 import { rateLimitResponse } from "@/lib/security/rate-limit";
 import { z } from "zod";
@@ -11,6 +11,7 @@ import { savedCreativeDescription } from "@/lib/creative/concept";
 import { sampleNoteCard, sampleWatermark, SAMPLE_LABEL, SAMPLE_NOTE } from "@/lib/creative/sample-watermark";
 import { isProspectAccount } from "@/lib/internal-accounts";
 import { leaveBehindBlock, segmentForCategory } from "@/lib/segments";
+import { ownerError } from "@/i18n/request-locale";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -29,7 +30,7 @@ async function handlePOST(req: Request) {
   const limited = await rateLimitResponse(`creative-export:${user.id}`, { limit: 10, windowMs: 5 * 60_000 });
   if (limited) return limited;
   const parsed = z.object({ creativeIds: z.array(z.string().uuid()).min(1).max(MAX_BATCH_IDS) }).safeParse(await req.json().catch(() => null));
-  if (!parsed.success) return apiError("Choose between 1 and 50 valid creative IDs.", 400);
+  if (!parsed.success) return apiError(await ownerError("exportCount"), 400);
   const ids = [...new Set(parsed.data.creativeIds)];
 
   // RLS scopes this to the user's own creatives.
@@ -37,9 +38,9 @@ async function handlePOST(req: Request) {
     .from("creatives")
     .select("*")
     .in("id", ids);
-  if (error) return apiError("Could not load the selected creatives. Retry the export.", 503);
+  if (error) return apiError(await ownerError("exportLoadFailed"), 503);
   if (!creatives?.length || creatives.length !== ids.length) {
-    return apiError("One or more selected creatives are missing or no longer accessible. Refresh your selection.", 404);
+    return apiError(await ownerError("exportAdsDeleted"), 404);
   }
 
   // #1317: a prospect's ads are samples until the owner takes the account over; every picture says so.
@@ -71,17 +72,15 @@ async function handlePOST(req: Request) {
         const downloaded = await downloadImage(creative.image_url, signal);
         // A picture that can't be marked is left out, never shipped unmarked.
         const marked = sample ? await sampleWatermark(downloaded.bytes) : downloaded;
-        // #1897: stored ads are WebP; an owner's download is a JPEG any app takes.
-        const jpeg = await jpegIfWebp(marked.bytes);
-        const { bytes, contentType } = jpeg.converted ? { bytes: jpeg.bytes, contentType: "image/jpeg" } : marked;
+        // #1897: downloadImage hands back PNG whatever is stored; the pack ships JPEG.
+        const bytes = await downloadJpeg(marked.bytes);
         if (totalBytes + bytes.byteLength > maximumBytes) {
           exhausted = true;
           skipped++;
           continue;
         }
         totalBytes += bytes.byteLength;
-        const ext = contentType.includes("png") ? "png" : contentType.includes("webp") ? "webp" : "jpg";
-        zip.file(`${label}.${ext}`, bytes);
+        zip.file(`${label}.jpg`, bytes);
       } catch {
         // Skip an image that failed to download; copy is still exported.
         skipped++;

@@ -110,7 +110,7 @@ describe("campaign draft store", () => {
     repository.activeCount = MAX_ACTIVE_DRAFTS;
     const result = await createDraft(repository, { actor, draftInput: baseInput, now });
 
-    expect(result).toEqual({ ok: false, code: "CONFLICT", message: "Draft limit reached. Finish or remove an existing draft first." });
+    expect(result).toEqual({ ok: false, code: "CONFLICT", message: "You have too many unfinished campaigns. Finish or remove one, then try again." });
     expect(repository.recordValue).toBeNull();
   });
 

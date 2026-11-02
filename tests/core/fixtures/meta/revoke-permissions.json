@@ -1,0 +1,9 @@
+{
+  "source": "Meta Graph API docs (DELETE /{user-id}/permissions, and an OAuthException for a token that no longer works). Not a live recording: revoking is a Meta write (#1324). Replace with the first real disconnect's answers.",
+  "subjectId": "900000000000000777",
+  "revoked": { "status": 200, "body": { "success": true } },
+  "alreadyRevoked": {
+    "status": 400,
+    "body": { "error": { "message": "Error validating access token: The user has not authorized application 900000000000000001.", "type": "OAuthException", "code": 190, "error_subcode": 458, "fbtrace_id": "AFixtureTrace01" } }
+  }
+}

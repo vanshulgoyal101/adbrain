@@ -247,7 +247,7 @@ describe("campaign audience workflow", () => {
   it("withholds WhatsApp submission when the Page-linked number is unverified", async () => {
     mocks.preflight.mockImplementation(async () => ({
       draftId: saved.draftId, draftVersion: saved.version, connectionGeneration: 1,
-      canCreatePaused: false, blockers: [{ code: "PREFLIGHT_BLOCKED", message: "Connect a WhatsApp Business number to the selected Facebook Page and verify access before reviewing.", action: null }],
+      canCreatePaused: false, blockers: [{ code: "PREFLIGHT_BLOCKED", message: "Your Facebook Page has no WhatsApp number linked yet, so the ad's button has nowhere to open a chat. Link the number in Settings, then review again.", action: null }],
       planHash: null, currency: "INR", perAdSetDailyBudgetRupees: 200,
       totalDailyBudgetRupees: 200, adSetCount: 1, resolvedAreaLabel: "Jaipur",
       selected, destination: "whatsapp", whatsappNumber: null,
@@ -256,7 +256,7 @@ describe("campaign audience workflow", () => {
     fireEvent.click(screen.getByRole("radio", { name: "WhatsApp chat (recommended)" }));
     fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
     fireEvent.click(screen.getByRole("button", { name: "Check my campaign (nothing spends)" }));
-    expect(await screen.findByText("Connect a WhatsApp Business number to the selected Facebook Page and verify access before reviewing.")).toBeVisible();
+    expect(await screen.findByText("Your Facebook Page has no WhatsApp number linked yet, so the ad's button has nowhere to open a chat. Link the number in Settings, then review again.")).toBeVisible();
     expect(screen.queryByRole("button", { name: "Send to Meta (paused)" })).not.toBeInTheDocument();
     expect(mocks.createCampaign).not.toHaveBeenCalled();
   });

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { ownerError } from "@/i18n/request-locale";
 import { z } from "zod";
 import { observeRoute } from "@/lib/observability/logger";
 import { preferenceCategories } from "@/lib/preferences/context";
@@ -24,11 +25,11 @@ export const GET = observeRoute("/api/preferences", "GET", async (req: Request) 
   const { data: { user } } = await client.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { data: business } = await client.from("businesses").select("id").eq("id", businessId).eq("owner_id", user.id).maybeSingle();
-  if (!business) return NextResponse.json({ error: "Business unavailable." }, { status: 404 });
+  if (!business) return NextResponse.json({ error: await ownerError("businessNotFound") }, { status: 404 });
   try {
     return NextResponse.json(await readPreferenceState(businessId), { headers: { "Cache-Control": "no-store" } });
   } catch {
-    return NextResponse.json({ error: "Preferences are temporarily unavailable." }, { status: 503 });
+    return NextResponse.json({ error: await ownerError("preferencesUnavailable") }, { status: 503 });
   }
 });
 
@@ -45,12 +46,12 @@ export const POST = observeRoute("/api/preferences", "POST", async (req: Request
     p_business_id: businessId, p_operation: operation, p_expected_epoch: expectedEpoch,
     p_category: category ?? null, p_value: value ?? null,
   });
-  if (error) return NextResponse.json({ error: error.code === "40001" ? "Preferences changed. Reload before saving." :
-    error.code === "42501" ? "Business unavailable." : error.code === "22023" ? error.message : "Could not save preferences." },
+  if (error) return NextResponse.json({ error: error.code === "40001" ? await ownerError("preferencesChanged") :
+    error.code === "42501" ? await ownerError("businessNotFound") : error.code === "22023" ? error.message : await ownerError("preferencesNotSaved") },
   { status: error.code === "40001" ? 409 : error.code === "42501" ? 403 : error.code === "22023" ? 400 : 503 });
   try {
     return NextResponse.json(await readPreferenceState(businessId), { headers: { "Cache-Control": "no-store" } });
   } catch {
-    return NextResponse.json({ error: "Saved, but the updated preferences could not be loaded. Refresh to confirm." }, { status: 503 });
+    return NextResponse.json({ error: await ownerError("preferencesSavedNotLoaded") }, { status: 503 });
   }
 });

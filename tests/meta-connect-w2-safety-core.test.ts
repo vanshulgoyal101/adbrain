@@ -90,7 +90,7 @@ describe("campaign preflight", () => {
     const review = runPreflight(input({ draft: { ...draft, destination: "whatsapp", leadFormId: null }, form: null, whatsappNumber }));
     expect(review.canCreatePaused).toBe(false);
     expect(review.planHash).toBeNull();
-    expect(review.blockers).toContainEqual(expect.objectContaining({ message: expect.stringContaining("selected Facebook Page") }));
+    expect(review.blockers).toContainEqual(expect.objectContaining({ reason: "REVIEW_WHATSAPP_NOT_LINKED" }));
   });
 
   it.each(["imageUrl", "headline", "primaryText", "description", "cta"] as const)("invalidates review when creative %s changes", (field) => {

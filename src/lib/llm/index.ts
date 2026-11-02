@@ -3,6 +3,7 @@ import { createGeminiProvider } from "./providers/gemini";
 import { createOpenAICompatibleProvider } from "./providers/openai-compatible";
 import { cacheKey, withCache } from "./cache";
 import { recordUsage } from "./usage";
+import { FREE_TEXT_PROVIDERS, freeTextOnly } from "./spend-policy";
 import {
   AllLLMProvidersFailedError,
   LLMError,
@@ -39,16 +40,22 @@ const COOLDOWN_MS = 60_000;
 const RATE_LIMIT_WAIT_MS = 20_000;
 const cooldownUntil = new Map<string, number>();
 // #1568: a provider that hit a named rate limit in this process is probed by one call at a time after its park;
-// calls made while that probe is out go to the next provider instead of piling onto a limit that may still hold.
+// calls made while that probe is out go to the next provider instead of piling onto a limit that may still hold
+// (with no next provider and `waitOnLastProvider`, they wait for the probe: #2189).
 const rateLimited = new Set<string>();
-const probing = new Set<string>();
+const probing = new Map<string, Promise<void>>();
+// #2189: with `waitOnLastProvider`, the last provider left waits out a limit it named (Groq's OTPM: ≤ COOLDOWN_MS a
+// round), for at most this many rounds and this much sleep per call. A bare 429 keeps the short wait.
+const LAST_RESORT_ROUNDS = 6;
+const LAST_RESORT_WAIT_BUDGET_MS = 90_000;
+// Until when a named limit parks each provider; unlike `rateLimited`, another call's success doesn't clear it.
+const namedParkUntil = new Map<string, number>();
 /** #1808: the Cerebras model, exported so the scheduled model check reads the same id. */
 export const CEREBRAS_MODEL = "llama-3.3-70b";
 // #449: a key out of credit stays parked long enough not to slow every Create; the free models answer meanwhile.
 const CREDIT_COOLDOWN_MS = 15 * 60_000;
 // #1568: a daily limit parks the provider until its own retry-after, up to this long.
 const DAILY_PARK_MAX_MS = 6 * 3_600_000;
-const FREE_PROVIDERS = ["google", "groq"];
 // Round-robin cursor per provider so load spreads across a key pool.
 const rrCursor = new Map<string, number>();
 
@@ -134,15 +141,21 @@ export async function complete(
   messages: ChatMessage[],
   options: CompletionOptions = {},
 ): Promise<CompletionResult> {
-  const registry = buildRegistry(options.routing, options.extraProviders, options.nextProviders);
-  if (registry.length === 0) throw new NoLLMKeysError();
+  // #2230: the smoke login never pays for text; when the free models can't answer, it fails with a clear reason.
+  const freeOnly = freeTextOnly();
+  const registry = buildRegistry(options.routing, options.extraProviders, options.nextProviders)
+    .filter(({ provider }) => !freeOnly || FREE_TEXT_PROVIDERS.includes(provider.name));
+  if (registry.length === 0) throw freeOnly ? new AllLLMProvidersFailedError("FREE_TEXT_UNAVAILABLE", 0) : new NoLLMKeysError();
 
   const startedAt = Date.now();
   const result = await withCache(
     cacheKey(messages, options),
     options.cache,
-    () => callProviders(messages, options, registry,
-      buildRegistry("standard").filter(({ provider }) => FREE_PROVIDERS.includes(provider.name) && !registry.some((entry) => entry.provider.name === provider.name))),
+    () => callProviders(messages, options, registry, freeOnly ? [] : buildRegistry("standard")
+      .filter(({ provider }) => FREE_TEXT_PROVIDERS.includes(provider.name) && !registry.some((entry) => entry.provider.name === provider.name)))
+      .catch((error: unknown) => {
+        throw freeOnly && error instanceof AllLLMProvidersFailedError ? new AllLLMProvidersFailedError("FREE_TEXT_UNAVAILABLE", registry.length) : error;
+      }),
   );
   const enriched = {
     ...result,
@@ -170,23 +183,47 @@ async function callProviders(
   const deferred = new Set<RegisteredProvider>();
   const available = ({ provider, keys }: RegisteredProvider) =>
     keys.some((_, idx) => (cooldownUntil.get(`${provider.name}:${idx}`) ?? 0) <= Date.now());
+  // #2462: hold the reserve for any later provider that is usable by the time it would be handed the call.
+  const reserve = options.fallbackReserve;
+  const usableAtHandoff = ({ provider, keys }: RegisteredProvider) => !reserve ||
+    keys.some((_, idx) => (cooldownUntil.get(`${provider.name}:${idx}`) ?? 0) <= reserve.deadlineAt - reserve.reserveMs);
+  const reservedMs = (position: number) => !reserve ? Infinity
+    : reserve.deadlineAt - Date.now() - (queue.slice(position + 1).some(usableAtHandoff) ? reserve.reserveMs : 0);
   for (let position = 0; position < queue.length; position++) {
     const entry = queue[position];
     const { provider, keys, model } = entry;
-    for (let round = 0; round < 2; round++) {
+    // #2189: with nothing after this provider, giving up loses the call; the caller's deadline bounds the wait instead.
+    const lastResort = () => Boolean(options.waitOnLastProvider && options.signal) && !queue.slice(position + 1).some(available);
+    let slept = 0;
+    let outOfTime = false;
+    for (let round = 0; !outOfTime; round++) {
       const start = nextKeyStart(provider.name, keys.length);
       for (let i = 0; i < keys.length; i++) {
         options.signal?.throwIfAborted();
         const idx = (start + i) % keys.length;
         const coolKey = `${provider.name}:${idx}`;
         if ((cooldownUntil.get(coolKey) ?? 0) > Date.now()) continue;
-        if (rateLimited.has(provider.name) && probing.has(provider.name)) break;
+        const capMs = options.providerAttemptTimeoutMs?.[provider.name] ?? options.attemptTimeoutMs;
+        const attemptTimeoutMs = reserve ? Math.min(capMs ?? Infinity, reservedMs(position)) : capMs;
+        if (attemptTimeoutMs !== undefined && attemptTimeoutMs <= 0) {
+          outOfTime = true;
+          failures.push("TIMEOUT");
+          break;
+        }
+        const inFlightProbe = rateLimited.has(provider.name) ? probing.get(provider.name) : undefined;
+        if (inFlightProbe) {
+          if (!lastResort()) break;
+          await abortable(inFlightProbe, options.signal);
+          i--;
+          continue;
+        }
         const probe = rateLimited.has(provider.name);
-        if (probe) probing.add(provider.name);
+        let settleProbe = () => {};
+        if (probe) probing.set(provider.name, new Promise<void>((resolve) => { settleProbe = resolve; }));
+        const endProbe = () => { probing.delete(provider.name); settleProbe(); };
 
         const attemptStart = Date.now();
         try {
-          const attemptTimeoutMs = options.providerAttemptTimeoutMs?.[provider.name] ?? options.attemptTimeoutMs;
           const maxTokens = options.providerMaxTokens?.[provider.name] ?? options.maxTokens;
           const { text, usage, providerRequestId, providerFinalStatus } = await provider.complete(messages, { ...options, attemptTimeoutMs, maxTokens }, {
             apiKey: keys[idx],
@@ -195,10 +232,8 @@ async function callProviders(
           options.onAttempt?.({ provider: provider.name, model, usage, providerRequestId,
             providerFinalStatus: providerFinalStatus ?? "unknown", status: "success", latencyMs: Date.now() - attemptStart });
           rateLimited.delete(provider.name);
-          if (probe) probing.delete(provider.name);
           return { text, provider: provider.name, model, usage, providerRequestId, providerFinalStatus };
         } catch (err) {
-          if (probe) probing.delete(provider.name);
           const failure: LLMFailureCode = options.signal?.aborted
             ? (options.signal.reason as { name?: string } | undefined)?.name === "TimeoutError" ? "DEADLINE" : "ABORTED"
             : err instanceof LLMError ? err.code ?? "UNKNOWN" : "UNKNOWN";
@@ -229,7 +264,10 @@ async function callProviders(
             // #1568: a limit the provider names (Groq's TPD, OTPM…) is the organization's, shared by every key.
             const parked = err.rateLimit ? keys.map((_, k) => `${provider.name}:${k}`) : [coolKey];
             for (const key of parked) cooldownUntil.set(key, Math.max(cooldownUntil.get(key) ?? 0, until));
-            if (err.rateLimit) rateLimited.add(provider.name);
+            if (err.rateLimit) {
+              rateLimited.add(provider.name);
+              namedParkUntil.set(provider.name, Math.max(namedParkUntil.get(provider.name) ?? 0, until));
+            }
           }
           // Another key on the same model would time out or truncate the same way; try the next model.
           if (err instanceof LLMError && !err.retryable && err.status === undefined) {
@@ -238,23 +276,27 @@ async function callProviders(
           }
           // A 5xx means the model is overloaded or down for every key.
           if (err instanceof LLMError && err.status !== undefined && err.status >= 500) break;
+          // #2502: Gemini's 400 is the request's shape (every key gets it) unless it names the key.
+          if (err instanceof LLMError && err.provider === "google" && err.status === 400 && !/api key/i.test(err.message)) break;
+        } finally {
+          // After the outcome is recorded, so a waiting call sees Groq answered or parked again.
+          if (probe) endProbe();
         }
       }
+      if (outOfTime) break;
       // Every key is rate-limited only briefly: wait once, then retry this model.
       const wait = Math.min(...keys.map((_, idx) => cooldownUntil.get(`${provider.name}:${idx}`) ?? 0)) - Date.now();
-      if (round === 1 || wait <= 0 || wait > RATE_LIMIT_WAIT_MS) break;
+      const last = lastResort() && (namedParkUntil.get(provider.name) ?? 0) > Date.now() && slept + wait <= LAST_RESORT_WAIT_BUDGET_MS;
+      if (round + 1 >= (last ? LAST_RESORT_ROUNDS : 2) || wait <= 0 || wait > (last ? COOLDOWN_MS : RATE_LIMIT_WAIT_MS)) break;
+      if (wait >= reservedMs(position)) break;
       // #668: a fast fallback answers sooner than the cooldown ends; come back to this provider after it.
       if (options.fallbackBeforeRateLimitWait && !deferred.has(entry) && queue.slice(position + 1).some(available)) {
         deferred.add(entry);
         queue.push(entry);
         break;
       }
-      options.signal?.throwIfAborted();
-      await new Promise<void>((resolve, reject) => {
-        const onAbort = () => { clearTimeout(timer); reject(options.signal?.reason); };
-        const timer = setTimeout(() => { options.signal?.removeEventListener("abort", onAbort); resolve(); }, wait);
-        options.signal?.addEventListener("abort", onAbort, { once: true });
-      });
+      await sleep(wait, options.signal);
+      slept += wait;
     }
   }
 
@@ -265,6 +307,30 @@ async function callProviders(
   if (terminal && failures.length === 1) throw terminal;
   throw new AllLLMProvidersFailedError(failures.length === 0 ? "COOLDOWN"
     : failures.every((reason) => reason === failures[0]) ? failures[0] : "MIXED", registry.length);
+}
+
+async function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await abortable(new Promise<void>((resolve) => { timer = setTimeout(resolve, ms); }), signal);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Await `waitFor`, rejecting with the signal's reason as soon as it aborts. */
+async function abortable(waitFor: Promise<void>, signal?: AbortSignal): Promise<void> {
+  signal?.throwIfAborted();
+  if (!signal) return waitFor;
+  let onAbort = () => {};
+  try {
+    await Promise.race([waitFor, new Promise<never>((_, reject) => {
+      onAbort = () => reject(signal.reason);
+      signal.addEventListener("abort", onAbort, { once: true });
+    })]);
+  } finally {
+    signal.removeEventListener("abort", onAbort);
+  }
 }
 
 /** Run a completion in JSON mode and parse the result. */
@@ -299,14 +365,34 @@ export function parseJSON<T>(text: string): T {
     .replace(/^\s*```(?:json)?/i, "")
     .replace(/```\s*$/i, "")
     .trim();
-  try {
-    return JSON.parse(cleaned) as T;
-  } catch {
-    const match = cleaned.match(/[[{][\s\S]*[\]}]/);
-    if (match) {
-      return JSON.parse(match[0]) as T;
+  const match = cleaned.match(/[[{][\s\S]*[\]}]/)?.[0];
+  for (const candidate of [cleaned, escapeRawControls(cleaned), ...(match ? [match, escapeRawControls(match)] : [])]) {
+    try {
+      return JSON.parse(candidate) as T;
+    } catch {
+      // try the next repair
     }
-    throw new Error(`Failed to parse LLM JSON output: ${text.slice(0, 200)}`);
   }
+  throw new Error(`Failed to parse LLM JSON output: ${text.slice(0, 200)}`);
 }
 
+/**
+ * #2444: Gemini flash-lite writes the line breaks of a multi-line field as raw newlines inside the JSON string
+ * ("Bad control character in string literal"); 3 of 6 recorded concepts. Escape control characters inside strings
+ * only; whitespace between tokens is valid JSON and stays.
+ */
+function escapeRawControls(json: string): string {
+  let out = "";
+  let inString = false;
+  let escaped = false;
+  for (const char of json) {
+    if (inString && !escaped && char < " ") {
+      out += char === "\n" ? "\\n" : char === "\r" ? "\\r" : char === "\t" ? "\\t" : `\\u${char.charCodeAt(0).toString(16).padStart(4, "0")}`;
+      continue;
+    }
+    if (char === '"' && !escaped) inString = !inString;
+    escaped = inString && !escaped && char === "\\";
+    out += char;
+  }
+  return out;
+}

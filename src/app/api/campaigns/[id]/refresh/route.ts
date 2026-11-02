@@ -1,4 +1,5 @@
 import { observeRoute } from "@/lib/observability/logger";
+import { ownerError } from "@/i18n/request-locale";
 import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { adResultsEnabled, saveAdResults } from "@/lib/campaign/ad-results-store";
@@ -17,6 +18,7 @@ import { ownerRefusal } from "@/lib/campaign/campaign-owner";
 import { resultsStale } from "@/lib/campaign/results-freshness";
 import { createClient } from "@/lib/supabase/server";
 import { saveCampaign, saveCampaignResult } from "@/lib/campaign/trusted-write";
+import { saveOutsideChanges } from "@/lib/campaign/outside-changes";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -46,7 +48,7 @@ async function handlePOST(
   }
   if (!campaign.meta_campaign_id) {
     return NextResponse.json(
-      { error: "This campaign hasn't been launched to Meta yet" },
+      { error: await ownerError("notOnMetaYet") },
       { status: 400 },
     );
   }
@@ -61,7 +63,7 @@ async function handlePOST(
     storedBinding.metaConnectionGeneration === null
   ) {
     return NextResponse.json(
-      { error: "This campaign needs account reconciliation before it can refresh." },
+      { error: await ownerError("refreshNeedsCheck") },
       { status: 409 },
     );
   }
@@ -107,7 +109,7 @@ async function handlePOST(
     if (err instanceof ConnectionAccessError) {
       return NextResponse.json({ error: err.message, autoPaused: enforcement.paused, protectionConfirmed: enforcement.confirmed }, { status: err.code === "CONFLICT" ? 409 : 400 });
     }
-    return NextResponse.json({ error: friendlyMetaError(err, "Could not refresh campaign results."), autoPaused: enforcement.paused, protectionConfirmed: enforcement.confirmed }, { status: 502 });
+    return NextResponse.json({ error: friendlyMetaError(err, await ownerError("refreshFailed")), autoPaused: enforcement.paused, protectionConfirmed: enforcement.confirmed }, { status: 502 });
   }
 
   const { data: result, error: resultError } = await saveCampaignResult(
@@ -125,13 +127,18 @@ async function handlePOST(
     }).catch(() => ({ data: null, error: new Error("Result storage unavailable.") }));
 
   if (resultError || !result) {
-    return NextResponse.json({ error: "Could not save refreshed results. Retry the refresh.", protectionConfirmed: false }, { status: 503 });
+    return NextResponse.json({ error: await ownerError("resultsNotSaved"), protectionConfirmed: false }, { status: 503 });
   }
 
   if (ads) await saveAdResults(createAdminClient() as unknown as SupabaseClient, { businessId: campaign.business_id, campaignId: id, ads }).catch(() => false);
+  // #1903: paused or budget changed in Meta Ads Manager; the card shows it from the updated row.
+  const { metaState, ...readInsights } = insights;
+  const outside = await saveOutsideChanges({ businessId: campaign.business_id, userId: user.id }, campaign, metaState)
+    .catch(() => ({ changed: false, raised: false }));
+  const { data: updated } = outside.changed ? await supabase.from("campaigns").select("*").eq("id", id).maybeSingle() : { data: null };
 
   const [summary, enforcement] = await Promise.all([
-    summarizeInsights(campaign.name ?? "Your campaign", insights),
+    summarizeInsights(campaign.name ?? "Your campaign", readInsights),
     enforceAutoPauseWithStatus(campaign.business_id),
     logEvent({
       businessId: campaign.business_id,
@@ -139,9 +146,9 @@ async function handlePOST(
       entityType: "campaign",
       entityId: id,
       metaObjectId: campaign.meta_campaign_id,
-      details: { ...insights },
+      details: { ...readInsights },
     }),
   ]);
 
-  return NextResponse.json({ result, summary, insights, review, autoPaused: enforcement.paused, protectionConfirmed: enforcement.confirmed });
+  return NextResponse.json({ result, summary, insights: readInsights, review, autoPaused: enforcement.paused, protectionConfirmed: enforcement.confirmed, ...updated ? { campaign: updated } : {} });
 }

@@ -100,6 +100,15 @@ describe("PrivacyRequests", () => {
     expect(JSON.parse(fetchMock.mock.calls.at(-1)![1]!.body as string)).toEqual({ kind: "export" });
   });
 
+  it("#1739: the 44 px details link sits on its own line, not inside the sentence (it split the line at 390)", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ requests: [] })));
+    render(<PrivacyRequests />);
+    const link = screen.getByRole("link", { name: "Data request details" });
+    expect(link).toHaveAttribute("href", "/data-deletion");
+    expect(link.closest("p")).toBeNull();
+    await screen.findByText("No requests yet.");
+  });
+
   it("does not claim a failed deletion request was submitted", async () => {
     vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => url.startsWith("/api/privacy-requests/operator")
       ? Response.json({ error: "Forbidden" }, { status: 403 }) : init?.method

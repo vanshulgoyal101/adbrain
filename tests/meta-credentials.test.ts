@@ -4,6 +4,7 @@ const h = vi.hoisted(() => ({
   connection: null as Record<string, unknown> | null,
   token: null as Record<string, unknown> | null,
   plaintext: "oauth-token",
+  owner: null as string | null,
 }));
 
 vi.mock("@/lib/supabase/server", () => ({
@@ -31,7 +32,7 @@ vi.mock("@/lib/supabase/admin", () => ({
       select: () => ({
         eq: () => ({
           maybeSingle: async () => ({
-            data: table === "meta_connections" ? h.connection : null,
+            data: table === "meta_connections" ? h.connection : table === "businesses" && h.owner ? { owner_id: h.owner } : null,
             error: null,
           }),
         }),
@@ -61,6 +62,7 @@ beforeEach(() => {
   h.connection = null;
   h.token = null;
   h.plaintext = "oauth-token";
+  h.owner = null;
 });
 
 const future = () => new Date(Date.now() + 86_400_000).toISOString();
@@ -150,5 +152,30 @@ describe("getMetaConnection", () => {
     const { getMetaConnection } = await import("@/lib/meta/credentials");
     const c = await getMetaConnection("biz");
     expect(c).toMatchObject({ source: "none", ready: false, adAccountId: null });
+  });
+});
+
+// #1649 (#1648): the business's client keeps the smoke account's pause-only rule (#1324), so a future write through
+// metaClientForBusiness can't skip it; an unreadable owner means no client.
+describe("metaClientForBusiness write mode (#1649)", () => {
+  const connect = () => {
+    h.connection = { business_id: "biz", token_id: "token-1", ad_account_id: "act_oauth", page_id: "pg_oauth", authorization_status: "connected" };
+    h.token = { id: "token-1", business_id: "biz", ciphertext: "", nonce: "", auth_tag: "", key_id: "", format_version: "", expires_at: null, revoked_at: null };
+  };
+  const writes = (client: unknown) => (client as { writes: string }).writes;
+
+  it("is pause-only for the smoke account's business and full for an owner's", async () => {
+    connect();
+    const { metaClientForBusiness } = await import("@/lib/meta/credentials");
+    h.owner = "144e4745-7e6d-4fb9-a1fd-7edec31a335f";
+    expect(writes(await metaClientForBusiness("biz"))).toBe("pause-only");
+    h.owner = "55555555-5555-4555-8555-555555555555";
+    expect(writes(await metaClientForBusiness("biz"))).toBe("all");
+  });
+
+  it("gives no client when the business's owner can't be read", async () => {
+    connect();
+    const { metaClientForBusiness } = await import("@/lib/meta/credentials");
+    expect(await metaClientForBusiness("biz")).toBeNull();
   });
 });

@@ -24,7 +24,12 @@ export async function storageWebp(bytes: Uint8Array): Promise<Uint8Array | null>
   return smallest && smallest.length < bytes.length ? new Uint8Array(smallest) : null;
 }
 
-/** Meta's ad images and owners' downloads take JPEG or PNG; a stored WebP is sent as a high-quality JPEG. */
+/** An owner's download (any stored format): a JPEG any app takes, about a tenth of a PNG; transparency goes white. */
+export async function downloadJpeg(bytes: Uint8Array): Promise<Uint8Array> {
+  return new Uint8Array(await sharp(bytes).flatten({ background: "#ffffff" }).jpeg({ quality: 92, mozjpeg: true }).toBuffer());
+}
+
+/** Meta's ad images take JPEG or PNG; a stored WebP is sent as a high-quality JPEG. */
 export async function jpegIfWebp(bytes: Uint8Array): Promise<{ bytes: Uint8Array; converted: boolean }> {
   if (!isWebp(bytes)) return { bytes, converted: false };
   return { bytes: new Uint8Array(await sharp(bytes).jpeg({ quality: 92, mozjpeg: true }).toBuffer()), converted: true };
