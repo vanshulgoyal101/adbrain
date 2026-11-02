@@ -47,7 +47,9 @@ export async function sdkCompletion(
   try {
     const result = await generateText({
       model,
-      messages,
+      messages: messages.map(({ role, content, images }) => role === "user" && images?.length
+        ? { role, content: [{ type: "text" as const, text: content }, ...images.map(({ data, mediaType }) => ({ type: "file" as const, data, mediaType }))] }
+        : { role, content }),
       allowSystemInMessages: true,
       temperature: options.temperature ?? 0.7,
       maxOutputTokens,

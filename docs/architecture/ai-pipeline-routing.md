@@ -23,6 +23,14 @@ Groq's 1,000 output tokens a minute. A 5xx skips that model's other
 keys. First successful provider response wins. Cancellation and
 terminal local errors do not mean trying every key indefinitely.
 
+Owners' library photos (#780) go only through `routing: "vision"`: one paid OpenRouter model
+(`VISION_MODEL`, Gemini 3.6 Flash, `data_collection: deny`, minimal reasoning because the endpoint
+refuses `none`), no cache and no free fallback, so a customer's photo never reaches a free tier that
+may train on it. Any other route refuses a message with pictures. [describe.ts](../../src/lib/media/describe.ts)
+asks once per photo what it shows and what words are printed on it (about $0.001 a photo), and the
+answer is saved on the photo so the next Create reuses it. The concept prompt treats those words as
+the photo's, never as Brand facts: a price read off a sign is not a claim the ad may make.
+
 Internal accounts (team, owner, test; [internal-accounts.json](../../src/lib/internal-accounts.json))
 write on the same models as customers (Haiku text is about $0.006 a Create, and the free text
 tiers allow 20 Gemini requests a day) but make their images free, without reference images and

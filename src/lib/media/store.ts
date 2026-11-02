@@ -31,6 +31,8 @@ export type MediaRow = {
   id: string; business_id: string; kind: MediaKind; path: string; name: string | null; tags: string[]; sha256: string;
   bytes: number | null; mime: string | null; width: number | null; height: number | null; duration_ms: number | null;
   checks: Record<string, unknown>; status: "pending" | "ready" | "delete_failed"; deleted_at: string | null; created_at: string;
+  /** #780: what the photo shows and the words printed in it, saved by the first Create that used it. */
+  description?: string | null; visible_text?: string | null;
 };
 export type MediaView = {
   id: string; kind: MediaKind; name: string | null; tags: string[]; width: number | null; height: number | null; bytes: number | null;
@@ -44,7 +46,7 @@ export class MediaError extends Error {
   }
 }
 
-const COLUMNS = "id, business_id, kind, path, name, tags, sha256, bytes, mime, width, height, duration_ms, checks, status, deleted_at, created_at";
+const COLUMNS = "id, business_id, kind, path, name, tags, sha256, bytes, mime, width, height, duration_ms, checks, status, deleted_at, created_at, description, visible_text";
 const URL_SECONDS = 3600;
 
 /** Start of the current month in India (the pilots' billing month), as an ISO instant. */

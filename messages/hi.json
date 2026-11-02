@@ -767,7 +767,11 @@
       "exportReport": "रिपोर्ट डाउनलोड करें",
       "syncing": "Meta से अपडेट हो रहा है…",
       "sync": "Meta से अपडेट करें",
-      "synced": "{age} अपडेट हुआ"
+      "synced": "{age} अपडेट हुआ",
+      "pageTitle": "कैंपेन",
+      "pageDescription": "जाँचे हुए विज्ञापन Meta पर चलाएँ, उन्हें रोकें और देखें कि उनसे क्या मिला।",
+      "reconnectBy": "अपने विज्ञापन संभालते रहने के लिए {date} तक Facebook फिर से जोड़ें।",
+      "savedDrafts": "सेव किए गए ड्राफ़्ट"
     },
     "filters": {
       "search": "कैंपेन खोजें",

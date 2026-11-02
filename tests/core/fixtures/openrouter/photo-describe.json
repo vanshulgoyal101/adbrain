@@ -1,0 +1,50 @@
+{
+  "recordedAt": "2026-11-02T16:21:46.216Z",
+  "visionModel": "google/gemini-3.6-flash",
+  "describes": [
+    {
+      "id": "price-sign",
+      "made": "SVG chalkboard sign",
+      "model": "google/gemini-3.6-flash",
+      "content": "{\"description\":\"A dark green rectangular graphic framed by a thin cream-colored border. In the center, text in cream-colored font lists services, prices, and operating hours.\",\"visibleText\":\"Haircut ₹149 | Beard trim ₹99 | Open 9am-9pm\"}",
+      "usage": {
+        "prompt": 1259,
+        "completion": 61
+      },
+      "latencyMs": 5213
+    },
+    {
+      "id": "no-text",
+      "made": "public/ideas/bakery-2.webp, bottom 570 px (the cake)",
+      "model": "google/gemini-3.6-flash",
+      "content": "{\"description\": \"A two-tiered round cake frosted in smooth off-white frosting sitting on a round wooden board. The top tier is edged with piped tan frosting shells. The base of the top tier has a ring of dark brown piped frosting shells, and the ledge of the bottom tier is lined with tan piped frosting shells.\", \"visibleText\": null}",
+      "usage": {
+        "prompt": 1252,
+        "completion": 72
+      },
+      "latencyMs": 2961
+    },
+    {
+      "id": "hindi-sign",
+      "made": "SVG shop sign in Hindi",
+      "model": "google/gemini-3.6-flash",
+      "content": "{\"description\":\"A solid brown background with a thin white border around the edge containing light-colored Hindi text centered vertically and horizontally.\",\"visibleText\":\"ताज़ा समोसे | ₹20 प्लेट\"}",
+      "usage": {
+        "prompt": 1259,
+        "completion": 41
+      },
+      "latencyMs": 2781
+    }
+  ],
+  "concept": {
+    "photo": "price-sign",
+    "angleName": "Save money / value",
+    "model": "anthropic/claude-haiku-5.5",
+    "content": "```json\n{\"headline\":\"$49 new-patient exam in Austin\",\"primary_text\":\"Your first visit in Austin: a $49 new-patient exam and consultation, priced plainly.\\nInsurance is accepted too, with transparent cash pricing.\\nBook a time that fits your week, including evenings and Saturdays.\",\"description\":\"Same-day appointments for new patients. Evening and Saturday hours available.\",\"cta\":\"Book Now\",\"rationale\":\"The angle is clear value: one stated price for a new-patient exam and consultation, plus insurance accepted. The hook names the service and Austin in the first line, as the lead instruction asks, and the offer sits there too. The visual is a price board, so the copy treats the image as a plain list of services and prices, which suits a value message. Caveat: the described photo shows a haircut and beard-trim price list with hours, which does not match a chiropractic clinic. Use the clinic's own board or crop out the other business's prices before running. The printed prices are not evidence and are not used in the copy. Evening and Saturday hours answer the 'fits my week' question for working adults and parents.\",\"visual\":{\"medium\":\"Documentary photograph of a physical price board, shot straight-on\",\"direction\":\"Use the owner's own photo of a dark green rectangular board with a thin cream border. Frame it straight-on so the board fills the central two-thirds of the portrait canvas, with its edges sharp and even. Keep the cream text legible but do not add any new text. The printed text in the photo lists haircut and beard-trim prices from another business, so crop it tightly to the board, retouch it out, or replace the board with the clinic's own. Lighting should be soft and neutral, with no dramatic shadows. Palette: deep green, cream, and a restrained warm accent echoing #FFC677 at the edges only. Leave the bottom third quiet and uncluttered for the headline and supporting line. Exclusions: no people, no hands, no stock props, no decorative objects, no logos, no extra text, no glossy or luxury styling.\",\"textPlacement\":\"bottom\"},\"supportingText\":\"Insurance accepted, transparent cash pricing\",\"sourceQuotes\":[\"$49 new-patient exam and consultation\",\"Insurance accepted, plus transparent cash pricing\",\"Evening and Saturday hours\",\"Same-day appointments for new patients\"]}\n```",
+    "usage": {
+      "prompt": 2441,
+      "completion": 3199
+    },
+    "rulesAtRecording": []
+  }
+}
