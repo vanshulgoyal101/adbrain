@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { MediaRow } from "@/lib/media/store";
 
-const mocks = vi.hoisted(() => ({ views: vi.fn(), read: vi.fn(), describe: vi.fn(), update: vi.fn() }));
+const mocks = vi.hoisted(() => ({ views: vi.fn(), read: vi.fn(), describe: vi.fn(), update: vi.fn(), saveError: null as unknown }));
 vi.mock("@/lib/media/store", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/media/store")>()),
   mediaViews: mocks.views,
@@ -14,12 +14,13 @@ vi.mock("@/lib/media/describe", async (importOriginal) => ({
 }));
 
 const admin = {
-  from: () => ({ update: (row: unknown) => ({ eq: () => ({ is: async () => { mocks.update(row); return { error: null }; } }) }) }),
+  from: () => ({ update: (row: unknown) => ({ eq: () => ({ is: async () => { mocks.update(row); return { error: mocks.saveError }; } }) }) }),
 } as unknown as SupabaseClient;
 const row = (id: string, extra: Partial<MediaRow> = {}) => ({ id, business_id: "b", mime: "image/jpeg", status: "ready", ...extra }) as MediaRow;
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.saveError = null;
   mocks.views.mockImplementation(async (_admin, rows: MediaRow[]) => rows.map((r) => ({ url: `https://signed/${r.id}` })));
   mocks.read.mockResolvedValue(new Uint8Array([1, 2]));
 });
@@ -57,5 +58,16 @@ describe("library photos for Create (#780)", () => {
     ]);
     expect(attempts.sort()).toEqual(["fails", "ok"]);
     expect(mocks.update).toHaveBeenCalledExactlyOnceWith({ description: "A sign.", visible_text: "Haircut ₹149" });
+  });
+
+  it("keeps the notes for this Create but logs an answer the database refused to save", async () => {
+    const { adPhotos, readAdPhotos } = await import("@/lib/media/ad-photos");
+    mocks.saveError = { message: "permission denied for table media_assets", code: "42501" };
+    mocks.describe.mockResolvedValue({ description: "A sign.", visibleText: null });
+    const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const photos = await adPhotos(admin, await readAdPhotos(admin, [row("new")]));
+    expect(photos).toEqual([{ mediaId: "new", url: "https://signed/new", notes: { description: "A sign.", visibleText: null } }]);
+    expect(JSON.parse(logged.mock.calls[0][0] as string)).toMatchObject({ source: "adbrain.media", code: "PHOTO_NOTES_NOT_SAVED", mediaId: "new", message: "permission denied for table media_assets" });
+    logged.mockRestore();
   });
 });

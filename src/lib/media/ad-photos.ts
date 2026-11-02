@@ -59,8 +59,11 @@ export async function adPhotos(
       { signal, onAttempt: (attempt) => options.onAttempt?.(attempt, row.id) });
     if (notes) {
       // Only the first answer is kept, so two batches describing at once can't flip a photo's notes.
-      await Promise.resolve(admin.from("media_assets").update({ description: notes.description, visible_text: notes.visibleText })
-        .eq("id", row.id).is("description", null)).catch(() => undefined);
+      const { error } = await Promise.resolve(admin.from("media_assets").update({ description: notes.description, visible_text: notes.visibleText })
+        .eq("id", row.id).is("description", null)).catch((caught: unknown) => ({ error: caught }));
+      // This Create still uses the notes; an unsaved answer means the next batch pays for the photo again.
+      if (error) console.error(JSON.stringify({ source: "adbrain.media", code: "PHOTO_NOTES_NOT_SAVED", mediaId: row.id,
+        message: (error instanceof Error ? error.message : String((error as { message?: unknown }).message ?? error)).slice(0, 300) }));
     }
     return { mediaId: row.id, url, notes };
   }));
