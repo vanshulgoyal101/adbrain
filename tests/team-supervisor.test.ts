@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { spawnSync, type SpawnSyncReturns } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -250,19 +250,27 @@ describe("nightly export encryption (#1762)", () => {
     let attempts = 0;
     let cleanups = 0;
     let notifications = 0;
-    const runScript = (script: string, args: string[]) => {
+    const result = (status: number, stdout: string): SpawnSyncReturns<string> => ({
+      pid: 0,
+      output: [null, stdout, ""],
+      stdout,
+      stderr: "",
+      status,
+      signal: null,
+    });
+    const runScript = (script: string, args: string[]): SpawnSyncReturns<string> => {
       if (script === "scripts/db-export.mjs" && args[0] === "export") {
         attempts++;
         mkdirSync(args[1]);
         writeFileSync(join(args[1], "data.json"), "private backup fixture");
-        return { status: 0, stdout: "exported", stderr: "" };
+        return result(0, "exported");
       }
       if (script === "scripts/db-export.mjs" && args[0] === "restore") {
-        return { status: attempts < 3 ? 1 : 0, stdout: "restore drill", stderr: "" };
+        return result(attempts < 3 ? 1 : 0, "restore drill");
       }
       if (script === "scripts/prune-smoke-storage.mjs") {
         cleanups++;
-        return { status: 0, stdout: "cleanup", stderr: "" };
+        return result(0, "cleanup");
       }
       throw new Error(`Unexpected script: ${script}`);
     };
