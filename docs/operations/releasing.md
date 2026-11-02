@@ -208,12 +208,15 @@ Vercel Hobby allows 100 production deploys a day, and every push to `main` is on
   into `next` itself (a `Train sync: main → next` PR whose head is `main`'s CI-checked
   commit), dispatches CI on the merged commit and promotes once it's green. Only a conflict
   or red `main` stops it; then merge `main` into `next` by a person's PR.
-  If `main`'s tip is the train's own merge commit (made with `GITHUB_TOKEN`, so no push CI ran), the
-  sync PR has no build/test/core checks and its CI run waits as `action_required`. Approve it with
-  `gh api -X POST repos/<repo>/actions/runs/<id>/approve` and the next train run merges it (#2200).
-- If `main` refuses the train PR's merge, the train checks the PR's own `pull_request` CI on that
-  commit. A run with **0 jobs** is GitHub's merge ref not being ready yet (#878): it reruns that run
-  once and keeps retrying for up to 10 minutes. A PR CI failure that ran jobs stops the train at once.
+- **Held bot runs (#2642).** GitHub holds every workflow that the train and sync PRs (opened
+  or moved with `GITHUB_TOKEN`) trigger as `action_required`, with no jobs, and turns them red
+  when the PR merges. Before each merge attempt the train deletes those runs, so no AI review
+  or core-approval verdict runs on them and nothing turns red. A PR can count its head's
+  checks only if CI ran on a **push** of that commit; dispatched CI (next after a sync, or
+  `main`'s tip when it's the train's own merge commit) doesn't count (#2682, #2200). Then the
+  train approves that PR's own CI on the exact head commit instead of deleting it and merges
+  once it passes (about 3 minutes, within the 10-minute retry). A PR CI failure that ran jobs
+  stops the train at once.
 - A red or stuck `next` opens one `Deploy train stuck` issue for DevOps that lists
   the changes on `next` not yet on `main` (the suspects). Fix `next` with a PR to it; production keeps the last train. The promote step's own 93-minute
   limit leaves its alert time to run. A cancelled or killed run alerts nothing, so the
