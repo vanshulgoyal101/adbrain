@@ -3,7 +3,7 @@ name: payment-state-reconciliation
 description: "Use when hosted checkout, saved orders, callbacks/webhooks, changing consent or funding prerequisites, refunds and delayed payment attempts share one workflow."
 ---
 
-<!-- Generated from vanshulgoyal101/skills@77e6db7 skills/payment-state-reconciliation.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
+<!-- Generated from vanshulgoyal101/skills@5d0975e skills/payment-state-reconciliation.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
 
 # Payment State Reconciliation
 
