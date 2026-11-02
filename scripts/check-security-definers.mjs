@@ -40,17 +40,24 @@ async function definerViolations(db) {
   return violations;
 }
 
-export async function securityDefinerPrivileges(db) {
+export async function securityDefinerState(db) {
   return (await db.query(`
     select format('%I.%I(%s)', n.nspname, p.proname, oidvectortypes(p.proargtypes)) as signature,
-      p.proowner, p.proacl::text as acl
+      p.proowner, p.proacl::text as acl, p.proconfig
     from pg_proc p join pg_namespace n on n.oid = p.pronamespace
     where n.nspname in ('public', 'private') and p.prosecdef
-      and not (n.nspname = 'private' and p.proname in
-        ('creative_generation_reconciliation_guard', 'creative_generation_settled_write_guard')
-        and p.pronargs = 0)
     order by signature
   `)).rows;
+}
+
+export function preservedSecurityDefinerPrivileges(rows) {
+  const triggerSignatures = new Set([
+    "private.creative_generation_reconciliation_guard()",
+    "private.creative_generation_settled_write_guard()",
+  ]);
+  return rows.map(({ signature, proowner, acl }) => triggerSignatures.has(signature)
+    ? { signature, proowner }
+    : { signature, proowner, acl });
 }
 
 export async function verifySecurityDefiners(db, database, check) {

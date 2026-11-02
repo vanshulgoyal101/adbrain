@@ -6,10 +6,10 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash, randomUUID } from "node:crypto";
 import pg from "pg";
-import { applyMigration } from "./database-migrations.mjs";
+import { applyMigration, managementMigrationSql } from "./database-migrations.mjs";
 import { appendedMigrations, buildSchema, readBaseSchema } from "./build-schema.mjs";
 import { createDefaultPrivilegeFixtures, verifyDefaultPrivilegeLedger, verifyDefaultPrivileges } from "./check-default-privileges.mjs";
-import { securityDefinerPrivileges, verifySecurityDefiners } from "./check-security-definers.mjs";
+import { preservedSecurityDefinerPrivileges, securityDefinerState, verifySecurityDefiners } from "./check-security-definers.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const defaultPrivilegesMigration = await readFile(join(root, "db/migrations/20261102_default_public_privileges.sql"), "utf8");
@@ -3075,11 +3075,34 @@ async function verify(database, source, integrityMigration, customerOnly = false
     await db.query(source);
     if (customerOnly) await verifyDefaultPrivileges(db, database, check, defaultPrivilegesMigration, defaultPrivilegeFixtures);
     if (database === "customer_upgrade") {
-      const previousPrivileges = await securityDefinerPrivileges(db);
-      await db.query(definerHardeningMigration);
-      await db.query(definerHardeningMigration);
+      const name = "20261102_security_definer_search_path.sql";
+      const before = await securityDefinerState(db);
+      await check(`${database}: definer hardening and its ledger roll back together`, async () => {
+        await db.query(`create table if not exists private.schema_migrations (
+          name text primary key, checksum text not null, applied_at timestamptz not null default now()
+        )`);
+        await db.query(managementMigrationSql(name, definerHardeningMigration, { commit: false }));
+        assert.deepEqual(await securityDefinerState(db), before, "the release dry run restores all function configuration and grants");
+        assert.equal((await db.query("select count(*)::int as count from private.schema_migrations where name=$1", [name])).rows[0].count, 0);
+        await db.query(`
+          create function private.reject_definer_ledger() returns trigger language plpgsql as $$
+            begin raise exception 'intentional ledger failure'; end $$;
+          create trigger reject_definer_ledger before insert on private.schema_migrations
+            for each row execute function private.reject_definer_ledger();
+        `);
+        try {
+          await assert.rejects(applyMigration(db, name, definerHardeningMigration), /intentional ledger failure/);
+          assert.deepEqual(await securityDefinerState(db), before, "a ledger failure rolls back the function changes");
+          assert.equal((await db.query("select count(*)::int as count from private.schema_migrations where name=$1", [name])).rows[0].count, 0);
+        } finally {
+          await db.query("drop trigger reject_definer_ledger on private.schema_migrations; drop function private.reject_definer_ledger()");
+        }
+      });
       await check(`${database}: hardening preserves existing owners and non-trigger function grants`, async () => {
-        assert.deepEqual(await securityDefinerPrivileges(db), previousPrivileges);
+        assert.equal(await applyMigration(db, name, definerHardeningMigration), "applied");
+        assert.equal(await applyMigration(db, name, definerHardeningMigration), "already_applied");
+        await db.query(definerHardeningMigration);
+        assert.deepEqual(preservedSecurityDefinerPrivileges(await securityDefinerState(db)), preservedSecurityDefinerPrivileges(before));
       });
     }
     if (process.argv.includes("--analytics-only") || database.startsWith("analytics_")) {
