@@ -15,7 +15,7 @@ import { hasCurrentMediaConsent } from "@/lib/media/consent";
 import { listMedia, mediaUploadsEnabled } from "@/lib/media/store";
 import { createClient } from "@/lib/supabase/server";
 
-export const metadata = { title: "Assets" };
+export const metadata = { title: "Photos" };
 
 export default async function AssetsPage({ searchParams }: { searchParams?: Promise<{ add?: string | string[] }> } = {}) {
   const [business, params] = await Promise.all([getPrimaryBusiness(), searchParams ?? ({} as { add?: string | string[] })]);
@@ -23,7 +23,7 @@ export default async function AssetsPage({ searchParams }: { searchParams?: Prom
   if (!business) {
     return (
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">Assets</h1>
+        <h1 className="text-2xl font-bold text-slate-900">Photos</h1>
         <Card className="mt-6">
           <CardContent className="flex flex-col items-start gap-4 p-8">
             <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
@@ -70,7 +70,7 @@ export default async function AssetsPage({ searchParams }: { searchParams?: Prom
   return (
     <div>
       <PageHeader
-        title="Assets"
+        title="Photos"
         description={
           <p>Every ad and upload for {business.name}, {sample ? "kept here until the account is handed over (sample ads can\u2019t be downloaded)." : "ready to download or share."}</p>
         }

@@ -155,7 +155,7 @@ describe("<Nav>", () => {
       ["Review", "/studio"],
       ["Campaigns", "/campaigns"],
       ["Enquiries", "/leads"],
-      ["Assets", "/assets"],
+      ["Photos", "/assets"],
       ["Settings", "/settings"],
     ];
     for (const [label, href] of expected) {
