@@ -316,7 +316,7 @@ function BusinessCampaigns({
   onSetupChange,
 }: CampaignsProps & { scope: string; initialSetup?: ComposerSetup; onSetupChange: (value: [string, ComposerSetup]) => void }) {
   const tc = campaignsTranslator(campaignWords);
-  const tn = useNotices();
+  const tn = useNotices(), formsLoadFailed = tn("goLive.formsLoadFailed"), formsUnavailable = tn("goLive.formsUnavailable");
   const [hadInitialSetup] = useState(Boolean(initialSetup));
   const [fromReview] = useState(Boolean(newCampaign) && !initialSetup);
   const [selected, setSelected] = useState<Set<string>>(() => initialSetup?.selected ?? new Set(
@@ -590,7 +590,7 @@ function BusinessCampaigns({
   }
 
   async function refreshDraftForms(signal?: AbortSignal) {
-    const forms = await fetchDraftForms(tn("goLive.formsLoadFailed"), signal);
+    const forms = await fetchDraftForms(formsLoadFailed, signal);
     if (signal?.aborted) return;
     setAvailableForms(forms);
     setLeadFormId(current => keptLeadForm(current, forms, readLeadFormMemory(leadFormMemoryKey)));
@@ -605,16 +605,16 @@ function BusinessCampaigns({
     const controller = new AbortController();
     startTransition(() => { setFormsLoading(true); setFormsError(null); });
     // #271: after a retry or reconnect, skip the server's ten-minute form cache.
-    void fetchDraftForms(tn("goLive.formsLoadFailed"), controller.signal, formsRetry > 0).then(forms => {
+    void fetchDraftForms(formsLoadFailed, controller.signal, formsRetry > 0).then(forms => {
       if (controller.signal.aborted) return;
       formsFreshnessRef.current = { ownerId: business.owner_id, businessId: business.id, retry: formsRetry, fetchedAt: Date.now() };
       setAvailableForms(forms);
       setLeadFormId(current => keptLeadForm(current, forms, readLeadFormMemory(leadFormMemoryKey)));
-    }).catch(() => { if (!controller.signal.aborted) setFormsError(tn("goLive.formsUnavailable")); }).finally(() => {
+    }).catch(() => { if (!controller.signal.aborted) setFormsError(formsUnavailable); }).finally(() => {
       if (!controller.signal.aborted) setFormsLoading(false);
     });
     return () => controller.abort();
-  }, [showComposer, connectedForDraft, business.id, business.owner_id, formsRetry, destination, leadFormMemoryKey, tn]);
+  }, [showComposer, connectedForDraft, business.id, business.owner_id, formsRetry, destination, leadFormMemoryKey, formsLoadFailed, formsUnavailable]);
 
   useEffect(() => {
     if (!showComposer || !connectedForDraft) return;
