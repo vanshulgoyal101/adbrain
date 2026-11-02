@@ -1,0 +1,86 @@
+[
+  {
+    "method": "GET",
+    "path": "900000000000000003/ads?fields=id%2Cstatus%2Cadset_id&limit=100",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "id": "900000000000000004",
+          "status": "PAUSED",
+          "adset_id": "900000000000000003"
+        }
+      ],
+      "paging": {
+        "cursors": {
+          "before":"CURSOR",
+          "after":"CURSOR"
+        }
+      }
+    }
+  },
+  {
+    "method": "GET",
+    "path": "900000000000000003?fields=id%2Ccampaign_id%2Cstatus%2Clifetime_budget%2Cbudget_remaining%2Cdaily_budget%2Cend_time",
+    "status": 200,
+    "body": {
+      "id": "900000000000000003",
+      "campaign_id": "900000000000000005",
+      "status": "PAUSED",
+      "lifetime_budget": "0",
+      "budget_remaining": "4025",
+      "daily_budget": "20000"
+    }
+  },
+  {
+    "method": "GET",
+    "path": "900000000000000006?fields=id%2Ccampaign_id%2Cstatus%2Clifetime_budget%2Cbudget_remaining%2Cdaily_budget%2Cend_time",
+    "status": 200,
+    "body": {
+      "id": "900000000000000006",
+      "campaign_id": "900000000000000005",
+      "status": "PAUSED",
+      "lifetime_budget": "0",
+      "budget_remaining": "5037",
+      "daily_budget": "25000",
+      "end_time": "2026-11-09T19:10:50+0530"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "900000000000000003",
+    "form": {
+      "daily_budget": "25000",
+      "end_time": "2026-11-09T19:10:50+0530"
+    },
+    "status": 200,
+    "body": {
+      "success": true
+    }
+  },
+  {
+    "method": "GET",
+    "path": "900000000000000003?fields=id%2Ccampaign_id%2Cstatus%2Clifetime_budget%2Cbudget_remaining%2Cdaily_budget%2Cend_time",
+    "status": 200,
+    "body": {
+      "id": "900000000000000003",
+      "campaign_id": "900000000000000005",
+      "status": "PAUSED",
+      "lifetime_budget": "0",
+      "budget_remaining": "5031",
+      "daily_budget": "25000",
+      "end_time": "2026-11-09T19:10:50+0530"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "900000000000000006",
+    "form": {
+      "status": "ARCHIVED"
+    },
+    "status": 200,
+    "body": {
+      "success": true
+    }
+  }
+]
