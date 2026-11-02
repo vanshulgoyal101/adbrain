@@ -21,6 +21,8 @@ export type CampaignTables = {
       meta_ad_ids: string[];
       meta_ad_account_id: string | null;
       meta_page_id: string | null;
+      /** #2711: the pixel a website leads/sales campaign was bought with; null otherwise. */
+      meta_pixel_id?: string | null;
       meta_connection_generation: number | null;
       creative_ids: string[];
       raw: Json | null;
@@ -40,6 +42,7 @@ export type CampaignTables = {
       meta_ad_ids?: string[];
       meta_ad_account_id?: string | null;
       meta_page_id?: string | null;
+      meta_pixel_id?: string | null;
       meta_connection_generation?: number | null;
       creative_ids?: string[];
       raw?: Json | null;
@@ -138,6 +141,10 @@ export type CampaignTables = {
       landing_page_views?: number;
       /** Website link clicks; null/absent means not read, not zero. */
       link_clicks?: number | null;
+      /** #2711: Meta-attributed pixel conversions (Lead or Purchase by goal); 0 for other goals. */
+      conversions?: number;
+      /** #2711: value of those conversions; null means Meta sent no value, not zero. */
+      conversion_value?: number | null;
       fetched_at: string;
     };
     Insert: {
@@ -156,6 +163,8 @@ export type CampaignTables = {
       whatsapp_opens?: number | null;
       landing_page_views?: number;
       link_clicks?: number | null;
+      conversions?: number;
+      conversion_value?: number | null;
       fetched_at?: string;
     };
     Update: Partial<

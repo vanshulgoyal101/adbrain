@@ -74,6 +74,8 @@ export type BusinessTables = {
       address: string | null;
       /** #2646 (#2656): where customers go by default. Optional in code: read it with `brandDestination` (absent → WhatsApp). */
       default_destination?: "whatsapp" | "website";
+      /** #2711: the Brand's chosen Meta pixel for website leads/sales; null until chosen. */
+      meta_pixel_id?: string | null;
       created_at: string;
       updated_at: string;
     };
@@ -99,6 +101,7 @@ export type BusinessTables = {
       whatsapp_template?: Json | null;
       address?: string | null;
       default_destination?: "whatsapp" | "website";
+      meta_pixel_id?: string | null;
       created_at?: string;
       updated_at?: string;
     };
