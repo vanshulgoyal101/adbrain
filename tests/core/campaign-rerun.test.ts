@@ -33,6 +33,17 @@ describe("core: Run this again (#1050)", () => {
     expect(rerunPrefill({ campaign, draft: { ...draft, name: "x".repeat(120) }, approvedIds: [A], bestCreativeId: null })).toMatchObject({ name: expect.stringMatching(/^x{112} \(again\)$/) });
   });
 
+  it("starts the next run with the Call now button off, keeping the rest of the message (#1174)", () => {
+    // CEO on #1174: runs with Call on got 3.8% chats, with it off 8.2%; a copy is the next run, never the live one.
+    const withCall: DraftInput = { ...draft, whatsappMessage: { greeting: "Namaste!", opening: { kind: "prefill", prefill: "Free site survey", callButton: true }, language: "hinglish" } };
+    expect(rerunPrefill({ campaign, draft: withCall, approvedIds: [A], bestCreativeId: null })).toMatchObject({
+      whatsappMessage: { greeting: "Namaste!", opening: { kind: "prefill", prefill: "Free site survey", callButton: false }, language: "hinglish" },
+    });
+    expect(withCall.whatsappMessage?.opening).toMatchObject({ callButton: true });
+    const questions: DraftInput = { ...draft, whatsappMessage: { greeting: "Namaste!", opening: { kind: "ice_breakers", questions: ["Price?"] }, language: "en" } };
+    expect(rerunPrefill({ campaign, draft: questions, approvedIds: [A], bestCreativeId: null })).toMatchObject({ whatsappMessage: questions.whatsappMessage });
+  });
+
   it("copies an old lead-form draft saved before destinations existed as a form campaign (#1216)", () => {
     const old = { ...draft, destination: undefined, leadFormId: "900000000000216", whatsappMessage: undefined, whatsappLanguage: undefined };
     expect(rerunPrefill({ campaign: { ...campaign, destination: "instant_form" }, draft: old, approvedIds: [A], bestCreativeId: null }))

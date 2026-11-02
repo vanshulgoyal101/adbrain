@@ -37,6 +37,11 @@ export type RerunPrefill = {
 const NAME_MAX = 120;
 const DEFAULT_BUDGET_RUPEES = 300;
 
+/** #1174 (CEO): the next run starts with the Call now button off; runs without it got more chats. The owner can turn it back on. */
+function withoutCallButton(message: DraftInput["whatsappMessage"]): DraftInput["whatsappMessage"] {
+  return message?.opening.kind === "prefill" && message.opening.callButton ? { ...message, opening: { ...message.opening, callButton: false } } : message;
+}
+
 export function rerunPrefill(input: {
   campaign: RerunCampaign;
   draft: DraftInput | null;
@@ -63,7 +68,7 @@ export function rerunPrefill(input: {
       ...shared, source: "draft", goal: draft.goal, dailyBudgetRupees: draft.dailyBudgetRupees,
       // #1216: a draft saved before destinations existed is a form campaign, as preflight and launch read it.
       destination: draft.destination === "website" ? undefined : draft.destination ?? "instant_form", leadFormId: draft.leadFormId, whatsappNumber: draft.whatsappNumber,
-      whatsappLanguage: draft.whatsappLanguage, whatsappMessage: draft.whatsappMessage,
+      whatsappLanguage: draft.whatsappLanguage, whatsappMessage: withoutCallButton(draft.whatsappMessage),
       targeting: draft.targeting, abTest: draft.abTest,
     };
   }
