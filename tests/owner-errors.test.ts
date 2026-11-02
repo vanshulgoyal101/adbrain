@@ -79,6 +79,7 @@ const ENGLISH: Record<OwnerErrorKey, string> = {
   exportCount: "Pick between 1 and 50 ads to download.",
   exportLoadFailed: "Could not load the selected creatives. Retry the export.",
   exportAdsDeleted: "Some ads you picked were deleted. Refresh the page and pick again.",
+  adsAlreadyBeingMade: "Your ads are already being made on another screen. They'll show here in a minute.",
   adRequestNotFound: "We couldn't find that ad request. Start again from Create.",
   noAdsMade: "No creatives were generated.",
   // #2312: Go live, pause and delete (src/app/api/campaigns/[id]/route.ts), byte-identical to the strings they replace.
