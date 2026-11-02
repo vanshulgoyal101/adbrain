@@ -7,6 +7,7 @@ const authenticatedSignatures = new Set([
   "public.business_transfer_mine()",
   "public.change_declared_preferences(uuid, text, bigint, text, text)",
   "public.delete_campaign_draft_if_version(uuid, bigint)",
+  "public.media_consent_record(uuid, text, boolean)",
   "public.owner_alert_prefs_set(uuid, boolean, boolean, text)",
   "public.owner_alert_start_verification(uuid)",
   "public.update_campaign_draft_if_version(uuid, uuid, uuid, bigint, jsonb, timestamp with time zone)",
