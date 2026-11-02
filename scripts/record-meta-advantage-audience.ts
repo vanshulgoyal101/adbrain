@@ -2,7 +2,7 @@
  * #334: validates (never creates) Leads ad sets with Advantage+ audience on, under a
  * temporary empty PAUSED Leads campaign that is deleted afterwards. Nothing can spend.
  *
- *   npx tsx --env-file=<.env.local> scripts/record-meta-advantage-audience.ts
+ *   npx tsx --import ./scripts/trusted-server-cli.mjs --env-file=<.env.local> scripts/record-meta-advantage-audience.ts
  */
 import "./lib/meta-write-gate";
 import { writeFileSync } from "node:fs";

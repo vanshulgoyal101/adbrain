@@ -3,7 +3,7 @@
  * fixture (#245), and with --live-runs the funding read plus the account's running capped runs
  * (#1058) at the same moment. Read-only: no Meta writes.
  *
- *   npx tsx --env-file=.env.local scripts/record-meta-funding-fixtures.ts
+ *   npx tsx --import ./scripts/trusted-server-cli.mjs --env-file=.env.local scripts/record-meta-funding-fixtures.ts
  *
  * Uses META_SYSTEM_USER_TOKEN / META_AD_ACCOUNT_ID / META_PAGE_ID; tokens are stripped.
  */

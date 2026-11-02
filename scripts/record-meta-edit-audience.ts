@@ -13,7 +13,7 @@
  *   - switch (#765 b): the same guards on a click-to-WhatsApp tree: ad set A ACTIVE → PAUSED copy B (copy tape) →
  *     switch A → B (switch tape) → copy C of B → cancel C (cancel tape). One scrubber per run, so ids join up.
  *
- *   npx tsx --env-file=<path to .env.local> scripts/record-meta-edit-audience.ts <imageUrl> [rebuild|patch|whatsapp|language|whatsapp-language|area-exclusions|running|switch] [campaignId]
+ *   npx tsx --import ./scripts/trusted-server-cli.mjs --env-file=<path to .env.local> scripts/record-meta-edit-audience.ts <imageUrl> [rebuild|patch|whatsapp|language|whatsapp-language|area-exclusions|running|switch] [campaignId]
  * With a campaignId, the PAUSED test campaign already exists (e.g. launched by older code, #912) and is
  * edited and archived instead of launched.
  *

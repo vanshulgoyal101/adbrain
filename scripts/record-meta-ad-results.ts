@@ -3,8 +3,8 @@
  * leaves the process). Picks a campaign on the account where some ads delivered and at least one didn't, then
  * records `getAdResults` and the campaign total (`getCampaignInsights`) so the core test can check the sum.
  *
- *   npx tsx --env-file=<path to .env.local> scripts/record-meta-ad-results.ts [campaignId]
- *   npx tsx --env-file=<path to .env.local> scripts/record-meta-ad-results.ts --state-only
+ *   npx tsx --import ./scripts/trusted-server-cli.mjs --env-file=<path to .env.local> scripts/record-meta-ad-results.ts [campaignId]
+ *   npx tsx --import ./scripts/trusted-server-cli.mjs --env-file=<path to .env.local> scripts/record-meta-ad-results.ts --state-only
  *
  * `--state-only` (#1903, #2290) re-records just the taped campaign's status/budget/end-time reads and swaps them
  * into the tape, so the per-ad answers stay as recorded.

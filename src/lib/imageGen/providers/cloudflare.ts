@@ -1,3 +1,5 @@
+import "server-only";
+
 import { getEnv } from "@/lib/env";
 import { MAX_IMAGE_BYTES, readBoundedResponse } from "../raster";
 import { FreeImageBusyError, FreeImageDailyLimitError, ImageProviderError, type GeneratedImage, type ImageProvider, type ImageRequest } from "../types";

@@ -3,7 +3,7 @@
  * on the internal Solaride account, for test:core. GETs only: any other method is refused before it
  * leaves the process. Tokens are dropped; ids, hashes and numbers are scrubbed (scripts/lib/scrub-meta.ts).
  *
- *   npx tsx --env-file=<.env.local> scripts/record-meta-setup-checklist.ts
+ *   npx tsx --import ./scripts/trusted-server-cli.mjs --env-file=<.env.local> scripts/record-meta-setup-checklist.ts
  */
 import "./lib/meta-write-gate";
 import { writeFileSync } from "node:fs";

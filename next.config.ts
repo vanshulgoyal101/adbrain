@@ -1,7 +1,20 @@
 import type { NextConfig } from "next";
+import { createRequire } from "node:module";
 import { getSecurityHeaders } from "./src/lib/security/headers";
-import { isRazorpayTestEnabled } from "./src/lib/payments/razorpay-test";
-import { isProductionPaymentConfigured } from "./src/lib/payments/production-config";
+import { registerTrustedServerOnly } from "./scripts/server-only-hook.mjs";
+
+// Next loads its config in Node before installing the server-component resolver.
+const { isRazorpayTestEnabled, isProductionPaymentConfigured } = (() => {
+  const hook = registerTrustedServerOnly();
+  try {
+    const load = createRequire(__filename);
+    const test = load("./src/lib/payments/razorpay-test") as typeof import("./src/lib/payments/razorpay-test");
+    const live = load("./src/lib/payments/production-config") as typeof import("./src/lib/payments/production-config");
+    return { isRazorpayTestEnabled: test.isRazorpayTestEnabled, isProductionPaymentConfigured: live.isProductionPaymentConfigured };
+  } finally {
+    hook.deregister();
+  }
+})();
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 let supabaseHost: string | undefined;
