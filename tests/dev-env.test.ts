@@ -21,7 +21,7 @@ function sandbox() {
 function run(script: string, env: Record<string, string>) {
   return spawnSync("bash", ["-c", `set -euo pipefail; source "${lib}"; ${script}`], {
     encoding: "utf8",
-    env: { PATH: process.env.PATH ?? "", ...env },
+    env: { ...process.env, ...env },
   });
 }
 
@@ -55,6 +55,19 @@ describe("#2490 dev-env.sh", () => {
     expect(readFileSync(join(root, "node_modules/from-cache"), "utf8")).toBe("yes");
     expect(existsSync(join(root, "node_modules/half-copied"))).toBe(false);
     expect(existsSync(join(root, ".node_modules.tmp"))).toBe(false);
+  });
+
+  it.runIf(process.platform === "darwin")("replaces node_modules installed from another lockfile", () => {
+    const { home, root } = sandbox();
+    seedCache(home, root);
+    mkdirSync(join(root, "node_modules"));
+    writeFileSync(join(root, "node_modules/.package-lock.json"), "{}");
+    writeFileSync(join(root, "node_modules/.lock-sha256"), "old-lockfile-hash");
+    const result = run(`ensure_node_modules "${root}"`, { HOME: home });
+    expect(result.status, result.stderr).toBe(0);
+    expect(readFileSync(join(root, "node_modules/from-cache"), "utf8")).toBe("yes");
+    // The next run trusts what it just installed.
+    expect(run(`ensure_node_modules "${root}" && ls "${root}/node_modules"`, { HOME: home }).stdout).toContain("from-cache");
   });
 
   it.runIf(process.platform === "darwin")("keeps an old cache it just used instead of pruning it", () => {

@@ -24,15 +24,18 @@ use_pinned_node() {
 # A prepared clone of a cache, made ahead on the same volume (wt.sh clones while git
 # checks out), is moved into place when its hash matches the lockfile, else deleted.
 ensure_node_modules() {
-  local root="$1" prepared="${2:-}" prepared_hash="${3:-}" cache_root cache seed
-  # A finished install writes node_modules/.package-lock.json last; anything else is partial.
-  if [[ -f "$root/node_modules/.package-lock.json" ]]; then
+  local root="$1" prepared="${2:-}" prepared_hash="${3:-}" cache_root cache seed hash stamp
+  hash="$(lockfile_hash "$root")"
+  stamp="$root/node_modules/.lock-sha256"
+  # A finished install writes node_modules/.package-lock.json last; anything else is partial. The stamp, written
+  # here, says which lockfile it came from, so a pull that changes dependencies reinstalls.
+  if [[ -f "$root/node_modules/.package-lock.json" ]] && { [[ ! -f "$stamp" ]] || [[ "$(cat "$stamp")" == "$hash" ]]; }; then
     if [[ -n "$prepared" ]]; then rm -rf "$prepared"; fi
     return 0
   fi
   rm -rf "$root/node_modules"
   cache_root="$HOME/Library/Caches/adbrain/node_modules"
-  cache="$cache_root/$(lockfile_hash "$root")"
+  cache="$cache_root/$hash"
   if [[ -n "$prepared" && -f "$prepared/.package-lock.json" && "$prepared_hash" == "$(basename "$cache")" ]]; then
     mv "$prepared" "$root/node_modules"
   else
@@ -47,12 +50,15 @@ ensure_node_modules() {
       mkdir -p "$cache_root"
       seed="$cache_root/.seed-$(basename "$cache")-$$"
       if cp -cR "$root/node_modules" "$seed"; then
-        if [[ ! -e "$cache" ]]; then mv "$seed" "$cache"; else rm -rf "$seed"; fi
+        if [[ ! -e "$cache" ]]; then mv "$seed" "$cache"; fi
+        # A seeder that lost the race moved its copy inside the winner's cache.
+        rm -rf "$seed" "$cache/$(basename "$seed")"
       else
         rm -rf "$seed"
       fi
     fi
   fi
+  echo "$hash" > "$stamp"
   # Mark this cache used (-c: never create it as a file), then keep only caches used in the last 14 days.
   touch -c "$cache" 2>/dev/null || true
   find "$cache_root" -mindepth 1 -maxdepth 1 -type d ! -name '.seed-*' -mtime +14 -exec rm -rf {} + 2>/dev/null || true
