@@ -4,7 +4,7 @@ import sharp from "sharp";
 import { getEnv } from "@/lib/env";
 import { readVideo, stripVideoMetadata } from "@/lib/media/mp4";
 import {
-  isMediaMime, isMediaVideoMime, MEDIA_BUCKET, MEDIA_EXTENSION, MEDIA_MAX_BYTES, MEDIA_MAX_LONG_SIDE, MEDIA_MONTHLY_UPLOADS,
+  isMediaMime, isMediaVideoMime, mediaBucket, MEDIA_EXTENSION, MEDIA_MAX_BYTES, MEDIA_MAX_LONG_SIDE, MEDIA_MONTHLY_UPLOADS,
   MEDIA_MONTHLY_VIDEOS, MEDIA_VIDEO_EXTENSION, MEDIA_VIDEO_MAX_BYTES, mediaFit, videoRefusal, type MediaFit, type MediaMime,
 } from "@/lib/media/rules";
 
@@ -73,7 +73,7 @@ function quotaError(kind: MediaKind, now = new Date()): MediaError {
 export type SignInput = { businessId: string; userId: string; mime: string; bytes: number; sha256: string; width: number; height: number; durationMs?: number; name?: string; rightsConfirmedAt: string };
 export type SignResult =
   | { duplicate: true; asset: MediaView }
-  | { duplicate: false; id: string; path: string; token: string; fit: MediaFit };
+  | { duplicate: false; id: string; bucket: string; path: string; token: string; fit: MediaFit };
 
 export async function signUpload(admin: SupabaseClient, input: SignInput): Promise<SignResult> {
   const kind: MediaKind = isMediaVideoMime(input.mime) && mediaVideoEnabled() ? "video" : "image";
@@ -94,7 +94,7 @@ export async function signUpload(admin: SupabaseClient, input: SignInput): Promi
     // The monthly limit is enforced on insert (20261103_media_upload_quota.sql), so a pending row from an earlier month
     // isn't reused (#2644 attack: 50 stale rows finished next month doubled the limit). It's retired, still counting in
     // its own month, and this try gets a new row that the limit sees.
-    await admin.storage.from(MEDIA_BUCKET).remove([existing.path]).catch(() => undefined);
+    await admin.storage.from(mediaBucket(existing.kind)).remove([existing.path]).catch(() => undefined);
     const { error } = await admin.from("media_assets").update({ deleted_at: new Date().toISOString() })
       .eq("id", existing.id).eq("status", "pending").is("deleted_at", null);
     if (error) throw new MediaError(503, "MEDIA_UNAVAILABLE", "Couldn't start the upload. Try again.");
@@ -107,7 +107,7 @@ export async function signUpload(admin: SupabaseClient, input: SignInput): Promi
   // (Dev 7, #1245 attack: a new path per retry left old tokens able to store uncounted files). Tokens can't overwrite
   // (Reviewer, #1245), so an unverified object from the earlier try goes first; finalize copies verified bytes elsewhere.
   let row = existing;
-  if (row) await admin.storage.from(MEDIA_BUCKET).remove([row.path]).catch(() => undefined);
+  if (row) await admin.storage.from(mediaBucket(row.kind)).remove([row.path]).catch(() => undefined);
   if (!row) {
     const extension = kind === "video" ? MEDIA_VIDEO_EXTENSION[input.mime as keyof typeof MEDIA_VIDEO_EXTENSION] : MEDIA_EXTENSION[input.mime as MediaMime];
     const path = `${input.businessId}/${randomUUID()}.${extension}`;
@@ -128,9 +128,9 @@ export async function signUpload(admin: SupabaseClient, input: SignInput): Promi
   }
   if (!row) throw new MediaError(503, "MEDIA_UNAVAILABLE", "Couldn't save the photo. Try again.");
   // Reviewer (#1245): a token that could overwrite would let a finished photo be swapped for other bytes for ~2 h.
-  const { data: signed, error } = await admin.storage.from(MEDIA_BUCKET).createSignedUploadUrl(row.path, { upsert: false });
+  const { data: signed, error } = await admin.storage.from(mediaBucket(row.kind)).createSignedUploadUrl(row.path, { upsert: false });
   if (error || !signed) throw new MediaError(503, "MEDIA_UNAVAILABLE", "Couldn't start the upload. Try again.");
-  return { duplicate: false, id: row.id, path: row.path, token: signed.token, fit };
+  return { duplicate: false, id: row.id, bucket: mediaBucket(row.kind), path: row.path, token: signed.token, fit };
 }
 
 async function liveBySha(admin: SupabaseClient, businessId: string, sha256: string): Promise<MediaRow | null> {
@@ -147,11 +147,11 @@ type Refuse = (status: number, code: string, message: string) => Promise<never>;
 /** Re-reads the stored object: the bytes must be the photo or video the browser described, or the object and row go. */
 export async function finalizeUpload(admin: SupabaseClient, row: MediaRow): Promise<MediaView> {
   if (row.status === "ready") return (await mediaViews(admin, [row]))[0];
-  const { data: blob, error } = await admin.storage.from(MEDIA_BUCKET).download(row.path);
+  const { data: blob, error } = await admin.storage.from(mediaBucket(row.kind)).download(row.path);
   if (error || !blob) throw new MediaError(409, "MEDIA_NOT_UPLOADED", "The upload didn't finish. Try again.");
   const bytes = Buffer.from(await blob.arrayBuffer());
   const refuse: Refuse = async (status, code, message) => {
-    await admin.storage.from(MEDIA_BUCKET).remove([row.path]);
+    await admin.storage.from(mediaBucket(row.kind)).remove([row.path]);
     // Only the unfinished upload this call read: one another finalize already made ready stays. Soft-deleted, not
     // removed (Dev 7, #1245 attack): the row still counts toward the monthly limit and keeps its path for #2644's sweep,
     // so a token still live for that path can't store files the limit never sees. Honest refusals happen at sign (#748).
@@ -213,7 +213,7 @@ async function promote(admin: SupabaseClient, row: MediaRow, stored: Uint8Array,
   // TODO(#2644): sweep the one orphan such a token can still leave at the old upload path, and stale pending rows.
   const uploadPath = row.path;
   const finalPath = `${row.business_id}/${randomUUID()}.${checked.extension}`;
-  const { error: writeError } = await admin.storage.from(MEDIA_BUCKET).upload(finalPath, stored, { upsert: false, contentType: checked.mime });
+  const { error: writeError } = await admin.storage.from(mediaBucket(row.kind)).upload(finalPath, stored, { upsert: false, contentType: checked.mime });
   if (writeError) throw new MediaError(503, "MEDIA_UNAVAILABLE", `Couldn't save the ${noun}. Try again.`);
   const storedSha256 = createHash("sha256").update(stored).digest("hex");
   const { data, error: saveError } = await admin.from("media_assets").update({
@@ -222,14 +222,14 @@ async function promote(admin: SupabaseClient, row: MediaRow, stored: Uint8Array,
     checks: { fit: checked.fit, storedSha256 }, updated_at: new Date().toISOString(),
   }).eq("id", row.id).eq("path", uploadPath).eq("status", "pending").select(COLUMNS).maybeSingle();
   if (saveError || !data) {
-    await admin.storage.from(MEDIA_BUCKET).remove([finalPath]).catch(() => undefined);
+    await admin.storage.from(mediaBucket(row.kind)).remove([finalPath]).catch(() => undefined);
     if (saveError) throw new MediaError(503, "MEDIA_UNAVAILABLE", `Couldn't save the ${noun}. Try again.`);
     // Another finalize of the same upload won the race: answer with its result.
     const { data: now } = await admin.from("media_assets").select(COLUMNS).eq("id", row.id).maybeSingle();
     if ((now as MediaRow | null)?.status === "ready") return (await mediaViews(admin, [now as MediaRow]))[0];
     throw new MediaError(409, "MEDIA_CHANGED", `The ${noun} changed while uploading. Add it again.`);
   }
-  await admin.storage.from(MEDIA_BUCKET).remove([uploadPath]).catch(() => undefined);
+  await admin.storage.from(mediaBucket(row.kind)).remove([uploadPath]).catch(() => undefined);
   return (await mediaViews(admin, [data as MediaRow]))[0];
 }
 
@@ -239,7 +239,7 @@ async function promote(admin: SupabaseClient, row: MediaRow, stored: Uint8Array,
  */
 export async function readVerifiedMedia(admin: SupabaseClient, row: MediaRow): Promise<Uint8Array> {
   if (row.status !== "ready") throw new MediaError(409, "MEDIA_NOT_UPLOADED", "This photo isn't ready yet.");
-  const { data: blob, error } = await admin.storage.from(MEDIA_BUCKET).download(row.path);
+  const { data: blob, error } = await admin.storage.from(mediaBucket(row.kind)).download(row.path);
   if (error || !blob) throw new MediaError(503, "MEDIA_UNAVAILABLE", "Couldn't read the photo. Try again.");
   const bytes = new Uint8Array(await blob.arrayBuffer());
   const expected = typeof row.checks?.storedSha256 === "string" ? row.checks.storedSha256 : row.sha256;
@@ -253,10 +253,13 @@ export async function readVerifiedMedia(admin: SupabaseClient, row: MediaRow): P
  * row's object is whatever an upload token stored, unchecked (Reviewer, #1245). */
 export async function mediaViews(client: SupabaseClient, rows: MediaRow[]): Promise<MediaView[]> {
   const ready = rows.filter((row) => row.status === "ready");
-  const { data: signed } = ready.length
-    ? await client.storage.from(MEDIA_BUCKET).createSignedUrls(ready.map((row) => row.path), URL_SECONDS)
-    : { data: [] as { path: string | null; signedUrl: string }[] };
-  const urls = new Map((signed ?? []).map((item) => [item.path, item.signedUrl]));
+  const urls = new Map<string | null, string>();
+  for (const kind of ["image", "video"] as const) {
+    const paths = ready.filter((row) => (row.kind ?? "image") === kind).map((row) => row.path);
+    if (!paths.length) continue;
+    const { data: signed } = await client.storage.from(mediaBucket(kind)).createSignedUrls(paths, URL_SECONDS);
+    for (const item of signed ?? []) urls.set(item.path, item.signedUrl);
+  }
   return rows.map((row) => ({
     id: row.id, kind: row.kind ?? "image", name: row.name, tags: row.tags ?? [], width: row.width, height: row.height, bytes: row.bytes,
     durationMs: row.duration_ms ?? null, fit: row.width && row.height ? mediaFit(row.width, row.height, row.kind ?? "image") : null, url: row.status === "ready" ? urls.get(row.path) ?? null : null, createdAt: row.created_at,
@@ -309,7 +312,7 @@ export async function deleteMedia(admin: SupabaseClient, row: MediaRow): Promise
     const campaign = (live as { name: string | null }[] | null)?.[0];
     if (campaign) throw new MediaError(409, "MEDIA_IN_USE", `"${campaign.name ?? "A running campaign"}" uses this photo. Pause that campaign first.`);
   }
-  const { error: removeError } = await admin.storage.from(MEDIA_BUCKET).remove([row.path]);
+  const { error: removeError } = await admin.storage.from(mediaBucket(row.kind)).remove([row.path]);
   if (removeError) {
     await admin.from("media_assets").update({ status: "delete_failed", updated_at: new Date().toISOString() }).eq("id", row.id);
     throw new MediaError(503, "MEDIA_UNAVAILABLE", "Couldn't delete the photo. Try again.");
