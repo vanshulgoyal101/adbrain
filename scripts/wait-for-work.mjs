@@ -64,18 +64,44 @@ export function snoozedUntil(body) {
   return Number.isNaN(t) ? null : t;
 }
 
+/** Holds a timed read never overrides: only the owner or a later decision can lift them (#2572). */
+const TIMER_HOLDS = new Set(["waiting-owner", "parked", "later"]);
+
+/**
+ * #2572: when your own last word schedules a read ("Next read <ISO time>Z"), its due time (ms), else null.
+ * The timer survives `blocked` (a timed read often waits on the outside world) but not `waiting-owner`,
+ * `parked` or `later`; someone else's time never schedules you.
+ */
+export function scheduledRead(lastBody, m, labels = []) {
+  if (lastBody == null || !m.writtenByMe(lastBody) || labels.some((l) => TIMER_HOLDS.has(l))) return null;
+  return snoozedUntil(lastBody);
+}
+
+/**
+ * #2572: owned items whose last word backlog() must read. Items a time can't lift (`waiting-owner`, `parked`,
+ * `later`) are skipped to save the shared API budget; every other one is read, so no scheduled read is missed.
+ * @template {{ labels?: Array<string | { name: string }> }} T
+ * @param {T[]} items
+ * @returns {T[]}
+ */
+export function backlogReads(items) {
+  return items.filter((i) => !labelNames(i).some((n) => TIMER_HOLDS.has(n)));
+}
+
 export function waitingOnMe(lastBody, m, labels = [], now = Date.now()) {
+  // A scheduled check (QA 2's live-run reads, #575) keeps the item quiet until its time, then reports it
+  // even when the comment also handed something on or the item is `blocked` (#2572).
+  const due = scheduledRead(lastBody, m, labels);
+  if (due !== null) {
+    if (now < due) { nextDue = Math.min(nextDue, due); return false; }
+    return true;
+  }
   // `later` is frozen (board, #2238): a reply on it doesn't wake its owner.
   if (labels.some((l) => PARKED.has(l) || l === "later")) return false;
   if (lastBody == null) return true;
   // Your own last word without a handoff (no "→ Role") means the item is still yours to continue;
-  // idle workers otherwise slept with their queue unfinished (Oct 25). A scheduled check
-  // ("Next read <ISO time>Z") keeps it quiet until that time (QA 2's live-run reads, #575).
-  if (m.writtenByMe(lastBody)) {
-    const due = snoozedUntil(lastBody);
-    if (due !== null && now < due) { nextDue = Math.min(nextDue, due); return false; }
-    return !m.handedToOther(lastBody);
-  }
+  // idle workers otherwise slept with their queue unfinished (Oct 25).
+  if (m.writtenByMe(lastBody)) return !m.handedToOther(lastBody);
   if (m.addressedToMe(lastBody)) return true;
   // #1478: on a co-owned issue an un-arrowed FYI isn't every owner's turn; only one that names you is.
   if (labels.filter((l) => l.startsWith("owner:")).length > 1) return false;
@@ -193,16 +219,18 @@ const labelNames = (i) => (i.labels ?? []).map((l) => (typeof l === "string" ? l
 /**
  * #364 (CEO, Oct 29): the owned items that stop you waiting. Everything labelled yours except held items
  * (parked, blocked, waiting-owner, decision, later, standing) and scheduled checks not yet due (`snoozed`).
+ * A `blocked` item whose own scheduled read is due (`due`, #2572) counts again.
  * A co-owned item (#1478) counts only when it is your turn (`myTurn`). Turns first, then `core`, then oldest.
  * @param {Array<{ number: number, labels?: Array<string | { name: string }> }>} items
- * @param {{ snoozed?: Set<number>, myTurn?: Set<number> }} [state]
+ * @param {{ snoozed?: Set<number>, myTurn?: Set<number>, due?: Set<number> }} [state]
  */
-export function actionableOwned(items, { snoozed = new Set(), myTurn = new Set() } = {}) {
+export function actionableOwned(items, { snoozed = new Set(), myTurn = new Set(), due = new Set() } = {}) {
   const rank = (i) => (myTurn.has(i.number) ? 0 : labelNames(i).includes("core") ? 1 : 2);
   return items
     .filter((i) => {
       const names = labelNames(i);
-      if (names.some((n) => HOLD.has(n)) || snoozed.has(i.number)) return false;
+      const holds = (n) => HOLD.has(n) && !(n === "blocked" && due.has(i.number));
+      if (names.some(holds) || snoozed.has(i.number)) return false;
       return names.filter((n) => n.startsWith("owner:")).length < 2 || myTurn.has(i.number);
     })
     .sort((a, b) => rank(a) - rank(b) || a.number - b.number);
@@ -213,6 +241,12 @@ export const OWNS_WORK = 6;
 
 /** Earliest scheduled check seen this run; the wait loop rechecks the backlog when it passes. */
 let nextDue = Infinity;
+/** True once when the earliest scheduled check is due at `now`; the wait loop then rereads the backlog. */
+export function dueWake(now = Date.now()) {
+  if (now < nextDue) return false;
+  nextDue = Infinity;
+  return true;
+}
 
 /** Ready-pool lane per role: briefed, unowned issues labelled `ready` + `lane:<lane>` (#573). */
 export const LANES = { dev: "dev", dev2: "dev", dev3: "dev", dev4: "dev", dev5: "dev", dev6: "dev", qa: "qa", qa2: "qa", devops: "devops", reviewer: "review", designer: "design", cpo: "product", analyst: "research", docs: "docs", speed: "devops", janitor: "devops", scout: "product" };
@@ -686,18 +720,20 @@ async function backlog() {
   const items = await owned();
   const snoozed = new Set();
   const myTurn = new Set();
-  for (const item of items.slice(0, 20)) {
+  const dueNow = new Set();
+  for (const item of backlogReads(items)) {
     const comments = item.comments ? await api(`repos/${repo}/issues/${item.number}/comments?per_page=100`) : [];
     const reviews = item.pull_request ? await api(`repos/${repo}/pulls/${item.number}/reviews?per_page=100`) : [];
     const last = latestWord(comments, reviews);
-    const due = last && writtenByMe(last.body ?? "") ? snoozedUntil(last.body) : null;
-    if (due !== null && Date.now() < due) snoozed.add(item.number);
-    if (waitingOnMe(last?.body ?? null, m, (item.labels ?? []).map(l => l.name))) {
+    const labels = (item.labels ?? []).map(l => l.name);
+    const due = scheduledRead(last?.body ?? null, m, labels);
+    if (due !== null) (Date.now() < due ? snoozed : dueNow).add(item.number);
+    if (waitingOnMe(last?.body ?? null, m, labels)) {
       myTurn.add(item.number);
       found.push(last ? `#${item.number} is waiting on you${withSkills(item)}: "${brief(last.body)}" ${last.url}` : `#${item.number} is yours and not started${withSkills(item)}: ${item.title}`);
     }
   }
-  ownedActionable = actionableOwned(items, { snoozed, myTurn });
+  ownedActionable = actionableOwned(items, { snoozed, myTurn, due: dueNow });
   // #364: nothing is waiting on you, but you still own work with no open PR: continue the oldest.
   if (!found.length) {
     const next = nextItem(items, await api(`repos/${repo}/pulls?state=open&per_page=100`), snoozed);
@@ -803,7 +839,7 @@ let warned = false;
 while (Date.now() < deadline) {
   exitIfOrphaned();
   try {
-    if (Date.now() >= nextDue) { nextDue = Infinity; const due = await backlog(); if (due.length) await report(due); }
+    if (dueWake()) { const due = await backlog(); if (due.length) await report(due); }
     const found = await findWork();
     if (found.length) await report(found);
   } catch (error) {
