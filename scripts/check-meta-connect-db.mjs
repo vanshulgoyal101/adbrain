@@ -8,13 +8,16 @@ import { createHash, randomUUID } from "node:crypto";
 import pg from "pg";
 import { applyMigration } from "./database-migrations.mjs";
 import { appendedMigrations, buildSchema, readBaseSchema } from "./build-schema.mjs";
+import { createDefaultPrivilegeFixtures, verifyDefaultPrivilegeLedger, verifyDefaultPrivileges } from "./check-default-privileges.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const defaultPrivilegesMigration = await readFile(join(root, "db/migrations/20261102_default_public_privileges.sql"), "utf8");
 const operatorPaymentMigration = await readFile(join(root, "db/migrations/20260926_production_payment_policy_v2.sql"), "utf8");
 const customerAllowanceMigration = await readFile(join(root, "db/migrations/20260926_customer_ad_allowance.sql"), "utf8");
 const creativeIntentMigration = await readFile(join(root, "db/migrations/20260927_creative_generation_intents.sql"), "utf8");
 const creativeReconcileMigration = await readFile(join(root, "db/migrations/20260930_creative_generation_reconcile.sql"), "utf8");
 const creativeSettleMigration = await readFile(join(root, "db/migrations/20261021_creative_generation_settle_holds.sql"), "utf8");
+const creativeOneBatchMigration = await readFile(join(root, "db/migrations/20261102_creative_generation_one_batch.sql"), "utf8");
 const regenerationClaimsMigration = await readFile(join(root, "db/migrations/20261001_creative_regeneration_claims.sql"), "utf8");
 const regenerationStaleMigration = await readFile(join(root, "db/migrations/20261029_creative_regeneration_stale_claims.sql"), "utf8");
 const configurablePaymentMigration = await readFile(join(root, "db/migrations/20260927_configurable_payment_quotes.sql"), "utf8");
@@ -23,6 +26,7 @@ const cappedBoundMigration = await readFile(join(root, "db/migrations/20261023_c
 const spendCapMinimumMigration = await readFile(join(root, "db/migrations/20261029_reserve_spend_cap_minimum.sql"), "utf8");
 const customAmountMigration = await readFile(join(root, "db/migrations/20261023_custom_payment_amount.sql"), "utf8");
 const paymentTermsV2Migration = await readFile(join(root, "db/migrations/20261028_payment_terms_v2.sql"), "utf8");
+const paymentReviewAlertMigration = await readFile(join(root, "db/migrations/20261029_payment_review_alert.sql"), "utf8");
 const metaCostMigration = await readFile(join(root, "db/migrations/20261023_meta_cost_observation.sql"), "utf8");
 const metaSettleMigration = await readFile(join(root, "db/migrations/20261023_meta_cost_settle.sql"), "utf8");
 const operatorFundedMigration = await readFile(join(root, "db/migrations/20261023_operator_funded_businesses.sql"), "utf8");
@@ -69,7 +73,14 @@ const bootstrap = `
   grant usage on schema auth, public to anon, authenticated, service_role;
   alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
   alter default privileges in schema public grant all on sequences to anon, authenticated, service_role;
+  alter default privileges for role postgres in schema public grant all on tables to anon, authenticated, service_role;
+  alter default privileges for role postgres in schema public grant all on sequences to anon, authenticated, service_role;
+  alter default privileges for role postgres in schema public grant execute on functions to anon, authenticated, service_role;
+  alter default privileges for role supabase_admin in schema public grant all on tables to anon, authenticated, service_role;
+  alter default privileges for role supabase_admin in schema public grant all on sequences to anon, authenticated, service_role;
+  alter default privileges for role supabase_admin in schema public grant execute on functions to anon, authenticated, service_role;
   create schema storage;
+  alter default privileges for role postgres in schema storage grant execute on functions to anon, authenticated, service_role;
   create table storage.buckets (id text primary key, name text, public boolean, file_size_limit bigint, allowed_mime_types text[]);
   create table storage.objects (id uuid primary key default gen_random_uuid(), bucket_id text, name text);
   alter table storage.objects enable row level security;
@@ -89,6 +100,19 @@ async function check(label, run) {
     failures.push(label);
     console.error(`FAIL ${label}: ${error.message}`);
   }
+}
+
+async function verifyDefaultPrivilegeMigrationLedger() {
+  const admin = client();
+  await admin.connect();
+  try { await admin.query("create database default_privilege_ledger"); }
+  finally { await admin.end(); }
+  const db = client("default_privilege_ledger");
+  await db.connect();
+  try {
+    await db.query(bootstrap);
+    await verifyDefaultPrivilegeLedger(db, check, defaultPrivilegesMigration);
+  } finally { await db.end(); }
 }
 
 async function verifyRollback() {
@@ -604,6 +628,28 @@ async function verifyConfigurablePayments(db, database) {
     assert.equal(after.events7d,1,'a duplicate delivery is stored once');
     assert.equal(after.unprocessed,0,'unprocessed counts only events older than an hour');
     assert.equal((await service("select public.production_payment_webhook_health('acc_other') as result")).events7d,0);
+  });
+  await check(`${database}: webhook health counts captured orders held for review until they're refunded (#1684)`, async () => {
+    const health = () => service("select public.production_payment_webhook_health('acc_pricing') as result");
+    const before = await health();
+    const order = (await db.query("select id,key_id from private.production_payment_orders where account_id='acc_pricing' and captured_paise>0 and not review_required and refunded_paise=0 limit 1")).rows[0];
+    assert.ok(order,'a clean captured order to flag');
+    await service("select public.production_payment_order_review($1,'acc_pricing',$2) as result",[order.id,order.key_id]);
+    assert.equal((await health()).reviewRequired,before.reviewRequired+1,'a captured order sent to review alerts');
+    // The operator resolves it by refunding the customer; review_required stays set, but the money is no longer held.
+    await db.query("update private.production_payment_orders set refunded_paise=amount_paise,provider_refunded_paise=amount_paise where id=$1",[order.id]);
+    assert.equal((await health()).reviewRequired,before.reviewRequired,'a refunded order stops alerting');
+    // The headline case (Reviewer on #1710): Razorpay captured a payment that doesn't match the quote, so it never
+    // verifies and captured_paise stays 0, yet the customer's money is held.
+    const pending = (await db.query("select id,key_id,provider_order_id from private.production_payment_orders where account_id='acc_pricing' and captured_paise=0 and provider_order_id is not null and not review_required limit 1")).rows[0];
+    assert.ok(pending,'an unpaid order to receive a mismatched capture');
+    await service("select public.production_payment_event_receive('acc_pricing',$1,$2,$3,$4,'pay_mismatch',$5,null,'capture') as result",[pending.key_id,randomUUID(),'evt_mismatch','b'.repeat(64),pending.provider_order_id]);
+    const observed = await service("select public.production_payment_observe($1,'acc_pricing',$2,'pay_mismatch',false,0,true,$3) as result",[pending.id,pending.key_id,'c'.repeat(64)]);
+    assert.equal(observed.state,'review_required');
+    assert.equal(observed.captured_paise,0,'a mismatched capture is never credited');
+    assert.equal((await health()).reviewRequired,before.reviewRequired+1,'money held on a mismatched capture alerts');
+    await db.query("update private.production_payment_orders set provider_refunded_paise=amount_paise where id=$1",[pending.id]);
+    assert.equal((await health()).reviewRequired,before.reviewRequired,'a full provider refund stops alerting');
   });
   await check(`${database}: pricing objects remain inaccessible to browser roles`, async () => {
     for (const role of ['anon','authenticated']) {
@@ -3027,7 +3073,12 @@ async function verifyCreativeGenerationAdmission(db, database) {
   });
   await check(`${database}: concurrent tenants cannot exceed the remaining quota`, async () => {
     const results=await Promise.all([admit(randomUUID(),otherBusiness,otherOwner),admit(randomUUID(),otherBusiness,otherOwner)]);
-    assert.deepEqual(results.map(result=>result.action).sort(),['quota','start']);
+    // #1402: the second simultaneous start follows the first batch, so it can't spend the allowance either.
+    assert.deepEqual(results.map(result=>result.action).sort(),['running','start']);
+    const {rows:[held]}=await db.query("select generation_id from private.creative_generation_intents where business_id=$1",[otherBusiness]);
+    await db.query("update private.creative_generation_intents set updated_at=clock_timestamp()-interval '6 minutes' where generation_id=$1",[held.generation_id]);
+    assert.equal((await admit(randomUUID(),otherBusiness,otherOwner)).action,'quota');
+    await db.query("update private.creative_generation_intents set updated_at=clock_timestamp() where generation_id=$1",[held.generation_id]);
   });
   await check(`${database}: an unknown recovery lookup fences a delayed producer`, async () => {
     const id=randomUUID();
@@ -3046,13 +3097,34 @@ async function verifyCreativeGenerationAdmission(db, database) {
     await db.query("insert into public.llm_usage_events(business_id,user_id,route,provider,model,total_tokens) values ($1,$2,'creatives.generate','fixture','fixture',40)",[business,owner]);
     const progress=await service("select public.creative_generation_progress($1,$2,$3,40,false,false,false) as result",[business,owner,first]);
     assert.equal(progress.status,'processing');
+    // #1402: a batch with no ad saved yet blocks a second start until it has been silent for 5 minutes, even at quota.
+    assert.equal((await admit(randomUUID(),business,owner,'b'.repeat(64),51)).action,'running');
+    const stale=id=>db.query("update private.creative_generation_intents set updated_at=clock_timestamp()-interval '6 minutes' where generation_id=$1",[id]);
+    await stale(first);
     assert.equal((await admit(randomUUID(),business,owner,'b'.repeat(64),51)).action,'quota');
-    assert.equal((await admit(randomUUID(),business,owner,'b'.repeat(64),50)).action,'start');
+    const second=randomUUID();
+    assert.equal((await admit(second,business,owner,'b'.repeat(64),50)).action,'start');
+    await stale(second);
     await db.query("insert into public.creatives(business_id,brief,variant_group) values ($1,'Fixture',$2)",[business,first]);
     assert.equal((await service("select public.creative_generation_progress($1,$2,$3,0,true,false,false) as result",[business,owner,first])).status,'complete');
     assert.equal((await admit(randomUUID(),business,owner,'c'.repeat(64),60)).action,'quota');
     assert.equal((await admit(randomUUID(),business,owner,'c'.repeat(64),50)).action,'start');
     assert.equal((await admit(first)).action,'recover');
+  });
+  await check(`${database}: a second device's start follows the batch still making its first ad (#1402)`, async () => {
+    const tenant=randomUUID();
+    await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Second device')",[tenant,owner]);
+    const raced=await Promise.all([admit(randomUUID(),tenant,owner,'d'.repeat(64),10,1000),admit(randomUUID(),tenant,owner,'e'.repeat(64),10,1000)]);
+    assert.deepEqual(raced.map(result=>result.action).sort(),['running','start']);
+    const {rows}=await db.query("select generation_id,request_hash from private.creative_generation_intents where business_id=$1",[tenant]);
+    assert.equal(rows.length,1);
+    const first=rows[0].generation_id;
+    const follow=await admit(randomUUID(),tenant,owner,'f'.repeat(64),10,1000);
+    assert.deepEqual([follow.action,follow.generationId,follow.status,follow.expectedCount],['running',first,'processing',1]);
+    assert.equal((await admit(first,tenant,owner,rows[0].request_hash,10,1000)).action,'recover');
+    await db.query("insert into public.creatives(business_id,brief,variant_group) values ($1,'Fixture',$2)",[tenant,first]);
+    assert.equal((await service("select public.creative_generation_progress($1,$2,$3,0,false,false,false) as result",[tenant,owner,first])).status,'partial');
+    assert.equal((await admit(randomUUID(),tenant,owner,'f'.repeat(64),10,1000)).action,'start');
   });
   await check(`${database}: timeout and uncertain provider outcome retain identity and hold`, async () => {
     const id=(await db.query("select generation_id from private.creative_generation_intents where business_id=$1 and state='processing' limit 1",[otherBusiness])).rows[0].generation_id;
@@ -3155,6 +3227,8 @@ async function verifyCreativeGenerationAdmission(db, database) {
       [freshBusiness,owner,id,'d'.repeat(64)]);
     assert.equal(first.action,'start');
     await service("select public.creative_generation_progress($1,$2,$3,0,false,false,true) as result",[freshBusiness,owner,id]);
+    // Past the #1402 follow window, so the hold itself (not the running batch) refuses the next admission.
+    await db.query("update private.creative_generation_intents set updated_at=clock_timestamp()-interval '6 minutes' where generation_id=$1",[id]);
     const second=await admit(randomUUID(),freshBusiness,owner,'e'.repeat(64),100);
     await db.query("insert into public.creatives(business_id,brief,variant_group) values ($1,'Still running',$2)",[freshBusiness,id]);
     const late=await service("select public.creative_generation_progress($1,$2,$3,0,false,false,false) as result",[freshBusiness,owner,id]);
@@ -3197,7 +3271,12 @@ async function verify(database, source, integrityMigration, customerOnly = false
   await db.connect();
   try {
     await db.query(bootstrap);
+    const defaultPrivilegeFixtures = customerOnly ? await createDefaultPrivilegeFixtures(db) : undefined;
+    if (database === "customer_upgrade") {
+      await db.query("alter default privileges for role postgres in schema public revoke execute on functions from anon");
+    }
     await db.query(source);
+    if (customerOnly) await verifyDefaultPrivileges(db, database, check, defaultPrivilegesMigration, defaultPrivilegeFixtures);
     if (process.argv.includes("--analytics-only") || database.startsWith("analytics_")) {
       const installed = (await db.query("select to_regclass('public.product_event_daily') is not null as installed")).rows[0].installed;
       if (!installed) {
@@ -3248,6 +3327,12 @@ async function verify(database, source, integrityMigration, customerOnly = false
           assert.equal(await applyMigration(db,"20261028_payment_terms_v2.sql",paymentTermsV2Migration),'already_applied');
         });
       }
+      if (!(await db.query("select pg_get_functiondef('public.production_payment_webhook_health(text)'::regprocedure) like '%reviewRequired%' as installed")).rows[0].installed) {
+        await check(`${database}: payment review alert migration applies once and skips replay (#1684)`,async () => {
+          assert.equal(await applyMigration(db,"20261029_payment_review_alert.sql",paymentReviewAlertMigration),'applied');
+          assert.equal(await applyMigration(db,"20261029_payment_review_alert.sql",paymentReviewAlertMigration),'already_applied');
+        });
+      }
       await verifyConfigurablePayments(db,database);
       return;
     }
@@ -3258,6 +3343,8 @@ async function verify(database, source, integrityMigration, customerOnly = false
       await db.query(creativeReconcileMigration);
       await db.query(creativeSettleMigration);
       await db.query(creativeSettleMigration);
+      await db.query(creativeOneBatchMigration);
+      await db.query(creativeOneBatchMigration);
       await verifyCreativeGenerationAdmission(db, database);
       await verifyRegenerationClaims(db, database);
       return;
@@ -4470,7 +4557,11 @@ try {
   started = true;
   const admin = client();
   await admin.connect();
-  await admin.query("create role anon; create role authenticated; create role service_role bypassrls");
+  await admin.query(`create role anon; create role authenticated; create role service_role bypassrls;
+    do $$ begin
+      if not exists (select 1 from pg_roles where rolname = 'postgres') then create role postgres superuser; end if;
+      if not exists (select 1 from pg_roles where rolname = 'supabase_admin') then create role supabase_admin superuser; end if;
+    end $$;`);
   await admin.end();
   if (process.argv.includes("--rollback-only")) {
     await verifyRollback();
@@ -4533,6 +4624,7 @@ try {
     await verify("ordered_upgrade", `${baseline}\n${metaMigration}\n${campaignMigration}\n${trustedUsageMigration}\n${trustedUsageMigration}\n${productEventsMigration}\n${productEventsMigration}\n${whatsappMigration}\n${whatsappMigration}\n${reportingMigration}\n${reportingMigration}\n${workerMigration}\n${workerMigration}\n${billingMigration}\n${billingMigration}\n${billingEventsMigration}\n${billingEventsMigration}\n${testPaymentsMigration}\n${testPaymentsMigration}\n${productionPaymentsMigration}\n${productionPaymentsMigration}\n${draftAuthorityMigration}\n${trustedCampaignMigration}\n${legacyLead}\n${leadFollowUpMigration}\n${leadFollowUpMigration}\n${leadSyncMigration}\n${leadSyncMigration}`, integrityMigration);
   }
   if (!process.argv.includes("--analytics-only") && !process.argv.includes("--pricing-only") && !process.argv.includes("--leads-only") && !process.argv.includes("--generation-only")) {
+    await verifyDefaultPrivilegeMigrationLedger();
     await verify("customer_fresh",schema,undefined,true);
     await verify("customer_upgrade",`${baseline}\n${metaMigration}\n${campaignMigration}\n${billingMigration}\n${productionPaymentsMigration}\n${trustedCampaignMigration}`,undefined,true);
     if (!process.argv.includes("--customer-only")) {

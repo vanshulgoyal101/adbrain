@@ -266,6 +266,8 @@
     "figures": {
       "impressions": "Impressions",
       "clicks": "Clicks",
+      "linkClicks": "Link clicks",
+      "cpc": "CPC",
       "chats": "WhatsApp chats",
       "leads": "Leads",
       "visits": "Website visits",
@@ -411,6 +413,33 @@
       "linkPage": "On your Facebook Page: Settings → Linked accounts → WhatsApp. The code arrives as a WhatsApp message from Facebook, not an SMS.",
       "linkApp": "In the WhatsApp Business app: Settings → Business tools → Facebook & Instagram. No code is needed.",
       "then": "Then press Check again."
+    },
+    "meta": {
+      "title": "Meta connection",
+      "serverManaged": "This workspace uses a server-managed Meta connection.",
+      "expired": "Your Meta connection needs to be renewed.",
+      "reconnectBy": "Reconnect Facebook by {date} to keep managing your ads.",
+      "connected": "Connected. Account and Page details are checked when you open the connection.",
+      "intro": "Connect an existing Meta business to prepare campaigns. You can keep working on a draft first.",
+      "noBusiness": "Set up your business before connecting Meta.",
+      "notConfigured": "Meta connection is not configured on this server yet.",
+      "manage": "Manage connection",
+      "reconnect": "Reconnect",
+      "connect": "Connect Business",
+      "disconnect": "Disconnect",
+      "disconnecting": "Disconnecting...",
+      "disconnectFailed": "Facebook is still connected. Try again in a minute.",
+      "unavailable": "Meta connection status is temporarily unavailable. Your campaign draft is preserved.",
+      "tryAgain": "Try again",
+      "noticeConnected": "Your Meta account is connected.",
+      "noticeSelect": "Connected. Now choose your ad account and page below.",
+      "error": {
+        "not_configured": "Facebook Login isn't configured on this server yet.",
+        "no_business": "Set up your business before connecting Meta.",
+        "invalid_state": "That connection link expired. Please try connecting again.",
+        "connect_failed": "Couldn't complete the connection. Please try again.",
+        "access_denied": "You declined the permissions AdBrain needs to manage ads."
+      }
     }
   },
   "pilotDay7": {
@@ -468,6 +497,14 @@
       "title": "Tell us about your business",
       "helper": "Five things. Your ads are made from these, and you can change them any time.",
       "website": "Your website (optional)",
+      "websiteRequired": "Your website or page",
+      "destination": {
+        "legend": "Where should customers go?",
+        "whatsapp": "WhatsApp chat",
+        "whatsappHint": "Customers message you. Best for most local businesses.",
+        "website": "Your website",
+        "websiteHint": "Customers visit the website or page above. A phone is optional."
+      },
       "fillWebsite": "Fill it from my website",
       "pasteToggle": "No website? Paste a bio or listing",
       "pasteLabel": "Instagram bio, Google listing or catalogue text",
@@ -512,17 +549,21 @@
         "locations": {
           "label": "Where you serve",
           "placeholder": "e.g. Mohali\nKharar",
-          "helper": "Your ads show only here. One city or area per line."
+          "helper": "Your ads show only here. One city or area per line.",
+          "websiteHelper": "Your ads show only here. Selling online everywhere? Write All India."
         },
         "offer": {
           "label": "Your offer",
           "placeholder": "e.g. Free site survey",
-          "helper": "One thing customers get for messaging you. Only what you really offer."
+          "helper": "One thing customers get for messaging you. Only what you really offer.",
+          "websiteHelper": "One thing customers get when they visit. Only what you really offer."
         },
         "phone": {
           "label": "WhatsApp number",
           "placeholder": "98765 43210",
-          "helper": "Customers message you here."
+          "helper": "Customers message you here.",
+          "optionalLabel": "Phone number (optional)",
+          "websiteHelper": "Only if customers can also call or message you."
         }
       },
       "errors": {
@@ -530,7 +571,8 @@
         "vertical": "Say what you sell, in a few words.",
         "locations": "Add at least one city or area.",
         "offer": "Add one offer, like a free visit or a first-time price.",
-        "phone": "Enter a 10-digit mobile number."
+        "phone": "Enter a 10-digit mobile number.",
+        "website": "Add the website or page people should go to, like yourbusiness.com/offer."
       }
     },
     "ads": {
@@ -971,6 +1013,7 @@
     "enquiryNotSaved": "The enquiry could not be saved. Try again.",
     "draftGone": "This campaign draft has expired or was removed. Reload the page and set up the campaign again. Nothing was sent to Meta.",
     "draftChangedElsewhere": "Draft changed in another tab. Review the latest version.",
+    "websiteClosed": "Website ads aren't open yet. Choose WhatsApp chat or a lead form.",
     "reviewCheckFailed": "Couldn't check your campaign just now. Nothing was sent to Meta. Try again in a minute.",
     "reviewRequestInvalid": "A valid business, draft, and version are required.",
     "businessAccessDenied": "Business access is not allowed.",

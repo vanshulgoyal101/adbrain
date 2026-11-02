@@ -37,7 +37,7 @@ describe("GET /api/cron/payment-health (#178)", () => {
     const { GET } = await import("@/app/api/cron/payment-health/route");
     const response = await GET(request(`Bearer ${SECRET}`));
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ ok: true, payments: "live", events7d: 2, unprocessed: 0, capturedWithoutEvent: 0 });
+    expect(await response.json()).toEqual({ ok: true, payments: "live", events7d: 2, unprocessed: 0, capturedWithoutEvent: 0, reviewRequired: 0 });
     expect(database.rpc).toHaveBeenCalledWith("production_payment_webhook_health", { p_account_id: "acc_fixture" });
   });
 
@@ -46,6 +46,14 @@ describe("GET /api/cron/payment-health (#178)", () => {
     const { GET } = await import("@/app/api/cron/payment-health/route");
     const body = await (await GET(request(`Bearer ${SECRET}`))).json();
     expect(body).toMatchObject({ ok: false, capturedWithoutEvent: 1 });
+  });
+
+  // #1684 (Reviewer): an order sent to review_required holds the customer's money with no ad budget; DevOps must hear.
+  it("flags a captured order held for review", async () => {
+    database.abortSignal.mockResolvedValueOnce({ data: { events7d: 1, unprocessed: 0, capturedWithoutEvent: 0, reviewRequired: 1 }, error: null });
+    const { GET } = await import("@/app/api/cron/payment-health/route");
+    const body = await (await GET(request(`Bearer ${SECRET}`))).json();
+    expect(body).toMatchObject({ ok: false, reviewRequired: 1 });
   });
 
   it("reports disabled payments without querying", async () => {

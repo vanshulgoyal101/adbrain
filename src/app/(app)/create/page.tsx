@@ -11,7 +11,7 @@ import { redirect } from "next/navigation";
 import { SetupAdsStep } from "@/components/setup-ads-step";
 import { isProspectSession } from "@/lib/prospect-session";
 import { setupFieldsFrom } from "@/lib/brand/setup-fields";
-import { brandUsable } from "@/lib/brand/usable";
+import { brandDestination, brandUsable } from "@/lib/brand/usable";
 import { clientCreative } from "@/lib/creative/client-receipt";
 import { madeForSetup } from "@/lib/creative/setup-picks";
 import { getApprovedCreatives, getBrandAssets, getSetupCreativeBatch, getPrimaryBusiness, hasLaunchedCampaign } from "@/lib/supabase/queries";
@@ -76,7 +76,8 @@ export default async function CreatePage({ searchParams }: { searchParams?: Prom
   const missing = [
     [business.offers?.length, "offers or prices"],
     [business.locations?.length, "service areas"],
-    [business.phone, "phone number"],
+    // #2646: a website business needs no phone; its link is checked by brandUsable instead.
+    [business.phone || brandDestination(business) === "website", "phone number"],
   ].filter(([present]) => !present).map(([, label]) => label);
   // #371: Create opens on what the business's own campaigns achieved; a failed read just skips the line.
   const [assets, evidence] = await Promise.all([getBrandAssets(business.id), getResultEvidence(business.id).catch(() => [])]);

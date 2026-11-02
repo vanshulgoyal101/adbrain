@@ -12,6 +12,7 @@ import { SetupGoLive } from "@/components/setup-go-live";
 import { setupWelcome } from "@/lib/campaign/setup-welcome";
 import { BUDGET_PRESETS } from "@/lib/campaign/budget";
 import { setupPhone } from "@/lib/brand/setup-fields";
+import { brandDestination } from "@/lib/brand/usable";
 import { maskWhatsAppNumber } from "@/lib/meta/whatsapp-status-shared";
 import { fundingMode } from "@/lib/payments/operator-funding";
 import { canUseMetaConnect, metaAppReviewPending } from "@/lib/meta/pilot-access";
@@ -112,7 +113,8 @@ export default async function CampaignsPage({
     .then(({ data }) => Boolean(data.user && canUseMetaConnect(data.user.id))).catch(() => false);
   // #1934 (CPO #1924): a returning owner's "New campaign" ends here too, with Page and payment already done.
   const again = params.again === "1";
-  if (params.all !== "1" && (again || !campaigns.length) && approved.length && await canConnect()) {
+  // #2646: SetupGoLive only launches WhatsApp, so a website business goes live from the composer below.
+  if (params.all !== "1" && brandDestination(business) === "whatsapp" && (again || !campaigns.length) && approved.length && await canConnect()) {
     // #1432: only ads made from today's step 1; with none, step 2 makes them.
     const current = approvedRows.filter((creative) => madeForSetup(creative, business)).map(clientCreative);
     if (!current.length) redirect(again ? "/create?again=1" : "/create");

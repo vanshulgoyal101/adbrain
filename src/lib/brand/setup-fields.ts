@@ -1,3 +1,6 @@
+import { brandDestination, type BrandDestination } from "@/lib/brand/usable";
+import { normalizeWebsite } from "@/lib/brand/validation";
+
 /**
  * #1269 (#1251 WS1 step 1): the five things a first-timer gives, exactly what `brandUsable` (#1136) needs.
  * Pure, so the step and its save action check the same rules. Words: the CPO's #1251 strings.
@@ -11,9 +14,15 @@ export type SetupBusinessFields = {
   offer: string;
   phone: string;
   usp?: string;
+  /** #2646: absent from an older open tab, so the save leaves the saved choice alone. */
+  destination?: BrandDestination;
+  /** #2646: the link a website business sends people to; required only for that destination. */
+  website?: string;
 };
 
 export type SetupField = keyof SetupBusinessFields;
+/** The five boxes step 1 always shows, in order. */
+export type SetupTextField = "name" | "vertical" | "locations" | "offer" | "phone";
 
 /** #1966: the fill-in-the-blanks lines for "Why do customers pick you?" (`setup.business.proof.chips`), by segment. */
 export const PROOF_CHIPS = {
@@ -21,9 +30,9 @@ export const PROOF_CHIPS = {
   ielts: ["ieltsSize", "ieltsMock", "ieltsEvening"],
   interiors: ["interiorsDesign", "interiorsWorkshop", "interiorsKitchens"],
 } as const;
-export const SETUP_FIELDS: Exclude<SetupField, "usp">[] = ["name", "vertical", "locations", "offer", "phone"];
+export const SETUP_FIELDS: SetupTextField[] = ["name", "vertical", "locations", "offer", "phone"];
 
-export const SETUP_FIELD_LIMITS: Record<Exclude<SetupField, "usp">, number> = { name: 120, vertical: 120, locations: 600, offer: 200, phone: 20 };
+export const SETUP_FIELD_LIMITS: Record<SetupTextField | "website", number> = { name: 120, vertical: 120, locations: 600, offer: 200, phone: 20, website: 500 };
 
 export function setupLocations(value: string): string[] {
   return value.split("\n").map((line) => line.trim()).filter(Boolean);
@@ -45,7 +54,10 @@ export function setupFieldErrors(fields: SetupBusinessFields): Partial<Record<Se
   if (!fields.vertical.trim()) errors.vertical = "Say what you sell, in a few words.";
   if (!setupLocations(fields.locations).length) errors.locations = "Add at least one city or area.";
   if (!fields.offer.trim()) errors.offer = "Add one offer, like a free visit or a first-time price.";
-  if (!setupPhone(fields.phone)) errors.phone = "Enter a 10-digit mobile number.";
+  const website = fields.destination === "website";
+  // #2646: a website business may leave the phone blank, but a typed one must still be a real mobile.
+  if ((!website || fields.phone.trim()) && !setupPhone(fields.phone)) errors.phone = "Enter a 10-digit mobile number.";
+  if (website && !normalizeWebsite(fields.website)) errors.website = "Add the website or page people should go to.";
   if (/[{}]/.test(fields.usp ?? "")) errors.usp = "Fill in each blank, using only what is true for your business.";
   return errors;
 }
@@ -53,7 +65,7 @@ export function setupFieldErrors(fields: SetupBusinessFields): Partial<Record<Se
 export function setupFieldsFrom(business: {
   name?: string | null; vertical?: string | null; locations?: readonly string[] | null;
   offers?: readonly string[] | null; phone?: string | null;
-  usps?: readonly string[] | null;
+  usps?: readonly string[] | null; website?: string | null; default_destination?: string | null;
 } | null): SetupBusinessFields {
   return {
     name: business?.name ?? "",
@@ -63,5 +75,7 @@ export function setupFieldsFrom(business: {
     offer: business?.offers?.[0] ?? "",
     phone: business?.phone ?? "",
     usp: business?.usps?.[0] ?? "",
+    destination: brandDestination(business ?? {}),
+    website: business?.website ?? "",
   };
 }

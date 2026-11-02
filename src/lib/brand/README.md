@@ -7,8 +7,8 @@ Part of the [repository map](../../../docs/architecture/overview.md#repository-m
 | File | Owns |
 | --- | --- |
 | [validation.ts](validation.ts) | Email, phone and URL checks, and `normalizeWebsite` (a bare domain becomes `https://…`) |
-| [usable.ts](usable.ts) | `brandUsable`: the five facts a Brand needs before Prepare can use it |
-| [setup-fields.ts](setup-fields.ts) | Setup step 1's fields, limits and errors (10-digit Indian mobile, one place per line) |
+| [usable.ts](usable.ts) | `brandUsable`: the five facts a Brand needs before Prepare can use it; `brandDestination`: WhatsApp (default, also when unset) or website, where a working link replaces the phone (#2646) |
+| [setup-fields.ts](setup-fields.ts) | Setup step 1's fields, limits and errors (10-digit Indian mobile, optional for a website business; one place per line) |
 | [autofill.ts](autofill.ts) | Website and pasted-text extraction helpers and the model call's settings (`BRAND_EXTRACTION`) |
 | [meter.ts](meter.ts) | Home's Brand meter: which of offer, proof, why and audience are known, and what to ask next |
 | [fields.ts](fields.ts) | Trimming form values into strings and lists |

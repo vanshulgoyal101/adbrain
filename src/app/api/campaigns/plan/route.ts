@@ -11,6 +11,7 @@ import { ConnectionAccessError, requireOwnedBusiness, withMetaConnection } from 
 import { friendlyMetaError, type LeadForm } from "@/lib/meta/client";
 import { rateLimitResponse } from "@/lib/security/rate-limit";
 import { createClient } from "@/lib/supabase/server";
+import { websiteOpenFor } from "@/lib/campaign/website-gate";
 import type { Json } from "@/lib/types";
 import { listEditableDrafts } from "@/lib/campaign/draft-repository";
 import { maskedWhatsAppNumberPattern } from "@/lib/meta/whatsapp-status-shared";
@@ -81,6 +82,9 @@ async function handlePOST(req: Request) {
   const destination = audienceDraft?.destination ?? parsed.data.destination ?? "instant_form";
   if (audienceDraft && audienceDraft.businessId !== business.id) {
     return NextResponse.json({ error: await ownerError("businessNotAllowed") }, { status: 403 });
+  }
+  if (destination === "website" && !websiteOpenFor(user)) {
+    return NextResponse.json({ error: await ownerError("websiteClosed") }, { status: 403 });
   }
 
   const approved = await getApprovedCreatives(business.id);
