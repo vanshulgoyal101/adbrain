@@ -1,4 +1,4 @@
-begin;
+-- The migration runner wraps these statements and the ledger update together.
 set local lock_timeout = '5s';
 set local statement_timeout = '30s';
 
@@ -13,5 +13,3 @@ alter default privileges for role postgres in schema public
 -- PostgreSQL's PUBLIC function default is global, so this also affects future functions in other schemas.
 alter default privileges for role postgres
   revoke execute on functions from public;
-
-commit;

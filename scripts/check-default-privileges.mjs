@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { applyMigration, managementMigrationSql } from "./database-migrations.mjs";
 
 async function privileges(db, table, sequence, routine) {
   return (await db.query(`
@@ -26,6 +27,36 @@ async function defaults(db, role) {
     from pg_default_acl d left join pg_namespace n on n.oid = d.defaclnamespace
     where d.defaclrole = $1::regrole order by schema, d.defaclobjtype
   `, [role])).rows;
+}
+
+export async function verifyDefaultPrivilegeLedger(db, check, migration) {
+  const name = "20261102_default_public_privileges.sql";
+  await check("default privilege migration and its ledger commit or roll back together", async () => {
+    await db.query(`
+      create schema private;
+      create table private.schema_migrations (
+        name text primary key, checksum text not null, applied_at timestamptz not null default now()
+      );
+      create function private.reject_default_privilege_ledger() returns trigger language plpgsql as $$
+        begin raise exception 'intentional ledger failure'; end $$;
+    `);
+    const before = await defaults(db, "postgres");
+    await db.query(managementMigrationSql(name, migration, { commit: false }));
+    assert.deepEqual(await defaults(db, "postgres"), before, "the release dry run rolls back default privileges");
+    assert.equal((await db.query("select count(*)::int as count from private.schema_migrations where name=$1", [name])).rows[0].count, 0);
+
+    await db.query(`create trigger reject_default_privilege_ledger before insert on private.schema_migrations
+      for each row execute function private.reject_default_privilege_ledger()`);
+    await assert.rejects(applyMigration(db, name, migration), /intentional ledger failure/);
+    assert.deepEqual(await defaults(db, "postgres"), before, "a ledger failure rolls back the migration");
+    assert.equal((await db.query("select count(*)::int as count from private.schema_migrations where name=$1", [name])).rows[0].count, 0);
+
+    await db.query("drop trigger reject_default_privilege_ledger on private.schema_migrations");
+    assert.equal(await applyMigration(db, name, migration), "applied");
+    assert.equal(await applyMigration(db, name, migration), "already_applied");
+    await assert.rejects(applyMigration(db, name, `${migration}\n-- changed bytes`), /checksum changed/);
+    assert.equal((await db.query("select count(*)::int as count from private.schema_migrations where name=$1", [name])).rows[0].count, 1);
+  });
 }
 
 async function functionPrivileges(db, routine) {

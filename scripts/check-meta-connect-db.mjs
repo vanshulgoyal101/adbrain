@@ -8,7 +8,7 @@ import { createHash, randomUUID } from "node:crypto";
 import pg from "pg";
 import { applyMigration } from "./database-migrations.mjs";
 import { appendedMigrations, buildSchema, readBaseSchema } from "./build-schema.mjs";
-import { createDefaultPrivilegeFixtures, verifyDefaultPrivileges } from "./check-default-privileges.mjs";
+import { createDefaultPrivilegeFixtures, verifyDefaultPrivilegeLedger, verifyDefaultPrivileges } from "./check-default-privileges.mjs";
 import { securityDefinerPrivileges, verifySecurityDefiners } from "./check-security-definers.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -99,6 +99,19 @@ async function check(label, run) {
     failures.push(label);
     console.error(`FAIL ${label}: ${error.message}`);
   }
+}
+
+async function verifyDefaultPrivilegeMigrationLedger() {
+  const admin = client();
+  await admin.connect();
+  try { await admin.query("create database default_privilege_ledger"); }
+  finally { await admin.end(); }
+  const db = client("default_privilege_ledger");
+  await db.connect();
+  try {
+    await db.query(bootstrap);
+    await verifyDefaultPrivilegeLedger(db, check, defaultPrivilegesMigration);
+  } finally { await db.end(); }
 }
 
 async function verifyRollback() {
@@ -4407,6 +4420,7 @@ try {
     await verify("ordered_upgrade", `${baseline}\n${metaMigration}\n${campaignMigration}\n${trustedUsageMigration}\n${trustedUsageMigration}\n${productEventsMigration}\n${productEventsMigration}\n${whatsappMigration}\n${whatsappMigration}\n${reportingMigration}\n${reportingMigration}\n${workerMigration}\n${workerMigration}\n${billingMigration}\n${billingMigration}\n${billingEventsMigration}\n${billingEventsMigration}\n${testPaymentsMigration}\n${testPaymentsMigration}\n${productionPaymentsMigration}\n${productionPaymentsMigration}\n${draftAuthorityMigration}\n${trustedCampaignMigration}\n${legacyLead}\n${leadFollowUpMigration}\n${leadFollowUpMigration}\n${leadSyncMigration}\n${leadSyncMigration}`, integrityMigration);
   }
   if (!process.argv.includes("--analytics-only") && !process.argv.includes("--pricing-only") && !process.argv.includes("--leads-only") && !process.argv.includes("--generation-only")) {
+    await verifyDefaultPrivilegeMigrationLedger();
     await verify("customer_fresh",schema,undefined,true);
     await verify("customer_legacy_upgrade",`${baseline}\n${metaMigration}\n${campaignMigration}\n${billingMigration}\n${productionPaymentsMigration}\n${trustedCampaignMigration}`,undefined,true);
     await verify("customer_upgrade",preDefinerSchema,undefined,true);
