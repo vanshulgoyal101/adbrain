@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { apiError } from "@/lib/api";
-import { adResultsEnabled, type StoredAdResult } from "@/lib/campaign/ad-results-store";
+import { AD_RESULT_COLUMNS, adResultsEnabled, type StoredAdResult } from "@/lib/campaign/ad-results-store";
 import { draftInputSchema } from "@/lib/campaign/connect-contracts";
 import { bestCreativeId, rerunPrefill } from "@/lib/campaign/rerun";
+import { preparedAudienceForm } from "@/lib/campaign/editor-targeting";
 import { observeRoute } from "@/lib/observability/logger";
 import { createClient } from "@/lib/supabase/server";
 
@@ -24,7 +25,7 @@ export const GET = observeRoute("/api/campaigns/[id]/rerun", "GET", async (
 
   // RLS scopes every read to the owner's own business.
   const { data: campaign } = await supabase.from("campaigns")
-    .select("id, business_id, name, creative_ids, daily_budget, destination").eq("id", id).maybeSingle();
+    .select("id, business_id, name, creative_ids, daily_budget, destination, raw").eq("id", id).maybeSingle();
   if (!campaign) return apiError("Campaign not found", 404);
 
   const { data: operation } = await supabase.from("campaign_operations")
@@ -46,17 +47,22 @@ export const GET = observeRoute("/api/campaigns/[id]/rerun", "GET", async (
     const database = supabase as unknown as SupabaseClient;
     const [results, links] = await Promise.all([
       database.from("ad_results")
-        .select("meta_ad_id, ad_name, effective_status, delivered, impressions, link_clicks, conversations, leads, spend_paise, synced_at")
+        .select(AD_RESULT_COLUMNS)
         .eq("campaign_id", id).is("period_start", null).is("period_end", null).limit(100),
       database.from("campaign_ads").select("meta_ad_id, creative_id").eq("campaign_id", id).limit(100),
     ]);
     // Best only orders the ads; without it the copy still works.
     if (!results.error && !links.error) {
-      best = bestCreativeId((results.data ?? []) as StoredAdResult[], (links.data ?? []) as { meta_ad_id: string; creative_id: string | null }[], campaign.destination === "whatsapp");
+      best = bestCreativeId((results.data ?? []) as StoredAdResult[], (links.data ?? []) as { meta_ad_id: string; creative_id: string | null }[], campaign.destination);
     }
   }
 
-  const prefill = rerunPrefill({ campaign, draft, approvedIds: (approved ?? []).map((row) => row.id), bestCreativeId: best });
+  // #1174: a WhatsApp run without its own message sent the saved one; the next run copies it with Call off.
+  const whatsapp = (draft ? draft.destination : campaign.destination) === "whatsapp" && !draft?.whatsappMessage;
+  const { data: business } = whatsapp
+    ? await supabase.from("businesses").select("whatsapp_template").eq("id", campaign.business_id).maybeSingle()
+    : { data: null };
+  const prefill = rerunPrefill({ campaign: { ...campaign, prepared: preparedAudienceForm(campaign.raw) }, draft, approvedIds: (approved ?? []).map((row) => row.id), bestCreativeId: best, savedMessage: business?.whatsapp_template });
   if ("error" in prefill) return apiError(prefill.error, 409);
   return NextResponse.json({ ok: true, prefill });
 });

@@ -44,7 +44,7 @@ describe("core: the daily WhatsApp results line (#1022)", () => {
     const rows: StoredAdResult[] = [];
     await saveAdResults({ from: () => ({ upsert: async (values: Omit<StoredAdResult, "synced_at">[]) => { rows.push(...values.map((value) => ({ ...value, synced_at: "2026-10-27T03:30:00Z" }))); return { error: null }; } }) } as never,
       { businessId: "b1", campaignId: recorded.campaignId, ads });
-    const card = adResultViews(rows, true).ads;
+    const card = adResultViews(rows, "whatsapp").ads;
     const totals = dailyTotals([{ whatsapp: true, ads }]);
     expect(totals.enquiries).toBe(card.reduce((total, ad) => total + ad.results, 0));
     expect(totals.spend).toBeCloseTo(card.reduce((total, ad) => total + ad.spend, 0), 2);

@@ -12,8 +12,10 @@
  *     end time as second guards; the tree is DELETED afterwards and the GET proving it is printed.
  *   - switch (#765 b): the same guards on a click-to-WhatsApp tree: ad set A ACTIVE → PAUSED copy B (copy tape) →
  *     switch A → B (switch tape) → copy C of B → cancel C (cancel tape). One scrubber per run, so ids join up.
+ *   - match-old (#1479): a PAUSED instant-form tree, nothing turned on; a copy takes the old ad set's changed daily
+ *     budget and end date, then a capped copy its changed total and end date (two tapes). Deleted afterwards.
  *
- *   npx tsx --env-file=<path to .env.local> scripts/record-meta-edit-audience.ts <imageUrl> [rebuild|patch|whatsapp|language|whatsapp-language|area-exclusions|running|switch] [campaignId]
+ *   npx tsx --env-file=<path to .env.local> scripts/record-meta-edit-audience.ts <imageUrl> [rebuild|patch|whatsapp|language|whatsapp-language|area-exclusions|running|switch|match-old] [campaignId]
  * With a campaignId, the PAUSED test campaign already exists (e.g. launched by older code, #912) and is
  * edited and archived instead of launched.
  *
@@ -153,8 +155,8 @@ async function main() {
   const created: string[] = [];
   try {
     const only = process.argv[3];
-    for (const [path, interests] of [["rebuild", audience.interests], ["patch", []], ["whatsapp", []], ["language", []], ["whatsapp-language", []], ["area-exclusions", []], ["running", []], ["switch", []]] as const) {
-      if (only ? only !== path : path === "running" || path === "switch") continue;
+    for (const [path, interests] of [["rebuild", audience.interests], ["patch", []], ["whatsapp", []], ["language", []], ["whatsapp-language", []], ["area-exclusions", []], ["running", []], ["switch", []], ["match-old", audience.interests]] as const) {
+      if (only ? only !== path : path === "running" || path === "switch" || path === "match-old") continue;
       const running = path === "running" || path === "switch";
       const whatsapp = path.startsWith("whatsapp") || path === "switch";
       if (whatsapp && !whatsappNumber) throw new Error("No WhatsApp number on the Page or the business.");
@@ -192,6 +194,10 @@ async function main() {
         console.log(`ad set before: ${JSON.stringify(await raw(`${launch.adSetIds[0]}?fields=status,effective_status,end_time`))}`);
         await new Promise(resolve => setTimeout(resolve, 31_000));
       }
+      if (path === "match-old") {
+        await recordMatchOld(meta, launch.campaignId, launch.adSetIds[0], launch.adIds, changes);
+        continue;
+      }
       if (path === "switch") {
         await recordSwitch(meta, launch.campaignId, launch.adSetIds[0], launch.adIds, changes);
         continue;
@@ -217,7 +223,7 @@ async function main() {
     if (tape.length) save("edit-audience-failed");
     throw error;
   } finally {
-    const remove = process.argv[3] === "running" || process.argv[3] === "switch" ? "DELETED" : "ARCHIVED";
+    const remove = ["running", "switch", "match-old"].includes(process.argv[3] ?? "") ? "DELETED" : "ARCHIVED";
     for (const campaignId of created) await archive(campaignId, remove).catch(error => console.error(`${remove} failed for ${campaignId}: ${error}`));
     tape = [];
     console.log(`${remove.toLowerCase()} ${created.length} test campaign(s)`);
@@ -249,6 +255,42 @@ async function recordSwitch(meta: NonNullable<ReturnType<typeof metaClientFromEn
   save("edit-audience-cancel");
   await assertCampaignPaused(campaignId);
   console.log(`cancel: GET deleted copy → ${JSON.stringify(scrub(gone))}; running ad set: ${JSON.stringify(await raw(`${copy.adSetId}?fields=status,effective_status`))}`);
+  console.log(`campaign insights: ${JSON.stringify(await raw(`${campaignId}/insights?fields=spend,impressions`))}`);
+}
+
+/**
+ * #1479: a copy takes the old ad set's money as it is now (#1146). On a PAUSED campaign (running: false, nothing is
+ * turned on), the old ad set's budget and end date change while its copy waits, then the switch writes them onto it.
+ * Uncapped: A (₹200/day) → copy B, A goes to ₹250/day with an end date. Capped: C (₹5,000 total) from B → copy D,
+ * C goes to ₹6,000 with a later end date. The tree is deleted afterwards.
+ */
+async function recordMatchOld(meta: NonNullable<ReturnType<typeof metaClientFromEnv>>, campaignId: string, adSetId: string, adIds: string[], changes: Parameters<NonNullable<ReturnType<typeof metaClientFromEnv>>["editAdSetTargeting"]>[1]["changes"]) {
+  // Meta allows one write per ad set per 30 s on some accounts (613).
+  const wait = () => new Promise(resolve => setTimeout(resolve, 31_000));
+  const days = (n: number) => new Date(Date.now() + n * 86_400_000);
+  await assertCampaignPaused(campaignId);
+  const b = await meta.editAdSetTargeting(campaignId, { adSetId, adIds, changes }, { copyOnly: true });
+  await wait();
+  await raw(adSetId, { daily_budget: String((MIN_DAILY_RUPEES + 150) * 100), end_time: days(7).toISOString() });
+  await wait();
+  tape = [];
+  const daily = await meta.switchAdSet(campaignId, { fromAdSetId: adSetId, toAdSetId: b.adSetId, toAdIds: b.adIds, running: false });
+  save("edit-audience-match-old-daily");
+  await assertCampaignPaused(campaignId);
+  console.log(`daily: ${JSON.stringify(daily)} copy: ${JSON.stringify(await raw(`${b.adSetId}?fields=status,daily_budget,end_time`))}`);
+  await wait();
+
+  const c = await meta.createCappedAdSet(campaignId, { sourceAdSetId: b.adSetId, sourceAdIds: b.adIds, lifetimeBudgetPaise: MIN_CAMPAIGN_CAP_RUPEES * 100, endTime: days(7) });
+  await wait();
+  const d = await meta.editAdSetTargeting(campaignId, { adSetId: c.adSetId, adIds: c.adIds, changes: { age: { min: 35, max: 60 } } }, { copyOnly: true });
+  await wait();
+  await raw(c.adSetId, { lifetime_budget: String((MIN_CAMPAIGN_CAP_RUPEES + 1_000) * 100), end_time: days(8).toISOString() });
+  await wait();
+  tape = [];
+  const lifetime = await meta.switchAdSet(campaignId, { fromAdSetId: c.adSetId, toAdSetId: d.adSetId, toAdIds: d.adIds, running: false });
+  save("edit-audience-match-old-lifetime");
+  await assertCampaignPaused(campaignId);
+  console.log(`lifetime: ${JSON.stringify(lifetime)} copy: ${JSON.stringify(await raw(`${d.adSetId}?fields=status,lifetime_budget,budget_remaining,end_time`))}`);
   console.log(`campaign insights: ${JSON.stringify(await raw(`${campaignId}/insights?fields=spend,impressions`))}`);
 }
 
