@@ -35,7 +35,8 @@ create table if not exists public.media_meta_uploads (
   check (status <> 'ready' or image_hash is not null or video_id is not null),
   check ((status = 'error') = (problem is not null))
 );
-create index if not exists media_meta_uploads_business_idx on public.media_meta_uploads(business_id);
+-- Leads with (business_id, media_asset_id), so it covers both foreign keys (businesses, and the same-business asset FK).
+create index if not exists media_meta_uploads_business_asset_idx on public.media_meta_uploads(business_id, media_asset_id);
 
 alter table public.media_meta_uploads enable row level security;
 revoke all on public.media_meta_uploads from public, anon, authenticated, service_role;
