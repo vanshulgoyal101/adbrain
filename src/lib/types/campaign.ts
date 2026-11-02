@@ -133,6 +133,8 @@ export type CampaignTables = {
       conversations?: number | null;
       cost_per_conversation?: number | null;
       whatsapp_opens?: number | null;
+      /** #2601: website campaigns' landing-page views (their result); 0 for other destinations. */
+      landing_page_views?: number;
       fetched_at: string;
     };
     Insert: {
@@ -149,6 +151,7 @@ export type CampaignTables = {
       conversations?: number | null;
       cost_per_conversation?: number | null;
       whatsapp_opens?: number | null;
+      landing_page_views?: number;
       fetched_at?: string;
     };
     Update: Partial<

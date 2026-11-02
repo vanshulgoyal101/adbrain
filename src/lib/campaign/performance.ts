@@ -17,14 +17,19 @@ export interface CampaignPerf {
   cpl: number | null;
   conversations?: number | null;
   costPerConversation?: number | null;
+  /** #2601: a website campaign's result (Meta landing-page views). */
+  landingPageViews?: number | null;
   status: string;
 }
 
 /** Rank: most leads first, then cheapest cost-per-lead. */
 function rank(a: CampaignPerf, b: CampaignPerf): number {
-  const group = (row: CampaignPerf) => row.destination === "instant_form" ? 0 : row.destination === "whatsapp" && row.conversations != null ? 1 : 2;
+  // #2601: website visits rank after leads and chats; they are far cheaper and are not enquiries.
+  const group = (row: CampaignPerf) => row.destination === "instant_form" ? 0 : row.destination === "whatsapp" && row.conversations != null ? 1
+    : row.destination === "website" ? 2 : 3;
   if (group(a) !== group(b)) return group(a) - group(b);
-  if (group(a) === 2) return b.spend - a.spend;
+  if (group(a) === 3) return b.spend - a.spend;
+  if (group(a) === 2) return (b.landingPageViews ?? 0) - (a.landingPageViews ?? 0) || perVisit(a) - perVisit(b);
   if (a.destination === "whatsapp" && b.destination === "whatsapp") {
     return (b.conversations ?? 0) - (a.conversations ?? 0) || (a.costPerConversation ?? Infinity) - (b.costPerConversation ?? Infinity);
   }
@@ -32,9 +37,17 @@ function rank(a: CampaignPerf, b: CampaignPerf): number {
   return (a.cpl ?? Infinity) - (b.cpl ?? Infinity);
 }
 
+const perVisit = (r: CampaignPerf) => (r.landingPageViews ? r.spend / r.landingPageViews : Infinity);
+
 function resultText(r: CampaignPerf): string {
   if (r.destination === "unknown" || r.destination === "mixed" || r.destination === "call") return `INR ${Math.round(r.spend)} spent; comparable outcome metrics unavailable (${r.destination}).`;
   if (r.destination === "whatsapp" && r.conversations == null) return `INR ${Math.round(r.spend)} spent; WhatsApp conversation metrics unavailable. Refresh required.`;
+  if (r.destination === "website") {
+    const visits = r.landingPageViews ?? 0;
+    return visits > 0
+      ? `${visits} website visit${visits === 1 ? "" : "s"} (landing-page views) at INR ${Math.round(r.spend / visits)} per visit; INR ${Math.round(r.spend)} spent. Visits are not enquiries.`
+      : `INR ${Math.round(r.spend)} spent, no website visits yet.`;
+  }
   if (r.destination === "whatsapp") return `${r.conversations} WhatsApp conversations started${r.costPerConversation != null ? ` at INR ${Math.round(r.costPerConversation)} per conversation` : ""}; INR ${Math.round(r.spend)} spent. Conversations are not verified leads or sales.`;
   if (r.leads > 0) {
     return `${r.leads} lead${r.leads === 1 ? "" : "s"}${
@@ -54,7 +67,7 @@ export function buildPerformanceContext(
   rows: CampaignPerf[],
   max = 8,
 ): string {
-  const meaningful = rows.filter((r) => r.leads > 0 || r.spend > 0 || (r.conversations ?? 0) > 0);
+  const meaningful = rows.filter((r) => r.leads > 0 || r.spend > 0 || (r.conversations ?? 0) > 0 || (r.landingPageViews ?? 0) > 0);
   if (!meaningful.length) return "";
 
   const lines = [...meaningful]

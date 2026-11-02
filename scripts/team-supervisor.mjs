@@ -251,17 +251,18 @@ export function exportDue(newest, now = new Date()) {
 
 /** Exports are named by their ISO time: an encrypted `<time>.tar.gz.cms` (#1762) or a legacy plaintext folder. */
 export const EXPORT_NAME = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}Z(\.tar\.gz\.cms)?$/;
+const UNVERIFIED_EXPORT_NAME = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}Z\.unverified\.tar\.gz\.cms$/;
 
 /** Keep the newest `keep` exports. */
-export function exportsToPrune(names, keep = BACKUP_KEEP) {
-  return names.filter((n) => EXPORT_NAME.test(n)).sort().reverse().slice(keep);
+export function exportsToPrune(names, keep = BACKUP_KEEP, pattern = EXPORT_NAME) {
+  return names.filter((n) => pattern.test(n)).sort().reverse().slice(keep);
 }
 
 const OPENSSL = ["/opt/homebrew/opt/openssl@3/bin/openssl", "/usr/local/opt/openssl@3/bin/openssl"].find((p) => existsSync(p)) ?? "openssl";
 
 /** #1762: tar the drilled export, CMS-encrypt it to the backup certificate (the private key stays in the keychain), then delete the plaintext. */
-export function encryptExport(dir, run = spawnSync) {
-  const tarball = `${dir}.tar.gz`, sealed = `${dir}.tar.gz.cms`;
+export function encryptExport(dir, run = spawnSync, verified = true) {
+  const tarball = `${dir}.tar.gz`, sealed = `${dir}${verified ? "" : ".unverified"}.tar.gz.cms`;
   const tar = run("tar", ["-czf", tarball, "-C", dirname(dir), basename(dir)], { encoding: "utf8" });
   const cms = tar.status === 0 ? run(OPENSSL, ["cms", "-encrypt", "-binary", "-aes256", "-outform", "DER", "-in", tarball, "-out", sealed,
     join(WT, ".github/backup/backup-cert.crt")], { encoding: "utf8" }) : null;
@@ -287,21 +288,46 @@ function dailyGraphSunsetCheck(dry) {
   if (result.status === 0) writeFileSync(stamp, "");
 }
 
+function runSupervisorScript(script, args, timeout) {
+  return spawnSync(process.execPath, [script, ...args], { cwd: WT, encoding: "utf8", timeout });
+}
+
+function notifyExportFailure({ name, exported, restored, sealed, tail, logLine }) {
+  try {
+    const title = "Nightly production export failed";
+    const open = JSON.parse(execFileSync("gh", ["issue", "list", "-R", REPO, "--state", "open", "--search", `in:title "${title}"`, "--json", "number"], { encoding: "utf8" }));
+    if (open.length) return;
+    const unverified = sealed && restored?.status !== 0
+      ? ` The unverified encrypted export is retained as ${name}.unverified.tar.gz.cms; the next tick retries.`
+      : "";
+    execFileSync("gh", ["issue", "create", "-R", REPO, "-l", "core", "-l", "bug", "-l", "owner:devops", "-t", title, "-b",
+      `The supervisor's nightly export (#884) failed at ${name}. Export exit ${exported.status}; restore drill exit ${restored?.status ?? "not run"}; encrypted ${sealed}.${unverified}\nLast lines: ${tail(restored ?? exported).slice(0, 300)}\n\nRerun by hand: \`node scripts/db-export.mjs export ~/.adbrain-backups/<now>\` then \`restore\` (docs/operations/backups.md#data-safety-and-recovery). Until an export succeeds, no destructive migration.`], { stdio: "ignore" });
+  } catch (error) {
+    logLine(`nightly export alert failed: ${String(error?.message ?? error).split("\n")[0].slice(0, 160)}`);
+  }
+}
+
 /** Nightly free-plan backup (#884): export, restore-drill it, prune, and open one issue when it fails. */
-function nightlyExport(dry) {
-  mkdirSync(BACKUP_DIR, { recursive: true, mode: 0o700 });
-  const names = readdirSync(BACKUP_DIR).filter((n) => EXPORT_NAME.test(n)).sort();
+export function nightlyExport(dry, {
+  backupDir = BACKUP_DIR,
+  now = new Date(),
+  runScript = runSupervisorScript,
+  logLine = log,
+  notifyFailure = notifyExportFailure,
+} = {}) {
+  mkdirSync(backupDir, { recursive: true, mode: 0o700 });
+  const names = readdirSync(backupDir).filter((n) => EXPORT_NAME.test(n)).sort();
   const newest = names.at(-1);
-  if (!exportDue(newest ? folderTime(newest) : null)) return;
-  if (dry) return console.log(`would export production to ${BACKUP_DIR} (newest ${newest ?? "none"})`);
-  const name = new Date().toISOString().slice(0, 16).replace(":", "-") + "Z";
-  const dir = join(BACKUP_DIR, name);
-  const run = (command) => spawnSync(process.execPath, ["scripts/db-export.mjs", command, dir], { cwd: WT, encoding: "utf8", timeout: 15 * 60_000 });
+  if (!exportDue(newest ? folderTime(newest) : null, now)) return;
+  if (dry) return console.log(`would export production to ${backupDir} (newest ${newest ?? "none"})`);
+  const name = now.toISOString().slice(0, 16).replace(":", "-") + "Z";
+  const dir = join(backupDir, name);
+  const run = (command) => runScript("scripts/db-export.mjs", [command, dir], 15 * 60_000);
   const exported = run("export");
   const restored = exported.status === 0 ? run("restore") : null;
-  // Encrypt whatever the drill says: plaintext never stays on the shared Mac (#1762).
-  const sealed = exported.status === 0 && encryptExport(dir);
-  const ok = exported.status === 0 && restored?.status === 0 && sealed;
+  const verified = restored?.status === 0;
+  const sealed = exported.status === 0 && encryptExport(dir, spawnSync, verified);
+  const ok = exported.status === 0 && verified && sealed;
   // The error line first (stacks end in "Node.js vNN"), never anything that looks like a credential.
   const tail = (r) => {
     if (!r) return "not run";
@@ -310,24 +336,21 @@ function nightlyExport(dry) {
     return [error, ...lines.slice(-2)].filter(Boolean).join(" | ");
   };
   if (ok) {
-    log(`nightly export ${name}: ${tail(restored).slice(0, 200)}`);
+    logLine(`nightly export ${name}: ${tail(restored).slice(0, 200)}`);
     // #1891: after a good backup, drop the core smoke's old unreferenced images so Storage stays under the free plan.
-    const pruned = spawnSync(process.execPath, ["scripts/prune-smoke-storage.mjs", "--apply"], { cwd: WT, encoding: "utf8", timeout: 5 * 60_000 });
-    log(`smoke storage prune: ${tail(pruned).slice(0, 200)}`);
-    for (const old of exportsToPrune([...names, `${name}.tar.gz.cms`])) rmSync(join(BACKUP_DIR, old), { recursive: true, force: true });
+    const pruned = runScript("scripts/prune-smoke-storage.mjs", ["--apply"], 5 * 60_000);
+    logLine(`smoke storage prune: ${tail(pruned).slice(0, 200)}`);
+    for (const old of exportsToPrune([...names, `${name}.tar.gz.cms`])) rmSync(join(backupDir, old), { recursive: true, force: true });
     return;
   }
   rmSync(dir, { recursive: true, force: true });
-  log(`nightly export ${name} FAILED: export ${exported.status}, restore ${restored?.status ?? "-"}, encrypted ${sealed}`);
-  try {
-    const title = "Nightly production export failed";
-    const open = JSON.parse(execFileSync("gh", ["issue", "list", "-R", REPO, "--state", "open", "--search", `in:title "${title}"`, "--json", "number"], { encoding: "utf8" }));
-    if (open.length) return;
-    execFileSync("gh", ["issue", "create", "-R", REPO, "-l", "core", "-l", "bug", "-l", "owner:devops", "-t", title, "-b",
-      `The supervisor's nightly export (#884) failed at ${name}. Export exit ${exported.status}; restore drill exit ${restored?.status ?? "not run"}; encrypted ${sealed}.\nLast lines: ${tail(restored ?? exported).slice(0, 300)}\n\nRerun by hand: \`node scripts/db-export.mjs export ~/.adbrain-backups/<now>\` then \`restore\` (docs/operations/backups.md#data-safety-and-recovery). Until an export succeeds, no destructive migration.`], { stdio: "ignore" });
-  } catch (error) {
-    log(`nightly export alert failed: ${String(error?.message ?? error).split("\n")[0].slice(0, 160)}`);
+  logLine(`nightly export ${name} FAILED: export ${exported.status}, restore ${restored?.status ?? "-"}, encrypted ${sealed}`);
+  if (sealed && !verified) {
+    for (const old of exportsToPrune(readdirSync(backupDir), BACKUP_KEEP, UNVERIFIED_EXPORT_NAME)) {
+      rmSync(join(backupDir, old), { force: true });
+    }
   }
+  notifyFailure({ name, exported, restored, sealed, tail, logLine });
 }
 
 /** #1856: once a UTC day, alert at 80% of a Supabase free-plan quota (scripts/plan-usage.mjs opens or updates one issue). */

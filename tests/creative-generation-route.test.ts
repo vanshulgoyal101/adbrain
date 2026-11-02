@@ -23,6 +23,8 @@ const mocks = vi.hoisted(() => ({
   lostIds: new Set<string>(),
   used: 0 as number | null,
   admitted: new Map<string, { business: string; hash: string }>(),
+  /** #1402: another device's batch still making its first ad. */
+  running: null as string | null,
   states: new Map<string, string>(),
   regenerateClaims: new Map<string, { attempt: string; state: "processing" | "unresolved" }>(),
   regenerateClaimError: false,
@@ -57,6 +59,7 @@ vi.mock("@/lib/supabase/admin", () => ({
       }
       if (mocks.used === null) return { data: null, error: { message: "Unavailable" } };
       const existing = mocks.admitted.get(args.p_generation_id);
+      if (!existing && mocks.running) return { data: { action: "running", generationId: mocks.running, status: "processing", expectedCount: 3 }, error: null };
       const action = existing ? existing.business !== args.p_business_id ? "missing" :
         existing.hash !== args.p_request_hash ? "conflict" : "recover" : "start";
       if (!existing) mocks.admitted.set(args.p_generation_id, { business: args.p_business_id, hash: args.p_request_hash ?? "" });
@@ -167,6 +170,7 @@ const request = (
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.admitted.clear();
+  mocks.running = null;
   mocks.states.clear();
   mocks.regenerateClaims.clear();
   mocks.regenerateClaimError = false;
@@ -367,6 +371,15 @@ describe("creative generation route", () => {
     expect((await POST(request(payload))).status).toBe(200);
     expect((await POST(request(payload))).status).toBe(202);
     expect(mocks.generateVariants).toHaveBeenCalledTimes(1);
+  });
+
+  it("#1402: a start while another device's batch makes its first ad returns that batch and pays for nothing", async () => {
+    const { POST } = await import("@/app/api/creatives/generate/route");
+    mocks.running = "22222222-2222-4222-8222-222222222222";
+    const response = await POST(request({ businessId: "business", brief: "Installation", format: "story", generationId: "11111111-1111-4111-8111-111111111111" }));
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ code: "CREATE_RUNNING", variantGroup: mocks.running, expectedCount: 3 });
+    expect(mocks.generateVariants).not.toHaveBeenCalled();
   });
 
   it("reads tenant-scoped advisory context only after admission, never on replay", async () => {

@@ -19,7 +19,7 @@ export interface CampaignPlan {
   special_ad_category: "none" | "housing" | "employment" | "financial_products_services" | "issues_elections_politics" | "unknown";
   locations: string[];
   excluded_locations: string[];
-  destination: Exclude<LeadDestination, "website">;
+  destination: LeadDestination;
   rationale: string;
 }
 
@@ -55,7 +55,7 @@ export interface PlannerAnswer {
 }
 
 export interface PlannerInput {
-  destination?: Exclude<LeadDestination, "call" | "website">;
+  destination?: Exclude<LeadDestination, "call">;
   brand: BrandContext;
   instructions?: string;
   preferences?: string;
@@ -196,6 +196,8 @@ export function buildPlannerMessages(input: PlannerInput): ChatMessage[] {
         "Never infer location-level performance from campaign totals. Ask when " +
         "it matters. (6) This editor supports instant forms and WhatsApp chats; preserve " +
         `the selected destination: ${input.destination ?? "instant_form"}. For WhatsApp, set lead_form_id=null; never ask for a form or invent a phone number. ` +
+        // #2599: only website plans get this sentence, so form and WhatsApp prompts stay byte-identical.
+        (input.destination === "website" ? "For website, set lead_form_id=null; the ad opens the brand's own website, so never ask for a form. " : "") +
         "(7) If no lead forms are provided, set " +
         "`lead_form_id` to null. Do not block planning on Meta login or invent a " +
         "form ID; the owner will connect Meta and choose a form before creation. " +

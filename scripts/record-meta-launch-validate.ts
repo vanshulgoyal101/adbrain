@@ -12,7 +12,10 @@
  * 9:16 so the placement creative is sent) into no-facebook-reels-validate.json, plus a control:
  * the default story rule, which still names facebook_reels, under the no-Reels ad set.
  *
- *   npx tsx --env-file=<.env.local> scripts/record-meta-launch-validate.ts [--no-facebook-reels]
+ * #2598: `--website` records a website-visits launch (traffic campaign, WEBSITE ad set, link ad with UTM tags)
+ * into launch-validate-website.json, plus validate_only creatives for the Shop now and Sign up buttons.
+ *
+ *   npx tsx --env-file=<.env.local> scripts/record-meta-launch-validate.ts [--no-facebook-reels | --website]
  */
 import "./lib/meta-write-gate";
 import { writeFileSync } from "node:fs";
@@ -43,6 +46,8 @@ const LAUNCH_INPUTS = {
 const PLACEHOLDER_PHONE = "+910000000000";
 
 const NO_FACEBOOK_REELS = process.argv.includes("--no-facebook-reels");
+const WEBSITE = process.argv.includes("--website");
+if (NO_FACEBOOK_REELS && WEBSITE) throw new Error("Record one tape at a time.");
 
 type Exchange = { destination: AdDestination; kind: string; form: Record<string, string>; status: number; body: unknown };
 const tape: Exchange[] = [];
@@ -51,6 +56,8 @@ const scrub = <T>(value: T): T => JSON.parse(scrubs.reduce((text, [real, label])
 const created: { kind: string; id: string }[] = [];
 /** #741: Meta's answer to the service-area read (region and country of each included place). */
 let geoMeta: { path: string; status: number; body: unknown } | null = null;
+/** #1932: each real creative's enhancement settings as Meta stored them, read before it is deleted. */
+const creativeReadbacks: { destination: AdDestination; status: number; body: unknown }[] = [];
 
 const realFetch = globalThis.fetch;
 let destination: AdDestination = "instant_form";
@@ -98,6 +105,11 @@ globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
   const real = await graphPost(path, form);
   if (real.status !== 200 || typeof real.body.id !== "string") return Response.json(real.body, { status: real.status });
   created.push({ kind, id: real.body.id });
+  if (kind === "adcreatives") {
+    const res = await realFetch(`${GRAPH}${real.body.id}?fields=degrees_of_freedom_spec&access_token=${encodeURIComponent(token)}`);
+    creativeReadbacks.push({ destination, status: res.status, body: await res.json() });
+    console.log(destination, "creative read-back", res.status);
+  }
   scrubs.push([real.body.id, { campaigns: "CAMPAIGN", adsets: "ADSET", adcreatives: "CREATIVE" }[kind]!]);
   return Response.json({ id: real.body.id });
 };
@@ -146,6 +158,20 @@ async function main() {
       const validated = await graphPost(`${account}/ads`, { ...form, execution_options: VALIDATE });
       tape.push({ destination, kind: "control-ads-story-rule-with-facebook-reels", form, status: validated.status, body: validated.body });
       console.log("control", validated.status, JSON.stringify(validated.body).slice(0, 400));
+    } else if (WEBSITE) {
+      destination = "website";
+      imageUploads = 0;
+      await meta.createLeadCampaign({ ...base, name: "AdBrain #2598 validate (PAUSED, deleted after)", destination });
+      // The other website buttons, validated on the same link ad (nothing is created).
+      const sent = tape.findLast((e) => e.destination === "website" && e.kind === "adcreatives")!.form;
+      for (const type of ["SHOP_NOW", "SIGN_UP"]) {
+        const story = JSON.parse(sent.object_story_spec) as { link_data: { call_to_action: { type: string } } };
+        story.link_data.call_to_action.type = type;
+        const form = { ...sent, object_story_spec: JSON.stringify(story) };
+        const validated = await graphPost(`${account}/adcreatives`, { ...form, execution_options: VALIDATE });
+        tape.push({ destination, kind: `adcreatives-cta-${type}`, form, status: validated.status, body: validated.body });
+        console.log("cta", type, validated.status, JSON.stringify(validated.body).slice(0, 400));
+      }
     } else {
       destination = "instant_form";
       imageUploads = 0;
@@ -164,8 +190,9 @@ async function main() {
     const instagram = exchange.form.object_story_spec ? (JSON.parse(exchange.form.object_story_spec) as { instagram_user_id?: string }).instagram_user_id : undefined;
     if (instagram) scrubs.push([instagram, "INSTAGRAM"]);
   }
-  const file = join(process.cwd(), `tests/core/fixtures/meta/${NO_FACEBOOK_REELS ? "no-facebook-reels" : "launch"}-validate.json`);
-  writeFileSync(file, `${JSON.stringify(scrub({ recordedAt: new Date().toISOString(), inputs: { ...LAUNCH_INPUTS, ...(NO_FACEBOOK_REELS ? { name: noReels.name } : {}), phone: PLACEHOLDER_PHONE }, geoMeta, tape }), null, 2)}\n`);
+  const file = join(process.cwd(), `tests/core/fixtures/meta/${NO_FACEBOOK_REELS ? "no-facebook-reels-validate" : WEBSITE ? "launch-validate-website" : "launch-validate"}.json`);
+  const name = NO_FACEBOOK_REELS ? { name: noReels.name } : WEBSITE ? { name: "AdBrain #2598 validate (PAUSED, deleted after)" } : {};
+  writeFileSync(file, `${JSON.stringify(scrub({ recordedAt: new Date().toISOString(), inputs: { ...LAUNCH_INPUTS, ...name, phone: PLACEHOLDER_PHONE }, geoMeta, creativeReadbacks, tape }), null, 2)}\n`);
   console.log(`launch-validate: ${tape.length} validated objects`);
 }
 
