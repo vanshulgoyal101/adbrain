@@ -7,7 +7,7 @@ Part of [Operations](README.md).
 **Supabase `pg_cron` runs the jobs on time** (#274,
 [migration](../../db/migrations/20261024_scheduler_pg_cron.sql)): `adbrain-enforce-spend`
 every 15 minutes, `adbrain-sync-leads` at :05/:20/:35/:50 and `adbrain-refresh-results`
-at :10/:25/:40/:55 (UTC; the route refreshes each active campaign on every run, at most every 14 minutes, so results are ≤ 15 minutes old; #992). Each job runs `private.call_cron_route(path)`, which sends the
+at :10/:25/:40/:55 (UTC; the route refreshes each active campaign on every run, at most every 14 minutes, so results are ≤ 15 minutes old; #992). `adbrain-dispatch-workflows` at :12/:27/:42/:57 calls `/api/cron/dispatch-workflows`, which dispatches an allowlisted workflow on `main` only when GitHub missed its slot (#2593; [migration](../../db/migrations/20261102_dispatch_workflows_pg_cron.sql)). Each job runs `private.call_cron_route(path)`, which sends the
 GET through `pg_net` with the secret from Supabase Vault (`adbrain_cron_secret`, equal
 to the production `CRON_SECRET`); without that Vault secret every job is a no-op.
 `adbrain-cron-history-cleanup` keeps 7 days of `cron.job_run_details`. Inspect with
@@ -94,6 +94,7 @@ dispatched (team supervisor, pushes) or run by pg_cron.
 | pg_cron `adbrain-enforce-spend` | `*/15 * * * *` | `/api/cron/enforce-spend` |
 | pg_cron `adbrain-sync-leads` | `5,20,35,50 * * * *` | `/api/cron/sync-leads` |
 | pg_cron `adbrain-refresh-results` | `10,25,40,55 * * * *` | `/api/cron/refresh-results` |
+| pg_cron `adbrain-dispatch-workflows` | `12,27,42,57 * * * *` | `/api/cron/dispatch-workflows`: dispatches overdue allowlisted workflows (#2593) |
 | pg_cron `adbrain-cron-history-cleanup` | `40 3 * * *` | Deletes `cron.job_run_details` older than 7 days |
 | Workflow `scheduled-jobs.yml` | `7,22,37,52 * * * *` | The backup scheduler and alerts above |
 | Workflow `create-smoke.yml` | `17 */4 * * *`, `47 8 * * *`, `37 3 * * *` | Picture smoke every 4 hours (#2405: saves Cloudflare's ~57 free pictures a day for customers), a daily `--prepare` smoke and a daily 3-ad `--create` smoke, all $0 (#2145, #2230). A dropped 03:37Z cron is made up by that day's next picture run (#2545) |
