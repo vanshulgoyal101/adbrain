@@ -288,6 +288,19 @@ describe("startup reads the newest comment page (#2576)", () => {
     const shrunk = fakeApi(thread(99));
     expect((await lastWordOn(shrunk.api, repo, { number: 1, comments: 182 }))?.url).toBe("c98");
   });
+  it("steps back past a newest page of bot posts to your future read, which stays snoozed (CEO repro)", async () => {
+    const comments = [...thread(100, "Dev 3: checked. Next read 2026-11-02T09:00Z."),
+      { body: "<!-- core-scoreboard -->\nscore", created_at: at(200), html_url: "bot" }];
+    const { api, calls } = fakeApi(comments);
+    expect((await lastWordOn(api, repo, { number: 7, comments: 101 }))?.url).toBe("c99");
+    expect(calls.length).toBe(2);
+    const scan = await scanBacklog([{ number: 7, comments: 101, labels: [{ name: "owner:dev3" }] }],
+      { api: fakeApi(comments).api, repo, m: dev3, now: Date.parse("2026-11-02T08:00Z") });
+    expect([scan.turns, [...scan.snoozed]]).toEqual([[], [7]]);
+    expect(actionableOwned([{ number: 7, labels: [{ name: "owner:dev3" }] }], scan)).toEqual([]);
+    const bots = Array.from({ length: 150 }, (_, k) => ({ body: "<!-- ai-review -->", created_at: at(k), html_url: `b${k}` }));
+    expect(await lastWordOn(fakeApi(bots).api, repo, { number: 8, comments: 150 })).toBeNull();
+  });
   it("reads every review page on a PR", async () => {
     const reviews = Array.from({ length: 130 }, (_, k) => ({ body: k === 129 ? "QA: approved. → Dev 3: merge it." : "QA: note.", submitted_at: at(500 + k), html_url: `r${k}` }));
     const { api } = fakeApi(thread(3), reviews);

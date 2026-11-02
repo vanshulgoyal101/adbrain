@@ -473,25 +473,28 @@ const BOT_MARKERS = ["<!-- ai-review -->", "<!-- core-scoreboard -->"];
 const PAGE = 100;
 /**
  * #2576: the latest word on an owned item. GitHub lists issue comments oldest first (sort/direction are
- * ignored), so read the page holding the newest comment (from the item's `comments` count), step back if
- * deletions emptied it, and keep reading while a page is full (a comment may land after the count was taken).
- * Every review page is read: reviews have no count on the issue list.
+ * ignored), so read the page holding the newest comment (from the item's `comments` count) and keep reading
+ * while a page is full (a comment may land after the count was taken). Then step back a page at a time while
+ * nothing read counts as a word: deletions emptied it, or it holds only bot posts. Every review page is read:
+ * reviews have no count on the issue list.
  * @param {(path: string) => Promise<any>} api
  * @param {string} repo
  * @param {{ number: number, comments?: number, pull_request?: unknown }} item
  */
 export async function lastWordOn(api, repo, item) {
-  const pages = async (path, first) => {
+  const read = async (path, page) => (await api(`${path}?per_page=${PAGE}&page=${page}`)) ?? [];
+  const pages = async (path, first, counts) => {
     let page = first;
-    let rows = await api(`${path}?per_page=${PAGE}&page=${page}`) ?? [];
-    while (!rows.length && page > 1) rows = await api(`${path}?per_page=${PAGE}&page=${--page}`) ?? [];
+    let rows = await read(path, page);
     let all = rows;
-    while (rows.length === PAGE) { rows = await api(`${path}?per_page=${PAGE}&page=${++page}`) ?? []; all = all.concat(rows); }
+    while (rows.length === PAGE) { rows = await read(path, ++page); all = all.concat(rows); }
+    for (let back = first - 1; back >= 1 && !all.some(counts); back--) all = (await read(path, back)).concat(all);
     return all;
   };
+  const human = (c) => !BOT_MARKERS.some((marker) => (c.body ?? "").startsWith(marker));
   // No count (not from the issue list) means unknown, not none: start at page 1.
-  const comments = item.comments === 0 ? [] : await pages(`repos/${repo}/issues/${item.number}/comments`, Math.max(1, Math.ceil((item.comments ?? 1) / PAGE)));
-  const reviews = item.pull_request ? await pages(`repos/${repo}/pulls/${item.number}/reviews`, 1) : [];
+  const comments = item.comments === 0 ? [] : await pages(`repos/${repo}/issues/${item.number}/comments`, Math.max(1, Math.ceil((item.comments ?? 1) / PAGE)), human);
+  const reviews = item.pull_request ? await pages(`repos/${repo}/pulls/${item.number}/reviews`, 1, () => true) : [];
   return latestWord(comments, reviews);
 }
 
