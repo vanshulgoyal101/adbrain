@@ -54,6 +54,9 @@ describe("core: Create concept validation on a recorded production concept", () 
       .toEqual(expect.arrayContaining(["guaranteed", "guaranteed band"]));
     // The same words pass for a business outside education and health.
     expect(adPolicyHits([{ id: "c1", headline: promise.headline, primaryText: promise.primary_text }], "solar energy")).toEqual([]);
+    // CPO (#1910): "crack it in 1st attempt" is the same promise without the word "guaranteed".
+    const firstAttempt = validateConcept({ ...promise, primary_text: `${recorded.concept.primary_text.split("\n")[0]}\nCrack IELTS in 1st attempt.` }, ielts);
+    expect(firstAttempt.success ? [] : conceptValidationRules(firstAttempt.issues).join(" ")).toMatch(/banned-claim/);
   });
 
   // #1617 (CPO, #1501): a generated picture can't be called the business's own work; the owner's photo can.
@@ -102,7 +105,8 @@ describe("core: Create concept validation on a recorded production concept", () 
     // 'Rs.' isn't a sentence end; with no other safe cut the text stays long for the repair.
     const rupees = "Modular kitchens from Rs. 2 lakh in Mohali with free 3D design and installation in 21 days for every home";
     expect(clipToThought(rupees, 100)).toBe(rupees);
-    expect(rules({ ...recorded.concept, description: rupees })).toEqual(["schema:description:too_big"]);
+    // #2444: the cut copy is still checked, so the free offer this dental brand never stated shows up too.
+    expect(rules({ ...recorded.concept, description: rupees })).toEqual(["schema:description:too_big", "unsupported-commercial-claim"]);
     const saved = validateConcept({ ...recorded.concept, description: `${recorded.concept.description} Ask for a quote on your first visit and more.` }, input);
     expect(saved.success && saved.concept.description).toBe(recorded.concept.description);
   });

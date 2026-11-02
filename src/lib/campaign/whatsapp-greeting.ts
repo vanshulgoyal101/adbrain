@@ -1,4 +1,4 @@
-import { isRomanHindi } from "@/lib/creative/interview";
+import { isRomanHindi } from "@/lib/creative/roman-hindi";
 
 export type WhatsAppGreeting = { autofill: string; greeting: string };
 
@@ -96,6 +96,27 @@ export function questionsWelcome(greeting: string): string {
 export function prefillWelcome(greeting: string): string {
   const found = nameIn(greeting, "questions");
   return found ? TEXT[found.language].greeting(found.name).slice(0, 300) : greeting;
+}
+
+/**
+ * #2422: the text with the business's name taken out of its slot when `text` is one of AdBrain's own welcomes or
+ * "know more about {name}" messages, so the policy check doesn't read "Cure Dental" as a claim. Every other word,
+ * the city included, stays to be checked; any other text comes back unchanged.
+ */
+export function withoutOwnName(text: string, name: string): string {
+  const NAME = "\u0000";
+  const CITY = "\u0001";
+  for (const words of Object.values(TEXT)) {
+    for (const template of [words.greeting(NAME), words.questions(NAME), words.business(NAME, null)]) {
+      if (text === template.replace(NAME, () => name)) return template.replace(NAME, " ");
+    }
+    const template = words.business(NAME, CITY);
+    const [before, after] = template.replace(NAME, () => name).split(CITY);
+    if (text.length > before.length + after.length && text.startsWith(before) && text.endsWith(after)) {
+      return template.replace(NAME, " ").replace(CITY, () => text.slice(before.length, text.length - after.length));
+    }
+  }
+  return text;
 }
 
 /** Which script the copy is in, for a stored language that doesn't say ("Hindi", "Punjabi"). */

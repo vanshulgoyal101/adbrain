@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
+import { ownerError } from "@/i18n/request-locale";
 import { apiError } from "@/lib/api";
 import { hasCurrentMediaConsent } from "@/lib/media/consent";
 import { mediaErrorResponse, mediaSession, ownedBusiness } from "@/lib/media/route-helpers";
@@ -34,7 +35,7 @@ export const POST = observeRoute("/api/media/sign", "POST", async (req: Request)
   try {
     // #784: the owner confirms their rights first (#1248's screen and record); nothing is signed until then.
     if (!await hasCurrentMediaConsent(session.client, business)) {
-      return NextResponse.json({ error: "Confirm you own these photos or have permission to use them.", code: "MEDIA_RIGHTS_REQUIRED" }, { status: 409 });
+      return NextResponse.json({ error: await ownerError("mediaRightsRequired"), code: "MEDIA_RIGHTS_REQUIRED" }, { status: 409 });
     }
     const result = await signUpload(createAdminClient() as unknown as SupabaseClient, {
       ...parsed.data, userId: session.user.id, rightsConfirmedAt: new Date().toISOString(),

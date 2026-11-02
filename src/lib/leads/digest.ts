@@ -21,16 +21,22 @@ export interface DigestOptions {
 
 /** Compact relative age, e.g. "just now", "3h ago", "2d ago". */
 export function relativeAge(iso: string | null, now: Date): string {
-  if (!iso) return "";
+  const age = ageParts(iso, now);
+  if (!age) return "";
+  return age.unit === "now" ? "just now" : `${age.n}${age.unit} ago`;
+}
+
+/** #1438: `relativeAge`'s unit and count, for callers that word it in the owner's language; null when unreadable. */
+export function ageParts(iso: string | null, now: Date): { unit: "now" | "m" | "h" | "d"; n: number } | null {
+  if (!iso) return null;
   const then = new Date(iso).getTime();
-  if (Number.isNaN(then)) return "";
+  if (Number.isNaN(then)) return null;
   const mins = Math.max(0, Math.round((now.getTime() - then) / 60000));
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
+  if (mins < 1) return { unit: "now", n: 0 };
+  if (mins < 60) return { unit: "m", n: mins };
   const hours = Math.round(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.round(hours / 24);
-  return `${days}d ago`;
+  if (hours < 24) return { unit: "h", n: hours };
+  return { unit: "d", n: Math.round(hours / 24) };
 }
 
 function withinWindow(iso: string | null, now: Date, windowDays: number): boolean {

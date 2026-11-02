@@ -68,6 +68,24 @@ describe("LLM provider fallthrough", () => {
     expect(attempts[1].rateLimit).toBeUndefined();
   });
 
+  // #2502: flash-lite's 400 to `thinkingBudget: 0` hit every Google key (×4) before Groq got the plan.
+  it.each([
+    ["the request's shape: one key, then the next provider", "Budget 0 is invalid. This model only works in thinking mode.", 1],
+    ["the key: try the other keys", "API key not valid. Please pass a valid API key.", 3],
+  ])("a Gemini 400 about %s", async (_, message, keysTried) => {
+    setEnv({ GOOGLE_AI_API_KEYS: "g1,g2,g3", GROQ_API_KEYS: "gk", LLM_PROVIDER_ORDER: "google,groq", GEMINI_MODEL: "gemini-3.5-flash-lite" });
+    const keys = new Set<string>();
+    global.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (!String(input).includes("generativelanguage")) return ok("from groq");
+      keys.add(new Headers(init?.headers).get("x-goog-api-key") ?? "");
+      return Response.json({ error: { code: 400, message, status: "INVALID_ARGUMENT" } }, { status: 400 });
+    }) as unknown as typeof fetch;
+    const { complete } = await import("@/lib/llm");
+    const res = await complete([{ role: "user", content: "hi" }], { thinking: "off" });
+    expect(res.provider).toBe("groq");
+    expect(keys.size).toBe(keysTried);
+  });
+
   it("aggregates errors and throws when every provider/key fails", async () => {
     mockFetchByHost({
       "api.groq.com": () => httpError(500),

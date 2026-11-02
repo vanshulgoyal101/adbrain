@@ -4,11 +4,15 @@
  * records `getAdResults` and the campaign total (`getCampaignInsights`) so the core test can check the sum.
  *
  *   npx tsx --env-file=<path to .env.local> scripts/record-meta-ad-results.ts [campaignId]
+ *   npx tsx --env-file=<path to .env.local> scripts/record-meta-ad-results.ts --state-only
+ *
+ * `--state-only` (#1903, #2290) re-records just the taped campaign's status/budget/end-time reads and swaps them
+ * into the tape, so the per-ad answers stay as recorded.
  *
  * Uses META_SYSTEM_USER_TOKEN / META_AD_ACCOUNT_ID / META_PAGE_ID. Tokens and the WhatsApp number are scrubbed.
  */
 import "./lib/meta-write-gate";
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { metaClientFromEnv } from "./lib/meta-env";
 
@@ -62,6 +66,21 @@ async function pick(): Promise<string> {
 async function main() {
   const meta = metaClientFromEnv();
   if (!meta) throw new Error("Meta env credentials are missing.");
+  if (process.argv[2] === "--state-only") {
+    const recorded = JSON.parse(readFileSync(OUT, "utf8")) as { campaignId: string; tape: Exchange[] };
+    tape = [];
+    const { metaState } = await meta.getCampaignInsights(recorded.campaignId);
+    const state = (exchange: Exchange) => exchange.path.includes("status%2Cdaily_budget");
+    if (tape.filter(state).length !== 2) throw new Error("Expected the campaign and ad-set state reads.");
+    const kept = recorded.tape.filter(exchange => !state(exchange));
+    // #1101: the account and Page are pinned fakes on every tape; this tape keeps its campaign and ad-set ids.
+    const pinned = JSON.parse(JSON.stringify(tape.filter(state))
+      .replaceAll(process.env.META_AD_ACCOUNT_ID!.replace(/^act_/, ""), "9000000000000001")
+      .replaceAll(process.env.META_PAGE_ID!, "900000000000002")) as Exchange[];
+    writeFileSync(OUT, `${JSON.stringify({ ...recorded, tape: [...kept, ...pinned], stateRecordedAt: new Date().toISOString() }, null, 2)}\n`);
+    console.log(JSON.stringify(metaState));
+    return;
+  }
   const campaignId = process.argv[2] ?? await pick();
   tape = [];
   const ads = await meta.getAdResults(campaignId);

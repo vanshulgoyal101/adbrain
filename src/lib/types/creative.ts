@@ -125,6 +125,10 @@ export type CreativeTables = {
 };
 
 export type CreativeFunctions = {
+  monthly_ai_cost_usd: {
+    Args: { p_business_id: string; p_since: string };
+    Returns: number;
+  };
   monthly_token_usage: {
     Args: { p_business_id: string; p_since: string };
     Returns: number;
@@ -145,7 +149,7 @@ export type CreativeFunctions = {
   };
   creative_regeneration_claim: {
     Args: { p_creative_id: string; p_business_id: string; p_user_id: string; p_attempt_id: string };
-    Returns: { action: "start" | "busy" | "missing"; status?: "processing" | "unresolved" };
+    Returns: { action: "start" | "busy" | "missing"; status?: "processing" | "unresolved"; tookOver?: boolean };
   };
   creative_regeneration_finish: {
     Args: { p_creative_id: string; p_business_id: string; p_user_id: string; p_attempt_id: string; p_unresolved: boolean };

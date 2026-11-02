@@ -22,7 +22,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 	New issues and PRs follow the [work](.github/ISSUE_TEMPLATE/work.md) and
 	[PR](.github/pull_request_template.md) templates: why, do, done-when, files, risk,
 	next owner.
-	**Every comment that finishes your part names who acts next** (`→ DevOps: release`,
+	**A hand-off comment names who acts next** (`→ DevOps: release`,
 	`→ Dev: yours`), and a verdict on a release PR always ends with `→ DevOps`. Move the
 	`owner:` label to whoever acts next. Start PR titles with the issue number (`#274 …`)
 	so the issue's owner hears about the PR. Start
@@ -33,18 +33,37 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 	`waiting-owner`; only the CEO asks the owner, in one batched list.
 	**The repo is public** (#1605): evidence that includes a customer's name, phone,
 	email or Meta id goes in `vbrain-private`; the issue gets only an opaque key.
+- **Trails, not talk** (owner, Oct 30; experiments measured weekly on #2360). Agents
+	coordinate through the shared world, not announcements: the code on `next`, CI,
+	production, labels and PR state *are* the status. Comment only to hand off to
+	another owner, record a decision or attach evidence; never to say what you are
+	about to do, are doing or just pushed. Don't ask others to adapt to your change:
+	make it, and if it breaks work already merged, fixing that is part of your
+	change. **One owner end to end:** the author takes an issue from code to production
+	smoke and hands off only at a hard gate (money, Meta writes, migrations, secrets,
+	production settings, `core-approval`). **Fix forward:** a red `next` or a non-core
+	break in production gets a fix PR on top from whoever sees it first, with no author
+	ping; a core break in production still rolls back first. **Try to break it
+	yourself:** before asking for `core-approval`, run a subagent that did not write
+	the change to attack it, and paste its one-line result in the PR.
 - **GitHub queue first; direct chat messages rarely** (owner, Oct 26). Work and
 	handoffs go on GitHub: the `owner:<role>` label plus a `→ <Role>:` comment on the
 	issue or PR. The receiver's `wait-for-work` wakes on that. Messages sent straight
 	into another chat get folded into its running turn or sit unread, so they are not
 	a work channel.
-	Send a direct chat message (`send_message`, links in pinned #819) **only** to:
-	1. wake a chat that is idle (turn complete, no waiter running) when it has queued
-		work: one line pointing at the issue, `queue` delivery;
-	2. stop a chat doing something harmful or obsolete right now (P0), with `steer`.
+	**A running chat reads no chat messages** (Nov 1): a `steer` to a worker mid-turn
+	stayed "processing" for hours (DevOps had three), and a `queue` message lands only
+	when the turn ends. So reach a busy worker through GitHub, which its waiter and
+	`gh` calls read: the `owner:` label plus `→ <Role>:` on the issue, or a
+	team-wide rule in the Everyone row of #580 (every waiter run prints it).
+	Send a direct chat message (`send_message`, `queue` delivery) **only** to start
+	a chat whose turn has ended (status idle): one line pointing at the issue. To stop
+	harm right now (P0), kill the harmful process by PID and post the rule on its issue.
+	A worker sitting in its waiter checks GitHub every minute; to make it look now,
+	run `node scripts/wait-for-work.mjs --wake <role>` after posting (#2473).
 	Never stack messages; replace or cancel a pending one. **Never end a turn
 	silently:** before stopping, run your waiter or post `→ <Role>` for what's next.
-- Read [docs/ORCHESTRATION.md](docs/ORCHESTRATION.md) before editing or using
+- Read [docs/team/orchestration.md](docs/team/orchestration.md) before editing or using
 	shared resources: read Current Dispatch, then your GitHub label queue
 	(`gh issue list -l core -l owner:<you>`), not historical receipts. When an issue
 	is done, hand it off by label and start the next one without waiting.
@@ -53,7 +72,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 	or config change) auto-merge on green CI and the author smoke-tests production.
 	Auto-merge is only for low-risk PRs; the required `core-approval` check holds any
 	PR touching Meta/launch/money paths or migrations until QA, the Reviewer or the
-	CTO approves its head (#926). To hold a PR, `gh pr merge <n> --disable-auto`: a
+	CTO approves its head (#926); wording-only changes and docs pass on green CI
+	(money wording needs one approval). To hold a PR, `gh pr merge <n> --disable-auto`: a
 	hold comment can't stop auto-merge.
 	DevOps owns migrations, money/tenant releases, config and rollback. Talk directly
 	to another owner when needed; do not route routine
@@ -74,7 +94,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 	or a PR whose title names it, or someone addresses you (`→ QA:`, `→ CEO`). Do the
 	work, then wait again. Before waiting, finish your row on the [Team board](https://github.com/vanshulgoyal101/adbrain/issues/580) in order.
 	A scheduled check (live-run reads) ends your comment with `Next read 2026-10-25T16:00Z`:
-	the item stays quiet until then, and the waiter wakes you when it's due.
+	the item stays quiet until then, and the waiter wakes you when it's due, even if the comment
+	also hands off or the item is `blocked` (#2572). `waiting-owner`, `parked` and `later` still hold it.
 	**Never idle with briefed work around (pull, don't wait):** when nothing you own is
 	actionable, the waiter offers the oldest `ready` issue in your lane (`lane:dev`,
 	`lane:qa`, `lane:devops`, `lane:review`; core first). Claim it with the printed command
@@ -88,8 +109,16 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 	members). Between waits, pull the next item from your board row or an unowned `core`
 	issue in your area. **Never run the waiter while you own an item you can act on**
 	(owner, Oct 28): having posted last on it doesn't make it done. Close it, or work it.
-	The CTO keeps every worker at ≥ 3 actionable items and the ready pool at ≥ 10 across
-	lanes; the CEO checks hourly which workers sit in the waiter and wakes them. Stop only if the CEO says so or the Mac is shutting down. Never end a turn with anything running in
+	The waiter enforces this (#2122): if you own any item not labelled `waiting-owner`,
+	`blocked`, `parked`, `decision`, `later` or `standing`, it prints the top 3 and exits 6
+	instead of waiting.
+	**Outcome first, not activity (owner, Oct 30: 1,071 contributions on Oct 29 moved
+	the core very little).** The CTO keeps every worker on the next item that passes the
+	#580 filter (core loop works in production, an outside pilot goes live, or cost
+	per enquiry drops), not on a ticket count; when none exists, the worker runs the
+	waiter instead of opening docs, wording, translation, refactor or process tickets.
+	One coherent customer fix is one PR with one writer, not split across files. The
+	CEO checks hourly that workers are on that outcome and wakes them. Stop only if the CEO says so or the Mac is shutting down. Never end a turn with anything running in
 	the background (waiters, dev servers, watchers, test databases), and close
 	finished terminals.
 - When you close an issue, add one `Lesson:` line if you learned something reusable
@@ -100,15 +129,21 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 	under `~/Development/copilot/adbrain-wt/`. `main` is the only long-lived branch: the
 	CEO and CTO ship docs edits there as small docs PRs with auto-merge. Never leave a
 	merge, staged files or local edits behind.
-- **Delete as you go** (owner, Oct 23: lean systems). When work is done, delete its
-	branch, worktree, one-off scripts and temporary files. Don't commit dated
-	reports, audits or handoffs; evidence goes in the issue or PR. Docs hold current
-	truth only, and git keeps the history.
+- **Delete as you go** (owner, Oct 23: lean systems). When work is done and the
+	preservation checks below pass, delete its branch, worktree, one-off scripts
+	and temporary files. Don't commit dated reports, audits or handoffs; evidence
+	goes in the issue or PR. Docs hold current truth only, and git keeps the history.
 - **Never lose built work** (owner, Oct 28). Paused work gets the `parked` label
 	and a row with its resume trigger in #1258; keep its PRs open as drafts and its
-	branches. Before deleting any branch or worktree, `git cherry origin/main <branch>`
-	shows no `+` lines (or the work is in an open PR or #1258), and uncommitted edits
-	are pushed to a branch first. Removed product features go in #1173.
+	branches. Preserve all backup branches, dirty worktrees and `deploy-train*` refs.
+	Before deleting any other branch or worktree, confirm it is clearly finished, has
+	no active writer and has no unpreserved tracked, untracked or ignored files.
+	`git cherry origin/main <branch>` must show no `+` lines, but that is not proof:
+	it omits merge commits. List `git log --merges --format='%H %P' origin/main..<branch>`
+	and inspect each divergent merge's parent histories and tree, including conflict
+	resolutions or stash payloads; prove the work is present on `main`. If provenance,
+	ownership or preservation is uncertain, keep it. An open PR or #1258 does not
+	replace these checks. Removed product features go in #1173.
 - **Two env files only** (owner, Oct 29: neat repo). Secrets go in `.env.local`, every
 	test login in `.env.smoke` (in the owner's checkout), and the committed template is
 	`.env.example`. Never create another `.env.*` file or leave files in the owner's
@@ -183,7 +218,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 | CI and workflows | ci, workflow, actions, scheduler, cron | github-actions-hardening, ci-merge-throughput |
 | QA walks and live checks | walk, verify, live check, qa, screenshot | playwright-cli, rendered-ui-evidence |
 | Coordination | queue, handoff, worker, orchestration, roles, skills | multi-worker-delivery, dispatching-parallel-agents |
-- They are advice: this file and `docs/ORCHESTRATION.md` win on any conflict.
+- They are advice: this file and `docs/team/orchestration.md` win on any conflict.
 	"Your human partner" means the issue's owner (the CTO for technical calls, the
 	CEO for priority and money); decide and note it on the issue, never ask the
 	owner directly. Plans and review scratch stay out of git (`.superpowers/` is
@@ -256,10 +291,13 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 - **Deploy train (#461; Vercel Hobby allows 100 deploys a day).** Branch from current
 	`origin/next` (`bash scripts/wt.sh <issue>` does it), open a PR to **`next`**, enable
-	auto-merge. A PR opened against `main` is retargeted to `next` automatically.
+	auto-merge with `gh pr merge <n> --auto --squash` (one green commit per PR; only the train's
+	sync and promotion PRs use `--merge`, #2479). A PR opened against `main` is retargeted to `next` automatically.
 	`main` is production; the deploy train promotes a green `next` to `main` at most
-	every 30 minutes, so your change is live within about 30 minutes of merging. Smoke it
-	then. Hotfixes and migration/money releases go to `main` (DevOps or CTO; label
+	every 15 minutes (#2609), so your change is live within about 20 minutes of merging. **Don't
+	wait for the train** (owner, Nov 1): check the changed flow before merging (locally or
+	on the PR preview), start your next item, and smoke production on your next pass once
+	it's live. Never sleep or poll for a deploy; it blocks your chat. Hotfixes and migration/money releases go to `main` (DevOps or CTO; label
 	`hotfix`). Required checks are build, test, core and secrets.
 - Migrations, production settings and rollbacks go through DevOps. Never
 	force-push or run `npm run db:push` against production.

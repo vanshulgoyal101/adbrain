@@ -30,7 +30,7 @@ describe("core: Home's Meta review line (#1469)", () => {
     expect(homeAdReview([campaign], { c1: statuses }, {})).toEqual({ kind: "rejected", campaignId: "c1" });
     const { HomeRejectedAds } = await import("@/components/home-rejected-ads");
     render(await HomeRejectedAds({ campaign, spend: 0 }));
-    expect(screen.getByRole("region", { name: "Ads Meta didn't approve" })).toHaveTextContent(/^Meta didn't approve your ad\. .*Nothing was spent\./);
+    expect(screen.getByRole("group", { name: "Ads Meta didn't approve" })).toHaveTextContent(/^Meta didn't approve your ad\. .*Nothing was spent\./);
   });
 
   it("the same ads still in review make Home say Meta is checking", () => {

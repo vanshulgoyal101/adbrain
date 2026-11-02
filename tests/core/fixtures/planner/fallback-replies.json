@@ -3,16 +3,24 @@
   "haikuRecordedAt": "2026-10-26T08:08:05.454Z",
   "latencyMs": {
     "geminiThinkingOn": [],
-    "geminiThinkingOff": [],
+    "geminiThinkingOff": [
+      3573,
+      2427,
+      2695
+    ],
     "openrouterHaiku": [
       4828,
       3142,
       2800
     ]
   },
-  "geminiThinkingOff": {},
+  "geminiThinkingOff": {
+    "model": "gemini-3.5-flash-lite",
+    "text": "{\n  \"ready\": true,\n  \"plan\": {\n    \"name\": \"Cedar Ridge leads\",\n    \"daily_budget_rupees\": 500,\n    \"lead_form_id\": null,\n    \"creative_ids\": [\n      \"e3d165a9-bbf8-47f7-8c61-e69dbb8ee3d1\"\n    ],\n    \"age_min\": 25,\n    \"age_max\": 60,\n    \"city_scope\": \"city_only\",\n    \"interests\": [\n      \"Physical fitness\",\n      \"Health & wellness\",\n      \"Running\"\n    ],\n    \"special_ad_category\": \"none\",\n    \"locations\": [\n      \"Austin, Texas\"\n    ],\n    \"excluded_locations\": [],\n    \"destination\": \"instant_form\",\n    \"rationale\": \"Targeting adults aged 25 to 60 in Austin, Texas, who follow health, wellness, and fitness interests to align with chiropractic care and the $49 new-patient exam offer. The campaign uses city-only scope to focus strictly on the core service area.\"\n  }\n}"
+  },
   "openrouterHaiku": {
     "model": "anthropic/claude-haiku-5.5",
     "text": "{\"ready\": true, \"plan\": {\"name\": \"Cedar Ridge leads\", \"daily_budget_rupees\": 500, \"lead_form_id\": \"form-1\", \"creative_ids\": [\"e3d165a9-bbf8-47f7-8c61-e69dbb8ee3d1\"], \"age_min\": 25, \"age_max\": 65, \"city_scope\": \"city_only\", \"radius_km\": 0, \"interests\": [\"Chiropractor\", \"Physical therapy\", \"Back pain\", \"Wellness\", \"Yoga\"], \"special_ad_category\": \"none\", \"locations\": [\"Austin\", \"Round Rock\", \"Cedar Park\"], \"excluded_locations\": [], \"destination\": \"instant_form\", \"rationale\": \"Cedar Ridge Chiropractic serves Austin, Round Rock and Cedar Park, so the audience is set to those three city areas using city_only scope, as the owner's manual location choice is preserved and no added radius is needed. The advertised offer is a $49 new-patient exam, a general wellness and health service rather than a regulated category, so no special ad category applies. Adults aged 25 to 65 are a testable working hypothesis for people seeking a new chiropractic exam, since the age range is an AI-selected setting that covers typical working-age adults likely to book routine care. Interests such as chiropractic, physical therapy, back pain, wellness and yoga are general commercial interests tied to the chiropractic service and the wellness-oriented Diwali renewal creative. This is a hypothesis to test, not a guaranteed best audience, and results should be reviewed after launch.\"}}"
-  }
+  },
+  "geminiFlashLiteRecordedAt": "2026-11-01T13:08:53.655Z"
 }

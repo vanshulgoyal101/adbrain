@@ -205,4 +205,34 @@ describe("core: Create makes Hindi and Hinglish ads (#290, #300)", () => {
     expect(saved.map((ad) => ad.headline)).toContain("31 Dec se pehle factory solar lagwao");
     expect(saved.some((ad) => /SOLARIDE ke IIT Bombay aur PEC/.test(ad.primaryText))).toBe(true);
   });
+
+  // #2166: the recorded Hindi "दिवाली की 10% छूट" reply with every digit written in Devanagari ("१०% छूट") is the
+  // same claim: cited by the Brand's Diwali offer, refused for a Brand without it, like the English-digit reply.
+  it("checks the recorded Hindi offer reply written in Devanagari digits like the English-digit one", async () => {
+    const { validateConcept, conceptValidationRules } = await import("@/lib/creative/concept");
+    const { parseJSON } = await import("@/lib/llm");
+    const { languagePromptName } = await import("@/lib/languages");
+    const { AD_ANGLES } = await import("@/lib/templates/ads");
+    const final = turns("hi", "vague").at(-1)!.result as { brief: string; sourceFacts: string[] };
+    const [reply] = replies("hi", "vague", "concept").filter((item) => item.angle === "Special offer / incentive" && item.attempt === 1);
+    const value = parseJSON<Record<string, unknown> & { primary_text: string; sourceQuotes: string[] }>(reply.content);
+    const devanagari = (node: unknown): unknown => typeof node === "string" ? node.replace(/\d/g, (digit) => String.fromCharCode(0x0966 + Number(digit)))
+      : Array.isArray(node) ? node.map(devanagari)
+        : node && typeof node === "object" ? Object.fromEntries(Object.entries(node).map(([key, item]) => [key, devanagari(item)])) : node;
+    const indian = { ...(devanagari(value) as typeof value), sourceQuotes: value.sourceQuotes };
+    expect(value.primary_text).toContain("10% छूट");
+    expect(indian.primary_text).toContain("१०% छूट");
+    expect(JSON.stringify(indian).replace(JSON.stringify(value.sourceQuotes), "")).not.toMatch(/\d/);
+    const check = (concept: unknown, brandUnderTest: BrandContext) => {
+      const result = validateConcept(concept, { brand: brandUnderTest, brief: final.brief, angle: AD_ANGLES.find((item) => item.name === reply.angle)!,
+        language: languagePromptName("hi"), format: "portrait", sourceFacts: final.sourceFacts });
+      return result.success ? [] : conceptValidationRules(result.issues);
+    };
+    const withoutDiwali = { ...brand, offers: (brand.offers ?? []).filter((offer) => !offer.includes("10%")) };
+    const withoutQuote = (concept: typeof value) => ({ ...concept, sourceQuotes: concept.sourceQuotes.filter((quote) => !quote.includes("10%")) });
+    expect(check(value, brand)).toEqual([]);
+    expect(check(indian, brand)).toEqual([]);
+    expect(check(withoutQuote(value), withoutDiwali)).toContain("unsupported-commercial-claim");
+    expect(check(withoutQuote(indian), withoutDiwali)).toContain("unsupported-commercial-claim");
+  });
 });

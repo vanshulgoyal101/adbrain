@@ -1,4 +1,4 @@
-import { adPolicyHits } from "@/lib/campaign/ad-policy";
+import { adPolicyHits, bannedTermKind } from "@/lib/campaign/ad-policy";
 import type { GeoTargeting } from "@/lib/meta/client";
 import { describeServiceArea } from "@/lib/meta/service-area";
 import { effectiveDailyBudget } from "@/lib/campaign/spend";
@@ -9,6 +9,10 @@ import { askMismatchWarning, QUOTED_ASK_WITH_QUESTIONS, reviewWarnings, WHATSAPP
 import { quotedAsk, sameWords } from "@/lib/campaign/whatsapp-greeting";
 import { batchProofWarning } from "@/lib/creative/proof-line";
 import type { ResolvedWhatsAppMessage } from "@/lib/campaign/whatsapp-template";
+import type { LeadDestination } from "@/lib/types/campaign";
+
+/** #1799: Meta's minimum daily budget per impression-billed ad set in INR (₹95.46, Oct 29), rounded up. */
+export const META_MIN_DAILY_BUDGET_RUPEES = 96;
 
 export interface PreflightCreative {
   id: string;
@@ -23,6 +27,8 @@ export interface PreflightCreative {
   storyReady?: boolean;
   /** Its picture asks for a WhatsApp message (#1147's contact bar), so a form campaign contradicts it (#1177). */
   asksWhatsApp?: boolean;
+  /** The phone its picture prints, from the saved design; null when it prints none (#2274). */
+  printedPhone?: string | null;
 }
 
 export interface PreflightForm {
@@ -70,6 +76,8 @@ export interface PreflightInput {
   hash: (payload: string) => string;
   /** The business's own cost per chat or lead for this kind of campaign (#419 2b); unknown when absent. */
   costPerResultRupees?: number | null;
+  /** #2274: what Prepare changed on the pictures (the chat number), shown first among the notes. */
+  pictureNotice?: string | null;
 }
 
 export type ReviewFreshnessInput = {
@@ -98,10 +106,11 @@ export interface CanonicalReviewPayload {
   creativeIds: string[];
   creatives: ReturnType<typeof buildCreativeReviewPayload>;
   leadFormId: string | null;
-  destination: "instant_form" | "whatsapp";
+  destination: Exclude<LeadDestination, "call" | "website">;
   whatsappNumber: string | null;
   dailyBudgetRupees: number;
   abTest: boolean;
+  excludeFacebookReels?: true;
   targeting: DraftInput["targeting"];
   resolvedAreaLabel: string | null;
   audienceInterests?: ReviewDTO["audienceInterests"];
@@ -119,6 +128,41 @@ function reviewedMessage({ source, opening, language }: ResolvedWhatsAppMessage)
     ...(opening.callButton ? { callButton: true } : {}),
     ...(opening.iceBreakers?.length ? { iceBreakers: opening.iceBreakers } : {}),
   };
+}
+
+/** #2452: whether the message launch rebuilt from fresh reads is the one this review checked; launch refuses otherwise. */
+export function isReviewedWhatsAppMessage(message: ResolvedWhatsAppMessage, review: Pick<ReviewDTO, "whatsappMessage">): boolean {
+  return Boolean(review.whatsappMessage)
+    && JSON.stringify(canonicalize(reviewedMessage(message))) === JSON.stringify(canonicalize(review.whatsappMessage));
+}
+
+function adName(creative: PreflightCreative): string {
+  const headline = (creative.headline ?? "").trim();
+  if (!headline) return "you chose";
+  // Whole characters, so a Hindi matra or an emoji is never split.
+  const graphemes = Array.from(new Intl.Segmenter("en", { granularity: "grapheme" }).segment(headline), (part) => part.segment);
+  if (graphemes.length <= 40) return `"${headline}"`;
+  const cut = graphemes.slice(0, 40).join("");
+  return `"${(cut.lastIndexOf(" ") > 20 ? cut.slice(0, cut.lastIndexOf(" ")) : cut).trimEnd()}…"`;
+}
+
+/** #681: which chosen ad is wrong and what to do about it, not one sentence for every fault. */
+function creativesBlockerMessage(draft: PreflightInput["draft"], creatives: PreflightCreative[]): string | null {
+  if (draft.creativeIds.length === 0) return "Choose at least one ad to send to Meta.";
+  const unique = new Set(draft.creativeIds).size === draft.creativeIds.length;
+  const found = creatives.filter((creative) => creative.businessId === draft.businessId && draft.creativeIds.includes(creative.id));
+  if (!unique || new Set(creatives.map((creative) => creative.id)).size !== creatives.length || found.length !== creatives.length || found.length !== draft.creativeIds.length) {
+    return "One of the ads you chose isn't available any more. Choose your ads again.";
+  }
+  const problems = found.flatMap((creative) => {
+    if (!creative.headline) return ["An ad you chose has no headline. Take it out of this campaign and choose another ad."];
+    if (!creative.approved) return [`The ad ${adName(creative)} isn't approved yet. Approve it on the Review page, or take it out of this campaign.`];
+    if (!creative.imageUrl) return [`The ad ${adName(creative)} has no picture yet. Take it out of this campaign and choose another ad.`];
+    return [];
+  });
+  if (!problems.length) return null;
+  const more = problems.length - 1;
+  return more ? `${problems[0]} ${more} more ${more === 1 ? "ad needs" : "ads need"} fixing too.` : problems[0];
 }
 
 /** #740: name what Meta didn't recognise, so the owner knows which line to fix. */
@@ -171,12 +215,14 @@ export function buildCanonicalReviewPayload(
     // #493: only when it changes what's sent, so plans reviewed before this field keep their hash.
     ...(input.draft.destination === "whatsapp" && input.draft.whatsappLanguage && input.draft.whatsappLanguage !== "ad"
       ? { whatsappLanguage: input.draft.whatsappLanguage } : {}),
-    // #840: an edited or saved message is fixed text, so a change to it needs a new review. A
-    // suggestion is derived from what's already here, so plans without one keep their hash.
-    ...(input.draft.destination === "whatsapp" && input.whatsappMessage && input.whatsappMessage.source !== "suggested"
+    // #840/#2452: the exact message launch will send, suggested ones too: a suggestion is rebuilt from the Brand's name,
+    // offers and areas at launch, so a Brand edit after Review changes the plan and launch refuses it.
+    ...(input.draft.destination === "whatsapp" && input.whatsappMessage
       ? { whatsappOpening: input.whatsappMessage.opening } : {}),
     dailyBudgetRupees: input.draft.dailyBudgetRupees,
     abTest: input.draft.abTest,
+    // #2273: only when on, so plans reviewed before this field keep their hash.
+    ...(input.draft.excludeFacebookReels ? { excludeFacebookReels: true as const } : {}),
     targeting: input.draft.targeting,
     resolvedAreaLabel: input.geo.resolvedAreaLabel,
     ...(input.geo.location ? { resolvedLocation: input.geo.location } : {}),
@@ -210,25 +256,12 @@ export function runPreflight(input: PreflightInput): ReviewDTO {
     blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_META_ACCESS", "Meta hasn't confirmed AdBrain can create campaigns in this ad account. Connect Facebook again and allow every permission it asks for."));
   }
 
-  if (
-    draft.creativeIds.length === 0 ||
-    new Set(draft.creativeIds).size !== draft.creativeIds.length ||
-    new Set(input.creatives.map((creative) => creative.id)).size !== input.creatives.length ||
-    input.creatives.length !== draft.creativeIds.length ||
-    input.creatives.some(
-      (creative) =>
-        creative.businessId !== draft.businessId ||
-        !creative.approved ||
-        !creative.imageUrl ||
-        !creative.headline ||
-        !draft.creativeIds.includes(creative.id),
-    )
-  ) {
-    blockers.push(blocker("FORBIDDEN", "REVIEW_CREATIVES", "Choose only approved ads from this business that have an image and a headline."));
-  }
+  const creativesProblem = creativesBlockerMessage(draft, input.creatives);
+  if (creativesProblem) blockers.push(blocker("FORBIDDEN", "REVIEW_CREATIVES", creativesProblem));
   if (draft.destination === "whatsapp") {
-    if (!input.whatsappNumber || !/^\+[1-9]\d{6,14}$/.test(input.whatsappNumber)) {
-      blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_WHATSAPP_NOT_LINKED", "Connect a WhatsApp Business number to the selected Facebook Page and verify access before reviewing."));
+    // #681: without Meta access the number can't be read; the connection blocker above is the one fix.
+    if (input.connection?.canCreatePaused && (!input.whatsappNumber || !/^\+[1-9]\d{6,14}$/.test(input.whatsappNumber))) {
+      blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_WHATSAPP_NOT_LINKED", "Your Facebook Page has no WhatsApp number linked yet, so the ad's button has nowhere to open a chat. Link the number in Settings, then review again."));
     }
     if (input.whatsappMessageProblem) {
       blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_WHATSAPP_MESSAGE", `Your WhatsApp message: ${input.whatsappMessageProblem}`));
@@ -241,10 +274,14 @@ export function runPreflight(input: PreflightInput): ReviewDTO {
   }
   const policyHit = adPolicyHits(input.creatives, input.vertical)[0];
   if (policyHit) {
-    blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_AD_POLICY", `"${policyHit.term}" in the ad "${policyHit.headline ?? "without a headline"}" is a health promise Meta rejects. Edit the ad to describe the service instead.`));
+    blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_AD_POLICY", `"${policyHit.term}" in the ad "${policyHit.headline ?? "without a headline"}" is ${bannedTermKind(policyHit.term, input.vertical)} Meta rejects. Edit the ad to describe the service instead.`));
   }
   if (draft.dailyBudgetRupees <= 0) {
     blockers.push(blocker("INVALID_INPUT", "REVIEW_BUDGET", "Set a daily budget above ₹0."));
+  } else if (draft.dailyBudgetRupees < META_MIN_DAILY_BUDGET_RUPEES) {
+    // #1799: Meta refuses an ad set under its INR minimum (₹95.46 a day for impression-billed WhatsApp and form
+    // ad sets, read from the account on Oct 29). Each ad set gets the full daily budget, so this is the floor.
+    blockers.push(blocker("INVALID_INPUT", "REVIEW_BUDGET", `Meta needs at least ₹${META_MIN_DAILY_BUDGET_RUPEES} a day. Set a daily budget of ₹${META_MIN_DAILY_BUDGET_RUPEES} or more.`));
   }
   const age = draft.targeting.age;
   if (age?.mode === "ai" || age?.min === undefined || age.max === undefined || age.min > age.max) {
@@ -284,6 +321,7 @@ export function runPreflight(input: PreflightInput): ReviewDTO {
     storyReady: input.creatives.length > 0 && input.creatives.every((creative) => creative.storyReady === true),
     perAdSetDailyBudgetRupees, costPerResultRupees: input.costPerResultRupees,
   });
+  if (input.pictureNotice) planWarnings.unshift(input.pictureNotice);
   // #418 rule 7: an ad that tells customers what to send should match what WhatsApp pre-types. Never a blocker.
   // #1198: with Quick questions there is no ready message, so a quoted ask can't match anything.
   const opening = draft.destination === "whatsapp" ? input.whatsappMessage?.opening : undefined;

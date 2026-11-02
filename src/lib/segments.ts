@@ -21,6 +21,8 @@ export type Segment = {
   /** #1944 (CPO #1937): measured results to show, or an invitation to be among the first when we have none. */
   proof?: { heading: string; body: string; smallPrint: string; hinglish: string };
   firstThree?: string;
+  /** #1632: real sample ads (4:5) from /ideas, shown marked "Sample". Without them, step 2 lists the angles in words. */
+  tiles?: { src: string; alt: string; caption: string }[];
 };
 
 export const SEGMENTS: Segment[] = [
@@ -34,6 +36,11 @@ export const SEGMENTS: Segment[] = [
     welcome: "Thanks for messaging us! Tell us your area and your monthly bill, and we'll book your free site survey.",
     ask: "I'd like a free site survey",
     angles: ["Your free site survey, up front", "Lower power bills, in your customers' words", "Subsidy help, if you're a registered PM Surya Ghar vendor"],
+    tiles: [
+      { src: "/ideas/rooftop-solar-1.webp", alt: "Sample ad: Free solar site survey in Jaipur", caption: "A free site survey, up front" },
+      { src: "/ideas/rooftop-solar-2.webp", alt: "Sample ad: Tired of rising power bills?", caption: "Lower power bills" },
+      { src: "/ideas/rooftop-solar-3.webp", alt: "Sample ad: Survey first, quote later", caption: "Survey first, quote later" },
+    ],
     whatsappText: "Hi, I saw AdBrain for solar installers. I'd like to try the free first campaign.",
     // Exactly as measured (#157 ₹820 → 5 chats, #499 ₹374 → 1); no per-chat headline (n = 6). Shown once the CEO OKs
     // naming Solaride publicly (#1937): SHOW_SOLARIDE_PROOF in the page.

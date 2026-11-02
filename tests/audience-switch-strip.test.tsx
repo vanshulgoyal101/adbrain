@@ -35,6 +35,17 @@ describe("AudienceSwitchStrip", () => {
     expect(cancel.className).toMatch(/\bh-11\b/);
   });
 
+  // #1274: in a half-width card at 1440 the viewport `sm:` row squeezed the text to one word per line.
+  it("goes side by side only when the strip itself is wide, not the screen", () => {
+    render(<AudienceSwitchStrip campaignId="c-1" operationId="op-1" running={false} onDone={vi.fn()} />);
+    const strip = screen.getByRole("group", { name: "New audience ready" });
+    expect(strip.className).toMatch(/(^|\s)@container(\s|$)/);
+    const row = strip.firstElementChild as HTMLElement;
+    expect(row.className).toMatch(/\bflex-col\b/);
+    expect(row.className).toMatch(/@2xl:flex-row/);
+    expect(strip.outerHTML).not.toMatch(/\bsm:flex-row\b/);
+  });
+
   it("cancels: only the copy goes and the current audience keeps running", async () => {
     const onDone = vi.fn();
     render(<AudienceSwitchStrip campaignId="c-1" operationId="op-1" running onDone={onDone} />);

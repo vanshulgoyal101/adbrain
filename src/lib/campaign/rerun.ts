@@ -1,5 +1,6 @@
 import { adResultViews, type StoredAdResult } from "./ad-results-store";
 import type { DraftInput, TargetingInputDTO } from "./connect-contracts";
+import type { LeadDestination } from "@/lib/types/campaign";
 
 /**
  * #1050 "Run this again": a campaign whose Best ad is known is copied into a new paused campaign. The
@@ -19,7 +20,7 @@ export type RerunPrefill = {
   goal: string;
   creativeIds: string[];
   dailyBudgetRupees: number;
-  destination?: "instant_form" | "whatsapp";
+  destination?: Exclude<LeadDestination, "call" | "website">;
   leadFormId: string | null;
   whatsappNumber?: string;
   whatsappLanguage?: DraftInput["whatsappLanguage"];

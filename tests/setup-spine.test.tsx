@@ -21,6 +21,12 @@ describe("<SetupSpine> (#1268)", () => {
     expect(screen.getByRole("heading", { name: "Set up your first ad" })).toBeInTheDocument();
   });
 
+  it("#1934: a returning owner's steps are titled New campaign, not first-ad setup", () => {
+    render(<SetupSpine step={2} again primary={{ label: "Continue", href: "/campaigns" }}><p /></SetupSpine>);
+    expect(screen.getByRole("heading", { name: "New campaign" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Set up your first ad" })).toBeNull();
+  });
+
   it("step 1 has no Back; later steps go back to the step before", () => {
     const { rerender } = render(<SetupSpine step={1} primary={{ label: "Continue", href: "/create" }}><p /></SetupSpine>);
     expect(screen.queryByRole("button", { name: "Back" })).toBeNull();

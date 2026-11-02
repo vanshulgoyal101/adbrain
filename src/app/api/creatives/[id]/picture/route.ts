@@ -7,27 +7,30 @@ import sharp from "sharp";
 import { renderAndPersistDesign } from "@/lib/creative/persist";
 import { renderCompositeAd } from "@/lib/creative/render";
 import {
-  findStoredBackground,
   pictureDesign,
   pictureWordsSchema,
+  savedBackground,
   withPictureWords,
 } from "@/lib/creative/picture-words";
 import { rateLimitResponse } from "@/lib/security/rate-limit";
 import { createClient } from "@/lib/supabase/server";
 import { AD_ANGLES, getAngleByName } from "@/lib/templates/ads";
 import type { Json } from "@/lib/types";
+import { ownerError } from "@/i18n/request-locale";
+import type { OwnerErrorKey } from "@/i18n/locale";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 export const POST = observeRoute("/api/creatives/[id]/picture", "POST", handlePOST);
 
-const FIELD_NAMES: Record<string, string> = {
-  headline: "Headline",
-  subhead: "Offer line",
-  phone: "Phone",
-  ctaLabel: "Button",
+const FIELD_NAMES: Record<string, OwnerErrorKey> = {
+  headline: "pictureFieldHeadline",
+  subhead: "pictureFieldSubhead",
+  phone: "pictureFieldPhone",
+  ctaLabel: "pictureFieldButton",
 };
+
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -47,12 +50,12 @@ async function handlePOST(req: Request, { params }: { params: Promise<{ id: stri
   const parsed = pictureWordsSchema.safeParse(body);
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
-    const field = FIELD_NAMES[String(issue?.path[0])] ?? "These words";
+    const field = await ownerError(FIELD_NAMES[String(issue?.path[0])] ?? "pictureFieldOther");
     const message = issue?.code === "too_small"
-      ? `${field} can't be empty.`
+      ? await ownerError("pictureFieldEmpty", { field })
       : issue?.code === "too_big"
-        ? `${field} must be ${Number(issue.maximum)} characters or fewer.`
-        : issue?.path[0] === "phone" ? "Phone: use digits, spaces and + only." : `${field} isn't valid.`;
+        ? await ownerError("pictureFieldTooLong", { field, max: Number(issue.maximum) })
+        : issue?.path[0] === "phone" ? await ownerError("phoneInvalid") : await ownerError("pictureFieldInvalid", { field });
     return NextResponse.json({ error: message }, { status: 400 });
   }
 
@@ -60,37 +63,30 @@ async function handlePOST(req: Request, { params }: { params: Promise<{ id: stri
   if (limited) return limited;
 
   if (!getEnv().AD_DESIGN_OVERLAY)
-    return NextResponse.json({ error: "This ad's picture has no words we can change." }, { status: 409 });
+    return NextResponse.json({ error: await ownerError("pictureNoWords") }, { status: 409 });
 
   const { data: creative } = await supabase
     .from("creatives")
     .select("id, business_id, variant_group, angle, image_url, headline, primary_text, cta, generation")
     .eq("id", id)
     .maybeSingle();
-  if (!creative) return NextResponse.json({ error: "Creative not found" }, { status: 404 });
+  if (!creative) return NextResponse.json({ error: await ownerError("adNotFound") }, { status: 404 });
   const { data: business } = await supabase
     .from("businesses")
     .select("*")
     .eq("id", creative.business_id)
     .maybeSingle();
-  if (!business) return NextResponse.json({ error: "Business not found" }, { status: 404 });
+  if (!business) return NextResponse.json({ error: await ownerError("businessNotFound") }, { status: 404 });
 
   const generation = isRecord(creative.generation) ? creative.generation : {};
   if (generation.composition === "image-only")
-    return NextResponse.json({ error: "This ad's picture has no words we can change." }, { status: 409 });
+    return NextResponse.json({ error: await ownerError("pictureNoWords") }, { status: 409 });
 
   const angle = getAngleByName(creative.angle ?? "") ?? AD_ANGLES[0];
-  const folder = `${creative.business_id}/${creative.variant_group ?? id}`;
-  // The receipt is owner-writable under RLS, so only trust a background in this business's own storage.
-  const ownStorage = supabase.storage.from("creatives").getPublicUrl(`${creative.business_id}/`).data.publicUrl;
-  const savedPhoto = typeof generation.photoUrl === "string" && generation.photoUrl.startsWith(ownStorage)
-    && !generation.photoUrl.slice(ownStorage.length).includes("..")
-    ? generation.photoUrl
-    : null;
-  const photoUrl = savedPhoto ?? await findStoredBackground(supabase, folder, angle.id, creative.image_url);
+  const photoUrl = await savedBackground(supabase, creative, generation, angle.id);
   if (!photoUrl)
     return NextResponse.json(
-      { error: "We couldn't find this ad's original background, so its words can't be redrawn. Regenerate the whole ad instead.", code: "no_background" },
+      { error: await ownerError("noOriginalBackground"), code: "no_background" },
       { status: 409 },
     );
 
@@ -101,7 +97,7 @@ async function handlePOST(req: Request, { params }: { params: Promise<{ id: stri
       const small = await sharp(Buffer.from(bytes)).resize({ width: 720, withoutEnlargement: true }).webp({ quality: 72 }).toBuffer();
       return NextResponse.json({ previewUrl: `data:image/webp;base64,${small.toString("base64")}` });
     } catch (error) {
-      return serverError("creative.picture.preview", error, "Couldn't draw the preview.");
+      return serverError("creative.picture.preview", error, await ownerError("previewFailed"));
     }
   }
   let imageUrl: string;
@@ -115,7 +111,7 @@ async function handlePOST(req: Request, { params }: { params: Promise<{ id: stri
       photoUrl,
     );
   } catch (error) {
-    return serverError("creative.picture", error, "Couldn't redraw the picture. Your ad is unchanged; try again.");
+    return serverError("creative.picture", error, await ownerError("redrawFailed"));
   }
 
   // Re-read so a text edit saved during the redraw isn't overwritten.
@@ -134,7 +130,7 @@ async function handlePOST(req: Request, { params }: { params: Promise<{ id: stri
     .select("*")
     .maybeSingle();
   if (error || !updated)
-    return serverError("creative.picture", error ?? new Error("Creative update returned no row"), "Couldn't save the new picture. Your ad is unchanged; try again.");
+    return serverError("creative.picture", error ?? new Error("Creative update returned no row"), await ownerError("pictureNotSaved"));
 
   const { data: live } = await supabase
     .from("campaigns")
@@ -152,6 +148,6 @@ async function handlePOST(req: Request, { params }: { params: Promise<{ id: stri
   });
   return NextResponse.json({
     creative: updated,
-    ...(live?.length ? { liveNotice: "This ad is live on Meta; your edit applies to new campaigns." } : {}),
+    ...(live?.length ? { liveNotice: await ownerError("liveEditNotice") } : {}),
   });
 }

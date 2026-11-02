@@ -7,6 +7,10 @@ const h = vi.hoisted(() => ({
   launchedAt: "2026-10-01T09:00:00Z" as string | null,
   exempt: false,
   owned: vi.fn(),
+  lang: undefined as string | undefined,
+}));
+vi.mock("next/headers", () => ({
+  cookies: async () => ({ get: (name: string) => (name === "adbrain_lang" && h.lang ? { value: h.lang } : undefined) }),
 }));
 vi.mock("@/lib/observability/logger", async (actual) => ({
   ...(await actual<object>()),
@@ -28,7 +32,7 @@ const post = async (body: unknown) => {
 };
 
 beforeEach(() => {
-  h.recorded = []; h.events = []; h.launchedAt = new Date(Date.now() - 8 * 86_400_000).toISOString(); h.exempt = false;
+  h.recorded = []; h.events = []; h.launchedAt = new Date(Date.now() - 8 * 86_400_000).toISOString(); h.exempt = false; h.lang = undefined;
   h.owned.mockReset().mockImplementation(async (id: string) => ({ businessId: id, userId: "owner" }));
 });
 
@@ -64,6 +68,16 @@ describe("POST /api/feedback/pilot-day7 (#1650)", () => {
     h.launchedAt = new Date(Date.now() - 2 * 86_400_000).toISOString();
     expect((await post({ businessId, answer: "yes", reason: "saves_time" })).status).toBe(409);
     expect(h.recorded).toEqual([]);
+  });
+
+  it("answers a Hindi owner in Hindi (#2335), with the same statuses", async () => {
+    h.lang = "hi";
+    expect(await post({ businessId, answer: "maybe", reason: "nope" })).toEqual({ status: 400, body: { error: "जवाबों में से एक चुनें।" } });
+    h.exempt = true;
+    expect(await post({ businessId, dismiss: true })).toEqual({ status: 409, body: { error: "यह सवाल अभी खुला नहीं है।" } });
+    h.exempt = false;
+    h.owned.mockRejectedValue(new Error("db down"));
+    expect(await post({ businessId, dismiss: true })).toEqual({ status: 503, body: { error: "आपका जवाब सेव नहीं हो सका। फिर से कोशिश करें।" } });
   });
 
   it("refuses another owner's business", async () => {

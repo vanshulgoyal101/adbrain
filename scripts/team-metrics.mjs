@@ -45,8 +45,12 @@ for (const r of Object.keys(roles)) { const ts = sorted.filter(c => c.who === r)
 // CI duration
 const runs = api(`repos/${R}/actions/runs?created=>${since.slice(0,10)}&per_page=100`).filter(x => x.conclusion);
 const byWf = {}; for (const r of runs) (byWf[r.name] ??= []).push(Date.parse(r.updated_at) - Date.parse(r.run_started_at ?? r.created_at));
-console.log("Workflow wall time (median min / runs / failures):");
-for (const [k, v] of Object.entries(byWf)) { const f = runs.filter(x => x.name === k && x.conclusion === "failure").length; console.log(`  ${k}: ${(med(v) / 60000).toFixed(1)} / ${v.length} / ${f}`); }
+// #2361: a failed run with 0 jobs is GitHub's merge ref not being ready (#878), not a broken change; count it apart.
+const jobless = new Set(runs.filter(x => x.conclusion === "failure")
+  .filter(x => JSON.parse(execFileSync("gh", ["api", `repos/${R}/actions/runs/${x.id}/jobs?per_page=1`], { encoding: "utf8" })).total_count === 0)
+  .map(x => x.id));
+console.log("Workflow wall time (median min / runs / failures / 0-job failures):");
+for (const [k, v] of Object.entries(byWf)) { const failed = runs.filter(x => x.name === k && x.conclusion === "failure"); const z = failed.filter(x => jobless.has(x.id)).length; console.log(`  ${k}: ${(med(v) / 60000).toFixed(1)} / ${v.length} / ${failed.length - z} / ${z}`); }
 // DORA four keys (#620): deploys are merges to main; failures and restores come from the production guard's smoke.
 const mainMerges = merged.filter(p => p.base?.ref === "main");
 const guard = api(`repos/${R}/actions/workflows/production-guard.yml/runs?created=>${since.slice(0, 10)}&per_page=100`).filter(x => x.created_at > since);

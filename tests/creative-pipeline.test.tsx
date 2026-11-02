@@ -289,8 +289,9 @@ describe("generateVariants", () => {
     expect(generateImage).toHaveBeenCalledTimes(1);
   });
 
-  it("repairs a failed concept without resending its rejected draft", async () => {
-    const rejected = { ...concept, cta: "", primary_text: "Invented model-only details" };
+  // #2444: a draft that failed only on form goes back for a targeted fix (tests/core/create-flash-lite-repair.test.ts).
+  it("repairs an unsupported claim without resending its rejected draft", async () => {
+    const rejected = { ...concept, primary_text: "Invented model-only details: free panels for every home" };
     complete.mockResolvedValueOnce(completion(rejected)).mockImplementationOnce(async (messages) => {
       if (messages.some((message: { role: string }) => message.role === "assistant")) throw new Error("Repair context overflow");
       return completion(concept);
@@ -302,7 +303,7 @@ describe("generateVariants", () => {
     expect(onFailure).not.toHaveBeenCalled();
     expect(complete).toHaveBeenCalledTimes(2);
     expect(complete.mock.calls[1][0]).toHaveLength(3);
-    expect(complete.mock.calls[1][0].at(-1).content).toContain("cta");
+    expect(complete.mock.calls[1][0].at(-1).content).toContain("unsupported-commercial-claim");
     expect(JSON.stringify(complete.mock.calls[1][0])).not.toContain("Invented model-only details");
     expect(generateImage).toHaveBeenCalledTimes(1);
   });

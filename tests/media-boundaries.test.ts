@@ -75,6 +75,12 @@ function storage(client: "rls" | "admin") {
         getPublicUrl: (path: string) => { record("getPublicUrl", path); return { data: { publicUrl: `https://public/${path}` } }; },
         download: async (path: string) => { record("download", path); const bytes = m.objects.get(path); return bytes ? { data: new Blob([Buffer.from(bytes)]), error: null } : { data: null, error: { message: "missing" } }; },
         remove: async (paths: string[]) => { record("remove", paths); paths.forEach((p) => m.objects.delete(p)); return { data: [], error: null }; },
+        upload: async (path: string, body: Uint8Array | Blob | ArrayBuffer) => {
+          record("upload", path);
+          const bytes = body instanceof Blob ? new Uint8Array(await body.arrayBuffer()) : new Uint8Array(body as ArrayBuffer);
+          m.objects.set(path, bytes);
+          return { data: { path }, error: null };
+        },
       };
     },
   };
@@ -108,6 +114,13 @@ beforeEach(async () => {
   };
   m.objects.set(theirPath, new Uint8Array([1, 2, 3]));
 });
+
+/** True when the image's EXIF has a GPS IFD pointer (tag 0x8825, either byte order). JPEG keeps EXIF in an
+ * "Exif\0\0" APP1 segment; WebP and PNG in an "EXIF"/"eXIf" chunk. */
+function hasGps(bytes: Buffer): boolean {
+  const marker = ["Exif\0\0", "EXIF", "eXIf"].map((name) => bytes.indexOf(Buffer.from(name, "binary"))).find((index) => index >= 0);
+  return marker !== undefined && [Buffer.from([0x88, 0x25]), Buffer.from([0x25, 0x88])].some((tag) => bytes.subarray(marker, marker + 65536).includes(tag));
+}
 
 const touchedAssets = () => m.calls.filter((c) => c.table === "media_assets" && c.op !== "from" || (c.bucket && c.op !== "getPublicUrl"));
 const signBody = (over: Record<string, unknown> = {}) => ({ businessId: MINE, mime: "image/jpeg", bytes: 500_000, sha256: "b".repeat(64), width: 1080, height: 1350, ...over });
@@ -186,6 +199,30 @@ describe.skipIf(!built)("media library boundaries (#1865, #1209 slice A)", () =>
     }
     expect(m.calls.some((c) => c.op === "getPublicUrl")).toBe(false);
     expect(views[0].url).toMatch(/^https:\/\/signed\//);
+  });
+
+  // #2001 (Reviewer's #1898): a phone photo's EXIF GPS is the owner's or a customer's home. The browser re-encodes, but
+  // a signed upload URL takes any bytes, so the server must strip it (or refuse the file) before the photo is "ready";
+  // slice B uploads to Meta from this stored object, so clean storage keeps GPS out of Meta too.
+  it("EXIF GPS never stays in storage: finalize strips it or refuses the photo (#2001)", async () => {
+    const { finalizeUpload } = await load("src/lib/media/store.ts");
+    const { createAdminClient } = await import("@/lib/supabase/admin");
+    const withGps = await sharp({ create: { width: 1080, height: 1350, channels: 3, background: "#888" } })
+      .withExif({ IFD0: { Make: "QA phone" }, IFD3: { GPSLatitudeRef: "N", GPSLatitude: "30/1 42/1 0/1", GPSLongitudeRef: "E", GPSLongitude: "76/1 43/1 0/1" } })
+      .jpeg().toBuffer();
+    expect(hasGps(withGps)).toBe(true); // control: the fixture really carries GPS
+    const path = `${MINE}/gps.jpg`;
+    m.objects.set(path, new Uint8Array(withGps));
+    const row = { id: crypto.randomUUID(), business_id: MINE, bucket: "media", path, status: "pending", deleted_at: null, mime: "image/jpeg", sha256: createHash("sha256").update(withGps).digest("hex"), tags: [], checks: {}, created_at: "2026-10-28T00:00:00Z" };
+    m.db.media_assets.push(row);
+    const ready = await finalizeUpload(createAdminClient(), row).then(() => true, () => false);
+    const stored = m.objects.get(path);
+    if (ready) {
+      expect(stored, "a ready photo keeps its object").toBeDefined();
+      expect(hasGps(Buffer.from(stored!)), "the stored photo still carries EXIF GPS").toBe(false);
+    } else {
+      expect(stored, "a refused photo's object is removed").toBeUndefined();
+    }
   });
 
   it("deleting my asset removes its object from the private bucket, not just the row", async () => {

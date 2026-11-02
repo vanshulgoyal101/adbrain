@@ -11,7 +11,7 @@ function deps(overrides: Partial<RunnerDeps> = {}) {
     config: { parentToken: "parent-token", parentBusinessId: "9000000000001", appId: "2286157145462990", appSecret: "app-secret" },
     claim: vi.fn(async () => true),
     release: vi.fn(async () => true),
-    businessName: async () => "Solaride Mohali",
+    business: async () => ({ name: "Solaride Mohali", category: "Rooftop solar installer" }),
     customerToken: async () => "customer-token",
     store: { get: async () => ({ business_id: business, state: "page_linked", page_id: "111", child_business_id: null, ad_account_id: null, step_keys: {} }), update: async () => {}, event: async () => {} },
     manager: { appId: "", save: async () => "t", load: async () => null, remove: async () => {} },
@@ -26,7 +26,7 @@ describe("runManagedProvisioning (#521)", () => {
     const { deps: d } = deps();
     expect(await runManagedProvisioning({ businessId: business, customerTokenId: "tok" }, d)).toMatchObject({ ok: true });
     expect(d.claim).toHaveBeenCalledOnce();
-    expect(d.provision).toHaveBeenCalledWith(expect.objectContaining({ businessId: business, businessName: "Solaride Mohali", parentBusinessId: "9000000000001",
+    expect(d.provision).toHaveBeenCalledWith(expect.objectContaining({ businessId: business, businessName: "Solaride Mohali", vertical: "ENERGY_AND_UTILITIES", parentBusinessId: "9000000000001",
       tokens: { customer: "customer-token", parent: "parent-token" } }));
     const lease = vi.mocked(d.claim).mock.calls[0][0];
     expect(d.release).toHaveBeenCalledWith(lease);
@@ -57,6 +57,12 @@ describe("runManagedProvisioning (#521)", () => {
 
     const noToken = deps().deps;
     expect(await runManagedProvisioning({ businessId: business, customerTokenId: null }, noToken)).toEqual({ ok: false, code: "CUSTOMER_REAUTH_REQUIRED", retryable: false });
+  });
+
+  it("needs the parent business id: no default parent, so a missing one never provisions under someone else (#2358)", async () => {
+    const d = deps({ config: { parentToken: "parent-token", parentBusinessId: "", appId: "1", appSecret: "s" } }).deps;
+    expect(await runManagedProvisioning({ businessId: business, customerTokenId: "tok" }, d)).toEqual({ ok: false, code: "NOT_CONFIGURED", retryable: false });
+    expect(d.claim).not.toHaveBeenCalled();
   });
 
   it("needs the app secret: Meta rejects the child-token mint without appsecret_proof (Reviewer, #577)", async () => {

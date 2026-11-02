@@ -8,8 +8,6 @@ import { saveAlertSettings, startAlertVerification } from "@/app/(app)/settings/
 import type { AlertSettings } from "@/lib/alerts/alert-settings";
 import { translator, type AppLocale } from "@/i18n/locale";
 
-const FAILED = "Couldn't save your alert settings. Try again.";
-
 /**
  * #701: Settings → WhatsApp alerts. Each new enquiry within a minute and one daily results line,
  * on the owner's own WhatsApp, only after they confirm the number by sending START. STOP ends both.
@@ -27,15 +25,15 @@ export function WhatsAppAlerts({ businessId, initial, locale = "en" }: { busines
   const changed = draft.leadAlerts !== settings.leadAlerts || draft.dailyResults !== settings.dailyResults || draft.language !== settings.language;
 
   const save = () => startTransition(async () => {
-    const result = await saveAlertSettings({ businessId, ...draft }).catch(() => ({ ok: false as const, error: FAILED }));
+    const result = await saveAlertSettings({ businessId, ...draft }).catch(() => ({ ok: false as const, error: t("alertsSaveFailed") }));
     if (!result.ok) { setMessage({ ok: false, text: result.error }); return; }
     setSettings(result.settings);
     setMessage({ ok: true, text: draft.leadAlerts || draft.dailyResults
-      ? result.settings.number ? "Saved. Alerts go to your WhatsApp." : "Saved. Confirm your WhatsApp number above to start getting them."
-      : "Saved. Alerts are off." });
+      ? t(result.settings.number ? "alertsSaved" : "alertsSavedConfirm")
+      : t("alertsSavedOff") });
   });
   const confirm = () => startTransition(async () => {
-    const result = await startAlertVerification({ businessId }).catch(() => ({ ok: false as const, error: "Couldn't start the confirmation. Try again." }));
+    const result = await startAlertVerification({ businessId }).catch(() => ({ ok: false as const, error: t("alertsConfirmFailed") }));
     if (!result.ok) { setMessage({ ok: false, text: result.error }); return; }
     setMessage(null);
     setLink(result.link);
@@ -45,18 +43,18 @@ export function WhatsAppAlerts({ businessId, initial, locale = "en" }: { busines
   // #847: the number is the gate, so until it's confirmed that step comes first; afterwards it's a footnote.
   const numberStep = <div className={confirmed ? "mt-5 border-t border-slate-100 pt-4 text-sm text-slate-700" : "mt-4 border-b border-slate-100 pb-4 text-sm text-slate-700"}>
     {confirmed
-      ? <p>Alerts go to <span className="whitespace-nowrap font-medium">{settings.number}</span>. Reply STOP on WhatsApp anytime to turn them off.</p>
-      : <p>{settings.optedOut ? "You replied STOP, so alerts are off. Send START from your WhatsApp to turn them back on." : "First, confirm the WhatsApp number that should get alerts: send one message from it."}</p>}
+      ? <p>{t.rich("alertsGoTo", { number: () => <span className="whitespace-nowrap font-medium">{settings.number}</span> })}</p>
+      : <p>{t(settings.optedOut ? "alertsOptedOut" : "alertsFirstStep")}</p>}
     <div className="mt-3 flex flex-wrap items-center gap-2">
       {link
-        ? <a href={link} target="_blank" rel="noopener noreferrer" className="inline-flex h-11 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary-hover">Open WhatsApp and send START</a>
-        : <Button type="button" variant="outline" disabled={pending} onClick={confirm}>{settings.number ? "Use another number" : "Confirm my WhatsApp number"}</Button>}
-      {link && <span className="text-xs text-slate-500">The message is ready to send. The link works for 15 minutes.</span>}
+        ? <a href={link} target="_blank" rel="noopener noreferrer" className="inline-flex h-11 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary-hover">{t("alertsOpenWhatsApp")}</a>
+        : <Button type="button" variant="outline" disabled={pending} onClick={confirm}>{t(settings.number ? "alertsOtherNumber" : "alertsConfirmNumber")}</Button>}
+      {link && <span className="text-xs text-slate-500">{t("alertsLinkNote")}</span>}
     </div>
   </div>;
 
   return <section aria-labelledby="whatsapp-alerts-title" className="rounded-lg border border-slate-200 bg-white p-6">
-    <h2 id="whatsapp-alerts-title" className="flex items-center gap-2 font-semibold text-slate-900"><MessageCircle className="h-4 w-4" aria-hidden="true" />WhatsApp alerts</h2>
+    <h2 id="whatsapp-alerts-title" className="flex items-center gap-2 font-semibold text-slate-900"><MessageCircle className="h-4 w-4" aria-hidden="true" />{t("alertsTitle")}</h2>
     <p className="mt-1 text-sm text-slate-600">{t("alertsIntro")}</p>
     {!confirmed && numberStep}
     <div className="mt-4 grid gap-3">
@@ -69,14 +67,14 @@ export function WhatsAppAlerts({ businessId, initial, locale = "en" }: { busines
         <input type="checkbox" checked={draft.leadAlerts} onChange={(event) => { setDraft({ ...draft, leadAlerts: event.target.checked }); setMessage(null); }} className="mt-0.5 h-4 w-4 accent-blue-600" />
         <span><span className="font-medium">{t("alertsForm")}</span><span className="block text-xs text-slate-500">{t("alertsFormDetail")}</span></span>
       </label>
-      <label className="grid max-w-xs gap-1 text-sm font-medium text-slate-800">Language
+      <label className="grid max-w-xs gap-1 text-sm font-medium text-slate-800">{t("alertsLanguage")}
         <select value={draft.language} onChange={(event) => { setDraft({ ...draft, language: event.target.value as "en" | "hi" }); setMessage(null); }} className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm font-normal">
           <option value="en">English</option>
           <option value="hi">हिंदी (Hindi)</option>
         </select>
       </label>
       <div className="flex flex-wrap items-center gap-3">
-        <Button type="button" variant="outline" disabled={pending || !changed} onClick={save}>Save alerts</Button>
+        <Button type="button" variant="outline" disabled={pending || !changed} onClick={save}>{t("alertsSave")}</Button>
         {message?.ok && <p role="status" className="text-sm text-slate-600">{message.text}</p>}
       </div>
     </div>

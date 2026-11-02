@@ -16,6 +16,8 @@ const BANNED = [/\b20\s?%/i, /\b80\s?%/i, /service allocation/i, /allocated to s
  * Leaks still live, each tracked on #1235. Fixing one fails this test until its line is removed, so the list only
  * shrinks; a new leak anywhere fails at once.
  */
+// The v1 terms stay byte-for-byte so orders accepted under them still validate (their hash); collection refuses them
+// for any new payment (RETIRED_POLICY_VERSIONS, #1235), so they can't reach a new checkout.
 const KNOWN: string[] = [
   "src/lib/payments/production-config.ts: /allocated to service/i",
   "src/lib/payments/production-config.ts: /service allocation/i",
