@@ -5,8 +5,9 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, relative } from "node:path";
 
 export default class FlakyReporter {
-  constructor(out = process.env.FLAKY_REPORT) {
-    this.out = out;
+  // Vitest passes its reporter options here; the report path comes only from FLAKY_REPORT.
+  constructor() {
+    this.out = process.env.FLAKY_REPORT;
     this.flaky = [];
   }
 

@@ -29,10 +29,14 @@ export default defineConfig({
     // while still catching genuinely hung tests.
     testTimeout: 15000,
     hookTimeout: 15000,
-    // #618: in CI a failed test gets one retry; one that passes on it is flaky, not a red job. A real failure fails
-    // both tries. The unit job sets FLAKY_REPORT so the reporter records flaky tests for their issues.
-    retry: process.env.CI ? 1 : 0,
-    reporters: process.env.FLAKY_REPORT ? ["default", "./scripts/flaky-reporter.mjs"] : ["default"],
+    // #618: the CI unit shards set FLAKY_REPORT. There a failed test gets one retry; one that passes on it is flaky,
+    // recorded for its issue, not a red job. A real failure fails both tries. Other runs (core, local) never retry.
+    retry: process.env.FLAKY_REPORT ? 1 : 0,
+    reporters: [
+      "default",
+      ...(process.env.GITHUB_ACTIONS === "true" ? ["github-actions"] : []),
+      ...(process.env.FLAKY_REPORT ? ["./scripts/flaky-reporter.mjs"] : []),
+    ],
     coverage: {
       provider: "v8",
       reporter: ["text-summary", "lcov"],

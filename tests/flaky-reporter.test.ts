@@ -1,12 +1,15 @@
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import FlakyReporter from "../scripts/flaky-reporter.mjs";
 import { flakyTitle, planFlakyIssues } from "../scripts/file-flaky.mjs";
 
 const dirs: string[] = [];
-afterEach(() => dirs.splice(0).forEach((dir) => rmSync(dir, { recursive: true, force: true })));
+afterEach(() => {
+  vi.unstubAllEnvs();
+  dirs.splice(0).forEach((dir) => rmSync(dir, { recursive: true, force: true }));
+});
 
 function testCase(name: string, state: "passed" | "failed", flaky: boolean, retryCount = flaky ? 1 : 0) {
   return {
@@ -23,12 +26,14 @@ describe("#618 flaky reporter", () => {
     const dir = mkdtempSync(join(tmpdir(), "flaky-"));
     dirs.push(dir);
     const out = join(dir, "nested", "shard-1.json");
-    const first = new FlakyReporter(out);
+    vi.stubEnv("FLAKY_REPORT", out);
+    // Vitest constructs reporters with its options object, never a path.
+    const first = new FlakyReporter({});
     first.onTestCaseResult(testCase("steady", "passed", false));
     first.onTestCaseResult(testCase("wobbly > shows the review", "passed", true));
     first.onTestCaseResult(testCase("broken", "failed", false, 1));
     first.onTestRunEnd();
-    const second = new FlakyReporter(out);
+    const second = new FlakyReporter({});
     second.onTestCaseResult(testCase("other wobble", "passed", true));
     second.onTestRunEnd();
     expect(JSON.parse(readFileSync(out, "utf8"))).toEqual([
@@ -38,7 +43,8 @@ describe("#618 flaky reporter", () => {
   });
 
   it("writes nothing without a report path", () => {
-    const reporter = new FlakyReporter(undefined);
+    vi.stubEnv("FLAKY_REPORT", "");
+    const reporter = new FlakyReporter({});
     reporter.onTestCaseResult(testCase("wobbly", "passed", true));
     expect(() => reporter.onTestRunEnd()).not.toThrow();
   });
