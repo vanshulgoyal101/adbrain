@@ -667,6 +667,25 @@
       "discardTitle": "Discard this setup?",
       "discardCopy": "Start a copy of \"{name}\" instead. Saved drafts stay available.",
       "discardAndCopy": "Discard and copy"
+    },
+    "destination": {
+      "legend": "Destination",
+      "whatsapp": "WhatsApp chat (recommended)",
+      "instantForm": "Instant form",
+      "website": "Website",
+      "websiteLink": "Ads send people to",
+      "noWebsite": "Add your website in Brand first.",
+      "openBrand": "Your business",
+      "ctaLegend": "Button on the ad",
+      "cta": {
+        "learn_more": "Learn more",
+        "shop_now": "Shop now",
+        "sign_up": "Sign up"
+      },
+      "ctaNote": "The button's words only. AdBrain runs these ads for website visits (landing-page views), not sign-ups or sales.",
+      "reviewWebsite": "People will go to",
+      "reviewButton": "Button: {cta}",
+      "expectWebsite": "AdBrain hasn’t run enough website campaigns yet to quote a cost per visit."
     }
   },
   "errors": {

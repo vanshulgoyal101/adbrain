@@ -69,6 +69,7 @@ import { applyBudget, budgetFormStart } from "@/lib/campaign/budget-edit-form";
 import { EditAdDialog } from "@/components/edit-ad-dialog";
 import { OWNER_WORDS } from "@/lib/copy/owner-words";
 import { CampaignLaunchReview } from "@/components/campaign-launch-review";
+import { DestinationChoice, WebsiteDestinationFields, WebsiteReviewFact, type ComposerDestination } from "@/components/campaign-destination";
 import { CampaignReviewSummary } from "@/components/campaign-review-summary";
 import { WeeklyCapLine, weeklyCapWords } from "@/components/weekly-cap-line";
 import { WhatsAppEnquiries } from "@/components/whatsapp-enquiries";
@@ -87,12 +88,7 @@ import {
   isTerminalOperation,
   stableOperationKey,
 } from "@/lib/meta-connect-ui/campaign-flow";
-import type {
-  DraftDTO,
-  DraftInput,
-  OperationDTO,
-  ReviewDTO,
-} from "@/lib/campaign/connect-contracts";
+import type { DraftDTO, DraftInput, OperationDTO, ReviewDTO, WebsiteCta } from "@/lib/campaign/connect-contracts";
 import { fetchAudiencePlan, needsAudiencePlan, plannedTargeting, type AudiencePlanReply } from "@/lib/campaign/audience-plan";
 import { campaignNameDate, defaultCampaignName, draftForSelection } from "@/lib/campaign/draft-name";
 import { REVIEW_AND_SPEND, whatsappExpectation } from "@/lib/campaign/expectations";
@@ -105,7 +101,7 @@ import { targetingFromEditor, targetingToEditor } from "@/lib/campaign/editor-ta
 import { buildManualDraftInput, pickWhatsAppNumber } from "@/lib/campaign/manual-draft-input";
 import { maskWhatsAppNumber, maskedWhatsAppNumberPattern, parseWhatsAppStatus, type WhatsAppStatus } from "@/lib/meta/whatsapp-status-shared";
 import type { ConnectIntent, ConnectionDTO } from "@/lib/meta/connect-contracts";
-import type { Business, Campaign, CampaignResult, Creative, Json, LeadDestination } from "@/lib/types";
+import type { Business, Campaign, CampaignResult, Creative, Json } from "@/lib/types";
 import {
   BUDGET_PRESETS,
   campaignNarrative,
@@ -190,7 +186,8 @@ async function fetchDraftForms(fallback: string, signal?: AbortSignal, fresh = f
 type ComposerSetup = {
   selected: Set<string>;
   budget: number;
-  destination: Exclude<LeadDestination, "call" | "website">;
+  destination: ComposerDestination;
+  websiteCta?: WebsiteCta;
   whatsappNumber: string;
   whatsappLanguage?: WhatsAppLanguage;
   /** #840: this campaign's own WhatsApp message ("Edit for this campaign"). */
@@ -324,7 +321,8 @@ function BusinessCampaigns({
   ));
   // #761: ₹300 a day is the core run (#334); less rarely gets Meta out of learning.
   const [budget, setBudget] = useState(initialSetup?.budget ?? newCampaign?.budget ?? 300);
-  const [destination, setDestination] = useState<Exclude<LeadDestination, "call" | "website">>(initialSetup?.destination ?? "whatsapp");
+  const [destination, setDestination] = useState<ComposerDestination>(initialSetup?.destination ?? "whatsapp");
+  const [websiteCta, setWebsiteCta] = useState<WebsiteCta>(initialSetup?.websiteCta ?? "learn_more");
   const [whatsappNumber, setWhatsAppNumber] = useState(initialSetup?.whatsappNumber ?? "");
   const [whatsappLanguage, setWhatsAppLanguage] = useState<WhatsAppLanguage>(initialSetup?.whatsappLanguage ?? "ad");
   const [whatsappMessage, setWhatsAppMessage] = useState<WhatsAppTemplate | null>(initialSetup?.whatsappMessage ?? null);
@@ -497,8 +495,8 @@ function BusinessCampaigns({
   const [draftBusy, setDraftBusy] = useState<string | null>(null);
   const [retryAllowed, setRetryAllowed] = useState(false);
   useEffect(() => {
-    onSetupChange([scope, { selected, budget, destination, whatsappNumber, whatsappLanguage, whatsappMessage, leadFormId, name: customName, targeting, draftGoal, includedNames, excludedNames, abTest, creationMode, showComposer }]);
-  }, [selected, budget, destination, whatsappNumber, whatsappLanguage, whatsappMessage, leadFormId, customName, targeting, draftGoal, includedNames, excludedNames, abTest, creationMode, showComposer, scope, onSetupChange]);
+    onSetupChange([scope, { selected, budget, destination, websiteCta, whatsappNumber, whatsappLanguage, whatsappMessage, leadFormId, name: customName, targeting, draftGoal, includedNames, excludedNames, abTest, creationMode, showComposer }]);
+  }, [selected, budget, destination, websiteCta, whatsappNumber, whatsappLanguage, whatsappMessage, leadFormId, customName, targeting, draftGoal, includedNames, excludedNames, abTest, creationMode, showComposer, scope, onSetupChange]);
   const visibleCampaigns = campaigns.filter(campaign =>
     (statusFilter === "all" || campaign.status === statusFilter) &&
     (campaign.name ?? business.name).toLocaleLowerCase().includes(campaignQuery.trim().toLocaleLowerCase()),
@@ -573,8 +571,7 @@ function BusinessCampaigns({
     setSelected(new Set(input.creativeIds));
     setBudget(input.dailyBudgetRupees);
     setLeadFormId(input.leadFormId ?? "");
-    // TODO(#2600): D adds website to this composer; until then a website draft keeps the composer's destination.
-    if (input.destination !== "website") setDestination(input.destination ?? "instant_form");
+    setDestination(input.destination ?? "instant_form"); setWebsiteCta(input.websiteCta ?? "learn_more");
     // The form names numbers by their mask; a full number from an older draft shows as its mask.
     setWhatsAppNumber(!input.whatsappNumber || maskedWhatsAppNumberPattern.test(input.whatsappNumber) ? input.whatsappNumber ?? "" : maskWhatsAppNumber(input.whatsappNumber));
     setWhatsAppLanguage(input.whatsappLanguage ?? "ad");
@@ -598,7 +595,7 @@ function BusinessCampaigns({
   }
 
   useEffect(() => {
-    if (!showComposer || !connectedForDraft || destination === "whatsapp") return;
+    if (!showComposer || !connectedForDraft || destination !== "instant_form") return;
     const freshness = formsFreshnessRef.current;
     if (freshness?.ownerId === business.owner_id && freshness.businessId === business.id &&
       freshness.retry === formsRetry && Date.now() - freshness.fetchedAt < LEAD_FORMS_FRESH_MS) return;
@@ -867,7 +864,7 @@ function BusinessCampaigns({
     return Boolean(recoveryRef.current?.request && (!operation || !["succeeded", "failed"].includes(operation.state)));
   }
 
-  function switchDestination(value: Exclude<LeadDestination, "call" | "website">) {
+  function switchDestination(value: ComposerDestination) {
     if (unresolvedRecovery()) { setError(tn("goLive.checkBeforeDestination")); return; }
     destinationChosenRef.current = true;
     flushSync(() => { setDestination(value); setPrepareReview(null); });
@@ -985,6 +982,7 @@ function BusinessCampaigns({
       dailyBudgetRupees: budget,
       leadFormId,
       destination,
+      websiteCta,
       whatsappNumber: chosenWhatsAppNumber,
       whatsappLanguage,
       whatsappMessage,
@@ -1136,7 +1134,7 @@ function BusinessCampaigns({
       failAt("composer", reason instanceof Error ? reason.message : "Complete the campaign details first.");
       return;
     }
-    if (reviewAfterSave && connectedForDraft && input.destination !== "whatsapp" && !input.leadFormId) {
+    if (reviewAfterSave && connectedForDraft && input.destination === "instant_form" && !input.leadFormId) {
       failAt("leadform", "Choose a lead form before preparing campaign review.");
       return;
     }
@@ -1158,7 +1156,7 @@ function BusinessCampaigns({
       if (over && over.draftId !== draft.draftId) setSavedDrafts((drafts) => drafts.filter((saved) => saved.draftId !== over.draftId));
       signal.throwIfAborted();
       saveRecovery({ draft, request: null, operationId: null });
-      if (reviewAfterSave && input.destination !== "whatsapp") saveLeadFormMemory(leadFormMemoryKey, input.leadFormId);
+      if (reviewAfterSave && input.destination === "instant_form") saveLeadFormMemory(leadFormMemoryKey, input.leadFormId);
       setOperation(null);
       operationRef.current = null;
       setRecoveryPending(false);
@@ -1320,7 +1318,7 @@ function BusinessCampaigns({
         setConnectOpen(true);
         return;
       }
-      if (draft.input.destination !== "whatsapp") await refreshDraftForms();
+      if (draft.input.destination === "instant_form") await refreshDraftForms();
       await loadPrepareReview(draft, connection);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not open the saved campaign review.");
@@ -1753,7 +1751,7 @@ function BusinessCampaigns({
                     {fact("Budget", <>{formatMoney(review.totalDailyBudgetRupees)} a day{review.perAdSetDailyBudgetRupees !== review.totalDailyBudgetRupees && <span className="text-slate-600"> ({formatMoney(review.perAdSetDailyBudgetRupees)} per ad set)</span>}</>)}
                     {fact("Where", <>{review.resolvedAreaLabel ?? "Needs review"}, {input.targeting.location?.cityScope === "city_only" ? "city only (no added radius)" : `${input.targeting.location?.radiusKm ?? 25} km radius`}{review.serviceArea && <span className="block text-slate-600">{serviceAreaLine(review.serviceArea)}</span>}</>)}
                     {fact("Who", <>Ages {age?.min ?? "unset"}–{age?.max === 65 ? "65+" : age?.max ?? "unset"}, {{ all: "all genders", men: "men", women: "women" }[input.targeting.gender ?? "all"]}{interests ? `, interested in ${interests}` : input.targeting.audience?.interestNames.length ? ", interests need resolving" : ", no interest narrowing"}</>)}
-                    {fact("Destination", <>{input.destination === "whatsapp" ? `WhatsApp chat ${review.whatsappNumber ?? "(number not verified)"}` : "Instant lead form"}{input.destination === "whatsapp" && !review.whatsappNumber && (
+                    {fact("Destination", <>{input.destination === "website" ? <WebsiteReviewFact url={review.websiteUrl ?? business.website} cta={review.websiteCta ?? input.websiteCta} words={campaignWords} /> : input.destination === "whatsapp" ? `WhatsApp chat ${review.whatsappNumber ?? "(number not verified)"}` : "Instant lead form"}{input.destination === "whatsapp" && !review.whatsappNumber && (
                       // #1301: an unverified number gets one plain next step, a link and a re-check (the same preflight read).
                       <span className="block text-slate-700">
                         {WHATSAPP_UNVERIFIED_STEP}{" "}
@@ -1917,10 +1915,8 @@ function BusinessCampaigns({
             <legend className="mb-2 text-xs font-medium text-slate-500">Campaign setup</legend>
             {[["manual", "Choose settings"], ["guided", "Plan with AdBrain"]].map(([value, label]) => <label key={value} className={cn("flex min-h-11 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm", creationMode === value ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200")}><input ref={value === "guided" ? guidedModeRef : undefined} type="radio" name="creation-mode" value={value} checked={creationMode === value} onChange={() => setCreationMode(value)} className="accent-blue-600" />{label}</label>)}
           </fieldset>
-          <fieldset disabled={preparing || creating || destinationRecoveryLocked} aria-describedby={showDestinationLock ? "destination-lock-reason" : undefined} className="flex flex-wrap gap-2">
-            <legend className="mb-2 text-xs font-medium text-slate-500">Destination</legend>
-            {([ ["whatsapp", "WhatsApp chat (recommended)"], ["instant_form", "Instant form"] ] as const).map(([value, label]) => <label key={value} className={cn("flex min-h-11 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm", destination === value ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200")}><input id={`destination-${value}`} type="radio" name="campaign-destination" value={value} checked={destination === value} onChange={() => { if (!unresolvedRecovery()) { destinationChosenRef.current = true; setDestination(value); setPrepareReview(null); } }} className="accent-blue-600" />{label}</label>)}
-          </fieldset>
+          <DestinationChoice value={destination} offerWebsite={internal} words={campaignWords} disabled={preparing || creating || destinationRecoveryLocked} describedBy={showDestinationLock ? "destination-lock-reason" : undefined}
+            onChange={(value) => { if (!unresolvedRecovery()) { destinationChosenRef.current = true; setDestination(value); setPrepareReview(null); } }} />
           </div>
           {showDestinationLock && <p id="destination-lock-reason" role="status" className="mb-4 text-sm text-amber-800">Destination is locked until the previous campaign request is resolved.</p>}
           {showComposer && destination === "whatsapp" && <div className="mb-4"><WhatsAppReadyChecklist businessId={business.id} />
@@ -1929,7 +1925,7 @@ function BusinessCampaigns({
           </div>}
           {showComposer && creationMode === "guided" && <CampaignChat
             businessId={business.id}
-            destination={destination}
+            destination={destination === "website" ? undefined : destination /* TODO(#2595): the planner learns website in slice C. */}
             whatsappNumber={destination === "whatsapp" && chosenWhatsAppNumber ? chosenWhatsAppNumber : undefined}
             onStarted={() => { destinationChosenRef.current = true; }}
             onDraftReady={(draft) => void handleGuidedDraft(draft)}
@@ -2132,6 +2128,7 @@ function BusinessCampaigns({
                     {/* #1004: from Create, choosing the form is the last step before Review opens. */}
                     {autoReviewPending && !leadFormId && !formsLoading && availableForms.length > 1 && <p role="status" className="text-sm text-slate-600">Choose the form for these enquiries, and Review opens.</p>}
                   </div>}
+                  {destination === "website" && <WebsiteDestinationFields website={business.website} cta={websiteCta} onCta={(cta) => { setWebsiteCta(cta); if (!unresolvedRecovery()) setPrepareReview(null); }} disabled={preparing || creating} words={campaignWords} />}
                   {destination === "whatsapp" && <div className="flex min-w-0 flex-col gap-1.5">
                     {whatsappOptions.length ? <>
                       <Label htmlFor="whatsapp-number">WhatsApp button number</Label>
@@ -2200,7 +2197,7 @@ function BusinessCampaigns({
                 <p className="-mt-2 text-xs text-slate-500">
                   What to expect: {destination === "whatsapp"
                     ? whatsappExpectation(whatsappLedger ?? undefined)
-                    : <>AdBrain hasn&apos;t run enough instant-form campaigns yet to quote a cost per enquiry.</>} {REVIEW_AND_SPEND}
+                    : destination === "website" ? tc("destination.expectWebsite") : <>AdBrain hasn&apos;t run enough instant-form campaigns yet to quote a cost per enquiry.</>} {REVIEW_AND_SPEND}
                 </p>
 
                 {destination === "instant_form" && formsLoading && <p role="status" className="text-sm text-slate-500">Loading lead forms...</p>}
@@ -2259,6 +2256,7 @@ function BusinessCampaigns({
                     leadFormName={selectedLeadForm?.name}
                     destination={destination}
                     whatsappNumber={destination === "whatsapp" && chosenWhatsAppNumber ? chosenWhatsAppNumber : undefined}
+                    website={business.website} websiteCta={websiteCta} words={campaignWords}
                     weeklyCap={composerCap}
                     audience={`${audiencePreview}; ${targeting.ageMode === "manual" ? `ages ${targeting.ageMin}-${targeting.ageMax === 65 ? "65+" : targeting.ageMax}` : "ages picked by AdBrain when you check"}; ${{ all: "All genders", men: "Men", women: "Women" }[targeting.gender ?? "all"]}; ${targeting.cityScope === "city_only" ? "city only (no added radius)" : `city radius ${targeting.radiusKm} km`}${targeting.audience?.interestNames.length ? `; interests: ${targeting.audience.interestNames.join(", ")}` : ""}`}
                   />

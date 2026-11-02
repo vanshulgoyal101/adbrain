@@ -3,7 +3,9 @@ import { cn } from "@/lib/utils";
 import { formatPerDay } from "@/lib/format";
 import type { WeeklyCapNotice } from "@/lib/campaign/spend";
 import { WeeklyCapLine } from "@/components/weekly-cap-line";
-import type { LeadDestination } from "@/lib/types/campaign";
+import { websiteHref, type ComposerDestination } from "@/components/campaign-destination";
+import type { WebsiteCta } from "@/lib/campaign/connect-contracts";
+import { campaignsTranslator, type Words } from "@/i18n/words";
 
 export function CampaignLaunchReview({
   selectedCount,
@@ -11,20 +13,29 @@ export function CampaignLaunchReview({
   leadFormName,
   destination = "whatsapp",
   whatsappNumber,
+  website,
+  websiteCta = "learn_more",
   audience,
   weeklyCap = null,
+  words,
 }: {
   selectedCount: number;
   budget: number;
   leadFormName?: string;
-  destination?: Exclude<LeadDestination, "call" | "website">;
+  destination?: ComposerDestination;
   /** The chosen WhatsApp button number, masked as the owner sees it. */
   whatsappNumber?: string;
+  /** #2595: the Brand website a website ad opens, and its button. */
+  website?: string | null;
+  websiteCta?: WebsiteCta;
   audience: string;
   /** #1342: the Settings cap against this campaign's weekly commitment. */
   weeklyCap?: WeeklyCapNotice | null;
+  words?: Words<"campaigns">;
 }) {
-  const destinationReady = destination === "whatsapp" ? !!whatsappNumber : !!leadFormName;
+  const t = campaignsTranslator(words);
+  const websiteLink = destination === "website" ? websiteHref(website) : null;
+  const destinationReady = destination === "whatsapp" ? !!whatsappNumber : destination === "website" ? !!websiteLink : !!leadFormName;
   const isReady =
     selectedCount > 0 &&
     budget > 0 &&
@@ -61,14 +72,18 @@ export function CampaignLaunchReview({
           </dd>
         </div>
         <div>
-          <dt className="text-xs text-slate-500">Lead destination</dt>
+          <dt className="text-xs text-slate-500">{destination === "website" ? t("destination.reviewWebsite") : "Lead destination"}</dt>
           <dd className={cn("mt-1 break-words font-medium", destinationReady ? "text-slate-900" : "text-amber-700")}>
-            {destination === "whatsapp"
-              ? whatsappNumber ? `WhatsApp chat ${whatsappNumber}` : "WhatsApp chat (number verification pending)"
-              : leadFormName ?? "Choose a lead form"}
+            {destination === "website"
+              ? websiteLink ? <a href={websiteLink} target="_blank" rel="noopener noreferrer" className="break-all text-blue-700 underline">{websiteLink}</a> : t("destination.noWebsite")
+              : destination === "whatsapp"
+                ? whatsappNumber ? `WhatsApp chat ${whatsappNumber}` : "WhatsApp chat (number verification pending)"
+                : leadFormName ?? "Choose a lead form"}
           </dd>
-          {/* #906/#680: WhatsApp and lead-form ads leave Audience Network out, where taps were mostly accidental. */}
-          <dd className="mt-1 text-xs text-slate-500">Shown on Facebook, Instagram and Messenger</dd>
+          {destination === "website"
+            ? <dd className="mt-1 text-xs text-slate-500">{t("destination.reviewButton", { cta: t(`destination.cta.${websiteCta}`) })}</dd>
+            /* #906/#680: WhatsApp and lead-form ads leave Audience Network out, where taps were mostly accidental. */
+            : <dd className="mt-1 text-xs text-slate-500">Shown on Facebook, Instagram and Messenger</dd>}
         </div>
         <div>
           <dt className="flex items-center gap-1 text-xs text-slate-500">
