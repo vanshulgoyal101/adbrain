@@ -42,6 +42,7 @@ const editOperationsMigration = await readFile(join(root, "db/migrations/2026102
 const editAdCreativeMigration = await readFile(join(root, "db/migrations/20261026_campaign_edit_operations_ad_creative.sql"), "utf8");
 const adResultsMigration = await readFile(join(root, "db/migrations/20261026_campaign_ads_ad_results.sql"), "utf8");
 const mediaLibraryMigration = await readFile(join(root, "db/migrations/20261103_media_library.sql"), "utf8");
+const mediaUploadQuotaMigration = await readFile(join(root, "db/migrations/20261103_media_upload_quota.sql"), "utf8");
 const ownerAlertsMigration = await readFile(join(root, "db/migrations/20261027_owner_whatsapp_alerts.sql"), "utf8");
 const ownerAlertSendsMigration = await readFile(join(root, "db/migrations/20261027_owner_whatsapp_alerts_sends.sql"), "utf8");
 const planPeriodsMigration = await readFile(join(root, "db/migrations/20261029_plan_periods.sql"), "utf8");
@@ -1629,6 +1630,36 @@ async function verifyLeadFirstContacted(db, database) {
       assert.equal((await session.query("update public.leads set first_contacted_at=now() where id=$1", [lead])).rowCount, 0);
     });
     assert.equal((await db.query("select count(*)::int as n from pg_indexes where indexname='leads_business_first_contacted_idx'")).rows[0].n, 1);
+  });
+}
+
+async function verifyMediaUploadQuota(db, database) {
+  const owner = randomUUID(), business = randomUUID();
+  await db.query("insert into auth.users(id) values ($1)", [owner]);
+  await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Quota')", [business, owner]);
+  const sha = () => createHash("sha256").update(randomUUID()).digest("hex");
+  const row = (kind = "image", source = "upload") => [business, `${business}/${randomUUID()}.${kind === "video" ? "mp4" : "jpg"}`, sha(), kind, source];
+  const insert = "insert into public.media_assets(business_id,path,sha256,kind,source) values ($1,$2,$3,$4,$5)";
+  const monthStart = "date_trunc('month', now() at time zone 'Asia/Kolkata') at time zone 'Asia/Kolkata'";
+  await check(`${database}: media uploads: the monthly limit holds under parallel inserts, per kind, counting retired rows (#1209)`, async () => {
+    await db.query(`insert into public.media_assets(business_id,path,sha256,created_at) values ($1::uuid,$1::text||'/old.jpg',$2,${monthStart} - interval '1 day')`, [business, sha()]);
+    for (let i = 0; i < 48; i++) await db.query(insert, row());
+    await db.query(`update public.media_assets set deleted_at=now() where id in (select id from public.media_assets where business_id=$1 and created_at >= ${monthStart} limit 5)`, [business]);
+    const racers = await Promise.all(Array.from({ length: 5 }, async () => { const c = client(database); await c.connect(); return c; }));
+    try {
+      const results = await Promise.allSettled(racers.map(async (c) => {
+        await c.query("begin");
+        await c.query("set local role service_role");
+        try { await c.query(insert, row()); await c.query("commit"); } catch (error) { await c.query("rollback"); throw error; }
+      }));
+      assert.equal(results.filter(r => r.status === "fulfilled").length, 2, "exactly two of five parallel uploads fit under 50");
+      for (const r of results.filter(r => r.status === "rejected")) assert.equal(r.reason.message, "MEDIA_QUOTA");
+    } finally { await Promise.all(racers.map(c => c.end())); }
+    assert.equal((await db.query(`select count(*)::int as n from public.media_assets where business_id=$1 and kind='image' and created_at >= ${monthStart}`, [business])).rows[0].n, 50);
+    await assert.rejects(db.query(insert, row()), { code: "P0001", message: "MEDIA_QUOTA" });
+    await db.query(insert, row("image", "ai"));
+    for (let i = 0; i < 3; i++) await db.query(insert, row("video"));
+    await assert.rejects(db.query(insert, row("video")), { code: "P0001", message: "MEDIA_QUOTA" });
   });
 }
 
@@ -3443,6 +3474,9 @@ async function verify(database, source, integrityMigration, customerOnly = false
       await db.query(mediaLibraryMigration);
       await verifyMediaAssets(db,database);
       await verifyMediaConsents(db,database);
+      await db.query(mediaUploadQuotaMigration);
+      await db.query(mediaUploadQuotaMigration);
+      await verifyMediaUploadQuota(db,database);
       if ((await db.query("select to_regclass('public.lead_sync_runs') is not null as installed")).rows[0].installed) {
         await db.query(leadCampaignLinkMigration);
         await db.query(leadCampaignLinkMigration);
