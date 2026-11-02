@@ -697,7 +697,7 @@
       "rule": "C4-file-size",
       "from": "src/app/api/creatives/generate/route.ts",
       "to": "> 400 lines",
-      "lines": 448
+      "lines": 436
     },
     {
       "rule": "C4-file-size",
@@ -715,7 +715,7 @@
       "rule": "C4-file-size",
       "from": "src/components/campaigns.tsx",
       "to": "> 400 lines",
-      "lines": 2689
+      "lines": 2684
     },
     {
       "rule": "C4-file-size",
@@ -739,7 +739,7 @@
       "rule": "C4-file-size",
       "from": "src/components/setup-ads-step.tsx",
       "to": "> 400 lines",
-      "lines": 439
+      "lines": 404
     },
     {
       "rule": "C4-file-size",
@@ -763,7 +763,7 @@
       "rule": "C4-file-size",
       "from": "src/lib/creative/concept.ts",
       "to": "> 400 lines",
-      "lines": 655
+      "lines": 653
     },
     {
       "rule": "C4-file-size",
@@ -781,7 +781,7 @@
       "rule": "C4-file-size",
       "from": "src/lib/meta/client.ts",
       "to": "> 400 lines",
-      "lines": 2435
+      "lines": 2402
     },
     {
       "rule": "C4-file-size",
@@ -967,6 +967,234 @@
       "rule": "C5-english-errors",
       "from": "src/app/api/spend-limits/route.ts",
       "to": "English error literals",
+      "lines": 1
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/app/(app)/settings/privacy-requests/page.tsx",
+      "to": "English fallback texts",
+      "lines": 1
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/ad-assistant.tsx",
+      "to": "English fallback texts",
+      "lines": 1
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/assets-library.tsx",
+      "to": "English fallback texts",
+      "lines": 5
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/audience-switch-strip.tsx",
+      "to": "English fallback texts",
+      "lines": 1
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/brand-form.tsx",
+      "to": "English fallback texts",
+      "lines": 4
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/campaign-chat.tsx",
+      "to": "English fallback texts",
+      "lines": 4
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/campaign-launch-review.tsx",
+      "to": "English fallback texts",
+      "lines": 1
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/campaign-whatsapp-message-dialog.tsx",
+      "to": "English fallback texts",
+      "lines": 1
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/campaigns.tsx",
+      "to": "English fallback texts",
+      "lines": 17
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/claim-business.tsx",
+      "to": "English fallback texts",
+      "lines": 2
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/create-progress.tsx",
+      "to": "English fallback texts",
+      "lines": 4
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/customer-balance.tsx",
+      "to": "English fallback texts",
+      "lines": 1
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/edit-ad-dialog.tsx",
+      "to": "English fallback texts",
+      "lines": 3
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/enquiry-erasure.tsx",
+      "to": "English fallback texts",
+      "lines": 4
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/generation-details.tsx",
+      "to": "English fallback texts",
+      "lines": 1
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/instructions.tsx",
+      "to": "English fallback texts",
+      "lines": 4
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/lead-inbox.tsx",
+      "to": "English fallback texts",
+      "lines": 5
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/login-form.tsx",
+      "to": "English fallback texts",
+      "lines": 3
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/managed-billing.tsx",
+      "to": "English fallback texts",
+      "lines": 1
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/managed-page-step.tsx",
+      "to": "English fallback texts",
+      "lines": 6
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/managed/managed-onboarding-live.tsx",
+      "to": "English fallback texts",
+      "lines": 8
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/media-library.tsx",
+      "to": "English fallback texts",
+      "lines": 1
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/media-upload.tsx",
+      "to": "English fallback texts",
+      "lines": 1
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/meta-connect/meta-connect-dialog.tsx",
+      "to": "English fallback texts",
+      "lines": 9
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/privacy-requests.tsx",
+      "to": "English fallback texts",
+      "lines": 2
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/production-checkout.tsx",
+      "to": "English fallback texts",
+      "lines": 5
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/prospect-hand-over.tsx",
+      "to": "English fallback texts",
+      "lines": 2
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/sample-viewer.tsx",
+      "to": "English fallback texts",
+      "lines": 1
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/setup-ads-step.tsx",
+      "to": "English fallback texts",
+      "lines": 1
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/sign-out-button.tsx",
+      "to": "English fallback texts",
+      "lines": 2
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/spend-guardrails.tsx",
+      "to": "English fallback texts",
+      "lines": 3
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/studio.tsx",
+      "to": "English fallback texts",
+      "lines": 5
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/targeting-controls.tsx",
+      "to": "English fallback texts",
+      "lines": 1
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/test-checkout.tsx",
+      "to": "English fallback texts",
+      "lines": 9
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/whatsapp-enquiries.tsx",
+      "to": "English fallback texts",
+      "lines": 4
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/whatsapp-message-card.tsx",
+      "to": "English fallback texts",
+      "lines": 1
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/workspace-home.tsx",
+      "to": "English fallback texts",
+      "lines": 1
+    },
+    {
+      "rule": "C6-english-fallbacks",
+      "from": "src/components/workspace-shell.tsx",
+      "to": "English fallback texts",
       "lines": 1
     }
   ]
