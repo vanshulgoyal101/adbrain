@@ -67,7 +67,7 @@
     "launchDetail": "{n, plural, one {# approved ad is} other {# approved ads are}} ready. Choose where to show them and how much to spend.",
     "launchAction": "Launch a campaign",
     "readyTitle": "Your ads are ready",
-    "readyDetail": "Share them on WhatsApp or download them now. Launching on Facebook and Instagram opens soon.",
+    "readyDetail": "Share them on WhatsApp or download them now. Running them on Facebook and Instagram needs a Facebook connection; Campaigns shows where that stands.",
     "readyAction": "Share your ads",
     "approvedTitle": "{n, plural, one {# approved ad is} other {# approved ads are}} available",
     "approvedDetail": "Not in a campaign yet. Put them in a campaign or export them.",
@@ -266,6 +266,8 @@
     "figures": {
       "impressions": "Impressions",
       "clicks": "Clicks",
+      "linkClicks": "Link clicks",
+      "cpc": "CPC",
       "chats": "WhatsApp chats",
       "leads": "Leads",
       "visits": "Website visits",
@@ -411,6 +413,33 @@
       "linkPage": "On your Facebook Page: Settings → Linked accounts → WhatsApp. The code arrives as a WhatsApp message from Facebook, not an SMS.",
       "linkApp": "In the WhatsApp Business app: Settings → Business tools → Facebook & Instagram. No code is needed.",
       "then": "Then press Check again."
+    },
+    "meta": {
+      "title": "Meta connection",
+      "serverManaged": "This workspace uses a server-managed Meta connection.",
+      "expired": "Your Meta connection needs to be renewed.",
+      "reconnectBy": "Reconnect Facebook by {date} to keep managing your ads.",
+      "connected": "Connected. Account and Page details are checked when you open the connection.",
+      "intro": "Connect an existing Meta business to prepare campaigns. You can keep working on a draft first.",
+      "noBusiness": "Set up your business before connecting Meta.",
+      "notConfigured": "Meta connection is not configured on this server yet.",
+      "manage": "Manage connection",
+      "reconnect": "Reconnect",
+      "connect": "Connect Business",
+      "disconnect": "Disconnect",
+      "disconnecting": "Disconnecting...",
+      "disconnectFailed": "Facebook is still connected. Try again in a minute.",
+      "unavailable": "Meta connection status is temporarily unavailable. Your campaign draft is preserved.",
+      "tryAgain": "Try again",
+      "noticeConnected": "Your Meta account is connected.",
+      "noticeSelect": "Connected. Now choose your ad account and page below.",
+      "error": {
+        "not_configured": "Facebook Login isn't configured on this server yet.",
+        "no_business": "Set up your business before connecting Meta.",
+        "invalid_state": "That connection link expired. Please try connecting again.",
+        "connect_failed": "Couldn't complete the connection. Please try again.",
+        "access_denied": "You declined the permissions AdBrain needs to manage ads."
+      }
     }
   },
   "pilotDay7": {
@@ -468,6 +497,14 @@
       "title": "Tell us about your business",
       "helper": "Five things. Your ads are made from these, and you can change them any time.",
       "website": "Your website (optional)",
+      "websiteRequired": "Your website or page",
+      "destination": {
+        "legend": "Where should customers go?",
+        "whatsapp": "WhatsApp chat",
+        "whatsappHint": "Customers message you. Best for most local businesses.",
+        "website": "Your website",
+        "websiteHint": "Customers visit the website or page above. A phone is optional."
+      },
       "fillWebsite": "Fill it from my website",
       "pasteToggle": "No website? Paste a bio or listing",
       "pasteLabel": "Instagram bio, Google listing or catalogue text",
@@ -512,17 +549,21 @@
         "locations": {
           "label": "Where you serve",
           "placeholder": "e.g. Mohali\nKharar",
-          "helper": "Your ads show only here. One city or area per line."
+          "helper": "Your ads show only here. One city or area per line.",
+          "websiteHelper": "Your ads show only here. Selling online everywhere? Write All India."
         },
         "offer": {
           "label": "Your offer",
           "placeholder": "e.g. Free site survey",
-          "helper": "One thing customers get for messaging you. Only what you really offer."
+          "helper": "One thing customers get for messaging you. Only what you really offer.",
+          "websiteHelper": "One thing customers get when they visit. Only what you really offer."
         },
         "phone": {
           "label": "WhatsApp number",
           "placeholder": "98765 43210",
-          "helper": "Customers message you here."
+          "helper": "Customers message you here.",
+          "optionalLabel": "Phone number (optional)",
+          "websiteHelper": "Only if customers can also call or message you."
         }
       },
       "errors": {
@@ -530,7 +571,8 @@
         "vertical": "Say what you sell, in a few words.",
         "locations": "Add at least one city or area.",
         "offer": "Add one offer, like a free visit or a first-time price.",
-        "phone": "Enter a 10-digit mobile number."
+        "phone": "Enter a 10-digit mobile number.",
+        "website": "Add the website or page people should go to, like yourbusiness.com/offer."
       }
     },
     "ads": {
@@ -609,6 +651,29 @@
       "billingRequired": "Meta needs a way to pay first: a card, or money added by UPI or net banking. Add it in Meta, then tap Go live again. Nothing was spent.",
       "savedPaused": "Your campaign is saved, paused. Nothing was spent.",
       "openCampaigns": "Open Campaigns"
+    },
+    "access": {
+      "pending": "Facebook is still reviewing AdBrain. You can make, approve and download ads now. Connecting a new Facebook account must wait for Meta to approve access.",
+      "requested": "Request received. Sending a request does not switch on Facebook access; Meta approval is still pending.",
+      "requestFailed": "Your request did not send. Check your connection and try again.",
+      "again": "Try again"
+    },
+    "readyAds": {
+      "title": "Your ads are ready",
+      "connectFirst": "Connect Facebook to run them on Facebook and Instagram. Until then, share your ads with customers yourself.",
+      "yourAd": "Your ad: {headline}",
+      "newestAd": "Your newest approved ad",
+      "preparing": "Preparing download…",
+      "downloadOne": "Download your ad",
+      "downloadAll": "Download all {n} ads",
+      "downloadFailed": "The download didn't finish. Check your connection and try again.",
+      "seeAll": "See all approved ads",
+      "runTitle": "Want to run them on Facebook?",
+      "askBody": "Ask for Facebook access so we know you're waiting. You approve every rupee before anything runs.",
+      "ask": "Ask for Facebook access",
+      "asking": "Sending request…",
+      "haveAccess": "Already have access?",
+      "connect": "Connect Facebook"
     }
   },
   "pauseAll": {
@@ -752,6 +817,57 @@
       "discardTitle": "Discard this setup?",
       "discardCopy": "Start a copy of \"{name}\" instead. Saved drafts stay available.",
       "discardAndCopy": "Discard and copy"
+    },
+    "review": {
+      "title": "Campaign review",
+      "fixItems": "Fix {count, plural, one {# item} other {# items}} before sending to Meta",
+      "cantSendYet": "This campaign can't be sent to Meta yet",
+      "pausedNote": "Meta gets it paused. Nothing spends until you activate it.",
+      "appearsOnceFixed": "Send to Meta (paused) appears once this is fixed.",
+      "checkAgain": "Check again",
+      "openBrand": "Open your business details",
+      "useWhatsApp": "Use WhatsApp chat instead (no website needed)",
+      "fix": {
+        "REVIEW_NO_META_CONNECTION": "Connect Facebook",
+        "REVIEW_CURRENCY": "Choose another ad account",
+        "REVIEW_META_ACCESS": "Connect Facebook again",
+        "REVIEW_CREATIVES": "Choose your ads",
+        "REVIEW_WHATSAPP_NOT_LINKED": "Link your WhatsApp number",
+        "REVIEW_NO_LEAD_FORM": "Choose a lead form",
+        "REVIEW_NO_WEBSITE": "Add website in Your business",
+        "REVIEW_WEBSITE_UNREACHABLE": "Fix link in Your business",
+        "REVIEW_BUDGET": "Set the daily budget",
+        "REVIEW_NO_AGE_RANGE": "Set the age range",
+        "REVIEW_RADIUS": "Set the city radius",
+        "REVIEW_CITY_RADIUS": "Choose the locations again",
+        "REVIEW_AREAS_UNRESOLVED": "Fix the areas",
+        "REVIEW_NO_AUDIENCE": "Go to Recommend audience",
+        "REVIEW_AD_POLICY": "Edit the ad's wording",
+        "REVIEW_INTERESTS_UNRESOLVED": "Edit the interests",
+        "REVIEW_WHATSAPP_MESSAGE": "Edit the WhatsApp message"
+      }
+    },
+    "destination": {
+      "legend": "Where should people go?",
+      "whatsapp": "WhatsApp chat",
+      "whatsappName": "WhatsApp chat (recommended)",
+      "recommended": "Recommended",
+      "whatsappHint": "People message you on WhatsApp",
+      "instantForm": "Instant form",
+      "instantFormHint": "People leave their name and number",
+      "website": "Website",
+      "websiteHint": "People open a page on your site",
+      "websiteLink": "Your ads open",
+      "open": "Open",
+      "changeInBrand": "Change in Brand",
+      "noWebsite": "Add your website in Brand first.",
+      "openBrand": "Add website in Brand",
+      "goal": "Goal",
+      "goalWebsite": "Website visits",
+      "goalWebsiteHint": "Meta counts people who open your page",
+      "reviewWebsite": "People will go to",
+      "needsLink": "Needs a working link",
+      "expectWebsite": "What to expect: AdBrain hasn’t run enough website campaigns yet to quote a cost per visit. Meta reviews new ads first, usually within 24 hours, and nothing spends until you go live."
     }
   },
   "errors": {
@@ -886,6 +1002,9 @@
     "planFailed": "Could not prepare the campaign plan.",
     "signInRequired": "Sign in required.",
     "businessMissing": "Business not found.",
+    "mediaRightsRequired": "Confirm you own these photos or have permission to use them.",
+    "mediaPeopleRequired": "Confirm that everyone recognisable has agreed to appear in your ads.",
+    "mediaConsentNotSaved": "Your confirmation couldn't be saved. Try again.",
     "chooseCampaign": "Choose a campaign.",
     "enquiriesNotDeleted": "The enquiries couldn't be deleted. Try again.",
     "enquiryNotDeleted": "The enquiry couldn't be deleted. Try again.",
@@ -914,7 +1033,22 @@
     "campaignsNotLoaded": "We couldn't load your campaigns. Reload the page.",
     "enquiryInvalid": "Invalid enquiry.",
     "enquiryWhatsAppOnly": "Real enquiries can be logged on WhatsApp campaigns only.",
-    "enquiryNotSaved": "The enquiry could not be saved. Try again."
+    "enquiryNotSaved": "The enquiry could not be saved. Try again.",
+    "draftGone": "This campaign draft has expired or was removed. Reload the page and set up the campaign again. Nothing was sent to Meta.",
+    "draftChangedElsewhere": "Draft changed in another tab. Review the latest version.",
+    "websiteClosed": "Website ads aren't open yet. Choose WhatsApp chat or a lead form.",
+    "reviewCheckFailed": "Couldn't check your campaign just now. Nothing was sent to Meta. Try again in a minute.",
+    "reviewRequestInvalid": "A valid business, draft, and version are required.",
+    "businessAccessDenied": "Business access is not allowed.",
+    "businessAccessUnchecked": "Business access could not be checked.",
+    "createRequestInvalid": "Campaign creation request is invalid.",
+    "executionModeMisconfigured": "Campaign execution mode is not configured correctly.",
+    "operationStorageUnavailable": "Campaign operation storage is unavailable.",
+    "requestKeyReused": "This idempotency key was used for a different campaign request.",
+    "createAlreadyRunning": "This campaign operation is already running.",
+    "reviewBlockersFirst": "Campaign preparation is blocked. Resolve the review blockers before creating.",
+    "reviewChangedBeforeCreate": "Campaign review changed. Review again before creating.",
+    "campaignQueueUnavailable": "Campaign queue is unavailable. No inline fallback was attempted."
   },
   "notices": {
     "studio": {
@@ -1162,5 +1296,38 @@
       "saveFailed": "That couldn't be saved. Try again.",
       "enquiryFailed": "The enquiry could not be saved. Try again."
     }
+  },
+  "review": {
+    "noMetaConnection": "Connect Facebook and choose your Page and ad account.",
+    "currency": "Choose an ad account that pays in Indian rupees (INR).",
+    "metaAccess": "Meta hasn't confirmed AdBrain can create campaigns in this ad account. Connect Facebook again and allow every permission it asks for.",
+    "noAds": "Choose at least one ad to send to Meta.",
+    "adGone": "One of the ads you chose isn't available any more. Choose your ads again.",
+    "adNoHeadline": "An ad you chose has no headline. Take it out of this campaign and choose another ad.",
+    "adNotApproved": "The ad {named, select, yes {{name}} other {you chose}} isn't approved yet. Approve it on the Review page, or take it out of this campaign.",
+    "adNoPicture": "The ad {named, select, yes {{name}} other {you chose}} has no picture yet. Take it out of this campaign and choose another ad.",
+    "adsMore": "{first} {more, plural, one {# more ad needs} other {# more ads need}} fixing too.",
+    "whatsappNotLinked": "Your Facebook Page has no WhatsApp number linked yet, so the ad's button has nowhere to open a chat. Link the number in Settings, then review again.",
+    "whatsappMessage": "Your WhatsApp message: {problem}",
+    "noLeadForm": "Choose an active lead form from your Facebook Page in the Lead form field.",
+    "noWebsite": "Add your business website on the Your business page. Meta lead ads must link to the advertiser's own website, not Facebook.",
+    "adPolicy": "\"{term}\" in the ad \"{named, select, yes {{headline}} other {without a headline}}\" is {kind, select, health {a health promise} other {a promise}} Meta rejects. Edit the ad to describe the service instead.",
+    "budgetZero": "Set a daily budget above ₹0.",
+    "budgetLow": "Meta needs at least ₹{min} a day. Set a daily budget of ₹{min} or more.",
+    "noAgeRange": "Choose an age range, or let AdBrain recommend one, before reviewing.",
+    "radius": "Set the city radius between 17 and 80 km; Meta allows nothing outside that range.",
+    "cityRadius": "\"City only\" came back from Meta with a radius. Choose the locations again.",
+    "areasNamed": "Meta didn't recognise the {count, plural, one {area} other {areas}} {names}. Fix or remove {count, plural, one {it} other {them}}, or choose nationwide targeting.",
+    "areasUnnamed": "Meta didn't recognise some of your areas. Fix or remove them, or choose nationwide targeting.",
+    "noAudience": "Let AdBrain recommend the audience (Recommend audience) before reviewing.",
+    "interestsNamed": "Meta didn't recognise the {count, plural, one {interest} other {interests}} {names}. Edit or remove {count, plural, one {it} other {them}}.",
+    "interestsUnnamed": "Meta didn't recognise some audience interests. Edit or remove them.",
+    "listAnd": "{first} and {last}",
+    "listMore": "{names} and {more} more",
+    "websiteMissing": "Add your business website on the Your business page. A website ad opens your own site, so AdBrain needs its address.",
+    "websiteUnreachable": "AdBrain couldn't open your website {host}. Check the address on the Your business page, or make sure the site is up, then review again.",
+    "websiteStatus": "Your website {host} answered with an error{coded, select, yes { ({status})} other {}} when AdBrain opened it. Check the address on the Your business page, or make sure the site is up, then review again.",
+    "websiteBlocked": "{host} isn't a public website address. Add your business's public site on the Your business page.",
+    "websiteRedirect": "Your website {host} sends visitors on to {known, select, yes {{finalHost}} other {another site}}. Add the address of your own site on the Your business page, so the ad opens your business."
   }
 }

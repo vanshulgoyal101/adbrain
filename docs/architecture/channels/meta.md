@@ -66,8 +66,9 @@ the text follows the token owner's locale (#185).
 
 - Tapes: `tests/core/fixtures/meta/` (60 recorded responses, scrubbed of tokens and IDs).
 - Recorders: `scripts/record-meta-*.ts` (30), run with
-  `npx tsx --env-file=<.env.local> <script>`. They call the real account: read each
-  script's header before running it, and record new create paths with `validate_only`.
+  `npx tsx --import ./scripts/trusted-server-cli.mjs --env-file=<.env.local> <script>`.
+  They call the real account: read each script's header before running it, and record
+  new create paths with `validate_only`.
 - Launch gate: `tests/core/launch-validate.test.ts` requires every create POST to equal a
   payload Meta accepted with `validate_only` (`launch-validate.json`). Part of `test:core`.
 - Campaigns are created PAUSED and activated as a separate step; see

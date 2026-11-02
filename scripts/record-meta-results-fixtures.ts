@@ -2,7 +2,7 @@
  * Records real Graph insights and ad review reads for the test:core results refresh
  * fixture (#258). Read-only: no Meta writes.
  *
- *   npx tsx --env-file=.env.local scripts/record-meta-results-fixtures.ts <live-campaign-id> <paused-campaign-id>
+ *   npx tsx --import ./scripts/trusted-server-cli.mjs --env-file=.env.local scripts/record-meta-results-fixtures.ts <live-campaign-id> <paused-campaign-id>
  *
  * Uses META_SYSTEM_USER_TOKEN / META_AD_ACCOUNT_ID / META_PAGE_ID; tokens are stripped.
  */

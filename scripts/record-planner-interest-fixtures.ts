@@ -4,7 +4,7 @@
  * MESSAGES_JSON holds the route's messages (captured from tests/core/campaign-prepare.test.ts, with
  * production brand facts swapped in).
  *
- *   MESSAGES_JSON=<file> npx tsx --env-file=.env.local scripts/record-planner-interest-fixtures.ts
+ *   MESSAGES_JSON=<file> npx tsx --import ./scripts/trusted-server-cli.mjs --env-file=.env.local scripts/record-planner-interest-fixtures.ts
  */
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";

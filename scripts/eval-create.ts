@@ -11,7 +11,7 @@
  * Pollinations images, OpenRouter switched off. Runs the two gate cases (English, Hindi) with no judge
  * (--judge adds it) and compares only the deterministic copy checks with tests/eval/baseline-free.json.
  *
- *   npx tsx --env-file=.env.local scripts/eval-create.ts [--profile free] [--cases id,id] [--repeat 2] [--write-baseline] [--no-judge | --judge]
+ *   npx tsx --import ./scripts/trusted-server-cli.mjs --env-file=.env.local scripts/eval-create.ts [--profile free] [--cases id,id] [--repeat 2] [--write-baseline] [--no-judge | --judge]
  *     [--cap-usd 5] [--keep-usd 2]   (keep-usd: the shared key's dollars kept for production; at least 0.5)
  *
  * Without --write-baseline it compares with its profile's baseline and exits 1 when a customer

@@ -1,0 +1,60 @@
+{
+  "recordedAt": "2026-11-02T14:24:19.469Z",
+  "note": "#2649: real qwen interview replies for the Cedar Ridge smoke Brand ('$49 new-patient exam', 'Free 15-minute spine check') with the setup step's goal (Groq only, Brand read-only).",
+  "brand": {
+    "name": "Cedar Ridge Chiropractic",
+    "vertical": "chiropractic clinic",
+    "description": "A family chiropractic clinic in Austin, Texas offering spinal adjustments, posture care, and sports injury rehab. Same-day appointments for new patients.",
+    "brand_voice": "Warm, professional, plain-spoken. No hype, no exclamation marks, no medical promises.",
+    "target_audience": "Adults 30-60 with desk jobs, weekend athletes, and new parents in the Austin area.",
+    "usps": [
+      "Same-day appointments for new patients",
+      "Board-certified chiropractors with 15+ years combined experience",
+      "Insurance accepted, plus transparent cash pricing",
+      "Digital posture scan included on your first visit",
+      "Evening and Saturday hours"
+    ],
+    "offers": [
+      "$49 new-patient exam and consultation",
+      "Free 15-minute spine check"
+    ],
+    "languages": [
+      "English"
+    ],
+    "locations": [
+      "Austin, Texas",
+      "Round Rock, Texas",
+      "Cedar Park, Texas"
+    ]
+  },
+  "goal": "Get more new patients in Austin to book a visit, leading with: $49 new-patient exam and consultation",
+  "replies": [
+    {
+      "run": 0,
+      "attempt": 1,
+      "valid": true,
+      "rules": [],
+      "provider": "groq",
+      "model": "qwen/qwen3.8-27b",
+      "content": "{\n  \"ready\": true,\n  \"brief\": \"A calm, sunlit scene in a modern Austin office setting, showing a relaxed professional or weekend athlete receiving a gentle, professional posture assessment from a board-certified chiropractor. The visual mood is warm, trustworthy, and unhurried, avoiding any sense of urgency or high-pressure sales. The copy leads with the specific offer: '$49 new-patient exam and consultation,' clearly stating that same-day appointments are available. The tone is plain-spoken and professional, emphasizing the value of the digital posture scan included in the visit and the clinic's transparent approach to care. No exclamation marks or hype, just a clear, accessible invitation for adults in the Austin area to prioritize their spinal health with a low-barrier first step.\",\n  \"language\": \"en\",\n  \"angleId\": \"value\",\n  \"recommendations\": [\n    {\n      \"label\": \"Problem-Solution Focus\",\n      \"prompt\": \"Create a variation that leads with the specific pain point of desk-job neck and back stiffness, positioning the $49 exam as the direct solution to find the root cause, rather than just a price point.\"\n    },\n    {\n      \"label\": \"Trust & Experience Focus\",\n      \"prompt\": \"Create a variation that leads with the '15+ years combined experience' and 'Board-certified' credentials to build trust, using the $49 exam as a low-risk way to experience that expertise, targeting skeptical new patients.\"\n    }\n  ]\n}"
+    },
+    {
+      "run": 1,
+      "attempt": 1,
+      "valid": true,
+      "rules": [],
+      "provider": "groq",
+      "model": "qwen/qwen3.8-27b",
+      "content": "{\n  \"ready\": true,\n  \"brief\": \"A calm, bright clinic room in Austin where a board-certified chiropractor gently reviews a digital posture scan with a relaxed patient in their 40s, conveying trust and ease. The copy opens with the direct value of the $49 new-patient exam and consultation, clearly stating that same-day appointments are available for new patients. The tone is warm and plain-spoken, avoiding any hype or medical promises, and closes with a simple invitation to book a visit at Cedar Ridge Chiropractic.\",\n  \"language\": \"en\",\n  \"angleId\": \"value\",\n  \"recommendations\": [\n    {\n      \"label\": \"Desk Job Pain Point\",\n      \"prompt\": \"Show a tired office worker at a desk in Austin, then transition to them feeling relief after a chiropractic adjustment, leading with the $49 new-patient exam and consultation.\"\n    },\n    {\n      \"label\": \"Weekend Athlete Recovery\",\n      \"prompt\": \"Feature a weekend athlete in Austin recovering from a minor sports injury, highlighting the $49 new-patient exam and consultation with same-day availability.\"\n    },\n    {\n      \"label\": \"New Parent Relief\",\n      \"prompt\": \"Depict a new parent in Austin holding a baby, looking for relief from postpartum and parenting strain, leading with the $49 new-patient exam and consultation.\"\n    }\n  ]\n}"
+    },
+    {
+      "run": 2,
+      "attempt": 1,
+      "valid": true,
+      "rules": [],
+      "provider": "groq",
+      "model": "qwen/qwen3.8-27b",
+      "content": "{\n  \"ready\": true,\n  \"brief\": \"A bright, calm interior shot of the Cedar Ridge Chiropractic clinic in Austin, featuring a warm, professional chiropractor adjusting a seated adult patient with a relaxed posture, soft natural light, and a visible 'Same-Day Appointments' sign in the background. The copy leads with the specific offer: 'New to Cedar Ridge? Get a $49 new-patient exam and consultation.' The tone is plain-spoken and reassuring, highlighting that board-certified chiropractors are ready to help desk workers and weekend athletes in Austin, Round Rock, and Cedar Park. No exclamation marks, no hype, just a clear, low-risk first step for adults 30-60 looking for posture care or injury rehab.\",\n  \"language\": \"en\",\n  \"angleId\": \"offer\",\n  \"recommendations\": [\n    {\n      \"label\": \"Desk Worker Relief Scene\",\n      \"prompt\": \"Create an ad showing a tired office worker in a home or office setting with a slouched posture, transitioning to a relaxed state after a visit, highlighting the 'Digital posture scan' included in the first visit.\"\n    },\n    {\n      \"label\": \"Weekend Athlete Recovery\",\n      \"prompt\": \"Create an ad focusing on a weekend athlete (e.g., runner or cyclist) in the Austin area, emphasizing 'sports injury rehab' and 'evening and Saturday hours' to fit their busy schedule.\"\n    }\n  ]\n}"
+    }
+  ]
+}

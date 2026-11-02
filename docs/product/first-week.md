@@ -27,8 +27,8 @@ day." For every screen in detail, see [Manage](manage.md).
   after 5."
 - Meta also takes time to learn who replies. Each new run starts that learning
   from zero, so "results may be slow at first". Changing who sees a running
-  campaign can mean a fresh copy that goes back to Meta's review, and "learning
-  restarts". So give it time before you change things.
+  campaign doesn't touch it: the change is "Saved for your next run", so its
+  learning carries on. So give it time before you change things.
 - Meta spreads your money across the days: "one day can be more than ₹300
   and another less. The total never goes past the limit above."
 

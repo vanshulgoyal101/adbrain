@@ -47,6 +47,41 @@ jobs:
         run: |
           set -euo pipefail
           repo="$GITHUB_REPOSITORY"
+          # GitHub holds every workflow that this job's PRs (opened or moved with GITHUB_TOKEN) trigger for
+          # approval: no jobs, "action_required", then a red failure when the PR merges (#2642). Delete those runs,
+          # so nothing runs (no paid AI review, no core-approval verdict over the status set below) and nothing turns
+          # red. One exception: main counts a commit's checks for the PR only if CI ran on a push of it. After a
+          # sync, CI on next was dispatched (a GITHUB_TOKEN merge pushes nothing), so the PR could never merge
+          # (#2682, #2200). Then approve this PR's own CI on that exact commit and let the merge wait for it.
+          tidy_held_runs() {
+            local sha=$1 branch=$2 pushed held rid path rsha
+            pushed=$(gh api "repos/$repo/actions/runs?head_sha=$sha&event=push&per_page=20" \
+              --jq '[.workflow_runs[] | select(.path == ".github/workflows/ci.yml" and (.conclusion == null or .conclusion == "success"))] | length') || pushed=""
+            held=$(gh api "repos/$repo/actions/runs?branch=$branch&event=pull_request&status=action_required&per_page=50" \
+              --jq ".workflow_runs[] | select(.conclusion == \"action_required\" and .actor.login == \"github-actions[bot]\" and .head_repository.full_name == \"$repo\") | \"\(.id) \(.path) \(.head_sha)\"") || held=""
+            while read -r rid path rsha; do
+              [ -n "$rid" ] || continue
+              # Unsure whether this commit had push CI: leave its CI run for the next try.
+              if [ "$path" = .github/workflows/ci.yml ] && [ "$rsha" = "$sha" ] && [ -z "$pushed" ]; then continue; fi
+              if [ "$path" = .github/workflows/ci.yml ] && [ "$rsha" = "$sha" ] && [ "$pushed" -eq 0 ]; then
+                gh api -X POST "repos/$repo/actions/runs/$rid/approve" >/dev/null \
+                  && echo "approved this PR's CI run $rid on ${sha::7} (no push CI on it)" || echo "::warning::could not approve $rid"
+              else
+                gh api -X DELETE "repos/$repo/actions/runs/$rid" >/dev/null \
+                  && echo "deleted held run $rid ($path on ${rsha::7})" || echo "::warning::could not delete held run $rid"
+              fi
+            done <<<"$held"
+          }
+          # A held run GitHub created after the last tidy turns into a 0-job failure when the PR merges; delete it.
+          clear_flipped_runs() {
+            local sha=$1 branch=$2 rid
+            sleep 5
+            for rid in $(gh api "repos/$repo/actions/runs?branch=$branch&event=pull_request&status=failure&head_sha=$sha&per_page=50" \
+              --jq ".workflow_runs[] | select(.actor.login == \"github-actions[bot]\" and .head_repository.full_name == \"$repo\") | .id" || true); do
+              [ "$(gh api "repos/$repo/actions/runs/$rid/jobs" --jq .total_count || echo 1)" = 0 ] || continue
+              gh api -X DELETE "repos/$repo/actions/runs/$rid" >/dev/null && echo "deleted 0-job run $rid left by the merge" || true
+            done
+          }
           ahead=$(gh api "repos/$repo/compare/main...next" --jq '.ahead_by')
           [ "$ahead" -gt 0 ] || { echo "next has nothing main lacks."; exit 0; }
           # At most one production deploy per GAP_MINUTES. Trains were next → main PRs until #2528, deploy-train since.
@@ -86,12 +121,14 @@ jobs:
                 --body "Automatic: brings migrations and hotfixes on main into next before the next train (#461).")
               sync=${sync##*/}
             fi
-            # Like the train PR (#1002): no workflow runs on this GITHUB_TOKEN PR, and main's commits already
-            # passed core-approval to get there (#1020).
+            # Like the train PR (#1002): this GITHUB_TOKEN PR's own workflows are held (see tidy_held_runs), and
+            # main's commits already passed core-approval to get there (#1020).
             gh api -X POST "repos/$repo/statuses/$msha" -f state=success -f context=core-approval \
               -f description="Train sync: main's commits were gated into main" >/dev/null
             merged=""
+            sleep 10
             for i in $(seq 1 20); do
+              tidy_held_runs "$msha" main
               if gh pr merge "$sync" -R "$repo" --merge --match-head-commit "$msha"; then merged=1; break; fi
               if [ "$(gh pr view "$sync" -R "$repo" --json mergeable --jq .mergeable)" = "CONFLICTING" ]; then break; fi
               sleep 30
@@ -100,6 +137,7 @@ jobs:
               echo "Could not merge main into next (#$sync: conflict or main's checks not green). Fix #$sync or merge main into next by a person's PR." > "$RUNNER_TEMP/reason"
               echo "::error::$(cat "$RUNNER_TEMP/reason")"; exit 1
             fi
+            clear_flipped_runs "$msha" main
             gh workflow run ci.yml -R "$repo" --ref next
             sleep 20
           fi
@@ -154,50 +192,35 @@ jobs:
             pr=$(gh pr create -R "$repo" --base main --head deploy-train --title "$title" --body "$body")
             pr=${pr##*/}
           fi
-          # core-approval.yml never runs for this PR (a GITHUB_TOKEN-opened PR triggers no workflows), and its
+          # core-approval.yml never runs for this PR (its GITHUB_TOKEN-triggered runs are held and deleted), and its
           # head is a commit on next, so each of its PRs was already gated into next (#1002). Set it here.
           gh api -X POST "repos/$repo/statuses/$sha" -f state=success -f context=core-approval \
             -f description="Deploy train: its PRs were gated into next" >/dev/null
           # A merge commit keeps next's history, so the next train needs no rebase.
-          # A just-created PR can briefly report its green checks as "expected" (#608). Its pull_request CI can
-          # also fail with 0 jobs when the merge ref isn't ready yet (#878): that's GitHub, not a red build, so
-          # rerun it once. A PR CI failure that ran jobs is a real failure and stops the train at once.
-          # This PR's own pull_request runs (actor github-actions[bot]) never start jobs; when the PR merges they end
-          # as 0-job failures and email the owner every train. They add nothing (next's checks above are the gate),
-          # so cancel any that haven't started; a cancelled run sends no failure email.
+          # A just-created PR can briefly report its green checks as "expected" (#608). Give GitHub a moment to
+          # create the PR's held runs, then tidy them before every merge attempt (late runs included).
           sleep 10
-          # Log each run's state and the cancel result: the 18:46Z train's cancels didn't take, silently.
-          gh api "repos/$repo/actions/runs?head_sha=$sha&event=pull_request&per_page=50" \
-            --jq '.workflow_runs[] | select(.actor.login == "github-actions[bot]") | "\(.id) \(.status) \(.name)"' |
-          while read -r rid rstatus rname; do
-            echo "train PR run $rid ($rname): $rstatus"
-            [ "$rstatus" = completed ] && continue
-            gh api -X POST "repos/$repo/actions/runs/$rid/cancel" >/dev/null 2>cancel.err \
-              || gh api -X POST "repos/$repo/actions/runs/$rid/force-cancel" >/dev/null 2>>cancel.err \
-              || echo "::warning::could not cancel $rid: $(tr '\n' ' ' < cancel.err | cut -c1-200)"
-          done
-          merged=""; rerun=""
+          merged=""
           for i in $(seq 1 30); do
             # --match-head-commit pins the head only: a hotfix landing on main since the check would merge into a
             # tree CI never saw, so stop and let the next run sync it first.
             if [ "$(gh api "repos/$repo/compare/$sha...main" --jq '.files | length')" -ne 0 ]; then
               echo "::error::main changed since ${sha::7} was checked; the next train syncs it first."; exit 1
             fi
+            tidy_held_runs "$sha" deploy-train
             if gh pr merge "$pr" -R "$repo" --merge --match-head-commit "$sha"; then merged=1; break; fi
+            # Only an approved PR CI runs jobs; if it ran them and failed, the merged tree is red.
             run=$(gh api "repos/$repo/actions/runs?head_sha=$sha&event=pull_request&per_page=20" \
-              --jq '[.workflow_runs[] | select(.name == "CI")] | sort_by(.created_at) | last // empty | "\(.id) \(.status) \(.conclusion)"')
+              --jq '[.workflow_runs[] | select(.path == ".github/workflows/ci.yml")] | sort_by(.created_at) | last // empty | "\(.id) \(.status) \(.conclusion)"')
             read -r rid rstatus rconclusion <<<"$run"
-            if [ -n "$rid" ] && [ "$rstatus" = completed ] && [ "$rconclusion" = failure ]; then
-              jobs=$(gh api "repos/$repo/actions/runs/$rid/jobs" --jq .total_count)
-              if [ "$jobs" != 0 ]; then echo "::error::pull_request CI $rid on ${sha::7} failed; not promoting."; exit 1; fi
-              if [ -z "$rerun" ]; then
-                echo "pull_request CI $rid has 0 jobs (merge ref not ready); rerunning it once."
-                gh run rerun "$rid" -R "$repo" && rerun=1
-              fi
+            if [ -n "$rid" ] && [ "$rstatus" = completed ] && [ "$rconclusion" = failure ] &&
+              [ "$(gh api "repos/$repo/actions/runs/$rid/jobs" --jq .total_count)" != 0 ]; then
+              echo "::error::pull_request CI $rid on ${sha::7} failed; not promoting."; exit 1
             fi
             sleep 20
           done
           [ -n "$merged" ] || { echo "::error::#$pr was not mergeable within 10 min."; exit 1; }
+          clear_flipped_runs "$sha" deploy-train
           echo "Promoted ${sha::7} via #$pr."
           gh workflow run production-drift.yml -R "$repo" --ref main || echo "::warning::drift check not dispatched"
       - name: Alert once when the train is stuck

@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { campaignAttention } from "@/lib/campaign/health";
+import website from "./core/fixtures/meta/website-results.provisional.json";
+import { decodeCampaignInsights } from "@/lib/meta/insights";
 
 const mocks = vi.hoisted(() => ({
   secret: "cron-secret" as string | undefined,
@@ -74,6 +76,22 @@ beforeEach(() => {
 });
 
 describe("GET /api/cron/refresh-results (#258)", () => {
+  it("#2635: scheduled refresh saves website link clicks, including zero, without changing form reads", async () => {
+    mocks.campaigns = [bound("website", "website"), bound("empty", "empty"), bound("form", "form")];
+    mocks.insights.mockImplementation(async (id: string) => id === "website"
+      ? decodeCampaignInsights(website.payload, "website")
+      : id === "empty" ? decodeCampaignInsights({ data: [] }, "website") : insights);
+    const stored: Record<string, unknown>[] = [];
+    mocks.saveCampaignResult.mockImplementation(async (_actor, row) => {
+      stored.push(row);
+      return { data: row, error: null };
+    });
+    expect((await call()).body).toMatchObject({ ok: true, refreshed: 3, failed: 0 });
+    expect(stored[0]).toMatchObject({ clicks: 97, link_clicks: 75, landing_page_views: 55, spend: 412.5 });
+    expect(stored[1]).toMatchObject({ clicks: 0, link_clicks: 0, landing_page_views: 0 });
+    expect(stored[2]).not.toHaveProperty("link_clicks");
+  });
+
   it("requires the cron secret", async () => {
     expect((await call("Bearer wrong")).status).toBe(401);
     mocks.secret = undefined;

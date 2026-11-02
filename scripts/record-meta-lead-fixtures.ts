@@ -2,7 +2,7 @@
  * Records real Graph lead-form and lead pages for the test:core lead sync
  * fixture (#165). Read-only: no Meta writes.
  *
- *   npx tsx --env-file=.env.local scripts/record-meta-lead-fixtures.ts
+ *   npx tsx --import ./scripts/trusted-server-cli.mjs --env-file=.env.local scripts/record-meta-lead-fixtures.ts
  *
  * Uses META_SYSTEM_USER_TOKEN / META_AD_ACCOUNT_ID / META_PAGE_ID. Tokens are
  * stripped and every lead field value is replaced with Meta's test-lead

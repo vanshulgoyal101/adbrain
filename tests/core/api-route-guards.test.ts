@@ -12,7 +12,7 @@ type Entry = { kind: Kind; methods: string[]; why?: string };
 /** The guard each class must call. `session` routes are scoped by RLS or an owner-checking RPC; `why` says which. */
 const GUARD: Record<Exclude<Kind, "public">, RegExp> = {
   owner: /\b(?:requireOwnedBusiness|ownedManagedAttempt|managedRouteUser|requireScheduledBusiness|ownedManagedBusiness)\(/,
-  session: /\bauth\.getUser\(|\bgetPrimaryBusiness\(/,
+  session: /\bauth\.getUser\(|\bgetPrimaryBusiness\(|\bmediaSession\(/,
   cron: /\bcronAuthError\(|CRON_SECRET/,
   secret: /\bTEST_SESSION_SECRET\b/,
   webhook: /[Ss]ignature|signed_request/,
@@ -77,6 +77,11 @@ const ROUTES: Record<string, Entry> = {
   "managed/billing": { kind: "owner", methods: ["POST"] },
   "managed/onboarding": { kind: "owner", methods: ["GET"] },
   "managed/whatsapp": { kind: "owner", methods: ["POST"] },
+  media: { kind: "session", methods: ["GET"], why: "session: mediaSession (auth.getUser); business checked through RLS before any read" },
+  "media/consent": { kind: "session", methods: ["POST"], why: "session: ownedBusiness (RLS), and media_consent_record refuses another owner's business" },
+  "media/[id]": { kind: "session", methods: ["DELETE", "PATCH"], why: "session: the asset is read through RLS (media assets: read own) before the service-role write" },
+  "media/finalize": { kind: "session", methods: ["POST"], why: "session: the upload row is read through RLS before the service-role write" },
+  "media/sign": { kind: "session", methods: ["POST"], why: "session: ownedBusiness (RLS) and current consent before signing" },
   "meta/access-request": { kind: "session", methods: ["POST"], why: "session: append_verified_audit_event refuses a business the user doesn't own (#1723)" },
   "meta/accounts": { kind: "owner", methods: ["GET"] },
   "meta/connect": { kind: "owner", methods: ["POST"] },

@@ -166,6 +166,17 @@ describe("POST /api/campaigns/preflight", () => {
     expect((await response.json()).error.message).toBe("This campaign draft has expired or was removed. Reload the page and set up the campaign again. Nothing was sent to Meta.");
   });
 
+  // #2688: website ads stay internal-only until they open (#2595); the route passes the signed-in account.
+  it("refuses a website draft from an outside account before any Meta read", async () => {
+    mocks.draft = { ...draftRow, input: { ...draftRow.input, destination: "website", leadFormId: null } };
+    const { POST } = await import("@/app/api/campaigns/preflight/route");
+    const response = await POST(request({ businessId, draftId, draftVersion: 1 }));
+    expect(response.status).toBe(403);
+    expect((await response.json()).error.message).toBe("Website ads aren't open yet. Choose WhatsApp chat or a lead form.");
+    expect(mocks.withMetaConnection).not.toHaveBeenCalled();
+    expect(mocks.getConnectionStatus).not.toHaveBeenCalled();
+  });
+
   it("says nothing was sent and to try again when the check itself fails", async () => {
     mocks.getConnectionStatus.mockRejectedValue(new Error("database timeout"));
     const { POST } = await import("@/app/api/campaigns/preflight/route");

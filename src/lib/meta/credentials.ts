@@ -1,3 +1,5 @@
+import "server-only";
+
 import { createAdminClient } from "@/lib/supabase/admin";
 import { metaWriteMode } from "@/lib/internal-accounts";
 import { businessOwnerId } from "@/lib/business-owner";

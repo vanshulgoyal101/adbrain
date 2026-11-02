@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import website from "./core/fixtures/meta/website-results.provisional.json";
+import { decodeCampaignInsights } from "@/lib/meta/insights";
 
 const mocks = vi.hoisted(() => ({
   getUser: vi.fn(),
@@ -90,6 +92,26 @@ beforeEach(() => {
 });
 
 describe("campaign refresh binding boundary", () => {
+  it("#2635: persists website link clicks separately from all clicks", async () => {
+    mocks.withMetaConnection.mockImplementation(async (_context, _options, execute) => execute({
+      getCampaignInsights: async () => decodeCampaignInsights(website.payload, "website"),
+      readAdReview: mocks.readAdReview,
+    }));
+    mocks.saveResult.mockImplementation(async (_actor, values) => ({ data: values, error: null }));
+    const { POST } = await import("@/app/api/campaigns/[id]/refresh/route");
+    const response = await POST(request(), { params: Promise.resolve({ id: "campaign-1" }) });
+    expect(response.status).toBe(200);
+    expect((await response.json()).result).toMatchObject({ destination: "website", clicks: 97, link_clicks: 75, landing_page_views: 55, spend: 412.5 });
+  });
+
+  it("#2635: an older/non-website insights read leaves link clicks unread", async () => {
+    mocks.saveResult.mockImplementation(async (_actor, values) => ({ data: values, error: null }));
+    const { POST } = await import("@/app/api/campaigns/[id]/refresh/route");
+    const response = await POST(request(), { params: Promise.resolve({ id: "campaign-1" }) });
+    expect(response.status).toBe(200);
+    expect((await response.json()).result).not.toHaveProperty("link_clicks");
+  });
+
   it("#1903: a budget changed in Meta Ads Manager is saved and the updated row returned; Meta's raw state stays out of the answer", async () => {
     const metaState = { status: "PAUSED", adSets: [{ id: "as1", status: "PAUSED", dailyBudget: "80000" }] };
     mocks.withMetaConnection.mockImplementation(async (_context, _options, execute) => execute({

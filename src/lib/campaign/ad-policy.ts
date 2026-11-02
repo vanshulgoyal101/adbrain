@@ -30,9 +30,14 @@ export function adPolicyHits(creatives: Copy[], vertical: string | null | undefi
     .map((term) => ({ creativeId: creative.id, headline: creative.headline, term })));
 }
 
-/** How Review names a banned term: a health claim for a clinic, otherwise a promise (#1609, #2423). */
+/** Whether a banned term is a health claim for a clinic, rather than any other promise (#1609, #2423). */
+export function isHealthPromise(term: string, vertical: string | null | undefined): boolean {
+  return HEALTH_VERTICAL.test(vertical ?? "") && (MEDICAL_BANNED_CLAIMS as readonly string[]).includes(term);
+}
+
+/** How a check written in English names a banned term (#1609, #2423). */
 export function bannedTermKind(term: string, vertical: string | null | undefined): string {
-  return HEALTH_VERTICAL.test(vertical ?? "") && (MEDICAL_BANNED_CLAIMS as readonly string[]).includes(term) ? "a health promise" : "a promise";
+  return isHealthPromise(term, vertical) ? "a health promise" : "a promise";
 }
 
 function escape(value: string): string {

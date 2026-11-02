@@ -3,7 +3,7 @@
  * refused before it leaves the process), through `MetaClient.listGoneCampaigns`, so the core test replays the client's
  * own read. Sync uses it to end stored rows Meta's plain listing leaves out.
  *
- *   npx tsx --env-file=<path to .env.local> scripts/record-meta-gone-campaigns.ts
+ *   npx tsx --import ./scripts/trusted-server-cli.mjs --env-file=<path to .env.local> scripts/record-meta-gone-campaigns.ts
  *
  * Uses META_SYSTEM_USER_TOKEN / META_AD_ACCOUNT_ID / META_PAGE_ID. Ids, phone numbers and tokens are scrubbed.
  */

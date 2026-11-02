@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Campaigns } from "@/components/campaigns";
 import { StaleResultsRefresher } from "@/components/stale-results-refresher";
 import { resultsStale, staleCampaignIds } from "@/lib/campaign/results-freshness";
 import type { Business, Campaign, CampaignResult } from "@/lib/types";
 import hi from "../messages/hi.json";
+import en from "../messages/en.json";
 
 // #1003: stale live results refresh quietly when the card or Home opens, and every card says how old its numbers are.
 const mocks = vi.hoisted(() => ({ drafts: vi.fn(), status: vi.fn(), routerRefresh: vi.fn() }));
@@ -44,6 +45,38 @@ beforeEach(() => {
 });
 
 describe("results freshness (#1003)", () => {
+  it.each([
+    { locale: "en" as const, linkLabel: "Link clicks", cpcLabel: "CPC" },
+    { locale: "hi" as const, linkLabel: "लिंक क्लिक", cpcLabel: "खर्च / क्लिक (CPC)" },
+  ])("#2635: website card shows link clicks and CPC in $locale, never all clicks", async ({ locale, linkLabel, cpcLabel }) => {
+    const messages = locale === "hi" ? hi : en;
+    const stored = { ...result(minutesAgo(2)), destination: "website" as const, landing_page_views: 55, link_clicks: 75, clicks: 97, spend: 412.5 };
+    render(<Campaigns business={business} approved={[]} initialCampaigns={[{ ...active, destination: "website" }]} initialResults={{ "campaign-2": stored }}
+      leadForms={[]} leadFormError={null} metaReady={false} adAccountId="act_999" verdictWords={{ locale, messages: messages.verdict }} />);
+    const running = await card("Solar EMI");
+    expect(running.getByText(linkLabel)).toBeInTheDocument();
+    expect(running.getByText(cpcLabel)).toBeInTheDocument();
+    expect(running.getByText("75")).toBeInTheDocument();
+    expect(running.getByText("₹5.50")).toBeInTheDocument();
+    expect(running.queryByText("97")).not.toBeInTheDocument();
+    expect(running.queryByText(messages.verdict.figures.clicks)).not.toBeInTheDocument();
+    expect(running.getByText(messages.verdict.figures.visits)).toBeInTheDocument();
+  });
+
+  it("#2635: refreshing only link clicks reports new results and replaces unread counts", async () => {
+    const stored = { ...result(minutesAgo(2)), destination: "website" as const, landing_page_views: 55, link_clicks: null };
+    fetchMock.mockImplementation(async (url) => Response.json(String(url).includes("/refresh")
+      ? { result: { ...stored, link_clicks: 35, fetched_at: new Date().toISOString() } } : {}));
+    render(<Campaigns business={business} approved={[]} initialCampaigns={[{ ...active, destination: "website" }]} initialResults={{ "campaign-2": stored }}
+      leadForms={[]} leadFormError={null} metaReady={false} adAccountId="act_999" />);
+    const running = await card("Solar EMI");
+    expect(running.queryByText("40")).not.toBeInTheDocument();
+    expect(running.getAllByText("—")).toHaveLength(2);
+    fireEvent.click(running.getByRole("button", { name: "Refresh results" }));
+    expect(await running.findByText("35")).toBeInTheDocument();
+    expect(running.getByText(en.campaigns.notices.updatedNow)).toBeInTheDocument();
+  });
+
   it("counts only live, Meta-bound campaigns whose results are over 10 min old or missing", () => {
     const now = Date.now();
     expect(resultsStale(minutesAgo(9), now)).toBe(false);
