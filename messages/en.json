@@ -411,6 +411,33 @@
       "linkPage": "On your Facebook Page: Settings → Linked accounts → WhatsApp. The code arrives as a WhatsApp message from Facebook, not an SMS.",
       "linkApp": "In the WhatsApp Business app: Settings → Business tools → Facebook & Instagram. No code is needed.",
       "then": "Then press Check again."
+    },
+    "meta": {
+      "title": "Meta connection",
+      "serverManaged": "This workspace uses a server-managed Meta connection.",
+      "expired": "Your Meta connection needs to be renewed.",
+      "reconnectBy": "Reconnect Facebook by {date} to keep managing your ads.",
+      "connected": "Connected. Account and Page details are checked when you open the connection.",
+      "intro": "Connect an existing Meta business to prepare campaigns. You can keep working on a draft first.",
+      "noBusiness": "Set up your business before connecting Meta.",
+      "notConfigured": "Meta connection is not configured on this server yet.",
+      "manage": "Manage connection",
+      "reconnect": "Reconnect",
+      "connect": "Connect Business",
+      "disconnect": "Disconnect",
+      "disconnecting": "Disconnecting...",
+      "disconnectFailed": "Facebook is still connected. Try again in a minute.",
+      "unavailable": "Meta connection status is temporarily unavailable. Your campaign draft is preserved.",
+      "tryAgain": "Try again",
+      "noticeConnected": "Your Meta account is connected.",
+      "noticeSelect": "Connected. Now choose your ad account and page below.",
+      "error": {
+        "not_configured": "Facebook Login isn't configured on this server yet.",
+        "no_business": "Set up your business before connecting Meta.",
+        "invalid_state": "That connection link expired. Please try connecting again.",
+        "connect_failed": "Couldn't complete the connection. Please try again.",
+        "access_denied": "You declined the permissions AdBrain needs to manage ads."
+      }
     }
   },
   "pilotDay7": {

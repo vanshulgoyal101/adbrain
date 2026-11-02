@@ -411,6 +411,33 @@
       "linkPage": "अपने Facebook Page पर: Settings → Linked accounts → WhatsApp। कोड Facebook से WhatsApp मैसेज में आता है, SMS में नहीं।",
       "linkApp": "WhatsApp Business ऐप में: Settings → Business tools → Facebook & Instagram। कोई कोड नहीं चाहिए।",
       "then": "फिर “फिर से जाँचें” दबाएँ।"
+    },
+    "meta": {
+      "title": "Meta कनेक्शन",
+      "serverManaged": "यह वर्कस्पेस सर्वर से जुड़ा Meta कनेक्शन इस्तेमाल करता है।",
+      "expired": "आपका Meta कनेक्शन फिर से जोड़ना होगा।",
+      "reconnectBy": "अपने विज्ञापन संभालते रहने के लिए {date} तक Facebook फिर से जोड़ें।",
+      "connected": "जुड़ गया। कनेक्शन खोलने पर खाते और पेज की जानकारी जाँची जाती है।",
+      "intro": "कैंपेन तैयार करने के लिए अपना Meta बिज़नेस जोड़ें। तब तक आप ड्राफ़्ट पर काम कर सकते हैं।",
+      "noBusiness": "Meta जोड़ने से पहले अपना बिज़नेस सेट करें।",
+      "notConfigured": "इस सर्वर पर अभी Meta कनेक्शन सेट नहीं है।",
+      "manage": "कनेक्शन संभालें",
+      "reconnect": "Facebook फिर से जोड़ें",
+      "connect": "बिज़नेस जोड़ें",
+      "disconnect": "Facebook हटाएँ",
+      "disconnecting": "हटाया जा रहा है...",
+      "disconnectFailed": "Facebook अभी भी जुड़ा है। एक मिनट बाद फिर कोशिश करें।",
+      "unavailable": "Meta कनेक्शन की स्थिति अभी नहीं दिख रही। आपका कैंपेन ड्राफ़्ट सुरक्षित है।",
+      "tryAgain": "फिर कोशिश करें",
+      "noticeConnected": "आपका Meta खाता जुड़ गया।",
+      "noticeSelect": "जुड़ गया। अब नीचे अपना विज्ञापन खाता और पेज चुनें।",
+      "error": {
+        "not_configured": "इस सर्वर पर अभी Facebook लॉगिन सेट नहीं है।",
+        "no_business": "Meta जोड़ने से पहले अपना बिज़नेस सेट करें।",
+        "invalid_state": "यह कनेक्शन लिंक पुराना हो गया। कृपया फिर से जोड़ें।",
+        "connect_failed": "कनेक्शन पूरा नहीं हो सका। कृपया फिर कोशिश करें।",
+        "access_denied": "आपने वे अनुमतियाँ नहीं दीं जिनकी AdBrain को विज्ञापन संभालने के लिए ज़रूरत है।"
+      }
     }
   },
   "pilotDay7": {
