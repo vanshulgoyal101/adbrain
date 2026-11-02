@@ -8,7 +8,7 @@ import type { Business, Creative } from "@/lib/types";
  * The first-timer's step and the ads Go live can use; the step is null after a campaign has gone live.
  */
 export function setupResume<T extends Pick<Creative, "status" | "generation">>({ business, creatives, campaigns }: {
-  business: Pick<Business, "name" | "vertical" | "phone" | "locations" | "offers"> | null;
+  business: Pick<Business, "name" | "vertical" | "phone" | "locations" | "offers" | "website" | "default_destination"> | null;
   creatives: T[];
   campaigns: LiveSignals[];
 }): { step: SetupStep | null; ready: T[] } {

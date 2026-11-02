@@ -137,6 +137,19 @@ describe("Create page for a first-timer (#1270)", () => {
     await expect(CreatePage({ searchParams: Promise.resolve({}) })).rejects.toThrow("NEXT_REDIRECT");
   });
 
+  it("#2646: a website business with its link and no phone reaches step 2; no phone is listed as missing", async () => {
+    const site = { ...usable, phone: null, website: "https://bakery.in", default_destination: "website" } as unknown as Business;
+    getPrimaryBusiness.mockResolvedValue(site);
+    hasLaunchedCampaign.mockResolvedValue(false);
+    const { default: CreatePage } = await import("@/app/(app)/create/page");
+    const { unmount } = render(await CreatePage({ searchParams: Promise.resolve({}) }));
+    expect(screen.getByText("Setup step 2")).toBeInTheDocument();
+    unmount();
+    render(await CreatePage({ searchParams: Promise.resolve({ all: "1" }) }));
+    expect(screen.getByRole("heading", { name: "Create ads" })).toBeInTheDocument();
+    expect(screen.queryByText(/phone number/)).toBeNull();
+  });
+
   it("no service area is not usable: step 2 sends the first-timer back to step 1 (#1136 CEO)", async () => {
     getPrimaryBusiness.mockResolvedValue({ ...usable, locations: [" "] });
     hasLaunchedCampaign.mockResolvedValue(false);

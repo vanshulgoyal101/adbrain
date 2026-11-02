@@ -178,6 +178,7 @@ const ENGLISH: Record<OwnerErrorKey, string> = {
   // #2333: Review (preflight) and Go live (create); create's gone draft now says what to do, as preflight does.
   draftGone: "This campaign draft has expired or was removed. Reload the page and set up the campaign again. Nothing was sent to Meta.",
   draftChangedElsewhere: "Draft changed in another tab. Review the latest version.",
+  websiteClosed: "Website ads aren't open yet. Choose WhatsApp chat or a lead form.",
   reviewCheckFailed: "Couldn't check your campaign just now. Nothing was sent to Meta. Try again in a minute.",
   reviewRequestInvalid: "A valid business, draft, and version are required.",
   businessAccessDenied: "Business access is not allowed.",

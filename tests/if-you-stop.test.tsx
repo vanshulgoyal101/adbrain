@@ -23,6 +23,7 @@ const connection: MetaConnection = {
 const dialogs = [
   {
     locale: "en",
+    button: "Disconnect",
     title: "Disconnect Facebook?",
     body: "Your ads keep running in Meta until you pause them there. After this, AdBrain can't pause them or update their results.",
     confirm: "Disconnect",
@@ -30,6 +31,7 @@ const dialogs = [
   },
   {
     locale: "hi",
+    button: "Facebook हटाएँ",
     title: "Facebook हटाएँ?",
     body: "आपके विज्ञापन Meta में तब तक चलते रहेंगे जब तक आप उन्हें वहाँ न रोकें। इसके बाद AdBrain उन्हें रोक या उनके नतीजे अपडेट नहीं कर पाएगा।",
     confirm: "हटाएँ",
@@ -74,14 +76,14 @@ describe("If you stop (#1916)", () => {
     const request = vi.fn();
     vi.stubGlobal("fetch", request);
     render(<MetaConnectionPanel businessId={businessId} connection={connection} oauthConfigured locale={copy.locale} />);
-    fireEvent.click(screen.getByRole("button", { name: "Disconnect" }));
+    fireEvent.click(screen.getByRole("button", { name: copy.button }));
     const dialog = await screen.findByRole("dialog", { name: copy.title });
     expect(dialog).toHaveAccessibleDescription(copy.body);
     expect(within(dialog).getByRole("button", { name: copy.confirm })).toBeInTheDocument();
     expect(request).not.toHaveBeenCalled();
     fireEvent.click(within(dialog).getByRole("button", { name: copy.cancel }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-    expect(screen.getByRole("button", { name: "Disconnect" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: copy.button })).toBeEnabled();
     expect(request).not.toHaveBeenCalled();
     expect(refresh).not.toHaveBeenCalled();
   });
@@ -90,7 +92,7 @@ describe("If you stop (#1916)", () => {
     const request = vi.fn().mockResolvedValue(new Response(JSON.stringify({ ok: true })));
     vi.stubGlobal("fetch", request);
     render(<MetaConnectionPanel businessId={businessId} connection={connection} oauthConfigured locale={copy.locale} />);
-    fireEvent.click(screen.getByRole("button", { name: "Disconnect" }));
+    fireEvent.click(screen.getByRole("button", { name: copy.button }));
     const dialog = await screen.findByRole("dialog", { name: copy.title });
     expect(request).not.toHaveBeenCalled();
     fireEvent.click(within(dialog).getByRole("button", { name: copy.confirm }));

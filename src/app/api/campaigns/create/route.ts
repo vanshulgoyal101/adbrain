@@ -5,6 +5,7 @@ import { createCampaignRequestSchema, type OperationDTO } from "@/lib/campaign/c
 import { draftRecordFromRow, isDraftExpired } from "@/lib/campaign/draft-store";
 import { buildCampaignPreflightLoaders } from "@/lib/campaign/preflight-runtime";
 import { prepareCampaignReview } from "@/lib/campaign/preflight-service";
+import { websiteOpenFor } from "@/lib/campaign/website-gate";
 import type { OperationRecord } from "@/lib/campaign/operations";
 import { executeReviewedCampaign } from "@/lib/campaign/create-service";
 import {
@@ -125,6 +126,7 @@ async function handlePOST(request: Request) {
       draftId: input.draftId,
       requestedDraftVersion: input.draftVersion,
       now,
+      websiteOpen: () => websiteOpenFor(user),
     });
   } catch (error) {
     // #681: a Meta read failing mid-review (Page, WhatsApp number, areas) is a retry, as on the preflight route, not a 500.
@@ -134,6 +136,7 @@ async function handlePOST(request: Request) {
   if (reviewResult.kind === "not_found") return errorResponse(requestId, 404, "NOT_FOUND", say("draftGone"));
   if (reviewResult.kind === "forbidden") return errorResponse(requestId, 403, "FORBIDDEN", say("draftGone"));
   if (reviewResult.kind === "stale") return errorResponse(requestId, 409, "CONFLICT", say("draftChangedElsewhere"), true);
+  if (reviewResult.kind === "website_closed") return errorResponse(requestId, 403, "FORBIDDEN", say("websiteClosed"));
   const review = reviewResult.review;
   if (!review.canCreatePaused || !review.planHash || !review.selected || !review.resolvedLocation) return errorResponse(requestId, 400, "PREFLIGHT_BLOCKED", say("reviewBlockersFirst"));
   if (review.planHash !== input.planHash) return errorResponse(requestId, 409, "CONFLICT", say("reviewChangedBeforeCreate"), true);
