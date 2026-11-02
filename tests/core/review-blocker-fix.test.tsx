@@ -69,6 +69,7 @@ const breaks: Record<ReviewBlockerReason, (input: PreflightInput) => void> = {
   REVIEW_INTERESTS_UNRESOLVED: (input) => { input.geo.audienceInterests = []; input.geo.unresolvedInterests = ["Wellness"]; },
   REVIEW_AD_POLICY: (input) => { input.vertical = "chiropractic clinic"; input.creatives[0].headline = "Cures back pain, guaranteed"; },
   REVIEW_WHATSAPP_MESSAGE: (input) => { input.draft.destination = "whatsapp"; input.whatsappMessageProblem = "\"guaranteed\" isn't in your business details. Reword it or add it there."; },
+  REVIEW_WEBSITE_UNREACHABLE: (input) => { input.draft.destination = "website"; input.websiteReach = { url: "https://cedarridgechiro.com", ok: false, problem: "unreachable" }; },
 };
 function reviewBlockedOn(reason: ReviewBlockerReason) {
   const input = productionInput();

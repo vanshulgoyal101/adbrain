@@ -16,7 +16,8 @@ export function buildManualDraftInput(fields: {
   mode: DraftInput["mode"];
   creativeIds: string[];
   dailyBudgetRupees: number;
-  destination: Exclude<LeadDestination, "call" | "website">;
+  destination: Exclude<LeadDestination, "call">;
+  /** #2595: the website ad's button. */
   leadFormId: string;
   whatsappNumber: string;
   whatsappLanguage: WhatsAppLanguage;
@@ -34,7 +35,7 @@ export function buildManualDraftInput(fields: {
     mode: fields.mode,
     creativeIds: fields.creativeIds,
     dailyBudgetRupees: Math.max(0, fields.dailyBudgetRupees),
-    leadFormId: destination === "whatsapp" ? null : fields.leadFormId || null,
+    leadFormId: destination === "instant_form" ? fields.leadFormId || null : null,
     destination,
     ...(destination === "whatsapp" && whatsappNumber ? { whatsappNumber } : {}),
     ...(destination === "whatsapp" && whatsappLanguage !== "ad" ? { whatsappLanguage } : {}),

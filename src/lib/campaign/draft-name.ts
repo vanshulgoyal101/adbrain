@@ -1,6 +1,6 @@
 import type { DraftDTO } from "@/lib/campaign/connect-contracts";
 
-const DESTINATION_LABEL = { whatsapp: "WhatsApp", instant_form: "Lead form" } as const;
+const DESTINATION_LABEL = { whatsapp: "WhatsApp", instant_form: "Lead form", website: "Website" } as const;
 const MAX_NAME = 120;
 
 /**

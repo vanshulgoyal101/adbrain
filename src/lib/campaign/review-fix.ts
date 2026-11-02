@@ -19,7 +19,8 @@ const FIXES: Record<ReviewBlockerReason, ReviewFix> = {
   // #847: linking lives in Settings' WhatsApp card (steps + Check again), not on Your business.
   REVIEW_WHATSAPP_NOT_LINKED: { kind: "page", label: "Link your WhatsApp number", href: "/settings#whatsapp-status-title" },
   REVIEW_NO_LEAD_FORM: { kind: "field", label: "Choose a lead form", targets: ["leadform"] },
-  REVIEW_NO_WEBSITE: { kind: "page", label: "Add your website", href: "/brand" },
+  REVIEW_NO_WEBSITE: { kind: "page", label: "Add website in Your business", href: "/brand" },
+  REVIEW_WEBSITE_UNREACHABLE: { kind: "page", label: "Fix link in Your business", href: "/brand" },
   REVIEW_BUDGET: { kind: "field", label: "Set the daily budget", targets: ["budget"] },
   REVIEW_NO_AGE_RANGE: { kind: "field", label: "Set the age range", targets: ["age-min", "age-mode"] },
   REVIEW_RADIUS: { kind: "field", label: "Set the city radius", targets: ["city-radius", "location-include", "location-mode"] },
@@ -37,5 +38,5 @@ export function reviewBlockerFix(reason: ReviewBlockerReason | undefined): Revie
 
 /** #742: another way past a blocker. WhatsApp chat ads need no website, so a site-less owner isn't stuck. */
 export function reviewBlockerAlternative(reason: ReviewBlockerReason | undefined): ReviewFix | null {
-  return reason === "REVIEW_NO_WEBSITE" ? { kind: "destination", label: "Use WhatsApp chat instead (no website needed)", destination: "whatsapp" } : null;
+  return reason === "REVIEW_NO_WEBSITE" || reason === "REVIEW_WEBSITE_UNREACHABLE" ? { kind: "destination", label: "Use WhatsApp chat instead (no website needed)", destination: "whatsapp" } : null;
 }

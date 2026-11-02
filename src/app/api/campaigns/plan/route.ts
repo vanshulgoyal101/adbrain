@@ -57,7 +57,7 @@ async function handlePOST(req: Request) {
   const parsed = z.object({
     goal: z.string().trim().min(1).max(2_000),
     audienceDraft: draftInputSchema.optional(),
-    destination: z.enum(["instant_form", "whatsapp"]).optional(),
+    destination: z.enum(["instant_form", "whatsapp", "website"]).optional(),
     whatsappNumber: z.string().regex(maskedWhatsAppNumberPattern).optional(),
     answers: z.union([z.string().max(12_000), z.array(plannerAnswerSchema).max(30)]).optional(),
   }).safeParse(await req.json().catch(() => null));
@@ -243,7 +243,7 @@ async function handlePOST(req: Request) {
       creative_ids: audienceDraft.creativeIds,
       lead_form_id: null,
       destination,
-    } : { ...result.plan, destination, ...(destination === "whatsapp" ? { lead_form_id: null } : {}) },
+    } : { ...result.plan, destination, ...(destination === "instant_form" ? {} : { lead_form_id: null }) },
     approvedCreativeIds: approved.map((creative) => creative.id),
     leadFormIds: leadForms.map((form) => form.id),
   });

@@ -32,6 +32,16 @@ describe("plan check (#419)", () => {
     expect(status(checkPlan(planFor("whatsapp", 30)), "Budget vs learning phase").status).toBe("pass");
   });
 
+  it("#2599: judges a website campaign's budget per landing-page view, never per chat", () => {
+    const website = (cost?: number) => {
+      const plan = planFor("whatsapp", cost);
+      return { ...plan, adSets: plan.adSets.map((form) => ({ ...form, optimization_goal: "LANDING_PAGE_VIEWS", destination_type: "WEBSITE" })) };
+    };
+    expect(status(checkPlan(website()), "Budget vs learning phase").detail).toBe("No cost per landing-page view yet. At ₹280 a day, learning needs a cost per landing-page view under ₹39.20.");
+    expect(status(checkPlan(website(69)), "Budget vs learning phase").detail).toMatch(/^About 28 landing-page views a week at ₹280 a day and ₹69 each/);
+    expect(status(checkPlan(website(5)), "Budget vs learning phase").status).toBe("pass");
+  });
+
   it("fails Advantage+ audience off, and flags pinned placements and split budgets", () => {
     const off = planFor("instant_form");
     const targeting = JSON.parse(off.adSets[0].targeting);
@@ -65,7 +75,10 @@ describe("plan check (#419)", () => {
     expect(REVIEW_WARNINGS).toEqual({
       story: "No 9:16 ad: Reels and Stories placements will crop or skip it",
       budget: "Budget is below what Meta needs to learn (about 50 results a week); results may be slow",
+      websiteBudget: "Budget is below what Meta needs to learn (about 50 landing-page views a week); visits may be slow",
     });
+    // #2599: a website ad learns from landing-page views, so its warning counts those, not chats.
+    expect(reviewWarnings({ destination: "website", storyReady: true, perAdSetDailyBudgetRupees: 100, costPerResultRupees: 20 })).toEqual([REVIEW_WARNINGS.websiteBudget]);
     // ₹280 a day at ₹69 a chat is about 28 chats a week (#157).
     expect(reviewWarnings({ destination: "whatsapp", storyReady: false, perAdSetDailyBudgetRupees: 280, costPerResultRupees: 69 }))
       .toEqual([REVIEW_WARNINGS.story, REVIEW_WARNINGS.budget]);

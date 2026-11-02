@@ -17,6 +17,10 @@ import { AD_LANGUAGE_KEYS, storedLocales } from "./locales";
 import { expandPlaceAliases } from "./geo-aliases";
 import { fetchAdImage, readAdVideo, startAdVideo, uploadAdImageBytes, type AdVideoState } from "./media";
 import { buildGeoLocations, clampRadiusKm, geoLabel, hasGeo, pickBestGeoMatch } from "./geo";
+import { destinationCTA, destinationPlan, hasPlacementCreative, isWebsiteLink, leavesAudienceNetworkOut, websiteUrlTags, type AdDestination } from "./destinations";
+export { destinationCTA, destinationPlan, websiteUrlTags, type AdDestination, type DestinationPlan } from "./destinations";
+import { CREATIVE_OPT_OUT_FORM } from "./creative-opt-out";
+export { CREATIVE_FEATURES_OPT_OUT, CREATIVE_OPT_OUT_FORM } from "./creative-opt-out";
 export { buildGeoLocations, geoItemsToTargeting, hasGeo, pickBestGeoMatch } from "./geo";
 export type { AdResult, CampaignInsights, MetaCampaignState } from "./insights";
 export type { CampaignDeliverySnapshot } from "./types";
@@ -506,31 +510,6 @@ export function friendlyMetaError(
   return fallback;
 }
 
-/** Where leads land: an in-ad instant form, a WhatsApp chat, or a phone call (LeadDestination minus website until #2595 B). */
-export type AdDestination = Exclude<CampaignDestination, "website" | "mixed" | "unknown">;
-
-/** #680: WhatsApp and lead-form ads get the 9:16 placement creative and leave Audience Network out, so an A/B differs only in destination. */
-function hasPlacementCreative(destination: AdDestination): boolean {
-  return destination === "whatsapp" || destination === "instant_form";
-}
-
-export interface DestinationPlan {
-  optimizationGoal: string;
-  destinationType: string;
-}
-
-/** Ad-set optimisation goal + destination type for a lead destination. */
-export function destinationPlan(dest: AdDestination): DestinationPlan {
-  switch (dest) {
-    case "call":
-      return { optimizationGoal: "QUALITY_CALL", destinationType: "PHONE_CALL" };
-    case "whatsapp":
-      return { optimizationGoal: "CONVERSATIONS", destinationType: "WHATSAPP" };
-    default:
-      return { optimizationGoal: "LEAD_GENERATION", destinationType: "ON_AD" };
-  }
-}
-
 function normalizeWhatsAppNumber(value: string): string | null {
   const number = value.replace(/[\s().-]/g, "").replace(/^\+?/, "+");
   return /^\+[1-9]\d{6,14}$/.test(number) ? number : null;
@@ -580,7 +559,7 @@ export type AdCopyEdit = {
   whatsappGreeting?: { autofill: string; greeting: string };
 };
 
-type StoredCreative = { name?: string; object_story_spec?: Record<string, unknown>; asset_feed_spec?: Record<string, unknown> };
+type StoredCreative = { name?: string; object_story_spec?: Record<string, unknown>; asset_feed_spec?: Record<string, unknown>; url_tags?: string };
 
 /**
  * #775: the `adcreatives` form for an edited copy of a launched ad's creative. Starts from the
@@ -593,6 +572,8 @@ export function editedCreativeForm(creative: StoredCreative, edit: AdCopyEdit): 
   if (!headline && !message && !description && !edit.whatsappGreeting) throw new MetaError("Change at least one part of the ad before saving.");
   const welcome = edit.whatsappGreeting ? whatsappWelcomeMessage(edit.whatsappGreeting) : undefined;
   const name = (headline ?? creative.name ?? "AdBrain creative").slice(0, 90);
+  // #2598: a website ad keeps its UTM tags, so visits after an edit still credit the campaign.
+  const urlTags: Record<string, string> = creative.url_tags ? { url_tags: creative.url_tags } : {};
   if (creative.asset_feed_spec) {
     const feed = structuredClone(creative.asset_feed_spec) as Record<string, unknown> & { additional_data?: Record<string, unknown> };
     if (message) feed.bodies = [{ text: message }];
@@ -602,7 +583,7 @@ export function editedCreativeForm(creative: StoredCreative, edit: AdCopyEdit): 
       if (!feed.additional_data?.page_welcome_message) throw new MetaError("This ad has no WhatsApp message to change.");
       feed.additional_data = { ...feed.additional_data, page_welcome_message: welcome };
     }
-    return { name, object_story_spec: JSON.stringify(creative.object_story_spec ?? {}), asset_feed_spec: JSON.stringify(feed) };
+    return { name, object_story_spec: JSON.stringify(creative.object_story_spec ?? {}), asset_feed_spec: JSON.stringify(feed), ...urlTags, ...CREATIVE_OPT_OUT_FORM };
   }
   const story = structuredClone(creative.object_story_spec ?? {}) as { link_data?: Record<string, unknown> };
   if (!story.link_data) throw new MetaError("This ad's format can't be edited in AdBrain yet.");
@@ -613,26 +594,7 @@ export function editedCreativeForm(creative: StoredCreative, edit: AdCopyEdit): 
     if (!story.link_data.page_welcome_message) throw new MetaError("This ad has no WhatsApp message to change.");
     story.link_data.page_welcome_message = welcome;
   }
-  return { name, object_story_spec: JSON.stringify(story) };
-}
-
-/** The creative call-to-action for a lead destination. */
-export function destinationCTA(
-  dest: AdDestination,
-  opts: { leadFormId?: string; phone?: string; ctaLabel?: string | null },
-): { type: string; value: Record<string, unknown> } {
-  if (dest === "call" && opts.phone) {
-    return { type: "CALL_NOW", value: { link: `tel:${opts.phone}` } };
-  }
-  if (dest === "whatsapp") {
-    return { type: "WHATSAPP_MESSAGE", value: { app_destination: "WHATSAPP", ...(opts.phone ? { link: `https://wa.me/${opts.phone.replace(/^\+/, "")}` } : {}) } };
-  }
-  // A human creative CTA is presentation copy, not a safe Graph API CTA. In
-  // particular, BOOK_NOW is not accepted for every instant-form lead ad.
-  return {
-    type: "LEARN_MORE",
-    value: { lead_gen_form_id: opts.leadFormId },
-  };
+  return { name, object_story_spec: JSON.stringify(story), ...urlTags, ...CREATIVE_OPT_OUT_FORM };
 }
 
 /** Meta rejects a hard minimum age above this with Advantage+ audience on (subcode 1870188). */
@@ -1306,6 +1268,7 @@ export class MetaClient {
     }
     const requested = params.destination ?? "instant_form";
     if (requested === "instant_form" && !params.leadFormId) throw new MetaError("Choose an active lead form before creating ads.");
+    if (requested === "website" && !isWebsiteLink(params.link)) throw new MetaError("Add the business's own website (starting https://) before creating website ads.");
     if (requested === "whatsapp") {
       if (!params.whatsappNumber || !/^\+[1-9]\d{6,14}$/.test(params.whatsappNumber)) throw new MetaError("Review the Page-linked WhatsApp Business number before creating ads.");
       if (await this.getWhatsAppNumber(params.whatsappNumber, params.boundWhatsAppNumbers ?? []) !== params.whatsappNumber) throw new MetaError("The Page-linked WhatsApp number changed. Review the campaign again.");
@@ -1334,7 +1297,7 @@ export class MetaClient {
       method: "POST",
       form: {
         name: params.name,
-        objective: requested === "whatsapp" ? "OUTCOME_ENGAGEMENT" : "OUTCOME_LEADS",
+        objective: requested === "whatsapp" ? "OUTCOME_ENGAGEMENT" : requested === "website" ? "OUTCOME_TRAFFIC" : "OUTCOME_LEADS",
         status: "PAUSED",
         special_ad_categories: "[]",
         is_adset_budget_sharing_enabled: "false",
@@ -1405,7 +1368,7 @@ export class MetaClient {
         ];
 
     // Ages are validated above, so both bounds are set here.
-    const targetingFor = (v: AdSetVariant, dest: AdDestination) => JSON.stringify((hasPlacementCreative(dest) ? (t: Record<string, unknown>) => withoutAudienceNetwork(t, { noFacebookReels: params.excludeFacebookReels }) : (t: Record<string, unknown>) => t)(adSetTargeting({
+    const targetingFor = (v: AdSetVariant, dest: AdDestination) => JSON.stringify((leavesAudienceNetworkOut(dest) ? (t: Record<string, unknown>) => withoutAudienceNetwork(t, { noFacebookReels: params.excludeFacebookReels }) : (t: Record<string, unknown>) => t)(adSetTargeting({
       location: v.location ?? params.location,
       excludedLocation: mergeExclusions(v.excludedLocation ?? params.excludedLocation, areaExclusions.get(v.location ?? params.location) ?? null),
       ageMin: (v.ageMin ?? params.ageMin)!,
@@ -1449,7 +1412,7 @@ export class MetaClient {
         try {
           adSet = await makeAdSet(requested, variants[i], i);
         } catch (err) {
-          if (requested === "instant_form") return rollBack(err);
+          if (requested === "instant_form" || requested === "website") return rollBack(err);
           return rollBack(new MetaError(
             requested === "whatsapp"
               ? "WhatsApp is not available for this Meta Page. Connect WhatsApp or choose an instant lead form."
@@ -1490,9 +1453,12 @@ export class MetaClient {
                 leadFormId: params.leadFormId,
                 phone: destination === "whatsapp" ? params.whatsappNumber : phone,
                 ctaLabel: c.cta,
+                link: params.link,
               }),
             },
           }),
+          ...(destination === "website" ? { url_tags: websiteUrlTags(campaign.id) } : {}),
+          ...CREATIVE_OPT_OUT_FORM,
         };
         const postCreative = async (form: Record<string, string>) => {
           const created = await this.graph<{ id: string }>(`${acct}/adcreatives`, { method: "POST", form });
@@ -1505,6 +1471,7 @@ export class MetaClient {
             name: singleImageForm.name,
             object_story_spec: JSON.stringify(placement.object_story_spec),
             asset_feed_spec: JSON.stringify(placement.asset_feed_spec),
+            ...CREATIVE_OPT_OUT_FORM,
           }).catch((error: unknown) => {
             params.onStoryFallback?.("creative", metaErrorCode(error));
             return postCreative(singleImageForm);
@@ -1577,7 +1544,7 @@ export class MetaClient {
   } = {}): Promise<{ adId: string; previousCreativeId: string; creativeId: string }> {
     const acct = this.creds.adAccountId;
     const ad = await this.graph<{ id: string; account_id?: string; creative?: StoredCreative & { id?: string } }>(
-      `${encodeURIComponent(adId)}?fields=id,account_id,creative{id,name,object_story_spec,asset_feed_spec}`,
+      `${encodeURIComponent(adId)}?fields=id,account_id,creative{id,name,object_story_spec,asset_feed_spec,url_tags}`,
     );
     if (ad.account_id !== acct.replace(/^act_/, "") || !ad.creative?.id) throw new MetaError("This ad isn't in the connected ad account.");
     const form = editedCreativeForm(ad.creative, edit);

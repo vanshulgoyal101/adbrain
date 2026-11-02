@@ -69,6 +69,7 @@ import { applyBudget, budgetFormStart } from "@/lib/campaign/budget-edit-form";
 import { EditAdDialog } from "@/components/edit-ad-dialog";
 import { OWNER_WORDS } from "@/lib/copy/owner-words";
 import { CampaignLaunchReview } from "@/components/campaign-launch-review";
+import { DestinationChoice, WebsiteDestinationFields, WebsiteReviewFacts, reviewWebsiteUrl, type ComposerDestination } from "@/components/campaign-destination";
 import { CampaignReviewSummary } from "@/components/campaign-review-summary";
 import { WeeklyCapLine, weeklyCapWords } from "@/components/weekly-cap-line";
 import { WhatsAppEnquiries } from "@/components/whatsapp-enquiries";
@@ -87,12 +88,7 @@ import {
   isTerminalOperation,
   stableOperationKey,
 } from "@/lib/meta-connect-ui/campaign-flow";
-import type {
-  DraftDTO,
-  DraftInput,
-  OperationDTO,
-  ReviewDTO,
-} from "@/lib/campaign/connect-contracts";
+import type { DraftDTO, DraftInput, OperationDTO, ReviewDTO } from "@/lib/campaign/connect-contracts";
 import { fetchAudiencePlan, needsAudiencePlan, plannedTargeting, type AudiencePlanReply } from "@/lib/campaign/audience-plan";
 import { campaignNameDate, defaultCampaignName, draftForSelection } from "@/lib/campaign/draft-name";
 import { REVIEW_AND_SPEND, whatsappExpectation } from "@/lib/campaign/expectations";
@@ -105,7 +101,7 @@ import { targetingFromEditor, targetingToEditor } from "@/lib/campaign/editor-ta
 import { buildManualDraftInput, pickWhatsAppNumber } from "@/lib/campaign/manual-draft-input";
 import { maskWhatsAppNumber, maskedWhatsAppNumberPattern, parseWhatsAppStatus, type WhatsAppStatus } from "@/lib/meta/whatsapp-status-shared";
 import type { ConnectIntent, ConnectionDTO } from "@/lib/meta/connect-contracts";
-import type { Business, Campaign, CampaignResult, Creative, Json, LeadDestination } from "@/lib/types";
+import type { Business, Campaign, CampaignResult, Creative, Json } from "@/lib/types";
 import {
   BUDGET_PRESETS,
   campaignNarrative,
@@ -121,6 +117,7 @@ import { verdict, type Comparison } from "@/lib/campaign/verdict";
 import { WAITING_COLUMNS, WAITING_DAYS, waitingByCampaign, type WaitingLeadRow } from "@/lib/leads/waiting";
 import { CampaignVerdict } from "@/components/campaign-verdict";
 import { ageText, campaignsTranslator, verdictTranslator, type Words } from "@/i18n/words";
+import { useNotices } from "@/i18n/notices";
 import { campaignAttention } from "@/lib/campaign/health";
 import { campaignWhatsAppSummary } from "@/lib/campaign/results-summary";
 import { bookedLabel, costPerCustomer } from "@/lib/campaign/real-enquiries";
@@ -137,6 +134,7 @@ import { useMounted } from "@/lib/use-mounted";
 import { refreshIfStale, staleCampaignIds } from "@/lib/campaign/results-freshness";
 import { GONE_LINES, OUTSIDE_LINES, budgetChangedInMeta, endTimeChangedInMeta, goneInMeta, madeOutsideAdBrain, pausedInMeta } from "@/lib/campaign/gone-in-meta";
 import { CampaignTestOptions } from "@/components/campaign-test-options";
+import { cardFigures, cardResultCount } from "@/lib/campaign/card-figures";
 import { formatDate, formatDay, formatMoney, formatMoneyExact, formatNumber, formatPerDay } from "@/lib/format";
 
 const subscribeNever = () => () => {};
@@ -178,17 +176,17 @@ type PrepareReviewState =
   | { status: "ready"; draft: DraftDTO; connection: ConnectionDTO; review: ReviewDTO }
   | { status: "blocked"; draft: DraftDTO; connection: ConnectionDTO; message: string };
 
-async function fetchDraftForms(signal?: AbortSignal, fresh = false): Promise<LeadForm[]> {
+async function fetchDraftForms(fallback: string, signal?: AbortSignal, fresh = false): Promise<LeadForm[]> {
   const response = await fetch(`/api/campaigns/lead-forms${fresh ? "?fresh=1" : ""}`, { cache: "no-store", signal });
   const data = await response.json() as { forms?: LeadForm[]; error?: string };
-  if (!response.ok || data.error || !Array.isArray(data.forms)) throw new Error(data.error ?? "Could not load Page forms. Your draft is saved.");
+  if (!response.ok || data.error || !Array.isArray(data.forms)) throw new Error(data.error ?? fallback);
   return data.forms;
 }
 
 type ComposerSetup = {
   selected: Set<string>;
   budget: number;
-  destination: Exclude<LeadDestination, "call" | "website">;
+  destination: ComposerDestination;
   whatsappNumber: string;
   whatsappLanguage?: WhatsAppLanguage;
   /** #840: this campaign's own WhatsApp message ("Edit for this campaign"). */
@@ -314,6 +312,7 @@ function BusinessCampaigns({
   onSetupChange,
 }: CampaignsProps & { scope: string; initialSetup?: ComposerSetup; onSetupChange: (value: [string, ComposerSetup]) => void }) {
   const tc = campaignsTranslator(campaignWords);
+  const tn = useNotices(), formsLoadFailed = tn("goLive.formsLoadFailed"), formsUnavailable = tn("goLive.formsUnavailable");
   const [hadInitialSetup] = useState(Boolean(initialSetup));
   const [fromReview] = useState(Boolean(newCampaign) && !initialSetup);
   const [selected, setSelected] = useState<Set<string>>(() => initialSetup?.selected ?? new Set(
@@ -321,7 +320,7 @@ function BusinessCampaigns({
   ));
   // #761: ₹300 a day is the core run (#334); less rarely gets Meta out of learning.
   const [budget, setBudget] = useState(initialSetup?.budget ?? newCampaign?.budget ?? 300);
-  const [destination, setDestination] = useState<Exclude<LeadDestination, "call" | "website">>(initialSetup?.destination ?? "whatsapp");
+  const [destination, setDestination] = useState<ComposerDestination>(initialSetup?.destination ?? "whatsapp");
   const [whatsappNumber, setWhatsAppNumber] = useState(initialSetup?.whatsappNumber ?? "");
   const [whatsappLanguage, setWhatsAppLanguage] = useState<WhatsAppLanguage>(initialSetup?.whatsappLanguage ?? "ad");
   const [whatsappMessage, setWhatsAppMessage] = useState<WhatsAppTemplate | null>(initialSetup?.whatsappMessage ?? null);
@@ -587,14 +586,14 @@ function BusinessCampaigns({
   }
 
   async function refreshDraftForms(signal?: AbortSignal) {
-    const forms = await fetchDraftForms(signal);
+    const forms = await fetchDraftForms(formsLoadFailed, signal);
     if (signal?.aborted) return;
     setAvailableForms(forms);
     setLeadFormId(current => keptLeadForm(current, forms, readLeadFormMemory(leadFormMemoryKey)));
   }
 
   useEffect(() => {
-    if (!showComposer || !connectedForDraft || destination === "whatsapp") return;
+    if (!showComposer || !connectedForDraft || destination !== "instant_form") return;
     const freshness = formsFreshnessRef.current;
     if (freshness?.ownerId === business.owner_id && freshness.businessId === business.id &&
       freshness.retry === formsRetry && Date.now() - freshness.fetchedAt < LEAD_FORMS_FRESH_MS) return;
@@ -602,18 +601,16 @@ function BusinessCampaigns({
     const controller = new AbortController();
     startTransition(() => { setFormsLoading(true); setFormsError(null); });
     // #271: after a retry or reconnect, skip the server's ten-minute form cache.
-    void fetchDraftForms(controller.signal, formsRetry > 0).then(forms => {
+    void fetchDraftForms(formsLoadFailed, controller.signal, formsRetry > 0).then(forms => {
       if (controller.signal.aborted) return;
       formsFreshnessRef.current = { ownerId: business.owner_id, businessId: business.id, retry: formsRetry, fetchedAt: Date.now() };
       setAvailableForms(forms);
       setLeadFormId(current => keptLeadForm(current, forms, readLeadFormMemory(leadFormMemoryKey)));
-    }).catch(() => {
-      if (!controller.signal.aborted) setFormsError("Page forms are temporarily unavailable.");
-    }).finally(() => {
+    }).catch(() => { if (!controller.signal.aborted) setFormsError(formsUnavailable); }).finally(() => {
       if (!controller.signal.aborted) setFormsLoading(false);
     });
     return () => controller.abort();
-  }, [showComposer, connectedForDraft, business.id, business.owner_id, formsRetry, destination, leadFormMemoryKey]);
+  }, [showComposer, connectedForDraft, business.id, business.owner_id, formsRetry, destination, leadFormMemoryKey, formsLoadFailed, formsUnavailable]);
 
   useEffect(() => {
     if (!showComposer || !connectedForDraft) return;
@@ -705,7 +702,7 @@ function BusinessCampaigns({
 
   async function reopenDraft(draftId: string) {
     if (preparing || creating) return;
-    if (unresolvedRecovery()) { setError("Resolve the current campaign operation before opening another draft."); return; }
+    if (unresolvedRecovery()) { setError(tn("goLive.resolveBeforeDraft")); return; }
     setDraftBusy(draftId);
     clearErrors();
     try {
@@ -753,7 +750,7 @@ function BusinessCampaigns({
     if (preparing || creating) return;
     // needs_reconciliation is terminal on the server; a new campaign uses a new request, so only in-flight work stays locked.
     const reconciling = operation?.state === "needs_reconciliation";
-    if (unresolvedRecovery() && !reconciling) { setError("Resolve the current campaign operation before starting another campaign."); return; }
+    if (unresolvedRecovery() && !reconciling) { setError(tn("goLive.resolveBeforeStart")); return; }
     if (!(await askConfirm(reconciling
       ? { title: "Start a new campaign?", description: "Meta only partly created the last campaign. Everything it made is paused, so nothing can spend. Sync brings it into Your campaigns if it has an ad set; an empty campaign shows only in Ads Manager, where you can delete it.", confirmLabel: "Start new campaign" }
       : { title: "Discard this setup?", description: "Start a new campaign instead. Saved drafts stay available.", confirmLabel: "Discard and start new", tone: "danger" }))) return;
@@ -865,15 +862,15 @@ function BusinessCampaigns({
     return Boolean(recoveryRef.current?.request && (!operation || !["succeeded", "failed"].includes(operation.state)));
   }
 
-  function switchDestination(value: Exclude<LeadDestination, "call" | "website">) {
-    if (unresolvedRecovery()) { setError("Check the existing campaign operation before changing the destination."); return; }
+  function switchDestination(value: ComposerDestination) {
+    if (unresolvedRecovery()) { setError(tn("goLive.checkBeforeDestination")); return; }
     destinationChosenRef.current = true;
     flushSync(() => { setDestination(value); setPrepareReview(null); });
     jumpToFix([`destination-${value}`]);
   }
 
   function openConnect() {
-    if (unresolvedRecovery()) { setError("Check the existing campaign operation before connecting again."); return; }
+    if (unresolvedRecovery()) { setError(tn("goLive.checkBeforeConnect")); return; }
     setConnectionIntent({ kind: "setup" });
     setPrepareReview(null);
     setConnectOpen(true);
@@ -972,8 +969,8 @@ function BusinessCampaigns({
   }
 
   function manualDraftInput(requireComplete = true): DraftInput {
-    if (requireComplete && selected.size === 0) throw new Error("Select at least one creative.");
-    if (requireComplete && budget <= 0) throw new Error("Enter a daily budget.");
+    if (requireComplete && selected.size === 0) throw new Error(tn("goLive.selectCreative"));
+    if (requireComplete && budget <= 0) throw new Error(tn("goLive.enterBudget"));
     return buildManualDraftInput({
       businessId: business.id,
       name,
@@ -1095,7 +1092,7 @@ function BusinessCampaigns({
         const primaryText = withQuestionsLastLine(ad.primary_text ?? "", adLanguages([ad])[0]);
         const text = savedAdText(ad);
         const result = await updateCreativeCopy(ad.id, { ...text, cta: text.cta as EditableCopy["cta"], primary_text: primaryText });
-        if (!result.ok) { failAt("review", result.error ?? "The ad couldn't be changed. Edit its last line, then check again."); return; }
+        if (!result.ok) { failAt("review", result.error ?? tn("goLive.adChangeFailed")); return; }
         setEditedAds((current) => ({ ...current, [ad.id]: { ...ad, ...result.creative, primary_text: result.creative?.primary_text ?? primaryText } }));
       }
       await prepareManualCampaign();
@@ -1134,7 +1131,7 @@ function BusinessCampaigns({
       failAt("composer", reason instanceof Error ? reason.message : "Complete the campaign details first.");
       return;
     }
-    if (reviewAfterSave && connectedForDraft && input.destination !== "whatsapp" && !input.leadFormId) {
+    if (reviewAfterSave && connectedForDraft && (input.destination ?? "instant_form") === "instant_form" && !input.leadFormId) {
       failAt("leadform", "Choose a lead form before preparing campaign review.");
       return;
     }
@@ -1156,7 +1153,7 @@ function BusinessCampaigns({
       if (over && over.draftId !== draft.draftId) setSavedDrafts((drafts) => drafts.filter((saved) => saved.draftId !== over.draftId));
       signal.throwIfAborted();
       saveRecovery({ draft, request: null, operationId: null });
-      if (reviewAfterSave && input.destination !== "whatsapp") saveLeadFormMemory(leadFormMemoryKey, input.leadFormId);
+      if (reviewAfterSave && (input.destination ?? "instant_form") === "instant_form") saveLeadFormMemory(leadFormMemoryKey, input.leadFormId);
       setOperation(null);
       operationRef.current = null;
       setRecoveryPending(false);
@@ -1301,7 +1298,7 @@ function BusinessCampaigns({
 
   async function handleGuidedDraft(draft: DraftDTO) {
     if (unresolvedRecovery()) {
-      setError("Check the existing campaign operation before preparing another campaign.");
+      setError(tn("goLive.checkBeforePrepare"));
       return;
     }
     saveRecovery({ draft, request: null, operationId: null });
@@ -1318,7 +1315,7 @@ function BusinessCampaigns({
         setConnectOpen(true);
         return;
       }
-      if (draft.input.destination !== "whatsapp") await refreshDraftForms();
+      if ((draft.input.destination ?? "instant_form") === "instant_form") await refreshDraftForms();
       await loadPrepareReview(draft, connection);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not open the saved campaign review.");
@@ -1434,7 +1431,7 @@ function BusinessCampaigns({
 
   async function buildActivationDigest(campaign: Campaign, connection: ConnectionDTO, delivery: CampaignDeliverySnapshot, days?: number): Promise<string> {
     const payload = activationConfirmationPayload(campaign, connection, delivery, days);
-    if (!crypto.subtle) throw new Error("Activation confirmation is unavailable in this browser.");
+    if (!crypto.subtle) throw new Error(tn("goLive.confirmUnavailable"));
     const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(payload));
     return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
   }
@@ -1443,14 +1440,14 @@ function BusinessCampaigns({
     try {
       const deliveryResponse = await fetch(`/api/campaigns/${campaign.id}`, { cache: "no-store" });
       const review = await deliveryResponse.json() as { delivery?: unknown; funding?: unknown; spendLimitRequired?: unknown; learning?: { costPerResultRupees?: unknown; pausedAt?: unknown }; keptPaused?: unknown; error?: string };
-      if (!deliveryResponse.ok) throw new Error(review.error ?? "Campaign delivery review is unavailable.");
+      if (!deliveryResponse.ok) throw new Error(review.error ?? tn("goLive.deliveryReviewUnavailable"));
       const delivery = campaignDeliverySnapshotSchema.parse(review.delivery);
       const funding = review.funding === undefined ? null : accountFundingSchema.parse(review.funding);
       // #208: a capped run needs only cap + GST; one day opens the dialog, PATCH enforces the chosen days.
       const capped = deliveryChildren(delivery).every(child => child.status === "PAUSED");
       if (!funding) {
         const response = await fetch(`/api/payments/customer-balance?businessId=${encodeURIComponent(campaign.business_id)}&campaignId=${encodeURIComponent(campaign.id)}${capped ? "&capDays=1" : ""}`, { cache: "no-store" });
-        if (!response.ok) throw new Error("Customer advertising funds must be reconciled before activation.");
+        if (!response.ok) throw new Error(tn("goLive.fundsReconcile"));
       }
       const digest = await buildActivationDigest(campaign, connection, delivery);
       setReviewConnection(connection);
@@ -1494,7 +1491,7 @@ function BusinessCampaigns({
       return;
     }
     if (next === "active" && (!activationDigest || !reviewConnection || !activationDelivery || !activationReady)) {
-      setError("Review the current connection before activating this campaign.");
+      setError(tn("goLive.reviewConnection"));
       return;
     }
     const reviewedDays = next === "active" && activationCapped ? capDays : undefined;
@@ -1747,11 +1744,11 @@ function BusinessCampaigns({
                 const interests = review.audienceInterests?.map((interest) => interest.name).join(", ");
                 const fact = (label: string, value: ReactNode) => <div key={label} className="grid grid-cols-[5.75rem_1fr] gap-3 sm:grid-cols-[7.5rem_1fr] sm:gap-4"><dt className="text-slate-500">{label}</dt><dd className="min-w-0 wrap-break-word text-slate-900">{value}</dd></div>;
                 const facts = <>
-                  <dl className="grid gap-2.5">
+                  <dl className="grid gap-2.5">{input.destination === "website" && <WebsiteReviewFacts url={reviewWebsiteUrl(review.websiteUrl, business.website)} words={campaignWords} />}
                     {fact("Budget", <>{formatMoney(review.totalDailyBudgetRupees)} a day{review.perAdSetDailyBudgetRupees !== review.totalDailyBudgetRupees && <span className="text-slate-600"> ({formatMoney(review.perAdSetDailyBudgetRupees)} per ad set)</span>}</>)}
                     {fact("Where", <>{review.resolvedAreaLabel ?? "Needs review"}, {input.targeting.location?.cityScope === "city_only" ? "city only (no added radius)" : `${input.targeting.location?.radiusKm ?? 25} km radius`}{review.serviceArea && <span className="block text-slate-600">{serviceAreaLine(review.serviceArea)}</span>}</>)}
                     {fact("Who", <>Ages {age?.min ?? "unset"}–{age?.max === 65 ? "65+" : age?.max ?? "unset"}, {{ all: "all genders", men: "men", women: "women" }[input.targeting.gender ?? "all"]}{interests ? `, interested in ${interests}` : input.targeting.audience?.interestNames.length ? ", interests need resolving" : ", no interest narrowing"}</>)}
-                    {fact("Destination", <>{input.destination === "whatsapp" ? `WhatsApp chat ${review.whatsappNumber ?? "(number not verified)"}` : "Instant lead form"}{input.destination === "whatsapp" && !review.whatsappNumber && (
+                    {input.destination !== "website" && fact("Destination", <>{input.destination === "whatsapp" ? `WhatsApp chat ${review.whatsappNumber ?? "(number not verified)"}` : "Instant lead form"}{input.destination === "whatsapp" && !review.whatsappNumber && (
                       // #1301: an unverified number gets one plain next step, a link and a re-check (the same preflight read).
                       <span className="block text-slate-700">
                         {WHATSAPP_UNVERIFIED_STEP}{" "}
@@ -1760,7 +1757,7 @@ function BusinessCampaigns({
                           disabled={prepareReview.status !== "ready"}
                           onClick={() => void loadPrepareReview(prepareReview.draft, prepareReview.connection).catch(() => undefined)}>Check again</button>
                       </span>
-                    )}{/* #906: WhatsApp and lead-form ads leave Audience Network out. */}{(input.destination === "whatsapp" || input.destination === "instant_form") && <span className="block text-slate-600">Shown on Facebook, Instagram and Messenger</span>}</>)}
+                    )}{/* #906: WhatsApp and lead-form ads leave Audience Network out. */}<span className="block text-slate-600">Shown on Facebook, Instagram and Messenger</span></>)}
                     {fact("Meta account", <>{review.selected?.accountName ?? prepareReview.connection.selected?.accountName ?? "Unavailable"}, Page {review.selected?.pageName ?? prepareReview.connection.selected?.pageName ?? "Unavailable"} ({review.currency})</>)}
                   </dl>
                   <p className="mt-3 text-xs text-slate-500">Location includes residents and recent visitors. Interest signals may expand under Meta lead optimization.</p>
@@ -1847,7 +1844,7 @@ function BusinessCampaigns({
         open={connectOpen}
         onClose={() => setConnectOpen(false)}
         onBeforeStart={connectionIntent.kind === "setup" ? async () => {
-              if (unresolvedRecovery()) throw new Error("Check the existing operation before connecting again.");
+              if (unresolvedRecovery()) throw new Error(tn("goLive.checkOperationBeforeConnect"));
               setPrepareReview(null);
               const client = createMetaConnectClient();
               const input = manualDraftInput(false);
@@ -1915,19 +1912,19 @@ function BusinessCampaigns({
             <legend className="mb-2 text-xs font-medium text-slate-500">Campaign setup</legend>
             {[["manual", "Choose settings"], ["guided", "Plan with AdBrain"]].map(([value, label]) => <label key={value} className={cn("flex min-h-11 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm", creationMode === value ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200")}><input ref={value === "guided" ? guidedModeRef : undefined} type="radio" name="creation-mode" value={value} checked={creationMode === value} onChange={() => setCreationMode(value)} className="accent-blue-600" />{label}</label>)}
           </fieldset>
-          <fieldset disabled={preparing || creating || destinationRecoveryLocked} aria-describedby={showDestinationLock ? "destination-lock-reason" : undefined} className="flex flex-wrap gap-2">
-            <legend className="mb-2 text-xs font-medium text-slate-500">Destination</legend>
-            {([ ["whatsapp", "WhatsApp chat (recommended)"], ["instant_form", "Instant form"] ] as const).map(([value, label]) => <label key={value} className={cn("flex min-h-11 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm", destination === value ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200")}><input id={`destination-${value}`} type="radio" name="campaign-destination" value={value} checked={destination === value} onChange={() => { if (!unresolvedRecovery()) { destinationChosenRef.current = true; setDestination(value); setPrepareReview(null); } }} className="accent-blue-600" />{label}</label>)}
-          </fieldset>
+          <DestinationChoice value={destination} offerWebsite={internal} words={campaignWords} disabled={preparing || creating || destinationRecoveryLocked} describedBy={showDestinationLock ? "destination-lock-reason" : undefined}
+            onChange={(value) => { if (!unresolvedRecovery()) { destinationChosenRef.current = true; setDestination(value); setPrepareReview(null); } }} />
           </div>
           {showDestinationLock && <p id="destination-lock-reason" role="status" className="mb-4 text-sm text-amber-800">Destination is locked until the previous campaign request is resolved.</p>}
           {showComposer && destination === "whatsapp" && <div className="mb-4"><WhatsAppReadyChecklist businessId={business.id} />
             {/* #1171 (QA): WhatsApp stays the default; an owner without a linked number can still run ads today. */}
             {whatsappStatus?.state !== "ready" && <Button type="button" variant="ghost" className="mt-1 h-11 px-0 text-blue-700" disabled={preparing || creating || destinationRecoveryLocked} onClick={() => switchDestination("instant_form")}>No WhatsApp number yet? Use an Instant form for now</Button>}
           </div>}
+          {/* Designer (#2660): Website's link and button open right under the switch, where WhatsApp's number and tips go. */}
+          {showComposer && creationMode === "manual" && destination === "website" && <div className="mb-4"><WebsiteDestinationFields website={business.website} words={campaignWords} /></div>}
           {showComposer && creationMode === "guided" && <CampaignChat
             businessId={business.id}
-            destination={destination}
+            destination={destination === "website" ? undefined : destination /* TODO(#2595): the planner learns website in slice C. */}
             whatsappNumber={destination === "whatsapp" && chosenWhatsAppNumber ? chosenWhatsAppNumber : undefined}
             onStarted={() => { destinationChosenRef.current = true; }}
             onDraftReady={(draft) => void handleGuidedDraft(draft)}
@@ -2196,9 +2193,9 @@ function BusinessCampaigns({
 
                 {/* #761: what to expect, from AdBrain's own runs (#588 ledger; #1307: facts with n until 20 results). #1038: no lead-form figure until AdBrain has run lead forms. */}
                 <p className="-mt-2 text-xs text-slate-500">
-                  What to expect: {destination === "whatsapp"
+                  {destination === "website" ? tc("destination.expectWebsite") : <>What to expect: {destination === "whatsapp"
                     ? whatsappExpectation(whatsappLedger ?? undefined)
-                    : <>AdBrain hasn&apos;t run enough instant-form campaigns yet to quote a cost per enquiry.</>} {REVIEW_AND_SPEND}
+                    : <>AdBrain hasn&apos;t run enough instant-form campaigns yet to quote a cost per enquiry.</>} {REVIEW_AND_SPEND}</>}
                 </p>
 
                 {destination === "instant_form" && formsLoading && <p role="status" className="text-sm text-slate-500">Loading lead forms...</p>}
@@ -2257,6 +2254,7 @@ function BusinessCampaigns({
                     leadFormName={selectedLeadForm?.name}
                     destination={destination}
                     whatsappNumber={destination === "whatsapp" && chosenWhatsAppNumber ? chosenWhatsAppNumber : undefined}
+                    website={business.website} words={campaignWords}
                     weeklyCap={composerCap}
                     audience={`${audiencePreview}; ${targeting.ageMode === "manual" ? `ages ${targeting.ageMin}-${targeting.ageMax === 65 ? "65+" : targeting.ageMax}` : "ages picked by AdBrain when you check"}; ${{ all: "All genders", men: "Men", women: "Women" }[targeting.gender ?? "all"]}; ${targeting.cityScope === "city_only" ? "city only (no added radius)" : `city radius ${targeting.radiusKm} km`}${targeting.audience?.interestNames.length ? `; interests: ${targeting.audience.interestNames.join(", ")}` : ""}`}
                   />
@@ -2570,7 +2568,7 @@ function BusinessCampaigns({
                       <p className="text-xs text-slate-500">{updatingIds.includes(c.id) ? tc("card.updating") : tc("card.updated", { age: ageText(verdictTranslator(verdictWords), r.fetched_at) })}</p>
                     )}
                     {r && mounted && c.meta_campaign_id && throttleActive(metaWaitUntil) && <p className="text-xs text-slate-600">{resultsWaitLine(Date.now() - new Date(r.fetched_at).getTime())}</p>}
-                    {adResults && r && c.meta_campaign_id && <AdResults campaignId={c.id} whatsapp={outcome === "whatsapp"} words={verdictWords} offerPause={!weakAdCards.includes(c.id)} onRunAgain={() => void runAgain(c)} runAgainBusy={rerunBusy === c.id} runAgainError={rerunError?.id === c.id ? rerunError.message : null} />}
+                    {adResults && r && c.meta_campaign_id && <AdResults campaignId={c.id} destination={outcome} words={verdictWords} offerPause={!weakAdCards.includes(c.id)} onRunAgain={() => void runAgain(c)} runAgainBusy={rerunBusy === c.id} runAgainError={rerunError?.id === c.id ? rerunError.message : null} />}
                     {r && ((r.booked ?? 0) > 0 || (r.customers ?? 0) > 0) && (
                       // #798: what a real customer cost, beside the per-enquiry figures. #1994: bookings, the step before, come first.
                       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4" aria-label={tc("card.customersLabel")}>
@@ -2656,18 +2654,16 @@ function CardResults({ campaign, result: r, outcome, comparison, waiting, onRunA
   perAd: boolean; onWeakAd: (campaignId: string, shown: boolean) => void; words?: Words<"verdict">;
 }) {
   const [now] = useState(() => Date.now());
-  const enough = (outcome === "whatsapp" ? r.conversations ?? 0 : r.leads) >= BEST_AD_MIN_RESULTS;
+  const enough = cardResultCount(outcome, r) >= BEST_AD_MIN_RESULTS;
+  const shown = cardFigures(outcome, r);
   const [weakAd, clearWeakAd] = useWeakAd(campaign.id, perAd && campaign.status === "active" && Boolean(campaign.meta_campaign_id) && enough);
   const t = verdictTranslator(words);
   const figures = <>
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
       <Stat label={t("figures.impressions")} value={formatNumber(r.impressions)} />
       <Stat label={t("figures.clicks")} value={formatNumber(r.clicks)} />
-      <Stat label={t(outcome === "whatsapp" ? "figures.chats" : outcome === "instant_form" ? "figures.leads" : "figures.unavailable")} value={outcome === "whatsapp" ? (r.conversations != null ? formatNumber(r.conversations) : "—") : outcome === "instant_form" ? formatNumber(r.leads) : "—"} />
-      <Stat
-        label={t(outcome === "whatsapp" ? "figures.costChat" : outcome === "instant_form" ? "figures.costLead" : "figures.costResult")}
-        value={outcome === "whatsapp" ? (r.conversations != null && r.cost_per_conversation != null ? formatMoney(r.cost_per_conversation) : "—") : outcome === "instant_form" && r.cpl != null ? formatMoney(r.cpl) : "—"}
-      />
+      <Stat label={t(shown.label)} value={shown.value} />
+      <Stat label={t(shown.costLabel)} value={shown.cost} />
     </div>
     {outcome === "whatsapp" && r.whatsapp_opens != null && r.conversations != null && (
       // #493: people reach WhatsApp and leave; show the drop-off plainly.
@@ -2683,7 +2679,7 @@ function CardResults({ campaign, result: r, outcome, comparison, waiting, onRunA
   useEffect(() => { onWeakAd(campaign.id, weakShown); }, [campaign.id, weakShown, onWeakAd]);
   // A paused card that never showed keeps its one "nothing has spent" line (#173), with no verdict beside it.
   if (!input || !judged || (campaign.status !== "active" && campaign.status !== "completed" && !r.impressions)) return figures;
-  return <CampaignVerdict verdict={judged} words={words} whatsapp={input.destination === "whatsapp"} results={input.results} spend={input.spend}
+  return <CampaignVerdict verdict={judged} words={words} destination={input.destination} results={input.results} spend={input.spend}
     details={figures} onRunAgain={onRunAgain} runAgainBusy={runAgainBusy} adsManagerUrl={adsManagerUrl} onEditAd={onEditAd}
-    pauseOffer={weakAd && <PauseOffer campaignId={campaign.id} suggestion={weakAd} whatsapp={input.destination === "whatsapp"} onKeep={clearWeakAd} words={words} />} />;
+    pauseOffer={weakAd && <PauseOffer campaignId={campaign.id} suggestion={weakAd} destination={input.destination} onKeep={clearWeakAd} words={words} />} />;
 }

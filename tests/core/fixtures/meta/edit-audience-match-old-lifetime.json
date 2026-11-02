@@ -1,0 +1,101 @@
+[
+  {
+    "method": "GET",
+    "path": "900000000000000007/ads?fields=id%2Cstatus%2Cadset_id&limit=100",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "id": "900000000000000008",
+          "status": "PAUSED",
+          "adset_id": "900000000000000007"
+        }
+      ],
+      "paging": {
+        "cursors": {
+          "before":"CURSOR",
+          "after":"CURSOR"
+        }
+      }
+    }
+  },
+  {
+    "method": "GET",
+    "path": "900000000000000007?fields=id%2Ccampaign_id%2Cstatus%2Clifetime_budget%2Cbudget_remaining%2Cdaily_budget%2Cend_time",
+    "status": 200,
+    "body": {
+      "id": "900000000000000007",
+      "campaign_id": "900000000000000005",
+      "status": "PAUSED",
+      "lifetime_budget": "500000",
+      "budget_remaining": "500000",
+      "daily_budget": "0",
+      "end_time": "2026-11-09T19:11:59+0530"
+    }
+  },
+  {
+    "method": "GET",
+    "path": "900000000000000009?fields=id%2Ccampaign_id%2Cstatus%2Clifetime_budget%2Cbudget_remaining%2Cdaily_budget%2Cend_time",
+    "status": 200,
+    "body": {
+      "id": "900000000000000009",
+      "campaign_id": "900000000000000005",
+      "status": "PAUSED",
+      "lifetime_budget": "600000",
+      "budget_remaining": "600000",
+      "daily_budget": "0",
+      "end_time": "2026-11-10T19:13:18+0530"
+    }
+  },
+  {
+    "method": "GET",
+    "path": "900000000000000009?fields=id%2Ccampaign_id%2Cstatus%2Clifetime_budget%2Cbudget_remaining%2Cdaily_budget%2Cend_time",
+    "status": 200,
+    "body": {
+      "id": "900000000000000009",
+      "campaign_id": "900000000000000005",
+      "status": "PAUSED",
+      "lifetime_budget": "600000",
+      "budget_remaining": "600000",
+      "daily_budget": "0",
+      "end_time": "2026-11-10T19:13:18+0530"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "900000000000000007",
+    "form": {
+      "lifetime_budget": "600000",
+      "end_time": "2026-11-10T19:13:18+0530"
+    },
+    "status": 200,
+    "body": {
+      "success": true
+    }
+  },
+  {
+    "method": "GET",
+    "path": "900000000000000007?fields=id%2Ccampaign_id%2Cstatus%2Clifetime_budget%2Cbudget_remaining%2Cdaily_budget%2Cend_time",
+    "status": 200,
+    "body": {
+      "id": "900000000000000007",
+      "campaign_id": "900000000000000005",
+      "status": "PAUSED",
+      "lifetime_budget": "600000",
+      "budget_remaining": "600000",
+      "daily_budget": "0",
+      "end_time": "2026-11-10T19:13:18+0530"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "900000000000000009",
+    "form": {
+      "status": "ARCHIVED"
+    },
+    "status": 200,
+    "body": {
+      "success": true
+    }
+  }
+]

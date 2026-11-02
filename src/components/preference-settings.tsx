@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { Download, Loader2, Pencil, Trash2 } from "lucide-react";
 import { Alert } from "@/components/ui/alert";
@@ -9,13 +9,14 @@ import { Input, Label } from "@/components/ui/input";
 import { preferenceCategories, type PreferenceCategory } from "@/lib/preferences/context";
 import type { PreferenceState } from "@/lib/preferences/store";
 import { formatDate } from "@/lib/format";
+import { settingsTranslator, type Words } from "@/i18n/words";
 
-const labels: Record<PreferenceCategory, string> = {
-  copy_length: "Copy length", tone: "Tone", language: "Language", visual_style: "Visual style",
-  layout_density: "Layout density", creative_dislikes: "Avoid in ads", workflow: "Workflow",
-};
-
-export function PreferenceSettings({ businessId, initialState = null }: { businessId: string; initialState?: PreferenceState | null }) {
+export function PreferenceSettings({ businessId, initialState = null, words }: {
+  businessId: string; initialState?: PreferenceState | null; words?: Words<"settings">;
+}) {
+  const t = useMemo(() => settingsTranslator(words), [words]);
+  const label = (item: PreferenceCategory) => t(`preferences.categories.${item}`);
+  const loadFailed = t("preferences.loadFailed");
   const [state, setState] = useState<PreferenceState | null>(initialState);
   const [category, setCategory] = useState<PreferenceCategory>("tone");
   const [value, setValue] = useState("");
@@ -31,12 +32,12 @@ export function PreferenceSettings({ businessId, initialState = null }: { busine
     fetch(`/api/preferences?businessId=${encodeURIComponent(businessId)}`, { cache: "no-store" })
       .then(async response => {
         const body = await response.json();
-        if (!response.ok) throw new Error(body.error ?? "Could not load preferences.");
+        if (!response.ok) throw new Error(body.error ?? loadFailed);
         return body as PreferenceState;
       }).then(result => { if (active) setState(result); })
       .catch(cause => { if (active) setError((cause as Error).message); });
     return () => { active = false; };
-  }, [businessId, serverLoaded]);
+  }, [businessId, serverLoaded, loadFailed]);
 
   async function change(operation: "enable" | "pause" | "save" | "forget" | "clear", target = category) {
     if (!state) return;
@@ -47,11 +48,11 @@ export function PreferenceSettings({ businessId, initialState = null }: { busine
         body: JSON.stringify({ businessId, operation, expectedEpoch: state.epoch, category: target, value: operation === "save" ? value : undefined }),
       });
       const body = await response.json();
-      if (!response.ok) throw new Error(body.error ?? "Could not save preferences.");
+      if (!response.ok) throw new Error(body.error ?? t("preferences.saveFailed"));
       setState(body as PreferenceState);
       if (operation === "save" || operation === "forget" || operation === "clear") setValue("");
-      setNotice(operation === "save" ? "Preference saved." : operation === "forget" ? "Preference forgotten." :
-        operation === "clear" ? "All preferences cleared." : operation === "pause" ? "Preferences paused." : "Preferences enabled.");
+      setNotice(t(operation === "save" ? "preferences.saved" : operation === "forget" ? "preferences.forgotten" :
+        operation === "clear" ? "preferences.cleared" : operation === "pause" ? "preferences.paused" : "preferences.enabled"));
     } catch (cause) { setError((cause as Error).message); }
     finally { setBusy(false); }
   }
@@ -74,48 +75,49 @@ export function PreferenceSettings({ businessId, initialState = null }: { busine
       {confirmDialog}
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div>
-        <h2 id="preferences-heading" className="text-lg font-semibold text-slate-900">Ad preferences</h2>
-        <p className="text-sm text-slate-600">Styles AdBrain remembers from your choices. What you ask for in Create always wins.</p>
+        <h2 id="preferences-heading" className="text-lg font-semibold text-slate-900">{t("preferences.title")}</h2>
+        <p className="text-sm text-slate-600">{t("preferences.intro")}</p>
       </div>
       {state && <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm text-slate-700">
         <input type="checkbox" checked={state.enabled} disabled={busy} onChange={() => change(state.enabled ? "pause" : "enable")}
-          className="h-4 w-4" /> Use preferences
+          className="h-4 w-4" />{` ${t("preferences.use")}`}
       </label>}
     </div>
-    {error && <Alert variant="error">{error} <button type="button" className="underline" onClick={() => window.location.reload()}>Reload</button></Alert>}
+    {error && <Alert variant="error">{error} <button type="button" className="underline" onClick={() => window.location.reload()}>{t("preferences.reload")}</button></Alert>}
     {notice && <Alert variant="success">{notice}</Alert>}
-    {!state && !error && <p role="status" className="flex items-center gap-2 text-sm text-slate-600"><Loader2 className="h-4 w-4 animate-spin" /> Loading preferences</p>}
+    {!state && !error && <p role="status" className="flex items-center gap-2 text-sm text-slate-600"><Loader2 className="h-4 w-4 animate-spin" />{` ${t("preferences.loading")}`}</p>}
     {state && <>
       {state.enabled && <form className="space-y-3" onSubmit={event => { event.preventDefault(); change("save"); }}>
         <div className="grid gap-3 sm:grid-cols-[10rem_1fr]">
-          <div><Label htmlFor="preference-category">Category</Label>
+          <div><Label htmlFor="preference-category">{t("preferences.category")}</Label>
             <select id="preference-category" value={category} onChange={event => { setCategory(event.target.value as PreferenceCategory); setValue(""); }}
               disabled={busy} className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-2 text-sm">
-              {preferenceCategories.map(item => <option key={item} value={item}>{labels[item]}</option>)}
+              {preferenceCategories.map(item => <option key={item} value={item}>{label(item)}</option>)}
             </select></div>
-          <div><Label htmlFor="preference-value">Preference</Label><Input id="preference-value" maxLength={160} value={value}
-            onChange={event => setValue(event.target.value)} disabled={busy} placeholder="Usually prefers simple, conversational copy" /></div>
+          <div><Label htmlFor="preference-value">{t("preferences.preference")}</Label><Input id="preference-value" maxLength={160} value={value}
+            onChange={event => setValue(event.target.value)} disabled={busy} placeholder={t("preferences.placeholder")} /></div>
         </div>
-        <Button type="submit" disabled={busy || !value.trim()}>{busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Remember preference</Button>
+        <Button type="submit" disabled={busy || !value.trim()}>{busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{t("preferences.remember")}</Button>
       </form>}
       {state.notes.length > 0 && <ul className="divide-y divide-slate-200 border-y border-slate-200">
         {state.notes.map(note => <li key={note.category} className="flex flex-wrap items-center gap-3 py-3 text-sm">
-          <div className="min-w-0 flex-1"><span className="font-medium text-slate-900">{labels[note.category]}</span>
+          <div className="min-w-0 flex-1"><span className="font-medium text-slate-900">{label(note.category)}</span>
             <p className="break-words text-slate-700">{note.value}</p>
-            <span className="text-xs text-slate-500">Declared by you · Updated {formatDate(note.updated_at)}</span></div>
-          <button type="button" title={`Edit ${labels[note.category]}`} aria-label={`Edit ${labels[note.category]}`} disabled={busy || !state.enabled}
+            <span className="text-xs text-slate-500">{t("preferences.declared", { date: formatDate(note.updated_at, undefined, words?.locale) })}</span></div>
+          <button type="button" title={t("preferences.edit", { label: label(note.category) })} aria-label={t("preferences.edit", { label: label(note.category) })} disabled={busy || !state.enabled}
             onClick={() => { setCategory(note.category); setValue(note.value); document.getElementById("preference-value")?.focus(); }}><Pencil className="h-4 w-4" /></button>
-          <button type="button" title={`Forget ${labels[note.category]}`} aria-label={`Forget ${labels[note.category]}`} disabled={busy}
+          <button type="button" title={t("preferences.forget", { label: label(note.category) })} aria-label={t("preferences.forget", { label: label(note.category) })} disabled={busy}
             onClick={() => change("forget", note.category)}><Trash2 className="h-4 w-4" /></button>
         </li>)}</ul>}
       {state.notes.length > 0 && <div className="flex flex-wrap gap-4 text-sm font-medium">
         <button type="button" disabled={busy} onClick={exportNotes} className="inline-flex items-center gap-2 text-slate-700 underline">
-          <Download className="h-4 w-4" /> Export preferences
+          <Download className="h-4 w-4" />{` ${t("preferences.export")}`}
         </button>
         <button type="button" disabled={busy} onClick={() => {
-          void confirm({ title: "Forget all preferences?", description: "AdBrain forgets everything it has learned about what this business likes and avoids.", confirmLabel: "Forget preferences", tone: "danger" })
+          void confirm({ title: t("preferences.forgetAllTitle"), description: t("preferences.forgetAllBody"), confirmLabel: t("preferences.forgetAllConfirm"),
+            cancelLabel: t("preferences.cancel"), tone: "danger" })
             .then((confirmed) => { if (confirmed) change("clear"); });
-        }} className="text-red-700 underline">Forget all preferences</button>
+        }} className="text-red-700 underline">{t("preferences.forgetAll")}</button>
       </div>}
     </>}
   </section>;
