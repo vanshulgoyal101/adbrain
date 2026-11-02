@@ -106,10 +106,12 @@ export function preparedAudienceForm(raw: unknown): AudienceEditForm | null {
   return parsed.success ? parsed.data : null;
 }
 
-/** #773: the campaign row as the server stores it after a running Save, so reopening Edit audience starts from the saved form. */
-export function withPreparedAudienceForm<T extends { raw: unknown }>(campaign: T, form: AudienceEditForm): T {
-  const raw = campaign.raw && typeof campaign.raw === "object" && !Array.isArray(campaign.raw) ? campaign.raw : {};
-  return { ...campaign, raw: { ...raw, preparedAudience: { form } } };
+/** #773: the campaign row as the server stores it after a Save: a running Save keeps its form, a paused one (applied) clears it. */
+export function withPreparedAudienceForm<T extends { raw: unknown }>(campaign: T, form: AudienceEditForm | null): T {
+  const raw: Record<string, unknown> = { ...campaign.raw && typeof campaign.raw === "object" && !Array.isArray(campaign.raw) ? campaign.raw : {} };
+  if (form) raw.preparedAudience = { form };
+  else delete raw.preparedAudience;
+  return { ...campaign, raw };
 }
 
 type GeoSpec = {

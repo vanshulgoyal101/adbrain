@@ -2361,7 +2361,7 @@ function BusinessCampaigns({
                 campaignName={audienceEdit.name ?? `${business.name} — ${audienceEdit.objective}`}
                 running={audienceEdit.status === "active"} prepared={preparedAudienceForm(audienceEdit.raw)}
                 onClose={() => { setAudienceEdit(null); loadWaiting(); }}
-                onSaved={(message, form) => { const id = audienceEdit.id; if (form) setCampaigns(list => list.map(item => item.id === id ? withPreparedAudienceForm(item, form) : item)); setCardNotice({ id, message }); setAudienceEdit(null); }}
+                onSaved={(message, form) => { const id = audienceEdit.id; setCampaigns(list => list.map(item => item.id === id ? withPreparedAudienceForm(item, form ?? null) : item)); setCardNotice({ id, message }); setAudienceEdit(null); }}
               />
             )}
             {budgetEdit && (

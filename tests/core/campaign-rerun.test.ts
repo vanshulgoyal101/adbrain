@@ -110,6 +110,8 @@ describe("core: Run this again (#1050)", () => {
     expect(row.raw).toMatchObject({ metaResult: { campaignId: "1" } });
     expect(preparedAudienceForm(row.raw)).toEqual(form);
     expect(preparedAudienceForm(withPreparedAudienceForm({ raw: null }, form).raw)).toEqual(form);
+    // A paused Save applied the change in Meta and the server cleared it; reopening must not offer it again.
+    expect(withPreparedAudienceForm(row, null).raw).toEqual({ metaResult: { campaignId: "1" } });
   });
 
   it("finds the Best ad's creative through the launch's ad links (#783's rule: 5+ results, 30% cheaper)", () => {
