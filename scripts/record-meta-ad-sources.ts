@@ -2,7 +2,7 @@
  * #1055: records Meta's real `source_ad_id` answers (`MetaClient.adSources`) for a capped run's copy
  * and its reviewed original, for test:core. GETs only; the tape is scrubbed (scripts/lib/scrub-meta.ts).
  *
- *   npx tsx --env-file=<.env.local> scripts/record-meta-ad-sources.ts <cappedCopyAdId> <originalAdId>
+ *   npx tsx --import ./scripts/trusted-server-cli.mjs --env-file=<.env.local> scripts/record-meta-ad-sources.ts <cappedCopyAdId> <originalAdId>
  */
 import "./lib/meta-write-gate";
 import { writeFileSync } from "node:fs";

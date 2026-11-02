@@ -1,0 +1,45 @@
+{
+  "recordedAt": "2026-11-02T11:51:07.949Z",
+  "adAccountId": "act_9000000000000001",
+  "tape": [
+    {
+      "name": "list-videos",
+      "method": "GET",
+      "path": "act_9000000000000001/advideos?fields=id%2Ctitle%2Ccreated_time&limit=50",
+      "status": 200,
+      "body": {
+        "data": [
+          {
+            "id": "9000000000000002",
+            "title": "owner-clip.mp4",
+            "created_time": "2026-10-29T06:15:45+0000"
+          },
+          {
+            "id": "900000000000003",
+            "title": "Auto_Cropped_AR_4_X_5_DCO_",
+            "created_time": "2026-01-04T11:53:00+0000"
+          }
+        ],
+        "paging": {
+          "cursors": {
+            "before": "CURSOR",
+            "after": "CURSOR"
+          }
+        }
+      }
+    },
+    {
+      "name": "filter-by-title",
+      "method": "GET",
+      "path": "act_9000000000000001/advideos?fields=id,title&filtering=%5B%7B%22field%22%3A%22title%22%2C%22operator%22%3A%22EQUAL%22%2C%22value%22%3A%22owner-clip.mp4%22%7D%5D",
+      "status": 400,
+      "body": {
+        "error": {
+          "message": "(#100) Filtering field 'title' with operation 'equal' is not supported",
+          "type": "OAuthException",
+          "code": 100
+        }
+      }
+    }
+  ]
+}

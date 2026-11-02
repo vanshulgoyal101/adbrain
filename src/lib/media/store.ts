@@ -61,8 +61,18 @@ export async function signUpload(admin: SupabaseClient, input: SignInput): Promi
   const fit = mediaFit(input.width, input.height);
   if (fit.level === "too_small") throw new MediaError(422, "MEDIA_TOO_SMALL", fit.message);
 
-  const existing = await liveBySha(admin, input.businessId, input.sha256);
+  let existing = await liveBySha(admin, input.businessId, input.sha256);
   if (existing?.status === "ready") return { duplicate: true, asset: (await mediaViews(admin, [existing]))[0] };
+  if (existing && Date.parse(existing.created_at) < Date.parse(monthStartIst())) {
+    // The monthly limit is enforced on insert (20261103_media_upload_quota.sql), so a pending row from an earlier month
+    // isn't reused (#2644 attack: 50 stale rows finished next month doubled the limit). It's retired, still counting in
+    // its own month, and this try gets a new row that the limit sees.
+    await admin.storage.from(MEDIA_BUCKET).remove([existing.path]).catch(() => undefined);
+    const { error } = await admin.from("media_assets").update({ deleted_at: new Date().toISOString() })
+      .eq("id", existing.id).eq("status", "pending").is("deleted_at", null);
+    if (error) throw new MediaError(503, "MEDIA_UNAVAILABLE", "Couldn't start the upload. Try again.");
+    existing = null;
+  }
   if (!existing && await monthlyUploads(admin, input.businessId) >= MEDIA_MONTHLY_UPLOADS) {
     throw new MediaError(429, "MEDIA_QUOTA", `You've used ${MEDIA_MONTHLY_UPLOADS} of ${MEDIA_MONTHLY_UPLOADS} photo uploads this month.`);
   }
@@ -79,6 +89,10 @@ export async function signUpload(admin: SupabaseClient, input: SignInput): Promi
       business_id: input.businessId, path, sha256: input.sha256, mime: input.mime, bytes: input.bytes,
       width: input.width, height: input.height, name: input.name?.trim().slice(0, 120) || null, rights_confirmed_at: input.rightsConfirmedAt,
     }).select(COLUMNS).single();
+    if (error?.message === "MEDIA_QUOTA") {
+      // The database's monthly limit (20261103_media_upload_quota.sql) caught parallel requests the count above let through.
+      throw new MediaError(429, "MEDIA_QUOTA", `You've used ${MEDIA_MONTHLY_UPLOADS} of ${MEDIA_MONTHLY_UPLOADS} photo uploads this month.`);
+    }
     if (error?.code === "23505") {
       const raced = await liveBySha(admin, input.businessId, input.sha256);
       if (raced?.status === "ready") return { duplicate: true, asset: (await mediaViews(admin, [raced]))[0] };
@@ -177,15 +191,17 @@ export async function readVerifiedMedia(admin: SupabaseClient, row: MediaRow): P
   return bytes;
 }
 
-/** Rows to what the library shows, each with a signed URL to the private object (an hour). */
+/** Rows to what the library shows. Only a `ready` row gets a signed URL to its private object (an hour): a pending
+ * row's object is whatever an upload token stored, unchecked (Reviewer, #1245). */
 export async function mediaViews(client: SupabaseClient, rows: MediaRow[]): Promise<MediaView[]> {
-  const { data: signed } = rows.length
-    ? await client.storage.from(MEDIA_BUCKET).createSignedUrls(rows.map((row) => row.path), URL_SECONDS)
+  const ready = rows.filter((row) => row.status === "ready");
+  const { data: signed } = ready.length
+    ? await client.storage.from(MEDIA_BUCKET).createSignedUrls(ready.map((row) => row.path), URL_SECONDS)
     : { data: [] as { path: string | null; signedUrl: string }[] };
   const urls = new Map((signed ?? []).map((item) => [item.path, item.signedUrl]));
   return rows.map((row) => ({
     id: row.id, name: row.name, tags: row.tags ?? [], width: row.width, height: row.height, bytes: row.bytes,
-    fit: row.width && row.height ? mediaFit(row.width, row.height) : null, url: urls.get(row.path) ?? null, createdAt: row.created_at,
+    fit: row.width && row.height ? mediaFit(row.width, row.height) : null, url: row.status === "ready" ? urls.get(row.path) ?? null : null, createdAt: row.created_at,
   }));
 }
 
@@ -213,6 +229,7 @@ export async function ownMedia(client: SupabaseClient, id: string): Promise<Medi
 }
 
 export async function updateMedia(admin: SupabaseClient, row: MediaRow, change: { name?: string | null; tags?: string[] }): Promise<MediaView> {
+  if (row.status !== "ready") throw new MediaError(409, "MEDIA_NOT_UPLOADED", "This photo isn't ready yet.");
   const { data, error } = await admin.from("media_assets").update({
     ...(change.name !== undefined ? { name: change.name?.trim().slice(0, 120) || null } : {}),
     ...(change.tags ? { tags: [...new Set(change.tags.map((tag) => tag.trim().slice(0, 40)).filter(Boolean))].slice(0, 10) } : {}),

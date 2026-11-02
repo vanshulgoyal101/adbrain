@@ -1,3 +1,5 @@
+import "server-only";
+
 import { getEnv } from "@/lib/env";
 import { createPollinationsProvider } from "./providers/pollinations";
 import { createOpenRouterProvider } from "./providers/openrouter";

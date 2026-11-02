@@ -1,4 +1,5 @@
 import { durationIn } from "@/i18n/duration";
+import { enquiriesTranslator, type Words } from "@/i18n/words";
 
 /**
  * #1838 slice 2b: the owner's words while Meta limits how often AdBrain can check (CPO on #1838 and #1870). Shown
@@ -19,12 +20,12 @@ export function resultsWaitLine(ageMs: number): string {
 }
 
 /** Enquiries, under "Updated … ago · Check now". */
-export function enquiriesWaitLine(ageMs: number): string {
-  return `Meta is limiting how often we can check right now. New form enquiries may show up to ${durationIn("en", ageMs)} late; WhatsApp chats still reach your phone as usual.`;
+export function enquiriesWaitLine(ageMs: number, words?: Words<"enquiries">): string {
+  return enquiriesTranslator(words)("sync.waitLine", { age: durationIn(words?.locale ?? "en", ageMs) });
 }
 
 /** A tap on Check now while Meta asked us to wait; nothing is sent. */
-export function checkLaterLine(until: string): string {
+export function checkLaterLine(until: string, words?: Words<"enquiries">): string {
   const time = new Intl.DateTimeFormat("en-IN", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" }).format(new Date(until));
-  return `Meta asked us to wait. We'll check again at ${time}.`;
+  return enquiriesTranslator(words)("sync.checkLater", { time });
 }

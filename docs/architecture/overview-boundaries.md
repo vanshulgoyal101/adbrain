@@ -95,6 +95,12 @@ signed state, browser binding, expiry, replay protection, and selection revision
 These controls protect the app boundary; they do not prove Meta has approved the
 app or granted usable access to a particular customer's assets.
 
+Secret-bearing service-role, Meta, payment, and provider modules import `server-only`
+so Next rejects client imports. Trusted repository scripts that use them opt in with
+`npx tsx --import ./scripts/trusted-server-cli.mjs <script>`; do not set the hook
+globally or use it for Next builds. Next config loads payment checks with the same
+hook only during its trusted Node bootstrap, then immediately deregisters it.
+
 ## Background and Observability
 
 Vercel invokes authenticated daily keepalive and spend-enforcement routes. These

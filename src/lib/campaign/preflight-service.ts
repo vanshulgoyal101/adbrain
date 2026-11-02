@@ -75,7 +75,8 @@ export async function prepareCampaignReview(
   }
 
   const destination: ReviewDestination = draft.input.destination ?? "instant_form";
-  if (destination === "website" && !(await input.websiteOpen?.())) return { kind: "website_closed" };
+  // #2710: conversion contracts are accepted, but no account may launch them before the recorded tracking/payload gates.
+  if (destination === "website" && ((draft.input.websiteGoal ?? "visits") !== "visits" || !(await input.websiteOpen?.()))) return { kind: "website_closed" };
   const [connection, creatives, form, geo, whatsappNumber, [website, websiteReach], costPerResultRupees, vertical, whatsappMessage, brandFacts] = await Promise.all([
     loaders.getConnection(input.actor),
     loaders.findCreatives(input.actor.businessId, draft.input.creativeIds),

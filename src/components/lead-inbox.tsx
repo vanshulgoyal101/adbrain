@@ -1,7 +1,7 @@
 "use client";
 
 import { checkLaterLine, enquiriesWaitLine, throttleActive } from "@/lib/campaign/meta-wait";
-import { useEffect, useEffectEvent, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useEffectEvent, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import Link from "next/link";
 import { Inbox, Loader2, MessageCircle, Phone, RefreshCw, Search, X, Save, Pencil, ChevronDown, SlidersHorizontal, UserCheck, MoreHorizontal } from "lucide-react";
 import { Alert } from "@/components/ui/alert";
@@ -11,7 +11,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Status } from "@/components/ui/status";
 import { useNotices } from "@/i18n/notices";
-import { relativeAge } from "@/lib/leads/digest";
+import { enquiriesTranslator, enquiryAge, type Words } from "@/i18n/words";
 import { formatDate } from "@/lib/format";
 import { useMounted } from "@/lib/use-mounted";
 import type { Lead } from "@/lib/types";
@@ -23,7 +23,7 @@ import { isMetaTestLead } from "@/lib/leads/test-lead";
 import { isWaiting } from "@/lib/leads/waiting";
 import { leadAnswers } from "@/lib/leads/answers";
 import styles from "./lead-inbox.module.css";
-import { WhatsAppEnquiries } from "@/components/whatsapp-enquiries";
+import { LeadInboxEmpty } from "@/components/lead-inbox-empty";
 
 const LEADS_FRESH_MS = 15 * 60_000;
 
@@ -35,11 +35,6 @@ function saveLeadSyncTime(key: string, completedAt: number) {
   try { localStorage.setItem(key, String(completedAt)); } catch { return; }
 }
 
-
-/** #798: follow-up statuses in owners' words; "customer" is an enquiry that became a customer. */
-const STATUS_LABEL: Record<WorkflowStatus, string> = {
-  new: "New", contacted: "Contacted", qualified: "Qualified", booked: "Booked", customer: "Customer", closed: "Closed",
-};
 
 type InboxView = "waiting" | "all" | "customers";
 
@@ -56,7 +51,6 @@ function useWide(): boolean {
     () => false,
   );
 }
-const VIEW_LABEL: Record<InboxView, string> = { waiting: "Waiting", all: "All", customers: "Customers" };
 
 function initials(name: string | null): string {
   const words = (name ?? "").trim().split(/\s+/).filter(Boolean);
@@ -74,13 +68,14 @@ export function LeadInbox({
   initialNextCursor = null,
   metaReady,
   syncScope,
-  title = "Enquiries",
+  title,
   summary = null,
   allTotal,
   offerAlerts = false,
   chatsEmpty = false,
   addEnquiryFor = null,
   metaWaitUntil = null,
+  words,
 }: {
   businessName: string;
   /** #1049: the business's first offer and language, for the pre-filled first WhatsApp reply. */
@@ -109,9 +104,11 @@ export function LeadInbox({
   addEnquiryFor?: { campaignId: string; spend: number; enquiries: number } | null;
   /** #1838: until when Meta asked us to wait; checks (on open and Check now) don't call Meta until then. */
   metaWaitUntil?: string | null;
+  /** #1438: the page's words in the owner's language (#798 statuses in owners' words); English without. */
+  words?: Words<"enquiries">;
 }) {
   const tn = useNotices();
-  const [adding, setAdding] = useState(false);
+  const t = useMemo(() => enquiriesTranslator(words), [words]);
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -281,7 +278,7 @@ export function LeadInbox({
   async function sync(tapped = false) {
     if (syncing) return;
     // #1838 (CPO #1870): Meta asked us to wait, so nothing is sent; a tap says when we'll check again.
-    if (throttleActive(metaWaitUntil)) { if (tapped) setNotice(checkLaterLine(metaWaitUntil)); return; }
+    if (throttleActive(metaWaitUntil)) { if (tapped) setNotice(checkLaterLine(metaWaitUntil, words)); return; }
     setSyncing(true);
     setError(null);
     setNotice(null);
@@ -304,10 +301,9 @@ export function LeadInbox({
       page.refresh();
       setSyncId(data.sync?.hasMore ? data.sync.id : null);
       if (data.failedForms?.length || data.sync?.state === "partial" || data.sync?.hasMore) {
-        const imported = data.imported ?? 0;
-        const soFar = `${imported} new ${imported === 1 ? "enquiry" : "enquiries"} so far`;
-        setWarning(data.failedForms?.length ? `Couldn't read: ${data.failedForms.map(form => form.name).join(", ")}. ${soFar}.` :
-          !res.ok ? `Some forms didn't answer. ${soFar}; Keep checking to try again.` : `Still checking Meta. ${soFar}; Keep checking to finish.`);
+        const soFar = t("sync.soFar", { count: data.imported ?? 0 });
+        setWarning(data.failedForms?.length ? t("sync.unread", { forms: data.failedForms.map(form => form.name).join(", "), soFar }) :
+          t(!res.ok ? "sync.noAnswer" : "sync.stillChecking", { soFar }));
         return;
       }
       if (data.sync?.state === "complete") {
@@ -344,7 +340,7 @@ export function LeadInbox({
   // friendlier relative "2h ago" once mounted on the client.
   function whenLabel(createdTime: string | null): string {
     if (!createdTime) return "—";
-    if (mounted) return relativeAge(createdTime, now) || formatDate(createdTime);
+    if (mounted) return enquiryAge(t, createdTime, now) || formatDate(createdTime);
     return formatDate(createdTime) || "—";
   }
 
@@ -355,15 +351,15 @@ export function LeadInbox({
     // #1260: one state word per row: New → Contacted in {m} → Customer.
     // #1819: Meta's test lead isn't someone waiting (the counts leave it out), so it says what it is.
     const state = isMetaTestLead(l) ? "test" : current === "customer" ? "customer" : current === "closed" ? "closed" : first ? "contacted" : current === "new" ? "new" : "other";
-    const stateLabel = state === "test" ? "Test from Meta" : state === "new" ? "New" : state === "contacted" ? contactedLabel(contactMinutes) : state === "closed" ? "Not interested" : STATUS_LABEL[current];
+    const stateLabel = state === "test" ? t("state.test") : state === "new" ? t("status.new") : state === "contacted" ? contactedLabel(contactMinutes, words) : state === "closed" ? t("state.notInterested") : t(`status.${current}`);
     // #1819: no WhatsApp/Call line and no Became a customer, so ⋯ sits on the name row instead of alone on a line.
     const noActions = state === "test" || state === "customer" || (state === "new" && !l.phone);
     const city = isMetaTestLead(l) ? null : l.city;
-    const meta = [l.created_time ? whenLabel(l.created_time) : null, l.source === "whatsapp_manual" ? "WhatsApp chat" : null, city].filter(Boolean).join(" · ");
+    const meta = [l.created_time ? whenLabel(l.created_time) : null, l.source === "whatsapp_manual" ? t("lead.whatsappChat") : null, city].filter(Boolean).join(" · ");
     const choices = replyChoices({ leadName: leadName(l), businessName, offer, vertical, language, contacted: Boolean(first), ownPhotos });
     const replyText = choices.texts[0] ?? "";
     const whatsapp = isMetaTestLead(l) || !replyText ? null : whatsappReplyLink(l.phone, replyText);
-    return { first, contactMinutes, current, state, stateLabel, meta, name: leadName(l) ?? "this enquiry", choices, replyText, whatsapp, noActions };
+    return { first, contactMinutes, current, state, stateLabel, meta, name: leadName(l) ?? t("lead.this"), choices, replyText, whatsapp, noActions };
   }
   // #1945: one generic reply opens WhatsApp straight away; a segment's choices open the sheet first.
   function whatsappAction(l: Lead, info: ReturnType<typeof rowInfo>, className: string | undefined, content: ReactNode) {
@@ -380,64 +376,42 @@ export function LeadInbox({
   const detail = selectedLead ? rowInfo(selectedLead) : null;
   const answers = selectedLead && !isMetaTestLead(selectedLead) ? leadAnswers(selectedLead.field_data) : [];
 
-  // #1597 (Designer, #1463): no enquiries anywhere: one block (title, line, one action) instead of banner, count, tabs,
-  // search and a card that repeats it. The checking above keeps running, so the first enquiry brings the inbox back.
-  // #1810: decided from the unfiltered first load (test leads included), never from a tab's filtered result.
+  // #1597: no enquiries anywhere; #1810: decided from the unfiltered first load, never from a tab's filtered result.
   if (emptyOnArrival && page.total === 0 && leads.length === 0 && !page.loading && !page.error) {
-    const solid = !metaReady || offerAlerts;
-    return (
-      <section aria-labelledby="enquiries-empty-title" className="mt-4 flex max-w-xl flex-col items-start gap-2">
-        <h2 id="enquiries-empty-title" className="text-[17px] font-semibold leading-6 text-slate-900">No enquiries yet</h2>
-        <p className="text-[15px] leading-[22px] text-slate-600">
-          {metaReady
-            ? "Enquiries from your ads show up here: form enquiries on their own, WhatsApp chats when you add them. Reply fast: people often pick the first business that answers."
-            : "Connect your Facebook Page to run ads. Enquiries from them show up here."}
-        </p>
-        <Link href={!metaReady ? "/settings" : offerAlerts ? "/settings#whatsapp-alerts-title" : "/campaigns"}
-          className={`mt-2 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md px-4 text-sm font-medium sm:w-auto ${solid
-            ? "bg-[var(--primary)] text-white"
-            : "border border-slate-300 text-slate-800 hover:bg-slate-50"}`}>
-          {!metaReady ? "Connect Facebook Page" : offerAlerts ? "Get a WhatsApp alert for form enquiries" : "See your campaigns"}
-        </Link>
-        {metaReady && addEnquiryFor && (adding
-          ? <WhatsAppEnquiries compact campaignId={addEnquiryFor.campaignId} spend={addEnquiryFor.spend} enquiries={addEnquiryFor.enquiries}
-            onLogged={() => window.location.reload()} />
-          : <button type="button" className="inline-flex min-h-11 items-center text-sm font-medium text-blue-700 hover:underline" onClick={() => setAdding(true)}>Add an enquiry</button>)}
-      </section>
-    );
+    return <LeadInboxEmpty metaReady={metaReady} offerAlerts={offerAlerts} addEnquiryFor={addEnquiryFor} words={words} />;
   }
 
   return (
     <div className={styles.inbox}>
       {!metaReady && (
         <Alert variant="warning">
-          Meta isn’t connected, so new enquiries can’t come in yet. <Link href="/settings" className="inline-flex min-h-11 items-center font-semibold underline">Connect your account in Settings</Link>.
+          {t.rich("sync.notConnected", { link: (chunks) => <Link href="/settings" className="inline-flex min-h-11 items-center font-semibold underline">{chunks}</Link> })}
         </Alert>
       )}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-lg font-semibold text-slate-900">
-          {title}{" "}
+          {title ?? t("title")}{" "}
           <span className="font-normal text-slate-400">({view === "all" || allTotal === undefined ? page.total : allTotal})</span>
         </h2>
       </div>
       {metaReady && <p className="-mt-2 flex flex-wrap items-center gap-x-2 text-xs text-slate-500">
         {/* #1260: checking runs on open; the time sits quietly here, with a small Check now for impatient owners and retries. */}
-        <span aria-live="polite">{syncing ? "Checking Meta for new enquiries…" : lastSync ? `Updated ${relativeAge(new Date(lastSync).toISOString(), now)}` : null}</span>
+        <span aria-live="polite">{syncing ? t("sync.checking") : lastSync ? t("sync.updated", { age: enquiryAge(t, new Date(lastSync).toISOString(), now) }) : null}</span>
         <button type="button" className="inline-flex min-h-11 items-center gap-1 font-medium text-blue-700 disabled:text-slate-400" onClick={() => void sync(true)} disabled={syncing}>
           {syncing ? <Loader2 size={12} className="animate-spin" aria-hidden="true" /> : <RefreshCw size={12} aria-hidden="true" />}
-          {syncId ? "Keep checking" : "Check now"}
+          {t(syncId ? "sync.keepChecking" : "sync.checkNow")}
         </button>
       </p>}
-      {metaReady && mounted && throttleActive(metaWaitUntil, now) && <p className="-mt-2 text-xs text-slate-600">{enquiriesWaitLine(lastSync ? now.getTime() - lastSync : Date.parse(metaWaitUntil) - now.getTime())}</p>}
+      {metaReady && mounted && throttleActive(metaWaitUntil, now) && <p className="-mt-2 text-xs text-slate-600">{enquiriesWaitLine(lastSync ? now.getTime() - lastSync : Date.parse(metaWaitUntil) - now.getTime(), words)}</p>}
 
       {waiting !== null && <p className={styles.summary}>
-        {waiting === 0 ? "Nobody is waiting." : `${waiting} ${waiting === 1 ? "person is" : "people are"} waiting for you.`}
-        {summary?.replyMinutes != null && ` You usually contact people within ${formatReplyTime(summary.replyMinutes)}.`}
+        {waiting === 0 ? t("summary.nobody") : t("summary.waiting", { count: waiting })}
+        {summary?.replyMinutes != null && ` ${t("summary.replyTime", { time: formatReplyTime(summary.replyMinutes, words?.locale) })}`}
       </p>}
-      <div className={styles.views} role="group" aria-label="Show">
+      <div className={styles.views} role="group" aria-label={t("view.label")}>
         {(["waiting", "all", "customers"] as const).map((option) => (
-          <button key={option} type="button" aria-pressed={view === option} onClick={() => { setView(option); setFiltersOpen(false); }}>{VIEW_LABEL[option]}</button>
+          <button key={option} type="button" aria-pressed={view === option} onClick={() => { setView(option); setFiltersOpen(false); }}>{t(`view.${option}`)}</button>
         ))}
       </div>
       {error && <Alert variant="error">{error}</Alert>}
@@ -445,80 +419,78 @@ export function LeadInbox({
       {customerNotice && <EnquiryStatusNotice notice={customerNotice} marking={!!marking} onUndo={() => void setCustomer(customerNotice.lead, customerNotice.previous, customerNotice.previous, true)} />}
       {/* #847: sync results are news, not alarms; the list below stays usable either way. */}
       <p aria-live="polite" className={warning || notice ? "text-sm text-slate-600" : "sr-only"}>{warning ?? notice}</p>
-      {page.error && <Alert variant="error">{page.error} <button type="button" onClick={page.refresh}>Retry list</button></Alert>}
+      {page.error && <Alert variant="error">{page.error} <button type="button" onClick={page.refresh}>{t("list.retry")}</button></Alert>}
 
       {view === "all" && <div>
         <div className={styles.toolbar}>
           <div className={styles.search}>
             <Search size={17} aria-hidden="true" />
-            <input ref={searchField} type="search" aria-label="Search enquiries" placeholder="Search name, contact, city, or form" value={query} onChange={event => setQuery(event.target.value)} />
-            {query && <button type="button" title="Clear search" aria-label="Clear search" onClick={() => setQuery("")}><X size={16} aria-hidden="true" /></button>}
+            <input ref={searchField} type="search" aria-label={t("list.search")} placeholder={t("list.searchPlaceholder")} value={query} onChange={event => setQuery(event.target.value)} />
+            {query && <button type="button" title={t("list.clearSearch")} aria-label={t("list.clearSearch")} onClick={() => setQuery("")}><X size={16} aria-hidden="true" /></button>}
           </div>
-          <button type="button" className={styles.filterToggle} aria-label={activeFilters ? `Filter, ${activeFilters} set` : "Filter"} aria-expanded={filtersOpen} aria-controls="enquiry-filters" onClick={() => setFiltersOpen(open => !open)}>
-            <SlidersHorizontal size={16} aria-hidden="true" />Filter{activeFilters > 0 && <span className={styles.filterCount}>{activeFilters}</span>}
+          <button type="button" className={styles.filterToggle} aria-label={activeFilters ? t("list.filterSet", { count: activeFilters }) : t("list.filter")} aria-expanded={filtersOpen} aria-controls="enquiry-filters" onClick={() => setFiltersOpen(open => !open)}>
+            <SlidersHorizontal size={16} aria-hidden="true" />{t("list.filter")}{activeFilters > 0 && <span className={styles.filterCount}>{activeFilters}</span>}
           </button>
           <div id="enquiry-filters" className={styles.filters} data-open={filtersOpen || undefined}>
-          <select aria-label="Contact availability" value={contactFilter} onChange={event => setContactFilter(event.target.value)}>
-            <option value="all">All contacts</option><option value="ready">Has contact details</option><option value="missing">Missing contact details</option>
+          <select aria-label={t("list.contact")} value={contactFilter} onChange={event => setContactFilter(event.target.value)}>
+            <option value="all">{t("list.allContacts")}</option><option value="ready">{t("list.hasContact")}</option><option value="missing">{t("list.missingContact")}</option>
           </select>
-          <select aria-label="Workflow status" value={status} onChange={event => setStatus(event.target.value)}>
-            <option value="all">All follow-up statuses</option>
-            {workflowStatuses.map(value => <option key={value} value={value}>{STATUS_LABEL[value]}</option>)}
+          <select aria-label={t("list.workflow")} value={status} onChange={event => setStatus(event.target.value)}>
+            <option value="all">{t("list.allStatuses")}</option>
+            {workflowStatuses.map(value => <option key={value} value={value}>{t(`status.${value}`)}</option>)}
           </select>
-          <select aria-label="Sort enquiries" value={sort} onChange={event => setSort(event.target.value)}>
-            <option value="newest">Newest first</option><option value="oldest">Oldest first</option><option value="name">Name A–Z</option>
+          <select aria-label={t("list.sort")} value={sort} onChange={event => setSort(event.target.value)}>
+            <option value="newest">{t("list.newest")}</option><option value="oldest">{t("list.oldest")}</option><option value="name">{t("list.byName")}</option>
           </select>
           </div>
         </div>
-        <div className={styles.resultCount}><span role="status">{page.loading ? "Loading enquiries..." : hasFilters || realShown < page.total ? `${realShown} of ${page.total} enquiries` : ""}</span>{hasFilters && leads.length > 0 && <button type="button" onClick={clearFilters}>Clear filters</button>}</div>
+        <div className={styles.resultCount}><span role="status">{page.loading ? t("list.loading") : hasFilters || realShown < page.total ? t("list.count", { shown: realShown, total: page.total }) : ""}</span>{hasFilters && leads.length > 0 && <button type="button" onClick={clearFilters}>{t("list.clearFilters")}</button>}</div>
       </div>}
 
-      {selected && <form className={styles.editor} aria-label="Enquiry follow-up" onSubmit={saveFollowUp}>
-        <div className={styles.editorHeading}><div><h3>Follow up: {leadName(selected) ?? "Unnamed enquiry"}</h3>{dirty && <p role="status" className="text-xs text-amber-800">Unsaved changes</p>}</div><button type="button" aria-label="Close follow-up" title="Close follow-up" disabled={saving} onClick={closeEditor}><X size={18} /></button></div>
-        <label>Follow-up status<select ref={editorField} value={draftStatus} disabled={saving} onChange={event => { setDraftStatus(event.target.value as WorkflowStatus); setSaved(false); }}>
-          {workflowStatuses.map(value => <option key={value} value={value}>{STATUS_LABEL[value]}</option>)}
+      {selected && <form className={styles.editor} aria-label={t("editor.label")} onSubmit={saveFollowUp}>
+        <div className={styles.editorHeading}><div><h3>{t("editor.heading", { name: leadName(selected) ?? t("lead.unnamed") })}</h3>{dirty && <p role="status" className="text-xs text-amber-800">{t("editor.unsaved")}</p>}</div><button type="button" aria-label={t("editor.close")} title={t("editor.close")} disabled={saving} onClick={closeEditor}><X size={18} /></button></div>
+        <label>{t("editor.status")}<select ref={editorField} value={draftStatus} disabled={saving} onChange={event => { setDraftStatus(event.target.value as WorkflowStatus); setSaved(false); }}>
+          {workflowStatuses.map(value => <option key={value} value={value}>{t(`status.${value}`)}</option>)}
         </select></label>
-        <label>Follow-up note<textarea rows={4} maxLength={2000} value={draftNote} disabled={saving} onChange={event => { setDraftNote(event.target.value); setSaved(false); }} /></label>
-        <div className={styles.editorActions}><span>{draftNote.length}/2000</span><Button type="submit" data-product-event="lead.follow_up" size="sm" disabled={saving}>{saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}Save follow-up</Button></div>
+        <label>{t("editor.note")}<textarea rows={4} maxLength={2000} value={draftNote} disabled={saving} onChange={event => { setDraftNote(event.target.value); setSaved(false); }} /></label>
+        <div className={styles.editorActions}><span>{draftNote.length}/2000</span><Button type="submit" data-product-event="lead.follow_up" size="sm" disabled={saving}>{saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}{t("editor.save")}</Button></div>
         {saveError && <Alert variant="error">{saveError}</Alert>}
-        {saved && <Alert variant="success">Follow-up saved.</Alert>}
+        {saved && <Alert variant="success">{t("editor.saved")}</Alert>}
       </form>}
 
-      {page.error && leads.length === 0 ? null : page.loading && leads.length === 0 ? <div className={styles.empty}><Loader2 className="animate-spin" aria-label="Loading enquiries" /></div> : leads.length === 0 && view === "waiting" ? (
-        <div className={styles.empty}><h3>Nobody is waiting.</h3><Button variant="outline" onClick={() => setView("all")}>See all enquiries</Button></div>
+      {page.error && leads.length === 0 ? null : page.loading && leads.length === 0 ? <div className={styles.empty}><Loader2 className="animate-spin" aria-label={t("list.loadingLabel")} /></div> : leads.length === 0 && view === "waiting" ? (
+        <div className={styles.empty}><h3>{t("summary.nobody")}</h3><Button variant="outline" onClick={() => setView("all")}>{t("empty.seeAll")}</Button></div>
       ) : leads.length === 0 && view === "customers" ? (
-        <div className={styles.empty}><h3>No customers yet.</h3><p className="text-sm text-slate-500">Tap Became a customer on an enquiry when they buy.</p></div>
+        <div className={styles.empty}><h3>{t("empty.noCustomers")}</h3><p className="text-sm text-slate-500">{t("empty.customersHint")}</p></div>
       ) : leads.length === 0 && !hasFilters ? (
         <Card>
           <CardContent className="flex flex-col items-center gap-2 py-12 text-center">
             <Inbox className="h-6 w-6 text-slate-300" aria-hidden="true" />
-            <p className="max-w-sm font-medium text-slate-700">
-              No enquiries yet. When someone fills your form or messages you on WhatsApp from an ad, they&apos;ll show up here.
-            </p>
-            <p className="max-w-sm text-sm text-slate-500">Reply fast: people often go with the first business that answers.</p>
+            <p className="max-w-sm font-medium text-slate-700">{t("empty.none")}</p>
+            <p className="max-w-sm text-sm text-slate-500">{t("empty.replyFast")}</p>
             {/* #1260 (Designer): one action, and never one the owner can't take. */}
             <Link href={offerAlerts ? "/settings#whatsapp-alerts-title" : "/campaigns"}
               className={offerAlerts
                 ? "mt-2 inline-flex min-h-11 items-center gap-2 rounded-md bg-[var(--primary)] px-4 text-sm font-medium text-white"
                 : "mt-2 inline-flex min-h-11 items-center gap-2 rounded-md border border-slate-300 px-4 text-sm font-medium text-slate-800 hover:bg-slate-50"}>
-              {offerAlerts ? <><MessageCircle size={16} aria-hidden="true" />Get a WhatsApp alert for each enquiry</> : "See your campaigns"}
+              {offerAlerts ? <><MessageCircle size={16} aria-hidden="true" />{t("empty.alertEach")}</> : t("arrival.campaigns")}
             </Link>
           </CardContent>
         </Card>
       ) : leads.length === 0 ? (
-        <div className={styles.empty}><h3>No matching enquiries</h3><Button variant="outline" onClick={clearFilters}>Clear filters</Button></div>
+        <div className={styles.empty}><h3>{t("empty.noMatch")}</h3><Button variant="outline" onClick={clearFilters}>{t("list.clearFilters")}</Button></div>
       ) : (
         <div className={detail ? styles.panes : undefined}>
         <div className={styles.listPane}>
-          <table role="table" aria-label="Customer enquiries" className={styles.table}>
+          <table role="table" aria-label={t("list.table")} className={styles.table}>
             <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
               <tr>
-                <th className="px-4 py-2 font-medium">Name</th>
-                <th className="px-4 py-2 font-medium">Contact</th>
-                <th className="px-4 py-2 font-medium">City</th>
-                <th className="px-4 py-2 font-medium">Form</th>
-                <th className="px-4 py-2 font-medium">When</th>
-                <th className="px-4 py-2 font-medium">Follow-up</th>
+                <th className="px-4 py-2 font-medium">{t("list.columns.name")}</th>
+                <th className="px-4 py-2 font-medium">{t("list.columns.contact")}</th>
+                <th className="px-4 py-2 font-medium">{t("list.columns.city")}</th>
+                <th className="px-4 py-2 font-medium">{t("list.columns.form")}</th>
+                <th className="px-4 py-2 font-medium">{t("list.columns.when")}</th>
+                <th className="px-4 py-2 font-medium">{t("list.columns.followUp")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -547,12 +519,12 @@ export function LeadInbox({
                       const replied = contactMinutes * 60_000;
                       return <div className={`${styles.replyActions} mt-1 flex flex-wrap items-center gap-2`}>
                         {whatsappAction(l, info, "inline-flex min-h-11 items-center gap-1 rounded-md bg-primary px-3 text-xs font-medium text-white hover:bg-primary-hover",
-                          <><MessageCircle size={14} aria-hidden="true" />WhatsApp them</>)}
+                          <><MessageCircle size={14} aria-hidden="true" />{t("lead.whatsapp")}</>)}
                         <a href={`tel:${l.phone}`} onClick={() => markContacted(l)}
                           className="inline-flex min-h-11 items-center gap-1 rounded-md border border-slate-300 px-3 text-xs font-medium text-slate-800 hover:bg-slate-50">
-                          <Phone size={14} aria-hidden="true" />Call</a>
+                          <Phone size={14} aria-hidden="true" />{t("lead.call")}</a>
                         {first && <span className={`${styles.repliedLine} block w-full text-xs text-slate-500`}>
-                          {Number.isFinite(replied) && replied >= 0 ? `Replied ${formatReplyTime(replied / 60_000)} after the enquiry` : "Replied"}
+                          {Number.isFinite(replied) && replied >= 0 ? t("lead.repliedAfter", { time: formatReplyTime(replied / 60_000, words?.locale) }) : t("lead.replied")}
                         </span>}
                       </div>;
                     })()}
@@ -563,37 +535,37 @@ export function LeadInbox({
                     )}
                     {(isMetaTestLead(l) || (!l.phone && !l.email)) && <span className={styles.blank}>—</span>}
                   </td>
-                  <td role="cell" className={styles.desktopOnly}><span className={styles.mobileLabel} aria-hidden="true">City</span>{(isMetaTestLead(l) ? null : l.city) ?? <span className={styles.blank}>—</span>}</td>
-                  <td role="cell" className={styles.desktopOnly}><span className={styles.mobileLabel} aria-hidden="true">Form</span>{leadSource(l)}</td>
+                  <td role="cell" className={styles.desktopOnly}><span className={styles.mobileLabel} aria-hidden="true">{t("list.columns.city")}</span>{(isMetaTestLead(l) ? null : l.city) ?? <span className={styles.blank}>—</span>}</td>
+                  <td role="cell" className={styles.desktopOnly}><span className={styles.mobileLabel} aria-hidden="true">{t("list.columns.form")}</span>{l.form_name || (l.source === "whatsapp_manual" ? t("lead.whatsappAdded") : "—")}</td>
                   <td role="cell" className={`${styles.desktopOnly} text-slate-500`}>
-                    <span className={styles.mobileLabel} aria-hidden="true">Received</span>
+                    <span className={styles.mobileLabel} aria-hidden="true">{t("list.columns.received")}</span>
                     {whenLabel(l.created_time) || <span className={styles.blank}>—</span>}
                   </td>
-                  <td role="cell" className={styles.followUp}><span className={styles.mobileLabel} aria-hidden="true">Follow-up</span>
+                  <td role="cell" className={styles.followUp}><span className={styles.mobileLabel} aria-hidden="true">{t("list.columns.followUp")}</span>
                     <div className={styles.followUpCell}>
-                      <button type="button" className={styles.followUpButton} title={`Follow up ${leadName(l) ?? "enquiry"}`} aria-label={`Follow up ${leadName(l) ?? "enquiry"}, status ${STATUS_LABEL[statusOf(l)]}`} disabled={saving} onClick={event => editLead(l, event.currentTarget)}>
-                        <Pencil size={14} aria-hidden="true" />{statusOf(l) === "customer" ? <Status tone="live">Customer</Status> : STATUS_LABEL[statusOf(l)]}
+                      <button type="button" className={styles.followUpButton} title={t("lead.followUp", { name: leadName(l) ?? t("lead.fallback") })} aria-label={t("lead.followUpStatus", { name: leadName(l) ?? t("lead.fallback"), status: t(`status.${statusOf(l)}`) })} disabled={saving} onClick={event => editLead(l, event.currentTarget)}>
+                        <Pencil size={14} aria-hidden="true" />{statusOf(l) === "customer" ? <Status tone="live">{t("status.customer")}</Status> : t(`status.${statusOf(l)}`)}
                       </button>
                       {statusOf(l) !== "customer" && !isMetaTestLead(l) && (
                         <Button type="button" size="sm" variant="outline" className="h-auto min-h-11 max-w-full shrink whitespace-normal py-1.5 text-left" data-product-event="lead.customer" disabled={!!marking || saving}
-                          aria-label={`${leadName(l) ?? "This enquiry"} became a customer`} onClick={() => void setCustomer(l, "customer", statusOf(l))}>
-                          {marking === l.id ? <Loader2 size={14} className="animate-spin" aria-hidden="true" /> : <UserCheck size={14} aria-hidden="true" />}Became a customer
+                          aria-label={t("lead.becameCustomerLabel", { name: leadName(l) ?? t("lead.thisCapital") })} onClick={() => void setCustomer(l, "customer", statusOf(l))}>
+                          {marking === l.id ? <Loader2 size={14} className="animate-spin" aria-hidden="true" /> : <UserCheck size={14} aria-hidden="true" />}{t("lead.becameCustomer")}
                         </Button>
                       )}
                       {/* #1260: on phones the status editor moves into ⋯ (Not interested, Edit). */}
                       <details className={styles.more}>
-                        <summary aria-label={`More for ${name}`} title="More"><MoreHorizontal size={18} aria-hidden="true" /></summary>
+                        <summary aria-label={t("lead.moreFor", { name })} title={t("lead.more")}><MoreHorizontal size={18} aria-hidden="true" /></summary>
                         <div className={styles.moreMenu}>
                           {/* #1260: once someone isn't waiting, their row shows only Became a customer · ⋯, so the replies live here. */}
                           {state !== "new" && !isMetaTestLead(l) && <>
-                            {l.phone && whatsappAction(l, info, undefined, "WhatsApp them")}
-                            {l.phone && <a href={`tel:${l.phone}`} onClick={() => markContacted(l)}>Call</a>}
-                            {l.email && <a href={`mailto:${l.email}`}>Email</a>}
+                            {l.phone && whatsappAction(l, info, undefined, t("lead.whatsapp"))}
+                            {l.phone && <a href={`tel:${l.phone}`} onClick={() => markContacted(l)}>{t("lead.call")}</a>}
+                            {l.email && <a href={`mailto:${l.email}`}>{t("lead.email")}</a>}
                           </>}
                           {current !== "closed" && current !== "customer" && !isMetaTestLead(l) && <button type="button" disabled={!!marking || saving}
-                            onClick={event => { event.currentTarget.closest("details")?.removeAttribute("open"); void setCustomer(l, "closed", current); }}>Not interested</button>}
-                          <button type="button" disabled={saving} onClick={event => { const menu = event.currentTarget.closest("details"); menu?.removeAttribute("open"); editLead(l, menu?.querySelector("summary") ?? event.currentTarget); }}>Edit</button>
-                          <button type="button" className="text-danger" disabled={saving} onClick={event => { event.currentTarget.closest("details")?.removeAttribute("open"); void deleteLead(l); }}>Delete enquiry</button>
+                            onClick={event => { event.currentTarget.closest("details")?.removeAttribute("open"); void setCustomer(l, "closed", current); }}>{t("state.notInterested")}</button>}
+                          <button type="button" disabled={saving} onClick={event => { const menu = event.currentTarget.closest("details"); menu?.removeAttribute("open"); editLead(l, menu?.querySelector("summary") ?? event.currentTarget); }}>{t("lead.edit")}</button>
+                          <button type="button" className="text-danger" disabled={saving} onClick={event => { event.currentTarget.closest("details")?.removeAttribute("open"); void deleteLead(l); }}>{t("lead.delete")}</button>
                         </div>
                       </details>
                     </div>
@@ -605,32 +577,32 @@ export function LeadInbox({
           </table>
         </div>
         {selectedLead && detail && (
-          <aside className={styles.detail} aria-label={`Enquiry from ${detail.name}`}>
+          <aside className={styles.detail} aria-label={t("lead.from", { name: detail.name })}>
             <div className={styles.detailHead}>
               <span className={styles.detailAvatar} aria-hidden="true">{initials(leadName(selectedLead))}</span>
               <div className="min-w-0">
-                <h3>{leadName(selectedLead) ?? "Unnamed enquiry"}</h3>
+                <h3>{leadName(selectedLead) ?? t("lead.unnamed")}</h3>
                 <p><span className={styles.detailState} data-state={detail.state}>{detail.stateLabel}</span>{detail.meta && ` · ${detail.meta}`}</p>
               </div>
             </div>
             {!isMetaTestLead(selectedLead) && detail.state !== "customer" && <div className="flex flex-wrap gap-2">
               {whatsappAction(selectedLead, detail, "inline-flex min-h-11 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-white hover:bg-primary-hover",
-                <><MessageCircle size={16} aria-hidden="true" />WhatsApp them</>)}
+                <><MessageCircle size={16} aria-hidden="true" />{t("lead.whatsapp")}</>)}
               {selectedLead.phone && <a href={`tel:${selectedLead.phone}`} onClick={() => markContacted(selectedLead)}
                 className="inline-flex min-h-11 items-center gap-2 rounded-md border border-slate-300 px-4 text-sm font-medium text-slate-800 hover:bg-slate-50">
-                <Phone size={16} aria-hidden="true" />Call</a>}
+                <Phone size={16} aria-hidden="true" />{t("lead.call")}</a>}
               {detail.first && <Button type="button" variant="outline" className="min-h-11" data-product-event="lead.customer" disabled={!!marking || saving}
-                onClick={() => void setCustomer(selectedLead, "customer", detail.current)}><UserCheck size={16} aria-hidden="true" />Became a customer</Button>}
+                onClick={() => void setCustomer(selectedLead, "customer", detail.current)}><UserCheck size={16} aria-hidden="true" />{t("lead.becameCustomer")}</Button>}
             </div>}
             {detail.whatsapp && detail.choices.kind === "generic" && detail.state !== "customer" && <section>
-              <h4>Opens WhatsApp with:</h4>
+              <h4>{t("lead.opensWith")}</h4>
               <p className={styles.detailMessage}>{detail.replyText}</p>
             </section>}
             {answers.length > 0 && <section>
-              <h4>Their answers</h4>
+              <h4>{t("lead.answers")}</h4>
               <dl className={styles.answers}>{answers.map(({ question, answer }) => <div key={question}><dt>{question}</dt><dd>{answer}</dd></div>)}</dl>
             </section>}
-            <div><Button type="button" variant="danger" size="sm" className="min-h-11" disabled={saving} onClick={() => void deleteLead(selectedLead)}>Delete enquiry</Button></div>
+            <div><Button type="button" variant="danger" size="sm" className="min-h-11" disabled={saving} onClick={() => void deleteLead(selectedLead)}>{t("lead.delete")}</Button></div>
           </aside>
         )}
         </div>
@@ -639,10 +611,10 @@ export function LeadInbox({
         {replyLead && replyInfo && <DialogContent className="sm:max-w-md">
           <div className="flex items-start justify-between gap-2 px-4 pt-4">
             <div className="min-w-0 pt-2">
-              <DialogTitle className="text-[17px] font-semibold leading-6 text-slate-900">{replyInfo.choices.kind === "follow-up" ? "Follow up" : "Choose a first reply"}</DialogTitle>
-              <DialogDescription className="mt-1 text-sm text-slate-600">Opens WhatsApp to {replyInfo.name} with this message. You can change it there before you send.</DialogDescription>
+              <DialogTitle className="text-[17px] font-semibold leading-6 text-slate-900">{t(replyInfo.choices.kind === "follow-up" ? "reply.followUp" : "reply.choose")}</DialogTitle>
+              <DialogDescription className="mt-1 text-sm text-slate-600">{t("reply.description", { name: replyInfo.name })}</DialogDescription>
             </div>
-            <DialogClose aria-label="Close replies" />
+            <DialogClose aria-label={t("reply.close")} />
           </div>
           <ul className="flex flex-col gap-2 p-4">
             {replyInfo.choices.texts.map((text) => <li key={text}>
@@ -655,13 +627,7 @@ export function LeadInbox({
           </ul>
         </DialogContent>}
       </Dialog>
-      {page.nextCursor && <Button variant="outline" disabled={page.loading} onClick={page.loadMore}>{page.loading ? <Loader2 size={16} className="animate-spin" /> : <ChevronDown size={16} />}Load more enquiries</Button>}
+      {page.nextCursor && <Button variant="outline" disabled={page.loading} onClick={page.loadMore}>{page.loading ? <Loader2 size={16} className="animate-spin" /> : <ChevronDown size={16} />}{t("list.loadMore")}</Button>}
     </div>
   );
-}
-
-/** Where an enquiry came from: its Meta form, or a WhatsApp chat the owner logged (#335). */
-function leadSource(lead: Lead): string {
-  if (lead.form_name) return lead.form_name;
-  return lead.source === "whatsapp_manual" ? "WhatsApp chat (added by you)" : "—";
 }

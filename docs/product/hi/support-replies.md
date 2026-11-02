@@ -1,5 +1,5 @@
 # सपोर्ट के जवाब
-<!-- mirrors ../support-replies.md d2dd52567e12 -->
+<!-- mirrors ../support-replies.md 0cc5cdb1dec3 -->
 
 यह [Support replies](../support-replies.md) का हिंदी रूप है; अंग्रेज़ी पेज बदले तो इसे भी बदलें।
 [Features and workflows](../README.md) का हिस्सा।
@@ -55,28 +55,29 @@
 - **ओनर कहते हैं:** "Facebook कह रहा है ऐप उपलब्ध नहीं है", "कनेक्ट नहीं हो रहा",
   "बार-बार फिर से पूछ रहा है"।
 - **स्क्रीन पर दिखता है:** Go live स्टेप पर, "Facebook Page" के नीचे: "Not connected" और
-  "Facebook is still reviewing AdBrain, so only people we've added can connect. Tap
-  Connect; if Facebook says the app isn't available, come back here and we\'ll add you."
-  and "Already invited? Accept … in your invites first." (… यानी adBrain) के साथ "Open my invites"।
-  कोशिश फ़ेल होने के बाद: "Didn't connect? We've asked our team to add you and will
-  WhatsApp you within a working day. Accept our invite, then try again." उस कोशिश से
-  ऐक्सेस रिक्वेस्ट चली जाती है, इसलिए अगली शेड्यूल्ड रन पर `waiting-owner` वाला
-  "Facebook access request" इश्यू खुलता है (#2538)। अगर Meta की विंडो बीच में
-  बंद कर दी: "Meta has not finished yet. Complete the Meta window, then check again.
-  Your draft is saved." Settings में: "That connection link expired. Please try
-  connecting again." या "You declined the permissions AdBrain needs to manage ads."
-- **कारण:** जब तक Facebook AdBrain को अप्रूव नहीं करता, सिर्फ़ इनवाइट किए गए Facebook अकाउंट
-  ही कनेक्ट हो सकते हैं; या Meta की विंडो आख़िरी स्टेप से पहले बंद हो गई।
+  "Facebook is still reviewing AdBrain. You can make, approve and download ads now.
+  Connecting a new Facebook account must wait for Meta to approve access." (हिंदी में:
+  "Facebook अभी AdBrain की जाँच कर रहा है।…")। कोशिश फ़ेल होने के बाद, "Try again" के साथ:
+  "Request received. Sending a request does not switch on Facebook access; Meta approval
+  is still pending."। उस कोशिश से ऐक्सेस रिक्वेस्ट दर्ज हो जाती है, इसलिए अगली शेड्यूल्ड
+  रन पर `waiting-owner` वाला "Facebook access request" इश्यू खुलता है (#2538)। दर्ज न हो
+  तो: "Your request did not send. Check your connection and try again."। अगर Meta की
+  विंडो बीच में बंद कर दी: "Meta has not finished yet. Complete the Meta window, then
+  check again. Your draft is saved." Settings में: "That connection link expired. Please
+  try connecting again." या "You declined the permissions AdBrain needs to manage ads."
+- **कारण:** जब तक Meta AdBrain को अप्रूव नहीं करता (App Review, #156), नया Facebook अकाउंट
+  कनेक्ट नहीं हो सकता; या Meta की विंडो आख़िरी स्टेप से पहले बंद हो गई।
 - **जवाब:**
 
-  > Facebook अभी हमारे ऐप की जाँच कर रहा है, इसलिए पहले हमें आपको जोड़ना होगा। कृपया अपनी
-  > Facebook प्रोफ़ाइल का लिंक भेजिए (Facebook › आपकी प्रोफ़ाइल › ⋯ › Copy profile link)। हमारा
-  > इनवाइट आने पर Go live स्क्रीन पर "Open my invites" दबाइए, adBrain का इनवाइट स्वीकार कीजिए,
-  > फिर "Connect Facebook Page" दबाइए। Meta की विंडो में अपना पेज और ऐड अकाउंट चुनिए और आख़िर
-  > तक जाइए। फिर भी न हो, तो मुझे स्क्रीनशॉट भेजिए।
+  > Facebook अभी हमारे ऐप की जाँच कर रहा है, इसलिए नया Facebook अकाउंट जोड़ने के लिए Meta
+  > की मंज़ूरी का इंतज़ार करना होगा। अभी हम कोई तारीख नहीं बता सकते। तब तक आप विज्ञापन बना,
+  > मंज़ूर और डाउनलोड कर सकते हैं और ग्राहकों के साथ खुद शेयर कर सकते हैं। आपका अनुरोध हमारे
+  > पास है। अगर आपको लगता है कि आपको मंज़ूरी मिल चुकी है, तो "Connect Facebook Page" दबाइए,
+  > Meta की विंडो में अपना पेज और ऐड अकाउंट चुनिए और आख़िर तक जाइए; फिर भी न हो, तो मुझे
+  > स्क्रीनशॉट भेजिए।
 
-अगर ओनर के पास स्वीकार करने को कोई इनवाइट नहीं है, तो मतलब इनवाइट अभी उनके Facebook
-अकाउंट पर भेजा ही नहीं गया: GitHub पर CEO को बताएँ (label `waiting-owner`) ताकि भेजा जाए।
+इनवाइट या तारीख का वादा न करें (#2697)। रिक्वेस्ट वाला इश्यू CEO के लिए है, ताकि App
+Review बाकी रहने तक पता रहे कि कौन इंतज़ार कर रहा है।
 
 अगर स्क्रीन पर लिखा है "This ad account is not active. Check Account quality in Meta.",
 तो यह जवाब दें: "Meta ने इस ऐड अकाउंट पर रोक लगाई है। Meta में Account quality खोलकर

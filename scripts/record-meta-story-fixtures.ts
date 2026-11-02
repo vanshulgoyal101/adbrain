@@ -7,7 +7,7 @@
  * runs without an ad), then validate an ad that uses it, with and without the Page's Instagram id.
  * Without it Meta refuses the ad ("Instagram Account Is Missing", subcode 1772103).
  *
- *   WHATSAPP_NUMBER=+91XXXXXXXXXX npx tsx --env-file=<.env.local> scripts/record-meta-story-fixtures.ts <whatsappAdSetId> <feedHash> <storyHash>
+ *   WHATSAPP_NUMBER=+91XXXXXXXXXX npx tsx --import ./scripts/trusted-server-cli.mjs --env-file=<.env.local> scripts/record-meta-story-fixtures.ts <whatsappAdSetId> <feedHash> <storyHash>
  */
 import "./lib/meta-write-gate";
 import { writeFileSync } from "node:fs";

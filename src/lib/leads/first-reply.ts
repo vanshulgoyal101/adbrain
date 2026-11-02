@@ -1,3 +1,6 @@
+import { enquiriesTranslator, type Words } from "@/i18n/words";
+import type { AppLocale } from "@/i18n/locale";
+
 /**
  * #1049: reply to an enquiry in one tap. "WhatsApp them" opens a chat with the lead pre-filled with a
  * first reply in the business's language (with its name and offer); "Call" dials. The first tap is
@@ -68,22 +71,23 @@ export function medianReplyMinutes(rows: { created_time: string | null; created_
   return minutes.length % 2 ? minutes[middle] : (minutes[middle - 1] + minutes[middle]) / 2;
 }
 
-/** "under a minute", "12 min", "3 h 5 min", "2 days". */
-export function formatReplyTime(minutes: number): string {
-  if (minutes < 1) return "under a minute";
-  if (minutes < 60) return `${Math.round(minutes)} min`;
+/** "under a minute", "12 min", "3 h 5 min", "2 days"; Hindi "एक मिनट से कम समय", "12 मिनट", "3 घंटे 5 मिनट", "2 दिन" (#1438). */
+export function formatReplyTime(minutes: number, locale: AppLocale = "en"): string {
+  const [under, min, h, days] = locale === "hi" ? ["एक मिनट से कम समय", "मिनट", "घंटे", "दिन"] : ["under a minute", "min", "h", "days"];
+  if (minutes < 1) return under;
+  if (minutes < 60) return `${Math.round(minutes)} ${min}`;
   if (minutes < 48 * 60) {
     const hours = Math.floor(minutes / 60);
     const rest = Math.round(minutes - hours * 60);
-    return rest ? `${hours} h ${rest} min` : `${hours} h`;
+    return rest ? `${hours} ${h} ${rest} ${min}` : `${hours} ${h}`;
   }
-  return `${Math.round(minutes / (24 * 60))} days`;
+  return `${Math.round(minutes / (24 * 60))} ${days}`;
 }
 
 /** #1260 (CPO words): 'Contacted' is the owner's first tap on WhatsApp them/Call, not a confirmed reply. */
-export function contactedLabel(minutes: number): string {
-  if (!Number.isFinite(minutes) || minutes < 0) return "Contacted";
-  if (minutes < 24 * 60) return `Contacted in ${formatReplyTime(minutes)}`;
-  const days = Math.floor(minutes / (24 * 60));
-  return `Contacted after ${days} ${days === 1 ? "day" : "days"}`;
+export function contactedLabel(minutes: number, words?: Words<"enquiries">): string {
+  const t = enquiriesTranslator(words);
+  if (!Number.isFinite(minutes) || minutes < 0) return t("state.contacted");
+  if (minutes < 24 * 60) return t("state.contactedIn", { time: formatReplyTime(minutes, words?.locale) });
+  return t("state.contactedAfter", { days: Math.floor(minutes / (24 * 60)) });
 }

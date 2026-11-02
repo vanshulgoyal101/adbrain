@@ -4,7 +4,7 @@
  * 9:16 placement creative (asset_feed_spec) and the single image (link_data). Starts from a PAUSED
  * ad's creative as Meta stores it. Nothing is created.
  *
- *   npx tsx --env-file=<.env.local> scripts/record-meta-whatsapp-openings.ts <paused placement ad id>
+ *   npx tsx --import ./scripts/trusted-server-cli.mjs --env-file=<.env.local> scripts/record-meta-whatsapp-openings.ts <paused placement ad id>
  */
 import "./lib/meta-write-gate";
 import { writeFileSync } from "node:fs";

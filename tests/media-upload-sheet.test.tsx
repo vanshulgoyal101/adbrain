@@ -23,7 +23,7 @@ function setup({ consented = true, vertical = "Interior design", fetch = vi.fn()
   const uploadToSignedUrl = vi.fn(async () => ({ error: null }));
   render(<MediaLibrary business={{ id: "b1", vertical }} media={[]} creatives={[]} brandAssets={[]} consented={consented} startOpen
     deps={{ fetch, uploadToSignedUrl }} codec={codec} />);
-  return { fetch, uploadToSignedUrl, sheet: screen.getByRole("dialog", { name: "Add photos & videos" }) };
+  return { fetch, uploadToSignedUrl, sheet: screen.getByRole("dialog", { name: "Add photos" }) };
 }
 
 describe("upload sheet (#778 slice 3b)", () => {
@@ -36,6 +36,39 @@ describe("upload sheet (#778 slice 3b)", () => {
     expect(within(list).getByText("Too small (300 px wide). Use the original photo, not a screenshot or a WhatsApp copy.")).toBeInTheDocument();
     expect(within(list).getByText(/This file type can't be used/)).toBeInTheDocument();
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("shows each pick's own picture, and lets it go once the pick is done with (#1973 review 2)", async () => {
+    const created: string[] = [];
+    const revoke = vi.fn();
+    vi.stubGlobal("URL", Object.assign(URL, { createObjectURL: (file: File) => { created.push(file.name); return `blob:${file.name}`; }, revokeObjectURL: revoke }));
+    const { sheet } = setup({ fetch: vi.fn(async (url: string) => url === "/api/media/sign"
+      ? json(200, { ok: true, duplicate: false, id: "m1", path: "p", token: "t" }) : json(200, { ok: true, asset: asset("m1", "tall") })) });
+    await pick(["tall.jpg"]);
+    const list = within(sheet).getByRole("list", { name: "Your picks" });
+    expect(list.querySelector("img")).toHaveAttribute("src", "blob:tall.jpg");
+    fireEvent.click(within(sheet).getByRole("button", { name: "Add 1 photo" }));
+    await waitFor(() => expect(within(sheet).getByText("Added")).toBeInTheDocument());
+    await pick(["wide.jpg"]);
+    expect(created).toEqual(["tall.jpg", "wide.jpg"]);
+    expect(revoke).toHaveBeenCalledWith("blob:tall.jpg");
+    vi.unstubAllGlobals();
+  });
+
+  it("draws no picture for a file it can't use, marks a ready pick with a tick, and opens on Choose photos (#778 walk 2, 3, 5)", async () => {
+    vi.stubGlobal("URL", Object.assign(URL, { createObjectURL: (file: File) => `blob:${file.name}`, revokeObjectURL: vi.fn() }));
+    const { sheet } = setup();
+    expect(within(sheet).getByRole("button", { name: "Choose photos" })).toHaveFocus();
+    expect(within(sheet).getByRole("button", { name: "Close" }).textContent).toBe("");
+    fireEvent.change(screen.getByLabelText("Choose photos"), { target: { files: [new File(["x"], "notes.txt", { type: "text/plain" }), new File(["x"], "tall.jpg", { type: "image/jpeg" })] } });
+    await waitFor(() => expect(screen.queryByText("Checking…")).not.toBeInTheDocument());
+    const [refused, ready] = within(within(sheet).getByRole("list", { name: "Your picks" })).getAllByRole("listitem");
+    expect(refused.querySelector("img")).toBeNull();
+    expect(refused.querySelector(".lucide-file-x")).not.toBeNull();
+    expect(ready.querySelector("img")).toHaveAttribute("src", "blob:tall.jpg");
+    expect(ready.querySelector(".lucide-check")).not.toBeNull();
+    expect(ready.querySelector(".lucide-image-plus")).toBeNull();
+    vi.unstubAllGlobals();
   });
 
   // Designer on #1999: "warning, can proceed" reads differently from "fine" and from red "refused".
@@ -56,7 +89,7 @@ describe("upload sheet (#778 slice 3b)", () => {
     const { sheet } = setup({ fetch: fetch as never });
     await pick(["tall.jpg"]);
     fireEvent.click(within(sheet).getByRole("button", { name: "Add 1 photo" }));
-    await waitFor(() => expect(within(sheet).getByRole("status")).toHaveTextContent("Uploading 1 of 1… You can close this box. Stay on this page until it finishes."));
+    await waitFor(() => expect(within(sheet).getByRole("status")).toHaveTextContent("Uploading 1 of 1… You can close this. Keep this page open until it finishes."));
     const leaving = new Event("beforeunload", { cancelable: true });
     window.dispatchEvent(leaving);
     expect(leaving.defaultPrevented).toBe(true);
@@ -92,13 +125,17 @@ describe("upload sheet (#778 slice 3b)", () => {
     expect(screen.getByRole("img", { name: "tall" })).toHaveAttribute("src", "https://example.com/m1.jpg");
   });
 
-  it("asks for the rights tick (and the people clause for a salon) once, saves it, then uploads", async () => {
+  it("asks for the rights tick (and the people clause for a salon) first, saves it once, then uploads", async () => {
     const fetch = vi.fn(async (url: string) => url === "/api/media/consent" ? json(200, { ok: true })
       : url === "/api/media/sign" ? json(200, { ok: true, duplicate: false, id: "m1", path: "p", token: "t" }) : json(200, { ok: true, asset: asset("m1", "tall") }));
     const { sheet } = setup({ consented: false, vertical: "Bridal salon", fetch: fetch as never });
+    // Designer (#1973 review 1): the tick is there before any pick and sits above the picks.
+    const tick = within(sheet).getByRole("checkbox", { name: /I own these photos/ });
     await pick(["tall.jpg"]);
-    fireEvent.click(within(sheet).getByRole("button", { name: "Add 1 photo" }));
-    expect(within(sheet).getByRole("alert")).toHaveTextContent("Tick the box above to add your photos.");
+    const picks = within(sheet).getByRole("list", { name: "Your picks" });
+    expect(tick.compareDocumentPosition(picks) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(sheet).getByRole("button", { name: "Add 1 photo" })).toBeDisabled();
+    expect(within(sheet).getByText("Tick the box above to add your photos.")).toBeInTheDocument();
     expect(fetch).not.toHaveBeenCalled();
 
     fireEvent.click(within(sheet).getByRole("checkbox", { name: /I own these photos/ }));

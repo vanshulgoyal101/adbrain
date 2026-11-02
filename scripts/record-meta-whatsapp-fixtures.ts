@@ -3,7 +3,7 @@
  * Prepare would send, and records the answers for test:core. Any POST without
  * execution_options=["validate_only"] is refused before it leaves the process.
  *
- *   npx tsx --env-file=<.env.local> scripts/record-meta-whatsapp-fixtures.ts <adSetBudgetCampaignId> <whatsappAdSetId> <imageHash>
+ *   npx tsx --import ./scripts/trusted-server-cli.mjs --env-file=<.env.local> scripts/record-meta-whatsapp-fixtures.ts <adSetBudgetCampaignId> <whatsappAdSetId> <imageHash>
  */
 import "./lib/meta-write-gate";
 import { readFileSync, writeFileSync } from "node:fs";

@@ -48,28 +48,29 @@ Tell the CTO on the issue if many owners report this in the same hour.
 - **Owner says:** "Facebook says the app isn't available", "connect not working",
   "it keeps asking again".
 - **Screen shows:** on the Go live step, under "Facebook Page": "Not connected" and
-  "Facebook is still reviewing AdBrain, so only people we've added can connect. Tap
-  Connect; if Facebook says the app isn't available, come back here and we\'ll add you."
-  and "Already invited? Accept … in your invites first." (… is adBrain) with "Open my invites".
-  After a failed try: "Didn't connect? We've asked our team to add you and will
-  WhatsApp you within a working day. Accept our invite, then try again." That try
-  already sent the access request, so the scheduled job opens a `waiting-owner`
-  "Facebook access request" issue on its next run (#2538). If the Meta window was closed
+  "Facebook is still reviewing AdBrain. You can make, approve and download ads now.
+  Connecting a new Facebook account must wait for Meta to approve access." After a
+  failed try, with "Try again": "Request received. Sending a request does not switch
+  on Facebook access; Meta approval is still pending." That try recorded the access
+  request, so the scheduled job opens a `waiting-owner` "Facebook access request"
+  issue on its next run (#2538). If it didn't record: "Your request did not send.
+  Check your connection and try again." If the Meta window was closed
   early: "Meta has not finished yet. Complete the Meta window, then check again.
   Your draft is saved." In Settings: "That connection link expired. Please try
   connecting again." or "You declined the permissions AdBrain needs to manage ads."
-- **Cause:** until Facebook approves AdBrain, only invited Facebook accounts can
-  connect; or the Meta window was closed before the last step.
+- **Cause:** until Meta approves AdBrain (App Review, #156), a new Facebook account
+  can't connect; or the Meta window was closed before the last step.
 - **Reply:**
 
-  > Facebook is still checking our app, so we need to add you first. Please send me
-  > your Facebook profile link (Facebook › your profile › ⋯ › Copy profile link). Once
-  > our invite arrives, on the Go live screen tap "Open my invites", accept adBrain,
-  > then tap "Connect Facebook Page". In the Meta window pick your Page and ad account
-  > and go to the end. If it still fails, send me a screenshot.
+  > Facebook is still reviewing our app, so connecting a new Facebook account has to
+  > wait for Meta's approval. We can't give a date yet. Meanwhile you can make,
+  > approve and download your ads and share them with customers yourself. We have
+  > your request. If you think you're already approved, tap "Connect Facebook Page",
+  > pick your Page and ad account in the Meta window and go to the end; if it fails,
+  > send me a screenshot.
 
-If the owner has no invite to accept, the invite was not sent to their Facebook
-account yet: tell the CEO on GitHub (label `waiting-owner`) so it gets sent.
+Don't promise an invite or a date (#2697). The request issue is for the CEO to track
+who is waiting while App Review is pending.
 
 If the screen says "This ad account is not active. Check Account quality in Meta.",
 reply: "Meta has limited this ad account. Open Account quality in Meta and follow

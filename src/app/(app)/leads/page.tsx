@@ -14,27 +14,27 @@ import { enquiriesTitle, whatsappChatRows, type WhatsAppChatRow } from "@/lib/ca
 import { getLeadPage } from "@/lib/leads/queries";
 import { inboxSummary } from "@/lib/leads/reply-time";
 import { readAlertSettings } from "@/lib/alerts/settings-read";
+import { requestWords } from "@/i18n/request-locale";
+import { enquiriesTranslator } from "@/i18n/words";
 
 export const metadata = { title: "Enquiries" };
 
 export default async function LeadsPage() {
-  const business = await getPrimaryBusiness();
+  const [business, words] = await Promise.all([getPrimaryBusiness(), requestWords("enquiries")]);
+  const t = enquiriesTranslator(words);
 
   if (!business) {
     return (
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">Enquiries</h1>
+        <h1 className="text-2xl font-bold text-slate-900">{t("title")}</h1>
         <Card className="mt-6">
           <CardContent className="flex flex-col items-start gap-4 p-8">
             <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
               <Building2 className="h-6 w-6" />
             </span>
-            <p className="max-w-md text-slate-600">
-              Set up your business and launch a campaign first. Enquiries
-              land here.
-            </p>
+            <p className="max-w-md text-slate-600">{t("noBusiness")}</p>
             <Link href="/brand">
-              <Button>Set up your business</Button>
+              <Button>{t("setUpBusiness")}</Button>
             </Link>
           </CardContent>
         </Card>
@@ -67,12 +67,12 @@ export default async function LeadsPage() {
   return (
     <div>
       <PageHeader
-        title="Enquiries"
+        title={t("title")}
         titleInTopBarOnPhone
-        description="People who responded to your ads."
+        description={t("description")}
       />
       <div className="mt-6 max-sm:mt-4">
-        <EnquiriesSections chatRows={chatRows} formTotal={page.total} empty={chatsEmpty && page.total === 0}>
+        <EnquiriesSections chatRows={chatRows} formTotal={page.total} empty={chatsEmpty && page.total === 0} words={words}>
           <LeadInbox
             key={`${business.owner_id}:${business.id}`}
             businessName={business.name}
@@ -89,7 +89,8 @@ export default async function LeadsPage() {
             addEnquiryFor={whatsapp ? { campaignId: whatsapp.id, spend: whatsapp.spend, enquiries: whatsapp.realEnquiries } : null}
             metaReady={metaConnection.ready}
             syncScope={`${business.owner_id}:${business.id}:${metaConnection.adAccountId ?? ""}:${metaConnection.pageId ?? ""}`}
-            title={enquiriesTitle(chatRows)}
+            title={enquiriesTitle(chatRows, words)}
+            words={words}
             summary={waitingPage || !summary?.waiting ? summary : { ...summary, waiting: null }}
             metaWaitUntil={metaConnection.ready ? await metaWaitFor(business.id) : null}
           />

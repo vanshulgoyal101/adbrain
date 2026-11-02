@@ -67,7 +67,7 @@
     "launchDetail": "{n, plural, one {# approved ad is} other {# approved ads are}} ready. Choose where to show them and how much to spend.",
     "launchAction": "Launch a campaign",
     "readyTitle": "Your ads are ready",
-    "readyDetail": "Share them on WhatsApp or download them now. Launching on Facebook and Instagram opens soon.",
+    "readyDetail": "Share them on WhatsApp or download them now. Running them on Facebook and Instagram needs a Facebook connection; Campaigns shows where that stands.",
     "readyAction": "Share your ads",
     "approvedTitle": "{n, plural, one {# approved ad is} other {# approved ads are}} available",
     "approvedDetail": "Not in a campaign yet. Put them in a campaign or export them.",
@@ -335,7 +335,8 @@
       "noBusiness": "Set up your business first, then connect your ad account here.",
       "setUpBusiness": "Set up your business",
       "preferences": "Preferences",
-      "loading": "Loading {label}"
+      "loading": "Loading {label}",
+      "tryAgain": "Try again"
     },
     "preferences": {
       "title": "Ad preferences",
@@ -430,7 +431,6 @@
       "disconnecting": "Disconnecting...",
       "disconnectFailed": "Facebook is still connected. Try again in a minute.",
       "unavailable": "Meta connection status is temporarily unavailable. Your campaign draft is preserved.",
-      "tryAgain": "Try again",
       "noticeConnected": "Your Meta account is connected.",
       "noticeSelect": "Connected. Now choose your ad account and page below.",
       "error": {
@@ -440,6 +440,27 @@
         "connect_failed": "Couldn't complete the connection. Please try again.",
         "access_denied": "You declined the permissions AdBrain needs to manage ads."
       }
+    },
+    "spend": {
+      "title": "Spend guardrails",
+      "intro": "Set a weekly ad-spend ceiling. AdBrain warns you as you approach it and won’t let you turn on campaigns that would commit more than your cap.",
+      "noCap": "No cap is set yet, so campaigns follow only their Meta budgets.",
+      "capInvalid": "Enter a positive whole-rupee cap, or leave it blank for no cap.",
+      "alertInvalid": "Enter a whole-number alert threshold between 1 and 100.",
+      "saveFailed": "Could not save.",
+      "saved": "Saved.",
+      "capLabel": "Weekly cap (₹)",
+      "capPlaceholder": "No cap",
+      "capHint": "Leave blank for no cap.",
+      "alertLabel": "Warn at (% of cap)",
+      "autoPauseLead": "Auto-pause at the cap.",
+      "autoPause": "When tracked spend reaches your weekly cap, pause every active campaign automatically (checked whenever results refresh).",
+      "howTitle": "How the cap works",
+      "how": "Checks are periodic, not real-time. Reporting delays and unsuccessful pause requests can allow spending beyond this cap. Use Meta account spending limits where supported; prepaid accounts need campaign budgets instead. These guardrails do not verify available funds or payment setup.",
+      "save": "Save guardrails",
+      "thisWeek": "This week",
+      "used": "{pct}% used · {left} left",
+      "loadFailed": "Spend limits could not be loaded. Your saved limits have not changed."
     }
   },
   "pilotDay7": {
@@ -651,6 +672,29 @@
       "billingRequired": "Meta needs a way to pay first: a card, or money added by UPI or net banking. Add it in Meta, then tap Go live again. Nothing was spent.",
       "savedPaused": "Your campaign is saved, paused. Nothing was spent.",
       "openCampaigns": "Open Campaigns"
+    },
+    "access": {
+      "pending": "Facebook is still reviewing AdBrain. You can make, approve and download ads now. Connecting a new Facebook account must wait for Meta to approve access.",
+      "requested": "Request received. Sending a request does not switch on Facebook access; Meta approval is still pending.",
+      "requestFailed": "Your request did not send. Check your connection and try again.",
+      "again": "Try again"
+    },
+    "readyAds": {
+      "title": "Your ads are ready",
+      "connectFirst": "Connect Facebook to run them on Facebook and Instagram. Until then, share your ads with customers yourself.",
+      "yourAd": "Your ad: {headline}",
+      "newestAd": "Your newest approved ad",
+      "preparing": "Preparing download…",
+      "downloadOne": "Download your ad",
+      "downloadAll": "Download all {n} ads",
+      "downloadFailed": "The download didn't finish. Check your connection and try again.",
+      "seeAll": "See all approved ads",
+      "runTitle": "Want to run them on Facebook?",
+      "askBody": "Ask for Facebook access so we know you're waiting. You approve every rupee before anything runs.",
+      "ask": "Ask for Facebook access",
+      "asking": "Sending request…",
+      "haveAccess": "Already have access?",
+      "connect": "Connect Facebook"
     }
   },
   "pauseAll": {
@@ -682,9 +726,26 @@
     "campaigns": "Campaigns",
     "enquiries": "Enquiries",
     "business": "Your business",
-    "assets": "Assets",
+    "assets": "Photos",
     "settings": "Settings",
-    "getStarted": "Get started"
+    "getStarted": "Get started",
+    "workspace": "Workspace",
+    "setUpBusiness": "Set up your business",
+    "yourAccount": "Your account",
+    "help": "Help on WhatsApp",
+    "signOut": "Sign out",
+    "signOutFailed": "Could not sign out. Please try again.",
+    "legal": "Legal",
+    "privacy": "Privacy",
+    "terms": "Terms",
+    "dataDeletion": "Data deletion",
+    "skip": "Skip to workspace",
+    "sidebar": "Main sidebar",
+    "navigation": "Workspace navigation",
+    "menu": "Workspace menu",
+    "openNav": "Open navigation",
+    "closeNav": "Close navigation",
+    "continueFirstAd": "Continue your first ad"
   },
   "campaigns": {
     "header": {
@@ -845,6 +906,35 @@
       "reviewWebsite": "People will go to",
       "needsLink": "Needs a working link",
       "expectWebsite": "What to expect: AdBrain hasn’t run enough website campaigns yet to quote a cost per visit. Meta reviews new ads first, usually within 24 hours, and nothing spends until you go live."
+    },
+    "editAd": {
+      "title": "Edit ad words",
+      "ad": "Ad",
+      "headline": "Headline",
+      "message": "Ad text",
+      "description": "Description",
+      "backToReview": "Your ad goes back to Meta review (usually 5–10 minutes) and stops showing until it's approved.",
+      "unchanged": "The picture, audience and budget don't change.",
+      "noChange": "Change the headline, text or description first.",
+      "failed": "Couldn't change the ad. Nothing changed.",
+      "offline": "No connection. Nothing changed; try again.",
+      "cancel": "Cancel",
+      "save": "Save and send to review",
+      "saved": "New words saved. {backToReview}"
+    },
+    "audienceSwitch": {
+      "title": "New audience ready",
+      "running": "Your current audience keeps running until you turn the new one on.",
+      "paused": "It takes the current audience's place when you use it; nothing starts running. Use or cancel it before you resume the campaign.",
+      "cancel": "Cancel new audience",
+      "turnOn": "Turn it on",
+      "use": "Use the new audience",
+      "lastTry": "Last try: {error}",
+      "failed": "Couldn't reach Meta. Nothing changed; try again.",
+      "offline": "No connection. Nothing changed; try again.",
+      "switchedRunning": "New audience is on and the old one is stopped. Meta reviews the ads again and learning restarts.",
+      "switchedPaused": "New audience is in place. The campaign stays paused until you resume it.",
+      "cancelled": "New audience cancelled. The current one keeps running."
     }
   },
   "errors": {
@@ -901,15 +991,15 @@
     "adsAlreadyBeingMade": "Your ads are already being made on another screen. They'll show here in a minute.",
     "adRequestNotFound": "We couldn't find that ad request. Start again from Create.",
     "noAdsMade": "No creatives were generated.",
-    "campaignNotFound": "Campaign not found",
+    "campaignNotFound": "We couldn't find this campaign. It may have been deleted; refresh the page.",
     "deliveryReviewUnavailable": "Campaign delivery review is unavailable.",
     "spendLimitsUnverified": "Spend limits could not be verified. Try again before activating.",
     "budgetsUnverified": "Campaign budgets or the saved cap could not be verified. Sync campaigns and review spend settings before activating.",
     "overWeeklyCap": "Activating this would commit about {projected} a week, over your {cap} a week cap. Raise the cap in Settings or pause another campaign first.",
     "notLinkedToMeta": "This campaign isn't linked to Meta yet.",
-    "reconcileBeforeChange": "This campaign needs account reconciliation before it can be changed.",
+    "reconcileBeforeChange": "AdBrain doesn't know which Meta ad account this campaign belongs to, so it can't change it here. Change it in Meta Ads Manager.",
     "metaConnectionChanged": "Meta connection changed; review the campaign again.",
-    "reconcileChildren": "Campaign children need reconciliation before activation.",
+    "reconcileChildren": "AdBrain can't find this campaign's ad set and ads, so it can't turn it on. Turn it on in Meta Ads Manager, or create a new campaign.",
     "fundingUnverified": "Campaign funding could not be verified. Try again before activating.",
     "budgetCurrencyUnverified": "Campaign budget and currency must be verified before activation.",
     "areaExclusionsMissing": "This campaign was built without out-of-area exclusions, so Meta could show it far outside your area. Add them first: More → Edit audience → Leave out places outside the area. Then turn it on.",
@@ -933,8 +1023,8 @@
     "metaAccessStopped": "Meta stopped accepting AdBrain's access. Reconnect Facebook in Settings, then try again.",
     "campaignUpdateFailed": "Could not update the campaign.",
     "campaignStorageUnavailable": "Campaign storage unavailable. Try again.",
-    "reconcileBeforeDelete": "This campaign needs account reconciliation before it can be deleted.",
-    "metaDeleteUnconfirmed": "Meta deletion could not be confirmed. The campaign remains in AdBrain so you can check its status.",
+    "reconcileBeforeDelete": "AdBrain doesn't know which Meta ad account this campaign belongs to, so it can't delete it safely. Pause or delete it in Meta Ads Manager.",
+    "metaDeleteUnconfirmed": "We couldn't confirm that Meta deleted this campaign, so it stays in AdBrain. Check its status, then try again.",
     "campaignDeleteFailed": "Could not delete the campaign.",
     "activationAccessUnconfirmed": "Meta has not confirmed campaign activation access.",
     "notOnMetaYet": "This campaign isn't on Meta yet, so there are no results to refresh.",
@@ -975,7 +1065,7 @@
     "brandReadFailed": "Could not extract business details. Try again later or enter them manually.",
     "planRequestInvalid": "A valid goal and answers are required.",
     "interviewTooLong": "The interview is too long. Continue in the campaign editor.",
-    "businessNotAllowed": "Business access is not allowed.",
+    "businessNotAllowed": "You don't have access to this business. Pick one of your businesses and try again.",
     "planFailed": "Could not prepare the campaign plan.",
     "signInRequired": "Sign in required.",
     "businessMissing": "Business not found.",
@@ -985,7 +1075,7 @@
     "chooseCampaign": "Choose a campaign.",
     "enquiriesNotDeleted": "The enquiries couldn't be deleted. Try again.",
     "enquiryNotDeleted": "The enquiry couldn't be deleted. Try again.",
-    "enquiryNotFound": "Enquiry not found.",
+    "enquiryNotFound": "We couldn't find this enquiry. Refresh the page.",
     "enquiriesNotReloaded": "Couldn't reload your saved enquiries. Your existing enquiries are still here.",
     "enquiryCountUnavailable": "Enquiry count unavailable.",
     "requestNotSent": "We couldn't send your request. Try again.",
@@ -1006,7 +1096,7 @@
     "openRequestExists": "An open request of this type already exists.",
     "setUpBrandFirst": "Set up your Brand first, then connect Facebook in Settings.",
     "leadFormsUnavailable": "Could not load lead forms. Try again.",
-    "campaignFiltersInvalid": "Invalid campaign filters.",
+    "campaignFiltersInvalid": "We couldn't load campaigns with these filters. Refresh the page.",
     "campaignsNotLoaded": "We couldn't load your campaigns. Reload the page.",
     "enquiryInvalid": "Invalid enquiry.",
     "enquiryWhatsAppOnly": "Real enquiries can be logged on WhatsApp campaigns only.",
@@ -1102,6 +1192,176 @@
       "checkOffline": "Couldn't check Meta for enquiries. Check your connection.",
       "imported": "{count, plural, one {# new enquiry} other {# new enquiries}} from Meta.",
       "someUnchecked": "Some enquiries on Meta couldn't be checked. The ones below are saved; tap Check now to try again."
+    }
+  },
+  "enquiries": {
+    "title": "Enquiries",
+    "formTitle": "Form enquiries",
+    "description": "People who responded to your ads.",
+    "noBusiness": "Set up your business and launch a campaign first. Enquiries land here.",
+    "setUpBusiness": "Set up your business",
+    "formFold": "Form enquiries (0)",
+    "status": {
+      "new": "New",
+      "contacted": "Contacted",
+      "qualified": "Qualified",
+      "booked": "Booked",
+      "customer": "Customer",
+      "closed": "Closed"
+    },
+    "view": {
+      "label": "Show",
+      "waiting": "Waiting",
+      "all": "All",
+      "customers": "Customers"
+    },
+    "age": {
+      "now": "just now",
+      "m": "{n}m ago",
+      "h": "{n}h ago",
+      "d": "{n}d ago"
+    },
+    "state": {
+      "test": "Test from Meta",
+      "notInterested": "Not interested",
+      "contacted": "Contacted",
+      "contactedIn": "Contacted in {time}",
+      "contactedAfter": "{days, plural, one {Contacted after {days} day} other {Contacted after {days} days}}"
+    },
+    "arrival": {
+      "title": "No enquiries yet",
+      "ready": "Enquiries from your ads show up here: form enquiries on their own, WhatsApp chats when you add them. Reply fast: people often pick the first business that answers.",
+      "notReady": "Connect your Facebook Page to run ads. Enquiries from them show up here.",
+      "connect": "Connect Facebook Page",
+      "alerts": "Get a WhatsApp alert for form enquiries",
+      "campaigns": "See your campaigns"
+    },
+    "sync": {
+      "notConnected": "Meta isn’t connected, so new enquiries can’t come in yet. <link>Connect your account in Settings</link>.",
+      "checking": "Checking Meta for new enquiries…",
+      "updated": "Updated {age}",
+      "checkNow": "Check now",
+      "keepChecking": "Keep checking",
+      "waitLine": "Meta is limiting how often we can check right now. New form enquiries may show up to {age} late; WhatsApp chats still reach your phone as usual.",
+      "checkLater": "Meta asked us to wait. We'll check again at {time}.",
+      "soFar": "{count, plural, one {{count} new enquiry so far} other {{count} new enquiries so far}}",
+      "unread": "Couldn't read: {forms}. {soFar}.",
+      "noAnswer": "Some forms didn't answer. {soFar}; Keep checking to try again.",
+      "stillChecking": "Still checking Meta. {soFar}; Keep checking to finish."
+    },
+    "summary": {
+      "nobody": "Nobody is waiting.",
+      "waiting": "{count, plural, one {{count} person is waiting for you.} other {{count} people are waiting for you.}}",
+      "replyTime": "You usually contact people within {time}."
+    },
+    "list": {
+      "retry": "Retry list",
+      "search": "Search enquiries",
+      "searchPlaceholder": "Search name, contact, city, or form",
+      "clearSearch": "Clear search",
+      "filter": "Filter",
+      "filterSet": "Filter, {count} set",
+      "contact": "Contact availability",
+      "allContacts": "All contacts",
+      "hasContact": "Has contact details",
+      "missingContact": "Missing contact details",
+      "workflow": "Workflow status",
+      "allStatuses": "All follow-up statuses",
+      "sort": "Sort enquiries",
+      "newest": "Newest first",
+      "oldest": "Oldest first",
+      "byName": "Name A–Z",
+      "loading": "Loading enquiries...",
+      "loadingLabel": "Loading enquiries",
+      "count": "{shown} of {total} enquiries",
+      "clearFilters": "Clear filters",
+      "loadMore": "Load more enquiries",
+      "table": "Customer enquiries",
+      "columns": {
+        "name": "Name",
+        "contact": "Contact",
+        "city": "City",
+        "form": "Form",
+        "when": "When",
+        "followUp": "Follow-up",
+        "received": "Received"
+      }
+    },
+    "empty": {
+      "seeAll": "See all enquiries",
+      "noCustomers": "No customers yet.",
+      "customersHint": "Tap Became a customer on an enquiry when they buy.",
+      "none": "No enquiries yet. When someone fills your form or messages you on WhatsApp from an ad, they'll show up here.",
+      "replyFast": "Reply fast: people often go with the first business that answers.",
+      "alertEach": "Get a WhatsApp alert for each enquiry",
+      "noMatch": "No matching enquiries"
+    },
+    "editor": {
+      "label": "Enquiry follow-up",
+      "heading": "Follow up: {name}",
+      "unsaved": "Unsaved changes",
+      "close": "Close follow-up",
+      "status": "Follow-up status",
+      "note": "Follow-up note",
+      "save": "Save follow-up",
+      "saved": "Follow-up saved."
+    },
+    "lead": {
+      "unnamed": "Unnamed enquiry",
+      "this": "this enquiry",
+      "thisCapital": "This enquiry",
+      "fallback": "enquiry",
+      "whatsappChat": "WhatsApp chat",
+      "whatsappAdded": "WhatsApp chat (added by you)",
+      "whatsapp": "WhatsApp them",
+      "call": "Call",
+      "email": "Email",
+      "replied": "Replied",
+      "repliedAfter": "Replied {time} after the enquiry",
+      "followUp": "Follow up {name}",
+      "followUpStatus": "Follow up {name}, status {status}",
+      "becameCustomer": "Became a customer",
+      "becameCustomerLabel": "{name} became a customer",
+      "more": "More",
+      "moreFor": "More for {name}",
+      "edit": "Edit",
+      "delete": "Delete enquiry",
+      "from": "Enquiry from {name}",
+      "opensWith": "Opens WhatsApp with:",
+      "answers": "Their answers"
+    },
+    "reply": {
+      "followUp": "Follow up",
+      "choose": "Choose a first reply",
+      "description": "Opens WhatsApp to {name} with this message. You can change it there before you send.",
+      "close": "Close replies"
+    },
+    "chats": {
+      "heading": "WhatsApp chats",
+      "from": "WhatsApp chats from {name}",
+      "started": "{count, plural, one {{chats} chat started} other {{chats} chats started}} from “{name}” on WhatsApp. The messages are in your WhatsApp Business app. Add the real enquiries here to see which ad brings customers.",
+      "added": "{count, plural, one {You added {logged} real enquiry} other {You added {logged} real enquiries}} from “{name}”.",
+      "none": "No chats started yet from “{name}”."
+    },
+    "log": {
+      "label": "Real enquiries",
+      "perReal": "Per real enquiry",
+      "hint": "Not every chat is a customer. Add each real enquiry from these WhatsApp chats.",
+      "name": "Name (optional)",
+      "phone": "Phone (optional)",
+      "note": "Note (optional)",
+      "save": "Save enquiry",
+      "cancel": "Cancel",
+      "add": "Add enquiry",
+      "addAn": "Add an enquiry",
+      "customer": "Got a customer? +1",
+      "customerLabel": "Got a customer? +1 (adds 1 customer from this ad)",
+      "removed": "Removed that customer.",
+      "added": "Added 1 customer.",
+      "undo": "Undo",
+      "saved": "Saved to Enquiries.",
+      "saveFailed": "That couldn't be saved. Try again.",
+      "enquiryFailed": "The enquiry could not be saved. Try again."
     }
   },
   "review": {

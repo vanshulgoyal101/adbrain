@@ -1,3 +1,5 @@
+import "server-only";
+
 import { getEnv } from "@/lib/env";
 import type { GeneratedImage, ImageProvider, ImageRequest } from "../types";
 

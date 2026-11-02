@@ -18,18 +18,20 @@ describe("Assets page (#778 slice 3a)", () => {
   it("is the old Assets page while uploads are off, and never reads media", async () => {
     const { default: AssetsPage } = await import("@/app/(app)/assets/page");
     render(await AssetsPage());
-    expect(screen.getByRole("heading", { name: "Assets" })).toBeInTheDocument();
+    // One name for the page in both states (Designer, #778 walk item 4); the old page is told by its description.
+    expect(screen.getByRole("heading", { name: "Photos" })).toBeInTheDocument();
+    expect(screen.getByText(/Every ad and upload for/)).toBeInTheDocument();
     expect(media.list).not.toHaveBeenCalled();
   });
 
-  it("with uploads on, is Photos & videos; a failed read shows the empty state, not an error page", async () => {
+  it("with uploads on, is Photos; a failed read shows the empty state, not an error page", async () => {
     media.on = true;
     media.list.mockRejectedValueOnce(new Error("down"));
     const { default: AssetsPage } = await import("@/app/(app)/assets/page");
     render(await AssetsPage());
-    expect(screen.getByRole("heading", { name: "Photos & videos" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Photos" })).toBeInTheDocument();
     expect(media.list).toHaveBeenCalledWith({}, "b1");
-    expect(screen.getByRole("button", { name: "Add photos & videos" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add photos" })).toBeInTheDocument();
   });
 
   it("?add=1 opens the upload sheet", async () => {
@@ -37,6 +39,6 @@ describe("Assets page (#778 slice 3a)", () => {
     media.list.mockResolvedValueOnce({ items: [], next: null });
     const { default: AssetsPage } = await import("@/app/(app)/assets/page");
     render(await AssetsPage({ searchParams: Promise.resolve({ add: "1" }) }));
-    expect(screen.getByRole("dialog", { name: "Add photos & videos" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Add photos" })).toBeInTheDocument();
   });
 });
