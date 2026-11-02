@@ -135,6 +135,20 @@ describe("unsaved campaign setup", () => {
     expect(mocks.saveDraft).not.toHaveBeenCalled();
   });
 
+  it("starts a website Brand's campaign on Website, and a Brand without a choice on WhatsApp (#2646)", () => {
+    const { unmount } = render(<Campaigns business={{ ...business, default_destination: "website", website: "example.com" }} approved={[creative]} initialCampaigns={[]} initialResults={{}}
+      leadForms={[]} leadFormError={null} metaReady={false} adAccountId="" />);
+    expect(screen.getByRole("radio", { name: "Website" })).toBeChecked();
+    fireEvent.click(screen.getByRole("radio", { name: "WhatsApp chat (recommended)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Close campaign setup" }));
+    fireEvent.click(screen.getByRole("button", { name: "New campaign" }));
+    expect(screen.getByRole("radio", { name: "WhatsApp chat (recommended)" })).toBeChecked();
+    unmount();
+    view();
+    expect(screen.getByRole("radio", { name: "WhatsApp chat (recommended)" })).toBeChecked();
+    expect(screen.queryByRole("radio", { name: "Website" })).toBeNull();
+  });
+
   it("restores keyboard focus to the guided setup when reopening", () => {
     view();
     fireEvent.click(screen.getByRole("radio", { name: "Plan with AdBrain" }));

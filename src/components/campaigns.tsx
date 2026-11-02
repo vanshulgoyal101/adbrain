@@ -69,6 +69,7 @@ import { applyBudget, budgetFormStart } from "@/lib/campaign/budget-edit-form";
 import { EditAdDialog } from "@/components/edit-ad-dialog";
 import { OWNER_WORDS } from "@/lib/copy/owner-words";
 import { CampaignLaunchReview } from "@/components/campaign-launch-review";
+import { brandDestination } from "@/lib/brand/usable";
 import { DestinationChoice, WebsiteDestinationFields, WebsiteReviewFacts, reviewWebsiteUrl, type ComposerDestination } from "@/components/campaign-destination";
 import { CampaignReviewSummary } from "@/components/campaign-review-summary";
 import { WeeklyCapLine, weeklyCapWords } from "@/components/weekly-cap-line";
@@ -320,7 +321,7 @@ function BusinessCampaigns({
   ));
   // #761: ₹300 a day is the core run (#334); less rarely gets Meta out of learning.
   const [budget, setBudget] = useState(initialSetup?.budget ?? newCampaign?.budget ?? 300);
-  const [destination, setDestination] = useState<ComposerDestination>(initialSetup?.destination ?? "whatsapp");
+  const [destination, setDestination] = useState<ComposerDestination>(initialSetup?.destination ?? brandDestination(business));
   const [whatsappNumber, setWhatsAppNumber] = useState(initialSetup?.whatsappNumber ?? "");
   const [whatsappLanguage, setWhatsAppLanguage] = useState<WhatsAppLanguage>(initialSetup?.whatsappLanguage ?? "ad");
   const [whatsappMessage, setWhatsAppMessage] = useState<WhatsAppTemplate | null>(initialSetup?.whatsappMessage ?? null);
@@ -773,8 +774,8 @@ function BusinessCampaigns({
     setIncludedNames("");
     setExcludedNames("");
     setLeadFormId("");
-    // #1171: WhatsApp is the channel (#680); an instant form only when the owner picks it.
-    setDestination("whatsapp");
+    // #1171: WhatsApp is the channel (#680); an instant form only when the owner picks it. #2646: a website Brand starts on website.
+    setDestination(brandDestination(business));
     setWhatsAppNumber("");
     setWhatsAppLanguage("ad");
     destinationChosenRef.current = false;
