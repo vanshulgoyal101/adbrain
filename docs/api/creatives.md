@@ -147,7 +147,8 @@ can free unused quota after the batch has settled; one failed angle cannot free
 its still-running siblings' hold. The failed UUID remains non-reusable. Omitted `generationId` gets
 a new server UUID and cannot be replayed safely after a lost response.
 
-Recovery uses `GET /api/creatives/generate?businessId=...&generationId=...&expectedCount=3`.
+Recovery uses `GET /api/creatives/generate?businessId=...&generationId=...&expectedCount=3`
+(150 reads per 5 minutes per owner across all tabs, 429 with `Retry-After` beyond; #2553).
 `generationId` must be UUID; optional `expectedCount` is integer 1-6 and, if
 provided, must match the claimed count (409 otherwise). The source candidate
 returns `{status, creatives, count, expectedCount}` based on the persisted
