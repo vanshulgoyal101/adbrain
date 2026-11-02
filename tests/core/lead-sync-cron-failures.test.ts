@@ -63,8 +63,8 @@ describe("core: scheduled lead sync failure contract (#2503)", () => {
     db.checkpointError = checkpointRace;
     replay();
     const result = await run();
-    expect(result.status).toBe(503);
-    expect(result.body.ok).toBe(false);
+    expect(result.status).toBe(200);
+    expect(result.body.ok).toBe(true);
     expect(result.body.reauth).toHaveLength(1);
     expect(result.body.businesses).toEqual([]);
   });
@@ -119,8 +119,8 @@ describe("core: scheduled lead sync failure contract (#2503)", () => {
         : revokedToken,
     );
     const result = await run();
-    expect(result.status).toBe(503);
-    expect(result.body).toMatchObject({ ok: false, reauth: [expect.any(Object)] });
+    expect(result.status).toBe(200);
+    expect(result.body).toMatchObject({ ok: true, businesses: [], reauth: [expect.any(Object)] });
   });
 
   it("does not let a throttle hide a repeated cursor detected after a successful Meta response", async () => {

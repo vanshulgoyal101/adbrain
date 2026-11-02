@@ -35,7 +35,7 @@ const SKIPPED_RACE = "Another run is syncing.";
  * Scheduled lead import (#165). For each business with a connected Meta Page it
  * resumes (or starts) the same bounded lead sync as `/api/leads/sync`: at most
  * 24 Graph reads per business per run, deduplicated by Meta lead id. A business
- * whose owner must reconnect Meta is listed by an opaque key in `reauth` (#758).
+ * whose owner must reconnect Meta is listed in `reauth` and does not fail the run (#758).
  * With `OWNER_ALERTS_ENABLED`, each opted-in owner then gets one WhatsApp alert per new lead under
  * 24 h old (#701 v1); an alert failure is reported under `alerts` and never fails the sync.
  *
@@ -137,7 +137,7 @@ async function handleGET(request: Request) {
     else businesses.push(outcome);
   }
 
-  const ok = reauth.length === 0 && businesses.every(business => !business.error);
+  const ok = businesses.every(business => !business.error);
   return NextResponse.json({
     ok,
     at: new Date().toISOString(),

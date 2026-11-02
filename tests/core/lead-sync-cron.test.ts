@@ -64,13 +64,13 @@ describe("core: scheduled lead sync against recorded Graph pages (#165)", () => 
     }
   });
 
-  it("#758: a dead token fails the run but stays opaque; the healthy business still imports", async () => {
+  it("#758: one owner's dead token is listed by opaque key; the healthy business still imports and the run stays green", async () => {
     const { createHash } = await import("node:crypto");
     db.connections = [{ business_id: deadBusiness }, { business_id: businessId }];
     replay();
     const result = await run();
-    expect(result.status).toBe(503);
-    expect(result.body).toMatchObject({ ok: false, imported: 1, businesses: [{ businessId, imported: 1 }] });
+    expect(result.status).toBe(200);
+    expect(result.body).toMatchObject({ ok: true, imported: 1, businesses: [{ businessId, imported: 1 }] });
     expect(result.body.reauth).toEqual([{ key: createHash("sha256").update(deadBusiness).digest("hex").slice(0, 12), since: expect.any(String), activeCampaigns: expect.any(Number) }]);
     expect(JSON.stringify(result.body.reauth)).not.toContain(deadBusiness);
   });
@@ -78,8 +78,8 @@ describe("core: scheduled lead sync against recorded Graph pages (#165)", () => 
   it("counts saved imports before a later recorded token refusal", async () => {
     replay(path => path.startsWith("1206878731403456/leads"), undefined, [], revokedToken);
     const result = await run();
-    expect(result.status).toBe(503);
-    expect(result.body).toMatchObject({ ok: false, imported: 1, businesses: [], reauth: [expect.any(Object)] });
+    expect(result.status).toBe(200);
+    expect(result.body).toMatchObject({ ok: true, imported: 1, businesses: [], reauth: [expect.any(Object)] });
     expect(db.leads.size).toBe(1);
   });
 

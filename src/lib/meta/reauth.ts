@@ -5,8 +5,8 @@ import { getManagedAccount } from "./managed-account";
 
 /**
  * #758: a business whose owner must reconnect Meta (dead token) is reported in a cron's
- * `reauth` list; each cron decides whether that also fails its run. The repo and workflow
- * logs are public, so the business is named only by an opaque key.
+ * `reauth` list instead of failing the whole scheduled run. The repo and workflow logs are
+ * public, so the business is named only by an opaque key.
  */
 export type ReauthEntry = { key: string; since: string; activeCampaigns: number };
 
