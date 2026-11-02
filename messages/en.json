@@ -669,21 +669,32 @@
       "discardAndCopy": "Discard and copy"
     },
     "destination": {
-      "legend": "Destination",
-      "whatsapp": "WhatsApp chat (recommended)",
+      "legend": "Where should people go?",
+      "whatsapp": "WhatsApp chat",
+      "whatsappName": "WhatsApp chat (recommended)",
+      "recommended": "Recommended",
+      "whatsappHint": "People message you on WhatsApp",
       "instantForm": "Instant form",
+      "instantFormHint": "People leave their name and number",
       "website": "Website",
-      "websiteLink": "Ads send people to",
+      "websiteHint": "People open a page on your site",
+      "websiteLink": "Your ads open",
+      "open": "Open",
+      "changeInBrand": "Change in Brand",
       "noWebsite": "Add your website in Brand first.",
-      "openBrand": "Your business",
+      "openBrand": "Add website in Brand",
       "ctaLegend": "Button on the ad",
       "cta": {
         "learn_more": "Learn more",
         "shop_now": "Shop now",
         "sign_up": "Sign up"
       },
-      "ctaNote": "The button's words only. AdBrain runs these ads for website visits (landing-page views), not sign-ups or sales.",
+      "ctaNote": "This changes only the button's words. Meta shows these ads to people likely to open your page.",
+      "goal": "Goal",
+      "goalWebsite": "Website visits",
+      "goalWebsiteHint": "Meta counts people who open your page",
       "reviewWebsite": "People will go to",
+      "needsLink": "Needs a working link",
       "reviewButton": "Button: {cta}",
       "expectWebsite": "AdBrain hasn’t run enough website campaigns yet to quote a cost per visit."
     }
