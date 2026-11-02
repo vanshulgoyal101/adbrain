@@ -19,7 +19,7 @@
 // are never lost). For the CTO it also reports any worker with fewer than 3 actionable items and,
 // at the end of each wait, workers gone quiet for 90 min and PRs untouched for 60 min.
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -498,18 +498,19 @@ export function missedHandoffs(comments, { cursor, since, ids = new Set(), owned
 
 /**
  * Repo-wide comments created at or after `from`, newest first, at most `maxPages` pages (bounded API budget).
+ * `complete` is false when the cap cut the window short: the caller must not move its cursor past it.
  * @param {(path: string) => Promise<any>} api
  * @param {string} repo
  * @param {string} from
  */
 export async function commentsSince(api, repo, from, maxPages = 5) {
-  const all = [];
+  const comments = [];
   for (let page = 1; page <= maxPages; page++) {
     const rows = (await api(`repos/${repo}/issues/comments?since=${from}&sort=created&direction=desc&per_page=${PAGE}&page=${page}`)) ?? [];
-    all.push(...rows);
-    if (rows.length < PAGE || (rows.at(-1)?.created_at ?? "") < from) break;
+    comments.push(...rows);
+    if (rows.length < PAGE || (rows.at(-1)?.created_at ?? "") < from) return { comments, complete: true };
   }
-  return all;
+  return { comments, complete: false };
 }
 /**
  * #2576: the latest word on an owned item. GitHub lists issue comments oldest first (sort/direction are
@@ -733,6 +734,7 @@ async function findWork() {
   // One repo-wide call (newest first) instead of one call per updated issue.
   const coOwned = new Set(mine.filter(item => (item.labels ?? []).filter(l => l.name.startsWith("owner:")).length > 1).map(item => item.number));
   const polledAt = Date.now();
+  const reported = [];
   seenWorld ??= loadSeen();
   for (const comment of freshComments(await api(`repos/${repo}/issues/comments?since=${since}&sort=created&direction=desc&per_page=100`), since)) {
     const number = Number(comment.issue_url.split("/").pop());
@@ -742,13 +744,9 @@ async function findWork() {
     if (coOwned.has(number) && !addressedToMe(body)) continue;
     if (seenWorld.handoffs.has(comment.id)) continue;
     if (mineNumbers.has(number) || addressedToMe(body) || linkedToMine.has(number)) {
-      if (addressedToMe(body)) seenWorld.handoffs.add(comment.id);
+      if (addressedToMe(body)) reported.push(comment.id);
       found.push(`#${number} new comment: "${brief(body)}" ${comment.html_url}`);
     }
-  }
-  if (!values.probe) {
-    const cursor = new Date(Math.max(Date.parse(since), polledAt - CURSOR_SKEW_MS)).toISOString();
-    if (cursor !== seenWorld.cursor || found.length) { seenWorld.cursor = cursor; saveSeen(seenWorld); }
   }
   if (role === "cto" || role === "devops") {
     const runs = (await api(`repos/${repo}/actions/runs?status=completed&created=${encodeURIComponent(`>=${since}`)}&per_page=100`)).workflow_runs ?? [];
@@ -761,6 +759,12 @@ async function findWork() {
     if (role === "cto") for (const line of systemicFailures(runs)) found.push(line);
   }
   found.push(...await worldChanges(mineNumbers, openPulls, seenWorld ??= loadSeen()));
+  // #2576: commit the comment cursor only once the whole poll succeeded, so a failed read loses nothing.
+  if (!values.probe) {
+    for (const id of reported) seenWorld.handoffs.add(id);
+    const cursor = new Date(Math.max(Date.parse(since), polledAt - CURSOR_SKEW_MS)).toISOString();
+    if (cursor !== seenWorld.cursor || reported.length) { seenWorld.cursor = cursor; saveSeen(seenWorld); }
+  }
   return found;
 }
 
@@ -774,19 +778,29 @@ function loadSeen() {
   } catch { return { red: new Set(), reached: new Set(), cursor: null, handoffs: new Set(), fresh: true }; }
 }
 const saveSeen = (seen) => {
+  // Write then rename, so a crash mid-write never leaves a torn file that resets every cursor.
   try {
-    writeFileSync(stateFile(), JSON.stringify({ red: [...seen.red].slice(-200), reached: [...seen.reached].slice(-200),
+    const tmp = `${stateFile()}.${process.pid}`;
+    writeFileSync(tmp, JSON.stringify({ red: [...seen.red].slice(-200), reached: [...seen.reached].slice(-200),
       cursor: seen.cursor, handoffs: [...seen.handoffs].slice(-200) }));
+    renameSync(tmp, stateFile());
   } catch { /* best effort */ }
 };
+let commitRecovered = () => {};
 // #2576: handoffs to you on items you don't own, posted after your last poll and before this run began.
 async function recoverHandoffs(seen) {
   const mine = new Set((await owned()).map((item) => item.number));
   const from = seen.cursor ? new Date(Math.max(Date.parse(seen.cursor), Date.parse(since) - HANDOFF_LOOKBACK_MS)).toISOString() : null;
-  const missed = from ? missedHandoffs(await commentsSince(api, repo, from), { cursor: seen.cursor, since, ids: seen.handoffs, owned: mine, m }) : [];
-  for (const c of missed) seen.handoffs.add(c.id);
-  seen.cursor = since;
-  saveSeen(seen);
+  const { comments, complete } = from ? await commentsSince(api, repo, from) : { comments: [], complete: true };
+  const missed = missedHandoffs(comments, { cursor: seen.cursor, since, ids: seen.handoffs, owned: mine, m });
+  // Saved only when these lines are reported (or there were none), so a later start-up failure loses nothing.
+  // A capped read keeps the old cursor (ids stop repeats); a full one moves it to this run's start.
+  commitRecovered = () => {
+    for (const c of missed) seen.handoffs.add(c.id);
+    if (complete) seen.cursor = since;
+    saveSeen(seen);
+    commitRecovered = () => {};
+  };
   // Not "#N …" first: the exit-6 report keeps only non-"#N" lines beside your top owned items.
   return missed.map((c) => `Addressed to you while the waiter was off, on #${issueOf(c)}: "${brief(c.body ?? "")}" ${c.html_url}`);
 }
@@ -853,6 +867,7 @@ const card = (() => { try { return roleCard(readFileSync(join(repoRoot, "docs/te
 const BOARD_ISSUE = 580;
 const board = async () => { try { return boardRow((await api(`repos/${repo}/issues/${BOARD_ISSUE}`)).body ?? "", role); } catch { return null; } };
 const report = async (found, code = 0) => {
+  commitRecovered();
   if (card) console.log(`Role: ${card}`);
   const row = await board();
   if (row) console.log(`Team board #${BOARD_ISSUE} (your queue, in order):\n${row}`);
@@ -901,21 +916,24 @@ try {
 } catch (error) {
   console.error(`Start-up summary failed, continuing: ${error.message.split("\n")[0]}`);
 }
+let recovered = [];
 try {
   // #2473: a red next/main with no fix PR comes first, even before your own items (fix forward).
   if (!values.probe) {
     // Each red run is reported once per role, so restarting the waiter doesn't loop on it.
     const seen = seenWorld = loadSeen();
+    // #2576: recover between-runs handoffs first, so a red-run report can't defer them.
+    recovered = await recoverHandoffs(seen).catch(() => []);
     const red = redRuns(await sharedPushRuns(), { since: new Date(Date.now() - RED_LOOKBACK_MS).toISOString(),
       openPulls: await api(`repos/${repo}/pulls?state=open&per_page=100`), seen: seen.red });
     if (red.length) {
       for (const run of red) seen.red.add(run.id);
       saveSeen(seen);
-      await report(red.map(redLine));
+      await report([...red.map(redLine), ...recovered]);
     }
   }
   const waiting = await backlog();
-  if (!values.probe) waiting.push(...await recoverHandoffs(seenWorld ??= loadSeen()));
+  waiting.push(...recovered);
   if (role === "cto") {
     const low = lowQueues(await openItems());
     // Outcome first (CEO, #364 Oct 29; AGENTS.md Oct 30): a thin queue is not work by itself, so it's shown at
@@ -934,6 +952,9 @@ try {
 } catch (error) {
   console.error(`Queue check failed, continuing: ${error.message.split("\n")[0]}`);
 }
+// A failed start-up check still delivers recovered handoffs; with none, the cursor moves on now.
+if (recovered.length) await report(recovered);
+commitRecovered();
 console.log(`Waiting for work for ${name} since ${since} (up to ${values["max-min"]} min)...`);
 let warned = false;
 while (Date.now() < deadline) {

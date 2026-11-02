@@ -355,11 +355,11 @@ describe("handoffs between waiter runs (#2576)", () => {
     const calls: string[] = [];
     const rows = (page: number) => Array.from({ length: 100 }, (_, k) => c(page * 1000 + k, 1, new Date(Date.parse(since) - (page * 100 + k) * 1000).toISOString(), "x"));
     const api = async (path: string) => { calls.push(path); return rows(Number(/[?&]page=(\d+)/.exec(path)![1])); };
-    await commentsSince(api, "o/r", new Date(Date.parse(since) - 250 * 1000).toISOString());
+    expect((await commentsSince(api, "o/r", new Date(Date.parse(since) - 250 * 1000).toISOString())).complete).toBe(true);
     expect(calls.length).toBe(2);
     calls.length = 0;
-    await commentsSince(api, "o/r", "2026-01-01T00:00:00Z");
-    expect(calls.length).toBe(5);
+    const capped = await commentsSince(api, "o/r", "2026-01-01T00:00:00Z");
+    expect([calls.length, capped.comments.length, capped.complete]).toEqual([5, 500, false]);
   });
 });
 
