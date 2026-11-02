@@ -3,7 +3,7 @@
  * an ad image upload of bytes that are not an image, and a DELETE of a campaign id that doesn't exist.
  * The campaign POST and a successful DELETE are already recorded (create.json, safety/capped-adset-delete.json).
  *
- *   npx tsx --env-file=.env.local scripts/record-meta-cleanup-fixtures.ts
+ *   npx tsx --import ./scripts/trusted-server-cli.mjs --env-file=.env.local scripts/record-meta-cleanup-fixtures.ts
  */
 import "./lib/meta-write-gate";
 import { writeFileSync } from "node:fs";

@@ -15,7 +15,7 @@
  *   - match-old (#1479): a PAUSED instant-form tree, nothing turned on; a copy takes the old ad set's changed daily
  *     budget and end date, then a capped copy its changed total and end date (two tapes). Deleted afterwards.
  *
- *   npx tsx --env-file=<path to .env.local> scripts/record-meta-edit-audience.ts <imageUrl> [rebuild|patch|whatsapp|language|whatsapp-language|area-exclusions|running|switch|match-old] [campaignId]
+ *   npx tsx --import ./scripts/trusted-server-cli.mjs --env-file=<path to .env.local> scripts/record-meta-edit-audience.ts <imageUrl> [rebuild|patch|whatsapp|language|whatsapp-language|area-exclusions|running|switch|match-old] [campaignId]
  * With a campaignId, the PAUSED test campaign already exists (e.g. launched by older code, #912) and is
  * edited and archived instead of launched.
  *

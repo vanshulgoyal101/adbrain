@@ -1,3 +1,5 @@
+import "server-only";
+
 import { APICallError, generateText, NoObjectGeneratedError, Output, type LanguageModel } from "ai";
 import { LLMError, type ChatMessage, type CompletionOptions, type ProviderCompletion, type RateLimitInfo } from "../types";
 

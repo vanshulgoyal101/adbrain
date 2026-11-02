@@ -1,3 +1,5 @@
+import "server-only";
+
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import type { LLMProvider } from "../types";
 import { sdkCompletion } from "./sdk";

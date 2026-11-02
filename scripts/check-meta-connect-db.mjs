@@ -381,7 +381,7 @@ async function verifyConfigurablePayments(db, database) {
       const settings = { ...environment,PAYMENTS_LIVE_AMOUNT_PAISE:chosen ? '1000000' : String(amount),...(scope ? {
         PAYMENTS_LIVE_VERIFICATION_ENABLED:'true',PAYMENTS_LIVE_VERIFICATION_AMOUNT_PAISE:String(amount),
         PAYMENTS_LIVE_VERIFICATION_BUSINESS_ID:business,PAYMENTS_LIVE_VERIFICATION_USER_ID:owner,PAYMENTS_LIVE_VERIFICATION_EXPIRES_AT:scope.expiresAt } : {}) };
-      const actual = JSON.parse(execFileSync(process.execPath,['--import','tsx','-e',
+      const actual = JSON.parse(execFileSync(process.execPath,['--import','./scripts/trusted-server-cli.mjs','--import','tsx','-e',
         'const {getProductionCollectionPolicy}=require("./src/lib/payments/production-config.ts"); const {hash,...policy}=getProductionCollectionPolicy(JSON.parse(process.argv[1]),Date.now(),JSON.parse(process.argv[2])); process.stdout.write(JSON.stringify(policy));',
         JSON.stringify(settings),JSON.stringify({businessId:business,userId:owner,...(chosen ? {annualAmountPaise:amount} : {})})],{cwd:root,encoding:'utf8'}));
       assert.deepEqual(actual,await terms(await quote(amount,Boolean(scope)),scope));

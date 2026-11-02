@@ -3,7 +3,7 @@
  * offers (production business 2439a215 had 2 such failures in 72 h). Budget routing only (free
  * providers); reads the Brand read-only; writes no data. Stops once it has `want` rejected replies.
  *
- *   npx tsx --env-file=<.env.local> scripts/record-interview-claim-fixtures.ts <business-id> [want] [maxRuns]
+ *   npx tsx --import ./scripts/trusted-server-cli.mjs --env-file=<.env.local> scripts/record-interview-claim-fixtures.ts <business-id> [want] [maxRuns]
  *
  * #1415: GOAL overrides the goal and OUT the fixture name (under tests/core/fixtures/create/).
  */

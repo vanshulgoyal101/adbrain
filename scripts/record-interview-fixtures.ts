@@ -3,7 +3,7 @@
  * question answered with a "type it below" chip and nothing typed. Calls the configured
  * LLM providers; reads the Brand read-only; writes no data.
  *
- *   npx tsx --env-file=.env.local scripts/record-interview-fixtures.ts <business-id> [runs]
+ *   npx tsx --import ./scripts/trusted-server-cli.mjs --env-file=.env.local scripts/record-interview-fixtures.ts <business-id> [runs]
  */
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
