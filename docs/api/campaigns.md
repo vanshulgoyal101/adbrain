@@ -123,6 +123,10 @@ is capped at 12000 characters. Legacy text answers remain accepted, with wording
 based repeat checks but without the new topic identity guarantees.
 This route schema differs from the older exported `planRequestSchema`; use the
 handler's contract, not that unused declaration, for integration.
+Website ads are internal-only until they open (#2595, #2688): a `website`
+destination from any other account is a 403 before the model or Meta is called,
+and Review, launch and the queued worker refuse a website draft the same way
+(`src/lib/campaign/website-gate.ts`).
 
 Returns `{ready:false,questions}` when more input/setup is needed. Without
 `audienceDraft`, success is `{ready:true,draft}` and saves a guided draft. With
