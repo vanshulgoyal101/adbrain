@@ -461,6 +461,19 @@
       "thisWeek": "This week",
       "used": "{pct}% used · {left} left",
       "loadFailed": "Spend limits could not be loaded. Your saved limits have not changed."
+    },
+    "metaSetup": {
+      "title": "Ready to launch on Meta",
+      "unread": "Your own ad account and your own card: Meta bills you directly.",
+      "allSet": "All {count} set. Meta bills your own ad account directly; AdBrain never sees your card.",
+      "toFixOne": "1 thing to fix in Meta before you launch. Meta bills your own ad account directly.",
+      "toFixMany": "{count} things to fix in Meta before you launch. Meta bills your own ad account directly.",
+      "readFailed": "We couldn't read your Meta setup right now. Open Settings again in a minute.",
+      "alreadySet": "Already set",
+      "seeChecked": "See what AdBrain checked",
+      "done": "done",
+      "needsAction": "needs action",
+      "opensMeta": "(opens Meta in a new tab)"
     }
   },
   "pilotDay7": {

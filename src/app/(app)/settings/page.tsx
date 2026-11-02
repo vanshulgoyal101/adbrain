@@ -193,8 +193,8 @@ async function ConnectionSettings({ businessId, searchParams, whatsapp }: {
       )}
       {/* #1016: behind META_SETUP_CHECKLIST; only for the owner's own Meta account, after Connect. */}
       {setupChecklistEnabled() && mode !== "managed" && result.connection?.source === "oauth" && result.connection.ready && (
-        <Suspense fallback={<SettingsLoading label="Ready to launch on Meta" />}>
-          <SetupChecklistSection businessId={businessId} />
+        <Suspense fallback={<SettingsLoading label={t("metaSetup.title")} />}>
+          <SetupChecklistSection businessId={businessId} locale={locale} />
         </Suspense>
       )}
       {whatsapp}
@@ -205,9 +205,9 @@ async function ConnectionSettings({ businessId, searchParams, whatsapp }: {
   );
 }
 
-async function SetupChecklistSection({ businessId }: { businessId: string }) {
+async function SetupChecklistSection({ businessId, locale }: { businessId: string; locale: AppLocale }) {
   const rows = await readSetupChecklist(businessId).catch(() => null);
-  return <MetaSetupChecklist rows={rows} />;
+  return <MetaSetupChecklist rows={rows} locale={locale} />;
 }
 
 async function SpendSettings({ businessId }: { businessId: string }) {

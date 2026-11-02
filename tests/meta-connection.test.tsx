@@ -140,4 +140,11 @@ describe("MetaConnectionPanel", () => {
     expect(screen.getByText("Your ad budget stays yours: you see every rupee spent.")).toBeInTheDocument();
     expect(screen.queryByText(/never holds your ad money/)).toBeNull();
   });
+
+  it("says the trust line in Hindi, marked lang='hi' (#1438)", () => {
+    render(<MetaConnectionPanel businessId="11111111-1111-4111-8111-111111111111" connection={connection({ source: "oauth", ready: false })} oauthConfigured fundingMode="own" locale="hi" />);
+    const line = screen.getByText("आपका पेज, आपका ऐड अकाउंट, आपका कार्ड। AdBrain आपके विज्ञापन का पैसा कभी अपने पास नहीं रखता।");
+    expect(line.closest("[lang]")).toHaveAttribute("lang", "hi");
+    expect(screen.queryByText(/never holds your ad money/)).toBeNull();
+  });
 });
