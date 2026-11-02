@@ -129,15 +129,21 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 	under `~/Development/copilot/adbrain-wt/`. `main` is the only long-lived branch: the
 	CEO and CTO ship docs edits there as small docs PRs with auto-merge. Never leave a
 	merge, staged files or local edits behind.
-- **Delete as you go** (owner, Oct 23: lean systems). When work is done, delete its
-	branch, worktree, one-off scripts and temporary files. Don't commit dated
-	reports, audits or handoffs; evidence goes in the issue or PR. Docs hold current
-	truth only, and git keeps the history.
+- **Delete as you go** (owner, Oct 23: lean systems). When work is done and the
+	preservation checks below pass, delete its branch, worktree, one-off scripts
+	and temporary files. Don't commit dated reports, audits or handoffs; evidence
+	goes in the issue or PR. Docs hold current truth only, and git keeps the history.
 - **Never lose built work** (owner, Oct 28). Paused work gets the `parked` label
 	and a row with its resume trigger in #1258; keep its PRs open as drafts and its
-	branches. Before deleting any branch or worktree, `git cherry origin/main <branch>`
-	shows no `+` lines (or the work is in an open PR or #1258), and uncommitted edits
-	are pushed to a branch first. Removed product features go in #1173.
+	branches. Preserve all backup branches, dirty worktrees and `deploy-train*` refs.
+	Before deleting any other branch or worktree, confirm it is clearly finished, has
+	no active writer and has no unpreserved tracked, untracked or ignored files.
+	`git cherry origin/main <branch>` must show no `+` lines, but that is not proof:
+	it omits merge commits. List `git log --merges --format='%H %P' origin/main..<branch>`
+	and inspect each divergent merge's parent histories and tree, including conflict
+	resolutions or stash payloads; prove the work is present on `main`. If provenance,
+	ownership or preservation is uncertain, keep it. An open PR or #1258 does not
+	replace these checks. Removed product features go in #1173.
 - **Two env files only** (owner, Oct 29: neat repo). Secrets go in `.env.local`, every
 	test login in `.env.smoke` (in the owner's checkout), and the committed template is
 	`.env.example`. Never create another `.env.*` file or leave files in the owner's
