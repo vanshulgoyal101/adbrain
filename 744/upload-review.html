@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Own photos and videos: pick, rights, choose, preview per placement · #744 (#778/#781)</title>
+<style>
+  @font-face { font-family: "DM Sans"; src: url("dm-sans.woff2") format("woff2"); font-weight: 100 900; }
+  :root { --ink: #0f172a; --body: #334155; --muted: #64748b; --line: #e2e8f0; --soft: #f8fafc; --blue: #1d4ed8; --amber: #92400e; --amber-bg: #fffbeb; --amber-line: #fcd34d; --red: #b91c1c; --red-bg: #fef2f2; --red-line: #fca5a5; --green: #166534; --primary: #1d4ed8; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #e9edf2; color: var(--ink); font: 14px/1.5 "DM Sans", "Noto Sans Devanagari", "Kohinoor Devanagari", sans-serif; }
+  p, h2, h3, ul, ol { margin: 0; }
+  ul { padding: 0; list-style: none; }
+  .boards { display: flex; gap: 24px; padding: 24px; align-items: flex-start; }
+  .frame { width: 390px; flex: none; background: white; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  .frame.hi { width: 360px; line-height: 1.6; }
+  .caption { padding: 10px 16px; background: var(--ink); color: white; font-size: 13px; line-height: 1.4; }
+  .caption b { font-weight: 600; }
+  .content { padding: 16px 16px 24px; display: flex; flex-direction: column; gap: 16px; }
+  .sheet-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+  h2 { font-size: 17px; font-weight: 600; line-height: 1.35; }
+  .x { width: 44px; height: 44px; flex: none; display: grid; place-items: center; border-radius: 8px; color: var(--body); font-size: 20px; }
+  .muted { color: var(--muted); font-size: 13px; }
+  .btn { display: inline-flex; flex: none; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 0 14px; border: 1px solid var(--line); border-radius: 8px; background: white; color: var(--ink); font-weight: 500; text-decoration: none; text-align: center; line-height: 1.25; }
+  .btn.primary { background: var(--primary); border-color: var(--primary); color: white; width: 100%; font-weight: 600; }
+  .btn.off { background: #e2e8f0; border-color: #e2e8f0; color: #64748b; }
+  .btn.ghost { border-style: dashed; width: 100%; }
+  .btn.small { padding: 0 12px; font-size: 13px; }
+  .tick { display: flex; gap: 12px; align-items: flex-start; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--soft); min-height: 44px; }
+  .box { flex: none; width: 22px; height: 22px; border: 1.5px solid #94a3b8; border-radius: 5px; background: white; margin-top: 1px; }
+  .picks { display: flex; flex-direction: column; }
+  .pick { display: flex; gap: 12px; align-items: flex-start; padding: 12px 0; border-top: 1px solid var(--line); }
+  .pick:first-child { border-top: 0; }
+  .meta { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
+  .name { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .fit { font-size: 13px; color: var(--body); }
+  .fit.ok::before { content: "✓ "; color: var(--green); font-weight: 700; }
+  .fit.warn { border-left: 2px solid #f59e0b; padding-left: 8px; color: var(--amber); }
+  .fit.bad { border-left: 2px solid #ef4444; padding-left: 8px; color: var(--red); }
+  .fixes { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .th { width: 52px; height: 52px; flex: none; border-radius: 8px; position: relative; overflow: hidden; }
+  .dur { position: absolute; right: 3px; bottom: 3px; padding: 0 4px; border-radius: 4px; background: rgba(15,23,42,.75); color: white; font-size: 10px; font-weight: 600; line-height: 16px; }
+  .play::after { content: ""; position: absolute; left: 50%; top: 50%; transform: translate(-35%,-50%); border-left: 12px solid rgba(255,255,255,.9); border-top: 8px solid transparent; border-bottom: 8px solid transparent; }
+  /* CSS stand-ins for the owner's photos (no generated images) */
+  .cake { background: radial-gradient(ellipse 60% 30% at 50% 62%, #f5e6c8 0 55%, #c08a4a 56% 64%, transparent 65%), radial-gradient(ellipse 55% 18% at 50% 40%, #fff7e6 0 70%, transparent 71%), linear-gradient(#8a6a4f, #d9c2a3); }
+  .solar { background: repeating-linear-gradient(115deg, #1e3a8a 0 10px, #9db4d9 10px 12px); }
+  .gym { background: radial-gradient(circle at 30% 70%, #f59e0b 0 6%, transparent 7%), linear-gradient(160deg, #111827, #374151 60%, #6b7280); }
+  .salon { background: radial-gradient(circle at 50% 38%, #f1c9a5 0 16%, transparent 17%), radial-gradient(ellipse 30% 40% at 50% 30%, #3f2a1e 0 60%, transparent 61%), linear-gradient(#fbcfe8, #f9a8d4); }
+  .ai { background: linear-gradient(135deg, #1e40af, #7c3aed); }
+  .ai2 { background: linear-gradient(135deg, #0f766e, #65a30d); }
+  .ai3 { background: linear-gradient(135deg, #b45309, #be123c); }
+  .tabs { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 4px; padding: 4px; background: #f1f5f9; border-radius: 10px; }
+  .tab { min-height: 44px; display: flex; align-items: center; justify-content: center; text-align: center; padding: 2px 4px; line-height: 1.2; border-radius: 7px; font-weight: 500; color: var(--body); font-size: 13px; }
+  .tab.on { background: white; color: var(--ink); box-shadow: 0 1px 2px rgba(15,23,42,.12); font-weight: 600; }
+  .stage { display: flex; justify-content: center; padding: 12px; background: var(--soft); border-radius: 10px; }
+  .story { width: 200px; aspect-ratio: 9/16; border-radius: 12px; position: relative; overflow: hidden; }
+  .safe { position: absolute; inset: 0; pointer-events: none; }
+  .safe i { position: absolute; background: repeating-linear-gradient(135deg, rgba(15,23,42,.55) 0 6px, rgba(15,23,42,.35) 6px 12px); }
+  .safe .t { left: 0; right: 0; top: 0; height: 14%; }
+  .safe .b { left: 0; right: 0; bottom: 0; height: 35%; }
+  .safe .l { left: 0; top: 14%; bottom: 35%; width: 6%; }
+  .safe .r { right: 0; top: 14%; bottom: 35%; width: 6%; }
+  .overtext { position: absolute; left: 10%; right: 10%; top: 70%; padding: 4px 6px; background: #fff7ed; border: 2px solid #f59e0b; border-radius: 4px; font-size: 11px; font-weight: 700; color: #7c2d12; text-align: center; z-index: 1; }
+  .legendline { display: flex; gap: 8px; align-items: center; }
+  .sw { width: 14px; height: 14px; border-radius: 3px; flex: none; background: repeating-linear-gradient(135deg, rgba(15,23,42,.55) 0 3px, rgba(15,23,42,.3) 3px 6px); }
+  .warnbox { border: 1px solid var(--amber-line); background: var(--amber-bg); color: var(--amber); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 4px; }
+  .warnbox b { color: #78350f; }
+  .redbox { border: 1px solid var(--red-line); background: var(--red-bg); color: var(--red); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 4px; }
+  .redbox b { color: #7f1d1d; }
+  .wa-chat { width: 100%; border-radius: 10px; background: #efe7dc; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+  .bubble { max-width: 85%; padding: 8px 10px; border-radius: 8px; font-size: 13px; line-height: 1.4; background: white; }
+  .bubble.me { align-self: flex-end; background: #d9fdd3; }
+  .bubble small { display: block; color: var(--muted); font-size: 11px; }
+  .wa-top { display: flex; gap: 8px; align-items: center; padding-bottom: 8px; border-bottom: 1px solid rgba(0,0,0,.08); font-size: 13px; }
+  .av { width: 28px; height: 28px; border-radius: 50%; background: #fde68a; flex: none; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 6px; }
+  .gt { aspect-ratio: 1; border-radius: 8px; position: relative; overflow: hidden; border: 3px solid transparent; }
+  .gt.sel { border-color: var(--blue); }
+  .gt .chk { position: absolute; top: 2px; right: 2px; width: 44px; height: 44px; display: grid; place-items: center; }
+  .gt .chk::before { content: ""; width: 22px; height: 22px; border-radius: 50%; background: white; border: 1.5px solid #94a3b8; box-sizing: border-box; }
+  .gt.sel .chk::before { background: var(--blue) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3'%3E%3Cpath d='M5 12l5 5L20 7'/%3E%3C/svg%3E") center/14px no-repeat; border-color: var(--blue); }
+  .gt .tag { position: absolute; left: 4px; bottom: 4px; padding: 0 5px; border-radius: 999px; background: rgba(255,255,255,.92); color: var(--ink); font-size: 10px; font-weight: 600; line-height: 16px; }
+  .advice { font-size: 13px; color: var(--body); padding: 10px 12px; border-radius: 8px; background: var(--soft); }
+  .item { display: flex; gap: 12px; align-items: flex-start; padding: 12px; border: 1px solid var(--line); border-radius: 10px; }
+  .chip { align-self: flex-start; padding: 0 8px; border-radius: 999px; font-size: 12px; font-weight: 500; line-height: 20px; }
+  .chip.you { background: #e0f2fe; color: #075985; }
+  .chip.ab { background: #ede9fe; color: #5b21b6; }
+  .bar { height: 6px; border-radius: 3px; background: #e2e8f0; overflow: hidden; margin-top: 4px; }
+  .bar i { display: block; height: 100%; width: 45%; background: var(--blue); }
+  .ok { color: var(--green); font-size: 13px; }
+  .pin { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: #db2777; color: white; font-size: 12px; font-weight: 700; flex: none; }
+  .ann { outline: 2px dashed #db2777; outline-offset: 3px; border-radius: 8px; position: relative; }
+  .ann > .pin { position: absolute; top: -12px; right: -12px; z-index: 2; }
+  .notes { width: 380px; flex: none; background: white; border-radius: 12px; padding: 16px; font-size: 13px; line-height: 1.5; }
+  .notes h3 { font-size: 15px; margin: 12px 0 6px; }
+  .notes h3:first-child { margin-top: 0; }
+  .notes ol { padding-left: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+  .notes li { display: flex; gap: 8px; }
+</style>
+<body>
+<div class="boards">
+
+  <section class="frame">
+    <div class="caption"><b>1 · Add photos &amp; videos.</b> Salon. The sheet opens after the phone's own picker. The rights tick comes first; Add stays off until it's ticked.</div>
+    <div class="content">
+      <div class="sheet-head"><div><h2>Add 4 photos &amp; videos</h2><p class="muted">Your own work: finished jobs, your shop, your team.</p></div><span class="x" aria-label="Close">×</span></div>
+      <div class="ann"><span class="pin">1</span>
+        <label class="tick"><i class="box"></i><span>I own these photos and videos, or have permission to use them, including any music and the people shown.</span></label>
+        <label class="tick" style="margin-top:8px"><i class="box"></i><span>The people shown agreed to appear in ads.</span></label>
+      </div>
+      <ul class="picks">
+        <li class="pick"><div class="th salon"></div><div class="meta"><span class="name">IMG_2041.jpg</span><span class="fit ok">Ready for Feed, Stories and Reels</span></div></li>
+        <li class="pick ann" style="padding:8px"><span class="pin">2</span><div class="th gym play"><span class="dur">0:24</span></div><div class="meta"><span class="name">VID_0310.mp4 · 0:24</span><span class="fit ok">Ready for Feed, Stories and Reels</span></div></li>
+        <li class="pick"><div class="th solar play"><span class="dur">0:18</span></div><div class="meta"><span class="name">VID_0322.mp4 · 0:18</span><span class="fit warn">Wide video (16:9): it runs in Feed only. Stories and Reels need an upright video.</span></div></li>
+        <li class="pick"><div class="th cake play"><span class="dur">1:42</span></div><div class="meta"><span class="name">VID_0299.mp4 · 1:42</span><span class="fit bad">This video is 1:42 long; ads here can be up to 1:00. Trim it in your gallery and add it again.</span></div></li>
+      </ul>
+      <span class="btn ghost">＋ Choose more</span>
+      <div>
+        <p class="muted" style="margin-bottom:8px">Tick the boxes above to add your photos and videos.</p>
+        <span class="btn primary off">Add 3</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="frame">
+    <div class="caption"><b>2 · Choose ads.</b> Campaign composer. AI ads and the owner's own sit in one grid, with no Meta format names.</div>
+    <div class="content">
+      <div><h2>Choose ads</h2><p class="muted">Pick any mix. Each one runs as its own ad, and Meta spends more on the one that works.</p></div>
+      <div class="tabs" role="tablist" aria-label="Show"><span class="tab on">All</span><span class="tab">Yours</span><span class="tab">By AdBrain</span></div>
+      <div class="grid3 ann"><span class="pin">3</span>
+        <div class="gt salon sel"><span class="chk"></span><span class="tag">Your photo</span></div>
+        <div class="gt gym sel"><span class="chk"></span><span class="tag">Your video · 0:24</span></div>
+        <div class="gt ai sel"><span class="chk"></span><span class="tag">AdBrain</span></div>
+        <div class="gt solar"><span class="chk"></span><span class="tag">Your video · 0:18</span></div>
+        <div class="gt ai2"><span class="chk"></span><span class="tag">AdBrain</span></div>
+        <div class="gt ai3"><span class="chk"></span><span class="tag">AdBrain</span></div>
+      </div>
+      <p class="advice ann"><span class="pin">4</span>At ₹300 a day, Meta tests about 3–4 ads well; more ads share the budget thinly.</p>
+      <span class="btn primary">Use 3 ads</span>
+      <p class="muted">Up to 6 ads per campaign.</p>
+    </div>
+  </section>
+
+  <section class="frame">
+    <div class="caption"><b>3 · Review → preview, Stories &amp; Reels.</b> Three tabs per ad. The picture is Meta's own preview; we add the safe-zone shading and the fix.</div>
+    <div class="content">
+      <div class="item" style="border:0;padding:0"><div class="th salon"></div><div class="meta"><b>Bridal makeup trial, ₹1,499</b><span class="chip you">Your photo</span></div></div>
+      <div class="tabs ann" role="tablist" aria-label="Where it shows"><span class="pin">5</span><span class="tab">Feed</span><span class="tab on">Stories &amp; Reels</span><span class="tab">WhatsApp</span></div>
+      <div class="stage">
+        <div class="story salon">
+          <div class="overtext">₹1,499 TRIAL · BOOK NOW</div>
+          <div class="safe"><i class="t"></i><i class="b"></i><i class="l"></i><i class="r"></i></div>
+        </div>
+      </div>
+      <p class="legendline muted"><i class="sw"></i>Shaded parts may be covered by the caption and buttons.</p>
+      <div class="warnbox ann"><span class="pin">6</span>
+        <b>The price is in the covered part</b>
+        <span>People on Stories and Reels may not see "₹1,499 trial".</span>
+        <div class="fixes"><span class="btn small">Fit to tall picture</span><span class="btn small">Use in Feed only</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="frame">
+    <div class="caption"><b>4 · Review → preview, WhatsApp.</b> What the customer sees after tapping: your greeting and their pre-filled message.</div>
+    <div class="content">
+      <div class="item" style="border:0;padding:0"><div class="th gym play"><span class="dur">0:24</span></div><div class="meta"><b>Morning batch, first week free</b><span class="chip you">Your video</span></div></div>
+      <div class="tabs" role="tablist" aria-label="Where it shows"><span class="tab">Feed</span><span class="tab">Stories &amp; Reels</span><span class="tab on">WhatsApp</span></div>
+      <div class="wa-chat ann"><span class="pin">7</span>
+        <div class="wa-top"><span class="av"></span><b>Iron Den Fitness</b></div>
+        <div class="bubble">Hi! Thanks for asking about our morning batch. Which days suit you?<small>Your greeting · sent automatically</small></div>
+        <div class="bubble me">Hi, I saw your ad. I'd like the free first week.<small>Typed for them; they can change it</small></div>
+      </div>
+      <span class="btn" style="align-self:flex-start">Change greeting</span>
+    </div>
+  </section>
+
+  <section class="frame">
+    <div class="caption"><b>5 · Review → ads list.</b> Videos go to Meta while the owner reviews. Send waits for them; one bad video never blocks the rest.</div>
+    <div class="content">
+      <div><h2>Review before creation</h2><p class="muted">AdBrain creates this campaign paused. Nothing spends until you activate it.</p></div>
+      <ul style="display:flex;flex-direction:column;gap:8px">
+        <li class="item"><div class="th salon"></div><div class="meta"><b>Bridal makeup trial</b><span class="chip you">Your photo</span><span class="ok">✓ Ready · Feed only</span></div></li>
+        <li class="item ann"><span class="pin">8</span><div class="th gym play"><span class="dur">0:24</span></div><div class="meta"><b>Morning batch, first week free</b><span class="chip you">Your video</span><span class="muted">Getting your video ready on Meta (usually 1–5 min). You can leave this page.</span><div class="bar"><i></i></div></div></li>
+        <li class="item"><div class="th ai"></div><div class="meta"><b>Glow facial, this weekend</b><span class="chip ab">AdBrain</span><span class="ok">✓ Ready</span></div></li>
+        <li class="redbox ann"><span class="pin">9</span>
+          <div style="display:flex;gap:12px"><div class="th solar play"><span class="dur">0:18</span></div><div><b>Meta couldn't use this video</b><br>The file is damaged. Launch without it, or replace it.</div></div>
+          <div class="fixes"><span class="btn small">Remove this video</span><span class="btn small">Replace</span></div>
+        </li>
+      </ul>
+      <div>
+        <p class="muted" style="margin-bottom:8px">Waiting for 1 video. Remove or replace the one Meta couldn't use.</p>
+        <span class="btn primary off">Send to Meta (paused)</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="frame hi">
+    <div class="caption"><b>6 · Hindi at 360.</b> Same as 3. Tab labels may wrap to two lines inside 44 px; fix buttons wrap below each other. Draft words; the CPO's #780 pairs win.</div>
+    <div class="content" lang="hi">
+      <div class="item" style="border:0;padding:0"><div class="th salon"></div><div class="meta"><b>ब्राइडल मेकअप ट्रायल, ₹1,499</b><span class="chip you">आपकी फ़ोटो</span></div></div>
+      <div class="tabs" role="tablist"><span class="tab">फ़ीड</span><span class="tab on">स्टोरीज़ और रील्स</span><span class="tab">WhatsApp</span></div>
+      <div class="stage">
+        <div class="story salon" style="width:180px">
+          <div class="overtext">₹1,499 TRIAL · BOOK NOW</div>
+          <div class="safe"><i class="t"></i><i class="b"></i><i class="l"></i><i class="r"></i></div>
+        </div>
+      </div>
+      <p class="legendline muted"><i class="sw"></i>छायांकित हिस्सा कैप्शन और बटन से ढक सकता है।</p>
+      <div class="warnbox">
+        <b>दाम ढके हुए हिस्से में है</b>
+        <span>स्टोरीज़ और रील्स पर लोग "₹1,499 ट्रायल" शायद न देखें।</span>
+        <div class="fixes"><span class="btn small">लंबी तस्वीर में फ़िट करें</span><span class="btn small">सिर्फ़ फ़ीड में चलाएँ</span></div>
+      </div>
+    </div>
+  </section>
+
+  <aside class="notes">
+    <h3>For Dev 5 (#778 UI) and Dev 8 (#781 Review)</h3>
+    <p>Flow and words: CPO #781 and the #744 Nov 2 criteria. Photo rows, library and tile states stay as in the #1222 mockups; these frames add video, Choose ads and Review.</p>
+    <ol>
+      <li><span class="pin">1</span><span>Rights tick <b>above</b> the list, Add disabled with the hint. The people line shows only for clinic, salon and coaching (#784). Once per business.</span></li>
+      <li><span class="pin">2</span><span>Videos: thumbnail with length and the same ✓ / amber / red line as photos, from <code>spec-rules.ts</code>. Wide = amber, Feed only (not blocked). Too long = red, no button: trimming happens in the gallery.</span></li>
+      <li><span class="pin">3</span><span>One grid, a tag per tile (Your photo / Your video · length / AdBrain), 44 px check target. Tabs filter. No carousel or "Flexible" words.</span></li>
+      <li><span class="pin">4</span><span>Advice only, not a limit; the cap of 6 is the only hard stop.</span></li>
+      <li><span class="pin">5</span><span>Segmented tabs, ≥44 px, on every ad. The picture is Meta <code>generatepreviews</code> (CTO). Show a grey 4:5 / 9:16 box while it loads, never a blank.</span></li>
+      <li><span class="pin">6</span><span>Safe zones: top 14 %, bottom 35 %, 6 % each side, hatched, with a one-line legend. A #751 warning sits under the preview with its fix buttons.</span></li>
+      <li><span class="pin">7</span><span>WhatsApp tab: the campaign's greeting + pre-filled message. Lead-form ads show the form's first screen instead.</span></li>
+      <li><span class="pin">8</span><span>Per-item state: preparing (bar + "you can leave") / ready / failed. Send stays disabled, with the reason in words, while any video prepares.</span></li>
+      <li><span class="pin">9</span><span>Failed video: red, the reason in plain words, "Remove this video" and "Replace". Removing it re-enables Send for the rest.</span></li>
+    </ol>
+    <h3>Checks</h3>
+    <p>390, and 360 in Hindi: no sideways scroll, every control ≥44 px, <code>lang="hi"</code> on Hindi text. Data is illustrative.</p>
+  </aside>
+
+</div>
+</body>
+</html>
