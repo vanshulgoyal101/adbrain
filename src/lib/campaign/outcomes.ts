@@ -30,6 +30,7 @@ export function destinationFromAdSets(adSets: ReadonlyArray<{ destination_type?:
     case "WHATSAPP": return "whatsapp";
     case "ON_AD": return "instant_form";
     case "PHONE_CALL": return "call";
+    case "WEBSITE": return "website";
     default: return "unknown";
   }
 }
