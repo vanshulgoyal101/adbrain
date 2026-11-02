@@ -76,6 +76,8 @@ export type CreativeTables = {
       primary_text: string | null;
       cta: string | null;
       variant_group: string | null;
+      /** #1209/#784: the owner's uploaded photo this ad uses (same-business FK); null for AdBrain's pictures. */
+      media_asset_id?: string | null;
       status: CreativeStatus;
       created_at: string;
       updated_at: string;
@@ -91,6 +93,7 @@ export type CreativeTables = {
       primary_text?: string | null;
       cta?: string | null;
       variant_group?: string | null;
+      media_asset_id?: string | null;
       status?: CreativeStatus;
       created_at?: string;
       updated_at?: string;

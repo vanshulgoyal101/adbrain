@@ -31,6 +31,8 @@ export interface PreflightCreative {
   asksWhatsApp?: boolean;
   /** The phone its picture prints, from the saved design; null when it prints none (#2274). */
   printedPhone?: string | null;
+  /** #784: its picture is the owner's own upload (`creatives.media_asset_id`), so launch needs their rights confirmation. */
+  ownMedia?: boolean;
 }
 
 export interface PreflightForm {
@@ -84,6 +86,8 @@ export interface PreflightInput {
   pictureNotice?: string | null;
   /** #2333: the owner's app language for the blocker sentences; English when absent. */
   locale?: AppLocale;
+  /** #784: the owner confirmed the current rights terms; undefined when no ad uses their own photos. */
+  mediaConsent?: boolean;
 }
 
 export type ReviewFreshnessInput = {
@@ -248,6 +252,7 @@ export function runPreflight(input: PreflightInput): ReviewDTO {
   } else if (destination !== "whatsapp" && input.website !== undefined && !isAdvertiserWebsite(input.website)) {
     blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_NO_WEBSITE", say("noWebsite"), { kind: "open_brand" }));
   }
+  if (input.mediaConsent === false && input.creatives.some((creative) => creative.ownMedia)) blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_MEDIA_RIGHTS", say("mediaRights")));
   const policyHit = adPolicyHits(input.creatives, input.vertical)[0];
   if (policyHit) {
     blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_AD_POLICY", say("adPolicy", {

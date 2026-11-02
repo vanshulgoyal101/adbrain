@@ -34,6 +34,8 @@ const FIXES: Record<ReviewBlockerReason, Fix<ReviewFix>> = {
   REVIEW_AD_POLICY: { kind: "field", targets: ["campaign-ad-picker"] },
   REVIEW_INTERESTS_UNRESOLVED: { kind: "field", targets: ["audience-interests", "recommend-audience"] },
   REVIEW_WHATSAPP_MESSAGE: { kind: "field", targets: ["whatsapp-message"] },
+  // #784: the rights tick lives with the owner's photos (the upload sheet on Assets).
+  REVIEW_MEDIA_RIGHTS: { kind: "page", href: "/assets?add=1" },
 };
 
 export function reviewBlockerFix(reason: ReviewBlockerReason | undefined, words?: Words<"campaigns">): ReviewFix | null {

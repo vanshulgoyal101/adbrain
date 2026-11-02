@@ -779,7 +779,8 @@
         "REVIEW_NO_AUDIENCE": "Go to Recommend audience",
         "REVIEW_AD_POLICY": "Edit the ad's wording",
         "REVIEW_INTERESTS_UNRESOLVED": "Edit the interests",
-        "REVIEW_WHATSAPP_MESSAGE": "Edit the WhatsApp message"
+        "REVIEW_WHATSAPP_MESSAGE": "Edit the WhatsApp message",
+        "REVIEW_MEDIA_RIGHTS": "Confirm your photo rights"
       }
     },
     "destination": {
@@ -1071,6 +1072,7 @@
     "adsMore": "{first} {more, plural, one {# more ad needs} other {# more ads need}} fixing too.",
     "whatsappNotLinked": "Your Facebook Page has no WhatsApp number linked yet, so the ad's button has nowhere to open a chat. Link the number in Settings, then review again.",
     "whatsappMessage": "Your WhatsApp message: {problem}",
+    "mediaRights": "Your ads use your own photos. Confirm you own them, or have permission to use them, before they go to Meta.",
     "noLeadForm": "Choose an active lead form from your Facebook Page in the Lead form field.",
     "noWebsite": "Add your business website on the Your business page. Meta lead ads must link to the advertiser's own website, not Facebook.",
     "adPolicy": "\"{term}\" in the ad \"{named, select, yes {{headline}} other {without a headline}}\" is {kind, select, health {a health promise} other {a promise}} Meta rejects. Edit the ad to describe the service instead.",

@@ -21,19 +21,26 @@ export function needsPeopleConsent(vertical: string | null | undefined): boolean
   return PEOPLE_VERTICAL.test(vertical ?? "");
 }
 
-type ConsentRow = { terms_version: string; people_confirmed: boolean };
+type ConsentRow = { terms_version: string; people_confirmed: boolean; user_id: string | null; confirmed_at: string };
 type Store = Pick<SupabaseClient, "from" | "rpc">;
 
 /**
  * Server gate for an upload or a launch with the owner's own media: true when the business has confirmed
  * the current terms, with the people clause when its vertical needs it. Uses the caller's RLS client.
+ * A business handed over (#1670's transfer) needs its new owner's own confirmation: the rights a sales rep
+ * ticked while preparing it don't carry over, so only the current owner's rows since `transferred_at` count.
  */
 export async function hasCurrentMediaConsent(database: Store, business: { id: string; vertical?: string | null }): Promise<boolean> {
-  const { data, error } = await database.from("media_consents").select("terms_version, people_confirmed")
-    .eq("business_id", business.id).eq("terms_version", MEDIA_TERMS_VERSION).order("confirmed_at", { ascending: false }).limit(1);
-  if (error) throw new Error("Media consent could not be checked.");
-  const latest = (data as ConsentRow[] | null)?.[0];
-  return Boolean(latest && (latest.people_confirmed || !needsPeopleConsent(business.vertical)));
+  const [consents, owner] = await Promise.all([
+    database.from("media_consents").select("terms_version, people_confirmed, confirmed_at, user_id")
+      .eq("business_id", business.id).eq("terms_version", MEDIA_TERMS_VERSION).order("confirmed_at", { ascending: false }).limit(1),
+    database.from("businesses").select("owner_id, transferred_at").eq("id", business.id).maybeSingle(),
+  ]);
+  if (consents.error || owner.error || !owner.data) throw new Error("Media consent could not be checked.");
+  const latest = (consents.data as ConsentRow[] | null)?.[0];
+  if (!latest || !latest.user_id || latest.user_id !== owner.data.owner_id || !(latest.people_confirmed || !needsPeopleConsent(business.vertical))) return false;
+  const transferredAt = (owner.data as { transferred_at: string | null }).transferred_at;
+  return !transferredAt || Date.parse(latest.confirmed_at) >= Date.parse(transferredAt);
 }
 
 /** Records the signed-in owner's confirmation of the current terms (refused for another owner's business). */
