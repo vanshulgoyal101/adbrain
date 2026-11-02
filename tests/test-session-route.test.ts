@@ -58,6 +58,7 @@ describe("POST /api/internal/test-session (#2574)", () => {
     expect((await mint({ email: "smoke@example.test" }, authorization)).status).toBe(401);
     expect(mocks.generateLink).not.toHaveBeenCalled();
     expect(outcomes()).toEqual([["auth.test_session", "rejected", 401]]);
+    expect(mocks.rate.mock.calls.map(([key]) => key)).toEqual(["test-session:203.0.113.9"]);
   });
 
   it("refuses an email outside the allowlist without minting anything", async () => {

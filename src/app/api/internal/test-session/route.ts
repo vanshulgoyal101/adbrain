@@ -33,13 +33,14 @@ async function handlePOST(request: Request) {
   // The platform sets x-real-ip and appends the caller to x-forwarded-for; a script can only prepend.
   const address = request.headers.get("x-real-ip")?.trim()
     || request.headers.get("x-forwarded-for")?.split(",").at(-1)?.trim() || "unknown";
-  const limited = await rateLimitResponse(`test-session:${address}`, { limit: 10, windowMs: 10 * 60_000 })
-    ?? await rateLimitResponse("test-session:all", { limit: 60, windowMs: 10 * 60_000 });
+  const limited = await rateLimitResponse(`test-session:${address}`, { limit: 10, windowMs: 10 * 60_000 });
   if (limited) return limited;
-
   if (!timingSafeEqual(digest(request.headers.get("authorization") ?? ""), digest(`Bearer ${secret}`))) {
     return reject(401, "Unauthorized");
   }
+  // Counted only after the secret, so strangers can't spend it and fail the production guard into a rollback.
+  const overall = await rateLimitResponse("test-session:all", { limit: 60, windowMs: 10 * 60_000 });
+  if (overall) return overall;
   const parsed = bodySchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return reject(422, "Send { email }.");
   const { email } = parsed.data;
