@@ -47,7 +47,7 @@ describe("shared outcome definition", () => {
   });
 
   it("preserves unread WhatsApp versus zero website counts and stored versus derived costs", () => {
-    const unread = { ...figures, conversations: null, landing_page_views: null, cpl: 5 };
+    const unread = { ...figures, conversations: null, landing_page_views: undefined, cpl: 5 };
     expect(cardFigures("whatsapp", unread).value).toBe("—");
     expect(cardFigures("whatsapp", unread).cost).toBe("—");
     expect(cardFigures("website", unread).value).toBe("0");
