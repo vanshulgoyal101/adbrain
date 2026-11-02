@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { scan } from "../scripts/scan-public-data.mjs";
+import { githubCommentIds, idCandidates, scan } from "../scripts/scan-public-data.mjs";
 
 describe("public-data scanner (#1627)", () => {
   it("flags customer data by type only", () => {
@@ -35,5 +35,37 @@ describe("public-data scanner (#1627)", () => {
     expect(scan('no false redraws for "98765 44842" or "098765 44842" against +91 98765 44842')).toEqual([]);
     expect(scan("Solaride act_2398686420592052, Page 885223068001054, app 2286157145462990")).toEqual([]);
     expect(scan("")).toEqual([]);
+  });
+
+  // #2727: comment ids passed 6e9, so bare ids cited in prose look like mobiles.
+  it("ignores bare GitHub comment ids only when GitHub knows them", () => {
+    const link = "[6581991068](https://github.com/vanshulgoyal101/adbrain/issues/2595#issuecomment-6581991068)";
+    expect(scan(`use the completed spec ${link}`)).toEqual([]);
+    expect(scan("[9812345678](https://wa.me/919812345678)")).toEqual(["indian_mobile"]);
+    expect(scan("[9812345678](https://github.com/o/r/issues/1#issuecomment-6581991068)")).toEqual(["indian_mobile"]);
+    const ids = new Set(["6577045396", "6577479113"]);
+    expect(scan("(CPO flow 6577045396, Analyst fields 6577479113).", ids)).toEqual([]);
+    expect(scan("CPO flow 6577045396")).toEqual(["indian_mobile"]);
+    expect(scan("CPO flow 6577045396; call 9812345678", ids)).toEqual(["indian_mobile"]);
+    expect(scan("call +91 65770 45396 or 065770-45396", ids)).toEqual(["indian_mobile"]);
+  });
+
+  it("lists only bare 10-digit numbers outside links as id candidates", () => {
+    const text = "flow 6577045396, again 6577045396, phone +91 98123 45678, 9812345678 "
+      + "and https://github.com/o/r/issues/1#issuecomment-6581991068 or 41469095565";
+    expect(idCandidates(text)).toEqual(["6577045396", "9812345678"]);
+  });
+
+  it("asks GitHub about unknown candidates only, within a bound", async () => {
+    const asked: string[] = [];
+    const exists = async (id: string) => { asked.push(id); return id.startsWith("65"); };
+    const ids = await githubCommentIds(["6500000001", "9812345678", "6500000002"], new Set(["6500000002"]), exists);
+    expect([...ids].sort()).toEqual(["6500000001", "6500000002"]);
+    expect(asked).toEqual(["6500000001", "9812345678"]);
+    const many = Array.from({ length: 120 }, (_, i) => String(6500000000 + i));
+    asked.length = 0;
+    expect((await githubCommentIds(many, new Set(), exists)).size).toBe(100);
+    expect(asked).toHaveLength(100);
+    expect([...(await githubCommentIds(["6500000001"], new Set(), async () => { throw new Error("rate limited"); }))]).toEqual([]);
   });
 });

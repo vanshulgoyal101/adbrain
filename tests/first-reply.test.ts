@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { firstReplyText, formatReplyTime, medianReplyMinutes, replyLanguage, whatsappDigits, whatsappReplyLink } from "@/lib/leads/first-reply";
+import { contactedLabel, firstReplyText, formatReplyTime, medianReplyMinutes, replyLanguage, whatsappDigits, whatsappReplyLink } from "@/lib/leads/first-reply";
+import hi from "../messages/hi.json";
 
 describe("first reply to an enquiry (#1049)", () => {
   const base = { leadName: "Ravi Kumar", businessName: "Solaride", offer: "Free solar site survey" };
@@ -41,6 +42,8 @@ describe("first reply to an enquiry (#1049)", () => {
     expect(medianReplyMinutes([row("2026-10-27T10:00:00Z", "2026-10-27T10:10:00Z"), row("2026-10-27T10:00:00Z", "2026-10-27T10:30:00Z"), row("2026-10-27T10:00:00Z", null)])).toBe(20);
     expect(medianReplyMinutes([row("2026-10-27T10:00:00Z", "2026-10-27T10:05:00Z"), row("2026-10-27T10:00:00Z", "2026-10-27T11:00:00Z"), row("2026-10-27T10:00:00Z", "2026-10-27T10:20:00Z")])).toBe(20);
     expect(medianReplyMinutes([row("2026-10-27T10:00:00Z", "2026-10-27T09:00:00Z")])).toBeNull();
-    expect([0.4, 12.4, 185, 3 * 24 * 60].map(formatReplyTime)).toEqual(["under a minute", "12 min", "3 h 5 min", "3 days"]);
+    expect([0.4, 12.4, 185, 3 * 24 * 60].map(m => formatReplyTime(m))).toEqual(["under a minute", "12 min", "3 h 5 min", "3 days"]);
+    expect([0.4, 12.4, 185, 120, 3 * 24 * 60].map(m => formatReplyTime(m, "hi"))).toEqual(["एक मिनट से कम समय", "12 मिनट", "3 घंटे 5 मिनट", "2 घंटे", "3 दिन"]);
+    expect(contactedLabel(0.4, { locale: "hi", messages: hi.enquiries })).toBe("एक मिनट से कम समय में संपर्क किया");
   });
 });

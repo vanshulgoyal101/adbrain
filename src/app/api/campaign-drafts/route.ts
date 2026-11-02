@@ -88,7 +88,7 @@ async function handlePOST(request: Request) {
         return responseError(requestId, 409, "CONFLICT", await ownerError("tooManyDrafts"));
       }
     } catch {
-      return responseError(requestId, 503, "UNAVAILABLE", "Saved draft operations could not be checked.", true);
+      return responseError(requestId, 503, "UNAVAILABLE", await ownerError("draftSaveUnavailable"), true);
     }
   }
 

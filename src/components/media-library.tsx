@@ -61,7 +61,7 @@ function OwnPhotoControls({ asset, request, onRenamed, onDelete }: {
         <input aria-label="Name" value={name} maxLength={120} onChange={(event) => setName(event.target.value)} autoFocus
           className="min-h-11 rounded-md border border-slate-300 px-3 text-sm" />
         <div className="flex gap-2">
-          <button type="submit" disabled={saving} className="inline-flex min-h-11 items-center rounded-md bg-blue-600 px-3 text-sm font-medium text-white disabled:opacity-50">Save</button>
+          <button type="submit" disabled={saving} className="inline-flex min-h-11 items-center rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary-hover disabled:opacity-50">Save</button>
           <button type="button" onClick={() => { setEditing(false); setName(asset.name ?? ""); setError(null); }} className="inline-flex min-h-11 items-center rounded-md px-3 text-sm text-slate-700 hover:bg-slate-100">Cancel</button>
         </div>
         {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
@@ -188,7 +188,7 @@ export function MediaLibrary({ business, media: initialMedia, creatives, brandAs
   }, []);
   const addButton = (
     <button type="button" onClick={() => setSheetOpen(true)}
-      className="inline-flex min-h-11 items-center gap-2 rounded-md bg-blue-600 px-4 text-sm font-medium text-white hover:bg-blue-700">
+      className="inline-flex min-h-11 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary-hover">
       <ImagePlus className="h-4 w-4" aria-hidden="true" /> Add photos
     </button>
   );
@@ -274,7 +274,7 @@ export function MediaLibrary({ business, media: initialMedia, creatives, brandAs
         {TABS.map((t) => (
           <button key={t.id} type="button" role="tab" id={`media-tab-${t.id}`} aria-selected={tab === t.id} aria-controls="media-panel"
             onClick={() => setTab(t.id)}
-            className={`min-h-11 shrink-0 border-b-2 px-3 text-sm font-medium ${tab === t.id ? "border-blue-600 text-blue-700" : "border-transparent text-slate-600 hover:text-slate-900"}`}>
+            className={`min-h-11 shrink-0 border-b-2 px-3 text-sm font-medium ${tab === t.id ? "border-primary text-primary" : "border-transparent text-slate-600 hover:text-slate-900"}`}>
             {t.label}
           </button>
         ))}

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { apiError } from "@/lib/api";
+import { ownerError } from "@/i18n/request-locale";
 import { AD_RESULT_COLUMNS, adCreativeLinks, adResultsEnabled, adResultViews, type AdCreative, type StoredAdResult } from "@/lib/campaign/ad-results-store";
 import { observeRoute } from "@/lib/observability/logger";
 import { createClient } from "@/lib/supabase/server";
@@ -21,7 +22,7 @@ export const GET = observeRoute("/api/campaigns/[id]/ads", "GET", async (
   // RLS scopes every read to the owner's own campaigns and creatives.
   const { data: campaign } = await supabase.from("campaigns")
     .select("id, destination, creative_ids, meta_campaign_id, meta_adset_id, meta_ad_ids, raw").eq("id", id).maybeSingle();
-  if (!campaign) return apiError("Campaign not found", 404);
+  if (!campaign) return apiError(await ownerError("campaignNotFound"), 404);
   const { data, error } = await (supabase as unknown as SupabaseClient).from("ad_results")
     .select(AD_RESULT_COLUMNS)
     .eq("campaign_id", id).is("period_start", null).is("period_end", null).limit(100);

@@ -2384,7 +2384,7 @@ function BusinessCampaigns({
                 campaign={adEdit}
                 campaignName={adEdit.name ?? `${business.name} — ${adEdit.objective}`}
                 creatives={approved}
-                hint={adEditHint}
+                hint={adEditHint} words={campaignWords}
                 onClose={() => { setAdEdit(null); setAdEditHint(undefined); loadWaiting(); }}
                 onSaved={(message, { adId, change }) => {
                   // Mirror the server's raw.adWords, so reopening the editor shows the new words.
@@ -2537,7 +2537,7 @@ function BusinessCampaigns({
                     {endTimeChangedInMeta(c) ? <p className="border-l-2 border-slate-300 pl-3 text-sm text-slate-700">{OUTSIDE_LINES.endTime(formatDay(endTimeChangedInMeta(c)!.now))}</p> : null}
                     <CampaignEnquiryFeedback error={cardError?.id === c.id ? cardError : undefined} adsManagerUrl={cardError?.id === c.id && cardError.adsManager ? adsLink(c) : undefined} adsManagerLabel={tc("card.openAdsManager")} />
                     {waitingSwitch[c.id] && (c.status === "active" || c.status === "paused") ? (
-                      <AudienceSwitchStrip campaignId={c.id} operationId={waitingSwitch[c.id]} running={c.status === "active"} lastError={waitingError[c.id] ?? null}
+                      <AudienceSwitchStrip campaignId={c.id} operationId={waitingSwitch[c.id]} running={c.status === "active"} lastError={waitingError[c.id] ?? null} words={campaignWords}
                         onDone={(message) => {
                           setWaitingSwitch(current => Object.fromEntries(Object.entries(current).filter(([id]) => id !== c.id)));
                           setCardNotice({ id: c.id, message });
