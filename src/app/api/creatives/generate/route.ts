@@ -5,10 +5,7 @@ import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { logEvent } from "@/lib/audit";
 import { CreativeImageError, CreativeValidationError, generateVariants, type CreateProgressEvent, type GeneratedVariant } from "@/lib/creative/generate";
-import {
-  persistCreativeImage,
-  renderAndPersistDesign,
-} from "@/lib/creative/persist";
+import { persistCreativeImage, renderAndPersistDesign } from "@/lib/creative/persist";
 import { languagePromptName } from "@/lib/languages";
 import { NoLLMKeysError } from "@/lib/llm";
 import {
