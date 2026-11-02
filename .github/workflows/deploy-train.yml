@@ -1,7 +1,7 @@
 name: Deploy train
 on:
   # PRs merge into `next` (no Vercel deploy). This promotes `next` to `main` (one production
-  # deploy) at most every 30 minutes, only when `next` is green (#461, Hobby: 100 deploys/day).
+  # deploy) at most every 15 minutes, only when `next` is green (#461; #2609: at most 96 a day, under Hobby's 100).
   push:
     branches: [next]
   schedule:
@@ -40,7 +40,7 @@ jobs:
         shell: bash
     env:
       GH_TOKEN: ${{ github.token }}
-      GAP_MINUTES: "30"
+      GAP_MINUTES: "15"
     steps:
       - name: Promote next to main
         timeout-minutes: 93

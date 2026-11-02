@@ -294,7 +294,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 	auto-merge with `gh pr merge <n> --auto --squash` (one green commit per PR; only the train's
 	sync and promotion PRs use `--merge`, #2479). A PR opened against `main` is retargeted to `next` automatically.
 	`main` is production; the deploy train promotes a green `next` to `main` at most
-	every 30 minutes, so your change is live within about 30 minutes of merging. **Don't
+	every 15 minutes (#2609), so your change is live within about 20 minutes of merging. **Don't
 	wait for the train** (owner, Nov 1): check the changed flow before merging (locally or
 	on the PR preview), start your next item, and smoke production on your next pass once
 	it's live. Never sleep or poll for a deploy; it blocks your chat. Hotfixes and migration/money releases go to `main` (DevOps or CTO; label

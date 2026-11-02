@@ -175,7 +175,7 @@ Vercel Hobby allows 100 production deploys a day, and every push to `main` is on
 (#461). So PRs merge into **`next`**, which Vercel doesn't deploy, and
 [deploy-train.yml](../../.github/workflows/deploy-train.yml) promotes it:
 - On every push to `next` (and at :11/:41 as a backup), if `next` has commits `main`
-  lacks, it waits until 30 minutes after the last train, then promotes the **newest commit on
+  lacks, it waits until 15 minutes after the last train (#2609), then promotes the **newest commit on
   `next` with build, test, core and secrets all green** (CI runs on every push to `next`), so a
   tip still in CI doesn't hold back what is green (#2528). Only `next`'s own (first-parent)
   commits that hold all of `main`'s changes count; red or pending ones are never promoted. It

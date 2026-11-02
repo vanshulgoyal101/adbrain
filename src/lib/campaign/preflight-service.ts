@@ -9,6 +9,7 @@ import {
 import type { DraftInput, ReviewDTO } from "@/lib/campaign/connect-contracts";
 import type { ResolvedWhatsAppMessage } from "@/lib/campaign/whatsapp-template";
 import { alignPrintedNumbers } from "@/lib/creative/chat-number";
+import type { LeadDestination } from "@/lib/types/campaign";
 
 export type PreflightActor = {
   businessId: string;
@@ -28,7 +29,7 @@ export type PreflightLoaders = {
   /** #418 rule 5: the Brand's facts (USPs, description), for the proof-line warning only. */
   findBrandFacts?: (actor: PreflightActor) => Promise<string[]>;
   /** #419 2(b): the business's own cost per result for this kind of campaign, or null. */
-  findCostPerResult?: (actor: PreflightActor, destination: "instant_form" | "whatsapp") => Promise<number | null>;
+  findCostPerResult?: (actor: PreflightActor, destination: Exclude<LeadDestination, "call" | "website">) => Promise<number | null>;
   /** #2274: redraws one picture's printed phone over its saved background; the new picture's URL, or null. */
   redrawPictureNumber?: (actor: PreflightActor, creativeId: string, phone: string) => Promise<string | null>;
   getConnection: (actor: PreflightActor) => Promise<PreflightConnection | null>;
