@@ -11,6 +11,8 @@ const JOBS = [
   { job: "sync-leads", everyMinutes: 15 },
   // Called every 15 min, but a single failing campaign makes a call 503; an hour keeps that from paging.
   { job: "refresh-results", everyMinutes: 60 },
+  // Dispatches overdue scheduled workflows (#2593; db/migrations/20261102_dispatch_workflows_pg_cron.sql).
+  { job: "dispatch-workflows", everyMinutes: 15 },
 ] as const;
 const LOOKBACK_MS = 24 * 3_600_000;
 
