@@ -8,6 +8,7 @@
  * name at Meta before anything is sent again, and an unsettled lookup never re-sends.
  */
 import { MetaError, isThrottleCode, type MetaClient } from "@/lib/meta/client";
+import { ConnectionAccessError } from "@/lib/meta/connection-access-error";
 import { VIDEO_PROBLEM_WORDS, adVideoProblem, type AdVideoLookup, type AdVideoProblem, type AdVideoState } from "@/lib/meta/media";
 
 export type MediaAsset = {
@@ -94,7 +95,7 @@ export type MetaMediaResult =
   | { status: "ready"; kind: "video"; videoId: string; width: number | null; height: number | null; lengthMs: number | null; instagramEligible: boolean | null }
   | { status: "processing"; kind: "video"; videoId: string | null }
   | { status: "error"; kind: "image" | "video"; problem: AdVideoProblem }
-  | { status: "refused"; reason: "bad_account" | "not_found" | "not_ready" };
+  | { status: "refused"; reason: "bad_account" | "not_found" | "not_ready" | "read_only" };
 
 /** Our hosts' clocks may disagree by up to this much. */
 export const CLOCK_SKEW_MS = 5 * 60_000;
@@ -137,6 +138,8 @@ async function ensureImage(deps: MetaMediaDeps, asset: MediaAsset, adAccountId: 
   try {
     imageHash = await deps.meta.uploadImage(await deps.readBytes(asset));
   } catch (error) {
+    // The client refused before sending (the pause-only smoke account): nothing reached Meta.
+    if (error instanceof ConnectionAccessError && error.code === "FORBIDDEN") return { status: "refused", reason: "read_only" };
     if (!(error instanceof MetaError)) throw error;
     return { status: "error", kind: "image", problem: imageProblem(error) };
   }
@@ -195,6 +198,11 @@ async function postVideo(deps: MetaMediaDeps, asset: MediaAsset, claim: MetaUplo
   try {
     videoId = await deps.meta.startVideo({ fileUrl, name, title: name });
   } catch (error) {
+    // The client refused before sending (the pause-only smoke account): free the claim so it isn't settled as lost.
+    if (error instanceof ConnectionAccessError && error.code === "FORBIDDEN") {
+      await deps.store.update(claim.id, expect, { status: "error", problem: "unreachable", checkedAt: nowIso(deps) });
+      return { status: "refused", reason: "read_only" };
+    }
     // Only a refusal Meta actually answered means no video was made; anything else stays `starting` for the lookup.
     if (!refused(error)) return { status: "processing", kind: "video", videoId: null };
     const problem = adVideoProblem(error);
