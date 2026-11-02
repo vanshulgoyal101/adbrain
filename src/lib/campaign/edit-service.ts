@@ -4,7 +4,7 @@ import { z } from "zod";
 import { logEvent } from "@/lib/audit";
 import { intendedCampaignChildren, reviewableCampaign } from "@/lib/campaign/activation";
 import { pausedAdIds } from "@/lib/campaign/ad-pause";
-import { audienceChangeFromForm, audienceEditFormSchema, type AudienceEditForm } from "@/lib/campaign/editor-targeting";
+import { audienceChangeFromForm, type AudienceEditForm } from "@/lib/campaign/editor-targeting";
 import { saveCampaignChildren, saveCampaignPreparedAudience } from "@/lib/campaign/trusted-write";
 import { AdSetSwitchStuckError, CampaignDeliveryError, MetaError, friendlyMetaError, needsRebuild, type AudienceChanges, type AudienceEdit, type GeoTargeting } from "@/lib/meta/client";
 import { ConnectionAccessError, withMetaConnection, type AuthorizedBusiness } from "@/lib/meta/connection-access";
@@ -47,15 +47,6 @@ export type AudienceChange = z.infer<typeof audienceChangeSchema>;
 
 /** #773 (CEO, Nov 2): a running campaign's audience change, saved in `campaigns.raw` until its next run. */
 export type PreparedAudience = { change: AudienceChange; form: AudienceEditForm; savedAt: string };
-
-/** The change saved for this campaign's next run, if any. */
-export function preparedAudience(raw: unknown): PreparedAudience | null {
-  const value = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as { preparedAudience?: unknown }).preparedAudience : undefined;
-  if (!value || typeof value !== "object") return null;
-  const { change, form, savedAt } = value as Record<string, unknown>;
-  const parsed = { change: audienceChangeSchema.safeParse(change), form: audienceEditFormSchema.safeParse(form) };
-  return parsed.change.success && parsed.form.success && typeof savedAt === "string" ? { change: parsed.change.data, form: parsed.form.data, savedAt } : null;
-}
 
 /** #765 (b): a running ad set's PAUSED copy, waiting for the owner to switch to it or cancel it. */
 export type PendingCopy = { from: { adSetId: string; adIds: string[] }; to: { adSetId: string; adIds: string[] } };
@@ -202,7 +193,10 @@ export async function editCampaignAudience(context: AuthorizedBusiness, campaign
   const review = reviewableCampaign(campaign);
   if (!review) throw new CampaignEditError("AdBrain can only edit campaigns it launched.", 409);
   await refuseWhileSwitchPending(database, campaignId);
-  // #773 (CEO, Nov 2): never edit a live run; the change waits for the next run and nothing goes to Meta.
+  // #773 (CEO, Nov 2): never edit a live run; the change waits for the next run and nothing goes to Meta. The form says
+  // the owner chose "Save for next run"; a dialog opened before the campaign started or stopped must reopen, not edit Meta.
+  if (status === "active" && !options.form) throw new CampaignEditError("This campaign is running now. Close Edit audience and open it again; your change will be saved for its next run.", 409);
+  if (status === "paused" && options.form) throw new CampaignEditError("This campaign is paused now. Close Edit audience and open it again to check the change with Meta.", 409);
   if (status === "active") return prepareForNextRun(context, campaign as Campaign, change, options);
 
   const touch = async (values: Record<string, unknown>) => {

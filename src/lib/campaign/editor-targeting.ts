@@ -86,13 +86,14 @@ export interface AudienceEditForm {
   areaExclusions: boolean;
 }
 
+// Not strict: a place from geo-search also carries `countryCode`; extra fields are dropped, not refused.
 const placeSchema = z.object({
   key: z.string().regex(/^[A-Za-z0-9]{1,64}$/), name: z.string().max(200), type: z.string().max(30), region: z.string().max(200).nullable().optional(),
-}).strict();
+});
 /** #773: the form as the owner filled it (place names included), kept with a change saved for a running campaign's next run. */
 export const audienceEditFormSchema: z.ZodType<AudienceEditForm> = z.object({
   included: z.array(placeSchema).max(50), excluded: z.array(placeSchema).max(50),
-  cityScope: z.enum(["city_only", "radius"]), radiusKm: z.number().finite().min(1).max(80),
+  cityScope: z.enum(["city_only", "radius"]), radiusKm: z.number().finite().transform(km => Math.min(80, Math.max(1, Math.round(km)))),
   ageMin: z.number().int().min(18).max(65).nullable(), ageMax: z.number().int().min(18).max(65).nullable(),
   gender: z.enum(["keep", "all", "men", "women"]), languageMode: z.enum(["keep", "any", "only"]),
   languages: z.array(z.number().int().refine(key => AD_LANGUAGE_KEYS.has(key))).max(AD_LANGUAGE_KEYS.size), areaExclusions: z.boolean(),

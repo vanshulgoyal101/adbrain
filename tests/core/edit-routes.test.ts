@@ -402,9 +402,25 @@ describe("core: edit a launched campaign's audience (#773)", () => {
     expect(await edit({ preview: true, form: FORM })).toMatchObject({ status: 200, body: { preview: { prepared: true, adSets: [], consequence: null } } });
     expect((await edit({ form: { ...FORM, ageMin: 25 } })).status).toBe(400);
     expect((await edit({ copy: true, form: FORM })).status).toBe(400);
-    expect((await edit({})).status).toBe(400);
+    // A dialog opened while the campaign was paused can't reach Meta once it runs, and the reverse.
+    expect(await edit({})).toMatchObject({ status: 409, body: { error: expect.stringMatching(/running now/) } });
     expect(graph.sent).toEqual([]);
     expect((mirror().raw as Row).preparedAudience).toBeUndefined();
+    mirror().status = "paused";
+    expect(await edit({ form: FORM })).toMatchObject({ status: 409, body: { error: expect.stringMatching(/paused now/) } });
+    expect(graph.sent).toEqual([]);
+    expect(operations()).toEqual([]);
+  });
+
+  it("saves places as geo-search returns them and a typed radius past the limit", async () => {
+    stored(running(), { status: "active" });
+    replay([]);
+    const pune = { key: "1035921", name: "Pune", type: "city", region: "Maharashtra", countryCode: "IN" };
+    const form = { ...FORM, included: [pune], radiusKm: 120 };
+    const change = { location: { cities: [{ key: "1035921", radius: 80, distance_unit: "kilometer" }] }, age: { min: 30, max: 60 } };
+    expect(await edit({ change, form })).toMatchObject({ status: 200, body: { result: { prepared: true } } });
+    expect((mirror().raw as Row).preparedAudience).toMatchObject({ change, form: { included: [{ key: "1035921", name: "Pune", type: "city", region: "Maharashtra" }], radiusKm: 80 } });
+    expect(graph.sent).toEqual([]);
   });
 
   it("a confirmed edit on the paused campaign applies the saved change and clears it", async () => {
