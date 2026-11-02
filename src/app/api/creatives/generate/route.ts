@@ -5,28 +5,17 @@ import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { logEvent } from "@/lib/audit";
 import { CreativeImageError, CreativeValidationError, generateVariants, type CreateProgressEvent, type GeneratedVariant } from "@/lib/creative/generate";
-import {
-  persistCreativeImage,
-  renderAndPersistDesign,
-} from "@/lib/creative/persist";
+import { persistCreativeImage, renderAndPersistDesign } from "@/lib/creative/persist";
 import { languagePromptName } from "@/lib/languages";
 import { NoLLMKeysError } from "@/lib/llm";
-import {
-  configuredMonthlyTokenLimit,
-  persistLLMUsage,
-  usageCostUsd,
-} from "@/lib/llm/persist";
+import { configuredMonthlyTokenLimit, persistLLMUsage, usageCostUsd } from "@/lib/llm/persist";
 import { rateLimitResponse } from "@/lib/security/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { getActiveInstructionsText } from "@/lib/supabase/queries";
 import { getEnv } from "@/lib/env";
 import { z } from "zod";
-import {
-  generationReceipt,
-  variantUsageEvents,
-  failedVariantUsage,
-} from "@/lib/creative/receipt";
+import { generationReceipt, variantUsageEvents, failedVariantUsage } from "@/lib/creative/receipt";
 import type { Creative, Database } from "@/lib/types";
 import { creativeAssets, recentCreativeCopy } from "@/lib/creative/references";
 import { CREATE_HEARTBEAT_MS, CREATE_TOP_UP_BUDGET_MS, CREATE_TOP_UP_START_MS, PROSPECT_PICTURE_RETRY_END_MS, PROSPECT_PICTURE_RETRY_MIN_MS } from "@/lib/creative/stream";
@@ -43,11 +32,7 @@ export const maxDuration = 300;
 
 const roundUsd = (usd: number) => Math.round(usd * 1e6) / 1e6;
 
-/**
- * Reconcile a client whose long-running generation request outlived its HTTP
- * connection. Successful variants are persisted independently, so the client
- * can recover them without issuing a second paid generation request.
- */
+/** Reconcile a client whose request outlived its connection: saved ads are recovered without a second paid Create. */
 export const GET = observeRoute("/api/creatives/generate", "GET", handleGET);
 
 async function handleGET(req: Request) {
@@ -65,11 +50,9 @@ async function handleGET(req: Request) {
     (requestedCount !== null && (!Number.isSafeInteger(requestedCount) || requestedCount < 1 || requestedCount > 6))) {
     return NextResponse.json({ error: "A valid businessId, generationId, and expectedCount are required." }, { status: 400 });
   }
-  // #2553: a status read is one cheap RPC. 30 per 5 min fit one poller, so a second tab or Studio's check 429'd a pilot.
-  // 150 covers two tabs of step 2 and Studio plus an assistant recovery (~115) and still caps a runaway client.
+  // #2553: 150 reads/5 min cover two tabs plus Studio/recovery (~115), while capping runaway polling.
   const limited = await rateLimitResponse(`generate-status:${user.id}`, {
-    limit: 150,
-    windowMs: 5 * 60_000,
+    limit: 150, windowMs: 5 * 60_000,
   });
   if (limited) return limited;
   let intent: Database["public"]["Functions"]["creative_generation_status"]["Returns"];
@@ -437,8 +420,7 @@ async function generate(req: Request, live?: LiveCreate) {
     businessId,
     action: "creatives.generate",
     entityType: "creative",
-    // The brief can be an LLM-written paragraph, so it belongs in details —
-    // `reason` is shown to the owner in the activity feed.
+    // `reason` is shown to the owner in the activity feed; the brief (LLM-written) belongs in details.
     reason: `Generated ${inserted.length} creative${inserted.length === 1 ? "" : "s"}`,
     details: {
       count: inserted.length,

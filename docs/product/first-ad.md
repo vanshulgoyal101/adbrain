@@ -133,9 +133,10 @@ ads were made from older details or in Studio, Home takes you back to Your ads i
   - "Stops at ₹708": the most this run can ever cost.
   - "Your Page, your ad account, your card. AdBrain never holds your ad money."
 - **Tap:** while Facebook is still reviewing AdBrain, the Facebook Page row says
-  "Facebook is still reviewing AdBrain. Until then, your Facebook account needs our
-  invite: open your invites and accept adBrain, then tap Connect." Tap "Open my
-  invites", accept adBrain, come back, then tap "Connect Facebook Page". A Meta window opens: tap "Connect
+  "Facebook is still reviewing AdBrain, so only people we've added can connect. Tap
+  Connect; if Facebook says the app isn't available, come back here and we\'ll add you."
+  and "Already invited? Accept … in your invites first." (… is adBrain) If you have our invite, tap
+  "Open my invites" and accept adBrain. Then tap "Connect Facebook Page". A Meta window opens: tap "Connect
   Business", sign in to Facebook, choose your Page and ad account, tap "Use
   selected business", then "Continue to review". The row now says "Connected"
   and the button becomes "Go live · ₹300 a day". Tap it.
@@ -147,9 +148,11 @@ ads were made from older details or in Studio, Home takes you back to Your ads i
 - **If it fails:** nothing is spent when something fails. What the screen says:
   - Meta connect: "Meta has not finished yet. Complete the Meta window, then check
     again. Your draft is saved." Finish in the Meta window, then tap "Check again".
-    "Didn't connect? If Facebook said the app isn't available, accept the invite
-    first, then try again.": you skipped the invite above. Tap "Open my invites",
-    accept, then "Try again".
+    "Didn't connect? We've asked our team to add you and will WhatsApp you within a
+    working day. Accept our invite, then try again.": Facebook let you in only once
+    we add you (#2538); AdBrain has already told the team. When our invite arrives, tap
+    "Open my invites", accept, then "Try again". "…your request didn't reach us": check
+    your connection and tap "Try again".
   - No ad account or Page shared: "Meta shared no ad account with AdBrain…" (or
     "no Facebook Page"). Tap "Reconnect Meta" and tick the ad account and Page in
     Meta's window. No ad account yet? Create one in rupees in the business portfolio.
