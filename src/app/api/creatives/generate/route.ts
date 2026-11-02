@@ -43,11 +43,7 @@ export const maxDuration = 300;
 
 const roundUsd = (usd: number) => Math.round(usd * 1e6) / 1e6;
 
-/**
- * Reconcile a client whose long-running generation request outlived its HTTP
- * connection. Successful variants are persisted independently, so the client
- * can recover them without issuing a second paid generation request.
- */
+/** Reconcile a client whose request outlived its connection: saved ads are recovered without a second paid Create. */
 export const GET = observeRoute("/api/creatives/generate", "GET", handleGET);
 
 async function handleGET(req: Request) {
@@ -437,8 +433,7 @@ async function generate(req: Request, live?: LiveCreate) {
     businessId,
     action: "creatives.generate",
     entityType: "creative",
-    // The brief can be an LLM-written paragraph, so it belongs in details —
-    // `reason` is shown to the owner in the activity feed.
+    // `reason` is shown to the owner in the activity feed; the brief (LLM-written) belongs in details.
     reason: `Generated ${inserted.length} creative${inserted.length === 1 ? "" : "s"}`,
     details: {
       count: inserted.length,
