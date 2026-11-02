@@ -55,6 +55,22 @@ describe("upload sheet (#778 slice 3b)", () => {
     vi.unstubAllGlobals();
   });
 
+  it("draws no picture for a file it can't use, marks a ready pick with a tick, and opens on Choose photos (#778 walk 2, 3, 5)", async () => {
+    vi.stubGlobal("URL", Object.assign(URL, { createObjectURL: (file: File) => `blob:${file.name}`, revokeObjectURL: vi.fn() }));
+    const { sheet } = setup();
+    expect(within(sheet).getByRole("button", { name: "Choose photos" })).toHaveFocus();
+    expect(within(sheet).getByRole("button", { name: "Close" }).textContent).toBe("");
+    fireEvent.change(screen.getByLabelText("Choose photos"), { target: { files: [new File(["x"], "notes.txt", { type: "text/plain" }), new File(["x"], "tall.jpg", { type: "image/jpeg" })] } });
+    await waitFor(() => expect(screen.queryByText("Checking…")).not.toBeInTheDocument());
+    const [refused, ready] = within(within(sheet).getByRole("list", { name: "Your picks" })).getAllByRole("listitem");
+    expect(refused.querySelector("img")).toBeNull();
+    expect(refused.querySelector(".lucide-file-x")).not.toBeNull();
+    expect(ready.querySelector("img")).toHaveAttribute("src", "blob:tall.jpg");
+    expect(ready.querySelector(".lucide-check")).not.toBeNull();
+    expect(ready.querySelector(".lucide-image-plus")).toBeNull();
+    vi.unstubAllGlobals();
+  });
+
   // Designer on #1999: "warning, can proceed" reads differently from "fine" and from red "refused".
   it("shows a usable-with-limits fit in amber, a fine one in slate, and labels the button with the ready count", async () => {
     const { sheet } = setup();

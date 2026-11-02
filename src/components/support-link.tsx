@@ -10,10 +10,10 @@ export function SupportLinkProvider({ url, children }: { url: string | null; chi
 }
 
 /** #796: a person to ask, on WhatsApp, wherever an owner may get stuck (menu, Connect, Launch). */
-export function HelpOnWhatsApp({ label = "Help on WhatsApp", className }: { label?: string; className?: string }) {
+export function HelpOnWhatsApp({ label = "Help on WhatsApp", className, lang }: { label?: string; className?: string; lang?: string }) {
   const url = useContext(SupportLinkContext);
   if (!url) return null;
-  return <a href={url} target="_blank" rel="noopener noreferrer" data-product-event="help.whatsapp" className={className ?? "inline-flex items-center gap-1.5 text-sm font-medium text-emerald-700 hover:underline"}>
+  return <a href={url} lang={lang} target="_blank" rel="noopener noreferrer" data-product-event="help.whatsapp" className={className ?? "inline-flex items-center gap-1.5 text-sm font-medium text-emerald-700 hover:underline"}>
     <MessageCircle size={15} aria-hidden="true" />{label}
   </a>;
 }

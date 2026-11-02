@@ -32,7 +32,7 @@ const UNSEEN_POLL_MS = 120_000;
 export function WorkspaceShell({ children, email, ownerId, businessId, businessName, supportUrl = null, firstAd = false, labels = en.shell, locale = "en" }: {
   /** #1877: the app bar and menu in the owner's language. */
   labels?: ShellLabels;
-  /** #1895: marks those words with their language; the rest of the shell stays English. */
+  /** #1895: marks those words with their language. */
   locale?: AppLocale;
   /** #1272: no campaign has gone live yet, so + continues the setup (/create resumes the saved step). */
   firstAd?: boolean;
@@ -46,7 +46,7 @@ export function WorkspaceShell({ children, email, ownerId, businessId, businessN
   const pathname = usePathname();
   const drawer = useRef<HTMLDialogElement>(null);
   const sectionKey = sections[pathname.split("/")[1]];
-  const section = sectionKey ? labels[sectionKey] : "Workspace";
+  const section = sectionKey ? labels[sectionKey] : labels.workspace;
   const lang = locale === "en" ? undefined : locale;
   const [unseen, setUnseen] = useState<{ key: string; since: string; count: number } | null>(null);
   const viewedKey = businessId ? `lead-viewed:${ownerId}:${businessId}` : null;
@@ -82,15 +82,15 @@ export function WorkspaceShell({ children, email, ownerId, businessId, businessN
 
   const identity = <Link href="/brand" className={styles.business}>
     <span className={styles.businessIcon}><Building2 size={17} aria-hidden="true" /></span>
-    <span><strong lang={businessName ? undefined : lang}>{businessName || labels.business}</strong><small lang={businessName ? lang : undefined}>{businessName ? labels.business : "Set up your business"}</small></span>
+    <span><strong lang={businessName ? undefined : lang}>{businessName || labels.business}</strong><small lang={lang}>{businessName ? labels.business : labels.setUpBusiness}</small></span>
     <ChevronRight size={14} aria-hidden="true" />
   </Link>;
 
-  const account = <div className={styles.account}><HelpOnWhatsApp className={styles.help} /><div><span className={styles.avatar} aria-hidden="true">{(email || "A").slice(0, 1).toUpperCase()}</span><span title={email || undefined}>{email || "Your account"}</span></div><SignOutButton /><nav aria-label="Legal" className={styles.legal}>{LEGAL_LINKS.map(link => <Link key={link.href} href={link.href} prefetch={false}>{link.label}</Link>)}</nav></div>;
+  const account = <div className={styles.account}><HelpOnWhatsApp className={styles.help} label={labels.help} lang={lang} /><div><span className={styles.avatar} aria-hidden="true">{(email || "A").slice(0, 1).toUpperCase()}</span><span title={email || undefined} lang={email ? undefined : lang}>{email || labels.yourAccount}</span></div><SignOutButton label={labels.signOut} failed={labels.signOutFailed} lang={lang} /><nav aria-label={labels.legal} lang={lang} className={styles.legal}>{LEGAL_LINKS.map(link => <Link key={link.href} href={link.href} prefetch={false}>{labels[link.key]}</Link>)}</nav></div>;
 
   return <SupportLinkProvider url={supportUrl}><div className={styles.shell}>
-    <a className={styles.skip} href="#workspace-main">Skip to workspace</a>
-    <aside className={styles.sidebar} aria-label="Main sidebar">
+    <a className={styles.skip} href="#workspace-main" lang={lang}>{labels.skip}</a>
+    <aside className={styles.sidebar} aria-label={labels.sidebar}>
       <Link href="/dashboard" className={styles.logo}><Brain size={20} aria-hidden="true" />AdBrain</Link>
       {identity}
       <Nav unseenCount={unseenCount} labels={labels} lang={lang} />
@@ -98,18 +98,18 @@ export function WorkspaceShell({ children, email, ownerId, businessId, businessN
     </aside>
     <div className={styles.body}>
       <header className={styles.header}>
-        <button className={styles.menu} type="button" title="Open navigation" aria-label="Open navigation" aria-haspopup="dialog" onClick={() => drawer.current?.showModal()}><Menu size={21} aria-hidden="true" /></button>
+        <button className={styles.menu} type="button" title={labels.openNav} aria-label={labels.openNav} lang={lang} aria-haspopup="dialog" onClick={() => drawer.current?.showModal()}><Menu size={21} aria-hidden="true" /></button>
         {/* #847: phones only. On wider screens the sidebar holds Create ads and the H1 names the page. */}
-        <div className={styles.breadcrumb}><strong lang={sectionKey ? lang : undefined}>{section}</strong></div>
-        {!pathname.startsWith("/create") && <Link className={styles.create} href="/create" aria-label={firstAd ? "Continue your first ad" : "Create ads"} title={firstAd ? "Continue your first ad" : "Create ads"}><Plus size={20} aria-hidden="true" /></Link>}
+        <div className={styles.breadcrumb}><strong lang={lang}>{section}</strong></div>
+        {!pathname.startsWith("/create") && <Link className={styles.create} href="/create" aria-label={firstAd ? labels.continueFirstAd : labels.create} title={firstAd ? labels.continueFirstAd : labels.create} lang={lang}><Plus size={20} aria-hidden="true" /></Link>}
       </header>
       <main id="workspace-main" tabIndex={-1} className={styles.main}>{children}</main>
     </div>
-    <dialog ref={drawer} className={styles.drawer} aria-label="Workspace menu" onClick={event => {
+    <dialog ref={drawer} className={styles.drawer} aria-label={labels.menu} onClick={event => {
       if (event.target === event.currentTarget || (event.target instanceof Element && event.target.closest("a"))) drawer.current?.close();
     }}>
       <div className={styles.drawerBody}>
-        <div className={styles.drawerHeading}><Link href="/dashboard" className={styles.logo}><Brain size={20} aria-hidden="true" />AdBrain</Link><button type="button" title="Close navigation" aria-label="Close navigation" onClick={() => drawer.current?.close()}><X size={21} aria-hidden="true" /></button></div>
+        <div className={styles.drawerHeading}><Link href="/dashboard" className={styles.logo}><Brain size={20} aria-hidden="true" />AdBrain</Link><button type="button" title={labels.closeNav} aria-label={labels.closeNav} lang={lang} onClick={() => drawer.current?.close()}><X size={21} aria-hidden="true" /></button></div>
         {identity}<Nav unseenCount={unseenCount} labels={labels} lang={lang} />{account}
       </div>
     </dialog>

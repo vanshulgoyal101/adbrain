@@ -18,7 +18,9 @@ describe("Assets page (#778 slice 3a)", () => {
   it("is the old Assets page while uploads are off, and never reads media", async () => {
     const { default: AssetsPage } = await import("@/app/(app)/assets/page");
     render(await AssetsPage());
-    expect(screen.getByRole("heading", { name: "Assets" })).toBeInTheDocument();
+    // One name for the page in both states (Designer, #778 walk item 4); the old page is told by its description.
+    expect(screen.getByRole("heading", { name: "Photos" })).toBeInTheDocument();
+    expect(screen.getByText(/Every ad and upload for/)).toBeInTheDocument();
     expect(media.list).not.toHaveBeenCalled();
   });
 

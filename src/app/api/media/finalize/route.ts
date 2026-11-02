@@ -9,9 +9,10 @@ import { rateLimitResponse } from "@/lib/security/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
-export const maxDuration = 30;
+// #748: a video's finalize downloads, hashes and copies up to 50 MB.
+export const maxDuration = 60;
 
-/** #1209: after the browser's upload, re-read the stored photo and list it, or remove it with the reason. */
+/** #1209, #748: after the browser's upload, re-read the stored photo or video and list it, or remove it with the reason. */
 export const POST = observeRoute("/api/media/finalize", "POST", async (req: Request) => {
   const session = await mediaSession();
   if (session instanceof NextResponse) return session;

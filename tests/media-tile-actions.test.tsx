@@ -8,7 +8,7 @@ vi.mock("@/lib/supabase/client", () => ({ createClient: () => ({}) }));
 afterEach(() => vi.useRealTimers());
 
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
-const photo = (id: string, name: string): MediaView => ({ id, name, tags: [], width: 1080, height: 1350, bytes: 1, fit: { level: "ready", ratio: "4:5", message: "Ready for Feed, Stories and Reels" }, url: `https://example.com/${id}.jpg`, createdAt: "2026-10-29T10:00:00Z" });
+const photo = (id: string, name: string): MediaView => ({ id, kind: "image", durationMs: null, name, tags: [], width: 1080, height: 1350, bytes: 1, fit: { level: "ready", ratio: "4:5", message: "Ready for Feed, Stories and Reels" }, url: `https://example.com/${id}.jpg`, createdAt: "2026-10-29T10:00:00Z" });
 
 function setup(fetch: ReturnType<typeof vi.fn>) {
   return render(<MediaLibrary business={{ id: "b1", vertical: null }} media={[photo("m1", "Kitchen"), photo("m2", "Shop front")]} creatives={[]} brandAssets={[]} consented

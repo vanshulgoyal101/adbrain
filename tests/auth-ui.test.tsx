@@ -45,6 +45,18 @@ describe("sign-out failure handling", () => {
     await waitFor(() => expect(push).toHaveBeenCalledWith("/login"));
   });
 
+  // #1438: the shell passes the owner's words.
+  it("says the button and its failure in the words the shell passes", async () => {
+    signOut.mockResolvedValueOnce({ error: { message: "offline" } });
+    render(<SignOutButton label="साइन आउट करें" failed="साइन आउट नहीं हो सका। फिर कोशिश करें।" lang="hi" />);
+    const button = screen.getByRole("button", { name: "साइन आउट करें" });
+    expect(button).toHaveAttribute("lang", "hi");
+    fireEvent.click(button);
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("साइन आउट नहीं हो सका। फिर कोशिश करें।");
+    expect(alert).toHaveAttribute("lang", "hi");
+  });
+
   it("disables repeated submissions while sign-out is pending", async () => {
     let finish!: (result: { error: null }) => void;
     signOut.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));

@@ -6,7 +6,7 @@ import type { MediaView } from "@/lib/media/store";
 import type { BrandAsset, CreativePreview } from "@/lib/types";
 
 const photo = (over: Partial<MediaView> = {}): MediaView => ({
-  id: "m1", name: "Finished kitchen", tags: [], width: 1080, height: 1350, bytes: 400_000,
+  id: "m1", kind: "image", durationMs: null, name: "Finished kitchen", tags: [], width: 1080, height: 1350, bytes: 400_000,
   fit: { level: "ready", ratio: "4:5", message: "Ready for Feed, Stories and Reels" },
   url: "https://example.com/m1.jpg", createdAt: "2026-10-29T10:00:00Z", ...over,
 });
