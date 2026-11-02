@@ -14,6 +14,8 @@ import { isProspectSession } from "@/lib/prospect-session";
 import { hasCurrentMediaConsent } from "@/lib/media/consent";
 import { listMedia, mediaUploadsEnabled } from "@/lib/media/store";
 import { createClient } from "@/lib/supabase/server";
+import { mediaTranslator } from "@/i18n/words";
+import { requestWords } from "@/i18n/request-locale";
 
 export const metadata = { title: "Photos" };
 
@@ -51,16 +53,18 @@ export default async function AssetsPage({ searchParams }: { searchParams?: Prom
   // #778 slice 3a: with uploads on, the page is the owner's photo library; a failed read shows the empty state.
   if (mediaUploadsEnabled()) {
     const client = await createClient();
-    const [media, consented] = await Promise.all([
+    const [media, consented, words] = await Promise.all([
       listMedia(client, business.id).then((page) => page.items, () => []),
       // A failed check shows the tick again; the sign route re-checks either way.
       hasCurrentMediaConsent(client, business).catch(() => false),
+      requestWords("media"),
     ]);
+    const t = mediaTranslator(words);
     return (
       <div>
-        <PageHeader title="Photos" description={<p>Your own photos for {business.name}&apos;s ads, and every ad AdBrain made.</p>} />
+        <PageHeader title={t("page.title")} description={<p>{t("page.description", { name: business.name })}</p>} />
         <div className="mt-6">
-          <MediaLibrary business={{ id: business.id, vertical: business.vertical ?? null }} media={media} creatives={creatives}
+          <MediaLibrary words={words} business={{ id: business.id, vertical: business.vertical ?? null }} media={media} creatives={creatives}
             brandAssets={brandAssets} sample={sample} consented={consented} startOpen={params.add === "1"} />
         </div>
       </div>

@@ -1401,5 +1401,82 @@
     "websiteStatus": "Your website {host} answered with an error{coded, select, yes { ({status})} other {}} when AdBrain opened it. Check the address on the Your business page, or make sure the site is up, then review again.",
     "websiteBlocked": "{host} isn't a public website address. Add your business's public site on the Your business page.",
     "websiteRedirect": "Your website {host} sends visitors on to {known, select, yes {{finalHost}} other {another site}}. Add the address of your own site on the Your business page, so the ad opens your business."
+  },
+  "media": {
+    "page": {
+      "title": "Photos",
+      "description": "Your own photos for {name}'s ads, and every ad AdBrain made."
+    },
+    "choice": {
+      "label": "How to make ads",
+      "ai": "Make ads with AI",
+      "mine": "Use my photos"
+    },
+    "library": {
+      "tabs": {
+        "label": "Show",
+        "all": "All",
+        "photos": "Photos",
+        "made": "Made by AdBrain"
+      },
+      "yours": "Your photos",
+      "made": "Made by AdBrain",
+      "add": "Add photos",
+      "empty": "No photos yet. Add your own work: finished jobs, your shop, your team.",
+      "noAds": "No ads yet. Every ad you create is saved here.",
+      "photo": "Photo",
+      "adFallback": "Ad creative",
+      "approved": "Approved",
+      "showMore": "Show more ({n} left)",
+      "assetType": {
+        "logo": "Logo",
+        "product_photo": "Product photo",
+        "past_ad": "Past ad",
+        "other": "Asset"
+      }
+    },
+    "tile": {
+      "more": "More for {name}",
+      "rename": "Rename",
+      "download": "Download",
+      "delete": "Delete",
+      "name": "Name",
+      "save": "Save",
+      "cancel": "Cancel",
+      "saveFailed": "Couldn't save the change. Try again.",
+      "downloadFailed": "Download failed. Try again.",
+      "deleted": "Deleted ‘{name}’",
+      "undo": "Undo",
+      "ok": "OK",
+      "deleteFailed": "Couldn't delete the photo. Try again."
+    },
+    "upload": {
+      "title": "Add photos",
+      "description": "Your own work: finished jobs, your shop, your team.",
+      "choose": "Choose photos",
+      "close": "Close",
+      "picks": "Your picks",
+      "checking": "Checking…",
+      "uploading": "Uploading…",
+      "added": "Added",
+      "tryAgain": "Try again",
+      "progress": "Uploading {n} of {total}…",
+      "keepOpen": "You can close this. Keep this page open until it finishes.",
+      "add": "{count, plural, =0 {Add photos} one {Add 1 photo} other {Add # photos}}",
+      "duplicate": "You already added this one; using the saved copy.",
+      "failed": "This didn't upload. Check your connection and tap Try again.",
+      "limitCount": "You can add up to {max} at a time. Add the rest after these finish.",
+      "rightsRequired": "Tick the box above to add your photos.",
+      "consentFailed": "Your confirmation couldn't be saved. Try again.",
+      "format": "This file type can't be used. Use a JPG or PNG photo, or an MP4 or MOV video.",
+      "tooBig": "This file is {size}; the limit is {max}. Trim or compress it in your gallery and add it again."
+    },
+    "fit": {
+      "ok": "Ready for Feed, Stories and Reels",
+      "square": "Square: fine for Feed.",
+      "wide": "Wide ({ratio}): Feed shows it; Stories and Reels need a tall picture.",
+      "landscape": "landscape",
+      "tooSmall": "Too small ({width} px wide). Use the original photo, not a screenshot or a WhatsApp copy."
+    }
   }
 }

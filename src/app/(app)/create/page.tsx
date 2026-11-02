@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { setupWords } from "@/i18n/request-locale";
+import { requestWords, setupWords } from "@/i18n/request-locale";
 import { Building2 } from "lucide-react";
 import { openingLine } from "@/lib/campaign/result-evidence";
 import { getResultEvidence } from "@/lib/campaign/result-evidence-store";
@@ -17,6 +17,7 @@ import { madeForSetup } from "@/lib/creative/setup-picks";
 import { getApprovedCreatives, getBrandAssets, getSetupCreativeBatch, getPrimaryBusiness, hasLaunchedCampaign } from "@/lib/supabase/queries";
 import { occasionsFor } from "@/lib/seasonal";
 import { mediaUploadsEnabled } from "@/lib/media/store";
+import { mediaTranslator } from "@/i18n/words";
 
 export const metadata = {
   title: "Create ads",
@@ -80,7 +81,9 @@ export default async function CreatePage({ searchParams }: { searchParams?: Prom
     [business.phone || brandDestination(business) === "website", "phone number"],
   ].filter(([present]) => !present).map(([, label]) => label);
   // #371: Create opens on what the business's own campaigns achieved; a failed read just skips the line.
-  const [assets, evidence] = await Promise.all([getBrandAssets(business.id), getResultEvidence(business.id).catch(() => [])]);
+  const [assets, evidence, choice] = await Promise.all([getBrandAssets(business.id), getResultEvidence(business.id).catch(() => []),
+    // #778: the entry choice shows with uploads on, in the owner's language.
+    mediaUploadsEnabled() ? requestWords("media").then(mediaTranslator) : null]);
   const hasPhotos = assets.some((a) => a.type === "product_photo");
   const visualsMissing = [!business.logo_url && "your logo", !hasPhotos && "1–3 real photos (team, premises or finished work)"].filter(Boolean);
 
@@ -91,10 +94,10 @@ export default async function CreatePage({ searchParams }: { searchParams?: Prom
         description="Say who you want to reach. You check every ad before it runs."
       />
       {/* #778 slice 3a: the entry choice (CPO #1868) as two equal rows (Designer, #1973 review 6). */}
-      {mediaUploadsEnabled() && (
-        <nav aria-label="How to make ads" className="mb-4 mt-4 grid max-w-2xl grid-cols-2 gap-2 text-sm">
-          <a href="#create-flow" aria-current="page" className="inline-flex min-h-11 items-center justify-center rounded-md border border-primary bg-primary/10 px-3 text-center font-medium text-primary">Make ads with AI</a>
-          <Link href="/assets" className="inline-flex min-h-11 items-center justify-center rounded-md border border-slate-300 px-3 text-center font-medium text-slate-700 hover:bg-slate-50">Use my photos</Link>
+      {choice && (
+        <nav aria-label={choice("choice.label")} className="mb-4 mt-4 grid max-w-2xl grid-cols-2 gap-2 text-sm">
+          <a href="#create-flow" aria-current="page" className="inline-flex min-h-11 items-center justify-center rounded-md border border-primary bg-primary/10 px-3 text-center font-medium text-primary">{choice("choice.ai")}</a>
+          <Link href="/assets" className="inline-flex min-h-11 items-center justify-center rounded-md border border-slate-300 px-3 text-center font-medium text-slate-700 hover:bg-slate-50">{choice("choice.mine")}</Link>
         </nav>
       )}
       <div id="create-flow" className="scroll-mt-4">

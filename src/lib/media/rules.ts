@@ -53,18 +53,26 @@ export function videoRefusal(mime: string, bytes: number, durationMs: number): {
 }
 
 export type MediaFit = { level: "ready" | "feed" | "too_small"; ratio: string; message: string };
+/** The fit line as a `media.fit.*` key and its values, so each screen says it in the owner's language. */
+export type MediaFitWords = { key: "ok" | "square" | "wide" | "tooSmall"; ratio: string; width: number };
 
-/** #751 / #778: what this photo fits, from its pixel size alone. Words are the CPO's (#1868 on #744). Videos (#748) are
- * judged on shape only: a photo's pixel minimum would refuse ordinary phone clips. */
-export function mediaFit(width: number, height: number, kind: "image" | "video" = "image"): MediaFit {
+export function mediaFitWords(width: number, height: number, kind: "image" | "video" = "image"): MediaFitWords {
   const short = Math.min(width, height);
   const ratio = width / height;
   const label = Math.abs(ratio - 9 / 16) < 0.04 ? "9:16" : Math.abs(ratio - 4 / 5) < 0.04 ? "4:5" : Math.abs(ratio - 1) < 0.04 ? "1:1"
     : Math.abs(ratio - 16 / 9) < 0.06 ? "16:9" : ratio < 1 ? "tall" : "wide";
-  if (kind === "image" && short < MEDIA_MIN_SIDE) {
-    return { level: "too_small", ratio: label, message: `Too small (${short} px wide). Use the original photo, not a screenshot or a WhatsApp copy.` };
+  const key = kind === "image" && short < MEDIA_MIN_SIDE ? "tooSmall" : ratio <= 0.84 ? "ok" : ratio <= 1.06 ? "square" : "wide";
+  return { key, ratio: label, width: short };
+}
+
+/** #751 / #778: what this photo fits, from its pixel size alone. Words are the CPO's (#1868 on #744). Videos (#748) are
+ * judged on shape only: a photo's pixel minimum would refuse ordinary phone clips. */
+export function mediaFit(width: number, height: number, kind: "image" | "video" = "image"): MediaFit {
+  const { key, ratio, width: short } = mediaFitWords(width, height, kind);
+  if (key === "tooSmall") {
+    return { level: "too_small", ratio, message: `Too small (${short} px wide). Use the original photo, not a screenshot or a WhatsApp copy.` };
   }
-  if (ratio <= 0.84) return { level: "ready", ratio: label, message: "Ready for Feed, Stories and Reels" };
-  if (ratio <= 1.06) return { level: "feed", ratio: label, message: "Square: fine for Feed." };
-  return { level: "feed", ratio: label, message: `Wide (${label === "wide" ? "landscape" : label}): Feed shows it; Stories and Reels need a tall picture.` };
+  if (key === "ok") return { level: "ready", ratio, message: "Ready for Feed, Stories and Reels" };
+  if (key === "square") return { level: "feed", ratio, message: "Square: fine for Feed." };
+  return { level: "feed", ratio, message: `Wide (${ratio === "wide" ? "landscape" : ratio}): Feed shows it; Stories and Reels need a tall picture.` };
 }
