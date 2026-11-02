@@ -1,0 +1,81 @@
+name: Temporary workflow approval probe
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths: [.github/workflows/temporary-2642-probe.yml]
+
+permissions: {}
+
+jobs:
+  probe:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'work/devops2-2642'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+      contents: write
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - name: Test approval on a disposable bot PR
+        shell: bash
+        run: |
+          set -euo pipefail
+          repo="$GITHUB_REPOSITORY"
+          prefix="devops2-2642-probe-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          base="$prefix-base"
+          head="$prefix-head"
+          base_created=0
+          head_created=0
+          pr=""
+          cleanup() {
+            result=$?
+            trap - EXIT
+            if [ "$head_created" = 1 ]; then
+              gh api -X DELETE "repos/$repo/git/refs/heads/$head" >/dev/null || { echo "::error::Failed to delete $head"; result=1; }
+            fi
+            if [ -n "$pr" ]; then
+              state=$(gh pr view "$pr" -R "$repo" --json state --jq .state) || { echo "::error::Could not inspect probe PR"; result=1; state=""; }
+              if [ "$state" = OPEN ]; then gh pr close "$pr" -R "$repo" >/dev/null || { echo "::error::Failed to close probe PR"; result=1; }; fi
+            fi
+            if [ "$base_created" = 1 ]; then
+              gh api -X DELETE "repos/$repo/git/refs/heads/$base" >/dev/null || { echo "::error::Failed to delete $base"; result=1; }
+            fi
+            exit "$result"
+          }
+          trap cleanup EXIT
+          gh api -X POST "repos/$repo/git/refs" -f ref="refs/heads/$base" -f sha="$HEAD_SHA" >/dev/null
+          base_created=1
+          base_tree=$(gh api "repos/$repo/git/commits/$HEAD_SHA" --jq .tree.sha)
+          tree=$(jq -nc --arg tree "$base_tree" '{base_tree:$tree,tree:[{path:"ci-approval-probe.txt",mode:"100644",type:"blob",content:"Disposable CI approval probe\n"}]}' |
+            gh api -X POST "repos/$repo/git/trees" --input - --jq .sha)
+          sha=$(jq -nc --arg tree "$tree" --arg parent "$HEAD_SHA" '{message:"Disposable CI approval probe",tree:$tree,parents:[$parent]}' |
+            gh api -X POST "repos/$repo/git/commits" --input - --jq .sha)
+          gh api -X POST "repos/$repo/git/refs" -f ref="refs/heads/$head" -f sha="$sha" >/dev/null
+          head_created=1
+          body=$(printf '%s\n' 'DevOps 2: #2642 probe' '' '**Why:** Test GitHub token approval on an isolated synthetic PR.' '' '**Change:** Add one disposable text file to disposable branches.' '' '**Done when / evidence:** The approval response is captured and both branches are removed.' '' '**Files:** ci-approval-probe.txt.' '' '**Built properly (AGENTS.md):**' '- [ ] Every layer it needs changed in the right place: types, DB, service, API, UI, words, docs' '- [ ] Fits #1792: core stays channel-neutral; platform calls only in that channel'"'"'s adapter' '- [ ] Reused or extended existing code; no duplicated logic, no one-off special cases' '- [ ] Tests at the right level (unit / recorded core test / e2e)' '- [ ] Any shortcut has a `TODO(#issue)` and a follow-up issue' '' '**Risk:** Disposable test branches only; no production change.' '' '→ DevOps 2: record the result and clean up.')
+          pr=$(gh pr create -R "$repo" --base "$base" --head "$head" --title "#2642 disposable approval probe" --body "$body")
+          pr=${pr##*/}
+          rid=""
+          for i in $(seq 1 20); do
+            rid=$(gh api "repos/$repo/actions/runs?event=pull_request&head_sha=$sha&per_page=50" \
+              --jq '[.workflow_runs[] | select(.name == "Dependabot auto-merge" and .actor.login == "github-actions[bot]")][0].id // empty')
+            [ -z "$rid" ] || break
+            sleep 3
+          done
+          [ -n "$rid" ] || { echo "::error::Probe workflow was not created"; exit 1; }
+          state=$(gh api "repos/$repo/actions/runs/$rid" --jq '"\(.status) \(.conclusion)"')
+          echo "Before approval: $state"
+          [ "$state" = "completed action_required" ] || { echo "::error::Probe was not approval-required"; exit 1; }
+          gh api -X POST "repos/$repo/actions/runs/$rid/approve" >/dev/null
+          echo "Approval endpoint accepted the workflow token."
+          for i in $(seq 1 20); do
+            state=$(gh api "repos/$repo/actions/runs/$rid" --jq '"\(.status) \(.conclusion // "pending")"')
+            if [ "$state" = "completed skipped" ]; then echo "After approval: $state"; exit 0; fi
+            if [[ "$state" = completed* ]]; then echo "::error::Unexpected approval result: $state"; exit 1; fi
+            sleep 3
+          done
+          echo "::error::Approved probe did not finish in time"
+          exit 1
