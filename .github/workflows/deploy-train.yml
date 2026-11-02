@@ -7,6 +7,12 @@ on:
   schedule:
     - cron: "11,41 * * * *"
   workflow_dispatch:
+    inputs:
+      promote:
+        # Only kick sets this. A person dispatching runs kick, so manual runs take the same lock (#2528).
+        description: "Internal: run the promotion (leave false; kick decides)"
+        type: boolean
+        default: false
 
 permissions:
   contents: write # merging the train PR writes to main
@@ -21,7 +27,7 @@ jobs:
     # Only kick (or a person) dispatches this, on main, and only when no promote is already waiting, so it
     # never gets replaced. One promotion at a time; the running one is never cancelled and takes the newest
     # green commit on next (#2528).
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && inputs.promote
     concurrency:
       group: deploy-train
       cancel-in-progress: false
@@ -217,7 +223,7 @@ jobs:
     # waiting promote would replace the first). A kick that loses the lock is covered: the holder reads
     # next after this commit landed, or the promote it finds running kicks again when it succeeds.
     needs: promote
-    if: always() && (github.event_name != 'workflow_dispatch' || needs.promote.result == 'success')
+    if: always() && (!inputs.promote || needs.promote.result == 'success')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     defaults:
@@ -233,12 +239,18 @@ jobs:
           set -euo pipefail
           repo="$GITHUB_REPOSITORY"
           lock=refs/heads/deploy-train-kick-lock
+          # Every unfinished train run but this one, however many runs are newer.
+          active_runs() {
+            for st in requested queued pending waiting in_progress; do
+              gh api --paginate "repos/$repo/actions/workflows/deploy-train.yml/runs?status=$st&per_page=100" \
+                --jq ".workflow_runs[] | select(.id != $GITHUB_RUN_ID) | .id"
+            done | sort -u
+          }
           take() { gh api -X POST "repos/$repo/git/refs" -f ref=$lock -f sha="$GITHUB_SHA" >/dev/null 2>&1; }
           if ! take; then
             # A kick killed before its release step leaves the lock; it is stale when no other kick is running.
             others=0
-            for rid in $(gh api "repos/$repo/actions/workflows/deploy-train.yml/runs?per_page=30" \
-              --jq ".workflow_runs[] | select(.status != \"completed\" and .id != $GITHUB_RUN_ID) | .id"); do
+            for rid in $(active_runs); do
               n=$(gh api "repos/$repo/actions/runs/$rid/jobs" --jq '[.jobs[] | select(.name == "kick" and .status == "in_progress")] | length')
               others=$((others + n))
             done
@@ -252,16 +264,17 @@ jobs:
           # A promote job that hasn't started takes whatever is green on next when it runs, so one is enough.
           # A dispatched run whose jobs aren't listed yet counts as waiting. A push or schedule run's promote
           # still going (from before kick existed) counts too, so a dispatch never queues behind it.
-          for rid in $(gh api "repos/$repo/actions/workflows/deploy-train.yml/runs?per_page=30" \
-            --jq ".workflow_runs[] | select(.status != \"completed\" and .id != $GITHUB_RUN_ID) | .id"); do
-            read -r event started active < <(gh api "repos/$repo/actions/runs/$rid" --jq .event | tr '\n' ' '; \
-              gh api "repos/$repo/actions/runs/$rid/jobs" --jq '[.jobs[] | select(.name == "promote")] |
-                "\([.[] | select(.status == "in_progress" or .status == "completed")] | length) \([.[] | select(.status != "completed")] | length)"')
+          for rid in $(active_runs); do
+            event=$(gh api "repos/$repo/actions/runs/$rid" --jq .event)
+            started=$(gh api "repos/$repo/actions/runs/$rid/jobs" \
+              --jq '[.jobs[] | select(.name == "promote" and (.status == "in_progress" or .status == "completed"))] | length')
+            active=$(gh api "repos/$repo/actions/runs/$rid/jobs" \
+              --jq '[.jobs[] | select(.name == "promote" and .status != "completed")] | length')
             if [ "$event" = workflow_dispatch ] && [ "$started" -eq 0 ]; then echo "Run $rid's promotion is waiting; it carries this change."; exit 0; fi
             if [ "$event" != workflow_dispatch ] && [ "$active" -gt 0 ]; then echo "Run $rid ($event) is still promoting; the next kick follows it."; exit 0; fi
           done
           t0=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          gh workflow run deploy-train.yml -R "$repo" --ref main
+          gh workflow run deploy-train.yml -R "$repo" --ref main -f promote=true
           # Wait until the run is listed, so a push a moment later finds it instead of starting a second one.
           for i in $(seq 1 10); do
             n=$(gh api "repos/$repo/actions/workflows/deploy-train.yml/runs?event=workflow_dispatch&per_page=5" \
