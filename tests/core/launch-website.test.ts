@@ -63,6 +63,11 @@ describe("core: website launch (#2599)", () => {
     expect(sent.link).toBe("https://cedarridgechiro.com");
   });
 
+  it("sends an http website at its https address, which Meta's website ads require", async () => {
+    await launch("http://cedarridgechiro.com");
+    expect(meta.createLeadCampaign.mock.calls[0][0].link).toBe("https://cedarridgechiro.com");
+  });
+
   it("saves the campaign as traffic, so results never read it as a form campaign", async () => {
     await launch("https://cedarridgechiro.com");
     expect(meta.saveCampaign.mock.calls[0][1]).toMatchObject({ destination: "website", objective: "traffic" });

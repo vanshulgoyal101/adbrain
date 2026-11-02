@@ -18,6 +18,7 @@ import { saveCampaign } from "./trusted-write";
 import { campaignWhatsAppMessage } from "./campaign-whatsapp-message";
 import { draftAreaNames } from "./draft-targeting";
 import { websiteAdLink } from "./website-review";
+import { normalizeWebsite } from "@/lib/brand/validation";
 import { checkPlan, planCheckEvent } from "./plan-check";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { buildLaunchSnapshot, saveLaunchSnapshot } from "./learnings";
@@ -106,9 +107,9 @@ export async function executeReviewedCampaign(input: {
             // #253: the create step re-checks the number against this business's bindings.
             ...(draft.input.destination === "whatsapp" ? { boundWhatsAppNumbers: await boundWhatsAppNumbers(actor.businessId) } : {}),
             ...(prefill ? { whatsappGreeting: prefill } : {}),
-            // Brands saved before #470 may hold a bare domain; Meta needs a full link. #2599: the link Review opened and hashed.
+            // Brands saved before #470 may hold a bare domain; Meta needs a full link. #2599: a website ad sends the link Review opened and hashed.
             // TODO(#2600): send review.websiteUrl once the Review DTO carries it.
-            link: websiteAdLink(business.website) ?? "https://facebook.com",
+            link: (draft.input.destination === "website" ? websiteAdLink(business.website) : normalizeWebsite(business.website)) ?? "https://facebook.com",
             creatives: creativeInputs.map((creative, index) => ({ imageUrl: creative.image_url!, headline: creative.headline!, message: creative.primary_text ?? "", description: savedCreativeDescription(creative.generation), cta: creative.cta, storyImage: storyImages[index] })),
             location, excludedLocation, ageMin: targeting.age?.min, ageMax: targeting.age?.max,
             gender: targeting.gender ?? "all", interests: review.audienceInterests,
