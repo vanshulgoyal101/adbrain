@@ -80,7 +80,7 @@ jobs:
         timeout-minutes: 15
         env:
           SMOKE_EMAIL: ${{ secrets.SMOKE_EMAIL }}
-          SMOKE_PASSWORD: ${{ secrets.SMOKE_PASSWORD }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           SMOKE_CREATE_CLEANUP: "1"
           # #2412: Cloudflare's token is on production (#2145), so a 3-ad run with no Cloudflare picture fails.
           SMOKE_EXPECT_CLOUDFLARE: "1"

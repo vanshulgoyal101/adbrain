@@ -15,9 +15,10 @@ import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { parseArgs, parseEnv } from "node:util";
+import { parseArgs } from "node:util";
 import { chromium } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
+import { browserCookies, localEnv, mintTestSession, testSessionConfig } from "./lib/test-session.mjs";
 
 const { values: args } = parseArgs({
   options: {
@@ -45,17 +46,15 @@ async function throttle(page) {
   await cdp.send("Emulation.setCPUThrottlingRate", { rate: 4 });
 }
 
-async function credentials() {
-  if (process.env.SMOKE_EMAIL && process.env.SMOKE_PASSWORD) return { email: process.env.SMOKE_EMAIL, password: process.env.SMOKE_PASSWORD };
-  const path = process.env.SMOKE_ENV_FILE ?? "/Users/vanshulgoyal/Development/copilot/adbrain/.env.smoke";
-  const env = parseEnv(await readFile(path, "utf8"));
-  assert.ok(env.SMOKE_EMAIL && env.SMOKE_PASSWORD, "Set SMOKE_EMAIL and SMOKE_PASSWORD (or the ignored .env.smoke).");
-  return { email: env.SMOKE_EMAIL, password: env.SMOKE_PASSWORD };
+/** #2574: the smoke account's session, minted once (no password form, so Supabase CAPTCHA, #1777, can stay on). */
+async function smokeSession() {
+  const env = await localEnv();
+  assert.ok(env.SMOKE_EMAIL, "Set SMOKE_EMAIL (or the ignored .env.smoke).");
+  return mintTestSession(env.SMOKE_EMAIL, { config: testSessionConfig(env) });
 }
 
-/** Allows reads and the one password sign-in; answers background syncs and telemetry locally. */
+/** Allows reads; answers background syncs and telemetry locally. */
 async function readOnly(context) {
-  let loginAllowed = true;
   await context.route("**/*", async (route) => {
     const request = route.request();
     const url = new URL(request.url());
@@ -64,28 +63,10 @@ async function readOnly(context) {
     }
     if (request.method() === "POST" && url.origin === origin && ["/api/campaigns/sync", "/api/events"].includes(url.pathname)) return route.fulfill({ status: 204, body: "" });
     if (request.method() === "POST" && url.hostname.endsWith(".supabase.co") && url.pathname === "/rest/v1/web_events") return route.fulfill({ status: 201, json: [] });
-    if (request.method() === "POST" && loginAllowed && url.hostname.endsWith(".supabase.co") && url.pathname === "/auth/v1/token" && url.searchParams.get("grant_type") === "password") {
-      loginAllowed = false;
-      return route.continue();
-    }
     if (!["GET", "HEAD", "OPTIONS"].includes(request.method())) return route.abort("blockedbyclient");
     if (url.origin === origin && (/^\/api\/(cron|scheduler)\//.test(url.pathname) || url.pathname.startsWith("/api/meta/oauth/"))) return route.abort("blockedbyclient");
     return route.continue();
   });
-}
-
-async function signIn(page, { email, password }) {
-  await page.goto(`${origin}/login`, { waitUntil: "domcontentloaded" });
-  const passwordField = page.getByLabel("Password", { exact: true });
-  await page.getByLabel("Email", { exact: true }).waitFor();
-  for (let attempt = 0; attempt < 5 && !(await passwordField.isVisible()); attempt++) {
-    await page.getByRole("button", { name: "Sign in", exact: true }).click();
-    await passwordField.waitFor({ state: "visible", timeout: 3_000 }).catch(() => {});
-  }
-  await page.getByLabel("Email", { exact: true }).fill(email);
-  await passwordField.fill(password);
-  await page.getByRole("button", { name: "Sign in with password", exact: true }).click();
-  await page.waitForURL((url) => url.origin === origin && !url.pathname.startsWith("/login"));
 }
 
 async function measure(page, path, file) {
@@ -134,7 +115,7 @@ async function run() {
   const browser = await chromium.launch();
   const report = { origin, ranAt: new Date().toISOString(), pages: {} };
   try {
-    const login = args["public-only"] ? null : await credentials();
+    const login = args["public-only"] ? null : await smokeSession();
     for (const [width, height] of VIEWPORTS) {
       const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 1, serviceWorkers: "block", ...(width < 500 ? { isMobile: true, hasTouch: true } : {}) });
       context.setDefaultTimeout(30_000);
@@ -148,9 +129,11 @@ async function run() {
         await page.close();
       }
       if (!login) { await context.close(); continue; }
-      const auth = await context.newPage();
-      await signIn(auth, login);
-      await auth.close();
+      await context.addCookies(browserCookies(login.cookies, origin));
+      const check = await context.newPage();
+      await check.goto(`${origin}/dashboard`, { waitUntil: "domcontentloaded" });
+      assert.ok(!new URL(check.url()).pathname.startsWith("/login"), "The app sent the minted session to /login.");
+      await check.close();
       for (const [name, path] of OWNER_PAGES) {
         const page = await context.newPage();
         await throttle(page);

@@ -2,21 +2,23 @@
 // a 360 px phone over slow 4G, run by the post-deploy guard. Read-only on Meta: every Meta write is blocked, and
 // nothing is launched. Step 1 fills only empty fields from a pasted bio, and step 2 makes ads only if the account has none.
 //
-//   WS1_EMAIL=… WS1_PASSWORD=… npx tsx scripts/ws1-walk.mts [--plant]
+//   WS1_EMAIL=… SUPABASE_SERVICE_ROLE_KEY=… npx tsx scripts/ws1-walk.mts [--plant]
 //
 // WS1_EMAIL must be a confirmed internal address (free image providers, #466) whose business has never gone live.
 // --plant injects a promise into step 3 and slows step 2's pictures, so the run must FAIL (proves the checks bite).
 import assert from "node:assert/strict";
 import { chromium, type CDPSession, type Page } from "@playwright/test";
 import { honestCopyFindings } from "../src/lib/copy/honest-copy-rules";
+import { localEnv, signInBrowser, testSessionConfig } from "./lib/test-session.mjs";
 
 const origin = "https://adbrain.vanshul.com";
-const { WS1_EMAIL: email, WS1_PASSWORD: password } = process.env;
+const env = await localEnv();
+const email = env.WS1_EMAIL;
 const plant = process.argv.includes("--plant");
 const LCP_MS = 2500;
 const CLS_MAX = 0.1;
 const BIO = "Sweet Crumbs Bakery, Mohali Phase 7 | Eggless cakes, brownies and custom birthday cakes | Same-day delivery in Mohali, Chandigarh and Zirakpur | Order on WhatsApp 98140 00000 | Flat 10% off on first order";
-assert.ok(email && password, "Set WS1_EMAIL and WS1_PASSWORD.");
+assert.ok(email, "Set WS1_EMAIL.");
 
 const failures: string[] = [];
 const check = (ok: boolean, label: string, detail = "") => {
@@ -97,19 +99,8 @@ try {
   }, { planted: plant });
   const page = await context.newPage();
 
-  await page.goto(`${origin}/login`, { waitUntil: "load" });
-  const emailField = page.getByLabel("Email", { exact: true });
-  const passwordField = page.getByLabel("Password", { exact: true });
-  await emailField.waitFor();
-  await page.getByRole("dialog").waitFor({ timeout: 6000 }).then(() => page.getByRole("button", { name: /^Skip/ }).click()).catch(() => {});
-  for (let i = 0; i < 5 && !(await passwordField.isVisible()); i++) {
-    await page.getByRole("button", { name: "Sign in", exact: true }).click();
-    await passwordField.waitFor({ state: "visible", timeout: 3000 }).catch(() => {});
-  }
-  await emailField.fill(email!);
-  await passwordField.fill(password!);
-  await page.getByRole("button", { name: "Sign in with password", exact: true }).click();
-  await page.waitForURL((url) => !url.pathname.startsWith("/login"));
+  // #2574: a minted session, not the password form, so Supabase CAPTCHA (#1777) can stay on.
+  await signInBrowser(context, origin, email, { config: testSessionConfig(env) });
 
   cdp = await context.newCDPSession(page);
   await cdp.send("Network.enable");

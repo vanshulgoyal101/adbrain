@@ -1,13 +1,10 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
-import { parseEnv } from "node:util";
 import { chromium } from "@playwright/test";
-import { loginAuth, loginSessionProblem, makesFreePictures } from "./lib/internal-accounts.mjs";
+import { makesFreePictures } from "./lib/internal-accounts.mjs";
+import { localEnv, signInBrowser, testSessionConfig } from "./lib/test-session.mjs";
 import { pictureSources } from "./lib/smoke-pictures.mjs";
 import { forgiveRecoveredBusyTurns } from "./lib/smoke-console.mjs";
 import { createFailureLines, parseCreateStream } from "./lib/smoke-create-failures.mjs";
-
-const envPath = "/Users/vanshulgoyal/Development/copilot/adbrain/.env.smoke";
 
 const origin = "https://adbrain.vanshul.com";
 const modes = new Set(process.argv.slice(2));
@@ -151,10 +148,9 @@ async function removeReplacedPictures(auth, before) {
   return files.length;
 }
 
-const { SMOKE_EMAIL: email, SMOKE_PASSWORD: password } = process.env.SMOKE_EMAIL
-  ? process.env
-  : parseEnv(await readFile(envPath, "utf8"));
-assert.ok(email && password, "Set SMOKE_EMAIL and SMOKE_PASSWORD in the ignored .env.smoke file.");
+const env = await localEnv();
+const email = env.SMOKE_EMAIL;
+assert.ok(email, "Set SMOKE_EMAIL in the ignored .env.smoke file.");
 
 let browser;
 let signedIn = false;
@@ -185,8 +181,6 @@ try {
   /** @type {Promise<boolean>[]} one per 503 assistant turn: whether its code was AI_BUSY (#2396) */
   const assistantBusy = [];
   const smokeBlocked = new Set();
-  let loginAllowed = true;
-  let loginSession = null;
   let skippedLeadSync = false;
   let skippedCampaignSync = false;
   let interviewCount = 0;
@@ -252,17 +246,6 @@ try {
     if (request.method() === "POST" && url.hostname.endsWith(".supabase.co") && url.pathname === "/rest/v1/web_events") {
       return route.fulfill({ status: 201, json: [] });
     }
-    if (request.method() === "POST" && loginAllowed && url.hostname.endsWith(".supabase.co")
-      && url.pathname === "/auth/v1/token" && url.searchParams.get("grant_type") === "password") {
-      loginAllowed = false;
-      // #2396: read the session here. After sign-in the page navigates and Chromium drops the response body,
-      // so reading it from the page's response afterwards lost the identity on some runs.
-      const response = await route.fetch().catch(() => null);
-      if (!response) return route.abort("failed");
-      loginSession = { status: response.status(), supabase: url.origin, apikey: request.headers().apikey,
-        body: await response.json().catch(() => null) };
-      return route.fulfill({ response });
-    }
     if (modes.has("--create") && request.method() === "POST" && url.origin === origin) {
       if (url.pathname === "/api/creatives/assistant" && ++interviewCount <= 8) return route.continue();
       if (url.pathname === "/api/creatives/generate" && generationCount === 0 && request.postDataJSON()?.count === 3) {
@@ -308,30 +291,22 @@ try {
     return route.continue();
   });
 
-  await page.goto(`${origin}/login`, { waitUntil: "domcontentloaded" });
-  const emailField = page.getByLabel("Email", { exact: true });
+  // #2574: the guard still proves the sign-in page renders and hydrates (a click opens the password form), but never
+  // submits it: the session is minted with the service role, so Supabase CAPTCHA (#1777) can stay on.
+  const loginResponse = await page.goto(`${origin}/login`, { waitUntil: "domcontentloaded" });
+  assert.equal(loginResponse?.status(), 200, "The sign-in page did not answer 200.");
   const passwordField = page.getByLabel("Password", { exact: true });
-  await emailField.waitFor();
-  // #289: a new browser opens on "Create your free account"; an existing user taps "Sign in" for the password form.
-  // A click before hydration does nothing, so retry until the password field shows.
+  await page.getByLabel("Email", { exact: true }).waitFor();
   for (let attempt = 0; attempt < 5 && !(await passwordField.isVisible()); attempt++) {
     await page.getByRole("button", { name: "Sign in", exact: true }).click();
     await passwordField.waitFor({ state: "visible", timeout: 3_000 }).catch(() => {});
   }
-  await emailField.fill(email);
-  await passwordField.fill(password);
-  const loginResponse = page.waitForResponse((response) => new URL(response.url()).pathname === "/auth/v1/token" && response.request().method() === "POST");
-  await page.getByRole("button", { name: "Sign in with password", exact: true }).click();
-  const response = await loginResponse;
-  assert.equal(response.status(), 200, "Login failed.");
+  assert.ok(await passwordField.isVisible(), "The sign-in page never opened its password form.");
   // #2145: who signed in decides free or paid pictures; the session also lets a scheduled run delete its own ads.
-  const auth = loginAuth(loginSession);
-  // #2396: Create, Prepare and Picture need the identity; failing here reports it as sign-in, not as their own step.
-  // Read-only runs (the post-deploy guard) don't use it, so they only note it.
-  const identityProblem = auth ? null : `identity unreadable (${loginSessionProblem(loginSession)}) (#2396); no paid or free-quota request sent`;
-  assert.ok(!identityProblem || !["--create", "--prepare", "--picture"].some((mode) => modes.has(mode)), identityProblem);
-  if (identityProblem) console.log(`NOTE Sign in: ${identityProblem}`);
-  await page.waitForURL((url) => url.origin === origin && !url.pathname.startsWith("/login"));
+  const minted = await signInBrowser(context, origin, email, { config: testSessionConfig(env) });
+  const auth = { supabase: minted.supabase, apikey: minted.apikey, token: minted.session.access_token, user: minted.user };
+  await page.goto(`${origin}/dashboard`, { waitUntil: "domcontentloaded" });
+  assert.ok(!new URL(page.url()).pathname.startsWith("/login"), "The app sent the minted session to /login.");
   signedIn = true;
   console.log("PASS Sign in");
 

@@ -90,7 +90,7 @@ jobs:
         if: steps.wait.outputs.superseded != 'true' && steps.served.outputs.superseded != 'true'
         env:
           SMOKE_EMAIL: ${{ secrets.SMOKE_EMAIL }}
-          SMOKE_PASSWORD: ${{ secrets.SMOKE_PASSWORD }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           FORCE_FAIL: ${{ (inputs.force_fail || inputs.drill) && 'true' || '' }}
         run: |
           smoke() {
@@ -107,7 +107,7 @@ jobs:
         if: steps.smoke.outcome == 'success'
         env:
           WS1_EMAIL: ${{ secrets.WS1_EMAIL }}
-          WS1_PASSWORD: ${{ secrets.WS1_PASSWORD }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: |
           [ -n "$WS1_EMAIL" ] || { echo "WS1_EMAIL not set; WS1 walk skipped"; exit 0; }
           set -o pipefail

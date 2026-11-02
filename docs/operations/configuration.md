@@ -197,8 +197,7 @@ GitHub environment secrets; never in an issue. GitHub's and Vercel's own variabl
 
 | Variable | Read by and purpose | Secret |
 | --- | --- | --- |
-| `SMOKE_EMAIL`, `SMOKE_PASSWORD` | `smoke-core.mjs`, `ui-gate.mjs`: the smoke account's login | Password |
-| `SMOKE_ENV_FILE` | `ui-gate.mjs`: path of the smoke env file (default `.env.smoke` in the owner's checkout) | No |
+| `SMOKE_EMAIL` | `smoke-core.mjs`, `ui-gate.mjs`, `perf-pages.mjs`: the smoke account, signed in by a session `scripts/lib/test-session.mjs` mints with `SUPABASE_SERVICE_ROLE_KEY` (no password, so Supabase CAPTCHA can stay on; #2574) | No |
 | `SMOKE_CREATE_CLEANUP` | `smoke-core.mjs`: `1` removes what a Create smoke made | No |
 | `CORE_APPROVAL_TS` | `core-approval.mjs`: path to a pinned `typescript.js` for the words-only check (#364); unset uses the repo's, missing keeps every core file gated | No |
 | `SMOKE_EXPECT_CLOUDFLARE` | `smoke-core.mjs`: `1` fails a Create smoke whose pictures include none from Cloudflare (#2412) | No |
@@ -208,7 +207,7 @@ GitHub environment secrets; never in an issue. GitHub's and Vercel's own variabl
 | `ADBRAIN_ALLOW_META_WRITES` | `scripts/lib/meta-write-gate.ts`: `1` lets a `record-meta-*` script make non-GET Graph calls | No |
 | `ADBRAIN_HEADLESS` | Set by `team-supervisor.mjs` for role runs; refuses releases, migrations and Meta writes | No |
 | `ADBRAIN_SUPERVISOR_CLI`, `ADBRAIN_SUPERVISOR_MAX_LOAD`, `ADBRAIN_SUPERVISOR_MIN_FREE_GB` | `team-supervisor.mjs`: the CLI command (JSON array), and the load and free-disk limits for starting a run | No |
-| `WS1_EMAIL`, `WS1_PASSWORD` | `ws1-walk.mts`: an internal account that has never gone live | Password |
+| `WS1_EMAIL` | `ws1-walk.mts`: an internal account that has never gone live, signed in like `SMOKE_EMAIL` | No |
 | `META_CONNECT_UI_BASE_URL`, `META_CONNECT_UI_STATIC_ONLY`, `META_OAUTH_INTERACTIVE`, `META_TEST_TRANSFER_SQL` | Local Meta connect checks (`check-meta-connect-ui.mjs`, `check-meta-oauth-entry.mjs`, `check-meta-connect-db.mjs`): target URL, static-only and interactive switches, transfer SQL path | No |
 | `META_TEST_PG_BIN` | `check-meta-connect-db.mjs`, `db-export.mjs`, `restore-drill.mjs`: Postgres binary folder | No |
 | `WORKSPACE_CHECK_URL`, `WORKSPACE_CHECK_WIDTH` | `check-workspace-ux.mjs`: target URL and viewport width | No |
