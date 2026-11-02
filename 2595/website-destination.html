@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Website destination: switch and Review · #2595 slice D (#2600)</title>
+<style>
+  @font-face { font-family: "DM Sans"; src: url("dm-sans.woff2") format("woff2"); font-weight: 100 900; }
+  :root { --ink: #0f172a; --body: #334155; --muted: #64748b; --line: #e2e8f0; --soft: #f8fafc; --blue: #1d4ed8; --blue-bg: #eff6ff; --blue-line: #93c5fd; --amber: #92400e; --amber-bg: #fffbeb; --amber-line: #fcd34d; --primary: #1d4ed8; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #e9edf2; color: var(--ink); font: 14px/1.5 "DM Sans", "Noto Sans Devanagari", "Kohinoor Devanagari", sans-serif; }
+  p, h2, h3, dl, dd, fieldset { margin: 0; }
+  fieldset { border: 0; padding: 0; min-width: 0; }
+  .boards { display: flex; gap: 24px; padding: 24px; align-items: flex-start; }
+  .frame { width: 390px; flex: none; background: white; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  .frame.hi { width: 360px; }
+  .caption { padding: 10px 16px; background: var(--ink); color: white; font-size: 13px; line-height: 1.4; }
+  .caption b { font-weight: 600; }
+  .content { padding: 20px 16px 24px; display: flex; flex-direction: column; gap: 20px; }
+  h2 { font-size: 17px; font-weight: 600; line-height: 1.35; }
+  .legend { display: block; font-size: 14px; font-weight: 600; margin-bottom: 8px; }
+  .options { display: flex; flex-direction: column; gap: 8px; }
+  .option { display: flex; gap: 12px; align-items: flex-start; min-height: 44px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; }
+  .option.on { border-color: var(--blue-line); background: var(--blue-bg); }
+  .dot { flex: none; width: 18px; height: 18px; margin-top: 2px; border: 1.5px solid #94a3b8; border-radius: 50%; }
+  .on .dot { border: 5px solid var(--blue); }
+  .option b { display: block; font-weight: 600; }
+  .option span { display: block; color: var(--muted); font-size: 13px; }
+  .option .tag { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 999px; background: #dcfce7; color: #166534; font-size: 12px; font-weight: 500; vertical-align: 1px; }
+  .pills { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .pill { display: flex; align-items: center; justify-content: center; text-align: center; min-height: 44px; padding: 4px 6px; line-height: 1.25; border: 1px solid var(--line); border-radius: 8px; }
+  .pill.on { border-color: var(--blue-line); background: var(--blue-bg); color: var(--blue); font-weight: 500; }
+  .pill .dot { margin: 0; width: 16px; height: 16px; }
+  .pill.on .dot { border-width: 4.5px; }
+  .note { color: var(--muted); font-size: 13px; margin-top: 8px; }
+  .url { display: flex; align-items: center; gap: 12px; padding: 4px 4px 4px 12px; border: 1px solid var(--line); border-radius: 8px; }
+  .url .addr { min-width: 0; flex: 1; overflow-wrap: anywhere; line-height: 1.35; padding: 6px 0; }
+  .url .host { font-weight: 600; }
+  .url .path { color: var(--muted); }
+  .btn { display: inline-flex; flex: none; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 0 14px; border: 1px solid var(--line); border-radius: 8px; background: white; color: var(--ink); font-weight: 500; text-decoration: none; }
+  .btn.primary { background: var(--primary); border-color: var(--primary); color: white; width: 100%; font-weight: 600; }
+  .btn.off { background: #e2e8f0; border-color: #e2e8f0; color: #64748b; }
+  .link { color: var(--blue); font-weight: 500; text-decoration: underline; display: inline-flex; min-height: 44px; align-items: center; }
+  .wa { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; }
+  .muted { color: var(--muted); font-size: 13px; }
+  .card { border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+  dl { display: flex; flex-direction: column; gap: 14px; }
+  dt { font-size: 12px; color: var(--muted); }
+  dd { margin-top: 2px; font-weight: 500; overflow-wrap: anywhere; }
+  dd.sub { margin-top: 2px; font-weight: 400; font-size: 13px; color: var(--muted); }
+  .row { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+  .blocker { border: 1px solid var(--amber-line); background: var(--amber-bg); color: var(--amber); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 6px; }
+  .blocker b { color: #78350f; font-weight: 600; }
+  .blocker .btn { align-self: flex-start; margin-top: 6px; border-color: var(--amber-line); color: #78350f; }
+  .pin { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: #db2777; color: white; font-size: 12px; font-weight: 700; flex: none; }
+  .ann { outline: 2px dashed #db2777; outline-offset: 3px; border-radius: 8px; position: relative; }
+  .ann > .pin { position: absolute; top: -12px; right: -12px; }
+  .notes { width: 360px; flex: none; background: white; border-radius: 12px; padding: 16px; font-size: 13px; line-height: 1.5; }
+  .notes h3 { font-size: 15px; margin-bottom: 8px; }
+  .notes ol { margin: 0; padding-left: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .notes li { display: flex; gap: 8px; }
+</style>
+<body>
+<div class="boards">
+
+  <!-- 1. Regression: WhatsApp default -->
+  <section class="frame">
+    <div class="caption"><b>1 · WhatsApp default, unchanged.</b> Local shop. WhatsApp stays preselected; Website appears only as a third choice.</div>
+    <div class="content">
+      <fieldset class="ann"><span class="pin">1</span>
+        <span class="legend">Where should people go?</span>
+        <div class="options">
+          <label class="option on"><i class="dot"></i><div><b>WhatsApp chat <span class="tag">Recommended</span></b><span>People message you on WhatsApp</span></div></label>
+          <label class="option"><i class="dot"></i><div><b>Instant form</b><span>People leave their name and number</span></div></label>
+          <label class="option"><i class="dot"></i><div><b>Website</b><span>People open a page on your site</span></div></label>
+        </div>
+      </fieldset>
+      <div>
+        <span class="legend">WhatsApp number</span>
+        <div class="wa"><div><b>+91 ••••• ••210</b><div class="muted">Verified on Meta</div></div><a class="btn">Change</a></div>
+      </div>
+      <p class="muted">The rest of setup (ads, audience, budget) is unchanged.</p>
+    </div>
+  </section>
+
+  <!-- 2. Website chosen -->
+  <section class="frame">
+    <div class="caption"><b>2 · Website chosen.</b> The link comes from Brand and the owner picks the button. The three buttons are one row of equal choices. Illustrative data.</div>
+    <div class="content">
+      <fieldset>
+        <span class="legend">Where should people go?</span>
+        <div class="options">
+          <label class="option"><i class="dot"></i><div><b>WhatsApp chat <span class="tag">Recommended</span></b><span>People message you on WhatsApp</span></div></label>
+          <label class="option"><i class="dot"></i><div><b>Instant form</b><span>People leave their name and number</span></div></label>
+          <label class="option on"><i class="dot"></i><div><b>Website</b><span>People open a page on your site</span></div></label>
+        </div>
+      </fieldset>
+      <div class="ann"><span class="pin">2</span>
+        <span class="legend">Your ads open</span>
+        <div class="url"><div class="addr"><span class="host">shop.example.in</span><span class="path">/summer-sale</span></div><a class="btn">Open ↗</a></div>
+        <a class="link">Change in Brand</a>
+      </div>
+      <fieldset class="ann"><span class="pin">3</span>
+        <span class="legend">Button on the ad</span>
+        <div class="pills">
+          <label class="pill">Learn more</label>
+          <label class="pill on">Shop now</label>
+          <label class="pill">Sign up</label>
+        </div>
+        <p class="note">This changes only the button's words. Meta shows these ads to people likely to open your page.</p>
+      </fieldset>
+    </div>
+  </section>
+
+  <!-- 3. Review ready -->
+  <section class="frame">
+    <div class="caption"><b>3 · Review, ready.</b> It starts with the goal, the full link and the button, then the existing facts.</div>
+    <div class="content">
+      <div><h2>Ready for campaign review</h2><p class="muted">AdBrain creates this campaign paused. Nothing spends until you activate it.</p></div>
+      <div class="card">
+        <dl>
+          <div class="ann"><span class="pin">4</span><dt>Goal</dt><dd>Website visits</dd><dd class="sub">Meta counts people who open your page</dd></div>
+          <div class="row"><div><dt>People will go to</dt><dd>shop.example.in/summer-sale</dd><dd class="sub">Button: Shop now</dd></div><a class="btn">Open ↗</a></div>
+          <div class="ann"><span class="pin">5</span><dt>Shown on</dt><dd>Facebook, Instagram and Messenger</dd></div>
+          <div><dt>Ads</dt><dd>3 approved ads</dd></div>
+          <div><dt>Audience</dt><dd>Women 25–44 in Pune, 15 km</dd></div>
+          <div><dt>Budget</dt><dd>₹500 a day · up to ₹3,500 a week</dd></div>
+        </dl>
+        <p class="muted">AdBrain hasn’t run enough website campaigns yet to quote a cost per visit.</p>
+      </div>
+      <a class="btn primary">Send to Meta (paused)</a>
+    </div>
+  </section>
+
+  <!-- 4. Review blocked -->
+  <section class="frame">
+    <div class="caption"><b>4 · Review, blocked.</b> Each blocker names the problem and offers one fix. Send stays off.</div>
+    <div class="content">
+      <div><h2>Review before creation</h2><p class="muted">AdBrain creates this campaign paused. Nothing spends until you activate it.</p></div>
+      <div class="blocker ann"><span class="pin">6</span>
+        <b>Your page didn’t open</b>
+        <span>shop.example.in/summer-sale returned an error when we checked it at 14:05. Fix the page or choose another link, then check again.</span>
+        <a class="btn">Fix link in Brand</a>
+      </div>
+      <p class="muted">Same pattern for the other website blockers: no website (“Add your website first” → <b>Add website in Brand</b>) and a page on another domain (“This page isn’t on your website” → <b>Fix link in Brand</b>).</p>
+      <div class="card">
+        <dl>
+          <div><dt>Goal</dt><dd>Website visits</dd></div>
+          <div><dt>People will go to</dt><dd style="color:var(--amber)">Needs a working link</dd><dd class="sub">Button: Shop now</dd></div>
+          <div><dt>Budget</dt><dd>₹500 a day · up to ₹3,500 a week</dd></div>
+        </dl>
+      </div>
+      <a class="btn primary off" aria-disabled="true">Send to Meta (paused)</a>
+    </div>
+  </section>
+
+  <!-- 5. Hindi 360 -->
+  <section class="frame hi" lang="hi">
+    <div class="caption"><b>5 · Hindi at 360.</b> Hindi labels from Dev 2's branch wrap without overflowing; hints are shown in Hindi too.</div>
+    <div class="content">
+      <fieldset>
+        <span class="legend">ग्राहक कहाँ जाएँ</span>
+        <div class="options">
+          <label class="option"><i class="dot"></i><div><b>WhatsApp चैट <span class="tag">सुझाया गया</span></b><span>लोग आपको WhatsApp पर मैसेज करें</span></div></label>
+          <label class="option"><i class="dot"></i><div><b>इंस्टेंट फ़ॉर्म</b><span>लोग अपना नाम और नंबर दें</span></div></label>
+          <label class="option on"><i class="dot"></i><div><b>वेबसाइट</b><span>लोग आपकी साइट का पेज खोलें</span></div></label>
+        </div>
+      </fieldset>
+      <div>
+        <span class="legend">आपके विज्ञापन यह पेज खोलेंगे</span>
+        <div class="url"><div class="addr"><span class="host">shop.example.in</span><span class="path">/summer-sale</span></div><a class="btn">खोलें ↗</a></div>
+      </div>
+      <fieldset>
+        <span class="legend">विज्ञापन पर बटन</span>
+        <div class="pills">
+          <label class="pill">और जानें</label>
+          <label class="pill on">अभी खरीदें</label>
+          <label class="pill">साइन अप करें</label>
+        </div>
+      </fieldset>
+    </div>
+  </section>
+
+  <aside class="notes">
+    <h3>Changes to Dev 2’s build (#2600)</h3>
+    <ol>
+      <li><span class="pin">1</span><span>Stack the three destinations as full-width rows, each with a one-line hint about what the customer will do. Rename the legend to “Where should people go?” and show “Recommended” as a tag. At 390, three wrapped pills read as one list, and a tech owner can’t tell Instant form from Website without a hint. Keep the <code>destination-&lt;value&gt;</code> ids and the WhatsApp default.</span></li>
+      <li><span class="pin">2</span><span>Show the link as host plus path, without the protocol, next to a 44 px “Open ↗”. Rename the Brand link from “Your business” to “Change in Brand” or “Add website in Brand”, so it says what it does.</span></li>
+      <li><span class="pin">3</span><span>Show the three buttons as one row of equal choices (3 columns, 44 px; they fit Hindi at 360), so Sign up doesn’t wrap alone. They stay radio inputs. Shorten the button note. Owners don’t know the term “landing-page views”, but the meaning stays the same: the button’s words don’t change what Meta optimises for.</span></li>
+      <li><span class="pin">4</span><span>Start Review with the goal, “Website visits”, as the CPO’s flow asks: goal, then full destination and button, then Open.</span></li>
+      <li><span class="pin">5</span><span>Keep “Shown on Facebook, Instagram and Messenger” for website ads. #2612 leaves Audience Network out for website too, so the line is still true. The branch currently replaces it with the button line.</span></li>
+      <li><span class="pin">6</span><span>Show the preflight blockers from slice C (no website, page unreachable, not the brand’s own domain) as named blockers, each with one fix button. Keep launch disabled. The branch shows the missing link only as amber text inside Review.</span></li>
+    </ol>
+  </aside>
+</div>
+</body>
+</html>
