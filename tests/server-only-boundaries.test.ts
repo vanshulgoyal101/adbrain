@@ -86,6 +86,22 @@ describe("server-only boundaries", () => {
     expect(config.headers).toBeTypeOf("function");
   });
 
+  it("falls back on Node without registerHooks and deregisters cleanly", async () => {
+    const { Module } = await import("node:module");
+    const { registerTrustedServerOnly } = await import("../scripts/server-only-hook.mjs");
+    const requireFromTest = createRequire(import.meta.url);
+    const original = (Module as unknown as { _resolveFilename: unknown })._resolveFilename;
+    const hook = registerTrustedServerOnly({ registerHooks: undefined });
+    try {
+      expect(requireFromTest.resolve("server-only")).toMatch(/server-only-cli-stub\.cjs$/);
+      expect(() => requireFromTest.resolve("server-only-extra")).toThrow(/server-only-extra/);
+    } finally {
+      hook.deregister();
+    }
+    expect((Module as unknown as { _resolveFilename: unknown })._resolveFilename).toBe(original);
+    expect(requireFromTest.resolve("server-only")).not.toMatch(/server-only-cli-stub\.cjs$/);
+  });
+
   it("rejects a plain tsx import without the trusted CLI hook", () => {
     const result = node("--import", "tsx", fixture);
     expect(result.status).not.toBe(0);

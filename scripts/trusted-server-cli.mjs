@@ -1,3 +1,3 @@
-import { registerTrustedServerOnly } from "./server-only-hook.mjs";
+import { registerTrustedServerOnlyForProcess } from "./server-only-hook.mjs";
 
-registerTrustedServerOnly();
+registerTrustedServerOnlyForProcess();
