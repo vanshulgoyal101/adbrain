@@ -21,16 +21,16 @@ export function isMediaMime(value: string): value is MediaMime {
 
 export type MediaFit = { level: "ready" | "feed" | "too_small"; ratio: string; message: string };
 
-/** #751 / #778: what this photo fits, from its pixel size alone. */
+/** #751 / #778: what this photo fits, from its pixel size alone. Words are the CPO's (#1868 on #744). */
 export function mediaFit(width: number, height: number): MediaFit {
   const short = Math.min(width, height);
   const ratio = width / height;
   const label = Math.abs(ratio - 9 / 16) < 0.04 ? "9:16" : Math.abs(ratio - 4 / 5) < 0.04 ? "4:5" : Math.abs(ratio - 1) < 0.04 ? "1:1"
     : Math.abs(ratio - 16 / 9) < 0.06 ? "16:9" : ratio < 1 ? "tall" : "wide";
   if (short < MEDIA_MIN_SIDE) {
-    return { level: "too_small", ratio: label, message: `Too small (${short} px on its short side). Use the original photo; at least ${MEDIA_MIN_SIDE} px works.` };
+    return { level: "too_small", ratio: label, message: `Too small (${short} px wide). Use the original photo, not a screenshot or a WhatsApp copy.` };
   }
   if (ratio <= 0.84) return { level: "ready", ratio: label, message: "Ready for Feed, Stories and Reels" };
-  if (ratio <= 1.06) return { level: "feed", ratio: label, message: "Square: fine for Feed. Reels and Stories crop the top and bottom." };
-  return { level: "feed", ratio: label, message: "Wide: Feed only. Reels and Stories need a tall photo." };
+  if (ratio <= 1.06) return { level: "feed", ratio: label, message: "Square: fine for Feed." };
+  return { level: "feed", ratio: label, message: `Wide (${label === "wide" ? "landscape" : label}): Feed shows it; Stories and Reels need a tall picture.` };
 }
