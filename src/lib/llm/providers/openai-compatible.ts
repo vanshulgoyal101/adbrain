@@ -1,3 +1,5 @@
+import "server-only";
+
 import { OpenAICompatibleChatLanguageModel } from "@ai-sdk/openai-compatible";
 import type { LLMProvider } from "../types";
 import { sdkCompletion } from "./sdk";

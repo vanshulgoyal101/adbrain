@@ -60,55 +60,24 @@ function sessionStore(): Storage | null {
 
 /** #1989: set when Connect is tapped, so a return to step 3 after Facebook in this tab still counts as a try. */
 const CONNECT_TRIED_KEY = "adbrain.setup.connectTried";
-const INVITES_URL = "https://developers.facebook.com/requests";
 const noSubscription = () => () => {};
-const inviteWords = {
-  en: {
-    hintBefore: "Facebook is still reviewing AdBrain, so only people we've added can connect. Tap Connect; if Facebook says the app isn't available, come back here and we'll add you. Already invited? Accept ",
-    hintAfter: " in your invites first.",
-    retry: "Didn't connect? If Facebook said the app isn't available, we need to add you first.",
-    retrySent: "Didn't connect? We've asked our team to add you and will WhatsApp you within a working day. Accept our invite, then try again.",
-    retryFailed: "Didn't connect? We need to add you first, but your request didn't reach us. Check your connection and tap Try again.",
-    open: "Open my invites",
-    again: "Try again",
-  },
-  hi: {
-    hintBefore: "Facebook अभी AdBrain की जाँच कर रहा है, इसलिए अभी सिर्फ़ वही लोग जुड़ सकते हैं जिन्हें हमने जोड़ा है। Connect दबाएँ; अगर Facebook कहे कि ऐप उपलब्ध नहीं है, तो यहाँ लौटें, हम आपको जोड़ देंगे। इनवाइट मिल चुका है? पहले अपने इनवाइट में ",
-    hintAfter: " स्वीकार करें।",
-    retry: "जुड़ा नहीं? अगर Facebook ने कहा कि ऐप उपलब्ध नहीं है, तो पहले हमें आपको जोड़ना होगा।",
-    retrySent: "जुड़ा नहीं? हमारी टीम को आपका अनुरोध मिल गया है, हम एक कार्यदिवस के भीतर WhatsApp करेंगे। हमारा इनवाइट स्वीकार करें, फिर दोबारा कोशिश करें।",
-    retryFailed: "जुड़ा नहीं? पहले हमें आपको जोड़ना होगा, पर आपका अनुरोध हम तक नहीं पहुँचा। अपना इंटरनेट कनेक्शन जाँचें और ‘फिर से कोशिश करें’ दबाएँ।",
-    open: "मेरे इनवाइट खोलें",
-    again: "फिर से कोशिश करें",
-  },
-} satisfies Record<AppLocale, Record<string, string>>;
 
 type AccessRequest = "idle" | "sent" | "failed";
 
 /**
- * #1989 (CPO #1983): before App Review only Testers can log in, and anyone else gets Meta's "app not available"
- * page inside the Facebook window, which AdBrain can't detect. Before the first tap say so; once the owner is
- * back with nothing connected, say what to do and offer Connect again. #2538: no invite exists until the team
- * adds them, so a try that didn't connect asks the team (the access request) and says whether it reached us.
+ * #1989/#2697: before App Review only accounts Meta already allows can connect; anyone else gets Meta's "app not
+ * available" page inside the Facebook window, which AdBrain can't detect. Say plainly that Meta's review is still
+ * pending (no Tester invite or date promise). After a try that didn't connect, say whether the access request
+ * (#2538) was recorded and offer Connect again; a recorded request is not a connection.
  */
-function TesterInviteHint({ tried, request, locale, onRetry }: { tried: boolean; request: AccessRequest; locale: AppLocale; onRetry: () => void }) {
-  const words = inviteWords[locale];
-  const invites = <a href={INVITES_URL} target="_blank" rel="noopener noreferrer" className={linkClass}>{words.open}</a>;
-  if (!tried) {
-    return (
-      <div className="mt-1 text-sm text-slate-700">
-        <p>{words.hintBefore}<strong>adBrain</strong>{words.hintAfter}</p>
-        {invites}
-      </div>
-    );
-  }
+function ReviewPendingStatus({ tried, request, t, onRetry }: { tried: boolean; request: AccessRequest; t: ReturnType<typeof setupTranslator>; onRetry: () => void }) {
   return (
-    <div role="status" className="mt-1 text-sm text-slate-950">
-      <p>{request === "sent" ? words.retrySent : request === "failed" ? words.retryFailed : words.retry}</p>
-      <div className="flex flex-wrap gap-x-4">
-        {invites}
-        <button type="button" onClick={onRetry} className={linkClass}>{words.again}</button>
-      </div>
+    <div role={tried ? "status" : undefined} className="mt-1 text-sm text-slate-700">
+      <p>{t("access.pending")}</p>
+      {tried && request !== "idle" && (
+        <p className="mt-1 font-medium text-slate-950">{t(request === "sent" ? "access.requested" : "access.requestFailed")}</p>
+      )}
+      {tried && <button type="button" onClick={onRetry} className={linkClass}>{t("access.again")}</button>}
     </div>
   );
 }
@@ -132,9 +101,9 @@ export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNum
   returning?: boolean;
   /** #1934: the offered amount nearest the last campaign's daily budget. */
   initialDaily?: number;
-  /** #1438: the owner's app language (#1901: the picture badge's and #1989's invite hint too); English without it. */
+  /** #1438: the owner's app language (#1901: the picture badge's and #1989's review status too); English without it. */
   words?: SetupWords;
-  /** #1989: Meta App Review (#156) is pending, so only the app's Testers can connect (`META_APP_REVIEW_PENDING`). */
+  /** #1989: Meta App Review (#156) is pending, so a new Facebook account can't connect yet (`META_APP_REVIEW_PENDING`). */
   appReviewPending?: boolean;
 }) {
   const router = useRouter();
@@ -144,7 +113,7 @@ export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNum
   const [daily, setDaily] = useState<number>(initialDaily ?? BUDGET_PRESETS[0]);
   const [days, setDays] = useState<number>(SETUP_RUN_DAYS);
   const [connectOpen, setConnectOpenState] = useState(false);
-  const showInviteHint = appReviewPending && !pageConnected;
+  const showReviewStatus = appReviewPending && !pageConnected;
   // #1989: this tab's storage, so the server (and hydration) render the before-the-tap hint.
   const connectTried = useSyncExternalStore(noSubscription,
     () => Boolean(sessionStore()?.getItem(CONNECT_TRIED_KEY)), () => false) && !connectOpen;
@@ -153,11 +122,11 @@ export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNum
     if (pageConnected) sessionStore()?.removeItem(CONNECT_TRIED_KEY);
   }, [pageConnected]);
 
-  // #2538: a try that didn't connect (dialog closed, or back from Facebook in this tab) asks the team to add the
-  // owner as a Tester. The server keeps one a day; Testers who connect never send it.
+  // #2538: a try that didn't connect (dialog closed, or back from Facebook in this tab) records an access request,
+  // so the team knows who is waiting. The server keeps one a day; owners who connect never send it.
   const [accessRequest, setAccessRequest] = useState<AccessRequest>("idle");
   const accessAsked = useRef(false);
-  const tryFailed = showInviteHint && connectTried;
+  const tryFailed = showReviewStatus && connectTried;
   useEffect(() => {
     if (!tryFailed || accessAsked.current) return;
     accessAsked.current = true;
@@ -284,7 +253,7 @@ export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNum
 
       <ul aria-label={t("goLive.before")} className="mt-4 divide-y divide-slate-200 border-y border-slate-200">
         <Row labels={rowLabels} done={pageConnected} title={t("goLive.page")} status={pageConnected ? t("goLive.connected") : t("goLive.notConnected")}
-          action={showInviteHint ? <TesterInviteHint tried={connectTried} request={accessRequest} locale={locale} onRetry={retryConnect} /> : undefined} />
+          action={showReviewStatus ? <ReviewPendingStatus tried={connectTried} request={accessRequest} t={t} onRetry={retryConnect} /> : undefined} />
         {payMetaRow ? (
           returning ? <Row labels={rowLabels} done title={t("goLive.payMeta")} status={t("goLive.payLast")} /> : <Row labels={rowLabels} done={false} title={t("goLive.payMeta")} status={t("goLive.payAdd")}
             action={<><p className="mt-1 text-sm text-slate-600">{t("goLive.payHow", { runTotal: formatMoney(total) })}</p><a href={META_PAYMENT_URL} target="_blank" rel="noopener noreferrer" className={linkClass}>{t("goLive.payLink")}</a></>} />

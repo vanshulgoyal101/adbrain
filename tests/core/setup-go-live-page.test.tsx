@@ -88,6 +88,14 @@ describe("core: Campaigns → Go live for a first-timer (#1271)", () => {
     await expect(page({ again: "1" })).rejects.toThrow("redirect:/create?again=1");
   });
 
+  it("#2646: a website business goes live from the composer, never WhatsApp's Go live", async () => {
+    m.getPrimaryBusiness.mockResolvedValue({ ...business, phone: null, website: "https://sunpeak.in", default_destination: "website" });
+    m.getApprovedCreatives.mockResolvedValue([ad("a", "Get website visits for our business in Jaipur")]);
+    await page({ new: "1" });
+    expect(screen.getByText("Campaigns loaded")).toBeInTheDocument();
+    expect(m.goLive).not.toHaveBeenCalled();
+  });
+
   it("a business with a campaign keeps the Campaigns page", async () => {
     m.getCampaignPage.mockResolvedValue({ campaigns: [{ id: "c1", status: "paused" }], nextCursor: null });
     await page({});

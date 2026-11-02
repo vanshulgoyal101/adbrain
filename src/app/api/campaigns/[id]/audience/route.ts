@@ -7,6 +7,7 @@ import { ConnectionAccessError, requireOwnedBusiness } from "@/lib/meta/connecti
 import { observeRoute } from "@/lib/observability/logger";
 import { createClient } from "@/lib/supabase/server";
 import { ownerRefusal } from "@/lib/campaign/campaign-owner";
+import { audienceEditFormSchema } from "@/lib/campaign/editor-targeting";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -14,8 +15,8 @@ export const maxDuration = 60;
 const bodySchema = z.object({
   change: audienceChangeSchema,
   preview: z.boolean().optional(),
-  /** #765 (b): the owner confirmed a PAUSED copy for running ad sets Meta can't change in place. */
-  copy: z.literal(true).optional(),
+  /** #773: the form behind the change; a running campaign saves both for its next run. */
+  form: audienceEditFormSchema.optional(),
   idempotencyKey: z.string().min(8).max(200),
 }).strict();
 
@@ -30,7 +31,7 @@ export const POST = observeRoute("/api/campaigns/[id]/audience", "POST", async (
 
   const parsed = bodySchema.safeParse(await readJson<unknown>(req));
   if (!parsed.success) return apiError("Send an audience change and an idempotencyKey of 8 to 200 characters.", 400);
-  const { change, preview, copy, idempotencyKey } = parsed.data;
+  const { change, preview, form, idempotencyKey } = parsed.data;
 
   // RLS scopes this to the user's own campaigns.
   const { data: campaign } = await supabase.from("campaigns").select("business_id,meta_campaign_id").eq("id", id).maybeSingle();
@@ -40,8 +41,8 @@ export const POST = observeRoute("/api/campaigns/[id]/audience", "POST", async (
 
   try {
     const context = await requireOwnedBusiness(campaign.business_id);
-    if (preview) return NextResponse.json({ ok: true, preview: await editCampaignAudience(context, id, change, { preview: true, idempotencyKey }) });
-    const result = await editCampaignAudience(context, id, change, { idempotencyKey, copy });
+    if (preview) return NextResponse.json({ ok: true, preview: await editCampaignAudience(context, id, change, { preview: true, idempotencyKey, form }) });
+    const result = await editCampaignAudience(context, id, change, { idempotencyKey, form });
     return NextResponse.json({ ok: true, result });
   } catch (error) {
     if (error instanceof CampaignEditError) return NextResponse.json({ error: error.message, retryable: error.retryable, ...error.code ? { code: error.code } : {} }, { status: error.status });

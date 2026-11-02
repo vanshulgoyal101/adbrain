@@ -132,14 +132,24 @@ describe("core: website card, ledger, evidence and rerun (#2601)", () => {
   });
 
   it("the card shows website visits and cost per visit; chat and form figures are unchanged", () => {
-    const stored = { spend: 412.5, leads: 3, cpl: 40, conversations: 7, cost_per_conversation: 20, landing_page_views: 55 };
+    const stored = { spend: 412.5, leads: 3, cpl: 40, conversations: 7, cost_per_conversation: 20, landing_page_views: 55, link_clicks: 75 };
     expect(cardResultCount("website", stored)).toBe(55);
-    expect(cardFigures("website", stored)).toEqual({ label: "figures.visits", value: "55", costLabel: "figures.costVisit", cost: "₹7.50" });
+    expect(cardFigures("website", stored)).toEqual({ label: "figures.visits", value: "55", costLabel: "figures.costVisit", cost: "₹7.50", linkClicks: "75", cpc: "₹5.50" });
     expect(cardFigures("website", { ...stored, landing_page_views: 0 })).toMatchObject({ value: "0", cost: "—" });
     expect(cardFigures("whatsapp", stored)).toEqual({ label: "figures.chats", value: "7", costLabel: "figures.costChat", cost: "₹20" });
     expect(cardFigures("instant_form", stored)).toEqual({ label: "figures.leads", value: "3", costLabel: "figures.costLead", cost: "₹40" });
     expect(cardFigures("unknown", stored)).toEqual({ label: "figures.unavailable", value: "—", costLabel: "figures.costResult", cost: "—" });
     expect([cardResultCount("whatsapp", stored), cardResultCount("instant_form", stored)]).toEqual([7, 3]);
+  });
+
+  it("#2635: the card derives CPC from link clicks, not all clicks, and distinguishes unread from zero", () => {
+    const insights = decodeCampaignInsights(recorded.payload, "website");
+    const stored = { spend: insights.spend, leads: insights.leads, cpl: insights.cpl, landing_page_views: insights.landingPageViews, link_clicks: insights.linkClicks };
+    expect(cardFigures("website", stored)).toMatchObject({ linkClicks: "75", cpc: "₹5.50" });
+    expect(cardFigures("website", { ...stored, link_clicks: null })).toMatchObject({ linkClicks: "—", cpc: "—" });
+    expect(cardFigures("website", { ...stored, link_clicks: undefined })).toMatchObject({ linkClicks: "—", cpc: "—" });
+    expect(cardFigures("website", { ...stored, link_clicks: 0 })).toMatchObject({ linkClicks: "0", cpc: "—" });
+    expect(cardFigures("website", { ...stored, spend: 0 })).toMatchObject({ linkClicks: "75", cpc: "₹0" });
   });
 
   it("reads a Meta WEBSITE ad set as a website campaign", () => {

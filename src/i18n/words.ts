@@ -19,6 +19,22 @@ export function campaignsTranslator(words?: Words<"campaigns">) {
   return createTranslator({ locale: words?.locale ?? "en", messages: { campaigns: words?.messages ?? en.campaigns }, namespace: "campaigns" });
 }
 
+/** The Enquiries page's words (inbox, WhatsApp chats, logging an enquiry); English when none are passed. */
+export function enquiriesTranslator(words?: Words<"enquiries">) {
+  return createTranslator({ locale: words?.locale ?? "en", messages: { enquiries: words?.messages ?? en.enquiries }, namespace: "enquiries" });
+}
+
+/** "3h ago" / "3 घंटे पहले" from the Enquiries words; empty when unreadable, like `relativeAge`. */
+export function enquiryAge(t: ReturnType<typeof enquiriesTranslator>, iso: string | null, now: Date): string {
+  const age = ageParts(iso, now);
+  return !age ? "" : age.unit === "now" ? t("age.now") : t(`age.${age.unit}`, { n: age.n });
+}
+
+/** Settings' client panels (preferences, privacy requests, WhatsApp status); English when none are passed. */
+export function settingsTranslator(words?: Words<"settings">) {
+  return createTranslator({ locale: words?.locale ?? "en", messages: { settings: words?.messages ?? en.settings }, namespace: "settings" });
+}
+
 /** #2345: client fallbacks (no reply, a dropped connection) in the owner's language; English when none are passed. */
 export function noticesTranslator(words?: Words<"notices">) {
   return createTranslator({ locale: words?.locale ?? "en", messages: { notices: words?.messages ?? en.notices }, namespace: "notices" });

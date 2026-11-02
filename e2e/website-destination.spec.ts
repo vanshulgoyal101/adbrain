@@ -1,12 +1,15 @@
 import { test, expect, type BrowserContext, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import { signInBrowser } from "../scripts/lib/test-session.mjs";
+import recorded from "../tests/core/fixtures/meta/launch-validate-website.json";
+import { MetaClient } from "@/lib/meta/client";
 
 /**
  * #2595 phase 1 acceptance: an owner sends ads to their website, and WhatsApp (the default) is unchanged.
  * Meta is never reached: connection, preflight and create are answered at the API boundary, so nothing spends.
  * The real draft API and local database store the input, so the draft contract is checked as saved.
- * The validate_only launch payload itself is proven by tests/core/launch-validate-website.test.ts (#2598).
+ * The launch step runs the real Meta adapter on the owner's Review choices with only Graph stubbed, and every
+ * payload must equal one Meta accepted with validate_only (tests/core/fixtures/meta/launch-validate-website.json).
  * Done when slices C (#2599, preflight) and D (#2600, composer and Review) are on next.
  */
 
@@ -97,36 +100,89 @@ async function openComposer(page: Page, headline: string, width: number) {
   await page.locator("#budget").fill("400");
 }
 
+type Exchange = { kind: string; form: Record<string, string>; status: number; body: unknown };
+const tape = recorded.tape as unknown as Exchange[];
+const LAUNCH_KINDS = ["campaigns", "adsets", "adcreatives", "ads"];
+const IDS: Record<string, string> = { campaigns: "CAMPAIGN", adsets: "ADSET", adcreatives: "CREATIVE", ads: "AD" };
+
+/**
+ * The payloads the Meta adapter sends for the owner's link; each ad keeps its own button (no composer choice, QA on #2660). Graph is stubbed in this test process only:
+ * nothing leaves the machine, so nothing spends. Inputs other than the link are the taped ones.
+ */
+async function launchPayloads(link: string) {
+  const sent: { kind: string; form: Record<string, string> }[] = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = new URL(String(input));
+    if (url.hostname !== "graph.facebook.com") return new Response(new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]));
+    if ((init?.method ?? "GET") !== "POST") {
+      if (url.searchParams.get("type") === "adgeolocationmeta") return Response.json(recorded.geoMeta.body, { status: recorded.geoMeta.status });
+      throw new Error(`Unexpected Graph read during the website launch: ${url.pathname}`);
+    }
+    const kind = url.pathname.split("/").pop()!;
+    if (kind === "adimages") return Response.json({ images: { image: { hash: "FEED_HASH" } } });
+    sent.push({ kind, form: Object.fromEntries([...(init!.body as URLSearchParams)].filter(([key]) => key !== "access_token")) });
+    return Response.json({ id: IDS[kind] });
+  }) as typeof fetch;
+  try {
+    const inputs = recorded.inputs;
+    const meta = new MetaClient({ adAccountId: "act_ACCOUNT", pageId: "PAGE", accessToken: "test-token" });
+    await meta.createLeadCampaign({
+      name: inputs.name, dailyBudgetRupees: inputs.dailyBudgetRupees, link, ageMin: inputs.ageMin, ageMax: inputs.ageMax,
+      gender: inputs.gender as "all", location: inputs.location, interests: inputs.interests,
+      creatives: [{ imageUrl: "https://adbrain.vanshul.com/solar-example.jpg", ...inputs.creative }],
+      destination: "website",
+    });
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+  return sent;
+}
+
+/** What Meta accepted with validate_only for this button type, moved to the owner's link. */
+function acceptedFor(link: string, type: "LEARN_MORE" | "SHOP_NOW" | "SIGN_UP") {
+  const accepted = (kind: string) => {
+    const exchange = tape.find(e => e.kind === kind)!;
+    expect(exchange, kind).toMatchObject({ status: 200, body: { success: true } });
+    return exchange.form;
+  };
+  const creative = accepted(type === "LEARN_MORE" ? "adcreatives" : `adcreatives-cta-${type}`);
+  const story = JSON.parse(creative.object_story_spec);
+  story.link_data.link = link;
+  story.link_data.call_to_action = { type, value: { link } };
+  return LAUNCH_KINDS.map(kind => ({ kind, form: kind === "adcreatives" ? { ...creative, object_story_spec: JSON.stringify(story) } : accepted(kind) }));
+}
+
 const reviewPanel = (page: Page) => page.locator("div").filter({ has: page.getByRole("heading", { name: "Campaign review" }) }).last();
 const fitsWidth = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth);
 
 for (const width of [1440, 390]) {
-  test(`website destination: URL and button reach Review and a paused create at ${width}px`, async ({ page, context }, testInfo) => {
+  test(`website destination: URL reaches Review and a paused create at ${width}px`, async ({ page, context }, testInfo) => {
     const admin = adminClient();
     const headline = `Website fixture ${width}`;
     const cleanup = await seed(admin, width === 390 ? "77777777-7777-4777-8777-777777777390" : "77777777-7777-4777-8777-777777771440", headline, "example.com/rooftop-solar");
-    const seen = await mockMeta(context, body => reviewFor(body, { destination: "website", websiteUrl: website, websiteCta: "shop_now", whatsappNumber: null }));
+    const seen = await mockMeta(context, body => reviewFor(body, { destination: "website", websiteUrl: website, whatsappNumber: null }));
     try {
       await signInBrowser(context, "http://localhost:3939", process.env.DEV_LOGIN_EMAIL!);
       await openComposer(page, headline, width);
       await expect(page.locator("#destination-whatsapp")).toBeChecked();
       await page.locator("#destination-website").check();
-      // The landing page is the Brand Website (a bare domain gets https), and the button defaults to Learn more.
-      await expect(page.locator("#website-destination")).toHaveAttribute("href", website);
-      await expect(page.locator("#website-cta-learn_more")).toBeChecked();
-      await page.locator("#website-cta-shop_now").check();
+      // The landing page is the Brand Website (a bare domain gets https); the button is each ad's own, not chosen here.
+      await expect(page.locator("#website-destination").getByRole("link", { name: "Open" })).toHaveAttribute("href", website);
+      await expect(page.locator('input[name="website-cta"]')).toHaveCount(0);
       await page.getByRole("button", { name: "Check my campaign (nothing spends)" }).click();
 
       const panel = reviewPanel(page);
       await expect(panel).toBeVisible();
-      await expect(panel.getByRole("link", { name: website })).toHaveAttribute("href", website);
-      await expect(panel.getByText("Button: Shop now")).toBeVisible();
+      await expect(panel.getByRole("link", { name: "Open" })).toHaveAttribute("href", website);
+      await expect(panel).not.toContainText("Button:");
       await expect(panel).not.toContainText("WhatsApp");
       await expect(panel).not.toContainText("Instant lead form");
 
       expect(seen.preflight).toHaveLength(1);
       const input = await storedInput(admin, seen.preflight[0].draftId);
-      expect(input).toMatchObject({ destination: "website", websiteCta: "shop_now", leadFormId: null });
+      expect(input).toMatchObject({ destination: "website", leadFormId: null });
+      expect(input).not.toHaveProperty("websiteCta");
       expect(input).not.toHaveProperty("whatsappNumber");
       expect(input).not.toHaveProperty("whatsappMessage");
       expect(await fitsWidth(page)).toBe(true);
@@ -137,6 +193,12 @@ for (const width of [1440, 390]) {
       expect(seen.create).toEqual([expect.objectContaining({ businessId, draftId: seen.preflight[0].draftId, draftVersion: seen.preflight[0].draftVersion, planHash, connectionGeneration: 1 })]);
       expect(seen.unexpected).toEqual([]);
       expect(await fitsWidth(page)).toBe(true);
+
+      // The launch for what Review passed: a paused website-visits campaign, exactly as Meta accepted with validate_only.
+      // The taped creative's "Get Quote" maps to Learn more.
+      const sent = await launchPayloads(website);
+      expect(sent).toEqual(acceptedFor(website, "LEARN_MORE"));
+      expect(sent.filter(s => "status" in s.form).map(s => s.form.status)).toEqual(["PAUSED", "PAUSED", "PAUSED"]);
     } finally {
       await cleanup(seen);
     }
@@ -148,7 +210,7 @@ test("website destination without a Brand website: Review blocks the send and of
   const headline = "Website fixture no site";
   const cleanup = await seed(admin, "77777777-7777-4777-8777-777777770000", headline, null);
   const blocker = { code: "PREFLIGHT_BLOCKED", reason: "REVIEW_NO_WEBSITE", message: "Add your business website on the Your business page.", action: { kind: "open_brand" } };
-  const seen = await mockMeta(context, body => reviewFor(body, { destination: "website", websiteUrl: null, websiteCta: "learn_more", canCreatePaused: false, planHash: null, blockers: [blocker] }));
+  const seen = await mockMeta(context, body => reviewFor(body, { destination: "website", websiteUrl: null, canCreatePaused: false, planHash: null, blockers: [blocker] }));
   try {
     await signInBrowser(context, "http://localhost:3939", process.env.DEV_LOGIN_EMAIL!);
     await openComposer(page, headline, 390);
@@ -200,5 +262,44 @@ test("WhatsApp stays the default and its draft and Review carry nothing from the
     expect(await fitsWidth(page)).toBe(true);
   } finally {
     await cleanup(seen);
+  }
+});
+
+/** Step 1 of the setup; after a launch it opens folded ("Same as last time … Change"). */
+async function openBrandStep(page: Page) {
+  await page.goto("/brand?again=1");
+  await page.getByRole("heading", { level: 2 }).first().waitFor();
+  const change = page.getByRole("button", { name: "Change" });
+  if (await change.isVisible()) await change.click();
+}
+
+// #2646 (slice F): Brand saves a website-only business with no phone. Needs #2656's column in the local database.
+// Nothing reaches Create: "Make my ads" would start a paid batch, so the saved row is read instead.
+test("Brand: a website-only business saves with no phone, and WhatsApp stays preselected for others", async ({ page, context }, testInfo) => {
+  const admin = adminClient();
+  const before = await admin.from("businesses").select("website, phone, default_destination").eq("id", businessId).single();
+  expect(before.error).toBeNull();
+  const row = async () => (await admin.from("businesses").select("website, phone, default_destination").eq("id", businessId).single()).data;
+  try {
+    expect((await admin.from("businesses").update({ default_destination: "whatsapp" }).eq("id", businessId)).error).toBeNull();
+    await page.setViewportSize({ width: 390, height: 844 });
+    await signInBrowser(context, "http://localhost:3939", process.env.DEV_LOGIN_EMAIL!);
+    await openBrandStep(page);
+    const picker = page.getByRole("group", { name: "Where should customers go?" });
+    await expect(picker.getByRole("radio", { name: "WhatsApp chat" })).toBeChecked();
+    await expect(page.getByLabel("WhatsApp number")).toBeVisible();
+
+    await picker.getByRole("radio", { name: "Your website" }).check();
+    await page.getByLabel("Your website or page").fill("example.com/rooftop-solar");
+    await page.getByLabel("Phone number (optional)").fill("");
+    await expect.poll(row, { timeout: 15_000 }).toMatchObject({ default_destination: "website", website, phone: null });
+    expect(await fitsWidth(page)).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath("brand-website-390.png"), fullPage: true });
+
+    // A reload reads the saved choice back.
+    await openBrandStep(page);
+    await expect(page.getByRole("radio", { name: "Your website" })).toBeChecked();
+  } finally {
+    await admin.from("businesses").update(before.data ?? {}).eq("id", businessId);
   }
 });

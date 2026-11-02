@@ -15,6 +15,8 @@ import {
   hasLaunchedCampaign,
 } from "@/lib/supabase/queries";
 import { getMetaConnection } from "@/lib/meta/credentials";
+import { isInternalUser } from "@/lib/internal-accounts";
+import { createClient } from "@/lib/supabase/server";
 import { readWhatsAppStatus, type WhatsAppStatus } from "@/lib/meta/whatsapp-status";
 
 export const metadata = { title: OWNER_WORDS.business };
@@ -25,10 +27,11 @@ export default async function BrandPage({ searchParams }: { searchParams: Promis
   // `?all=1` opens the full page. If the check fails, the full page shows as before.
   const setup = params.all !== "1" && (!business || !(await hasLaunchedCampaign(business.id).catch(() => true)));
   if (setup || (params.again === "1" && business)) {
-    const words = await setupWords();
-    if (setup) return <SetupBusinessStep business={business} chooseLanguage={!(await localeChosen())} words={words} />;
+    const [words, offerWebsite] = await Promise.all([setupWords(),
+      createClient().then((supabase) => supabase.auth.getUser()).then(({ data }) => isInternalUser(data.user)).catch(() => false)]);
+    if (setup) return <SetupBusinessStep business={business} chooseLanguage={!(await localeChosen())} offerWebsite={offerWebsite} words={words} />;
     // #1934 (CPO #1924): "New campaign" after one went live re-enters the 3 steps; step 1 asks only for the new offer.
-    return <SetupBusinessStep business={business} returning words={words} />;
+    return <SetupBusinessStep business={business} returning offerWebsite={offerWebsite} words={words} />;
   }
   const [assets, instructions, connection] = business
     ? await Promise.all([

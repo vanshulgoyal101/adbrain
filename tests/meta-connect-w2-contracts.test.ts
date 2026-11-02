@@ -8,6 +8,15 @@ import {
 const businessId = "11111111-1111-4111-8111-111111111111";
 
 describe("Worker 2 campaign contracts", () => {
+  it.each(["whatsapp", "instant_form", undefined])("rejects conversion goals on the %s destination", (destination) => {
+    for (const websiteGoal of ["leads", "sales"]) {
+      expect(draftInputSchema.safeParse({
+        businessId, name: "Website leads", goal: "Enquiries", mode: "manual", creativeIds: [],
+        dailyBudgetRupees: 300, leadFormId: null, targeting: {}, abTest: false, destination, websiteGoal,
+      }).success).toBe(false);
+    }
+  });
+
   it("allows incomplete draft input while requiring bounded typed fields", () => {
     const parsed = draftInputSchema.safeParse({
       businessId,

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { MetaClient, editedCreativeForm } from "@/lib/meta/client";
+import { CREATIVE_OPT_OUT_FORM, MetaClient, editedCreativeForm } from "@/lib/meta/client";
 import recorded from "./fixtures/meta/ad-edit.json";
 
 // ad-edit.json: #499's paused ad and its creative as Meta stores them, and Meta's validate_only
@@ -73,6 +73,8 @@ describe("core: edit a launched ad's words (#775)", () => {
     const form = editedCreativeForm(single, { headline: "New title", whatsappGreeting: { autofill: "Hi! I'd like a free solar site survey.", greeting: "Hi!" } });
     const story = JSON.parse(form.object_story_spec);
     expect(form.name).toBe("New title");
+    // #1932: the edited single-image creative opts out of Meta's creative enhancements like a launched one.
+    expect(form.degrees_of_freedom_spec).toBe(CREATIVE_OPT_OUT_FORM.degrees_of_freedom_spec);
     expect(story.link_data).toMatchObject({ image_hash: "H", message: "Old body", name: "New title" });
     expect(JSON.parse(story.link_data.page_welcome_message).text_format.message.autofill_message.content).toBe("Hi! I'd like a free solar site survey.");
     expect(() => editedCreativeForm({ object_story_spec: { link_data: { message: "x" } } }, { whatsappGreeting: { autofill: "a", greeting: "b" } })).toThrow("no WhatsApp message");

@@ -4,7 +4,7 @@
  * through saveCampaign, after an exact read-back of the Meta tree. Read-only on Meta.
  * Dry run by default; --apply writes the row. Mark the business operator-funded first.
  *
- *   npx tsx --env-file=.env.local scripts/adopt-capped-run.ts --draft <draft id> \
+ *   npx tsx --import ./scripts/trusted-server-cli.mjs --env-file=.env.local scripts/adopt-capped-run.ts --draft <draft id> \
  *     --campaign <meta campaign> --source-adset <id> --source-ad <id> \
  *     --capped-adset <id> --capped-ad <id> --days <1-7> [--apply]
  */

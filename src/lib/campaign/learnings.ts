@@ -2,6 +2,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { savedGenerationSettings } from "@/lib/creative/receipt";
 import type { WhatsAppOpening } from "@/lib/meta/client";
 
+/** #789: a media library asset (#1209's `media_assets`) an ad was made from. */
+export type CreativeMedia = { id: string; kind: string; source: string };
+
 type Generation = { textModels?: { model?: unknown }[]; image?: { model?: unknown } } | null;
 
 export type LaunchSnapshotInput = {
@@ -20,7 +23,8 @@ export type LaunchSnapshotInput = {
   /** #840: this campaign's edited WhatsApp message, the business's saved one, or AdBrain's suggestion. */
   prefillSource?: "edited" | "saved" | "suggested";
   storyFormat: boolean;
-  creatives: { id: string; angle: string | null; generation: unknown }[];
+  /** #789: `media` is the library photo or video the ad was made from (`readCreativeMedia`), if any. */
+  creatives: { id: string; angle: string | null; generation: unknown; media?: CreativeMedia | null }[];
   /** #672: the ad sets' `targeting` forms as sent to Meta (from the plan check's payloads). */
   sentTargetings?: string[];
   /** #672: the Meta creative each ad runs on, in ad order. */
@@ -66,7 +70,8 @@ const text = (value: unknown) => (typeof value === "string" && value ? value : n
 export function buildLaunchSnapshot(input: LaunchSnapshotInput) {
   return {
     // v2 (#672): Advantage+ as sent, Meta creative ids, and `cap` once a capped run is activated.
-    version: 2,
+    // v3 (#789): each creative's library asset (`mediaAssetId`) and the distinct assets in `media`.
+    version: 3,
     destination: input.destination,
     objective: input.objective,
     budget: { dailyRupees: input.dailyBudgetRupees, adSets: input.adSetCount, abTest: input.abTest },
@@ -94,11 +99,52 @@ export function buildLaunchSnapshot(input: LaunchSnapshotInput) {
         language: savedGenerationSettings(creative.generation).language ?? null,
         textModel: text(generation?.textModels?.[0]?.model),
         imageModel: text(generation?.image?.model),
+        mediaAssetId: creative.media?.id ?? null,
       };
     }),
+    media: [...new Map(input.creatives.flatMap(({ media }) => media ? [[media.id, { mediaAssetId: media.id, kind: media.kind, source: media.source }] as const] : [])).values()],
     metaCreativeIds: input.metaCreativeIds ?? [],
     cap: null as null | { lifetimeRupees: number; days: number; endTime: string },
   };
+}
+
+/**
+ * #789: the library asset each creative was made from, for the ledger. Best effort like the ledger itself:
+ * any error or a read slower than 1.5 s (including a database without #2625's `media_asset_id` yet) gives no media, never a failed launch.
+ */
+export async function readCreativeMedia(database: SupabaseClient, businessId: string, creativeIds: string[], timeoutMs = MEDIA_READ_TIMEOUT_MS): Promise<Map<string, CreativeMedia>> {
+  // Launch awaits this after Meta's create and before the campaign row is saved, so a stalled read must not hold it.
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timedOut = new Promise<Map<string, CreativeMedia>>(resolve => { timer = setTimeout(() => resolve(new Map()), timeoutMs); });
+  try {
+    return await Promise.race([lookupCreativeMedia(database, businessId, creativeIds), timedOut]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+const MEDIA_READ_TIMEOUT_MS = 1500;
+
+async function lookupCreativeMedia(database: SupabaseClient, businessId: string, creativeIds: string[]): Promise<Map<string, CreativeMedia>> {
+  const media = new Map<string, CreativeMedia>();
+  try {
+    if (!creativeIds.length) return media;
+    const { data: links, error } = await database.from("creatives").select("id, media_asset_id").in("id", creativeIds).eq("business_id", businessId);
+    if (error || !Array.isArray(links)) return media;
+    const linked = (links as { id: string; media_asset_id: string | null }[]).filter(link => link.media_asset_id);
+    if (!linked.length) return media;
+    const { data: assets, error: assetError } = await database.from("media_assets").select("id, kind, source")
+      .in("id", [...new Set(linked.map(link => link.media_asset_id!))]).eq("business_id", businessId);
+    if (assetError || !Array.isArray(assets)) return media;
+    const byId = new Map((assets as CreativeMedia[]).map(asset => [asset.id, { id: asset.id, kind: asset.kind, source: asset.source }]));
+    for (const link of linked) {
+      const asset = byId.get(link.media_asset_id!);
+      if (asset) media.set(link.id, asset);
+    }
+  } catch {
+    media.clear();
+  }
+  return media;
 }
 
 /**

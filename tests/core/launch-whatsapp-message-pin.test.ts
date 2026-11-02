@@ -13,7 +13,7 @@ vi.mock("@/lib/meta/whatsapp-bindings", () => ({ boundWhatsAppNumbers: async () 
 vi.mock("@/lib/creative/story", () => ({ renderStoriesWithin: (generations: unknown[]) => generations.map(() => null) }));
 vi.mock("@/lib/campaign/operation-store", () => ({ createOperationCheckpoint: () => ({ checkpoint: async (operation: unknown) => operation }) }));
 vi.mock("@/lib/campaign/trusted-write", () => ({ saveCampaign: async () => ({ data: { id: "campaign-row" }, error: null }) }));
-vi.mock("@/lib/campaign/learnings", () => ({ buildLaunchSnapshot: () => null, saveLaunchSnapshot: async () => true }));
+vi.mock("@/lib/campaign/learnings", () => ({ buildLaunchSnapshot: () => null, readCreativeMedia: async () => new Map(), saveLaunchSnapshot: async () => true }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({}) }));
 vi.mock("@/lib/observability/logger", () => ({ recordProductEvent: () => undefined }));
 

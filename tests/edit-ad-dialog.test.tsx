@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EditAdDialog } from "@/components/edit-ad-dialog";
 import { BACK_TO_REVIEW, editableAds } from "@/lib/campaign/ad-edit-copy";
 import type { Campaign, Creative } from "@/lib/types";
+import hi from "../messages/hi.json";
 
 const creatives = [
   { id: "c1", headline: "Stop guessing if your roof is ready", primary_text: "Book your free solar site survey today.", generation: null },
@@ -27,6 +28,18 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("edit a launched ad's words (#775)", () => {
+  it("speaks the owner's language, including the fallback when the server says nothing (#1438)", async () => {
+    fetcher.mockResolvedValueOnce(Response.json({}, { status: 500 }));
+    render(<EditAdDialog campaign={capped} campaignName="Solaride" creatives={creatives} onClose={vi.fn()} onSaved={vi.fn()} words={{ locale: "hi", messages: hi.campaigns }} />);
+    expect(screen.getByRole("dialog", { name: "विज्ञापन के शब्द बदलें" })).toBeTruthy();
+    expect(screen.getByRole("note")).toHaveTextContent(`${hi.campaigns.editAd.backToReview} ${hi.campaigns.editAd.unchanged}`);
+    fireEvent.click(screen.getByRole("button", { name: "सेव करें और जाँच के लिए भेजें" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("पहले हेडलाइन, टेक्स्ट या विवरण बदलें।");
+    fireEvent.change(screen.getByLabelText("विज्ञापन का टेक्स्ट"), { target: { value: "नया टेक्स्ट" } });
+    fireEvent.click(screen.getByRole("button", { name: "सेव करें और जाँच के लिए भेजें" }));
+    expect(await screen.findByText("विज्ञापन नहीं बदला जा सका। कुछ भी नहीं बदला।")).toBeTruthy();
+  });
+
   it("offers a capped run's delivering copies, every ad of an uncapped A/B by ad set, and decides from the stored cap", () => {
     expect(editableAds(capped, ["c1", "c2"])).toEqual([
       { adId: "live-1", creativeId: "c1", label: "Ad 1" }, { adId: "live-2", creativeId: "c2", label: "Ad 2" }]);

@@ -126,6 +126,7 @@ lower cost.
 | `META_LOGIN_CONFIG_ID` | Empty | Optional Facebook Login for Business configuration |
 | `META_TOKEN_ENCRYPTION_KEY` | Empty | Base64 32-byte encryption key for token store |
 | `MANAGED_ACCOUNTS_ENABLED` | `false` | 2-Tier managed accounts (#518): `true`/`1` turns on provisioning child businesses under the parent. Off until provisioning ships. While off, internal accounts (`internal-accounts.json`, #379) still get the managed screens and routes (`/onboarding`, `/api/managed/*`, `/api/meta/managed/*`) for QA walks and concierge pilots (#523); background work (credential routing, spend caps, crons) follows the flag only |
+| `MEDIA_UPLOADS_ENABLED` | `false` | Owners' own photos (#1209, #744 phase 1): `true`/`1` turns on `/api/media/*` and the photo library. Turn on only after `20261028_media_assets.sql` (the `media_assets` tables and the private `media` bucket) is in production |
 | `AD_RESULTS_ENABLED` | off | Results per ad (#783): exactly `true` makes each campaign refresh (manual and cron) also read Meta's per-ad results into `ad_results` (best effort; a failure keeps the last rows) and turns on `GET /api/campaigns/[id]/ads`. Turn on only after the `20261026_campaign_ads_ad_results.sql` migration is in production |
 | `OWNER_ALERTS_ENABLED` | off | Owner WhatsApp alerts (#701 slice 2): exactly `true`, with `ALERTS_WHATSAPP_PHONE_ID` and `ALERTS_WHATSAPP_TOKEN` set, lets the sender send approved utility templates from AdBrain's alerts number. Turn on only after the `20261027_owner_whatsapp_alerts_sends.sql` migration and template approval |
 | `ALERTS_WHATSAPP_PHONE_ID` | empty | The Cloud API phone number id (digits) of AdBrain's alerts number (#701). Not a secret |
@@ -136,7 +137,7 @@ lower cost.
 | `META_PARENT_SYSTEM_TOKEN` | Empty | Privileged secret (Vercel Sensitive): the parent's 'AdBrain provisioning' system-user token. Checked read-only after each deploy (`/api/cron/meta-parent-health`); rotation in OPERATIONS |
 | `META_CONNECT_ROLLOUT` | Unset | `disabled`, `pilot`, `enabled`; unset allows nonproduction only |
 | `META_CONNECT_PILOT_USER_ID` | Unset | Exact app user allowed in pilot mode |
-| `META_APP_REVIEW_PENDING` | on | #1989: while Meta App Review (#156) is pending, WS1 step 3 tells a not-yet-Tester owner that only added people can connect, and after a return with nothing connected sends the access request (#2538) and offers Try again. Exactly `false` hides it; DevOps sets that once #156 is approved. No secret |
+| `META_APP_REVIEW_PENDING` | on | #1989: while Meta App Review (#156) is pending, WS1 step 3 and the Campaigns ready-ads step say Facebook is still reviewing AdBrain and a new account must wait for Meta's approval (#2697); after a return with nothing connected step 3 sends the access request (#2538), says whether it was recorded and offers Try again. Exactly `false` hides it and the ready-ads step offers Connect Facebook instead; DevOps sets that once #156 is approved. No secret |
 | `META_SYSTEM_USER_TOKEN`, `META_AD_ACCOUNT_ID`, `META_PAGE_ID` | Empty | **Local fixture recording only** (`.env.local`, read by `scripts/lib/meta-env.ts`). The app doesn't read them (#520), and they aren't set in Vercel |
 
 Rollout variables are read directly, outside `getEnv()`. Unknown values deny
@@ -206,10 +207,12 @@ GitHub environment secrets; never in an issue. GitHub's and Vercel's own variabl
 | `SMOKE_EXPECT_CLOUDFLARE` | `smoke-core.mjs`: `1` fails a Create smoke whose pictures include none from Cloudflare (#2412) | No |
 | `VERCEL_TOKEN` | `production-guard.mjs`: Vercel API for the live SHA and rollback | Yes |
 | `GH_TOKEN`, `GH_REPO` | CI scripts' GitHub token; `wait-for-work.mjs` repository override | Token |
+| `FLAKY_REPORT` | `vitest.config.mts`, `flaky-reporter.mjs`: CI unit job's path for tests that passed only on their retry; `file-flaky.mjs` files them as `flaky` issues (#618) | No |
 | `GROQ_REVIEW_API_KEY` | `ai-review.mjs`: the PR AI review's Groq key, separate from the app's pool | Yes |
 | `ADBRAIN_ALLOW_META_WRITES` | `scripts/lib/meta-write-gate.ts`: `1` lets a `record-meta-*` script make non-GET Graph calls | No |
 | `ADBRAIN_HEADLESS` | Set by `team-supervisor.mjs` for role runs; refuses releases, migrations and Meta writes | No |
 | `ADBRAIN_SUPERVISOR_CLI`, `ADBRAIN_SUPERVISOR_MAX_LOAD`, `ADBRAIN_SUPERVISOR_MIN_FREE_GB` | `team-supervisor.mjs`: the CLI command (JSON array), and the load and free-disk limits for starting a run | No |
+| `TEST_BASE`, `NVM_DIR` | `scripts/test.sh`: the ref `--changed` diffs against (CI: `HEAD^1`; default the merge-base with `origin/next`), and where to find the `.nvmrc` Node (default `~/.nvm`) | No |
 | `WS1_EMAIL` | `ws1-walk.mts`: an internal account that has never gone live, signed in like `SMOKE_EMAIL` | No |
 | `META_CONNECT_UI_BASE_URL`, `META_CONNECT_UI_STATIC_ONLY`, `META_OAUTH_INTERACTIVE`, `META_TEST_TRANSFER_SQL` | Local Meta connect checks (`check-meta-connect-ui.mjs`, `check-meta-oauth-entry.mjs`, `check-meta-connect-db.mjs`): target URL, static-only and interactive switches, transfer SQL path | No |
 | `META_TEST_PG_BIN` | `check-meta-connect-db.mjs`, `db-export.mjs`, `restore-drill.mjs`: Postgres binary folder | No |
