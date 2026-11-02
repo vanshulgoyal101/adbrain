@@ -1,5 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { MediaAsset, MetaMediaStore, MetaUploadPatch, MetaUploadRow, NewMetaUpload } from "./meta-media";
+import { readVerifiedMedia, type MediaRow } from "@/lib/media/store";
+import { metaClientForBusiness } from "@/lib/meta/credentials";
+import {
+  ensureMetaMedia, metaMediaPort, type MediaAsset, type MetaMediaResult, type MetaMediaStore, type MetaUploadPatch, type MetaUploadRow,
+  type NewMetaUpload,
+} from "./meta-media";
 
 /** #749: `media_meta_uploads` (20261104_media_meta_uploads.sql) and the `media_assets` it points at, service role only. */
 type Admin = Pick<SupabaseClient, "from" | "storage">;
@@ -77,4 +82,19 @@ function toDb(row: NewMetaUpload | MetaUploadPatch): Record<string, unknown> {
     if (column && value !== undefined) out[column] = value;
   }
   return out;
+}
+
+/**
+ * #749 production wiring for a row the caller read through RLS: the business's own Meta connection (its account and
+ * write mode, so the smoke account stays pause-only), the sha256-checked bytes and the service-role store.
+ */
+export async function sendOwnMediaToMeta(admin: SupabaseClient, row: MediaRow, retry?: boolean): Promise<MetaMediaResult> {
+  const client = await metaClientForBusiness(row.business_id);
+  if (!client) return { status: "refused", reason: "bad_account" };
+  return ensureMetaMedia({
+    store: supabaseMetaMediaStore(admin),
+    meta: metaMediaPort(client),
+    readBytes: () => readVerifiedMedia(admin, row),
+    signedUrl: (asset) => signedMediaUrl(admin, asset),
+  }, { businessId: row.business_id, assetId: row.id, retry });
 }

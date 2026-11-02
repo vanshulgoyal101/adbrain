@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // #749: the owner's file goes only to their business's own connected ad account, proven by the RLS read.
 const m = vi.hoisted(() => ({
-  own: vi.fn(), read: vi.fn(), client: vi.fn(), ensure: vi.fn(), port: vi.fn(), signed: vi.fn(), store: vi.fn(),
+  own: vi.fn(), read: vi.fn(), client: vi.fn(), ensure: vi.fn(), port: vi.fn(),
 }));
 const admin = { admin: true };
 vi.mock("@/lib/observability/logger", () => ({ observeRoute: (_r: string, _m: string, handler: unknown) => handler }));
@@ -11,7 +11,6 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => admin }));
 vi.mock("@/lib/media/store", () => ({ ownMedia: m.own, readVerifiedMedia: m.read }));
 vi.mock("@/lib/meta/credentials", () => ({ metaClientForBusiness: m.client }));
 vi.mock("@/services/meta-media", () => ({ ensureMetaMedia: m.ensure, metaMediaPort: m.port }));
-vi.mock("@/services/meta-media-store", () => ({ signedMediaUrl: m.signed, supabaseMetaMediaStore: m.store }));
 vi.mock("@/lib/media/route-helpers", () => ({
   mediaSession: async () => ({ user: { id: "u1" }, client: { rls: true } }),
   mediaErrorResponse: (error: { status?: number }) => new Response(null, { status: error.status ?? 503 }),
@@ -31,7 +30,6 @@ beforeEach(() => {
   m.own.mockResolvedValue(row);
   m.client.mockResolvedValue({ adAccountId: "act_1" });
   m.port.mockReturnValue({ adAccountId: "act_1" });
-  m.store.mockReturnValue({ store: true });
   m.ensure.mockResolvedValue({ status: "processing", kind: "video", videoId: "9000000000000002" });
 });
 
@@ -43,13 +41,10 @@ describe("POST /api/media/[id]/meta (#749)", () => {
     expect(m.own).toHaveBeenCalledWith({ rls: true }, ASSET);
     expect(m.client).toHaveBeenCalledWith(BUSINESS);
     expect(m.port).toHaveBeenCalledWith({ adAccountId: "act_1" });
-    expect(m.store).toHaveBeenCalledWith(admin);
     const [deps, input] = m.ensure.mock.calls[0];
     expect(input).toEqual({ businessId: BUSINESS, assetId: ASSET, retry: true });
     await deps.readBytes();
     expect(m.read).toHaveBeenCalledWith(admin, row);
-    await deps.signedUrl({ id: ASSET });
-    expect(m.signed).toHaveBeenCalledWith(admin, { id: ASSET });
   });
 
   it("refuses a request that names a business or account: only the file id counts", async () => {
@@ -90,10 +85,9 @@ describe("POST /api/media/[id]/meta (#749)", () => {
   });
 
   it("the pause-only smoke account is told plainly it can't send, not to try again", async () => {
-    const { ConnectionAccessError } = await import("@/lib/meta/connection-access-error");
-    m.ensure.mockRejectedValueOnce(new ConnectionAccessError("FORBIDDEN", "The test account can only check and pause on this Meta ad account."));
+    m.ensure.mockResolvedValueOnce({ status: "refused", reason: "read_only" });
     const response = await post();
     expect(response.status).toBe(403);
-    expect(await response.json()).toEqual({ error: "The test account can only check and pause on this Meta ad account.", code: "META_FORBIDDEN" });
+    expect((await response.json()).code).toBe("META_READ_ONLY");
   });
 });

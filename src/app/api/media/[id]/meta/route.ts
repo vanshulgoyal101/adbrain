@@ -3,14 +3,12 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { apiError } from "@/lib/api";
 import { mediaErrorResponse, mediaSession } from "@/lib/media/route-helpers";
-import { ownMedia, readVerifiedMedia } from "@/lib/media/store";
-import { ConnectionAccessError } from "@/lib/meta/connection-access-error";
-import { metaClientForBusiness } from "@/lib/meta/credentials";
+import { ownMedia } from "@/lib/media/store";
 import { observeRoute } from "@/lib/observability/logger";
 import { rateLimitResponse } from "@/lib/security/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { ensureMetaMedia, metaMediaPort, type MetaMediaResult } from "@/services/meta-media";
-import { signedMediaUrl, supabaseMetaMediaStore } from "@/services/meta-media-store";
+import type { MetaMediaResult } from "@/services/meta-media";
+import { sendOwnMediaToMeta } from "@/services/meta-media-store";
 
 export const runtime = "nodejs";
 // A video start is two 15 s Graph calls (one 389 retry) plus a status read; a stuck claim's lookup can run past this,
@@ -25,6 +23,7 @@ const REFUSED: Record<Refusal, [number, string, string]> = {
   not_found: [404, "MEDIA_NOT_FOUND", "Photo not found."],
   not_ready: [409, "MEDIA_NOT_UPLOADED", "This file isn't ready yet."],
   bad_account: [409, "META_NOT_CONNECTED", "Connect Facebook to send your files to Meta."],
+  read_only: [403, "META_READ_ONLY", "The test account can only check and pause on this Meta ad account."],
 };
 
 function refused(reason: Refusal) {
@@ -48,22 +47,10 @@ export const POST = observeRoute("/api/media/[id]/meta", "POST", async (req: Req
   try {
     // RLS read proves the owner; the account is the business's own connection, never one the request names.
     const row = await ownMedia(session.client, (await params).id);
-    const client = await metaClientForBusiness(row.business_id);
-    if (!client) return refused("bad_account");
-    const admin = createAdminClient() as unknown as SupabaseClient;
-    const result = await ensureMetaMedia({
-      store: supabaseMetaMediaStore(admin),
-      meta: metaMediaPort(client),
-      readBytes: () => readVerifiedMedia(admin, row),
-      signedUrl: (asset) => signedMediaUrl(admin, asset),
-    }, { businessId: row.business_id, assetId: row.id, retry: parsed.data.retry });
+    const result = await sendOwnMediaToMeta(createAdminClient() as unknown as SupabaseClient, row, parsed.data.retry);
     if (result.status === "refused") return refused(result.reason);
     return NextResponse.json({ ok: true, ...result });
   } catch (error) {
-    if (error instanceof ConnectionAccessError) {
-      const status = { UNAUTHENTICATED: 401, NOT_FOUND: 404, FORBIDDEN: 403, CONFLICT: 409, UNAVAILABLE: 503 }[error.code];
-      return NextResponse.json({ error: error.message, code: `META_${error.code}` }, { status });
-    }
     return mediaErrorResponse(error);
   }
 });

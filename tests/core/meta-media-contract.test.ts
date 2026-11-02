@@ -407,10 +407,12 @@ describe("core: an owner's video goes to Meta once, even when an answer is lost 
   it("the pause-only smoke client refuses before sending: the claim is freed, not left to be settled as lost", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch");
     const { graph } = tapeGraph([]);
-    const { store, rows } = memoryStore([videoAsset()]);
+    const { store, rows } = memoryStore([videoAsset(), asset()]);
     const creds = { adAccountId: videoAccount, pageId: "1", accessToken: "core-token" };
     const pauseOnly = { ...deps(graph, store, videoAccount).deps, meta: metaMediaPort(new MetaClient(creds, undefined, "pause-only")) };
-    await expect(ensureMetaMedia(pauseOnly, input)).rejects.toMatchObject({ name: "ConnectionAccessError", code: "FORBIDDEN" });
+    expect(await ensureMetaMedia(pauseOnly, input)).toEqual({ status: "refused", reason: "read_only" });
+    expect(await ensureMetaMedia({ ...pauseOnly, meta: { ...pauseOnly.meta, adAccountId: imageAccount } }, { businessId: BUSINESS, assetId: IMAGE_ID }))
+      .toEqual({ status: "refused", reason: "read_only" });
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(rows).toMatchObject([{ status: "error", problem: "unreachable", attempt: 1 }]);
   });
