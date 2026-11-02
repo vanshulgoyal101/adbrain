@@ -12,8 +12,7 @@ function input(destination: "instant_form" | "whatsapp" | "website" = "website")
   return {
     draft: {
       businessId, name: "Cedar Ridge exams", goal: "Book new-patient exams", mode: "manual",
-      // TODO(#2600): drop the cast once the draft schema accepts website.
-      destination: destination as "instant_form",
+      destination,
       creativeIds: [creativeId], dailyBudgetRupees: 200, leadFormId: destination === "instant_form" ? "form-1" : null, abTest: false,
       targeting: {
         location: { mode: "ai", cityScope: "city_only", includedNames: ["Austin, Texas"] },
