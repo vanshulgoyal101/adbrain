@@ -1,0 +1,30 @@
+{
+  "source": "PROVISIONAL (#2601): the documented shape of Meta's campaign insights for a traffic campaign (OUTCOME_TRAFFIC, optimization_goal LANDING_PAGE_VIEWS), same request as getCampaignInsights, not a recording. link_click = taps on the link; landing_page_view = the page loaded after a tap. Replace with the read of the first real website campaign (#2595 phase 1).",
+  "payload": {
+    "data": [
+      {
+        "impressions": "4210",
+        "clicks": "97",
+        "spend": "412.50",
+        "actions": [
+          { "action_type": "link_click", "value": "75" },
+          { "action_type": "landing_page_view", "value": "55" },
+          { "action_type": "omni_landing_page_view", "value": "55" },
+          { "action_type": "post_engagement", "value": "90" },
+          { "action_type": "page_engagement", "value": "90" }
+        ],
+        "date_start": "2026-11-02",
+        "date_stop": "2026-11-05"
+      }
+    ]
+  },
+  "ads": {
+    "list": { "data": [{ "id": "120000000000101", "name": "Ad 1", "effective_status": "ACTIVE" }, { "id": "120000000000102", "name": "Ad 2", "effective_status": "ACTIVE" }] },
+    "insights": {
+      "data": [
+        { "ad_id": "120000000000101", "impressions": "3000", "clicks": "70", "spend": "300.00", "actions": [{ "action_type": "link_click", "value": "55" }, { "action_type": "landing_page_view", "value": "40" }] },
+        { "ad_id": "120000000000102", "impressions": "1210", "clicks": "27", "spend": "112.50", "actions": [{ "action_type": "link_click", "value": "20" }, { "action_type": "omni_landing_page_view", "value": "15" }] }
+      ]
+    }
+  }
+}

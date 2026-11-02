@@ -14,6 +14,11 @@ export interface CampaignInsights {
   costPerConversation?: number | null;
   /** Meta link_click: WhatsApp button taps, not verified chat opens or a count of non-senders. */
   whatsappOpens?: number;
+  /** #2601: website campaigns only. Pages loaded after a tap (the result), taps on the link, ₹ per tap and ₹ per page view. */
+  landingPageViews?: number;
+  linkClicks?: number;
+  cpc?: number | null;
+  costPerLandingPageView?: number | null;
   /** Meta returned no rows: nothing delivered in the requested period. */
   noDelivery?: true;
   /** #1903: the campaign's own status and budgets, read with the binding check (no extra call). */
@@ -64,6 +69,15 @@ function actionCounter(row: InsightRow | undefined) {
 const LEAD_ACTIONS = ["lead", "onsite_conversion.lead_grouped"];
 /** #371/#789: the headline WhatsApp result; Meta also reports first replies and depth, which we don't switch to silently. */
 const CONVERSATION_ACTIONS = ["onsite_conversion.messaging_conversation_started_7d"];
+/** #2601: a website campaign's result. Meta may report it only as the omni (cross-surface) count. */
+const LANDING_PAGE_ACTIONS = ["landing_page_view", "omni_landing_page_view"];
+/** Taps on the ad's link, from the same `actions` list (so the request and its recorded tapes stay as they are). */
+const LINK_CLICK_ACTIONS = ["link_click"];
+
+/** A campaign's or an ad's headline result: chats for WhatsApp, page views for a website, form leads otherwise. */
+function resultCount(count: ReturnType<typeof actionCounter>, destination: CampaignDestination) {
+  return destination === "whatsapp" ? count(CONVERSATION_ACTIONS) : destination === "website" ? count(LANDING_PAGE_ACTIONS) : count(LEAD_ACTIONS);
+}
 
 export function decodeCampaignInsights(payload: unknown, destination: CampaignDestination, options?: { requireSpend?: boolean }): CampaignInsights {
   const parsed = insightsSchema.safeParse(payload);
@@ -82,9 +96,14 @@ export function decodeCampaignInsights(payload: unknown, destination: CampaignDe
     impressions: row?.impressions ?? 0,
     clicks: row?.clicks ?? 0,
     spend, leads, cpl: leads > 0 ? spend / leads : null,
-    ...(destination === "whatsapp" ? { conversations, costPerConversation: conversations > 0 ? spend / conversations : null, whatsappOpens: actionCount(["link_click"]) } : {}),
+    ...(destination === "whatsapp" ? { conversations, costPerConversation: conversations > 0 ? spend / conversations : null, whatsappOpens: actionCount(LINK_CLICK_ACTIONS) } : {}),
+    ...(destination === "website" ? websiteFigures(spend, resultCount(actionCount, destination), actionCount(LINK_CLICK_ACTIONS)) : {}),
     ...(row ? {} : { noDelivery: true as const }),
   };
+}
+
+function websiteFigures(spend: number, landingPageViews: number, linkClicks: number) {
+  return { landingPageViews, linkClicks, cpc: linkClicks > 0 ? spend / linkClicks : null, costPerLandingPageView: landingPageViews > 0 ? spend / landingPageViews : null };
 }
 
 const lifetimeSpendSchema = z.object({
@@ -105,8 +124,10 @@ export function decodeLifetimeSpendPaise(payload: unknown): number {
 export type AdResult = {
   adId: string; name: string | null; effectiveStatus: string | null; creativeId: string | null;
   delivered: boolean; impressions: number; clicks: number; spend: number;
-  /** Chats for a WhatsApp campaign, form leads otherwise. */
+  /** Chats for a WhatsApp campaign, landing-page views for a website one (#2601), form leads otherwise. */
   results: number; costPerResult: number | null; whatsappOpens?: number;
+  /** #2601: a website campaign's ad also counts its results as landing-page views, so storage knows which they are. */
+  landingPageViews?: number;
   /** Archived (an audience edit rebuilt its ad set) or gone from the listing: its results count, but it can't be "Best so far". */
   replaced: boolean;
 };
@@ -142,12 +163,13 @@ export function decodeAdResults(adsPayload: unknown, insightsPayload: unknown, d
     const row = rows.get(ad.id);
     const count = actionCounter(row);
     const spend = row?.spend ?? 0;
-    const results = destination === "whatsapp" ? count(CONVERSATION_ACTIONS) : count(LEAD_ACTIONS);
+    const results = resultCount(count, destination);
     return {
       adId: ad.id, name: ad.name ?? null, effectiveStatus: ad.effective_status ?? null, creativeId: ad.creative?.id ?? null,
       delivered: Boolean(row), impressions: row?.impressions ?? 0, clicks: row?.clicks ?? 0, spend,
       results, costPerResult: results > 0 ? spend / results : null,
-      ...(destination === "whatsapp" ? { whatsappOpens: count(["link_click"]) } : {}),
+      ...(destination === "whatsapp" ? { whatsappOpens: count(LINK_CLICK_ACTIONS) } : {}),
+      ...(destination === "website" ? { landingPageViews: results } : {}),
       replaced: !known.has(ad.id) || ad.effective_status === "ARCHIVED",
     };
   });

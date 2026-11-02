@@ -55,9 +55,9 @@ describe("core: Run this again (#1050)", () => {
   it("finds the Best ad's creative through the launch's ad links (#783's rule: 5+ results, 30% cheaper)", () => {
     const rows = [row("901", 8, 400), row("902", 3, 450), row("903", 0, 120)];
     const links = [{ meta_ad_id: "901", creative_id: B }, { meta_ad_id: "902", creative_id: A }, { meta_ad_id: "903", creative_id: null }];
-    expect(bestCreativeId(rows, links, true)).toBe(B);
-    expect(bestCreativeId(rows, links, false)).toBeNull();
-    expect(bestCreativeId(rows, [], true)).toBeNull();
+    expect(bestCreativeId(rows, links, "whatsapp")).toBe(B);
+    expect(bestCreativeId(rows, links, "instant_form")).toBeNull();
+    expect(bestCreativeId(rows, [], "whatsapp")).toBeNull();
   });
 });
 

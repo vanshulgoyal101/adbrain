@@ -1,5 +1,5 @@
 import { campaignDestination } from "@/lib/campaign/outcomes";
-import { costPerResultFrom, pickResultEvidence, toEvidenceCampaign, type EvidenceCampaign, type ResultEvidence } from "@/lib/campaign/result-evidence";
+import { costPerResultFrom, pickResultEvidence, storedResults, toEvidenceCampaign, type EvidenceCampaign, type ResultEvidence } from "@/lib/campaign/result-evidence";
 import { getLatestResults } from "@/lib/supabase/queries";
 import { createClient } from "@/lib/supabase/server";
 
@@ -21,7 +21,7 @@ async function recentResults(businessId: string, now: number) {
     const result = results[campaign.id];
     if (!result || !(Number(result.spend) > 0) || now - Date.parse(result.fetched_at) > WINDOW_MS) return [];
     const destination = campaignDestination(campaign, result);
-    return destination === "whatsapp" || destination === "instant_form" ? [{ campaign, result, destination }] : [];
+    return destination === "whatsapp" || destination === "instant_form" || destination === "website" ? [{ campaign, result, destination }] : [];
   });
   return { supabase, recent };
 }
@@ -41,13 +41,13 @@ export async function getResultEvidence(businessId: string, now = Date.now()): P
 }
 
 /**
- * #419 2(b): the business's own cost per chat or lead for one kind of campaign, pooled over the
+ * #419 2(b): the business's own cost per chat, lead or website visit (#2601) for one kind of campaign, pooled over the
  * last 60 days of stored results; null before any result. Same session and rows as the evidence.
  */
 export async function getCostPerResult(businessId: string, destination: EvidenceCampaign["destination"], now = Date.now()): Promise<number | null> {
   const { recent } = await recentResults(businessId, now);
   return costPerResultFrom(recent.map(({ result, destination: kind }) => ({
-    destination: kind, spend: Number(result.spend) || 0, results: (kind === "whatsapp" ? result.conversations : result.leads) ?? 0,
+    destination: kind, spend: Number(result.spend) || 0, results: storedResults(kind, result),
   })), destination);
 }
 
