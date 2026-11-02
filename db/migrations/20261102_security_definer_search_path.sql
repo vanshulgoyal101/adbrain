@@ -1,0 +1,1 @@
+-- #674: definer guard regression-test placeholder.

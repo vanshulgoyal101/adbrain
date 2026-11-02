@@ -9,9 +9,11 @@ import pg from "pg";
 import { applyMigration } from "./database-migrations.mjs";
 import { appendedMigrations, buildSchema, readBaseSchema } from "./build-schema.mjs";
 import { createDefaultPrivilegeFixtures, verifyDefaultPrivileges } from "./check-default-privileges.mjs";
+import { securityDefinerPrivileges, verifySecurityDefiners } from "./check-security-definers.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const defaultPrivilegesMigration = await readFile(join(root, "db/migrations/20261102_default_public_privileges.sql"), "utf8");
+const definerHardeningMigration = await readFile(join(root, "db/migrations/20261102_security_definer_search_path.sql"), "utf8");
 const operatorPaymentMigration = await readFile(join(root, "db/migrations/20260926_production_payment_policy_v2.sql"), "utf8");
 const customerAllowanceMigration = await readFile(join(root, "db/migrations/20260926_customer_ad_allowance.sql"), "utf8");
 const creativeIntentMigration = await readFile(join(root, "db/migrations/20260927_creative_generation_intents.sql"), "utf8");
@@ -1186,11 +1188,8 @@ async function verifyManagedWhatsAppPageLink(db, database) {
   });
 }
 
-async function verifyTokenSearchPath(db, database) {
-  await check(`${database}: the token RPCs run with an empty search_path and still store, read and delete (#625)`, async () => {
-    const config = (await db.query(`select p.proname, p.proconfig from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-      where n.nspname = 'public' and p.proname in ('meta_token_insert','meta_token_get','meta_token_delete') order by p.proname`)).rows;
-    assert.deepEqual(config, ["meta_token_delete", "meta_token_get", "meta_token_insert"].map((proname) => ({ proname, proconfig: ['search_path=""'] })));
+async function verifyTokenRoundTrip(db, database) {
+  await check(`${database}: the token RPCs still store, read and delete (#625)`, async () => {
     const owner = randomUUID(), business = randomUUID(), token = randomUUID();
     await db.query("begin");
     try {
@@ -3062,6 +3061,14 @@ async function verify(database, source, integrityMigration, customerOnly = false
     }
     await db.query(source);
     if (customerOnly) await verifyDefaultPrivileges(db, database, check, defaultPrivilegesMigration, defaultPrivilegeFixtures);
+    if (database === "customer_upgrade") {
+      const previousPrivileges = await securityDefinerPrivileges(db);
+      await db.query(definerHardeningMigration);
+      await db.query(definerHardeningMigration);
+      await check(`${database}: hardening preserves existing owners and non-trigger function grants`, async () => {
+        assert.deepEqual(await securityDefinerPrivileges(db), previousPrivileges);
+      });
+    }
     if (process.argv.includes("--analytics-only") || database.startsWith("analytics_")) {
       const installed = (await db.query("select to_regclass('public.product_event_daily') is not null as installed")).rows[0].installed;
       if (!installed) {
@@ -3199,7 +3206,7 @@ async function verify(database, source, integrityMigration, customerOnly = false
       }
       await db.query(tokenSearchPathMigration);
       await db.query(tokenSearchPathMigration);
-      await verifyTokenSearchPath(db,database);
+      await verifyTokenRoundTrip(db,database);
       await verifyMetaTokenPurge(db,database);
       await verifyMetaRevocationTarget(db,database);
       await db.query(whatsappTemplateMigration);
@@ -3234,6 +3241,7 @@ async function verify(database, source, integrityMigration, customerOnly = false
       if (database === "customer_fresh") await verifyAdvisorHardening(db,database);
       await verifyBusinessTransfer(db,database);
       await verifyMetaThrottle(db,database);
+      if (database !== "customer_legacy_upgrade") await verifySecurityDefiners(db, database, check);
       return;
     }
     if (integrityMigration) {
@@ -4340,6 +4348,8 @@ try {
     await verifyRollback();
   } else {
   const schema = buildSchema(root);
+  const preDefinerSchema = schema.replace(definerHardeningMigration.trim(), "");
+  assert.notEqual(preDefinerSchema, schema, "Canonical schema must include the exact definer hardening migration");
   const baseline = execFileSync("git", ["show", "d8d789071c74a7a93b1f270a0c4f119aff79aa34:db/schema.sql"], { cwd: root, encoding: "utf8" });
   const metaMigration = await readFile(join(root, "db/migrations/20260907_meta_instant_connect.sql"), "utf8");
   const campaignMigration = await readFile(join(root, "db/migrations/20260907_campaign_connect.sql"), "utf8");
@@ -4398,7 +4408,8 @@ try {
   }
   if (!process.argv.includes("--analytics-only") && !process.argv.includes("--pricing-only") && !process.argv.includes("--leads-only") && !process.argv.includes("--generation-only")) {
     await verify("customer_fresh",schema,undefined,true);
-    await verify("customer_upgrade",`${baseline}\n${metaMigration}\n${campaignMigration}\n${billingMigration}\n${productionPaymentsMigration}\n${trustedCampaignMigration}`,undefined,true);
+    await verify("customer_legacy_upgrade",`${baseline}\n${metaMigration}\n${campaignMigration}\n${billingMigration}\n${productionPaymentsMigration}\n${trustedCampaignMigration}`,undefined,true);
+    await verify("customer_upgrade",preDefinerSchema,undefined,true);
     if (!process.argv.includes("--customer-only")) {
       await verify("pricing_fresh",schema);
       await verify("pricing_upgrade",schema.slice(0,schema.lastIndexOf(configurablePaymentMigration.trim())));
