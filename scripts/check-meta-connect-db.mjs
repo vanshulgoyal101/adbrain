@@ -42,6 +42,7 @@ const editOperationsMigration = await readFile(join(root, "db/migrations/2026102
 const editAdCreativeMigration = await readFile(join(root, "db/migrations/20261026_campaign_edit_operations_ad_creative.sql"), "utf8");
 const adResultsMigration = await readFile(join(root, "db/migrations/20261026_campaign_ads_ad_results.sql"), "utf8");
 const mediaLibraryMigration = await readFile(join(root, "db/migrations/20261103_media_library.sql"), "utf8");
+const trackingConversionsMigration = await readFile(join(root, "db/migrations/20261105_tracking_conversions.sql"), "utf8");
 const ownerAlertsMigration = await readFile(join(root, "db/migrations/20261027_owner_whatsapp_alerts.sql"), "utf8");
 const ownerAlertSendsMigration = await readFile(join(root, "db/migrations/20261027_owner_whatsapp_alerts_sends.sql"), "utf8");
 const planPeriodsMigration = await readFile(join(root, "db/migrations/20261029_plan_periods.sql"), "utf8");
@@ -1720,6 +1721,45 @@ async function verifyMediaAssets(db, database) {
       // Supabase grants anon select on storage.objects too; only the policies keep the private bucket closed.
       assert.equal((await session.query("select count(*)::int as n from storage.objects where bucket_id='media'")).rows[0].n, 0);
     });
+  });
+}
+
+async function verifyTrackingConversions(db, database) {
+  const owner = randomUUID(), business = randomUUID(), campaign = randomUUID();
+  await db.query("insert into auth.users(id) values ($1)", [owner]);
+  await db.query("insert into public.businesses(id,owner_id,name,meta_pixel_id) values ($1,$2,'Pixel','1234567890')", [business, owner]);
+  await db.query("insert into public.campaigns(id,business_id,daily_budget,objective,meta_pixel_id) values ($1,$2,300,'sales','1234567890')", [campaign, business]);
+  const insert = {
+    campaign_results: (columns, values) => [`insert into public.campaign_results(campaign_id${columns}) values ($1${values}) returning conversions, conversion_value`, [campaign]],
+    ad_results: (columns, values) => [`insert into public.ad_results(business_id,campaign_id,meta_ad_id${columns}) values ($2,$1,'7'${values}) returning conversions, conversion_value`, [campaign, business]],
+  };
+  await check(`${database}: pixel conversions are finite and non-negative; NULL value stays NULL, never NaN (#2711)`, async () => {
+    await db.query("begin");
+    try {
+      for (const [table, row] of Object.entries(insert)) {
+        for (const [columns, values, code] of [
+          [",conversion_value", ",'NaN'::numeric", "23514"],
+          [",conversion_value", ",-0.01", "23514"],
+          [",conversions", ",-1", "23514"],
+          [",conversions", ",9007199254740992", "23514"],
+        ]) {
+          const [sql, params] = row(columns, values);
+          await db.query("savepoint s");
+          await assert.rejects(db.query(sql, params), { code }, `${table}: ${values}`);
+          await db.query("rollback to savepoint s");
+        }
+        for (const [columns, values, expected] of [
+          ["", "", { conversions: "0", conversion_value: null }],
+          [",conversions,conversion_value", ",0,0", { conversions: "0", conversion_value: "0.00" }],
+          [",conversions,conversion_value", ",9007199254740991,123456789012.34", { conversions: "9007199254740991", conversion_value: "123456789012.34" }],
+        ]) {
+          const [sql, params] = row(columns, values);
+          await db.query("savepoint s");
+          assert.deepEqual((await db.query(sql, params)).rows[0], expected, `${table}: ${values}`);
+          await db.query("rollback to savepoint s");
+        }
+      }
+    } finally { await db.query("rollback"); }
   });
 }
 
@@ -3443,6 +3483,9 @@ async function verify(database, source, integrityMigration, customerOnly = false
       await db.query(mediaLibraryMigration);
       await verifyMediaAssets(db,database);
       await verifyMediaConsents(db,database);
+      await db.query(trackingConversionsMigration);
+      await db.query(trackingConversionsMigration);
+      await verifyTrackingConversions(db,database);
       if ((await db.query("select to_regclass('public.lead_sync_runs') is not null as installed")).rows[0].installed) {
         await db.query(leadCampaignLinkMigration);
         await db.query(leadCampaignLinkMigration);
