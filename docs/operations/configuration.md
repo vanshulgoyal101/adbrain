@@ -206,10 +206,12 @@ GitHub environment secrets; never in an issue. GitHub's and Vercel's own variabl
 | `SMOKE_EXPECT_CLOUDFLARE` | `smoke-core.mjs`: `1` fails a Create smoke whose pictures include none from Cloudflare (#2412) | No |
 | `VERCEL_TOKEN` | `production-guard.mjs`: Vercel API for the live SHA and rollback | Yes |
 | `GH_TOKEN`, `GH_REPO` | CI scripts' GitHub token; `wait-for-work.mjs` repository override | Token |
+| `FLAKY_REPORT` | `vitest.config.mts`, `flaky-reporter.mjs`: CI unit job's path for tests that passed only on their retry; `file-flaky.mjs` files them as `flaky` issues (#618) | No |
 | `GROQ_REVIEW_API_KEY` | `ai-review.mjs`: the PR AI review's Groq key, separate from the app's pool | Yes |
 | `ADBRAIN_ALLOW_META_WRITES` | `scripts/lib/meta-write-gate.ts`: `1` lets a `record-meta-*` script make non-GET Graph calls | No |
 | `ADBRAIN_HEADLESS` | Set by `team-supervisor.mjs` for role runs; refuses releases, migrations and Meta writes | No |
 | `ADBRAIN_SUPERVISOR_CLI`, `ADBRAIN_SUPERVISOR_MAX_LOAD`, `ADBRAIN_SUPERVISOR_MIN_FREE_GB` | `team-supervisor.mjs`: the CLI command (JSON array), and the load and free-disk limits for starting a run | No |
+| `TEST_BASE`, `NVM_DIR` | `scripts/test.sh`: the ref `--changed` diffs against (CI: `HEAD^1`; default the merge-base with `origin/next`), and where to find the `.nvmrc` Node (default `~/.nvm`) | No |
 | `WS1_EMAIL` | `ws1-walk.mts`: an internal account that has never gone live, signed in like `SMOKE_EMAIL` | No |
 | `META_CONNECT_UI_BASE_URL`, `META_CONNECT_UI_STATIC_ONLY`, `META_OAUTH_INTERACTIVE`, `META_TEST_TRANSFER_SQL` | Local Meta connect checks (`check-meta-connect-ui.mjs`, `check-meta-oauth-entry.mjs`, `check-meta-connect-db.mjs`): target URL, static-only and interactive switches, transfer SQL path | No |
 | `META_TEST_PG_BIN` | `check-meta-connect-db.mjs`, `db-export.mjs`, `restore-drill.mjs`: Postgres binary folder | No |

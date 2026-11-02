@@ -12,8 +12,7 @@ function input(destination: "instant_form" | "whatsapp" | "website" = "website")
   return {
     draft: {
       businessId, name: "Cedar Ridge exams", goal: "Book new-patient exams", mode: "manual",
-      // TODO(#2600): drop the cast once the draft schema accepts website.
-      destination: destination as "instant_form",
+      destination,
       creativeIds: [creativeId], dailyBudgetRupees: 200, leadFormId: destination === "instant_form" ? "form-1" : null, abTest: false,
       targeting: {
         location: { mode: "ai", cityScope: "city_only", includedNames: ["Austin, Texas"] },
@@ -45,6 +44,9 @@ describe("Review of a website ad (#2599)", () => {
     ["no website", (v: PreflightInput) => { v.website = null; }],
     ["the website isn't checked by the caller", (v: PreflightInput) => { v.website = undefined; }],
     ["a Facebook page instead of a website", (v: PreflightInput) => { v.website = "https://www.facebook.com/cedarridge"; }],
+    // Launch's isWebsiteLink refuses every Meta and WhatsApp domain, so Review must too.
+    ["a Messenger link", (v: PreflightInput) => { v.website = "https://messenger.com/t/cedarridge"; }],
+    ["a wa.link shortcut", (v: PreflightInput) => { v.website = "https://wa.link/cedarridge"; }],
   ])("blocks on REVIEW_NO_WEBSITE: %s", (_name, change) => {
     const value = input();
     change(value);
@@ -67,6 +69,19 @@ describe("Review of a website ad (#2599)", () => {
     expect(runPreflight(value).blockers).toEqual([expect.objectContaining({
       code: "PREFLIGHT_BLOCKED", reason: "REVIEW_WEBSITE_UNREACHABLE", action: { kind: "open_brand" }, message: expect.stringMatching(message),
     })]);
+  });
+
+  it("checks and sends an http website at its https address, the only kind Meta's website ads take", () => {
+    const value = input();
+    value.website = "http://cedarridgechiro.com";
+    expect(runPreflight(value).blockers).toEqual([]);
+    expect(buildCanonicalReviewPayload(value)).toMatchObject({ websiteUrl: "https://cedarridgechiro.com" });
+  });
+
+  it("still lets a form ad link an http website, as before", () => {
+    const value = input("instant_form");
+    value.website = "http://cedarridgechiro.com";
+    expect(runPreflight(value).blockers).toEqual([]);
   });
 
   it("puts the website in the reviewed plan, so a Brand website edit after Review is a different plan", () => {

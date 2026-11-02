@@ -10,6 +10,7 @@ import { EnquiryStatusNotice, leadName, useLeadErasure } from "@/components/enqu
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Status } from "@/components/ui/status";
+import { useNotices } from "@/i18n/notices";
 import { relativeAge } from "@/lib/leads/digest";
 import { formatDate } from "@/lib/format";
 import { useMounted } from "@/lib/use-mounted";
@@ -109,6 +110,7 @@ export function LeadInbox({
   /** #1838: until when Meta asked us to wait; checks (on open and Check now) don't call Meta until then. */
   metaWaitUntil?: string | null;
 }) {
+  const tn = useNotices();
   const [adding, setAdding] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -234,7 +236,7 @@ export function LeadInbox({
       setSaved(true);
       page.refresh();
     } catch {
-      setSaveError("Follow-up could not be saved. Your edits are still here; retry to save them.");
+      setSaveError(tn("enquiries.followUpSaveFailed"));
     } finally {
       setSaving(false);
     }
@@ -270,7 +272,7 @@ export function LeadInbox({
       setCustomerNotice({ lead, previous, status, undone: undo });
       page.refresh();
     } catch {
-      setError("Couldn't save that. Check your connection and try again.");
+      setError(tn("enquiries.saveOffline"));
     } finally {
       setMarking(null);
     }
@@ -296,7 +298,7 @@ export function LeadInbox({
         error?: string;
       };
       if ((!res.ok && !(res.status === 502 && data.sync?.hasMore)) || !Array.isArray(data.leads)) {
-        setError(data.error ?? "Couldn't check Meta for enquiries. The ones below are still here.");
+        setError(data.error ?? tn("enquiries.checkFailed"));
         return;
       }
       page.refresh();
@@ -315,12 +317,10 @@ export function LeadInbox({
       }
       // #1260: 'Updated just now' says a quiet check found nothing; only news gets a sentence.
       setNotice(
-        data.imported
-          ? `${data.imported} new ${data.imported === 1 ? "enquiry" : "enquiries"} from Meta.`
-          : data.sync?.state === "complete" ? null : "Some enquiries on Meta couldn't be checked. The ones below are saved; tap Check now to try again.",
+        data.imported ? tn("enquiries.imported", { count: data.imported }) : data.sync?.state === "complete" ? null : tn("enquiries.someUnchecked"),
       );
     } catch {
-      setError("Couldn't check Meta for enquiries. Check your connection.");
+      setError(tn("enquiries.checkOffline"));
     } finally {
       setSyncing(false);
     }

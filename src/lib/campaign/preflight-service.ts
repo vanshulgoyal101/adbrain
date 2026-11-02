@@ -67,8 +67,7 @@ export async function prepareCampaignReview(
     return { kind: "stale", draftVersion: draft.version };
   }
 
-  // TODO(#2600): drop the cast once the draft schema accepts website.
-  const destination = (draft.input.destination ?? "instant_form") as ReviewDestination;
+  const destination: ReviewDestination = draft.input.destination ?? "instant_form";
   const [connection, creatives, form, geo, whatsappNumber, [website, websiteReach], costPerResultRupees, vertical, whatsappMessage, brandFacts] = await Promise.all([
     loaders.getConnection(input.actor),
     loaders.findCreatives(input.actor.businessId, draft.input.creativeIds),

@@ -156,6 +156,19 @@ describe("campaign planner prompt", () => {
       special_ad_category: "none", locations: ["Jaipur"], excluded_locations: [], interests: ["Solar energy"], destination: "whatsapp", rationale: "Test local enquiries",
     } })).toMatchObject({ ok: true, draft: { destination: "whatsapp", leadFormId: null } });
   });
+  it("plans a website ad without a lead form, and adds the website sentence only for website (#2599)", () => {
+    const website = buildPlannerMessages({ destination: "website", brand: { name: "Cedar Ridge" }, approved: [], leadForms: [], goal: "Website visits" });
+    expect(website[0].content).toContain("selected destination: website. ");
+    expect(website[0].content).toContain("For website, set lead_form_id=null");
+    for (const destination of ["whatsapp", "instant_form"] as const) {
+      expect(buildPlannerMessages({ destination, brand: { name: "Cedar Ridge" }, approved: [], leadForms: [], goal: "Leads" })[0].content).not.toContain("For website");
+    }
+    const creativeId = "22222222-2222-4222-8222-222222222222";
+    expect(plannerPlanToDraftInput({ businessId: "11111111-1111-4111-8111-111111111111", goal: "Website visits", approvedCreativeIds: [creativeId], leadFormIds: ["form-1"], plan: {
+      name: "Website", daily_budget_rupees: 300, lead_form_id: "form-1", creative_ids: [creativeId], age_min: 25, age_max: 65,
+      special_ad_category: "none", locations: ["Austin"], excluded_locations: [], interests: ["Chiropractic"], destination: "website", rationale: "Website visits",
+    } })).toMatchObject({ ok: true, draft: { destination: "website", leadFormId: null } });
+  });
 
   it("includes creative ids, lead form ids, goal, and the no-invent rule", () => {
     const msgs = buildPlannerMessages({
