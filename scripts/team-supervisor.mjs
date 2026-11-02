@@ -25,7 +25,7 @@ const CALL_TIMEOUT_MS = 120_000;
 const execFileSync = (cmd, args, opts = {}) => rawExecFileSync(cmd, args, { timeout: CALL_TIMEOUT_MS, killSignal: "SIGKILL", ...opts });
 
 /** Handoff bottlenecks first (reviews, releases), then builders. CTO/CEO coordinate through chat tools, so they're excluded. */
-export const ORDER = ["devops", "qa", "reviewer", "qa2", "dev3", "dev", "dev2", "dev4", "dev5", "dev6", "speed", "janitor", "scout", "cpo", "analyst", "designer", "docs"];
+export const ORDER = ["devops", "qa", "reviewer", "qa2", "dev3", "dev", "dev2", "dev4", "dev5", "dev6", "dev7", "speed", "janitor", "scout", "cpo", "analyst", "designer", "docs"];
 export const LABEL = "in.adbrain.team-supervisor";
 // #766: with `pmset sleep 1` the Mac slept between ticks and the alert dispatch lapsed for ~2 h at a time.
 // `caffeinate -s` holds off system sleep on the charger only (no sudo; on battery the Mac still sleeps).
