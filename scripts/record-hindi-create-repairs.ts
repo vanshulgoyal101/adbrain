@@ -5,7 +5,7 @@
  * production's. Image requests are refused (text only, about $0.001 a reply); writes no data.
  *
  *   CREATIVE_PROVIDER_ORDER=openrouter OPENROUTER_MODEL=anthropic/claude-haiku-5.5 \
- *     npx tsx --env-file=.env.local scripts/record-hindi-create-repairs.ts hi:vague[:<angle name>:<attempt>] …
+ *     npx tsx --import ./scripts/trusted-server-cli.mjs --env-file=.env.local scripts/record-hindi-create-repairs.ts hi:vague[:<angle name>:<attempt>] …
  *
  * With an angle and attempt, that angle's recorded replies from that attempt on are dropped first and
  * re-recorded: a stale repair whose prompt now carries different validation issues.

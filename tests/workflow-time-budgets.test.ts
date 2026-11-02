@@ -131,6 +131,72 @@ describe("deploy train watchdog", () => {
   });
 });
 
+// #2642: the train's own PRs get every workflow held for approval. The helper deletes them, except it approves
+// the PR's CI on the exact head when that commit had no push CI (main can't count dispatched CI for the PR).
+function runTidy(pushRuns: object[] | null, heldRuns: object[]) {
+  dir = mkdtempSync(join(tmpdir(), "train-tidy-"));
+  if (pushRuns) writeFileSync(join(dir, "push.json"), JSON.stringify({ workflow_runs: pushRuns }));
+  writeFileSync(join(dir, "held.json"), JSON.stringify({ workflow_runs: heldRuns }));
+  const bin = join(dir, "bin");
+  mkdirSync(bin);
+  // Applies the workflow's real --jq filter to a fixture, so the selection logic is what's tested.
+  writeFileSync(join(bin, "gh"), `#!/bin/bash
+echo "$*" >> "${dir}/gh.log"
+url=""; jqx=""
+while [ $# -gt 0 ]; do case "$1" in api) ;; -X) shift ;; --jq) jqx=$2; shift ;; *) url=$1 ;; esac; shift; done
+case "$url" in
+  *event=push*) exec jq -r "$jqx" "${dir}/push.json" ;;
+  *status=action_required*) exec jq -r "$jqx" "${dir}/held.json" ;;
+esac
+`);
+  chmodSync(join(bin, "gh"), 0o755);
+  const fn = /^tidy_held_runs\(\) \{[\s\S]*?^\}$/m.exec(stepScript("deploy-train.yml", "Promote next to main"));
+  expect(fn).not.toBeNull();
+  const output = execFileSync("bash", ["-c", `set -euo pipefail\nrepo=o/r\n${fn![0]}\ntidy_held_runs abc1234 deploy-train`], {
+    env: { ...process.env, PATH: `${bin}:${process.env.PATH}` }, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"],
+  });
+  const calls = readFileSync(join(dir, "gh.log"), "utf8").split("\n").filter((line) => / -X (POST|DELETE) /.test(line));
+  return { output, calls };
+}
+
+const held = (id: number, workflow: string, extra: object = {}) => ({
+  id, path: `.github/workflows/${workflow}`, head_sha: "abc1234", conclusion: "action_required",
+  actor: { login: "github-actions[bot]" }, head_repository: { full_name: "o/r" }, ...extra,
+});
+const pushCi = (conclusion: string | null) => ({ path: ".github/workflows/ci.yml", conclusion });
+
+describe("deploy train held runs", () => {
+  it("deletes every held run, CI included, when the commit's push CI passed", () => {
+    const { calls } = runTidy([pushCi("success")], [held(1, "ci.yml"), held(2, "ai-review.yml"), held(3, "core-approval.yml")]);
+    expect(calls).toEqual(["api -X DELETE repos/o/r/actions/runs/1", "api -X DELETE repos/o/r/actions/runs/2", "api -X DELETE repos/o/r/actions/runs/3"]);
+  });
+
+  it("approves only this commit's CI when it had no push CI, and deletes the rest", () => {
+    const { calls } = runTidy([pushCi("failure"), { path: ".github/workflows/deploy-train.yml", conclusion: "success" }], [
+      held(1, "ci.yml"), held(2, "core-approval.yml"), held(3, "ci.yml", { head_sha: "old0000" }),
+    ]);
+    expect(calls).toEqual(["api -X POST repos/o/r/actions/runs/1/approve", "api -X DELETE repos/o/r/actions/runs/2", "api -X DELETE repos/o/r/actions/runs/3"]);
+  });
+
+  it("counts a push CI still running as push CI", () => {
+    const { calls } = runTidy([pushCi(null)], [held(1, "ci.yml")]);
+    expect(calls).toEqual(["api -X DELETE repos/o/r/actions/runs/1"]);
+  });
+
+  it("never touches runs a person triggered, runs from another repo, or runs not held", () => {
+    const { calls } = runTidy([], [
+      held(1, "ci.yml", { actor: { login: "someone" } }), held(2, "ci.yml", { head_repository: { full_name: "fork/r" } }),
+      held(3, "ci.yml", { conclusion: "success" }),
+    ]);
+    expect(calls).toEqual([]);
+  });
+
+  it("leaves this commit's CI held for the next try when the push CI lookup fails", () => {
+    const { calls } = runTidy(null, [held(1, "ci.yml"), held(2, "ai-review.yml")]);
+    expect(calls).toEqual(["api -X DELETE repos/o/r/actions/runs/2"]);
+  });
+});
+
 // #2145: the dispatch input reaches the shell only through REQUESTED_MODE and a fixed `case`.
 describe("create smoke mode", () => {
   const made: string[] = [];

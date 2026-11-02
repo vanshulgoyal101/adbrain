@@ -67,7 +67,7 @@
     "launchDetail": "{n, plural, one {# approved ad is} other {# approved ads are}} ready. Choose where to show them and how much to spend.",
     "launchAction": "Launch a campaign",
     "readyTitle": "Your ads are ready",
-    "readyDetail": "Share them on WhatsApp or download them now. Launching on Facebook and Instagram opens soon.",
+    "readyDetail": "Share them on WhatsApp or download them now. Running them on Facebook and Instagram needs a Facebook connection; Campaigns shows where that stands.",
     "readyAction": "Share your ads",
     "approvedTitle": "{n, plural, one {# approved ad is} other {# approved ads are}} available",
     "approvedDetail": "Not in a campaign yet. Put them in a campaign or export them.",
@@ -266,6 +266,8 @@
     "figures": {
       "impressions": "Impressions",
       "clicks": "Clicks",
+      "linkClicks": "Link clicks",
+      "cpc": "CPC",
       "chats": "WhatsApp chats",
       "leads": "Leads",
       "visits": "Website visits",
@@ -516,6 +518,14 @@
       "title": "Tell us about your business",
       "helper": "Five things. Your ads are made from these, and you can change them any time.",
       "website": "Your website (optional)",
+      "websiteRequired": "Your website or page",
+      "destination": {
+        "legend": "Where should customers go?",
+        "whatsapp": "WhatsApp chat",
+        "whatsappHint": "Customers message you. Best for most local businesses.",
+        "website": "Your website",
+        "websiteHint": "Customers visit the website or page above. A phone is optional."
+      },
       "fillWebsite": "Fill it from my website",
       "pasteToggle": "No website? Paste a bio or listing",
       "pasteLabel": "Instagram bio, Google listing or catalogue text",
@@ -560,17 +570,21 @@
         "locations": {
           "label": "Where you serve",
           "placeholder": "e.g. Mohali\nKharar",
-          "helper": "Your ads show only here. One city or area per line."
+          "helper": "Your ads show only here. One city or area per line.",
+          "websiteHelper": "Your ads show only here. Selling online everywhere? Write All India."
         },
         "offer": {
           "label": "Your offer",
           "placeholder": "e.g. Free site survey",
-          "helper": "One thing customers get for messaging you. Only what you really offer."
+          "helper": "One thing customers get for messaging you. Only what you really offer.",
+          "websiteHelper": "One thing customers get when they visit. Only what you really offer."
         },
         "phone": {
           "label": "WhatsApp number",
           "placeholder": "98765 43210",
-          "helper": "Customers message you here."
+          "helper": "Customers message you here.",
+          "optionalLabel": "Phone number (optional)",
+          "websiteHelper": "Only if customers can also call or message you."
         }
       },
       "errors": {
@@ -578,7 +592,8 @@
         "vertical": "Say what you sell, in a few words.",
         "locations": "Add at least one city or area.",
         "offer": "Add one offer, like a free visit or a first-time price.",
-        "phone": "Enter a 10-digit mobile number."
+        "phone": "Enter a 10-digit mobile number.",
+        "website": "Add the website or page people should go to, like yourbusiness.com/offer."
       }
     },
     "ads": {
@@ -657,6 +672,29 @@
       "billingRequired": "Meta needs a way to pay first: a card, or money added by UPI or net banking. Add it in Meta, then tap Go live again. Nothing was spent.",
       "savedPaused": "Your campaign is saved, paused. Nothing was spent.",
       "openCampaigns": "Open Campaigns"
+    },
+    "access": {
+      "pending": "Facebook is still reviewing AdBrain. You can make, approve and download ads now. Connecting a new Facebook account must wait for Meta to approve access.",
+      "requested": "Request received. Sending a request does not switch on Facebook access; Meta approval is still pending.",
+      "requestFailed": "Your request did not send. Check your connection and try again.",
+      "again": "Try again"
+    },
+    "readyAds": {
+      "title": "Your ads are ready",
+      "connectFirst": "Connect Facebook to run them on Facebook and Instagram. Until then, share your ads with customers yourself.",
+      "yourAd": "Your ad: {headline}",
+      "newestAd": "Your newest approved ad",
+      "preparing": "Preparing download…",
+      "downloadOne": "Download your ad",
+      "downloadAll": "Download all {n} ads",
+      "downloadFailed": "The download didn't finish. Check your connection and try again.",
+      "seeAll": "See all approved ads",
+      "runTitle": "Want to run them on Facebook?",
+      "askBody": "Ask for Facebook access so we know you're waiting. You approve every rupee before anything runs.",
+      "ask": "Ask for Facebook access",
+      "asking": "Sending request…",
+      "haveAccess": "Already have access?",
+      "connect": "Connect Facebook"
     }
   },
   "pauseAll": {
@@ -986,6 +1024,8 @@
     "signInRequired": "Sign in required.",
     "businessMissing": "Business not found.",
     "mediaRightsRequired": "Confirm you own these photos or have permission to use them.",
+    "mediaPeopleRequired": "Confirm that everyone recognisable has agreed to appear in your ads.",
+    "mediaConsentNotSaved": "Your confirmation couldn't be saved. Try again.",
     "chooseCampaign": "Choose a campaign.",
     "enquiriesNotDeleted": "The enquiries couldn't be deleted. Try again.",
     "enquiryNotDeleted": "The enquiry couldn't be deleted. Try again.",
@@ -1017,6 +1057,7 @@
     "enquiryNotSaved": "The enquiry could not be saved. Try again.",
     "draftGone": "This campaign draft has expired or was removed. Reload the page and set up the campaign again. Nothing was sent to Meta.",
     "draftChangedElsewhere": "Draft changed in another tab. Review the latest version.",
+    "websiteClosed": "Website ads aren't open yet. Choose WhatsApp chat or a lead form.",
     "reviewCheckFailed": "Couldn't check your campaign just now. Nothing was sent to Meta. Try again in a minute.",
     "reviewRequestInvalid": "A valid business, draft, and version are required.",
     "businessAccessDenied": "Business access is not allowed.",

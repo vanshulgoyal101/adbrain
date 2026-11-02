@@ -1,3 +1,4 @@
+import { brandDestination } from "@/lib/brand/usable";
 import type { Creative } from "@/lib/types";
 
 /**
@@ -28,11 +29,15 @@ export function setupPicks<T extends Pick<Creative, "id" | "generation">>(creati
 }
 
 /** The goal Create starts from when the owner hasn't typed one: their offer, to people where they serve. */
-export function setupGoal(business: { vertical?: string | null; locations?: readonly string[] | null; offers?: readonly string[] | null }): string {
+export function setupGoal(business: {
+  vertical?: string | null; locations?: readonly string[] | null; offers?: readonly string[] | null; default_destination?: string | null;
+}): string {
   const what = business.vertical && business.vertical !== "local business" ? business.vertical.trim() : "our business";
   const where = business.locations?.find((place) => place.trim())?.trim();
   const offer = business.offers?.find((item) => item.trim())?.trim();
-  return [`Get WhatsApp enquiries for ${what}${where ? ` in ${where}` : ""}`, offer ? `, leading with: ${offer}` : ""].join("").slice(0, 500);
+  // #2646: a website business's first ads aim at visits; the WhatsApp goal is unchanged.
+  const aim = brandDestination(business) === "website" ? "Get website visits" : "Get WhatsApp enquiries";
+  return [`${aim} for ${what}${where ? ` in ${where}` : ""}`, offer ? `, leading with: ${offer}` : ""].join("").slice(0, 500);
 }
 
 type BatchRow = Pick<Creative, "variant_group" | "created_at">;

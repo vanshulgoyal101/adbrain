@@ -4,7 +4,7 @@
  * budget providers (free tiers) once; writes no data. Scripts, styles and SVGs are dropped from the
  * saved page: the route removes them before reading, and the script checks the text and phone match.
  *
- *   npx tsx --env-file=.env.local scripts/record-brand-autofill-fixtures.ts [url] [fixture name, default autofill-solaride]
+ *   npx tsx --import ./scripts/trusted-server-cli.mjs --env-file=.env.local scripts/record-brand-autofill-fixtures.ts [url] [fixture name, default autofill-solaride]
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";

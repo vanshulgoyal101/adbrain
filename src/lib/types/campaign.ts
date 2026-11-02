@@ -3,6 +3,7 @@ import type { Json } from "./json";
 import type { Database } from "./database";
 /** #2595: where a lead lands. WhatsApp is the default; narrow with `Exclude<>` where a path cannot handle one yet. */
 export type LeadDestination = "whatsapp" | "instant_form" | "call" | "website";
+export type WebsiteGoal = "visits" | "leads" | "sales";
 export type CampaignStatus = "draft" | "active" | "paused" | "completed";
 
 export type CampaignTables = {
@@ -135,6 +136,8 @@ export type CampaignTables = {
       whatsapp_opens?: number | null;
       /** #2601: website campaigns' landing-page views (their result); 0 for other destinations. */
       landing_page_views?: number;
+      /** Website link clicks; null/absent means not read, not zero. */
+      link_clicks?: number | null;
       fetched_at: string;
     };
     Insert: {
@@ -152,6 +155,7 @@ export type CampaignTables = {
       cost_per_conversation?: number | null;
       whatsapp_opens?: number | null;
       landing_page_views?: number;
+      link_clicks?: number | null;
       fetched_at?: string;
     };
     Update: Partial<

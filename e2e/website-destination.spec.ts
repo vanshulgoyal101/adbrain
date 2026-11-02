@@ -264,3 +264,42 @@ test("WhatsApp stays the default and its draft and Review carry nothing from the
     await cleanup(seen);
   }
 });
+
+/** Step 1 of the setup; after a launch it opens folded ("Same as last time … Change"). */
+async function openBrandStep(page: Page) {
+  await page.goto("/brand?again=1");
+  await page.getByRole("heading", { level: 2 }).first().waitFor();
+  const change = page.getByRole("button", { name: "Change" });
+  if (await change.isVisible()) await change.click();
+}
+
+// #2646 (slice F): Brand saves a website-only business with no phone. Needs #2656's column in the local database.
+// Nothing reaches Create: "Make my ads" would start a paid batch, so the saved row is read instead.
+test("Brand: a website-only business saves with no phone, and WhatsApp stays preselected for others", async ({ page, context }, testInfo) => {
+  const admin = adminClient();
+  const before = await admin.from("businesses").select("website, phone, default_destination").eq("id", businessId).single();
+  expect(before.error).toBeNull();
+  const row = async () => (await admin.from("businesses").select("website, phone, default_destination").eq("id", businessId).single()).data;
+  try {
+    expect((await admin.from("businesses").update({ default_destination: "whatsapp" }).eq("id", businessId)).error).toBeNull();
+    await page.setViewportSize({ width: 390, height: 844 });
+    await signInBrowser(context, "http://localhost:3939", process.env.DEV_LOGIN_EMAIL!);
+    await openBrandStep(page);
+    const picker = page.getByRole("group", { name: "Where should customers go?" });
+    await expect(picker.getByRole("radio", { name: "WhatsApp chat" })).toBeChecked();
+    await expect(page.getByLabel("WhatsApp number")).toBeVisible();
+
+    await picker.getByRole("radio", { name: "Your website" }).check();
+    await page.getByLabel("Your website or page").fill("example.com/rooftop-solar");
+    await page.getByLabel("Phone number (optional)").fill("");
+    await expect.poll(row, { timeout: 15_000 }).toMatchObject({ default_destination: "website", website, phone: null });
+    expect(await fitsWidth(page)).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath("brand-website-390.png"), fullPage: true });
+
+    // A reload reads the saved choice back.
+    await openBrandStep(page);
+    await expect(page.getByRole("radio", { name: "Your website" })).toBeChecked();
+  } finally {
+    await admin.from("businesses").update(before.data ?? {}).eq("id", businessId);
+  }
+});

@@ -2,7 +2,7 @@
  * Records real Graph single lead-form reads for the test:core preflight form check (#271).
  * Read-only: no Meta writes.
  *
- *   npx tsx --env-file=.env.local scripts/record-meta-form-fixtures.ts <active-form-id> <other-object-id> <unknown-id>
+ *   npx tsx --import ./scripts/trusted-server-cli.mjs --env-file=.env.local scripts/record-meta-form-fixtures.ts <active-form-id> <other-object-id> <unknown-id>
  *
  * Uses META_SYSTEM_USER_TOKEN / META_AD_ACCOUNT_ID / META_PAGE_ID; tokens are stripped.
  */

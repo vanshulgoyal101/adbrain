@@ -1,6 +1,11 @@
 import { normalizeWebsite } from "@/lib/brand/validation";
 import type { WebsiteReach } from "@/lib/campaign/website-reach";
 import { isWebsiteLink } from "@/lib/meta/destinations";
+import type { WebsiteGoal } from "@/lib/types/campaign";
+
+export function websiteGoalObjective(goal: WebsiteGoal = "visits"): "traffic" | "leads" | "sales" {
+  return goal === "visits" ? "traffic" : goal;
+}
 
 /** Review's website rules, kept apart from the server-only reachability fetch so the browser can share them. */
 export function isAdvertiserWebsite(website: string | null): boolean {

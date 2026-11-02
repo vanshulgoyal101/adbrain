@@ -7,6 +7,7 @@ import {
 } from "@/lib/meta/connect-contracts";
 import { maskedWhatsAppNumberPattern } from "@/lib/meta/whatsapp-status-shared";
 import { whatsappTemplateSchema } from "@/lib/campaign/whatsapp-template";
+import type { WebsiteGoal } from "@/lib/types/campaign";
 
 const uuid = z.string().uuid();
 const isoDate = z.string().datetime({ offset: true });
@@ -52,6 +53,10 @@ export const targetingInputSchema = z
 
 export type TargetingInputDTO = z.infer<typeof targetingInputSchema>;
 
+export const websiteGoalSchema = z.enum(["visits", "leads", "sales"] satisfies WebsiteGoal[]);
+const validWebsiteGoal = (value: { destination?: string; websiteGoal?: WebsiteGoal }) =>
+  value.websiteGoal === undefined || value.destination === "website";
+
 export const draftInputSchema = z
   .object({
     businessId: uuid,
@@ -63,6 +68,8 @@ export const draftInputSchema = z
     leadFormId: metaId.nullable(),
     /** #2599: "website" opens the advertiser's own site; Review checks it is reachable before launch. */
     destination: z.enum(["instant_form", "whatsapp", "website"]).optional(),
+    /** #2710: absent means visits; conversion goals remain closed at Review until their launch gates exist. */
+    websiteGoal: websiteGoalSchema.optional(),
     /** WhatsApp button number when it differs from the Page's, in full or masked as AdBrain shows it ("+91 ••••• 4842"); verified against Meta at review. */
     whatsappNumber: z.union([z.string().regex(/^\+[1-9]\d{6,14}$/), z.string().regex(maskedWhatsAppNumberPattern)]).optional(),
     /** #493: the language of the WhatsApp message the customer sends; "ad" (default) follows the ads. */
@@ -74,7 +81,8 @@ export const draftInputSchema = z
     /** #2273 (#680 placement test): leave Facebook Reels out. Internal-only control; absent means automatic. */
     excludeFacebookReels: z.boolean().optional(),
   })
-  .strict();
+  .strict()
+  .refine(validWebsiteGoal, { message: "Website goals require the website destination.", path: ["websiteGoal"] });
 export type DraftInput = z.infer<typeof draftInputSchema>;
 
 export const draftDtoSchema = z.object({
@@ -113,6 +121,7 @@ export const reviewDtoSchema = z.object({
   planHash: z.string().regex(/^[a-f0-9]{64}$/).nullable(),
   creativeHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   destination: z.enum(["instant_form", "whatsapp", "website"]).optional(),
+  websiteGoal: websiteGoalSchema.optional(),
   whatsappNumber: z.string().regex(/^\+[1-9]\d{6,14}$/).nullable().optional(),
   /** #2599: a website ad's link exactly as Review opened and hashed it; launch sends this, never a fresh Brand read. */
   websiteUrl: z.string().url().max(2_000).nullable().optional(),
@@ -142,7 +151,7 @@ export const reviewDtoSchema = z.object({
   }).optional(),
   /** #419 2(b): non-blocking notes from Meta's new-advertiser guidance; never part of the plan hash. */
   planWarnings: z.array(boundedText(200)).max(5).optional(),
-});
+}).refine(validWebsiteGoal, { message: "Website goals require the website destination.", path: ["websiteGoal"] });
 export type ReviewDTO = z.infer<typeof reviewDtoSchema>;
 
 export const operationDtoSchema = z.object({

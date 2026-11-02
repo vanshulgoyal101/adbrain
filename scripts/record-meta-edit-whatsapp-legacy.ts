@@ -6,7 +6,7 @@
  * ONE new PAUSED WhatsApp test campaign; the old-style ad set, creative and ad are made directly on it.
  * Never sets ACTIVE; nothing delivers or spends. Archived after.
  *
- *   npx tsx --env-file=<path to .env.local> scripts/record-meta-edit-whatsapp-legacy.ts <imageUrl>
+ *   npx tsx --import ./scripts/trusted-server-cli.mjs --env-file=<path to .env.local> scripts/record-meta-edit-whatsapp-legacy.ts <imageUrl>
  *
  * Uses META_SYSTEM_USER_TOKEN / META_AD_ACCOUNT_ID / META_PAGE_ID. Tokens and the WhatsApp number are scrubbed.
  */

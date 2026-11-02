@@ -3,7 +3,7 @@
  * PAUSED test campaign (cap, review status, three-level pause), plus read-only ad
  * account insights, then archives the campaign. Any ACTIVE write is refused.
  *
- *   npx tsx --env-file=.env.local scripts/record-meta-safety-fixtures.ts <imageUrl> [capped-adset]
+ *   npx tsx --import ./scripts/trusted-server-cli.mjs --env-file=.env.local scripts/record-meta-safety-fixtures.ts <imageUrl> [capped-adset]
  */
 import "./lib/meta-write-gate";
 import { mkdirSync, writeFileSync } from "node:fs";

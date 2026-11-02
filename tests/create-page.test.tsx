@@ -12,6 +12,8 @@ const getApprovedCreatives = vi.hoisted(() => vi.fn(async () => [] as unknown[])
 vi.mock("@/lib/supabase/queries", () => ({ getPrimaryBusiness, getBrandAssets, hasLaunchedCampaign, getSetupCreativeBatch, getApprovedCreatives }));
 const setupProps = vi.hoisted(() => vi.fn());
 vi.mock("@/components/setup-ads-step", () => ({ SetupAdsStep: (props: unknown) => { setupProps(props); return <div>Setup step 2</div>; } }));
+const mediaOn = vi.hoisted(() => ({ value: false }));
+vi.mock("@/lib/media/store", () => ({ mediaUploadsEnabled: () => mediaOn.value }));
 vi.mock("@/components/ad-assistant", () => ({ AdAssistant: () => <div>Assistant</div> }));
 
 const sparse = {
@@ -49,6 +51,21 @@ describe("Create page business details (#169)", () => {
     expect(screen.getByRole("link", { name: "Edit your business" })).toHaveAttribute("href", "/brand");
     expect(screen.queryByText("Rs 99 loaf")).not.toBeInTheDocument();
     expect(screen.queryByText(/Not added yet/)).not.toBeInTheDocument();
+  });
+
+  it("#778: with uploads on, offers the entry choice: Make ads with AI · Use my photos; off, no choice", async () => {
+    getPrimaryBusiness.mockResolvedValue(sparse);
+    const { default: CreatePage } = await import("@/app/(app)/create/page");
+    const { unmount } = render(await CreatePage());
+    expect(screen.queryByRole("navigation", { name: "How to make ads" })).not.toBeInTheDocument();
+    unmount();
+    mediaOn.value = true;
+    try {
+      render(await CreatePage());
+      expect(screen.getByRole("link", { name: "Make ads with AI" })).toHaveAttribute("aria-current", "page");
+      expect(screen.getByRole("link", { name: "Make ads with AI" })).toHaveAttribute("href", "#create-flow");
+      expect(screen.getByRole("link", { name: "Use my photos" })).toHaveAttribute("href", "/assets");
+    } finally { mediaOn.value = false; }
   });
 
   it("asks for a logo and real photos until the Brand has them (#195)", async () => {
@@ -135,6 +152,19 @@ describe("Create page for a first-timer (#1270)", () => {
     hasLaunchedCampaign.mockResolvedValue(false);
     const { default: CreatePage } = await import("@/app/(app)/create/page");
     await expect(CreatePage({ searchParams: Promise.resolve({}) })).rejects.toThrow("NEXT_REDIRECT");
+  });
+
+  it("#2646: a website business with its link and no phone reaches step 2; no phone is listed as missing", async () => {
+    const site = { ...usable, phone: null, website: "https://bakery.in", default_destination: "website" } as unknown as Business;
+    getPrimaryBusiness.mockResolvedValue(site);
+    hasLaunchedCampaign.mockResolvedValue(false);
+    const { default: CreatePage } = await import("@/app/(app)/create/page");
+    const { unmount } = render(await CreatePage({ searchParams: Promise.resolve({}) }));
+    expect(screen.getByText("Setup step 2")).toBeInTheDocument();
+    unmount();
+    render(await CreatePage({ searchParams: Promise.resolve({ all: "1" }) }));
+    expect(screen.getByRole("heading", { name: "Create ads" })).toBeInTheDocument();
+    expect(screen.queryByText(/phone number/)).toBeNull();
   });
 
   it("no service area is not usable: step 2 sends the first-timer back to step 1 (#1136 CEO)", async () => {

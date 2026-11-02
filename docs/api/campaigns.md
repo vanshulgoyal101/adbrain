@@ -2,6 +2,22 @@
 
 Drafts, the planner, review, durable creation, activation, pause, delete and per-campaign edits. Conventions: [API reference](README.md).
 
+Website results from manual and scheduled refresh store `link_clicks` separately
+from all `clicks` (#2635). The card's Details show Link clicks, CPC (spend divided
+by link clicks), website visits and cost per visit. Null/missing link clicks mean
+unread and display as “—”; zero clicks display as 0 with no CPC. WhatsApp and form
+figures are unchanged. The website insights tape remains explicitly provisional
+until a real website campaign can be read; code tests do not prove live delivery.
+
+Website drafts and Review DTOs accept optional `websiteGoal` (`visits`, `leads`,
+`sales`, #2710), only with `destination: "website"`. Absent means visits without
+adding a default field to saved drafts. Visits omit goal/tracking fields from the
+canonical Review payload, preserving phase-1 hashes; conversion goals have distinct
+hashes. The shared Review service refuses leads/sales with the existing
+`website_closed` result, even for internal accounts, until the recorded tracking
+and conversion-launch gates exist. This contract does not enable conversions or
+change Meta payloads, campaign objectives at create, budgets or spend.
+
 ## Routes
 
 `Envelope` means the typed family in [Response Families](README.md#response-families); `plain` means route-specific JSON.
@@ -123,6 +139,10 @@ is capped at 12000 characters. Legacy text answers remain accepted, with wording
 based repeat checks but without the new topic identity guarantees.
 This route schema differs from the older exported `planRequestSchema`; use the
 handler's contract, not that unused declaration, for integration.
+Website ads are internal-only until they open (#2595, #2688): a `website`
+destination from any other account is a 403 before the model or Meta is called,
+and Review, launch and the queued worker refuse a website draft the same way
+(`src/lib/campaign/website-gate.ts`).
 
 Returns `{ready:false,questions}` when more input/setup is needed. Without
 `audienceDraft`, success is `{ready:true,draft}` and saves a guided draft. With
