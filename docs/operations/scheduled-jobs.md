@@ -41,7 +41,8 @@ Pause it with `gh workflow disable scheduled-jobs.yml`; resume
 with `gh workflow enable scheduled-jobs.yml`; run once with `gh workflow run scheduled-jobs.yml`.
 Each run also scans issue/PR bodies and comments since the previous run for customer data
 ([scan-public-data.mjs](../../scripts/scan-public-data.mjs), #1627: Indian mobiles, emails, Meta ids, tokens, JWTs,
-payment ids; the team's own Solaride/app ids and fake ids are allowed). A hit adds the URL and pattern type,
+payment ids; the team's own Solaride/app ids and fake ids are allowed, and a bare 10-digit number GitHub resolves
+as one of this repo's comments is that comment's id, #2727). A hit adds the URL and pattern type,
 never the value, to one `Possible customer data in a public issue or PR` issue for DevOps, who edits the
 comment to an opaque key and ticks the line. A scan error is a warning, never a failed run.
 [vercel.json](../../vercel.json) also runs keepalive and enforce-spend daily at
