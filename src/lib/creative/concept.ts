@@ -279,10 +279,9 @@ function normalizeDraft(value: unknown): unknown {
   };
 }
 
-// #2541: flash-lite ended a Hindi fact's quote with "。" for its "।" and the ad was lost; sentence enders are one mark.
 const foldQuote = (text: string) => text.toLowerCase().replace(/[\u2018\u2019]/g, "'").replace(/[\u201c\u201d]/g, '"').replace(/[।॥。｡．]/gu, ".");
 
-// A quote that differs from a fact only in case, curly quotes or its full-stop mark is stored as the fact's exact text.
+// A quote differing from a fact only in case, curly quotes or full-stop mark (#2541: 。 for ।) is stored as the fact.
 function verbatimQuote(quote: string, sources: string[]): string | null {
   if (sources.some((source) => source.includes(quote))) return quote;
   // #713: Haiku prefixed "the" to the owner's "…or cost of the solar installation…" and the ad was lost
