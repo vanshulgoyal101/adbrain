@@ -310,3 +310,6 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Start temporary browser-validation servers with `npm run dev` so the configured memory limit applies.
 - Stop any server you start as soon as browser validation is complete unless the user explicitly asks to keep it running.
 - Do not leave dev servers detached or orphaned after an agent session.
+- **Local checks (#2617):** run only the test files you changed (`npm run test -- tests/<file>.test.ts`) and push;
+	CI typechecks in 17 s. `typecheck`, `lint`, the full suite or `build` on the shared Mac take 10–15 min and slow
+	every worker: run them locally only to fix a CI failure.

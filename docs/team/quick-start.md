@@ -101,11 +101,12 @@ First verify login and a saved Brand Brain. Do not generate ads or connect a rea
 ad account merely to prove the page renders.
 
 ```sh
-npm run lint
-npm run typecheck
-npm test
-npm run build
+npm run test -- tests/<the-file-you-changed>.test.ts
 ```
+
+Then push: CI typechecks, lints, builds and runs the full suite in a few minutes.
+On the shared Mac, run `lint`, `typecheck`, the full suite or `build` locally only
+to fix a CI failure (#2617; see [Testing](testing.md#focused-local-loop)).
 
 Local tests do not prove email delivery, real consent, provider quality, or
 production deployment. Browser scripts can sign in to the configured backend;
