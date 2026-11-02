@@ -358,6 +358,7 @@ export function runPreflight(input: PreflightInput): ReviewDTO {
     creativeHash,
     destination: draft.destination ?? "instant_form",
     whatsappNumber: draft.destination === "whatsapp" ? input.whatsappNumber ?? null : null,
+    ...(payload.websiteUrl !== undefined ? { websiteUrl: payload.websiteUrl } : {}),
     currency: "INR",
     perAdSetDailyBudgetRupees,
     adSetCount,

@@ -158,6 +158,7 @@ nonnegative-safe-integer}`. Review data includes:
 | `resolvedAreaLabel`, `resolvedLocation`, `resolvedExcludedLocation` | Human label and provider-resolved geography |
 | `audienceInterests` | Resolved `{id,name}` entries, up to five |
 | `destination`, `whatsappNumber` | Optional destination and nullable E.164 number (`+` and 7-15 digits) |
+| `websiteUrl` | Website ads only: the https link Review opened and hashed; launch sends this link, and refuses before Meta without it (#2599) |
 
 Create body: `businessId`, `draftId` (UUIDs), `draftVersion`,
 `connectionGeneration` (nonnegative safe integers), `planHash` (64 lowercase hex),
