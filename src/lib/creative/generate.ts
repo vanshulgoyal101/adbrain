@@ -14,6 +14,7 @@ import {
 } from "@/lib/creative/concept";
 import { conceptImagePrompt } from "@/lib/creative/image-prompt";
 import { downloadImage, generateImage } from "@/lib/imageGen";
+import { personSubjectLine } from "@/lib/creative/visual-rules";
 import { ReferencePhotoPausedError, type ImageAttempt } from "@/lib/imageGen/types";
 import { ownerPhotoFor, pausedPhotoFor } from "./owner-photos";
 import { batchPictures } from "./batch-reuse";
@@ -384,7 +385,7 @@ async function renderVariant(
   const image = ownerRaster && ownerPhoto
     ? fromOwner(ownerPhoto, ownerRaster)
     : await generateImage({
-      prompt: conceptImagePrompt(concept, input),
+      prompt: [personSubjectLine(concept.visual.direction, [input.instructions, input.brief, input.advisoryPreferences], brand), conceptImagePrompt(concept, input)].filter(Boolean).join("\n"),
       width: dims.width,
       height: dims.height,
       referenceImages: referenceImages?.slice(0, 3),

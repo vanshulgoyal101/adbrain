@@ -23,7 +23,8 @@ describe("core: a WhatsApp business's copy asks for a WhatsApp message, never a 
     expect(user.brand.phone).toBeUndefined();
     expect(user.brand.email).toBeUndefined();
     expect(JSON.stringify(user)).not.toMatch(/73802|hello@solaride/);
-    expect(system).toMatch(/When contact\s+is "whatsapp", the ad's button opens a WhatsApp chat: the last line asks people to message on WhatsApp,\s+and the ad never asks them to call, phone or email \(and never picks "Call Now"\)/);
+    expect(system).toMatch(/When contact\s+is "whatsapp", the ad's button opens a WhatsApp chat: ask people to message on WhatsApp,\s+and never ask them to call, phone or email \(and never pick "Call Now"\)/);
+    expect(system).toMatch(/If lead\.ask is given, put\s+the WhatsApp request before the final quoted ask/);
   });
 
   it("a saved WhatsApp message makes any business a WhatsApp one; a US clinic without one keeps its number", () => {
@@ -90,6 +91,22 @@ describe("core: the WhatsApp line keeps a quoted ask last, and Call Now becomes 
     expect(quotedAsk(result.concept.primary_text)).toBe("Free site survey");
   });
 
+  it("does not duplicate a WhatsApp request already before the quoted ask", () => {
+    const lines = replies[0].primary_text.split("\n").filter(Boolean);
+    const quoted = {
+      ...replies[0],
+      primary_text: [...lines.slice(0, -1), "Message us on WhatsApp.", "Send “Free site survey” to book."].join("\n"),
+    };
+    const result = validateConcept(quoted, input(solaride));
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.concept.primary_text).toBe(quoted.primary_text);
+    expect(result.concept.primary_text.split("\n").slice(-2)).toEqual([
+      "Message us on WhatsApp.",
+      "Send “Free site survey” to book.",
+    ]);
+  });
+
   it("stores Contact Us instead of Call Now for a WhatsApp business only", () => {
     const call = { ...replies[0], cta: "Call Now" };
     const whatsapp = validateConcept(call, input(solaride));
@@ -98,4 +115,3 @@ describe("core: the WhatsApp line keeps a quoted ask last, and Call Now becomes 
     expect(other.success && other.concept.cta).toBe("Call Now");
   });
 });
-

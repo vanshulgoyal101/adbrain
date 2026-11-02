@@ -25,7 +25,7 @@ import sharp from "sharp";
 import { z } from "zod";
 import type { BrandContext } from "@/lib/templates/ads";
 import {
-  compareSummaries, expectedScript, inconclusive, offerInFold, personInScene, placeUpFront, summarize, textScript,
+  compareSummaries, copyRules, expectedScript, inconclusive, offerInFold, personInScene, placeUpFront, summarize, textScript,
   type AdResult, type CaseResult, type JudgeScore,
 } from "./lib/eval-create-score";
 import { evalProfile } from "./lib/eval-profile";
@@ -212,6 +212,7 @@ async function main() {
           offerInFold: offerInFold(variant.primaryText, item.offerTerms),
           placeUpFront: placeUpFront(variant.headline, variant.primaryText, item.brand.locations ?? []),
           visualDirection: variant.concept.visual.direction, personInScene: personInScene(variant.concept.visual.direction),
+          ...copyRules(item.brand, item.sourceFacts, variant.headline, variant.primaryText),
           scriptOk: textScript(variant.primaryText) === expectedScript(item.language),
           costUsd: Number(costUsd.toFixed(5)),
         } });
@@ -229,6 +230,7 @@ async function main() {
             headline: error.concept.headline, primaryText: error.concept.primary_text, supportingText: error.concept.supportingText,
             placeUpFront: placeUpFront(error.concept.headline, error.concept.primary_text, item.brand.locations ?? []),
             visualDirection: error.concept.visual.direction, personInScene: personInScene(error.concept.visual.direction),
+            ...copyRules(item.brand, item.sourceFacts, error.concept.headline, error.concept.primary_text),
           } } : {}),
         });
       },

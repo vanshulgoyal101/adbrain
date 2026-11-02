@@ -12,6 +12,7 @@ Part of the [repository map](../../../docs/architecture/overview.md#repository-m
 | [autofill.ts](autofill.ts) | Website and pasted-text extraction helpers and the model call's settings (`BRAND_EXTRACTION`) |
 | [meter.ts](meter.ts) | Home's Brand meter: which of offer, proof, why and audience are known, and what to ask next |
 | [fields.ts](fields.ts) | Trimming form values into strings and lists |
+| [offer.ts](offer.ts) | Shared Brand offer wording for Create and WhatsApp asks |
 
 ## Rules
 

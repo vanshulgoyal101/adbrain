@@ -58,7 +58,19 @@ Part of [Architecture](README.md). [Interview and boundaries](ai-pipeline.md) ·
    states a cited offer that neither the headline nor `supportingText` carries,
    `supportingText` becomes the one Brand offer fact (up to 64 characters) that states
    it. No repair and no new words; Hindi and Punjabi copy keeps its own picture line.
+   The `creative-concept-v4` prompt also requests a service and one Brand place, when
+   available, in a first line of at most 60 characters, a supplied Brand proof and the
+   same channel-neutral quoted ask in every ad (#418 rules 1, 5 and 7). `batchAsk`
+   chooses the first free offer, else the first numbered offer, else the first offer;
+   the quote becomes the WhatsApp pre-typed message. These are prompt guidance, not new
+   validators or repairs; the 125-character validator stays unchanged. Each angle gets
+   its own place and opening so parallel concepts start differently; repeat repairs
+   quote the words to avoid.
 4. Generate an image from the validated concept and up to three reference images.
+   For a generated picture whose direction has no person, the image prompt starts with a
+   person doing the business's work (#418 rule 4). An owner's instructions, brief or
+   preferences excluding people take precedence; an owner-photo ad and an owner's own
+   background request do not use this addition.
    When the business has uploaded product photos (Brand assets), ads 1 to
    min(k, 3) each use a different one, newest first (#195, #1901); a retried ad keeps
    its own photo. The rest get generated images. An owner-photo ad makes no image call and has no image cost,
@@ -80,8 +92,9 @@ Part of [Architecture](README.md). [Interview and boundaries](ai-pipeline.md) ·
    #1147). The ask is in the ad's language ("Message us on WhatsApp", "WhatsApp पर मैसेज करें",
    "WhatsApp par message karein", "WhatsApp ਤੇ ਮੈਸੇਜ ਕਰੋ"; Indic words shaped like the rest, #1177).
    Others show their phone number, as do designs saved before #1147. A WhatsApp business's concept
-   gets no phone or email and is told its button opens a chat; when the copy's last line doesn't mention
-   WhatsApp, that same ask is added as the last line, in the ad's language ($0, no repair). Review warns, without
+   gets no phone or email and is told its button opens a chat. If neither its last line nor the
+   line before a quoted final ask mentions WhatsApp, that same ask is added in the ad's language
+   ($0, no repair). A quoted shared ask stays last, with the WhatsApp line before it. Review warns, without
    blocking, when such a picture goes to a form campaign, and offers "Switch to WhatsApp".
 6. Save usage receipts and report partial failures independently of successful rows.
 

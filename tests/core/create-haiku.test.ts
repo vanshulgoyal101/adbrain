@@ -74,6 +74,13 @@ describe("core: Create on recorded Claude Haiku 5.5 concepts", () => {
     expect(variants.map(({ angleName }) => angleName)).toEqual(responses.map(({ angleName }) => angleName));
     expect(new Set(variants.map(({ headline }) => headline)).size).toBe(3);
     expect(bodies).toHaveLength(3);
+    // #418 rule 4: a picture with nobody in it opens its image prompt with a person doing the Brand's work.
+    const { personInScene } = await import("@/lib/creative/visual-rules");
+    for (const variant of variants) {
+      expect(variant.imagePrompt.startsWith(`Main subject, overriding any "no people" note: a ${run4.brand.name}`), variant.angleName)
+        .toBe(!personInScene(variant.concept.visual.direction));
+    }
+    expect(variants.some((variant) => !personInScene(variant.concept.visual.direction))).toBe(true);
     for (const body of bodies) {
       expect(body).toMatchObject({ model: "anthropic/claude-haiku-5.5", reasoning: { effort: "medium", exclude: true } });
     }
