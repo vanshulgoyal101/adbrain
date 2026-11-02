@@ -1,5 +1,5 @@
 # जाँचें और लाइव करें
-<!-- mirrors ../review.md 1601d87a57c1 -->
+<!-- mirrors ../review.md b31d30c472f9 -->
 
 यह [Review and Go Live](../review.md) का हिंदी रूप है; अंग्रेज़ी पेज बदले तो इसे भी बदलें।
 [Features and workflows](../README.md) का हिस्सा।
@@ -98,8 +98,8 @@ Button दबाएँ, वह एक चीज़ ठीक करें, फ�
 | `REVIEW_WHATSAPP_NOT_LINKED` | "Your Facebook Page has no WhatsApp number linked yet, so the ad's button has nowhere to open a chat. Link the number in Settings, then review again." | "Link your WhatsApp number" (Settings खुलता है) | Meta में WhatsApp Business number को Page से जोड़ें, फिर Settings में जाँचें। |
 | `REVIEW_WHATSAPP_MESSAGE` | "Your WhatsApp message: {problem}" | "Edit the WhatsApp message" | Message में जो कमी बताई है (बहुत लंबा, खाली, या welcome, pre-typed message या किसी question में कोई वादा) उसे ठीक करें। |
 | `REVIEW_NO_LEAD_FORM` | "Choose an active lead form from your Facebook Page in the Lead form field." | "Choose a lead form" | Active form चुनें, या पहले Facebook Page पर एक बनाएँ। |
-| `REVIEW_NO_WEBSITE` | "Add your business website on the Your business page. Meta lead ads must link to the advertiser's own website, not Facebook." | "Add your website" (Brand खुलता है), या "Use WhatsApp chat instead (no website needed)" | अपनी website डालें, या WhatsApp chat ads पर जाएँ। |
-| `REVIEW_WEBSITE_UNREACHABLE` | सिर्फ़ website ads (#2599): "AdBrain couldn't open your website {site}", "answered with an error ({code})", "isn't a public website address" या "sends visitors on to {other site}" | "Check your website" (Brand खुलता है), या "Use WhatsApp chat instead (no website needed)" | Address ठीक करें ताकि आपकी अपनी site खुले, site फिर से चालू करें, या WhatsApp chat ads पर जाएँ। |
+| `REVIEW_NO_WEBSITE` | "Add your business website on the Your business page. Meta lead ads must link to the advertiser's own website, not Facebook." | "Add website in Your business" (Brand खुलता है), या "Use WhatsApp chat instead (no website needed)" | अपनी website डालें, या WhatsApp chat ads पर जाएँ। |
+| `REVIEW_WEBSITE_UNREACHABLE` | सिर्फ़ website ads (#2599): "AdBrain couldn't open your website {site}", "answered with an error ({code})", "isn't a public website address" या "sends visitors on to {other site}" | "Fix link in Your business" (Brand खुलता है), या "Use WhatsApp chat instead (no website needed)" | Address ठीक करें ताकि आपकी अपनी site खुले, site फिर से चालू करें, या WhatsApp chat ads पर जाएँ। |
 | `REVIEW_AD_POLICY` | ad में "{word}" is a health promise (clinics) या a promise (बाकी) "Meta rejects. Edit the ad to describe the service instead." | "Edit the ad's wording" | लिखें कि सेवा क्या है, यह नहीं कि वह क्या ठीक करती है या किसकी गारंटी देती है। |
 | `REVIEW_BUDGET` | "Set a daily budget above ₹0." या "Meta needs at least ₹96 a day. Set a daily budget of ₹96 or more." | "Set the daily budget" | रोज़ ₹300, ₹500 या ₹1,000 चुनें। |
 | `REVIEW_NO_AGE_RANGE` | "Choose an age range, or let AdBrain recommend one, before reviewing." | "Set the age range" | उम्र चुनें, या **Recommend audience** दबाएँ। |
