@@ -42,6 +42,18 @@ responses. Network requests are fulfilled with fixtures or blocked; server
 actions throw. Screenshots go to ignored `test-results/scroll-layout/`.
 This does not replace authenticated workflow tests or real-device Safari testing.
 
+For per-asset result badges in the real Assets/Photos components and CSS:
+
+```sh
+node scripts/check-asset-results-ux.mjs
+```
+
+This credential-free Chrome harness blocks live transport and checks English/Hindi
+at 390/1440px: separate outcome counts/costs, pinned freshness, zero/unread/no-delivery/
+unavailable states, clipping, rename/cancel and tabs. Screenshots go to a temporary
+directory printed by the command (or the first, output-directory argument). Inspect them manually.
+It is not proof of an authenticated launch or real per-photo production results.
+
 ### Enquiry Checks
 
 For the saved-enquiry workflow, with installed Google Chrome and fully synthetic

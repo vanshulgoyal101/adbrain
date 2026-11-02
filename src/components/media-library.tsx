@@ -11,6 +11,7 @@ import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
 import { UPLOAD_WORDS, type Codec, type UploadDeps } from "@/lib/media/client-upload";
 import type { MediaView } from "@/lib/media/store";
 import type { BrandAsset, CreativePreview } from "@/lib/types";
+import { AssetResultBadge, AssetResultsNotice, type AssetResultProps } from "@/components/asset-result-badge";
 
 const TABS = [
   { id: "all", label: "All" },
@@ -105,7 +106,7 @@ function Grid({ children }: { children: React.ReactNode }) {
  * #778 slice 3a (#744 phase 1): "Photos & videos", the owner's own uploads beside the ads AdBrain made. Shown when
  * MEDIA_UPLOADS_ENABLED is on; the older Assets page stays otherwise. Words are the CPO's (#1868 on #744).
  */
-export function MediaLibrary({ business, media: initialMedia, creatives, brandAssets, sample = false, consented = false, startOpen = false, deps, codec }: {
+export function MediaLibrary({ business, media: initialMedia, creatives, brandAssets, sample = false, consented = false, startOpen = false, deps, codec, results, words }: {
   business: { id: string; vertical: string | null };
   media: MediaView[];
   creatives: CreativePreview[];
@@ -118,7 +119,7 @@ export function MediaLibrary({ business, media: initialMedia, creatives, brandAs
   startOpen?: boolean;
   deps?: UploadDeps;
   codec?: Codec;
-}) {
+} & AssetResultProps) {
   const [tab, setTab] = useState<Tab>("all");
   const [media, setMedia] = useState(initialMedia);
   const [sheetOpen, setSheetOpen] = useState(startOpen);
@@ -207,6 +208,7 @@ export function MediaLibrary({ business, media: initialMedia, creatives, brandAs
       {media.map((m) => (
         <AssetTile key={m.id} url={m.url} title={m.name || "Photo"} meta={m.fit?.message} actions={false}
           filename={`adbrain-${slugify(m.name ?? "photo", m.id.slice(0, 6))}.jpg`}>
+          <AssetResultBadge results={results} words={words} assetId={m.id} kind="media" />
           <OwnPhotoControls key={m.name ?? ""} asset={m} request={request} onRenamed={onRenamed} onDelete={onDelete} />
         </AssetTile>
       ))}
@@ -228,7 +230,9 @@ export function MediaLibrary({ business, media: initialMedia, creatives, brandAs
             title={c.headline ?? "Ad creative"}
             filename={`adbrain-${slugify(c.headline ?? c.angle ?? "creative", c.id.slice(0, 6))}.jpg`}
             meta={c.status === "approved" ? <Status tone="live">Approved</Status> : undefined}
-            actions={!sample} />
+            actions={!sample}>
+            <AssetResultBadge results={results} words={words} assetId={c.id} kind="creative" />
+          </AssetTile>
         ))}
       </Grid>
       {made.length > shown && (
@@ -242,6 +246,7 @@ export function MediaLibrary({ business, media: initialMedia, creatives, brandAs
 
   return (
     <div className="flex flex-col gap-6">
+      <AssetResultsNotice results={results} words={words} />
       {ownCount > 0 && <div>{addButton}</div>}
       {/* Delete feedback lives in one bottom toast, so a scrolled owner sees why a photo came back (Designer, #2008). */}
       {(deleted || deleteError) && (

@@ -14,6 +14,9 @@ import { isProspectSession } from "@/lib/prospect-session";
 import { hasCurrentMediaConsent } from "@/lib/media/consent";
 import { listMedia, mediaUploadsEnabled } from "@/lib/media/store";
 import { createClient } from "@/lib/supabase/server";
+import { adResultsEnabled } from "@/lib/campaign/ad-results-store";
+import { readAssetResults } from "@/lib/campaign/asset-results-store";
+import { requestWords } from "@/i18n/request-locale";
 
 export const metadata = { title: "Assets" };
 
@@ -47,6 +50,11 @@ export default async function AssetsPage({ searchParams }: { searchParams?: Prom
     getBrandAssets(business.id),
     isProspectSession(),
   ]);
+  const showResults = adResultsEnabled() && !sample;
+  const [results, words] = showResults ? await Promise.all([
+    createClient().then(client => readAssetResults(client, business.id)),
+    requestWords("verdict"),
+  ]) : [undefined, undefined];
 
   // #778 slice 3a: with uploads on, the page is the owner's photo library; a failed read shows the empty state.
   if (mediaUploadsEnabled()) {
@@ -61,7 +69,7 @@ export default async function AssetsPage({ searchParams }: { searchParams?: Prom
         <PageHeader title="Photos" description={<p>Your own photos for {business.name}&apos;s ads, and every ad AdBrain made.</p>} />
         <div className="mt-6">
           <MediaLibrary business={{ id: business.id, vertical: business.vertical ?? null }} media={media} creatives={creatives}
-            brandAssets={brandAssets} sample={sample} consented={consented} startOpen={params.add === "1"} />
+            brandAssets={brandAssets} sample={sample} consented={consented} startOpen={params.add === "1"} results={results} words={words} />
         </div>
       </div>
     );
@@ -76,7 +84,7 @@ export default async function AssetsPage({ searchParams }: { searchParams?: Prom
         }
       />
       <div className="mt-6">
-        <AssetsLibrary creatives={creatives} brandAssets={brandAssets} sample={sample} />
+        <AssetsLibrary creatives={creatives} brandAssets={brandAssets} sample={sample} results={results} words={words} />
       </div>
     </div>
   );

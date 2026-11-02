@@ -3,7 +3,8 @@ import { NextResponse } from "next/server";
 import { getEnv } from "@/lib/env";
 import { observeRoute } from "@/lib/observability/logger";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { adResultsEnabled, saveAdResults } from "@/lib/campaign/ad-results-store";
+import { adResultsEnabled } from "@/lib/campaign/ad-results-store";
+import { refreshAdAssetResults } from "@/lib/campaign/asset-results-store";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { readAllByCursor } from "@/lib/supabase/queries";
 import { requireScheduledBusiness, withMetaConnection } from "@/lib/meta/connection-access";
@@ -122,7 +123,7 @@ async function handleGET(request: Request) {
         ...(insights.linkClicks !== undefined ? { link_clicks: insights.linkClicks } : {}),
       });
       if (resultError) throw new Error("Result storage unavailable.");
-      if (ads) await saveAdResults(admin as unknown as SupabaseClient, { businessId: campaign.business_id, campaignId: campaign.id, ads }).catch(() => false);
+      if (ads) await refreshAdAssetResults(admin as unknown as SupabaseClient, { businessId: campaign.business_id, campaign, ads });
       // #1903: paused or daily budget changed in Meta Ads Manager. Only a raise is an alert (money went up outside AdBrain).
       // The key hashes `${id}:budget_raised:${raw.metaBudgetChange.at}`, as health flags hash their `since`.
       const seenAt = new Date(started);

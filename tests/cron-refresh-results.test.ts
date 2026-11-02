@@ -18,6 +18,8 @@ const mocks = vi.hoisted(() => ({
   rpc: vi.fn(),
   throttledConnections: [] as Array<{ business_id: string; throttled_until: string }>,
   saveCampaignBudget: vi.fn(),
+  ads: vi.fn(),
+  refreshAds: vi.fn(),
 }));
 
 vi.mock("@/lib/env", () => ({ getEnv: () => ({ CRON_SECRET: mocks.secret }) }));
@@ -37,6 +39,7 @@ vi.mock("@/lib/supabase/admin", () => ({
   }),
 }));
 vi.mock("@/lib/meta/managed-account", () => ({ getManagedAccount: async () => null }));
+vi.mock("@/lib/campaign/asset-results-store", () => ({ refreshAdAssetResults: mocks.refreshAds }));
 vi.mock("@/lib/campaign/trusted-write", () => ({
   saveCampaign: mocks.saveCampaign,
   saveCampaignResult: mocks.saveCampaignResult,
@@ -47,6 +50,7 @@ vi.mock("@/lib/meta/connection-access", () => ({
   requireScheduledBusiness: async (id: string) => ({ businessId: id, userId: "owner-1" }),
   withMetaConnection: async (_context: unknown, _options: unknown, execute: (meta: unknown) => unknown) => execute({
     getCampaignInsights: mocks.insights, readAdReview: mocks.review,
+    getAdResults: mocks.ads,
     pauseCampaignTree: mocks.pause, updateCampaignStatus: mocks.updateStatus,
   }),
 }));
@@ -76,6 +80,16 @@ beforeEach(() => {
 });
 
 describe("GET /api/cron/refresh-results (#258)", () => {
+  it("#789: routes each business's per-ad refresh to immutable attribution without mixing campaigns", async () => {
+    vi.stubEnv("AD_RESULTS_ENABLED", "true");
+    const ads = [{ adId: "101" }];
+    mocks.ads.mockResolvedValue(ads);
+    mocks.refreshAds.mockResolvedValue(undefined);
+    try {
+      expect((await call()).body).toMatchObject({ refreshed: 2, failed: 0 });
+      expect(mocks.refreshAds.mock.calls.map(([, input]) => input)).toEqual(mocks.campaigns.map(campaign => ({ businessId: campaign.business_id, campaign, ads })));
+    } finally { vi.unstubAllEnvs(); }
+  });
   it("#2635: scheduled refresh saves website link clicks, including zero, without changing form reads", async () => {
     mocks.campaigns = [bound("website", "website"), bound("empty", "empty"), bound("form", "form")];
     mocks.insights.mockImplementation(async (id: string) => id === "website"

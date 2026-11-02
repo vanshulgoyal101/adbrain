@@ -13,14 +13,18 @@ vi.mock("@/lib/meta/whatsapp-bindings", () => ({ boundWhatsAppNumbers: async () 
 vi.mock("@/lib/creative/story", () => ({ renderStoriesWithin: (generations: unknown[]) => generations.map(() => null) }));
 vi.mock("@/lib/campaign/operation-store", () => ({ createOperationCheckpoint: () => ({ checkpoint: async (operation: unknown) => operation }) }));
 vi.mock("@/lib/campaign/trusted-write", () => ({ saveCampaign: async () => ({ data: { id: "campaign-row" }, error: null }) }));
-vi.mock("@/lib/campaign/learnings", () => ({ buildLaunchSnapshot: () => null, readCreativeMedia: async () => new Map(), saveLaunchSnapshot: async () => true }));
+vi.mock("@/lib/campaign/learnings", () => ({ buildLaunchSnapshot: () => attribution.snapshot, readCreativeMedia: async () => new Map(), saveLaunchSnapshot: async () => true }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({}) }));
-vi.mock("@/lib/observability/logger", () => ({ recordProductEvent: () => undefined }));
+vi.mock("@/lib/observability/logger", () => ({ recordProductEvent: attribution.events }));
 
 import { executeReviewedCampaign } from "@/lib/campaign/create-service";
 import { buildCanonicalReviewPayload, buildCreativeReviewPayload, isReviewedWhatsAppMessage } from "@/lib/campaign/preflight";
 import type { ReviewDTO } from "@/lib/campaign/connect-contracts";
 import type { OperationRecord } from "@/lib/campaign/operations";
+import type { CampaignMutationCheckpoint } from "@/lib/meta/client";
+
+const attribution = vi.hoisted(() => ({ record: vi.fn(), events: vi.fn(), snapshot: null as null | { creatives: { id: string; mediaAssetId: string | null }[] } }));
+vi.mock("@/lib/campaign/asset-results-store", () => ({ recordAdAssetLinks: attribution.record }));
 
 const solaride = { name: "Solaride", website: "https://solaride.in", locations: ["Chandigarh", "Panchkula", "Mohali"],
   offers: ["Free site survey", "PM Surya Ghar subsidy help", "Diwali offer: 10% off rooftop solar installation"], whatsapp_template: null as unknown };
@@ -52,7 +56,46 @@ function launch(business: typeof solaride) {
 }
 
 beforeEach(() => {
+  attribution.record.mockReset().mockResolvedValue(undefined);
+  attribution.events.mockClear();
+  attribution.snapshot = null;
   meta.createLeadCampaign.mockReset().mockResolvedValue({ destination: "whatsapp", campaignId: "c1", adSetId: "s1", adSetIds: ["s1"], adIds: ["a1"], creativeIds: ["cr1"] });
+});
+
+async function checkpointLaunch() {
+  attribution.snapshot = { creatives: [{ id: creative.id, mediaAssetId: "00000000-0000-4000-8000-000000000001" }] };
+  meta.createLeadCampaign.mockImplementation(async ({ onCheckpoint }: { onCheckpoint: (event: CampaignMutationCheckpoint) => Promise<void> }) => {
+    await onCheckpoint({ phase: "creative", externalId: "501", variantIndex: 0, creativeIndex: 0 });
+    await onCheckpoint({ phase: "ad", externalId: "101", variantIndex: 0, creativeIndex: 0 });
+    return { destination: "whatsapp", campaignId: "1", adSetId: "2", adSetIds: ["2"], adIds: ["101"], creativeIds: ["501"] };
+  });
+  return launch(solaride);
+}
+
+describe("core: explicit launch attribution (#789), using the recorded reviewed message", () => {
+  it("persists checkpoint indices and immutable snapshot media only with the flag enabled", async () => {
+    vi.stubEnv("AD_RESULTS_ENABLED", "true");
+    try {
+      expect((await checkpointLaunch()).kind).toBe("succeeded");
+      expect(attribution.record).toHaveBeenCalledWith({}, [{
+        business_id: "b1", campaign_id: "campaign-row", meta_ad_id: "101", meta_creative_id: "501",
+        creative_id: creative.id, media_asset_id: "00000000-0000-4000-8000-000000000001", variant_index: 0, position: 0,
+      }]);
+      attribution.record.mockClear();
+      vi.stubEnv("AD_RESULTS_ENABLED", "false");
+      expect((await checkpointLaunch()).kind).toBe("succeeded");
+      expect(attribution.record).not.toHaveBeenCalled();
+    } finally { vi.unstubAllEnvs(); }
+  });
+
+  it("logs attribution failure without changing a successfully created paused campaign", async () => {
+    vi.stubEnv("AD_RESULTS_ENABLED", "true");
+    attribution.record.mockRejectedValue(new Error("down"));
+    try {
+      expect((await checkpointLaunch()).kind).toBe("succeeded");
+      expect(attribution.events).toHaveBeenCalledWith(expect.objectContaining({ name: "campaign.ad_attribution", outcome: "failed" }));
+    } finally { vi.unstubAllEnvs(); }
+  });
 });
 
 describe("core: launch sends only the WhatsApp message Review checked (#2452)", () => {
