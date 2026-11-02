@@ -4,7 +4,6 @@ import { formatPerDay } from "@/lib/format";
 import type { WeeklyCapNotice } from "@/lib/campaign/spend";
 import { WeeklyCapLine } from "@/components/weekly-cap-line";
 import { WebsiteGoal, WebsiteReviewFact, websiteHref, type ComposerDestination } from "@/components/campaign-destination";
-import type { WebsiteCta } from "@/lib/campaign/connect-contracts";
 import { campaignsTranslator, type Words } from "@/i18n/words";
 
 export function CampaignLaunchReview({
@@ -14,7 +13,6 @@ export function CampaignLaunchReview({
   destination = "whatsapp",
   whatsappNumber,
   website,
-  websiteCta = "learn_more",
   audience,
   weeklyCap = null,
   words,
@@ -27,7 +25,6 @@ export function CampaignLaunchReview({
   whatsappNumber?: string;
   /** #2595: the Brand website a website ad opens, and its button. */
   website?: string | null;
-  websiteCta?: WebsiteCta;
   audience: string;
   /** #1342: the Settings cap against this campaign's weekly commitment. */
   weeklyCap?: WeeklyCapNotice | null;
@@ -67,7 +64,7 @@ export function CampaignLaunchReview({
           <dt className="text-xs text-slate-500">{destination === "website" ? t("destination.reviewWebsite") : "Lead destination"}</dt>
           <dd className={cn("mt-1 break-words font-medium", destinationReady ? "text-slate-900" : "text-amber-700")}>
             {destination === "website"
-              ? <WebsiteReviewFact url={websiteLink} cta={websiteCta} words={words} />
+              ? <WebsiteReviewFact url={websiteLink} words={words} />
               : destination === "whatsapp"
                 ? whatsappNumber ? `WhatsApp chat ${whatsappNumber}` : "WhatsApp chat (number verification pending)"
                 : leadFormName ?? "Choose a lead form"}

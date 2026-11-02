@@ -2,14 +2,12 @@ import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { campaignsTranslator, type Words } from "@/i18n/words";
-import { WEBSITE_CTAS, type WebsiteCta } from "@/lib/campaign/connect-contracts";
 import type { LeadDestination } from "@/lib/types/campaign";
 
 /** #2595: the destinations the composer can choose (Call stays planner-only). */
 export type ComposerDestination = Exclude<LeadDestination, "call">;
 
 const selectedBox = (active: boolean) => active ? "border-blue-300 bg-blue-50" : "border-slate-200 bg-white";
-const focusRing = "has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-blue-500 has-[:focus-visible]:ring-offset-1";
 const openButton = "inline-flex min-h-11 flex-none items-center gap-1 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 hover:bg-slate-50";
 
 /** The Brand website as a link the ad may open: http(s) only, a bare domain gets https. */
@@ -82,39 +80,22 @@ export function DestinationChoice({ value, onChange, disabled, describedBy, offe
   );
 }
 
-/** The website the ads open and the ad's button. The button is wording only: phase 1 optimises for landing-page views. */
-export function WebsiteDestinationFields({ website, cta, onCta, disabled, words }: {
+/** The website the ads open. Each ad keeps its own button (QA, #2660): a button choice returns once preflight and launch carry it. */
+export function WebsiteDestinationFields({ website, words }: {
   website?: string | null;
-  cta: WebsiteCta;
-  onCta: (cta: WebsiteCta) => void;
-  disabled?: boolean;
   words?: Words<"campaigns">;
 }) {
   const t = campaignsTranslator(words);
   const href = websiteHref(website);
   return (
-    <div className="flex min-w-0 flex-col gap-4">
-      <div className="flex min-w-0 flex-col gap-1.5">
-        <span className="text-sm font-medium text-slate-900">{t("destination.websiteLink")}</span>
-        {href
-          ? <>
-            <div id="website-destination" className="flex min-w-0 items-center justify-between gap-3 rounded-lg border border-slate-200 py-1.5 pl-3 pr-1.5 text-sm"><WebsiteLinkText href={href} /><OpenWebsite href={href} words={words} /></div>
-            <Link href="/brand" className="inline-flex min-h-11 w-fit items-center text-sm font-medium text-blue-700 underline underline-offset-4">{t("destination.changeInBrand")}</Link>
-          </>
-          : <p id="website-destination" role="status" className="text-sm text-amber-800">{t("destination.noWebsite")} <Link href="/brand" className="inline-flex min-h-11 items-center font-medium text-blue-700 underline underline-offset-4">{t("destination.openBrand")}</Link></p>}
-      </div>
-      <fieldset disabled={disabled} className="flex min-w-0 flex-col gap-1.5">
-        <legend className="mb-1.5 text-sm font-medium text-slate-900">{t("destination.ctaLegend")}</legend>
-        <div className="grid grid-cols-3 gap-2">
-          {WEBSITE_CTAS.map((option) => (
-            <label key={option} className={cn("flex min-h-11 cursor-pointer items-center justify-center rounded-md border px-2 text-center text-sm", focusRing, cta === option ? "border-blue-300 bg-blue-50 font-medium text-blue-700" : "border-slate-200 bg-white text-slate-900")}>
-              <input id={`website-cta-${option}`} type="radio" name="website-cta" value={option} checked={cta === option} onChange={() => onCta(option)} className="sr-only" />
-              {t(`destination.cta.${option}`)}
-            </label>
-          ))}
-        </div>
-        <p className="text-xs text-slate-500">{t("destination.ctaNote")}</p>
-      </fieldset>
+    <div className="flex min-w-0 flex-col gap-1.5">
+      <span className="text-sm font-medium text-slate-900">{t("destination.websiteLink")}</span>
+      {href
+        ? <>
+          <div id="website-destination" className="flex min-w-0 items-center justify-between gap-3 rounded-lg border border-slate-200 py-1.5 pl-3 pr-1.5 text-sm"><WebsiteLinkText href={href} /><OpenWebsite href={href} words={words} /></div>
+          <Link href="/brand" className="inline-flex min-h-11 w-fit items-center text-sm font-medium text-blue-700 underline underline-offset-4">{t("destination.changeInBrand")}</Link>
+        </>
+        : <p id="website-destination" role="status" className="text-sm text-amber-800">{t("destination.noWebsite")} <Link href="/brand" className="inline-flex min-h-11 items-center font-medium text-blue-700 underline underline-offset-4">{t("destination.openBrand")}</Link></p>}
     </div>
   );
 }
@@ -125,25 +106,24 @@ export function WebsiteGoal({ words }: { words?: Words<"campaigns"> }) {
   return <>{t("destination.goalWebsite")}<span className="block text-xs text-slate-500">{t("destination.goalWebsiteHint")}</span></>;
 }
 
-/** Review's destination for a website ad: the link launch sends, an Open tap, and the ad's button. */
-export function WebsiteReviewFact({ url, cta = "learn_more", words }: { url?: string | null; cta?: WebsiteCta; words?: Words<"campaigns"> }) {
+/** Review's destination for a website ad: the link launch sends and an Open tap. */
+export function WebsiteReviewFact({ url, words }: { url?: string | null; words?: Words<"campaigns"> }) {
   const t = campaignsTranslator(words);
   const href = websiteHref(url);
   return <span className="flex min-w-0 items-start justify-between gap-3">
     <span className="min-w-0">
       {href ? <span className="block"><WebsiteLinkText href={href} /></span> : <span className="block font-medium text-amber-800">{t("destination.needsLink")}</span>}
-      <span className="block text-slate-600">{t("destination.reviewButton", { cta: t(`destination.cta.${cta}`) })}</span>
     </span>
     {href && <OpenWebsite href={href} words={words} />}
   </span>;
 }
 
 /** The server Review's first rows for a website ad (#2595: goal, then where people go). */
-export function WebsiteReviewFacts({ url, cta, words }: { url?: string | null; cta?: WebsiteCta; words?: Words<"campaigns"> }) {
+export function WebsiteReviewFacts({ url, words }: { url?: string | null; words?: Words<"campaigns"> }) {
   const t = campaignsTranslator(words);
   const row = "grid grid-cols-[5.75rem_1fr] gap-3 sm:grid-cols-[7.5rem_1fr] sm:gap-4";
   return <>
     <div className={row}><dt className="text-slate-500">{t("destination.goal")}</dt><dd className="min-w-0 text-slate-900"><WebsiteGoal words={words} /></dd></div>
-    <div className={row}><dt className="text-slate-500">{t("destination.reviewWebsite")}</dt><dd className="min-w-0 text-slate-900"><WebsiteReviewFact url={url} cta={cta} words={words} /><span className="block text-slate-600">Shown on Facebook, Instagram and Messenger</span></dd></div>
+    <div className={row}><dt className="text-slate-500">{t("destination.reviewWebsite")}</dt><dd className="min-w-0 text-slate-900"><WebsiteReviewFact url={url} words={words} /><span className="block text-slate-600">Shown on Facebook, Instagram and Messenger</span></dd></div>
   </>;
 }

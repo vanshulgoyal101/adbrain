@@ -1,4 +1,4 @@
-import type { DraftInput, TargetingInputDTO, WebsiteCta } from "@/lib/campaign/connect-contracts";
+import type { DraftInput, TargetingInputDTO } from "@/lib/campaign/connect-contracts";
 import type { WhatsAppLanguage } from "@/lib/campaign/whatsapp-greeting";
 import type { WhatsAppTemplate } from "@/lib/campaign/whatsapp-template";
 import type { LeadDestination } from "@/lib/types/campaign";
@@ -18,7 +18,6 @@ export function buildManualDraftInput(fields: {
   dailyBudgetRupees: number;
   destination: Exclude<LeadDestination, "call">;
   /** #2595: the website ad's button. */
-  websiteCta?: WebsiteCta;
   leadFormId: string;
   whatsappNumber: string;
   whatsappLanguage: WhatsAppLanguage;
@@ -38,7 +37,6 @@ export function buildManualDraftInput(fields: {
     dailyBudgetRupees: Math.max(0, fields.dailyBudgetRupees),
     leadFormId: destination === "instant_form" ? fields.leadFormId || null : null,
     destination,
-    ...(destination === "website" ? { websiteCta: fields.websiteCta ?? "learn_more" } : {}),
     ...(destination === "whatsapp" && whatsappNumber ? { whatsappNumber } : {}),
     ...(destination === "whatsapp" && whatsappLanguage !== "ad" ? { whatsappLanguage } : {}),
     ...(destination === "whatsapp" && whatsappMessage ? { whatsappMessage } : {}),

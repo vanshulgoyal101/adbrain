@@ -88,7 +88,7 @@ import {
   isTerminalOperation,
   stableOperationKey,
 } from "@/lib/meta-connect-ui/campaign-flow";
-import type { DraftDTO, DraftInput, OperationDTO, ReviewDTO, WebsiteCta } from "@/lib/campaign/connect-contracts";
+import type { DraftDTO, DraftInput, OperationDTO, ReviewDTO } from "@/lib/campaign/connect-contracts";
 import { fetchAudiencePlan, needsAudiencePlan, plannedTargeting, type AudiencePlanReply } from "@/lib/campaign/audience-plan";
 import { campaignNameDate, defaultCampaignName, draftForSelection } from "@/lib/campaign/draft-name";
 import { REVIEW_AND_SPEND, whatsappExpectation } from "@/lib/campaign/expectations";
@@ -187,7 +187,6 @@ type ComposerSetup = {
   selected: Set<string>;
   budget: number;
   destination: ComposerDestination;
-  websiteCta?: WebsiteCta;
   whatsappNumber: string;
   whatsappLanguage?: WhatsAppLanguage;
   /** #840: this campaign's own WhatsApp message ("Edit for this campaign"). */
@@ -322,7 +321,6 @@ function BusinessCampaigns({
   // #761: ₹300 a day is the core run (#334); less rarely gets Meta out of learning.
   const [budget, setBudget] = useState(initialSetup?.budget ?? newCampaign?.budget ?? 300);
   const [destination, setDestination] = useState<ComposerDestination>(initialSetup?.destination ?? "whatsapp");
-  const [websiteCta, setWebsiteCta] = useState<WebsiteCta>(initialSetup?.websiteCta ?? "learn_more");
   const [whatsappNumber, setWhatsAppNumber] = useState(initialSetup?.whatsappNumber ?? "");
   const [whatsappLanguage, setWhatsAppLanguage] = useState<WhatsAppLanguage>(initialSetup?.whatsappLanguage ?? "ad");
   const [whatsappMessage, setWhatsAppMessage] = useState<WhatsAppTemplate | null>(initialSetup?.whatsappMessage ?? null);
@@ -495,8 +493,8 @@ function BusinessCampaigns({
   const [draftBusy, setDraftBusy] = useState<string | null>(null);
   const [retryAllowed, setRetryAllowed] = useState(false);
   useEffect(() => {
-    onSetupChange([scope, { selected, budget, destination, websiteCta, whatsappNumber, whatsappLanguage, whatsappMessage, leadFormId, name: customName, targeting, draftGoal, includedNames, excludedNames, abTest, creationMode, showComposer }]);
-  }, [selected, budget, destination, websiteCta, whatsappNumber, whatsappLanguage, whatsappMessage, leadFormId, customName, targeting, draftGoal, includedNames, excludedNames, abTest, creationMode, showComposer, scope, onSetupChange]);
+    onSetupChange([scope, { selected, budget, destination, whatsappNumber, whatsappLanguage, whatsappMessage, leadFormId, name: customName, targeting, draftGoal, includedNames, excludedNames, abTest, creationMode, showComposer }]);
+  }, [selected, budget, destination, whatsappNumber, whatsappLanguage, whatsappMessage, leadFormId, customName, targeting, draftGoal, includedNames, excludedNames, abTest, creationMode, showComposer, scope, onSetupChange]);
   const visibleCampaigns = campaigns.filter(campaign =>
     (statusFilter === "all" || campaign.status === statusFilter) &&
     (campaign.name ?? business.name).toLocaleLowerCase().includes(campaignQuery.trim().toLocaleLowerCase()),
@@ -571,7 +569,7 @@ function BusinessCampaigns({
     setSelected(new Set(input.creativeIds));
     setBudget(input.dailyBudgetRupees);
     setLeadFormId(input.leadFormId ?? "");
-    setDestination(input.destination ?? "instant_form"); setWebsiteCta(input.websiteCta ?? "learn_more");
+    setDestination(input.destination ?? "instant_form");
     // The form names numbers by their mask; a full number from an older draft shows as its mask.
     setWhatsAppNumber(!input.whatsappNumber || maskedWhatsAppNumberPattern.test(input.whatsappNumber) ? input.whatsappNumber ?? "" : maskWhatsAppNumber(input.whatsappNumber));
     setWhatsAppLanguage(input.whatsappLanguage ?? "ad");
@@ -982,7 +980,6 @@ function BusinessCampaigns({
       dailyBudgetRupees: budget,
       leadFormId,
       destination,
-      websiteCta,
       whatsappNumber: chosenWhatsAppNumber,
       whatsappLanguage,
       whatsappMessage,
@@ -1134,7 +1131,7 @@ function BusinessCampaigns({
       failAt("composer", reason instanceof Error ? reason.message : "Complete the campaign details first.");
       return;
     }
-    if (reviewAfterSave && connectedForDraft && input.destination === "instant_form" && !input.leadFormId) {
+    if (reviewAfterSave && connectedForDraft && (input.destination ?? "instant_form") === "instant_form" && !input.leadFormId) {
       failAt("leadform", "Choose a lead form before preparing campaign review.");
       return;
     }
@@ -1156,7 +1153,7 @@ function BusinessCampaigns({
       if (over && over.draftId !== draft.draftId) setSavedDrafts((drafts) => drafts.filter((saved) => saved.draftId !== over.draftId));
       signal.throwIfAborted();
       saveRecovery({ draft, request: null, operationId: null });
-      if (reviewAfterSave && input.destination === "instant_form") saveLeadFormMemory(leadFormMemoryKey, input.leadFormId);
+      if (reviewAfterSave && (input.destination ?? "instant_form") === "instant_form") saveLeadFormMemory(leadFormMemoryKey, input.leadFormId);
       setOperation(null);
       operationRef.current = null;
       setRecoveryPending(false);
@@ -1318,7 +1315,7 @@ function BusinessCampaigns({
         setConnectOpen(true);
         return;
       }
-      if (draft.input.destination === "instant_form") await refreshDraftForms();
+      if ((draft.input.destination ?? "instant_form") === "instant_form") await refreshDraftForms();
       await loadPrepareReview(draft, connection);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not open the saved campaign review.");
@@ -1747,7 +1744,7 @@ function BusinessCampaigns({
                 const interests = review.audienceInterests?.map((interest) => interest.name).join(", ");
                 const fact = (label: string, value: ReactNode) => <div key={label} className="grid grid-cols-[5.75rem_1fr] gap-3 sm:grid-cols-[7.5rem_1fr] sm:gap-4"><dt className="text-slate-500">{label}</dt><dd className="min-w-0 wrap-break-word text-slate-900">{value}</dd></div>;
                 const facts = <>
-                  <dl className="grid gap-2.5">{input.destination === "website" && <WebsiteReviewFacts url={reviewWebsiteUrl(review.websiteUrl, business.website)} cta={review.websiteCta ?? input.websiteCta} words={campaignWords} />}
+                  <dl className="grid gap-2.5">{input.destination === "website" && <WebsiteReviewFacts url={reviewWebsiteUrl(review.websiteUrl, business.website)} words={campaignWords} />}
                     {fact("Budget", <>{formatMoney(review.totalDailyBudgetRupees)} a day{review.perAdSetDailyBudgetRupees !== review.totalDailyBudgetRupees && <span className="text-slate-600"> ({formatMoney(review.perAdSetDailyBudgetRupees)} per ad set)</span>}</>)}
                     {fact("Where", <>{review.resolvedAreaLabel ?? "Needs review"}, {input.targeting.location?.cityScope === "city_only" ? "city only (no added radius)" : `${input.targeting.location?.radiusKm ?? 25} km radius`}{review.serviceArea && <span className="block text-slate-600">{serviceAreaLine(review.serviceArea)}</span>}</>)}
                     {fact("Who", <>Ages {age?.min ?? "unset"}–{age?.max === 65 ? "65+" : age?.max ?? "unset"}, {{ all: "all genders", men: "men", women: "women" }[input.targeting.gender ?? "all"]}{interests ? `, interested in ${interests}` : input.targeting.audience?.interestNames.length ? ", interests need resolving" : ", no interest narrowing"}</>)}
@@ -1924,7 +1921,7 @@ function BusinessCampaigns({
             {whatsappStatus?.state !== "ready" && <Button type="button" variant="ghost" className="mt-1 h-11 px-0 text-blue-700" disabled={preparing || creating || destinationRecoveryLocked} onClick={() => switchDestination("instant_form")}>No WhatsApp number yet? Use an Instant form for now</Button>}
           </div>}
           {/* Designer (#2660): Website's link and button open right under the switch, where WhatsApp's number and tips go. */}
-          {showComposer && creationMode === "manual" && destination === "website" && <div className="mb-4"><WebsiteDestinationFields website={business.website} cta={websiteCta} onCta={(cta) => { setWebsiteCta(cta); if (!unresolvedRecovery()) setPrepareReview(null); }} disabled={preparing || creating} words={campaignWords} /></div>}
+          {showComposer && creationMode === "manual" && destination === "website" && <div className="mb-4"><WebsiteDestinationFields website={business.website} words={campaignWords} /></div>}
           {showComposer && creationMode === "guided" && <CampaignChat
             businessId={business.id}
             destination={destination === "website" ? undefined : destination /* TODO(#2595): the planner learns website in slice C. */}
@@ -2257,7 +2254,7 @@ function BusinessCampaigns({
                     leadFormName={selectedLeadForm?.name}
                     destination={destination}
                     whatsappNumber={destination === "whatsapp" && chosenWhatsAppNumber ? chosenWhatsAppNumber : undefined}
-                    website={business.website} websiteCta={websiteCta} words={campaignWords}
+                    website={business.website} words={campaignWords}
                     weeklyCap={composerCap}
                     audience={`${audiencePreview}; ${targeting.ageMode === "manual" ? `ages ${targeting.ageMin}-${targeting.ageMax === 65 ? "65+" : targeting.ageMax}` : "ages picked by AdBrain when you check"}; ${{ all: "All genders", men: "Men", women: "Women" }[targeting.gender ?? "all"]}; ${targeting.cityScope === "city_only" ? "city only (no added radius)" : `city radius ${targeting.radiusKm} km`}${targeting.audience?.interestNames.length ? `; interests: ${targeting.audience.interestNames.join(", ")}` : ""}`}
                   />
