@@ -97,7 +97,7 @@ import { handoffRate } from "@/lib/campaign/whatsapp-handoff";
 import { reviewBlockerAlternative, reviewBlockerFix } from "@/lib/campaign/review-fix";
 import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
 import { useCampaignPreparation } from "@/lib/meta-connect-ui/use-campaign-preparation";
-import { targetingFromEditor, targetingToEditor } from "@/lib/campaign/editor-targeting";
+import { preparedAudienceForm, targetingFromEditor, withPreparedAudienceForm, targetingToEditor } from "@/lib/campaign/editor-targeting";
 import { buildManualDraftInput, pickWhatsAppNumber } from "@/lib/campaign/manual-draft-input";
 import { maskWhatsAppNumber, maskedWhatsAppNumberPattern, parseWhatsAppStatus, type WhatsAppStatus } from "@/lib/meta/whatsapp-status-shared";
 import type { ConnectIntent, ConnectionDTO } from "@/lib/meta/connect-contracts";
@@ -1377,6 +1377,7 @@ function BusinessCampaigns({
   // #773: the paused campaign whose audience is being edited.
   const [audienceEdit, setAudienceEdit] = useState<Campaign | null>(null);
   // #765 (b): campaign id → the edit whose paused copy waits for the owner to turn it on or cancel it.
+  // TODO(#2665): only copies made before #773 can still wait here.
   const [waitingSwitch, setWaitingSwitch] = useState<Record<string, string>>({});
   const pendingDecision = campaigns.some(c => Boolean(waitingSwitch[c.id]) && (c.status === "active" || c.status === "paused"));
   const [waitingError, setWaitingError] = useState<Record<string, string>>({});
@@ -2358,13 +2359,9 @@ function BusinessCampaigns({
               <EditAudienceDialog
                 campaignId={audienceEdit.id}
                 campaignName={audienceEdit.name ?? `${business.name} — ${audienceEdit.objective}`}
-                running={audienceEdit.status === "active"}
+                running={audienceEdit.status === "active"} prepared={preparedAudienceForm(audienceEdit.raw)}
                 onClose={() => { setAudienceEdit(null); loadWaiting(); }}
-                onSaved={(message, waitingOperationId) => {
-                  setCardNotice({ id: audienceEdit.id, message });
-                  if (waitingOperationId) setWaitingSwitch(current => ({ ...current, [audienceEdit.id]: waitingOperationId }));
-                  setAudienceEdit(null);
-                }}
+                onSaved={(message, form) => { const id = audienceEdit.id; setCampaigns(list => list.map(item => item.id === id ? withPreparedAudienceForm(item, form ?? null) : item)); setCardNotice({ id, message }); setAudienceEdit(null); }}
               />
             )}
             {budgetEdit && (
