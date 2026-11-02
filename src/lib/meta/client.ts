@@ -571,7 +571,7 @@ export function editedCreativeForm(creative: StoredCreative, edit: AdCopyEdit): 
   const welcome = edit.whatsappGreeting ? whatsappWelcomeMessage(edit.whatsappGreeting) : undefined;
   const name = (headline ?? creative.name ?? "AdBrain creative").slice(0, 90);
   // #2598: a website ad keeps its UTM tags, so visits after an edit still credit the campaign.
-  const urlTags = creative.url_tags ? { url_tags: creative.url_tags } : {};
+  const urlTags: Record<string, string> = creative.url_tags ? { url_tags: creative.url_tags } : {};
   if (creative.asset_feed_spec) {
     const feed = structuredClone(creative.asset_feed_spec) as Record<string, unknown> & { additional_data?: Record<string, unknown> };
     if (message) feed.bodies = [{ text: message }];

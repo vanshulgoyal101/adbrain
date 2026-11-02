@@ -103,7 +103,7 @@ describe("core: website-visits launch payloads Meta accepted with validate_only 
     expect(checkPlan(planned!).find((finding) => finding.rule === "Advantage+ audience")?.status).toBe("pass");
   });
 
-  it.each([["Shop Now", "SHOP_NOW"], ["Buy now", "SHOP_NOW"], ["Sign up", "SIGN_UP"], ["Register", "SIGN_UP"], ["Get Quote", "LEARN_MORE"], [null, "LEARN_MORE"]])(
+  it.each([["Shop Now", "SHOP_NOW"], ["Buy now", "SHOP_NOW"], ["Sign up", "SIGN_UP"], ["Register", "SIGN_UP"], ["Get Quote", "LEARN_MORE"], [null, "LEARN_MORE"], ["shop_now", "SHOP_NOW"], ["sign_up", "SIGN_UP"], ["learn_more", "LEARN_MORE"]])(
     "the %s button becomes Meta's %s with the website link",
     (label, type) => {
       expect(destinationCTA("website", { link: "https://shop.example.in/", ctaLabel: label })).toEqual({ type, value: { link: "https://shop.example.in/" } });
