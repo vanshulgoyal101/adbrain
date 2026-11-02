@@ -333,7 +333,8 @@
       "noBusiness": "Set up your business first, then connect your ad account here.",
       "setUpBusiness": "Set up your business",
       "preferences": "Preferences",
-      "loading": "Loading {label}"
+      "loading": "Loading {label}",
+      "tryAgain": "Try again"
     },
     "preferences": {
       "title": "Ad preferences",
@@ -428,7 +429,6 @@
       "disconnecting": "Disconnecting...",
       "disconnectFailed": "Facebook is still connected. Try again in a minute.",
       "unavailable": "Meta connection status is temporarily unavailable. Your campaign draft is preserved.",
-      "tryAgain": "Try again",
       "noticeConnected": "Your Meta account is connected.",
       "noticeSelect": "Connected. Now choose your ad account and page below.",
       "error": {
@@ -438,6 +438,27 @@
         "connect_failed": "Couldn't complete the connection. Please try again.",
         "access_denied": "You declined the permissions AdBrain needs to manage ads."
       }
+    },
+    "spend": {
+      "title": "Spend guardrails",
+      "intro": "Set a weekly ad-spend ceiling. AdBrain warns you as you approach it and won’t let you turn on campaigns that would commit more than your cap.",
+      "noCap": "No cap is set yet, so campaigns follow only their Meta budgets.",
+      "capInvalid": "Enter a positive whole-rupee cap, or leave it blank for no cap.",
+      "alertInvalid": "Enter a whole-number alert threshold between 1 and 100.",
+      "saveFailed": "Could not save.",
+      "saved": "Saved.",
+      "capLabel": "Weekly cap (₹)",
+      "capPlaceholder": "No cap",
+      "capHint": "Leave blank for no cap.",
+      "alertLabel": "Warn at (% of cap)",
+      "autoPauseLead": "Auto-pause at the cap.",
+      "autoPause": "When tracked spend reaches your weekly cap, pause every active campaign automatically (checked whenever results refresh).",
+      "howTitle": "How the cap works",
+      "how": "Checks are periodic, not real-time. Reporting delays and unsuccessful pause requests can allow spending beyond this cap. Use Meta account spending limits where supported; prepaid accounts need campaign budgets instead. These guardrails do not verify available funds or payment setup.",
+      "save": "Save guardrails",
+      "thisWeek": "This week",
+      "used": "{pct}% used · {left} left",
+      "loadFailed": "Spend limits could not be loaded. Your saved limits have not changed."
     }
   },
   "pilotDay7": {
