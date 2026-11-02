@@ -87,8 +87,8 @@ do $$
 begin
   if to_regclass('public.campaign_ads') is not null then
     alter table public.campaign_ads add column if not exists media_asset_id uuid;
-    if not exists (select 1 from pg_constraint where conname = 'campaign_ads_media_asset_id_fkey' and conrelid = 'public.campaign_ads'::regclass) then
-      alter table public.campaign_ads add constraint campaign_ads_media_asset_id_fkey
+    if not exists (select 1 from pg_constraint where conname = 'campaign_ads_same_business_media_asset' and conrelid = 'public.campaign_ads'::regclass) then
+      alter table public.campaign_ads add constraint campaign_ads_same_business_media_asset
         foreign key (business_id, media_asset_id) references public.media_assets(business_id, id) on delete set null (media_asset_id);
     end if;
     create index if not exists campaign_ads_media_asset_idx on public.campaign_ads(media_asset_id) where media_asset_id is not null;
