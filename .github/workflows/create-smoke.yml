@@ -8,6 +8,8 @@ name: Create smoke
 # A dispatched `create` runs the full Create (3 ads); the smoke login's words use free text only (#2230).
 # #2145: daily at 03:37Z (before India's working day) the same `create` runs on schedule, because a one-picture
 # check passed while customers' 3-ad batches saved 1 of 3 (QA 2, #679). Once a day keeps the free tiers for customers.
+# #2545: GitHub drops crons, so a scheduled picture run after 03:37Z runs that day's `create` if no run has yet
+# (scripts/smoke-mode.mjs); a late 03:37Z run after that runs `picture`. Still at most one scheduled create a day.
 on:
   schedule:
     - cron: "17 */4 * * *"
@@ -29,6 +31,9 @@ jobs:
     permissions:
       contents: read
       issues: write
+      # #2545: read today's runs and their `Smoke mode` annotations.
+      actions: read
+      checks: read
     # A timed-out job opens no issue (#2029): every step is bounded and they sum to at most this.
     timeout-minutes: 50
     # Never two at once; a queued run waits, never cancels the running one.
@@ -39,8 +44,9 @@ jobs:
       run:
         shell: bash
     # The dispatch input and the schedule reach the shell only as variables, mapped to a fixed flag by `case`.
+    # "Choose mode" turns SCHEDULED_MODE into REQUESTED_MODE for the steps after it.
     env:
-      REQUESTED_MODE: ${{ inputs.mode || (github.event.schedule == '47 8 * * *' && 'prepare') || (github.event.schedule == '37 3 * * *' && 'create') || 'picture' }}
+      SCHEDULED_MODE: ${{ inputs.mode || (github.event.schedule == '47 8 * * *' && 'prepare') || (github.event.schedule == '37 3 * * *' && 'create') || 'picture' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         timeout-minutes: 3
@@ -60,6 +66,15 @@ jobs:
           timeout -k 30s 8m npx playwright install --with-deps chromium && exit 0
           echo "::warning::playwright install --with-deps did not finish in 8 min; installing Chromium without OS packages"
           timeout -k 30s 4m npx playwright install chromium
+      # #2545: picks the mode only; the Smoke step marks it, so only a run that reached the smoke counts as the create.
+      - name: Choose mode
+        timeout-minutes: 2
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mode=$(node scripts/smoke-mode.mjs) || mode="$SCHEDULED_MODE"
+          case "$mode" in picture|prepare|create) ;; *) mode=invalid ;; esac
+          echo "REQUESTED_MODE=$mode" >> "$GITHUB_ENV"
       # No retry: a second attempt only spends more of the free tiers. Each mode deletes what it replaced or made after a PASS.
       - name: Smoke (free picture, free-text Prepare, or a dispatched Create)
         timeout-minutes: 15
@@ -76,6 +91,8 @@ jobs:
             create) flag=--create ;;
             *) echo "FAIL unknown mode" | tee smoke.txt; exit 1 ;;
           esac
+          # #2545: scripts/smoke-mode.mjs reads this mark to keep one create a day.
+          echo "::notice title=Smoke mode::${REQUESTED_MODE:-picture}"
           rc=0; timeout -k 30s 14m node scripts/smoke-core.mjs "$flag" | tee smoke.txt || rc=$?
           if [ "$rc" -eq 124 ] || [ "$rc" -eq 137 ]; then echo "FAIL smoke did not finish in 14 min" | tee -a smoke.txt; fi
           exit "$rc"

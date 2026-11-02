@@ -19,7 +19,8 @@ so Supabase can't restore anything (paid backups are a CEO call, #884). Our own 
   tokens: keep it private and delete it when done.
 - `node scripts/db-export.mjs restore <dir>` builds git's schema in a throwaway local
   Postgres 17, loads every row with triggers and FK checks off, prints exported vs restored
-  counts and deletes the cluster. It took **4 s**, with 0 rows lost.
+  counts and deletes the cluster. It took **4 s**, with 0 rows lost. In a checkout with no
+  `node_modules` (the supervisor's can lose them, #2537) it first clones wt.sh's lockfile cache there.
 - To bring production back from an export: create a new Supabase project, apply git's
   schema the same way, load the export (the restore's insert step), set `META_TOKEN_ENCRYPTION_KEY`
   to the same value so stored tokens decrypt, and point Vercel at it. Owners sign in again

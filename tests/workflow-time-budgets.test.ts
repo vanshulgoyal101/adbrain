@@ -147,14 +147,15 @@ describe("create smoke mode", () => {
     for (const tool of ["timeout", "node", "gh"]) chmodSync(join(bin, tool), 0o755);
     if (smoke !== undefined) writeFileSync(join(work, "smoke.txt"), smoke);
     let status = 0;
+    let out = "";
     try {
-      execFileSync("bash", ["-c", stepScript("create-smoke.yml", step)], {
+      out = execFileSync("bash", ["-c", stepScript("create-smoke.yml", step)], {
         cwd: work, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"],
         env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, GITHUB_SERVER_URL: "https://github.com", GITHUB_REPOSITORY: "o/r", GITHUB_RUN_ID: "1", GITHUB_EVENT_NAME: "schedule", ...env },
       });
     } catch (error) { status = (error as { status: number }).status; }
     const read = (file: string) => { try { return readFileSync(join(work, file), "utf8"); } catch { return ""; } };
-    return { status, calls: read("calls.log"), gh: read("gh.log") };
+    return { status, out, calls: read("calls.log"), gh: read("gh.log") };
   }
 
   const smoke = "Smoke (free picture, free-text Prepare, or a dispatched Create)";
@@ -182,7 +183,31 @@ describe("create smoke mode", () => {
     const text = workflow("create-smoke.yml").join("\n");
     const daily = text.match(/- cron: "(37 3 \* \* \*)"/)?.[1];
     expect(daily).toBeTruthy();
-    expect(text).toContain(`REQUESTED_MODE: \${{ inputs.mode || (github.event.schedule == '47 8 * * *' && 'prepare') || (github.event.schedule == '${daily}' && 'create') || 'picture' }}`);
+    expect(text).toContain(`SCHEDULED_MODE: \${{ inputs.mode || (github.event.schedule == '47 8 * * *' && 'prepare') || (github.event.schedule == '${daily}' && 'create') || 'picture' }}`);
+  });
+
+  // #2545: the chooser's answer reaches later steps only as one of the three modes.
+  it("Choose mode passes the chooser's mode on, falls back to the scheduled one, and refuses anything else", () => {
+    const chosen = (node: string, scheduled = "picture") => {
+      const work = mkdtempSync(join(process.cwd(), ".create-smoke-test-"));
+      made.push(work);
+      const bin = join(work, "bin");
+      mkdirSync(bin);
+      writeFileSync(join(bin, "node"), `#!/bin/bash\n${node}\n`);
+      chmodSync(join(bin, "node"), 0o755);
+      const out = execFileSync("bash", ["-c", stepScript("create-smoke.yml", "Choose mode")], {
+        cwd: work, encoding: "utf8",
+        env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, SCHEDULED_MODE: scheduled, GITHUB_ENV: join(work, "env") },
+      });
+      return { out, env: readFileSync(join(work, "env"), "utf8") };
+    };
+    expect(chosen("echo create").env).toBe("REQUESTED_MODE=create\n");
+    expect(chosen("exit 1", "prepare").env).toBe("REQUESTED_MODE=prepare\n");
+    expect(chosen("printf 'create\\nPWNED=1'").env).toBe("REQUESTED_MODE=invalid\n");
+  });
+
+  it("marks the mode it runs, so tomorrow's chooser can count today's create (#2545)", () => {
+    expect(run(smoke, { REQUESTED_MODE: "create" }).out).toContain("::notice title=Smoke mode::create\n");
   });
 
   it("refuses any other input without running the smoke", () => {

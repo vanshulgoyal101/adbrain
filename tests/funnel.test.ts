@@ -15,6 +15,9 @@ describe("activation funnel (#338)", () => {
     expect(sql).toContain("'smoke@example.com'");
     expect(sql).toContain("'/api/meta/oauth/start'");
     expect(sql).toContain("'meta.access_request'");
+    // #2538: Connect starts at connections/start, and the server's access-request event counts too.
+    expect(sql).toContain("'/api/meta/connections/start'");
+    expect(sql).toContain("or name = 'meta.access_request'");
     expect(sql).not.toMatch(/;\s*\S/);
     expect(funnelSql(14, ["smoke@example.com"], { includeInternal: true })).not.toContain("split_part(");
   });
