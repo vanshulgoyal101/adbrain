@@ -1,5 +1,5 @@
 // #2598: where an ad sends people, and the Meta ad-set plan and button for each destination.
-import type { LeadDestination } from "@/lib/types/campaign";
+import type { LeadDestination, WebsiteGoal } from "@/lib/types/campaign";
 
 /** Where people land: an in-ad instant form, a WhatsApp chat, a phone call, or the business's website (#2595). */
 export type AdDestination = LeadDestination;
@@ -40,15 +40,27 @@ export interface DestinationPlan {
   destinationType: string;
 }
 
-/** Ad-set optimisation goal + destination type for a lead destination. */
-export function destinationPlan(dest: AdDestination): DestinationPlan {
+/** #2713: the pixel event a website leads/sales goal optimises for; visits has none. */
+export function websiteConversionEvent(goal: WebsiteGoal | undefined): "LEAD" | "PURCHASE" | null {
+  return goal === "leads" ? "LEAD" : goal === "sales" ? "PURCHASE" : null;
+}
+
+/** #2713: the campaign objective for a destination; a website leads/sales goal gets Meta's leads/sales objective. */
+export function campaignObjective(dest: AdDestination, goal?: WebsiteGoal): string {
+  if (dest === "whatsapp") return "OUTCOME_ENGAGEMENT";
+  if (dest !== "website") return "OUTCOME_LEADS";
+  return goal === "leads" ? "OUTCOME_LEADS" : goal === "sales" ? "OUTCOME_SALES" : "OUTCOME_TRAFFIC";
+}
+
+/** Ad-set optimisation goal + destination type for a lead destination (a website leads/sales goal optimises for the pixel event, #2713). */
+export function destinationPlan(dest: AdDestination, goal?: WebsiteGoal): DestinationPlan {
   switch (dest) {
     case "call":
       return { optimizationGoal: "QUALITY_CALL", destinationType: "PHONE_CALL" };
     case "whatsapp":
       return { optimizationGoal: "CONVERSATIONS", destinationType: "WHATSAPP" };
     case "website":
-      return { optimizationGoal: "LANDING_PAGE_VIEWS", destinationType: "WEBSITE" };
+      return { optimizationGoal: websiteConversionEvent(goal) ? "OFFSITE_CONVERSIONS" : "LANDING_PAGE_VIEWS", destinationType: "WEBSITE" };
     default:
       return { optimizationGoal: "LEAD_GENERATION", destinationType: "ON_AD" };
   }
