@@ -17,13 +17,13 @@ describe("#2599 website reachability", () => {
 
   it("passes a site that answers on its own domain, after a redirect to a subdomain", async () => {
     fetchPublicUrl.mockResolvedValueOnce(landed("https://shop.example.co.in/home"));
-    await expect(checkWebsiteReach("https://example.co.in")).resolves.toEqual({ ok: true, finalUrl: "https://shop.example.co.in/home" });
+    await expect(checkWebsiteReach("https://example.co.in")).resolves.toEqual({ url: "https://example.co.in", ok: true, finalUrl: "https://shop.example.co.in/home" });
     expect(fetchPublicUrl).toHaveBeenCalledWith("https://example.co.in", expect.objectContaining({ timeoutMs: 8_000 }));
   });
 
   it("fails a site that lands on another domain", async () => {
     fetchPublicUrl.mockResolvedValueOnce(landed("https://linktr.ee/example"));
-    await expect(checkWebsiteReach("https://example.com")).resolves.toEqual({ ok: false, problem: "other_domain", finalHost: "linktr.ee" });
+    await expect(checkWebsiteReach("https://example.com")).resolves.toEqual({ url: "https://example.com", ok: false, problem: "other_domain", finalHost: "linktr.ee" });
   });
 
   it.each([
@@ -33,7 +33,7 @@ describe("#2599 website reachability", () => {
     [new DOMException("timed out", "TimeoutError"), { ok: false, problem: "unreachable" }],
   ])("names why a site can't be reached: %s", async (error, expected) => {
     fetchPublicUrl.mockRejectedValueOnce(error);
-    await expect(checkWebsiteReach("https://example.com")).resolves.toEqual(expected);
+    await expect(checkWebsiteReach("https://example.com")).resolves.toEqual({ url: "https://example.com", ...expected });
   });
 
   it("treats each site on a shared host as its own domain", () => {

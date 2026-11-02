@@ -1,10 +1,10 @@
 import { getDomain } from "tldts";
 import { fetchPublicUrl, SafeFetchError } from "@/lib/security/ssrf";
 
-/** #2599: whether a website ad's link opens the advertiser's own site, as a visitor would land on it. */
+/** #2599: whether a website ad's link (`url`, exactly as opened) reaches the advertiser's own site, as a visitor would land on it. */
 export type WebsiteReach =
-  | { ok: true; finalUrl: string }
-  | { ok: false; problem: "blocked" | "unreachable" | "status" | "other_domain"; status?: number; finalHost?: string };
+  | { url: string; ok: true; finalUrl: string }
+  | { url: string; ok: false; problem: "blocked" | "unreachable" | "status" | "other_domain"; status?: number; finalHost?: string };
 
 /** The registrable domain ("shop.example.co.in" → "example.co.in"); hosting suffixes like vercel.app count as public. */
 function registrableDomain(url: string): string | null {
@@ -28,14 +28,14 @@ export async function checkWebsiteReach(website: string, options: { timeoutMs?: 
       timeoutMs: options.timeoutMs ?? 8_000,
     });
   } catch (error) {
-    if (error instanceof SafeFetchError && error.code === "blocked") return { ok: false, problem: "blocked" };
-    if (error instanceof SafeFetchError && error.code === "status") return { ok: false, problem: "status", status: error.status };
-    return { ok: false, problem: "unreachable" };
+    if (error instanceof SafeFetchError && error.code === "blocked") return { url: website, ok: false, problem: "blocked" };
+    if (error instanceof SafeFetchError && error.code === "status") return { url: website, ok: false, problem: "status", status: error.status };
+    return { url: website, ok: false, problem: "unreachable" };
   }
   await response.body?.cancel().catch(() => undefined);
   const finalUrl = response.url || website;
   if (!sameRegistrableDomain(finalUrl, website)) {
-    return { ok: false, problem: "other_domain", finalHost: new URL(finalUrl).hostname };
+    return { url: website, ok: false, problem: "other_domain", finalHost: new URL(finalUrl).hostname };
   }
-  return { ok: true, finalUrl };
+  return { url: website, ok: true, finalUrl };
 }

@@ -30,7 +30,7 @@ function input(destination: "instant_form" | "whatsapp" | "website" = "website")
     form: destination === "instant_form" ? { id: "form-1", businessId, active: true } : null,
     whatsappNumber: "+919876543210",
     website: "https://cedarridgechiro.com",
-    websiteReach: { ok: true, finalUrl: "https://www.cedarridgechiro.com/" },
+    websiteReach: { url: "https://cedarridgechiro.com", ok: true, finalUrl: "https://www.cedarridgechiro.com/" },
     geo: { resolvedAreaLabel: "Austin, Texas", unresolvedNames: [], explicitlyNationwide: false, audienceInterests: [{ id: "6840321905207", name: "Wellness" }] },
     hash: (payload) => payload,
   };
@@ -55,10 +55,12 @@ describe("Review of a website ad (#2599)", () => {
 
   it.each([
     ["not checked", undefined, /couldn't open your website cedarridgechiro\.com/],
-    ["unreachable", { ok: false, problem: "unreachable" }, /couldn't open your website cedarridgechiro\.com/],
-    ["an error status", { ok: false, problem: "status", status: 503 }, /answered with an error \(503\)/],
-    ["a private address", { ok: false, problem: "blocked" }, /isn't a public website address/],
-    ["a redirect to another site", { ok: false, problem: "other_domain", finalHost: "parked-domains.example" }, /sends visitors on to parked-domains\.example/],
+    ["unreachable", { url: "https://cedarridgechiro.com", ok: false, problem: "unreachable" }, /couldn't open your website cedarridgechiro\.com/],
+    ["an error status", { url: "https://cedarridgechiro.com", ok: false, problem: "status", status: 503 }, /answered with an error \(503\)/],
+    ["a private address", { url: "https://cedarridgechiro.com", ok: false, problem: "blocked" }, /isn't a public website address/],
+    ["a redirect to another site", { url: "https://cedarridgechiro.com", ok: false, problem: "other_domain", finalHost: "parked-domains.example" }, /sends visitors on to parked-domains\.example/],
+    // CPO on #2634: a pass for another page or an older address isn't a check of the link this ad sends people to.
+    ["checked at a different address", { url: "https://cedarridgechiro.com/old-offer", ok: true, finalUrl: "https://cedarridgechiro.com/old-offer" }, /couldn't open your website cedarridgechiro\.com/],
   ] as const)("blocks on REVIEW_WEBSITE_UNREACHABLE when the link is %s", (_name, reach, message) => {
     const value = input();
     value.websiteReach = reach as PreflightInput["websiteReach"];
@@ -112,7 +114,7 @@ describe("prepareCampaignReview checks a website ad's link (#2599)", () => {
   });
 
   it("opens the normalized website and passes when it reaches the advertiser's site; no form or chat-cost lookup", async () => {
-    const checkWebsite = vi.fn(async () => ({ ok: true as const, finalUrl: "https://cedarridgechiro.com/" }));
+    const checkWebsite = vi.fn(async (url: string) => ({ url, ok: true as const, finalUrl: "https://cedarridgechiro.com/" }));
     const value = loaders("website", { checkWebsite });
     const result = await run(value);
     expect(checkWebsite).toHaveBeenCalledWith("https://cedarridgechiro.com");

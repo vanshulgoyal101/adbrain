@@ -4,14 +4,13 @@ import { describeServiceArea } from "@/lib/meta/service-area";
 import { effectiveDailyBudget } from "@/lib/campaign/spend";
 import type { DraftInput, ReviewDTO } from "@/lib/campaign/connect-contracts";
 import type { ReviewBlockerReason, SelectedAssets } from "@/lib/meta/connect-contracts";
-import { normalizeWebsite } from "@/lib/brand/validation";
 import { askMismatchWarning, QUOTED_ASK_WITH_QUESTIONS, reviewWarnings, WHATSAPP_PICTURE_ON_FORM, WHATSAPP_PICTURE_ON_WEBSITE, type ReviewDestination } from "@/lib/campaign/plan-check";
 import { quotedAsk, sameWords } from "@/lib/campaign/whatsapp-greeting";
 import { batchProofWarning } from "@/lib/creative/proof-line";
 import type { ResolvedWhatsAppMessage } from "@/lib/campaign/whatsapp-template";
 import type { LeadDestination } from "@/lib/types/campaign";
 import type { WebsiteReach } from "@/lib/campaign/website-reach";
-import { isAdvertiserWebsite, websiteBlockerMessage } from "@/lib/campaign/website-review";
+import { isAdvertiserWebsite, websiteAdLink, websiteBlockerMessage } from "@/lib/campaign/website-review";
 
 /** #1799: Meta's minimum daily budget per impression-billed ad set in INR (₹95.46, Oct 29), rounded up. */
 export const META_MIN_DAILY_BUDGET_RUPEES = 96;
@@ -213,7 +212,7 @@ export function buildCanonicalReviewPayload(
     destination: input.draft.destination ?? "instant_form",
     whatsappNumber: input.draft.destination === "whatsapp" ? input.whatsappNumber ?? null : null,
     // #2599: only for website ads, so other plans keep their hash; a Brand website edit after Review changes the plan.
-    ...(reviewDestination(input.draft) === "website" ? { websiteUrl: normalizeWebsite(input.website ?? null) } : {}),
+    ...(reviewDestination(input.draft) === "website" ? { websiteUrl: websiteAdLink(input.website) } : {}),
     // #493: only when it changes what's sent, so plans reviewed before this field keep their hash.
     ...(input.draft.destination === "whatsapp" && input.draft.whatsappLanguage && input.draft.whatsappLanguage !== "ad"
       ? { whatsappLanguage: input.draft.whatsappLanguage } : {}),

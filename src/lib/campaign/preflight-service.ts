@@ -11,7 +11,7 @@ import type { ResolvedWhatsAppMessage } from "@/lib/campaign/whatsapp-template";
 import { alignPrintedNumbers } from "@/lib/creative/chat-number";
 import type { LeadDestination } from "@/lib/types/campaign";
 import type { ReviewDestination } from "@/lib/campaign/plan-check";
-import { normalizeWebsite } from "@/lib/brand/validation";
+import { websiteAdLink } from "@/lib/campaign/website-review";
 import type { WebsiteReach } from "@/lib/campaign/website-reach";
 
 export type PreflightActor = {
@@ -120,8 +120,8 @@ export async function prepareCampaignReview(
 /** The Brand website, and for a website ad whether its link opens; a failed check reads as unreachable, never a pass. */
 async function websiteAndReach(loaders: PreflightLoaders, actor: PreflightActor, check: boolean): Promise<readonly [string | null | undefined, WebsiteReach | undefined]> {
   const website = await loaders.findWebsite?.(actor);
-  const url = check && website ? normalizeWebsite(website) : null;
+  const url = check ? websiteAdLink(website) : null;
   if (!url || !loaders.checkWebsite) return [website, undefined];
-  const reach = await loaders.checkWebsite(url).catch((): WebsiteReach => ({ ok: false, problem: "unreachable" }));
+  const reach = await loaders.checkWebsite(url).catch((): WebsiteReach => ({ url, ok: false, problem: "unreachable" }));
   return [website, reach];
 }
