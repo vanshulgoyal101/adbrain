@@ -2,15 +2,23 @@ begin;
 set local lock_timeout = '5s';
 set local statement_timeout = '30s';
 
--- #748 (CEO, #2653 = A): owners' own videos on the Free plan, MP4/MOV up to 50 MB, 3 per business a month
--- (20261103_media_upload_quota.sql). The private `media` bucket also takes video and objects up to 50 MB. The bucket
--- limit is the outer bound only: the server signs uploads per kind and finalize re-reads every object, refusing a
--- photo over 8 MB or a video over 50 MB / 60 s (and the refused row still counts toward the month).
--- `media_assets` already accepts kind 'video' with video/* MIME. Nothing is signed for video until MEDIA_VIDEO_ENABLED.
--- Apply after 20261103_media_library.sql.
-update storage.buckets
-set file_size_limit = 52428800,
-    allowed_mime_types = array['image/jpeg', 'image/png', 'image/webp', 'video/mp4', 'video/quicktime']
-where id = 'media';
+-- #748 (CEO, #2653 = A): owners' own videos, MP4/MOV up to 50 MB, 3 per business a month (20261103_media_upload_quota.sql).
+-- Their own private bucket (QA 2 on #2735): the photo bucket `media` stays at 8 MB images, so a photo upload token can
+-- never park 50 MB. The server signs video uploads here only behind MEDIA_VIDEO_ENABLED, and finalize re-reads every
+-- object (type, size, length) before a row is ready. Paths are `<business id>/<uuid>.mp4|.mov`, like `media`.
+-- Apply after 20261103_media_library.sql (owns_business).
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('media-video', 'media-video', false, 52428800, array['video/mp4', 'video/quicktime'])
+on conflict (id) do update set public = false, file_size_limit = excluded.file_size_limit, allowed_mime_types = excluded.allowed_mime_types;
+
+-- Owners read their own business's videos (the library signs its links as the owner, like `media`). No write policy:
+-- uploads only through the server's signed URL.
+drop policy if exists "media-video: read own" on storage.objects;
+create policy "media-video: read own"
+  on storage.objects for select to authenticated
+  using (
+    bucket_id = 'media-video'
+    and public.owns_business(((storage.foldername(name))[1])::uuid)
+  );
 
 commit;
