@@ -377,6 +377,8 @@ async function generate(req: Request, live?: LiveCreate) {
       .slice(0, count - inserted.length);
     if (retry.length && Date.now() - startedAt <= CREATE_TOP_UP_START_MS) {
       topUp = retry.length;
+      // #2546: a remade ad's own calls are unrecorded until its remake reaches onVariant.
+      for (const angle of retry) recordedAngles.delete(angle.id);
       live?.onTopUp(topUp);
       await generateVariants({
         ...run,
