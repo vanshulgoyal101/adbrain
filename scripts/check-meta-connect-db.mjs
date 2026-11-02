@@ -8,8 +8,10 @@ import { createHash, randomUUID } from "node:crypto";
 import pg from "pg";
 import { applyMigration } from "./database-migrations.mjs";
 import { appendedMigrations, buildSchema, readBaseSchema } from "./build-schema.mjs";
+import { createDefaultPrivilegeFixtures, verifyDefaultPrivileges } from "./check-default-privileges.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const defaultPrivilegesMigration = await readFile(join(root, "db/migrations/20261102_default_public_privileges.sql"), "utf8");
 const operatorPaymentMigration = await readFile(join(root, "db/migrations/20260926_production_payment_policy_v2.sql"), "utf8");
 const customerAllowanceMigration = await readFile(join(root, "db/migrations/20260926_customer_ad_allowance.sql"), "utf8");
 const creativeIntentMigration = await readFile(join(root, "db/migrations/20260927_creative_generation_intents.sql"), "utf8");
@@ -68,6 +70,12 @@ const bootstrap = `
   grant usage on schema auth, public to anon, authenticated, service_role;
   alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
   alter default privileges in schema public grant all on sequences to anon, authenticated, service_role;
+  alter default privileges for role postgres in schema public grant all on tables to anon, authenticated, service_role;
+  alter default privileges for role postgres in schema public grant all on sequences to anon, authenticated, service_role;
+  alter default privileges for role postgres in schema public grant execute on functions to anon, authenticated, service_role;
+  alter default privileges for role supabase_admin in schema public grant all on tables to anon, authenticated, service_role;
+  alter default privileges for role supabase_admin in schema public grant all on sequences to anon, authenticated, service_role;
+  alter default privileges for role supabase_admin in schema public grant execute on functions to anon, authenticated, service_role;
   create schema storage;
   create table storage.buckets (id text primary key, name text, public boolean, file_size_limit bigint, allowed_mime_types text[]);
   create table storage.objects (id uuid primary key default gen_random_uuid(), bucket_id text, name text);
@@ -3047,7 +3055,9 @@ async function verify(database, source, integrityMigration, customerOnly = false
   await db.connect();
   try {
     await db.query(bootstrap);
+    const defaultPrivilegeFixtures = customerOnly ? await createDefaultPrivilegeFixtures(db) : undefined;
     await db.query(source);
+    if (customerOnly) await verifyDefaultPrivileges(db, database, check, defaultPrivilegesMigration, defaultPrivilegeFixtures);
     if (process.argv.includes("--analytics-only") || database.startsWith("analytics_")) {
       const installed = (await db.query("select to_regclass('public.product_event_daily') is not null as installed")).rows[0].installed;
       if (!installed) {
@@ -4316,7 +4326,11 @@ try {
   started = true;
   const admin = client();
   await admin.connect();
-  await admin.query("create role anon; create role authenticated; create role service_role bypassrls");
+  await admin.query(`create role anon; create role authenticated; create role service_role bypassrls;
+    do $$ begin
+      if not exists (select 1 from pg_roles where rolname = 'postgres') then create role postgres superuser; end if;
+      if not exists (select 1 from pg_roles where rolname = 'supabase_admin') then create role supabase_admin superuser; end if;
+    end $$;`);
   await admin.end();
   if (process.argv.includes("--rollback-only")) {
     await verifyRollback();
