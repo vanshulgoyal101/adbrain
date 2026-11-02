@@ -50,6 +50,23 @@ settings, credentials and encryption keys are DevOps-owned changes; see the
 | `NEXT_PUBLIC_DEV_AUTH_BYPASS` | Empty; exact `true` outside production | UI identity fallback, not general API authentication |
 | `DEV_LOGIN_EMAIL`, `DEV_LOGIN_PASSWORD` | Empty | Development login credentials |
 | `DEMO_USER_EMAIL` | `demo@adbrain.vanshul.com`, email | Demo identity; not a sandbox guarantee |
+| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | Empty (off); Cloudflare Turnstile site key | Sign-in check on email link and password sign-in (#1777); adds `challenges.cloudflare.com` to CSP `script-src`/`frame-src`. Public; needs a rebuild |
+
+### Sign-in check
+
+Off by default. The site key turns on the browser widget; Supabase only enforces
+it after **Auth → Bot and Abuse Protection** is set to Turnstile with the secret
+key (the secret lives only there). Google sign-in and email-link verification are
+never checked.
+
+- **Before enabling:** the core smoke (`scripts/smoke-core.mjs`), `ui-gate`,
+  `perf-pages`, `check-*`, `seed-demo-clinic` scripts and e2e specs sign in with
+  the password grant and will fail once Supabase enforces the check. Move them to
+  a check-free sign-in first.
+- **Enable:** set the site key in Vercel, redeploy, confirm the widget loads on
+  `/login`, then turn on Supabase CAPTCHA.
+- **Roll back:** turn off Supabase CAPTCHA first, then clear the site key.
+  Supabase on without the site key blocks every email and password sign-in.
 
 ## Text Models
 
