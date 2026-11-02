@@ -16,6 +16,7 @@ import type { DraftDTO } from "@/lib/campaign/connect-contracts";
 import { useSessionDraft } from "@/lib/use-session-draft";
 import { cn } from "@/lib/utils";
 import type { PlannerQuestion, PlannerAnswer as Answer, PlannerLLMResult } from "@/lib/campaign/planner";
+import type { LeadDestination } from "@/lib/types/campaign";
 
 type Turn =
   | { role: "user"; text: string }
@@ -49,7 +50,7 @@ function reviveSession(raw: unknown): ChatSession | null {
 
 type CampaignChatProps = {
   businessId: string;
-  destination?: "instant_form" | "whatsapp";
+  destination?: Exclude<LeadDestination, "call" | "website">;
   /** Masked WhatsApp number chosen above the chat; saved on the guided draft. */
   whatsappNumber?: string;
   onStarted?: () => void;

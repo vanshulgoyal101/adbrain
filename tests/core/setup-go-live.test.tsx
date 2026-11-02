@@ -52,15 +52,15 @@ describe("core: <SetupGoLive> (#1271)", () => {
 
   it("says Meta paces the capped total across the days, so one day can be over the daily amount (#2007)", () => {
     goLive();
-    expect(screen.getByText("Meta spreads it across the days, so one day can be a bit more than ₹300 and another less. The total never goes past the limit above.")).toBeInTheDocument();
+    expect(screen.getByText("Meta spreads it across the days, so one day can be more than ₹300 and another less. The total never goes past the limit above.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "₹1,000 a day" }));
-    expect(screen.getByText("Meta spreads it across the days, so one day can be a bit more than ₹1,000 and another less. The total never goes past the limit above.")).toBeInTheDocument();
+    expect(screen.getByText("Meta spreads it across the days, so one day can be more than ₹1,000 and another less. The total never goes past the limit above.")).toBeInTheDocument();
   });
 
   it("says the pacing line in Hindi (#2007)", () => {
     render(<SetupGoLive business={business} ads={ads} pageConnected funding="managed" words={{ locale: "hi", messages: hi.setup }}
       whatsappNumber="+91 ••••• 3210" weeklyCap={{ capRupees: null, active: [] }} />);
-    expect(screen.getByText("Meta इसे दिनों में बाँटता है, इसलिए किसी दिन ₹300 से थोड़ा ज़्यादा और किसी दिन कम लग सकता है। कुल खर्च ऊपर लिखी सीमा से ज़्यादा कभी नहीं होगा।")).toBeInTheDocument();
+    expect(screen.getByText("Meta इसे दिनों में बाँटता है, इसलिए किसी दिन ₹300 से ज़्यादा और किसी दिन कम खर्च हो सकता है। कुल खर्च ऊपर लिखी सीमा से ज़्यादा कभी नहीं होगा।")).toBeInTheDocument();
     // #1530: the 2/7-day choice in Hindi.
     fireEvent.click(within(screen.getByRole("group", { name: "कितने दिन" })).getByRole("button", { name: "7 दिन" }));
     expect(screen.getByText("₹300 रोज़, 7 दिन तक, Meta के GST समेत ज़्यादा से ज़्यादा ₹2,478")).toBeInTheDocument();
@@ -279,7 +279,7 @@ describe("#1901: Go live says whose picture each ad is", () => {
 // "app not available" page inside the Facebook dialog, which AdBrain can't see. Step 3 says so before and after.
 describe("core: step 3 asks a not-yet-Tester owner to accept the invite (#1989)", () => {
   const hint = /Facebook is still reviewing AdBrain/;
-  const retry = /Didn't connect\? If Facebook said the app isn't available/;
+  const retry = /^Didn't connect\?/;
   function step3({ pageConnected = false, appReviewPending = true, locale = "en" as "en" | "hi" } = {}) {
     render(<SetupGoLive business={business} ads={ads} pageConnected={pageConnected} funding="own" appReviewPending={appReviewPending}
       words={locale === "hi" ? { locale, messages: hi.setup } : undefined} whatsappNumber="+91 ••••• 3210" weeklyCap={{ capRupees: null, active: [] }} />);
@@ -312,6 +312,66 @@ describe("core: step 3 asks a not-yet-Tester owner to accept the invite (#1989)"
     cleanup();
     step3();
     expect(screen.getByText(retry)).toBeInTheDocument();
+  });
+
+  // #2538: the one real outsider tapped Connect twice and hit Facebook's wall; nobody on the team heard.
+  const stubFetch = (impl: () => Promise<Response>) => { const fn = vi.fn(impl); vi.stubGlobal("fetch", fn); return fn; };
+  const accessCall = ["/api/meta/access-request", expect.objectContaining({ method: "POST", keepalive: true, body: JSON.stringify({ businessId: "b1" }) })];
+
+  it("a try that didn't connect asks the team to add the owner, once, and says it reached us", async () => {
+    const fetchMock = stubFetch(async () => new Response("{}"));
+    try {
+      step3();
+      expect(screen.getByText(/come back here and we'll add you/)).toBeInTheDocument();
+      fireEvent.click(bar().getByRole("button", { name: "Connect Facebook Page" }));
+      expect(fetchMock).not.toHaveBeenCalled();
+      fireEvent.click(screen.getByRole("button", { name: "Meta dialog: closed" }));
+      expect(await screen.findByText(/We've asked our team to add you and will WhatsApp you within a working day/)).toBeInTheDocument();
+      expect(fetchMock).toHaveBeenCalledWith(...accessCall);
+      fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+      fireEvent.click(screen.getByRole("button", { name: "Meta dialog: closed" }));
+      await screen.findByText(/We've asked our team/);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    } finally { vi.unstubAllGlobals(); }
+  });
+
+  it("back from Facebook in this tab: the request is sent on arrival", async () => {
+    window.sessionStorage.setItem("adbrain.setup.connectTried", "1");
+    const fetchMock = stubFetch(async () => new Response("{}"));
+    try {
+      step3();
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(...accessCall));
+    } finally { vi.unstubAllGlobals(); }
+  });
+
+  it("a request that didn't reach us says so, never blocks Connect, and Try again sends it again", async () => {
+    const fetchMock = stubFetch(async () => new Response("{}", { status: 503 }));
+    try {
+      step3();
+      fireEvent.click(bar().getByRole("button", { name: "Connect Facebook Page" }));
+      fireEvent.click(screen.getByRole("button", { name: "Meta dialog: closed" }));
+      expect(await screen.findByText(/your request didn't reach us/)).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+      expect(screen.getByRole("button", { name: "Meta dialog: connected" })).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Meta dialog: closed" }));
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    } finally { vi.unstubAllGlobals(); }
+  });
+
+  it("a Tester who connects, an owner already connected, or after App Review: nothing is sent", async () => {
+    const fetchMock = stubFetch(async () => new Response("{}"));
+    try {
+      step3();
+      fireEvent.click(bar().getByRole("button", { name: "Connect Facebook Page" }));
+      fireEvent.click(screen.getByRole("button", { name: "Meta dialog: connected" }));
+      cleanup();
+      window.sessionStorage.setItem("adbrain.setup.connectTried", "1");
+      step3({ pageConnected: true });
+      cleanup();
+      step3({ appReviewPending: false });
+      await act(async () => {});
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally { vi.unstubAllGlobals(); }
   });
 
   it("connected: today's ✓ row and no hint, even after a try", () => {

@@ -9,6 +9,33 @@ offer. Nothing spends until you tap Go live, and you can stop at any step.
 "Your first month of AdBrain is free. After that it's ₹999 a month; we'll remind
 you before it's due."
 
+## Before you start: get Facebook ready (once, about 15 minutes)
+
+Do this on your phone, signed in to Facebook as yourself (the owner), a day before
+if you can. Meta's own screens; nothing here spends money.
+
+1. **Send AdBrain your Facebook profile link** on WhatsApp (Facebook › your profile ›
+   ⋯ › Copy profile link). While Facebook is still reviewing AdBrain, we add you as a
+   tester of the adBrain app, and you can only connect after that.
+2. **Accept the invite:** open developers.facebook.com/requests and accept adBrain.
+   Facebook may ask you to register as a developer first: it's free and needs a code
+   sent to your phone.
+3. **A business portfolio:** open business.facebook.com. If it asks you to create a
+   business portfolio, use your business's name, your own name and your business
+   email. Already have one? Use it. Never use someone else's portfolio.
+4. **Your Page in it:** Settings › Accounts › Pages › Add › Add a Page, and choose
+   your business's Facebook Page. Your Page should have a WhatsApp button with the
+   number customers should message.
+5. **An ad account in rupees:** Settings › Accounts › Ad accounts › Add › Create a
+   new ad account. Currency **Indian Rupee (INR)** and time zone **Asia/Kolkata**:
+   Meta can't change these later. Choose "My business" when it asks who it's for.
+   Already have an ad account in rupees? Add it here instead.
+6. **A way to pay:** in that ad account, Payment settings › Add payment method: a
+   card, or UPI or net banking with money added first (at least what your run
+   costs; AdBrain shows it, for example ₹708).
+
+Then sign in to AdBrain (below). On Go live you'll connect this Page and ad account.
+
 ## If someone from AdBrain set it up for you
 
 On a visit, the person from AdBrain may make your business details and ads on
@@ -37,17 +64,22 @@ you sign in yourself, on your own phone, within 30 minutes.
 - **You see:** on a phone, a card first: "From your business to WhatsApp chats".
   Tap "Skip" (or "Create my free account") to reach the form, headed "Create your
   free account". Already have an account? Tap "Already have an account? Sign in".
+  The "Sign in" link at the top of the homepage skips the card and opens "Welcome back".
 - **Tap:** "Continue with Google", or type your email and tap "Email me a sign-in
-  link". "No password needed. The link creates your account."
+  link". "No password needed. The link creates your account." Google's screen
+  shows a …supabase.co address; the line under the button says "That's AdBrain."
 - **Takes:** a minute. With email you see "Check your email": open the link on the
   same phone. "It works once, for a short time."
 - **If it fails:** the screen says, for example, "Could not send a sign-in link.
-  Please try again." Tap "Send again", or use "Continue with Google".
+  Please try again." Tap "Send again", or use "Continue with Google". "Too many
+  sign-in emails right now…" means the hourly email limit is reached: use
+  "Continue with Google".
 
 After signing in you land on "Set up your first ad", "Step 1 of 3". The bar at the
 top shows your three steps. If you leave and come back, Home shows "Your first ad"
-with "Continue"; once your ads are made it shows "Your 3 ads are ready" with
-"Connect and go live".
+with "Continue"; once a picked ad matches your current details it shows "Your ad is
+ready" (or "Your N ads are ready") with "Connect and go live". If your picked
+ads were made from older details or in Studio, Home takes you back to Your ads instead.
 
 ## Step 1: Your business
 
@@ -101,9 +133,10 @@ with "Continue"; once your ads are made it shows "Your 3 ads are ready" with
   - "Stops at ₹708": the most this run can ever cost.
   - "Your Page, your ad account, your card. AdBrain never holds your ad money."
 - **Tap:** while Facebook is still reviewing AdBrain, the Facebook Page row says
-  "Facebook is still reviewing AdBrain. Until then, your Facebook account needs our
-  invite: open your invites and accept adBrain, then tap Connect." Tap "Open my
-  invites", accept adBrain, come back, then tap "Connect Facebook Page". A Meta window opens: tap "Connect
+  "Facebook is still reviewing AdBrain, so only people we've added can connect. Tap
+  Connect; if Facebook says the app isn't available, come back here and we\'ll add you."
+  and "Already invited? Accept … in your invites first." (… is adBrain) If you have our invite, tap
+  "Open my invites" and accept adBrain. Then tap "Connect Facebook Page". A Meta window opens: tap "Connect
   Business", sign in to Facebook, choose your Page and ad account, tap "Use
   selected business", then "Continue to review". The row now says "Connected"
   and the button becomes "Go live · ₹300 a day". Tap it.
@@ -115,9 +148,26 @@ with "Continue"; once your ads are made it shows "Your 3 ads are ready" with
 - **If it fails:** nothing is spent when something fails. What the screen says:
   - Meta connect: "Meta has not finished yet. Complete the Meta window, then check
     again. Your draft is saved." Finish in the Meta window, then tap "Check again".
-    "Didn't connect? If Facebook said the app isn't available, accept the invite
-    first, then try again.": you skipped the invite above. Tap "Open my invites",
-    accept, then "Try again".
+    "Didn't connect? We've asked our team to add you and will WhatsApp you within a
+    working day. Accept our invite, then try again.": Facebook let you in only once
+    we add you (#2538); AdBrain has already told the team. When our invite arrives, tap
+    "Open my invites", accept, then "Try again". "…your request didn't reach us": check
+    your connection and tap "Try again".
+  - No ad account or Page shared: "Meta shared no ad account with AdBrain…" (or
+    "no Facebook Page"). Tap "Reconnect Meta" and tick the ad account and Page in
+    Meta's window. No ad account yet? Create one in rupees in the business portfolio.
+  - Not in one portfolio: "This Page and ad account aren't in the same business
+    portfolio…". If the list has another pair you can tick (no amber note under
+    it), choose it. Otherwise tap "Open business settings", add the Page and the
+    rupee ad account to one portfolio (no portfolio yet? create one there first),
+    then tap "Reconnect Meta".
+  - Not in rupees: "This ad account uses USD. AdBrain runs ads in rupees, and Meta
+    can't change an account's currency…". Tap "Open business settings", create a
+    new ad account in rupees (INR) in the same portfolio, then tap "Reconnect Meta"
+    and tick the new account.
+  - No currency or time zone: "Meta did not return a currency or time zone for
+    your ad account…". Open the ad account's settings in Meta Business Settings,
+    check its currency and time zone are set, then tap "Reconnect Meta".
   - Ad account not active: "This ad account is not active. Check Account quality
     in Meta." Fix it on Meta's Account quality page, or connect another ad
     account.

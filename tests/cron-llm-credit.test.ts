@@ -58,4 +58,20 @@ describe("OpenRouter credit alert (#449)", () => {
     expect(body).toMatchObject({ ok: false, low: false, keys: [{ index: 0, error: "HTTP_401" }] });
     expect(JSON.stringify(body)).not.toContain("sk-or");
   });
+
+  it("reports today's Cloudflare free pictures, near the cap from 45 (#2404)", async () => {
+    vi.stubEnv("OPENROUTER_API_KEYS", KEY_A);
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "service-role");
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(json(200, { data: { limit: 9, limit_remaining: 5 } })));
+    vi.doMock("@/lib/imageGen/cloudflare-quota", async (original) => ({
+      ...await original<typeof import("@/lib/imageGen/cloudflare-quota")>(),
+      cloudflareToday: async () => ({ day: "2026-10-31", pictures: 46, capped: false, alertAt: 45, dailyCap: 57, near: true }),
+    }));
+    try {
+      const { GET } = await import("@/app/api/cron/llm-credit/route");
+      expect(await (await GET(request())).json()).toMatchObject({ ok: true, cloudflare: { day: "2026-10-31", pictures: 46, near: true } });
+    } finally {
+      vi.doUnmock("@/lib/imageGen/cloudflare-quota");
+    }
+  });
 });

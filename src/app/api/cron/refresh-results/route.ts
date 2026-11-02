@@ -118,6 +118,7 @@ async function handleGET(request: Request) {
         spend: insights.spend,
         cpl: insights.cpl,
         ...(insights.conversations !== undefined ? { conversations: insights.conversations, cost_per_conversation: insights.costPerConversation ?? null, whatsapp_opens: insights.whatsappOpens ?? null } : {}),
+        ...(insights.landingPageViews !== undefined ? { landing_page_views: insights.landingPageViews } : {}),
       });
       if (resultError) throw new Error("Result storage unavailable.");
       if (ads) await saveAdResults(admin as unknown as SupabaseClient, { businessId: campaign.business_id, campaignId: campaign.id, ads }).catch(() => false);

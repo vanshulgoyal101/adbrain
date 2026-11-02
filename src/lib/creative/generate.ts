@@ -8,14 +8,16 @@ import {
   buildConceptMessages,
   conceptValidationRules,
   creativeConceptSchema,
-  conceptImagePrompt,
   validateConcept,
   type CreativeConcept,
   type ConceptInput,
 } from "@/lib/creative/concept";
+import { conceptImagePrompt } from "@/lib/creative/image-prompt";
 import { downloadImage, generateImage } from "@/lib/imageGen";
 import { ReferencePhotoPausedError, type ImageAttempt } from "@/lib/imageGen/types";
 import { ownerPhotoFor, pausedPhotoFor } from "./owner-photos";
+import { batchPictures } from "./batch-reuse";
+import { repairMessages } from "./concept-repair";
 import { complete, parseJSON } from "@/lib/llm";
 import { LLMError } from "@/lib/llm/types";
 import type { LLMFailureCode, TokenUsage } from "@/lib/llm";
@@ -87,10 +89,7 @@ const MAX_FIELD_CHARS = 1_000;
 const MAX_LIST_ITEMS = 10;
 
 function boundedBrand(brand: BrandContext): BrandContext {
-  const boundedList = (items?: string[]) =>
-    items
-      ?.slice(0, MAX_LIST_ITEMS)
-      .map((item) => item.slice(0, MAX_FIELD_CHARS));
+  const boundedList = (items?: string[]) => items?.slice(0, MAX_LIST_ITEMS).map((item) => item.slice(0, MAX_FIELD_CHARS));
   return {
     ...brand,
     name: brand.name.slice(0, MAX_FIELD_CHARS),
@@ -165,8 +164,9 @@ export async function generateVariants(params: {
   const parallel = getEnv().CREATIVE_CONCEPT_SCHEDULE === "parallel";
   let planning = Promise.resolve();
   let startNext = Promise.resolve();
+  const pictures = batchPictures(angles.length);
   const outcomes = await Promise.allSettled(
-    angles.map(async (angle) => {
+    angles.map(async (angle, index) => {
       try {
         const ownerPhoto = ownerPhotoFor(angle, params.ownerPhotos);
         const input: ConceptInput = { brand, brief, angle, instructions, language, format, referenceImages, advisoryPreferences, sourceFacts, ...(ownerPhoto ? { ownerPhoto } : {}) };
@@ -188,12 +188,14 @@ export async function generateVariants(params: {
         void planning.then(notifyNext);
         const concept = await planned;
         progress(angle, "image");
+        // #2378: a free picture that busied out reuses a sibling's picture under this ad's own copy.
         const variant = await renderVariant(input, signal, concept, () => progress(angle, "image", { slowPictures: true }),
-          pausedPhotoFor(angle, params.ownerPhotos));
+          pausedPhotoFor(angle, params.ownerPhotos)).then((made) => pictures.settle(index, made), (error) => pictures.borrow(index, input, error, signal));
         await params.onVariant?.(variant);
         progress(angle, "ready");
         return variant;
       } catch (error) {
+        pictures.settle(index);
         progress(angle, "failed");
         await params.onFailure?.(angle, error);
         throw error;
@@ -262,7 +264,7 @@ async function generateConcept(
       maxTokens: env.CREATIVE_MAX_TOKENS,
       reasoningEffort: env.CREATIVE_REASONING_EFFORT,
       attemptTimeoutMs: env.CREATIVE_ATTEMPT_TIMEOUT_MS,
-      cache: false,
+      cache: false, waitOnLastProvider: true, // #2189: parallel concepts take turns on Groq when it's the last provider.
       signal,
       onAttempt: (entry) => {
         sawProviderAttempt = true;
@@ -321,10 +323,7 @@ async function generateConcept(
     if (usage.length > usageBeforeAttempt) {
       usage[usage.length - 1].validation = { stage, rules: [...conceptValidationRules(issues), ...claims].slice(0, 12) };
     }
-    messages.push({
-      role: "user",
-      content: `Generate a fresh, complete JSON concept for the original brief. Fix these validation failures using only supplied facts, without inventing claims:\n${issues.join("\n")}`,
-    });
+    messages.push(...repairMessages(value, issues));
     if (attempt === 0) onRepair?.();
   }
   throw new CreativeValidationError(issues, usage, stage);
@@ -415,13 +414,8 @@ async function renderVariant(
       ? "[Image prompt omitted because declared preferences were applied; the generated concept may reflect their style.]"
       : image.prompt,
     design: buildAdDesign({
-      brand,
-      copy: concept,
-      concept,
-      angle,
-      backgroundUrl: image.url,
-      format,
-      language: input.language,
+      brand, copy: concept, concept, angle, backgroundUrl: image.url, format, language: input.language,
+      ownerPhoto: Boolean(ownerPhoto),
     }),
     llmUsage: usage,
     imageUsage: {

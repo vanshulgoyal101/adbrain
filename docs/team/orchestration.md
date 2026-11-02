@@ -35,8 +35,17 @@ label it for the owner instead of doing it.
 | **QA** | Independent review of high-risk changes (money, migration, tenant/auth), red tests (live checks go to QA 2) | Fixing product code (send it to the owner Dev); routine low-risk PRs need no QA |
 | **QA 2** | Live checks: live-run reads and final reports (#157, #499), production smoke follow-up, phone and desktop walks, 2-Tier acceptance walks (#527) | Same as QA |
 | **Reviewer** | High-risk code review (money, migration, tenant/auth); when no review is waiting, pick your own audit of a failing #681 row and file findings into the pool (the CTO doesn't refill this row): `gh pr review <n> --comment --body "Reviewer review of <sha>: **approved**. …"`, accepted by `release.mjs` where the CTO's is; reviews in parallel with QA, within an hour | Design and priority calls (CTO, CEO); fixing code (the author) |
-| **DevOps** | When no release waits, pick your own ops hygiene (Supabase advisors, slow queries, costs, alerts, the train); the CTO doesn't refill this row. Migrations, money/tenant/config releases, secrets and production settings, rollback, scheduler, CI and the production guard | Feature work; priority (CEO) |
+| **DevOps** | Releases and gates: migrations, money/tenant/config releases, secrets and production settings, rollback and the production guard. The only role that applies migrations or changes production; hands scheduler work to DevOps 2 and production fixes to DevOps 3 | Feature work; priority (CEO) |
+| **DevOps 2** | Scheduler, alerts and CI: scheduled jobs that don't fire or fail (#2593, #2607, #766), the nightly export (#2537), CI speed and the deploy train; when idle, ops hygiene (advisors, slow queries, costs) | Applying migrations, secrets, production settings, rollback (DevOps); priority (CEO) |
+| **DevOps 3** | Production fixes: smoke and test sign-in (#2574), Create failures seen in production (#2444, #2378), and any `owner:devops` bug that needs code rather than a release; ships a PR, then hands its release step to DevOps | Same as DevOps 2 |
 | **Dev 4** | The pre-launch Review step (#681): every rejection says in plain words what to fix, with a one-tap path to fix it, plus issues assigned to you | Same as Dev |
+| **Dev 5** | Create reliability (#2444, #2457, #2378): every Create batch saves 3 of 3 ads on free models; plus issues assigned to you | Same as Dev |
+| **Dev 6** | Pilot blockers (#679, #1221) and the Launch → Manage loop in production; plus issues assigned to you | Same as Dev |
+| **Dev 7** | Upload your own ads (#744): owners' photos and videos from upload to launch and results; plus issues assigned to you | Same as Dev |
+| **Dev 8** | Upload your own ads (#744), the Meta side: owners' media to Meta (#749), spec checks (#751), mixed-media launch (#781); plus issues assigned to you | Same as Dev |
+| **Speed** | Speed a customer feels on the core loop: how long Create, Review and Go live take in production (from receipts, aggregates only); finds the slowest step with evidence and fixes it or briefs its owner. Team tooling only when it blocks a core or pilot PR; labelled `owner:speed` | Product code another worker owns (brief them); production settings and secrets (DevOps) |
+| **Janitor** | Fix forward anything red: `next` or `main` CI on any check, failed scheduled jobs and smokes, flaky tests, stale branches and worktrees; a small fix PR on top, no author ping (AGENTS.md "Fix forward"); a core break in production still rolls back first via DevOps | Root-cause redesigns (file to the area owner); rollback (DevOps) |
+| **Scout** | Turns production failures on the core loop and pilots (top error codes per route, failed smokes, Create saved/expected) into briefed `ready` issues with a target and evidence, only when a real failure exists; no lane quotas; labelled `owner:scout` | Ranking (CPO); building (the lane) |
 | **CPO** | Product: research and the ranked roadmap (#703), feature proposals with evidence, cost and the smallest test (#694), labelled `owner:cpo` | Building (CTO assigns); priority and money (CEO) |
 | **Analyst** | Market and competitor research (#750), evidence-backed lessons filed as `later` issues for the CPO to rank; picks its own research when empty, labelled `owner:analyst` | Product ranking (CPO); building (CTO assigns); priority and money (CEO) |
 | **Designer** | The product's look and feel (#847): screen audits, one type/colour/spacing system, design slices built and shipped as small UI PRs with QA's 390/1440 check; labelled `owner:designer` | Feature logic and Meta/money code (the step owner); priority (CEO) |
@@ -58,7 +67,7 @@ Routine steps never wait for the CEO or the CTO.
    `core` or `later` (priority), `owner:dev`, `owner:dev2`, `owner:dev3`, `owner:qa`, `owner:cpo`, `owner:analyst`, `owner:designer`, `owner:docs`,
    `owner:devops`, `owner:cto` (who acts next), `ready-to-ship` (committed,
    waiting for DevOps), `blocked` (needs something outside the team; the issue says
-   what), `waiting-owner` (blocked on the owner; the CEO asks him) and `decision`
+   what; your own `Next read <time>Z` still wakes you at that time), `waiting-owner` (blocked on the owner; the CEO asks him) and `decision`
    (needs the CEO). Talk on the issue or PR itself; see
    [AGENTS.md](../../AGENTS.md#worker-coordination) Communication.
 2. **Start or resume** by reading this section, then your queue:
@@ -76,9 +85,12 @@ Routine steps never wait for the CEO or the CTO.
 4. **Low-risk PRs ship themselves.** No migration, money, tenant/auth or config
    change: run `gh pr merge <n> --auto --squash`. GitHub merges when CI passes
    (about 3 minutes) into `next`, and the deploy train ships `next` to production
-   at most every 30 minutes (#461). Branches don't need to be up to date to merge.
-   After the train deploys it, smoke the changed flow in production,
-   close the issue with the PR link (plus one `Lesson:` line if you learned
+   at most every 15 minutes (#461, #2609). Branches don't need to be up to date to merge.
+   Don't wait for the train: start your next item, and once it's live smoke the
+   changed flow in production on your next pass (never sleep or poll for a deploy;
+   the `.github/hooks/no-deploy-wait.json` hook refuses sync `sleep ≥60s`, sleep
+   loops and `gh run watch`, escape with `# allow-wait`, #2481),
+   then close the issue with the PR link (plus one `Lesson:` line if you learned
    something reusable) and start your next issue.
    **Ship the same day.** Open the PR as soon as one small slice works; do not
    hold finished work on a branch or batch it. A green PR that is still open after
@@ -106,10 +118,8 @@ Routine steps never wait for the CEO or the CTO.
    deploys to `main`, lead time to production, change-failure rate and time to
    restore from the production guard's smoke; active hours per role, PR lead time,
    handoff latency, idle gaps, workflow failures) on #364 and fixes the worst number.
-   **Queues never run dry:** every worker (every role, CEO Oct 28) keeps at least 3
-   actionable items (owner, Oct 28; not `waiting-owner`, `blocked`, `parked` or `decision`), each traceable
-   to a line in the CEO priorities below; `wait-for-work --me cto` reports any
-   worker that drops below 3, and the CTO refills that row the same hour. At the
+   **Outcome first, not queue length** (owner, Oct 30, replacing the 3-item floor): a
+   worker's next item must pass the #580 filter; with none, it waits. At the
    end of every wait it also reports workers with queued work but no signed comment
    in 90 minutes and PRs untouched for 60 minutes; the CTO checks and unblocks them.
    **CI failures are the CTO's without being asked** (owner, Oct 27): the waiter reports
@@ -158,14 +168,21 @@ Each tick:
    **Load guard (#1495):** no run starts while the 1-min load is over 1.5 per core or under 2 GB of memory is
    available (macOS memory-pressure level, not `os.freemem()`); the tick logs why. Override with
    `ADBRAIN_SUPERVISOR_MAX_LOAD` / `ADBRAIN_SUPERVISOR_MIN_FREE_GB`. Scheduled jobs and the nightly backup still run.
-3. Log: `~/.adbrain-supervisor/supervisor.log`; stop role runs with `touch ~/.adbrain-supervisor/OFF` (scheduled-job dispatch and the nightly backup keep running, #1525);
+3. Log: `~/.adbrain-supervisor/supervisor.log`; stop role runs with `touch ~/.adbrain-supervisor/OFF` (scheduled-job dispatch, the nightly backup and smoke-storage prune, and the daily quota check keep running, #1525, #884);
    `--dry-run` shows who it would wake; `--install`/`--uninstall` manage the LaunchAgent.
 
-**After a VS Code restart** the old chats can't be messaged. The CEO (CTO as backup) starts one
-chat per role with `create_session` and the text from `npm run team-supervisor -- --restart-prompt all`;
-GitHub is the memory. Chats still help when they're alive: the CEO (or the CTO) can nudge an idle or
-stuck chat with `list_sessions`, `get_session_context` and `send_message` (at most once per
-chat per 20 min). `npm run team-status` lists each role as `waiting`, `has-work`, `no-work`
+**CEO handover and restarts (#2476).** The owner rotates CEO chats often and closes the old one, and a
+VS Code restart ends every chat. Either way, GitHub and git are the memory. Start a new CEO with the text
+from `npm run team-supervisor -- --restart-prompt ceo`. It reads the board and its `decision` queue, adopts
+live worker chats (`list_sessions`, `get_session_context`) and starts each missing role with `create_session`
+(relationship `independent`, title `AdBrain <Role>`) using `npm run team-supervisor -- --restart-prompt <role>`.
+Workers never nest inside a CEO session, so closing a CEO chat leaves them running; never delete another
+session. The outgoing CEO writes no handover: every decision and promise is already on its issue, and
+scheduled reads are `Next read <time>` comments. If workers still sit inside an earlier CEO's session, the
+owner closes it first and the new CEO then starts their independent replacements (worktrees survive). A
+running chat reads no chat messages (steers stay "processing"; queued ones land when the turn ends), so
+reach workers on GitHub (`→ <Role>:`, or the Everyone row of #580) and use `send_message` (queue) only to
+start a chat whose status is idle. `npm run team-status` lists each role as `waiting`, `has-work`, `no-work`
 or `error`.
 
 ### Ready pool (pull, don't wait)
@@ -182,7 +199,10 @@ it. Not for you? Add `declined:<you>` and it isn't offered to you again. QA's wa
   with `node_modules` cloned from a shared lockfile cache in seconds (a full `npm ci`
   only when the lockfile changed). Not `/tmp`, which is wiped on restart. Push your branch at each coherent step.
   Never edit the owner's checkout (`adbrain/`).
-- **Checks.** Run the tests for what you changed plus typecheck; CI runs the rest.
+- **Checks.** Run only the tests for what you changed (`npx vitest run <files>`), then push:
+  CI's `lint` job typechecks and lints in under a minute (17 s + 24 s), while a local
+  `tsc` on the shared Mac took 10–15 min and slowed every other worker (#2617). Run
+  `npm run typecheck`, `lint`, the full suite or `build` locally only to fix a CI failure.
   Do not rerun full suites or re-review unchanged code.
 - **Subagents.** Split your issue across subagents and do small cross-role tasks
   yourself instead of handing them off; rules in [AGENTS.md](../../AGENTS.md#subagents).

@@ -1,5 +1,5 @@
 /**
- * #521 (2-Tier, #518): provision a managed customer under Solaride, walking #519's ledger:
+ * #521 (2-Tier, #518): provision a managed customer under the AdBrain BP (#2357), walking #519's ledger:
  * page_linked → child business → INR ad account. Each step looks up before it creates (Meta's
  * `child_business_external_id`, and a deterministic ad account name), so a lost response is found
  * on the next run and nothing is created twice. Failures leave the row `failed` with a code.
@@ -41,7 +41,18 @@ export type ProvisionResult =
   | { ok: true; state: string; childBusinessId: string; adAccountId: string }
   | { ok: false; code: string; retryable: boolean };
 
+import { segmentForCategory } from "@/lib/segments";
+
 const INDIA_TIMEZONE_ID = "71";
+
+/** A value of Meta's Business `vertical` enum (Graph reference, user/businesses), which owned_businesses requires (#2358). */
+export type MetaVertical = "ENERGY_AND_UTILITIES" | "EDUCATION" | "PROFESSIONAL_SERVICES" | "OTHER";
+const SEGMENT_VERTICALS: Record<string, MetaVertical> = { solar: "ENERGY_AND_UTILITIES", ielts: "EDUCATION", interiors: "PROFESSIONAL_SERVICES" };
+
+/** The Brand's free-text category as Meta's vertical: the pilot segments, else OTHER. */
+export function metaVertical(category: string | null | undefined): MetaVertical {
+  return SEGMENT_VERTICALS[segmentForCategory(category)?.slug ?? ""] ?? "OTHER";
+}
 const MAX_CHILD_PAGES = 50;
 
 /** A lookup that can't prove the child doesn't exist: stop rather than risk a second one (QA #527 T3). */
@@ -93,6 +104,7 @@ export function provisionErrorCode(error: unknown): { code: string; retryable: b
 export async function provisionManagedAccount(input: {
   businessId: string;
   businessName: string;
+  vertical: MetaVertical;
   parentBusinessId: string;
   store: ProvisionStore;
   graph: ProvisionGraph;
@@ -122,6 +134,7 @@ export async function provisionManagedAccount(input: {
       if (!childId) {
         const created = await graph.post<{ id: string }>(`${parentBusinessId}/owned_businesses`, {
           name: input.businessName.trim().slice(0, 100),
+          vertical: input.vertical,
           shared_page_id: row.page_id,
           page_permitted_tasks: JSON.stringify(PAGE_TASKS),
           timezone_id: INDIA_TIMEZONE_ID,

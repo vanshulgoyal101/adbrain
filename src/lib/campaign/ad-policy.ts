@@ -1,23 +1,38 @@
-import { bannedClaimsForVertical, foldClaimText, scanAdCopy } from "@/lib/creative/slopScan";
+import { bannedClaimsForVertical, foldClaimText, HEALTH_VERTICAL, MEDICAL_BANNED_CLAIMS, scanAdCopy } from "@/lib/creative/slopScan";
 
 export type AdPolicyHit = { creativeId: string; headline: string | null; term: string };
 
 type Copy = { id: string; headline: string | null; primaryText?: string | null; description?: string | null };
 
 /**
- * #739: health promises in each ad's saved wording, by Create's own banned-claim rule. #738's new
- * rules (personal attributes, superlatives) join here with their own plain-words message.
+ * #739: the industry's banned claims (`bannedClaimsForVertical`) in text Meta reviews, by Create's own rule. Whole
+ * words only: banned-claim scanning matches substrings ("cure" in "secure"), Review blocks the word or its plural.
  */
-export function adPolicyHits(creatives: Copy[], vertical: string | null | undefined): AdPolicyHit[] {
+export function bannedTermsIn(text: string, vertical: string | null | undefined): string[] {
+  const normalized = text.normalize("NFC");
+  const folded = foldClaimText(normalized);
   const bannedClaims = bannedClaimsForVertical(vertical);
-  return creatives.flatMap((creative) => {
-    const text = [creative.headline, creative.primaryText, creative.description].filter(Boolean).join("\n").normalize("NFC");
-    const folded = foldClaimText(text);
-    return scanAdCopy(text, { bannedClaims })
-      // banned-claim matches substrings ("cure" in "secure"); Review only blocks the whole word.
-      .filter((finding) => finding.rule === "banned-claim" && new RegExp(`(?<![\\p{L}\\p{M}])${escape(foldClaimText(finding.detail))}(?![\\p{L}\\p{M}])`, "u").test(folded))
-      .map((finding) => ({ creativeId: creative.id, headline: creative.headline, term: finding.detail }));
-  });
+  const listed = new Set(bannedClaims.map(foldClaimText));
+  const whole = (term: string, plural: boolean) => new RegExp(`(?<![\\p{L}\\p{M}])${escape(term)}${plural ? "s" : ""}(?![\\p{L}\\p{M}])`, "u").test(folded);
+  return scanAdCopy(normalized, { bannedClaims })
+    .filter((finding) => {
+      if (finding.rule !== "banned-claim") return false;
+      const term = foldClaimText(finding.detail);
+      // A listed plural ("cures") names itself, so "cure" doesn't also claim "Cures".
+      return whole(term, false) || (!listed.has(`${term}s`) && whole(term, true));
+    })
+    .map((finding) => finding.detail);
+}
+
+/** #739: banned claims in each ad's saved wording. */
+export function adPolicyHits(creatives: Copy[], vertical: string | null | undefined): AdPolicyHit[] {
+  return creatives.flatMap((creative) => bannedTermsIn([creative.headline, creative.primaryText, creative.description].filter(Boolean).join("\n"), vertical)
+    .map((term) => ({ creativeId: creative.id, headline: creative.headline, term })));
+}
+
+/** How Review names a banned term: a health claim for a clinic, otherwise a promise (#1609, #2423). */
+export function bannedTermKind(term: string, vertical: string | null | undefined): string {
+  return HEALTH_VERTICAL.test(vertical ?? "") && (MEDICAL_BANNED_CLAIMS as readonly string[]).includes(term) ? "a health promise" : "a promise";
 }
 
 function escape(value: string): string {

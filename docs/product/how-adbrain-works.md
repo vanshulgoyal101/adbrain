@@ -87,9 +87,12 @@ So do the errors from changing an ad's background, words or version, the assista
 Download (#2324).
 So do the refusals when you turn a campaign on, pause it or delete it (spend cap, Meta funds,
 Meta access, a pause Meta didn't confirm) (#2312).
+So do the errors from refreshing results, bringing in campaigns from Meta, changing a
+budget and pausing one ad (#2314).
 Errors from Enquiries and connecting Facebook come in Hindi too (#2327), as do the Day 7
 question, privacy requests and the lead-form picker (#2335).
 Errors from Brand's website or text autofill and from preparing a campaign plan come in Hindi too (#2330).
+So do the errors from saving your spend limits and preferences in Settings (#2334).
 When your phone loses its connection or the server sends no reply, the messages on Create, Review
 and Brand pictures still come in your language (#2345).
 A campaign that can't be found, or that AdBrain can't safely change or delete, now says what to do

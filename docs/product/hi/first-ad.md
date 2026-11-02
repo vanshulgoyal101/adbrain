@@ -1,5 +1,5 @@
 # फ़ोन पर आपका पहला ऐड
-<!-- mirrors ../first-ad.md 6d905c72aacb -->
+<!-- mirrors ../first-ad.md 6a07d4dd0d03 -->
 
 यह [Your first ad on a phone](../first-ad.md) का हिंदी रूप है; अंग्रेज़ी पेज बदले तो इसे भी बदलें।
 [Features and workflows](../README.md) का हिस्सा।
@@ -15,6 +15,33 @@
 किसी भी स्टेप पर रुक सकते हैं।
 "Your first month of AdBrain is free. After that it's ₹999 a month; we'll remind
 you before it's due."
+
+## शुरू करने से पहले: Facebook तैयार करें (एक बार, लगभग 15 मिनट)
+
+यह अपने फ़ोन पर करें, Facebook में खुद (मालिक के तौर पर) साइन इन करके, हो सके तो एक दिन
+पहले। ये Meta की अपनी स्क्रीन हैं; यहाँ कोई पैसा खर्च नहीं होता।
+
+1. **AdBrain को अपनी Facebook प्रोफ़ाइल का लिंक भेजें** WhatsApp पर (Facebook › आपकी
+   प्रोफ़ाइल › ⋯ › Copy profile link)। जब तक Facebook AdBrain की जाँच कर रहा है, हम
+   आपको adBrain ऐप का tester बनाते हैं, और उसके बाद ही आप कनेक्ट कर पाएँगे।
+2. **इनवाइट स्वीकार करें:** developers.facebook.com/requests खोलें और adBrain स्वीकार
+   करें। Facebook पहले developer के तौर पर रजिस्टर करने को कह सकता है: यह मुफ़्त है और
+   आपके फ़ोन पर आए कोड से होता है।
+3. **एक बिज़नेस पोर्टफ़ोलियो:** business.facebook.com खोलें। अगर यह बिज़नेस पोर्टफ़ोलियो
+   बनाने को कहे, तो अपने बिज़नेस का नाम, अपना नाम और बिज़नेस ईमेल डालें। पहले से है?
+   वही इस्तेमाल करें। किसी और का पोर्टफ़ोलियो कभी इस्तेमाल न करें।
+4. **उसमें आपका पेज:** Settings › Accounts › Pages › Add › Add a Page, और अपने बिज़नेस
+   का Facebook पेज चुनें। पेज पर WhatsApp बटन होना चाहिए, उसी नंबर के साथ जिस पर ग्राहक
+   मैसेज करें।
+5. **रुपये वाला ऐड अकाउंट:** Settings › Accounts › Ad accounts › Add › Create a new ad
+   account। Currency **Indian Rupee (INR)** और time zone **Asia/Kolkata**: Meta इन्हें
+   बाद में नहीं बदल सकता। पूछे कि किसके लिए है, तो "My business" चुनें। रुपये वाला ऐड
+   अकाउंट पहले से है? तो उसे यहीं जोड़ें।
+6. **पेमेंट का तरीका:** उसी ऐड अकाउंट में Payment settings › Add payment method: कार्ड,
+   या UPI या नेट बैंकिंग से पहले पैसे डालें (कम से कम उतने जितना आपका रन ले सकता है;
+   AdBrain दिखाता है, जैसे ₹708)।
+
+फिर AdBrain में साइन इन करें (नीचे)। Go live पर आप यही पेज और ऐड अकाउंट कनेक्ट करेंगे।
 
 ## अगर AdBrain के किसी व्यक्ति ने आपके लिए सेटअप किया है
 
@@ -44,17 +71,22 @@ you before it's due."
 - **आपको दिखेगा:** फ़ोन पर पहले एक कार्ड: "From your business to WhatsApp chats"।
   फ़ॉर्म तक जाने के लिए "Skip" (या "Create my free account") दबाएँ, जिसके ऊपर लिखा है "Create your
   free account"। पहले से अकाउंट है? "Already have an account? Sign in" दबाएँ।
+  होमपेज के ऊपर वाला "Sign in" लिंक यह कार्ड छोड़कर सीधे "Welcome back" खोलता है।
 - **टैप करें:** "Continue with Google", या अपना ईमेल डालकर "Email me a sign-in
-  link" दबाएँ। "No password needed. The link creates your account."
+  link" दबाएँ। "No password needed. The link creates your account." Google की स्क्रीन पर
+  …supabase.co वाला पता दिखता है; बटन के नीचे की लाइन बताती है "That's AdBrain."
 - **कितना समय:** एक मिनट। ईमेल से करने पर "Check your email" दिखेगा: लिंक उसी फ़ोन
   पर खोलें। "It works once, for a short time."
 - **अगर काम न करे:** स्क्रीन पर लिखा आएगा, जैसे "Could not send a sign-in link.
   Please try again." "Send again" दबाएँ, या "Continue with Google" इस्तेमाल करें।
+  "Too many sign-in emails right now…" का मतलब है घंटे भर की ईमेल लिमिट पूरी हो गई:
+  "Continue with Google" इस्तेमाल करें।
 
 साइन इन के बाद आप "Set up your first ad", "Step 1 of 3" पर पहुँचते हैं। ऊपर की पट्टी
 आपके तीनों स्टेप दिखाती है। अगर आप बीच में छोड़कर वापस आएँ, तो Home पर "Your first ad"
-के साथ "Continue" दिखेगा; ऐड बन जाने के बाद वहाँ "Your 3 ads are ready" के साथ
-"Connect and go live" दिखेगा।
+के साथ "Continue" दिखेगा; चुना गया ऐड आपकी मौजूदा जानकारी से मेल खाने पर "Your ad is
+ready" (या "Your N ads are ready") के साथ "Connect and go live" दिखेगा।
+अगर चुने हुए ऐड पुरानी जानकारी से या Studio में बने थे, Home आपको फिर Your ads पर ले जाएगा।
 
 ## स्टेप 1: आपका बिज़नेस
 
@@ -108,9 +140,10 @@ you before it's due."
   - "Stops at ₹708": इस रन का ज़्यादा से ज़्यादा खर्च।
   - "Your Page, your ad account, your card. AdBrain never holds your ad money."
 - **टैप करें:** जब तक Facebook AdBrain की जाँच कर रहा है, Facebook Page वाली लाइन में लिखा होगा
-  "Facebook is still reviewing AdBrain. Until then, your Facebook account needs our
-  invite: open your invites and accept adBrain, then tap Connect." "Open my
-  invites" दबाएँ, adBrain का इनवाइट स्वीकार करें, वापस आएँ, फिर "Connect Facebook Page" दबाएँ।
+  "Facebook is still reviewing AdBrain, so only people we've added can connect. Tap
+  Connect; if Facebook says the app isn't available, come back here and we\'ll add you."
+  and "Already invited? Accept … in your invites first." (… यानी adBrain) इनवाइट मिल चुका है तो "Open my
+  invites" दबाकर adBrain स्वीकार करें। फिर "Connect Facebook Page" दबाएँ।
   Meta की विंडो खुलेगी: "Connect
   Business" दबाएँ, Facebook में साइन इन करें, अपना पेज और ऐड अकाउंट चुनें, "Use
   selected business" दबाएँ, फिर "Continue to review"। अब लाइन में "Connected" लिखा
@@ -123,9 +156,26 @@ you before it's due."
 - **अगर काम न करे:** कुछ भी फ़ेल हो तो कोई पैसा खर्च नहीं होता। स्क्रीन पर क्या लिखा आता है:
   - Meta कनेक्ट: "Meta has not finished yet. Complete the Meta window, then check
     again. Your draft is saved." Meta की विंडो में काम पूरा करें, फिर "Check again" दबाएँ।
-    "Didn't connect? If Facebook said the app isn't available, accept the invite
-    first, then try again.": आपने ऊपर वाला इनवाइट छोड़ दिया। "Open my invites" दबाएँ,
-    स्वीकार करें, फिर "Try again"।
+    "Didn't connect? We've asked our team to add you and will WhatsApp you within a
+    working day. Accept our invite, then try again.": हमारे जोड़ने के बाद ही Facebook आपको
+    अंदर आने देगा (#2538); AdBrain ने टीम को बता दिया है। इनवाइट आने पर "Open my invites"
+    दबाएँ, स्वीकार करें, फिर "Try again"। "…your request didn't reach us" दिखे तो इंटरनेट
+    देखें और "Try again" दबाएँ।
+  - ऐड अकाउंट या पेज शेयर नहीं हुआ: "Meta shared no ad account with AdBrain…" (या
+    "no Facebook Page")। "Reconnect Meta" दबाएँ और Meta की विंडो में ऐड अकाउंट और पेज
+    पर टिक करें। ऐड अकाउंट नहीं है? बिज़नेस पोर्टफ़ोलियो में रुपये वाला एक बनाएँ।
+  - एक पोर्टफ़ोलियो में नहीं: "This Page and ad account aren't in the same business
+    portfolio…"। अगर लिस्ट में कोई दूसरी जोड़ी चुनी जा सकती है (उसके नीचे पीला नोट नहीं),
+    तो उसे चुनें। नहीं तो "Open business settings" दबाएँ, पेज और रुपये वाला ऐड अकाउंट
+    एक पोर्टफ़ोलियो में जोड़ें (पोर्टफ़ोलियो नहीं है? पहले वहीं एक बनाएँ), फिर
+    "Reconnect Meta" दबाएँ।
+  - रुपये में नहीं: "This ad account uses USD. AdBrain runs ads in rupees, and Meta
+    can't change an account's currency…"। "Open business settings" दबाएँ, उसी
+    पोर्टफ़ोलियो में रुपये (INR) वाला नया ऐड अकाउंट बनाएँ, फिर "Reconnect Meta" दबाएँ
+    और नए अकाउंट पर टिक करें।
+  - करेंसी या टाइम ज़ोन नहीं: "Meta did not return a currency or time zone for
+    your ad account…"। Meta Business Settings में ऐड अकाउंट की सेटिंग खोलें, देखें कि
+    करेंसी और टाइम ज़ोन भरे हैं, फिर "Reconnect Meta" दबाएँ।
   - ऐड अकाउंट चालू नहीं: "This ad account is not active. Check Account quality
     in Meta." इसे Meta के Account quality पेज पर ठीक करें, या कोई दूसरा ऐड अकाउंट
     कनेक्ट करें।

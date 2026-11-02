@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 // businessId without an ownership check is a cross-tenant read or write. Every src/app/api route is classified here,
 // and its file must call that class's guard; a new, renamed or reclassified route fails until it is listed.
 
-type Kind = "owner" | "session" | "cron" | "webhook" | "delegated" | "public";
+type Kind = "owner" | "session" | "cron" | "secret" | "webhook" | "delegated" | "public";
 type Entry = { kind: Kind; methods: string[]; why?: string };
 
 /** The guard each class must call. `session` routes are scoped by RLS or an owner-checking RPC; `why` says which. */
@@ -14,6 +14,7 @@ const GUARD: Record<Exclude<Kind, "public">, RegExp> = {
   owner: /\b(?:requireOwnedBusiness|ownedManagedAttempt|managedRouteUser|requireScheduledBusiness|ownedManagedBusiness)\(/,
   session: /\bauth\.getUser\(|\bgetPrimaryBusiness\(/,
   cron: /\bcronAuthError\(|CRON_SECRET/,
+  secret: /\bTEST_SESSION_SECRET\b/,
   webhook: /[Ss]ignature|signed_request/,
   delegated: /\b(?:handleProductionPayments|handleTestPayments)\(/,
 };
@@ -53,6 +54,7 @@ const ROUTES: Record<string, Entry> = {
   "cron/access-requests": { kind: "cron", methods: ["GET"] },
   "cron/campaign-reconciliation": { kind: "cron", methods: ["GET"] },
   "cron/core-scoreboard": { kind: "cron", methods: ["GET"] },
+  "cron/dispatch-workflows": { kind: "cron", methods: ["GET"] },
   "cron/enforce-spend": { kind: "cron", methods: ["GET"] },
   "cron/keepalive": { kind: "cron", methods: ["GET"] },
   "cron/llm-credit": { kind: "cron", methods: ["GET"] },
@@ -67,10 +69,12 @@ const ROUTES: Record<string, Entry> = {
   "events": { kind: "session", methods: ["POST"], why: "session: business from getPrimaryBusiness(), never from input" },
   "feedback/pilot-day7": { kind: "owner", methods: ["POST"] },
   "internal/meta-traffic": { kind: "session", methods: ["POST"], why: "session: email allowlist, rate-limited, 404 in production without it (#1723)" },
+  "internal/test-session": { kind: "secret", methods: ["POST"], why: "#2574: TEST_SESSION_SECRET bearer (constant time, ≥ 32 chars) and a TEST_SESSION_EMAILS allowlist; 404 when unset" },
   "leads": { kind: "session", methods: ["DELETE", "GET"], why: "session: RLS client (the owner's own leads)" },
   "leads/[id]": { kind: "session", methods: ["DELETE", "PATCH"], why: "session: RLS client (the owner's own leads); DELETE runs leads_erase as the caller (#1761)" },
   "leads/sync": { kind: "owner", methods: ["POST"] },
   "leads/unseen": { kind: "session", methods: ["GET"], why: "session: RLS client (the owner's own leads)" },
+  "managed/billing": { kind: "owner", methods: ["POST"] },
   "managed/onboarding": { kind: "owner", methods: ["GET"] },
   "managed/whatsapp": { kind: "owner", methods: ["POST"] },
   "meta/access-request": { kind: "session", methods: ["POST"], why: "session: append_verified_audit_event refuses a business the user doesn't own (#1723)" },

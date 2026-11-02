@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, w
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { activeRun, agentArgs, didWork, firstPrompt, lastWakes, lastWords, liveRoles, pickRole, prompt, restartPrompt, roleFromPrompt, runsToday, scheduledJobsDue, exportDue, exportsToPrune, encryptExport, loadSkip, machineLoad } from "../scripts/team-supervisor.mjs";
+import { activeRun, agentArgs, didWork, firstPrompt, lastWakes, lastWords, liveRoles, pickRole, prompt, restartPrompt, roleFromPrompt, runsToday, scheduledJobsDue, exportDue, exportsToPrune, encryptExport, loadSkip, machineLoad, plist, awakePlist } from "../scripts/team-supervisor.mjs";
 
 const dir = mkdtempSync(join(tmpdir(), "supervisor-"));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
@@ -107,6 +107,20 @@ describe("team-supervisor (#573 A1)", () => {
     expect(text).toContain('"Dev 2:"');
     expect(() => restartPrompt("nobody")).toThrow();
   });
+
+  it("gives a rotated-in CEO a succession prompt that respawns workers outside its own session (#2476)", () => {
+    const text = restartPrompt("ceo");
+    expect(roleFromPrompt(text)).toBe("ceo");
+    expect(text).toContain('relationship "independent"');
+    expect(text).toContain("never delete another session");
+    expect(text).toContain("--restart-prompt <role>");
+    expect(text).toContain("wait-for-work.mjs --me ceo");
+    for (const r of ["dev", "dev4", "qa2", "reviewer", "devops", "cto", "docs"]) expect(text).toContain(`(${r})`);
+    expect(text).toContain("ask the owner to close that session first");
+    expect(text).toContain("a running chat reads no chat messages");
+    expect(text).not.toContain("steer one line");
+    expect(text).not.toMatch(/\(ceo\)/);
+  });
 });
 
 describe("scheduled-jobs dispatch (#692)", () => {
@@ -207,5 +221,20 @@ describe("nightly export encryption (#1762)", () => {
     expect(encryptExport(folder, run as never)).toBe(false);
     expect(existsSync(folder)).toBe(false);
     expect(existsSync(`${folder}.tar.gz.cms`)).toBe(false);
+  });
+});
+
+describe("LaunchAgent plists (#766)", () => {
+  const rawAmpersand = /&(?!amp;|lt;|gt;|quot;|apos;)/;
+  it("escapes the shell command so the supervisor plist is valid XML", () => {
+    const text = plist(null);
+    expect(text).toContain("&amp;&amp; exec");
+    expect(text).not.toMatch(rawAmpersand);
+  });
+  it("keeps the Mac awake on the charger only, without sudo", () => {
+    const text = awakePlist();
+    expect(text).toContain("<string>/usr/bin/caffeinate</string><string>-s</string>");
+    expect(text).toContain("<key>KeepAlive</key><true/>");
+    expect(text).not.toMatch(rawAmpersand);
   });
 });

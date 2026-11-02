@@ -4,7 +4,7 @@ import { renderStoriesWithin } from "@/lib/creative/story";
 import { TargetingExclusionsMissingError } from "@/lib/meta/service-area";
 import type { DraftRecord } from "./draft-store";
 import type { ReviewDTO } from "./connect-contracts";
-import { buildCreativeReviewPayload } from "./preflight";
+import { buildCreativeReviewPayload, isReviewedWhatsAppMessage } from "./preflight";
 import { createOperationCheckpoint } from "./operation-store";
 import { executeOperation, OperationPhaseError, OperationRolledBackError, recordExternalId, type OperationRecord } from "./operations";
 import { effectiveDailyBudget } from "./spend";
@@ -90,6 +90,8 @@ export async function executeReviewedCampaign(input: {
           const areas = draftAreaNames(draft.input, business.locations ?? []);
           // #840: this campaign's edit, else the saved message, else AdBrain's suggestion: what Review showed.
           const message = draft.input.destination === "whatsapp" ? campaignWhatsAppMessage({ draft: draft.input, business, creatives: creativeInputs }) : null;
+          // #2452: rebuilt from this launch's own reads; anything but the reviewed message is refused before Meta sees it.
+          if (message && !isReviewedWhatsAppMessage(message, review)) throw new OperationPhaseError("WhatsApp message changed since review.", { transmitted: false });
           const prefill = message?.opening ?? null;
           metaResult = await meta.createLeadCampaign({
             name: draft.input.name, dailyBudgetRupees: draft.input.dailyBudgetRupees,

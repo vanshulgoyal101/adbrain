@@ -1,20 +1,27 @@
 name: Create smoke
-# #2145: every 2 hours the smoke account changes one ad's background in production (`--picture`), so dead free
+# #2145: every 4 hours the smoke account changes one ad's background in production (`--picture`), so dead free
 # pictures fail a check instead of waiting for someone to walk into them. That run spends $0: a template prompt,
-# no text model, and smoke-core.mjs refuses before the request unless the account makes free pictures.
+# no text model, and smoke-core.mjs refuses before the request unless the account makes free pictures. Every 4 h,
+# not 2 h (#2405): Cloudflare's free tier is ~57 pictures a day for customers and smokes together.
 # #2230: daily at 08:47Z (after Gemini's free quota resets at midnight Pacific) `--prepare` plans one audience on
 # free text only, $0.
 # A dispatched `create` runs the full Create (3 ads); the smoke login's words use free text only (#2230).
+# #2145: daily at 03:37Z (before India's working day) the same `create` runs on schedule, because a one-picture
+# check passed while customers' 3-ad batches saved 1 of 3 (QA 2, #679). Once a day keeps the free tiers for customers.
+# #2545: GitHub drops crons, so a scheduled picture run after 03:37Z runs that day's `create` if no run has yet
+# (scripts/smoke-mode.mjs); a late 03:37Z run after that runs `picture`. Still at most one scheduled create a day.
+# #2593: when GitHub drops every slot, /api/cron/dispatch-workflows dispatches mode `auto`, chosen like a schedule.
 on:
   schedule:
-    - cron: "17 */2 * * *"
+    - cron: "17 */4 * * *"
     - cron: "47 8 * * *"
+    - cron: "37 3 * * *"
   workflow_dispatch:
     inputs:
       mode:
-        description: "picture: free, $0. prepare: one audience plan on free text, $0. create: 3 ads (free text)."
+        description: "picture: free, $0. prepare: one audience plan on free text, $0. create: 3 ads (free text). auto: as the schedule would (#2593)."
         type: choice
-        options: [picture, prepare, create]
+        options: [picture, prepare, create, auto]
         default: picture
 permissions:
   contents: read
@@ -25,6 +32,9 @@ jobs:
     permissions:
       contents: read
       issues: write
+      # #2545: read today's runs and their `Smoke mode` annotations.
+      actions: read
+      checks: read
     # A timed-out job opens no issue (#2029): every step is bounded and they sum to at most this.
     timeout-minutes: 50
     # Never two at once; a queued run waits, never cancels the running one.
@@ -35,8 +45,9 @@ jobs:
       run:
         shell: bash
     # The dispatch input and the schedule reach the shell only as variables, mapped to a fixed flag by `case`.
+    # "Choose mode" turns SCHEDULED_MODE into REQUESTED_MODE for the steps after it.
     env:
-      REQUESTED_MODE: ${{ inputs.mode || (github.event.schedule == '47 8 * * *' && 'prepare') || 'picture' }}
+      SCHEDULED_MODE: ${{ inputs.mode || (github.event.schedule == '47 8 * * *' && 'prepare') || (github.event.schedule == '37 3 * * *' && 'create') || 'picture' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         timeout-minutes: 3
@@ -56,13 +67,25 @@ jobs:
           timeout -k 30s 8m npx playwright install --with-deps chromium && exit 0
           echo "::warning::playwright install --with-deps did not finish in 8 min; installing Chromium without OS packages"
           timeout -k 30s 4m npx playwright install chromium
+      # #2545: picks the mode only; the Smoke step marks it, so only a run that reached the smoke counts as the create.
+      - name: Choose mode
+        timeout-minutes: 2
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # If the chooser fails, never a create: it can't tell whether today's already ran.
+          mode=$(node scripts/smoke-mode.mjs) || { [ "$SCHEDULED_MODE" = prepare ] && mode=prepare || mode=picture; }
+          case "$mode" in picture|prepare|create) ;; *) mode=invalid ;; esac
+          echo "REQUESTED_MODE=$mode" >> "$GITHUB_ENV"
       # No retry: a second attempt only spends more of the free tiers. Each mode deletes what it replaced or made after a PASS.
       - name: Smoke (free picture, free-text Prepare, or a dispatched Create)
         timeout-minutes: 15
         env:
           SMOKE_EMAIL: ${{ secrets.SMOKE_EMAIL }}
-          SMOKE_PASSWORD: ${{ secrets.SMOKE_PASSWORD }}
+          TEST_SESSION_SECRET: ${{ secrets.TEST_SESSION_SECRET }}
           SMOKE_CREATE_CLEANUP: "1"
+          # #2412: Cloudflare's token is on production (#2145), so a 3-ad run with no Cloudflare picture fails.
+          SMOKE_EXPECT_CLOUDFLARE: "1"
         run: |
           case "${REQUESTED_MODE:-picture}" in
             picture) flag=--picture ;;
@@ -70,6 +93,8 @@ jobs:
             create) flag=--create ;;
             *) echo "FAIL unknown mode" | tee smoke.txt; exit 1 ;;
           esac
+          # #2545: scripts/smoke-mode.mjs reads this mark to keep one create a day.
+          echo "::notice title=Smoke mode::${REQUESTED_MODE:-picture}"
           rc=0; timeout -k 30s 14m node scripts/smoke-core.mjs "$flag" | tee smoke.txt || rc=$?
           if [ "$rc" -eq 124 ] || [ "$rc" -eq 137 ]; then echo "FAIL smoke did not finish in 14 min" | tee -a smoke.txt; fi
           exit "$rc"
@@ -81,14 +106,20 @@ jobs:
         run: |
           run="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
           smoke=$(grep -E '^(PASS|FAIL|NOTE)' smoke.txt 2>/dev/null || echo "smoke did not run; see the run log")
-          if grep -q '^FAIL Picture' smoke.txt 2>/dev/null; then
+          if grep -q '^FAIL Sign in' smoke.txt 2>/dev/null; then
+            cause="The smoke could not sign in or read who signed in (#2396), so it stopped before any Create, Prepare or picture request. It spent nothing; the reason is in the FAIL Sign in line."
+          elif grep -q '^FAIL Create:.*no paid request sent' smoke.txt 2>/dev/null; then
+            cause="Create stopped before generating: a guard refused before the request (see the FAIL Create line). It spent nothing and saved no ads."
+          elif grep -q '^FAIL Picture' smoke.txt 2>/dev/null; then
             cause="Free pictures are failing in production: the scheduled check could not save a new background from a free provider (#2145). It spent nothing."
+          elif grep -q '^FAIL Create.*Pictures:' smoke.txt 2>/dev/null; then
+            cause="Create saved its ads, but the pictures are wrong (#2412): reused siblings mean free pictures are busy; no Cloudflare picture means its token or account is broken. The NOTE pictures line says which; it spent nothing."
           elif grep -q '^FAIL Prepare plan' smoke.txt 2>/dev/null; then
             cause="Prepare's plan failed in production on free text (#2230): keys, a retired model, the prompt or validation. The receipts above say which; it spent nothing."
           elif [ "${REQUESTED_MODE:-picture}" != create ]; then
             cause="The scheduled \$0 check ($REQUESTED_MODE) failed outside its own step; see the lines above (#2145)."
           else
-            cause="Free pictures are the usual cause (#2145). A FAIL Create with saved ads keeps them in the smoke workspace; a FAIL Cleanup leaves the ads of that run in Review."
+            cause="Create saved fewer ads than it asked for or stopped (#2504): the NOTE missing ad lines name each one and NOTE failed attempts gives the reasons, provider and model. A FAIL Create with saved ads keeps them in the smoke workspace; a FAIL Cleanup leaves the ads of that run in Review."
           fi
           body="$(printf 'Run: %s\n\n```\n%s\n```\n%s\n' "$run" "$smoke" "$cause")"
           # One open alert at a time: a repeat failure comments on it.

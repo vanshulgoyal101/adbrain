@@ -507,7 +507,7 @@ export function Studio({
       {error && <Alert variant="error">{error}</Alert>}
 
       {!empty && (
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-lg font-semibold text-slate-900">
           Ads{" "}
           <span className="font-normal text-slate-400">({items.length - setAsideCount})</span>
@@ -547,8 +547,8 @@ export function Studio({
       {exportOk && <Alert variant="success">Ad pack downloaded.</Alert>}
 
       {items.length > 0 && (
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <fieldset className="flex gap-1">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <fieldset className="flex min-w-0 flex-wrap gap-1">
             <legend className="sr-only">Ad status</legend>
             {(
               [
@@ -560,7 +560,7 @@ export function Studio({
               <label
                 key={value}
                 className={cn(
-                  "flex min-h-11 cursor-pointer items-center gap-1 whitespace-nowrap rounded-md px-3 text-sm has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-primary",
+                  "flex min-h-11 cursor-pointer items-center gap-1 whitespace-nowrap rounded-md px-2.5 text-sm sm:px-3 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-primary",
                   filter === value
                     ? "bg-slate-100 font-medium text-slate-900"
                     : "text-slate-600 hover:bg-slate-50",
@@ -578,7 +578,7 @@ export function Studio({
               </label>
             ))}
           </fieldset>
-          <label className="relative min-w-0">
+          <label className="relative min-w-0 lg:shrink-0">
             <span className="sr-only">Search ads</span>
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
             <input
@@ -586,7 +586,7 @@ export function Studio({
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search ads"
-              className="h-11 w-full rounded-md border border-slate-300 pl-9 pr-3 text-sm sm:w-60"
+              className="h-11 w-full rounded-md border border-slate-300 pl-9 pr-3 text-sm lg:w-60"
             />
           </label>
         </div>

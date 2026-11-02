@@ -1,0 +1,22 @@
+{
+ "note": "#2444: real gemini-3.5-flash-lite Create concept replies (Oct 31, eval gate cases, first attempts) that JSON.parse rejects for raw newlines inside strings.",
+ "recordedAt": "2026-10-31",
+ "model": "gemini-3.5-flash-lite",
+ "replies": [
+  {
+   "case": "cedar-ridge-en",
+   "angle": "offer",
+   "text": "{\"headline\":\"$49 new-patient exam\",\"primary_text\":\"Start your care in Cedar Park with a $49 new-patient exam and consultation.\nMeet our experienced team and get clear answers about your spinal health.\nMessage us to learn more about the consultation and book your visit.\",\"description\":\"Explore our $49 new-patient exam and consultation today.\",\"cta\":\"Learn More\",\"rationale\":\"This concept directly opens with the $49 new-patient exam and consultation offer as instructed, targeting adults in Cedar Park looking for transparent care. The visual sets a calm, professional tone in a clean clinic environment, keeping the focus clear and uncrowded. The copy avoids medical promises while inviting the reader to learn more and book an appointment.\",\"visual\":{\"medium\":\"Clean, professional photography\",\"direction\":\"A bright, minimalist chiropractic treatment room with warm wood tones, a comfortable adjustment table, soft natural daylight from a side window, and an uncluttered background. No people in the frame. Palette of soft blue, warm wood, and neutral whites. Exclude any medical equipment clutter or dramatic lighting.\",\"textPlacement\":\"top\"},\"supportingText\":\"Transparent care for your spine\",\"sourceQuotes\":[\"$49 new-patient exam and consultation\"]}"
+  },
+  {
+   "case": "cedar-ridge-en",
+   "angle": "problem",
+   "text": "{\"headline\":\"Exams starting at $49\",\"primary_text\":\"Desk strain is an everyday reality when work keeps you seated for hours.\nOur new-patient exam and consultation addresses spine alignment.\nBook your visit today.\",\"description\":\"Learn about our $49 new-patient exam and consultation.\",\"cta\":\"Book Now\",\"rationale\":\"The ad connects the physical reality of desk strain directly to the professional chiropractic exam service, fulfilling the pain-point angle without assuming the reader's personal condition. The visual uses a clean, professional aesthetic in Austin to reinforce warmth and trustworthiness without relying on stock clichés.\",\"visual\":{\"medium\":\"photography\",\"direction\":\"A minimalist, well-lit modern clinic room featuring an adjustable treatment table and clean wood accents, viewed from a wide angle with soft morning light. Palette of warm neutrals and muted blue tones. No people, no medical devices in active use, and no text.\",\"textPlacement\":\"top\"},\"supportingText\":\"New-patient exam and consultation\",\"sourceQuotes\":[\"$49 new-patient exam and consultation\"]}"
+  },
+  {
+   "case": "solaride-factory-hi",
+   "angle": "offer",
+   "text": "{\"headline\":\"31 दिसंबर से पहले सोलर लगवाएं!\",\"primary_text\":\"31 दिसंबर के बाद नॉन-DCR सोलर पैनल बंद हो रहे हैं और लागत ₹10,000 प्रति किलोवाट से ज़्यादा बढ़ जाएगी।\nअपनी फैक्ट्री की बिजली लागत पर लगाम लगाएं और आज ही फ्री साइट सर्वे बुक करें।\",\"description\":\"दिसंबर डेडलाइन से पहले सोलर इंस्टॉल करें और लागत में वृद्धि से बचें।\",\"cta\":\"Book Now\",\"rationale\":\"यह विज्ञापन फैक्ट्री मालिकों को 31 दिसंबर की आगामी डेडलाइन और नॉन-DCR सोलर पैनल बंद होने तथा लागत बढ़ने (₹10,000 प्रति किलोवाट) के तथ्य के आधार पर तुरंत निर्णय लेने के लिए प्रेरित करता है। विजुअल और कॉपी दोनों ही स्पष्ट और अर्जेंट संदेश देते हैं, जिससे आर्थिक बचत की जा सके।\",\"visual\":{\"medium\":\"आधुनिक फोटोग्राफी\",\"direction\":\"एक बड़ी औद्योगिक फैक्ट्री की छत पर लगे सोलर पैनल, जिनके आसपास साफ आसमान और नीचे आधुनिक व्यावसायिक परिसर दिखाई दे रहा है। फ्रेम में साफ रोशनी, पेशेवर कंपोजिशन और शांत नीले-हरे रंग का टोन। किसी भी तरह के इंसानों या डिजिटल टेक्स्ट का प्रयोग न करें।\",\"textPlacement\":\"top\"},\"supportingText\":\"दिसंबर डेडलाइन से पहले अपनी फैक्ट्री को सुरक्षित करें\",\"sourceQuotes\":[\"फ़ैक्टरी मालिकों के लिए विज्ञापन: 31 दिसंबर से नॉन-DCR सोलर पैनल बंद हो रहे हैं और लागत 10,000 रुपये प्रति किलोवाट से ज़्यादा बढ़ जाएगी। डेडलाइन से पहले इंस्टॉल करवाएं।\"]}"
+  }
+ ]
+}

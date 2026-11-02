@@ -52,8 +52,12 @@ function network(answer: () => Response = () => Response.json({ ...cloudflare.su
     const url = new URL(String(input instanceof Request ? input.url : input));
     calls.push(`${url.hostname}${url.pathname}`);
     if (url.hostname === "api.cloudflare.com") {
-      bodies.push(JSON.parse(String(init?.body)));
+      const body = JSON.parse(String(init?.body));
+      bodies.push(body);
       headers.push(new Headers(init?.headers));
+      // Like the live API: any property outside the recorded request (a seed, a size) is a 400 bad input.
+      if (Object.keys(body).some((key) => !(key in cloudflare.request.body)))
+        return Response.json(cloudflare.badInput.body, { status: cloudflare.badInput.status });
       return answer();
     }
     if (url.pathname.includes("/images/models/")) return Response.json({ endpoints: [{ supported_parameters: {} }] });
@@ -82,7 +86,7 @@ describe("core: free pictures come from Cloudflare FLUX-1-schnell first (#1476)"
     expect(picture).toMatchObject({ provider: "cloudflare", model: "@cf/black-forest-labs/flux-1-schnell", estimatedCostUsd: 0, width: 1024, height: 1024 });
     expect(picture.url).toMatch(/^data:image\/png;base64,/);
     expect(calls).toEqual([`api.cloudflare.com/client/v4/accounts/${ACCOUNT}/ai/run/@cf/black-forest-labs/flux-1-schnell`]);
-    expect(bodies[0]).toEqual({ prompt: image.prompt, steps: 4, seed: 42 });
+    expect(bodies[0]).toEqual({ prompt: image.prompt, steps: 4 });
     expect(headers[0].get("authorization")).toBe("Bearer cf-test-token");
     expect(attempts.map(({ provider, status, estimatedCostUsd }) => [provider, status, estimatedCostUsd])).toEqual([["cloudflare", "success", 0]]);
   });
@@ -152,6 +156,20 @@ describe("core: free pictures come from Cloudflare FLUX-1-schnell first (#1476)"
     }
   });
 
+  it("records each daily-limit refusal as a product event, so a capped day is seen without a customer (#2404)", async () => {
+    network(() => Response.json(cloudflare.dailyLimit.body, { status: cloudflare.dailyLimit.status }));
+    const logged = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    try {
+      const { generateImage } = await import("@/lib/imageGen");
+      await asInternal(() => generateImage(image));
+      const events = logged.mock.calls.map(([line]) => { try { return JSON.parse(String(line)); } catch { return null; } });
+      expect(events).toContainEqual(expect.objectContaining({ source: "adbrain.product", kind: "system", name: "image.free_daily_limit", outcome: "failed",
+        attributes: expect.objectContaining({ provider: "cloudflare", errorCode: "IMAGE_FREE_DAILY_LIMIT" }) }));
+    } finally {
+      logged.mockRestore();
+    }
+  });
+
   it.each([
     ["refuses the token (401)", () => Response.json(cloudflare.badToken.body, { status: cloudflare.badToken.status }), "IMAGE_PROVIDER"],
     ["answers 200 with no picture", () => Response.json({ result: {}, success: true, errors: [] }), "IMAGE_PROVIDER"],
@@ -202,5 +220,54 @@ describe("core: free pictures come from Cloudflare FLUX-1-schnell first (#1476)"
     const onFallback = vi.fn();
     await asInternal(() => generateImage({ ...image, onFallback }));
     expect(onFallback).not.toHaveBeenCalled();
+  });
+});
+
+// #2441: QA 2's 390 px walk (generation 421c4c86): one Cloudflare picture lettered "Cedar Ridge Chiropracti…" across
+// its bottom half. The prompt opened with the business name and the whole brand JSON (name, address, offers); schnell
+// has no negative prompt, so a named business reads as signage to draw.
+describe("core: a free picture's prompt carries no business name or other words to letter (#2441)", () => {
+  it("the Cedar Ridge offer scene reaches Cloudflare text-free first, without the name, address, phone or offer", async () => {
+    const cases = (await import("../eval/cases.json")).default.cases;
+    const brand = { ...cases.find((item: { id: string }) => item.id === "cedar-ridge-en")!.brand, phone: "+1 512 555 0142", website: "https://cedarridgechiro.example" };
+    const { conceptImagePrompt } = await import("@/lib/creative/image-prompt");
+    const prompt = conceptImagePrompt({
+      visual: {
+        medium: "Photograph",
+        direction: "A chiropractor at Cedar Ridge Chiropractic’s front desk greets a new patient; warm morning light, CEDAR RIDGE CHIROPRACTIC blue accents, calm and unhurried.",
+        textPlacement: "bottom",
+      },
+    } as never, { brand, angle: { id: "offer" }, format: "portrait" } as never);
+    network();
+    const { generateImage } = await import("@/lib/imageGen");
+    await asInternal(() => generateImage({ ...image, prompt }));
+    const sent = bodies[0].prompt as string;
+    expect(sent.split("\n")[0]).toBe("A text-free Photograph for a chiropractic clinic: no words, letters, numbers, signs with writing, logos or watermarks anywhere in the image.");
+    // Models write curly apostrophes and capitals; the name still never reaches the picture model.
+    expect(sent).toContain("A chiropractor at the chiropractic clinic’s front desk greets a new patient");
+    expect(sent).toContain("the chiropractic clinic blue accents");
+    for (const word of ["Cedar Ridge", "2100", "$49", "555", "cedarridgechiro", "Board-certified", "Free 15-minute spine check"]) expect(sent).not.toContain(word);
+    // The scene's own context still reaches the model: who it serves, where, and the brand's colours.
+    expect(sent).toContain("Adults 30-60 with desk jobs");
+    expect(sent).toContain("Round Rock");
+    expect(sent).toContain("#74A7FE");
+    expect(sent).toContain("keep the bottom area quiet");
+  });
+
+  it.each([
+    // The attack review's cases: a place in the name, a one-word name that is also an ordinary word, "&" for "and".
+    ["San Antonio Roofing", "roofing contractor", "A roofer on a tile roof above the San Antonio skyline, crew from San Antonio roofing on site.",
+      "A roofer on a tile roof above the San Antonio skyline, crew from the roofing contractor on site."],
+    ["Golden", "bakery", "Golden hour light over the counter at Golden. Golden crusts cool by the window.",
+      "Golden hour light over the counter at the bakery. Golden crusts cool by the window."],
+    ["Bloom", "flower shop", "The florist at Bloom arranges peonies in a soft bloom of window light.",
+      "The florist at the flower shop arranges peonies in a soft bloom of window light."],
+    ["Joe's Pizza and Pasta", "pizzeria", "Fresh pies come out of Joe’s Pizza & Pasta’s oven.",
+      "Fresh pies come out of the pizzeria’s oven."],
+  ])("names only the business: %s", async (name, vertical, direction, expected) => {
+    const { conceptImagePrompt } = await import("@/lib/creative/image-prompt");
+    const prompt = conceptImagePrompt({ visual: { medium: "Photograph", direction, textPlacement: "top" } } as never,
+      { brand: { name, vertical }, format: "square" } as never);
+    expect(prompt.split("\n")[1]).toBe(expected);
   });
 });

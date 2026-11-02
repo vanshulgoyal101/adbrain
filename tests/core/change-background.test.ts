@@ -268,6 +268,17 @@ describe("core: change only the background on a recorded run-4 ad", () => {
     expect(mocks.claims.size).toBe(0);
   });
 
+  it("moves the words to the bottom when the owner's photo replaces a top-words picture (#2430)", async () => {
+    const { buildAdDesign } = await import("@/lib/creative/design");
+    const offer = run4.angles.find((a) => a.concept.visual.textPlacement === "top")!;
+    const photo = `${SUPABASE}/storage/v1/object/public/brand-assets/${run4.brand.id}/team.jpg`;
+    mocks.assets = [photo];
+    mocks.editedDuringImage = JSON.parse(JSON.stringify({ ...buildAdDesign({ brand: run4.brand, copy: offer.concept, concept: offer.concept as never }), backgroundUrl: undefined }));
+    expect(mocks.editedDuringImage!.layout).toBe("top");
+    expect((await post(undefined, { photoUrl: photo })).status).toBe(200);
+    expect((mocks.updates[0].generation as { design: Record<string, unknown> }).design).toMatchObject({ headline: offer.concept.headline, layout: "bottom" });
+  });
+
   it("saves the owner's 'Show whole photo' choice for every later render, and a new AI picture clears it (#1904)", async () => {
     const { buildAdDesign } = await import("@/lib/creative/design");
     const { pictureDesign, storedPictureDesign } = await import("@/lib/creative/picture-words");

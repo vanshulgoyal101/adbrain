@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -147,14 +147,15 @@ describe("create smoke mode", () => {
     for (const tool of ["timeout", "node", "gh"]) chmodSync(join(bin, tool), 0o755);
     if (smoke !== undefined) writeFileSync(join(work, "smoke.txt"), smoke);
     let status = 0;
+    let out = "";
     try {
-      execFileSync("bash", ["-c", stepScript("create-smoke.yml", step)], {
+      out = execFileSync("bash", ["-c", stepScript("create-smoke.yml", step)], {
         cwd: work, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"],
         env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, GITHUB_SERVER_URL: "https://github.com", GITHUB_REPOSITORY: "o/r", GITHUB_RUN_ID: "1", GITHUB_EVENT_NAME: "schedule", ...env },
       });
     } catch (error) { status = (error as { status: number }).status; }
     const read = (file: string) => { try { return readFileSync(join(work, file), "utf8"); } catch { return ""; } };
-    return { status, calls: read("calls.log"), gh: read("gh.log") };
+    return { status, out, calls: read("calls.log"), gh: read("gh.log") };
   }
 
   const smoke = "Smoke (free picture, free-text Prepare, or a dispatched Create)";
@@ -164,16 +165,52 @@ describe("create smoke mode", () => {
     expect(run(smoke, { REQUESTED_MODE: "picture" }).calls).toBe("node scripts/smoke-core.mjs --picture\n");
   });
 
+  it("schedules the picture check every 4 hours, keeping Cloudflare's free pictures for customers (#2405)", () => {
+    const crons = [...workflow("create-smoke.yml").join("\n").matchAll(/- cron: "([^"]+)"/g)].map((match) => match[1]);
+    expect(crons).toEqual(["17 */4 * * *", "47 8 * * *", "37 3 * * *"]);
+  });
+
   it("runs --prepare when the daily schedule or a dispatch asks for it (#2230)", () => {
     expect(run(smoke, { REQUESTED_MODE: "prepare" }).calls).toBe("node scripts/smoke-core.mjs --prepare\n");
     const text = workflow("create-smoke.yml").join("\n");
     const daily = text.match(/- cron: "(47 8 \* \* \*)"/)?.[1];
     expect(daily).toBeTruthy();
-    expect(text).toContain(`REQUESTED_MODE: \${{ inputs.mode || (github.event.schedule == '${daily}' && 'prepare') || 'picture' }}`);
+    expect(text).toContain(`(github.event.schedule == '${daily}' && 'prepare')`);
   });
 
-  it("runs --create only when dispatched with create", () => {
+  it("runs --create when the daily 3-ad schedule or a dispatch asks for it (#2145)", () => {
     expect(run(smoke, { REQUESTED_MODE: "create" }).calls).toBe("node scripts/smoke-core.mjs --create\n");
+    const text = workflow("create-smoke.yml").join("\n");
+    const daily = text.match(/- cron: "(37 3 \* \* \*)"/)?.[1];
+    expect(daily).toBeTruthy();
+    expect(text).toContain(`SCHEDULED_MODE: \${{ inputs.mode || (github.event.schedule == '47 8 * * *' && 'prepare') || (github.event.schedule == '${daily}' && 'create') || 'picture' }}`);
+  });
+
+  // #2545: the chooser's answer reaches later steps only as one of the three modes.
+  it("Choose mode passes the chooser's mode on, falls back to picture (prepare stays), and refuses anything else", () => {
+    const chosen = (node: string, scheduled = "picture") => {
+      const work = mkdtempSync(join(process.cwd(), ".create-smoke-test-"));
+      made.push(work);
+      const bin = join(work, "bin");
+      mkdirSync(bin);
+      writeFileSync(join(bin, "node"), `#!/bin/bash\n${node}\n`);
+      chmodSync(join(bin, "node"), 0o755);
+      const out = execFileSync("bash", ["-c", stepScript("create-smoke.yml", "Choose mode")], {
+        cwd: work, encoding: "utf8",
+        env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, SCHEDULED_MODE: scheduled, GITHUB_ENV: join(work, "env") },
+      });
+      return { out, env: readFileSync(join(work, "env"), "utf8") };
+    };
+    expect(chosen("echo create").env).toBe("REQUESTED_MODE=create\n");
+    expect(chosen("exit 1", "prepare").env).toBe("REQUESTED_MODE=prepare\n");
+    // #2593: a failed chooser never creates (today's may have run) and never passes `auto` on.
+    expect(chosen("exit 1", "auto").env).toBe("REQUESTED_MODE=picture\n");
+    expect(chosen("exit 1", "create").env).toBe("REQUESTED_MODE=picture\n");
+    expect(chosen("printf 'create\\nPWNED=1'").env).toBe("REQUESTED_MODE=invalid\n");
+  });
+
+  it("marks the mode it runs, so tomorrow's chooser can count today's create (#2545)", () => {
+    expect(run(smoke, { REQUESTED_MODE: "create" }).out).toContain("::notice title=Smoke mode::create\n");
   });
 
   it("refuses any other input without running the smoke", () => {
@@ -196,8 +233,84 @@ describe("create smoke mode", () => {
   });
 
   it("keeps the Create wording for a dispatched create", () => {
-    const { gh } = run("Alert on failure", { REQUESTED_MODE: "create" }, "FAIL Create: 1/3 saved\n");
+    const { gh } = run("Alert on failure", { REQUESTED_MODE: "create" },
+      "FAIL Create: 1/3 saved\nNOTE missing ad \"Price\": Could not write this ad.\n");
     expect(gh).not.toContain("Free pictures are failing");
-    expect(gh).toContain("Free pictures are the usual cause");
+    expect(gh).toContain("NOTE missing ad");
+    expect(gh).toContain("Create saved fewer ads than it asked for or stopped (#2504)");
+  });
+});
+
+describe("scheduled parent-token health check", () => {
+  function runParentCheck(scenario: string) {
+    dir = mkdtempSync(join(tmpdir(), "parent-health-step-"));
+    writeFileSync(join(dir, "curl"), `#!/bin/bash
+count=0
+[ -f calls ] && count=$(wc -l < calls)
+count=$((count + 1))
+printf '%s\\n' "$*" >> calls
+output=""
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = -o ]; then output="$2"; shift; fi
+  shift
+done
+case "$SCENARIO:$count" in
+  timeout:*) echo '{"ok":true,"configured":true,"enabled":false}' > "$output"; echo 'curl: (28) Connection timed out' >&2; printf 000; exit 28 ;;
+  recover:1) echo 'curl: (28) Connection timed out' >&2; printf 000; exit 28 ;;
+  tls:*) echo 'curl: (60) Certificate verification failed' >&2; printf 000; exit 60 ;;
+  refused:*) echo '{"ok":false,"configured":true,"enabled":false,"errorCode":"META_190"}' > "$output"; printf 503; exit 0 ;;
+esac
+echo '{"ok":true,"configured":true,"enabled":false}' > "$output"
+printf 200
+`);
+    chmodSync(join(dir, "curl"), 0o755);
+    const result = spawnSync("bash", ["--noprofile", "--norc", "-eo", "pipefail", "-c",
+      stepScript("scheduled-jobs.yml", "2-Tier parent token")], {
+      cwd: dir,
+      encoding: "utf8",
+      timeout: 5000,
+      env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, CRON_SECRET: "test-cron-secret", SCENARIO: scenario },
+    });
+    const calls = readFileSync(join(dir, "calls"), "utf8").trim().split("\n");
+    return { ...result, calls };
+  }
+
+  it("retries one timed-out read-only check and succeeds when the retry succeeds", () => {
+    const result = runParentCheck("recover");
+    expect(result.status).toBe(0);
+    expect(result.calls).toHaveLength(2);
+    expect(result.calls[0]).toContain("--connect-timeout 10 --max-time 30");
+    expect(result.calls[1]).toContain("--connect-timeout 10 --max-time 10");
+    for (const call of result.calls) {
+      expect(call).toContain("Authorization: Bearer test-cron-secret");
+      expect(call).toContain("https://adbrain.vanshul.com/api/cron/meta-parent-health");
+    }
+    expect(result.stdout).toContain("retry");
+    expect(result.stdout).toContain("HTTP 200");
+    expect(result.stdout + result.stderr).not.toContain("test-cron-secret");
+  });
+
+  it("fails after a second timeout rather than hiding a persistent outage", () => {
+    const result = runParentCheck("timeout");
+    expect(result.status).toBe(1);
+    expect(result.calls).toHaveLength(2);
+    expect(result.stdout).toContain("FAIL 2-Tier parent token: HTTP 000");
+    expect(result.stdout).toContain('"error":"request failed"');
+    expect(result.stdout).not.toContain('"ok":true');
+  });
+
+  it("does not retry or hide an HTTP error from the health endpoint", () => {
+    const result = runParentCheck("refused");
+    expect(result.status).toBe(1);
+    expect(result.calls).toHaveLength(1);
+    expect(result.stdout).toContain("HTTP 503");
+    expect(result.stdout).toContain("META_190");
+  });
+
+  it("does not retry a non-timeout curl error", () => {
+    const result = runParentCheck("tls");
+    expect(result.status).toBe(1);
+    expect(result.calls).toHaveLength(1);
+    expect(result.stdout).toContain("FAIL 2-Tier parent token: HTTP 000");
   });
 });
