@@ -1,4 +1,4 @@
-import { campaignDestination } from "@/lib/campaign/outcomes";
+import { campaignDestination, outcomeDefinition } from "@/lib/campaign/outcomes";
 import { costPerCustomer } from "@/lib/campaign/real-enquiries";
 import type { Campaign, CampaignResult } from "@/lib/types";
 
@@ -14,11 +14,11 @@ export type HomeResults = { enquiries: number; spend: number; perEnquiry: number
  */
 export function homeResults(campaigns: Campaign[], results: Record<string, CampaignResult>): HomeResults | null {
   // #2601: website campaigns bring visits, not enquiries, so their spend would inflate "₹ per enquiry".
-  const rows = campaigns.flatMap((campaign) => (results[campaign.id] && campaignDestination(campaign, results[campaign.id]) !== "website"
+  const rows = campaigns.flatMap((campaign) => (results[campaign.id] && outcomeDefinition(campaignDestination(campaign, results[campaign.id]), campaign.objective).countsAsEnquiry
     ? [{ campaign, result: results[campaign.id] }] : []));
   if (!rows.length) return null;
   const enquiries = rows.reduce((sum, { campaign, result }) =>
-    sum + (campaignDestination(campaign, result) === "whatsapp" ? result.conversations ?? 0 : result.leads), 0);
+    sum + (result[outcomeDefinition(campaignDestination(campaign, result), campaign.objective).campaignField] ?? 0), 0);
   const spend = rows.reduce((sum, { result }) => sum + result.spend, 0);
   // The oldest of the latest reads, so "updated" never sounds fresher than any campaign's numbers.
   const oldestFetchedAt = rows.map(({ result }) => result.fetched_at).sort()[0];

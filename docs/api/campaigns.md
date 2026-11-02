@@ -9,6 +9,15 @@ unread and display as “—”; zero clicks display as 0 with no CPC. WhatsApp 
 figures are unchanged. The website insights tape remains explicitly provisional
 until a real website campaign can be read; code tests do not prove live delivery.
 
+Website drafts and Review DTOs accept optional `websiteGoal` (`visits`, `leads`,
+`sales`, #2710), only with `destination: "website"`. Absent means visits without
+adding a default field to saved drafts. Visits omit goal/tracking fields from the
+canonical Review payload, preserving phase-1 hashes; conversion goals have distinct
+hashes. The shared Review service refuses leads/sales with the existing
+`website_closed` result, even for internal accounts, until the recorded tracking
+and conversion-launch gates exist. This contract does not enable conversions or
+change Meta payloads, campaign objectives at create, budgets or spend.
+
 ## Routes
 
 `Envelope` means the typed family in [Response Families](README.md#response-families); `plain` means route-specific JSON.

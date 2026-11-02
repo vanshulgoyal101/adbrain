@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { intendedCampaignChildren } from "@/lib/campaign/activation";
+import { outcomeDefinition } from "@/lib/campaign/outcomes";
 import { bestAd, type AdResult } from "@/lib/meta/insights";
 import type { Campaign } from "@/lib/types";
 
@@ -24,17 +25,19 @@ function storedStatus(ad: AdResult): string | null {
 export async function saveAdResults(database: Store, row: { businessId: string; campaignId: string; ads: AdResult[] }): Promise<boolean> {
   if (!row.ads.length) return true;
   const syncedAt = new Date().toISOString();
-  const { error } = await database.from("ad_results").upsert(row.ads.map(ad => ({
-    business_id: row.businessId, campaign_id: row.campaignId, meta_ad_id: ad.adId,
-    ad_name: ad.name?.slice(0, 400) ?? null, effective_status: storedStatus(ad),
-    period_start: null, period_end: null, delivered: ad.delivered,
-    impressions: ad.impressions, link_clicks: ad.whatsappOpens ?? ad.clicks,
-    conversations: ad.whatsappOpens === undefined ? 0 : ad.results,
-    leads: ad.whatsappOpens === undefined && ad.landingPageViews === undefined ? ad.results : 0,
-    // #2601: only a website campaign writes the column, so other saves don't depend on it.
-    ...(ad.landingPageViews === undefined ? {} : { landing_page_views: ad.landingPageViews }),
-    spend_paise: Math.round(ad.spend * 100), synced_at: syncedAt,
-  })), { onConflict: "campaign_id,meta_ad_id,period_start,period_end" });
+  const { error } = await database.from("ad_results").upsert(row.ads.map(ad => {
+    const outcome = outcomeDefinition(ad.whatsappOpens !== undefined ? "whatsapp" : ad.landingPageViews !== undefined ? "website" : "instant_form");
+    return {
+      business_id: row.businessId, campaign_id: row.campaignId, meta_ad_id: ad.adId,
+      ad_name: ad.name?.slice(0, 400) ?? null, effective_status: storedStatus(ad),
+      period_start: null, period_end: null, delivered: ad.delivered,
+      impressions: ad.impressions, link_clicks: ad.whatsappOpens ?? ad.clicks,
+      conversations: 0, leads: 0, [outcome.adField]: ad.results,
+      // #2601: only a website campaign writes the column, so other saves don't depend on it.
+      ...(ad.landingPageViews === undefined ? {} : { landing_page_views: ad.landingPageViews }),
+      spend_paise: Math.round(ad.spend * 100), synced_at: syncedAt,
+    };
+  }), { onConflict: "campaign_id,meta_ad_id,period_start,period_end" });
   return !error;
 }
 
@@ -49,7 +52,7 @@ export const AD_RESULT_COLUMNS = "meta_ad_id, ad_name, effective_status, deliver
 
 /** #2601: a stored ad's headline result: chats for WhatsApp, landing-page views for a website, form enquiries otherwise. */
 export function storedAdResult(row: StoredAdResult, destination: string | null | undefined): number {
-  return destination === "whatsapp" ? row.conversations : destination === "website" ? row.landing_page_views ?? 0 : row.leads;
+  return row[outcomeDefinition(destination).adField] ?? 0;
 }
 
 /** The AdBrain creative an ad was launched from, so the card shows its picture and headline (Designer, #783). */
