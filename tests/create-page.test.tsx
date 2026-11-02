@@ -17,7 +17,10 @@ vi.mock("@/lib/media/store", () => ({ mediaUploadsEnabled: () => mediaOn.value }
 vi.mock("@/components/ad-assistant", () => ({ AdAssistant: () => <div>Assistant</div> }));
 // #1438: the owner's language comes from the app-language cookie; unset is English.
 const appLanguage = vi.hoisted(() => ({ value: undefined as string | undefined }));
-vi.mock("next/headers", () => ({ cookies: async () => ({ get: (name: string) => name === "adbrain_lang" && appLanguage.value ? { name, value: appLanguage.value } : undefined }) }));
+vi.mock("next/headers", () => {
+  const all = () => (appLanguage.value ? [{ name: "adbrain_lang", value: appLanguage.value }] : []);
+  return { cookies: async () => ({ getAll: all, get: (name: string) => all().find((c) => c.name === name), set: () => {} }) };
+});
 
 const sparse = {
   id: "b1",
