@@ -1,6 +1,7 @@
 import { verdictTranslator, type Words } from "@/i18n/words";
 import { formatNumber } from "@/lib/format";
 import type { PauseSuggestion } from "@/lib/campaign/ad-pause";
+import type { LeadDestination } from "@/lib/types/campaign";
 
 /**
  * #1255 (#1226 workstream 2): what an owner should understand about a campaign in 3 seconds: one sentence, one
@@ -30,7 +31,7 @@ export type Comparison =
   | { kind: "own"; results: number; typical: number };
 
 export type VerdictInput = {
-  destination: "whatsapp" | "instant_form";
+  destination: Exclude<LeadDestination, "call" | "website">;
   status: "active" | "paused" | "completed" | string;
   /** When the campaign was last turned on (ISO); null when unknown. */
   liveSince: string | null;

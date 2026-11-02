@@ -105,7 +105,7 @@ import { targetingFromEditor, targetingToEditor } from "@/lib/campaign/editor-ta
 import { buildManualDraftInput, pickWhatsAppNumber } from "@/lib/campaign/manual-draft-input";
 import { maskWhatsAppNumber, maskedWhatsAppNumberPattern, parseWhatsAppStatus, type WhatsAppStatus } from "@/lib/meta/whatsapp-status-shared";
 import type { ConnectIntent, ConnectionDTO } from "@/lib/meta/connect-contracts";
-import type { Business, Campaign, CampaignResult, Creative, Json } from "@/lib/types";
+import type { Business, Campaign, CampaignResult, Creative, Json, LeadDestination } from "@/lib/types";
 import {
   BUDGET_PRESETS,
   campaignNarrative,
@@ -188,7 +188,7 @@ async function fetchDraftForms(signal?: AbortSignal, fresh = false): Promise<Lea
 type ComposerSetup = {
   selected: Set<string>;
   budget: number;
-  destination: "instant_form" | "whatsapp";
+  destination: Exclude<LeadDestination, "call" | "website">;
   whatsappNumber: string;
   whatsappLanguage?: WhatsAppLanguage;
   /** #840: this campaign's own WhatsApp message ("Edit for this campaign"). */
@@ -321,7 +321,7 @@ function BusinessCampaigns({
   ));
   // #761: ₹300 a day is the core run (#334); less rarely gets Meta out of learning.
   const [budget, setBudget] = useState(initialSetup?.budget ?? newCampaign?.budget ?? 300);
-  const [destination, setDestination] = useState<"instant_form" | "whatsapp">(initialSetup?.destination ?? "whatsapp");
+  const [destination, setDestination] = useState<Exclude<LeadDestination, "call" | "website">>(initialSetup?.destination ?? "whatsapp");
   const [whatsappNumber, setWhatsAppNumber] = useState(initialSetup?.whatsappNumber ?? "");
   const [whatsappLanguage, setWhatsAppLanguage] = useState<WhatsAppLanguage>(initialSetup?.whatsappLanguage ?? "ad");
   const [whatsappMessage, setWhatsAppMessage] = useState<WhatsAppTemplate | null>(initialSetup?.whatsappMessage ?? null);
@@ -865,7 +865,7 @@ function BusinessCampaigns({
     return Boolean(recoveryRef.current?.request && (!operation || !["succeeded", "failed"].includes(operation.state)));
   }
 
-  function switchDestination(value: "instant_form" | "whatsapp") {
+  function switchDestination(value: Exclude<LeadDestination, "call" | "website">) {
     if (unresolvedRecovery()) { setError("Check the existing campaign operation before changing the destination."); return; }
     destinationChosenRef.current = true;
     flushSync(() => { setDestination(value); setPrepareReview(null); });

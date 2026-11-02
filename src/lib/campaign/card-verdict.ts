@@ -5,11 +5,12 @@ import { campaignDestination } from "@/lib/campaign/outcomes";
 import type { Words } from "@/i18n/words";
 import { restatesStatus, verdict, type Comparison, type Verdict, type VerdictInput } from "@/lib/campaign/verdict";
 import type { Campaign, CampaignResult } from "@/lib/types";
+import type { LeadDestination } from "@/lib/types/campaign";
 
 type CardCampaign = Pick<Campaign, "id" | "status" | "created_at" | "raw" | "destination" | "objective">;
 type CardResult = Pick<CampaignResult, "impressions" | "spend" | "leads" | "conversations" | "whatsapp_opens" | "destination">;
 
-const resultsOf = (destination: "whatsapp" | "instant_form", result: CardResult) =>
+const resultsOf = (destination: Exclude<LeadDestination, "call" | "website">, result: CardResult) =>
   destination === "whatsapp" ? result.conversations ?? 0 : result.leads ?? 0;
 
 /**

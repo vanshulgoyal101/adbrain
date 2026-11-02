@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const campaignDestinationSchema = z.enum(["instant_form", "whatsapp", "call", "mixed", "unknown"]);
+export const campaignDestinationSchema = z.enum(["instant_form", "whatsapp", "call", "website", "mixed", "unknown"]);
 export type CampaignDestination = z.infer<typeof campaignDestinationSchema>;
 
 const storedOutcomeSchema = z.object({

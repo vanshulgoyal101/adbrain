@@ -4,6 +4,7 @@
  */
 import { formatMoney, formatPerDay } from "@/lib/format";
 import { FACEBOOK_POSITIONS_WITHOUT_REELS, WHATSAPP_PUBLISHER_PLATFORMS } from "@/lib/meta/placements";
+import type { LeadDestination } from "@/lib/types/campaign";
 
 /** Meta's learning phase ends after about 50 optimisation events within 7 days of the last significant edit. */
 const LEARNING_EVENTS_PER_WEEK = 50;
@@ -114,7 +115,7 @@ export function planCheckEvent(findings: PlanFinding[], destination: string) {
   return {
     outcome: findings.some((finding) => finding.status === "warn" || finding.status === "fail") ? "partial" as const : "success" as const,
     attributes: {
-      ...(destination === "instant_form" || destination === "whatsapp" ? { destination: destination as "instant_form" | "whatsapp" } : {}),
+      ...(destination === "instant_form" || destination === "whatsapp" ? { destination: destination as Exclude<LeadDestination, "call" | "website"> } : {}),
       count: findings.length,
       failedCount: findings.filter((finding) => finding.status === "fail").length,
       validationRules: findings.filter((finding) => finding.status !== "pass").map((finding) => `${ruleSlug(finding.rule)}:${finding.status}`),
@@ -145,7 +146,7 @@ export function askMismatchWarning(ask: string, prefill: string): string {
  * nothing rather than guess.
  */
 export function reviewWarnings(input: {
-  destination: "instant_form" | "whatsapp";
+  destination: Exclude<LeadDestination, "call" | "website">;
   storyReady: boolean;
   perAdSetDailyBudgetRupees: number;
   costPerResultRupees?: number | null;

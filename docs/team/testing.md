@@ -187,9 +187,10 @@ Fixtures in `tests/core/fixtures` come from production recordings and `evals/cre
 
 ```sh
 npm run test -- tests/spend.test.ts
-npm run lint
-npm run typecheck
 ```
+
+Then push: CI's `lint` job runs typecheck and eslint in under a minute. On the shared Mac,
+run `npm run lint` or `npm run typecheck` only to fix a CI failure (#2617).
 
 To keep inherited service credentials out of a mocked test, run it from a
 worktree without environment files and a scrubbed environment:

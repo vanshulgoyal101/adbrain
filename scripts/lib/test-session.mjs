@@ -9,7 +9,7 @@ import { parseEnv } from "node:util";
 import { createServerClient } from "@supabase/ssr";
 import { createClient } from "@supabase/supabase-js";
 
-/** @typedef {{ session: { access_token: string, refresh_token?: string }, user: { id: string, email?: string },
+/** @typedef {{ session: { access_token: string, refresh_token?: string }, user: { id: string, email?: string, email_confirmed_at?: string },
  *   cookies: { name: string, value: string }[], supabase: string, apikey: string }} MintedSession */
 /** @typedef {{ route: string, secret: string } | { url: string, serviceRoleKey: string, apikey: string }} TestSessionConfig */
 
@@ -80,7 +80,14 @@ async function mintThroughApp(email, { route, secret }, fetch) {
   const body = await response.json();
   const cookies = responseCookies(response);
   if (!cookies.length || !body?.accessToken || !body.user?.id) throw new Error("test sign-in: no session cookie written");
-  return { session: { access_token: body.accessToken }, user: body.user, cookies, supabase: body.supabase, apikey: body.apikey };
+  // #2396: the route returns only id and email; the smoke's free-pictures guard needs Supabase's own record
+  // (email_confirmed_at), the one the app's freeImagesOnly() reads.
+  const read = await fetch(new URL("/auth/v1/user", body.supabase), {
+    headers: { apikey: body.apikey, authorization: `Bearer ${body.accessToken}` }, signal: AbortSignal.timeout(15_000),
+  });
+  const user = read.ok ? await read.json().catch(() => null) : null;
+  if (user?.id !== body.user.id) throw new Error(`test sign-in: user not read (${read.ok ? "mismatch" : read.status})`);
+  return { session: { access_token: body.accessToken }, user, cookies, supabase: body.supabase, apikey: body.apikey };
 }
 
 /**
