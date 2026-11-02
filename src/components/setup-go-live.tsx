@@ -240,7 +240,7 @@ export function SetupGoLive({ business, ads, pageConnected, funding, whatsappNum
           </dd>
           {welcome && <>
             <dd className="mt-2 whitespace-pre-wrap break-words rounded-lg bg-slate-50 p-3 text-slate-800">&ldquo;{welcome.greeting}&rdquo;</dd>
-            <dd className="mt-1 text-slate-600">{whenTheyTapLine(welcome)}</dd>
+            <dd className="mt-1 text-slate-600">{whenTheyTapLine(welcome, t)}</dd>
           </>}
         </div>
       </dl>
