@@ -89,13 +89,14 @@ export default async function CreatePage({ searchParams }: { searchParams?: Prom
         title="Create ads"
         description="Say who you want to reach. You check every ad before it runs."
       />
-      {/* #778 slice 3a: the entry choice (CPO #1868); own-photo ads start from the library until slice 3b's picker. */}
+      {/* #778 slice 3a: the entry choice (CPO #1868) as two equal rows (Designer, #1973 review 6). */}
       {mediaUploadsEnabled() && (
-        <nav aria-label="How to make ads" className="mb-4 flex flex-wrap gap-2 text-sm">
-          <span aria-current="page" className="inline-flex min-h-11 items-center rounded-full bg-blue-50 px-4 font-medium text-blue-700">Make ads with AI</span>
-          <Link href="/assets" className="inline-flex min-h-11 items-center rounded-full border border-slate-300 px-4 font-medium text-slate-700 hover:bg-slate-50">Use my photos &amp; videos</Link>
+        <nav aria-label="How to make ads" className="mb-4 grid max-w-2xl grid-cols-2 gap-2 text-sm">
+          <a href="#create-flow" aria-current="page" className="inline-flex min-h-11 items-center justify-center rounded-md border border-blue-600 bg-blue-50 px-3 text-center font-medium text-blue-700">Make ads with AI</a>
+          <Link href="/assets" className="inline-flex min-h-11 items-center justify-center rounded-md border border-slate-300 px-3 text-center font-medium text-slate-700 hover:bg-slate-50">Use my photos &amp; videos</Link>
         </nav>
       )}
+      <div id="create-flow" className="scroll-mt-4">
       <CreateFlow business={business} opening={openingLine(evidence)} occasions={occasionsFor(business)}>
         <aside aria-label="Your business details" className="max-w-2xl border-t border-slate-200 pt-5 text-sm text-slate-500">
           <p>
@@ -114,6 +115,7 @@ export default async function CreatePage({ searchParams }: { searchParams?: Prom
           )}
         </aside>
       </CreateFlow>
+      </div>
     </div>
   );
 }

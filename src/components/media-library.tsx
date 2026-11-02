@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ImagePlus, Pencil, Trash2 } from "lucide-react";
+import { Download, ImagePlus, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Status } from "@/components/ui/status";
-import { AssetTile, slugify } from "@/components/assets-library";
+import { AssetTile, downloadImage, slugify } from "@/components/assets-library";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { MediaUploadSheet, useMediaUploads } from "@/components/media-upload";
 import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
 import { UPLOAD_WORDS, type Codec, type UploadDeps } from "@/lib/media/client-upload";
@@ -20,9 +21,8 @@ const TABS = [
 type Tab = (typeof TABS)[number]["id"];
 
 const UNDO_MS = 6_000;
-const iconButton = "inline-flex size-11 items-center justify-center rounded-md text-slate-600 hover:bg-slate-100 disabled:opacity-50";
 
-/** #778 slice 3c: Rename and Delete on the owner's own photo. */
+/** #778 slice 3c: one ⋯ menu (Rename · Download · Delete) on the owner's own photo (Designer, #1973 review 4). */
 function OwnPhotoControls({ asset, request, onRenamed, onDelete }: {
   asset: MediaView;
   request: typeof fetch;
@@ -34,6 +34,7 @@ function OwnPhotoControls({ asset, request, onRenamed, onDelete }: {
   const [name, setName] = useState(asset.name ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState(false);
 
   async function save() {
     setSaving(true);
@@ -66,14 +67,29 @@ function OwnPhotoControls({ asset, request, onRenamed, onDelete }: {
       </form>
     );
   }
+  const url = asset.url;
   return (
     <div className="-mx-2 flex items-center">
-      <button type="button" aria-label={`Rename ${label}`} title="Rename" className={iconButton} onClick={() => setEditing(true)}>
-        <Pencil className="h-4 w-4" aria-hidden="true" />
-      </button>
-      <button type="button" aria-label={`Delete ${label}`} title="Delete" className={iconButton} onClick={() => onDelete(asset)}>
-        <Trash2 className="h-4 w-4" aria-hidden="true" />
-      </button>
+      <DropdownMenu>
+        <DropdownMenuTrigger aria-label={`More for ${label}`} disabled={downloading}
+          className="inline-flex size-11 items-center justify-center rounded-md text-slate-600 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-50">
+          <MoreHorizontal className="h-5 w-5" aria-hidden="true" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent>
+          <DropdownMenuItem onSelect={() => setEditing(true)}><Pencil className="h-4 w-4" aria-hidden="true" /> Rename</DropdownMenuItem>
+          {url && (
+            <DropdownMenuItem onSelect={async () => {
+              setError(null);
+              setDownloading(true);
+              try { await downloadImage(url, `adbrain-${slugify(asset.name ?? "photo", asset.id.slice(0, 6))}.jpg`); }
+              catch { setError("Download failed. Try again."); }
+              finally { setDownloading(false); }
+            }}><Download className="h-4 w-4" aria-hidden="true" /> Download</DropdownMenuItem>
+          )}
+          <DropdownMenuItem variant="danger" onSelect={() => onDelete(asset)}><Trash2 className="h-4 w-4" aria-hidden="true" /> Delete</DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
     </div>
   );
 }
@@ -122,7 +138,9 @@ export function MediaLibrary({ business, media: initialMedia, creatives, brandAs
     next.splice(Math.min(index, next.length), 0, asset);
     return next;
   }), []);
+  const pending = useRef<{ asset: MediaView; index: number } | null>(null);
   const commit = useCallback(async (asset: MediaView, index: number) => {
+    if (pending.current?.asset.id === asset.id) pending.current = null;
     setDeleted((current) => current?.asset.id === asset.id ? null : current);
     try {
       const response = await request(`/api/media/${asset.id}`, { method: "DELETE", signal: AbortSignal.timeout(30_000) });
@@ -142,15 +160,31 @@ export function MediaLibrary({ business, media: initialMedia, creatives, brandAs
     setDeleteError(null);
     setMedia((current) => current.filter((item) => item.id !== asset.id));
     setDeleted({ asset, index });
+    pending.current = { asset, index };
     timer.current = setTimeout(() => { timer.current = null; void commit(asset, index); }, UNDO_MS);
   }, [commit, deleted, media]);
   const undo = () => {
     if (timer.current) clearTimeout(timer.current);
     timer.current = null;
+    pending.current = null;
     if (deleted) restore(deleted.asset, deleted.index);
     setDeleted(null);
   };
-  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+  // Leaving the page or the library sends a pending delete now (keepalive outlives the page) instead of dropping it.
+  // `request` changes every render, so the effect reads it through a ref and runs once.
+  const requestRef = useRef(request);
+  useEffect(() => { requestRef.current = request; }, [request]);
+  useEffect(() => {
+    const flush = () => {
+      if (timer.current) clearTimeout(timer.current);
+      timer.current = null;
+      const item = pending.current;
+      pending.current = null;
+      if (item) void requestRef.current(`/api/media/${item.asset.id}`, { method: "DELETE", keepalive: true }).catch(() => undefined);
+    };
+    window.addEventListener("pagehide", flush);
+    return () => { window.removeEventListener("pagehide", flush); flush(); };
+  }, []);
   const addButton = (
     <button type="button" onClick={() => setSheetOpen(true)}
       className="inline-flex min-h-11 items-center gap-2 rounded-md bg-blue-600 px-4 text-sm font-medium text-white hover:bg-blue-700">
@@ -171,7 +205,7 @@ export function MediaLibrary({ business, media: initialMedia, creatives, brandAs
   ) : (
     <Grid>
       {media.map((m) => (
-        <AssetTile key={m.id} url={m.url} title={m.name || "Photo"} meta={m.fit?.message}
+        <AssetTile key={m.id} url={m.url} title={m.name || "Photo"} meta={m.fit?.message} actions={false}
           filename={`adbrain-${slugify(m.name ?? "photo", m.id.slice(0, 6))}.jpg`}>
           <OwnPhotoControls key={m.name ?? ""} asset={m} request={request} onRenamed={onRenamed} onDelete={onDelete} />
         </AssetTile>
@@ -210,9 +244,9 @@ export function MediaLibrary({ business, media: initialMedia, creatives, brandAs
     <div className="flex flex-col gap-6">
       {ownCount > 0 && <div>{addButton}</div>}
       {deleted && (
-        <p role="status" className="flex items-center gap-2 text-sm text-slate-700">
-          Deleted
-          <button type="button" onClick={undo} className="inline-flex min-h-11 items-center rounded-md px-3 font-medium text-blue-700 hover:bg-blue-50">Undo</button>
+        <p role="status" className="fixed inset-x-4 bottom-4 z-50 mx-auto flex max-w-md items-center justify-between gap-2 rounded-lg bg-slate-900 py-1 pl-4 pr-1 text-sm text-white shadow-lg">
+          <span className="min-w-0 truncate">Deleted ‘{deleted.asset.name || "Photo"}’</span>
+          <button type="button" onClick={undo} className="inline-flex min-h-11 shrink-0 items-center rounded-md px-3 font-medium text-blue-200 hover:bg-white/10">Undo</button>
         </p>
       )}
       {deleteError && <p role="alert" className="text-sm text-red-700">{deleteError}</p>}

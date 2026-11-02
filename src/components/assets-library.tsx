@@ -16,7 +16,7 @@ const ASSET_TYPE_LABEL: Record<string, string> = {
   past_ad: "Past ad",
 };
 
-async function downloadImage(url: string, filename: string) {
+export async function downloadImage(url: string, filename: string) {
   const res = await fetch(url, { signal: AbortSignal.timeout(30_000) });
   if (!res.ok) throw new Error("Image download failed.");
   const blob = await res.blob();
