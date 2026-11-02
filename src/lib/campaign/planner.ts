@@ -4,6 +4,7 @@ import { z } from "zod";
 import { plannerPlanSchema } from "@/lib/campaign/planner-draft";
 import type { BrandContext } from "@/lib/templates/ads";
 import { formatPromptContext } from "@/lib/preferences/context";
+import type { LeadDestination } from "@/lib/types/campaign";
 
 export interface CampaignPlan {
   name: string;
@@ -18,7 +19,7 @@ export interface CampaignPlan {
   special_ad_category: "none" | "housing" | "employment" | "financial_products_services" | "issues_elections_politics" | "unknown";
   locations: string[];
   excluded_locations: string[];
-  destination: "instant_form" | "whatsapp" | "call";
+  destination: Exclude<LeadDestination, "website">;
   rationale: string;
 }
 
@@ -54,7 +55,7 @@ export interface PlannerAnswer {
 }
 
 export interface PlannerInput {
-  destination?: "instant_form" | "whatsapp";
+  destination?: Exclude<LeadDestination, "call" | "website">;
   brand: BrandContext;
   instructions?: string;
   preferences?: string;
