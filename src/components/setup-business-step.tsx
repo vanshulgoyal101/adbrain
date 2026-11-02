@@ -32,7 +32,7 @@ const HAS_HELPER: Record<SetupTextField, boolean> = { name: false, vertical: fal
  * #1269 (#1251 WS1 step 1): five required fields and an optional selling point (#1966), saved as they type.
  * Everything else on the Brand stays on the full page ("More about your business").
  */
-export function SetupBusinessStep({ business, chooseLanguage = false, returning = false, words }: {
+export function SetupBusinessStep({ business, chooseLanguage = false, returning = false, offerWebsite = false, words }: {
   business: Business | null;
   /** #1934 (CPO #1924): a new campaign after one went live; only the new offer is asked, the rest is folded. */
   returning?: boolean;
@@ -40,6 +40,8 @@ export function SetupBusinessStep({ business, chooseLanguage = false, returning 
   words?: SetupWords;
   /** #1641: no app language chosen on this browser yet, so offer English / हिंदी above the step. */
   chooseLanguage?: boolean;
+  /** TODO(#2595): Website is internal-only until website launch is live, like the composer's switch; a business already on website still sees it. */
+  offerWebsite?: boolean;
 }) {
   const t = setupTranslator(words);
   // #1934: a returning owner types this campaign's offer fresh; the last one is the placeholder.
@@ -227,11 +229,11 @@ export function SetupBusinessStep({ business, chooseLanguage = false, returning 
         )}
         {errors.website && <p id="setup-website-error" className="text-sm font-medium text-red-800">{t("business.errors.website")}</p>}
         {autofillNote && <Alert variant={autofillNote.ok ? "info" : "error"}>{autofillNote.text}</Alert>}
-        <DestinationPicker value={fields.destination ?? "whatsapp"} t={t} onChange={(destination) => {
+        {(offerWebsite || fields.destination === "website") && <DestinationPicker value={fields.destination ?? "whatsapp"} t={t} onChange={(destination) => {
           change({ ...fieldsRef.current, destination });
           // The other destination's rules no longer apply.
           setErrors((current) => ({ ...current, website: undefined, phone: undefined }));
-        }} />
+        }} />}
       </div>}
 
       <div className="mt-6 flex flex-col gap-5">

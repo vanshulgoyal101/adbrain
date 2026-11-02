@@ -203,9 +203,9 @@ describe("core: <SetupBusinessStep> (#1269)", () => {
     mocks.saveSetupBusiness.mockImplementation(async (id: string | null) => ({ ok: true, id: id ?? "b-new", usable: true }));
   });
 
-  async function step(initial: Business | null = business, chooseLanguage = false) {
+  async function step(initial: Business | null = business, chooseLanguage = false, offerWebsite = false) {
     const { SetupBusinessStep } = await import("@/components/setup-business-step");
-    render(<SetupBusinessStep business={initial} chooseLanguage={chooseLanguage} />);
+    render(<SetupBusinessStep business={initial} chooseLanguage={chooseLanguage} offerWebsite={offerWebsite} />);
   }
   const type = (label: string, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
   const makeMyAds = () => within(screen.getByRole("navigation", { name: "Setup steps" })).getByRole("button", { name: "Make my ads" });
@@ -279,8 +279,14 @@ describe("core: <SetupBusinessStep> (#1269)", () => {
     expect(mocks.saveAdLanguage).toHaveBeenCalledWith("b1", "pa");
   });
 
-  it("#2646: WhatsApp is preselected; Website makes the link required and the phone optional", async () => {
+  it("#2646: until website launch is live, only internal accounts see the destination choice", async () => {
     await step({ ...business, vertical: complete.vertical, locations: ["Jaipur"], offers: [complete.offer] });
+    expect(screen.queryByRole("group", { name: "Where should customers go?" })).toBeNull();
+    expect(screen.getByLabelText("WhatsApp number")).toBeInTheDocument();
+  });
+
+  it("#2646: WhatsApp is preselected; Website makes the link required and the phone optional", async () => {
+    await step({ ...business, vertical: complete.vertical, locations: ["Jaipur"], offers: [complete.offer] }, false, true);
     const picker = screen.getByRole("group", { name: "Where should customers go?" });
     expect(within(picker).getByRole("radio", { name: "WhatsApp chat" })).toBeChecked();
     expect(screen.getByLabelText("WhatsApp number")).toBeInTheDocument();
