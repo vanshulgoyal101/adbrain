@@ -284,6 +284,7 @@ describe("startup reads the newest comment page (#2576)", () => {
   it("keeps reading when a comment lands after the count, and steps back when comments were deleted", async () => {
     const grown = fakeApi(thread(101));
     expect((await lastWordOn(grown.api, repo, { number: 1, comments: 100 }))?.url).toBe("c100");
+    expect((await lastWordOn(fakeApi(thread(120)).api, repo, { number: 1 }))?.url).toBe("c119");
     const shrunk = fakeApi(thread(99));
     expect((await lastWordOn(shrunk.api, repo, { number: 1, comments: 182 }))?.url).toBe("c98");
   });

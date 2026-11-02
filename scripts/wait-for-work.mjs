@@ -489,7 +489,8 @@ export async function lastWordOn(api, repo, item) {
     while (rows.length === PAGE) { rows = await api(`${path}?per_page=${PAGE}&page=${++page}`) ?? []; all = all.concat(rows); }
     return all;
   };
-  const comments = item.comments ? await pages(`repos/${repo}/issues/${item.number}/comments`, Math.ceil(item.comments / PAGE)) : [];
+  // No count (not from the issue list) means unknown, not none: start at page 1.
+  const comments = item.comments === 0 ? [] : await pages(`repos/${repo}/issues/${item.number}/comments`, Math.max(1, Math.ceil((item.comments ?? 1) / PAGE)));
   const reviews = item.pull_request ? await pages(`repos/${repo}/pulls/${item.number}/reviews`, 1) : [];
   return latestWord(comments, reviews);
 }
