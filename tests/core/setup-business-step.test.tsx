@@ -64,7 +64,17 @@ describe("core: setup fields (#1269)", () => {
 
   it("reads a saved Brand back; the column default isn't shown as what you sell", () => {
     expect(setupFieldsFrom({ name: "A", vertical: "local business", locations: ["Jaipur", "Ajmer"], offers: ["Free visit", "10% off"], phone: "9876543210" }))
-      .toEqual({ name: "A", vertical: "", locations: "Jaipur\nAjmer", offer: "Free visit", phone: "9876543210", usp: "" });
+      .toEqual({ name: "A", vertical: "", locations: "Jaipur\nAjmer", offer: "Free visit", phone: "9876543210", usp: "", destination: "whatsapp", website: "" });
+    expect(setupFieldsFrom({ name: "A", website: "https://a.in/offer", default_destination: "website" })).toMatchObject({ destination: "website", website: "https://a.in/offer" });
+  });
+
+  it("#2646: a website business needs its link, not a phone; a typed phone is still checked", () => {
+    const site = { ...complete, phone: "", destination: "website" as const, website: "sunpeak.in/offer" };
+    expect(setupFieldErrors(site)).toEqual({});
+    expect(setupFieldErrors({ ...site, website: "" })).toEqual({ website: "Add the website or page people should go to." });
+    expect(setupFieldErrors({ ...site, website: "not a link" })).toHaveProperty("website");
+    expect(setupFieldErrors({ ...site, phone: "12345" })).toEqual({ phone: "Enter a 10-digit mobile number." });
+    expect(setupFieldErrors({ ...complete, phone: "", destination: "whatsapp", website: "sunpeak.in" })).toHaveProperty("phone");
   });
 });
 
@@ -111,6 +121,25 @@ describe("core: saveSetupBusiness writes only the five fields (#1269)", () => {
     mocks.written.mockResolvedValue({ data: { id: "b2", name: "SunPeak Solar", vertical: "local business", phone: null, locations: [], offers: [] }, error: null });
     await expect(saveSetupBusiness(null, { name: "SunPeak Solar", vertical: "", locations: "", offer: "", phone: "" })).resolves.toEqual({ ok: true, id: "b2", usable: false });
     expect(mocks.insert).toHaveBeenCalledWith(expect.objectContaining({ owner_id: "u1", name: "SunPeak Solar", locations: [], offers: [] }));
+  });
+
+  it("#2646: saves the destination and the full website link; a half-typed link waits", async () => {
+    mocks.written.mockResolvedValue({ data: { id: "b1", name: complete.name, vertical: complete.vertical, phone: null, locations: ["Jaipur", "Ajmer"],
+      offers: [complete.offer], website: "https://sunpeak.in/offer", default_destination: "website" }, error: null });
+    mocks.current.mockResolvedValue({ data: { offers: [] }, error: null });
+    const { saveSetupBusiness } = await import("@/app/(app)/brand/actions");
+    const site = { ...complete, phone: "", destination: "website" as const, website: " sunpeak.in/offer " };
+    await expect(saveSetupBusiness("b1", site)).resolves.toEqual({ ok: true, id: "b1", usable: true });
+    expect(mocks.update.mock.calls.at(-1)![0]).toMatchObject({ phone: null, default_destination: "website", website: "https://sunpeak.in/offer" });
+    await saveSetupBusiness("b1", { ...site, website: "sunpeak" });
+    expect(mocks.update.mock.calls.at(-1)![0]).not.toHaveProperty("website");
+    await saveSetupBusiness("b1", { ...site, website: "" });
+    expect(mocks.update.mock.calls.at(-1)![0]).toHaveProperty("website", null);
+    await saveSetupBusiness(null, site);
+    expect(mocks.insert.mock.calls.at(-1)![0]).toMatchObject({ default_destination: "website", website: "https://sunpeak.in/offer" });
+    // An unknown value is ignored rather than written.
+    await saveSetupBusiness("b1", { ...complete, destination: "call" as never });
+    expect(mocks.update.mock.calls.at(-1)![0]).not.toHaveProperty("default_destination");
   });
 
   it("refuses when signed out", async () => {
@@ -250,6 +279,34 @@ describe("core: <SetupBusinessStep> (#1269)", () => {
     expect(mocks.saveAdLanguage).toHaveBeenCalledWith("b1", "pa");
   });
 
+  it("#2646: WhatsApp is preselected; Website makes the link required and the phone optional", async () => {
+    await step({ ...business, vertical: complete.vertical, locations: ["Jaipur"], offers: [complete.offer] });
+    const picker = screen.getByRole("group", { name: "Where should customers go?" });
+    expect(within(picker).getByRole("radio", { name: "WhatsApp chat" })).toBeChecked();
+    expect(screen.getByLabelText("WhatsApp number")).toBeInTheDocument();
+    fireEvent.click(within(picker).getByRole("radio", { name: "Your website" }));
+    expect(screen.getByLabelText("Phone number (optional)")).toHaveValue("");
+    expect(screen.getByText(/Write All India/)).toBeInTheDocument();
+    await act(async () => fireEvent.click(makeMyAds()));
+    expect(mocks.push).not.toHaveBeenCalled();
+    const link = screen.getByLabelText("Your website or page");
+    expect(link).toHaveAttribute("aria-invalid", "true");
+    expect(link).toHaveFocus();
+    type("Your website or page", "sunpeak.in/offer");
+    await act(async () => fireEvent.click(makeMyAds()));
+    await waitFor(() => expect(mocks.push).toHaveBeenCalledWith("/create"));
+    expect(mocks.saveSetupBusiness.mock.calls.at(-1)![1]).toMatchObject({ destination: "website", website: "sunpeak.in/offer", phone: "" });
+  });
+
+  it("#2646: a saved website business opens on Website, in Hindi too", async () => {
+    const hi = await import("../../messages/hi.json");
+    const { SetupBusinessStep } = await import("@/components/setup-business-step");
+    render(<SetupBusinessStep business={{ ...business, website: "https://sunpeak.in", default_destination: "website" } as Business} words={{ locale: "hi", messages: hi.setup }} />);
+    expect(screen.getByRole("radio", { name: "आपकी वेबसाइट" })).toBeChecked();
+    expect(screen.getByLabelText("आपकी वेबसाइट या पेज")).toHaveValue("https://sunpeak.in");
+    expect(screen.getByLabelText("फ़ोन नंबर (ज़रूरी नहीं)")).toBeInTheDocument();
+  });
+
   it("is step 1 of 3 with the five fields, no Back, and the free note", async () => {
     await step();
     expect(screen.getByRole("group", { name: "Step 1 of 3: Your business" })).toBeInTheDocument();
@@ -313,7 +370,7 @@ describe("core: <SetupBusinessStep> (#1269)", () => {
     await waitFor(() => expect(mocks.push).toHaveBeenCalledWith("/create"));
     const [id, saved] = mocks.saveSetupBusiness.mock.calls.at(-1)!;
     expect(id).toBe("b1");
-    expect(saved).toEqual({ ...complete, usp: "" });
+    expect(saved).toEqual({ ...complete, usp: "", destination: "whatsapp", website: "" });
     expect(brandUsable({ ...saved, locations: setupLocations(saved.locations), offers: [saved.offer] })).toBe(true);
   });
 

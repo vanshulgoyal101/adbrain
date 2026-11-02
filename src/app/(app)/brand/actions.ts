@@ -69,8 +69,8 @@ export async function saveBusiness(
     payload.website = normalizeWebsite(payload.website);
 
     const query = id
-      ? supabase.from("businesses").update(payload).eq("id", id).select("id").single()
-      : supabase.from("businesses").insert(payload).select("id").single();
+      ? supabase.from("businesses").update(payload).eq("id", id).select("id, default_destination").single()
+      : supabase.from("businesses").insert(payload).select("id, default_destination").single();
 
     const { data: saved, error } = await query;
     if (error) return { ok: false, error: error.message };
@@ -81,7 +81,8 @@ export async function saveBusiness(
       action: id ? "business.update" : "business.create",
       entityType: "business",
       entityId: saved.id,
-      eventAttributes: { brandUsable: brandUsable(payload) },
+      // #2646: this form doesn't ask where customers go, so the saved choice decides.
+      eventAttributes: { brandUsable: brandUsable({ ...payload, default_destination: saved.default_destination }) },
     });
 
     revalidatePath("/brand");
@@ -93,10 +94,14 @@ export async function saveBusiness(
 
 export type SetupSaveResult = { ok: true; id: string; usable: boolean } | { ok: false; error: string };
 
+/** Columns `brandUsable` reads back after a save. */
+const USABLE_COLUMNS = "id, name, vertical, phone, locations, offers, website, default_destination";
+
 /**
  * #1269 (WS1 step 1): autosave of the five setup fields and optional selling point (#1966).
- * A blank name never overwrites a saved one (a new business needs one first); an unfinished phone isn't
- * written; the first offer and optional USP are replaced and any others kept.
+ * A blank name never overwrites a saved one (a new business needs one first); an unfinished phone or website isn't
+ * written; the first offer and optional USP are replaced and any others kept. #2646: the destination and website
+ * are written only when the step sends them, so an older open tab leaves them alone.
  */
 export async function saveSetupBusiness(id: string | null, input: SetupBusinessFields): Promise<SetupSaveResult> {
   return observeAction("server.saveSetupBusiness", async () => {
@@ -109,7 +114,12 @@ export async function saveSetupBusiness(id: string | null, input: SetupBusinessF
     if (uspError) return { ok: false, error: uspError };
     const name = fields.name.trim();
     const phone = setupPhone(fields.phone) ? fields.phone.trim() : undefined;
-    const columns = "id, name, vertical, phone, locations, offers";
+    const destination = input?.destination === "website" || input?.destination === "whatsapp" ? input.destination : undefined;
+    const typedWebsite = typeof input?.website === "string" ? input.website.slice(0, SETUP_FIELD_LIMITS.website).trim() : undefined;
+    // Blank clears it, a valid link is stored in full (#470), a half-typed one waits.
+    const website = typedWebsite === undefined ? undefined : typedWebsite ? normalizeWebsite(typedWebsite) ?? undefined : null;
+    const reach = { ...(destination ? { default_destination: destination } : {}), ...(website !== undefined ? { website } : {}) };
+    const columns = USABLE_COLUMNS;
 
     if (!id) {
       if (!name) return { ok: false, error: "Add your business name." };
@@ -117,7 +127,7 @@ export async function saveSetupBusiness(id: string | null, input: SetupBusinessF
       const { data, error } = await supabase.from("businesses").insert({
         owner_id: user.id, name, vertical: fields.vertical.trim() || undefined, phone: phone ?? null,
         locations: setupLocations(fields.locations), offers: offer ? [offer] : [],
-        ...(usp ? { usps: [usp] } : {}),
+        ...(usp ? { usps: [usp] } : {}), ...reach,
       }).select(columns).single();
       if (error || !data) {
         // #1657: the owner sees plain words; the database's own message goes to the logs only.
@@ -144,6 +154,7 @@ export async function saveSetupBusiness(id: string | null, input: SetupBusinessF
       locations: setupLocations(fields.locations),
       ...(offers ? { offers } : {}),
       ...(usps ? { usps } : {}),
+      ...reach,
     }).eq("id", id).select(columns).single();
     if (error || !data) {
       console.error("[business.update]", error?.message ?? "no row");
@@ -152,7 +163,8 @@ export async function saveSetupBusiness(id: string | null, input: SetupBusinessF
     return finish(data, "business.update");
   });
 
-  async function finish(row: { id: string; name: string; vertical: string | null; phone: string | null; locations: string[] | null; offers: string[] | null },
+  async function finish(row: { id: string; name: string; vertical: string | null; phone: string | null; locations: string[] | null; offers: string[] | null;
+    website?: string | null; default_destination?: string | null },
     action: "business.create" | "business.update"): Promise<SetupSaveResult> {
     const usable = brandUsable({ ...row, vertical: setupFieldsFrom(row).vertical });
     await logEvent({ businessId: row.id, action, entityType: "business", entityId: row.id, eventAttributes: { brandUsable: usable } });
@@ -185,7 +197,7 @@ export async function saveBrandFact(id: string, fact: BrandFact, input: string):
       }
     }
     const { data, error } = await supabase.from("businesses").update(update).eq("id", id)
-      .select("id, name, vertical, phone, locations, offers").single();
+      .select(USABLE_COLUMNS).single();
     if (error || !data) {
       console.error("[business.fact]", error?.message ?? "no row");
       return { ok: false, error: "Your business details weren't saved. Check your connection and try again." };

@@ -42,6 +42,11 @@ describe("core: the pick rule (#1270)", () => {
   it("the goal comes from the five step-1 facts", () => {
     expect(setupGoal(business)).toBe("Get WhatsApp enquiries for Rooftop solar in Jaipur, leading with: Free site survey");
   });
+
+  it("#2646: a website business aims at visits; an absent choice stays WhatsApp", () => {
+    expect(setupGoal({ ...business, default_destination: "website" })).toBe("Get website visits for Rooftop solar in Jaipur, leading with: Free site survey");
+    expect(setupGoal({ ...business, default_destination: null })).toBe(setupGoal(business));
+  });
 });
 
 describe("core: the making story (#1270)", () => {
