@@ -3,7 +3,7 @@ name: database-invariants
 description: "Use this skill when correctness depends on SQL triggers, RPCs, caps, RLS policies, constraints, or SECURITY DEFINER functions."
 ---
 
-<!-- Generated from vanshulgoyal101/skills@77e6db7 skills/database-invariants.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
+<!-- Generated from vanshulgoyal101/skills@5d0975e skills/database-invariants.md; edit upstream, then re-run scripts/sync-own-skills.mjs. -->
 
 # Database Invariants
 
