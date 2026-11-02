@@ -767,7 +767,11 @@
       "exportReport": "Export report",
       "syncing": "Syncing…",
       "sync": "Sync from Meta",
-      "synced": "Synced {age}"
+      "synced": "Synced {age}",
+      "pageTitle": "Campaigns",
+      "pageDescription": "Launch your approved ads on Meta, pause them and see what they bring in.",
+      "reconnectBy": "Reconnect Facebook by {date} to keep managing your ads.",
+      "savedDrafts": "Saved drafts"
     },
     "filters": {
       "search": "Search campaigns",
