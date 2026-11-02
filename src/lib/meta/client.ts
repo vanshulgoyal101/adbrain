@@ -21,6 +21,8 @@ import {
 import { buildGeoLocations, clampRadiusKm, geoLabel, hasGeo, pickBestGeoMatch } from "./geo";
 import { destinationCTA, destinationPlan, hasPlacementCreative, isWebsiteLink, leavesAudienceNetworkOut, websiteUrlTags, type AdDestination } from "./destinations";
 export { destinationCTA, destinationPlan, websiteUrlTags, type AdDestination, type DestinationPlan } from "./destinations";
+import { CREATIVE_OPT_OUT_FORM } from "./creative-opt-out";
+export { CREATIVE_FEATURES_OPT_OUT, CREATIVE_OPT_OUT_FORM } from "./creative-opt-out";
 export { buildGeoLocations, geoItemsToTargeting, hasGeo, pickBestGeoMatch } from "./geo";
 export type { AdResult, CampaignInsights, MetaCampaignState } from "./insights";
 export type { CampaignDeliverySnapshot } from "./types";
@@ -583,7 +585,7 @@ export function editedCreativeForm(creative: StoredCreative, edit: AdCopyEdit): 
       if (!feed.additional_data?.page_welcome_message) throw new MetaError("This ad has no WhatsApp message to change.");
       feed.additional_data = { ...feed.additional_data, page_welcome_message: welcome };
     }
-    return { name, object_story_spec: JSON.stringify(creative.object_story_spec ?? {}), asset_feed_spec: JSON.stringify(feed), ...urlTags };
+    return { name, object_story_spec: JSON.stringify(creative.object_story_spec ?? {}), asset_feed_spec: JSON.stringify(feed), ...urlTags, ...CREATIVE_OPT_OUT_FORM };
   }
   const story = structuredClone(creative.object_story_spec ?? {}) as { link_data?: Record<string, unknown> };
   if (!story.link_data) throw new MetaError("This ad's format can't be edited in AdBrain yet.");
@@ -594,7 +596,7 @@ export function editedCreativeForm(creative: StoredCreative, edit: AdCopyEdit): 
     if (!story.link_data.page_welcome_message) throw new MetaError("This ad has no WhatsApp message to change.");
     story.link_data.page_welcome_message = welcome;
   }
-  return { name, object_story_spec: JSON.stringify(story), ...urlTags };
+  return { name, object_story_spec: JSON.stringify(story), ...urlTags, ...CREATIVE_OPT_OUT_FORM };
 }
 
 /** Meta rejects a hard minimum age above this with Advantage+ audience on (subcode 1870188). */
@@ -1468,6 +1470,7 @@ export class MetaClient {
             },
           }),
           ...(destination === "website" ? { url_tags: websiteUrlTags(campaign.id) } : {}),
+          ...CREATIVE_OPT_OUT_FORM,
         };
         const postCreative = async (form: Record<string, string>) => {
           const created = await this.graph<{ id: string }>(`${acct}/adcreatives`, { method: "POST", form });
@@ -1480,6 +1483,7 @@ export class MetaClient {
             name: singleImageForm.name,
             object_story_spec: JSON.stringify(placement.object_story_spec),
             asset_feed_spec: JSON.stringify(placement.asset_feed_spec),
+            ...CREATIVE_OPT_OUT_FORM,
           }).catch((error: unknown) => {
             params.onStoryFallback?.("creative", metaErrorCode(error));
             return postCreative(singleImageForm);

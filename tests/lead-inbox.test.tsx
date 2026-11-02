@@ -4,6 +4,8 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LeadInbox } from "@/components/lead-inbox";
 import type { Lead } from "@/lib/types";
+import { NoticesProvider } from "@/i18n/notices";
+import hi from "../messages/hi.json";
 
 const lead = (over: Partial<Lead> = {}): Lead =>
   ({
@@ -356,6 +358,20 @@ describe("<LeadInbox> syncing", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       /check your connection/i,
     );
+  });
+
+  // #1438: the check's fallbacks follow the owner's language.
+  it("says a dropped connection and new enquiries in Hindi", async () => {
+    const hiWords = { locale: "hi" as const, messages: hi.notices };
+    global.fetch = vi.fn().mockRejectedValue(new Error("offline")) as unknown as typeof fetch;
+    const { unmount } = render(<NoticesProvider words={hiWords}><LeadInbox businessName="Solaride" initialLeads={[]} metaReady /></NoticesProvider>);
+    fireEvent.click(screen.getByRole("button", { name: "Check now" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(hi.notices.enquiries.checkOffline);
+    unmount();
+    setFetch({ ok: true, json: async () => ({ leads: [], imported: 2, sync: { id: "sync-1", state: "complete", hasMore: false } }) });
+    render(<NoticesProvider words={hiWords}><LeadInbox businessName="Solaride" initialLeads={[]} metaReady /></NoticesProvider>);
+    fireEvent.click(screen.getByRole("button", { name: "Check now" }));
+    expect(await screen.findByText("Meta से 2 नई पूछताछ आई।")).toBeInTheDocument();
   });
 
   it("disables the button while a sync is in flight", async () => {

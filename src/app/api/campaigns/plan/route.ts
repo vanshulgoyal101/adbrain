@@ -11,6 +11,7 @@ import { ConnectionAccessError, requireOwnedBusiness, withMetaConnection } from 
 import { friendlyMetaError, type LeadForm } from "@/lib/meta/client";
 import { rateLimitResponse } from "@/lib/security/rate-limit";
 import { createClient } from "@/lib/supabase/server";
+import { websiteOpenFor } from "@/lib/campaign/website-gate";
 import type { Json } from "@/lib/types";
 import { listEditableDrafts } from "@/lib/campaign/draft-repository";
 import { maskedWhatsAppNumberPattern } from "@/lib/meta/whatsapp-status-shared";
@@ -57,7 +58,7 @@ async function handlePOST(req: Request) {
   const parsed = z.object({
     goal: z.string().trim().min(1).max(2_000),
     audienceDraft: draftInputSchema.optional(),
-    destination: z.enum(["instant_form", "whatsapp"]).optional(),
+    destination: z.enum(["instant_form", "whatsapp", "website"]).optional(),
     whatsappNumber: z.string().regex(maskedWhatsAppNumberPattern).optional(),
     answers: z.union([z.string().max(12_000), z.array(plannerAnswerSchema).max(30)]).optional(),
   }).safeParse(await req.json().catch(() => null));
@@ -81,6 +82,9 @@ async function handlePOST(req: Request) {
   const destination = audienceDraft?.destination ?? parsed.data.destination ?? "instant_form";
   if (audienceDraft && audienceDraft.businessId !== business.id) {
     return NextResponse.json({ error: await ownerError("businessNotAllowed") }, { status: 403 });
+  }
+  if (destination === "website" && !websiteOpenFor(user)) {
+    return NextResponse.json({ error: await ownerError("websiteClosed") }, { status: 403 });
   }
 
   const approved = await getApprovedCreatives(business.id);
@@ -243,7 +247,7 @@ async function handlePOST(req: Request) {
       creative_ids: audienceDraft.creativeIds,
       lead_form_id: null,
       destination,
-    } : { ...result.plan, destination, ...(destination === "whatsapp" ? { lead_form_id: null } : {}) },
+    } : { ...result.plan, destination, ...(destination === "instant_form" ? {} : { lead_form_id: null }) },
     approvedCreativeIds: approved.map((creative) => creative.id),
     leadFormIds: leadForms.map((form) => form.id),
   });

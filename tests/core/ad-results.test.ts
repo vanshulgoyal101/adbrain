@@ -169,7 +169,7 @@ describe("core: stored per-ad results round-trip (#783)", () => {
     const database = { from: () => ({ upsert: async (rows: StoredAdResult[]) => { stored = rows; return { error: null }; } }) };
     expect(await saveAdResults(database as never, { businessId: "b", campaignId: "c", ads })).toBe(true);
     expect(stored).toHaveLength(6);
-    const view = adResultViews(stored, true);
+    const view = adResultViews(stored, "whatsapp");
     expect(view.ads.reduce((sum, ad) => sum + ad.spend, 0)).toBeCloseTo(total.spend, 2);
     expect(view.ads.reduce((sum, ad) => sum + ad.results, 0)).toBe(total.conversations);
     expect(view.ads.some(ad => ad.best)).toBe(false);

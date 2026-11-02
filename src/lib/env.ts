@@ -97,6 +97,8 @@ const schema = z.object({
   // token provisions child businesses. Off until provisioning ships; the token is Sensitive in Vercel.
   // No default parent (#2358): an unset id is NOT_CONFIGURED, never someone else's business.
   MANAGED_ACCOUNTS_ENABLED: z.string().optional().default("false").transform((v) => v === "true" || v === "1"),
+  // #1209: owners upload their own photos into the private `media` bucket. Off until the migration is applied.
+  MEDIA_UPLOADS_ENABLED: z.string().optional().default("false").transform((v) => v === "true" || v === "1"),
   META_PARENT_BUSINESS_ID: z.preprocess((v) => (v === "" ? undefined : v), z.string().regex(/^\d+$/).optional()),
   META_PARENT_SYSTEM_TOKEN: z.string().optional().default(""),
 
