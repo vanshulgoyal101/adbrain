@@ -154,6 +154,21 @@ describe("signUpload (#1209)", () => {
     await expect(signed(await photo(1080, 1350))).rejects.toMatchObject({ status: 429, code: "MEDIA_QUOTA" });
     expect(db.tables.media_assets).toEqual([]);
   });
+
+  // #2644 attack: the limit is checked on insert, so last month's unfinished rows can't be finished uncounted this month.
+  it("retires an unfinished upload from an earlier month and signs a new row the limit counts", async () => {
+    const bytes = await photo(1080, 1350);
+    const first = await signed(bytes);
+    if (first.duplicate) throw new Error("unexpected duplicate");
+    const stale = db.tables.media_assets[0];
+    stale.created_at = new Date(Date.parse(monthStartIst()) - 60_000).toISOString();
+    const again = await signed(bytes);
+    if (again.duplicate) throw new Error("unexpected duplicate");
+    expect(again.id).not.toBe(first.id);
+    expect(again.path).not.toBe(first.path);
+    expect(stale.deleted_at).toBeTruthy();
+    expect(db.tables.media_assets).toHaveLength(2);
+  });
 });
 
 describe("pending rows (Reviewer, #2644)", () => {
