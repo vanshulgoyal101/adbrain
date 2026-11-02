@@ -1,6 +1,7 @@
 import type { DraftInput, TargetingInputDTO } from "@/lib/campaign/connect-contracts";
 import type { WhatsAppLanguage } from "@/lib/campaign/whatsapp-greeting";
 import type { WhatsAppTemplate } from "@/lib/campaign/whatsapp-template";
+import type { LeadDestination } from "@/lib/types/campaign";
 
 /** The WhatsApp button number the composer uses: the owner's pick when Meta still offers it, else Meta's first ready number. */
 export function pickWhatsAppNumber(options: readonly { masked: string }[], wanted: string): string {
@@ -15,7 +16,7 @@ export function buildManualDraftInput(fields: {
   mode: DraftInput["mode"];
   creativeIds: string[];
   dailyBudgetRupees: number;
-  destination: "instant_form" | "whatsapp";
+  destination: Exclude<LeadDestination, "call" | "website">;
   leadFormId: string;
   whatsappNumber: string;
   whatsappLanguage: WhatsAppLanguage;
