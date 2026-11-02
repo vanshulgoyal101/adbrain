@@ -28,6 +28,8 @@ repository secret and Vault together.
 only thing that opens issues. GitHub's 15-minute schedule actually runs every few hours, so the
 team supervisor's 10-minute tick dispatches it when its latest run started over 9 minutes ago (so every tick) and
 none is queued or running (#692; the OFF switch stops only role runs, not this, #1525).
+`--install` also loads `in.adbrain.keep-awake` (`caffeinate -s`): with `pmset sleep 1` the Mac slept
+between ticks and this dispatch lapsed for ~2 h at a time (#766). It holds off sleep on the charger only.
 It first calls `scheduler-health` and opens one `Scheduled job overdue: <job>` `core`
 bug for DevOps per job with no successful run in twice its interval. It then calls
 enforce-spend, `sync-leads`, `payment-health` and `refresh-results` itself. It needs
@@ -94,7 +96,7 @@ dispatched (team supervisor, pushes) or run by pg_cron.
 | pg_cron `adbrain-refresh-results` | `10,25,40,55 * * * *` | `/api/cron/refresh-results` |
 | pg_cron `adbrain-cron-history-cleanup` | `40 3 * * *` | Deletes `cron.job_run_details` older than 7 days |
 | Workflow `scheduled-jobs.yml` | `7,22,37,52 * * * *` | The backup scheduler and alerts above |
-| Workflow `create-smoke.yml` | `17 */4 * * *`, `47 8 * * *`, `37 3 * * *` | Picture smoke every 4 hours (#2405: saves Cloudflare's ~57 free pictures a day for customers), a daily `--prepare` smoke and a daily 3-ad `--create` smoke, all $0 (#2145, #2230) |
+| Workflow `create-smoke.yml` | `17 */4 * * *`, `47 8 * * *`, `37 3 * * *` | Picture smoke every 4 hours (#2405: saves Cloudflare's ~57 free pictures a day for customers), a daily `--prepare` smoke and a daily 3-ad `--create` smoke, all $0 (#2145, #2230). A dropped 03:37Z cron is made up by that day's next picture run (#2545) |
 | Workflow `production-guard.yml` | `30 3 * * *` | Daily read-only core smoke ([Production guard](releasing-recovery.md#production-guard)) |
 | Workflow `production-drift.yml` | `*/15 * * * *` | Fails when main HEAD isn't live 15 minutes after it landed (also on every main push) |
 | Workflow `deploy-train.yml` | `11,41 * * * *` | Promotes a green `next` to `main` (#461; also on every `next` push) |
