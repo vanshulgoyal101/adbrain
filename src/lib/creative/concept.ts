@@ -14,6 +14,7 @@ import { policyFindings } from "@/lib/creative/policy-rules";
 import { emptyScene } from "@/lib/creative/visual-rules";
 import { plainDigits, rateDropIssues, spelledAmountIndex, spelledCurrency, spelledRupeeAmounts } from "./currency";
 import { contactsInCopy } from "./contact-in-copy";
+import { repeatIssues } from "./sibling-repeats";
 
 export const CONCEPT_VERSION = "creative-concept-v3";
 // Primary text Meta shows on mobile before "See more" (#194).
@@ -514,8 +515,6 @@ export function validateConcept(
     ...data,
     sourceQuotes: verbatimQuotes.length ? verbatimQuotes : data.sourceQuotes,
   };
-  const normalizeCopy = (text: string) => text.toLocaleLowerCase().replace(/[^\p{L}\p{M}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
-  const opening = (text: string) => normalizeCopy(text).split(" ").slice(0, 8).join(" ");
   const allowedCaps = capitalWords(sources.join(" "));
   const issues = scanAdCopy(
     [concept.headline, concept.primary_text, concept.supportingText]
@@ -527,15 +526,7 @@ export function validateConcept(
       allowedCaps,
     },
   ).map((finding) => `${finding.rule}: ${finding.detail}`);
-  for (const previous of input.recentCopy ?? []) {
-    if (normalizeCopy(concept.headline) === normalizeCopy(previous.headline)) {
-      issues.push(`repeated-headline: "${previous.headline.slice(0, 60)}" is a recent ad's headline; write a different one`);
-    }
-    if (opening(concept.primary_text) === opening(previous.primary_text)) {
-      // #1035: quoting the opening lets the one repair avoid it; "write a different hook" alone repeated it (Oct 27).
-      issues.push(`repeated-opening: a recent ad opens "${previous.primary_text.split(/\s+/).slice(0, 8).join(" ")}"; start primary_text with different words`);
-    }
-  }
+  issues.push(...repeatIssues(concept, input.recentCopy ?? []));
   issues.push(...scanAdCopy(concept.description, {
     bannedClaims: bannedClaimsForVertical(input.brand.vertical),
     allowedCaps,
