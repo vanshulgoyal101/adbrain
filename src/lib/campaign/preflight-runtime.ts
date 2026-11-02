@@ -6,6 +6,7 @@ import { getEnv } from "@/lib/env";
 import { AD_ANGLES, getAngleByName } from "@/lib/templates/ads";
 import type { Json } from "@/lib/types";
 import { getCostPerResult } from "@/lib/campaign/result-evidence-store";
+import { checkWebsiteReach } from "@/lib/campaign/website-reach";
 import { getConnectionStatus, withMetaConnection, type AuthorizedBusiness } from "@/lib/meta/connection-access";
 import { draftRecordFromRow } from "@/lib/campaign/draft-store";
 import { whatsappNumberForBusiness } from "@/lib/meta/whatsapp-bindings";
@@ -91,6 +92,7 @@ export function buildCampaignPreflightLoaders(
       const problem = edited ?? whatsappOpeningProblem(message.opening, business)?.error ?? null;
       return { message, problem };
     },
+    checkWebsite: (url) => checkWebsiteReach(url),
     findWebsite: async (actor) => {
       const { data } = await supabase.from("businesses").select("website").eq("id", actor.businessId).maybeSingle();
       return data?.website ?? null;
