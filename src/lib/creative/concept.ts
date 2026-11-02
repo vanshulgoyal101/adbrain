@@ -15,6 +15,7 @@ import { emptyScene } from "@/lib/creative/visual-rules";
 import { plainDigits, rateDropIssues, spelledAmountIndex, spelledCurrency, spelledRupeeAmounts } from "./currency";
 import { contactsInCopy } from "./contact-in-copy";
 import { repeatIssues } from "./sibling-repeats";
+import { fitHeadline } from "./fit-headline";
 
 export const CONCEPT_VERSION = "creative-concept-v3";
 // Primary text Meta shows on mobile before "See more" (#194).
@@ -490,7 +491,11 @@ export function validateConcept(
       parent[path.at(-1)!] = parent[path.at(-1)!].trim().slice(0, Number(maximum));
     }
     const checked = validateConcept(cut, input, uncut);
-    if (checked.success) return { success: false, issues };
+    // #2541: a headline over only by a trailing call to action passed every check in full, so it loses the tail, not
+    // the ad. Its fit is checked again; QA (#2567): the fit's tail patterns are quadratic on long blank runs.
+    const long = issues.length === 1 && parsed.error.issues[0].path.join(".") === "headline" && String(valueAt(draft, ["headline"]));
+    const headline = long && long.length <= 160 ? fitHeadline(long) : null;
+    if (checked.success) return headline ? validateConcept({ ...(draft as object), headline }, input) : { success: false, issues };
     return { success: false, issues: [...issues, ...checked.issues.filter((issue) => !issue.startsWith("schema:"))], ...(checked.claims ? { claims: checked.claims } : {}) };
   }
   const data = uncut.length ? structuredClone(parsed.data) : parsed.data;
@@ -516,16 +521,9 @@ export function validateConcept(
     sourceQuotes: verbatimQuotes.length ? verbatimQuotes : data.sourceQuotes,
   };
   const allowedCaps = capitalWords(sources.join(" "));
-  const issues = scanAdCopy(
-    [concept.headline, concept.primary_text, concept.supportingText]
-      .filter(Boolean)
-      .join(" "),
-    {
-      maxWords: 85,
-      bannedClaims: bannedClaimsForVertical(input.brand.vertical),
-      allowedCaps,
-    },
-  ).map((finding) => `${finding.rule}: ${finding.detail}`);
+  const issues = scanAdCopy([concept.headline, concept.primary_text, concept.supportingText].filter(Boolean).join(" "), {
+    maxWords: 85, bannedClaims: bannedClaimsForVertical(input.brand.vertical), allowedCaps,
+  }).map((finding) => `${finding.rule}: ${finding.detail}`);
   issues.push(...repeatIssues(concept, input.recentCopy ?? []));
   issues.push(...scanAdCopy(concept.description, {
     bannedClaims: bannedClaimsForVertical(input.brand.vertical),

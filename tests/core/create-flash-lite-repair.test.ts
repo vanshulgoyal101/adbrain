@@ -152,3 +152,34 @@ describe("core: a quote that differs from its fact only in the full-stop mark is
     expect(result.success ? result.concept.sourceQuotes[0] : result.issues).toBe(hindi.sourceFacts[0]);
   });
 });
+
+describe("core: a headline over 40 only by a trailing call to action is fitted, not sent to repair (#2541, #2543)", () => {
+  async function check(headline: string, recent: typeof recentCopy = []) {
+    const { validateConcept } = await import("@/lib/creative/concept");
+    const { AD_ANGLES } = await import("@/lib/templates/ads");
+    return validateConcept({ ...JSON.parse(offer.text.replace(/\n/g, "\\n")), headline }, {
+      brand: item.brand, brief: item.brief, language: item.language, sourceFacts: item.sourceFacts,
+      angle: AD_ANGLES.find((angle) => angle.id === "offer")!, recentCopy: recent,
+    });
+  }
+  const fitted = "New patients seen the same day.";
+
+  it("drops flash-lite's recorded offer draft's trailing 'Learn more.' and keeps every check", async () => {
+    const result = await check(`${fitted} Learn more.`);
+    expect(result.success ? result.concept.headline : result.issues).toBe(fitted);
+    const repeated = await check(`${fitted} Learn more.`, [{ headline: fitted, primary_text: recentCopy[0].primary_text }]);
+    expect(repeated.success ? repeated.concept : repeated.issues.join("\n")).toMatch(/repeated-headline/);
+  });
+
+  it("still sends an over-long headline whose words make an unsupported claim to repair", async () => {
+    const result = await check("Every cleaning 90% off today. Learn more.");
+    expect(result.success ? result.concept : result.issues.join("\n")).toMatch(/schema:headline:too_big[\s\S]*unsupported-commercial-claim/);
+  });
+
+  it("leaves a whitespace-padded headline to repair without running the fit (QA: quadratic tails)", async () => {
+    const started = performance.now();
+    const result = await check(`${fitted}${" ".repeat(50_000)}Learn more.`);
+    expect(result.success ? result.concept : result.issues[0]).toMatch(/^schema:headline:too_big/);
+    expect(performance.now() - started).toBeLessThan(1_000);
+  });
+});
