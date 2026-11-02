@@ -20,7 +20,7 @@ import { draftAreaNames } from "./draft-targeting";
 import { normalizeWebsite } from "@/lib/brand/validation";
 import { checkPlan, planCheckEvent } from "./plan-check";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { buildLaunchSnapshot, saveLaunchSnapshot } from "./learnings";
+import { buildLaunchSnapshot, readCreativeMedia, saveLaunchSnapshot } from "./learnings";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 const STORY_RENDER_BUDGET_MS = 15_000;
@@ -93,6 +93,8 @@ export async function executeReviewedCampaign(input: {
           // #2452: rebuilt from this launch's own reads; anything but the reviewed message is refused before Meta sees it.
           if (message && !isReviewedWhatsAppMessage(message, review)) throw new OperationPhaseError("WhatsApp message changed since review.", { transmitted: false });
           const prefill = message?.opening ?? null;
+          // #789: for the ledger, read alongside Meta's create; never rejects.
+          const mediaRead = readCreativeMedia(database as unknown as SupabaseClient, actor.businessId, creativeInputs.map(creative => creative.id));
           metaResult = await meta.createLeadCampaign({
             name: draft.input.name, dailyBudgetRupees: draft.input.dailyBudgetRupees,
             leadFormId: draft.input.destination === "whatsapp" ? undefined : draft.input.leadFormId ?? undefined,
@@ -125,6 +127,7 @@ export async function executeReviewedCampaign(input: {
             throw error;
           });
           // #588: what this launch tried, for the learning ledger (saved once the campaign row exists). Never fails the launch (#603).
+          const media = await mediaRead;
           try {
             launchSnapshot = buildLaunchSnapshot({
               destination: metaResult.destination, objective: metaResult.destination === "whatsapp" ? "OUTCOME_ENGAGEMENT" : "leads",
@@ -133,7 +136,7 @@ export async function executeReviewedCampaign(input: {
               interests: (review.audienceInterests ?? []).map(interest => interest.name),
               whatsappLanguage: draft.input.whatsappLanguage ?? null, prefill, prefillSource: message?.source,
               storyFormat: storyRendered, sentTargetings, metaCreativeIds: metaResult.creativeIds,
-              creatives: creativeInputs.map(creative => ({ id: creative.id, angle: creative.angle ?? null, generation: creative.generation })),
+              creatives: creativeInputs.map(creative => ({ id: creative.id, angle: creative.angle ?? null, generation: creative.generation, media: media.get(creative.id) ?? null })),
             });
           } catch {
             launchSnapshot = null;

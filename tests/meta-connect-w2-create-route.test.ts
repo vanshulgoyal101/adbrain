@@ -421,8 +421,8 @@ describe("durable campaign create route", () => {
         snapshot: expect.objectContaining({ destination: "whatsapp", objective: "OUTCOME_ENGAGEMENT", formats: ["4:5"],
           whatsapp: expect.objectContaining({ prefill: "Hi! I'd like to know more about Solaride in Jaipur." }),
           audience: expect.objectContaining({ areas: ["Jaipur"], gender: "women", advantageAudience: 1 }),
-          version: 2, metaCreativeIds: ["meta-creative-1"], cap: null,
-          creatives: [expect.objectContaining({ id: creativeId })] }) })]);
+          version: 3, metaCreativeIds: ["meta-creative-1"], cap: null, media: [],
+          creatives: [expect.objectContaining({ id: creativeId, mediaAssetId: null })] }) })]);
     } else {
       expect(response.status).toBeGreaterThanOrEqual(400);
       expect(create).not.toHaveBeenCalled();
