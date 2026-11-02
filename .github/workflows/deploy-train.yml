@@ -7,6 +7,12 @@ on:
   schedule:
     - cron: "11,41 * * * *"
   workflow_dispatch:
+    inputs:
+      promote:
+        # Only kick sets this. A person dispatching runs kick, so manual runs take the same lock (#2528).
+        description: "Internal: run the promotion (leave false; kick decides)"
+        type: boolean
+        default: false
 
 permissions:
   contents: write # merging the train PR writes to main
@@ -18,9 +24,10 @@ permissions:
 
 jobs:
   promote:
-    # One promotion at a time; a push never cancels the running one (#2528: 45 of 60 runs were cancelled
-    # past the gap). Newer pushes queue as one pending run (GitHub replaces an older pending one), and the
-    # running promotion already takes the newest green commit. Job-level, so the watchdog is never queued.
+    # Only kick (or a person) dispatches this, on main, and only when no promote is already waiting, so it
+    # never gets replaced. One promotion at a time; the running one is never cancelled and takes the newest
+    # green commit on next (#2528).
+    if: github.event_name == 'workflow_dispatch' && inputs.promote
     concurrency:
       group: deploy-train
       cancel-in-progress: false
@@ -206,6 +213,80 @@ jobs:
           body="$(printf 'next could not be promoted to main. %s\n\nRun: %s/%s/actions/runs/%s\nChanges on next not yet on main (latest 15):\n%s\n\nFix forward on next (whoever sees it first, #2360 E3), or ship a hotfix PR to main (DevOps/CTO). Runbook: docs/operations/releasing.md#deploy-train\n' "$reason" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" "$suspects")"
           if [ -n "$open" ]; then gh issue comment "$open" -R "$GITHUB_REPOSITORY" -b "$body"
           else gh issue create -R "$GITHUB_REPOSITORY" -l core -l bug -l owner:devops -t "$title" -b "$body"; fi
+
+  kick:
+    # Pushes and the schedule only start a promotion, so no run of theirs waits in the promote queue where
+    # GitHub would replace (cancel) it: a next commit shows a red X only when a real check fails (#2528).
+    # It also runs after each successful promote: a change that promotion left behind (its CI wasn't green
+    # yet) gets the next train even if no push or schedule comes. Kicks hold a ref lock, not a concurrency
+    # group (a queued kick would be replaced and show cancelled), so two can't both dispatch (a second
+    # waiting promote would replace the first). A kick that loses the lock is covered: the holder reads
+    # next after this commit landed, or the promote it finds running kicks again when it succeeds.
+    needs: promote
+    if: always() && (!inputs.promote || needs.promote.result == 'success')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        shell: bash
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Start a promotion unless one is already waiting
+        id: kick
+        timeout-minutes: 4
+        run: |
+          set -euo pipefail
+          repo="$GITHUB_REPOSITORY"
+          lock=refs/heads/deploy-train-kick-lock
+          # Every unfinished train run but this one, however many runs are newer.
+          active_runs() {
+            for st in requested queued pending waiting in_progress; do
+              gh api --paginate "repos/$repo/actions/workflows/deploy-train.yml/runs?status=$st&per_page=100" \
+                --jq ".workflow_runs[] | select(.id != $GITHUB_RUN_ID) | .id"
+            done | sort -u
+          }
+          take() { gh api -X POST "repos/$repo/git/refs" -f ref=$lock -f sha="$GITHUB_SHA" >/dev/null 2>&1; }
+          if ! take; then
+            # A kick killed before its release step leaves the lock; it is stale when no other kick is running.
+            others=0
+            for rid in $(active_runs); do
+              n=$(gh api "repos/$repo/actions/runs/$rid/jobs" --jq '[.jobs[] | select(.name == "kick" and .status == "in_progress")] | length')
+              others=$((others + n))
+            done
+            [ "$others" -eq 0 ] || { echo "Another kick holds the lock; it covers this change."; exit 0; }
+            gh api -X DELETE "repos/$repo/git/$lock" >/dev/null 2>&1 || true
+            take || { echo "Another kick took the lock; it covers this change."; exit 0; }
+          fi
+          echo "held=1" >> "$GITHUB_OUTPUT"
+          ahead=$(gh api "repos/$repo/compare/main...next" --jq '.ahead_by')
+          [ "$ahead" -gt 0 ] || { echo "next has nothing main lacks."; exit 0; }
+          # A promote job that hasn't started takes whatever is green on next when it runs, so one is enough.
+          # A dispatched run whose jobs aren't listed yet counts as waiting. A push or schedule run's promote
+          # still going (from before kick existed) counts too, so a dispatch never queues behind it.
+          for rid in $(active_runs); do
+            event=$(gh api "repos/$repo/actions/runs/$rid" --jq .event)
+            started=$(gh api "repos/$repo/actions/runs/$rid/jobs" \
+              --jq '[.jobs[] | select(.name == "promote" and (.status == "in_progress" or .status == "completed"))] | length')
+            active=$(gh api "repos/$repo/actions/runs/$rid/jobs" \
+              --jq '[.jobs[] | select(.name == "promote" and .status != "completed")] | length')
+            if [ "$event" = workflow_dispatch ] && [ "$started" -eq 0 ]; then echo "Run $rid's promotion is waiting; it carries this change."; exit 0; fi
+            if [ "$event" != workflow_dispatch ] && [ "$active" -gt 0 ]; then echo "Run $rid ($event) is still promoting; the next kick follows it."; exit 0; fi
+          done
+          t0=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          gh workflow run deploy-train.yml -R "$repo" --ref main -f promote=true
+          # Wait until the run is listed, so a push a moment later finds it instead of starting a second one.
+          for i in $(seq 1 10); do
+            n=$(gh api "repos/$repo/actions/workflows/deploy-train.yml/runs?event=workflow_dispatch&per_page=5" \
+              --jq "[.workflow_runs[] | select(.created_at >= \"$t0\")] | length")
+            [ "$n" -eq 0 ] || { echo "Promotion started."; exit 0; }
+            sleep 3
+          done
+          echo "::warning::dispatched promotion not listed after 30s"
+      - name: Release the lock
+        if: always() && steps.kick.outputs.held == '1'
+        timeout-minutes: 1
+        run: gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/deploy-train-kick-lock" >/dev/null
 
   watchdog:
     # A promote that is cancelled or killed runs no failure alert (#2029), and a replaced pending run never

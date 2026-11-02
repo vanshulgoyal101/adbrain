@@ -65,8 +65,10 @@ async function handleGET(req: Request) {
     (requestedCount !== null && (!Number.isSafeInteger(requestedCount) || requestedCount < 1 || requestedCount > 6))) {
     return NextResponse.json({ error: "A valid businessId, generationId, and expectedCount are required." }, { status: 400 });
   }
+  // #2553: a status read is one cheap RPC. 30 per 5 min fit one poller, so a second tab or Studio's check 429'd a pilot.
+  // 150 covers two tabs of step 2 and Studio plus an assistant recovery (~115) and still caps a runaway client.
   const limited = await rateLimitResponse(`generate-status:${user.id}`, {
-    limit: 30,
+    limit: 150,
     windowMs: 5 * 60_000,
   });
   if (limited) return limited;
@@ -375,6 +377,8 @@ async function generate(req: Request, live?: LiveCreate) {
       .slice(0, count - inserted.length);
     if (retry.length && Date.now() - startedAt <= CREATE_TOP_UP_START_MS) {
       topUp = retry.length;
+      // #2546: a remade ad's own calls are unrecorded until its remake reaches onVariant.
+      for (const angle of retry) recordedAngles.delete(angle.id);
       live?.onTopUp(topUp);
       await generateVariants({
         ...run,
