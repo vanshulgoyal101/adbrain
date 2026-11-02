@@ -727,7 +727,7 @@
       "rule": "C4-file-size",
       "from": "src/components/lead-inbox.tsx",
       "to": "> 400 lines",
-      "lines": 667
+      "lines": 633
     },
     {
       "rule": "C4-file-size",
@@ -781,7 +781,7 @@
       "rule": "C4-file-size",
       "from": "src/lib/meta/client.ts",
       "to": "> 400 lines",
-      "lines": 2402
+      "lines": 2416
     },
     {
       "rule": "C4-file-size",
@@ -989,12 +989,6 @@
     },
     {
       "rule": "C6-english-fallbacks",
-      "from": "src/components/audience-switch-strip.tsx",
-      "to": "English fallback texts",
-      "lines": 1
-    },
-    {
-      "rule": "C6-english-fallbacks",
       "from": "src/components/brand-form.tsx",
       "to": "English fallback texts",
       "lines": 4
@@ -1043,12 +1037,6 @@
     },
     {
       "rule": "C6-english-fallbacks",
-      "from": "src/components/edit-ad-dialog.tsx",
-      "to": "English fallback texts",
-      "lines": 3
-    },
-    {
-      "rule": "C6-english-fallbacks",
       "from": "src/components/enquiry-erasure.tsx",
       "to": "English fallback texts",
       "lines": 4
@@ -1069,7 +1057,7 @@
       "rule": "C6-english-fallbacks",
       "from": "src/components/lead-inbox.tsx",
       "to": "English fallback texts",
-      "lines": 5
+      "lines": 2
     },
     {
       "rule": "C6-english-fallbacks",
@@ -1099,7 +1087,7 @@
       "rule": "C6-english-fallbacks",
       "from": "src/components/media-library.tsx",
       "to": "English fallback texts",
-      "lines": 1
+      "lines": 3
     },
     {
       "rule": "C6-english-fallbacks",
@@ -1151,12 +1139,6 @@
     },
     {
       "rule": "C6-english-fallbacks",
-      "from": "src/components/spend-guardrails.tsx",
-      "to": "English fallback texts",
-      "lines": 3
-    },
-    {
-      "rule": "C6-english-fallbacks",
       "from": "src/components/studio.tsx",
       "to": "English fallback texts",
       "lines": 5
@@ -1172,12 +1154,6 @@
       "from": "src/components/test-checkout.tsx",
       "to": "English fallback texts",
       "lines": 9
-    },
-    {
-      "rule": "C6-english-fallbacks",
-      "from": "src/components/whatsapp-enquiries.tsx",
-      "to": "English fallback texts",
-      "lines": 4
     },
     {
       "rule": "C6-english-fallbacks",
