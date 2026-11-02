@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const m = vi.hoisted(() => ({ record: vi.fn(), business: vi.fn() }));
 vi.mock("@/lib/observability/logger", () => ({ observeRoute: (_r: string, _m: string, handler: unknown) => handler }));
 vi.mock("@/lib/security/rate-limit", () => ({ rateLimitResponse: async () => null }));
-vi.mock("@/lib/media/consent", () => ({ recordMediaConsent: m.record }));
+vi.mock("@/lib/media/consent", async (importOriginal) => ({ ...await importOriginal<typeof import("@/lib/media/consent")>(), recordMediaConsent: m.record }));
 vi.mock("@/lib/media/route-helpers", () => ({
   mediaSession: async () => ({ user: { id: "u1" }, client: { rls: true } }),
   ownedBusiness: m.business,
@@ -32,12 +32,17 @@ describe("POST /api/media/consent (#778, #784)", () => {
   });
 
   it("an unticked or incomplete confirmation: 400 with the reason", async () => {
-    m.record.mockRejectedValue(new Error("Confirm that everyone recognisable has agreed to appear in your ads."));
+    const { MediaConsentError } = await import("@/lib/media/consent");
+    m.record.mockRejectedValue(new MediaConsentError("mediaPeopleRequired", 400));
     const response = await post({ businessId: id, rights: true, people: false });
     expect(response.status).toBe(400);
     expect((await response.json()).error).toMatch(/everyone recognisable/);
     expect((await post({ businessId: "nope", rights: true })).status).toBe(400);
-    m.record.mockRejectedValue(new Error("Your confirmation couldn't be saved. Try again."));
+    m.record.mockRejectedValue(new MediaConsentError("mediaConsentNotSaved", 503));
     expect((await post({ businessId: id, rights: true })).status).toBe(503);
+    m.record.mockRejectedValue(new Error("network"));
+    const unknown = await post({ businessId: id, rights: true });
+    expect(unknown.status).toBe(503);
+    expect((await unknown.json()).error).toBe("Your confirmation couldn't be saved. Try again.");
   });
 });

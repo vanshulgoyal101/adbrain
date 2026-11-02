@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { ownerError } from "@/i18n/request-locale";
 import { apiError } from "@/lib/api";
-import { recordMediaConsent } from "@/lib/media/consent";
+import { MediaConsentError, recordMediaConsent } from "@/lib/media/consent";
 import { mediaSession, ownedBusiness } from "@/lib/media/route-helpers";
 import { observeRoute } from "@/lib/observability/logger";
 import { rateLimitResponse } from "@/lib/security/rate-limit";
@@ -17,14 +18,14 @@ export const POST = observeRoute("/api/media/consent", "POST", async (req: Reque
   const limited = await rateLimitResponse(`media-consent:${session.user.id}`, { limit: 20, windowMs: 10 * 60_000 });
   if (limited) return limited;
   const parsed = body.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) return apiError("Tick the box above to add your photos.", 400);
+  if (!parsed.success) return apiError(await ownerError("mediaRightsRequired"), 400);
   const business = await ownedBusiness(session.client, parsed.data.businessId);
-  if (!business) return apiError("Business not found", 404);
+  if (!business) return apiError(await ownerError("businessMissing"), 404);
   try {
     await recordMediaConsent(session.client, business, { rights: parsed.data.rights, people: parsed.data.people });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Your confirmation couldn't be saved. Try again.";
-    return apiError(message, /^Confirm /.test(message) ? 400 : 503);
+    const refusal = error instanceof MediaConsentError ? error : new MediaConsentError("mediaConsentNotSaved", 503);
+    return apiError(await ownerError(refusal.ownerKey), refusal.status);
   }
   return NextResponse.json({ ok: true });
 });
