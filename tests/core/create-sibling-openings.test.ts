@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildConceptMessages, conceptLead, validateConcept } from "@/lib/creative/concept";
+import { repairMessages } from "@/lib/creative/concept-repair";
 import { AD_ANGLES, type BrandContext } from "@/lib/templates/ads";
 import regenerate from "./fixtures/create/solaride-regenerate.json";
 import cases from "../eval/cases.json";
@@ -34,6 +35,28 @@ describe("core: parallel concepts open differently, and a repeat repair names wh
     expect(result.success ? [] : result.issues.filter((issue) => issue.startsWith("repeated-"))).toEqual([
       `repeated-headline: "${sibling.headline}" is a recent ad's headline; write a different one`,
       'repeated-opening: a recent ad opens "Rooftop solar for your home in Chandigarh, Mohali"; start primary_text with different words',
+    ]);
+  });
+
+  // #2444: told only the sibling it hit, a targeted repair could write the other sibling's line, and in the parallel
+  // schedule the siblings weren't in the first prompt. Each repeat rule is one issue that names every recent ad.
+  it("names every recent headline and opening to avoid, once per rule, in the targeted repair", () => {
+    const other = { headline: "Solar that pays you back", primary_text: "Your electricity bill keeps rising every summer.\nA rooftop system cuts it." };
+    const recentCopy = [other, sibling, { ...sibling }];
+    const repeat = { ...reply, headline: sibling.headline, primary_text: `${sibling.primary_text}\nBook your free site survey.` };
+    const result = validateConcept(repeat, { ...input, recentCopy });
+    const issues = result.success ? [] : result.issues.filter((issue) => issue.startsWith("repeated-"));
+    expect(issues).toEqual([
+      `repeated-headline: "${sibling.headline}" is a recent ad's headline; write a different one; also avoid "${other.headline}"`,
+      'repeated-opening: a recent ad opens "Rooftop solar for your home in Chandigarh, Mohali"; start primary_text with different words; also avoid "Your electricity bill keeps rising every summer. A"',
+    ]);
+    const ask = repairMessages(repeat, result.success ? [] : result.issues);
+    expect(ask.map((turn) => turn.role)).toEqual(["assistant", "user"]);
+    expect(ask[1].content).toContain(`also avoid "${other.headline}"`);
+    // Its rewrite to the other sibling's headline is still refused.
+    const swapped = validateConcept({ ...repeat, headline: other.headline }, { ...input, recentCopy });
+    expect(swapped.success ? [] : swapped.issues.filter((issue) => issue.startsWith("repeated-headline"))).toEqual([
+      `repeated-headline: "${other.headline}" is a recent ad's headline; write a different one; also avoid "${sibling.headline}"`,
     ]);
   });
 
