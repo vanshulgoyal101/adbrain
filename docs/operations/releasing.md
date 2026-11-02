@@ -131,6 +131,9 @@ exclude entire test directories or suppress uninvestigated findings.
   The owner alert preference and verification RPCs from #974 are accepted only for
   authenticated execution: both check `auth.uid()` and business ownership inside,
   fix `search_path`, and keep anonymous execution and direct owner writes denied.
+  The media consent RPC from #784 has the same signed-in-only exception: it checks
+  `auth.uid()` and `owns_business`, fixes an empty `search_path`, and appends the
+  rights record. Anonymous execution and direct browser writes remain denied.
 - **Tenant or money PRs without a migration target `next`** (#461): `release.mjs --pr <n>` runs the same
   QA (and, for money paths including `src/lib/managed/`, CTO) checks, merges into `next`, and prints
   a receipt; the next deploy train ships it and smokes it. Migrations still release to `main`.

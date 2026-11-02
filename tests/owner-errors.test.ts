@@ -164,6 +164,8 @@ const ENGLISH: Record<OwnerErrorKey, string> = {
   // #2327: Enquiries and the Facebook connect path (the leads 404 reuses #2312's campaignNotFound).
   signInRequired: "Sign in required.",
   businessMissing: "Business not found.",
+  // #1209: the upload rights gate (/api/media/sign).
+  mediaRightsRequired: "Confirm you own these photos or have permission to use them.",
   chooseCampaign: "Choose a campaign.",
   enquiriesNotDeleted: "The enquiries couldn't be deleted. Try again.",
   enquiryNotDeleted: "The enquiry couldn't be deleted. Try again.",
@@ -173,6 +175,22 @@ const ENGLISH: Record<OwnerErrorKey, string> = {
   requestNotSent: "We couldn't send your request. Try again.",
   pickAccountAndPage: "Pick both an ad account and a page.",
   facebookStillConnected: "Facebook is still connected. Try again in a minute.",
+  // #2333: Review (preflight) and Go live (create); create's gone draft now says what to do, as preflight does.
+  draftGone: "This campaign draft has expired or was removed. Reload the page and set up the campaign again. Nothing was sent to Meta.",
+  draftChangedElsewhere: "Draft changed in another tab. Review the latest version.",
+  websiteClosed: "Website ads aren't open yet. Choose WhatsApp chat or a lead form.",
+  reviewCheckFailed: "Couldn't check your campaign just now. Nothing was sent to Meta. Try again in a minute.",
+  reviewRequestInvalid: "A valid business, draft, and version are required.",
+  businessAccessDenied: "Business access is not allowed.",
+  businessAccessUnchecked: "Business access could not be checked.",
+  createRequestInvalid: "Campaign creation request is invalid.",
+  executionModeMisconfigured: "Campaign execution mode is not configured correctly.",
+  operationStorageUnavailable: "Campaign operation storage is unavailable.",
+  requestKeyReused: "This idempotency key was used for a different campaign request.",
+  createAlreadyRunning: "This campaign operation is already running.",
+  reviewBlockersFirst: "Campaign preparation is blocked. Resolve the review blockers before creating.",
+  reviewChangedBeforeCreate: "Campaign review changed. Review again before creating.",
+  campaignQueueUnavailable: "Campaign queue is unavailable. No inline fallback was attempted.",
   // #2334: Settings spend limits and preferences.
   spendLimitsInvalid: "Enter the weekly cap in whole rupees (or leave it blank for no cap), and a Warn at number from 1 to 100.",
   spendLimitsNotSaved: "We couldn't save your spend limits. Try again.",
@@ -225,7 +243,7 @@ const RENDERED: Partial<Record<OwnerErrorKey, string>> = {
 };
 const keys = Object.keys(ENGLISH) as OwnerErrorKey[];
 
-describe("owner errors (#2305, #2312, #2314, #2324, #2327, #2330, #2334, #2335)", () => {
+describe("owner errors (#2305, #2312, #2314, #2324, #2327, #2330, #2333, #2334, #2335)", () => {
   it("has the same keys in English and Hindi", () => {
     expect(Object.keys(en.errors).sort()).toEqual([...keys].sort());
     expect(Object.keys(hi.errors).sort()).toEqual([...keys].sort());

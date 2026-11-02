@@ -1,3 +1,5 @@
+import { z } from "zod";
+import { AD_LANGUAGE_KEYS } from "@/lib/meta/locales";
 import type { TargetingInputDTO } from "./connect-contracts";
 
 export interface GeoPick {
@@ -82,6 +84,34 @@ export interface AudienceEditForm {
   languages: number[];
   /** Add #741's out-of-area exclusions to the current area (campaigns built before the rule). */
   areaExclusions: boolean;
+}
+
+// Not strict: a place from geo-search also carries `countryCode`; extra fields are dropped, not refused.
+const placeSchema = z.object({
+  key: z.string().regex(/^[A-Za-z0-9]{1,64}$/), name: z.string().max(200), type: z.string().max(30), region: z.string().max(200).nullable().optional(),
+});
+/** #773: the form as the owner filled it (place names included), kept with a change saved for a running campaign's next run. */
+export const audienceEditFormSchema: z.ZodType<AudienceEditForm> = z.object({
+  included: z.array(placeSchema).max(50), excluded: z.array(placeSchema).max(50),
+  cityScope: z.enum(["city_only", "radius"]), radiusKm: z.number().finite().transform(km => Math.min(80, Math.max(1, Math.round(km)))),
+  ageMin: z.number().int().min(18).max(65).nullable(), ageMax: z.number().int().min(18).max(65).nullable(),
+  gender: z.enum(["keep", "all", "men", "women"]), languageMode: z.enum(["keep", "any", "only"]),
+  languages: z.array(z.number().int().refine(key => AD_LANGUAGE_KEYS.has(key))).max(AD_LANGUAGE_KEYS.size), areaExclusions: z.boolean(),
+}).strict();
+
+/** #773: the form of the change saved in `campaigns.raw.preparedAudience` for the next run, if any. */
+export function preparedAudienceForm(raw: unknown): AudienceEditForm | null {
+  const prepared = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as { preparedAudience?: { form?: unknown } }).preparedAudience : undefined;
+  const parsed = audienceEditFormSchema.safeParse(prepared && typeof prepared === "object" ? prepared.form : undefined);
+  return parsed.success ? parsed.data : null;
+}
+
+/** #773: the campaign row as the server stores it after a Save: a running Save keeps its form, a paused one (applied) clears it. */
+export function withPreparedAudienceForm<T extends { raw: unknown }>(campaign: T, form: AudienceEditForm | null): T {
+  const raw: Record<string, unknown> = { ...campaign.raw && typeof campaign.raw === "object" && !Array.isArray(campaign.raw) ? campaign.raw : {} };
+  if (form) raw.preparedAudience = { form };
+  else delete raw.preparedAudience;
+  return { ...campaign, raw };
 }
 
 type GeoSpec = {
