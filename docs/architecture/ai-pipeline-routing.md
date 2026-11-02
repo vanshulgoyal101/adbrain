@@ -7,10 +7,19 @@ Part of [Architecture](README.md). [Interview and boundaries](ai-pipeline.md) ·
 [The orchestrator](../../src/lib/llm/index.ts) supports Google plus OpenAI-compatible
 Groq, OpenRouter, and Cerebras. It follows the selected standard/budget order,
 round-robins keys within each provider, skips missing pools, and parks HTTP-429
-keys for the provider's Retry-After (at most 60 seconds). When every key of a
+keys for the provider's Retry-After (at most 60 seconds; a daily limit parks
+until its Retry-After, at most 6 hours, and a named organization limit parks
+every key of that provider). When every key of a
 model is parked for 20 seconds or less, it waits once and retries that model
 before falling through; Groq keys share one organization tokens-per-minute
-limit, so rotating keys does not add capacity. A 5xx skips that model's other
+limit, so rotating keys does not add capacity. After a named limit, one call at
+a time probes the provider; the others go to the next provider. Create's concept
+calls set `waitOnLastProvider` (#2189): when no later provider can answer (for
+example Gemini returns 503 and Groq is all that's left), they wait for the probe
+and wait out a limit the provider named, such as Groq's output tokens per
+minute (up to 60 seconds a round and 90 seconds a call, bounded by the batch
+deadline), instead of failing; a bare 429 keeps the 20-second rule, so three parallel concepts take turns on
+Groq's 1,000 output tokens a minute. A 5xx skips that model's other
 keys. First successful provider response wins. Cancellation and
 terminal local errors do not mean trying every key indefinitely.
 
@@ -19,11 +28,17 @@ write on the same models as customers (Haiku text is about $0.006 a Create, and 
 tiers allow 20 Gemini requests a day) but make their images free, without reference images and
 never falling back to the paid image model (#449, #466). The production smoke login (`smokeUserIds`) also
 writes on free text only (Groq, Gemini): its usage rows cost $0, and when those can't answer a call fails with
-`FREE_TEXT_UNAVAILABLE` rather than reaching OpenRouter (#2230). When `CLOUDFLARE_ACCOUNT_ID` and
+`FREE_TEXT_UNAVAILABLE` rather than reaching OpenRouter (#2230). The Creative assistant answers that as a
+503 "busy, try again" when the free models were busy, and a 500 that alerts when none is configured or a key
+was refused (#2457). When `CLOUDFLARE_ACCOUNT_ID` and
 `CLOUDFLARE_AI_TOKEN` are set, the free picture comes from Cloudflare Workers AI FLUX-1-schnell
 ([cloudflare.ts](../../src/lib/imageGen/providers/cloudflare.ts), #1476): 4 steps, prompt capped at
 2048 characters, $0 within the daily free allowance. It returns a square JPEG (no size option); the
-poster covers its frame, so a 4:5 ad crops the sides. A 429 (including 3040, out of capacity) or 5xx
+poster covers its frame, so a 4:5 ad crops the sides. Schnell has no negative prompt and letters a
+named business onto the picture, so every picture prompt
+([image-prompt.ts](../../src/lib/creative/image-prompt.ts)) opens with the text-free rule, says "the
+<vertical>" instead of the business name, and sends only the brand's visual fields (no name,
+phone, address, website, offers or proof points; #2441). A 429 (including 3040, out of capacity) or 5xx
 is recorded as `IMAGE_FREE_BUSY` and asked once more a second later; error 3036 or 4006 (daily allowance used)
 is recorded as `IMAGE_FREE_DAILY_LIMIT` and skips Cloudflare on that instance until 00:00 UTC (#2145). Any other
 failure is `IMAGE_PROVIDER`. Then the picture falls to Pollinations, which stays last. Pollinations answers
@@ -74,8 +89,9 @@ quality or provider capability certification.
 
 Cerebras currently uses the registry's fixed `llama-3.3-70b`; it has no model
 environment override. Configuring OpenRouter for text also supplies image keys,
-but image routing remains independently selected. `parseJSON` can remove fences
-or recover a JSON block; a successful parse is not schema validation. Callers
+but image routing remains independently selected. `parseJSON` can remove fences,
+recover a JSON block, and escape raw control characters (line breaks) inside string
+values, which Gemini flash-lite writes in multi-line fields (#2444); a successful parse is not schema validation. Callers
 such as the interviewer/concept validator apply their own runtime checks.
 
 Cache is opt-in, in-process only, default TTL ten minutes and maximum 500 entries.

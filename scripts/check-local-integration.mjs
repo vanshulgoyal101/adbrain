@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { createClient } from "@supabase/supabase-js";
+import { mintTestSession } from "./lib/test-session.mjs";
 
 export function verifyDockerHost(host) {
   const url = new URL(host);
@@ -79,8 +80,10 @@ async function run() {
       assert.ok(!created.error && created.data.user, "Synthetic Auth fixture creation failed");
       users.push(created.data.user.id);
       const client = createClient(origin, local.ANON_KEY, options);
-      const signedIn = await client.auth.signInWithPassword({ email, password });
-      assert.ok(!signedIn.error && signedIn.data.session, "Synthetic password sign-in failed");
+      const config = { url: origin, serviceRoleKey: local.SERVICE_ROLE_KEY, apikey: local.ANON_KEY };
+      const { session } = await mintTestSession(email, { config, fetch: guardedFetch });
+      const signedIn = await client.auth.setSession(session);
+      assert.ok(!signedIn.error && signedIn.data.session, "Synthetic sign-in failed");
       const id = randomUUID();
       businesses.push({ id, client });
       const inserted = await admin.from("businesses").insert({ id, owner_id: created.data.user.id, name: "OPS synthetic isolation probe", vertical: "test" });

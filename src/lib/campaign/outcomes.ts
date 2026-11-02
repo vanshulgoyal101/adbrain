@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const campaignDestinationSchema = z.enum(["instant_form", "whatsapp", "call", "mixed", "unknown"]);
+export const campaignDestinationSchema = z.enum(["instant_form", "whatsapp", "call", "website", "mixed", "unknown"]);
 export type CampaignDestination = z.infer<typeof campaignDestinationSchema>;
 
 const storedOutcomeSchema = z.object({
@@ -30,6 +30,7 @@ export function destinationFromAdSets(adSets: ReadonlyArray<{ destination_type?:
     case "WHATSAPP": return "whatsapp";
     case "ON_AD": return "instant_form";
     case "PHONE_CALL": return "call";
+    case "WEBSITE": return "website";
     default: return "unknown";
   }
 }

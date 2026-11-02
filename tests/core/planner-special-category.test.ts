@@ -98,4 +98,26 @@ describe("core: an interiors or 'EMI available' offer never becomes a special ca
   ])("a '%s' offering '%s' keeps the financial block", (vertical, offer) => {
     expect(effectiveSpecialCategory("financial_products_services", { vertical, offers: [offer] })).toBe("financial_products_services");
   });
+
+  // #2370: Indian wording for rooms to let and pawn or money lending keeps the planner's label (and the launch block).
+  it.each([
+    ...["Rooms on rent", "Room rent", "Rooms for rent", "Rooms", "Furnished rooms", "To-let rooms for students", "Rent house",
+      "Ghar kiraye par", "Makan kiraye par", "Kiraya ghar", "1RK available", "Flatmate wanted"]
+      .map((vertical) => ["housing", vertical] as const),
+    ...["Pawn broker", "Pawnbroker", "Pawn shop", "Money lender", "Moneylender", "Gold loan",
+      "Sood par paisa", "Girvi par paisa", "Byaj par loan"]
+      .map((vertical) => ["financial_products_services", vertical] as const),
+  ])("keeps %s for a '%s' (#2370)", (category, vertical) => {
+    expect(effectiveSpecialCategory(category, { vertical, offers: [] })).toBe(category);
+  });
+
+  it.each(["Living room interiors", "Kids room decor", "Modular kitchen and room makeover", "Bathroom fittings showroom",
+    "Bike on rent", "Bike for rent", "Car rental", "Tent house on rent", "Hotel rooms", "Room heater dealer"])(
+    "a '%s' labelled housing still prepares as none (#2370)", (vertical) => {
+      expect(effectiveSpecialCategory("housing", { vertical, offers: [] })).toBe("none");
+    });
+
+  it("a place name that starts with 'pawn' isn't a lender (#2370)", () => {
+    expect(effectiveSpecialCategory("financial_products_services", { vertical: "Pawna Lake camping", offers: [] })).toBe("none");
+  });
 });

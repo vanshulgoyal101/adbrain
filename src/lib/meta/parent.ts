@@ -21,6 +21,8 @@ export async function checkParentAccess(fetchImpl: typeof fetch = fetch): Promis
   const enabled = env.MANAGED_ACCOUNTS_ENABLED;
   const token = env.META_PARENT_SYSTEM_TOKEN;
   if (!token) return { configured: false, enabled };
+  const parentId = env.META_PARENT_BUSINESS_ID;
+  if (!parentId) return { configured: true, enabled, ok: false, errorCode: "NOT_CONFIGURED" };
   async function read(path: string) {
     const proof = appSecretProof(token);
     const response = await fetchImpl(`${GRAPH}/${path}${proof ? `${path.includes("?") ? "&" : "?"}appsecret_proof=${proof}` : ""}`, {
@@ -36,8 +38,8 @@ export async function checkParentAccess(fetchImpl: typeof fetch = fetch): Promis
   }
   try {
     meSchema.parse(await read("me?fields=id"));
-    const business = businessSchema.parse(await read(`${encodeURIComponent(env.META_PARENT_BUSINESS_ID)}?fields=id,verification_status`));
-    if (business.id !== env.META_PARENT_BUSINESS_ID) return { configured: true, enabled, ok: false, errorCode: "BUSINESS_MISMATCH" };
+    const business = businessSchema.parse(await read(`${encodeURIComponent(parentId)}?fields=id,verification_status`));
+    if (business.id !== parentId) return { configured: true, enabled, ok: false, errorCode: "BUSINESS_MISMATCH" };
     return { configured: true, enabled, ok: true, businessVerified: business.verification_status === "verified" };
   } catch (error) {
     const code = error instanceof Error && /^(META|HTTP)_[\w?]+$/.test(error.message) ? error.message : "UNREADABLE_RESPONSE";

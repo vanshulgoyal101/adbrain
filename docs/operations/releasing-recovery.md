@@ -72,15 +72,15 @@ anyone watching (owner-approved automatic rollback, #111):
 - **Daily at 03:30 UTC** it runs the same smoke and opens an issue on failure
   (no rollback).
 - **WS1 first-timer walk (#1439), gating:** after a green smoke it runs
-  `scripts/ws1-walk.mts` as `WS1_EMAIL`/`WS1_PASSWORD` (a confirmed internal account whose
+  `scripts/ws1-walk.mts` as `WS1_EMAIL` (a minted session, no password; a confirmed internal account whose
   business has never gone live) on a 360 px phone over slow 4G: step 1's five fields (filled
   from a pasted bio where empty), step 2's two picked ads, and step 3's cap, Connect/payment
   and trust lines, each with LCP ≤ 2.5 s, CLS ≤ 0.1 and the honest-copy rules
   (`src/lib/copy/honest-copy-rules.ts`). Every Meta write is blocked. The result lands in the
   run summary; a FAIL turns the guard red and opens a core bug, but never rolls back. Skipped while the secrets are
   unset. `--plant` must make it FAIL (a planted promise and a slowed load).
-- **Free pictures, every 2 hours (#2145):** [`create-smoke.yml`](../../.github/workflows/create-smoke.yml)
-  runs `smoke-core.mjs --picture` as the smoke account at :17 past every second hour, one run at a time and with
+- **Free pictures, every 4 hours (#2145, #2405):** [`create-smoke.yml`](../../.github/workflows/create-smoke.yml)
+  runs `smoke-core.mjs --picture` as the smoke account at :17 past every fourth hour, one run at a time and with
   no retry. It signs in, opens the read-only views and changes the background of the most recent ad that isn't
   in a campaign on Meta (`plain light studio background`). It passes only when the saved picture came from a free
   provider (Pollinations or Cloudflare). The run spends $0: the prompt is a template with no text model, it
@@ -95,12 +95,17 @@ anyone watching (owner-approved automatic rollback, #111):
   sent to Meta. The smoke login (`smokeUserIds`) writes on free text only (Groq, Gemini; `freeTextOnly` in
   [spend-policy.ts](../../src/lib/llm/spend-policy.ts)); when they can't answer, the plan fails with
   `FREE_TEXT_UNAVAILABLE` instead of paying. Once a day keeps it far inside Groq's free daily cap.
-  **Dispatch `mode: create`** runs `--create` instead: 3 ads, their words on free text too (#2230), so a busy
-  free tier fails the run rather than spending. DevOps uses it before and
+  **Daily Create, 03:37Z (#2145)** (or dispatch `mode: create`) runs `--create`: 3 ads, their words on free text
+  too (#2230), so a busy free tier fails the run rather than spending. When GitHub drops the 03:37Z cron, the next
+  scheduled picture run that day runs `create` instead, and a late 03:37Z run after that runs `picture`
+  ([smoke-mode.mjs](../../scripts/smoke-mode.mjs), #2545): the Smoke step marks each run's mode with a `Smoke mode`
+  annotation, and a failed lookup or a re-run does `picture`, so there is still at most one scheduled create a day. It passes only when all 3 are saved: a
+  one-picture check stayed green while customers' batches saved 1 of 3. DevOps also dispatches it before and
   after the Cloudflare token lands. A PASS deletes those ads and their files, but keeps the newest ad when the
   smoke business has no other ad.
   A failure opens one `core` `bug` issue `Create smoke failed in production` for DevOps (`FAIL Picture` says
-  free pictures are failing, `FAIL Prepare plan` that Prepare's free-text plan is). Repeat failures comment on that issue, and the first pass after it says so once.
+  free pictures are failing, `FAIL Prepare plan` that Prepare's free-text plan is, `FAIL Sign in` that it couldn't
+  sign in or read who signed in, so nothing was requested, #2396). Repeat failures comment on that issue, and the first pass after it says so once.
   The check never rolls back. Pause it with `gh workflow disable create-smoke.yml`.
 - **After each push to `main`, and every 15 minutes if GitHub fires the schedule**
   [`production-drift.yml`](../../.github/workflows/production-drift.yml) waits until
@@ -118,7 +123,7 @@ opens the issue and does not roll back. If the browser install also fails, the
 issue says "smoke did not run". Each smoke attempt gets 10 minutes; a hang
 counts as a FAIL.
 
-It needs repository secrets `SMOKE_EMAIL`, `SMOKE_PASSWORD` and `VERCEL_TOKEN`.
+It needs repository secrets `SMOKE_EMAIL`, `TEST_SESSION_SECRET` (the app mints the smoke's session for an allowlisted email; #2574; the service key stays in Vercel) and `VERCEL_TOKEN`.
 Without `VERCEL_TOKEN`, the rollback, the wait-for-commit step and the drift
 check are skipped. Steps run in `bash` with pipefail, so `| tee` cannot turn a
 failed smoke green (#153). To prove that, run the workflow manually with

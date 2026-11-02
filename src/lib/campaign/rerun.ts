@@ -1,5 +1,6 @@
 import { adResultViews, type StoredAdResult } from "./ad-results-store";
 import type { DraftInput, TargetingInputDTO } from "./connect-contracts";
+import type { LeadDestination } from "@/lib/types/campaign";
 
 /**
  * #1050 "Run this again": a campaign whose Best ad is known is copied into a new paused campaign. The
@@ -19,7 +20,8 @@ export type RerunPrefill = {
   goal: string;
   creativeIds: string[];
   dailyBudgetRupees: number;
-  destination?: "instant_form" | "whatsapp";
+  // TODO(#2595): add "website" once Create can launch website campaigns (slices B to D); until then a copy picks its destination again.
+  destination?: Exclude<LeadDestination, "call" | "website">;
   leadFormId: string | null;
   whatsappNumber?: string;
   whatsappLanguage?: DraftInput["whatsappLanguage"];
@@ -60,7 +62,7 @@ export function rerunPrefill(input: {
     return {
       ...shared, source: "draft", goal: draft.goal, dailyBudgetRupees: draft.dailyBudgetRupees,
       // #1216: a draft saved before destinations existed is a form campaign, as preflight and launch read it.
-      destination: draft.destination ?? "instant_form", leadFormId: draft.leadFormId, whatsappNumber: draft.whatsappNumber,
+      destination: draft.destination === "website" ? undefined : draft.destination ?? "instant_form", leadFormId: draft.leadFormId, whatsappNumber: draft.whatsappNumber,
       whatsappLanguage: draft.whatsappLanguage, whatsappMessage: draft.whatsappMessage,
       targeting: draft.targeting, abTest: draft.abTest,
     };
@@ -77,8 +79,8 @@ export function rerunPrefill(input: {
 export function bestCreativeId(
   rows: StoredAdResult[],
   links: { meta_ad_id: string; creative_id: string | null }[],
-  whatsapp: boolean,
+  destination: string | null | undefined,
 ): string | null {
-  const best = adResultViews(rows, whatsapp).ads.find((ad) => ad.best);
+  const best = adResultViews(rows, destination).ads.find((ad) => ad.best);
   return best ? links.find((link) => link.meta_ad_id === best.adId)?.creative_id ?? null : null;
 }

@@ -49,6 +49,53 @@ describe("workspace business query failures", () => {
   });
 });
 
+describe("creative reads (#2371)", () => {
+  it("keeps Home previews narrow and scoped to the business", async () => {
+    const { getCreativePreviews } = await import("@/lib/supabase/queries");
+    expect(await getCreativePreviews("business")).toEqual([]);
+    expect(mocks.select).toHaveBeenCalledWith("id, headline, image_url, status, angle, created_at, variant_group");
+    expect(mocks.eq).toHaveBeenCalledWith("business_id", "business");
+    expect(mocks.order).toHaveBeenCalledWith("created_at", { ascending: false });
+  });
+
+  it("keeps full creative reads scoped and newest first", async () => {
+    const { getCreatives } = await import("@/lib/supabase/queries");
+    expect(await getCreatives("business")).toEqual([]);
+    expect(mocks.select).toHaveBeenCalledWith("*");
+    expect(mocks.eq).toHaveBeenCalledWith("business_id", "business");
+    expect(mocks.order).toHaveBeenCalledWith("created_at", { ascending: false });
+  });
+
+  it("keeps the setup batch bounded and reports read failures", async () => {
+    const { getSetupCreativeBatch } = await import("@/lib/supabase/queries");
+    expect(await getSetupCreativeBatch("business")).toEqual({ ads: [], newest: null });
+    expect(mocks.eq).toHaveBeenCalledWith("business_id", "business");
+    expect(mocks.order).toHaveBeenCalledWith("created_at", { ascending: false });
+    expect(mocks.limit).toHaveBeenCalledWith(12, undefined);
+    mocks.failedTable = "creatives";
+    await expect(getSetupCreativeBatch("business")).rejects.toThrow("Ads could not be loaded.");
+  });
+
+  it("keeps an empty approved-ad list valid", async () => {
+    const { getApprovedCreatives } = await import("@/lib/supabase/queries");
+    expect(await getApprovedCreatives("business", { throwOnError: true })).toEqual([]);
+    expect(mocks.eq).toHaveBeenCalledWith("business_id", "business");
+    expect(mocks.eq).toHaveBeenCalledWith("status", "approved");
+  });
+
+  it("rejects a failed read instead of presenting it as no approved ads", async () => {
+    mocks.failedTable = "creatives";
+    const { getApprovedCreatives } = await import("@/lib/supabase/queries");
+    await expect(getApprovedCreatives("business", { throwOnError: true })).rejects.toThrow("Approved ads could not be loaded.");
+  });
+
+  it("preserves existing non-strict callers' behavior on a failed read", async () => {
+    mocks.failedTable = "creatives";
+    const { getApprovedCreatives } = await import("@/lib/supabase/queries");
+    expect(await getApprovedCreatives("business")).toEqual([]);
+  });
+});
+
 describe("instruction query failures", () => {
   it.each(["getAdInstructions", "getActiveInstructionsText"] as const)("%s rejects unavailable instructions with a safe error", async (queryName) => {
     mocks.failedTable = "ad_instructions";

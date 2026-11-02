@@ -1,12 +1,14 @@
 /** #1824: campaign tables and functions of the `public` schema (moved from types.ts; part of `Database`). */
 import type { Json } from "./json";
 import type { Database } from "./database";
+/** #2595: where a lead lands. WhatsApp is the default; narrow with `Exclude<>` where a path cannot handle one yet. */
+export type LeadDestination = "whatsapp" | "instant_form" | "call" | "website";
 export type CampaignStatus = "draft" | "active" | "paused" | "completed";
 
 export type CampaignTables = {
   campaigns: {
     Row: {
-      destination?: "instant_form" | "whatsapp" | "call" | "mixed" | "unknown";
+      destination?: LeadDestination | "mixed" | "unknown";
       id: string;
       business_id: string;
       name: string | null;
@@ -29,7 +31,7 @@ export type CampaignTables = {
       business_id: string;
       name?: string | null;
       objective: string;
-      destination?: "instant_form" | "whatsapp" | "call" | "mixed" | "unknown";
+      destination?: LeadDestination | "mixed" | "unknown";
       daily_budget?: number | null;
       status?: CampaignStatus;
       meta_campaign_id?: string | null;
@@ -118,7 +120,7 @@ export type CampaignTables = {
   };
   campaign_results: {
     Row: {
-      destination?: "instant_form" | "whatsapp" | "call" | "mixed" | "unknown";
+      destination?: LeadDestination | "mixed" | "unknown";
       period_start?: string | null;
       period_end?: string | null;
       id: string;
@@ -131,13 +133,15 @@ export type CampaignTables = {
       conversations?: number | null;
       cost_per_conversation?: number | null;
       whatsapp_opens?: number | null;
+      /** #2601: website campaigns' landing-page views (their result); 0 for other destinations. */
+      landing_page_views?: number;
       fetched_at: string;
     };
     Insert: {
       id?: string;
       campaign_id: string;
       impressions?: number;
-      destination?: "instant_form" | "whatsapp" | "call" | "mixed" | "unknown";
+      destination?: LeadDestination | "mixed" | "unknown";
       period_start?: string | null;
       period_end?: string | null;
       clicks?: number;
@@ -147,6 +151,7 @@ export type CampaignTables = {
       conversations?: number | null;
       cost_per_conversation?: number | null;
       whatsapp_opens?: number | null;
+      landing_page_views?: number;
       fetched_at?: string;
     };
     Update: Partial<

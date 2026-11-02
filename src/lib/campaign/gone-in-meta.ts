@@ -29,13 +29,39 @@ export function pausableCampaigns<T extends Pick<Campaign, "id" | "name" | "stat
 export const OUTSIDE_LINES = {
   paused: "This was paused in Meta Ads Manager. Nothing is spending.",
   budget: (now: string, was: string) => `The daily budget was changed in Meta Ads Manager: now ${now} a day (was ${was}).`,
+  endTime: (now: string) => `End date changed in Meta Ads Manager: now ${now}.`,
 } as const;
 
 type OutsideRow = Pick<Campaign, "status" | "daily_budget" | "raw">;
 type BudgetChange = { wasRupees: number; nowRupees: number; at: string };
+type EndTimeChange = { was: string; now: string; at: string };
 
 function rawObject(raw: Campaign["raw"]): Record<string, unknown> {
   return raw && typeof raw === "object" && !Array.isArray(raw) ? { ...(raw as Record<string, unknown>) } : {};
+}
+
+const second = (iso: unknown): number => typeof iso === "string" ? Math.floor(Date.parse(iso) / 1000) : Number.NaN;
+
+/** The latest capped run AdBrain recorded (#157): its ad set and the end time stored for it. */
+function latestCap(raw: Campaign["raw"]): { adSetId: string; endTime: string } | null {
+  const cap = rawObject(raw).cap as { adSetId?: unknown; endTime?: unknown } | undefined;
+  return cap && typeof cap.adSetId === "string" && typeof cap.endTime === "string" && Number.isFinite(second(cap.endTime))
+    ? { adSetId: cap.adSetId, endTime: cap.endTime } : null;
+}
+
+/** #2290: the end time Meta holds for the latest capped run's ad set, or null when Meta doesn't say. */
+export function metaCapEndTime(raw: Campaign["raw"], state: MetaCampaignState): string | null {
+  const cap = latestCap(raw);
+  const at = Date.parse(state.adSets.find(adSet => adSet.id === cap?.adSetId)?.endTime ?? "");
+  return cap && Number.isFinite(at) ? new Date(at).toISOString() : null;
+}
+
+/** #2290: the run's end date changed in Meta Ads Manager, while the row still holds that time (an AdBrain edit since replaces it). */
+export function endTimeChangedInMeta(campaign: Pick<Campaign, "raw">): EndTimeChange | null {
+  const change = rawObject(campaign.raw).metaEndTimeChange as Partial<EndTimeChange> | undefined;
+  const cap = latestCap(campaign.raw);
+  if (!change || !cap || typeof change.was !== "string" || typeof change.now !== "string" || typeof change.at !== "string") return null;
+  return second(change.now) === second(cap.endTime) ? { was: change.was, now: change.now, at: change.at } : null;
 }
 
 /** #1903: AdBrain thinks it runs, Meta says the owner paused it in Ads Manager. AdBrain's own status is kept. */
@@ -102,6 +128,19 @@ export function outsideChanges(
     else raw.metaBudgetChange = { wasRupees, nowRupees, at: now.toISOString() } satisfies BudgetChange;
     raised = nowRupees > row.daily_budget;
     dailyBudget = nowRupees;
+    changed = true;
+  }
+  // #2290: a capped run's end date moved in Ads Manager. Store Meta's time, so enforce-spend ends the run when Meta does.
+  const cap = latestCap(row.raw);
+  const metaEnd = metaCapEndTime(row.raw, state);
+  if (cap && metaEnd && second(metaEnd) !== second(cap.endTime)) {
+    const was = endTimeChangedInMeta(row)?.was ?? cap.endTime;
+    if (second(was) === second(metaEnd)) delete raw.metaEndTimeChange;
+    else raw.metaEndTimeChange = { was, now: metaEnd, at: now.toISOString() } satisfies EndTimeChange;
+    const stored = raw.cap as Record<string, unknown>;
+    // health.ts dates the run's start as endTime − days, so the days move with the end (as AdBrain's own edit does).
+    const days = typeof stored.days === "number" ? Math.max(1, stored.days + Math.round((Date.parse(metaEnd) - Date.parse(cap.endTime)) / 86_400_000)) : undefined;
+    raw.cap = { ...stored, endTime: metaEnd, ...days !== undefined ? { days } : {} };
     changed = true;
   }
   return changed ? { ...dailyBudget !== undefined ? { daily_budget: dailyBudget } : {}, raw: raw as Campaign["raw"], raised } : null;

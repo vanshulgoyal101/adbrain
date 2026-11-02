@@ -29,13 +29,15 @@ day." For every screen in detail, see [Manage](manage.md).
   from zero, so "results may be slow at first". Changing who sees a running
   campaign can mean a fresh copy that goes back to Meta's review, and "learning
   restarts". So give it time before you change things.
-- Meta spreads your money across the days: "one day can be a bit more than ₹300
+- Meta spreads your money across the days: "one day can be more than ₹300
   and another less. The total never goes past the limit above."
 
 ## Each day: check Home, reply fast
 
 - **Home** shows your results so far: "Chats" (or "Enquiries" if you run a form
   ad), "Spent" and "Per chat". "—" means not yet. Below it: "Updated 4m ago".
+  On narrow phones, whole figures move to the next row instead of splitting
+  currency digits; **New campaign** sits separately above the figures.
 - Above the numbers is one line on how it's going, such as "Each chat costs ₹45."
   If people are waiting, it starts with "1 person is waiting for your reply." and
   shows "Reply now".

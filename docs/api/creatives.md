@@ -109,7 +109,10 @@ Returns `{variantGroup, creatives, failures}`. Individual saved variants survive
 other failures. If none save, returns 502 with an error/failure list. Missing
 generation schema or unavailable admission blocks before work with 503.
 No configured text keys can return 400/`NO_LLM_KEYS`; exceeded quota returns
-429/`LLM_MONTHLY_QUOTA_EXCEEDED`. Generation/regeneration declare a 300-second
+429/`LLM_MONTHLY_QUOTA_EXCEEDED`. While another batch for the business is still
+making its first ad (under 5 minutes), a new id returns 409/`CREATE_RUNNING` with
+that batch's `variantGroup` and `expectedCount`, so the caller follows it instead
+of paying for a second (#1402). Generation/regeneration declare a 300-second
 route duration; host execution limits still apply.
 
 Live progress (Create): send `Accept: application/x-ndjson`. A request rejected
@@ -147,7 +150,8 @@ can free unused quota after the batch has settled; one failed angle cannot free
 its still-running siblings' hold. The failed UUID remains non-reusable. Omitted `generationId` gets
 a new server UUID and cannot be replayed safely after a lost response.
 
-Recovery uses `GET /api/creatives/generate?businessId=...&generationId=...&expectedCount=3`.
+Recovery uses `GET /api/creatives/generate?businessId=...&generationId=...&expectedCount=3`
+(150 reads per 5 minutes per owner across all tabs, 429 with `Retry-After` beyond; #2553).
 `generationId` must be UUID; optional `expectedCount` is integer 1-6 and, if
 provided, must match the claimed count (409 otherwise). The source candidate
 returns `{status, creatives, count, expectedCount}` based on the persisted

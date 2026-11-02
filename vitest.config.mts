@@ -2,6 +2,8 @@ import react from "@vitejs/plugin-react";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
+const root = fileURLToPath(new URL(".", import.meta.url));
+
 export default defineConfig({
   plugins: [react()],
   test: {
@@ -11,11 +13,30 @@ export default defineConfig({
     globals: true,
     setupFiles: ["./tests/setup.ts"],
     include: ["tests/**/*.test.{ts,tsx}"],
+    // `vitest --changed` (PR CI, #2386) runs every test when one of these changed.
+    // Root-anchored: src/lib/supabase must not match supabase/.
+    forceRerunTriggers: [
+      "**/package.json",
+      "**/{vitest,vite}.config.*",
+      `${root}package-lock.json`,
+      `${root}tsconfig*.json`,
+      `${root}tests/setup.ts`,
+      `${root}.github/**`,
+      `${root}supabase/**`,
+    ],
     // jsdom component tests (render + userEvent) can exceed the 5s default when
     // the machine is under load; a longer ceiling avoids spurious CI failures
     // while still catching genuinely hung tests.
     testTimeout: 15000,
     hookTimeout: 15000,
+    // #618: the CI unit shards set FLAKY_REPORT. There a failed test gets one retry; one that passes on it is flaky,
+    // recorded for its issue, not a red job. A real failure fails both tries. Other runs (core, local) never retry.
+    retry: process.env.FLAKY_REPORT ? 1 : 0,
+    reporters: [
+      "default",
+      ...(process.env.GITHUB_ACTIONS === "true" ? ["github-actions"] : []),
+      ...(process.env.FLAKY_REPORT ? ["./scripts/flaky-reporter.mjs"] : []),
+    ],
     coverage: {
       provider: "v8",
       reporter: ["text-summary", "lcov"],

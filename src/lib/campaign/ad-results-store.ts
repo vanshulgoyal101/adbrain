@@ -29,7 +29,10 @@ export async function saveAdResults(database: Store, row: { businessId: string; 
     ad_name: ad.name?.slice(0, 400) ?? null, effective_status: storedStatus(ad),
     period_start: null, period_end: null, delivered: ad.delivered,
     impressions: ad.impressions, link_clicks: ad.whatsappOpens ?? ad.clicks,
-    conversations: ad.whatsappOpens === undefined ? 0 : ad.results, leads: ad.whatsappOpens === undefined ? ad.results : 0,
+    conversations: ad.whatsappOpens === undefined ? 0 : ad.results,
+    leads: ad.whatsappOpens === undefined && ad.landingPageViews === undefined ? ad.results : 0,
+    // #2601: only a website campaign writes the column, so other saves don't depend on it.
+    ...(ad.landingPageViews === undefined ? {} : { landing_page_views: ad.landingPageViews }),
     spend_paise: Math.round(ad.spend * 100), synced_at: syncedAt,
   })), { onConflict: "campaign_id,meta_ad_id,period_start,period_end" });
   return !error;
@@ -38,7 +41,16 @@ export async function saveAdResults(database: Store, row: { businessId: string; 
 export type StoredAdResult = {
   meta_ad_id: string; ad_name: string | null; effective_status: string | null; delivered: boolean;
   impressions: number; link_clicks: number; conversations: number; leads: number; spend_paise: number; synced_at: string;
+  landing_page_views?: number;
 };
+
+/** The `ad_results` columns a card reads, for every reader of stored per-ad results. */
+export const AD_RESULT_COLUMNS = "meta_ad_id, ad_name, effective_status, delivered, impressions, link_clicks, conversations, leads, landing_page_views, spend_paise, synced_at";
+
+/** #2601: a stored ad's headline result: chats for WhatsApp, landing-page views for a website, form enquiries otherwise. */
+export function storedAdResult(row: StoredAdResult, destination: string | null | undefined): number {
+  return destination === "whatsapp" ? row.conversations : destination === "website" ? row.landing_page_views ?? 0 : row.leads;
+}
 
 /** The AdBrain creative an ad was launched from, so the card shows its picture and headline (Designer, #783). */
 export type AdCreative = { headline: string | null; imageUrl: string | null };
@@ -75,16 +87,16 @@ export type AdResultView = {
   impressions: number; results: number; spend: number; costPerResult: number | null;
 };
 
-/** The card's rows: results are chats for a WhatsApp campaign, form enquiries otherwise; "Best" by #783's rule. */
+/** The card's rows: results by the campaign's destination (`storedAdResult`); "Best" by #783's rule. */
 export function adResultViews(
-  stored: StoredAdResult[], whatsapp: boolean,
+  stored: StoredAdResult[], destination: string | null | undefined,
   linked?: { links: Map<string, AdCreativeLink>; creatives: Map<string, AdCreative> },
 ): { ads: AdResultView[]; syncedAt: string | null } {
   const linkOf = (adId: string) => linked?.links.get(adId);
   // A capped run's earlier ad that never delivered is a zero-row duplicate of its running copy.
   const rows = stored.filter(row => row.delivered || linkOf(row.meta_ad_id)?.live !== false);
   const ads: AdResult[] = rows.map(row => {
-    const results = whatsapp ? row.conversations : row.leads;
+    const results = storedAdResult(row, destination);
     const spend = row.spend_paise / 100;
     return {
       adId: row.meta_ad_id, name: row.ad_name, effectiveStatus: row.effective_status, creativeId: null, delivered: row.delivered,

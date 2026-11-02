@@ -41,7 +41,7 @@ vi.mock("@/lib/campaign/preflight-runtime", () => ({ buildCampaignPreflightLoade
 const post = (body: unknown) => new Request("https://adbrain.test/api", { method: "POST", body: JSON.stringify(body) });
 const preflight = async () => (await import("@/app/api/campaigns/preflight/route")).POST(post({ businessId, draftId, draftVersion: 1 }));
 const create = async () => (await import("@/app/api/campaigns/create/route")).POST(post({
-  businessId, draftId, draftVersion: 1, planHash: "a".repeat(64), connectionGeneration: 1, idempotencyKey: "key-12345678",
+  businessId, draftId, draftVersion: 1, planHash: "a".repeat(64), connectionGeneration: 1, idempotencyKey: "test-idem-1",
 }));
 const error = async (response: Response) => ({ status: response.status, ...(await response.json()).error });
 

@@ -1,15 +1,17 @@
-import { adPolicyHits } from "@/lib/campaign/ad-policy";
+import { adPolicyHits, isHealthPromise } from "@/lib/campaign/ad-policy";
 import type { GeoTargeting } from "@/lib/meta/client";
 import { describeServiceArea } from "@/lib/meta/service-area";
 import { effectiveDailyBudget } from "@/lib/campaign/spend";
 import type { DraftInput, ReviewDTO } from "@/lib/campaign/connect-contracts";
 import type { ReviewBlockerReason, SelectedAssets } from "@/lib/meta/connect-contracts";
-import { normalizeWebsite } from "@/lib/brand/validation";
-import { askMismatchWarning, QUOTED_ASK_WITH_QUESTIONS, reviewWarnings, WHATSAPP_PICTURE_ON_FORM } from "@/lib/campaign/plan-check";
+import { askMismatchWarning, QUOTED_ASK_WITH_QUESTIONS, reviewWarnings, WHATSAPP_PICTURE_ON_FORM, WHATSAPP_PICTURE_ON_WEBSITE, type ReviewDestination } from "@/lib/campaign/plan-check";
 import { quotedAsk, sameWords } from "@/lib/campaign/whatsapp-greeting";
 import { batchProofWarning } from "@/lib/creative/proof-line";
 import type { ResolvedWhatsAppMessage } from "@/lib/campaign/whatsapp-template";
 import { translator, type AppLocale } from "@/i18n/locale";
+import type { WebsiteReach } from "@/lib/campaign/website-reach";
+import { isAdvertiserWebsite, websiteAdLink, websiteBlocker } from "@/lib/campaign/website-review";
+import { creativesBlockerMessage, named, websiteBlockerWords } from "@/lib/campaign/review-blocker-words";
 
 /** #1799: Meta's minimum daily budget per impression-billed ad set in INR (₹95.46, Oct 29), rounded up. */
 export const META_MIN_DAILY_BUDGET_RUPEES = 96;
@@ -72,6 +74,8 @@ export interface PreflightInput {
   brandFacts?: string[];
   /** Business website; undefined when the caller does not check it. */
   website?: string | null;
+  /** #2599: whether a website ad's link opens the advertiser's own site; a website ad without it is blocked. */
+  websiteReach?: WebsiteReach;
   geo: PreflightGeo;
   hash: (payload: string) => string;
   /** The business's own cost per chat or lead for this kind of campaign (#419 2b); unknown when absent. */
@@ -81,8 +85,6 @@ export interface PreflightInput {
   /** #2333: the owner's app language for the blocker sentences; English when absent. */
   locale?: AppLocale;
 }
-
-type ReviewSay = ReturnType<typeof translator<"review">>;
 
 export type ReviewFreshnessInput = {
   draftVersion: number;
@@ -110,8 +112,9 @@ export interface CanonicalReviewPayload {
   creativeIds: string[];
   creatives: ReturnType<typeof buildCreativeReviewPayload>;
   leadFormId: string | null;
-  destination: "instant_form" | "whatsapp";
+  destination: ReviewDestination;
   whatsappNumber: string | null;
+  websiteUrl?: string | null;
   dailyBudgetRupees: number;
   abTest: boolean;
   excludeFacebookReels?: true;
@@ -134,53 +137,15 @@ function reviewedMessage({ source, opening, language }: ResolvedWhatsAppMessage)
   };
 }
 
-/** The ad's quoted, shortened headline; null without one (the sentence then says "the ad you chose"). */
-function adName(creative: PreflightCreative): string | null {
-  const headline = (creative.headline ?? "").trim();
-  if (!headline) return null;
-  // Whole characters, so a Hindi matra or an emoji is never split.
-  const graphemes = Array.from(new Intl.Segmenter("en", { granularity: "grapheme" }).segment(headline), (part) => part.segment);
-  if (graphemes.length <= 40) return `"${headline}"`;
-  const cut = graphemes.slice(0, 40).join("");
-  return `"${(cut.lastIndexOf(" ") > 20 ? cut.slice(0, cut.lastIndexOf(" ")) : cut).trimEnd()}…"`;
+/** #2452: whether the message launch rebuilt from fresh reads is the one this review checked; launch refuses otherwise. */
+export function isReviewedWhatsAppMessage(message: ResolvedWhatsAppMessage, review: Pick<ReviewDTO, "whatsappMessage">): boolean {
+  return Boolean(review.whatsappMessage)
+    && JSON.stringify(canonicalize(reviewedMessage(message))) === JSON.stringify(canonicalize(review.whatsappMessage));
 }
 
-/** #681: which chosen ad is wrong and what to do about it, not one sentence for every fault. */
-function creativesBlockerMessage(draft: PreflightInput["draft"], creatives: PreflightCreative[], say: ReviewSay): string | null {
-  if (draft.creativeIds.length === 0) return say("noAds");
-  const unique = new Set(draft.creativeIds).size === draft.creativeIds.length;
-  const found = creatives.filter((creative) => creative.businessId === draft.businessId && draft.creativeIds.includes(creative.id));
-  if (!unique || new Set(creatives.map((creative) => creative.id)).size !== creatives.length || found.length !== creatives.length || found.length !== draft.creativeIds.length) {
-    return say("adGone");
-  }
-  const problems = found.flatMap((creative) => {
-    if (!creative.headline) return [say("adNoHeadline")];
-    const name = adName(creative);
-    const ad = { named: name ? "yes" : "no", name: name ?? "" };
-    if (!creative.approved) return [say("adNotApproved", ad)];
-    if (!creative.imageUrl) return [say("adNoPicture", ad)];
-    return [];
-  });
-  if (!problems.length) return null;
-  const more = problems.length - 1;
-  return more ? say("adsMore", { first: problems[0], more }) : problems[0];
-}
-
-/** #740: name what Meta didn't recognise, so the owner knows which line to fix. */
-function named(names: string[], say: ReviewSay): string {
-  const shown = names.slice(0, 5).map((name) => `"${name}"`);
-  const list = shown.length > 1 ? say("listAnd", { first: shown.slice(0, -1).join(", "), last: shown.at(-1)! }) : shown[0];
-  return names.length > shown.length ? say("listMore", { names: list, more: names.length - shown.length }) : list;
-}
-
-function isAdvertiserWebsite(website: string | null): boolean {
-  // Brands saved before #470 may hold a bare domain.
-  const normalized = normalizeWebsite(website);
-  if (!normalized) return false;
-  const url = new URL(normalized);
-  const host = url.hostname.toLowerCase().replace(/^www\./, "");
-  return (url.protocol === "https:" || url.protocol === "http:") &&
-    !["facebook.com", "fb.com", "fb.me", "instagram.com", "m.me", "wa.me"].some((blocked) => host === blocked || host.endsWith(`.${blocked}`));
+/** The destination Review checks; a draft saved before destinations existed is a form campaign. */
+function reviewDestination(draft: DraftInput): ReviewDestination {
+  return draft.destination ?? "instant_form";
 }
 
 function canonicalize(value: unknown): unknown {
@@ -210,15 +175,17 @@ export function buildCanonicalReviewPayload(
     selected: input.connection?.selected ?? null,
     creativeIds: [...input.draft.creativeIds].sort(),
     creatives: buildCreativeReviewPayload(input.creatives),
-    leadFormId: input.draft.destination === "whatsapp" ? null : input.draft.leadFormId,
+    leadFormId: reviewDestination(input.draft) === "instant_form" ? input.draft.leadFormId : null,
     destination: input.draft.destination ?? "instant_form",
     whatsappNumber: input.draft.destination === "whatsapp" ? input.whatsappNumber ?? null : null,
+    // #2599: only for website ads, so other plans keep their hash; a Brand website edit after Review changes the plan.
+    ...(reviewDestination(input.draft) === "website" ? { websiteUrl: websiteAdLink(input.website) } : {}),
     // #493: only when it changes what's sent, so plans reviewed before this field keep their hash.
     ...(input.draft.destination === "whatsapp" && input.draft.whatsappLanguage && input.draft.whatsappLanguage !== "ad"
       ? { whatsappLanguage: input.draft.whatsappLanguage } : {}),
-    // #840: an edited or saved message is fixed text, so a change to it needs a new review. A
-    // suggestion is derived from what's already here, so plans without one keep their hash.
-    ...(input.draft.destination === "whatsapp" && input.whatsappMessage && input.whatsappMessage.source !== "suggested"
+    // #840/#2452: the exact message launch will send, suggested ones too: a suggestion is rebuilt from the Brand's name,
+    // offers and areas at launch, so a Brand edit after Review changes the plan and launch refuses it.
+    ...(input.draft.destination === "whatsapp" && input.whatsappMessage
       ? { whatsappOpening: input.whatsappMessage.opening } : {}),
     dailyBudgetRupees: input.draft.dailyBudgetRupees,
     abTest: input.draft.abTest,
@@ -247,6 +214,7 @@ export function runPreflight(input: PreflightInput): ReviewDTO {
   const blockers: ReviewDTO["blockers"] = [];
   const { draft } = input;
   const say = translator(input.locale ?? "en", "review");
+  const destination = reviewDestination(draft);
 
   if (!input.connection?.selected) {
     blockers.push(blocker("SETUP_REQUIRED", "REVIEW_NO_META_CONNECTION", say("noMetaConnection")));
@@ -268,15 +236,24 @@ export function runPreflight(input: PreflightInput): ReviewDTO {
     if (input.whatsappMessageProblem) {
       blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_WHATSAPP_MESSAGE", say("whatsappMessage", { problem: input.whatsappMessageProblem })));
     }
-  } else if (!draft.leadFormId || !input.form || input.form.id !== draft.leadFormId || input.form.businessId !== draft.businessId || !input.form.active) {
+  } else if (destination === "instant_form" && (!draft.leadFormId || !input.form || input.form.id !== draft.leadFormId || input.form.businessId !== draft.businessId || !input.form.active)) {
     blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_NO_LEAD_FORM", say("noLeadForm")));
   }
-  if (draft.destination !== "whatsapp" && input.website !== undefined && !isAdvertiserWebsite(input.website)) {
+  if (destination === "website") {
+    const websiteProblem = websiteBlocker(input.website ?? null, input.websiteReach);
+    if (websiteProblem) {
+      const reason = websiteProblem.missing ? "REVIEW_NO_WEBSITE" : "REVIEW_WEBSITE_UNREACHABLE";
+      blockers.push(blocker("PREFLIGHT_BLOCKED", reason, websiteBlockerWords(websiteProblem, say), { kind: "open_brand" }));
+    }
+  } else if (destination !== "whatsapp" && input.website !== undefined && !isAdvertiserWebsite(input.website)) {
     blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_NO_WEBSITE", say("noWebsite"), { kind: "open_brand" }));
   }
   const policyHit = adPolicyHits(input.creatives, input.vertical)[0];
   if (policyHit) {
-    blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_AD_POLICY", say("adPolicy", { term: policyHit.term, named: policyHit.headline == null ? "no" : "yes", headline: policyHit.headline ?? "" })));
+    blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_AD_POLICY", say("adPolicy", {
+      term: policyHit.term, named: policyHit.headline == null ? "no" : "yes", headline: policyHit.headline ?? "",
+      kind: isHealthPromise(policyHit.term, input.vertical) ? "health" : "other",
+    })));
   }
   if (draft.dailyBudgetRupees <= 0) {
     blockers.push(blocker("INVALID_INPUT", "REVIEW_BUDGET", say("budgetZero")));
@@ -319,7 +296,7 @@ export function runPreflight(input: PreflightInput): ReviewDTO {
   const creativeHash = input.hash(JSON.stringify(buildCreativeReviewPayload(input.creatives)));
   const planHash = blockers.length ? null : input.hash(canonicalJson(payload));
   const planWarnings = reviewWarnings({
-    destination: draft.destination ?? "instant_form",
+    destination,
     storyReady: input.creatives.length > 0 && input.creatives.every((creative) => creative.storyReady === true),
     perAdSetDailyBudgetRupees, costPerResultRupees: input.costPerResultRupees,
   });
@@ -339,7 +316,9 @@ export function runPreflight(input: PreflightInput): ReviewDTO {
   const proof = batchProofWarning(input.creatives.map((creative) => [creative.headline, creative.primaryText].filter(Boolean).join("\n")), input.brandFacts ?? []);
   if (proof) planWarnings.push(proof);
   // #1177: the picture says "Message us on WhatsApp" but the button opens a form. Never a blocker.
-  if ((draft.destination ?? "instant_form") !== "whatsapp" && input.creatives.some((creative) => creative.asksWhatsApp)) planWarnings.push(WHATSAPP_PICTURE_ON_FORM);
+  if (destination !== "whatsapp" && input.creatives.some((creative) => creative.asksWhatsApp)) {
+    planWarnings.push(destination === "website" ? WHATSAPP_PICTURE_ON_WEBSITE : WHATSAPP_PICTURE_ON_FORM);
+  }
 
   return {
     draftId: input.draftId,
@@ -351,6 +330,7 @@ export function runPreflight(input: PreflightInput): ReviewDTO {
     creativeHash,
     destination: draft.destination ?? "instant_form",
     whatsappNumber: draft.destination === "whatsapp" ? input.whatsappNumber ?? null : null,
+    ...(payload.websiteUrl !== undefined ? { websiteUrl: payload.websiteUrl } : {}),
     currency: "INR",
     perAdSetDailyBudgetRupees,
     adSetCount,

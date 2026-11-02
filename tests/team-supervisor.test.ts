@@ -1,8 +1,9 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { spawnSync, type SpawnSyncReturns } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { activeRun, agentArgs, didWork, firstPrompt, lastWakes, lastWords, liveRoles, pickRole, prompt, restartPrompt, roleFromPrompt, runsToday, scheduledJobsDue, exportDue, exportsToPrune, encryptExport, loadSkip, machineLoad } from "../scripts/team-supervisor.mjs";
+import { activeRun, agentArgs, didWork, firstPrompt, lastWakes, lastWords, liveRoles, pickRole, prompt, restartPrompt, roleFromPrompt, runsToday, scheduledJobsDue, exportDue, exportsToPrune, encryptExport, loadSkip, machineLoad, plist, awakePlist } from "../scripts/team-supervisor.mjs";
 
 const dir = mkdtempSync(join(tmpdir(), "supervisor-"));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
@@ -107,6 +108,20 @@ describe("team-supervisor (#573 A1)", () => {
     expect(text).toContain('"Dev 2:"');
     expect(() => restartPrompt("nobody")).toThrow();
   });
+
+  it("gives a rotated-in CEO a succession prompt that respawns workers outside its own session (#2476)", () => {
+    const text = restartPrompt("ceo");
+    expect(roleFromPrompt(text)).toBe("ceo");
+    expect(text).toContain('relationship "independent"');
+    expect(text).toContain("never delete another session");
+    expect(text).toContain("--restart-prompt <role>");
+    expect(text).toContain("wait-for-work.mjs --me ceo");
+    for (const r of ["dev", "dev4", "qa2", "reviewer", "devops", "cto", "docs"]) expect(text).toContain(`(${r})`);
+    expect(text).toContain("ask the owner to close that session first");
+    expect(text).toContain("a running chat reads no chat messages");
+    expect(text).not.toContain("steer one line");
+    expect(text).not.toMatch(/\(ceo\)/);
+  });
 });
 
 describe("scheduled-jobs dispatch (#692)", () => {
@@ -207,5 +222,103 @@ describe("nightly export encryption (#1762)", () => {
     expect(encryptExport(folder, run as never)).toBe(false);
     expect(existsSync(folder)).toBe(false);
     expect(existsSync(`${folder}.tar.gz.cms`)).toBe(false);
+  });
+  it("keeps a failed restore encrypted without naming it as a completed backup", () => {
+    const folder = join(dir, "2026-11-02T02-32Z");
+    const plaintext = "private backup fixture";
+    mkdirSync(folder);
+    writeFileSync(join(folder, "leads.json"), plaintext);
+
+    expect(encryptExport(folder, spawnSync, false)).toBe(true);
+    expect(existsSync(folder)).toBe(false);
+    expect(existsSync(`${folder}.tar.gz`)).toBe(false);
+    expect(existsSync(`${folder}.tar.gz.cms`)).toBe(false);
+    const sealed = `${folder}.unverified.tar.gz.cms`;
+    expect(statSync(sealed).mode & 0o777).toBe(0o600);
+    expect(readFileSync(sealed).includes(Buffer.from(plaintext))).toBe(false);
+  });
+  it("retries failed restore drills, keeps their archives bounded, and stops after a verified backup", async () => {
+    const { nightlyExport } = await import("../scripts/team-supervisor.mjs");
+    const backupDir = join(dir, "retry-backups");
+    mkdirSync(backupDir);
+    const verified = "2026-11-01T10-35Z.tar.gz.cms";
+    writeFileSync(join(backupDir, verified), "previous verified backup");
+    for (let day = 24; day <= 30; day++) {
+      writeFileSync(join(backupDir, `2026-10-${day}T00-00Z.unverified.tar.gz.cms`), "older unverified backup");
+    }
+
+    let attempts = 0;
+    let cleanups = 0;
+    let notifications = 0;
+    const result = (status: number, stdout: string): SpawnSyncReturns<string> => ({
+      pid: 0,
+      output: [null, stdout, ""],
+      stdout,
+      stderr: "",
+      status,
+      signal: null,
+    });
+    const runScript = (script: string, args: string[]): SpawnSyncReturns<string> => {
+      if (script === "scripts/db-export.mjs" && args[0] === "export") {
+        attempts++;
+        mkdirSync(args[1]);
+        writeFileSync(join(args[1], "data.json"), "private backup fixture");
+        return result(0, "exported");
+      }
+      if (script === "scripts/db-export.mjs" && args[0] === "restore") {
+        return result(attempts < 3 ? 1 : 0, "restore drill");
+      }
+      if (script === "scripts/prune-smoke-storage.mjs") {
+        cleanups++;
+        return result(0, "cleanup");
+      }
+      throw new Error(`Unexpected script: ${script}`);
+    };
+    const options = {
+      backupDir,
+      runScript,
+      logLine: () => {},
+      notifyFailure: () => {
+        notifications++;
+        expect(readdirSync(backupDir).filter((name) => name.endsWith(".unverified.tar.gz.cms"))).toHaveLength(7);
+      },
+    };
+
+    nightlyExport(false, { ...options, now: new Date("2026-11-02T02:32:00Z") });
+    expect(existsSync(join(backupDir, "2026-11-02T02-32Z.unverified.tar.gz.cms"))).toBe(true);
+    expect(existsSync(join(backupDir, "2026-11-02T02-32Z.tar.gz.cms"))).toBe(false);
+    expect(existsSync(join(backupDir, verified))).toBe(true);
+    expect(readdirSync(backupDir).filter((name) => name.endsWith(".unverified.tar.gz.cms"))).toHaveLength(7);
+    expect(existsSync(join(backupDir, "2026-10-24T00-00Z.unverified.tar.gz.cms"))).toBe(false);
+    expect(cleanups).toBe(0);
+    expect(notifications).toBe(1);
+
+    nightlyExport(false, { ...options, now: new Date("2026-11-02T02:42:00Z") });
+    expect(existsSync(join(backupDir, "2026-11-02T02-42Z.unverified.tar.gz.cms"))).toBe(true);
+    expect(cleanups).toBe(0);
+    expect(notifications).toBe(2);
+
+    nightlyExport(false, { ...options, now: new Date("2026-11-02T02:52:00Z") });
+    expect(existsSync(join(backupDir, "2026-11-02T02-52Z.tar.gz.cms"))).toBe(true);
+    expect(cleanups).toBe(1);
+    nightlyExport(false, { ...options, now: new Date("2026-11-02T03:02:00Z") });
+    expect(attempts).toBe(3);
+    expect(cleanups).toBe(1);
+    expect(notifications).toBe(2);
+  });
+});
+
+describe("LaunchAgent plists (#766)", () => {
+  const rawAmpersand = /&(?!amp;|lt;|gt;|quot;|apos;)/;
+  it("escapes the shell command so the supervisor plist is valid XML", () => {
+    const text = plist(null);
+    expect(text).toContain("&amp;&amp; exec");
+    expect(text).not.toMatch(rawAmpersand);
+  });
+  it("keeps the Mac awake on the charger only, without sudo", () => {
+    const text = awakePlist();
+    expect(text).toContain("<string>/usr/bin/caffeinate</string><string>-s</string>");
+    expect(text).toContain("<key>KeepAlive</key><true/>");
+    expect(text).not.toMatch(rawAmpersand);
   });
 });

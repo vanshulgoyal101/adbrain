@@ -61,7 +61,8 @@ export const draftInputSchema = z
     creativeIds: z.array(uuid).max(50),
     dailyBudgetRupees: moneyRupees,
     leadFormId: metaId.nullable(),
-    destination: z.enum(["instant_form", "whatsapp"]).optional(),
+    /** #2599: "website" opens the advertiser's own site; Review checks it is reachable before launch. */
+    destination: z.enum(["instant_form", "whatsapp", "website"]).optional(),
     /** WhatsApp button number when it differs from the Page's, in full or masked as AdBrain shows it ("+91 ••••• 4842"); verified against Meta at review. */
     whatsappNumber: z.union([z.string().regex(/^\+[1-9]\d{6,14}$/), z.string().regex(maskedWhatsAppNumberPattern)]).optional(),
     /** #493: the language of the WhatsApp message the customer sends; "ad" (default) follows the ads. */
@@ -111,8 +112,10 @@ export const reviewDtoSchema = z.object({
   blockers: z.array(blockerSchema).max(20),
   planHash: z.string().regex(/^[a-f0-9]{64}$/).nullable(),
   creativeHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
-  destination: z.enum(["instant_form", "whatsapp"]).optional(),
+  destination: z.enum(["instant_form", "whatsapp", "website"]).optional(),
   whatsappNumber: z.string().regex(/^\+[1-9]\d{6,14}$/).nullable().optional(),
+  /** #2599: a website ad's link exactly as Review opened and hashed it; launch sends this, never a fresh Brand read. */
+  websiteUrl: z.string().url().max(2_000).nullable().optional(),
   currency: z.literal("INR"),
   perAdSetDailyBudgetRupees: moneyRupees,
   adSetCount: z.number().int().positive().max(50),
@@ -128,7 +131,7 @@ export const reviewDtoSchema = z.object({
     keptStates: z.array(boundedText(100)).max(36),
     excludedStateCount: z.number().int().nonnegative().max(36),
   }).optional(),
-  /** #840: what the WhatsApp ad will send, as launch sends it. Edited and saved messages are in the plan hash. */
+  /** #840/#2452: what the WhatsApp ad will send, as launch sends it. Every message, suggested too, is in the plan hash. */
   whatsappMessage: z.object({
     source: z.enum(["edited", "saved", "suggested"]),
     greeting: z.string().max(1_000),

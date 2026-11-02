@@ -44,8 +44,12 @@ export function capitalWords(text: string): string[] {
   return [...new Set(text.split(/[\s/-]+/).map(bareWord).filter((w) => w === w.toUpperCase() && /\p{Lu}.*\p{Lu}/u.test(w)))];
 }
 
-/** #1609 (CPO): "वीज़ा" is typed precomposed, decomposed or without the nukta, so claims compare without it. */
-export const foldClaimText = (text: string) => text.toLowerCase().normalize("NFD").replace(/[\u093C\u0A3C]/g, "");
+/**
+ * #1609 (CPO): "वीज़ा" is typed precomposed, decomposed or without the nukta, so claims compare without it. #2423:
+ * "risk‑free", "Guaranteed-savings" and line-broken phrases are the same claim, so dashes and spacing fold to one space.
+ */
+export const foldClaimText = (text: string) => text.toLowerCase().normalize("NFD").replace(/[\u093C\u0A3C]/g, "")
+  .replace(/[\s\u002D\u2010-\u2015\u2212]+/gu, " ");
 
 /** Return every quality problem found in `text`. Empty array = clean. */
 export function scanAdCopy(text: string, opts: SlopScanOptions = {}): SlopFinding[] {
@@ -78,11 +82,14 @@ export function scanAdCopy(text: string, opts: SlopScanOptions = {}): SlopFindin
   }
 
   const folded = foldClaimText(text);
+  const claimed = new Set<string>();
   for (const claim of opts.bannedClaims ?? []) {
     const term = foldClaimText(claim);
     // "heal" (heals, healed, healing) is a health claim; "health" is not.
     const found = term === "heal" ? /heal(?!th)/.test(folded) : folded.includes(term);
-    if (claim && found) {
+    // "risk-free" and "risk free" fold alike: report the claim once.
+    if (claim && found && !claimed.has(term)) {
+      claimed.add(term);
       findings.push({ rule: "banned-claim", detail: claim });
     }
   }
@@ -171,6 +178,9 @@ export const EDUCATION_BANNED_CLAIMS = [
   "1st attempt",
   // CPO (Analyst #1514 ② ④): fixed visa timelines and document fraud. "No IELTS needed" stays allowed (some waive it).
   "visa in ", // with its space: "visa interview practice" is fine
+  // #2452: "Visa in just 30 days" is the same fixed timeline.
+  "visa in just ",
+  "visa in only ",
   "fake",
   "arranged offer letter",
   "backdated",
@@ -186,11 +196,54 @@ export const EDUCATION_BANNED_CLAIMS = [
   "visa pakka",
 ];
 
+/** #2423 (Analyst #2411): solar, energy and home-interiors businesses, whose ads sell savings or a return on the job. */
+export const HOME_SERVICES_VERTICAL = /solar|rooftop|inverter|energy|interior|modular kitchen|home improvement|renovat|furnish|furniture|false ceiling|wardrobe/i;
+
+/**
+ * Meta's prohibited commercial practices: returns "guaranteed or risk-free", or a guaranteed result. Refused even when
+ * a Brand fact says it. Product warranties stay allowed ("25-year panel guarantee" names no outcome), so a bare
+ * "guarantee" is not on this list. Singular only: Create matches substrings and Review takes a plural "s".
+ */
+export const OUTCOME_GUARANTEE_CLAIMS = [
+  "guaranteed saving",
+  "savings guaranteed",
+  "saving guaranteed",
+  "assured saving",
+  "guaranteed return",
+  "assured return",
+  "guaranteed roi",
+  "roi guaranteed",
+  "guaranteed profit",
+  "guaranteed income",
+  "guaranteed zero bill",
+  "risk-free",
+  "lowest price guaranteed",
+  "lowest prices guaranteed",
+  "guaranteed lowest price",
+  "lowest price guarantee",
+  "बचत की गारंटी",
+  "गारंटीड बचत",
+  "रिटर्न की गारंटी",
+  "गारंटीड रिटर्न",
+  "मुनाफे की गारंटी",
+  "जोखिम मुक्त",
+  "जोखिम-मुक्त",
+  "ਬੱਚਤ ਦੀ ਗਾਰੰਟੀ",
+  "ਗਾਰੰਟੀਡ ਬੱਚਤ",
+  "ਰਿਟਰਨ ਦੀ ਗਾਰੰਟੀ",
+  "ਗਾਰੰਟੀਡ ਰਿਟਰਨ",
+  "ਜੋਖਮ ਮੁਕਤ",
+  "bachat ki guarantee",
+  "guaranteed bachat",
+  "return ki guarantee",
+];
+
 export function bannedClaimsForVertical(vertical?: string | null): string[] {
   const text = vertical ?? "";
-  return [
+  return [...new Set([
     ...(HEALTH_VERTICAL.test(text) ? MEDICAL_BANNED_CLAIMS : []),
     ...(EDUCATION_VERTICAL.test(text) ? EDUCATION_BANNED_CLAIMS : []),
-  ];
+    ...(HOME_SERVICES_VERTICAL.test(text) ? OUTCOME_GUARANTEE_CLAIMS : []),
+  ])];
 }
 

@@ -6,6 +6,7 @@ import { getEnv } from "@/lib/env";
 import { AD_ANGLES, getAngleByName } from "@/lib/templates/ads";
 import type { Json } from "@/lib/types";
 import { getCostPerResult } from "@/lib/campaign/result-evidence-store";
+import { checkWebsiteReach } from "@/lib/campaign/website-reach";
 import { getConnectionStatus, withMetaConnection, type AuthorizedBusiness } from "@/lib/meta/connection-access";
 import { draftRecordFromRow } from "@/lib/campaign/draft-store";
 import { whatsappNumberForBusiness } from "@/lib/meta/whatsapp-bindings";
@@ -14,7 +15,7 @@ import type { createClient } from "@/lib/supabase/server";
 import { resolveDraftTargeting } from "./draft-targeting";
 import { savedCreativeDescription } from "@/lib/creative/concept";
 import { campaignWhatsAppMessage } from "./campaign-whatsapp-message";
-import { whatsappTemplateProblem } from "./whatsapp-template-check";
+import { whatsappOpeningProblem, whatsappTemplateProblem } from "./whatsapp-template-check";
 
 export type CampaignSupabase = Awaited<ReturnType<typeof createClient>>;
 
@@ -75,19 +76,23 @@ export function buildCampaignPreflightLoaders(
       return withMetaConnection(authorizedBusiness, { purpose: "create_paused" }, (meta) => whatsappNumberForBusiness(authorizedBusiness.businessId, meta, requested ?? null));
     },
     findWhatsAppMessage: async (actor, draft) => {
-      const [{ data: business, error }, { data: creatives }] = await Promise.all([
+      const [{ data: business, error }, { data: creatives, error: creativesError }] = await Promise.all([
         supabase.from("businesses").select("name, offers, usps, description, vertical, locations, whatsapp_template").eq("id", actor.businessId).maybeSingle(),
         supabase.from("creatives").select("id, image_url, headline, primary_text, generation").in("id", draft.creativeIds).eq("business_id", actor.businessId),
       ]);
-      if (error || !business) return null;
+      // #2452: a failed read is a retry (Review says try again), never a fallback message Review passes and launch doesn't send.
+      if (error || creativesError || !business) throw new Error("WhatsApp message could not be read.");
       // The same ads, in the same order, as launch writes the suggestion from.
       const byId = new Map((creatives ?? []).map((creative) => [creative.id, creative]));
       const used = draft.creativeIds.map((id) => byId.get(id)).filter((creative): creative is NonNullable<typeof creative> => Boolean(creative?.image_url && creative.headline));
       const message = campaignWhatsAppMessage({ draft, business, creatives: used });
-      // A saved message was checked when it was saved; this campaign's edit is checked here.
-      const problem = draft.whatsappMessage ? whatsappTemplateProblem(draft.whatsappMessage, business)?.error ?? null : null;
+      // A saved message was checked when it was saved, and this campaign's edit is checked here. #2422: whatever
+      // launch sends (suggested and saved too) also meets the ad text's policy rules, since Meta reviews it with the ad.
+      const edited = draft.whatsappMessage ? whatsappTemplateProblem(draft.whatsappMessage, business)?.error ?? null : null;
+      const problem = edited ?? whatsappOpeningProblem(message.opening, business)?.error ?? null;
       return { message, problem };
     },
+    checkWebsite: (url) => checkWebsiteReach(url),
     findWebsite: async (actor) => {
       const { data } = await supabase.from("businesses").select("website").eq("id", actor.businessId).maybeSingle();
       return data?.website ?? null;

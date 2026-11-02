@@ -125,6 +125,8 @@ describe("updateCreativeCopy", () => {
     expect(res.warnings).toEqual([
       "\"20%\" isn't in your Brand. Check it's true, or add it to your Brand's offers.",
       "\"Guaranteed\" isn't in your Brand. Check it's true, or add it to your Brand's offers.",
+      // #2423: an outcome guarantee is refused for solar whatever the Brand says.
+      "\"guaranteed saving\" is a promise Meta often rejects. Consider rewording it.",
     ]);
     expect(h.updates).toHaveLength(1);
   });

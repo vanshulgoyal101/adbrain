@@ -17,6 +17,7 @@
  *   npm run seed:demo-clinic
  */
 import { createClient } from "@supabase/supabase-js";
+import { mintTestSession } from "./lib/test-session.mjs";
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -41,6 +42,7 @@ function requireEnv() {
   const missing = Object.entries({
     NEXT_PUBLIC_SUPABASE_URL: SUPABASE_URL,
     NEXT_PUBLIC_SUPABASE_ANON_KEY: ANON_KEY,
+    SUPABASE_SERVICE_ROLE_KEY: SERVICE_KEY,
     DEMO_USER_EMAIL: EMAIL,
     DEMO_USER_PASSWORD: PASSWORD,
   })
@@ -176,10 +178,6 @@ async function fetchImage(url, attempts = 3) {
  * INSERTed via raw SQL get NULL token columns and GoTrue login then fails.
  */
 async function ensureUser() {
-  if (!SERVICE_KEY) {
-    console.log("• No SUPABASE_SERVICE_ROLE_KEY — assuming the demo user exists.");
-    return;
-  }
   const admin = createClient(SUPABASE_URL, SERVICE_KEY, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
@@ -215,10 +213,10 @@ async function main() {
   const supabase = createClient(SUPABASE_URL, ANON_KEY, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
-  const { data: session, error: signInError } = await supabase.auth.signInWithPassword({
-    email: EMAIL,
-    password: PASSWORD,
-  });
+  // #2574: a minted session, not the password grant, so Supabase CAPTCHA (#1777) can stay on.
+  const config = { url: SUPABASE_URL, serviceRoleKey: SERVICE_KEY, apikey: ANON_KEY };
+  const minted = await mintTestSession(EMAIL, { config }).catch((error) => ({ error }));
+  const signInError = minted.error ?? (await supabase.auth.setSession(minted.session)).error;
   if (signInError) {
     // On a dry run the user may not exist yet — report the plan instead.
     if (DRY) {
@@ -231,7 +229,7 @@ async function main() {
     }
     throw new Error(`Demo user cannot sign in: ${signInError.message}`);
   }
-  const ownerId = session.user.id;
+  const ownerId = minted.user.id;
   console.log(`• Signed in as ${EMAIL}`);
 
   // Business — idempotent on (owner_id, name).

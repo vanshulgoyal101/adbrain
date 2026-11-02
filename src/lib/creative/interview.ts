@@ -9,59 +9,8 @@ import { affirmedInFact, negatedTerm } from "./claim-support";
 import { isNonAnswer, isWriteYourOwnOption } from "./interview-options";
 import { isRomanHindi } from "./roman-hindi";
 
-/**
- * A single, tap-friendly question the Ad Assistant asks a non-technical user.
- * The UI renders `options` as chips, plus optional shortcuts:
- * - `allowText`   → the user can type their own answer
- * - `allowRandom` → a "Surprise me" button (the AI picks a fun on-brand option)
- * - `aiCanDecide` → a "Let AI decide" button, shown ONLY when the Brand Brain
- *                   already implies a sensible default so the user can skip.
- */
-export interface InterviewQuestion {
-  id: string;
-  field?: string;
-  question: string;
-  help?: string;
-  options?: string[];
-  allowText?: boolean;
-  allowRandom?: boolean;
-  aiCanDecide?: boolean;
-}
-
-/** One answered question, replayed to continue the interview. */
-export interface InterviewAnswer {
-  question: string;
-  answer: string;
-  questionId?: string;
-  field?: string;
-  options?: string[];
-}
-
-export interface InterviewResult {
-  /** True when the assistant has enough to write the ad. */
-  ready: boolean;
-  /** The next single question (when not ready). */
-  question?: InterviewQuestion;
-  /** A vivid creative brief to generate from (when ready). */
-  brief?: string;
-  /** An AD_LANGUAGES id, if the user/brand implies a specific language. */
-  language?: string;
-  /** A preferred AD_ANGLES id, if one clearly fits. */
-  angleId?: string;
-  recommendations?: { label: string; prompt: string }[];
-}
-
-export interface InterviewInput {
-  brand: BrandContext;
-  instructions?: string;
-  preferences?: string;
-  goal: string;
-  answers?: InterviewAnswer[];
-  recentGoals?: string[];
-  referenceBrief?: string;
-  /** #371: the PAST RESULTS block built in code from the business's own results; "" or absent when none. */
-  pastResults?: string;
-}
+export type { InterviewAnswer, InterviewInput, InterviewQuestion, InterviewResult } from "./interview-types";
+import type { InterviewAnswer, InterviewInput, InterviewResult } from "./interview-types";
 
 /** Format answers into the transcript the interviewer reads. */
 export function formatInterviewAnswers(answers: InterviewAnswer[]): string {
@@ -86,6 +35,18 @@ function brandLine(brand: BrandContext): string {
 
 const MAX_INTERVIEW_ANSWERS = 3;
 export const INTERVIEW_PROMPT_VERSION = "interview-v5";
+
+export const INTERVIEW_MAX_TOKENS = 2400;
+/**
+ * #2249: Groq counts the `max_tokens` reservation against its 1,000 output tokens a minute, so 2,400 tripped it on a
+ * second quick turn (smoke, Oct 31 14:13Z). Its interview replies peak at 532 tokens (p99 532, 63 successes, Oct 25 to
+ * Nov 1); 800 is 1.5× that, so a reply is never cut and one Groq turn a minute fits. Gemini follows.
+ */
+export const INTERVIEW_GROQ_MAX_TOKENS = 800;
+
+export function interviewMaxTokens(provider: string): number {
+  return provider === "groq" ? INTERVIEW_GROQ_MAX_TOKENS : INTERVIEW_MAX_TOKENS;
+}
 
 const OWNER_LANGUAGES = { hi: "Hindi in Devanagari script", pa: "Punjabi in Gurmukhi script", hinglish: "Hinglish (Hindi in Roman script)" } as const;
 
@@ -388,6 +349,7 @@ If you have enough to write a great ad, return:
   ];
 }
 
+const INTERVIEW_DEADLINE_MS = 45_000;
 export async function runInterview(
   input: InterviewInput,
   options: {
@@ -398,7 +360,8 @@ export async function runInterview(
   } = {},
 ): Promise<InterviewResult> {
   const messages = buildInterviewMessages(input);
-  const timeout = AbortSignal.timeout(45_000);
+  const deadlineAt = Date.now() + INTERVIEW_DEADLINE_MS;
+  const timeout = AbortSignal.timeout(INTERVIEW_DEADLINE_MS);
   const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
   let last: { result: InterviewResult; issues: string[] } | null = null;
   for (let attempt = 0; attempt < 2; attempt++) {
@@ -414,11 +377,14 @@ export async function runInterview(
       // #2249: a hanging Gemini once used the whole 45 s and the paid fallback never ran. Its slowest success in 14 days
       // took 22.2 s; 25 s keeps those and leaves 20 s for OpenRouter (slowest 11.9 s).
       providerAttemptTimeoutMs: { google: 25_000 },
+      // #2462: on the repair turn too, and for a hanging Groq, the last provider keeps OpenRouter's p90 success (11.2 s).
+      fallbackReserve: { deadlineAt, reserveMs: 12_000 },
       promptVersion: INTERVIEW_PROMPT_VERSION,
       json: true,
       responseSchema: resultSchema,
       temperature: attempt ? 0.2 : 0.5,
-      maxTokens: 2400,
+      maxTokens: INTERVIEW_MAX_TOKENS,
+      providerMaxTokens: { groq: INTERVIEW_GROQ_MAX_TOKENS },
       cache: false,
       signal,
       onAttempt: (entry) => {

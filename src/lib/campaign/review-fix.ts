@@ -24,6 +24,7 @@ const FIXES: Record<ReviewBlockerReason, Fix<ReviewFix>> = {
   REVIEW_WHATSAPP_NOT_LINKED: { kind: "page", href: "/settings#whatsapp-status-title" },
   REVIEW_NO_LEAD_FORM: { kind: "field", targets: ["leadform"] },
   REVIEW_NO_WEBSITE: { kind: "page", href: "/brand" },
+  REVIEW_WEBSITE_UNREACHABLE: { kind: "page", href: "/brand" },
   REVIEW_BUDGET: { kind: "field", targets: ["budget"] },
   REVIEW_NO_AGE_RANGE: { kind: "field", targets: ["age-min", "age-mode"] },
   REVIEW_RADIUS: { kind: "field", targets: ["city-radius", "location-include", "location-mode"] },
@@ -41,5 +42,5 @@ export function reviewBlockerFix(reason: ReviewBlockerReason | undefined, words?
 
 /** #742: another way past a blocker. WhatsApp chat ads need no website, so a site-less owner isn't stuck. */
 export function reviewBlockerAlternative(reason: ReviewBlockerReason | undefined, words?: Words<"campaigns">): ReviewFix | null {
-  return reason === "REVIEW_NO_WEBSITE" ? { kind: "destination", label: campaignsTranslator(words)("review.useWhatsApp"), destination: "whatsapp" } : null;
+  return reason === "REVIEW_NO_WEBSITE" || reason === "REVIEW_WEBSITE_UNREACHABLE" ? { kind: "destination", label: campaignsTranslator(words)("review.useWhatsApp"), destination: "whatsapp" } : null;
 }

@@ -691,13 +691,13 @@
       "rule": "C4-file-size",
       "from": "src/app/api/campaigns/[id]/route.ts",
       "to": "> 400 lines",
-      "lines": 463
+      "lines": 461
     },
     {
       "rule": "C4-file-size",
       "from": "src/app/api/creatives/generate/route.ts",
       "to": "> 400 lines",
-      "lines": 473
+      "lines": 448
     },
     {
       "rule": "C4-file-size",
@@ -715,13 +715,13 @@
       "rule": "C4-file-size",
       "from": "src/components/campaigns.tsx",
       "to": "> 400 lines",
-      "lines": 2703
+      "lines": 2689
     },
     {
       "rule": "C4-file-size",
       "from": "src/components/creative-copy-editor.tsx",
       "to": "> 400 lines",
-      "lines": 564
+      "lines": 534
     },
     {
       "rule": "C4-file-size",
@@ -745,7 +745,7 @@
       "rule": "C4-file-size",
       "from": "src/components/studio.tsx",
       "to": "> 400 lines",
-      "lines": 1098
+      "lines": 1094
     },
     {
       "rule": "C4-file-size",
@@ -763,25 +763,25 @@
       "rule": "C4-file-size",
       "from": "src/lib/creative/concept.ts",
       "to": "> 400 lines",
-      "lines": 664
+      "lines": 655
     },
     {
       "rule": "C4-file-size",
       "from": "src/lib/creative/generate.ts",
       "to": "> 400 lines",
-      "lines": 442
+      "lines": 435
     },
     {
       "rule": "C4-file-size",
       "from": "src/lib/creative/interview.ts",
       "to": "> 400 lines",
-      "lines": 481
+      "lines": 443
     },
     {
       "rule": "C4-file-size",
       "from": "src/lib/meta/client.ts",
       "to": "> 400 lines",
-      "lines": 2471
+      "lines": 2435
     },
     {
       "rule": "C4-file-size",
@@ -793,19 +793,13 @@
       "rule": "C4-file-size",
       "from": "src/lib/observability/core-scoreboard.ts",
       "to": "> 400 lines",
-      "lines": 578
-    },
-    {
-      "rule": "C4-file-size",
-      "from": "src/lib/supabase/queries.ts",
-      "to": "> 400 lines",
-      "lines": 424
+      "lines": 506
     },
     {
       "rule": "C5-english-errors",
       "from": "src/app/api/brand/autofill/route.ts",
       "to": "English error literals",
-      "lines": 9
+      "lines": 1
     },
     {
       "rule": "C5-english-errors",
@@ -817,7 +811,7 @@
       "rule": "C5-english-errors",
       "from": "src/app/api/campaigns/[id]/refresh/route.ts",
       "to": "English error literals",
-      "lines": 6
+      "lines": 3
     },
     {
       "rule": "C5-english-errors",
@@ -829,7 +823,7 @@
       "rule": "C5-english-errors",
       "from": "src/app/api/campaigns/lead-forms/route.ts",
       "to": "English error literals",
-      "lines": 2
+      "lines": 1
     },
     {
       "rule": "C5-english-errors",
@@ -841,7 +835,7 @@
       "rule": "C5-english-errors",
       "from": "src/app/api/campaigns/plan/route.ts",
       "to": "English error literals",
-      "lines": 8
+      "lines": 1
     },
     {
       "rule": "C5-english-errors",
@@ -878,12 +872,6 @@
       "from": "src/app/api/creatives/generate/route.ts",
       "to": "English error literals",
       "lines": 7
-    },
-    {
-      "rule": "C5-english-errors",
-      "from": "src/app/api/feedback/pilot-day7/route.ts",
-      "to": "English error literals",
-      "lines": 3
     },
     {
       "rule": "C5-english-errors",
@@ -961,13 +949,13 @@
       "rule": "C5-english-errors",
       "from": "src/app/api/preferences/route.ts",
       "to": "English error literals",
-      "lines": 7
+      "lines": 4
     },
     {
       "rule": "C5-english-errors",
       "from": "src/app/api/privacy-requests/route.ts",
       "to": "English error literals",
-      "lines": 5
+      "lines": 2
     },
     {
       "rule": "C5-english-errors",
@@ -979,7 +967,7 @@
       "rule": "C5-english-errors",
       "from": "src/app/api/spend-limits/route.ts",
       "to": "English error literals",
-      "lines": 4
+      "lines": 1
     }
   ]
 }

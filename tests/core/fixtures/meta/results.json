@@ -11,7 +11,7 @@
   },
   {
     "method": "GET",
-    "path": "120253678786150526/adsets?fields=id%2Cstatus%2Cdaily_budget%2Clifetime_budget%2Cpromoted_object%2Cdestination_type&limit=100",
+    "path": "120253678786150526/adsets?fields=id%2Cstatus%2Cdaily_budget%2Clifetime_budget%2Cend_time%2Cpromoted_object%2Cdestination_type&limit=100",
     "status": 200,
     "body": {
       "data": [
@@ -20,6 +20,7 @@
           "status": "ACTIVE",
           "daily_budget": "0",
           "lifetime_budget": "84000",
+          "end_time": "2026-10-26T19:54:16+0530",
           "promoted_object": {
             "page_id": "900000000000002",
             "smart_pse_enabled": false,
@@ -185,7 +186,7 @@
   },
   {
     "method": "GET",
-    "path": "120253164673180526/adsets?fields=id%2Cstatus%2Cdaily_budget%2Clifetime_budget%2Cpromoted_object%2Cdestination_type&limit=100",
+    "path": "120253164673180526/adsets?fields=id%2Cstatus%2Cdaily_budget%2Clifetime_budget%2Cend_time%2Cpromoted_object%2Cdestination_type&limit=100",
     "status": 200,
     "body": {
       "data": [

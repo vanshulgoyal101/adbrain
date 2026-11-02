@@ -77,6 +77,8 @@ The stream includes:
   Meta reads), each `withMetaConnection` run gets its own request ID and business, shared with its
   `meta.<purpose>` event (#615). A context keeps at most 100
   events, so a long cron run logs its first 100 calls to the database (all to the log stream).
+- Cloudflare's daily free-picture limit (#2404): `image.free_daily_limit`, `kind=system`, `outcome=failed`,
+  with `provider` and `errorCode=IMAGE_FREE_DAILY_LIMIT`, once per refusal; `/api/cron/llm-credit` counts the day.
 - Audit/usage persistence failures and product-log persistence health warnings.
 - Authenticated page views and browser error/rejection categories on the eight
   workspace pages. These are marked `kind=client`: client-reported signals, not

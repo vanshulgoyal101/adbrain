@@ -22,6 +22,16 @@ const skipped = [
 ];
 
 describe("#1438 Campaigns list words", () => {
+  it.each([
+    ["en", en.campaigns, en.verdict, "28 taps on the WhatsApp button, 1 messaged you"],
+    ["hi", hi.campaigns, hi.verdict, "WhatsApp बटन पर 28 टैप हुए, 1 ने आपको मैसेज किया"],
+  ] as const)("labels WhatsApp link clicks as button taps in %s without changing counts", async (locale, messages, verdictMessages, expected) => {
+    const whatsapp = { ...campaign, destination: "whatsapp" as const };
+    const result = { id: "r-1", campaign_id: campaign.id, impressions: 900, clicks: 28, leads: 0, spend: 150, cpl: null, conversations: 1, cost_per_conversation: 150, whatsapp_opens: 28, destination: "whatsapp" as const, fetched_at: new Date().toISOString() };
+    render(<Campaigns business={business} approved={[]} initialCampaigns={[whatsapp]} initialResults={{ [campaign.id]: result }} leadForms={[]} leadFormError={null} metaReady adAccountId="act_1" campaignWords={{ locale, messages }} verdictWords={{ locale, messages: verdictMessages }} />);
+    expect(await screen.findByText(expected)).toBeInTheDocument();
+  });
+
   it("keeps the English sync lines word for word", () => {
     expect(describeSkippedCampaigns(skipped, 4)).toBe(
       "\"Old run\" was left unchanged: it uses a lifetime budget set in Meta, which AdBrain doesn't manage. "

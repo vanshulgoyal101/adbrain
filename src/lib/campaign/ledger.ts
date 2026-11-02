@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getEnv } from "@/lib/env";
 import { isInternalUser, isScoreboardExcluded, type AccountIdentity } from "@/lib/internal-accounts";
+import type { LeadDestination } from "@/lib/types/campaign";
 
 /**
  * #1307 (#1255): AdBrain's own pooled results, from the #588 ledger: every AdBrain-made run (a `campaign_learnings`
@@ -10,29 +11,38 @@ import { isInternalUser, isScoreboardExcluded, type AccountIdentity } from "@/li
  * results can be read from it (Reviewer on #1400). Team, smoke, demo and prospect businesses never count.
  */
 export type LedgerTotals = { results: number; spendRupees: number; runs: number };
-type Destination = "whatsapp" | "instant_form";
-type LedgerRead = { spend?: number | string | null; conversations?: number | null; leads?: number | null };
+type Destination = Exclude<LeadDestination, "call">;
+const DESTINATIONS: Destination[] = ["whatsapp", "instant_form", "website"];
+type LedgerRead = { spend?: number | string | null; conversations?: number | null; leads?: number | null; landing_page_views?: number | null };
 export type LedgerRun = LedgerRead & { businessId?: string | null; destination?: string | null; status?: string | null };
 
 /** A destination's pool is quoted only from this many stopped runs, by this many different businesses. */
 const MIN_RUNS = 5;
 const MIN_BUSINESSES = 3;
 
+const pooled = (destination: string | null | undefined): destination is Destination => DESTINATIONS.includes(destination as Destination);
+
+/** A run's headline result: chats, form leads, or landing-page views for a website run (#2601). */
+const resultOf = (run: LedgerRun & { destination: Destination }) =>
+  run.destination === "whatsapp" ? run.conversations ?? 0 : run.destination === "website" ? run.landing_page_views ?? 0 : run.leads ?? 0;
+
 /** The pooled totals per destination from each run's latest results; null until the pool is big enough. Running campaigns wait until they stop. */
 export function poolLedger(runs: LedgerRun[]): Record<Destination, LedgerTotals | null> {
-  const pools = { whatsapp: { results: 0, spendRupees: 0, runs: 0, businesses: new Set<string>() }, instant_form: { results: 0, spendRupees: 0, runs: 0, businesses: new Set<string>() } };
+  const pools = Object.fromEntries(DESTINATIONS.map((destination) => [destination, { results: 0, spendRupees: 0, runs: 0, businesses: new Set<string>() }])) as
+    Record<Destination, { results: number; spendRupees: number; runs: number; businesses: Set<string> }>;
   for (const run of runs) {
     const spend = Number(run.spend ?? 0);
-    if (run.status === "active" || !(spend > 0) || (run.destination !== "whatsapp" && run.destination !== "instant_form")) continue;
-    const pool = pools[run.destination];
+    const destination = run.destination;
+    if (run.status === "active" || !(spend > 0) || !pooled(destination)) continue;
+    const pool = pools[destination];
     pool.runs += 1;
     pool.spendRupees += spend;
-    pool.results += run.destination === "whatsapp" ? run.conversations ?? 0 : run.leads ?? 0;
+    pool.results += resultOf({ ...run, destination });
     if (run.businessId) pool.businesses.add(run.businessId);
   }
-  const quoted = ({ results, spendRupees, runs, businesses }: typeof pools.whatsapp): LedgerTotals | null =>
+  const quoted = ({ results, spendRupees, runs, businesses }: Record<Destination, typeof pools.whatsapp>[Destination]): LedgerTotals | null =>
     runs >= MIN_RUNS && businesses.size >= MIN_BUSINESSES ? { results, spendRupees: Math.round(spendRupees * 100) / 100, runs } : null;
-  return { whatsapp: quoted(pools.whatsapp), instant_form: quoted(pools.instant_form) };
+  return { whatsapp: quoted(pools.whatsapp), instant_form: quoted(pools.instant_form), website: quoted(pools.website) };
 }
 
 /** Accounts whose runs never shape a customer's expectation: the team, smoke, the demo workspace and sales prospects. */
@@ -61,7 +71,7 @@ async function readLedger() {
   if (!ids.length) return poolLedger([]);
   const [{ data: campaigns, error: campaignsError }, { data: results, error: resultsError }] = await Promise.all([
     admin.from("campaigns").select("id, business_id, status, destination").in("id", ids),
-    admin.from("campaign_results").select("campaign_id, spend, conversations, leads, fetched_at").in("campaign_id", ids).order("fetched_at", { ascending: false }).limit(5000),
+    admin.from("campaign_results").select("campaign_id, spend, conversations, leads, landing_page_views, fetched_at").in("campaign_id", ids).order("fetched_at", { ascending: false }).limit(5000),
   ]);
   if (campaignsError || resultsError) throw campaignsError ?? resultsError;
   const latest = new Map<string, LedgerRead>();

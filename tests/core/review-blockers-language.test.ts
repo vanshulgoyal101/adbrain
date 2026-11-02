@@ -62,6 +62,14 @@ const variants: [string, (v: PreflightInput) => void, string][] = [
   ["website", (v) => { v.website = null; }, "REVIEW_NO_WEBSITE"],
   ["policy", (v) => { v.vertical = "chiropractic clinic"; v.creatives[0].headline = "Cures back pain"; }, "REVIEW_AD_POLICY"],
   ["policy no headline", (v) => { v.vertical = "chiropractic clinic"; v.creatives[0].headline = null; v.creatives[0].primaryText = "Cures back pain"; }, "REVIEW_AD_POLICY"],
+  ["policy promise", (v) => { v.vertical = "coaching institute"; v.creatives[0].headline = "Guaranteed rank"; }, "REVIEW_AD_POLICY"],
+  ["site missing", (v) => { toWebsite(v); v.website = null; }, "REVIEW_NO_WEBSITE"],
+  ["site unchecked", (v) => toWebsite(v), "REVIEW_WEBSITE_UNREACHABLE"],
+  ["site error", (v) => toWebsite(v, { url: SITE, ok: false, problem: "status", status: 503 }), "REVIEW_WEBSITE_UNREACHABLE"],
+  ["site error uncoded", (v) => toWebsite(v, { url: SITE, ok: false, problem: "status" }), "REVIEW_WEBSITE_UNREACHABLE"],
+  ["site private", (v) => toWebsite(v, { url: SITE, ok: false, problem: "blocked" }), "REVIEW_WEBSITE_UNREACHABLE"],
+  ["site redirect", (v) => toWebsite(v, { url: SITE, ok: false, problem: "other_domain", finalHost: "parked.example" }), "REVIEW_WEBSITE_UNREACHABLE"],
+  ["site redirect unknown", (v) => toWebsite(v, { url: SITE, ok: false, problem: "other_domain" }), "REVIEW_WEBSITE_UNREACHABLE"],
   ["budget zero", (v) => { v.draft.dailyBudgetRupees = 0; }, "REVIEW_BUDGET"],
   ["budget low", (v) => { v.draft.dailyBudgetRupees = 95; }, "REVIEW_BUDGET"],
   ["age", (v) => { v.draft.targeting.age = { mode: "ai" }; }, "REVIEW_NO_AGE_RANGE"],
@@ -75,6 +83,15 @@ const variants: [string, (v: PreflightInput) => void, string][] = [
   ["two interests", (v) => { v.geo.unresolvedInterests = ["Wellness", "Yoga"]; }, "REVIEW_INTERESTS_UNRESOLVED"],
   ["interests unnamed", (v) => { v.geo.audienceInterests = []; }, "REVIEW_INTERESTS_UNRESOLVED"],
 ];
+
+const SITE = "https://cedarridgechiro.com";
+/** #2599: a website ad, its site checked (or not) by Review. */
+function toWebsite(v: PreflightInput, reach?: unknown): void {
+  v.draft.destination = "website";
+  v.draft.leadFormId = null;
+  v.form = null;
+  v.websiteReach = reach as PreflightInput["websiteReach"];
+}
 
 /** The English each sentence said before #2333 slice 2: unchanged, byte for byte. */
 const ENGLISH: Record<string, string> = {
@@ -95,6 +112,15 @@ const ENGLISH: Record<string, string> = {
   "website": "Add your business website on the Your business page. Meta lead ads must link to the advertiser's own website, not Facebook.",
   "policy": "\"cures\" in the ad \"Cures back pain\" is a health promise Meta rejects. Edit the ad to describe the service instead.",
   "policy no headline": "\"cures\" in the ad \"without a headline\" is a health promise Meta rejects. Edit the ad to describe the service instead.",
+  "policy promise": "\"guaranteed\" in the ad \"Guaranteed rank\" is a promise Meta rejects. Edit the ad to describe the service instead.",
+  // #2599's website sentences, as they were in English.
+  "site missing": "Add your business website on the Your business page. A website ad opens your own site, so AdBrain needs its address.",
+  "site unchecked": "AdBrain couldn't open your website cedarridgechiro.com. Check the address on the Your business page, or make sure the site is up, then review again.",
+  "site error": "Your website cedarridgechiro.com answered with an error (503) when AdBrain opened it. Check the address on the Your business page, or make sure the site is up, then review again.",
+  "site error uncoded": "Your website cedarridgechiro.com answered with an error when AdBrain opened it. Check the address on the Your business page, or make sure the site is up, then review again.",
+  "site private": "cedarridgechiro.com isn't a public website address. Add your business's public site on the Your business page.",
+  "site redirect": "Your website cedarridgechiro.com sends visitors on to parked.example. Add the address of your own site on the Your business page, so the ad opens your business.",
+  "site redirect unknown": "Your website cedarridgechiro.com sends visitors on to another site. Add the address of your own site on the Your business page, so the ad opens your business.",
   "budget zero": "Set a daily budget above ₹0.",
   "budget low": "Meta needs at least ₹96 a day. Set a daily budget of ₹96 or more.",
   "age": "Choose an age range, or let AdBrain recommend one, before reviewing.",
@@ -138,6 +164,12 @@ describe("Review blockers in the owner's language (#2333)", () => {
     expect(message("hi", (v) => unapproved(v, ["Exam", "Second", "Third"]), "REVIEW_CREATIVES"))
       .toBe('विज्ञापन "Exam" अभी मंज़ूर नहीं हुआ है। उसे "विज्ञापन जाँचें" पेज पर मंज़ूर करें, या इस कैंपेन से हटाएँ। 2 और विज्ञापन भी ठीक करने हैं।');
     expect(message("hi", (v) => { v.draft.destination = "whatsapp"; v.whatsappMessageProblem = "PROBLEM"; }, "REVIEW_WHATSAPP_MESSAGE")).toBe("आपका WhatsApp मैसेज: PROBLEM");
+    expect(message("hi", (v) => toWebsite(v, { url: SITE, ok: false, problem: "status", status: 503 }), "REVIEW_WEBSITE_UNREACHABLE"))
+      .toBe("AdBrain ने आपकी वेबसाइट cedarridgechiro.com खोली तो उसने गड़बड़ी (503) बताई। Your business पेज पर पता जाँचें, या पक्का करें कि साइट चल रही है, फिर से रिव्यू करें।");
+    expect(message("hi", (v) => toWebsite(v, { url: SITE, ok: false, problem: "other_domain", finalHost: "parked.example" }), "REVIEW_WEBSITE_UNREACHABLE"))
+      .toBe("आपकी वेबसाइट cedarridgechiro.com लोगों को parked.example पर भेज देती है। Your business पेज पर अपनी साइट का पता जोड़ें, ताकि विज्ञापन आपका बिज़नेस खोले।");
+    expect(message("hi", (v) => { v.vertical = "coaching institute"; v.creatives[0].headline = "Guaranteed rank"; }, "REVIEW_AD_POLICY"))
+      .toBe('विज्ञापन "Guaranteed rank" में "guaranteed" ऐसा वादा है जिसे Meta मना कर देता है। विज्ञापन बदलकर सेवा के बारे में बताएँ।');
   });
 
   it("names every fix button in the owner's language, English unchanged", () => {

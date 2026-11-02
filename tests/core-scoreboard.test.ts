@@ -62,7 +62,7 @@ describe("core scoreboard (#681)", () => {
     expect(row(board([...timed, slowRequest]), "Prepare")).toMatchObject({ now: "20 runs: 100% planned (0 partial, 0 failed); p90 2.5 s", met: true });
   });
 
-  it("Create needs 3 ads per batch and times a run from its first AI call's start to its last call", () => {
+  it("Create needs every ad asked for (3 when unrecorded) and times a run from its first AI call's start to its last call", () => {
     const batches = [ev("creative.batch", "success", { attributes: { count: 3 } }), ev("creative.batch", "partial", { attributes: { count: 2 } })];
     const calls = [
       call("creatives.generate", "success", { request_id: "r1", created_at: at(60), latency_ms: 10_000 }),
@@ -70,15 +70,31 @@ describe("core scoreboard (#681)", () => {
       call("creatives.generate", "success", { request_id: "r2", created_at: at(30), latency_ms: 12_000 }),
     ];
     const customers = "Create (customers, paid images)";
-    expect(row(board(batches, calls), customers)).toMatchObject({ now: "2 batches: 50% gave 3 ads; AI calls 1/3 failed; p90 40 s", met: false });
+    expect(row(board(batches, calls), customers)).toMatchObject({ now: "2 batches: 50% saved every ad asked; AI calls 1/3 failed; p90 40 s", met: false });
     expect(row(board([batches[0]], calls.slice(2)), customers).met).toBe(true);
+  });
+
+  it("#2499: a batch is full when it saved every ad asked for, and a fallback picture is not a failed call", () => {
+    const batches = [
+      ev("creative.batch", "success", { attributes: { count: 2, expected: 2 } }),
+      ev("creative.batch", "success", { attributes: { count: 3, expected: 3 } }),
+      ev("creative.batch", "partial", { attributes: { count: 2, expected: 3 } }),
+    ];
+    const calls = [
+      call("creatives.generate", "error", { request_id: "r1", latency_ms: 1_000 }),
+      call("creatives.generate", "fallback", { request_id: "r1", latency_ms: 2_000 }),
+      call("creatives.generate", "success", { request_id: "r1", latency_ms: 12_000 }),
+    ];
+    expect(row(board(batches, calls), "Create (customers, paid images)").now)
+      .toBe("3 batches: 66.7% saved every ad asked; AI calls 1/3 failed (1 fell back); p90 12 s");
+    expect(row(board(batches.slice(0, 2), calls), "Create (customers, paid images)").met).toBe(true);
   });
 
   it("#1468: the median estimated AI cost per Create, from batches that recorded one", () => {
     const batches = [0.012, 0.003, 0.0405].map((usd) => ev("creative.batch", "success", { attributes: { count: 3, costUsd: usd } }));
     const calls = [call("creatives.generate", "success", { request_id: "r1", latency_ms: 10_000 })];
     expect(row(board([...batches, ev("creative.batch", "success", { attributes: { count: 3 } })], calls), "Create (customers, paid images)").now)
-      .toBe("4 batches: 100% gave 3 ads; AI calls 0/1 failed; p90 10 s; median $0.0120 (≈₹1.01) per Create");
+      .toBe("4 batches: 100% saved every ad asked; AI calls 0/1 failed; p90 10 s; median $0.0120 (≈₹1.01) per Create");
   });
 
   it("splits Create by image path and holds only the customer path to the target", () => {
@@ -86,10 +102,10 @@ describe("core scoreboard (#681)", () => {
       [ev("creative.batch", "success", { attributes: { count: 3 } }), ev("creative.batch", "success", { user_id: FREE, attributes: { count: 3 } })],
       [call("creatives.generate", "success", { request_id: "c", latency_ms: 20_000 }), call("creatives.generate", "success", { user_id: FREE, request_id: "f", latency_ms: 110_000 })],
     );
-    expect(row(b, "Create (customers, paid images)")).toMatchObject({ now: "1 batch: 100% gave 3 ads; AI calls 0/1 failed; p90 20 s", met: true });
+    expect(row(b, "Create (customers, paid images)")).toMatchObject({ now: "1 batch: 100% saved every ad asked; AI calls 0/1 failed; p90 20 s", met: true });
     expect(row(b, "Create (internal, free images)")).toEqual({
       step: "Create (internal, free images)",
-      now: "1 batch: 100% gave 3 ads; AI calls 0/1 failed; p90 110 s",
+      now: "1 batch: 100% saved every ad asked; AI calls 0/1 failed; p90 110 s",
       target: "not a target: free images, internal only",
       met: null,
     });

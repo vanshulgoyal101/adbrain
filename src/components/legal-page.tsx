@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Brain } from "lucide-react";
 import { LEGAL_LINKS } from "@/lib/legal-links";
+import { SIGN_IN_HREF } from "@/lib/site";
 
 /** Shared shell for public legal/content pages (privacy, terms). */
 export function LegalPage({
@@ -21,7 +22,7 @@ export function LegalPage({
           </span>
           <span className="text-lg font-bold tracking-tight">AdBrain</span>
         </Link>
-        <Link href="/login" className="text-sm font-medium text-blue-700 hover:underline">
+        <Link href={SIGN_IN_HREF} className="text-sm font-medium text-blue-700 hover:underline">
           Sign in
         </Link>
       </header>

@@ -9,6 +9,8 @@ import deliveryTape from "./fixtures/meta/delivery.json";
 import fundingTape from "./fixtures/meta/account-funding-live-runs.json";
 import deletedTape from "./fixtures/meta/campaign-deleted.json";
 import goneFixture from "./fixtures/meta/campaigns-gone.json";
+import whatsappValidateTape from "./fixtures/meta/whatsapp-adset-validate.json";
+import cleanupRefusals from "./fixtures/meta/create-cleanup-refusals.json";
 
 // #649: the manage loop (pause, sync, refresh, activation review and refusals) through the real route
 // handlers, connection access, MetaClient, trusted writes, spend enforcement and audit, on an OAuth
@@ -42,7 +44,7 @@ const store = vi.hoisted(() => {
   function from(table: string) {
     if (!known.includes(table)) fail(`from(${table})`);
     const filters: Array<(row: Row) => boolean> = [];
-    let write: { kind: "insert" | "update"; values: Row } | null = null;
+    let write: { kind: "insert" | "update" | "delete"; values: Row } | null = null;
     let count = false, withResults = false;
     let sort: { key: string; ascending: boolean } | null = null, take: number | null = null;
     const settle = () => {
@@ -59,6 +61,7 @@ const store = vi.hoisted(() => {
       }
       if (take !== null && !write) matched.splice(take);
       if (write?.kind === "update") for (const row of matched) Object.assign(row, write.values);
+      if (write?.kind === "delete") state.tables[table] = rows.filter(row => !matched.includes(row));
       // getLatestResults' `campaign_results!inner(*)` embed: each campaign's newest result, campaigns without one dropped.
       const data = matched.map(row => withResults ? { ...row, campaign_results: (state.tables.campaign_results ?? [])
         .filter(result => result.campaign_id === row.id).sort((a, b) => String(b.fetched_at).localeCompare(String(a.fetched_at))).slice(0, 1) } : { ...row })
@@ -79,6 +82,7 @@ const store = vi.hoisted(() => {
       abortSignal: () => query,
       insert: (values: Row) => { state.log.push(`insert ${table}`); write = { kind: "insert", values }; return query; },
       update: (values: Row) => { state.log.push(`update ${table}`); write = { kind: "update", values }; return query; },
+      delete: () => { state.log.push(`delete ${table}`); write = { kind: "delete", values: {} }; return query; },
       maybeSingle: async () => {
         const { data } = settle();
         return data.length > 1 ? { data: null, error: { message: "multiple rows" } } : { data: data[0] ?? null, error: null };
@@ -237,6 +241,10 @@ async function digest(campaign: Row, delivery: unknown, capDays?: number) {
 async function sync() {
   const { POST } = await import("@/app/api/campaigns/sync/route");
   return POST(new Request("http://localhost/api/campaigns/sync", { method: "POST" }));
+}
+async function remove(id = STORED) {
+  const { DELETE } = await import("@/app/api/campaigns/[id]/route");
+  return DELETE(new Request(`http://localhost/api/campaigns/${id}`, { method: "DELETE" }), params(id));
 }
 async function refresh(id = STORED, query = "") {
   const { POST } = await import("@/app/api/campaigns/[id]/refresh/route");
@@ -689,5 +697,58 @@ describe("core: manage routes against recorded Graph responses (#649)", () => {
     expect(response.status).toBe(200);
     expect(store.state.tables.campaigns.filter(campaign => campaign.meta_campaign_id !== SYNCED)).toEqual(before);
     expect(graph.pending).toEqual([]);
+  });
+
+  // #1479: the campaign DELETE route against recorded Meta answers. The binding reads are the tree's
+  // (safety/campaign-spend-cap); Meta's answer to a campaign DELETE is the recorded deletion of a PAUSED test
+  // campaign (whatsapp-adset-validate, Oct 23) and its refusal the recorded subcode 33 (create-cleanup-refusals).
+  const binding = (tapes.pause as Exchange[]).slice(0, 2);
+  const deleteAnswer = (whatsappValidateTape.tape as Exchange[]).find(exchange => exchange.method === "DELETE")!;
+  const deleteRefused = (cleanupRefusals as Exchange[]).find(exchange => exchange.method === "DELETE")!;
+
+  it("delete: removes the bound campaign from Meta, then from AdBrain, with an audit row", async () => {
+    treeCampaign();
+    replay(binding, [{ ...deleteAnswer, path: TREE.campaignId }]);
+    const response = await remove();
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ ok: true, metaDeleted: true });
+    expect(graph.sent.map(call => call.method)).toEqual(["GET", "GET", "DELETE"]);
+    expect(graph.sent.every(call => call.access === ACCESS)).toBe(true);
+    expect(store.state.tables.campaigns).toEqual([]);
+    expect(audits()).toHaveLength(1);
+    expect(graph.pending).toEqual([]);
+  });
+
+  it("delete: Meta refusing the DELETE keeps the campaign in AdBrain and says it couldn't confirm", async () => {
+    treeCampaign();
+    replay(binding, [{ ...deleteRefused, path: TREE.campaignId }]);
+    const response = await remove();
+    expect(response.status).toBe(502);
+    expect(store.state.tables.campaigns).toHaveLength(1);
+    expect(audits()).toEqual([]);
+  });
+
+  // #721's tree, deleted in Ads Manager: the binding read lists no ad sets and Meta's status read says DELETED
+  // (campaign-deleted.json, the delete path's narrower field lists over the same recorded bodies). Before #1479
+  // every Delete answered 502, so the owner could never remove a campaign already gone from Meta.
+  it("delete: a campaign already deleted in Meta is removed from AdBrain, with no Meta DELETE", async () => {
+    const DELETED = "120253706331870526";
+    const [campaign, adSets, state] = deletedTape.tape as Exchange[];
+    storeCampaign({ meta_campaign_id: DELETED, status: "paused", name: "Solaride | Free Survey | Tricity | WhatsApp EN | Oct 26" });
+    const { id, account_id } = campaign.body as Row;
+    replay([
+      { ...campaign, path: `${DELETED}?fields=id%2Caccount_id`, body: { id, account_id } },
+      { ...adSets, path: `${DELETED}/adsets?fields=promoted_object%2Cdestination_type&limit=100` },
+      state,
+    ]);
+    const audited: Row[] = [];
+    store.state.rpc.append_verified_audit_event = args => { audited.push(args); return { data: null, error: null }; };
+    const response = await remove();
+    const body = await response.json();
+    expect(response.status, JSON.stringify(body)).toBe(200);
+    expect(body).toEqual({ ok: true, metaDeleted: false });
+    expect(graph.sent.every(call => call.method === "GET")).toBe(true);
+    expect(store.state.tables.campaigns).toEqual([]);
+    expect(JSON.stringify(audited)).toContain('"metaGone":"DELETED"');
   });
 });

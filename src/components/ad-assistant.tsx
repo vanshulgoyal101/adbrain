@@ -1,4 +1,5 @@
 "use client";
+import { useNotices } from "@/i18n/notices";
 import { takePendingIdea } from "@/lib/ideas/pending";
 import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
 
@@ -147,6 +148,7 @@ export function AdAssistant({ business, opening = null, occasions = [], onFlowSt
   /** #760: "Brief" while the owner answers, "Create" once ads are being or have been made. */
   onFlowStep?: (step: "Brief" | "Create") => void;
 }) {
+  const tn = useNotices();
   const [goal, setGoal] = useState("");
   const [started, setStarted] = useState(false);
   const [turns, setTurns] = useState<Turn[]>([]);
@@ -209,10 +211,10 @@ export function AdAssistant({ business, opening = null, occasions = [], onFlowSt
       if (saved.generationId && saved.phase !== "done" && saved.prepared) {
         setPhase("chat");
         setLastAction({ type: "generate", ...saved.prepared, count: saved.generationCount });
-        setError("An earlier generation may still be processing. Check for saved results before starting another.");
+        setError(tn("assistant.earlierRunning"));
       } else if (saved.started && saved.phase === "chat" && saved.turns.at(-1)?.role === "user") {
         setLastAction({ type: "step", answers: saved.answers });
-        setError("The last assistant response was interrupted. Retry to continue your brief.");
+        setError(tn("assistant.interrupted"));
       }
     }
   }
@@ -311,7 +313,7 @@ export function AdAssistant({ business, opening = null, occasions = [], onFlowSt
         error?: string;
       };
       if (!res.ok) {
-        setError(data.error ?? "That reply didn't come through. Send your last answer again.");
+        setError(data.error ?? tn("assistant.replyFailed"));
         return;
       }
       if (data.ready && data.brief) {
@@ -327,10 +329,10 @@ export function AdAssistant({ business, opening = null, occasions = [], onFlowSt
         quickStartRef.current = false;
         setTurns((t) => [...t, { role: "question", question: data.question! }]);
       } else {
-        setError("That reply didn't come through. Send your last answer again.");
+        setError(tn("assistant.replyFailed"));
       }
     } catch {
-      setError("Couldn't reach the assistant — check your connection.");
+      setError(tn("assistant.offline"));
     } finally {
       setLoading(false);
       inFlightRef.current = false;
@@ -382,7 +384,7 @@ export function AdAssistant({ business, opening = null, occasions = [], onFlowSt
       try {
         const recovered = await recoverPersistedGeneration(generationId, count, brief, language);
         if (!recovered) {
-          setError("No saved ads found yet. Check again shortly or open Review. No new ads were started.");
+          setError(tn("assistant.noSavedYet"));
           setPhase("chat");
         }
       } finally {
@@ -439,22 +441,19 @@ export function AdAssistant({ business, opening = null, occasions = [], onFlowSt
         if (status >= 500 || status === 408) {
           const recovered = await recoverPersistedGeneration(newGenerationId, count, brief, language);
           if (recovered) return;
-          setError("We can't confirm your ads were saved yet. Check again shortly or open Review. No new ads were started.");
+          setError(tn("assistant.cantConfirmSaved"));
           setPhase("chat");
           return;
         }
         setGenerationId(null);
-        setError(
-          data.error ??
-            "Your ads couldn't be made just now. Try again in a minute.",
-        );
+        setError(data.error ?? tn("assistant.makeFailed"));
         setPhase("chat");
         return;
       }
       if (!data.creatives?.length) {
         const recovered = await recoverPersistedGeneration(newGenerationId, count, brief, language);
         if (recovered) return;
-        setError("Your ads finished, but none came back here. Open Review to see what was saved.");
+        setError(tn("assistant.noneCameBack"));
         setPhase("chat");
         return;
       }
@@ -463,7 +462,7 @@ export function AdAssistant({ business, opening = null, occasions = [], onFlowSt
       if (movedOnRef.current) return;
       const recovered = await recoverPersistedGeneration(newGenerationId, count, brief, language);
       if (!recovered) {
-        setError("Your ads are still being made, or the server stopped responding. Open Review shortly; don't try again yet, because finished ads may already be saved.");
+        setError(tn("assistant.stillMaking"));
         setPhase("chat");
       }
     } finally {
@@ -486,7 +485,7 @@ export function AdAssistant({ business, opening = null, occasions = [], onFlowSt
         );
         if (res.status === 429) {
           setPhase("chat");
-          setError("Too many status checks. Wait a few minutes before checking again. Do not start another generation.");
+          setError(tn("assistant.tooManyChecks"));
           return true;
         }
         if (res.ok) {
@@ -497,19 +496,19 @@ export function AdAssistant({ business, opening = null, occasions = [], onFlowSt
           if (data.creatives?.length) {
             showResult(withLiveEdits(data.creatives!), count, brief, language, data.status !== "partial" && data.status !== "processing");
             if (data.status === "partial") {
-              setError("Some ads finished while we reconnected. See them in Review; no duplicate ads were started.");
+              setError(tn("assistant.finishedWhileReconnecting"));
             }
             return true;
           }
           if (data.status === "failed") {
             setGenerationId(null);
             setPhase("chat");
-            setError("No ads were saved. This attempt failed. You can try again.");
+            setError(tn("assistant.attemptFailed"));
             return true;
           }
           if (data.status === "unresolved") {
             setPhase("chat");
-            setError("No ads were saved yet; this attempt is held for a check. Look in Review later, and don't start another one yet.");
+            setError(tn("assistant.heldForCheck"));
             return true;
           }
         }
@@ -1001,6 +1000,7 @@ function ResultCard({
   onStatus?: (status: "draft" | "approved") => void;
   onEdited?: (creative: Creative) => void;
 }) {
+  const tn = useNotices();
   const [errored, setErrored] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editNotes, setEditNotes] = useState<CopyEditNotes | null>(null);
@@ -1034,11 +1034,11 @@ function ResultCard({
         const res = await setCreativeStatus(creative.id, next ? "approved" : "draft");
         if (!res.ok) {
           setApproved(!next);
-          setSaveError("Your choice wasn't saved. Tap it again.");
+          setSaveError(tn("assistant.choiceNotSaved"));
         }
       } catch {
         setApproved(!next);
-        setSaveError("Your choice wasn't saved. Tap it again.");
+        setSaveError(tn("assistant.choiceNotSaved"));
       }
     });
   }

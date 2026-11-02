@@ -67,3 +67,41 @@ describe("preflight loaders for the Review warnings (#419 2b)", () => {
   });
 });
 
+
+describe("WhatsApp message loader (#2422)", () => {
+  const loadersWith = (business: Record<string, unknown>) => {
+    const businesses = { select: () => businesses, eq: () => businesses, maybeSingle: async () => ({ data: business, error: null }) };
+    const creatives = { select: () => creatives, in: () => creatives, eq: async () => ({ data: [] }) };
+    return buildCampaignPreflightLoaders({ from: (table: string) => (table === "businesses" ? businesses : creatives) } as never, actor);
+  };
+  const draft = { destination: "whatsapp", creativeIds: [], targeting: {} } as never;
+
+  it("holds a saved message to the policy rules, not only this campaign's edit", async () => {
+    const saved = { greeting: "Hi! 100% visa with our team.", opening: { kind: "prefill", prefill: "Hi, I'd like a demo class", callButton: false }, language: "en" };
+    const found = await loadersWith({ name: "Study Hub", vertical: "IELTS coaching", offers: [], usps: [], description: null, locations: [], whatsapp_template: saved }).findWhatsAppMessage?.(actor, draft);
+    expect(found?.message.source).toBe("saved");
+    expect(found?.problem).toBe('"100% visa" in the welcome is a promise Meta rejects. Reword it.');
+  });
+
+  it("passes AdBrain's suggested message", async () => {
+    const found = await loadersWith({ name: "Study Hub", vertical: "IELTS coaching", offers: [], usps: [], description: null, locations: [], whatsapp_template: null }).findWhatsAppMessage?.(actor, draft);
+    expect(found?.message.source).toBe("suggested");
+    expect(found?.problem).toBeNull();
+  });
+});
+
+describe("WhatsApp message loader fails closed (#2452)", () => {
+  const failing = (businessError: unknown, creativesError: unknown) => {
+    const businesses = { select: () => businesses, eq: () => businesses, maybeSingle: async () => ({ data: businessError ? null : { name: "Study Hub", whatsapp_template: null, locations: [] }, error: businessError }) };
+    const creatives = { select: () => creatives, in: () => creatives, eq: async () => ({ data: null, error: creativesError }) };
+    return buildCampaignPreflightLoaders({ from: (table: string) => (table === "businesses" ? businesses : creatives) } as never, actor);
+  };
+  const draft = { destination: "whatsapp", creativeIds: ["c1"], targeting: {} } as never;
+
+  it.each([
+    ["the business read", { message: "timeout" }, null],
+    ["the ads read", null, { message: "timeout" }],
+  ])("rejects (Review says try again) when %s fails, instead of passing a fallback message", async (_label, businessError, creativesError) => {
+    await expect(failing(businessError, creativesError).findWhatsAppMessage?.(actor, draft)).rejects.toThrow("WhatsApp message could not be read.");
+  });
+});

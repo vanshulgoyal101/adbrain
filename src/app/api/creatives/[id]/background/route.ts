@@ -3,7 +3,7 @@ import { applyMonthlyCostCap } from "@/lib/llm/cost-cap";
 import { NextResponse } from "next/server";
 import { logEvent } from "@/lib/audit";
 import { backgroundImagePrompt, backgroundRequestSchema } from "@/lib/creative/background";
-import { formatDimensions } from "@/lib/creative/design";
+import { formatDimensions, OWNER_PHOTO_LAYOUT } from "@/lib/creative/design";
 import { CreativeImageError, OWNER_PHOTO_PROVIDER } from "@/lib/creative/generate";
 import { persistCreativeImage, renderAndPersistDesign } from "@/lib/creative/persist";
 import { pictureDesign } from "@/lib/creative/picture-words";
@@ -168,7 +168,12 @@ async function handlePOST(req: Request, { params }: { params: Promise<{ id: stri
     const { data: fresh } = await supabase.from("creatives").select("generation").eq("id", id).maybeSingle();
     const latest = isRecord(fresh?.generation) ? fresh.generation : isRecord(creative.generation) ? creative.generation : {};
     // #1904: an owner photo keeps the fit the owner chose; a new AI picture is made for the frame, so no fit.
-    const design = { ...pictureDesign({ ...creative, generation: latest as Json }, business), backgroundFit: photoFit };
+    // #2430: and its words go along the bottom, clear of the faces the earlier picture's placement didn't plan for.
+    const design = {
+      ...pictureDesign({ ...creative, generation: latest as Json }, business),
+      backgroundFit: photoFit,
+      ...(ownerPhoto ? { layout: OWNER_PHOTO_LAYOUT } : {}),
+    };
     const photoUrl = await persistCreativeImage(supabase, business.id, group, angle.id, image.url);
     const imageUrl = await renderAndPersistDesign(supabase, business.id, group, angle.id, design, photoUrl, image.url);
 

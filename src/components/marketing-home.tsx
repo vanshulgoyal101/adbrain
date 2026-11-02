@@ -8,6 +8,7 @@ import { MARKETING_FAQS } from "@/lib/seo/jsonLd";
 import { PRICING_FAQS, PRICING_POINTS } from "@/lib/pricing-words";
 import { IDEAS } from "@/lib/ideas";
 import { LEGAL_LINKS } from "@/lib/legal-links";
+import { SIGN_IN_HREF } from "@/lib/site";
 import styles from "./marketing-home.module.css";
 
 // Digits only, for wa.me; unset renders no support link (#289: the owner supplies the number).
@@ -30,7 +31,7 @@ export function MarketingHome() {
         <nav aria-label="Main navigation">
           <Link href="/ideas" className={styles.exampleLink}>Campaign ideas</Link>
           <a href="#cycle" className={styles.exampleLink}>How it works</a>
-          <Link href="/login" className={styles.signIn}>Sign in <ArrowRight aria-hidden="true" size={16} /></Link>
+          <Link href={SIGN_IN_HREF} className={styles.signIn}>Sign in <ArrowRight aria-hidden="true" size={16} /></Link>
         </nav>
       </header>
       <main id="main-content">

@@ -4,7 +4,7 @@ import { renderStoriesWithin } from "@/lib/creative/story";
 import { TargetingExclusionsMissingError } from "@/lib/meta/service-area";
 import type { DraftRecord } from "./draft-store";
 import type { ReviewDTO } from "./connect-contracts";
-import { buildCreativeReviewPayload } from "./preflight";
+import { buildCreativeReviewPayload, isReviewedWhatsAppMessage } from "./preflight";
 import { createOperationCheckpoint } from "./operation-store";
 import { executeOperation, OperationPhaseError, OperationRolledBackError, recordExternalId, type OperationRecord } from "./operations";
 import { effectiveDailyBudget } from "./spend";
@@ -22,6 +22,12 @@ import { checkPlan, planCheckEvent } from "./plan-check";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { buildLaunchSnapshot, saveLaunchSnapshot } from "./learnings";
 import type { SupabaseClient } from "@supabase/supabase-js";
+
+/** The stored objective label; website matches what sync maps OUTCOME_TRAFFIC to, so it never reads as a form campaign. */
+function campaignObjective(destination: string): string {
+  if (destination === "whatsapp") return "OUTCOME_ENGAGEMENT";
+  return destination === "website" ? "traffic" : "leads";
+}
 
 const STORY_RENDER_BUDGET_MS = 15_000;
 
@@ -90,16 +96,21 @@ export async function executeReviewedCampaign(input: {
           const areas = draftAreaNames(draft.input, business.locations ?? []);
           // #840: this campaign's edit, else the saved message, else AdBrain's suggestion: what Review showed.
           const message = draft.input.destination === "whatsapp" ? campaignWhatsAppMessage({ draft: draft.input, business, creatives: creativeInputs }) : null;
+          // #2452: rebuilt from this launch's own reads; anything but the reviewed message is refused before Meta sees it.
+          if (message && !isReviewedWhatsAppMessage(message, review)) throw new OperationPhaseError("WhatsApp message changed since review.", { transmitted: false });
           const prefill = message?.opening ?? null;
+          // #2599: a website ad sends the link Review opened and hashed, not a Brand read taken after it.
+          const websiteLink = draft.input.destination === "website" ? review.websiteUrl : undefined;
+          if (draft.input.destination === "website" && !websiteLink) throw new OperationPhaseError("Website link missing from review.", { transmitted: false });
           metaResult = await meta.createLeadCampaign({
             name: draft.input.name, dailyBudgetRupees: draft.input.dailyBudgetRupees,
-            leadFormId: draft.input.destination === "whatsapp" ? undefined : draft.input.leadFormId ?? undefined,
+            leadFormId: (draft.input.destination ?? "instant_form") === "instant_form" ? draft.input.leadFormId ?? undefined : undefined,
             destination: draft.input.destination ?? "instant_form", whatsappNumber: review.whatsappNumber ?? undefined,
             // #253: the create step re-checks the number against this business's bindings.
             ...(draft.input.destination === "whatsapp" ? { boundWhatsAppNumbers: await boundWhatsAppNumbers(actor.businessId) } : {}),
             ...(prefill ? { whatsappGreeting: prefill } : {}),
             // Brands saved before #470 may hold a bare domain; Meta needs a full link.
-            link: normalizeWebsite(business.website) ?? "https://facebook.com",
+            link: websiteLink ?? normalizeWebsite(business.website) ?? "https://facebook.com",
             creatives: creativeInputs.map((creative, index) => ({ imageUrl: creative.image_url!, headline: creative.headline!, message: creative.primary_text ?? "", description: savedCreativeDescription(creative.generation), cta: creative.cta, storyImage: storyImages[index] })),
             location, excludedLocation, ageMin: targeting.age?.min, ageMax: targeting.age?.max,
             gender: targeting.gender ?? "all", interests: review.audienceInterests,
@@ -125,7 +136,7 @@ export async function executeReviewedCampaign(input: {
           // #588: what this launch tried, for the learning ledger (saved once the campaign row exists). Never fails the launch (#603).
           try {
             launchSnapshot = buildLaunchSnapshot({
-              destination: metaResult.destination, objective: metaResult.destination === "whatsapp" ? "OUTCOME_ENGAGEMENT" : "leads",
+              destination: metaResult.destination, objective: campaignObjective(metaResult.destination),
               dailyBudgetRupees: draft.input.dailyBudgetRupees, adSetCount: metaResult.adSetIds.length || 1, abTest: Boolean(draft.input.abTest),
               areas, ageMin: targeting.age?.min, ageMax: targeting.age?.max, gender: targeting.gender ?? "all",
               interests: (review.audienceInterests ?? []).map(interest => interest.name),
@@ -152,7 +163,7 @@ export async function executeReviewedCampaign(input: {
       if (!metaResult) return null;
       const { data: campaign, error } = await saveCampaign(actor, {
         name: draft.input.name,
-        objective: metaResult.destination === "whatsapp" ? "OUTCOME_ENGAGEMENT" : "leads",
+        objective: campaignObjective(metaResult.destination),
         destination: metaResult.destination,
         daily_budget: effectiveDailyBudget(draft.input.dailyBudgetRupees, metaResult.adSetIds.length || 1),
         status: "paused", meta_campaign_id: metaResult.campaignId,

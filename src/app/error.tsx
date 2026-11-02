@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { Brain } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { SIGN_IN_HREF } from "@/lib/site";
 
 export default function Error({
   error,
@@ -28,7 +29,7 @@ export default function Error({
         refresh the page.
       </p>
       <Button onClick={retry}>Try again</Button>
-      <a href="/login" className="text-sm font-medium text-blue-700 underline">Sign in</a>
+      <a href={SIGN_IN_HREF} className="text-sm font-medium text-blue-700 underline">Sign in</a>
     </div>
   );
 }

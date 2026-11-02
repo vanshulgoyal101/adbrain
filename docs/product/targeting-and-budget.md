@@ -18,7 +18,9 @@ Part of [Features and workflows](README.md). Step of [Prepare a Campaign](launch
   now button) or up to 3 questions. A campaign's own edit (draft `whatsappMessage`) wins over
   it, with the same claim checks as a blocker. With neither, AdBrain writes the greeting and
   prefill per campaign as before. Review returns the exact message (`whatsappMessage`) and
-  launch sends that one; an edited or saved message is part of the plan hash. The ledger
+  launch sends that one: every message, suggested too, is part of the plan hash, and launch
+  rebuilds it from fresh reads and refuses a different one before Meta sees it (#2452). A
+  failed read is a "try again", never a fallback message. The ledger
   records the button and whether it was edited, saved or suggested. In the composer,
   "WhatsApp message: Your saved message · Edit for this campaign" opens the same fields and
   preview ("Also save as my message" is off by default); Review's "When they tap" shows the

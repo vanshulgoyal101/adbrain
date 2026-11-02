@@ -4,6 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Brain, MessageCircle } from "lucide-react";
 import { LEGAL_LINKS } from "@/lib/legal-links";
+import { SIGN_IN_HREF } from "@/lib/site";
 import { SEGMENTS, segmentBySlug, segmentWhatsAppHref, type Segment } from "@/lib/segments";
 import styles from "./segment.module.css";
 
@@ -66,7 +67,7 @@ export default async function SegmentPage({ params }: { params: Promise<{ segmen
     <div className={styles.page}>
       <header className={styles.header}>
         <Link href="/" aria-label="AdBrain home" className={styles.logo}><Brain aria-hidden="true" size={24} /> AdBrain</Link>
-        <Link href="/login" className={styles.signIn}>Sign in</Link>
+        <Link href={SIGN_IN_HREF} className={styles.signIn}>Sign in</Link>
       </header>
       <main>
         <section className={styles.hero} aria-labelledby="segment-title">

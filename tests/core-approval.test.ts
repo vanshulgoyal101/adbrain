@@ -148,3 +148,20 @@ describe("a main → next sync merge isn't held on main's own gated files (#2147
     expect(syncExempt({ head: null, main: "m", next: "b", base: "b" })).toBe(false);
   });
 });
+
+describe("words-only gate (#364)", () => {
+  it("ships core wording on green CI; money wording needs one approval; migrations stay gated", () => {
+    const file = "src/lib/campaign/ad-pause-service.ts";
+    const meta = { files: [file], head, headRef: "b", comments: [], wordsFiles: new Set([file]) };
+    expect(coreApproval(meta).state).toBe("success");
+    expect(coreApproval({ ...meta, comments: [at("QA: changes requested at 7612817")] }).state).toBe("pending");
+    expect(coreApproval({ ...meta, wordsFiles: new Set<string>() }).state).toBe("pending");
+    const money = { files: ["src/lib/payments/plan.ts"], head, headRef: "b", comments: [], wordsFiles: new Set(["src/lib/payments/plan.ts"]) };
+    expect(coreApproval(money).state).toBe("pending");
+    expect(coreApproval({ ...money, comments: [at("Reviewer review of 7612817: **approved**.")] }).state).toBe("success");
+    const sql = { files: ["db/migrations/20261031_x.sql"], head, headRef: "b", comments: [at("Reviewer review of 7612817: **approved**.")], wordsFiles: new Set(["db/migrations/20261031_x.sql"]) };
+    expect(coreApproval(sql).state).toBe("pending");
+    expect(coreApproval({ ...meta, files: [file, "src/lib/meta/client.ts"] }).state).toBe("pending");
+    expect(coreFiles(["src/lib/campaign/README.md", "src/lib/meta/README.md"])).toHaveLength(0);
+  });
+});

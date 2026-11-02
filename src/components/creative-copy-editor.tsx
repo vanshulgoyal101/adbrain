@@ -1,9 +1,8 @@
 "use client";
-
+import { useNotices } from "@/i18n/notices";
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { LivePicture, type PicturePreview } from "@/components/live-picture";
 import { PhotoFitSheet, PhotoPicker, useBrandPhotos } from "@/components/photo-fit-sheet";
-import { AlertTriangle, CheckCircle2, Info } from "lucide-react";
 import { updateCreativeCopy, type CopyEditResult } from "@/app/(app)/studio/actions";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Textarea } from "@/components/ui/input";
@@ -22,6 +21,7 @@ const LIMITS = {
 };
 
 export type CopyEditNotes = Pick<CopyEditResult, "warnings" | "liveNotice">;
+export { CopyEditNotice, UnsavedPreviewBadge } from "@/components/creative-edit-notices";
 
 /** The text an ad shows: saved, or the owner's unsaved draft while editing (#387). */
 export type AdText = { headline: string; primary_text: string; description: string; cta: string };
@@ -47,15 +47,6 @@ function savedPhotoUrl(creative: Creative): string | null {
 
 const PREVIEW_DEBOUNCE_MS = 700;
 
-/** Marks a live preview that isn't saved yet, so nobody mistakes it for the saved ad. */
-export function UnsavedPreviewBadge() {
-  return (
-    <span role="status" className="inline-flex w-fit items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900">
-      Preview · unsaved changes
-    </span>
-  );
-}
-
 /** Inline editor for an ad's words (#280). Saving never calls the AI. */
 function CreativeCopyEditor({
   creative,
@@ -71,6 +62,7 @@ function CreativeCopyEditor({
   /** Called with every edit so the card can preview it live; null when the editor closes. */
   onDraft?: (copy: AdText | null) => void;
 }) {
+  const tn = useNotices();
   const [copy, setCopy] = useState<EditableCopy>(() => ({
     headline: creative.headline ?? "",
     primary_text: creative.primary_text ?? "",
@@ -96,9 +88,9 @@ function CreativeCopyEditor({
         const res = await updateCreativeCopy(creative.id, copy);
         if (res.ok && res.creative) {
           onSaved({ ...creative, ...res.creative }, { warnings: res.warnings ?? [], liveNotice: res.liveNotice });
-        } else setError(res.error ?? "Couldn't save your changes. Try again.");
+        } else setError(res.error ?? tn("editor.saveFailed"));
       } catch {
-        setError("Couldn't save your changes. Check your connection and try again.");
+        setError(tn("editor.saveOffline"));
       }
     });
   }
@@ -190,30 +182,6 @@ function CreativeCopyEditor({
   );
 }
 
-/** What the owner should know after saving: unbacked claims and live campaigns. */
-export function CopyEditNotice({ notes }: { notes: CopyEditNotes }) {
-  const warnings = notes.warnings ?? [];
-  return (
-    <div className="flex flex-col gap-1.5" role="status">
-      {warnings.length === 0 && !notes.liveNotice && (
-        <p className="flex items-center gap-1.5 text-xs text-emerald-700">
-          <CheckCircle2 className="h-3.5 w-3.5" /> Saved.
-        </p>
-      )}
-      {warnings.map((warning) => (
-        <p key={warning} className="flex items-start gap-1.5 text-xs text-amber-800">
-          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" /> {warning}
-        </p>
-      ))}
-      {notes.liveNotice && (
-        <p className="flex items-start gap-1.5 text-xs text-slate-600">
-          <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" /> {notes.liveNotice}
-        </p>
-      )}
-    </div>
-  );
-}
-
 const PICTURE_LIMITS = {
   headline: pictureWordsSchema.shape.headline.maxLength ?? 40,
   subhead: pictureWordsSchema.shape.subhead.maxLength ?? 64,
@@ -237,6 +205,7 @@ function PictureWordsEditor({
   /** Live picture with the unsaved words (#387); null when there's nothing to preview. */
   onPreview?: (preview: PicturePreview | null) => void;
 }) {
+  const tn = useNotices();
   // Keyed on the fields the overlay uses: some cards rebuild `creative` on every render.
   const { id, headline, primary_text, cta, angle, generation } = creative;
   const base = useMemo(
@@ -295,9 +264,9 @@ function PictureWordsEditor({
       });
       const data = (await res.json().catch(() => ({}))) as { creative?: Creative; liveNotice?: string; error?: string };
       if (res.ok && data.creative) onSaved({ ...creative, ...data.creative }, { warnings: [], liveNotice: data.liveNotice });
-      else setError(data.error ?? "Couldn't redraw the picture. Try again.");
+      else setError(data.error ?? tn("editor.redrawFailed"));
     } catch {
-      setError("Couldn't redraw the picture. Check your connection and try again.");
+      setError(tn("editor.redrawOffline"));
     } finally {
       setSaving(false);
     }
@@ -384,6 +353,7 @@ function BackgroundEditor({
   onBusy?: (busy: boolean) => void;
   onPreview?: (preview: PicturePreview | null) => void;
 }) {
+  const tn = useNotices();
   const [instruction, setInstruction] = useState("");
   const photos = useBrandPhotos(creative.business_id);
   const [photo, setPhoto] = useState<string | null>(null);
@@ -415,9 +385,9 @@ function BackgroundEditor({
       });
       const data = (await res.json().catch(() => ({}))) as { creative?: Creative; liveNotice?: string; error?: string };
       if (res.ok && data.creative) onSaved({ ...creative, ...data.creative }, { warnings: [], liveNotice: data.liveNotice });
-      else setError(data.error ?? "Couldn't make a new background. Try again.");
+      else setError(data.error ?? tn("editor.backgroundFailed"));
     } catch {
-      setError("Couldn't make a new background. Check your connection, then refresh before trying again.");
+      setError(tn("editor.backgroundOffline"));
     } finally {
       setSaving(false);
     }
