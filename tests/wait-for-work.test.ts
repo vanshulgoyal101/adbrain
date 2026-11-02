@@ -4,7 +4,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { actionableOwned, OWNS_WORK, createGitHubApi, readyPool, redShared, myPulls, failedOnMine, mainArrival, TRAIN_RULE, BORROWS_DEV, boardRow, systemicFailures, snoozedUntil, latestWord, linkedIssues, lowQueues, matchers, nextItem, freshComments, offTrack, rateBackoffMs, roleCard, unsavedWork, waitingOnMe } from "../scripts/wait-for-work.mjs";
+import { actionableOwned, backlogReads, dueWake, scheduledRead, OWNS_WORK, createGitHubApi, readyPool, redShared, myPulls, failedOnMine, mainArrival, TRAIN_RULE, BORROWS_DEV, boardRow, systemicFailures, snoozedUntil, latestWord, linkedIssues, lowQueues, matchers, nextItem, freshComments, offTrack, rateBackoffMs, roleCard, unsavedWork, waitingOnMe } from "../scripts/wait-for-work.mjs";
 
 describe("PR reviews count as the latest word (#423)", () => {
   it("picks a review posted after the last comment, and ignores empty approvals", () => {
@@ -208,6 +208,52 @@ describe("scheduled checks: Next read <time> (QA 2, #575)", () => {
     expect(waitingOnMe("Dev 3: → QA 2: gates please. Next read 2026-10-25T16:00Z.", qa2, [], Date.parse("2026-10-25T11:00Z"))).toBe(true);
     expect(snoozedUntil("QA 2: Next read ~16:00Z")).toBeNull();
     expect(snoozedUntil("QA 2: next check 2026-10-26 14:24Z")).toBe(Date.parse("2026-10-26T14:24Z"));
+  });
+});
+
+describe("timed reads survive `blocked` (#2572)", () => {
+  const dev3 = matchers("dev3");
+  const at = (t: string) => Date.parse(`2026-11-02T${t}Z`);
+  const read = "Dev 3: backup ran; restore check pending. → CEO: #1481. Next read 2026-11-02T08:45Z.";
+  it("an owner-signed read on a blocked item stays quiet, wakes the loop at its time, then is reported", () => {
+    dueWake(Infinity);
+    expect(waitingOnMe(read, dev3, ["blocked", "owner:dev3"], at("08:00"))).toBe(false);
+    expect(dueWake(at("08:44"))).toBe(false);
+    expect(dueWake(at("08:45"))).toBe(true);
+    expect(dueWake(at("08:46"))).toBe(false);
+    expect(waitingOnMe(read, dev3, ["blocked", "owner:dev3"], at("08:45"))).toBe(true);
+    expect(scheduledRead(read, dev3, ["blocked"])).toBe(at("08:45"));
+  });
+  it("a due read counts as actionable even when blocked; a blocked item without one stays held", () => {
+    const issue = (n: number, ...labels: string[]) => ({ number: n, labels: labels.map((name) => ({ name })) });
+    const items = [issue(1, "blocked"), issue(2, "blocked"), issue(3, "waiting-owner")];
+    expect(actionableOwned(items, { due: new Set([2, 3]) }).map((i) => i.number)).toEqual([2]);
+    expect(actionableOwned(items).map((i) => i.number)).toEqual([]);
+    expect(waitingOnMe("Dev 3: waiting on Meta support.", dev3, ["blocked"], at("09:00"))).toBe(false);
+  });
+  it("backlog reads every owned item a time can lift, past the first 20", () => {
+    const issue = (n: number, ...labels: string[]) => ({ number: n, labels: labels.map((name) => ({ name })) });
+    const items = [...Array.from({ length: 25 }, (_, k) => issue(k + 1, "owner:dev3")), issue(26, "blocked"), issue(27, "waiting-owner"), issue(28, "parked"), issue(29, "later")];
+    expect(backlogReads(items).map((i) => i.number)).toEqual([...Array.from({ length: 25 }, (_, k) => k + 1), 26]);
+  });
+  it("waiting-owner, parked and later are never made actionable by a time alone", () => {
+    for (const hold of ["waiting-owner", "parked", "later"]) {
+      dueWake(Infinity);
+      expect(scheduledRead(read, dev3, [hold])).toBeNull();
+      expect(waitingOnMe(read, dev3, [hold, "blocked"], at("08:00"))).toBe(false);
+      expect(waitingOnMe(read, dev3, [hold], at("09:00"))).toBe(false);
+      expect(dueWake(at("09:00"))).toBe(false);
+    }
+  });
+  it("unblocked schedules still wake on time, other people's times are ignored, and addressed work still wakes", () => {
+    dueWake(Infinity);
+    expect(waitingOnMe(read, dev3, [], at("08:00"))).toBe(false);
+    expect(dueWake(at("08:30"))).toBe(false);
+    expect(dueWake(at("08:45"))).toBe(true);
+    expect(waitingOnMe(read, dev3, [], at("08:45"))).toBe(true);
+    expect(scheduledRead("CTO: → Dev 3: look. Next read 2026-11-02T08:45Z.", dev3, ["blocked"])).toBeNull();
+    expect(waitingOnMe("CTO: → Dev 3: look. Next read 2026-11-02T08:45Z.", dev3, [], at("08:00"))).toBe(true);
+    expect(waitingOnMe("CTO: → Dev 3: look.", dev3, ["blocked"], at("08:00"))).toBe(false);
   });
 });
 
