@@ -50,7 +50,7 @@ it("does not upload a second video when an older page precedes the lost upload (
       adAccountId: account,
       uploadImage: async () => { throw new Error("Not an image."); },
       startVideo: (input) => startAdVideo(graph, account, input),
-      findVideoByName: (name, since) => findAdVideoByName(graph, account, name, since),
+      findVideoByName: (name) => findAdVideoByName(graph, account, name),
       readVideo: async () => ({
         status: "processing", width: null, height: null, lengthSeconds: null,
         instagramEligible: null, thumbnailUrl: null,

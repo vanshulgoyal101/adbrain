@@ -99,23 +99,21 @@ const LIST_PAGES = 4;
 
 /**
  * After an `advideos` POST whose answer never arrived, finds the video by the unique name it was sent with, so it is
- * never uploaded twice. Graph refuses `filtering` on title (100, recorded), so this reads the list (newest-first,
- * recorded but not promised) and calls it absent only after a whole page older than `since` (the claim time) or the
- * end of the list. `unknown` when 200 videos didn't settle it: never re-upload then.
+ * never uploaded twice. Graph refuses `filtering` on title (100, recorded), so this reads the list. Its order is not
+ * promised, so only the proven end of the list (no `paging.next`) means absent. A `next` without a cursor, or 200
+ * videos read without reaching the end, is `unknown`: never re-upload then.
  */
-export async function findAdVideoByName(graph: MetaGraph, adAccountId: string, name: string, since: Date): Promise<AdVideoLookup> {
+export async function findAdVideoByName(graph: MetaGraph, adAccountId: string, name: string): Promise<AdVideoLookup> {
   let after: string | null = null;
   for (let page = 0; page < LIST_PAGES; page++) {
     const cursor: string = after ? `&after=${encodeURIComponent(after)}` : "";
-    const data: { data?: { id?: string; title?: string; created_time?: string }[]; paging?: { cursors?: { after?: string }; next?: string } } =
+    const data: { data?: { id?: string; title?: string }[]; paging?: { cursors?: { after?: string }; next?: string } } =
       await graph(`${adAccountId}/advideos?fields=${encodeURIComponent(AD_VIDEO_LIST_FIELDS)}&limit=${LIST_PAGE}${cursor}`);
-    const videos = data.data ?? [];
-    const match = videos.find((video) => video.id && video.title === name);
+    const match = (data.data ?? []).find((video) => video.id && video.title === name);
     if (match?.id) return { status: "found", videoId: match.id };
-    const older = (video: { created_time?: string }) => Date.parse(video.created_time ?? "") < since.getTime();
-    if (videos.length > 0 && videos.every(older)) return { status: "absent" };
-    after = data.paging?.next ? data.paging.cursors?.after ?? null : null;
-    if (!after) return { status: "absent" };
+    if (!data.paging?.next) return { status: "absent" };
+    after = data.paging.cursors?.after ?? null;
+    if (!after) return { status: "unknown" };
   }
   return { status: "unknown" };
 }

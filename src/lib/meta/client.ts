@@ -1194,8 +1194,8 @@ export class MetaClient {
   }
 
   /** #749: settle a video upload whose answer never came back by the name AdBrain gave it. */
-  findAdVideoByName(name: string, since: Date): Promise<AdVideoLookup> {
-    return findAdVideoByName((path, opts) => this.graph(path, opts), this.creds.adAccountId, name, since);
+  findAdVideoByName(name: string): Promise<AdVideoLookup> {
+    return findAdVideoByName((path, opts) => this.graph(path, opts), this.creds.adAccountId, name);
   }
 
   /**

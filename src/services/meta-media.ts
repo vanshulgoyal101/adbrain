@@ -63,7 +63,7 @@ export type MetaMediaPort = {
   uploadImage(bytes: Uint8Array): Promise<string>;
   startVideo(input: { fileUrl: () => string | Promise<string>; name: string; title: string }): Promise<string>;
   readVideo(videoId: string): Promise<AdVideoState>;
-  findVideoByName(name: string, since: Date): Promise<AdVideoLookup>;
+  findVideoByName(name: string): Promise<AdVideoLookup>;
 };
 
 export type MetaMediaClient = Pick<MetaClient, "adAccountId" | "uploadAdImageBytes" | "startAdVideo" | "readAdVideo" | "findAdVideoByName">;
@@ -75,7 +75,7 @@ export function metaMediaPort(client: MetaMediaClient): MetaMediaPort {
     uploadImage: (bytes) => client.uploadAdImageBytes(bytes),
     startVideo: (input) => client.startAdVideo(input),
     readVideo: (videoId) => client.readAdVideo(videoId),
-    findVideoByName: (name, since) => client.findAdVideoByName(name, since),
+    findVideoByName: (name) => client.findAdVideoByName(name),
   };
 }
 
@@ -96,7 +96,7 @@ export type MetaMediaResult =
   | { status: "error"; kind: "image" | "video"; problem: AdVideoProblem }
   | { status: "refused"; reason: "bad_account" | "not_found" | "not_ready" };
 
-/** Clocks (ours across hosts, and Meta's `created_time`) may disagree by up to this much. */
+/** Our hosts' clocks may disagree by up to this much. */
 export const CLOCK_SKEW_MS = 5 * 60_000;
 /**
  * An `advideos` POST is at most two 15 s Graph calls (one 389 retry), so a claim older than 2 min with no id lost its
@@ -246,7 +246,7 @@ async function settleClaim(deps: MetaMediaDeps, asset: MediaAsset, claim: MetaUp
   if (!retrying && now.getTime() - claimedAt < CLAIM_STALE_MS) return waiting;
   let lookup: AdVideoLookup;
   try {
-    lookup = await deps.meta.findVideoByName(claim.uploadName, new Date(claimedAt - CLOCK_SKEW_MS));
+    lookup = await deps.meta.findVideoByName(claim.uploadName);
   } catch {
     return retrying ? videoError(claim) : waiting;
   }
@@ -256,7 +256,7 @@ async function settleClaim(deps: MetaMediaDeps, asset: MediaAsset, claim: MetaUp
     return saved ? pollVideo(deps, saved) : { status: "processing", kind: "video", videoId: lookup.videoId };
   }
   if (lookup.status === "unknown") {
-    // Too many newer videos to be sure: never risk a second copy.
+    // The list wasn't read to its end: never risk a second copy.
     if (claim.status === "starting") await deps.store.update(claim.id, expect, { status: "error", problem: "unknown", checkedAt: now.toISOString() });
     return videoError({ ...claim, problem: "unknown" });
   }

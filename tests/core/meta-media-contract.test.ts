@@ -100,7 +100,7 @@ const graphPort = (graph: MetaGraph, adAccountId: string) => metaMediaPort({
   uploadAdImageBytes: (bytes) => uploadAdImageBytes(graph, adAccountId, bytes),
   startAdVideo: (input) => startAdVideo(graph, adAccountId, input),
   readAdVideo: (videoId) => readAdVideo(graph, videoId),
-  findAdVideoByName: (name, since) => findAdVideoByName(graph, adAccountId, name, since),
+  findAdVideoByName: (name) => findAdVideoByName(graph, adAccountId, name),
 });
 
 function deps(graph: MetaGraph, store: MetaMediaStore, adAccountId: string, now = new Date("2026-10-29T06:15:00Z")) {
@@ -321,25 +321,37 @@ describe("core: an owner's video goes to Meta once, even when an answer is lost 
     expect(second.rows).toMatchObject([{ status: "starting", attempt: 1 }]);
   });
 
-  it("Meta refuses a title filter (recorded), so the lookup reads the list; absent only once a whole page is older", async () => {
+  it("Meta refuses a title filter (recorded), so the lookup reads the list; absent only at its proven end", async () => {
     const refusal = named(listTape, "filter-by-title")[0];
     expect(refusal).toMatchObject({ status: 400, body: { error: { code: 100 } } });
     const { graph, calls } = tapeGraph(named(listTape, "list-videos"));
-    expect(await findAdVideoByName(graph, imageAccount, "owner-clip.mp4", new Date("2026-10-29T06:10:00Z")))
+    expect(await findAdVideoByName(graph, imageAccount, "owner-clip.mp4"))
       .toEqual({ status: "found", videoId: (listTape[0].body as { data: { id: string }[] }).data[0].id });
     expect(calls[0].path).not.toContain("filtering");
 
     // Order isn't promised: an older video listed before the match doesn't end the search.
     const [newest, oldest] = (listTape[0].body as { data: object[] }).data;
     const shuffled = { ...listTape[0], body: { data: [oldest, newest], paging: {} } };
-    expect(await findAdVideoByName(tapeGraph([shuffled]).graph, imageAccount, "owner-clip.mp4", new Date("2026-10-29T06:10:00Z")))
+    expect(await findAdVideoByName(tapeGraph([shuffled]).graph, imageAccount, "owner-clip.mp4"))
       .toMatchObject({ status: "found" });
 
     // A page mixing an older video with newer ones isn't the end: the match on the next page is still found.
     const mixed = { ...listTape[0], body: { data: [oldest, { id: "9100000000000001", title: "other", created_time: "2026-10-29T07:00:00+0000" }], paging: { cursors: { after: "c1" }, next: "https://graph.facebook.com/next" } } };
     const nextPage = { ...listTape[0], path: `${listTape[0].path}&after=c1`, body: { data: [newest], paging: {} } };
-    expect(await findAdVideoByName(tapeGraph([mixed, nextPage]).graph, imageAccount, "owner-clip.mp4", new Date("2026-10-29T06:10:00Z")))
+    expect(await findAdVideoByName(tapeGraph([mixed, nextPage]).graph, imageAccount, "owner-clip.mp4"))
       .toMatchObject({ status: "found" });
+
+    // A whole page older than the claim isn't the end either: the order isn't promised.
+    const allOlder = { ...mixed, body: { ...mixed.body, data: [oldest] } };
+    expect(await findAdVideoByName(tapeGraph([allOlder, nextPage]).graph, imageAccount, "owner-clip.mp4"))
+      .toMatchObject({ status: "found" });
+
+    // Only a last page (no `next`) proves absence; a `next` with no cursor can't be followed, so it stays unknown.
+    expect(await findAdVideoByName(tapeGraph([{ ...listTape[0], body: { data: [oldest], paging: {} } }]).graph, imageAccount, "owner-clip.mp4"))
+      .toEqual({ status: "absent" });
+    const noCursor = { ...mixed, body: { data: [oldest], paging: { next: "https://graph.facebook.com/next" } } };
+    expect(await findAdVideoByName(tapeGraph([noCursor]).graph, imageAccount, "owner-clip.mp4"))
+      .toEqual({ status: "unknown" });
   });
 
   it("in production the port is the business's MetaClient: its account, its Graph, its write mode", async () => {
@@ -352,7 +364,7 @@ describe("core: an owner's video goes to Meta once, even when an answer is lost 
     const creds = { adAccountId: imageAccount, pageId: "1", accessToken: "core-token" };
     const port = metaMediaPort(new MetaClient(creds));
     expect(port.adAccountId).toBe(imageAccount);
-    expect(await port.findVideoByName("owner-clip.mp4", new Date("2026-10-29T06:10:00Z"))).toMatchObject({ status: "found" });
+    expect(await port.findVideoByName("owner-clip.mp4")).toMatchObject({ status: "found" });
     expect(urls[0]).toContain(`/${imageAccount}/advideos?`);
 
     // The smoke account's client is pause-only: an owner's upload can't reach Meta through it.
