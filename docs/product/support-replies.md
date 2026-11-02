@@ -48,10 +48,13 @@ Tell the CTO on the issue if many owners report this in the same hour.
 - **Owner says:** "Facebook says the app isn't available", "connect not working",
   "it keeps asking again".
 - **Screen shows:** on the Go live step, under "Facebook Page": "Not connected" and
-  "Facebook is still reviewing AdBrain. Until then, your Facebook account needs our
-  invite: open your invites and accept adBrain, then tap Connect." with "Open my
-  invites". After a failed try: "Didn't connect? If Facebook said the app isn't
-  available, accept the invite first, then try again." If the Meta window was closed
+  "Facebook is still reviewing AdBrain, so only people we've added can connect. Tap
+  Connect; if Facebook says the app isn't available, come back here and we'll add you.
+  Already invited? Accept adBrain in your invites first." with "Open my invites".
+  After a failed try: "Didn't connect? We've asked our team to add you and will
+  WhatsApp you within a working day. Accept our invite, then try again." That try
+  already sent the access request, so the scheduled job opens a `waiting-owner`
+  "Facebook access request" issue on its next run (#2538). If the Meta window was closed
   early: "Meta has not finished yet. Complete the Meta window, then check again.
   Your draft is saved." In Settings: "That connection link expired. Please try
   connecting again." or "You declined the permissions AdBrain needs to manage ads."
@@ -59,10 +62,11 @@ Tell the CTO on the issue if many owners report this in the same hour.
   connect; or the Meta window was closed before the last step.
 - **Reply:**
 
-  > Facebook is still checking our app, so you need our invite first. On the Go live
-  > screen tap "Open my invites", accept adBrain, then come back and tap "Connect
-  > Facebook Page". In the Meta window pick your Page and ad account and go to the
-  > end. If it still fails, send me a screenshot.
+  > Facebook is still checking our app, so we need to add you first. Please send me
+  > your Facebook profile link (Facebook › your profile › ⋯ › Copy profile link). Once
+  > our invite arrives, on the Go live screen tap "Open my invites", accept adBrain,
+  > then tap "Connect Facebook Page". In the Meta window pick your Page and ad account
+  > and go to the end. If it still fails, send me a screenshot.
 
 If the owner has no invite to accept, the invite was not sent to their Facebook
 account yet: tell the CEO on GitHub (label `waiting-owner`) so it gets sent.

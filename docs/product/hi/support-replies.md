@@ -55,10 +55,13 @@
 - **ओनर कहते हैं:** "Facebook कह रहा है ऐप उपलब्ध नहीं है", "कनेक्ट नहीं हो रहा",
   "बार-बार फिर से पूछ रहा है"।
 - **स्क्रीन पर दिखता है:** Go live स्टेप पर, "Facebook Page" के नीचे: "Not connected" और
-  "Facebook is still reviewing AdBrain. Until then, your Facebook account needs our
-  invite: open your invites and accept adBrain, then tap Connect." के साथ "Open my
-  invites"। कोशिश फ़ेल होने के बाद: "Didn't connect? If Facebook said the app isn't
-  available, accept the invite first, then try again." अगर Meta की विंडो बीच में
+  "Facebook is still reviewing AdBrain, so only people we've added can connect. Tap
+  Connect; if Facebook says the app isn't available, come back here and we'll add you.
+  Already invited? Accept adBrain in your invites first." के साथ "Open my invites"।
+  कोशिश फ़ेल होने के बाद: "Didn't connect? We've asked our team to add you and will
+  WhatsApp you within a working day. Accept our invite, then try again." उस कोशिश से
+  ऐक्सेस रिक्वेस्ट चली जाती है, इसलिए अगली शेड्यूल्ड रन पर `waiting-owner` वाला
+  "Facebook access request" इश्यू खुलता है (#2538)। अगर Meta की विंडो बीच में
   बंद कर दी: "Meta has not finished yet. Complete the Meta window, then check again.
   Your draft is saved." Settings में: "That connection link expired. Please try
   connecting again." या "You declined the permissions AdBrain needs to manage ads."
@@ -66,9 +69,10 @@
   ही कनेक्ट हो सकते हैं; या Meta की विंडो आख़िरी स्टेप से पहले बंद हो गई।
 - **जवाब:**
 
-  > Facebook अभी हमारे ऐप की जाँच कर रहा है, इसलिए पहले आपको हमारा इनवाइट स्वीकार करना होगा। Go live
-  > स्क्रीन पर "Open my invites" दबाइए, adBrain का इनवाइट स्वीकार कीजिए, फिर वापस आकर "Connect
-  > Facebook Page" दबाइए। Meta की विंडो में अपना पेज और ऐड अकाउंट चुनिए और आख़िर
+  > Facebook अभी हमारे ऐप की जाँच कर रहा है, इसलिए पहले हमें आपको जोड़ना होगा। कृपया अपनी
+  > Facebook प्रोफ़ाइल का लिंक भेजिए (Facebook › आपकी प्रोफ़ाइल › ⋯ › Copy profile link)। हमारा
+  > इनवाइट आने पर Go live स्क्रीन पर "Open my invites" दबाइए, adBrain का इनवाइट स्वीकार कीजिए,
+  > फिर "Connect Facebook Page" दबाइए। Meta की विंडो में अपना पेज और ऐड अकाउंट चुनिए और आख़िर
   > तक जाइए। फिर भी न हो, तो मुझे स्क्रीनशॉट भेजिए।
 
 अगर ओनर के पास स्वीकार करने को कोई इनवाइट नहीं है, तो मतलब इनवाइट अभी उनके Facebook
