@@ -26,10 +26,10 @@ beforeEach(() => {
 
 describe("Enquiries in Hindi", () => {
   it("shows the inbox's headings, buttons and counts in Hindi", async () => {
-    render(<LeadInbox businessName="Solaride" initialLeads={[asha]} metaReady syncScope="o:b" allTotal={1} summary={{ waiting: 2, replyMinutes: null }} words={words} />);
+    render(<LeadInbox businessName="Solaride" initialLeads={[asha]} metaReady syncScope="o:b" allTotal={1} summary={{ waiting: 2, replyMinutes: 12.4 }} words={words} />);
     expect(screen.getByRole("heading", { name: "पूछताछ (1)" })).toBeInTheDocument();
     expect(within(screen.getByRole("group", { name: "दिखाएँ" })).getByRole("button", { name: "सभी" })).toBeInTheDocument();
-    expect(screen.getByText("2 लोग आपका इंतज़ार कर रहे हैं।")).toBeInTheDocument();
+    expect(screen.getByText(/2 लोग आपका इंतज़ार कर रहे हैं।/)).toHaveTextContent("2 लोग आपका इंतज़ार कर रहे हैं। आप आमतौर पर 12 मिनट में लोगों से संपर्क करते हैं।");
     expect(await screen.findByText("Meta पर अभी भी देखा जा रहा है। अब तक 3 नई पूछताछ; पूरा करने के लिए \"देखते रहें\" दबाएँ।")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "देखते रहें" })).toBeInTheDocument();
   });

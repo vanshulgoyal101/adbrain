@@ -109,7 +109,7 @@ export default async function SettingsPage({
           </Suspense>
         </div>
         <div className="min-w-0 space-y-6">
-          <Suspense fallback={<SettingsLoading label="Spend guardrails" />}>
+          <Suspense fallback={<SettingsLoading label={t("spend.title")} status={t("page.loading", { label: t("spend.title") })} />}>
             <SpendSettings businessId={business.id} />
           </Suspense>
           <Suspense fallback={<SettingsLoading label={t("page.preferences")} status={t("page.loading", { label: t("page.preferences") })} />}>
@@ -188,7 +188,7 @@ async function ConnectionSettings({ businessId, searchParams, whatsapp }: {
       ) : (
         <Alert variant="error">
           {t("meta.unavailable")}
-          <Link href="/settings" className="ml-1 font-medium underline">{t("meta.tryAgain")}</Link>
+          <Link href="/settings" className="ml-1 font-medium underline">{t("page.tryAgain")}</Link>
         </Alert>
       )}
       {/* #1016: behind META_SETUP_CHECKLIST; only for the owner's own Meta account, after Connect. */}
@@ -211,11 +211,12 @@ async function SetupChecklistSection({ businessId }: { businessId: string }) {
 }
 
 async function SpendSettings({ businessId }: { businessId: string }) {
-  const spend = await getSpendEvaluation(businessId).catch(() => null);
-  return spend ? <SpendGuardrails limits={spend.limits} evaluation={spend.evaluation} /> : (
+  const [spend, locale] = await Promise.all([getSpendEvaluation(businessId).catch(() => null), requestLocale()]);
+  const t = translator(locale, "settings");
+  return spend ? <SpendGuardrails limits={spend.limits} evaluation={spend.evaluation} words={{ locale, messages: namespaceMessages(locale, "settings") }} /> : (
     <Alert variant="error">
-      Spend limits could not be loaded. Your saved limits have not changed.
-      <Link href="/settings" className="ml-1 font-medium underline">Try again</Link>
+      {t("spend.loadFailed")}
+      <Link href="/settings" className="ml-1 font-medium underline">{t("page.tryAgain")}</Link>
     </Alert>
   );
 }

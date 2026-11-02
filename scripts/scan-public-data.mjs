@@ -24,7 +24,10 @@ const FAKE_PHONES = new Set(["9876543210", "9876544842"]);
 const fakeNumber = (digits) => /^(9000|1234|0000)/.test(digits) || /^(\d)\1+$/.test(digits) || FAKE_PHONES.has(digits) || TEAM_META_IDS.has(digits);
 
 /** GitHub's own ids (comment, review and run numbers) live in its URLs; drop URLs before matching digits. */
-const withoutUrls = (text) => text.replace(/https?:\/\/\S+/g, " ").replace(/\b(issuecomment|pullrequestreview|discussion_r)-\d+/g, " ")
+const withoutUrls = (text) => text
+  // #2727: `[6581991068](https://github.com/…#issuecomment-6581991068)` cites the id in its own GitHub link.
+  .replace(/\[(\d{6,})\]\((https:\/\/github\.com\/[^)\s]*)\)/g, (link, id, url) => (url.includes(id) ? " " : link))
+  .replace(/https?:\/\/\S+/g, " ").replace(/\b(issuecomment|pullrequestreview|discussion_r)-\d+/g, " ")
   .replace(/\b(comment|review|run|job|pr|issue|artifact)s?\s+#?\d{6,}(?:(?:\s*,\s*|\s+(?:and|or)\s+)#?\d{6,})*/gi, " ");
 
 export const PATTERNS = [
@@ -37,16 +40,37 @@ export const PATTERNS = [
   ["email", /\b[A-Za-z0-9._%+-]+@([A-Za-z0-9-]+\.)+[A-Za-z]{2,}\b/g, (m) => !TEAM_DOMAINS.has(m.split("@")[1].toLowerCase())],
   ["meta_ad_account", /\bact_(\d{6,})\b/g, (m) => !fakeNumber(m.slice(4)) && !TEST_ACCOUNTS.has(m) && !TEST_ACCOUNTS.has(m.slice(4))],
   ["meta_id", /(?<![\d.\w-])\d{15,17}(?![\d\w])/g, (m) => !fakeNumber(m)],
-  ["indian_mobile", /(?<![\d\w])(?:\+?91[\s-]?|0)?[6-9]\d{4}[\s-]?\d{5}(?![\d\w])/g, (m) => !fakeNumber(m.replace(/\D/g, "").slice(-10)) && !teamPhone(m.replace(/\D/g, "").slice(-10))],
+  // A bare 10 digits GitHub resolves as one of this repo's comments is that comment's id, not a phone (#2727).
+  ["indian_mobile", /(?<![\d\w])(?:\+?91[\s-]?|0)?[6-9]\d{4}[\s-]?\d{5}(?![\d\w])/g, (m, githubIds) => !githubIds.has(m) && !fakeNumber(m.replace(/\D/g, "").slice(-10)) && !teamPhone(m.replace(/\D/g, "").slice(-10))],
 ];
 
+const BARE_TEN = /(?<![\d\w])[6-9]\d{9}(?![\d\w])/g;
+const MAX_ID_LOOKUPS = 100;
+
+/** Bare 10-digit numbers outside links: each may be a GitHub comment id that reads like a mobile (#2727). */
+export function idCandidates(text) {
+  return [...new Set(withoutUrls(text ?? "").match(BARE_TEN) ?? [])];
+}
+
+/** Candidates that are comment ids: those already seen, plus up to 100 GitHub confirms. A failed lookup keeps the flag. */
+export async function githubCommentIds(candidates, seen, exists) {
+  const ids = new Set();
+  let lookups = 0;
+  for (const id of new Set(candidates)) {
+    if (seen.has(id)) { ids.add(id); continue; }
+    if (lookups++ >= MAX_ID_LOOKUPS) continue;
+    if (await exists(id).catch(() => false)) ids.add(id);
+  }
+  return ids;
+}
+
 /** The pattern types found in one text, sorted and unique. Matches themselves are never returned. */
-export function scan(text) {
+export function scan(text, githubIds = new Set()) {
   const found = new Set();
   const plain = withoutUrls(text ?? "");
   for (const [type, re, keep = () => true] of PATTERNS) {
     for (const match of (type === "token" || type === "jwt" ? text ?? "" : plain).matchAll(re)) {
-      if (keep(match[0])) { found.add(type); break; }
+      if (keep(match[0], githubIds)) { found.add(type); break; }
     }
   }
   return [...found].sort();
@@ -81,7 +105,12 @@ async function main() {
     ...(await pages(`/issues/comments?since=${since}`)).map((c) => ({ url: c.html_url, body: c.body })),
     ...(await pages(`/pulls/comments?since=${since}`)).map((c) => ({ url: c.html_url, body: c.body })),
   ].filter((item) => item.title !== TITLE);
-  const hits = items.map((item) => ({ url: item.url, types: scan(item.body) })).filter((hit) => hit.types.length);
+  const seen = new Set(items.map((item) => item.url.match(/#issuecomment-(\d+)$/)?.[1]).filter(Boolean));
+  const githubIds = await githubCommentIds(items.flatMap((item) => idCandidates(item.body)), seen, async (id) => {
+    const response = await fetch(`https://api.github.com/repos/${repo}/issues/comments/${id}`, { headers });
+    return response.status === 200;
+  });
+  const hits = items.map((item) => ({ url: item.url, types: scan(item.body, githubIds) })).filter((hit) => hit.types.length);
   console.log(`Scanned ${items.length} bodies/comments since ${since}: ${hits.length} with possible customer data.`);
   if (!hits.length) return;
 
