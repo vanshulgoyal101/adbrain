@@ -7,7 +7,7 @@ import type { AssetResults, AssetTotals } from "@/lib/campaign/asset-results";
 import hi from "../messages/hi.json";
 
 const totals: AssetTotals = { destination: "whatsapp", objective: "OUTCOME_ENGAGEMENT", results: 3, spendPaise: 28_800, delivered: true, syncedAt: "2026-11-02T10:00:00Z" };
-const ready = (groups: AssetTotals[] = [totals]): AssetResults => ({
+const ready = (groups: AssetTotals[] = [totals]): Extract<AssetResults, { state: "ready" }> => ({
   state: "ready", byMedia: { photo: groups }, byCreative: { creative: groups }, unmatched: 0, asOf: Date.parse("2026-11-02T10:03:00Z"),
 });
 describe("quiet lifetime asset result badges", () => {
