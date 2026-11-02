@@ -1,4 +1,4 @@
-// One-command money or migration release (#228): node scripts/release.mjs --pr <n> [--dry-run]
+// One-command money or migration release (#228): node scripts/release.mjs --pr <n> [--dry-run] [--no-wait]
 // Read-only preflight, then dry run, apply with ledger row, schema reload, merge at the full head SHA,
 // production guard and a receipt. --dry-run stops before apply and merge. Never prints a secret.
 import { execFileSync } from "node:child_process";
@@ -214,9 +214,10 @@ async function waitForGuard(sha) {
 async function main() {
   // #1513: even --dry-run loads the production Management token, and verdict comments are one shared GitHub user.
   refuseHeadless("release.mjs");
-  const { values } = parseArgs({ options: { pr: { type: "string" }, "dry-run": { type: "boolean", default: false } } });
-  if (!/^\d+$/.test(values.pr ?? "")) stop("Usage: node scripts/release.mjs --pr <number> [--dry-run]");
+  const { values } = parseArgs({ options: { pr: { type: "string" }, "dry-run": { type: "boolean", default: false }, "no-wait": { type: "boolean", default: false } } });
+  if (!/^\d+$/.test(values.pr ?? "")) stop("Usage: node scripts/release.mjs --pr <number> [--dry-run] [--no-wait]");
   const dry = values["dry-run"];
+  const noWait = values["no-wait"];
   const pr = ghJson("pr", "view", values.pr, "-R", repo, "--json", "number,state,baseRefName,headRefOid,mergeCommit,mergeStateStatus,url,closingIssuesReferences");
   // Migrations release to main; tenant and money code without one can go to next and ride the deploy train (#461).
   const base = pr.baseRefName;
@@ -230,8 +231,8 @@ async function main() {
   if (base === "next" && names.length) stop(`PR #${pr.number} adds a migration; retarget it to main (migrations release to main).`);
 
   if (pr.state === "MERGED") {
-    step(`PR #${pr.number} is already merged as ${pr.mergeCommit.oid.slice(0, 7)}; checking the production guard only.`);
-    return finish(pr, head, pr.mergeCommit.oid, names, await ledger(names), null);
+    step(`PR #${pr.number} is already merged as ${pr.mergeCommit.oid.slice(0, 7)}; ${noWait ? "production verification remains pending" : "checking the production guard only"}.`);
+    return finish(pr, head, pr.mergeCommit.oid, names, await ledger(names), null, noWait);
   }
   if (pr.state !== "OPEN") stop(`PR #${pr.number} is ${pr.state}.`);
 
@@ -312,7 +313,7 @@ async function main() {
   if (pending.length) await requireFreshBackup(dry);
   if (dry) {
     const apply = pending.length ? `applies ${pending.map((m) => m.name).join(", ")}, reloads the schema,` : "applies no migration,";
-    step(`Dry run complete. A real run ${apply} merges with --match-head-commit ${head} and waits for the guard.`);
+    step(`Dry run complete. A real run ${apply} merges with --match-head-commit ${head} and ${noWait ? "leaves production smoke pending" : "waits for the guard"}.`);
     return;
   }
 
@@ -349,10 +350,10 @@ async function main() {
   }
   const merged = ghJson("pr", "view", String(pr.number), "-R", repo, "--json", "state,mergeCommit");
   if (merged.state !== "MERGED") stop(`PR #${pr.number} is ${merged.state} after merge; check it by hand.`);
-  return finish(pr, head, merged.mergeCommit.oid, names, after, qa.latest?.url);
+  return finish(pr, head, merged.mergeCommit.oid, names, after, qa.latest?.url, noWait);
 }
 
-async function finish(pr, head, mergeSha, names, rows, qaUrl) {
+async function finish(pr, head, mergeSha, names, rows, qaUrl, noWait = false) {
   if (pr.baseRefName === "next") {
     step("Receipt (paste into the issue)");
     console.log([
@@ -362,15 +363,17 @@ async function finish(pr, head, mergeSha, names, rows, qaUrl) {
     ].join("\n"));
     return;
   }
-  step(`Wait for the production guard on ${mergeSha.slice(0, 7)}`);
-  const guard = await waitForGuard(mergeSha);
-  const via = guard.sha === mergeSha ? "" : ` on ${guard.sha.slice(0, 7)}, which contains it,`;
+  step(`${noWait ? "Production verification pending" : "Wait for the production guard"} on ${mergeSha.slice(0, 7)}`);
+  const guard = noWait ? null : await waitForGuard(mergeSha);
+  const via = !guard || guard.sha === mergeSha ? "" : ` on ${guard.sha.slice(0, 7)}, which contains it,`;
   const receipt = [
     `DevOps release of PR #${pr.number} at ${head.slice(0, 7)}.`,
     names.length
       ? `${names.map((n) => { const r = rows.find((x) => x.name === n); return `Migration \`${n}\` (sha256 ${r?.checksum.slice(0, 8)}…) applied with its ledger row at ${r?.applied_at}`; }).join("; ")}, then the schema cache was reloaded.`
       : "No migration.",
-    `Merged as ${mergeSha.slice(0, 7)}. Production guard run ${guard.run.databaseId}${via} passed the core smoke ${guard.pass}/${guard.pass}.${qaUrl ? ` QA approval: ${qaUrl}.` : ""}`,
+    guard
+      ? `Merged as ${mergeSha.slice(0, 7)}. Production guard run ${guard.run.databaseId}${via} passed the core smoke ${guard.pass}/${guard.pass}.${qaUrl ? ` QA approval: ${qaUrl}.` : ""}`
+      : `Merged as ${mergeSha}. Production smoke pending; check production-guard.yml on the next pass and rerun without --no-wait only once the guard has completed.${qaUrl ? ` QA approval: ${qaUrl}.` : ""}`,
     "No payment, refund or ad activation by this release.",
   ];
   step("Receipt (paste into the issue)");
