@@ -180,7 +180,7 @@ Draft FK deletion is restricted while an operation references it; campaign FK
 deletion sets operation `campaign_id` null while retaining recovery evidence.
 
 Reporting migrations add `destination` to campaigns and snapshots with a constrained
-set of `instant_form`, `whatsapp`, `call`, `mixed`, `unknown` (default).
+set of `instant_form`, `whatsapp`, `call`, `website` (#2597), `mixed`, `unknown` (default).
 Snapshot `period_start`/`period_end` record provider dates when available; legacy
 rows remain null. No historical range or destination is invented. A snapshot's
 known destination wins over the campaign's current destination; unknown snapshots
