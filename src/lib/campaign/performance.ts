@@ -4,7 +4,7 @@
  * that produced cheaper leads. Pure and side-effect free for easy testing.
  */
 
-import type { CampaignDestination } from "./outcomes";
+import { outcomeDefinition, type CampaignDestination } from "./outcomes";
 
 export interface CampaignPerf {
   destination: CampaignDestination;
@@ -25,32 +25,33 @@ export interface CampaignPerf {
 /** Rank: most leads first, then cheapest cost-per-lead. */
 function rank(a: CampaignPerf, b: CampaignPerf): number {
   // #2601: website visits rank after leads and chats; they are far cheaper and are not enquiries.
-  const group = (row: CampaignPerf) => row.destination === "instant_form" ? 0 : row.destination === "whatsapp" && row.conversations != null ? 1
-    : row.destination === "website" ? 2 : 3;
+  const group = (row: CampaignPerf) => {
+    const definition = outcomeDefinition(row.destination);
+    return definition.unit === "chat" && row[definition.insightField] == null ? 3 : definition.performanceRank;
+  };
   if (group(a) !== group(b)) return group(a) - group(b);
   if (group(a) === 3) return b.spend - a.spend;
-  if (group(a) === 2) return (b.landingPageViews ?? 0) - (a.landingPageViews ?? 0) || perVisit(a) - perVisit(b);
-  if (a.destination === "whatsapp" && b.destination === "whatsapp") {
-    return (b.conversations ?? 0) - (a.conversations ?? 0) || (a.costPerConversation ?? Infinity) - (b.costPerConversation ?? Infinity);
-  }
-  if (a.leads !== b.leads) return b.leads - a.leads;
-  return (a.cpl ?? Infinity) - (b.cpl ?? Infinity);
+  const definition = outcomeDefinition(a.destination);
+  const results = (row: CampaignPerf) => row[definition.insightField] ?? 0;
+  const cost = (row: CampaignPerf) => definition.insightCostField ? row[definition.insightCostField] ?? Infinity
+    : results(row) ? row.spend / results(row) : Infinity;
+  return results(b) - results(a) || cost(a) - cost(b);
 }
 
-const perVisit = (r: CampaignPerf) => (r.landingPageViews ? r.spend / r.landingPageViews : Infinity);
-
 function resultText(r: CampaignPerf): string {
-  if (r.destination === "unknown" || r.destination === "mixed" || r.destination === "call") return `INR ${Math.round(r.spend)} spent; comparable outcome metrics unavailable (${r.destination}).`;
-  if (r.destination === "whatsapp" && r.conversations == null) return `INR ${Math.round(r.spend)} spent; WhatsApp conversation metrics unavailable. Refresh required.`;
-  if (r.destination === "website") {
-    const visits = r.landingPageViews ?? 0;
+  const definition = outcomeDefinition(r.destination);
+  const count = r[definition.insightField];
+  if (!definition.comparable) return `INR ${Math.round(r.spend)} spent; comparable outcome metrics unavailable (${r.destination}).`;
+  if (definition.unit === "chat" && count == null) return `INR ${Math.round(r.spend)} spent; WhatsApp conversation metrics unavailable. Refresh required.`;
+  if (definition.unit === "visit") {
+    const visits = count ?? 0;
     return visits > 0
       ? `${visits} website visit${visits === 1 ? "" : "s"} (landing-page views) at INR ${Math.round(r.spend / visits)} per visit; INR ${Math.round(r.spend)} spent. Visits are not enquiries.`
       : `INR ${Math.round(r.spend)} spent, no website visits yet.`;
   }
-  if (r.destination === "whatsapp") return `${r.conversations} WhatsApp conversations started${r.costPerConversation != null ? ` at INR ${Math.round(r.costPerConversation)} per conversation` : ""}; INR ${Math.round(r.spend)} spent. Conversations are not verified leads or sales.`;
-  if (r.leads > 0) {
-    return `${r.leads} lead${r.leads === 1 ? "" : "s"}${
+  if (definition.unit === "chat") return `${count} WhatsApp conversations started${r.costPerConversation != null ? ` at INR ${Math.round(r.costPerConversation)} per conversation` : ""}; INR ${Math.round(r.spend)} spent. Conversations are not verified leads or sales.`;
+  if (count != null && count > 0) {
+    return `${count} lead${count === 1 ? "" : "s"}${
       r.cpl != null ? ` at ₹${Math.round(r.cpl)} per lead` : ""
     }`;
   }
