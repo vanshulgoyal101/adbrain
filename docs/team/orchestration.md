@@ -83,7 +83,7 @@ Routine steps never wait for the CEO or the CTO.
 4. **Low-risk PRs ship themselves.** No migration, money, tenant/auth or config
    change: run `gh pr merge <n> --auto --squash`. GitHub merges when CI passes
    (about 3 minutes) into `next`, and the deploy train ships `next` to production
-   at most every 30 minutes (#461). Branches don't need to be up to date to merge.
+   at most every 15 minutes (#461, #2609). Branches don't need to be up to date to merge.
    Don't wait for the train: start your next item, and once it's live smoke the
    changed flow in production on your next pass (never sleep or poll for a deploy;
    the `.github/hooks/no-deploy-wait.json` hook refuses sync `sleep ≥60s`, sleep
