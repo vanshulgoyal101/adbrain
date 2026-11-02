@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import recorded from "./fixtures/gemini/flash-lite-concepts.json";
 import evalCases from "../eval/cases.json";
 import { googleReply, requestBody, requestUrl } from "./replay";
+import batches from "./fixtures/gemini/flash-lite-batch-replies.json";
 
 // #2444: on production's free text model (gemini-3.5-flash-lite, #2189), repeated headlines were the top rejection
 // (~18 of 32 calls on Oct 31). The one repair asked for a fresh concept, so flash-lite wrote the same lines again and the
@@ -133,5 +134,21 @@ describe("core: the repair keeps flash-lite's draft and changes only what failed
 
     expect(requests).toHaveLength(2);
     expect(variants).toHaveLength(0);
+  });
+});
+
+describe("core: a quote that differs from its fact only in the full-stop mark is the fact's own words (#2541)", () => {
+  it("stores batch 5's offer quote, ended with 。 for the fact's ।, as the fact's exact text", async () => {
+    const { validateConcept } = await import("@/lib/creative/concept");
+    const { AD_ANGLES } = await import("@/lib/templates/ads");
+    const hindi = evalCases.cases.find((entry) => entry.id === "solaride-factory-hi")!;
+    const reply = batches.batches[4].calls.find((call) => call.angle === "Special offer / incentive" && call.attempt === 0)!;
+    const draft = JSON.parse(reply.text.replace(/^```json\s*|\s*```\s*$/g, "")) as { sourceQuotes: string[] };
+    expect(draft.sourceQuotes[0].endsWith("。")).toBe(true);
+    const result = validateConcept(draft, {
+      brand: hindi.brand, brief: hindi.brief, language: hindi.language, sourceFacts: hindi.sourceFacts,
+      angle: AD_ANGLES.find((angle) => angle.id === "offer")!,
+    });
+    expect(result.success ? result.concept.sourceQuotes[0] : result.issues).toBe(hindi.sourceFacts[0]);
   });
 });

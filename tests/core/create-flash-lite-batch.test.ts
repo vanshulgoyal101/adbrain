@@ -16,7 +16,7 @@ const RECORD = process.env.RECORD_FLASH_LITE_BATCH === "1";
 const MODEL = "gemini-3.5-flash-lite";
 const PLAN = ["cedar-ridge-en", "cedar-ridge-en", "cedar-ridge-en", "solaride-factory-hi", "solaride-factory-hi"];
 const MAX_CALLS = 40;
-const SAVED_FLOOR = 14;
+const SAVED_FLOOR = 15;
 
 type Call = { angle: string; attempt: number; status: number; text: string };
 type Batch = { case: string; calls: Call[] };
