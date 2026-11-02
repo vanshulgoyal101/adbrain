@@ -3,7 +3,8 @@
 // 03:37Z becomes the day's `create` when no job of this workflow that started since 03:00Z marked itself `create`;
 // a late 03:37Z run after that becomes `picture`. Still one create a day: the Smoke step marks its mode with a
 // `Smoke mode` annotation as it starts, the job's concurrency group runs them one at a time, and anything uncertain
-// (a failed lookup, a re-run) does `picture`, never an extra create.
+// (a failed lookup, a re-run) does `picture`, never an extra create. #2593: a dispatch with mode `auto` (the
+// dispatch-workflows route making up a dropped slot) is treated as a scheduled picture run.
 import { execFileSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
@@ -55,9 +56,10 @@ export function createStartedSince({ gh, repo, runId, since }) {
 
 function main() {
   const env = process.env;
+  const auto = env.SCHEDULED_MODE === "auto";
   const scheduled = MODES.includes(env.SCHEDULED_MODE) ? env.SCHEDULED_MODE : "picture";
   const now = new Date();
-  const event = env.GITHUB_EVENT_NAME;
+  const event = auto ? "schedule" : env.GITHUB_EVENT_NAME;
   const rerun = Number(env.GITHUB_RUN_ATTEMPT || 1) > 1;
   let createdToday = false;
   if (event === "schedule" && scheduled !== "prepare" && createDue(now) && !rerun) {

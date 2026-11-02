@@ -1,3 +1,7 @@
+import { execFileSync } from "node:child_process";
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { chooseSmokeMode, createStartedSince, createWindowStart } from "../scripts/smoke-mode.mjs";
 
@@ -66,5 +70,24 @@ describe("createStartedSince", () => {
   it("is false when only picture runs are marked", () => {
     delete marks["130"];
     expect(createStartedSince({ gh: fakeGh([]), repo: "o/r", runId: "11", since })).toBe(false);
+  });
+});
+
+// #2593: the dispatch-workflows route makes up dropped slots with mode `auto`; it must choose like a schedule.
+describe("smoke-mode.mjs with SCHEDULED_MODE=auto", () => {
+  it("is treated as a scheduled picture run, never a plain dispatch of `auto`", () => {
+    const bin = mkdtempSync(join(tmpdir(), "smoke-mode-"));
+    try {
+      writeFileSync(join(bin, "gh"), "#!/bin/bash\necho lookup down >&2\nexit 1\n");
+      chmodSync(join(bin, "gh"), 0o755);
+      const out = execFileSync("node", ["scripts/smoke-mode.mjs"], {
+        encoding: "utf8", stdio: ["ignore", "pipe", "pipe"],
+        env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, SCHEDULED_MODE: "auto", GITHUB_EVENT_NAME: "workflow_dispatch", GITHUB_RUN_ATTEMPT: "1", GITHUB_REPOSITORY: "o/r", GITHUB_RUN_ID: "1" },
+      });
+      // Before 03:37Z it's a picture; after, the failed lookup keeps it a picture. A working lookup makes it `create`.
+      expect(out).toBe("picture\n");
+    } finally {
+      rmSync(bin, { recursive: true, force: true });
+    }
   });
 });
