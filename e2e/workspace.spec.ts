@@ -162,7 +162,13 @@ test("Phone menu at 390px opens without a focus ring or auto-links (#2747)", asy
   await menu.click();
   const drawer = page.getByRole("dialog", { name: "Workspace menu" });
   await expect(drawer).toBeFocused();
-  await expect(drawer.locator('a[href^="mailto:"]')).toHaveCount(0);
+  const account = drawer.locator('[class*="account"]').filter({ has: page.locator('[class*="avatar"]') });
+  const row = account.locator(":scope > div").filter({ has: page.locator('[class*="avatar"]') });
+  await expect(row.locator("a")).toHaveCount(0);
+  await expect(row.locator('[class*="avatar"]')).toHaveCSS("text-decoration-line", "none");
+  // The initial must not sit in the text run next to the email, where iOS reads "D" + email as one address.
+  expect((await row.textContent())?.trim()).toBe((await row.locator("span[title]").getAttribute("title")) ?? "");
+  expect(await account.locator('[class*="avatar"]').evaluate((element) => getComputedStyle(element, "::before").content)).toMatch(/^"[A-Z]"$/);
   await page.screenshot({ path: testInfo.outputPath("menu-390.png") });
   await page.keyboard.press("Tab");
   await expect(drawer.getByRole("link", { name: "AdBrain" })).toBeFocused();
