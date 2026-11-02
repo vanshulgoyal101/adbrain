@@ -63,7 +63,7 @@ Routine steps never wait for the CEO or the CTO.
    `core` or `later` (priority), `owner:dev`, `owner:dev2`, `owner:dev3`, `owner:qa`, `owner:cpo`, `owner:analyst`, `owner:designer`, `owner:docs`,
    `owner:devops`, `owner:cto` (who acts next), `ready-to-ship` (committed,
    waiting for DevOps), `blocked` (needs something outside the team; the issue says
-   what), `waiting-owner` (blocked on the owner; the CEO asks him) and `decision`
+   what; your own `Next read <time>Z` still wakes you at that time), `waiting-owner` (blocked on the owner; the CEO asks him) and `decision`
    (needs the CEO). Talk on the issue or PR itself; see
    [AGENTS.md](../../AGENTS.md#worker-coordination) Communication.
 2. **Start or resume** by reading this section, then your queue:

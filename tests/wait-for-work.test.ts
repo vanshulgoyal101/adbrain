@@ -4,7 +4,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { actionableOwned, OWNS_WORK, createGitHubApi, readyPool, redShared, myPulls, failedOnMine, mainArrival, TRAIN_RULE, BORROWS_DEV, boardRow, systemicFailures, snoozedUntil, latestWord, linkedIssues, lowQueues, matchers, nextItem, freshComments, offTrack, rateBackoffMs, roleCard, unsavedWork, waitingOnMe } from "../scripts/wait-for-work.mjs";
+import { actionableOwned, backlogReads, dueWake, lastWordOn, scanBacklog, scheduledRead, OWNS_WORK, createGitHubApi, readyPool, redShared, myPulls, failedOnMine, mainArrival, TRAIN_RULE, BORROWS_DEV, boardRow, systemicFailures, snoozedUntil, latestWord, linkedIssues, lowQueues, matchers, nextItem, freshComments, offTrack, rateBackoffMs, roleCard, unsavedWork, waitingOnMe } from "../scripts/wait-for-work.mjs";
 
 describe("PR reviews count as the latest word (#423)", () => {
   it("picks a review posted after the last comment, and ignores empty approvals", () => {
@@ -208,6 +208,109 @@ describe("scheduled checks: Next read <time> (QA 2, #575)", () => {
     expect(waitingOnMe("Dev 3: → QA 2: gates please. Next read 2026-10-25T16:00Z.", qa2, [], Date.parse("2026-10-25T11:00Z"))).toBe(true);
     expect(snoozedUntil("QA 2: Next read ~16:00Z")).toBeNull();
     expect(snoozedUntil("QA 2: next check 2026-10-26 14:24Z")).toBe(Date.parse("2026-10-26T14:24Z"));
+  });
+});
+
+describe("timed reads survive `blocked` (#2572)", () => {
+  const dev3 = matchers("dev3");
+  const at = (t: string) => Date.parse(`2026-11-02T${t}Z`);
+  const read = "Dev 3: backup ran; restore check pending. → CEO: #1481. Next read 2026-11-02T08:45Z.";
+  it("an owner-signed read on a blocked item stays quiet, wakes the loop at its time, then is reported", () => {
+    dueWake(Infinity);
+    expect(waitingOnMe(read, dev3, ["blocked", "owner:dev3"], at("08:00"))).toBe(false);
+    expect(dueWake(at("08:44"))).toBe(false);
+    expect(dueWake(at("08:45"))).toBe(true);
+    expect(dueWake(at("08:46"))).toBe(false);
+    expect(waitingOnMe(read, dev3, ["blocked", "owner:dev3"], at("08:45"))).toBe(true);
+    expect(scheduledRead(read, dev3, ["blocked"])).toBe(at("08:45"));
+  });
+  it("a due read counts as actionable even when blocked; a blocked item without one stays held", () => {
+    const issue = (n: number, ...labels: string[]) => ({ number: n, labels: labels.map((name) => ({ name })) });
+    const items = [issue(1, "blocked"), issue(2, "blocked"), issue(3, "waiting-owner")];
+    expect(actionableOwned(items, { due: new Set([2, 3]) }).map((i) => i.number)).toEqual([2]);
+    expect(actionableOwned(items).map((i) => i.number)).toEqual([]);
+    expect(waitingOnMe("Dev 3: waiting on Meta support.", dev3, ["blocked"], at("09:00"))).toBe(false);
+  });
+  it("backlog reads every owned item a time can lift, past the first 20", () => {
+    const issue = (n: number, ...labels: string[]) => ({ number: n, labels: labels.map((name) => ({ name })) });
+    const items = [...Array.from({ length: 25 }, (_, k) => issue(k + 1, "owner:dev3")), issue(26, "blocked"), issue(27, "waiting-owner"), issue(28, "parked"), issue(29, "later")];
+    expect(backlogReads(items).map((i) => i.number)).toEqual([...Array.from({ length: 25 }, (_, k) => k + 1), 26]);
+  });
+  it("waiting-owner, parked and later are never made actionable by a time alone", () => {
+    for (const hold of ["waiting-owner", "parked", "later"]) {
+      dueWake(Infinity);
+      expect(scheduledRead(read, dev3, [hold])).toBeNull();
+      expect(waitingOnMe(read, dev3, [hold, "blocked"], at("08:00"))).toBe(false);
+      expect(waitingOnMe(read, dev3, [hold], at("09:00"))).toBe(false);
+      expect(dueWake(at("09:00"))).toBe(false);
+    }
+  });
+  it("unblocked schedules still wake on time, other people's times are ignored, and addressed work still wakes", () => {
+    dueWake(Infinity);
+    expect(waitingOnMe(read, dev3, [], at("08:00"))).toBe(false);
+    expect(dueWake(at("08:30"))).toBe(false);
+    expect(dueWake(at("08:45"))).toBe(true);
+    expect(waitingOnMe(read, dev3, [], at("08:45"))).toBe(true);
+    expect(scheduledRead("CTO: → Dev 3: look. Next read 2026-11-02T08:45Z.", dev3, ["blocked"])).toBeNull();
+    expect(waitingOnMe("CTO: → Dev 3: look. Next read 2026-11-02T08:45Z.", dev3, [], at("08:00"))).toBe(true);
+    expect(waitingOnMe("CTO: → Dev 3: look.", dev3, ["blocked"], at("08:00"))).toBe(false);
+  });
+});
+
+describe("startup reads the newest comment page (#2576)", () => {
+  const repo = "o/r";
+  const dev3 = matchers("dev3");
+  const at = (k: number) => new Date(Date.parse("2026-10-20T00:00:00Z") + k * 60_000).toISOString();
+  const thread = (n: number, last = "CTO: noted.") =>
+    Array.from({ length: n }, (_, k) => ({ body: k === n - 1 ? last : `Dev 3: step ${k}. → CTO: look.`, created_at: at(k), html_url: `c${k}` }));
+  // GitHub pages oldest first and ignores sort/direction on this endpoint.
+  const fakeApi = (comments: object[], reviews: object[] = []) => {
+    const calls: string[] = [];
+    const api = async (path: string) => {
+      calls.push(path);
+      const page = Number(/[?&]page=(\d+)/.exec(path)?.[1] ?? 1);
+      const rows = path.includes("/reviews") ? reviews : comments;
+      return rows.slice((page - 1) * 100, page * 100);
+    };
+    return { api, calls };
+  };
+  it.each([0, 1, 100, 101, 182])("finds the latest of %i comments in one or two reads", async (n) => {
+    const comments = thread(n);
+    const { api, calls } = fakeApi(comments);
+    const last = await lastWordOn(api, repo, { number: 364, comments: n });
+    expect(last?.url ?? null).toBe(n ? `c${n - 1}` : null);
+    expect(calls.length).toBe(n === 0 ? 0 : n % 100 === 0 ? 2 : 1);
+  });
+  it("keeps reading when a comment lands after the count, and steps back when comments were deleted", async () => {
+    const grown = fakeApi(thread(101));
+    expect((await lastWordOn(grown.api, repo, { number: 1, comments: 100 }))?.url).toBe("c100");
+    expect((await lastWordOn(fakeApi(thread(120)).api, repo, { number: 1 }))?.url).toBe("c119");
+    const shrunk = fakeApi(thread(99));
+    expect((await lastWordOn(shrunk.api, repo, { number: 1, comments: 182 }))?.url).toBe("c98");
+  });
+  it("reads every review page on a PR", async () => {
+    const reviews = Array.from({ length: 130 }, (_, k) => ({ body: k === 129 ? "QA: approved. → Dev 3: merge it." : "QA: note.", submitted_at: at(500 + k), html_url: `r${k}` }));
+    const { api } = fakeApi(thread(3), reviews);
+    expect((await lastWordOn(api, repo, { number: 2, comments: 3, pull_request: {} }))?.url).toBe("r129");
+  });
+  it("a handoff posted on comment 182 while you were busy is reported by the startup backlog", async () => {
+    const comments = thread(182, "CEO: → Dev 3: take #2576 now.");
+    const { api } = fakeApi(comments);
+    const items = [{ number: 364, comments: 182, labels: [{ name: "owner:dev3" }, { name: "core" }] }];
+    const scan = await scanBacklog(items, { api, repo, m: dev3, now: Date.parse("2026-11-02T08:00Z") });
+    expect(scan.turns.map((t) => t.last?.url)).toEqual(["c181"]);
+    expect(actionableOwned(items, scan).map((i) => i.number)).toEqual([364]);
+  });
+  it("your own handoff on the newest page is not your turn, and a future read there stays quiet", async () => {
+    const handed = await scanBacklog([{ number: 5, comments: 150, labels: [{ name: "owner:dev3" }] }],
+      { api: fakeApi(thread(150, "Dev 3: shipped. → QA: walk it.")).api, repo, m: dev3, now: Date.parse("2026-11-02T08:00Z") });
+    expect(handed.turns).toEqual([]);
+    dueWake(Infinity);
+    const timed = await scanBacklog([{ number: 6, comments: 150, labels: [{ name: "owner:dev3" }, { name: "blocked" }] }],
+      { api: fakeApi(thread(150, "Dev 3: read done. Next read 2026-11-02T09:00Z.")).api, repo, m: dev3, now: Date.parse("2026-11-02T08:00Z") });
+    expect([timed.turns, [...timed.snoozed]]).toEqual([[], [6]]);
+    expect(dueWake(Date.parse("2026-11-02T08:59Z"))).toBe(false);
+    expect(dueWake(Date.parse("2026-11-02T09:00Z"))).toBe(true);
   });
 });
 
