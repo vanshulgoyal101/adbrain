@@ -16,7 +16,7 @@ export const plannerPlanSchema = z
     special_ad_category: z.enum(["none", "housing", "employment", "financial_products_services", "issues_elections_politics", "unknown"]),
     locations: z.array(z.string().trim().min(1).max(200)).max(50),
     excluded_locations: z.array(z.string().trim().min(1).max(200)).max(50),
-    destination: z.enum(["instant_form", "whatsapp", "call"]),
+    destination: z.enum(["instant_form", "whatsapp", "call", "website"]),
     rationale: z.string().trim().min(1).max(2_000),
   })
   .strict();
@@ -151,7 +151,7 @@ export function plannerPlanToDraftInput(input: {
     mode: "guided" as const,
     creativeIds,
     dailyBudgetRupees: plan.daily_budget_rupees,
-    leadFormId: plan.destination === "whatsapp" ? null : plan.lead_form_id,
+    leadFormId: plan.destination === "instant_form" ? plan.lead_form_id : null,
     destination: plan.destination,
     targeting: {
       location: {

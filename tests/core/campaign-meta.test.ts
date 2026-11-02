@@ -13,7 +13,7 @@ vi.mock("@/lib/security/ssrf", () => ({
   fetchPublicUrl: async () => new Response(new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])),
 }));
 
-import { MetaClient } from "@/lib/meta/client";
+import { CREATIVE_OPT_OUT_FORM, MetaClient } from "@/lib/meta/client";
 
 type Exchange = { method: string; path: string; form?: Record<string, string>; status: number; body: unknown };
 type Sent = { method: string; path: string; form: Record<string, string> };
@@ -83,10 +83,12 @@ describe("core: Meta campaign half against recorded Graph responses", () => {
     expect(posts.find(call => call.path.endsWith("/adsets"))?.form.daily_budget).toBe("20000");
     // Request bodies still match what Meta accepted when recorded. Targeting changed in #334
     // (Advantage+ audience) and #680 (no Audience Network); advantage-audience.test.ts and
-    // leadform-placements.test.ts check those against Meta's validate_only answers.
+    // leadform-placements.test.ts check those against Meta's validate_only answers. The creative's explicit
+    // enhancement opt-outs (#1932) are checked the same way in launch-validate.test.ts and creative-features-opt-out.test.ts.
     for (const exchange of createTape as unknown as Exchange[]) {
       const sent = posts.find(call => call.path === exchange.path)!;
-      const { targeting, ...rest } = sent.form;
+      const { targeting, degrees_of_freedom_spec: optOut, ...rest } = sent.form;
+      if (exchange.path.endsWith("/adcreatives")) expect(optOut).toBe(CREATIVE_OPT_OUT_FORM.degrees_of_freedom_spec);
       const { targeting: recordedTargeting, ...recordedRest } = exchange.form ?? {};
       expect({ ...rest, bytes: exchange.form?.bytes }).toEqual({ ...recordedRest, bytes: exchange.form?.bytes });
       if (recordedTargeting) {

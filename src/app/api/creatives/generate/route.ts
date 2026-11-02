@@ -273,6 +273,8 @@ async function generate(req: Request, live?: LiveCreate) {
       if (admission.action === "missing") return NextResponse.json({ error: await ownerError("adRequestNotFound") }, { status: 404 });
       if (admission.action === "conflict") return NextResponse.json({ error: "Generation ID was already used for different inputs." }, { status: 409 });
       if (admission.action === "quota") return NextResponse.json({ error: await ownerError("aiAllowanceUsed"), code: "LLM_MONTHLY_QUOTA_EXCEEDED" }, { status: 429 });
+      // #1402: another device's batch is still making its first ad; follow it instead of paying for a second one.
+      if (admission.action === "running") return NextResponse.json({ error: await ownerError("adsAlreadyBeingMade"), code: "CREATE_RUNNING", variantGroup: admission.generationId, expectedCount: admission.expectedCount }, { status: 409 });
       return NextResponse.json({ variantGroup, status: admission.status, creatives: [], count: 0, expectedCount: count }, { status: 202 });
     }
     admitted = true;

@@ -30,6 +30,7 @@ is a server component and still computes its queue from complete campaign data.
 Destination is explicit on campaigns and result snapshots: `instant_form`,
 `whatsapp`, `call`, `website` (#2597), `mixed`, or `unknown`. Unavailable conversation metrics are
 not zero leads; mixed/unknown/call outcomes are excluded from lead comparisons.
+Website campaigns are judged on landing-page views (visits), never counted as leads (#2601).
 Legacy fallbacks use saved creation evidence, conversation metrics, or the old
 app-specific `leads` objective, not arbitrary Meta engagement objectives.
 

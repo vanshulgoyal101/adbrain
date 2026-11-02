@@ -13,7 +13,7 @@ import { PreferenceSettings } from "@/components/preference-settings";
 import { PrivacyRequests } from "@/components/privacy-requests";
 import { WhatsAppAlerts } from "@/components/whatsapp-alerts";
 import { AppLanguage } from "@/components/app-language";
-import { translator } from "@/i18n/locale";
+import { namespaceMessages, translator } from "@/i18n/locale";
 import { requestLocale } from "@/i18n/request-locale";
 import { readAlertSettings } from "@/lib/alerts/settings-read";
 import { WhatsAppStatusSection } from "@/components/whatsapp-status-section";
@@ -71,26 +71,27 @@ export default async function SettingsPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const business = await getPrimaryBusiness();
+  const [business, locale] = await Promise.all([getPrimaryBusiness(), requestLocale()]);
+  const t = translator(locale, "settings");
 
   if (!business) {
     return (
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">Settings</h1>
+        <h1 className="text-2xl font-bold text-slate-900">{t("page.title")}</h1>
         <Card className="mt-6">
           <CardContent className="flex flex-col items-start gap-4 p-8">
             <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
               <Building2 className="h-6 w-6" />
             </span>
             <p className="max-w-md text-slate-600">
-              Set up your business first, then connect your ad account here.
+              {t("page.noBusiness")}
             </p>
             <Link href="/brand">
-              <Button>Set up your business</Button>
+              <Button>{t("page.setUpBusiness")}</Button>
             </Link>
           </CardContent>
         </Card>
-        <div className="mt-6"><PrivacyRequests /></div>
+        <div className="mt-6"><PrivacyRequests words={{ locale, messages: namespaceMessages(locale, "settings") }} /></div>
       </div>
     );
   }
@@ -99,8 +100,8 @@ export default async function SettingsPage({
     // #403 S5: one column up to xl; from xl, connections and money left, limits and preferences right.
     <div className="max-w-2xl space-y-6 xl:max-w-6xl">
       <PageHeader
-        title="Settings"
-        description="Your Meta connection, spending limits and data."
+        title={t("page.title")}
+        description={t("page.description")}
       />
       {/* #1670: a sales prospect account hands its prepared business to the owner; nothing renders for owners. */}
       <Suspense fallback={null}>
@@ -111,7 +112,7 @@ export default async function SettingsPage({
           <Suspense fallback={<SettingsLoading label="Meta connection" />}>
             {/* #847: WhatsApp sits with the Meta connection it depends on, above Billing. */}
             <ConnectionSettings businessId={business.id} searchParams={searchParams} whatsapp={
-              <Suspense fallback={<SettingsLoading label="WhatsApp chat ads" />}>
+              <Suspense fallback={<SettingsLoading label={t("whatsappStatus.title")} status={t("page.loading", { label: t("whatsappStatus.title") })} />}>
                 <WhatsAppStatusSection businessId={business.id} />
               </Suspense>
             } />
@@ -121,7 +122,7 @@ export default async function SettingsPage({
           <Suspense fallback={<SettingsLoading label="Spend guardrails" />}>
             <SpendSettings businessId={business.id} />
           </Suspense>
-          <Suspense fallback={<SettingsLoading label="Preferences" />}>
+          <Suspense fallback={<SettingsLoading label={t("page.preferences")} status={t("page.loading", { label: t("page.preferences") })} />}>
             <PreferenceAndPrivacySettings businessId={business.id} />
           </Suspense>
         </div>
@@ -148,18 +149,20 @@ async function PreferenceAndPrivacySettings({ businessId }: { businessId: string
     readAlertSettings(businessId).catch(() => null),
   ]);
   const t = translator(locale, "settings");
+  const words = { locale, messages: namespaceMessages(locale, "settings") };
   return <>
     {/* #1438: Home follows this choice; other screens follow screen by screen. */}
     <AppLanguage key={locale} initial={locale} labels={{ language: t("language"), hint: t("languageHint"), saveFailed: t("saveFailed") }} />
     {/* #701: shown once AdBrain's alerts number is set (ALERTS_WHATSAPP). */}
     {alerts && <WhatsAppAlerts businessId={businessId} initial={alerts} locale={locale} />}
-    <PreferenceSettings key={businessId} businessId={businessId} initialState={preferences} />
-    <PrivacyRequests initialRequests={requests} initialOperatorAvailable={operator} />
+    <PreferenceSettings key={businessId} businessId={businessId} initialState={preferences} words={words} />
+    <PrivacyRequests initialRequests={requests} initialOperatorAvailable={operator} words={words} />
   </>;
 }
 
-function SettingsLoading({ label }: { label: string }) {
-  return <section role="status" aria-label={`Loading ${label}`} className="min-h-64 space-y-5 rounded-lg border border-slate-200 bg-white p-6">
+/** `status` is the screen-reader line in the owner's language; panels not yet translated keep the English one. */
+function SettingsLoading({ label, status = `Loading ${label}` }: { label: string; status?: string }) {
+  return <section role="status" aria-label={status} className="min-h-64 space-y-5 rounded-lg border border-slate-200 bg-white p-6">
     <h2 className="font-semibold text-slate-900">{label}</h2>
     <div aria-hidden="true" className="space-y-4 motion-safe:animate-pulse">
       <div className="h-4 w-3/4 rounded bg-slate-100" />

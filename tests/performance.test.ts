@@ -35,6 +35,19 @@ describe("buildPerformanceContext", () => {
     expect(out).not.toContain("no leads yet");
   });
 
+  it("#2601: says a website campaign's result in visits, never as leads, and ranks it after leads and chats", () => {
+    const out = buildPerformanceContext([
+      { ...base, name: "Site", destination: "website", landingPageViews: 55, spend: 412.5 },
+      { ...base, name: "Quiet site", destination: "website", landingPageViews: 0, spend: 90 },
+      { ...base, name: "Chat", destination: "whatsapp", conversations: 5, costPerConversation: 20, spend: 100 },
+      { ...base, name: "Form", destination: "instant_form", leads: 2, cpl: 50, spend: 100 },
+    ]);
+    expect(out).toContain("55 website visits (landing-page views) at INR 8 per visit; INR 413 spent. Visits are not enquiries.");
+    expect(out).toContain("INR 90 spent, no website visits yet.");
+    expect(out).not.toMatch(/no leads yet/);
+    expect(out.split("\n").map((line) => line.slice(3, line.indexOf('"', 3)))).toEqual(["Form", "Chat", "Site", "Quiet site"]);
+  });
+
   it("returns empty when no campaign has spent or produced leads", () => {
     expect(buildPerformanceContext([{ ...base }, { ...base }])).toBe("");
   });

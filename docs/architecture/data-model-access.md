@@ -166,6 +166,7 @@ or spendable credit, and installing the tables does not enable checkout; see
 | `meta_disconnect`, `meta_revoke_subject` | Disconnect/revoke and invalidate connection generation (revoke clears only connections using that Meta user's token) |
 | `update_campaign_draft_if_version`, `delete_campaign_draft_if_version` | Authenticated owner/version-checked draft update/delete; update blocks unsafe operation overlap; direct update/delete revoked |
 | `append_verified_audit_event` | Service-only verified actor/time/provenance audit insertion |
+| `media_consent_record` | #784: authenticated, owner-checked append of the current rights confirmation for a business (dated terms version, people clause); direct table writes are denied |
 | `get_lead_page` | Authenticated, owner-checked filtered enquiry page with total and keyset position |
 | `lead_sync_start`, `lead_sync_checkpoint` | Service-only binding-checked sync run resume and atomic lead import/progress commit |
 | `claim_campaign_operation` | Durable idempotency/lease claim |
@@ -189,7 +190,11 @@ See [database tests](../../scripts/check-meta-connect-db.mjs) before changing fe
 
 ## Storage
 
-Both `brand-assets` and `creatives` buckets are configured **public**. Object
+Both `brand-assets` and `creatives` buckets are configured **public**. The `media`
+bucket (#1209, owners' own photos) is **private**: JPEG/PNG/WebP up to 8 MB, owners
+read their own `<business_id>/` folder through signed URLs, and only the server
+writes (it mints signed upload URLs, so bytes go browser → Storage, never through
+Vercel). Video stays off until the bucket is widened (#744 phase 2). Object
 management is scoped by an owned business UUID as the first path segment, but a
 public delivery URL is not a private authenticated download. Do not upload
 confidential documents, lead lists, credentials, or unconsented personal media.
