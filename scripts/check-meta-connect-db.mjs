@@ -48,6 +48,7 @@ const planPeriodsMigration = await readFile(join(root, "db/migrations/20261029_p
 const leadCustomerMigration = await readFile(join(root, "db/migrations/20261026_lead_customer_status.sql"), "utf8");
 const leadFirstContactedMigration = await readFile(join(root, "db/migrations/20261027_lead_first_contacted.sql"), "utf8");
 const tokenSearchPathMigration = await readFile(join(root, "db/migrations/20261026_meta_token_search_path.sql"), "utf8");
+const mediaBucketVideoMigration = await readFile(join(root, "db/migrations/20261104_media_bucket_video.sql"), "utf8");
 const tokenPurgeMigration = await readFile(join(root, "db/migrations/20261029_meta_token_purge.sql"), "utf8");
 const whatsappTemplateMigration = await readFile(join(root, "db/migrations/20261026_business_whatsapp_template.sql"), "utf8");
 const metaDeletionMigration = await readFile(join(root, "db/migrations/20261026_meta_deletion_requests.sql"), "utf8");
@@ -3460,6 +3461,12 @@ async function verify(database, source, integrityMigration, customerOnly = false
       }
       if (database === "customer_fresh") await verifyAdvisorHardening(db,database);
       await verifyBusinessTransfer(db,database);
+      // #748 (#2653 = A): the private media bucket also takes MP4/MOV up to 50 MB; applied twice, nothing else changes.
+      await db.query(mediaBucketVideoMigration);
+      await db.query(mediaBucketVideoMigration);
+      assert.deepEqual((await db.query("select public, file_size_limit::int as size, allowed_mime_types as types from storage.buckets where id='media'")).rows,
+        [{ public: false, size: 52428800, types: ["image/jpeg", "image/png", "image/webp", "video/mp4", "video/quicktime"] }], `${database}: media bucket takes video`);
+      assert.equal(Number((await db.query("select count(*) from storage.buckets where file_size_limit = 52428800")).rows[0].count), 1, `${database}: only the media bucket widened`);
       await verifyMetaThrottle(db,database);
       return;
     }
