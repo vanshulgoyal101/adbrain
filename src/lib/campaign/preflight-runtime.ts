@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { hasStoryDesign, savedBackground, storedPictureDesign } from "@/lib/creative/picture-words";
 import { renderAndPersistDesign } from "@/lib/creative/persist";
 import { logEvent } from "@/lib/audit";
+import { hasCurrentMediaConsent } from "@/lib/media/consent";
 import { getEnv } from "@/lib/env";
 import { AD_ANGLES, getAngleByName } from "@/lib/templates/ads";
 import type { Json } from "@/lib/types";
@@ -40,7 +41,7 @@ export function buildCampaignPreflightLoaders(
     findCreatives: async (businessId, creativeIds) => {
       const { data } = await supabase
         .from("creatives")
-        .select("id, business_id, status, image_url, headline, primary_text, cta, generation")
+        .select("id, business_id, status, image_url, headline, primary_text, cta, generation, media_asset_id")
         .in("id", creativeIds)
         .eq("business_id", businessId);
       return (data ?? []).map((creative) => ({
@@ -55,6 +56,7 @@ export function buildCampaignPreflightLoaders(
         storyReady: hasStoryDesign(creative.generation),
         asksWhatsApp: storedPictureDesign((creative.generation as { design?: unknown } | null)?.design)?.contact === "whatsapp",
         printedPhone: storedPictureDesign((creative.generation as { design?: unknown } | null)?.design)?.phone ?? null,
+        ownMedia: Boolean(creative.media_asset_id),
       }));
     },
     redrawPictureNumber: (actor, creativeId, phone) => redrawPictureNumber(supabase, actor.businessId, creativeId, phone),
@@ -100,6 +102,11 @@ export function buildCampaignPreflightLoaders(
     findBrandFacts: async (actor) => {
       const { data } = await supabase.from("businesses").select("usps, description").eq("id", actor.businessId).maybeSingle();
       return [...(data?.usps ?? []), data?.description ?? ""].filter((fact): fact is string => typeof fact === "string" && fact.trim() !== "");
+    },
+    findMediaConsent: async (actor) => {
+      const { data, error } = await supabase.from("businesses").select("vertical").eq("id", actor.businessId).maybeSingle();
+      if (error || !data) throw new Error("Media consent could not be checked.");
+      return hasCurrentMediaConsent(supabase as unknown as Parameters<typeof hasCurrentMediaConsent>[0], { id: actor.businessId, vertical: data.vertical });
     },
     findVertical: async (actor) => {
       const { data } = await supabase.from("businesses").select("vertical").eq("id", actor.businessId).maybeSingle();

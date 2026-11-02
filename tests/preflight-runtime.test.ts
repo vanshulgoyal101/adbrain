@@ -105,3 +105,23 @@ describe("WhatsApp message loader fails closed (#2452)", () => {
     await expect(failing(businessError, creativesError).findWhatsAppMessage?.(actor, draft)).rejects.toThrow("WhatsApp message could not be read.");
   });
 });
+
+describe("own-photo rights loader (#784)", () => {
+  it("marks an ad with the owner's upload and reads their confirmation since any hand-over", async () => {
+    const rows = [
+      { id: "c1", business_id: "b1", status: "approved", image_url: "https://x/1.png", headline: "A", primary_text: "a", cta: null, generation: null, media_asset_id: "m1" },
+      { id: "c2", business_id: "b1", status: "approved", image_url: "https://x/2.png", headline: "B", primary_text: "b", cta: null, generation: null, media_asset_id: null },
+    ];
+    const creatives = { select: () => creatives, in: () => creatives, eq: async () => ({ data: rows }) };
+    const business = { vertical: "solar energy", transferred_at: "2026-11-02T09:00:00Z" };
+    const businesses = { select: () => businesses, eq: () => businesses, maybeSingle: async () => ({ data: business, error: null }) };
+    const consents = (confirmedAt: string) => {
+      const query = { select: () => query, eq: () => query, order: () => query, limit: async () => ({ data: [{ terms_version: "x", people_confirmed: false, confirmed_at: confirmedAt }], error: null }) };
+      return query;
+    };
+    const build = (confirmedAt: string) => buildCampaignPreflightLoaders({ from: (table: string) => table === "creatives" ? creatives : table === "businesses" ? businesses : consents(confirmedAt) } as never, actor);
+    expect((await build("2026-11-02T10:00:00Z").findCreatives("b1", ["c1", "c2"])).map((creative) => creative.ownMedia)).toEqual([true, false]);
+    expect(await build("2026-11-02T10:00:00Z").findMediaConsent?.(actor)).toBe(true);
+    expect(await build("2026-11-01T10:00:00Z").findMediaConsent?.(actor)).toBe(false);
+  });
+});

@@ -71,6 +71,7 @@ const breaks: Record<ReviewBlockerReason, (input: PreflightInput) => void> = {
   REVIEW_WHATSAPP_MESSAGE: (input) => { input.draft.destination = "whatsapp"; input.whatsappMessageProblem = "\"guaranteed\" isn't in your business details. Reword it or add it there."; },
   // TODO(#2600): drop the cast once the draft schema accepts website.
   REVIEW_WEBSITE_UNREACHABLE: (input) => { input.draft.destination = "website" as never; input.websiteReach = { url: "https://cedarridgechiro.com", ok: false, problem: "unreachable" }; },
+  REVIEW_MEDIA_RIGHTS: (input) => { input.creatives[0].ownMedia = true; input.mediaConsent = false; },
 };
 function reviewBlockedOn(reason: ReviewBlockerReason) {
   const input = productionInput();

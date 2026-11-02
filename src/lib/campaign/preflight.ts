@@ -30,6 +30,8 @@ export interface PreflightCreative {
   asksWhatsApp?: boolean;
   /** The phone its picture prints, from the saved design; null when it prints none (#2274). */
   printedPhone?: string | null;
+  /** #784: its picture is the owner's own upload (`creatives.media_asset_id`), so launch needs their rights confirmation. */
+  ownMedia?: boolean;
 }
 
 export interface PreflightForm {
@@ -81,6 +83,8 @@ export interface PreflightInput {
   costPerResultRupees?: number | null;
   /** #2274: what Prepare changed on the pictures (the chat number), shown first among the notes. */
   pictureNotice?: string | null;
+  /** #784: the owner confirmed the current rights terms; undefined when no ad uses their own photos. */
+  mediaConsent?: boolean;
 }
 
 export type ReviewFreshnessInput = {
@@ -279,6 +283,9 @@ export function runPreflight(input: PreflightInput): ReviewDTO {
     }
   } else if (destination !== "whatsapp" && input.website !== undefined && !isAdvertiserWebsite(input.website)) {
     blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_NO_WEBSITE", "Add your business website on the Your business page. Meta lead ads must link to the advertiser's own website, not Facebook.", { kind: "open_brand" }));
+  }
+  if (input.mediaConsent === false && input.creatives.some((creative) => creative.ownMedia)) {
+    blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_MEDIA_RIGHTS", "Your ads use your own photos. Confirm you own them, or have permission to use them, before they go to Meta."));
   }
   const policyHit = adPolicyHits(input.creatives, input.vertical)[0];
   if (policyHit) {
