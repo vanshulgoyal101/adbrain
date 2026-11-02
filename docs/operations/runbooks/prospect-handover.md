@@ -11,7 +11,8 @@ in issues.
 **Prepare (sales, before the visit):**
 1. Sign in with a team plus-address, `<you>+prospect-<short>@<team domain>`. A confirmed team
    address is internal (`isInternalUser`), so Create uses the free image providers and no paid
-   model (#466; CEO #1129: no paid spend until the owner tops up).
+   model (#466; CEO #1129: no paid spend until the owner tops up). Do this the day before and stay
+   signed in: every email sign-in on visit day uses the shared limit (see hand-over step 2).
 2. Step 1, "Tell us about your business": **Fill it from my website**, or **No website? Paste a
    bio or listing** with the shop's Instagram bio, Google listing or catalogue text, pasted by hand
    (no scraping or unofficial APIs). Both fill only empty fields, name included; check each line
@@ -22,7 +23,24 @@ in issues.
    Assets tile's Download, Copy link and Open are hidden on a `+prospect` account, so no clean
    picture leaves before hand-over. After hand-over they come back on their own.
 
-**Hand over (DevOps executes, QA reviews; a tenant step):**
+**Hand over (self-serve on the visit, #1670; once `20261028_business_transfer.sql` is live):**
+1. On the prospect account, **Settings → Hand this account to the owner**: type the owner's email
+   (read it back with them; use the Gmail or other Google-account address they use on their phone,
+   so step 2 can be Google) and tap **Hand to owner**. The rows must both show ✓ (no Meta account,
+   no campaigns); anything else set up blocks too, in plain words. It waits 30 minutes; **Cancel
+   hand-over** stops it.
+2. On the owner's own phone: `adbrain.vanshul.com/login`, **Continue with Google** with that email,
+   then **Make it mine** on Home (#2416). Google's screen names `…supabase.co`: say it's AdBrain's
+   sign-in service (#1847). Use **Email me a sign-in link** only if the owner has no Google account:
+   AdBrain can send just **2 sign-in emails an hour, for everyone** (#1777), so space email sign-ins
+   30 minutes apart and send none of your own that hour. "Too many sign-in emails" (or "email rate
+   limit exceeded") means: switch to Google, or wait an hour. No link comes from AdBrain; the sign-in
+   proves the address. The business (Brand, picked ads, drafts, preferences) moves to their own new login
+   in one transaction; sales `ad_instructions` are deleted; one `audit_log` row names both users. Their
+   monthly AI allowance starts at the hand-over. 'This isn't my business' shows on the rep's Settings.
+3. The prospect login keeps no access to it. A target email that already owns a business is refused.
+
+**Hand over by runbook (fallback until the migration is live; DevOps executes, QA reviews; a tenant step):**
 1. Read-only checks, all must hold:
    `select authorization_status, token_id from public.meta_connections where business_id='<business id>';`
    returns no row, or `disconnected`/`revoked` with `token_id` null;

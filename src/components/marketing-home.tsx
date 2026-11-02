@@ -3,10 +3,12 @@
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowDown, ArrowRight, Brain, Check, CirclePause, IndianRupee, MapPin, MessageCircle, ShieldCheck } from "lucide-react";
+import { ArrowDown, ArrowRight, Brain, Check, CirclePause, MapPin, MessageCircle, ShieldCheck } from "lucide-react";
 import { MARKETING_FAQS } from "@/lib/seo/jsonLd";
+import { PRICING_FAQS, PRICING_POINTS } from "@/lib/pricing-words";
 import { IDEAS } from "@/lib/ideas";
 import { LEGAL_LINKS } from "@/lib/legal-links";
+import { SIGN_IN_HREF } from "@/lib/site";
 import styles from "./marketing-home.module.css";
 
 // Digits only, for wa.me; unset renders no support link (#289: the owner supplies the number).
@@ -29,7 +31,7 @@ export function MarketingHome() {
         <nav aria-label="Main navigation">
           <Link href="/ideas" className={styles.exampleLink}>Campaign ideas</Link>
           <a href="#cycle" className={styles.exampleLink}>How it works</a>
-          <Link href="/login" className={styles.signIn}>Sign in <ArrowRight aria-hidden="true" size={16} /></Link>
+          <Link href={SIGN_IN_HREF} className={styles.signIn}>Sign in <ArrowRight aria-hidden="true" size={16} /></Link>
         </nav>
       </header>
       <main id="main-content">
@@ -87,9 +89,16 @@ export function MarketingHome() {
           <ul>
             <li><Check aria-hidden="true" /><div><h3>Approve every ad</h3><p>Check the picture, the words and every claim before an ad is used.</p></div></li>
             <li><CirclePause aria-hidden="true" /><div><h3>Your limit, your pause button</h3><p>Campaigns start paused with the daily limit you set. Pause any time; Meta&apos;s own review still applies.</p></div></li>
-            <li><IndianRupee aria-hidden="true" /><div><h3>Simple pricing</h3><p>₹999 a month for AdBrain, first month free. You pay Meta for your ads directly, with a limit you set. No auto-debit, stop any time.</p></div></li>
             <li><MapPin aria-hidden="true" /><div><h3>Your own Page, your customers</h3><p>Ads run from your Facebook Page and Instagram, and customers message your WhatsApp directly.</p></div></li>
           </ul>
+        </section>
+
+        <section id="pricing" className={`${styles.faq} ${styles.pricing}`} aria-labelledby="pricing-title">
+          <div>
+            <h2 id="pricing-title">Pricing</h2>
+            <ul>{PRICING_POINTS.map((point) => <li key={point.lead}><strong>{point.lead}</strong> {point.text}</li>)}</ul>
+          </div>
+          <div>{PRICING_FAQS.map((faq) => <details key={faq.question}><summary>{faq.question}</summary><p>{faq.answer}</p></details>)}</div>
         </section>
 
         <section className={styles.faq} aria-labelledby="faq-title">

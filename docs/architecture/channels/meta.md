@@ -3,7 +3,7 @@
 Part of [Channels](README.md). Current facts as of 2026-10-29. When one changes, change
 it here and in its source in the same PR. How connecting works:
 [Meta connection](meta-connect.md); the App Review packet:
-[Meta approval plan](../../META_APPROVAL_ACTION_PLAN.md).
+[Meta approval plan](../../plans/meta-approval.md).
 
 ## API Version
 
@@ -20,7 +20,7 @@ it here and in its source in the same PR. How connecting works:
 | Marketing API Access Tier (Meta renamed "Ads Management Standard Access"; tiers Limited/Full) | Approved Aug 25; renewal in review since Oct 28 | #156 (CEO read, Oct 28), #2049 |
 | Advanced access for the 7 login permissions | "Review in progress" since Oct 28; Meta says most reviews finish within 20 days | #156 |
 | Access Verification as a Tech Provider | "In Review" (about 5 days) | #156, #517 |
-| Business verification, Data Use Checkup, app Published | Done | [Owner checklist](../../META_APPROVAL_ACTION_PLAN.md#owner-checklist-one-sitting) |
+| Business verification, Data Use Checkup, app Published | Done | [Owner checklist](../../plans/meta-approval.md#owner-checklist-one-sitting) |
 
 Until review passes, only people with a role on the app can connect. Approval is
 Meta's decision: never create campaigns or calls to raise API activity.
@@ -39,7 +39,7 @@ decides what is available (`src/lib/meta/capability-verification.ts`): insights 
 
 | Fact | Value | Source |
 | --- | --- | --- |
-| Limited tier budget | 60 points per ad account per 5 minutes; a write costs 3 | [Provider access prerequisites](../../ARCHITECTURE.md#provider-access-prerequisites) |
+| Limited tier budget | 60 points per ad account per 5 minutes; a write costs 3 | [Provider access prerequisites](../adr-001-multi-channel.md#provider-access-prerequisites) |
 | Throttle codes | `4` app; `17`, `613`, `80000`–`80014` user or ad account; `32` Page | `isThrottleCode` in `src/lib/meta/client.ts` |
 | Wait | Meta's estimate from `x-business-use-case-usage` (minutes) or `x-ad-account-usage` (seconds), else 15 minutes | `throttleWaitMs`, same file; tape from `scripts/record-meta-throttle-headers.ts` |
 | Behaviour | `MetaThrottledError` (`reason: "rate_limited"`, scope app/account/page). The results-refresh and lead-sync crons skip a throttled account and stop on an app throttle; a person's pause or activation is still tried | `src/app/api/cron/refresh-results/route.ts`, `src/app/api/cron/sync-leads/route.ts` |
@@ -77,4 +77,4 @@ the text follows the token owner's locale (#185).
 ADR-001 (#1805, proposed) moves these calls behind a channel adapter. Today they live in
 `src/lib/meta/`; `MetaThrottledError.reason` already maps to the adapter's
 `ChannelError` code `rate_limited`
-([Architecture](../../ARCHITECTURE.md)).
+([Architecture](../overview.md)).

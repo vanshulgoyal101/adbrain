@@ -6,7 +6,7 @@ import { CheckCircle2, ExternalLink, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { translator, type AppLocale } from "@/i18n/locale";
-import { adsManagerUrl } from "@/lib/meta/ads-manager-url";
+import { adsManagerUrl } from "@/lib/campaign/ads-manager-url";
 import type { Campaign } from "@/lib/types";
 
 type LiveCampaign = Pick<Campaign, "id" | "name" | "meta_ad_account_id" | "meta_campaign_id">;

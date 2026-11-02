@@ -16,6 +16,8 @@ Sync, insights, enquiries, spend limits, preferences and privacy requests. Conve
 | DELETE | `/api/leads/[id]` | -> `{ok,deleted:1}`; **404** when it isn't the owner's | #1761: the same erase for one enquiry; `audit_log` `lead.deleted` with the lead id only |
 | POST | `/api/leads/sync` | Empty body or `{syncId}` -> `{leads,imported,failedForms,sync}`; failed Meta reads return 502 with saved rows and a resumable `sync.id` | Bounded provider pages + atomic per-business deduplicated inserts/checkpoints; incomplete runs are not up to date |
 | GET | `/api/leads/unseen` | `since` (ISO viewed time) -> `{count}` | Authenticated owner business only; exact count of locally imported leads after `since`, Meta's test leads excluded (#1149), private no-store; no provider sync. The sidebar badge polls it every 2 min while visible, waits out a 429's Retry-After and stops on 401 (`usePoll`, #1541) |
+| GET | `/api/results-card?businessId=<uuid>[&footer=0]` | 1080×1920 JPEG, `private, no-store`; **409** unless the card is offered (5+ owner-logged `whatsapp_manual` enquiries in 7 days, a business area, no share or skip in 7 days) | #2036 weekly results card for WhatsApp Status: owner only, 20 per 10 min; business name, logo, logged-enquiry count, area, best-ad picture, owner's WhatsApp number; never money or customers. No AI or Meta call |
+| POST | `/api/results-card` | `{businessId, event: shown\|shared\|dismissed}` -> `{ok:true}`; **409** unless offered | Owner only; one `results_card.<event>` product event. `shared`/`dismissed` hide the card for 7 days; the hide is read from `product_events`, so if that write fails the card returns next visit |
 | POST | `/api/spend-limits` | Complete settings -> `{ok:true}` | DB write |
 | GET | `/api/preferences` | `businessId` -> `{enabled,epoch,notes}` | Authenticated owner-scoped read, no cache |
 | POST | `/api/preferences` | Versioned mutation -> `{enabled,epoch,notes}` | Owner-scoped opt-in/save/forget/pause/clear |
@@ -23,6 +25,9 @@ Sync, insights, enquiries, spend limits, preferences and privacy requests. Conve
 | POST | `/api/privacy-requests` | Same-origin `{kind:"export"|"delete"}` -> `{request}` (201) | Owner-scoped request; one open request per kind, no export/deletion |
 | GET | `/api/privacy-requests/operator` | No body -> `{requests}` (oldest 100 open requests); `?check=1` -> `{allowed:true}` without loading the queue | Verified privacy operator only; server-only queue read |
 | PATCH | `/api/privacy-requests/operator` | Same-origin `{id,expectedStatus,status}` -> `{request}` | Verified privacy operator only; status and handler audit, no export/deletion |
+| POST | `/api/prospect/transfer` | `{businessId, ownerEmail}` -> `{ok, ownerEmail, expiresInMinutes: 30}` | #1670: only the business's own confirmed `+prospect` session; `business_transfer_start` re-checks that and the #1486 pre-checks (409 names the one that blocks). No link is sent |
+| DELETE | `/api/prospect/transfer` | `{businessId}` -> `{ok}` | Cancels the pending hand-over (same session rule) |
+| POST | `/api/prospect/claim` | `{transferId, decision:"accept"\|"decline"}` -> `{ok[, businessId]}` | #1670: the owner's answer on Home; the DB checks their confirmed address, expiry, single use, one business per account and the pre-checks; a team login can't accept (403) |
 
 ## Sync, Insights, Leads, and Settings
 

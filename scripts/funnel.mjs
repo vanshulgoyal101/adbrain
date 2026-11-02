@@ -1,5 +1,5 @@
 // Activation funnel (#338): where each sign-up of the last N days stopped. Read-only: one
-// statement through the Supabase Management API inside BEGIN READ ONLY (docs/ORCHESTRATION.md
+// statement through the Supabase Management API inside BEGIN READ ONLY (docs/team/orchestration.md
 // "Access"). Prints user-id prefixes only, never emails or names, and leaves out internal
 // accounts (scripts/lib/internal-accounts.mjs).
 // Usage: node scripts/funnel.mjs [--days 14] [--include-internal]
@@ -36,8 +36,10 @@ export function funnelSql(days, internalEmails, { includeInternal = false } = {}
 ), e as (
   select user_id, max(created_at) as last_seen,
     bool_or(name = 'page.view' and attributes->>'route' = '/campaigns') as campaigns,
-    -- Connect Meta, or (before Meta App Review) "Ask for Facebook access" on Campaigns (#336).
-    bool_or((name = 'http.request' and attributes->>'route' = '/api/meta/oauth/start')
+    -- Connect Meta, or (before Meta App Review) "Ask for Facebook access" (#336). #2538: Connect starts at
+    -- /api/meta/connections/start, and the server records the request as its own event.
+    bool_or((name = 'http.request' and attributes->>'route' in ('/api/meta/oauth/start', '/api/meta/connections/start'))
+      or name = 'meta.access_request'
       or (name = 'ui.action' and (attributes->>'action' like 'meta.connect%' or attributes->>'action' = 'meta.access_request'))) as connect_clicked,
     bool_or(name = 'creative.approve') as approved
   from public.product_events where user_id in (select id from u) group by user_id

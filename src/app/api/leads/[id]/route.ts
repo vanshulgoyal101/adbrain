@@ -7,6 +7,7 @@ import { observeRoute } from "@/lib/observability/logger";
 import { logEvent } from "@/lib/audit";
 import { rateLimitResponse } from "@/lib/security/rate-limit";
 import { recordCustomerMark } from "@/lib/leads/customer-event";
+import { ownerError } from "@/i18n/request-locale";
 
 export const PATCH = observeRoute("/api/leads/[id]", "PATCH", async (
   request: Request, context: { params: Promise<{ id: string }> },
@@ -14,11 +15,11 @@ export const PATCH = observeRoute("/api/leads/[id]", "PATCH", async (
   try {
     const database = await createClient();
     const { data: { user } } = await database.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Sign in required." }, { status: 401 });
+    if (!user) return NextResponse.json({ error: await ownerError("signInRequired") }, { status: 401 });
     const id = z.uuid().parse((await context.params).id);
     const update = leadUpdateSchema.parse(await request.json());
     const business = await getPrimaryBusiness();
-    if (!business) return NextResponse.json({ error: "Business not found." }, { status: 404 });
+    if (!business) return NextResponse.json({ error: await ownerError("businessMissing") }, { status: 404 });
     const { contacted, ...fields } = update;
     if (contacted) {
       // #1049: the first tap only; later taps keep the first time. A new enquiry becomes "contacted".
@@ -38,7 +39,7 @@ export const PATCH = observeRoute("/api/leads/[id]", "PATCH", async (
       : database.from("leads").select("*").eq("id", id).eq("business_id", business.id).maybeSingle();
     const { data, error } = await query;
     if (error) throw new Error("Save failed");
-    if (!data) return NextResponse.json({ error: "Enquiry not found." }, { status: 404 });
+    if (!data) return NextResponse.json({ error: await ownerError("enquiryNotFound") }, { status: 404 });
     if (before && (before.workflow_status === "customer") !== (data.workflow_status === "customer")) {
       recordCustomerMark({ businessId: business.id, campaignId: data.campaign_id, source: "inbox", undone: data.workflow_status !== "customer" });
     }
@@ -58,16 +59,16 @@ export const DELETE = observeRoute("/api/leads/[id]", "DELETE", async (
 ) => {
   const database = await createClient();
   const { data: { user } } = await database.auth.getUser();
-  if (!user) return NextResponse.json({ error: "Sign in required." }, { status: 401 });
+  if (!user) return NextResponse.json({ error: await ownerError("signInRequired") }, { status: 401 });
   const id = z.uuid().safeParse((await context.params).id);
   if (!id.success) return NextResponse.json({ error: "Invalid enquiry." }, { status: 400 });
   const limited = await rateLimitResponse(`lead-erase:${user.id}`, { limit: 60, windowMs: 5 * 60_000 });
   if (limited) return limited;
   const business = await getPrimaryBusiness();
-  if (!business) return NextResponse.json({ error: "Business not found." }, { status: 404 });
+  if (!business) return NextResponse.json({ error: await ownerError("businessMissing") }, { status: 404 });
   const { data, error } = await database.rpc("leads_erase", { p_business_id: business.id, p_lead_id: id.data });
-  if (error) return NextResponse.json({ error: "The enquiry couldn't be deleted. Try again." }, { status: 503 });
-  if (!data) return NextResponse.json({ error: "Enquiry not found." }, { status: 404 });
+  if (error) return NextResponse.json({ error: await ownerError("enquiryNotDeleted") }, { status: 503 });
+  if (!data) return NextResponse.json({ error: await ownerError("enquiryNotFound") }, { status: 404 });
   await logEvent({ businessId: business.id, action: "lead.deleted", entityType: "lead", entityId: id.data, details: { count: data } });
   return NextResponse.json({ ok: true, deleted: data });
 });

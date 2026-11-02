@@ -1,11 +1,12 @@
 "use client";
 
+import { checkLaterLine, enquiriesWaitLine, throttleActive } from "@/lib/campaign/meta-wait";
 import { useEffect, useEffectEvent, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import Link from "next/link";
 import { Inbox, Loader2, MessageCircle, Phone, RefreshCw, Search, X, Save, Pencil, ChevronDown, SlidersHorizontal, UserCheck, MoreHorizontal } from "lucide-react";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { useConfirm } from "@/components/ui/confirm-dialog";
+import { EnquiryStatusNotice, leadName, useLeadErasure } from "@/components/enquiry-erasure";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Status } from "@/components/ui/status";
@@ -15,7 +16,7 @@ import { useMounted } from "@/lib/use-mounted";
 import type { Lead } from "@/lib/types";
 import { useLeadList } from "@/lib/leads/use-lead-list";
 import { workflowStatuses, type WorkflowStatus } from "@/lib/leads/filters";
-import { formatReplyTime, whatsappReplyLink, type ReplyLanguage } from "@/lib/leads/first-reply";
+import { contactedLabel, formatReplyTime, whatsappReplyLink, type ReplyLanguage } from "@/lib/leads/first-reply";
 import { replyChoices } from "@/lib/leads/reply-choices";
 import { isMetaTestLead } from "@/lib/leads/test-lead";
 import { isWaiting } from "@/lib/leads/waiting";
@@ -39,10 +40,6 @@ const STATUS_LABEL: Record<WorkflowStatus, string> = {
   new: "New", contacted: "Contacted", qualified: "Qualified", booked: "Booked", customer: "Customer", closed: "Closed",
 };
 
-function leadName(lead: Pick<Lead, "full_name">): string | null {
-  return isMetaTestLead(lead) ? "Test enquiry from Meta" : lead.full_name;
-}
-
 type InboxView = "waiting" | "all" | "customers";
 
 /** #1260 slice 4: two panes (list + the selected person) from 1280 px; server and first paint are one pane. */
@@ -65,14 +62,6 @@ function initials(name: string | null): string {
   return words.length ? (words[0][0] + (words.length > 1 ? words.at(-1)![0] : "")).toUpperCase() : "?";
 }
 
-/** #1260 (CPO words): 'Contacted' is the owner's first tap on WhatsApp them/Call, not a confirmed reply. */
-function contactedLabel(minutes: number): string {
-  if (!Number.isFinite(minutes) || minutes < 0) return "Contacted";
-  if (minutes < 24 * 60) return `Contacted in ${formatReplyTime(minutes)}`;
-  const days = Math.floor(minutes / (24 * 60));
-  return `Contacted after ${days} ${days === 1 ? "day" : "days"}`;
-}
-
 export function LeadInbox({
   businessName,
   offer = null,
@@ -90,6 +79,7 @@ export function LeadInbox({
   offerAlerts = false,
   chatsEmpty = false,
   addEnquiryFor = null,
+  metaWaitUntil = null,
 }: {
   businessName: string;
   /** #1049: the business's first offer and language, for the pre-filled first WhatsApp reply. */
@@ -116,6 +106,8 @@ export function LeadInbox({
   chatsEmpty?: boolean;
   /** #1597: a WhatsApp campaign the empty block's 'Add an enquiry' logs to. */
   addEnquiryFor?: { campaignId: string; spend: number; enquiries: number } | null;
+  /** #1838: until when Meta asked us to wait; checks (on open and Check now) don't call Meta until then. */
+  metaWaitUntil?: string | null;
 }) {
   const [adding, setAdding] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -159,23 +151,10 @@ export function LeadInbox({
   const page = useLeadList({ leads: initialLeads, total: initialTotal, nextCursor: initialNextCursor }, view === "all"
     ? { query, status, contact: contactFilter, sort }
     : { query: "", status: view === "waiting" ? "new" : "customer", contact: "all", sort: "newest" });
-  // #1761 (DPDP erasure): delete one enquiry for good, after a confirm that says what that means.
-  const [askConfirm, confirmDialog] = useConfirm();
-  async function deleteLead(lead: Lead) {
-    const who = leadName(lead);
-    const confirmed = await askConfirm({
-      title: "Delete this enquiry?",
-      description: `${who ? `${who}'s` : "Their"} details and answers are removed from AdBrain for good. Meta keeps its own copy in your Page's leads.`,
-      confirmLabel: "Delete enquiry",
-      tone: "danger",
-    });
-    if (!confirmed) return;
-    setError(null);
-    const ok = await fetch(`/api/leads/${lead.id}`, { method: "DELETE" }).then((response) => response.ok, () => false);
-    if (!ok) { setError("Couldn't delete that enquiry. Try again."); return; }
+  const [deleteLead, confirmDialog] = useLeadErasure(setError, (lead) => {
     if (selected?.id === lead.id) setSelected(null);
     page.refresh();
-  }
+  });
   // A row the owner just contacted stays in Waiting this visit, showing 'Contacted in …'.
   const leads = view === "waiting" ? page.leads.filter((lead) => isWaiting(lead, openedAt) || contactedAt[`${lead.business_id}:${lead.id}`]) : page.leads;
   const contactedNow = page.leads.filter((lead) => isWaiting(lead, openedAt) && contactedAt[`${lead.business_id}:${lead.id}`]).length;
@@ -297,8 +276,10 @@ export function LeadInbox({
     }
   }
 
-  async function sync() {
+  async function sync(tapped = false) {
     if (syncing) return;
+    // #1838 (CPO #1870): Meta asked us to wait, so nothing is sent; a tap says when we'll check again.
+    if (throttleActive(metaWaitUntil)) { if (tapped) setNotice(checkLaterLine(metaWaitUntil)); return; }
     setSyncing(true);
     setError(null);
     setNotice(null);
@@ -443,11 +424,12 @@ export function LeadInbox({
       {metaReady && <p className="-mt-2 flex flex-wrap items-center gap-x-2 text-xs text-slate-500">
         {/* #1260: checking runs on open; the time sits quietly here, with a small Check now for impatient owners and retries. */}
         <span aria-live="polite">{syncing ? "Checking Meta for new enquiries…" : lastSync ? `Updated ${relativeAge(new Date(lastSync).toISOString(), now)}` : null}</span>
-        <button type="button" className="inline-flex min-h-11 items-center gap-1 font-medium text-blue-700 disabled:text-slate-400" onClick={sync} disabled={syncing}>
+        <button type="button" className="inline-flex min-h-11 items-center gap-1 font-medium text-blue-700 disabled:text-slate-400" onClick={() => void sync(true)} disabled={syncing}>
           {syncing ? <Loader2 size={12} className="animate-spin" aria-hidden="true" /> : <RefreshCw size={12} aria-hidden="true" />}
           {syncId ? "Keep checking" : "Check now"}
         </button>
       </p>}
+      {metaReady && mounted && throttleActive(metaWaitUntil, now) && <p className="-mt-2 text-xs text-slate-600">{enquiriesWaitLine(lastSync ? now.getTime() - lastSync : Date.parse(metaWaitUntil) - now.getTime())}</p>}
 
       {waiting !== null && <p className={styles.summary}>
         {waiting === 0 ? "Nobody is waiting." : `${waiting} ${waiting === 1 ? "person is" : "people are"} waiting for you.`}
@@ -460,18 +442,7 @@ export function LeadInbox({
       </div>
       {error && <Alert variant="error">{error}</Alert>}
       {confirmDialog}
-      {customerNotice && (
-        <p role="status" className="flex flex-wrap items-center gap-2 text-sm text-slate-700">
-          {customerNotice.undone
-            ? `${leadName(customerNotice.lead) ?? "This enquiry"} is back to ${STATUS_LABEL[customerNotice.previous].toLowerCase()}.`
-            : customerNotice.status === "closed" ? `${leadName(customerNotice.lead) ?? "This enquiry"} is marked not interested.`
-              : `${leadName(customerNotice.lead) ?? "This enquiry"} became a customer.`}
-          {!customerNotice.undone && (
-            <button type="button" className="min-h-11 font-medium text-blue-700" disabled={!!marking}
-              onClick={() => void setCustomer(customerNotice.lead, customerNotice.previous, customerNotice.previous, true)}>Undo</button>
-          )}
-        </p>
-      )}
+      {customerNotice && <EnquiryStatusNotice notice={customerNotice} marking={!!marking} onUndo={() => void setCustomer(customerNotice.lead, customerNotice.previous, customerNotice.previous, true)} />}
       {/* #847: sync results are news, not alarms; the list below stays usable either way. */}
       <p aria-live="polite" className={warning || notice ? "text-sm text-slate-600" : "sr-only"}>{warning ?? notice}</p>
       {page.error && <Alert variant="error">{page.error} <button type="button" onClick={page.refresh}>Retry list</button></Alert>}

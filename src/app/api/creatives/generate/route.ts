@@ -1,31 +1,21 @@
 import { observeRoute, recordProductEvent, currentRequestId } from "@/lib/observability/logger";
-import { creativeFailureMessage } from "@/lib/creative/failure-message";
+import { creativeFailureMessage, creativeFailureStage, type CreativeFailureStage } from "@/lib/creative/failure-message";
+import { saveCreative } from "@/lib/creative/save";
 import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { logEvent } from "@/lib/audit";
 import { CreativeImageError, CreativeValidationError, generateVariants, type CreateProgressEvent, type GeneratedVariant } from "@/lib/creative/generate";
-import {
-  persistCreativeImage,
-  renderAndPersistDesign,
-} from "@/lib/creative/persist";
+import { persistCreativeImage, renderAndPersistDesign } from "@/lib/creative/persist";
 import { languagePromptName } from "@/lib/languages";
 import { NoLLMKeysError } from "@/lib/llm";
-import {
-  configuredMonthlyTokenLimit,
-  persistLLMUsage,
-  usageCostUsd,
-} from "@/lib/llm/persist";
+import { configuredMonthlyTokenLimit, persistLLMUsage, usageCostUsd } from "@/lib/llm/persist";
 import { rateLimitResponse } from "@/lib/security/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { getActiveInstructionsText } from "@/lib/supabase/queries";
 import { getEnv } from "@/lib/env";
 import { z } from "zod";
-import {
-  generationReceipt,
-  variantUsageEvents,
-  failedVariantUsage,
-} from "@/lib/creative/receipt";
+import { generationReceipt, variantUsageEvents, failedVariantUsage } from "@/lib/creative/receipt";
 import type { Creative, Database } from "@/lib/types";
 import { creativeAssets, recentCreativeCopy } from "@/lib/creative/references";
 import { CREATE_HEARTBEAT_MS, CREATE_TOP_UP_BUDGET_MS, CREATE_TOP_UP_START_MS, PROSPECT_PICTURE_RETRY_END_MS, PROSPECT_PICTURE_RETRY_MIN_MS } from "@/lib/creative/stream";
@@ -33,18 +23,16 @@ import { isProspectAccount } from "@/lib/internal-accounts";
 import { AD_ANGLES, type AdAngle } from "@/lib/templates/ads";
 import { freeImagesOnly } from "@/lib/llm/spend-policy";
 import { cloudflareConfigured } from "@/lib/imageGen/providers/cloudflare";
+import { applyMonthlyCostCap } from "@/lib/llm/cost-cap";
 import { preferenceContext } from "@/lib/preferences/store";
+import { ownerError } from "@/i18n/request-locale";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
 const roundUsd = (usd: number) => Math.round(usd * 1e6) / 1e6;
 
-/**
- * Reconcile a client whose long-running generation request outlived its HTTP
- * connection. Successful variants are persisted independently, so the client
- * can recover them without issuing a second paid generation request.
- */
+/** Reconcile a client whose request outlived its connection: saved ads are recovered without a second paid Create. */
 export const GET = observeRoute("/api/creatives/generate", "GET", handleGET);
 
 async function handleGET(req: Request) {
@@ -62,9 +50,9 @@ async function handleGET(req: Request) {
     (requestedCount !== null && (!Number.isSafeInteger(requestedCount) || requestedCount < 1 || requestedCount > 6))) {
     return NextResponse.json({ error: "A valid businessId, generationId, and expectedCount are required." }, { status: 400 });
   }
+  // #2553: 150 reads/5 min cover two tabs plus Studio/recovery (~115), while capping runaway polling.
   const limited = await rateLimitResponse(`generate-status:${user.id}`, {
-    limit: 30,
-    windowMs: 5 * 60_000,
+    limit: 150, windowMs: 5 * 60_000,
   });
   if (limited) return limited;
   let intent: Database["public"]["Functions"]["creative_generation_status"]["Returns"];
@@ -72,12 +60,12 @@ async function handleGET(req: Request) {
     const lookup = await createAdminClient().rpc("creative_generation_status", {
       p_business_id: businessId, p_user_id: user.id, p_generation_id: generationId,
     });
-    if (lookup.error || !lookup.data) return NextResponse.json({ error: "Generation status is unavailable." }, { status: 503 });
+    if (lookup.error || !lookup.data) return NextResponse.json({ error: await ownerError("checkAdsUnavailable") }, { status: 503 });
     intent = lookup.data;
   } catch {
-    return NextResponse.json({ error: "Generation status is unavailable." }, { status: 503 });
+    return NextResponse.json({ error: await ownerError("checkAdsUnavailable") }, { status: 503 });
   }
-  if (intent.status === "unknown") return NextResponse.json({ error: "Generation not found." }, { status: 404 });
+  if (intent.status === "unknown") return NextResponse.json({ error: await ownerError("adRequestNotFound") }, { status: 404 });
   const expectedCount = Number(intent.expectedCount);
   if (requestedCount !== null && requestedCount !== expectedCount)
     return NextResponse.json({ error: "Generation count does not match the saved request." }, { status: 409 });
@@ -88,7 +76,7 @@ async function handleGET(req: Request) {
     .eq("business_id", businessId)
     .eq("variant_group", generationId)
     .order("created_at", { ascending: true });
-  if (error) return NextResponse.json({ error: "Generation status is unavailable." }, { status: 503 });
+  if (error) return NextResponse.json({ error: await ownerError("checkAdsUnavailable") }, { status: 503 });
 
   const saved = (creatives ?? []) as Creative[];
   let status: string = intent.status === "complete" && saved.length < expectedCount ? "unresolved" :
@@ -156,9 +144,10 @@ async function handlePOST(req: Request): Promise<Response> {
     }, CREATE_HEARTBEAT_MS);
   };
   beat();
+  const unfinished = await ownerError("adsDidntFinish");
   void result
     .then(async (response) => write({ type: "result", status: response.status, body: await response.json() }))
-    .catch(() => write({ type: "result", status: 502, body: { error: "Creative generation could not be completed. Check saved results before trying again." } }))
+    .catch(() => write({ type: "result", status: 502, body: { error: unfinished } }))
     .finally(() => {
       clearTimeout(heartbeat);
       writer.close().catch(() => {});
@@ -208,22 +197,9 @@ async function generate(req: Request, live?: LiveCreate) {
       { status: 400 },
     );
   const body = parsed.data;
-
-  const businessId = (body?.businessId ?? "").trim();
-  const brief = (body?.brief ?? "").trim();
-  const rawCount = Number(body?.count ?? 3);
-  const count = Number.isFinite(rawCount)
-    ? Math.min(Math.max(Math.floor(rawCount), 1), 6)
-    : 3;
-  const language = languagePromptName(body?.language);
-  const sourceFacts = body.sourceFacts;
-
-  if (!businessId || !brief) {
-    return NextResponse.json(
-      { error: "businessId and brief are required" },
-      { status: 400 },
-    );
-  }
+  // The schema already trims and bounds these (count 1-6, default 3).
+  const { businessId, brief, count, sourceFacts } = body;
+  const language = languagePromptName(body.language);
 
   // RLS ensures the user can only read their own business.
   const { data: business } = await supabase
@@ -232,10 +208,11 @@ async function generate(req: Request, live?: LiveCreate) {
     .eq("id", businessId)
     .maybeSingle();
   if (!business) {
-    return NextResponse.json({ error: "Business not found" }, { status: 404 });
+    return NextResponse.json({ error: await ownerError("businessNotFound") }, { status: 404 });
   }
 
   const monthlyLimit = configuredMonthlyTokenLimit(user);
+  await applyMonthlyCostCap(businessId, user);
   const { error: schemaError } = await supabase
     .from("creatives")
     .select("generation")
@@ -253,8 +230,10 @@ async function generate(req: Request, live?: LiveCreate) {
   const variantGroup = body.generationId ?? crypto.randomUUID();
   const inserted: Creative[] = [];
   // Keyed by angle: a top-up that saves the angle clears its failure; one that fails replaces it.
-  const failed = new Map<string, { angle: AdAngle; error: unknown; message: string }>();
-  let failures: { angle: string; error: string }[] = [];
+  const failed = new Map<string, { angle: AdAngle; error: unknown; message: string; savedUpTo?: string }>();
+  // #2444: the step a finished ad (words and picture passed) reached when its save failed; it used to vanish unlogged.
+  const saving = new Map<string, string>();
+  let failures: { angle: string; error: string; stage: CreativeFailureStage }[] = [];
   let topUp = 0;
   let pictureRetry = 0;
   const cost = { text: 0, image: 0 };
@@ -289,11 +268,11 @@ async function generate(req: Request, live?: LiveCreate) {
       p_image_floor_tokens: count * 10_000,
       p_monthly_limit: monthlyLimit,
     });
-    if (admissionError || !admission) return NextResponse.json({ error: "Generation admission is unavailable. No generation was started." }, { status: 503 });
+    if (admissionError || !admission) return NextResponse.json({ error: await ownerError("somethingDidntAnswer") }, { status: 503 });
     if (admission.action !== "start") {
-      if (admission.action === "missing") return NextResponse.json({ error: "Generation not found." }, { status: 404 });
+      if (admission.action === "missing") return NextResponse.json({ error: await ownerError("adRequestNotFound") }, { status: 404 });
       if (admission.action === "conflict") return NextResponse.json({ error: "Generation ID was already used for different inputs." }, { status: 409 });
-      if (admission.action === "quota") return NextResponse.json({ error: "This business has reached its monthly AI generation limit.", code: "LLM_MONTHLY_QUOTA_EXCEEDED" }, { status: 429 });
+      if (admission.action === "quota") return NextResponse.json({ error: await ownerError("aiAllowanceUsed"), code: "LLM_MONTHLY_QUOTA_EXCEEDED" }, { status: 429 });
       return NextResponse.json({ variantGroup, status: admission.status, creatives: [], count: 0, expectedCount: count }, { status: 202 });
     }
     admitted = true;
@@ -326,49 +305,29 @@ async function generate(req: Request, live?: LiveCreate) {
         const recorded = await persistLLMUsage(events);
         if (recorded) recordedAngles.add(variant.angleId);
         else usageUnknown = true;
+        saving.set(variant.angleId, "progress");
         await progress(recorded ? events.reduce((total, event) => total + event.usage.totalTokens, 0) : 0, false, !recorded);
-        const photoUrl = await persistCreativeImage(
-          supabase,
-          businessId,
-          variantGroup,
-          variant.angleId,
-          variant.imageUrl,
-        );
-        const imageUrl = await renderAndPersistDesign(
-          supabase,
-          businessId,
-          variantGroup,
-          variant.angleId,
-          variant.design,
-          photoUrl,
-          variant.imageUrl,
-        );
-        const { data, error } = await supabase
-          .from("creatives")
-          .insert({
-            business_id: businessId,
-            brief,
-            angle: variant.angleName,
-            image_url: imageUrl,
-            headline: variant.headline,
-            primary_text: variant.primaryText,
-            cta: variant.cta,
-            variant_group: variantGroup,
-            status: "draft",
-            generation: generationReceipt(variant, language, referenceImages, sourceFacts, photoUrl, requestId),
-          })
-          .select("*")
-          .single();
-        if (error || !data)
-          throw new Error(
-            "Could not save the creative. Check the generation schema migration.",
-          );
+        saving.set(variant.angleId, "picture-store");
+        const photoUrl = await persistCreativeImage(supabase, businessId, variantGroup, variant.angleId, variant.imageUrl);
+        saving.set(variant.angleId, "render");
+        const imageUrl = await renderAndPersistDesign(supabase, businessId, variantGroup, variant.angleId, variant.design, photoUrl, variant.imageUrl);
+        saving.set(variant.angleId, "insert");
+        const data = await saveCreative(supabase, {
+          business_id: businessId, brief, angle: variant.angleName, image_url: imageUrl,
+          headline: variant.headline, primary_text: variant.primaryText, cta: variant.cta,
+          variant_group: variantGroup, status: "draft",
+          generation: generationReceipt(variant, language, referenceImages, sourceFacts, photoUrl, requestId),
+        });
         inserted.push(data);
+        saving.delete(variant.angleId);
         failed.delete(variant.angleId);
         live?.onCreative(variant.angleId, data);
         await progress();
       },
       onFailure: async (angle: AdAngle, error: unknown) => {
+        const savedUpTo = saving.get(angle.id);
+        saving.delete(angle.id);
+        if (savedUpTo) console.error(JSON.stringify({ source: "adbrain.creative", code: "AD_NOT_SAVED", angle: angle.id, savedUpTo, message: (error instanceof Error ? error.message : String(error)).slice(0, 300) }));
         const events = failedVariantUsage(error, {
             businessId,
             userId: user.id,
@@ -383,7 +342,7 @@ async function generate(req: Request, live?: LiveCreate) {
           || error instanceof NoLLMKeysError || recordedAngles.has(angle.id));
         if (unknown) usageUnknown = true;
         await progress(recorded ? events.reduce((total, event) => total + event.usage.totalTokens, 0) : 0, false, unknown);
-        failed.set(angle.id, { angle, error, message: creativeFailureMessage(error) });
+        failed.set(angle.id, { angle, error, message: creativeFailureMessage(error), savedUpTo });
       },
     };
     await generateVariants({ ...run, count, ownerPhotos, recentCopy });
@@ -394,12 +353,15 @@ async function generate(req: Request, live?: LiveCreate) {
     const prospectPictures = isProspectAccount(user) && freeImagesOnly();
     const pictureOnly = (error: unknown): error is CreativeImageError => prospectPictures && error instanceof CreativeImageError && Boolean(error.concept);
     const retry = [...failed.values()]
-      .filter(({ error }) => !pictureOnly(error) && (error instanceof CreativeImageError || (error instanceof CreativeValidationError && error.stage !== "provider")))
+      .filter(({ error, savedUpTo }) => savedUpTo === "picture-store" || savedUpTo === "render"
+        || (!pictureOnly(error) && (error instanceof CreativeImageError || (error instanceof CreativeValidationError && error.stage !== "provider"))))
       .map(({ angle }) => angle)
       .sort((a, b) => firstPass.indexOf(a) - firstPass.indexOf(b))
       .slice(0, count - inserted.length);
     if (retry.length && Date.now() - startedAt <= CREATE_TOP_UP_START_MS) {
       topUp = retry.length;
+      // #2546: a remade ad's own calls are unrecorded until its remake reaches onVariant.
+      for (const angle of retry) recordedAngles.delete(angle.id);
       live?.onTopUp(topUp);
       await generateVariants({
         ...run,
@@ -422,7 +384,7 @@ async function generate(req: Request, live?: LiveCreate) {
       live?.onTopUp(pictureRetry, "picture");
       await generateVariants({ ...run, angleIds: Object.keys(concepts), count: pictureRetry, concepts, ownerPhotos: undefined, recentCopy, signal: AbortSignal.timeout(retryBudget) });
     }
-    failures = [...failed.values()].map(({ angle, message }) => ({ angle: angle.name, error: message }));
+    failures = [...failed.values()].map(({ angle, message, error }) => ({ angle: angle.name, error: message, stage: creativeFailureStage(error) }));
     const noProvider = !inserted.length && failures.length === count && noProviderFailures === count;
     await progress(0, true, usageUnknown || inserted.length + failures.length < count, !inserted.length);
     if (noProvider) return NextResponse.json({ error: new NoLLMKeysError().message, code: "NO_LLM_KEYS" }, { status: 400 });
@@ -436,7 +398,7 @@ async function generate(req: Request, live?: LiveCreate) {
       );
     }
     return NextResponse.json(
-      { error: "Creative generation could not be completed. Check saved results before trying again." },
+      { error: await ownerError("adsDidntFinish") },
       { status: 502 },
     );
   }
@@ -446,11 +408,11 @@ async function generate(req: Request, live?: LiveCreate) {
   recordProductEvent({ kind: "workflow", name: "creative.batch", businessId, durationMs: Date.now() - startedAt,
     outcome: !inserted.length ? "failed" : failures.length ? "partial" : "success",
     // #1468: the estimated AI cost of this Create (USD), for the top-up and image-provider decisions.
-    attributes: { count: inserted.length, failedCount: failures.length, topUp, ...(pictureRetry ? { pictureRetry } : {}), provider: freeImagesOnly() ? (cloudflareConfigured() ? "cloudflare" : "pollinations") : "paid",
+    attributes: { count: inserted.length, expected: count, failedCount: failures.length, ...(failures.length ? { failedStages: failures.map((failure) => failure.stage) } : {}), topUp, ...(pictureRetry ? { pictureRetry } : {}), provider: freeImagesOnly() ? (cloudflareConfigured() ? "cloudflare" : "pollinations") : "paid",
       costUsd: roundUsd(cost.text + cost.image), textCostUsd: roundUsd(cost.text), imageCostUsd: roundUsd(cost.image) } });
   if (!inserted.length)
     return NextResponse.json(
-      { error: failures[0]?.error ?? "No creatives were generated.", failures },
+      { error: failures[0]?.error ?? await ownerError("noAdsMade"), failures },
       { status: 502 },
     );
 
@@ -458,8 +420,7 @@ async function generate(req: Request, live?: LiveCreate) {
     businessId,
     action: "creatives.generate",
     entityType: "creative",
-    // The brief can be an LLM-written paragraph, so it belongs in details —
-    // `reason` is shown to the owner in the activity feed.
+    // `reason` is shown to the owner in the activity feed; the brief (LLM-written) belongs in details.
     reason: `Generated ${inserted.length} creative${inserted.length === 1 ? "" : "s"}`,
     details: {
       count: inserted.length,

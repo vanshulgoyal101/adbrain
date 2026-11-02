@@ -140,7 +140,7 @@ randomized A/B testing integration. Actual remote billing remains controlled by 
 
 Draft version, attempt revision, connection generation, review hash, activation
 digest, and idempotency key are different controls. Never substitute one for
-another or recompute server hashes in an integration. See [Architecture](../../ARCHITECTURE.md).
+another or recompute server hashes in an integration. See [Architecture](../overview.md).
 
 [Activation review and PATCH](../../../src/app/api/campaigns/[id]/route.ts) verify
 stored child IDs, binding, generation, account/Page/budget and current Meta
@@ -152,7 +152,7 @@ Effective delivery/eligibility is not certified. #49 reservation remains uncerta
 when the parent request or post-request verification is ambiguous; reconcile
 before retrying. Creation idempotency does not make activation atomic with Meta.
 [Operations](../../operations/README.md) owns incident procedures and
-[Release Policy](../../RELEASING.md) owns authorization for live changes.
+[Release Policy](../../operations/releasing.md) owns authorization for live changes.
 
 ## Lead Import and Follow-Up
 
@@ -203,10 +203,12 @@ adds the follow-up columns and `get_lead_page`. Both are in the fresh schema.
 ## Managed Accounts (2-Tier, #518)
 
 Behind `MANAGED_ACCOUNTS_ENABLED`. AdBrain provisions each customer a child business under
-Solaride, tracked in `managed_meta_accounts` (#519). The customer links a Page they administer
+the AdBrain business portfolio (`META_PARENT_BUSINESS_ID`, no default; unset is `NOT_CONFIGURED`,
+#2357), tracked in `managed_meta_accounts` (#519). The customer links a Page they administer
 (#523). [`provisionManagedAccount`](../../../src/lib/meta/managed-provision.ts) (#521) then creates the
 child business (`POST /{parent}/owned_businesses` with `shared_page_id`, `page_permitted_tasks`,
-timezone 71 and `child_business_external_id` = the AdBrain business ID) and its INR ad account
+timezone 71, `vertical` from the Brand's category (solar `ENERGY_AND_UTILITIES`, IELTS
+`EDUCATION`, interiors `PROFESSIONAL_SERVICES`, else `OTHER`) and `child_business_external_id` = the AdBrain business ID) and its INR ad account
 (`POST /{child}/adaccount`, `end_advertiser` = the Page), then assigns the managing system user
 to it (`POST /{act}/assigned_users`, MANAGE/ADVERTISE/ANALYZE, `business` = the child; checked
 first with `GET /{act}/assigned_users?business=`). Every step reads before it creates: every
@@ -235,6 +237,33 @@ state; a failed repair keeps the state and records `last_error`, so only set-up 
 provisioning Graph call carries `appsecret_proof` (HMAC-SHA256 of its token with `META_APP_SECRET`;
 Meta rejects the child-token mint without it), so a missing secret is `NOT_CONFIGURED`. A token
 the ledger no longer references (replaced, or saved before a failed update) is deleted.
+
+**The customer's own card (#2357, #2359).** Each customer pays Meta with their own payment method
+on their child ad account; AdBrain's card is never shared to it. Meta has no API to add a card, so
+[`managed-billing`](../../../src/lib/meta/managed-billing.ts) (via `POST /api/managed/billing`) does
+three things with the child's own token once the ad account and its grant exist, each inside the
+ledger lease (`managed_meta_account_claim`, so a concurrent invite or check gets `busy`): **invite**
+the person the owner names (`POST /{child}/business_users`, `role=EMPLOYEE`, after reading
+`business_users` and `pending_users` so a person is never invited twice, and refusing a new address
+while 3 invites are unaccepted so a child can't send spam; a list read without `data`, or with a
+further page, fails closed before any write; the email is validated before any call and goes to Meta
+only; the ledger keeps a keyed hash of it, `step_keys.payer`, recorded before the invite). A person
+already in the child is granted at once (`joined`) and an invite already waiting reads `pending`.
+**Grant** `MANAGE` on the ad account to that named person alone, once they have joined (`MANAGE`
+includes billing; `act_/assigned_users` has no billing-only task; other members get nothing). **Read**
+`GET /{act}?fields=account_status,funding_source_details`. The ledger moves
+`ad_account_created → funded` (`funding_state=card_attached`) only when that read shows
+`account_status=1` and a funding source the customer adds themselves (`type` 1 card, 12/13 PayPal,
+17 direct debit, 19 alternative payment), never on a click. It's an allow-list: a credit line or
+invoice (4, 6) shared from a parent, or any unknown type, reads as not funded. A prepaid `STORED_BALANCE` (20) stays not funded until a walk records its real shape (an
+empty balance won't deliver); statuses 3/8 (payment due), 7 (risk review), 9 (grace period),
+2 (disabled) and 100/101/202 (closed) each get a plain reason. An unaccepted invite reads as
+"waiting for them", not an error. A ledger move that matches no row (the state changed meanwhile)
+reports the current state, never `funded`. If the Page's WhatsApp was recorded while the account
+waited, it moves on to `whatsapp_linked`. Least privilege (EMPLOYEE + MANAGE), whether a child
+made with `owned_businesses` accepts people, and the Billing deep link are confirmed on the
+first internal child's walk; until then the screen says "Business Settings → Billing &
+payments". The funding tests use Meta's documented shapes, provisional until that walk's tape.
 
 ## Recovery and Destructive Actions
 

@@ -57,4 +57,29 @@ describe("Meta asset selection", () => {
     });
     expect(buildCandidateDTOs(unverified)[0].eligible).toBe(false);
   });
+
+  it("tells a shop whose Page and ad account sit outside one portfolio to put both in one (#679)", () => {
+    // A personal ad account (no portfolio) next to a Page: Meta returns no shared business id.
+    const [candidate] = buildCandidateDTOs(buildDiscoveryPairs({
+      adAccounts: [account], pages: [page], relationshipPairs: [], supportedCurrencies: ["INR"],
+    }));
+    expect(candidate.eligible).toBe(false);
+    expect(candidate.blockers).toEqual([expect.objectContaining({ code: "SETUP_REQUIRED" })]);
+    expect(candidate.blockers[0].message).toMatch(/same business portfolio.*Meta Business Settings/);
+    expect(candidate.blockers[0].message).toContain("No portfolio yet? Create one in Business Settings.");
+  });
+
+  it("names the account's currency and the fix for a non-rupee ad account (#2421)", () => {
+    const [candidate] = buildCandidateDTOs(buildDiscoveryPairs({
+      adAccounts: [{ ...account, currency: "USD" }], pages: [page],
+      relationshipPairs: [{ adAccountId: "act_1", pageId: "page_1" }],
+      supportedCurrencies: ["INR"],
+    }));
+    expect(candidate.eligible).toBe(false);
+    expect(candidate.blockers).toEqual([{
+      code: "UNSUPPORTED_CURRENCY",
+      message: "This ad account uses USD. AdBrain runs ads in rupees, and Meta can't change an account's currency. Create a new ad account in rupees (INR) in your business portfolio, then tap Reconnect Meta.",
+      action: null,
+    }]);
+  });
 });

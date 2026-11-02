@@ -70,6 +70,8 @@ export const draftInputSchema = z
     whatsappMessage: whatsappTemplateSchema.optional(),
     targeting: targetingInputSchema,
     abTest: z.boolean(),
+    /** #2273 (#680 placement test): leave Facebook Reels out. Internal-only control; absent means automatic. */
+    excludeFacebookReels: z.boolean().optional(),
   })
   .strict();
 export type DraftInput = z.infer<typeof draftInputSchema>;
@@ -126,7 +128,7 @@ export const reviewDtoSchema = z.object({
     keptStates: z.array(boundedText(100)).max(36),
     excludedStateCount: z.number().int().nonnegative().max(36),
   }).optional(),
-  /** #840: what the WhatsApp ad will send, as launch sends it. Edited and saved messages are in the plan hash. */
+  /** #840/#2452: what the WhatsApp ad will send, as launch sends it. Every message, suggested too, is in the plan hash. */
   whatsappMessage: z.object({
     source: z.enum(["edited", "saved", "suggested"]),
     greeting: z.string().max(1_000),

@@ -16,7 +16,8 @@ const FIXES: Record<ReviewBlockerReason, ReviewFix> = {
   REVIEW_CURRENCY: { kind: "connect", label: "Choose another ad account" },
   REVIEW_META_ACCESS: { kind: "connect", label: "Connect Facebook again" },
   REVIEW_CREATIVES: { kind: "field", label: "Choose your ads", targets: ["campaign-ad-picker"] },
-  REVIEW_WHATSAPP_NOT_LINKED: { kind: "page", label: "Link your WhatsApp number", href: "/brand" },
+  // #847: linking lives in Settings' WhatsApp card (steps + Check again), not on Your business.
+  REVIEW_WHATSAPP_NOT_LINKED: { kind: "page", label: "Link your WhatsApp number", href: "/settings#whatsapp-status-title" },
   REVIEW_NO_LEAD_FORM: { kind: "field", label: "Choose a lead form", targets: ["leadform"] },
   REVIEW_NO_WEBSITE: { kind: "page", label: "Add your website", href: "/brand" },
   REVIEW_BUDGET: { kind: "field", label: "Set the daily budget", targets: ["budget"] },

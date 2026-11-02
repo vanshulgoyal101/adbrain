@@ -244,13 +244,15 @@ export function buildAdDesign(params: {
   format?: AdFormat;
   /** The ad's language as Create stores it ("Hindi (Devanagari)"), for the WhatsApp ask (#1177). */
   language?: string | null;
+  /** The picture is the business's own photo, which the planner never saw (#2430). */
+  ownerPhoto?: boolean;
 }): AdDesignSpec {
   const { brand, copy } = params;
   const format = params.format ?? "portrait";
   const dims = formatDimensions(format);
   const primaryColor = normalizeHex(brand.primary_color);
   const headline = params.concept?.headline ?? (shortenHeadline(copy.headline) || brand.name);
-  const layout = params.concept?.visual.textPlacement ?? layoutForAngle(params.angle?.id);
+  const layout = params.ownerPhoto ? OWNER_PHOTO_LAYOUT : params.concept?.visual.textPlacement ?? layoutForAngle(params.angle?.id);
 
   return {
     format,
@@ -274,6 +276,14 @@ export function buildAdDesign(params: {
     layout,
   };
 }
+
+/**
+ * #2430: where the words go on the business's own photo. The planner picks a text placement without seeing the
+ * photo, and nothing keeps that area clear the way the image prompt does for an AI picture. Real photos put faces
+ * on the upper third, so words at the top (or the left-side panel) cover people; along the bottom they sit over
+ * bodies, desks and floors.
+ */
+export const OWNER_PHOTO_LAYOUT: AdDesignSpec["layout"] = "bottom";
 
 function layoutForAngle(angleId?: string): AdDesignSpec["layout"] {
   if (angleId === "offer" || angleId === "urgency") return "top";

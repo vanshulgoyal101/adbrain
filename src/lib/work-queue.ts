@@ -16,8 +16,6 @@ type QueueBusiness = Pick<
   "name" | "description" | "brand_voice" | "target_audience" | "locations"
 >;
 
-type BrandField = "description" | "voice" | "audience" | "areas";
-
 /**
  * #1630 (CPO, #1604): the ₹999 plan's status, as #1442's `readPlan` returns it, or null while PLAN_BILLING_ENABLED is
  * off or the business isn't on the plan. Home is where a pilot owner lives, so the free month's end shows there.
@@ -37,20 +35,6 @@ function planItem(plan: QueuePlan | null | undefined, locale: AppLocale): WorkIt
     return { id: "plan", title: t("planFreeEndsTitle", { date }), detail: t("planFreeEndsDetail"), href: "/settings#plan-title", action: t("planPayAction"), tone: "work" };
   }
   return null;
-}
-
-function missingFields(business: QueueBusiness): BrandField[] {
-  return ([
-    !business.description?.trim() && "description",
-    !business.brand_voice?.trim() && "voice",
-    !business.target_audience?.trim() && "audience",
-    !business.locations.some((location) => location.trim()) && "areas",
-  ] as const).filter((field): field is BrandField => Boolean(field));
-}
-
-export function missingBrandContext(business: QueueBusiness, locale: AppLocale = "en"): string[] {
-  const t = translator(locale, "workQueue");
-  return missingFields(business).map((field) => t(`field.${field}`));
 }
 
 export function buildWorkQueue({
@@ -102,7 +86,6 @@ export function buildWorkQueue({
   const unusedApproved = creatives.filter(
     (creative) => creative.status === "approved" && !usedIds.has(creative.id),
   ).length;
-  const missing = missingBrandContext(business, locale);
   const paused = campaigns.filter(
     (campaign) => campaign.status === "paused",
   ).length;
@@ -127,15 +110,6 @@ export function buildWorkQueue({
       href: "/leads",
       action: t("chatsAction"),
       tone: "work",
-    });
-  if (missing.length)
-    queue.push({
-      id: "context",
-      title: t("contextTitle"),
-      detail: t("contextDetail", { fields: missing.join(", ") }),
-      href: "/brand",
-      action: t("contextAction"),
-      tone: "attention",
     });
   if (!creatives.length)
     queue.push({

@@ -1,11 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
-import { checkDocumentation } from "./check-docs.mjs";
+import { appCopy, checkDocumentation, codeTableDrift, environmentDrift, mirrorDrift, missingLabels, moneyDrift, moneyFacts, scheduleDrift, scriptEnvironment, stampMirror } from "./check-docs.mjs";
 
 function fixture(context, files = {}) {
   const root = mkdtempSync(resolve(tmpdir(), "adbrain-docs-check-"));
@@ -127,20 +127,24 @@ test("layered docs: short pages, an index per folder linking each page, nothing 
   const long = "# Long\n" + "line\n".repeat(300);
   const root = fixture(context, {
     "README.md": "# Start\n",
-    "docs/README.md": "# Docs\n[Product](product/README.md) [Roadmap](roadmap.md) [Old](OLD.md) [Loose](loose.md)\n",
+    "docs/README.md": "# Docs\n[Product](product/README.md) [Roadmap](roadmap.md) [Loose](loose.md)\n",
     "docs/roadmap.md": "# Roadmap\n",
-    "docs/OLD.md": long,
     "docs/loose.md": "# Loose\n",
     "docs/product/README.md": "# Product\n[Brand](brand.md)\n",
     "docs/product/brand.md": long,
     "docs/product/create.md": "# Create\n",
     "docs/operations/runbooks/one.md": "# One\n",
+    "docs/plans/README.md": "# Plans\n[Live](live.md) [Stale](stale.md)\n",
+    "docs/plans/live.md": "# Live\n\n**Status:** active: building it (#1).\n",
+    "docs/plans/stale.md": "# Stale\n\nNo status.\n",
   });
-  assert.deepEqual(messages(checkDocumentation(root, { legacyFlat: new Set(["docs/OLD.md"]) })).sort(), [
+  assert.deepEqual(messages(checkDocumentation(root)).sort(), [
     "docs/README.md Index does not link docs/operations/README.md",
-    "docs/loose.md Put pages in a docs/ subfolder (product, architecture, api, operations, team)",
+    "docs/README.md Index does not link docs/plans/README.md",
+    "docs/loose.md Put pages in a docs/ subfolder (product, architecture, api, operations, team, plans)",
     "docs/operations Folder has no README.md index",
     "docs/operations/runbooks Folder has no README.md index",
+    "docs/plans/stale.md Plan needs a `**Status:** active` or `**Status:** done` line under its title",
     "docs/product/README.md Index does not link docs/product/create.md",
     "docs/product/brand.md Page has 301 lines; split it (limit 300)",
   ]);
@@ -160,4 +164,99 @@ test("layered docs: code, scripts and workflows name only docs that exist (#1851
     ".github/workflows/y.yml Names a missing doc: docs/operations/gone.md",
     "scripts/x.mjs Names a missing doc: docs/MOVED.md",
   ]);
+});
+
+test("flags quoted labels the app never shows, allowing filled templates and support words", context => {
+  const root = fixture(context, {
+    "src/components/card.tsx": 'export const Card = () => <p>{`Each ${chat} costs ${cost}.`}<button>Go live</button></p>;\n',
+    "messages/en.json": JSON.stringify({ waiting: "{n, plural, one {# person is waiting for your reply.} other {# people are waiting.}}" }),
+  });
+  const texts = [
+    { line: 1, text: 'Tap "Go live". It says "Each chat costs ₹45." and "1 person is waiting for your reply."' },
+    { line: 2, text: 'Tap "Go live now please" or "Launch it".' },
+    { line: 3, text: 'Owner says: "it is broken"' },
+    { line: 4, text: 'Then reply: "We are on it." The owner may write "पिक्चर नहीं आई".' },
+  ];
+  assert.deepEqual(missingLabels(texts, appCopy(root)).map(({ line, label }) => `${line} ${label}`), ["2 Go live now please", "2 Launch it"]);
+});
+
+test("scheduled-jobs.md must list every cron and nothing that is gone", context => {
+  const root = fixture(context, {
+    ".github/workflows/nightly.yml": 'on:\n  schedule:\n    - cron: "30 21 * * *"\n    - cron: \'0 5 * * 1\'\n',
+    "vercel.json": JSON.stringify({ crons: [{ path: "/api/cron/keepalive", schedule: "0 6 * * *" }] }),
+    "db/migrations/1_jobs.sql": "select cron.schedule('adbrain-a', '*/15 * * * *', 'x'); select cron.schedule('adbrain-b', '1 * * * *', 'x');",
+    "db/migrations/2_jobs.sql": "select cron.unschedule('adbrain-b'); select cron.schedule('adbrain-a', '*/5 * * * *', 'x');",
+  });
+  const doc = "| Source | Schedule |\n| --- | --- |\n| `nightly.yml` | `30 21 * * *` |\n| `/api/cron/keepalive` | `0 6 * * *` |\n| `adbrain-a` | `*/15 * * * *` |\n| `adbrain-b` | `1 * * * *` |\n";
+  assert.deepEqual(scheduleDrift(root, doc).map(({ line, message }) => `${line} ${message}`), [
+    "1 Schedule missing from the table: `nightly.yml 0 5 * * 1`",
+    "1 Schedule missing from the table: `adbrain-a */5 * * * *`",
+    "5 Documented schedule no longer exists: `adbrain-a */15 * * * *`",
+    "6 Documented schedule no longer exists: `adbrain-b 1 * * * *`",
+  ]);
+});
+
+test("a Hindi page names its stale English page until it is refreshed and stamped", context => {
+  const root = fixture(context, {
+    "docs/product/go.md": "# Go\n\nTap \"Go live\".\n\n```\n# not a heading \"x\"\n```\n",
+    "docs/product/hi/go.md": "# जाएँ\n\nयह [Go](../go.md) का हिंदी रूप है। \"Go live\" दबाएँ।\n",
+  });
+  const hindi = resolve(root, "docs/product/hi/go.md");
+  assert.match(mirrorDrift(hindi, readFileSync(hindi, "utf8")), /No mirror stamp/);
+  stampMirror(hindi);
+  assert.match(readFileSync(hindi, "utf8"), /^# जाएँ\n<!-- mirrors \.\.\/go\.md [0-9a-f]{12} -->\n/);
+  assert.equal(mirrorDrift(hindi, readFileSync(hindi, "utf8")), null);
+  writeFileSync(resolve(root, "docs/product/go.md"), "# Go\n\nTap \"Go live\". More words.\n\n```\n# changed code \"y\"\n```\n");
+  assert.equal(mirrorDrift(hindi, readFileSync(hindi, "utf8")), null);
+  writeFileSync(resolve(root, "docs/product/go.md"), "# Go\n\nTap \"Go live now\".\n");
+  assert.match(mirrorDrift(hindi, readFileSync(hindi, "utf8")), /\.\.\/go\.md changed since this translation/);
+  assert.ok(checkDocumentation(root, { files: ["docs/product/hi/go.md"] }).diagnostics.some(item => item.severity === "error" && /changed since this translation/.test(item.message)));
+});
+
+test("configuration docs list every variable scripts read, and nothing that is never read", context => {
+  const root = fixture(context, {
+    "scripts/smoke.mjs": "const { SMOKE_EMAIL: email } = process.env; const t = process.env.VERCEL_TOKEN ?? process.env[\"GH_REPO\"]; process.env.GITHUB_OUTPUT;\n",
+    "scripts/doctor.sh": 'echo "${APP_URL:-}" "$LOCAL_ONLY"\n',
+    "next.config.ts": "export default { env: { sha: process.env.VERCEL_GIT_COMMIT_SHA } };\n",
+  });
+  const scripts = scriptEnvironment(root);
+  assert.deepEqual([...scripts].sort(), ["APP_URL", "GH_REPO", "GITHUB_OUTPUT", "SMOKE_EMAIL", "VERCEL_GIT_COMMIT_SHA", "VERCEL_TOKEN"]);
+  const pages = [{ file: "docs/operations/configuration.md", text: "| `SMOKE_EMAIL` | x |\n| `APP_URL` | x |\n| `OLD_KEY` | gone |\n| `GET` | a verb |\n| `META_APP_ID` | x |\n" }];
+  assert.deepEqual(environmentDrift(["META_APP_ID"], scripts, pages).map(({ line, message }) => `${line} ${message}`), [
+    "1 Environment key read by scripts but not documented: GH_REPO",
+    "1 Environment key read by scripts but not documented: VERCEL_TOKEN",
+    "3 Documented environment key nothing reads: OLD_KEY",
+  ]);
+});
+
+test("a ₹ amount or % in docs/product must come from a source constant or be a listed example", context => {
+  const sources = {
+    "src/lib/campaign/budget.ts": "export const BUDGET_PRESETS = [300, 500, 1000] as const;\n",
+    "src/components/setup-go-live.tsx": "export const SETUP_RUN_DAYS = 2;\nexport const SETUP_RUN_DAY_CHOICES = [SETUP_RUN_DAYS, 7] as const;\n",
+    "src/lib/payments/allocation.ts": "return Math.ceil(capPaise * (10_000 + (input.taxRateBps ?? 1_800)) / 10_000);\n",
+    "src/lib/plan/status.ts": "export const PLAN_PRICE_PAISE = 99_900;\n",
+    "src/lib/campaign/verdict.ts": "export const EVIDENCE_MIN_SPEND = 500;\n",
+    "src/lib/meta/insights.ts": "export const BEST_AD_MARGIN = 0.3;\n",
+    "src/lib/creative/design.ts": "export const STORY_SAFE = { top: 0.14, bottom: 0.35, side: 0.06 } as const;\n",
+    "src/lib/campaign/preflight.ts": "export const META_MIN_DAILY_BUDGET_RUPEES = 96;\n",
+  };
+  const root = fixture(context, sources);
+  const prose = [{ line: 3, text: "₹300 a day for 2 days, ₹708 at most incl. 18% GST; 7 days is ₹2,478. Then ₹999 a month. Each chat costs ₹45. Meta needs ₹96 a day." }];
+  assert.deepEqual(moneyDrift(prose, moneyFacts(root).facts), []);
+  assert.deepEqual(moneyDrift([{ line: 4, text: "Only ₹1,499 and 25% off." }], moneyFacts(root).facts), [{ line: 4, amount: "₹1,499" }, { line: 4, amount: "25%" }]);
+  writeFileSync(resolve(root, "src/lib/payments/allocation.ts"), "(input.taxRateBps ?? 2_800)\n");
+  writeFileSync(resolve(root, "src/lib/plan/status.ts"), "export const PLAN_PRICE_PAISE = 1_49_900;\n");
+  assert.deepEqual(moneyDrift(prose, moneyFacts(root).facts).map(({ amount }) => amount), ["₹708", "18%", "₹2,478", "₹999"]);
+  rmSync(resolve(root, "src/lib/meta/insights.ts"));
+  assert.deepEqual(moneyFacts(root).missing, ["src/lib/meta/insights.ts BEST_AD_MARGIN = ([\\d.]+)"]);
+});
+
+test("a code table has one row per source code, both ways (#2288)", () => {
+  const row = /^\| `(REVIEW_[A-Z_]+)` \|/;
+  const page = "Intro `REVIEW_INLINE` text\n\n| Code | Says |\n| --- | --- |\n| `REVIEW_BUDGET` | x |\n| `REVIEW_GONE` | y |\n";
+  assert.deepEqual(codeTableDrift(page, ["REVIEW_BUDGET", "REVIEW_RADIUS", "REVIEW_BUDGET"], row, "preflight.ts"), [
+    { line: 1, message: "No row for REVIEW_RADIUS from preflight.ts" },
+    { line: 6, message: "Row for REVIEW_GONE, which preflight.ts no longer has" },
+  ]);
+  assert.deepEqual(codeTableDrift(page.replace("| `REVIEW_GONE` | y |\n", ""), ["REVIEW_BUDGET"], row, "preflight.ts"), []);
 });

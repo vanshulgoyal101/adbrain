@@ -17,6 +17,8 @@ export function getSecurityHeaders(
   const trustedSupabaseOrigin = supabaseHost.replace(/\/$/, "");
   const allowCheckout = (testCheckout && process.env.NODE_ENV !== "production" && !process.env.VERCEL_ENV)
     || (liveCheckout && process.env.NODE_ENV === "production" && process.env.VERCEL_ENV === "production" && process.env.VERCEL_GIT_COMMIT_REF === "main");
+  // #2570: the sign-in check (Cloudflare Turnstile) loads its script and frame only when its site key is set.
+  const signInCheck = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ? " https://challenges.cloudflare.com" : "";
   return [
     {
       key: "Content-Security-Policy",
@@ -26,12 +28,12 @@ export function getSecurityHeaders(
         "object-src 'none'",
         "frame-ancestors 'none'",
         "form-action 'self'",
-        `script-src 'self' 'unsafe-inline' https://vanshul.com${allowCheckout ? " https://checkout.razorpay.com https://cdn.razorpay.com" : ""}`,
+        `script-src 'self' 'unsafe-inline' https://vanshul.com${signInCheck}${allowCheckout ? " https://checkout.razorpay.com https://cdn.razorpay.com" : ""}`,
         "style-src 'self' 'unsafe-inline'",
         "img-src 'self' data: blob: https:",
         "font-src 'self' data:",
         `connect-src 'self' ${trustedSupabaseOrigin} https://*.supabase.co https://vanshul.com https://graph.facebook.com${allowCheckout ? " https://api.razorpay.com https://checkout.razorpay.com https://lumberjack.razorpay.com" : ""}`,
-        `frame-src 'self' https://accounts.google.com https://www.facebook.com${allowCheckout ? " https://api.razorpay.com https://checkout.razorpay.com" : ""}`,
+        `frame-src 'self' https://accounts.google.com https://www.facebook.com${signInCheck}${allowCheckout ? " https://api.razorpay.com https://checkout.razorpay.com" : ""}`,
         "worker-src 'self' blob:",
         "manifest-src 'self'",
       ].join("; "),

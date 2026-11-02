@@ -12,7 +12,9 @@ Part of [Architecture](README.md). [Interview and boundaries](ai-pipeline.md) ·
 2. Choose up to six configured marketing angles; default batch count is three.
 3. For each angle, request a structured concept with caching disabled. First
    attempt temperature is 0.8; one repair attempt uses 0.4 and is told each
-   failed check, with the actual length when text is too long (#281). Max output and
+   failed check, with the actual length when text is too long (#281). The repair sees its own
+   draft and rewrites only what failed when the failures are about form (#2444); a reply that wasn't JSON, or a
+   draft that broke a fact or policy rule, gets a fresh try. Max output and
    reasoning effort are configured. Failed validation stops the variant.
    Before validation, cosmetic slips are normalized once:
    - Over-long `visual.medium`, `visual.direction` and rationale are clipped at a word. An over-long link
@@ -67,6 +69,10 @@ Part of [Architecture](README.md). [Interview and boundaries](ai-pipeline.md) ·
    (`fitPhoto`, #1904): EXIF orientation, then sharp's `attention` saliency crop
    so a phone photo's face isn't cut off, or `backgroundFit: "blur"` (the whole
    photo on a blurred copy of itself) for group shots.
+   An owner photo's words always go along the bottom (`OWNER_PHOTO_LAYOUT`, #2430), at
+   Create, on a borrowed sibling photo and when the owner switches an ad to their own photo:
+   the concept picks `textPlacement` without seeing the photo, and real photos put faces
+   on the upper third. AI pictures keep the concept's placement, which their prompt keeps quiet.
 5. Download and validate the raster, persist the source image, render the designed
    poster when enabled, persist the final image, then insert a draft creative row.
    The poster's contact bar asks for a WhatsApp message (chat icon, no number) for a business whose

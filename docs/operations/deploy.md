@@ -3,7 +3,7 @@
 Part of [Operations](README.md).
 
 Use this runbook to prepare a target and verify a deployment. Authorization and
-promotion rules live in [Release Workflow](../RELEASING.md); configuration defaults
+promotion rules live in [Release Workflow](releasing.md); configuration defaults
 live in [Configuration](configuration.md). AdBrain requires a dynamic Node/Next.js
 host and Supabase Auth/Postgres/Storage, not a static export.
 
@@ -143,7 +143,7 @@ but cannot detect a loopback tunnel to production. Repeated DDL can change grant
 policies and functions even when tables already exist; do not use it for upgrades.
 
 For an existing target, compare actual schema and `private.schema_migrations`
-with the [migration map](../DATA_MODEL.md#migration-map). Historical objects may
+with the [migration map](../architecture/migrations.md#migration-map). Historical objects may
 predate the ledger. Missing ledger entries do not authorize replaying the folder.
 Preview the one reviewed file first. Application is a separate approved action:
 
@@ -213,7 +213,7 @@ required by Supabase's provider setup, not an invented direct application route.
 
 In Meta, configure the exact `/api/meta/oauth/callback`, appropriate application
 domains, privacy/deletion URLs, Login for Business settings and permissions. Follow
-[Meta Connect](../architecture/channels/meta-connect.md), including its [App Review](../architecture/channels/meta-app-review.md#app-review-156) section, and [Approval Readiness](../META_APPROVAL_ACTION_PLAN.md).
+[Meta Connect](../architecture/channels/meta-connect.md), including its [App Review](../architecture/channels/meta-app-review.md#app-review-156) section, and [Approval Readiness](../plans/meta-approval.md).
 An AdBrain login smoke test does not verify this second authorization flow.
 
 ## 5. Validate and Promote

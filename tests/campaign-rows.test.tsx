@@ -40,6 +40,38 @@ beforeEach(() => {
 });
 
 describe("Campaigns rows (#403 S5)", () => {
+  it.each([true, false])("only erases a campaign's enquiries after confirmation (%s)", async (confirmed) => {
+    const user = userEvent.setup();
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(confirmed);
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ deleted: 2 })));
+    view();
+    const card = within((await screen.findByRole("heading", { name: "Solar EMI" })).closest("article")!);
+    card.getByRole("button", { name: "More actions for Solar EMI" }).focus();
+    await user.keyboard("{Enter}");
+    await user.click(within(await screen.findByRole("menu")).getByRole("menuitem", { name: "Delete its enquiries" }));
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining("Your ads aren't affected."));
+    if (confirmed) {
+      expect(await card.findByRole("status")).toHaveTextContent("Deleted 2 enquiries from this campaign.");
+      expect(fetch).toHaveBeenCalledWith("/api/leads?campaignId=campaign-2", { method: "DELETE" });
+    } else {
+      expect(vi.mocked(fetch).mock.calls.some(([, init]) => init?.method === "DELETE")).toBe(false);
+    }
+    expect(card.getByRole("heading", { name: "Solar EMI" })).toBeInTheDocument();
+  });
+
+  it("keeps the campaign and shows its enquiry erasure error on the card", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ error: "Enquiries could not be deleted." }, { status: 503 })));
+    view();
+    const card = within((await screen.findByRole("heading", { name: "Solar EMI" })).closest("article")!);
+    card.getByRole("button", { name: "More actions for Solar EMI" }).focus();
+    await user.keyboard("{Enter}");
+    await user.click(within(await screen.findByRole("menu")).getByRole("menuitem", { name: "Delete its enquiries" }));
+    expect(await card.findByRole("alert")).toHaveTextContent("Enquiries could not be deleted.");
+    expect(card.getByRole("heading", { name: "Solar EMI" })).toBeInTheDocument();
+  });
+
   // #1150: campaigns deleted in Meta fold under "Deleted (n)" after the live list, with one status word.
   it("folds campaigns deleted in Meta under Deleted (n) after the live one", async () => {
     const deleted = (id: string, metaStatus: string) => ({ ...paused, id, name: "Rooftop solar old", status: "completed", raw: { ...paused.raw as object, metaStatus } }) as unknown as Campaign;
@@ -205,6 +237,27 @@ describe("Campaigns rows (#403 S5)", () => {
       expect(screen.getByText("Deleted (2)").closest("details")).not.toBeNull();
     });
 
+    // #2150 (Designer, #1793 walk): "below" pointed at Deleted, and a deleted WhatsApp campaign brought the reply tips.
+    it("reads None running → Saved drafts → Deleted, with no WhatsApp tips for deleted campaigns", async () => {
+      mocks.drafts.mockResolvedValue(drafts);
+      const gone = (id: string) => ({ ...deleted(id), destination: "whatsapp" }) as Campaign;
+      render(<Campaigns business={business} approved={[]} initialCampaigns={[gone("campaign-8"), gone("campaign-9")]} initialResults={{}}
+        initialDrafts={drafts as never} leadForms={[]} leadFormError={null} metaReady adAccountId="act_999" />);
+      const none = await screen.findByRole("heading", { name: "None running" });
+      const saved = screen.getByRole("group", { name: "Saved drafts" });
+      const fold = screen.getByText("Deleted (2)").closest("details")!;
+      expect(none.compareDocumentPosition(saved) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(saved.compareDocumentPosition(fold) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(screen.getAllByRole("group", { name: "Saved drafts" })).toHaveLength(1);
+      expect(screen.queryByText(/tips to get more replies/)).toBeNull();
+    });
+
+    it("keeps the WhatsApp tips while a WhatsApp campaign is live, next to a deleted one", async () => {
+      render(<Campaigns business={business} approved={[]} initialCampaigns={[deleted("campaign-8"), { ...paused, destination: "whatsapp" } as Campaign]} initialResults={{}}
+        leadForms={[]} leadFormError={null} metaReady adAccountId="act_999" />);
+      expect(await screen.findByText(/tips to get more replies/)).toBeInTheDocument();
+    });
+
     it("without drafts, says what to do next", async () => {
       render(<Campaigns business={business} approved={[]} initialCampaigns={[deleted("campaign-8")]} initialResults={{}}
         leadForms={[]} leadFormError={null} metaReady adAccountId="act_999" />);
@@ -221,12 +274,12 @@ describe("Campaigns rows (#403 S5)", () => {
     });
   });
 
-  it("shows how many opened WhatsApp and how many messaged (#493)", async () => {
+  it("shows WhatsApp button taps and messages as separate counts (#493)", async () => {
     const whatsapp = { ...active, id: "campaign-3", name: "Solar WhatsApp", raw: { destination: "whatsapp" } } as unknown as Campaign;
     render(<Campaigns business={business} approved={[]} initialCampaigns={[whatsapp]} leadForms={[]} leadFormError={null} metaReady={false} adAccountId="act_999"
       initialResults={{ [whatsapp.id]: { ...result, destination: "whatsapp", leads: 0, cpl: null, conversations: 1, cost_per_conversation: 162, whatsapp_opens: 12 } as CampaignResult }} />);
     const row = (await screen.findByRole("heading", { name: "Solar WhatsApp" })).closest("article") as HTMLElement;
-    expect(within(row).getByText("12 opened WhatsApp, 1 messaged you")).toBeInTheDocument();
+    expect(within(row).getByText("12 taps on the WhatsApp button, 1 messaged you")).toBeInTheDocument();
     // #783: the card's figures and 'Which ad worked' both call them chats.
     expect(within(row).getByText("WhatsApp chats")).toBeInTheDocument();
     expect(within(row).getByText("Cost / chat")).toBeInTheDocument();

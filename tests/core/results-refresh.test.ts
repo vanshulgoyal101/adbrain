@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import resultsTape from "./fixtures/meta/results.json";
 
+// #1903: the insights binding reads (campaign/ad-set status and budgets) were re-recorded read-only on Oct 29;
+// both campaigns were PAUSED by then, so their status is set back to ACTIVE as when the scenarios were recorded.
 // Graph insights and ad review reads recorded read-only by scripts/record-meta-results-fixtures.ts
 // from the live #157 run (120253678786150526; lifetime 70 impressions, ₹10.69, 1 chat on Oct 24) and a paused Solaride
 // campaign (120253164673180526) (#258). The DISAPPROVED ad below is a synthetic edit of the

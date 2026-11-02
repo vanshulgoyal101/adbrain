@@ -2,7 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // #1761 (DPDP erasure, #1758): owners delete an enquiry, or all of a campaign's, through RLS (leads_erase); the
 // audit row names only ids and a count.
-const m = vi.hoisted(() => ({ rpc: vi.fn(), campaign: null as unknown, audit: vi.fn(), user: { id: "owner" } as unknown }));
+const m = vi.hoisted(() => ({ rpc: vi.fn(), campaign: null as unknown, audit: vi.fn(), user: { id: "owner" } as unknown, lang: undefined as string | undefined }));
+vi.mock("next/headers", () => ({
+  cookies: async () => ({ get: (name: string) => (name === "adbrain_lang" && m.lang ? { value: m.lang } : undefined) }),
+}));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({
   auth: { getUser: async () => ({ data: { user: m.user } }) },
   rpc: m.rpc,
@@ -22,6 +25,7 @@ beforeEach(() => {
   m.audit.mockReset();
   m.campaign = { id: campaignId };
   m.user = { id: "owner" };
+  m.lang = undefined;
 });
 
 describe("DELETE /api/leads/[id] (#1761)", () => {
@@ -43,6 +47,15 @@ describe("DELETE /api/leads/[id] (#1761)", () => {
     expect((await remove()).status).toBe(404);
     expect(m.audit).not.toHaveBeenCalled();
     expect((await remove("not-a-uuid")).status).toBe(400);
+  });
+
+  it("says a failed delete in the owner's language (#2327), with the same 503", async () => {
+    m.rpc.mockResolvedValue({ data: null, error: { message: "down" } });
+    expect(await (await remove()).json()).toEqual({ error: "The enquiry couldn't be deleted. Try again." });
+    m.lang = "hi";
+    const response = await remove();
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ error: "यह पूछताछ हटाई नहीं जा सकी। फिर से कोशिश करें।" });
   });
 
   it("needs a signed-in owner", async () => {

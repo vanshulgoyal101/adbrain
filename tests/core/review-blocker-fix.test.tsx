@@ -178,9 +178,13 @@ describe("core: every Review blocker has a one-tap fix (#723)", () => {
     expect(screen.getByLabelText(field)).toHaveFocus();
   });
 
-  it.each(["REVIEW_NO_WEBSITE", "REVIEW_WHATSAPP_NOT_LINKED"] as const)("%s: the fix opens Your business", async (reason) => {
+  it.each([
+    ["REVIEW_NO_WEBSITE", "/brand"],
+    // #681 (#847): linking a WhatsApp number lives in Settings' WhatsApp card, not on Your business.
+    ["REVIEW_WHATSAPP_NOT_LINKED", "/settings#whatsapp-status-title"],
+  ] as const)("%s: the fix opens %s", async (reason, href) => {
     const region = await prepareBlockedOn(reason);
-    expect(within(region).getByRole("link", { name: reviewBlockerFix(reason)!.label })).toHaveAttribute("href", "/brand");
+    expect(within(region).getByRole("link", { name: reviewBlockerFix(reason)!.label })).toHaveAttribute("href", href);
   });
 
   // #742: QA's 390 px walk: a site-less owner on Instant form was only told to add a website.

@@ -36,14 +36,24 @@ with existing campaigns, payment shows "Set up for your last campaign" and the b
 at the offered amount nearest the last campaign's daily budget. `?again=1` is kept by Back.
 
 Until then Home (`/dashboard`) is one resume card, "Your first ad · Step N of 3 ·
-{step} · Continue" (#1272, `setupResumeStep`): step 1 until the five facts make a
-usable Brand, step 2 until an ad is picked (approved), then step 3. At step 3 with ads made
-from today's step 1 (`madeForSetup`, e.g. a handed-over prospect account), the card says
+{step} · Continue" (#1272, `setupResume`): step 1 until the five facts make a
+usable Brand, step 2 until an approved ad was made from today's step 1 (`madeForSetup`),
+then step 3. At step 3 (e.g. a handed-over prospect account), the card says
 "Your N ads are ready", shows up to 3 of them and leads with **Connect and go live** (#1712);
 budget, area and payment stay on step 3. The + button
 reads "Continue your first ad" and `/create` sends a first-timer without the five
 facts to `/brand`. A campaign counts as having gone live once it has `launched_at`
 or is active or completed.
+
+After setup, Home shows the **Brand meter** (#2032, `src/lib/brand/meter.ts`) while a fact
+is missing: "Your ads know {n} of 4 things about you" and one ask, in this order: a specific
+offer (a price, ₹ or a free first step such as a survey or demo, English or Hindi), a
+number people can trust (read from selling points and the description with the same
+`proofFacts` as Review's proof warning), why customers pick you, and your best customers.
+**Add** saves one line (up to 200 characters, no `{…}` blanks) to the Brand: the offer
+replaces the first offer, proof and why join the selling points, audience replaces the
+target audience. Only the next ads use it; running ads don't change. **Not now** hides the
+card for 7 days.
 
 Website autofill fetches a public website and proposes extracted facts. On a Brand with
 nothing filled in yet it runs by itself when the owner leaves the Website field (once per
@@ -72,4 +82,4 @@ Real photos are reference hints for image generation, not the ad image itself.
 Instruction files have a title, Markdown body, and active flag. Active instructions
 are included by generation/planning call sites; an instruction is guidance to a
 model, not deterministic enforcement. Never put credentials or sensitive lead
-details in prompts. See [Data Model](../DATA_MODEL.md) and [AI Pipeline](../architecture/ai-pipeline.md).
+details in prompts. See [Data Model](../architecture/data-model.md) and [AI Pipeline](../architecture/ai-pipeline.md).

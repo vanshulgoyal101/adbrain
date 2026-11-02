@@ -4,7 +4,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { actionableOwned, OWNS_WORK, createGitHubApi, readyPool, boardRow, systemicFailures, snoozedUntil, latestWord, linkedIssues, lowQueues, matchers, nextItem, freshComments, offTrack, rateBackoffMs, roleCard, unsavedWork, waitingOnMe } from "../scripts/wait-for-work.mjs";
+import { actionableOwned, commentsSince, HANDOFF_LOOKBACK_MS, missedHandoffs, backlogReads, dueWake, lastWordOn, scanBacklog, scheduledRead, OWNS_WORK, createGitHubApi, readyPool, redShared, myPulls, failedOnMine, mainArrival, TRAIN_RULE, BORROWS_DEV, boardRow, systemicFailures, snoozedUntil, latestWord, linkedIssues, lowQueues, matchers, nextItem, freshComments, offTrack, rateBackoffMs, roleCard, unsavedWork, waitingOnMe } from "../scripts/wait-for-work.mjs";
 
 describe("PR reviews count as the latest word (#423)", () => {
   it("picks a review posted after the last comment, and ignores empty approvals", () => {
@@ -79,6 +79,8 @@ describe("CTO on-track check", () => {
       prs: [
         { number: 357, title: "#334 Advantage+", updated_at: at(75), draft: false },
         { number: 365, title: "#335 enquiries", updated_at: at(10), draft: false },
+        { number: 1248, title: "#784 frozen", updated_at: at(2000), draft: false, labels: [{ name: "later" }] },
+        { number: 1250, title: "#785 parked", updated_at: at(2000), draft: false, labels: [{ name: "parked" }] },
       ],
     });
     expect(result.quiet).toEqual([{ role: "dev2", minutes: 120 }]);
@@ -96,8 +98,9 @@ describe("CTO queue watch", () => {
       issue("owner:dev3"), issue("owner:dev3"), issue("owner:dev3", "decision"),
       issue("owner:qa", "owner:dev"), issue("owner:qa"),
     ]);
-    expect(low).toEqual([{ role: "dev2", count: 1 }, { role: "dev3", count: 2 }, { role: "dev4", count: 0 }, { role: "qa", count: 2 }, { role: "qa2", count: 0 },
-      { role: "reviewer", count: 0 }, { role: "devops", count: 0 }, { role: "cpo", count: 0 }, { role: "analyst", count: 0 }, { role: "designer", count: 0 }, { role: "docs", count: 0 }]);
+    expect(low).toEqual([{ role: "dev2", count: 1 }, { role: "dev3", count: 2 }, { role: "dev4", count: 0 }, { role: "dev5", count: 0 }, { role: "dev6", count: 0 }, { role: "dev7", count: 0 }, { role: "dev8", count: 0 }, { role: "qa", count: 2 }, { role: "qa2", count: 0 },
+      { role: "reviewer", count: 0 }, { role: "devops", count: 0 }, { role: "devops2", count: 0 }, { role: "devops3", count: 0 }, { role: "cpo", count: 0 }, { role: "analyst", count: 0 }, { role: "designer", count: 0 }, { role: "docs", count: 0 },
+      { role: "speed", count: 0 }, { role: "janitor", count: 0 }, { role: "scout", count: 0 }]);
   });
 
   it("knows the Docs role (owner, Oct 29): handoffs wake it, and it isn't confused with docs/ paths", () => {
@@ -147,6 +150,13 @@ describe("wait-for-work handoffs", () => {
 
   it("ignores items parked on the owner or outside the team", () => {
     expect(waitingOnMe("CEO: please submit", devops, ["core", "waiting-owner"])).toBe(false);
+  });
+
+  it("keeps frozen later items quiet, even when a reply names you (#2238)", () => {
+    const dev2 = matchers("dev2");
+    expect(waitingOnMe("Reviewer: **changes requested**. → Dev 2: fix the order-less case.", dev2, ["later", "owner:dev2"])).toBe(false);
+    expect(waitingOnMe("Docs: the old file is gone; merge next.", dev2, ["later", "owner:dev2"])).toBe(false);
+    expect(waitingOnMe("CEO: → Dev 2: decide by noon.", dev2, ["decision", "owner:dev2"])).toBe(true);
   });
 
   it("keeps Dev distinct from Dev 2, Dev 3 and DevOps", () => {
@@ -201,6 +211,158 @@ describe("scheduled checks: Next read <time> (QA 2, #575)", () => {
   });
 });
 
+describe("timed reads survive `blocked` (#2572)", () => {
+  const dev3 = matchers("dev3");
+  const at = (t: string) => Date.parse(`2026-11-02T${t}Z`);
+  const read = "Dev 3: backup ran; restore check pending. → CEO: #1481. Next read 2026-11-02T08:45Z.";
+  it("an owner-signed read on a blocked item stays quiet, wakes the loop at its time, then is reported", () => {
+    dueWake(Infinity);
+    expect(waitingOnMe(read, dev3, ["blocked", "owner:dev3"], at("08:00"))).toBe(false);
+    expect(dueWake(at("08:44"))).toBe(false);
+    expect(dueWake(at("08:45"))).toBe(true);
+    expect(dueWake(at("08:46"))).toBe(false);
+    expect(waitingOnMe(read, dev3, ["blocked", "owner:dev3"], at("08:45"))).toBe(true);
+    expect(scheduledRead(read, dev3, ["blocked"])).toBe(at("08:45"));
+  });
+  it("a due read counts as actionable even when blocked; a blocked item without one stays held", () => {
+    const issue = (n: number, ...labels: string[]) => ({ number: n, labels: labels.map((name) => ({ name })) });
+    const items = [issue(1, "blocked"), issue(2, "blocked"), issue(3, "waiting-owner")];
+    expect(actionableOwned(items, { due: new Set([2, 3]) }).map((i) => i.number)).toEqual([2]);
+    expect(actionableOwned(items).map((i) => i.number)).toEqual([]);
+    expect(waitingOnMe("Dev 3: waiting on Meta support.", dev3, ["blocked"], at("09:00"))).toBe(false);
+  });
+  it("backlog reads every owned item a time can lift, past the first 20", () => {
+    const issue = (n: number, ...labels: string[]) => ({ number: n, labels: labels.map((name) => ({ name })) });
+    const items = [...Array.from({ length: 25 }, (_, k) => issue(k + 1, "owner:dev3")), issue(26, "blocked"), issue(27, "waiting-owner"), issue(28, "parked"), issue(29, "later")];
+    expect(backlogReads(items).map((i) => i.number)).toEqual([...Array.from({ length: 25 }, (_, k) => k + 1), 26]);
+  });
+  it("waiting-owner, parked and later are never made actionable by a time alone", () => {
+    for (const hold of ["waiting-owner", "parked", "later"]) {
+      dueWake(Infinity);
+      expect(scheduledRead(read, dev3, [hold])).toBeNull();
+      expect(waitingOnMe(read, dev3, [hold, "blocked"], at("08:00"))).toBe(false);
+      expect(waitingOnMe(read, dev3, [hold], at("09:00"))).toBe(false);
+      expect(dueWake(at("09:00"))).toBe(false);
+    }
+  });
+  it("unblocked schedules still wake on time, other people's times are ignored, and addressed work still wakes", () => {
+    dueWake(Infinity);
+    expect(waitingOnMe(read, dev3, [], at("08:00"))).toBe(false);
+    expect(dueWake(at("08:30"))).toBe(false);
+    expect(dueWake(at("08:45"))).toBe(true);
+    expect(waitingOnMe(read, dev3, [], at("08:45"))).toBe(true);
+    expect(scheduledRead("CTO: → Dev 3: look. Next read 2026-11-02T08:45Z.", dev3, ["blocked"])).toBeNull();
+    expect(waitingOnMe("CTO: → Dev 3: look. Next read 2026-11-02T08:45Z.", dev3, [], at("08:00"))).toBe(true);
+    expect(waitingOnMe("CTO: → Dev 3: look.", dev3, ["blocked"], at("08:00"))).toBe(false);
+  });
+});
+
+describe("startup reads the newest comment page (#2576)", () => {
+  const repo = "o/r";
+  const dev3 = matchers("dev3");
+  const at = (k: number) => new Date(Date.parse("2026-10-20T00:00:00Z") + k * 60_000).toISOString();
+  const thread = (n: number, last = "CTO: noted.") =>
+    Array.from({ length: n }, (_, k) => ({ body: k === n - 1 ? last : `Dev 3: step ${k}. → CTO: look.`, created_at: at(k), html_url: `c${k}` }));
+  // GitHub pages oldest first and ignores sort/direction on this endpoint.
+  const fakeApi = (comments: object[], reviews: object[] = []) => {
+    const calls: string[] = [];
+    const api = async (path: string) => {
+      calls.push(path);
+      const page = Number(/[?&]page=(\d+)/.exec(path)?.[1] ?? 1);
+      const rows = path.includes("/reviews") ? reviews : comments;
+      return rows.slice((page - 1) * 100, page * 100);
+    };
+    return { api, calls };
+  };
+  it.each([0, 1, 100, 101, 182])("finds the latest of %i comments in one or two reads", async (n) => {
+    const comments = thread(n);
+    const { api, calls } = fakeApi(comments);
+    const last = await lastWordOn(api, repo, { number: 364, comments: n });
+    expect(last?.url ?? null).toBe(n ? `c${n - 1}` : null);
+    expect(calls.length).toBe(n === 0 ? 0 : n % 100 === 0 ? 2 : 1);
+  });
+  it("keeps reading when a comment lands after the count, and steps back when comments were deleted", async () => {
+    const grown = fakeApi(thread(101));
+    expect((await lastWordOn(grown.api, repo, { number: 1, comments: 100 }))?.url).toBe("c100");
+    expect((await lastWordOn(fakeApi(thread(120)).api, repo, { number: 1 }))?.url).toBe("c119");
+    const shrunk = fakeApi(thread(99));
+    expect((await lastWordOn(shrunk.api, repo, { number: 1, comments: 182 }))?.url).toBe("c98");
+  });
+  it("steps back past a newest page of bot posts to your future read, which stays snoozed (CEO repro)", async () => {
+    const comments = [...thread(100, "Dev 3: checked. Next read 2026-11-02T09:00Z."),
+      { body: "<!-- core-scoreboard -->\nscore", created_at: at(200), html_url: "bot" }];
+    const { api, calls } = fakeApi(comments);
+    expect((await lastWordOn(api, repo, { number: 7, comments: 101 }))?.url).toBe("c99");
+    expect(calls.length).toBe(2);
+    const scan = await scanBacklog([{ number: 7, comments: 101, labels: [{ name: "owner:dev3" }] }],
+      { api: fakeApi(comments).api, repo, m: dev3, now: Date.parse("2026-11-02T08:00Z") });
+    expect([scan.turns, [...scan.snoozed]]).toEqual([[], [7]]);
+    expect(actionableOwned([{ number: 7, labels: [{ name: "owner:dev3" }] }], scan)).toEqual([]);
+    const bots = Array.from({ length: 150 }, (_, k) => ({ body: "<!-- ai-review -->", created_at: at(k), html_url: `b${k}` }));
+    expect(await lastWordOn(fakeApi(bots).api, repo, { number: 8, comments: 150 })).toBeNull();
+  });
+  it("reads every review page on a PR", async () => {
+    const reviews = Array.from({ length: 130 }, (_, k) => ({ body: k === 129 ? "QA: approved. → Dev 3: merge it." : "QA: note.", submitted_at: at(500 + k), html_url: `r${k}` }));
+    const { api } = fakeApi(thread(3), reviews);
+    expect((await lastWordOn(api, repo, { number: 2, comments: 3, pull_request: {} }))?.url).toBe("r129");
+  });
+  it("a handoff posted on comment 182 while you were busy is reported by the startup backlog", async () => {
+    const comments = thread(182, "CEO: → Dev 3: take #2576 now.");
+    const { api } = fakeApi(comments);
+    const items = [{ number: 364, comments: 182, labels: [{ name: "owner:dev3" }, { name: "core" }] }];
+    const scan = await scanBacklog(items, { api, repo, m: dev3, now: Date.parse("2026-11-02T08:00Z") });
+    expect(scan.turns.map((t) => t.last?.url)).toEqual(["c181"]);
+    expect(actionableOwned(items, scan).map((i) => i.number)).toEqual([364]);
+  });
+  it("your own handoff on the newest page is not your turn, and a future read there stays quiet", async () => {
+    const handed = await scanBacklog([{ number: 5, comments: 150, labels: [{ name: "owner:dev3" }] }],
+      { api: fakeApi(thread(150, "Dev 3: shipped. → QA: walk it.")).api, repo, m: dev3, now: Date.parse("2026-11-02T08:00Z") });
+    expect(handed.turns).toEqual([]);
+    dueWake(Infinity);
+    const timed = await scanBacklog([{ number: 6, comments: 150, labels: [{ name: "owner:dev3" }, { name: "blocked" }] }],
+      { api: fakeApi(thread(150, "Dev 3: read done. Next read 2026-11-02T09:00Z.")).api, repo, m: dev3, now: Date.parse("2026-11-02T08:00Z") });
+    expect([timed.turns, [...timed.snoozed]]).toEqual([[], [6]]);
+    expect(dueWake(Date.parse("2026-11-02T08:59Z"))).toBe(false);
+    expect(dueWake(Date.parse("2026-11-02T09:00Z"))).toBe(true);
+  });
+});
+
+describe("handoffs between waiter runs (#2576)", () => {
+  const dev = matchers("dev");
+  const c = (id: number, issue: number, created_at: string, body: string) =>
+    ({ id, body, created_at, issue_url: `https://api.github.com/repos/o/r/issues/${issue}`, html_url: `h${id}` });
+  // CEO repro: the #2573 comment to Dev at 07:51:55; Dev's previous poll saved its cursor at 07:49:00 and the next waiter started 07:52:14.
+  const handoff = c(1, 2573, "2026-11-02T07:51:55Z", "CTO: → Dev: take #2573.");
+  const since = "2026-11-02T07:52:14.000Z";
+  it("recovers an addressed comment on a non-owned item posted between runs, exactly once", () => {
+    const comments = [handoff, c(2, 2573, "2026-11-02T07:51:00Z", "Dev: → QA: ready."), c(3, 9, "2026-11-02T07:50:00Z", "CTO: general note.")];
+    const got = missedHandoffs(comments, { cursor: "2026-11-02T07:49:00Z", since, m: dev });
+    expect(got.map((x) => x.id)).toEqual([1]);
+    expect(missedHandoffs(comments, { cursor: "2026-11-02T07:49:00Z", since, ids: new Set([1]), m: dev })).toEqual([]);
+    expect(missedHandoffs(comments, { cursor: since, since: "2026-11-02T08:30:00Z", m: dev })).toEqual([]);
+  });
+  it("leaves owned items (and their holds) to the backlog, ignores bots and anything after this run began", () => {
+    expect(missedHandoffs([handoff], { cursor: "2026-11-02T07:49:00Z", since, owned: new Set([2573]), m: dev })).toEqual([]);
+    expect(missedHandoffs([c(4, 5, "2026-11-02T07:51:00Z", "<!-- ai-review -->\n→ Dev: fix")], { cursor: "2026-11-02T07:49:00Z", since, m: dev })).toEqual([]);
+    expect(missedHandoffs([c(5, 5, "2026-11-02T07:53:00Z", "CTO: → Dev: later one.")], { cursor: "2026-11-02T07:49:00Z", since, m: dev })).toEqual([]);
+  });
+  it("is bounded: no saved cursor recovers nothing, and an old cursor looks back at most a day", () => {
+    expect(missedHandoffs([handoff], { cursor: null, since, m: dev })).toEqual([]);
+    const old = c(6, 5, new Date(Date.parse(since) - HANDOFF_LOOKBACK_MS - 60_000).toISOString(), "CTO: → Dev: stale.");
+    expect(missedHandoffs([old, handoff], { cursor: "2026-10-01T00:00:00Z", since, m: dev }).map((x) => x.id)).toEqual([1]);
+  });
+  it("reads newest-first pages only until it passes the window, at most five", async () => {
+    const calls: string[] = [];
+    const rows = (page: number) => Array.from({ length: 100 }, (_, k) => c(page * 1000 + k, 1, new Date(Date.parse(since) - (page * 100 + k) * 1000).toISOString(), "x"));
+    const api = async (path: string) => { calls.push(path); return rows(Number(/[?&]page=(\d+)/.exec(path)![1])); };
+    expect((await commentsSince(api, "o/r", new Date(Date.parse(since) - 250 * 1000).toISOString())).complete).toBe(true);
+    expect(calls.length).toBe(2);
+    calls.length = 0;
+    const capped = await commentsSince(api, "o/r", "2026-01-01T00:00:00Z");
+    expect([calls.length, capped.comments.length, capped.complete]).toEqual([5, 500, false]);
+  });
+});
+
 describe("ready pool (#573)", () => {
   const issue = (number: number, ...labels: string[]) => ({ number, labels: labels.map((name) => ({ name })) });
   const pool = [
@@ -213,7 +375,7 @@ describe("ready pool (#573)", () => {
   ];
   it("offers the lane's unclaimed items, core first, to every role in the lane", () => {
     expect(readyPool(pool, "dev3").map((i) => i.number)).toEqual([11, 10]);
-    expect(readyPool(pool, "qa2").map((i) => i.number)).toEqual([13]);
+    expect(readyPool(pool, "qa2").map((i) => i.number)).toEqual([13, 11]); // #2473: then the Dev lane's core items
     expect(readyPool(pool, "devops")).toEqual([]);
     expect(readyPool(pool, "cto")).toEqual([]);
   });
@@ -222,6 +384,10 @@ describe("ready pool (#573)", () => {
     expect(readyPool(lanes, "designer").map((i) => i.number)).toEqual([20]);
     expect(readyPool(lanes, "cpo").map((i) => i.number)).toEqual([21]);
     expect(readyPool(lanes, "analyst").map((i) => i.number)).toEqual([22]);
+  });
+  it("never offers frozen work: `later` and `standing` stay out of the pool (#2052)", () => {
+    const pool = [issue(30, "ready", "lane:dev", "later"), issue(31, "ready", "lane:dev", "standing"), issue(32, "ready", "lane:dev")];
+    expect(readyPool(pool, "dev3").map((i) => i.number)).toEqual([32]);
   });
 });
 
@@ -239,6 +405,32 @@ describe("Dev 4 role", () => {
   });
 });
 
+describe("speed roles (Nov 1)", () => {
+  it("keeps Dev distinct from Dev 5 and Dev 6, and routes new-role handoffs", () => {
+    expect(matchers("dev").writtenByMe("Dev 5: fixed #2444")).toBe(false);
+    expect(matchers("dev5").writtenByMe("Dev 5: fixed #2444")).toBe(true);
+    expect(waitingOnMe("CTO: → Dev 6: take #2457.", matchers("dev6"))).toBe(true);
+    expect(waitingOnMe("CTO: → Dev 6: take #2457.", matchers("dev"))).toBe(false);
+    expect(waitingOnMe("CEO: → Dev 7: take #744.", matchers("dev7"))).toBe(true);
+    expect(waitingOnMe("CEO: → Dev 7: take #744.", matchers("dev"))).toBe(false);
+    expect(waitingOnMe("CEO: → Dev 8: take #749.", matchers("dev8"))).toBe(true);
+    expect(waitingOnMe("CEO: → Dev 8: take #749.", matchers("dev"))).toBe(false);
+    expect(waitingOnMe("CEO: → DevOps 2: #2593 cron.", matchers("devops2"))).toBe(true);
+    expect(waitingOnMe("CEO: → DevOps 2: #2593 cron.", matchers("devops"))).toBe(false);
+    expect(waitingOnMe("CEO: → DevOps 3: #2574 smoke.", matchers("devops3"))).toBe(true);
+    expect(waitingOnMe("CEO: → DevOps 3: #2574 smoke.", matchers("devops"))).toBe(false);
+    expect(waitingOnMe("CEO: → DevOps: apply #2603.", matchers("devops"))).toBe(true);
+    expect(matchers("devops").writtenByMe("DevOps 2: fixed #2537")).toBe(false);
+    expect(waitingOnMe("CEO: → Janitor: next is red.", matchers("janitor"))).toBe(true);
+    expect(waitingOnMe("CEO: → Speed: local jsdom fails.", matchers("speed"))).toBe(true);
+    expect(waitingOnMe("CEO: → Scout: refill lane:dev.", matchers("scout"))).toBe(true);
+  });
+  it("counts every new role's queue", () => {
+    const roles = lowQueues([]).map((x) => x.role);
+    for (const r of ["dev5", "dev6", "dev7", "dev8", "devops2", "devops3", "speed", "janitor", "scout"]) expect(roles).toContain(r);
+  });
+});
+
 describe("systemic CI failures (CTO auto-track)", () => {
   const run = (name: string, branch: string, conclusion = "failure", event = "pull_request") => ({ name, head_branch: branch, conclusion, event, html_url: `u-${branch}` });
   it("flags one workflow failing on 2+ PR branches, not a single PR's red run or push runs", () => {
@@ -248,6 +440,15 @@ describe("systemic CI failures (CTO auto-track)", () => {
     ]);
     expect(lines).toHaveLength(1);
     expect(lines[0]).toMatch(/^CI systemic: Core approval failed on 2 PR branches \(dev3\/701, designer\/847\)/);
+  });
+  it("ignores 0-job runs (#878) and branches that went green since", () => {
+    const at = (s: number) => new Date(Date.parse("2026-10-31T12:00:00Z") + s * 1000).toISOString();
+    const lines = systemicFailures([
+      { ...run("CI", "next"), run_started_at: at(0), updated_at: at(14) },
+      run("CI", "work/issue-2371", "success"), { ...run("CI", "work/issue-2371"), run_started_at: at(0), updated_at: at(190) },
+      { ...run("CI", "dev/1"), run_started_at: at(0), updated_at: at(190) },
+    ]);
+    expect(lines).toEqual([]);
   });
 });
 
@@ -261,6 +462,10 @@ describe("next item (#364: idle with a full queue)", () => {
     expect(nextItem([issue(12, "parked")], [])).toBeNull();
     // Standing channels and umbrellas (#364, #418) are never "your next item".
     expect(nextItem([issue(364, "standing"), issue(400, "core")], [])?.number).toBe(400);
+  });
+  it("owned PRs count toward a queue (#2122: QA's reviews are its work)", () => {
+    const prs = [1, 2, 3].map((n) => ({ ...issue(n, "owner:qa"), pull_request: {} }));
+    expect(lowQueues(prs).map((l) => l.role)).not.toContain("qa");
   });
   it("parked items don't count toward a queue", () => {
     expect(lowQueues([issue(1, "owner:dev"), issue(2, "owner:dev", "parked")]).map((l) => l.role)).toContain("dev");
@@ -405,7 +610,7 @@ process.exit(1);
 `, { mode: 0o755 });
       const result = spawnSync(process.execPath, [
         fileURLToPath(new URL("../scripts/wait-for-work.mjs", import.meta.url)), "--me", "cto", "--probe",
-      ], { env: { ...process.env, PATH: `${dir}:${process.env.PATH}` }, encoding: "utf8", timeout: 5_000 });
+      ], { env: { ...process.env, TMPDIR: dir, PATH: `${dir}:${process.env.PATH}` }, encoding: "utf8", timeout: 5_000 });
       expect(result.error).toBeUndefined();
       expect(result.status).toBe(3);
       expect(result.stderr).toContain("Wait deadline reached during GitHub rate-limit backoff");
@@ -507,4 +712,95 @@ describe("never wait while you own actionable work (#364, CEO Oct 29)", () => {
     expect(actionableOwned([])).toEqual([]);
     expect(OWNS_WORK).not.toBe(0);
   });
+});
+
+describe("wake on the world (#2473)", () => {
+  const since = "2026-11-01T12:00:00Z";
+  const run = (o: Record<string, unknown>) => ({ name: "CI", event: "push", head_branch: "next", head_sha: "7aa95032aa", status: "completed",
+    conclusion: "failure", run_started_at: "2026-11-01T12:01:00Z", updated_at: "2026-11-01T12:05:00Z", html_url: "u", ...o });
+
+  it("wakes everyone on red next or main code (push runs of any workflow), once per run", () => {
+    const lines = redShared([run({ id: 1, name: "boundaries" }), run({ id: 2, name: "CI", head_branch: "main" })], { since });
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toMatch(/^Red next: boundaries failed at 7aa9503 u\. No PR names 7aa9503 yet/);
+    expect(lines[1]).toMatch(/^Red main: CI failed/);
+    expect(redShared([run({ id: 1, name: "boundaries" }), run({ id: 2, name: "CI", head_branch: "main" })], { since, seen: new Set([1]) })).toHaveLength(1);
+  });
+
+  it("leaves scheduled runs (production smokes, drift, the train) to their own alert issues", () => {
+    expect(redShared([run({ name: "Create smoke", event: "schedule", head_branch: "main" }), run({ name: "train", event: "workflow_dispatch" })], { since })).toEqual([]);
+  });
+
+  it("stays quiet when the newest run passed or is still running, nothing ran, it's old, a fix PR is open, or it isn't shared", () => {
+    expect(redShared([run({ conclusion: "success", updated_at: "2026-11-01T12:09:00Z" }), run({})], { since })).toEqual([]);
+    expect(redShared([run({ status: "in_progress", conclusion: null }), run({})], { since })).toEqual([]);
+    expect(redShared([run({ updated_at: "2026-11-01T12:01:10Z" })], { since })).toEqual([]); // no job started (#878)
+    expect(redShared([run({ updated_at: "2026-11-01T11:59:00Z", run_started_at: "2026-11-01T11:50:00Z" })], { since })).toEqual([]);
+    expect(redShared([run({})], { since, openPulls: [{ title: "#1 Fix forward 7aa9503", body: "" }] })).toEqual([]);
+    expect(redShared([run({})], { since, openPulls: [{ title: "#2 Unrelated", body: "fixes #2" }] })).toHaveLength(1);
+    expect(redShared([run({ head_branch: "work/issue-1" }), run({ event: "issue_comment", head_branch: "main" })], { since })).toEqual([]);
+  });
+
+  it("finds your PRs by linked issue, owner label or signature, and wakes on their failed CI", () => {
+    const pulls = [
+      { number: 1, title: "#2473 Waiter", body: "", head: { ref: "a" } },
+      { number: 2, title: "Other", body: "Dev 3: fixes #9", head: { ref: "b" } },
+      { number: 3, title: "#9 x", body: "Dev 2: fixes #9", head: { ref: "c" } },
+      { number: 4, title: "Owned PR", body: "", head: { ref: "d" } },
+    ];
+    expect(myPulls(pulls, "dev3", new Set([2473, 4])).map((p: { number: number }) => p.number)).toEqual([1, 2, 4]);
+    const prRun = (o: Record<string, unknown>) => run({ event: "pull_request", head_branch: "a", ...o });
+    expect(failedOnMine([prRun({ name: "core" }), prRun({ head_branch: "c" })], new Set(["a"]), since))
+      .toEqual(["CI failed on your PR branch a: core u"]);
+    expect(failedOnMine([prRun({ conclusion: "success" }), prRun({})], new Set(["a"]), since)).toEqual([]);
+  });
+
+  it("reports your PR reaching main once per role, even if it arrived between waits", () => {
+    const reported = new Set([7]);
+    expect(mainArrival({ number: 8 }, "diverged", reported)).toBe("wait");
+    expect(mainArrival({ number: 8 }, "behind", reported)).toBe("wait");
+    expect(mainArrival({ number: 8 }, "ahead", reported)).toBe("report");
+    expect(mainArrival({ number: 8 }, "identical", reported)).toBe("report");
+    expect(mainArrival({ number: 7 }, "ahead", reported)).toBe("drop");
+  });
+
+  it("gives dry lanes the Dev lane's core items after their own (E8); builders and DevOps don't borrow", () => {
+    const issue = (number: number, ...labels: string[]) => ({ number, labels: labels.map((name) => ({ name })) });
+    const pool = [issue(5, "ready", "lane:dev", "core"), issue(6, "ready", "lane:dev"), issue(7, "ready", "lane:docs"), issue(8, "ready", "lane:dev", "core", "owner:dev")];
+    for (const role of BORROWS_DEV) expect(readyPool(pool, role).map((i) => i.number)).toEqual(role === "docs" ? [7, 5] : [5]);
+    expect(readyPool(pool, "devops")).toEqual([]);
+    expect(readyPool(pool, "designer")).toEqual([]);
+    expect(readyPool(pool, "dev").map((i) => i.number)).toEqual([5, 6]);
+  });
+
+  it("--wake stops a live waiter within seconds, which tells its chat to read messages; no waiter means exit 1", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "waiter-wake-test-"));
+    const script = fileURLToPath(new URL("../scripts/wait-for-work.mjs", import.meta.url));
+    const env = { ...process.env, TMPDIR: dir, PATH: `${dir}:${process.env.PATH}` };
+    let waiter: ReturnType<typeof spawn> | null = null;
+    try {
+      writeFileSync(join(dir, "gh"), "#!/bin/sh\nprintf 'HTTP/2.0 200 OK\\r\\n\\r\\n[]'\n", { mode: 0o755 });
+      expect(spawnSync(process.execPath, [script, "--wake", "qa"], { env, encoding: "utf8" }).status).toBe(1);
+      // A stale lock whose pid now belongs to another role's waiter (or anything else) is never signalled.
+      writeFileSync(join(dir, "adbrain-wait-for-work-dev.pid"), String(process.pid));
+      expect(spawnSync(process.execPath, [script, "--wake", "dev"], { env, encoding: "utf8" }).status).toBe(1);
+      let out = "";
+      waiter = spawn(process.execPath, [script, "--me", "qa", "--max-min", "5"], { env, stdio: ["ignore", "pipe", "pipe"] });
+      waiter.stdout!.on("data", (chunk) => { out += chunk; });
+      const exited = new Promise<number | null>((resolve) => waiter!.once("exit", resolve));
+      for (const end = Date.now() + 15_000; Date.now() < end && !out.includes("Waiting for work"); await new Promise((r) => setTimeout(r, 100)));
+      expect(out).toContain("Waiting for work");
+      const woke = spawnSync(process.execPath, [script, "--wake", "qa"], { env, encoding: "utf8" });
+      expect(woke.status).toBe(0);
+      const started = Date.now();
+      expect(await exited).toBe(0);
+      expect(Date.now() - started).toBeLessThan(10_000);
+      expect(out).toContain("someone needs QA now");
+      expect(out).toContain(TRAIN_RULE);
+      expect(existsSync(join(dir, "adbrain-wait-for-work-qa.pid"))).toBe(false);
+    } finally {
+      if (waiter?.exitCode === null) waiter.kill("SIGKILL");
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 30_000);
 });

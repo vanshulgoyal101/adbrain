@@ -10,7 +10,7 @@ describe("#1081: past open → message rate", () => {
   it("sums the business's WhatsApp campaigns and hides below 10 opens", () => {
     // #157: 28 opened WhatsApp, 1 messaged.
     expect(handoffRate([{ whatsapp_opens: 21, conversations: 1 }, { whatsapp_opens: 7, conversations: null }])).toEqual({ opens: 28, messages: 1 });
-    expect(handoffLine({ opens: 28, messages: 1 })).toBe("Your past WhatsApp ads: 28 opened WhatsApp, 1 sent a message (4%).");
+    expect(handoffLine({ opens: 28, messages: 1 })).toBe("Your past WhatsApp ads: 28 taps on the WhatsApp button, 1 sent a message (4%).");
     expect(handoffRate([{ whatsapp_opens: 9, conversations: 2 }])).toBeNull();
     expect(handoffRate([])).toBeNull();
     expect(handoffRate([{ whatsapp_opens: 10, conversations: 40 }])).toEqual({ opens: 10, messages: 10 });
@@ -40,7 +40,7 @@ describe("#1081: When they tap shows the rate and the note", () => {
   it("shows the past rate and a soft note with Edit for a general ask", () => {
     const onEdit = vi.fn();
     render(<WhenTheyTap message={message} businessName="Solaride" adsLanguage="en" onEdit={onEdit} handoff={{ opens: 28, messages: 1 }} offers={offers} />);
-    expect(screen.getByText("Your past WhatsApp ads: 28 opened WhatsApp, 1 sent a message (4%).")).toBeInTheDocument();
+    expect(screen.getByText("Your past WhatsApp ads: 28 taps on the WhatsApp button, 1 sent a message (4%).")).toBeInTheDocument();
     expect(screen.getByText(/is general\. People send a concrete, local ask more often/)).toBeInTheDocument();
     screen.getByRole("button", { name: "Edit" }).click();
     expect(onEdit).toHaveBeenCalled();

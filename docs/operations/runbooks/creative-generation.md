@@ -32,8 +32,12 @@ Before deploying the regeneration claim caller, apply the reviewed
 `20261001_creative_regeneration_claims.sql` migration to the verified target and
 independently confirm its ledger checksum, private table RLS, and service-role-only
 execute grants on both claim and finish RPCs. Do not replay the canonical schema.
-An overlapping request receives 409; a `processing` or `unresolved` claim does
-not expire or authorize another paid attempt. The finish RPC releases only a
+An overlapping request receives 409. After
+`20261029_creative_regeneration_stale_claims.sql`, a `processing` claim untouched
+for 15 minutes (a request killed past `maxDuration` or by a deploy) is taken over
+by the next attempt (#2219); an `unresolved` claim never expires or authorizes
+another paid attempt. A free-picture failure (Pollinations, Cloudflare) is a known
+$0 outcome and no longer creates an `unresolved` claim. The finish RPC releases only a
 `processing` claim with a known outcome; it cannot clear an `unresolved` claim.
 A fact-check rejection is a known outcome when every text attempt completed and its
 usage receipt saved: the route releases it and returns 422 (#281).

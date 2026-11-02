@@ -88,7 +88,7 @@ describe("updateCreativeCopy", () => {
 
   it("refuses an ad the owner can't see (RLS hides it) and saves nothing", async () => {
     h.rows.creatives = null;
-    await expect(save()).resolves.toEqual({ ok: false, error: "Creative not found or no longer accessible." });
+    await expect(save()).resolves.toEqual({ ok: false, error: "We couldn't find this ad. It may have been deleted; refresh the page." });
     expect(h.updates).toEqual([]);
   });
 
@@ -125,6 +125,8 @@ describe("updateCreativeCopy", () => {
     expect(res.warnings).toEqual([
       "\"20%\" isn't in your Brand. Check it's true, or add it to your Brand's offers.",
       "\"Guaranteed\" isn't in your Brand. Check it's true, or add it to your Brand's offers.",
+      // #2423: an outcome guarantee is refused for solar whatever the Brand says.
+      "\"guaranteed saving\" is a promise Meta often rejects. Consider rewording it.",
     ]);
     expect(h.updates).toHaveLength(1);
   });

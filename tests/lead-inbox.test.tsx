@@ -127,6 +127,19 @@ describe("<LeadInbox> Meta readiness", () => {
     expect(screen.queryByRole("button", { name: /check now/i })).toBeNull();
   });
 
+  it("#1838: while Meta asks us to wait, neither opening nor Check now calls Meta; a tap says when we'll check", async () => {
+    const fetch = vi.fn();
+    global.fetch = fetch as never;
+    localStorage.setItem("lead-sync:owner:b1", String(Date.now() - 40 * 60_000));
+    const until = new Date(Date.now() + 20 * 60_000).toISOString();
+    render(<LeadInbox businessName="Solaride" initialLeads={[]} metaReady syncScope="owner:b1" metaWaitUntil={until} />);
+    expect(screen.getByText("Meta is limiting how often we can check right now. New form enquiries may show up to about 40 minutes late; WhatsApp chats still reach your phone as usual.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Check now" }));
+    expect(await screen.findByText(/^Meta asked us to wait\. We'll check again at \d{1,2}:\d{2} [ap]m\.$/)).toBeInTheDocument();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(fetch).not.toHaveBeenCalledWith("/api/leads/sync", expect.anything());
+  });
+
   it("offers a quiet Check now and the last update time once Meta is connected (#1260)", () => {
     localStorage.setItem("lead-sync:owner:b1", String(Date.now() - 5 * 60_000));
     render(<LeadInbox businessName="Solaride" initialLeads={[]} metaReady syncScope="owner:b1" />);

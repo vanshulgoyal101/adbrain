@@ -188,7 +188,7 @@ export async function createDraft(
   if ("ok" in plan) return plan;
   const activeCount = await repository.countActive(input.actor, input.now);
   if (activeCount >= MAX_ACTIVE_DRAFTS) {
-    return failure("CONFLICT", "Draft limit reached. Finish or remove an existing draft first.");
+    return failure("CONFLICT", "You have too many unfinished campaigns. Finish or remove one, then try again.");
   }
   return { ok: true, draft: draftRecordToDTO(await repository.insert(plan)) };
 }

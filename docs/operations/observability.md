@@ -77,6 +77,8 @@ The stream includes:
   Meta reads), each `withMetaConnection` run gets its own request ID and business, shared with its
   `meta.<purpose>` event (#615). A context keeps at most 100
   events, so a long cron run logs its first 100 calls to the database (all to the log stream).
+- Cloudflare's daily free-picture limit (#2404): `image.free_daily_limit`, `kind=system`, `outcome=failed`,
+  with `provider` and `errorCode=IMAGE_FREE_DAILY_LIMIT`, once per refusal; `/api/cron/llm-credit` counts the day.
 - Audit/usage persistence failures and product-log persistence health warnings.
 - Authenticated page views and browser error/rejection categories on the eight
   workspace pages. These are marked `kind=client`: client-reported signals, not
@@ -86,7 +88,8 @@ The stream includes:
   regeneration/export, campaign create/review/activate/pause/sync, Brand save,
   upload/delete, follow-up save, payment quote/checkout, Meta connect controls and
   `meta.access_request` (a new owner asking for Facebook access before App Review),
-  the audience edit (`campaign.edit_audience`), and Help on WhatsApp (`help.whatsapp`, #1284).
+  the audience edit (`campaign.edit_audience`), Help on WhatsApp (`help.whatsapp`, #1284), and hiding
+  Home's "last week" card (`home.week_summary_dismiss`, #1668; Home reads it to keep the card hidden that week).
 - `lead.customer_marked` (#2026), `kind=action`, server-side: an enquiry crossing to or from
   "customer" in the inbox or a campaign's WhatsApp chats. Attributes: `source` (inbox|whatsapp),
   `campaignId` when known, `undone` (true when unmarked).
@@ -145,7 +148,7 @@ privacy notice and applicable consent requirements before production rollout.
 
 1. Inspect the target's existing schema and configuration. For a new sink, apply
   [the product-event migration](../../db/migrations/20260918_product_events.sql)
-  under the [release policy](../RELEASING.md). Existing sinks need only the new
+  under the [release policy](releasing.md). Existing sinks need only the new
   [rollup migration](../../db/migrations/20260928_product_event_rollups.sql) before
   the next cleanup; do not replay old applied migrations.
 2. Deploy through the protected release workflow. Structured runtime JSON is on

@@ -46,7 +46,8 @@ at most five relevant advisory notes (up to 1000 characters of serialized notes)
 alongside the current request. Generation gives these notes to concept and image
 providers only after an accepted request; a replay does not launch another provider
 call or reread notes.
-"Ignore preferences" and "fresh direction" omit them for that request. Notes
+A request whose text says "ignore preferences" (or skip, without, forget) or
+"fresh direction" omits them for that request (typed words, not a button). Notes
 cannot authorize spend, justify a commercial claim, override an explicit current
 brief, or turn an old tagline into required copy. Explicit Brand and legal
 requirements remain separate. A model-written Create brief is direction only,

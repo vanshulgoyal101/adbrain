@@ -195,10 +195,13 @@ describe("core: <SetupBusinessStep> (#1269)", () => {
     await act(async () => fireEvent.click(makeMyAds()));
     expect(screen.getByText("Add one offer, like a free visit or a first-time price.")).toBeInTheDocument();
     expect(mocks.push).not.toHaveBeenCalled();
+    expect(sessionStorage.getItem(`setup-make-tap:${launched.id}`)).toBeNull();
     type("Your offer", "Free site survey this week");
     await act(async () => fireEvent.click(makeMyAds()));
     await waitFor(() => expect(mocks.push).toHaveBeenCalledWith("/create?again=1"));
     expect(mocks.saveSetupBusiness.mock.calls.at(-1)![1]).toMatchObject({ offer: "Free site survey this week", vertical: "Rooftop solar" });
+    // #1934: the tap is kept for step 2's one arrival, after the save.
+    expect(Number(sessionStorage.getItem(`setup-make-tap:${launched.id}`))).toBeGreaterThan(0);
   });
 
   it("#1934: 'Change' opens the folded fields", async () => {

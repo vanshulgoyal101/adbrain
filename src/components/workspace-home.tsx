@@ -18,9 +18,11 @@ import type { AuditLog, Business, Campaign, CampaignResult, CreativePreview } fr
 import { campaignAttention } from "@/lib/campaign/health";
 import { formatReplyTime } from "@/lib/leads/first-reply";
 import { campaignStatus, Status } from "@/components/ui/status";
-import { goneInMeta, pausableCampaigns, recentlyDeletedInMeta } from "@/lib/campaign/gone-in-meta";
+import { goneInMeta, pausableCampaigns, pausedInMeta, recentlyDeletedInMeta, recentlyRaisedInMeta } from "@/lib/campaign/gone-in-meta";
 import type { HomeAdReview } from "@/lib/campaign/home-ad-review";
-import { timeAgoIn, translator, type AppLocale } from "@/i18n/locale";
+import { durationIn } from "@/i18n/duration";
+import { namespaceMessages, timeAgoIn, translator, type AppLocale } from "@/i18n/locale";
+import { ageMs, throttleActive } from "@/lib/campaign/meta-wait";
 
 export interface WorkspaceHomeProps {
   business: Business | null;
@@ -43,9 +45,17 @@ export interface WorkspaceHomeProps {
   adReview?: HomeAdReview | null;
   /** #1469: the streamed rejected-ads section, shown when `adReview` is "rejected". */
   rejectedAds?: ReactNode;
+  /** #2032: the Brand meter card, after the next step; left out when the Brand is complete or snoozed. */
+  brandMeter?: ReactNode;
+  /** #1668: the streamed Monday "last week" card. */
+  weekSummary?: ReactNode;
   /** #1650: the day-7 'would you pay ₹999 a month?' card, when it's due. */
   pilotQuestion?: ReactNode;
+  /** #2036: the weekly results card for WhatsApp Status, when it's offered. */
+  resultsCard?: ReactNode;
   now?: number;
+  /** #1838: until when Meta asked us to wait before checking again; the results line says the numbers may be old. */
+  metaWaitUntil?: string | null;
   /** #1438: the owner's app language (Settings); English by default. */
   locale?: AppLocale;
 }
@@ -70,8 +80,12 @@ export function WorkspaceHome({
   firstEnquiry = null,
   adReview = null,
   rejectedAds,
+  weekSummary,
   pilotQuestion,
+  resultsCard,
+  brandMeter,
   now,
+  metaWaitUntil = null,
   locale = "en",
 }: WorkspaceHomeProps) {
   const t = translator(locale, "home");
@@ -79,7 +93,7 @@ export function WorkspaceHome({
   const liveCampaigns = campaigns.filter((campaign) => !goneInMeta(campaign) || recentlyDeletedInMeta(campaign, now));
   const summary = business ? homeResults(campaigns, results) : null;
   // #1292's line already names the newest person waiting, so the verdict doesn't say it twice.
-  const verdicts = business ? homeVerdicts(campaigns, results, { now, waiting: firstEnquiry ? 0 : waiting }) : null;
+  const verdicts = business ? homeVerdicts(campaigns, results, { now, waiting: firstEnquiry ? 0 : waiting, words: { locale, messages: namespaceMessages(locale, "verdict") } }) : null;
   const leadCampaign = verdicts?.lead ? campaigns.find((campaign) => campaign.id === verdicts.lead?.campaignId) : null;
   const stale = business ? staleCampaignIds(campaigns, results, now) : [];
   const unlogged = business ? unloggedChats(campaigns, results) : 0;
@@ -120,33 +134,37 @@ export function WorkspaceHome({
         <p role="status" aria-label={t("metaReview")} className="text-sm text-slate-900">{t("metaChecking")}</p>
       )}
       {adReview?.kind === "rejected" && rejectedAds}
+      {weekSummary}
+      {resultsCard}
       {pilotQuestion}
 
       {stale.length > 0 && <StaleResultsRefresher campaignIds={stale} />}
       {summary && (
         <section aria-labelledby="results-title">
           <h2 id="results-title" className="sr-only">{t("resultsSoFar")}</h2>
-          {/* #1934 (CPO #1924): a new offer re-runs the 3 steps in returning mode. */}
-          <Link href="/brand?again=1" className="float-right ml-4 inline-flex min-h-11 items-center rounded-md border border-slate-300 bg-white px-4 text-sm font-medium text-slate-900 hover:bg-slate-50">
-            {t("newCampaign")}
-          </Link>
-          {verdicts?.lead && leadCampaign && (
-            <p className="mb-4 max-w-2xl text-[17px] leading-snug text-slate-900">
-              {verdicts.lead.verdict.sentence}{" "}
-              <Link href="/campaigns" className="text-sm font-medium text-blue-700 hover:underline">
-                {leadCampaign.name || t("untitledCampaign")}
-              </Link>
-            </p>
-          )}
-          <dl className="grid grid-cols-3 gap-4 sm:flex sm:gap-16">
+          <div className="mb-5 flex flex-col items-start gap-3 sm:flex-row sm:justify-between">
+            {verdicts?.lead && leadCampaign && (
+              <p className="min-w-0 max-w-2xl break-words text-[17px] leading-snug text-slate-900">
+                {verdicts.lead.verdict.sentence}{" "}
+                <Link href="/campaigns" className="text-sm font-medium text-blue-700 hover:underline">
+                  {leadCampaign.name || t("untitledCampaign")}
+                </Link>
+              </p>
+            )}
+            {/* #1934 (CPO #1924): a new offer re-runs the 3 steps in returning mode. */}
+            <Link href="/brand?again=1" className="inline-flex min-h-11 max-w-full items-center rounded-md border border-slate-300 bg-white px-4 text-sm font-medium text-slate-900 hover:bg-slate-50 sm:ml-auto sm:shrink-0">
+              {t("newCampaign")}
+            </Link>
+          </div>
+          <dl className="flex flex-wrap gap-x-8 gap-y-5 sm:gap-x-16">
             {[
               { label: summary.chatsOnly ? t("chats") : t("enquiries"), value: String(summary.enquiries) },
               { label: t("spent"), value: formatMoney(summary.spend) },
               { label: summary.chatsOnly ? t("perChat") : t("perEnquiry"), value: summary.perEnquiry === null ? null : formatMoney(summary.perEnquiry) },
             ].map((metric) => (
-              <div key={metric.label} className="flex min-w-0 flex-col-reverse">
+              <div key={metric.label} className="flex shrink-0 flex-col-reverse">
                 <dt className="mt-1 text-xs text-slate-600">{metric.label}</dt>
-                <dd className="break-words text-4xl font-medium tracking-[-0.02em] text-slate-950">
+                <dd className="whitespace-nowrap text-3xl font-medium tabular-nums tracking-[-0.02em] text-slate-950 sm:text-4xl">
                   {metric.value ?? <span className="text-slate-400" aria-label={t("notYet")}>—</span>}
                 </dd>
               </div>
@@ -165,6 +183,11 @@ export function WorkspaceHome({
             {t("updated", { ago: timeAgoIn(locale, new Date(summary.oldestFetchedAt), now === undefined ? undefined : new Date(now)) })} ·{" "}
             <Link href="/campaigns" className={linkClass}>{t("seeCampaigns")}</Link>
           </p>
+          {throttleActive(metaWaitUntil, now === undefined ? undefined : new Date(now)) && (
+            <p className="mt-1 text-xs text-slate-600">
+              {t("metaWaiting", { age: durationIn(locale, ageMs(summary.oldestFetchedAt, now)) })}
+            </p>
+          )}
         </section>
       )}
 
@@ -208,6 +231,8 @@ export function WorkspaceHome({
             )}
           </section>
 
+          {brandMeter}
+
           {business && (
             <section aria-labelledby="campaigns-title" className="min-w-0">
               <div className="flex items-center justify-between gap-3">
@@ -226,6 +251,9 @@ export function WorkspaceHome({
                     const attention = campaignAttention(campaign);
                     const judged = verdicts?.labels.get(campaign.id);
                     const deleted = goneInMeta(campaign) === "Deleted in Meta";
+                    // #1903: paused in Meta takes the status line; a budget raised in Meta shows for a week (a lower one stays on Campaigns).
+                    const paused = pausedInMeta(campaign);
+                    const raised = recentlyRaisedInMeta(campaign, now);
                     return (
                       <li key={campaign.id} className="py-3 sm:flex sm:items-center sm:justify-between sm:gap-6">
                         <div className="min-w-0">
@@ -233,8 +261,9 @@ export function WorkspaceHome({
                             {campaign.name || t("untitledCampaign")}
                           </Link>
                           {attention && <p className="mt-1 text-xs font-medium text-danger">Needs attention: {attention}</p>}
+                          {raised && <p className="mt-1 border-l-2 border-warning pl-2 text-xs text-slate-700">{t("budgetRaisedInMeta", { now: formatMoney(raised.nowRupees), was: formatMoney(raised.wasRupees) })}</p>}
                         </div>
-                        {deleted ? <p className="mt-1 text-sm text-slate-700 sm:mt-0 sm:max-w-xs">{t("deletedInMeta")}</p> : <p className="mt-1 flex shrink-0 gap-x-4 text-xs text-slate-600 sm:mt-0">
+                        {deleted || paused ? <p className="mt-1 text-sm text-slate-700 sm:mt-0 sm:max-w-xs">{t(deleted ? "deletedInMeta" : "pausedInMeta")}</p> : <p className="mt-1 flex shrink-0 gap-x-4 text-xs text-slate-600 sm:mt-0">
                           <Status tone={status.tone}>{status.label}</Status>
                           {judged && <span>{judged}</span>}
                           {campaign.daily_budget != null && <span className="sm:w-24 sm:text-right">{formatPerDay(campaign.daily_budget)}</span>}

@@ -2,10 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   buildConceptMessages,
   conceptValidationRules,
-  conceptImagePrompt,
   validateConcept,
   savedCreativeDescription,
 } from "@/lib/creative/concept";
+import { conceptImagePrompt } from "@/lib/creative/image-prompt";
 import { AD_ANGLES } from "@/lib/templates/ads";
 
 const input = {
@@ -56,7 +56,8 @@ describe("creative concept contract", () => {
     const result = validateConcept({ ...concept, headline: "x".repeat(41), sourceQuotes: ["ok", ""] }, input);
     expect(result.success).toBe(false);
     const rules = conceptValidationRules(result.success ? [] : result.issues);
-    expect(rules).toEqual(["schema:headline:too_big"]);
+    // #2444: the other checks run on the cut copy, so the invented quote shows up beside the length.
+    expect(rules).toEqual(["schema:headline:too_big", "sourceQuotes"]);
     expect(JSON.stringify(rules)).not.toContain("xxx");
     const withoutLine: Record<string, unknown> = { ...concept };
     delete withoutLine.supportingText;
@@ -103,6 +104,8 @@ describe("creative concept contract", () => {
     expect(context.brand.usps).toEqual(input.brand.usps);
     expect(context.placement.height).toBe(1920);
     expect(messages[0].content).toContain("not visible to you");
+    // #2166: prices and numbers in English digits whatever the ad's language.
+    expect(messages[0].content).toContain("English digits (₹499, 4.8★, 50%) in every language");
   });
 
   it("uses declared preferences as advisory concept and image style, never claim evidence", () => {
@@ -306,6 +309,17 @@ describe("creative concept contract", () => {
     expect(hindiRules({ supportingText: "Costs may rise over ₹10,000/kW after 31 Dec", sourceQuotes: [hinglish] }, { sourceFacts: [hinglish] })).toEqual([]);
     expect(hindiRules({ supportingText: "Costs may rise over ₹1,000/kW after 31 Dec", sourceQuotes: [factory] }, { sourceFacts: [factory] }))
       .toEqual(["unsupported-commercial-claim"]);
+  });
+
+  // #2166: Devanagari and Gurmukhi digits are the same amounts as English digits.
+  it.each([
+    ["सिर्फ़ ₹४९९ में जाँच।", "जाँच सिर्फ़ ₹499"],
+    ["सिर्फ़ ४९९ रुपये में जाँच।", "जाँच सिर्फ़ 499 रुपये"],
+    ["ਸਿਰਫ਼ ₹੪੯੯ ਵਿੱਚ।", "Checkup at ₹499"],
+    ["५०% छूट", "50% off on installation"],
+  ])("checks an amount in Indian digits like English digits: %s (#2166)", (primary_text, fact) => {
+    expect(hindiRules({ primary_text })).toEqual(["unsupported-commercial-claim"]);
+    expect(hindiRules({ primary_text, sourceQuotes: [fact] }, { sourceFacts: [fact] })).toEqual([]);
   });
 
   it("compares Hindi openings with their vowel signs (#290)", () => {

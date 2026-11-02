@@ -1,17 +1,12 @@
 import { test, expect } from "@playwright/test";
-import { createServerClient } from "@supabase/ssr";
+import { signInBrowser } from "../scripts/lib/test-session.mjs";
 import { buildAttemptBlockers } from "../src/lib/meta/attempt-recovery";
 
 for (const width of [1440, 390]) {
   test(`missing access recovers to explicit asset selection at ${width}px`, async ({ page, context }, testInfo) => {
     const databaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
     expect(["localhost", "127.0.0.1"]).toContain(new URL(databaseUrl).hostname);
-    let cookies: Parameters<typeof context.addCookies>[0] = [];
-    const auth = createServerClient(databaseUrl, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
-      cookies: { getAll: () => [], setAll: updates => { cookies = updates.map(({ name, value }) => ({ name, value, domain: "localhost", path: "/", sameSite: "Lax" })); } },
-    });
-    expect((await auth.auth.signInWithPassword({ email: process.env.DEV_LOGIN_EMAIL!, password: process.env.DEV_LOGIN_PASSWORD! })).error).toBeNull();
-    await context.addCookies(cookies);
+    await signInBrowser(context, "http://localhost:3939", process.env.DEV_LOGIN_EMAIL!);
     await page.setViewportSize({ width, height: 900 });
     const businessId = "11111111-1111-4111-8111-111111111111";
     const attemptId = "22222222-2222-4222-8222-222222222222";
@@ -53,8 +48,8 @@ for (const width of [1440, 390]) {
     await page.getByRole("button", { name: "Connect Business" }).click();
     const dialog = page.getByRole("dialog");
     await dialog.getByRole("button", { name: "Connect Business" }).click();
-    await expect(dialog.getByText(/No accessible ad account was returned/)).toBeVisible();
-    await expect(dialog.getByText(/No accessible Facebook Page was returned/)).toBeVisible();
+    await expect(dialog.getByText(/Meta shared no ad account with AdBrain/)).toBeVisible();
+    await expect(dialog.getByText(/Meta shared no Facebook Page with AdBrain/)).toBeVisible();
     await expect(dialog.getByRole("link", { name: "Open business settings" })).toHaveCount(2);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     const bounds = await dialog.boundingBox();

@@ -52,10 +52,15 @@ Details: [Connect Meta](setup.md), [Prepare a campaign](launch.md),
 The Campaigns page and Home show spend, chats or enquiries and the cost of each,
 with how fresh the numbers are ("Updated 4m ago"). AdBrain refreshes them in the
 background and when the page opens. A running campaign with a problem (Meta
-rejected an ad, no one has seen it after 6 hours, or its end date has passed)
-shows **Needs attention** with the reason. The owner can pause any campaign, set
+rejected an ad, or no one has seen it after 6 hours) shows **Needs attention** with
+the reason. A run whose end date has passed reads as ended, and AdBrain pauses it
+within 15 minutes. The owner can pause any campaign, set
 a weekly spending cap (with auto-pause on, AdBrain pauses the ads when the week's
-spend reaches it), and share results on WhatsApp. **New campaign** runs the same three steps again,
+spend reaches it), and share results on WhatsApp. The four reasons AdBrain pauses a
+campaign by itself are in [Why AdBrain paused your campaign](manage.md#why-adbrain-paused-your-campaign). After a week with 5 or more enquiries the
+owner logged, Home offers a results card for their WhatsApp Status: the
+business, how many people in their area enquired, their best ad and their
+WhatsApp number, never money. **New campaign** runs the same three steps again,
 asking only what changed. Details: [Manage](manage.md), [Settings](settings.md).
 
 ## Enquiries: reply to customers
@@ -74,4 +79,19 @@ results count it. Details: [Manage: sync, results and leads](manage.md).
 | Meta | Reviews and shows the ads, charges the ad money to the owner's ad account |
 
 The app also works in Hindi (Settings → App language): the menu, app bar and
-Home, including Recent activity, which shows only the Hindi label for each event.
+Home, including Recent activity, which shows only the Hindi label for each event,
+and each campaign's "How it's going" sentence and buttons, on Home and Campaigns (#1438).
+The main errors from making ads and saving a campaign (AI allowance used, too many
+unfinished campaigns, a save or check that didn't go through) also come in Hindi (#2305).
+So do the errors from changing an ad's background, words or version, the assistant and
+Download (#2324).
+So do the refusals when you turn a campaign on, pause it or delete it (spend cap, Meta funds,
+Meta access, a pause Meta didn't confirm) (#2312).
+So do the errors from refreshing results, bringing in campaigns from Meta, changing a
+budget and pausing one ad (#2314).
+Errors from Enquiries and connecting Facebook come in Hindi too (#2327), as do the Day 7
+question, privacy requests and the lead-form picker (#2335).
+Errors from Brand's website or text autofill and from preparing a campaign plan come in Hindi too (#2330).
+So do the errors from saving your spend limits and preferences in Settings (#2334).
+When your phone loses its connection or the server sends no reply, the messages on Create, Review
+and Brand pictures still come in your language (#2345).

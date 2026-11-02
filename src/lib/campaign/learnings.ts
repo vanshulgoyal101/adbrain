@@ -27,12 +27,14 @@ export type LaunchSnapshotInput = {
   metaCreativeIds?: string[];
 };
 
-/** #906: the placements Meta was sent: automatic everywhere, or automatic within named platforms (WhatsApp leaves Audience Network out). */
+/** #906: the placements Meta was sent: automatic everywhere, or automatic within named platforms (WhatsApp leaves Audience Network out; #2273 also Facebook Reels). */
 function sentPlacements(targetings: string[] | undefined): string {
   const platforms = new Set((targetings ?? []).map((form) => {
     try {
-      const value = (JSON.parse(form) as { publisher_platforms?: unknown }).publisher_platforms;
-      return Array.isArray(value) ? value.join(",") : "advantage";
+      const { publisher_platforms: value, facebook_positions: facebook } = JSON.parse(form) as { publisher_platforms?: unknown; facebook_positions?: unknown };
+      // #2273: the no-Reels test is its own arm in the ledger.
+      const noReels = Array.isArray(facebook) && !facebook.includes("facebook_reels") ? " -facebook_reels" : "";
+      return Array.isArray(value) ? `${value.join(",")}${noReels}` : "advantage";
     } catch {
       return "unknown";
     }

@@ -154,6 +154,35 @@ describe("core: <SetupAdsStep> (#1270)", () => {
     expect(screen.queryByRole("group", { name: "Your ads will be in" })).toBeNull();
   });
 
+  it("#1934: a returning owner's step 2 starts a batch once from step 1's tap; a reload or Back shows Make 3 ads", async () => {
+    const generate = vi.fn();
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "/api/creatives/assistant") return Response.json({ ready: true, brief: "b" });
+      generate(JSON.parse(String(init?.body)));
+      return Response.json({ creatives: [ad("a"), ad("b"), ad("c")] });
+    }));
+    const { markMakeTap } = await import("@/lib/setup/steps");
+    markMakeTap(business.id);
+    const first = render(<SetupAdsStep business={business} initialAds={[]} earlier again />);
+    expect(await screen.findByRole("heading", { name: "Your ads are ready" })).toBeInTheDocument();
+    expect(generate).toHaveBeenCalledTimes(1);
+    first.unmount();
+    localStorage.clear();
+    render(<SetupAdsStep business={business} initialAds={[]} earlier again />);
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
+    expect(generate).toHaveBeenCalledTimes(1);
+    expect(bar().getByRole("button", { name: "Make 3 ads" })).toBeInTheDocument();
+  });
+
+  it("#1934: an old tap (over 2 minutes) doesn't start a batch", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({})));
+    sessionStorage.setItem(`setup-make-tap:${business.id}`, String(Date.now() - 3 * 60 * 1000));
+    render(<SetupAdsStep business={business} initialAds={[]} earlier again />);
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
+    expect(fetch).not.toHaveBeenCalled();
+    expect(sessionStorage.getItem(`setup-make-tap:${business.id}`)).toBeNull();
+  });
+
   it("#1475: earlier ads but a batch already running (another tab) resumes it, still never a new one", async () => {
     localStorage.setItem(`setup-generation:${business.id}`, `22222222-2222-4222-8222-222222222222:3:${Date.now()}`);
     vi.stubGlobal("fetch", vi.fn(async () => Response.json({ status: "complete", creatives: [ad("a"), ad("b"), ad("c")] })));

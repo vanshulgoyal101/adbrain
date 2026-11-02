@@ -14,6 +14,13 @@ export type SetupBusinessFields = {
 };
 
 export type SetupField = keyof SetupBusinessFields;
+
+/** #1966: the fill-in-the-blanks lines for "Why do customers pick you?" (`setup.business.proof.chips`), by segment. */
+export const PROOF_CHIPS = {
+  solar: ["solarTeam", "solarHomes"],
+  ielts: ["ieltsSize", "ieltsMock", "ieltsEvening"],
+  interiors: ["interiorsDesign", "interiorsWorkshop", "interiorsKitchens"],
+} as const;
 export const SETUP_FIELDS: Exclude<SetupField, "usp">[] = ["name", "vertical", "locations", "offer", "phone"];
 
 export const SETUP_FIELD_LIMITS: Record<Exclude<SetupField, "usp">, number> = { name: 120, vertical: 120, locations: 600, offer: 200, phone: 20 };

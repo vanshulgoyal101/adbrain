@@ -100,7 +100,7 @@ if (command === "live") {
       break;
     }
     if (i >= 24) {
-      console.log(`FAIL Domain serves ${served ? served.slice(0, 7) : "an unknown build"}, not ${sha.slice(0, 7)}: promote the newest production deployment (docs/RELEASING.md#rollback-and-incident-handling)`);
+      console.log(`FAIL Domain serves ${served ? served.slice(0, 7) : "an unknown build"}, not ${sha.slice(0, 7)}: promote the newest production deployment (docs/operations/releasing-recovery.md#rollback-and-incident-handling)`);
       process.exitCode = 1;
       break;
     }

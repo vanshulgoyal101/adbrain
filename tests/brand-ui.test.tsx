@@ -4,6 +4,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { BrandForm } from "@/components/brand-form";
 import { BrandAssets } from "@/components/brand-assets";
 import { Instructions } from "@/components/instructions";
+import { NoticesProvider } from "@/i18n/notices";
+import hi from "../messages/hi.json";
 import type { AdInstruction, BrandAsset, Business } from "@/lib/types";
 // #403 S6: the confirm dialog has its own tests (confirm-dialog.test.tsx); here window.confirm stands in for the owner's answer.
 vi.mock("@/components/ui/confirm-dialog", () => ({
@@ -105,6 +107,15 @@ describe("<BrandForm> prefill", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Upload" }));
     expect(screen.getByText("Choose a PNG, JPEG or WebP image.")).toBeInTheDocument();
+    expect(h.storageFrom).not.toHaveBeenCalled();
+  });
+
+  // #2345: the app layout's notices words reach the client fallbacks, so a Hindi owner reads Hindi with no server reply.
+  it("shows its own fallbacks in the owner's language", () => {
+    render(<NoticesProvider words={{ locale: "hi", messages: hi.notices }}><BrandAssets businessId="b1" initialAssets={[]} /></NoticesProvider>);
+    fireEvent.change(screen.getByLabelText("Image file"), { target: { files: [new File(["x".repeat(6 * 1024 * 1024)], "big.png", { type: "image/png" })] } });
+    fireEvent.click(screen.getByRole("button", { name: "Upload" }));
+    expect(screen.getByText("5 MB से छोटी तस्वीर चुनें।")).toBeInTheDocument();
     expect(h.storageFrom).not.toHaveBeenCalled();
   });
 
@@ -360,7 +371,7 @@ describe("<BrandAssets> persistence", () => {
     const { remove } = setup({ recordError: true });
     render(<BrandAssets businessId="b1" initialAssets={[]} />);
     uploadFile();
-    expect(await screen.findByRole("alert")).toHaveTextContent("write failed");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Couldn't save the picture. Try again.");
     expect(remove).toHaveBeenCalledWith([expect.stringMatching(/^b1\/logo\//)]);
     expect(screen.queryByRole("button", { name: "Delete asset" })).toBeNull();
   });
@@ -369,7 +380,7 @@ describe("<BrandAssets> persistence", () => {
     setup({ logoError: true });
     render(<BrandAssets businessId="b1" initialAssets={[]} />);
     uploadFile();
-    expect(await screen.findByRole("alert")).toHaveTextContent("Asset saved, but the brand logo could not be updated");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Picture saved, but it couldn't be set as your logo");
     expect(screen.getByRole("button", { name: "Delete asset" })).toBeInTheDocument();
   });
 
@@ -377,7 +388,7 @@ describe("<BrandAssets> persistence", () => {
     const { remove } = setup({ recordError: true });
     render(<BrandAssets businessId="b1" initialAssets={[asset]} />);
     fireEvent.click(screen.getByRole("button", { name: "Delete asset" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("write failed");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Couldn't delete the picture. Try again.");
     expect(remove).not.toHaveBeenCalled();
     expect(screen.getByRole("img", { name: "Main logo" })).toBeInTheDocument();
   });
@@ -396,7 +407,7 @@ describe("<BrandAssets> persistence", () => {
     setup({ storageError: true });
     render(<BrandAssets businessId="b1" initialAssets={[asset]} />);
     fireEvent.click(screen.getByRole("button", { name: "Delete asset" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("its stored file could not be deleted");
+    expect(await screen.findByRole("alert")).toHaveTextContent("its stored file couldn't be deleted");
     expect(screen.queryByRole("img", { name: "Main logo" })).toBeNull();
   });
 });

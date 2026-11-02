@@ -18,6 +18,9 @@ export const ACCEPTED = {
   "authenticated_security_definer_function_executable:public.delete_campaign_draft_if_version": "checks owner and business inside",
   "authenticated_security_definer_function_executable:public.owner_alert_prefs_set": "checks auth.uid() and business ownership inside; preserves WhatsApp STOP (#974)",
   "authenticated_security_definer_function_executable:public.owner_alert_start_verification": "checks auth.uid() and business ownership inside; issues an expiring verification code (#974)",
+  "authenticated_security_definer_function_executable:public.business_transfer_mine": "returns only the signed-in, email-confirmed user's own pending transfer (#1783)",
+  "authenticated_security_definer_function_executable:public.business_transfer_decline": "only the signed-in, email-confirmed target can decline their own transfer (#1783)",
+  "authenticated_security_definer_function_executable:public.business_transfer_claim": "requires auth.uid(); private.business_transfer_complete re-checks target, owner and locks (#1783)",
   // HaveIBeenPwned checks need the Supabase Pro plan (402 on the Free plan); a CEO money decision (#359).
   "auth_leaked_password_protection:.": "needs the Supabase Pro plan",
 };

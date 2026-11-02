@@ -4,6 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Brain, MessageCircle } from "lucide-react";
 import { LEGAL_LINKS } from "@/lib/legal-links";
+import { SIGN_IN_HREF } from "@/lib/site";
 import { SEGMENTS, segmentBySlug, segmentWhatsAppHref, type Segment } from "@/lib/segments";
 import styles from "./segment.module.css";
 
@@ -66,7 +67,7 @@ export default async function SegmentPage({ params }: { params: Promise<{ segmen
     <div className={styles.page}>
       <header className={styles.header}>
         <Link href="/" aria-label="AdBrain home" className={styles.logo}><Brain aria-hidden="true" size={24} /> AdBrain</Link>
-        <Link href="/login" className={styles.signIn}>Sign in</Link>
+        <Link href={SIGN_IN_HREF} className={styles.signIn}>Sign in</Link>
       </header>
       <main>
         <section className={styles.hero} aria-labelledby="segment-title">
@@ -117,8 +118,9 @@ export default async function SegmentPage({ params }: { params: Promise<{ segmen
           <dl className={styles.costs}>
             <div><dt>Setup</dt><dd><strong>Free</strong><span>We make your ads and set up your first campaign with you, in about 20 minutes.</span></dd></div>
             <div><dt>Ads</dt><dd><strong>You pay Meta directly</strong><span>From your own ad account. We suggest ₹300 a day for 7 days (₹2,100 plus Meta&apos;s GST). Stop any time.</span></dd></div>
-            <div><dt>AdBrain</dt><dd><strong>₹999 a month</strong><span>First month free. No auto-debit, no lock-in.</span></dd></div>
+            <div><dt>AdBrain</dt><dd><strong>₹999 a month</strong><span>First month free. No auto-debit, stop any time, and a full refund for any month you pay but don&apos;t start a new campaign.</span></dd></div>
           </dl>
+          <p className={styles.note}><Link href="/#pricing" className={styles.pricingLink}>Questions about pricing</Link></p>
         </section>
 
         <section className={styles.block} aria-labelledby="steps-title">
@@ -126,7 +128,7 @@ export default async function SegmentPage({ params }: { params: Promise<{ segmen
           <ol className={styles.steps}>
             <li>Tell AdBrain your business, where you work and one real offer.</li>
             <li>{segment.tiles ? "AdBrain makes 3 ads, like the samples above. You pick the ones you like." : <>AdBrain makes 3 ads. For {segment.trade} they can lead with: {segment.angles.join("; ")}. You pick the ones you like.</>}</li>
-            <li>You set the daily amount and go live. Meta checks your ads first, usually within a few hours and up to a day.</li>
+            <li>You set the daily amount and go live. Meta checks your ads first. This usually takes a few hours, sometimes up to a day.</li>
           </ol>
         </section>
 

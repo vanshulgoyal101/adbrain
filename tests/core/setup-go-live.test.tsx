@@ -52,15 +52,15 @@ describe("core: <SetupGoLive> (#1271)", () => {
 
   it("says Meta paces the capped total across the days, so one day can be over the daily amount (#2007)", () => {
     goLive();
-    expect(screen.getByText("Meta spreads it across the days, so one day can be a bit more than ₹300 and another less. The total never goes past the limit above.")).toBeInTheDocument();
+    expect(screen.getByText("Meta spreads it across the days, so one day can be more than ₹300 and another less. The total never goes past the limit above.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "₹1,000 a day" }));
-    expect(screen.getByText("Meta spreads it across the days, so one day can be a bit more than ₹1,000 and another less. The total never goes past the limit above.")).toBeInTheDocument();
+    expect(screen.getByText("Meta spreads it across the days, so one day can be more than ₹1,000 and another less. The total never goes past the limit above.")).toBeInTheDocument();
   });
 
   it("says the pacing line in Hindi (#2007)", () => {
     render(<SetupGoLive business={business} ads={ads} pageConnected funding="managed" words={{ locale: "hi", messages: hi.setup }}
       whatsappNumber="+91 ••••• 3210" weeklyCap={{ capRupees: null, active: [] }} />);
-    expect(screen.getByText("Meta इसे दिनों में बाँटता है, इसलिए किसी दिन ₹300 से थोड़ा ज़्यादा और किसी दिन कम लग सकता है। कुल खर्च ऊपर लिखी सीमा से ज़्यादा कभी नहीं होगा।")).toBeInTheDocument();
+    expect(screen.getByText("Meta इसे दिनों में बाँटता है, इसलिए किसी दिन ₹300 से ज़्यादा और किसी दिन कम खर्च हो सकता है। कुल खर्च ऊपर लिखी सीमा से ज़्यादा कभी नहीं होगा।")).toBeInTheDocument();
     // #1530: the 2/7-day choice in Hindi.
     fireEvent.click(within(screen.getByRole("group", { name: "कितने दिन" })).getByRole("button", { name: "7 दिन" }));
     expect(screen.getByText("₹300 रोज़, 7 दिन तक, Meta के GST समेत ज़्यादा से ज़्यादा ₹2,478")).toBeInTheDocument();
@@ -103,8 +103,9 @@ describe("core: <SetupGoLive> (#1271)", () => {
     expect(chips[0]).toHaveAttribute("aria-pressed", "true");
     expect(chips[0].className).toContain("bg-primary/10");
     expect(chips[0].className).not.toMatch(/(^|\s)bg-primary(\s|$)/);
-    expect(screen.getByText("Meta checks your ads first, usually within a few hours and up to a day.")).toBeInTheDocument();
-    expect(screen.getAllByText(/₹708/)).toHaveLength(2);
+    expect(screen.getByText("Meta checks your ads first. This usually takes a few hours, sometimes up to a day.")).toBeInTheDocument();
+    // The budget line and 'Stops at'; #1990's payment helper names it once more, for UPI top-ups.
+    expect(screen.getAllByText(/₹708/)).toHaveLength(3);
   });
 
   it("Page not connected: the primary connects it first, then the page refreshes", () => {
@@ -185,6 +186,14 @@ describe("core: <SetupGoLive> (#1271)", () => {
     expect(screen.getByRole("link", { name: "Open Campaigns" })).toHaveAttribute("href", "/campaigns?all=1");
   });
 
+  it("#1990: blocked on Meta billing: says how to pay in the owner's words, links to Meta's payment page, no review link", async () => {
+    const run = tapGoLive();
+    await run.finish({ kind: "blocked", messages: [], billing: true });
+    expect(screen.getByRole("alert")).toHaveTextContent("Meta needs a way to pay first: a card, or money added by UPI or net banking. Add it in Meta, then tap Go live again. Nothing was spent.");
+    expect(within(screen.getByRole("alert")).getByRole("link", { name: "Add payment in Meta" })).toHaveAttribute("href", "https://business.facebook.com/billing_hub/payment_settings");
+    expect(screen.queryByRole("link", { name: "Fix in campaign review" })).toBeNull();
+  });
+
   it("not connected any more: the tap opens the Meta dialog", async () => {
     const run = tapGoLive();
     await run.finish({ kind: "connect" });
@@ -198,6 +207,29 @@ describe("core: <SetupGoLive> (#1271)", () => {
     expect(bar().getByRole("button", { name: "Go live · ₹300 a day" })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "₹1,000 a day" }));
     expect(bar().getByRole("button", { name: "Go live · ₹1,000 a day" })).toBeDisabled();
+  });
+
+  it("#1990: a new owner is told card or UPI, and that UPI needs the run's total added first; it follows the 2/7-day choice", () => {
+    goLive({ funding: "own" });
+    expect(screen.getByText("Add a card, or pay by UPI or net banking")).toBeInTheDocument();
+    const how = "Card: Meta charges it after the ads run. UPI or net banking: add money first, at least TOTAL, or the ads stop when it runs out.";
+    expect(screen.getByText(how.replace("TOTAL", "₹708"))).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "7 days" }));
+    expect(screen.getByText(how.replace("TOTAL", "₹2,478"))).toBeInTheDocument();
+  });
+
+  it("#1990: the payment helper and the billing refusal in Hindi", () => {
+    render(<SetupGoLive business={business} ads={ads} pageConnected funding="own" words={{ locale: "hi", messages: hi.setup }}
+      whatsappNumber="+91 ••••• 3210" weeklyCap={{ capRupees: null, active: [] }} />);
+    expect(screen.getByText("कार्ड जोड़ें, या UPI या नेट बैंकिंग से भुगतान करें")).toBeInTheDocument();
+    expect(screen.getByText("कार्ड: विज्ञापन चलने के बाद Meta पैसे काटता है। UPI या नेट बैंकिंग: पहले पैसे डालें, कम से कम ₹708, वरना पैसे खत्म होते ही विज्ञापन रुक जाएँगे।")).toBeInTheDocument();
+    expect(hi.setup.goLive.billingRequired).toBe("Meta को पहले पेमेंट का तरीका चाहिए: कार्ड, या UPI या नेट बैंकिंग से डाले गए पैसे। Meta में जोड़ें, फिर से लाइव करें दबाएँ। कोई पैसा खर्च नहीं हुआ।");
+  });
+
+  it("#1990: a returning owner doesn't get the payment helper", () => {
+    render(<SetupGoLive business={business} ads={ads} pageConnected funding="own" returning
+      whatsappNumber="+91 ••••• 3210" weeklyCap={{ capRupees: null, active: [] }} />);
+    expect(screen.queryByText(/UPI or net banking: add money first/)).toBeNull();
   });
 
   it("money row (#1251 CEO): only the own-ad-account row; AdBrain's 'Ad money' row stays hidden for every funding mode", () => {
@@ -247,7 +279,7 @@ describe("#1901: Go live says whose picture each ad is", () => {
 // "app not available" page inside the Facebook dialog, which AdBrain can't see. Step 3 says so before and after.
 describe("core: step 3 asks a not-yet-Tester owner to accept the invite (#1989)", () => {
   const hint = /Facebook is still reviewing AdBrain/;
-  const retry = /Didn't connect\? If Facebook said the app isn't available/;
+  const retry = /^Didn't connect\?/;
   function step3({ pageConnected = false, appReviewPending = true, locale = "en" as "en" | "hi" } = {}) {
     render(<SetupGoLive business={business} ads={ads} pageConnected={pageConnected} funding="own" appReviewPending={appReviewPending}
       words={locale === "hi" ? { locale, messages: hi.setup } : undefined} whatsappNumber="+91 ••••• 3210" weeklyCap={{ capRupees: null, active: [] }} />);
@@ -280,6 +312,66 @@ describe("core: step 3 asks a not-yet-Tester owner to accept the invite (#1989)"
     cleanup();
     step3();
     expect(screen.getByText(retry)).toBeInTheDocument();
+  });
+
+  // #2538: the one real outsider tapped Connect twice and hit Facebook's wall; nobody on the team heard.
+  const stubFetch = (impl: () => Promise<Response>) => { const fn = vi.fn(impl); vi.stubGlobal("fetch", fn); return fn; };
+  const accessCall = ["/api/meta/access-request", expect.objectContaining({ method: "POST", keepalive: true, body: JSON.stringify({ businessId: "b1" }) })];
+
+  it("a try that didn't connect asks the team to add the owner, once, and says it reached us", async () => {
+    const fetchMock = stubFetch(async () => new Response("{}"));
+    try {
+      step3();
+      expect(screen.getByText(/come back here and we'll add you/)).toBeInTheDocument();
+      fireEvent.click(bar().getByRole("button", { name: "Connect Facebook Page" }));
+      expect(fetchMock).not.toHaveBeenCalled();
+      fireEvent.click(screen.getByRole("button", { name: "Meta dialog: closed" }));
+      expect(await screen.findByText(/We've asked our team to add you and will WhatsApp you within a working day/)).toBeInTheDocument();
+      expect(fetchMock).toHaveBeenCalledWith(...accessCall);
+      fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+      fireEvent.click(screen.getByRole("button", { name: "Meta dialog: closed" }));
+      await screen.findByText(/We've asked our team/);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    } finally { vi.unstubAllGlobals(); }
+  });
+
+  it("back from Facebook in this tab: the request is sent on arrival", async () => {
+    window.sessionStorage.setItem("adbrain.setup.connectTried", "1");
+    const fetchMock = stubFetch(async () => new Response("{}"));
+    try {
+      step3();
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(...accessCall));
+    } finally { vi.unstubAllGlobals(); }
+  });
+
+  it("a request that didn't reach us says so, never blocks Connect, and Try again sends it again", async () => {
+    const fetchMock = stubFetch(async () => new Response("{}", { status: 503 }));
+    try {
+      step3();
+      fireEvent.click(bar().getByRole("button", { name: "Connect Facebook Page" }));
+      fireEvent.click(screen.getByRole("button", { name: "Meta dialog: closed" }));
+      expect(await screen.findByText(/your request didn't reach us/)).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+      expect(screen.getByRole("button", { name: "Meta dialog: connected" })).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Meta dialog: closed" }));
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    } finally { vi.unstubAllGlobals(); }
+  });
+
+  it("a Tester who connects, an owner already connected, or after App Review: nothing is sent", async () => {
+    const fetchMock = stubFetch(async () => new Response("{}"));
+    try {
+      step3();
+      fireEvent.click(bar().getByRole("button", { name: "Connect Facebook Page" }));
+      fireEvent.click(screen.getByRole("button", { name: "Meta dialog: connected" }));
+      cleanup();
+      window.sessionStorage.setItem("adbrain.setup.connectTried", "1");
+      step3({ pageConnected: true });
+      cleanup();
+      step3({ appReviewPending: false });
+      await act(async () => {});
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally { vi.unstubAllGlobals(); }
   });
 
   it("connected: today's ✓ row and no hint, even after a try", () => {

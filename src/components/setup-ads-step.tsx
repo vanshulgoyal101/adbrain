@@ -12,6 +12,7 @@ import { AdLanguageChips } from "@/components/ad-language-chips";
 import { applyCreateLine, readCreateResponse, type LiveAd } from "@/components/create-progress";
 import { SampleViewer } from "@/components/sample-viewer";
 import { SetupSpine } from "@/components/setup-spine";
+import { takeMakeTap } from "@/lib/setup/steps";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
@@ -40,7 +41,7 @@ export function storyFor(slots: LiveAd[] | null): Story {
 const generationKey = (businessId: string) => `setup-generation:${businessId}`;
 /** A batch takes 1–3 minutes; a kept id older than this is a leftover, not a run in progress. */
 const KEEP_MS = 15 * 60_000;
-// #1402: the status GET allows 30 reads per 5 minutes; every 10 s for 4 minutes stays inside it.
+// #1402, #2553: the status GET allows 150 reads per 5 minutes per owner; every 10 s for 4 minutes stays well inside it.
 const POLL_MS = 10_000;
 const POLLS = 24;
 const RATE_LIMIT_WAIT_MS = 60_000;
@@ -61,7 +62,7 @@ function forget(businessId: string) {
 }
 /**
  * #1534: the tab that gets a batch's ads publishes them, so other tabs waiting on the same batch show them at once
- * instead of polling the status route (30 reads per 5 minutes per owner, shared by every tab) into 429s.
+ * instead of polling the status route (150 reads per 5 minutes per owner, shared by every tab) into 429s.
  */
 const resultKey = (businessId: string) => `setup-generation-result:${businessId}`;
 function readResult(businessId: string, id: string, raw?: string | null): Creative[] | null {
@@ -135,8 +136,8 @@ export function SetupAdsStep({ business, initialAds, sample = false, earlier = f
 
   useEffect(() => {
     if (startedRef.current || initialAds.length) return;
-    // #1475: a batch already running (another tab) is still picked up; a new one waits for the tap.
-    if (earlier && !readKept(business.id)) return;
+    // #1475: a batch already running (another tab) is still picked up; a new one waits for the tap (#1934: or step 1's).
+    if (earlier && !readKept(business.id) && !(again && takeMakeTap(business.id))) return;
     startedRef.current = true;
     void makeAds(FULL_BATCH);
     // Runs once per visit; makeAds reads only stable props.
@@ -242,11 +243,7 @@ export function SetupAdsStep({ business, initialAds, sample = false, earlier = f
     if (kept) {
       const saved = await savedBatch(kept.id, kept.count);
       if (saved?.length) return finish(saved, kept.count, false);
-      if (saved === null) {
-        setMaking(false);
-        setError("busy");
-        return;
-      }
+      if (saved === null) { setMaking(false); setError("busy"); return; }
       forget(business.id);
     }
     let generationId = "";

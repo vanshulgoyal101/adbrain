@@ -21,6 +21,11 @@ export function isProspectAccount(user: AccountIdentity): boolean {
   return isInternalUser(user) && /\+prospect(?:-|$)/.test(local);
 }
 
+/** #1324/#2230: the production smoke login (a listed auth user id). */
+export function isSmokeUser(user: AccountIdentity): boolean {
+  return Boolean(user && internal.smokeUserIds.includes(user.id));
+}
+
 /**
  * #1324: the smoke/demo login is connected to a real ad account. A business it owns may read, validate and pause
  * on Meta, but nothing else, unless its ad account is a listed test account.
@@ -36,7 +41,7 @@ export function metaWriteMode(ownerId: string, adAccountId: string | null | unde
  */
 export function isScoreboardExcluded(user: AccountIdentity, demoEmail?: string | null): boolean {
   if (!user) return false;
-  if (internal.smokeUserIds.includes(user.id)) return true;
+  if (isSmokeUser(user)) return true;
   if (demoEmail && user.email?.trim().toLowerCase() === demoEmail.trim().toLowerCase()) return true;
   return isProspectAccount(user);
 }

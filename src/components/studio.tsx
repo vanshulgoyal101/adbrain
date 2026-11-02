@@ -1,4 +1,5 @@
 "use client";
+import { useNotices } from "@/i18n/notices";
 import { PictureSourceBadge } from "@/components/picture-source-badge";
 import type { AppLocale } from "@/i18n/locale";
 import { formatDate } from "@/lib/format";
@@ -97,6 +98,7 @@ export function Studio({
   initialFilter?: "all" | "draft" | "approved";
   initialCreativeId?: string | null;
 }) {
+  const tn = useNotices();
   const [items, setItems] = useState<Creative[]>(initialCreatives);
   // #1261: the newest batch may still be coming in, or may have ended short, after the owner left Create.
   const [shortfall, setShortfall] = useState<{ brief: string; missing: number; expected: number; ended: boolean } | null>(null);
@@ -251,7 +253,7 @@ export function Studio({
       const stored = localStorage.getItem(generationKey);
       setPendingGeneration(stored ? studioGenerationSchema.parse(JSON.parse(stored)) : null);
     } catch {
-      setError("This browser won't let AdBrain save your progress, so no ads were started. Turn off private browsing or use another browser.");
+      setError(tn("studio.storageBlocked"));
     }
   }
 
@@ -329,7 +331,7 @@ export function Studio({
         if (stored) intent = studioGenerationSchema.parse(JSON.parse(stored));
         if (!intent) {
           if (!runBrief.trim()) {
-            setError("Describe what you want to advertise.");
+            setError(tn("studio.describeAd"));
             return;
           }
           intent = { generationId: crypto.randomUUID(), count: runCount };
@@ -341,7 +343,7 @@ export function Studio({
           return;
         }
       } catch {
-        setError("This browser won't let AdBrain save your progress, so no ads were started. Turn off private browsing or use another browser.");
+        setError(tn("studio.storageBlocked"));
         return;
       }
       setPendingGeneration(intent);
@@ -367,7 +369,7 @@ export function Studio({
       if (!res.ok) {
         if ([400, 401, 403, 404, 409, 422, 429].includes(res.status)) {
           clearIntent();
-          setError(data.error ?? "Generation was rejected.");
+          setError(data.error ?? tn("studio.startFailed"));
         } else await recover(data.error);
         return;
       }
@@ -399,14 +401,14 @@ export function Studio({
         body: JSON.stringify({ creativeIds: ids }),
       });
       if (!res.ok) {
-        setError("The ad pack didn't download. Check your connection and tap Download again.");
+        setError(tn("studio.downloadFailed"));
         return;
       }
       const blob = await res.blob();
       downloadBlob(blob, "adbrain-ad-pack.zip");
       setExportOk(true);
     } catch {
-      setError("The ad pack didn't download. Check your connection and tap Download again.");
+      setError(tn("studio.downloadFailed"));
     } finally {
       setExporting(false);
     }
@@ -505,7 +507,7 @@ export function Studio({
       {error && <Alert variant="error">{error}</Alert>}
 
       {!empty && (
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-lg font-semibold text-slate-900">
           Ads{" "}
           <span className="font-normal text-slate-400">({items.length - setAsideCount})</span>
@@ -545,8 +547,8 @@ export function Studio({
       {exportOk && <Alert variant="success">Ad pack downloaded.</Alert>}
 
       {items.length > 0 && (
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <fieldset className="flex gap-1">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <fieldset className="flex min-w-0 flex-wrap gap-1">
             <legend className="sr-only">Ad status</legend>
             {(
               [
@@ -558,7 +560,7 @@ export function Studio({
               <label
                 key={value}
                 className={cn(
-                  "flex min-h-11 cursor-pointer items-center gap-1 whitespace-nowrap rounded-md px-3 text-sm has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-primary",
+                  "flex min-h-11 cursor-pointer items-center gap-1 whitespace-nowrap rounded-md px-2.5 text-sm sm:px-3 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-primary",
                   filter === value
                     ? "bg-slate-100 font-medium text-slate-900"
                     : "text-slate-600 hover:bg-slate-50",
@@ -576,7 +578,7 @@ export function Studio({
               </label>
             ))}
           </fieldset>
-          <label className="relative min-w-0">
+          <label className="relative min-w-0 lg:shrink-0">
             <span className="sr-only">Search ads</span>
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
             <input
@@ -584,7 +586,7 @@ export function Studio({
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search ads"
-              className="h-11 w-full rounded-md border border-slate-300 pl-9 pr-3 text-sm sm:w-60"
+              className="h-11 w-full rounded-md border border-slate-300 pl-9 pr-3 text-sm lg:w-60"
             />
           </label>
         </div>
@@ -709,6 +711,7 @@ function CreativeCard({
   onDelete: (id: string) => void;
   onPreview: () => void;
 }) {
+  const tn = useNotices();
   const [pending, startTransition] = useTransition();
   const [regenerating, setRegenerating] = useState(false);
   const [confirmingRegen, setConfirmingRegen] = useState(false);
@@ -743,9 +746,9 @@ function CreativeCard({
         error?: string;
       };
       if (res.ok && data.creative) onChange(data.creative);
-      else setRegenError(data.error ?? "Couldn't regenerate — try again.");
+      else setRegenError(data.error ?? tn("studio.regenFailed"));
     } catch {
-      setRegenError("Couldn't regenerate — check your connection.");
+      setRegenError(tn("studio.regenOffline"));
     } finally {
       setRegenerating(false);
     }
@@ -758,11 +761,9 @@ function CreativeCard({
       try {
         const res = await setCreativeStatus(creative.id, next);
         if (res.ok) onChange({ ...creative, status: next });
-        else setRegenError(res.error ?? "Couldn't update approval. Try again.");
+        else setRegenError(res.error ?? tn("studio.approvalFailed"));
       } catch {
-        setRegenError(
-          "Couldn't update approval. Check your connection and try again.",
-        );
+        setRegenError(tn("studio.approvalOffline"));
       }
     });
   }
@@ -774,14 +775,9 @@ function CreativeCard({
       try {
         const res = await deleteCreative(creative.id);
         if (res.ok) onDelete(creative.id);
-        else
-          setRegenError(
-            res.error ?? "Couldn't delete the creative. Try again.",
-          );
+        else setRegenError(res.error ?? tn("studio.deleteFailed"));
       } catch {
-        setRegenError(
-          "Couldn't delete the creative. Check your connection and try again.",
-        );
+        setRegenError(tn("studio.deleteOffline"));
       }
     });
   }

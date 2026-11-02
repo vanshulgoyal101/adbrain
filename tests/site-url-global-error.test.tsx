@@ -57,7 +57,7 @@ describe("<GlobalError>", () => {
     expect(
       screen.getByRole("heading", { name: /something went wrong/i }),
     ).toHaveFocus();
-    expect(screen.getByRole("link", { name: /sign in/i })).toHaveAttribute("href", "/login");
+    expect(screen.getByRole("link", { name: /sign in/i })).toHaveAttribute("href", "/login?mode=signin");
     await user.click(screen.getByRole("button", { name: /try again/i }));
 
     expect(retry).toHaveBeenCalledTimes(1);
@@ -74,7 +74,7 @@ describe("<AppError>", () => {
     render(<AppError error={new Error("boom")} retry={retry} />);
 
     expect(screen.getByRole("heading", { name: /something went wrong/i })).toHaveFocus();
-    expect(screen.getByRole("link", { name: /sign in/i })).toHaveAttribute("href", "/login");
+    expect(screen.getByRole("link", { name: /sign in/i })).toHaveAttribute("href", "/login?mode=signin");
     await user.click(screen.getByRole("button", { name: /try again/i }));
 
     expect(retry).toHaveBeenCalledTimes(1);
