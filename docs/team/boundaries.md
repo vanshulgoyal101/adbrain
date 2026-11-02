@@ -23,11 +23,12 @@ list may only shrink.
 The check fails when:
 
 - a violation is not in the baseline (a new edge);
-- a baseline entry no longer occurs (you fixed it; drop it from the baseline), except C5, where a route
-  with no English errors left still passes;
-- with `--base`, the baseline has an entry the base branch did not have, or a higher C4 or C5 ceiling
+- a baseline entry no longer occurs (you fixed it; drop it from the baseline), except C5 and C6, where a
+  file with no English texts left still passes;
+- with `--base`, the baseline has an entry the base branch did not have, or a higher C4, C5 or C6 ceiling
   (a rule the base branch's checker doesn't define yet is skipped for this one comparison);
-- a file listed under C4 has more lines than its baseline ceiling, or one listed under C5 more English errors.
+- a file listed under C4 has more lines than its baseline ceiling, one listed under C5 more English errors, or one
+  listed under C6 more English fallback texts.
 
 ## What each rule protects
 
@@ -55,6 +56,7 @@ Source checks, from `checkFile` in [`scripts/check-boundaries.mjs`](../../script
 | `C3-appsecret-proof` | A file that builds a Graph URL also sends `appsecret_proof` (`appSecretProof` or `appsecret_proof` appears in it). `graph-version.ts` and `headers.ts` are exempt. |
 | `C4-file-size` | No source file goes over 400 lines. Files already over it are listed with a `lines` ceiling and may only shrink. |
 | `C5-english-errors` | An owner-facing API route (`src/app/api/**/route.ts`, not `cron/`, `internal/`, `whatsapp/webhook` or `privacy-requests/operator`) adds no English error: `error: "<English>"` or `errorResponse(requestId, status, "CODE", "<English>")`. Routes that still have them are listed with their count as the `lines` ceiling. Only growth fails: fewer, or none, pass without a baseline edit (#2337). |
+| `C6-english-fallbacks` | An owner screen (`src/components/**/*.tsx`, `src/app/(app)/**/*.tsx`) adds no hard-coded English fallback: a capitalised phrase after `??`, `\|\|`, `Error(`, `setError(` or `.message :`, e.g. `data.error ?? "Couldn't save."`. Files that still have them are listed with their count as the `lines` ceiling; only growth fails (#1438, #2347). |
 
 ## Fixing a red check
 
@@ -74,6 +76,7 @@ The CI summary lists each failing entry as `rule: from → to`. Fix the code, no
 | `C3-appsecret-proof` | Add `appsecret_proof` to the Graph call, the way the existing Meta helpers do. |
 | `C4-file-size` | Move your own new lines into a sibling module (400 lines or fewer), so the file stays at or under its ceiling. The author fixes it. The baseline never goes up (#2071). |
 | `C5-english-errors` | Say the error with `ownerError("key")` from `@/i18n/request-locale` and add the key to `errors` in `messages/en.json` and `messages/hi.json` (#2305). A client component's own fallback (no reply, a dropped connection) uses `useNotices()` from `@/i18n/notices` and a key under `notices` (#2345). |
+| `C6-english-fallbacks` | Use `useNotices()` from `@/i18n/notices` (a key under `notices`) or the screen's own translator, e.g. `data.error ?? t("saveFailed")`, with the key in `messages/en.json` and `messages/hi.json`. |
 
 When you fix an entry, the check goes red with "Fixed, still in the baseline". Run
 `npm run boundaries -- --write-baseline`, check the diff (below) and commit the
@@ -89,7 +92,7 @@ in your PR. Find the PR that grew the file (`git log` on the file) and name it o
 
 `--write-baseline` does not only remove fixed entries. It overwrites
 `scripts/boundaries-baseline.json` with whatever the code has now: new violations are
-added and every C4 and C5 `lines` ceiling is set to today's count, including files that grew.
+added and every C4, C5 and C6 `lines` ceiling is set to today's count, including files that grew.
 It always exits green.
 
 So after every `--write-baseline`:

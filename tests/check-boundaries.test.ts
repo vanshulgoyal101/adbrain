@@ -55,7 +55,7 @@ describe("check-boundaries (#2070)", () => {
   });
 });
 
-describe("source checks C1–C5 (#2071, #2337)", () => {
+describe("source checks C1–C6 (#2071, #2337, #1438)", () => {
   const rules = (file: string, text: string) => checkFile(file, text).map(v => `${v.rule} ${v.to}`);
   const graphCall = "const r = await fetch(`${GRAPH}/me`);\n";
 
@@ -133,9 +133,33 @@ describe("source checks C1–C5 (#2071, #2337)", () => {
     expect(compare([english(2)], [english(3)]).ok).toBe(true);
     const none = compare([], [english(3)]);
     expect(none.ok).toBe(true);
-    expect(report(none)).toContain("Routes with no English errors left (passes) (1)");
+    expect(report(none)).toContain("Files with no English errors or fallbacks left (passes) (1)");
     expect(compare([], [big(900)]).ok).toBe(false);
     expect(compare([english(4)], [english(4)], [english(3)]).ok).toBe(false);
+  });
+
+  const fallback = (lines: number, from = "src/components/x.tsx") => ({ rule: "C6-english-fallbacks", from, to: "English fallback texts", lines });
+
+  it("C6: counts a screen's English fallback texts; translated fallbacks, codes and non-screens don't count", () => {
+    const text = 'setError(data.error ?? "Couldn\'t save. Try again.");\nconst name = ad.title || "Untitled ad";\n'
+      + 'throw new Error("Image download failed.");\nsetError("No connection. Nothing changed.");\n'
+      + 'setError(reason instanceof Error ? reason.message : `We could not check ${x}.`);\n'
+      + 'setError(data.error ?? t("saveFailed")); const v = x ?? ""; throw new Error("not_found"); const k = y || "Draft";\n';
+    expect(checkFile("src/components/x.tsx", text)).toEqual([fallback(5)]);
+    expect(checkFile("src/app/(app)/x/page.tsx", text)).toEqual([fallback(5, "src/app/(app)/x/page.tsx")]);
+    for (const file of ["src/lib/x.ts", "src/components/x.ts", "src/app/admin/x/page.tsx"]) expect(checkFile(file, text)).toEqual([]);
+  });
+
+  it("C6: a new English fallback fails; fewer or none pass without a baseline edit", () => {
+    const more = compare([fallback(4)], [fallback(3)]);
+    expect(more.ok).toBe(false);
+    expect(report(more)).toContain("New English fallback texts (1)");
+    expect(report(more)).toContain("(3 → 4 texts)");
+    expect(report(more)).not.toContain("Big files that grew");
+    expect(report(more)).not.toContain("New English-only errors");
+    expect(compare([fallback(1, "src/components/y.tsx")], []).ok).toBe(false);
+    expect(compare([fallback(2)], [fallback(3)]).ok).toBe(true);
+    expect(compare([], [fallback(3)]).ok).toBe(true);
   });
 
   it("a rule the base branch's checker doesn't define yet is compared with itself", () => {

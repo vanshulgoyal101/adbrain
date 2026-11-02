@@ -42,7 +42,13 @@ export const POST = observeRoute("/api/media/[id]/meta", "POST", async (req: Req
   // Review polls each video about every 5 s while it is open.
   const limited = await rateLimitResponse(`media-meta:${session.user.id}`, { limit: 300, windowMs: 10 * 60_000 });
   if (limited) return limited;
-  const parsed = body.safeParse(await req.json().catch(() => ({})));
+  // An empty body means no retry; anything else must be valid JSON, so a garbled request never starts an upload.
+  const text = await req.text();
+  let payload: unknown = {};
+  if (text.trim()) {
+    try { payload = JSON.parse(text); } catch { return apiError("Bad request.", 400); }
+  }
+  const parsed = body.safeParse(payload);
   if (!parsed.success) return apiError("Bad request.", 400);
   try {
     // RLS read proves the owner; the account is the business's own connection, never one the request names.

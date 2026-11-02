@@ -53,6 +53,20 @@ describe("POST /api/media/[id]/meta (#749)", () => {
     expect(m.ensure).not.toHaveBeenCalled();
   });
 
+  it("refuses malformed JSON before any Meta upload", async () => {
+    const { POST } = await import("@/app/api/media/[id]/meta/route");
+    const req = new Request(`https://adbrain.vanshul.com/api/media/${ASSET}/meta`, { method: "POST", body: '{"retry":' });
+    const response = await POST(req, { params: Promise.resolve({ id: ASSET }) });
+    expect({ status: response.status, uploads: m.ensure.mock.calls.length }).toEqual({ status: 400, uploads: 0 });
+  });
+
+  it("an empty body is a plain status call", async () => {
+    const { POST } = await import("@/app/api/media/[id]/meta/route");
+    const response = await POST(new Request(`https://adbrain.vanshul.com/api/media/${ASSET}/meta`, { method: "POST" }), { params: Promise.resolve({ id: ASSET }) });
+    expect(response.status).toBe(200);
+    expect(m.ensure.mock.calls[0][1]).toEqual({ businessId: BUSINESS, assetId: ASSET, retry: undefined });
+  });
+
   it("another owner's file is not found through RLS, so nothing reaches Meta", async () => {
     m.own.mockRejectedValue(Object.assign(new Error("Photo not found."), { status: 404 }));
     expect((await post()).status).toBe(404);
