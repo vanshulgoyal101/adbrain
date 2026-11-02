@@ -27,13 +27,12 @@ describe("#618 flaky reporter", () => {
     dirs.push(dir);
     const out = join(dir, "nested", "shard-1.json");
     vi.stubEnv("FLAKY_REPORT", out);
-    // Vitest constructs reporters with its options object, never a path.
-    const first = new FlakyReporter({});
+    const first = new FlakyReporter();
     first.onTestCaseResult(testCase("steady", "passed", false));
     first.onTestCaseResult(testCase("wobbly > shows the review", "passed", true));
     first.onTestCaseResult(testCase("broken", "failed", false, 1));
     first.onTestRunEnd();
-    const second = new FlakyReporter({});
+    const second = new FlakyReporter();
     second.onTestCaseResult(testCase("other wobble", "passed", true));
     second.onTestRunEnd();
     expect(JSON.parse(readFileSync(out, "utf8"))).toEqual([
@@ -44,7 +43,7 @@ describe("#618 flaky reporter", () => {
 
   it("writes nothing without a report path", () => {
     vi.stubEnv("FLAKY_REPORT", "");
-    const reporter = new FlakyReporter({});
+    const reporter = new FlakyReporter();
     reporter.onTestCaseResult(testCase("wobbly", "passed", true));
     expect(() => reporter.onTestRunEnd()).not.toThrow();
   });
