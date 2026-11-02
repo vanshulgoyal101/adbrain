@@ -319,13 +319,98 @@
       "disconnectLead": "Facebook हटाने पर:",
       "disconnect": "आपके विज्ञापन Meta में तब तक चलते रहेंगे जब तक आप उन्हें वहाँ न रोकें। उसके बाद AdBrain उन्हें रोक या नतीजे अपडेट नहीं कर पाएगा।",
       "deleteLead": "अपना डेटा हटाने के लिए:",
-      "delete": "नीचे Privacy and data requests इस्तेमाल करें। आपके कैंपेन आपके अपने Meta विज्ञापन खाते में रहेंगे।"
+      "delete": "नीचे “प्राइवेसी और डेटा अनुरोध” इस्तेमाल करें। आपके कैंपेन आपके अपने Meta विज्ञापन खाते में रहेंगे।"
     },
     "disconnect": {
       "title": "Facebook हटाएँ?",
       "body": "आपके विज्ञापन Meta में तब तक चलते रहेंगे जब तक आप उन्हें वहाँ न रोकें। इसके बाद AdBrain उन्हें रोक या उनके नतीजे अपडेट नहीं कर पाएगा।",
       "confirm": "हटाएँ",
       "cancel": "जुड़ा रहने दें"
+    },
+    "page": {
+      "title": "सेटिंग",
+      "description": "आपका Meta कनेक्शन, खर्च की सीमाएँ और डेटा।",
+      "noBusiness": "पहले अपना बिज़नेस सेट करें, फिर यहाँ अपना विज्ञापन खाता जोड़ें।",
+      "setUpBusiness": "अपना बिज़नेस सेट करें",
+      "preferences": "पसंद",
+      "loading": "लोड हो रहा है: {label}"
+    },
+    "preferences": {
+      "title": "विज्ञापन की पसंद",
+      "intro": "आपके चुनावों से AdBrain जो स्टाइल याद रखता है। Create में आप जो माँगें, वही हमेशा चलेगा।",
+      "use": "पसंद इस्तेमाल करें",
+      "reload": "फिर से लोड करें",
+      "loading": "पसंद लोड हो रही है",
+      "category": "किस बारे में",
+      "preference": "पसंद",
+      "placeholder": "आम तौर पर सीधी, बातचीत जैसी भाषा पसंद है",
+      "remember": "पसंद याद रखें",
+      "declared": "आपने बताया · {date} को अपडेट हुआ",
+      "edit": "{label} बदलें",
+      "forget": "{label} भूल जाएँ",
+      "export": "पसंद एक्सपोर्ट करें",
+      "forgetAll": "सारी पसंद भूल जाएँ",
+      "forgetAllTitle": "सारी पसंद भूल जाएँ?",
+      "forgetAllBody": "इस बिज़नेस को क्या पसंद है और किससे बचना है, AdBrain ने जो कुछ सीखा है, सब भूल जाएगा।",
+      "forgetAllConfirm": "पसंद भूल जाएँ",
+      "cancel": "रहने दें",
+      "loadFailed": "पसंद लोड नहीं हो पाई।",
+      "saveFailed": "पसंद सेव नहीं हो पाई।",
+      "saved": "पसंद सेव हो गई।",
+      "forgotten": "पसंद भुला दी गई।",
+      "cleared": "सारी पसंद हटा दी गई।",
+      "paused": "पसंद रोक दी गई।",
+      "enabled": "पसंद चालू हो गई।",
+      "categories": {
+        "copy_length": "टेक्स्ट की लंबाई",
+        "tone": "लहजा",
+        "language": "भाषा",
+        "visual_style": "दिखावट का स्टाइल",
+        "layout_density": "लेआउट कितना भरा हो",
+        "creative_dislikes": "विज्ञापनों में क्या न हो",
+        "workflow": "काम का तरीका"
+      }
+    },
+    "privacy": {
+      "title": "प्राइवेसी और डेटा अनुरोध",
+      "intro": "अनुरोध एक ऑपरेटर देखता है; पूरे खाते का एक्सपोर्ट या डिलीट अपने-आप नहीं होता।",
+      "details": "डेटा अनुरोध की जानकारी",
+      "requestExport": "एक्सपोर्ट का अनुरोध करें",
+      "requestDeletion": "डिलीट का अनुरोध करें",
+      "loading": "अनुरोध लोड हो रहे हैं",
+      "list": "आपके प्राइवेसी अनुरोध",
+      "none": "अभी कोई अनुरोध नहीं।",
+      "operatorQueue": "ऑपरेटर के अनुरोधों की सूची",
+      "deleteTitle": "खाता डिलीट करने का अनुरोध करें?",
+      "deleteBody": "एक ऑपरेटर अनुरोध देखेगा। कोई भी डेटा तुरंत डिलीट नहीं होता।",
+      "cancel": "रहने दें",
+      "loadFailed": "प्राइवेसी अनुरोध लोड नहीं हो पाए।",
+      "submitFailed": "अनुरोध भेजा नहीं जा सका।",
+      "exportReceived": "एक्सपोर्ट का अनुरोध मिल गया। इसकी स्थिति नीचे देख सकते हैं।",
+      "deleteReceived": "डिलीट का अनुरोध मिल गया। इसकी स्थिति नीचे देख सकते हैं।",
+      "kind": {
+        "export": "एक्सपोर्ट",
+        "delete": "डिलीट"
+      },
+      "status": {
+        "received": "मिल गया",
+        "in_review": "देखा जा रहा है",
+        "completed": "पूरा हुआ",
+        "declined": "मना किया गया"
+      }
+    },
+    "whatsappStatus": {
+      "title": "WhatsApp चैट विज्ञापन",
+      "checkAgain": "फिर से जाँचें",
+      "ready": "तैयार: {numbers}",
+      "readyPage": "{number} (आपके Page से जुड़ा)",
+      "readyBusiness": "{number} (आपका WhatsApp Business खाता)",
+      "notLinked": "अभी जुड़ा नहीं है। नंबर जुड़ने तक विज्ञापन WhatsApp चैट नहीं खोल सकते।",
+      "unavailable": "WhatsApp की स्थिति अभी नहीं मिल रही। पहले Meta जोड़ें और अपना विज्ञापन खाता और Page चुनें।",
+      "linkTitle": "अपना WhatsApp नंबर जोड़ें (दोनों में से कोई भी तरीका):",
+      "linkPage": "अपने Facebook Page पर: Settings → Linked accounts → WhatsApp। कोड Facebook से WhatsApp मैसेज में आता है, SMS में नहीं।",
+      "linkApp": "WhatsApp Business ऐप में: Settings → Business tools → Facebook & Instagram। कोई कोड नहीं चाहिए।",
+      "then": "फिर “फिर से जाँचें” दबाएँ।"
     }
   },
   "pilotDay7": {
@@ -667,6 +752,28 @@
       "discardTitle": "यह सेटअप छोड़ दें?",
       "discardCopy": "इसकी जगह \"{name}\" की कॉपी शुरू करें। सेव किए ड्राफ़्ट बने रहेंगे।",
       "discardAndCopy": "छोड़ें और कॉपी करें"
+    },
+    "destination": {
+      "legend": "ग्राहक कहाँ जाएँ",
+      "whatsapp": "WhatsApp चैट",
+      "whatsappName": "WhatsApp चैट (सुझाया गया)",
+      "recommended": "सुझाया गया",
+      "whatsappHint": "लोग आपको WhatsApp पर मैसेज करें",
+      "instantForm": "इंस्टेंट फ़ॉर्म",
+      "instantFormHint": "लोग अपना नाम और नंबर दें",
+      "website": "वेबसाइट",
+      "websiteHint": "लोग आपकी साइट का पेज खोलें",
+      "websiteLink": "आपके विज्ञापन यह पेज खोलेंगे",
+      "open": "खोलें",
+      "changeInBrand": "ब्रांड में बदलें",
+      "noWebsite": "पहले ब्रांड में अपनी वेबसाइट जोड़ें।",
+      "openBrand": "ब्रांड में वेबसाइट जोड़ें",
+      "goal": "लक्ष्य",
+      "goalWebsite": "वेबसाइट विज़िट",
+      "goalWebsiteHint": "Meta आपका पेज खोलने वाले लोगों को गिनता है",
+      "reviewWebsite": "लोग यहाँ जाएँगे",
+      "needsLink": "चालू लिंक चाहिए",
+      "expectWebsite": "क्या उम्मीद करें: AdBrain ने अभी इतने वेबसाइट कैंपेन नहीं चलाए हैं कि प्रति विज़िट खर्च बता सके। Meta नए विज्ञापन पहले जाँचता है, आमतौर पर 24 घंटे में, और जब तक आप लाइव नहीं करते, कुछ खर्च नहीं होता।"
     }
   },
   "errors": {
