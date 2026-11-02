@@ -17,6 +17,8 @@
 .account > div { display: flex; align-items: center; gap: 8px; padding: 12px; border-top: 1px solid var(--border); }
 .account > div > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
 .avatar { flex-shrink: 0; width: 28px; height: 28px; border-radius: 50%; background: var(--surface-strong); color: var(--foreground); display: grid; place-items: center; font-size: 13px; font-weight: 600; }
+/* #2747: drawn by CSS, out of the text run, so iOS can't join the initial to the email as one address. */
+.avatar::before { content: attr(data-initial); }
 .legal { display: flex; flex-wrap: wrap; gap: 4px 12px; padding: 8px 12px 0; color: var(--muted); }
 .legal a:hover { color: var(--primary-hover); text-decoration: underline; }
 .body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
