@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { MEDIA_MONTHLY_UPLOADS, mediaFit } from "@/lib/media/rules";
 const CONFIRMED = "2026-10-28T10:00:00.000Z";
-import { deleteMedia, finalizeUpload, listMedia, monthStartIst, ownMedia, readVerifiedMedia, signUpload, type MediaRow } from "@/lib/media/store";
+import { deleteMedia, finalizeUpload, listMedia, monthlyUploads, monthStartIst, ownMedia, readVerifiedMedia, signUpload, type MediaRow } from "@/lib/media/store";
 
 vi.mock("@/lib/env", () => ({ getEnv: () => ({ MEDIA_UPLOADS_ENABLED: true }) }));
 
@@ -164,14 +164,18 @@ describe("finalizeUpload (#1209)", () => {
     expect((await listMedia(db.client, BUSINESS)).items.map((item) => item.id)).toEqual([asset.id]);
   });
 
-  it("removes the object and the row when the bytes aren't the photo described, or aren't a photo", async () => {
+  // Dev 7 (#1245 attack): a refused upload still counts toward the month, so a reused token can't dodge the limit.
+  it("removes the object and retires the row (still counted) when the bytes aren't the photo described, or aren't a photo", async () => {
     const bytes = await photo(1080, 1350);
     await expect(finalizeUpload(db.client, await pending(bytes, await photo(1080, 1351)))).rejects.toMatchObject({ status: 422, code: "MEDIA_CHANGED" });
     const text = new TextEncoder().encode("not a photo at all");
     await expect(finalizeUpload(db.client, await pending(text))).rejects.toMatchObject({ status: 415, code: "MEDIA_TYPE" });
-    expect(db.tables.media_assets).toEqual([]);
+    expect(db.tables.media_assets).toHaveLength(2);
+    expect(db.tables.media_assets.every((row) => row.deleted_at && row.status === "pending")).toBe(true);
+    expect(await monthlyUploads(db.client, BUSINESS)).toBe(2);
     expect(db.objects.size).toBe(0);
     expect(db.removed).toHaveLength(2);
+    await expect(signed(bytes)).resolves.toMatchObject({ duplicate: false });
   });
 
   it("records the real type when a PNG was sent as a JPG, and refuses a stored photo that's too small", async () => {

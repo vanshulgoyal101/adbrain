@@ -111,8 +111,11 @@ export async function finalizeUpload(admin: SupabaseClient, row: MediaRow): Prom
   const bytes = Buffer.from(await blob.arrayBuffer());
   const reject = async (status: number, code: string, message: string): Promise<never> => {
     await admin.storage.from(MEDIA_BUCKET).remove([row.path]);
-    // Only the unfinished upload this call read: a photo another finalize already made ready stays.
-    await admin.from("media_assets").delete().eq("id", row.id).eq("path", row.path).eq("status", "pending");
+    // Only the unfinished upload this call read: a photo another finalize already made ready stays. Soft-deleted, not
+    // removed (Dev 7, #1245 attack): the row still counts toward the monthly limit and keeps its path for #2644's sweep,
+    // so a token still live for that path can't store files the limit never sees.
+    await admin.from("media_assets").update({ deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+      .eq("id", row.id).eq("path", row.path).eq("status", "pending");
     throw new MediaError(status, code, message);
   };
   if (bytes.length > MEDIA_MAX_BYTES) return reject(413, "MEDIA_TOO_LARGE", "This photo is over 8 MB. Choose a smaller one.");
