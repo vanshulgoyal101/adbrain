@@ -215,8 +215,9 @@ describe.skipIf(!built)("media library boundaries (#1865, #1209 slice A)", () =>
     m.objects.set(path, new Uint8Array(withGps));
     const row = { id: crypto.randomUUID(), business_id: MINE, bucket: "media", path, status: "pending", deleted_at: null, mime: "image/jpeg", sha256: createHash("sha256").update(withGps).digest("hex"), tags: [], checks: {}, created_at: "2026-10-28T00:00:00Z" };
     m.db.media_assets.push(row);
-    const ready = await finalizeUpload(createAdminClient(), row).then(() => true, () => false);
-    const stored = m.objects.get(path);
+    const ready = await finalizeUpload(createAdminClient(), { ...row }).then(() => true, () => false);
+    // Dev 7 (#1245): a ready photo's checked bytes move to a path no upload token was signed for.
+    const stored = m.objects.get(String(m.db.media_assets.find((asset) => asset.id === row.id)?.path ?? path));
     if (ready) {
       expect(stored, "a ready photo keeps its object").toBeDefined();
       expect(hasGps(Buffer.from(stored!)), "the stored photo still carries EXIF GPS").toBe(false);

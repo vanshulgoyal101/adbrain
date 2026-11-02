@@ -67,18 +67,12 @@ export async function signUpload(admin: SupabaseClient, input: SignInput): Promi
     throw new MediaError(429, "MEDIA_QUOTA", `You've used ${MEDIA_MONTHLY_UPLOADS} of ${MEDIA_MONTHLY_UPLOADS} photo uploads this month.`);
   }
 
-  // A pending row (an earlier try that didn't finish) is reused, so retrying never stores the file twice; it gets a new
-  // path, because an upload token can't overwrite (Reviewer, #1245), and the old object (if any) goes.
+  // A pending row (an earlier try that didn't finish) is reused, so retrying never stores the file twice. It keeps its one
+  // upload path, so every token ever signed for it targets that path: at most one unverified object per counted row
+  // (Dev 7, #1245 attack: a new path per retry left old tokens able to store uncounted files). Tokens can't overwrite
+  // (Reviewer, #1245), so an unverified object from the earlier try goes first; finalize copies verified bytes elsewhere.
   let row = existing;
-  if (row) {
-    const retired = row.path;
-    const path = `${input.businessId}/${randomUUID()}.${MEDIA_EXTENSION[input.mime as MediaMime]}`;
-    const { data: moved, error: moveError } = await admin.from("media_assets").update({ path, updated_at: new Date().toISOString() })
-      .eq("id", row.id).eq("status", "pending").select(COLUMNS).single();
-    if (moveError || !moved) throw new MediaError(503, "MEDIA_UNAVAILABLE", "Couldn't save the photo. Try again.");
-    row = moved as MediaRow;
-    await admin.storage.from(MEDIA_BUCKET).remove([retired]).catch(() => undefined);
-  }
+  if (row) await admin.storage.from(MEDIA_BUCKET).remove([row.path]).catch(() => undefined);
   if (!row) {
     const path = `${input.businessId}/${randomUUID()}.${MEDIA_EXTENSION[input.mime as MediaMime]}`;
     const { data, error } = await admin.from("media_assets").insert({
@@ -117,7 +111,8 @@ export async function finalizeUpload(admin: SupabaseClient, row: MediaRow): Prom
   const bytes = Buffer.from(await blob.arrayBuffer());
   const reject = async (status: number, code: string, message: string): Promise<never> => {
     await admin.storage.from(MEDIA_BUCKET).remove([row.path]);
-    await admin.from("media_assets").delete().eq("id", row.id);
+    // Only the unfinished upload this call read: a photo another finalize already made ready stays.
+    await admin.from("media_assets").delete().eq("id", row.id).eq("path", row.path).eq("status", "pending");
     throw new MediaError(status, code, message);
   };
   if (bytes.length > MEDIA_MAX_BYTES) return reject(413, "MEDIA_TOO_LARGE", "This photo is over 8 MB. Choose a smaller one.");
@@ -133,19 +128,33 @@ export async function finalizeUpload(admin: SupabaseClient, row: MediaRow): Prom
     const clean = await sharp(bytes).rotate().toFormat(meta.format as "jpeg" | "png" | "webp", meta.format === "jpeg" ? { quality: 90 } : {})
       .toBuffer({ resolveWithObject: true }).catch(() => null);
     if (!clean) return reject(415, "MEDIA_TYPE", "Please choose a JPG, PNG or WebP photo.");
-    const { error: writeError } = await admin.storage.from(MEDIA_BUCKET).upload(row.path, clean.data, { upsert: true, contentType: mime });
-    if (writeError) throw new MediaError(503, "MEDIA_UNAVAILABLE", "Couldn't save the photo. Try again.");
     stored = new Uint8Array(clean.data);
     width = clean.info.width;
     height = clean.info.height;
   }
   const fit = mediaFit(width, height);
   if (fit.level === "too_small") return reject(422, "MEDIA_TOO_SMALL", fit.message);
+  // Dev 7 (#1245 attack): the checked bytes go to a new path no upload token was ever signed for, and the row moves
+  // there only if it still points at the upload path we read. A token still live for the upload path (a retry's, or one
+  // signed while this ran) can then never put unchecked bytes behind a ready photo.
+  // TODO(#2644): sweep the one orphan such a token can still leave at the old upload path, and stale pending rows.
+  const uploadPath = row.path;
+  const finalPath = `${row.business_id}/${randomUUID()}.${MEDIA_EXTENSION[mime]}`;
+  const { error: writeError } = await admin.storage.from(MEDIA_BUCKET).upload(finalPath, stored, { upsert: false, contentType: mime });
+  if (writeError) throw new MediaError(503, "MEDIA_UNAVAILABLE", "Couldn't save the photo. Try again.");
   const storedSha256 = createHash("sha256").update(stored).digest("hex");
   const { data, error: saveError } = await admin.from("media_assets").update({
-    status: "ready", bytes: stored.length, mime, width, height, checks: { fit, storedSha256 }, updated_at: new Date().toISOString(),
-  }).eq("id", row.id).select(COLUMNS).single();
-  if (saveError || !data) throw new MediaError(503, "MEDIA_UNAVAILABLE", "Couldn't save the photo. Try again.");
+    path: finalPath, status: "ready", bytes: stored.length, mime, width, height, checks: { fit, storedSha256 }, updated_at: new Date().toISOString(),
+  }).eq("id", row.id).eq("path", uploadPath).eq("status", "pending").select(COLUMNS).maybeSingle();
+  if (saveError || !data) {
+    await admin.storage.from(MEDIA_BUCKET).remove([finalPath]).catch(() => undefined);
+    if (saveError) throw new MediaError(503, "MEDIA_UNAVAILABLE", "Couldn't save the photo. Try again.");
+    // Another finalize of the same upload won the race: answer with its result.
+    const { data: now } = await admin.from("media_assets").select(COLUMNS).eq("id", row.id).maybeSingle();
+    if ((now as MediaRow | null)?.status === "ready") return (await mediaViews(admin, [now as MediaRow]))[0];
+    throw new MediaError(409, "MEDIA_CHANGED", "The photo changed while uploading. Add it again.");
+  }
+  await admin.storage.from(MEDIA_BUCKET).remove([uploadPath]).catch(() => undefined);
   return (await mediaViews(admin, [data as MediaRow]))[0];
 }
 
