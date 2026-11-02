@@ -4,7 +4,7 @@
  * concept loop; image requests are refused, so only text is paid. Reads read-only; writes no data.
  *
  *   OPENROUTER_MODEL=anthropic/claude-haiku-5.5 CREATIVE_PROVIDER_ORDER=openrouter \
- *     npx tsx --env-file=.env.local scripts/record-regenerate-fixtures.ts <creative-id> [runs]
+ *     npx tsx --import ./scripts/trusted-server-cli.mjs --env-file=.env.local scripts/record-regenerate-fixtures.ts <creative-id> [runs]
  */
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";

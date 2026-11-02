@@ -8,6 +8,7 @@ import { jpegIfWebp } from "@/lib/imageGen/encode";
 import { readBoundedResponse } from "@/lib/imageGen/raster";
 import { fetchPublicUrl } from "@/lib/security/ssrf";
 import { MetaError, isThrottleCode } from "./client";
+import { destinationCTA } from "./destinations";
 
 export type MetaGraph = <T>(path: string, opts?: { method?: string; form?: Record<string, string> }) => Promise<T>;
 
@@ -24,6 +25,8 @@ export type AdVideoProblem = {
   kind: "unreachable" | "format" | "file" | "too_small" | "invalid" | "reconnect" | "throttled" | "unknown";
   message: string;
 };
+
+export type AdVideoLookup = { status: "found"; videoId: string } | { status: "absent" } | { status: "unknown" };
 
 /** Meta's video title limit is "less than 255 characters". */
 const TITLE_MAX = 254;
@@ -89,6 +92,32 @@ export async function startAdVideo(
   return created.id;
 }
 
+/** `title` echoes the `name` sent to `advideos` (recorded); reading `name` is refused (12). */
+export const AD_VIDEO_LIST_FIELDS = "id,title,created_time";
+const LIST_PAGE = 50;
+const LIST_PAGES = 4;
+
+/**
+ * After an `advideos` POST whose answer never arrived, finds the video by the unique name it was sent with, so it is
+ * never uploaded twice. Graph refuses `filtering` on title (100, recorded), so this reads the list. Its order is not
+ * promised, so only the proven end of the list (no `paging.next`) means absent. A `next` without a cursor, or 200
+ * videos read without reaching the end, is `unknown`: never re-upload then.
+ */
+export async function findAdVideoByName(graph: MetaGraph, adAccountId: string, name: string): Promise<AdVideoLookup> {
+  let after: string | null = null;
+  for (let page = 0; page < LIST_PAGES; page++) {
+    const cursor: string = after ? `&after=${encodeURIComponent(after)}` : "";
+    const data: { data?: { id?: string; title?: string }[]; paging?: { cursors?: { after?: string }; next?: string } } =
+      await graph(`${adAccountId}/advideos?fields=${encodeURIComponent(AD_VIDEO_LIST_FIELDS)}&limit=${LIST_PAGE}${cursor}`);
+    const match = (data.data ?? []).find((video) => video.id && video.title === name);
+    if (match?.id) return { status: "found", videoId: match.id };
+    if (!data.paging?.next) return { status: "absent" };
+    after = data.paging.cursors?.after ?? null;
+    if (!after) return { status: "unknown" };
+  }
+  return { status: "unknown" };
+}
+
 export async function readAdVideo(graph: MetaGraph, videoId: string): Promise<AdVideoState> {
   return decodeAdVideo(await graph<AdVideoNode>(`${videoId}?fields=${encodeURIComponent(AD_VIDEO_FIELDS)}`));
 }
@@ -125,15 +154,68 @@ export function decodeAdVideo(node: AdVideoNode): AdVideoState {
   };
 }
 
+export const VIDEO_PROBLEM_WORDS: Record<AdVideoProblem["kind"], string> = {
+  unreachable: "Couldn't send your video to Meta. Try again.",
+  format: "Meta can't read this kind of video. Use an MP4 or MOV from your phone.",
+  file: "Meta couldn't use this video file. Try another video.",
+  too_small: "This video is too small for Meta. Use a longer or larger video.",
+  invalid: "Meta couldn't accept this video. Try another video.",
+  reconnect: "Reconnect Facebook to send videos to Meta.",
+  throttled: "Meta is busy. We'll try again in a minute.",
+  unknown: "Meta couldn't take this video right now. Try again.",
+};
+
 /** Plain words for the owner; codes from Meta's Ad Videos reference. */
 export function adVideoProblem(error: unknown): AdVideoProblem {
-  const code = error instanceof MetaError ? error.code : undefined;
-  if (code === CANT_FETCH_URL) return { kind: "unreachable", message: "Couldn't send your video to Meta. Try again." };
-  if (code === 352) return { kind: "format", message: "Meta can't read this kind of video. Use an MP4 or MOV from your phone." };
-  if (code === 351 || code === 6000 || code === 6001) return { kind: "file", message: "Meta couldn't use this video file. Try another video." };
-  if (code === 382) return { kind: "too_small", message: "This video is too small for Meta. Use a longer or larger video." };
-  if (code === 100) return { kind: "invalid", message: "Meta couldn't accept this video. Try another video." };
-  if (code === 190 || code === 200) return { kind: "reconnect", message: "Reconnect Facebook to send videos to Meta." };
-  if (isThrottleCode(code)) return { kind: "throttled", message: "Meta is busy. We'll try again in a minute." };
-  return { kind: "unknown", message: "Meta couldn't take this video right now. Try again." };
+  const kind = adVideoProblemKind(error instanceof MetaError ? error.code : undefined);
+  return { kind, message: VIDEO_PROBLEM_WORDS[kind] };
+}
+
+function adVideoProblemKind(code: number | undefined): AdVideoProblem["kind"] {
+  if (code === CANT_FETCH_URL) return "unreachable";
+  if (code === 352) return "format";
+  if (code === 351 || code === 6000 || code === 6001) return "file";
+  if (code === 382) return "too_small";
+  if (code === 100) return "invalid";
+  if (code === 190 || code === 200) return "reconnect";
+  if (isThrottleCode(code)) return "throttled";
+  return "unknown";
+}
+
+export type VideoCreativeInput = {
+  pageId: string;
+  videoId: string;
+  /** The video's own thumbnail (`readAdVideo().thumbnailUrl` once ready); Meta needs one on `video_data`. */
+  thumbnailUrl: string;
+  message: string;
+  headline: string;
+  description?: string | null;
+} & (
+  | { destination: "instant_form"; leadFormId: string }
+  /** `welcomeMessage`: `whatsappWelcomeMessage(opening)`, already serialized. */
+  | { destination: "whatsapp"; welcomeMessage?: string }
+);
+
+/**
+ * #749: the `object_story_spec` for an owner's video ad, the video twin of the launch's `link_data` image creative:
+ * same words, same call to action (`destinationCTA`), same WhatsApp welcome. Meta accepted these (validate_only,
+ * tests/core/fixtures/meta/video-creative-validate.json). One recorded difference: on `video_data` Meta refuses a
+ * `link` in the WhatsApp button (code 105, subcode 1815630), so the number comes from the ad set's promoted object.
+ */
+export function videoStorySpec(input: VideoCreativeInput): { page_id: string; video_data: Record<string, unknown> } {
+  const description = input.description?.trim();
+  if (!input.videoId || !input.thumbnailUrl) throw new MetaError("This video isn't ready at Meta yet.");
+  if (input.destination === "instant_form" && !input.leadFormId) throw new MetaError("Choose a lead form for this ad.");
+  return {
+    page_id: input.pageId,
+    video_data: {
+      video_id: input.videoId,
+      image_url: input.thumbnailUrl,
+      message: input.message,
+      title: input.headline,
+      ...(description ? { link_description: description } : {}),
+      ...(input.destination === "whatsapp" && input.welcomeMessage ? { page_welcome_message: input.welcomeMessage } : {}),
+      call_to_action: destinationCTA(input.destination, input.destination === "instant_form" ? { leadFormId: input.leadFormId } : {}),
+    },
+  };
 }

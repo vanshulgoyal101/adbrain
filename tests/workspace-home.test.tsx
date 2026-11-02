@@ -693,6 +693,8 @@ describe("Home results row (#764)", () => {
     expect(screen.getByText(/You usually contact people within/)).toHaveTextContent("You usually contact people within 12 min (last 30 days).");
     rerender(<WorkspaceHome {...empty} business={business} campaigns={[chats, forms]} results={results} replyMinutes={null} now={now} />);
     expect(screen.queryByText(/You usually contact people within/)).not.toBeInTheDocument();
+    rerender(<WorkspaceHome {...empty} business={business} campaigns={[chats, forms]} results={results} replyMinutes={185} now={now} locale="hi" />);
+    expect(screen.getByText(/आमतौर पर/)).toHaveTextContent("आप आमतौर पर 3 घंटे 5 मिनट में संपर्क करते हैं (पिछले 30 दिन)।");
   });
 
   // #1274 slice 2b: Home leads with the best running campaign's verdict, people waiting first; each row gets its word.

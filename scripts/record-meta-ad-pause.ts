@@ -4,7 +4,7 @@
  * write goes to an ad that is already PAUSED (a no-op Meta still answers and reads back). Any other
  * POST is refused before it leaves the process. The tape is scrubbed (scripts/lib/scrub-meta.ts).
  *
- *   npx tsx --env-file=<.env.local> scripts/record-meta-ad-pause.ts <campaignId> <liveAdId> <pausedAdId>
+ *   npx tsx --import ./scripts/trusted-server-cli.mjs --env-file=<.env.local> scripts/record-meta-ad-pause.ts <campaignId> <liveAdId> <pausedAdId>
  */
 import "./lib/meta-write-gate";
 import { writeFileSync } from "node:fs";

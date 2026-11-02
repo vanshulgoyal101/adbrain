@@ -15,8 +15,9 @@ import { Input, Textarea } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import {
   PROOF_CHIPS, SETUP_FIELDS, SETUP_FIELD_LIMITS, setupFieldErrors, setupFieldsFrom, setupLocations,
-  type SetupBusinessFields, type SetupField,
+  type SetupBusinessFields, type SetupField, type SetupTextField,
 } from "@/lib/brand/setup-fields";
+import type { BrandDestination } from "@/lib/brand/usable";
 import type { BrandExtraction } from "@/lib/templates/ads";
 import type { Business } from "@/lib/types";
 import { segmentForCategory } from "@/lib/segments";
@@ -25,13 +26,13 @@ import { setupTranslator, type SetupWords } from "@/i18n/setup-words";
 const AUTOSAVE_MS = 800;
 
 /** Fields with a helper line under them (the CPO's #1251 words; text in messages `setup.business.fields`). */
-const HAS_HELPER: Record<Exclude<SetupField, "usp">, boolean> = { name: false, vertical: false, locations: true, offer: true, phone: true };
+const HAS_HELPER: Record<SetupTextField, boolean> = { name: false, vertical: false, locations: true, offer: true, phone: true };
 
 /**
  * #1269 (#1251 WS1 step 1): five required fields and an optional selling point (#1966), saved as they type.
  * Everything else on the Brand stays on the full page ("More about your business").
  */
-export function SetupBusinessStep({ business, chooseLanguage = false, returning = false, words }: {
+export function SetupBusinessStep({ business, chooseLanguage = false, returning = false, offerWebsite = false, words }: {
   business: Business | null;
   /** #1934 (CPO #1924): a new campaign after one went live; only the new offer is asked, the rest is folded. */
   returning?: boolean;
@@ -39,6 +40,8 @@ export function SetupBusinessStep({ business, chooseLanguage = false, returning 
   words?: SetupWords;
   /** #1641: no app language chosen on this browser yet, so offer English / हिंदी above the step. */
   chooseLanguage?: boolean;
+  /** TODO(#2595): Website is internal-only until website launch is live, like the composer's switch; a business already on website still sees it. */
+  offerWebsite?: boolean;
 }) {
   const t = setupTranslator(words);
   // #1934: a returning owner types this campaign's offer fresh; the last one is the placeholder.
@@ -51,7 +54,6 @@ export function SetupBusinessStep({ business, chooseLanguage = false, returning 
   // the chooser stays mounted so its Hindi note can show. A reload no longer offers it.
   const [offerLanguage] = useState(chooseLanguage);
   const [saved, setSaved] = useState<"saving" | "saved" | "failed" | null>(null);
-  const [website, setWebsite] = useState(business?.website ?? "");
   const [autofilling, setAutofilling] = useState(false);
   const [autofillNote, setAutofillNote] = useState<{ ok: boolean; text: string } | null>(null);
   // #1317: a shop with no website fills step 1 from a pasted Instagram bio or Google listing.
@@ -65,6 +67,7 @@ export function SetupBusinessStep({ business, chooseLanguage = false, returning 
   const inputRefs = useRef<Partial<Record<SetupField, HTMLInputElement | HTMLTextAreaElement | null>>>({});
   const proofSelectionRef = useRef<string | null>(null);
   const segment = segmentForCategory(fields.vertical)?.slug;
+  const toWebsite = fields.destination === "website";
   const proofChips = segment === "solar" || segment === "ielts" || segment === "interiors" ? PROOF_CHIPS[segment] : [];
 
   useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current); }, []);
@@ -128,7 +131,8 @@ export function SetupBusinessStep({ business, chooseLanguage = false, returning 
 
   async function beforeLeave() {
     const found = setupFieldErrors(fieldsRef.current);
-    const first = SETUP_FIELDS.find((key) => found[key]) ?? (found.usp ? "usp" : undefined);
+    // The website box sits above the five fields, so its error comes first (#2646).
+    const first = (["website", ...SETUP_FIELDS] as const).find((key) => found[key]) ?? (found.usp ? "usp" : undefined);
     if (first) {
       // A folded field that's now incomplete opens, so the owner sees what to fix.
       if (first !== "offer") setExpanded(true);
@@ -146,6 +150,7 @@ export function SetupBusinessStep({ business, chooseLanguage = false, returning 
 
   async function autofill(pasted?: string) {
     setAutofillNote(null);
+    const website = fieldsRef.current.website ?? "";
     if (pasted === undefined && !website.trim()) {
       setAutofillNote({ ok: false, text: t("business.needWebsite") });
       return;
@@ -195,11 +200,13 @@ export function SetupBusinessStep({ business, chooseLanguage = false, returning 
         </>
       )}
 
-      {!returning && <div className="mt-5 flex flex-col gap-2">
-        <label htmlFor="setup-website" className="text-sm font-medium text-slate-900">{t("business.website")}</label>
+      {(!returning || expanded) && <div className="mt-5 flex flex-col gap-2">
+        <label htmlFor="setup-website" className="text-sm font-medium text-slate-900">{t(toWebsite ? "business.websiteRequired" : "business.website")}</label>
         <div className="flex flex-col gap-2 sm:flex-row">
-          <Input id="setup-website" type="url" inputMode="url" placeholder="yourbusiness.com" value={website}
-            onChange={(event) => setWebsite(event.target.value)} className="h-11" />
+          <Input id="setup-website" type="url" inputMode="url" placeholder="yourbusiness.com" value={fields.website ?? ""}
+            maxLength={SETUP_FIELD_LIMITS.website} ref={(node) => { inputRefs.current.website = node; }}
+            aria-invalid={errors.website ? true : undefined} aria-describedby={errors.website ? "setup-website-error" : undefined}
+            onChange={(event) => set("website", event.target.value)} className="h-11" />
           <Button type="button" variant="outline" className="h-11 shrink-0" onClick={() => void autofill()} disabled={autofilling}>
             {autofilling ? <Spinner /> : <Wand2 className="h-4 w-4" aria-hidden="true" />}
             {t("business.fillWebsite")}
@@ -220,14 +227,21 @@ export function SetupBusinessStep({ business, chooseLanguage = false, returning 
             {t("business.pasteToggle")}
           </button>
         )}
+        {errors.website && <p id="setup-website-error" className="text-sm font-medium text-red-800">{t("business.errors.website")}</p>}
         {autofillNote && <Alert variant={autofillNote.ok ? "info" : "error"}>{autofillNote.text}</Alert>}
+        {(offerWebsite || fields.destination === "website") && <DestinationPicker value={fields.destination ?? "whatsapp"} t={t} onChange={(destination) => {
+          change({ ...fieldsRef.current, destination });
+          // The other destination's rules no longer apply.
+          setErrors((current) => ({ ...current, website: undefined, phone: undefined }));
+        }} />}
       </div>}
 
       <div className="mt-6 flex flex-col gap-5">
         {SETUP_FIELDS.filter((key) => expanded || key === "offer").map((key) => {
-          const text = { label: t(`business.fields.${key}.label`),
+          const forWebsite = toWebsite && key !== "name" && key !== "vertical";
+          const text = { label: t(forWebsite && key === "phone" ? "business.fields.phone.optionalLabel" : `business.fields.${key}.label`),
             placeholder: key === "offer" && returning && lastOffer ? lastOffer : t(`business.fields.${key}.placeholder`),
-            helper: HAS_HELPER[key] ? t(`business.fields.${key}.helper` as "business.fields.offer.helper") : undefined };
+            helper: HAS_HELPER[key] ? t(`business.fields.${key}.${forWebsite ? "websiteHelper" : "helper"}` as "business.fields.offer.helper") : undefined };
           const id = `setup-${key}`;
           const described = [text.helper && `${id}-helper`, errors[key] && `${id}-error`].filter(Boolean).join(" ") || undefined;
           const common = {
@@ -274,7 +288,7 @@ export function SetupBusinessStep({ business, chooseLanguage = false, returning 
 
       {!expanded && (
         <p className="mt-4 text-sm text-slate-600">
-          {t("business.sameAsLast", { summary: [fields.vertical, setupLocations(fields.locations).join(", "), fields.phone].filter((part) => part.trim()).join(" · ") })}{" "}
+          {t("business.sameAsLast", { summary: [fields.vertical, setupLocations(fields.locations).join(", "), toWebsite ? fields.website ?? "" : fields.phone].filter((part) => part.trim()).join(" · ") })}{" "}
           <button type="button" onClick={() => setExpanded(true)} className="inline-flex min-h-11 items-center font-medium text-blue-700 underline underline-offset-4">{t("business.change")}</button>
         </p>
       )}
@@ -285,5 +299,26 @@ export function SetupBusinessStep({ business, chooseLanguage = false, returning 
         {t("business.more")}
       </Link>
     </SetupSpine>
+  );
+}
+
+/** #2646: where customers go: WhatsApp (preselected, as before) or the website above. */
+function DestinationPicker({ value, onChange, t }: {
+  value: BrandDestination; onChange: (value: BrandDestination) => void; t: ReturnType<typeof setupTranslator>;
+}) {
+  return (
+    <fieldset className="mt-3 flex flex-col gap-2">
+      <legend className="mb-2 text-sm font-medium text-slate-900">{t("business.destination.legend")}</legend>
+      {(["whatsapp", "website"] as const).map((option) => (
+        <label key={option} className="flex min-h-11 cursor-pointer items-start gap-3 rounded-lg border border-slate-300 px-3 py-2.5 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-blue-600">
+          <input type="radio" name="setup-destination" value={option} checked={value === option} onChange={() => onChange(option)}
+            aria-label={t(`business.destination.${option}`)} aria-describedby={`setup-destination-${option}-hint`} className="mt-1 h-4 w-4 accent-blue-600 focus-visible:outline-none" />
+          <span className="flex flex-col">
+            <span className="text-sm font-medium text-slate-900">{t(`business.destination.${option}`)}</span>
+            <span id={`setup-destination-${option}-hint`} className="text-xs text-slate-600">{t(`business.destination.${option}Hint`)}</span>
+          </span>
+        </label>
+      ))}
+    </fieldset>
   );
 }

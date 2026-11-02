@@ -5,6 +5,7 @@ import {
 } from "@/lib/campaign/connect-contracts";
 import { buildCampaignPreflightLoaders } from "@/lib/campaign/preflight-runtime";
 import { prepareCampaignReview } from "@/lib/campaign/preflight-service";
+import { websiteOpenFor } from "@/lib/campaign/website-gate";
 import {
   ConnectionAccessError,
   requireOwnedBusiness,
@@ -62,6 +63,7 @@ async function handlePOST(request: Request) {
         requestedDraftVersion: parsed.data.draftVersion,
         now: new Date().toISOString(),
         locale: await requestLocale(),
+        websiteOpen: () => websiteOpenFor(user),
       },
     );
 
@@ -69,6 +71,7 @@ async function handlePOST(request: Request) {
     if (result.kind === "not_found") return errorResponse(requestId, 404, "NOT_FOUND", say("draftGone"));
     if (result.kind === "forbidden") return errorResponse(requestId, 403, "FORBIDDEN", say("draftGone"));
     if (result.kind === "stale") return errorResponse(requestId, 409, "CONFLICT", say("draftChangedElsewhere"), true);
+    if (result.kind === "website_closed") return errorResponse(requestId, 403, "FORBIDDEN", say("websiteClosed"));
     // #688: every blocker's own reason, so production can rank which fix owners need.
     const blockerCodes = result.review.blockers.map((blocker) => blocker.reason ?? blocker.code);
     recordProductEvent({ kind: "workflow", name: "campaign.review", outcome: result.review.canCreatePaused ? "success" : "rejected",

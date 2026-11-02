@@ -1,3 +1,5 @@
+import "server-only";
+
 import Razorpay from "razorpay";
 import { z } from "zod";
 import { PLAN_PRICE_PAISE } from "@/lib/plan/status";

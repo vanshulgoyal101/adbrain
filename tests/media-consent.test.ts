@@ -45,8 +45,8 @@ describe("media consent (#784)", () => {
     const { database, rpc } = store([]);
     await recordMediaConsent(database, { id: "b1", vertical: "dental clinic" }, { rights: true, people: true });
     expect(rpc).toHaveBeenCalledWith("media_consent_record", { p_business_id: "b1", p_terms_version: MEDIA_TERMS_VERSION, p_people_confirmed: true });
-    await expect(recordMediaConsent(database, { id: "b1" }, { rights: false, people: false })).rejects.toThrow("own these photos");
-    await expect(recordMediaConsent(database, { id: "b1", vertical: "salon" }, { rights: true, people: false })).rejects.toThrow("everyone recognisable");
+    await expect(recordMediaConsent(database, { id: "b1" }, { rights: false, people: false })).rejects.toMatchObject({ ownerKey: "mediaRightsRequired", status: 400 });
+    await expect(recordMediaConsent(database, { id: "b1", vertical: "salon" }, { rights: true, people: false })).rejects.toMatchObject({ ownerKey: "mediaPeopleRequired", status: 400 });
     expect(rpc).toHaveBeenCalledTimes(1);
   });
 

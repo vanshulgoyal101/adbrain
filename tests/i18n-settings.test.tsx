@@ -1,10 +1,15 @@
 // @vitest-environment jsdom
 import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import hi from "../messages/hi.json";
+import { MetaConnectionPanel } from "@/components/meta-connection";
+import { SpendGuardrails } from "@/components/spend-guardrails";
+import { evaluateSpend } from "@/lib/campaign/spend";
 import { PreferenceSettings } from "@/components/preference-settings";
 import { PrivacyRequests } from "@/components/privacy-requests";
 import { WhatsAppStatusPanel } from "@/components/whatsapp-status";
+
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 
 const words = { locale: "hi" as const, messages: hi.settings };
 const state = { enabled: true, epoch: 1, notes: [{ category: "tone" as const, value: "दोस्ताना", updated_at: "2026-10-01T10:00:00Z", version: 1 }] };
@@ -32,5 +37,24 @@ describe("Settings in Hindi (#1438)", () => {
     expect(screen.getByRole("heading", { name: "WhatsApp चैट विज्ञापन" })).toBeTruthy();
     expect(screen.getByRole("status").textContent).toBe(hi.settings.whatsappStatus.notLinked);
     expect(screen.getByText(/^अपने Facebook Page पर:/)).toBeTruthy();
+  });
+
+  it("shows the Meta connection panel in Hindi", () => {
+    const connection = { source: "oauth" as const, pending: false, ready: false, adAccountId: null, pageId: null, tokenExpiresAt: null, expired: true, scopes: [] };
+    render(<MetaConnectionPanel businessId="b1" connection={connection} oauthConfigured locale="hi" />);
+    expect(screen.getByRole("heading", { name: "Meta कनेक्शन" })).toBeTruthy();
+    expect(screen.getByText(hi.settings.meta.expired)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Facebook फिर से जोड़ें" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Facebook हटाएँ" })).toBeTruthy();
+  });
+
+  it("shows spend guardrails and the spend meter in Hindi", () => {
+    const limits = { weeklyCapRupees: 7000, alertPct: 80, autoPause: false };
+    render(<SpendGuardrails limits={limits} evaluation={evaluateSpend([{ id: "c1", status: "active", dailyBudget: 500, spend: 0 }], limits)} words={words} />);
+    expect(screen.getByRole("heading", { name: "खर्च की सीमा" })).toBeTruthy();
+    expect(screen.getByLabelText("हफ़्ते की सीमा (₹)")).toBeTruthy();
+    expect(screen.getByText("इस हफ़्ते")).toBeTruthy();
+    expect(screen.getByText(/% खर्च · .* बाकी$/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "सीमा सेव करें" })).toBeTruthy();
   });
 });

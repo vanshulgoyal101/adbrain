@@ -372,6 +372,24 @@ describe("guided planner route", () => {
     expect(mocks.createLeadCampaign).not.toHaveBeenCalled();
   });
 
+  // #2688: website ads stay internal-only until they open (#2595), whatever the composer showed.
+  it("refuses a website plan from an outside account before the model or Meta is called", async () => {
+    const { POST } = await import("@/app/api/campaigns/plan/route");
+    const response = await POST(new Request("http://localhost/api/campaigns/plan", { method: "POST", body: JSON.stringify({ goal: "Get visits", destination: "website" }) }));
+    expect(response.status).toBe(403);
+    expect((await response.json()).error).toBe("Website ads aren't open yet. Choose WhatsApp chat or a lead form.");
+    expect(mocks.runPlanner).not.toHaveBeenCalled();
+    expect(mocks.withMetaConnection).not.toHaveBeenCalled();
+  });
+
+  it("lets a confirmed team account plan a website ad", async () => {
+    mocks.getUser.mockResolvedValue({ data: { user: { id: "user-1", email: "team@adbrain.vanshul.com", email_confirmed_at: "2026-10-01T00:00:00Z" } } });
+    const { POST } = await import("@/app/api/campaigns/plan/route");
+    const response = await POST(new Request("http://localhost/api/campaigns/plan", { method: "POST", body: JSON.stringify({ goal: "Get visits", destination: "website" }) }));
+    expect(response.status).toBe(200);
+    expect(mocks.runPlanner).toHaveBeenCalled();
+  });
+
   it("rejects malformed planner input before provider calls", async () => {
     const { POST } = await import("@/app/api/campaigns/plan/route");
     const response = await POST(new Request("http://localhost/api/campaigns/plan", { method: "POST", body: JSON.stringify({ goal: 42 }) }));

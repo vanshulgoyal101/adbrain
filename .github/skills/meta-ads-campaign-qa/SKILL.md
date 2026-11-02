@@ -29,7 +29,7 @@ launch flow, or you are about to launch, activate or change a Meta campaign.
    `createLeadCampaign` for lead-form and WhatsApp campaigns and requires every POST to equal a
    payload Meta accepted with `validate_only`.
 2. **If you changed a payload on purpose**, re-record:
-   `npx tsx --env-file=<.env.local> scripts/record-meta-launch-validate.ts`. Read every Meta
+   `npx tsx --import ./scripts/trusted-server-cli.mjs --env-file=<.env.local> scripts/record-meta-launch-validate.ts`. Read every Meta
    answer (status and `error_subcode`), not just the count. Add a case to the recorder for any
    new path (for example a 9:16 placement creative) so the gate covers it.
 3. **Check the plan:** `npx tsx scripts/plan-check.ts --cost-per-result <₹ from the latest

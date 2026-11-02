@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { CampaignDestination } from "@/lib/campaign/outcomes";
+import { outcomeDefinition, type CampaignDestination } from "@/lib/campaign/outcomes";
 
 export interface CampaignInsights {
   destination?: CampaignDestination;
@@ -52,7 +52,7 @@ const insightsSchema = z.object({
 
 /** One action's count in an insights row (Meta lists each action type at most once). */
 function actionCounter(row: InsightRow | undefined) {
-  return (names: string[]) => {
+  return (names: readonly string[]) => {
     for (const name of names) {
       const matches = row?.actions?.filter(action => action.action_type === name) ?? [];
       if (matches.length > 1) throw new Error("Campaign insight actions are ambiguous.");
@@ -66,17 +66,15 @@ function actionCounter(row: InsightRow | undefined) {
   };
 }
 
-const LEAD_ACTIONS = ["lead", "onsite_conversion.lead_grouped"];
+const LEAD_ACTIONS = outcomeDefinition("instant_form").metaActions;
 /** #371/#789: the headline WhatsApp result; Meta also reports first replies and depth, which we don't switch to silently. */
-const CONVERSATION_ACTIONS = ["onsite_conversion.messaging_conversation_started_7d"];
-/** #2601: a website campaign's result. Meta may report it only as the omni (cross-surface) count. */
-const LANDING_PAGE_ACTIONS = ["landing_page_view", "omni_landing_page_view"];
+const CONVERSATION_ACTIONS = outcomeDefinition("whatsapp").metaActions;
 /** Taps on the ad's link, from the same `actions` list (so the request and its recorded tapes stay as they are). */
 const LINK_CLICK_ACTIONS = ["link_click"];
 
 /** A campaign's or an ad's headline result: chats for WhatsApp, page views for a website, form leads otherwise. */
 function resultCount(count: ReturnType<typeof actionCounter>, destination: CampaignDestination) {
-  return destination === "whatsapp" ? count(CONVERSATION_ACTIONS) : destination === "website" ? count(LANDING_PAGE_ACTIONS) : count(LEAD_ACTIONS);
+  return count(outcomeDefinition(destination).metaActions);
 }
 
 export function decodeCampaignInsights(payload: unknown, destination: CampaignDestination, options?: { requireSpend?: boolean }): CampaignInsights {

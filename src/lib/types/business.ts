@@ -72,6 +72,8 @@ export type BusinessTables = {
       email: string | null;
       whatsapp_template: Json | null;
       address: string | null;
+      /** #2646 (#2656): where customers go by default. Optional in code: read it with `brandDestination` (absent → WhatsApp). */
+      default_destination?: "whatsapp" | "website";
       created_at: string;
       updated_at: string;
     };
@@ -96,6 +98,7 @@ export type BusinessTables = {
       email?: string | null;
       whatsapp_template?: Json | null;
       address?: string | null;
+      default_destination?: "whatsapp" | "website";
       created_at?: string;
       updated_at?: string;
     };

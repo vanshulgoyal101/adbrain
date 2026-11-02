@@ -69,6 +69,7 @@ import { applyBudget, budgetFormStart } from "@/lib/campaign/budget-edit-form";
 import { EditAdDialog } from "@/components/edit-ad-dialog";
 import { OWNER_WORDS } from "@/lib/copy/owner-words";
 import { CampaignLaunchReview } from "@/components/campaign-launch-review";
+import { brandDestination } from "@/lib/brand/usable";
 import { DestinationChoice, WebsiteDestinationFields, WebsiteReviewFacts, reviewWebsiteUrl, type ComposerDestination } from "@/components/campaign-destination";
 import { CampaignReviewSummary } from "@/components/campaign-review-summary";
 import { WeeklyCapLine, weeklyCapWords } from "@/components/weekly-cap-line";
@@ -252,7 +253,7 @@ function keptLeadForm(current: string, forms: { id: string }[], lastUsed = ""): 
 const currentTime = () => Date.now();
 
 function refreshNotice(previous: CampaignResult | undefined, next: CampaignResult | undefined, t: ReturnType<typeof campaignsTranslator>): string {
-  const keys = ["impressions", "clicks", "leads", "spend", "conversations", "whatsapp_opens"] as const;
+  const keys = ["impressions", "clicks", "leads", "spend", "conversations", "whatsapp_opens", "landing_page_views", "link_clicks"] as const;
   if (!next) return t("notices.checkedNone");
   if (!previous || keys.some(key => (previous[key] ?? null) !== (next[key] ?? null))) return t("notices.updatedNow");
   return t("notices.checkedSince", { since: formatDate(previous.fetched_at) });
@@ -320,7 +321,7 @@ function BusinessCampaigns({
   ));
   // #761: ₹300 a day is the core run (#334); less rarely gets Meta out of learning.
   const [budget, setBudget] = useState(initialSetup?.budget ?? newCampaign?.budget ?? 300);
-  const [destination, setDestination] = useState<ComposerDestination>(initialSetup?.destination ?? "whatsapp");
+  const [destination, setDestination] = useState<ComposerDestination>(initialSetup?.destination ?? brandDestination(business));
   const [whatsappNumber, setWhatsAppNumber] = useState(initialSetup?.whatsappNumber ?? "");
   const [whatsappLanguage, setWhatsAppLanguage] = useState<WhatsAppLanguage>(initialSetup?.whatsappLanguage ?? "ad");
   const [whatsappMessage, setWhatsAppMessage] = useState<WhatsAppTemplate | null>(initialSetup?.whatsappMessage ?? null);
@@ -773,8 +774,8 @@ function BusinessCampaigns({
     setIncludedNames("");
     setExcludedNames("");
     setLeadFormId("");
-    // #1171: WhatsApp is the channel (#680); an instant form only when the owner picks it.
-    setDestination("whatsapp");
+    // #1171: WhatsApp is the channel (#680); an instant form only when the owner picks it. #2646: a website Brand starts on website.
+    setDestination(brandDestination(business));
     setWhatsAppNumber("");
     setWhatsAppLanguage("ad");
     destinationChosenRef.current = false;
@@ -2383,7 +2384,7 @@ function BusinessCampaigns({
                 campaign={adEdit}
                 campaignName={adEdit.name ?? `${business.name} — ${adEdit.objective}`}
                 creatives={approved}
-                hint={adEditHint}
+                hint={adEditHint} words={campaignWords}
                 onClose={() => { setAdEdit(null); setAdEditHint(undefined); loadWaiting(); }}
                 onSaved={(message, { adId, change }) => {
                   // Mirror the server's raw.adWords, so reopening the editor shows the new words.
@@ -2536,7 +2537,7 @@ function BusinessCampaigns({
                     {endTimeChangedInMeta(c) ? <p className="border-l-2 border-slate-300 pl-3 text-sm text-slate-700">{OUTSIDE_LINES.endTime(formatDay(endTimeChangedInMeta(c)!.now))}</p> : null}
                     <CampaignEnquiryFeedback error={cardError?.id === c.id ? cardError : undefined} adsManagerUrl={cardError?.id === c.id && cardError.adsManager ? adsLink(c) : undefined} adsManagerLabel={tc("card.openAdsManager")} />
                     {waitingSwitch[c.id] && (c.status === "active" || c.status === "paused") ? (
-                      <AudienceSwitchStrip campaignId={c.id} operationId={waitingSwitch[c.id]} running={c.status === "active"} lastError={waitingError[c.id] ?? null}
+                      <AudienceSwitchStrip campaignId={c.id} operationId={waitingSwitch[c.id]} running={c.status === "active"} lastError={waitingError[c.id] ?? null} words={campaignWords}
                         onDone={(message) => {
                           setWaitingSwitch(current => Object.fromEntries(Object.entries(current).filter(([id]) => id !== c.id)));
                           setCardNotice({ id: c.id, message });
@@ -2656,9 +2657,10 @@ function CardResults({ campaign, result: r, outcome, comparison, waiting, onRunA
   const [weakAd, clearWeakAd] = useWeakAd(campaign.id, perAd && campaign.status === "active" && Boolean(campaign.meta_campaign_id) && enough);
   const t = verdictTranslator(words);
   const figures = <>
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+    <div className={`grid grid-cols-2 gap-3 ${outcome === "website" ? "sm:grid-cols-5" : "sm:grid-cols-4"}`}>
       <Stat label={t("figures.impressions")} value={formatNumber(r.impressions)} />
-      <Stat label={t("figures.clicks")} value={formatNumber(r.clicks)} />
+      <Stat label={t(outcome === "website" ? "figures.linkClicks" : "figures.clicks")} value={shown.linkClicks ?? formatNumber(r.clicks)} />
+      {shown.cpc !== undefined && <Stat label={t("figures.cpc")} value={shown.cpc} />}
       <Stat label={t(shown.label)} value={shown.value} />
       <Stat label={t(shown.costLabel)} value={shown.cost} />
     </div>

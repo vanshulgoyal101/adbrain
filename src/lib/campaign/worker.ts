@@ -7,6 +7,7 @@ import { createOperationCheckpoint, operationRecordFromRow } from "./operation-s
 import { markFailed } from "./operations";
 import { buildCampaignPreflightLoaders, type CampaignSupabase } from "./preflight-runtime";
 import { prepareCampaignReview } from "./preflight-service";
+import { websiteOpenForOwner } from "./website-gate";
 import { requireCampaignWorkerActor } from "@/lib/meta/connection-access";
 import type { Database } from "@/lib/types";
 
@@ -29,6 +30,7 @@ export async function runCampaignJob(database: CampaignSupabase, row: OperationR
     if (error || !draftRow) throw new Error("Queued draft could not be loaded.");
     const result = await prepareCampaignReview(buildCampaignPreflightLoaders(database, actor), {
       actor, draftId: request.draftId, requestedDraftVersion: request.draftVersion, now: new Date().toISOString(),
+      websiteOpen: () => websiteOpenForOwner(actor.userId),
     });
     signal.throwIfAborted();
     if (result.kind !== "review" || !result.review.canCreatePaused || !result.review.selected || !result.review.resolvedLocation

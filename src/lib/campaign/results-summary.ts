@@ -1,6 +1,6 @@
 import { cappedRunEnded } from "@/lib/campaign/activation";
 import { campaignAttention } from "@/lib/campaign/health";
-import { campaignDestination } from "@/lib/campaign/outcomes";
+import { campaignDestination, outcomeDefinition } from "@/lib/campaign/outcomes";
 import type { Campaign, CampaignResult } from "@/lib/types";
 import { formatMoney } from "@/lib/format";
 
@@ -20,20 +20,19 @@ export function campaignWhatsAppSummary(
   result: CampaignResult,
 ): string {
   const destination = campaignDestination(campaign, result);
+  const definition = outcomeDefinition(destination, campaign.objective);
   const whatsapp = destination === "whatsapp";
-  const website = destination === "website";
   const days = capDays(campaign.raw);
   const spent = formatMoney(result.spend);
   const spendLine = days && campaign.daily_budget
     ? `Spent ${spent} of the ${formatMoney(campaign.daily_budget * days)} limit`
     : campaign.daily_budget ? `Spent ${spent} (${formatMoney(campaign.daily_budget)} a day)` : `Spent ${spent}`;
 
-  const count = whatsapp ? result.conversations ?? 0 : website ? result.landing_page_views ?? 0 : result.leads;
-  const unit = whatsapp ? { one: "WhatsApp chat", many: "WhatsApp chats", per: "chat" }
-    : website ? { one: "website visit", many: "website visits", per: "visit" } : { one: "enquiry", many: "enquiries", per: "enquiry" };
+  const count = result[definition.campaignField] ?? 0;
+  const unit = definition.summaryUnit;
   const real = whatsapp && result.real_enquiries ? `, ${plural(result.real_enquiries, "real enquiry", "real enquiries")}` : "";
   const countLine = count > 0 ? `${plural(count, unit.one, unit.many)}${real}` : `No ${unit.many} yet${real}`;
-  const cost = whatsapp ? result.cost_per_conversation : website ? (count > 0 ? result.spend / count : null) : result.cpl;
+  const cost = definition.costField ? result[definition.costField] : count > 0 ? result.spend / count : null;
   const costLine = count > 0 && cost != null ? `${formatMoney(cost)} per ${unit.per}` : `Cost per ${unit.per}: not yet`;
 
   const attention = campaignAttention(campaign);

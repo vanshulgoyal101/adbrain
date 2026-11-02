@@ -2,7 +2,7 @@
  * #1305: records Meta's real review feedback for a campaign's ads, read-only (any non-GET Graph call is refused
  * before it leaves the process), through `MetaClient.readAdReview`, so the core test replays the client's own read.
  *
- *   npx tsx --env-file=<path to .env.local> scripts/record-meta-ad-review.ts <metaCampaignId>
+ *   npx tsx --import ./scripts/trusted-server-cli.mjs --env-file=<path to .env.local> scripts/record-meta-ad-review.ts <metaCampaignId>
  *
  * Uses META_SYSTEM_USER_TOKEN / META_AD_ACCOUNT_ID / META_PAGE_ID. Ids, phone numbers and tokens are scrubbed.
  */

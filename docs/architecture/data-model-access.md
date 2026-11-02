@@ -174,7 +174,7 @@ or spendable credit, and installing the tables does not enable checkout; see
 | `checkpoint_campaign_operation` | Fenced phase and external-ID persistence |
 | `finish_campaign_operation`, `fail_campaign_operation`, `expire_campaign_operation` | Terminal/reconciliation transitions |
 | `monthly_token_usage` | Security-invoker, owner-RLS monthly sum |
-| `creative_generation_admit/status/progress` | Deployed #54 service-only, owner-checked generation claim, recovery and quota holds |
+| `creative_generation_admit/status/progress` | Deployed #54 service-only, owner-checked generation claim, recovery and quota holds; one first-ad-pending batch per business (#1402) |
 | `creative_generation_reconcile` | Production service-only operator-attested settlement after external finality and token verification; legacy intents denied |
 | `creative_regeneration_claim/finish` | Migration-dependent service-only, owner-checked per-creative paid-operation claim and guarded release/hold |
 | `check_rate_limit` | Service-only advisory-lock-protected count and insert |

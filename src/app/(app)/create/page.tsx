@@ -11,11 +11,12 @@ import { redirect } from "next/navigation";
 import { SetupAdsStep } from "@/components/setup-ads-step";
 import { isProspectSession } from "@/lib/prospect-session";
 import { setupFieldsFrom } from "@/lib/brand/setup-fields";
-import { brandUsable } from "@/lib/brand/usable";
+import { brandDestination, brandUsable } from "@/lib/brand/usable";
 import { clientCreative } from "@/lib/creative/client-receipt";
 import { madeForSetup } from "@/lib/creative/setup-picks";
 import { getApprovedCreatives, getBrandAssets, getSetupCreativeBatch, getPrimaryBusiness, hasLaunchedCampaign } from "@/lib/supabase/queries";
 import { occasionsFor } from "@/lib/seasonal";
+import { mediaUploadsEnabled } from "@/lib/media/store";
 
 export const metadata = {
   title: "Create ads",
@@ -75,7 +76,8 @@ export default async function CreatePage({ searchParams }: { searchParams?: Prom
   const missing = [
     [business.offers?.length, "offers or prices"],
     [business.locations?.length, "service areas"],
-    [business.phone, "phone number"],
+    // #2646: a website business needs no phone; its link is checked by brandUsable instead.
+    [business.phone || brandDestination(business) === "website", "phone number"],
   ].filter(([present]) => !present).map(([, label]) => label);
   // #371: Create opens on what the business's own campaigns achieved; a failed read just skips the line.
   const [assets, evidence] = await Promise.all([getBrandAssets(business.id), getResultEvidence(business.id).catch(() => [])]);
@@ -88,6 +90,14 @@ export default async function CreatePage({ searchParams }: { searchParams?: Prom
         title="Create ads"
         description="Say who you want to reach. You check every ad before it runs."
       />
+      {/* #778 slice 3a: the entry choice (CPO #1868) as two equal rows (Designer, #1973 review 6). */}
+      {mediaUploadsEnabled() && (
+        <nav aria-label="How to make ads" className="mb-4 mt-4 grid max-w-2xl grid-cols-2 gap-2 text-sm">
+          <a href="#create-flow" aria-current="page" className="inline-flex min-h-11 items-center justify-center rounded-md border border-primary bg-primary/10 px-3 text-center font-medium text-primary">Make ads with AI</a>
+          <Link href="/assets" className="inline-flex min-h-11 items-center justify-center rounded-md border border-slate-300 px-3 text-center font-medium text-slate-700 hover:bg-slate-50">Use my photos</Link>
+        </nav>
+      )}
+      <div id="create-flow" className="scroll-mt-4">
       <CreateFlow business={business} opening={openingLine(evidence)} occasions={occasionsFor(business)}>
         <aside aria-label="Your business details" className="max-w-2xl border-t border-slate-200 pt-5 text-sm text-slate-500">
           <p>
@@ -106,6 +116,7 @@ export default async function CreatePage({ searchParams }: { searchParams?: Prom
           )}
         </aside>
       </CreateFlow>
+      </div>
     </div>
   );
 }

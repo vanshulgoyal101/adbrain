@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { OwnerErrorKey } from "@/i18n/locale";
 import { HEALTH_VERTICAL } from "@/lib/creative/slopScan";
 
 /**
@@ -19,6 +20,16 @@ const PEOPLE_VERTICAL = new RegExp(`${HEALTH_VERTICAL.source}|salon|beauty|spa|p
 
 export function needsPeopleConsent(vertical: string | null | undefined): boolean {
   return PEOPLE_VERTICAL.test(vertical ?? "");
+}
+
+/**
+ * A refusal the owner reads: the route answers `ownerError(ownerKey)` in the owner's language. The
+ * message is the key only, so the client checkbox that imports this file doesn't bundle every message.
+ */
+export class MediaConsentError extends Error {
+  constructor(readonly ownerKey: OwnerErrorKey, readonly status: 400 | 503) {
+    super(ownerKey);
+  }
 }
 
 type ConsentRow = { terms_version: string; people_confirmed: boolean; user_id: string | null; confirmed_at: string };
@@ -45,10 +56,10 @@ export async function hasCurrentMediaConsent(database: Store, business: { id: st
 
 /** Records the signed-in owner's confirmation of the current terms (refused for another owner's business). */
 export async function recordMediaConsent(database: Store, business: { id: string; vertical?: string | null }, confirmed: { rights: boolean; people: boolean }): Promise<void> {
-  if (!confirmed.rights) throw new Error("Confirm you own these photos and videos, or have permission to use them.");
-  if (needsPeopleConsent(business.vertical) && !confirmed.people) throw new Error("Confirm that everyone recognisable has agreed to appear in your ads.");
+  if (!confirmed.rights) throw new MediaConsentError("mediaRightsRequired", 400);
+  if (needsPeopleConsent(business.vertical) && !confirmed.people) throw new MediaConsentError("mediaPeopleRequired", 400);
   const { error } = await database.rpc("media_consent_record", {
     p_business_id: business.id, p_terms_version: MEDIA_TERMS_VERSION, p_people_confirmed: confirmed.people,
   });
-  if (error) throw new Error("Your confirmation couldn't be saved. Try again.");
+  if (error) throw new MediaConsentError("mediaConsentNotSaved", 503);
 }
