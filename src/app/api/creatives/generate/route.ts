@@ -65,11 +65,9 @@ async function handleGET(req: Request) {
     (requestedCount !== null && (!Number.isSafeInteger(requestedCount) || requestedCount < 1 || requestedCount > 6))) {
     return NextResponse.json({ error: "A valid businessId, generationId, and expectedCount are required." }, { status: 400 });
   }
-  // #2553: a status read is one cheap RPC. 30 per 5 min fit one poller, so a second tab or Studio's check 429'd a pilot.
-  // 150 covers two tabs of step 2 and Studio plus an assistant recovery (~115) and still caps a runaway client.
+  // #2553: 150 reads/5 min cover two tabs plus Studio/recovery (~115), while capping runaway polling.
   const limited = await rateLimitResponse(`generate-status:${user.id}`, {
-    limit: 150,
-    windowMs: 5 * 60_000,
+    limit: 150, windowMs: 5 * 60_000,
   });
   if (limited) return limited;
   let intent: Database["public"]["Functions"]["creative_generation_status"]["Returns"];
