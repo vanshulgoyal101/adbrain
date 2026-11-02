@@ -10,7 +10,7 @@ function distinct<T>(items: T[], key: (item: T) => string): T[] {
   return items.filter((item) => !seen.has(key(item)) && Boolean(seen.add(key(item))));
 }
 
-const others = (texts: string[]) => (texts.length ? `; also avoid ${texts.map((text) => `"${text}"`).join(", ")}` : "");
+const others = (all: string[], texts = all.filter((text) => text.trim())) => (texts.length ? `; also avoid ${texts.map((text) => `"${text}"`).join(", ")}` : "");
 
 /**
  * #1035/#2444: a headline or opening that repeats a recent ad's (siblings first) is one issue per rule. It quotes
