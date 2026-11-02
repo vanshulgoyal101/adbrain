@@ -17,7 +17,7 @@ export type PlannedCampaign = {
   adSets: Record<string, string>[];
   /** The `adcreatives` POST forms, as sent to Graph. */
   creatives: Record<string, string>[];
-  /** Typical cost per result (chat or lead) for this business, if we know one. */
+  /** Typical cost per optimisation event (chat, lead or landing-page view) for this business, if we know one. */
   costPerResultRupees?: number | null;
 };
 
@@ -28,6 +28,16 @@ const parse = (value: string | undefined): Record<string, unknown> => {
     return {};
   }
 };
+
+/**
+ * #2599: learning counts the ad set's optimisation events, so a website campaign's budget is judged per landing-page
+ * view, never per chat. Chats and leads keep the word "result".
+ */
+function learningUnit(adSets: Record<string, string>[]): { one: string; many: string } {
+  return adSets.length > 0 && adSets.every((form) => form.optimization_goal === "LANDING_PAGE_VIEWS")
+    ? { one: "landing-page view", many: "landing-page views" }
+    : { one: "result", many: "results" };
+}
 
 const PLACEMENT_KEYS = ["publisher_platforms", "facebook_positions", "instagram_positions", "audience_network_positions", "messenger_positions", "device_platforms"];
 
@@ -69,18 +79,19 @@ export function checkPlan(plan: PlannedCampaign): PlanFinding[] {
 
   const dailyBudgets = plan.adSets.map((form) => Number(form.daily_budget) / 100).filter((n) => Number.isFinite(n) && n > 0);
   const perAdSet = dailyBudgets.length ? Math.min(...dailyBudgets) : 0;
+  const unit = learningUnit(plan.adSets);
   if (!plan.costPerResultRupees || plan.costPerResultRupees <= 0) {
     findings.push({
       rule: "Budget vs learning phase",
       status: "unknown",
-      detail: `No cost per result yet. At ${formatPerDay(perAdSet)}, learning needs a cost per result under ${formatMoney((perAdSet * 7) / LEARNING_EVENTS_PER_WEEK)}.`,
+      detail: `No cost per ${unit.one} yet. At ${formatPerDay(perAdSet)}, learning needs a cost per ${unit.one} under ${formatMoney((perAdSet * 7) / LEARNING_EVENTS_PER_WEEK)}.`,
     });
   } else {
     const weekly = (perAdSet * 7) / plan.costPerResultRupees;
     findings.push({
       rule: "Budget vs learning phase",
       status: weekly >= LEARNING_EVENTS_PER_WEEK ? "pass" : "warn",
-      detail: `About ${Math.floor(weekly)} results a week at ${formatPerDay(perAdSet)} and ${formatMoney(plan.costPerResultRupees)} each (Meta's learning phase needs about ${LEARNING_EVENTS_PER_WEEK}). ${weekly >= LEARNING_EVENTS_PER_WEEK ? "" : `It needs about ${formatPerDay(Math.ceil((LEARNING_EVENTS_PER_WEEK * plan.costPerResultRupees) / 7))}, or it may stay "learning limited".`}`.trim(),
+      detail: `About ${Math.floor(weekly)} ${unit.many} a week at ${formatPerDay(perAdSet)} and ${formatMoney(plan.costPerResultRupees)} each (Meta's learning phase needs about ${LEARNING_EVENTS_PER_WEEK}). ${weekly >= LEARNING_EVENTS_PER_WEEK ? "" : `It needs about ${formatPerDay(Math.ceil((LEARNING_EVENTS_PER_WEEK * plan.costPerResultRupees) / 7))}, or it may stay "learning limited".`}`.trim(),
     });
   }
 

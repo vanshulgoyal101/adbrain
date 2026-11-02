@@ -32,6 +32,16 @@ describe("plan check (#419)", () => {
     expect(status(checkPlan(planFor("whatsapp", 30)), "Budget vs learning phase").status).toBe("pass");
   });
 
+  it("#2599: judges a website campaign's budget per landing-page view, never per chat", () => {
+    const website = (cost?: number) => {
+      const plan = planFor("whatsapp", cost);
+      return { ...plan, adSets: plan.adSets.map((form) => ({ ...form, optimization_goal: "LANDING_PAGE_VIEWS", destination_type: "WEBSITE" })) };
+    };
+    expect(status(checkPlan(website()), "Budget vs learning phase").detail).toBe("No cost per landing-page view yet. At ₹280 a day, learning needs a cost per landing-page view under ₹39.20.");
+    expect(status(checkPlan(website(69)), "Budget vs learning phase").detail).toMatch(/^About 28 landing-page views a week at ₹280 a day and ₹69 each/);
+    expect(status(checkPlan(website(5)), "Budget vs learning phase").status).toBe("pass");
+  });
+
   it("fails Advantage+ audience off, and flags pinned placements and split budgets", () => {
     const off = planFor("instant_form");
     const targeting = JSON.parse(off.adSets[0].targeting);
