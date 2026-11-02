@@ -101,6 +101,8 @@ const schema = z.object({
   MANAGED_ACCOUNTS_ENABLED: z.string().optional().default("false").transform((v) => v === "true" || v === "1"),
   // #1209: owners upload their own photos into the private `media` bucket. Off until the migration is applied.
   MEDIA_UPLOADS_ENABLED: z.string().optional().default("false").transform((v) => v === "true" || v === "1"),
+  // #748 (#2653 = A): owners' MP4/MOV videos too. Off until the bucket takes video; needs MEDIA_UPLOADS_ENABLED.
+  MEDIA_VIDEO_ENABLED: z.string().optional().default("false").transform((v) => v === "true" || v === "1"),
   META_PARENT_BUSINESS_ID: z.preprocess((v) => (v === "" ? undefined : v), z.string().regex(/^\d+$/).optional()),
   META_PARENT_SYSTEM_TOKEN: z.string().optional().default(""),
 

@@ -9,12 +9,16 @@ import { describe, expect, it } from "vitest";
 const dir = join(process.cwd(), "db/migrations");
 const files = readdirSync(dir).filter((file) => file.endsWith(".sql")).sort();
 const define = /create\s+or\s+replace\s+function\s+public\.lead_sync_checkpoint\s*\(/i;
+const defineStart = /create\s+or\s+replace\s+function\s+public\.lead_sync_start\s*\(/i;
+
+function extract(sql: string, definition: RegExp): string {
+  const start = sql.search(definition);
+  const end = sql.indexOf("$$;", start);
+  return start < 0 || end < 0 ? "" : sql.slice(start, end).replace(/--[^\n]*/g, " ").replace(/\s+/g, " ");
+}
 
 function body(file: string): string {
-  const sql = readFileSync(join(dir, file), "utf8");
-  const start = sql.search(define);
-  const end = sql.indexOf("$$;", start);
-  return sql.slice(start, end).replace(/--[^\n]*/g, " ").replace(/\s+/g, " ").toLowerCase();
+  return extract(readFileSync(join(dir, file), "utf8"), define).toLowerCase();
 }
 
 function keepsSharedPageFilter(sql: string): boolean {
@@ -51,5 +55,25 @@ describe("lead sync keeps a shared Page's leads in their own business (#1775, #2
     expect(precedenceBug).not.toBe(shared);
     expect(keepsSharedPageFilter(precedenceBug)).toBe(false);
     expect(keepsSharedPageFilter(body(latest).replace(/where \((not \w+ or \w+\.id is not null)\)/, "where $1"))).toBe(false);
+  });
+});
+
+describe("lead sync checkpoint race contract (#2503)", () => {
+  it("the canonical schema and final migration use the exact conflict SQLSTATE and case-sensitive message", () => {
+    const latest = files.filter((file) => define.test(readFileSync(join(dir, file), "utf8"))).at(-1)!;
+    const schema = readFileSync(join(process.cwd(), "db/schema.sql"), "utf8");
+    const conflict = /if current_run\.version <> p_version or current_run\.state <> 'partial' then raise exception '([^']+)' using errcode = '([^']+)'; end if;/i;
+    for (const sql of [readFileSync(join(dir, latest), "utf8"), schema]) {
+      const match = extract(sql, define).match(conflict);
+      expect(match?.[1]).toBe("Sync progress changed; reload and resume");
+      expect(match?.[2]).toBe("40001");
+    }
+
+    const latestStart = files.filter((file) => defineStart.test(readFileSync(join(dir, file), "utf8"))).at(-1)!;
+    for (const sql of [readFileSync(join(dir, latestStart), "utf8"), schema]) {
+      const start = extract(sql, defineStart);
+      expect(start).not.toBe("");
+      expect(start).not.toContain("'Sync progress changed; reload and resume'");
+    }
   });
 });

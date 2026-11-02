@@ -9,14 +9,19 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input, Label } from "@/components/ui/input";
 import type { SpendEvaluation, SpendLimits } from "@/lib/campaign/spend";
 import { formatMoney } from "@/lib/format";
+import { settingsTranslator, type Words } from "@/i18n/words";
 
 export function SpendGuardrails({
   limits,
   evaluation,
+  words,
 }: {
   limits: SpendLimits;
   evaluation: SpendEvaluation;
+  /** #1438: the owner's language; without it, English. */
+  words?: Words<"settings">;
 }) {
+  const t = settingsTranslator(words);
   const router = useRouter();
   const [cap, setCap] = useState(
     limits.weeklyCapRupees != null ? String(limits.weeklyCapRupees) : "",
@@ -33,11 +38,11 @@ export function SpendGuardrails({
     const weeklyCapRupees = cap.trim() === "" ? null : Number(cap);
     const threshold = Number(alertPct);
     if (weeklyCapRupees !== null && (!Number.isInteger(weeklyCapRupees) || weeklyCapRupees <= 0 || weeklyCapRupees > 2_147_483_647)) {
-      setError("Enter a positive whole-rupee cap, or leave it blank for no cap.");
+      setError(t("spend.capInvalid"));
       return;
     }
     if (!Number.isInteger(threshold) || threshold < 1 || threshold > 100) {
-      setError("Enter a whole-number alert threshold between 1 and 100.");
+      setError(t("spend.alertInvalid"));
       return;
     }
     setSaving(true);
@@ -52,7 +57,7 @@ export function SpendGuardrails({
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Could not save.");
+      if (!res.ok) throw new Error(data.error ?? t("spend.saveFailed"));
       setSaved(true);
       router.refresh();
     } catch (err) {
@@ -67,40 +72,39 @@ export function SpendGuardrails({
       <CardHeader>
         <CardTitle as="h2" className="flex items-center gap-2">
           <ShieldCheck className="h-5 w-5 text-slate-500" aria-hidden="true" />
-          Spend guardrails
+          {t("spend.title")}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <p className="text-sm text-slate-600">
-          Set a weekly ad-spend ceiling. AdBrain warns you as you approach it and
-          won’t let you turn on campaigns that would commit more than your cap.
-          {limits.weeklyCapRupees == null && " No cap is set yet, so campaigns follow only their Meta budgets."}
+          {t("spend.intro")}
+          {limits.weeklyCapRupees == null && ` ${t("spend.noCap")}`}
         </p>
 
         {evaluation.capRupees != null && (
-          <SpendMeter evaluation={evaluation} />
+          <SpendMeter evaluation={evaluation} t={t} />
         )}
 
         {error && <Alert variant="error">{error}</Alert>}
-        {saved && <Alert variant="success">Saved.</Alert>}
+        {saved && <Alert variant="success">{t("spend.saved")}</Alert>}
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <Label htmlFor="cap">Weekly cap (₹)</Label>
+            <Label htmlFor="cap">{t("spend.capLabel")}</Label>
             <Input
               id="cap"
               type="number"
               min={1}
               disabled={saving}
               inputMode="numeric"
-              placeholder="No cap"
+              placeholder={t("spend.capPlaceholder")}
               value={cap}
               onChange={(e) => { setCap(e.target.value); setSaved(false); }}
             />
-            <p className="mt-1 text-xs text-slate-500">Leave blank for no cap.</p>
+            <p className="mt-1 text-xs text-slate-500">{t("spend.capHint")}</p>
           </div>
           <div>
-            <Label htmlFor="alert">Warn at (% of cap)</Label>
+            <Label htmlFor="alert">{t("spend.alertLabel")}</Label>
             <Input
               id="alert"
               type="number"
@@ -123,32 +127,26 @@ export function SpendGuardrails({
             onChange={(e) => { setAutoPause(e.target.checked); setSaved(false); }}
           />
           <span>
-            <span className="font-medium">Auto-pause at the cap.</span> When
-            tracked spend reaches your weekly cap, pause every active campaign
-            automatically (checked whenever results refresh).
+            <span className="font-medium">{t("spend.autoPauseLead")}</span>{" "}
+            {t("spend.autoPause")}
           </span>
         </label>
 
         <details className="text-sm text-slate-600">
-          <summary className="flex min-h-11 w-fit cursor-pointer items-center font-medium text-blue-700">How the cap works</summary>
-          <p className="pb-2 text-sm leading-6 text-slate-600">
-            Checks are periodic, not real-time. Reporting delays and unsuccessful
-            pause requests can allow spending beyond this cap. Use Meta account
-            spending limits where supported; prepaid accounts need campaign budgets
-            instead. These guardrails do not verify available funds or payment setup.
-          </p>
+          <summary className="flex min-h-11 w-fit cursor-pointer items-center font-medium text-blue-700">{t("spend.howTitle")}</summary>
+          <p className="pb-2 text-sm leading-6 text-slate-600">{t("spend.how")}</p>
         </details>
 
         <Button onClick={save} disabled={saving}>
           {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-          Save guardrails
+          {t("spend.save")}
         </Button>
       </CardContent>
     </Card>
   );
 }
 
-function SpendMeter({ evaluation }: { evaluation: SpendEvaluation }) {
+function SpendMeter({ evaluation, t }: { evaluation: SpendEvaluation; t: ReturnType<typeof settingsTranslator> }) {
   const tone =
     evaluation.status === "over"
       ? "bg-red-500"
@@ -159,7 +157,7 @@ function SpendMeter({ evaluation }: { evaluation: SpendEvaluation }) {
   return (
     <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
       <div className="flex items-center justify-between text-sm">
-        <span className="text-slate-600">This week</span>
+        <span className="text-slate-600">{t("spend.thisWeek")}</span>
         <span className="font-medium text-slate-900">
           {formatMoney(evaluation.usedRupees)} / {formatMoney(evaluation.capRupees ?? 0)}
         </span>
@@ -168,7 +166,7 @@ function SpendMeter({ evaluation }: { evaluation: SpendEvaluation }) {
         <div className={`h-full ${tone}`} style={{ width: `${width}%` }} />
       </div>
       <p className="mt-1 text-xs text-slate-500">
-        {evaluation.pct}% used · {formatMoney(evaluation.headroomRupees)} left
+        {t("spend.used", { pct: evaluation.pct, left: formatMoney(evaluation.headroomRupees) })}
       </p>
     </div>
   );

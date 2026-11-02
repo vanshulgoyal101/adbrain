@@ -20,12 +20,19 @@ export function pausedPhotoFor(angle: AdAngle, photos: readonly string[] | undef
 /** #780: what an owner's photo shows and the words printed in it (a vision call); context, never claim evidence. */
 export type OwnerPhotoNotes = { description: string; visibleText: string | null };
 
+/** An ad's owner photo fields, as the concept takes them. */
+export type OwnerPhotoFields = {
+  /** The business's own photo used as this ad's image (#195); the model never sees it. */
+  ownerPhoto?: string;
+  ownerPhotoNotes?: OwnerPhotoNotes;
+};
+
 /** #780: an ad's owner photo and, when it was described, what it shows, so the ad's words fit it. */
 export function ownerPhotoInput(
   angle: AdAngle,
   photos: readonly string[] | undefined,
   notes: Readonly<Record<string, OwnerPhotoNotes>> | undefined,
-): { ownerPhoto?: string; ownerPhotoNotes?: OwnerPhotoNotes } {
+): OwnerPhotoFields {
   const ownerPhoto = ownerPhotoFor(angle, photos);
   const ownerPhotoNotes = ownerPhoto ? notes?.[ownerPhoto] : undefined;
   return { ...(ownerPhoto ? { ownerPhoto } : {}), ...(ownerPhotoNotes ? { ownerPhotoNotes } : {}) };
@@ -39,12 +46,12 @@ claim from it only when the Brand facts or supplied facts say the same, and neve
 `;
 
 /** #780: the concept prompt's rule for a described owner photo ("" otherwise). */
-export function describedPhotoRule(input: { ownerPhoto?: string; ownerPhotoNotes?: OwnerPhotoNotes }): string {
+export function describedPhotoRule(input: OwnerPhotoFields): string {
   return input.ownerPhoto && input.ownerPhotoNotes ? DESCRIBED_PHOTO_RULE : "";
 }
 
 /** The concept payload's image source, plus what a described owner photo shows. */
-export function imageSourceFields(input: { ownerPhoto?: string; ownerPhotoNotes?: OwnerPhotoNotes }) {
+export function imageSourceFields(input: OwnerPhotoFields) {
   if (!input.ownerPhoto) return { imageSource: "generated" };
   return input.ownerPhotoNotes ? { imageSource: "owner_photo_described", photo: input.ownerPhotoNotes } : { imageSource: "owner_photo" };
 }

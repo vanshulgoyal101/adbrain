@@ -2,6 +2,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AudienceSwitchStrip } from "@/components/audience-switch-strip";
+import hi from "../messages/hi.json";
 
 // #765 (b): the card's "New audience ready" strip: turn the waiting copy on, or cancel it.
 describe("AudienceSwitchStrip", () => {
@@ -11,6 +12,16 @@ describe("AudienceSwitchStrip", () => {
     vi.stubGlobal("fetch", fetchMock);
   });
   const sent = () => JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body));
+
+  it("speaks the owner's language, including Meta's silence and the last try (#1438)", async () => {
+    fetchMock.mockResolvedValueOnce(Response.json({}, { status: 502 }));
+    render(<AudienceSwitchStrip campaignId="c-1" operationId="op-1" running={false} lastError="समय खत्म" onDone={vi.fn()} words={{ locale: "hi", messages: hi.campaigns }} />);
+    expect(screen.getByRole("group", { name: "नई ऑडियंस तैयार है" })).toBeTruthy();
+    expect(screen.getByRole("alert")).toHaveTextContent("पिछली कोशिश: समय खत्म");
+    fireEvent.click(screen.getByRole("button", { name: "नई ऑडियंस इस्तेमाल करें" }));
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Meta तक नहीं पहुँच सके। कुछ भी नहीं बदला; फिर कोशिश करें।"));
+    expect(screen.getByRole("button", { name: "नई ऑडियंस रद्द करें" })).toBeTruthy();
+  });
 
   it("turns the new audience on for a running campaign, with 44 px buttons", async () => {
     const onDone = vi.fn();

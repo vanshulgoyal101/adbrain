@@ -16,7 +16,7 @@ import { plainDigits, rateDropIssues, spelledAmountIndex, spelledCurrency, spell
 import { contactsInCopy } from "./contact-in-copy";
 import { repeatIssues } from "./sibling-repeats";
 import { fitHeadline } from "./fit-headline";
-import { describedPhotoRule, imageSourceFields, type OwnerPhotoNotes } from "./owner-photos";
+import { describedPhotoRule, imageSourceFields, type OwnerPhotoFields } from "./owner-photos";
 
 export const CONCEPT_VERSION = "creative-concept-v3";
 // Primary text Meta shows on mobile before "See more" (#194).
@@ -45,7 +45,7 @@ export function savedCreativeDescription(generation: unknown): string | null {
   return result.success ? result.data.concept.description : null;
 }
 
-export interface ConceptInput {
+export interface ConceptInput extends OwnerPhotoFields {
   brand: BrandContext;
   brief: string;
   angle: AdAngle;
@@ -53,9 +53,6 @@ export interface ConceptInput {
   language?: string;
   format?: AdFormat;
   referenceImages?: string[];
-  /** The business's own photo used as this ad's image (#195); the model never sees it. */
-  ownerPhoto?: string;
-  ownerPhotoNotes?: OwnerPhotoNotes;
   recentCopy?: { headline: string; primary_text: string }[];
   advisoryPreferences?: string;
   sourceFacts?: string[];
