@@ -117,7 +117,7 @@ lower cost.
 | `META_PARENT_SYSTEM_TOKEN` | Empty | Privileged secret (Vercel Sensitive): the parent's 'AdBrain provisioning' system-user token. Checked read-only after each deploy (`/api/cron/meta-parent-health`); rotation in OPERATIONS |
 | `META_CONNECT_ROLLOUT` | Unset | `disabled`, `pilot`, `enabled`; unset allows nonproduction only |
 | `META_CONNECT_PILOT_USER_ID` | Unset | Exact app user allowed in pilot mode |
-| `META_APP_REVIEW_PENDING` | on | #1989: while Meta App Review (#156) is pending, WS1 step 3 asks a not-yet-Tester owner to accept the app invite before Connect, and offers Try again after a return with nothing connected. Exactly `false` hides it; DevOps sets that once #156 is approved. No secret |
+| `META_APP_REVIEW_PENDING` | on | #1989: while Meta App Review (#156) is pending, WS1 step 3 tells a not-yet-Tester owner that only added people can connect, and after a return with nothing connected sends the access request (#2538) and offers Try again. Exactly `false` hides it; DevOps sets that once #156 is approved. No secret |
 | `META_SYSTEM_USER_TOKEN`, `META_AD_ACCOUNT_ID`, `META_PAGE_ID` | Empty | **Local fixture recording only** (`.env.local`, read by `scripts/lib/meta-env.ts`). The app doesn't read them (#520), and they aren't set in Vercel |
 
 Rollout variables are read directly, outside `getEnv()`. Unknown values deny
