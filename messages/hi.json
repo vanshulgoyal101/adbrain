@@ -728,7 +728,24 @@
     "business": "बिज़नेस",
     "assets": "फ़ोटो",
     "settings": "सेटिंग",
-    "getStarted": "शुरू करें"
+    "getStarted": "शुरू करें",
+    "workspace": "वर्कस्पेस",
+    "setUpBusiness": "अपना बिज़नेस सेट करें",
+    "yourAccount": "आपका खाता",
+    "help": "WhatsApp पर मदद",
+    "signOut": "साइन आउट करें",
+    "signOutFailed": "साइन आउट नहीं हो सका। फिर कोशिश करें।",
+    "legal": "कानूनी",
+    "privacy": "गोपनीयता",
+    "terms": "शर्तें",
+    "dataDeletion": "डेटा हटाना",
+    "skip": "सीधे वर्कस्पेस पर जाएँ",
+    "sidebar": "मुख्य साइडबार",
+    "navigation": "वर्कस्पेस के पेज",
+    "menu": "वर्कस्पेस मेन्यू",
+    "openNav": "मेन्यू खोलें",
+    "closeNav": "मेन्यू बंद करें",
+    "continueFirstAd": "अपना पहला विज्ञापन पूरा करें"
   },
   "campaigns": {
     "header": {
