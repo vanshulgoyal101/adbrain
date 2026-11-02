@@ -27,7 +27,7 @@ import { applyMonthlyCostCap } from "@/lib/llm/cost-cap";
 import { preferenceContext } from "@/lib/preferences/store";
 import { ownerError } from "@/i18n/request-locale";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { adPhotos, describeUsageEvent, MAX_AD_PHOTOS, pickedMedia, type AdPhoto } from "@/lib/media/ad-photos";
+import { adPhotos, describeUsageEvent, MAX_AD_PHOTOS, pickedMedia, readAdPhotos, type AdPhoto, type ReadPhoto } from "@/lib/media/ad-photos";
 import { MediaError, mediaUploadsEnabled, type MediaRow } from "@/lib/media/store";
 
 export const runtime = "nodejs";
@@ -217,10 +217,13 @@ async function generate(req: Request, live?: LiveCreate) {
   }
 
   let pickedRows: MediaRow[] = [];
+  let readPhotos: ReadPhoto[] = [];
   if (body.mediaIds) {
     if (!mediaUploadsEnabled()) return NextResponse.json({ error: "Not found" }, { status: 404 });
     try {
       pickedRows = await pickedMedia(supabase as unknown as SupabaseClient, businessId, body.mediaIds);
+      // Reads before admission: a photo that can't be read must not strand a paid batch's hold.
+      readPhotos = await readAdPhotos(createAdminClient() as unknown as SupabaseClient, pickedRows);
     } catch (error) {
       if (error instanceof MediaError) return NextResponse.json({ error: error.message, code: error.code }, { status: error.status });
       throw error;
@@ -297,10 +300,10 @@ async function generate(req: Request, live?: LiveCreate) {
     live?.onAdmitted();
     // #780: one paid vision call per new library photo (inside the admitted reservation), so each ad's words fit its photo.
     let photos: AdPhoto[] = [];
-    if (pickedRows.length) {
+    if (readPhotos.length) {
       const visionEvents: Parameters<typeof persistLLMUsage>[0] = [];
       try {
-        photos = await adPhotos(admin as unknown as SupabaseClient, pickedRows, {
+        photos = await adPhotos(admin as unknown as SupabaseClient, readPhotos, {
           onAttempt: (attempt, mediaId) => visionEvents.push(describeUsageEvent(attempt, mediaId,
             { businessId, userId, route: "creatives.generate", requestId, generationId: variantGroup })),
         });

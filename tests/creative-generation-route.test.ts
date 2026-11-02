@@ -31,6 +31,7 @@ const mocks = vi.hoisted(() => ({
   persist: vi.fn(),
   progress: vi.fn(),
   pickedMedia: vi.fn(),
+  readAdPhotos: vi.fn(),
   adPhotos: vi.fn(),
   mediaEnabled: true,
   user: { id: "owner" } as { id: string; email?: string; email_confirmed_at?: string },
@@ -142,6 +143,7 @@ vi.mock("@/lib/audit", () => ({ logEvent: async () => {} }));
 vi.mock("@/lib/media/ad-photos", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/media/ad-photos")>()),
   pickedMedia: mocks.pickedMedia,
+  readAdPhotos: mocks.readAdPhotos,
   adPhotos: mocks.adPhotos,
 }));
 vi.mock("@/lib/media/store", async (importOriginal) => ({
@@ -240,12 +242,27 @@ describe("creative generation route", () => {
     expect(mocks.generateVariants).not.toHaveBeenCalled();
   });
 
+  it("refuses a photo that can't be read before admitting a paid batch, so no hold is stranded (#780)", async () => {
+    const { MediaError } = await import("@/lib/media/store");
+    mocks.pickedMedia.mockResolvedValueOnce([{ id: mediaId, business_id: "business" }]);
+    mocks.readAdPhotos.mockRejectedValueOnce(new MediaError(503, "MEDIA_UNAVAILABLE", "Couldn't read the photo. Try again."));
+    const { POST } = await import("@/app/api/creatives/generate/route");
+    const response = await POST(request({ businessId: "business", brief: "Installation", format: "story", mediaIds: [mediaId] }));
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({ code: "MEDIA_UNAVAILABLE" });
+    expect(mocks.admitted.size).toBe(0);
+    expect(mocks.adPhotos).not.toHaveBeenCalled();
+    expect(mocks.generateVariants).not.toHaveBeenCalled();
+  });
+
   it("writes each ad's words for its library photo, bills the vision call and keeps the signed link out of the receipt (#780)", async () => {
     const row = { id: mediaId, business_id: "business" };
     const notes = { description: "A hand-painted sign on a salon wall.", visibleText: "Haircut ₹149" };
+    const read = { row, url: signed, notes: null, bytes: new Uint8Array([1]) };
     mocks.pickedMedia.mockResolvedValueOnce([row]);
-    mocks.adPhotos.mockImplementationOnce(async (_admin, rows, options) => {
-      expect(rows).toEqual([row]);
+    mocks.readAdPhotos.mockResolvedValueOnce([read]);
+    mocks.adPhotos.mockImplementationOnce(async (_admin, photos, options) => {
+      expect(photos).toEqual([read]);
       options.onAttempt({ provider: "openrouter", model: "google/gemini-3.6-flash", status: "success", latencyMs: 900,
         usage: { promptTokens: 1255, completionTokens: 60, totalTokens: 1315 } }, mediaId);
       return [{ mediaId, url: signed, notes }];

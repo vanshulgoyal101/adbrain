@@ -95,7 +95,7 @@ Example interview input for a synthetic business:
 | `language` | Optional string normalized through language helpers |
 | `sourceFacts` | Optional array of up to 12 explicit user-authored facts, each up to 2000 characters (6000 combined); never copy an AI-generated brief or advisory preferences here |
 | `format` | `portrait` (default), `square`, `story`, `landscape` |
-| `mediaIds` | Optional 1-3 UUIDs of the Brand's ready library photos (#780; 404 while `MEDIA_UPLOADS_ENABLED` is off, 404 for another Brand's photo, 409 for one not ready). Each ad uses one photo, and its words are written from the photo's saved description (one paid vision call the first time); the saved ad gets `media_asset_id` and its receipt `ownerPhotoUrl: media:<id>`, never the signed link |
+| `mediaIds` | Optional 1-3 UUIDs of the Brand's ready library photos (#780; 404 while `MEDIA_UPLOADS_ENABLED` is off, 404 for another Brand's photo, 409 for one not ready, 503 when it can't be read; all checked before the batch is admitted). Each ad uses one photo, and its words are written from the photo's saved description (one paid vision call the first time); the saved ad gets `media_asset_id` and its receipt `ownerPhotoUrl: media:<id>`, never the signed link |
 
 Example paid-generation input, submitted after the owner starts Create (after the brief review, or straight from any goal on a complete Brand, #858/#1004):
 
