@@ -470,6 +470,51 @@ export function skillsFor(map, title, labels = []) {
 /** Bot posts that are not a word: the advisory AI review (#587) would wake the PR owner on every push, the daily core scoreboard (#681) every role on #681. */
 const BOT_MARKERS = ["<!-- ai-review -->", "<!-- core-scoreboard -->"];
 
+const PAGE = 100;
+/**
+ * #2576: the latest word on an owned item. GitHub lists issue comments oldest first (sort/direction are
+ * ignored), so read the page holding the newest comment (from the item's `comments` count), step back if
+ * deletions emptied it, and keep reading while a page is full (a comment may land after the count was taken).
+ * Every review page is read: reviews have no count on the issue list.
+ * @param {(path: string) => Promise<any>} api
+ * @param {string} repo
+ * @param {{ number: number, comments?: number, pull_request?: unknown }} item
+ */
+export async function lastWordOn(api, repo, item) {
+  const pages = async (path, first) => {
+    let page = first;
+    let rows = await api(`${path}?per_page=${PAGE}&page=${page}`) ?? [];
+    while (!rows.length && page > 1) rows = await api(`${path}?per_page=${PAGE}&page=${--page}`) ?? [];
+    let all = rows;
+    while (rows.length === PAGE) { rows = await api(`${path}?per_page=${PAGE}&page=${++page}`) ?? []; all = all.concat(rows); }
+    return all;
+  };
+  // No count (not from the issue list) means unknown, not none: start at page 1.
+  const comments = item.comments === 0 ? [] : await pages(`repos/${repo}/issues/${item.number}/comments`, Math.max(1, Math.ceil((item.comments ?? 1) / PAGE)));
+  const reviews = item.pull_request ? await pages(`repos/${repo}/pulls/${item.number}/reviews`, 1) : [];
+  return latestWord(comments, reviews);
+}
+
+/**
+ * The startup and due-time backlog scan (#364, #2572, #2576): whose turn each owned item is, and its timed reads.
+ * @param {Array<{ number: number, comments?: number, pull_request?: unknown, labels?: Array<string | { name: string }> }>} items
+ * @param {{ api: (path: string) => Promise<any>, repo: string, m: ReturnType<typeof matchers>, now?: number }} ctx
+ */
+export async function scanBacklog(items, { api, repo, m, now = Date.now() }) {
+  const snoozed = new Set();
+  const myTurn = new Set();
+  const dueNow = new Set();
+  const turns = [];
+  for (const item of backlogReads(items)) {
+    const last = await lastWordOn(api, repo, item);
+    const labels = labelNames(item);
+    const due = scheduledRead(last?.body ?? null, m, labels);
+    if (due !== null) (now < due ? snoozed : dueNow).add(item.number);
+    if (waitingOnMe(last?.body ?? null, m, labels, now)) { myTurn.add(item.number); turns.push({ item, last }); }
+  }
+  return { snoozed, myTurn, dueNow, turns };
+}
+
 /** The latest word on an item across issue comments and PR reviews (verdicts are reviews since #423), bot posts left out. */
 export function latestWord(comments = [], reviews = []) {
   const words = [
@@ -718,20 +763,9 @@ let ownedActionable = [];
 async function backlog() {
   const found = [];
   const items = await owned();
-  const snoozed = new Set();
-  const myTurn = new Set();
-  const dueNow = new Set();
-  for (const item of backlogReads(items)) {
-    const comments = item.comments ? await api(`repos/${repo}/issues/${item.number}/comments?per_page=100`) : [];
-    const reviews = item.pull_request ? await api(`repos/${repo}/pulls/${item.number}/reviews?per_page=100`) : [];
-    const last = latestWord(comments, reviews);
-    const labels = (item.labels ?? []).map(l => l.name);
-    const due = scheduledRead(last?.body ?? null, m, labels);
-    if (due !== null) (Date.now() < due ? snoozed : dueNow).add(item.number);
-    if (waitingOnMe(last?.body ?? null, m, labels)) {
-      myTurn.add(item.number);
-      found.push(last ? `#${item.number} is waiting on you${withSkills(item)}: "${brief(last.body)}" ${last.url}` : `#${item.number} is yours and not started${withSkills(item)}: ${item.title}`);
-    }
+  const { snoozed, myTurn, dueNow, turns } = await scanBacklog(items, { api, repo, m });
+  for (const { item, last } of turns) {
+    found.push(last ? `#${item.number} is waiting on you${withSkills(item)}: "${brief(last.body)}" ${last.url}` : `#${item.number} is yours and not started${withSkills(item)}: ${item.title}`);
   }
   ownedActionable = actionableOwned(items, { snoozed, myTurn, due: dueNow });
   // #364: nothing is waiting on you, but you still own work with no open PR: continue the oldest.
