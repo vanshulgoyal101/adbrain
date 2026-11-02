@@ -1,5 +1,5 @@
 # जाँचें और लाइव करें
-<!-- mirrors ../review.md 800808cc9745 -->
+<!-- mirrors ../review.md 1601d87a57c1 -->
 
 यह [Review and Go Live](../review.md) का हिंदी रूप है; अंग्रेज़ी पेज बदले तो इसे भी बदलें।
 [Features and workflows](../README.md) का हिस्सा।

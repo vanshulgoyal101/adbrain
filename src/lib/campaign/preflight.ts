@@ -274,7 +274,10 @@ export function runPreflight(input: PreflightInput): ReviewDTO {
   }
   if (destination === "website") {
     const websiteProblem = websiteBlockerMessage(input.website ?? null, input.websiteReach);
-    if (websiteProblem) blockers.push(blocker("PREFLIGHT_BLOCKED", websiteProblem.reason, websiteProblem.message, { kind: "open_brand" }));
+    if (websiteProblem) {
+      const reason = websiteProblem.missing ? "REVIEW_NO_WEBSITE" : "REVIEW_WEBSITE_UNREACHABLE";
+      blockers.push(blocker("PREFLIGHT_BLOCKED", reason, websiteProblem.message, { kind: "open_brand" }));
+    }
   } else if (destination !== "whatsapp" && input.website !== undefined && !isAdvertiserWebsite(input.website)) {
     blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_NO_WEBSITE", "Add your business website on the Your business page. Meta lead ads must link to the advertiser's own website, not Facebook.", { kind: "open_brand" }));
   }
