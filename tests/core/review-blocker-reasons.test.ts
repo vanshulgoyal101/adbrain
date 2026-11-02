@@ -47,6 +47,8 @@ const cases: [string, (value: PreflightInput) => void][] = [
   ["REVIEW_NO_AUDIENCE", (v) => { v.draft.targeting.audience = undefined; }],
   ["REVIEW_INTERESTS_UNRESOLVED", (v) => { v.geo.unresolvedInterests = ["Wellness"]; }],
   ["REVIEW_AD_POLICY", (v) => { v.vertical = "chiropractic clinic"; v.creatives[0].headline = "Cures back pain"; }],
+  // TODO(#2600): drop the cast once the draft schema accepts website.
+  ["REVIEW_WEBSITE_UNREACHABLE", (v) => { v.draft.destination = "website" as never; v.websiteReach = { ok: false, problem: "status", status: 503 }; }],
 ];
 
 describe("Review blockers carry their own reason (#688)", () => {

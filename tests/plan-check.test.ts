@@ -75,7 +75,10 @@ describe("plan check (#419)", () => {
     expect(REVIEW_WARNINGS).toEqual({
       story: "No 9:16 ad: Reels and Stories placements will crop or skip it",
       budget: "Budget is below what Meta needs to learn (about 50 results a week); results may be slow",
+      websiteBudget: "Budget is below what Meta needs to learn (about 50 landing-page views a week); visits may be slow",
     });
+    // #2599: a website ad learns from landing-page views, so its warning counts those, not chats.
+    expect(reviewWarnings({ destination: "website", storyReady: true, perAdSetDailyBudgetRupees: 100, costPerResultRupees: 20 })).toEqual([REVIEW_WARNINGS.websiteBudget]);
     // ₹280 a day at ₹69 a chat is about 28 chats a week (#157).
     expect(reviewWarnings({ destination: "whatsapp", storyReady: false, perAdSetDailyBudgetRupees: 280, costPerResultRupees: 69 }))
       .toEqual([REVIEW_WARNINGS.story, REVIEW_WARNINGS.budget]);

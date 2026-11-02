@@ -9,6 +9,9 @@ import type { LeadDestination } from "@/lib/types/campaign";
 /** Meta's learning phase ends after about 50 optimisation events within 7 days of the last significant edit. */
 const LEARNING_EVENTS_PER_WEEK = 50;
 
+/** The destinations Review checks: everything but phone calls (#2599). */
+export type ReviewDestination = Exclude<LeadDestination, "call">;
+
 export type PlanCheckStatus = "pass" | "warn" | "fail" | "unknown";
 export type PlanFinding = { rule: string; status: PlanCheckStatus; detail: string };
 
@@ -138,11 +141,16 @@ export function planCheckEvent(findings: PlanFinding[], destination: string) {
 export const REVIEW_WARNINGS = {
   story: "No 9:16 ad: Reels and Stories placements will crop or skip it",
   budget: "Budget is below what Meta needs to learn (about 50 results a week); results may be slow",
+  /** #2599: website ads learn from landing-page views, not chats. */
+  websiteBudget: "Budget is below what Meta needs to learn (about 50 landing-page views a week); visits may be slow",
 } as const;
 
 /** #418 rule 7: an ad's last line asks customers to send other words than WhatsApp pre-types. */
 /** #1177: Review shows "Switch to WhatsApp" beside this warning. */
 export const WHATSAPP_PICTURE_ON_FORM = "An ad's picture asks people to message you on WhatsApp, but this campaign opens a form. Switch to WhatsApp, or choose ads made for forms";
+
+/** #2599: the same contradiction on a website ad. */
+export const WHATSAPP_PICTURE_ON_WEBSITE = "An ad's picture asks people to message you on WhatsApp, but this campaign opens your website. Switch to WhatsApp, or choose ads made for your website";
 
 /** #1198: the ad quotes what to send, but a Quick questions campaign shows questions, not a ready message. */
 export const QUOTED_ASK_WITH_QUESTIONS = "Your ad promises a ready message, but customers will see quick questions. Change the last line to “Tap, then pick a question to send”?";
@@ -157,7 +165,7 @@ export function askMismatchWarning(ask: string, prefill: string): string {
  * nothing rather than guess.
  */
 export function reviewWarnings(input: {
-  destination: Exclude<LeadDestination, "call" | "website">;
+  destination: ReviewDestination;
   storyReady: boolean;
   perAdSetDailyBudgetRupees: number;
   costPerResultRupees?: number | null;
@@ -165,7 +173,9 @@ export function reviewWarnings(input: {
   const warnings: string[] = [];
   if (!input.storyReady) warnings.push(REVIEW_WARNINGS.story);
   const cost = input.costPerResultRupees;
-  if (cost && cost > 0 && (input.perAdSetDailyBudgetRupees * 7) / cost < LEARNING_EVENTS_PER_WEEK) warnings.push(REVIEW_WARNINGS.budget);
+  if (cost && cost > 0 && (input.perAdSetDailyBudgetRupees * 7) / cost < LEARNING_EVENTS_PER_WEEK) {
+    warnings.push(input.destination === "website" ? REVIEW_WARNINGS.websiteBudget : REVIEW_WARNINGS.budget);
+  }
   return warnings;
 }
 
