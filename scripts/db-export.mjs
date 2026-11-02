@@ -6,8 +6,10 @@
 // The export holds customer data and encrypted Meta tokens: keep <dir> private (0700) and delete it after use.
 // Not covered: Auth passwords and sessions (owners sign in by email again), Storage file bytes.
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
-import { tmpdir, userInfo } from "node:os";
+import { homedir, tmpdir, userInfo } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildSchema } from "./build-schema.mjs";
@@ -62,10 +64,34 @@ from (select ${columns} from ${name} order by ctid offset ${offset} limit ${PAGE
   console.log(`Export: ${manifest.length} tables, ${manifest.reduce((n, t) => n + t.rows, 0)} rows in ${Math.round((Date.now() - started) / 1000)} s.`);
 }
 
+/**
+ * pg from this checkout. A checkout with no node_modules (the supervisor's can lose them, and the drill then
+ * failed every night, #2537) gets a copy-on-write clone of wt.sh's per-lockfile cache: this lockfile's, else
+ * the newest.
+ */
+export async function loadPg({
+  importLocal = () => import("pg"),
+  target = join(root, "node_modules"),
+  cacheRoot = join(homedir(), "Library/Caches/adbrain/node_modules"),
+  lockHash = createHash("sha256").update(readFileSync(join(root, "package-lock.json"))).digest("hex"),
+} = {}) {
+  try {
+    return (await importLocal()).default;
+  } catch (error) {
+    if (error?.code !== "ERR_MODULE_NOT_FOUND" || existsSync(target)) throw error;
+  }
+  const cached = (await readdir(cacheRoot).catch(() => []))
+    .filter((name) => !name.startsWith(".") && existsSync(join(cacheRoot, name, "pg", "package.json")))
+    .sort((a, b) => (b === lockHash) - (a === lockHash) || statSync(join(cacheRoot, b)).mtimeMs - statSync(join(cacheRoot, a)).mtimeMs);
+  if (!cached.length) throw new Error(`Cannot find package 'pg' here or in ${cacheRoot}: run npm ci, or bash scripts/wt.sh once to fill the cache`);
+  execFileSync("cp", ["-cR", join(cacheRoot, cached[0]), target]);
+  return (await importLocal()).default;
+}
+
 async function restoreAll(dir) {
   const { tables } = JSON.parse(await readFile(join(dir, "manifest.json"), "utf8"));
   // Loaded here so the export runs in a worktree without node_modules (the supervisor's, #973).
-  const { default: pg } = await import("pg");
+  const pg = await loadPg();
   const bin = process.env.META_TEST_PG_BIN ?? "/opt/homebrew/opt/postgresql@17/bin";
   const work = await mkdtemp(join(tmpdir(), "adbrain-restore-"));
   const cluster = join(work, "data");
