@@ -176,7 +176,7 @@ export function WorkspaceHome({
           </p>}
           {replyMinutes !== null && <p className="mt-3 text-sm text-slate-700">
             {/* #1443: the number is the owner's first WhatsApp/Call tap, not a reply AdBrain can see. */}
-            {t.rich("contactTime", { time: formatReplyTime(replyMinutes), strong: (chunks) => <strong className="font-medium">{chunks}</strong> })}{" "}
+            {t.rich("contactTime", { time: formatReplyTime(replyMinutes, locale), strong: (chunks) => <strong className="font-medium">{chunks}</strong> })}{" "}
             <Link href="/leads" className={linkClass}>{t("seeEnquiries")}</Link>
           </p>}
           <p className="mt-3 text-xs text-slate-500">

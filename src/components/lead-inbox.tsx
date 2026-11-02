@@ -407,7 +407,7 @@ export function LeadInbox({
 
       {waiting !== null && <p className={styles.summary}>
         {waiting === 0 ? t("summary.nobody") : t("summary.waiting", { count: waiting })}
-        {summary?.replyMinutes != null && ` ${t("summary.replyTime", { time: formatReplyTime(summary.replyMinutes) })}`}
+        {summary?.replyMinutes != null && ` ${t("summary.replyTime", { time: formatReplyTime(summary.replyMinutes, words?.locale) })}`}
       </p>}
       <div className={styles.views} role="group" aria-label={t("view.label")}>
         {(["waiting", "all", "customers"] as const).map((option) => (
@@ -524,7 +524,7 @@ export function LeadInbox({
                           className="inline-flex min-h-11 items-center gap-1 rounded-md border border-slate-300 px-3 text-xs font-medium text-slate-800 hover:bg-slate-50">
                           <Phone size={14} aria-hidden="true" />{t("lead.call")}</a>
                         {first && <span className={`${styles.repliedLine} block w-full text-xs text-slate-500`}>
-                          {Number.isFinite(replied) && replied >= 0 ? t("lead.repliedAfter", { time: formatReplyTime(replied / 60_000) }) : t("lead.replied")}
+                          {Number.isFinite(replied) && replied >= 0 ? t("lead.repliedAfter", { time: formatReplyTime(replied / 60_000, words?.locale) }) : t("lead.replied")}
                         </span>}
                       </div>;
                     })()}
