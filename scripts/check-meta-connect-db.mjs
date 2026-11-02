@@ -1649,6 +1649,32 @@ async function verifyMediaAssets(db, database) {
     assert.deepEqual(bucket, { public: false, size: 8388608, types: ["image/jpeg", "image/png", "image/webp"] });
     assert.ok((await db.query("select 1 from information_schema.columns where table_schema='public' and table_name='creatives' and column_name='media_asset_id'")).rowCount);
   });
+  await check(`${database}: media library: an ad links only to its own business's photo; anon reads nothing (#1209)`, async () => {
+    await db.query("grant usage on schema storage to anon; grant select on storage.objects to anon");
+    const [mine, theirs] = (await db.query("insert into public.media_assets(business_id,path,sha256,status) values ($1::uuid,$1::text||'/link.jpg',$3,'ready'),($2::uuid,$2::text||'/link.jpg',$3,'ready') returning id", [business, otherBusiness, sha(9)])).rows.map(row => row.id);
+    const creative = (await db.query("insert into public.creatives(business_id,brief) values ($1,'Own photo') returning id", [business])).rows[0].id;
+    await as("authenticated", owner, async (session) => {
+      await session.query("savepoint s");
+      await assert.rejects(session.query("update public.creatives set media_asset_id=$1 where id=$2", [theirs, creative]), { code: "23503" });
+      await session.query("rollback to savepoint s");
+      assert.equal((await session.query("update public.creatives set media_asset_id=$1 where id=$2", [mine, creative])).rowCount, 1);
+    });
+    await db.query("update public.creatives set media_asset_id=$1 where id=$2", [mine, creative]);
+    await db.query("delete from public.media_assets where id=$1", [mine]);
+    assert.deepEqual((await db.query("select business_id, media_asset_id from public.creatives where id=$1", [creative])).rows, [{ business_id: business, media_asset_id: null }]);
+    if ((await db.query("select to_regclass('public.campaign_ads') is not null as installed")).rows[0].installed) {
+      const campaign = randomUUID();
+      await db.query("insert into public.campaigns(id,business_id,daily_budget) values ($1,$2,300)", [campaign, business]);
+      await assert.rejects(db.query("insert into public.campaign_ads(business_id,campaign_id,meta_ad_id,media_asset_id) values ($1,$2,'1',$3)", [business, campaign, theirs]), { code: "23503" });
+    }
+    await as("anon", null, async (session) => {
+      await session.query("savepoint s");
+      await assert.rejects(session.query("select 1 from public.media_assets"), { code: "42501" });
+      await session.query("rollback to savepoint s");
+      // Supabase grants anon select on storage.objects too; only the policies keep the private bucket closed.
+      assert.equal((await session.query("select count(*)::int as n from storage.objects where bucket_id='media'")).rows[0].n, 0);
+    });
+  });
 }
 
 async function verifyCampaignAdsAndResults(db, database) {

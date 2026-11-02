@@ -145,7 +145,7 @@ database length bounds; prompt builders truncate selected fields independently.
 
 | Table | Important fields and semantics |
 | --- | --- |
-| `public.creatives` | Business, brief, angle, headline, primary text, CTA, image URL, `variant_group` UUID, status `draft`/`approved`, optional `generation` JSON, timestamps; nullable `media_asset_id` when the ad was made from an owner's uploaded photo ([#1209](../../db/migrations/20261103_media_library.sql), `on delete set null`) |
+| `public.creatives` | Business, brief, angle, headline, primary text, CTA, image URL, `variant_group` UUID, status `draft`/`approved`, optional `generation` JSON, timestamps; nullable `media_asset_id` when the ad was made from an owner's uploaded photo ([#1209](../../db/migrations/20261103_media_library.sql), same-business FK, `on delete set null`) |
 | `public.media_assets` | #1209: one row per owner-uploaded file in the private `media` bucket: `kind` `image`/`video` (MIME must match), `source`, `path` and `poster_path` under `<business_id>/`, sha256 unique per business while live, MIME/bytes/dimensions/duration, `checks`/`flags` JSON, `rights_confirmed_at`, `status` `pending`→`ready` (or `delete_failed`), soft `deleted_at`. Owners read their own rows; only the service role writes |
 | `public.media_consents` | #784: append-only rights confirmation (business, user, dated `terms_version`, `people_confirmed`, time) that gates owner uploads. Owners read their own and add one only through `media_consent_record`; nobody updates or deletes a row |
 | `public.campaigns` | Business, name, objective, total daily budget, status `draft`/`active`/`paused`/`completed`, creative UUID array, Meta campaign/adset/ad IDs, account/Page/generation binding, raw metadata, launch/create times |

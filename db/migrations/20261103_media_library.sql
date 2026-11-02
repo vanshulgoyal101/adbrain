@@ -51,6 +51,15 @@ create unique index if not exists media_assets_bucket_path_idx on public.media_a
 create index if not exists media_assets_business_created_idx on public.media_assets(business_id, created_at desc);
 create index if not exists media_assets_pending_idx on public.media_assets(status, created_at) where status = 'pending';
 create index if not exists media_assets_creative_idx on public.media_assets(creative_id) where creative_id is not null;
+-- Links from creatives and campaign_ads name the same business (a foreign key ignores RLS, so a plain id link
+-- would let an owner point their own ad at another business's photo).
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'media_assets_business_id_id_key' and conrelid = 'public.media_assets'::regclass) then
+    alter table public.media_assets add constraint media_assets_business_id_id_key unique (business_id, id);
+  end if;
+end
+$$;
 
 alter table public.media_assets enable row level security;
 revoke all on public.media_assets from public, anon, authenticated, service_role;
@@ -62,7 +71,15 @@ create policy "media assets: read own" on public.media_assets
   for select to authenticated using (public.owns_business(business_id));
 
 -- The ad made from an uploaded photo points back at it (#748, #752); deleting the photo keeps the ad.
-alter table public.creatives add column if not exists media_asset_id uuid references public.media_assets(id) on delete set null;
+alter table public.creatives add column if not exists media_asset_id uuid;
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'creatives_same_business_media_asset' and conrelid = 'public.creatives'::regclass) then
+    alter table public.creatives add constraint creatives_same_business_media_asset foreign key (business_id, media_asset_id)
+      references public.media_assets(business_id, id) on delete set null (media_asset_id);
+  end if;
+end
+$$;
 create index if not exists creatives_media_asset_idx on public.creatives(media_asset_id) where media_asset_id is not null;
 
 -- campaign_ads.media_asset_id waited for this table (20261026_campaign_ads_ad_results.sql).
@@ -72,7 +89,7 @@ begin
     alter table public.campaign_ads add column if not exists media_asset_id uuid;
     if not exists (select 1 from pg_constraint where conname = 'campaign_ads_media_asset_id_fkey' and conrelid = 'public.campaign_ads'::regclass) then
       alter table public.campaign_ads add constraint campaign_ads_media_asset_id_fkey
-        foreign key (media_asset_id) references public.media_assets(id) on delete set null;
+        foreign key (business_id, media_asset_id) references public.media_assets(business_id, id) on delete set null (media_asset_id);
     end if;
     create index if not exists campaign_ads_media_asset_idx on public.campaign_ads(media_asset_id) where media_asset_id is not null;
   end if;
