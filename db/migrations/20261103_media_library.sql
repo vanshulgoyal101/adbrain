@@ -98,11 +98,12 @@ $$;
 
 -- #784 (#790 design): media_consents is the append-only rights record: which terms version, who, when, and
 -- whether the people-in-photos clause was shown and ticked. Owners read their own rows and add one only through
--- media_consent_record(); nobody updates or deletes a row (a business deletion cascades).
+-- media_consent_record(); nobody updates or deletes a row (a business deletion cascades; deleting the confirming
+-- user only clears user_id, so the record outlives the account).
 create table if not exists public.media_consents (
   id bigint generated always as identity primary key,
   business_id uuid not null references public.businesses(id) on delete cascade,
-  user_id uuid not null references auth.users(id) on delete cascade,
+  user_id uuid references auth.users(id) on delete set null,
   terms_version text not null check (terms_version ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}(\.[0-9]{1,3})?$'),
   people_confirmed boolean not null default false,
   confirmed_at timestamptz not null default now()

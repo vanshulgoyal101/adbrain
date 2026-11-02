@@ -2250,6 +2250,18 @@ async function verifyMediaConsents(db, database) {
       await session.query("rollback to savepoint s");
     });
   });
+  await check(`${database}: media consent: deleting the confirming user keeps the record and clears only user_id; a business deletion removes it (#784)`, async () => {
+    const helper = randomUUID();
+    await db.query("insert into auth.users(id) values ($1)", [helper]);
+    await db.query("insert into public.media_consents(business_id,user_id,terms_version,people_confirmed) values ($1,$2,'2026-10-29',true)", [business, helper]);
+    await db.query("delete from auth.users where id=$1", [helper]);
+    assert.deepEqual((await db.query("select user_id, people_confirmed from public.media_consents where business_id=$1 and terms_version='2026-10-29'", [business])).rows,
+      [{ user_id: null, people_confirmed: true }]);
+    await db.query("delete from auth.users where id=$1", [other]);
+    assert.equal((await db.query("select count(*)::int as n from public.businesses where id=$1", [otherBusiness])).rows[0].n, 0);
+    await db.query("delete from auth.users where id=$1", [owner]);
+    assert.equal((await db.query("select count(*)::int as n from public.media_consents where business_id=$1", [business])).rows[0].n, 0);
+  });
 }
 
 async function verifyOwnerWhatsAppAlerts(db, database) {
