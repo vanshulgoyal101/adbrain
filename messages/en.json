@@ -980,6 +980,8 @@
     "signInRequired": "Sign in required.",
     "businessMissing": "Business not found.",
     "mediaRightsRequired": "Confirm you own these photos or have permission to use them.",
+    "mediaPeopleRequired": "Confirm that everyone recognisable has agreed to appear in your ads.",
+    "mediaConsentNotSaved": "Your confirmation couldn't be saved. Try again.",
     "chooseCampaign": "Choose a campaign.",
     "enquiriesNotDeleted": "The enquiries couldn't be deleted. Try again.",
     "enquiryNotDeleted": "The enquiry couldn't be deleted. Try again.",

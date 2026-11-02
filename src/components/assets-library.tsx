@@ -25,7 +25,7 @@ async function downloadImage(url: string, filename: string) {
   downloadBlob(blob, filename.replace(/\.[^.]+$/, `.${extension}`));
 }
 
-function slugify(s: string, fallback: string): string {
+export function slugify(s: string, fallback: string): string {
   const base = s
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
@@ -34,7 +34,7 @@ function slugify(s: string, fallback: string): string {
   return base || fallback;
 }
 
-function AssetTile({
+export function AssetTile({
   url,
   thumbnailUrl,
   title,
@@ -42,7 +42,8 @@ function AssetTile({
   filename,
   actions = true,
 }: {
-  url: string;
+  /** #778: null when the private photo's signed URL couldn't be made; the tile shows a placeholder and no actions. */
+  url: string | null;
   thumbnailUrl?: string;
   title: string;
   meta?: React.ReactNode;
@@ -50,7 +51,7 @@ function AssetTile({
   actions?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
-  const [broken, setBroken] = useState(false);
+  const [broken, setBroken] = useState(!url);
   const [originalFallback, setOriginalFallback] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -60,7 +61,7 @@ function AssetTile({
       <div className="relative aspect-square bg-slate-100">
         {!broken ? (
           <img
-            src={originalFallback ? url : thumbnailUrl ?? url}
+            src={(originalFallback ? url : thumbnailUrl ?? url) ?? undefined}
             alt={title}
             loading="lazy"
             className="h-full w-full object-contain"
@@ -81,7 +82,7 @@ function AssetTile({
         </p>
         {meta && <div className="text-xs text-slate-500">{meta}</div>}
         {/* #847: one row of labelled 44 px icons instead of three wrapping text links. */}
-        {actions && <div className="-mx-2 flex items-center text-slate-600">
+        {actions && url && <div className="-mx-2 flex items-center text-slate-600">
           <button
             type="button"
             disabled={downloading}
