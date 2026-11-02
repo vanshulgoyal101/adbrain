@@ -16,6 +16,7 @@ import { EXCLUDABLE_CITIES, INDIA_REGION_KEYS, mergeExclusions, serviceAreaExclu
 import { AD_LANGUAGE_KEYS, storedLocales } from "./locales";
 import { expandPlaceAliases } from "./geo-aliases";
 import { fetchAdImage, readAdVideo, startAdVideo, uploadAdImageBytes, type AdVideoState } from "./media";
+import { readTrackingStatus, type TrackingEvent, type TrackingStatus } from "./pixels";
 import { buildGeoLocations, clampRadiusKm, geoLabel, hasGeo, pickBestGeoMatch } from "./geo";
 import { destinationCTA, destinationPlan, hasPlacementCreative, isWebsiteLink, leavesAudienceNetworkOut, websiteUrlTags, type AdDestination } from "./destinations";
 export { destinationCTA, destinationPlan, websiteUrlTags, type AdDestination, type DestinationPlan } from "./destinations";
@@ -1186,6 +1187,11 @@ export class MetaClient {
 
   readAdVideo(videoId: string): Promise<AdVideoState> {
     return readAdVideo((path, opts) => this.graph(path, opts), videoId);
+  }
+
+  /** #2712: whether the ad account's pixel saw Lead/Purchase events in the last 7 days (read-only). */
+  trackingStatus(options: { pixelId?: string; need?: TrackingEvent; now?: Date } = {}): Promise<TrackingStatus> {
+    return readTrackingStatus((path, opts) => this.graph(path, opts), this.creds.adAccountId, options);
   }
 
   /**
