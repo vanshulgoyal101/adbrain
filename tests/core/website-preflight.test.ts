@@ -76,6 +76,7 @@ describe("Review of a website ad (#2599)", () => {
     value.website = "http://cedarridgechiro.com";
     expect(runPreflight(value).blockers).toEqual([]);
     expect(buildCanonicalReviewPayload(value)).toMatchObject({ websiteUrl: "https://cedarridgechiro.com" });
+    expect(runPreflight(value).websiteUrl).toBe("https://cedarridgechiro.com");
   });
 
   it("still lets a form ad link an http website, as before", () => {
@@ -95,6 +96,7 @@ describe("Review of a website ad (#2599)", () => {
   it("leaves form and WhatsApp plans as they were: no websiteUrl in their reviewed plan", () => {
     expect(buildCanonicalReviewPayload(input("instant_form"))).not.toHaveProperty("websiteUrl");
     expect(buildCanonicalReviewPayload(input("whatsapp"))).not.toHaveProperty("websiteUrl");
+    expect(runPreflight(input("instant_form"))).not.toHaveProperty("websiteUrl");
     expect(buildCanonicalReviewPayload(input("instant_form")).leadFormId).toBe("form-1");
   });
 
