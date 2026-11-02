@@ -1,5 +1,5 @@
 import type { NextConfig } from "next";
-import { createRequire } from "node:module";
+import { require as requireTypeScript } from "tsx/cjs/api";
 import { getSecurityHeaders } from "./src/lib/security/headers";
 import { registerTrustedServerOnly } from "./scripts/server-only-hook.mjs";
 
@@ -7,9 +7,8 @@ import { registerTrustedServerOnly } from "./scripts/server-only-hook.mjs";
 const { isRazorpayTestEnabled, isProductionPaymentConfigured } = (() => {
   const hook = registerTrustedServerOnly();
   try {
-    const load = createRequire(__filename);
-    const test = load("./src/lib/payments/razorpay-test") as typeof import("./src/lib/payments/razorpay-test");
-    const live = load("./src/lib/payments/production-config") as typeof import("./src/lib/payments/production-config");
+    const test = requireTypeScript("./src/lib/payments/razorpay-test.ts", __filename) as typeof import("./src/lib/payments/razorpay-test");
+    const live = requireTypeScript("./src/lib/payments/production-config.ts", __filename) as typeof import("./src/lib/payments/production-config");
     return { isRazorpayTestEnabled: test.isRazorpayTestEnabled, isProductionPaymentConfigured: live.isProductionPaymentConfigured };
   } finally {
     hook.deregister();

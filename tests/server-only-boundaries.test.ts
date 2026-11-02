@@ -81,6 +81,11 @@ describe("server-only boundaries", () => {
     expect(createAdminClient).toBeTypeOf("function");
   });
 
+  it("loads Next config in Vitest's Node environment", async () => {
+    const { default: config } = await import("../next.config");
+    expect(config.headers).toBeTypeOf("function");
+  });
+
   it("rejects a plain tsx import without the trusted CLI hook", () => {
     const result = node("--import", "tsx", fixture);
     expect(result.status).not.toBe(0);
