@@ -378,64 +378,62 @@ describe("core: edit a launched campaign's audience (#773)", () => {
     return exchange;
   });
 
-  it("patches a running lead-form campaign in place: it keeps running and learning restarts", async () => {
-    const scene = running();
-    expect(((runningTape as Exchange[])[6].body as { status: string }).status).toBe("ACTIVE");
-    expect(((runningTape as Exchange[]).at(-1)!.body as { status: string }).status).toBe("ACTIVE");
-    stored(scene, { status: "active" });
-    replay(live(scene.tape, "tree"));
-    const { status, body } = await edit();
-    expect(status).toBe(200);
-    expect(body).toMatchObject({ result: { count: 1, consequence: "This restarts Meta's learning; results may be slower for 2–3 days.", adSets: [{ adSetId: scene.adSetId, mode: "patch", previousAdSetId: null }] } });
-    expect(writes().map(call => call.path)).toEqual([scene.adSetId]);
-    expect(mirror()).toMatchObject({ status: "active", meta_adset_id: scene.adSetId, meta_ad_ids: [scene.adId] });
+  // #773 (CEO, Nov 2): Save never edits a live run; the change waits for the next run.
+  const FORM = { included: [], excluded: [], cityScope: "radius", radiusKm: 25, ageMin: 30, ageMax: 60, gender: "keep", languageMode: "keep", languages: [], areaExclusions: false };
+  it.each([["a lead-form ad set Meta could patch", () => running()], ["a WhatsApp or interest ad set Meta would rebuild", () => rebuild()]])(
+    "saves a running campaign's change for its next run with no Graph call (%s)", async (_label, scene) => {
+      stored(scene(), { status: "active" });
+      replay([]);
+      const before = structuredClone(mirror());
+      const { status, body } = await edit({ form: FORM });
+      expect(status).toBe(200);
+      expect(body).toMatchObject({ result: { prepared: true, count: 0, adSets: [], consequence: null } });
+      expect(graph.sent).toEqual([]);
+      expect(operations()).toEqual([]);
+      const raw = mirror().raw as Row;
+      expect(raw.preparedAudience).toEqual({ change: CHANGE, form: FORM, savedAt: expect.any(String) });
+      expect({ ...mirror(), raw: { ...raw, preparedAudience: undefined } }).toEqual({ ...before, raw: { ...before.raw as Row, preparedAudience: undefined } });
+      expect(JSON.stringify(audit)).toContain("for its next run");
+    });
+
+  it("previews a running campaign's change without Meta, and refuses a form that isn't the change or the old copy option", async () => {
+    stored(running(), { status: "active" });
+    replay([]);
+    expect(await edit({ preview: true, form: FORM })).toMatchObject({ status: 200, body: { preview: { prepared: true, adSets: [], consequence: null } } });
+    expect((await edit({ form: { ...FORM, ageMin: 25 } })).status).toBe(400);
+    expect((await edit({ copy: true, form: FORM })).status).toBe(400);
+    // A running Save keeps only what "Run this again" carries: the draft has no languages and review adds out-of-area exclusions.
+    expect(await edit({ change: { ...CHANGE, languages: [] }, form: { ...FORM, languageMode: "any" } })).toMatchObject({ status: 400, body: { error: expect.stringMatching(/only on a paused campaign/) } });
+    // A dialog opened while the campaign was paused can't reach Meta once it runs, and the reverse.
+    expect(await edit({})).toMatchObject({ status: 409, body: { error: expect.stringMatching(/running now/) } });
+    expect(graph.sent).toEqual([]);
+    expect((mirror().raw as Row).preparedAudience).toBeUndefined();
+    mirror().status = "paused";
+    expect(await edit({ form: FORM })).toMatchObject({ status: 409, body: { error: expect.stringMatching(/paused now/) } });
+    expect(graph.sent).toEqual([]);
+    expect(operations()).toEqual([]);
   });
 
-  it("asks before copying a running WhatsApp or interest-based ad set, and writes nothing without the OK", async () => {
-    const scene = rebuild();
-    stored(scene, { status: "active" });
-    replay(live(scene.tape, "tree"));
-    const { status, body } = await edit();
-    expect(status).toBe(409);
-    expect(body).toMatchObject({ code: "needs_copy", error: "Meta doesn't allow this change on a running campaign. We'll make a fresh copy with your change (paused, back to review, learning restarts) and stop the old one when you turn the new one on." });
-    expect(writes()).toEqual([]);
+  it("saves places as geo-search returns them and a typed radius past the limit", async () => {
+    stored(running(), { status: "active" });
+    replay([]);
+    const pune = { key: "1035921", name: "Pune", type: "city", region: "Maharashtra", countryCode: "IN" };
+    const form = { ...FORM, included: [pune], radiusKm: 120 };
+    const change = { location: { cities: [{ key: "1035921", radius: 80, distance_unit: "kilometer" }] }, age: { min: 30, max: 60 } };
+    expect(await edit({ change, form })).toMatchObject({ status: 200, body: { result: { prepared: true } } });
+    expect((mirror().raw as Row).preparedAudience).toMatchObject({ change, form: { included: [{ key: "1035921", name: "Pune", type: "city", region: "Maharashtra" }], radiusKm: 80 } });
+    expect(graph.sent).toEqual([]);
   });
 
-  // #765 (b): Check with Meta on a running rebuild reports a copy (validated) instead of refusing.
-  it("previews a running rebuild as a copy, validated by Meta, with nothing written", async () => {
-    const scene = rebuild();
-    stored(scene, { status: "active" });
-    replay(live(scene.tape, "tree"));
-    const { status, body } = await edit({ preview: true });
+  it("a confirmed edit on the paused campaign applies the saved change and clears it", async () => {
+    const scene = patch();
+    stored(scene, { raw: { source: "campaign_operation", metaResult: { campaignId: scene.campaignId, adSetIds: [scene.adSetId], adIds: [scene.adId] },
+      preparedAudience: { change: CHANGE, form: FORM, savedAt: "2026-11-02T00:00:00.000Z" } } });
+    replay(scene.tape);
+    const { status } = await edit();
     expect(status).toBe(200);
-    expect(body.preview).toMatchObject({ adSets: [{ adSetId: scene.adSetId, mode: "copy", validated: true }] });
-    expect(writes().every(call => graph.forms[graph.sent.filter(sent => sent.method === "POST").indexOf(call)]?.execution_options)).toBe(true);
-  });
-
-  it("with the owner's OK, builds a PAUSED copy, keeps the old ad set running and the mirror unchanged, and waits", async () => {
-    const scene = rebuild();
-    stored(scene, { status: "active" });
-    replay(live(scene.tape, "tree"));
-    const before = structuredClone(mirror());
-    const { status, body } = await edit({ copy: true });
-    expect(status).toBe(200);
-    const result = body.result as { adSets: unknown[]; awaitingSwitch: { operationId: string; pending: Array<{ from: { adSetId: string }; to: { adSetId: string; adIds: string[] } }> } };
-    expect(result.adSets).toEqual([{ adSetId: scene.newAdSetId, previousAdSetId: scene.adSetId, mode: "copy" }]);
-    expect(result.awaitingSwitch.pending).toEqual([{ from: { adSetId: scene.adSetId, adIds: [scene.adId] }, to: { adSetId: scene.newAdSetId, adIds: [scene.newAdId] } }]);
-    // The old ad set is never paused or archived by the copy.
-    expect(graph.forms.some(form => form.status === "ARCHIVED" || form.status === "PAUSED" && !form.name)).toBe(false);
-    expect(mirror()).toEqual(before);
-    expect(operations()).toMatchObject([{ id: result.awaitingSwitch.operationId, state: "awaiting_switch", phase: "copy", transmitted: true }]);
-    expect(JSON.stringify(audit)).toContain("waiting to be turned on");
-
-    // A retry with the same key replays the waiting copy instead of building a second one.
-    const calls = graph.sent.length;
-    expect((await edit({ copy: true })).body).toMatchObject({ result: { awaitingSwitch: { operationId: result.awaitingSwitch.operationId }, replay: true } });
-    expect(graph.sent).toHaveLength(calls);
-    // Any other edit waits for the switch or cancel, before calling Meta.
-    const other = await edit({ change: { age: { min: 25, max: 40 } }, idempotencyKey: "edit-key-0002" });
-    expect(other).toMatchObject({ status: 409, body: { code: "switch_pending", error: "A new audience is waiting for this campaign. Turn it on or cancel it first." } });
-    expect(graph.sent).toHaveLength(calls);
+    expect(writes().length).toBeGreaterThan(0);
+    expect((mirror().raw as Row).preparedAudience).toBeUndefined();
   });
 
   it("asks to pause first when a paused campaign still has a live ad set in Meta", async () => {

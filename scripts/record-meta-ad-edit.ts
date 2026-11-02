@@ -3,7 +3,7 @@
  * the ad and its creative as Meta stores them, Meta accepting the edited creative, and Meta accepting
  * the ad pointed at a creative. Nothing is created or changed (no real POST is sent).
  *
- *   npx tsx --env-file=<.env.local> scripts/record-meta-ad-edit.ts <paused ad id>
+ *   npx tsx --import ./scripts/trusted-server-cli.mjs --env-file=<.env.local> scripts/record-meta-ad-edit.ts <paused ad id>
  */
 import "./lib/meta-write-gate";
 import { writeFileSync } from "node:fs";

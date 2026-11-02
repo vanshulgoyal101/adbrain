@@ -60,8 +60,9 @@ export default defineConfig({
     },
   },
   resolve: {
-    alias: {
-      "@": fileURLToPath(new URL("./src", import.meta.url)),
-    },
+    alias: [
+      { find: /^server-only$/, replacement: fileURLToPath(new URL("./scripts/server-only-cli-stub.cjs", import.meta.url)) },
+      { find: "@", replacement: fileURLToPath(new URL("./src", import.meta.url)) },
+    ],
   },
 });

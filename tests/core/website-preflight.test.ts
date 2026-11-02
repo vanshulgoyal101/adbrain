@@ -127,7 +127,7 @@ describe("prepareCampaignReview checks a website ad's link (#2599)", () => {
     };
   }
   const run = (value: PreflightLoaders) => prepareCampaignReview(value, {
-    actor: { businessId, userId: "owner-1" }, draftId: "90d1d2bb-466c-4889-9af2-edb533e82531", requestedDraftVersion: 2, now: "2026-11-01T00:00:00Z",
+    actor: { businessId, userId: "owner-1" }, draftId: "90d1d2bb-466c-4889-9af2-edb533e82531", requestedDraftVersion: 2, now: "2026-11-01T00:00:00Z", websiteOpen: () => true,
   });
 
   it("opens the normalized website and passes when it reaches the advertiser's site; no form or chat-cost lookup", async () => {

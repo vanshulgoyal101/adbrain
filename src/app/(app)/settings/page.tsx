@@ -13,7 +13,7 @@ import { PreferenceSettings } from "@/components/preference-settings";
 import { PrivacyRequests } from "@/components/privacy-requests";
 import { WhatsAppAlerts } from "@/components/whatsapp-alerts";
 import { AppLanguage } from "@/components/app-language";
-import { namespaceMessages, translator } from "@/i18n/locale";
+import { namespaceMessages, translator, type AppLocale } from "@/i18n/locale";
 import { requestLocale } from "@/i18n/request-locale";
 import { readAlertSettings } from "@/lib/alerts/settings-read";
 import { WhatsAppStatusSection } from "@/components/whatsapp-status-section";
@@ -39,29 +39,19 @@ import { listOwnPrivacyRequests, privacyOperatorAllowed } from "@/lib/privacy-re
 
 export const metadata = { title: "Settings" };
 
-const ERROR_MESSAGES: Record<string, string> = {
-  not_configured: "Facebook Login isn't configured on this server yet.",
-  no_business: "Set up your business before connecting Meta.",
-  invalid_state: "That connection link expired. Please try connecting again.",
-  connect_failed: "Couldn't complete the connection. Please try again.",
-  access_denied: "You declined the permissions AdBrain needs to manage ads.",
-};
+const META_ERRORS = ["not_configured", "no_business", "invalid_state", "connect_failed", "access_denied"] as const;
 
 function noticeFrom(
   params: Record<string, string | string[] | undefined>,
+  locale: AppLocale,
 ): { kind: "success" | "error"; message: string } | undefined {
-  if (params.meta_connected) {
-    return { kind: "success", message: "Your Meta account is connected." };
-  }
-  if (params.meta_select) {
-    return {
-      kind: "success",
-      message: "Connected. Now choose your ad account and page below.",
-    };
-  }
+  const t = translator(locale, "settings");
+  if (params.meta_connected) return { kind: "success", message: t("meta.noticeConnected") };
+  if (params.meta_select) return { kind: "success", message: t("meta.noticeSelect") };
   const err = params.meta_error;
   if (typeof err === "string") {
-    return { kind: "error", message: ERROR_MESSAGES[err] ?? err };
+    const known = META_ERRORS.find((key) => key === err);
+    return { kind: "error", message: known ? t(`meta.error.${known}`) : err };
   }
   return undefined;
 }
@@ -109,7 +99,7 @@ export default async function SettingsPage({
       </Suspense>
       <div className="space-y-6 xl:grid xl:grid-cols-2 xl:items-start xl:gap-6 xl:space-y-0">
         <div className="min-w-0 space-y-6">
-          <Suspense fallback={<SettingsLoading label="Meta connection" />}>
+          <Suspense fallback={<SettingsLoading label={t("meta.title")} status={t("page.loading", { label: t("meta.title") })} />}>
             {/* #847: WhatsApp sits with the Meta connection it depends on, above Billing. */}
             <ConnectionSettings businessId={business.id} searchParams={searchParams} whatsapp={
               <Suspense fallback={<SettingsLoading label={t("whatsappStatus.title")} status={t("page.loading", { label: t("whatsappStatus.title") })} />}>
@@ -189,15 +179,16 @@ async function ConnectionSettings({ businessId, searchParams, whatsapp }: {
     // #1968: Pause all sits under "If you stop", which only an own-account owner sees.
     mode === "own" ? getCampaigns(businessId).catch(() => []) : Promise.resolve([]),
   ]);
+  const t = translator(locale, "settings");
   return (
     <>
       {result.connection ? (
         <MetaConnectionPanel businessId={businessId} connection={result.connection}
-          oauthConfigured={metaOAuthConfigured()} notice={noticeFrom(params)} fundingMode={mode} locale={locale} />
+          oauthConfigured={metaOAuthConfigured()} notice={noticeFrom(params, locale)} fundingMode={mode} locale={locale} />
       ) : (
         <Alert variant="error">
-          Meta connection status is temporarily unavailable. Your campaign draft is preserved.
-          <Link href="/settings" className="ml-1 font-medium underline">Try again</Link>
+          {t("meta.unavailable")}
+          <Link href="/settings" className="ml-1 font-medium underline">{t("meta.tryAgain")}</Link>
         </Alert>
       )}
       {/* #1016: behind META_SETUP_CHECKLIST; only for the owner's own Meta account, after Connect. */}

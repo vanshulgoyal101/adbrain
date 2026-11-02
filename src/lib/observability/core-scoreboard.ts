@@ -193,7 +193,7 @@ export function buildScoreboard(input: {
     rows.push({
       step: "Brand",
       now: `${plural(creates.length, "new business", "new businesses")}${team ? ` (${team} team left out)` : ""}${usable}; autofill ${plural(autofill.length, "call")} (${failed} failed${slowest === null ? "" : `, p90 ${(slowest / 1000).toFixed(1)} s`})`,
-      target: "sign-up to a usable business (name, category, area, phone, offer) in < 2 min on a phone",
+      target: "sign-up to a usable business (name, category, area, phone or website, offer) in < 2 min on a phone",
       met: creates.length && measured ? slowestUsable !== null && slowestUsable < 2 : null,
     });
   }

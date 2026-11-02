@@ -1,3 +1,5 @@
+import "server-only";
+
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { createAnnualPaymentQuote, createVerificationPaymentQuote, DEFAULT_ANNUAL_PAYMENT_PAISE,

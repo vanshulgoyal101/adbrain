@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { spawnSync } from "node:child_process";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Business } from "@/lib/types";
@@ -70,15 +71,25 @@ afterEach(() => {
 });
 
 describe("core: Create result under the production CSP", () => {
-  it("serves the pinned policy on every route", async () => {
-    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", SUPABASE);
-    vi.resetModules();
-    const config = (await import("../../next.config")).default;
-    const rules = await config.headers!();
+  it("serves the pinned policy on every route", () => {
+    // Next config runs in Node, not jsdom's separate typed-array realm.
+    const code = `
+      const config = require("./next.config.ts").default;
+      config.headers().then((rules) => process.stdout.write(JSON.stringify(rules)))
+        .catch((error) => { console.error(error); process.exitCode = 1; });
+    `;
+    const result = spawnSync(process.execPath, ["--import", "tsx", "--eval", code], {
+      cwd: process.cwd(),
+      env: { PATH: process.env.PATH, NODE_ENV: "test", NEXT_PUBLIC_SUPABASE_URL: SUPABASE },
+      encoding: "utf8",
+      timeout: 60_000,
+    });
+    expect(result.status, result.stderr).toBe(0);
+    const rules = JSON.parse(result.stdout) as { source: string; headers: { key: string; value: string }[] }[];
     const policy = rules.find((rule) => rule.source === "/:path*")?.headers
       .find((header) => header.key === "Content-Security-Policy")?.value;
     expect(policy).toBe(PRODUCTION_POLICY);
-  });
+  }, 70_000);
 
   it("renders three generated ads using only allowed sources and no eval", async () => {
     const { AdAssistant } = await import("@/components/ad-assistant");

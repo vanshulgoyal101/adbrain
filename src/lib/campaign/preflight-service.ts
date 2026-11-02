@@ -1,4 +1,5 @@
 import { isDraftExpired, type DraftRecord } from "@/lib/campaign/draft-store";
+import type { AppLocale } from "@/i18n/locale";
 import {
   runPreflight,
   type PreflightConnection,
@@ -46,7 +47,9 @@ export type PreflightServiceResult =
   | { kind: "review"; review: ReviewDTO }
   | { kind: "not_found" }
   | { kind: "forbidden" }
-  | { kind: "stale"; draftVersion: number };
+  | { kind: "stale"; draftVersion: number }
+  /** #2688: a website draft from an account website ads aren't open to (website-gate.ts). */
+  | { kind: "website_closed" };
 
 export async function prepareCampaignReview(
   loaders: PreflightLoaders,
@@ -55,6 +58,10 @@ export async function prepareCampaignReview(
     draftId: string;
     requestedDraftVersion: number;
     now: string;
+    /** #2333: the blocker sentences' language; English when absent. */
+    locale?: AppLocale;
+    /** #2688: asked only for a website draft; absent means closed. */
+    websiteOpen?: () => boolean | Promise<boolean>;
   },
 ): Promise<PreflightServiceResult> {
   const draft = await loaders.findDraft(input.actor, input.draftId);
@@ -68,6 +75,7 @@ export async function prepareCampaignReview(
   }
 
   const destination: ReviewDestination = draft.input.destination ?? "instant_form";
+  if (destination === "website" && !(await input.websiteOpen?.())) return { kind: "website_closed" };
   const [connection, creatives, form, geo, whatsappNumber, [website, websiteReach], costPerResultRupees, vertical, whatsappMessage, brandFacts] = await Promise.all([
     loaders.getConnection(input.actor),
     loaders.findCreatives(input.actor.businessId, draft.input.creativeIds),
@@ -113,6 +121,7 @@ export async function prepareCampaignReview(
       geo,
       hash: loaders.hash,
       costPerResultRupees,
+      locale: input.locale,
     }),
   };
 }

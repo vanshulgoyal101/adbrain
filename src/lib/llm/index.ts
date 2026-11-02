@@ -1,3 +1,5 @@
+import "server-only";
+
 import { getEnv } from "@/lib/env";
 import { createGeminiProvider } from "./providers/gemini";
 import { createOpenAICompatibleProvider } from "./providers/openai-compatible";
