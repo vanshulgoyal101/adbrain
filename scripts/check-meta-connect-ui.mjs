@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { createServerClient } from "@supabase/ssr";
 import { chromium, expect } from "@playwright/test";
+import { signInBrowser, testSessionConfig } from "./lib/test-session.mjs";
 
 const baseUrl = process.env.META_CONNECT_UI_BASE_URL ?? "http://localhost:3939";
 if (new URL(baseUrl).hostname !== "localhost") throw new Error("Meta browser checks are restricted to localhost.");
@@ -76,35 +76,6 @@ function apiFailure(message) {
     error: { code: "UNAVAILABLE", message, retryable: true },
     requestId,
   };
-}
-
-async function signInCookies() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  const email = process.env.DEV_LOGIN_EMAIL;
-  const password = process.env.DEV_LOGIN_PASSWORD;
-  if (!url || !key || !email || !password) {
-    throw new Error(
-      "Set NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, DEV_LOGIN_EMAIL, and DEV_LOGIN_PASSWORD for the authenticated browser check.",
-    );
-  }
-
-  let cookies = [];
-  const client = createServerClient(url, key, {
-    cookies: {
-      getAll: () => [],
-      setAll: (updates) => {
-        cookies = updates.map(({ name, value }) => ({
-          name,
-          value,
-          url: baseUrl,
-        }));
-      },
-    },
-  });
-  const { error } = await client.auth.signInWithPassword({ email, password });
-  if (error) throw new Error("Local browser-test account sign-in failed.");
-  return cookies;
 }
 
 async function mockConnectionApi(page) {
@@ -301,8 +272,8 @@ async function bootstrapAuthentication(context) {
   await page.close();
   if (!redirectedToLogin) return;
 
-  const cookies = await signInCookies();
-  await context.addCookies(cookies);
+  if (!process.env.DEV_LOGIN_EMAIL) throw new Error("Set DEV_LOGIN_EMAIL and SUPABASE_SERVICE_ROLE_KEY for the authenticated browser check.");
+  await signInBrowser(context, baseUrl, process.env.DEV_LOGIN_EMAIL, { config: testSessionConfig() });
 }
 
 async function main() {

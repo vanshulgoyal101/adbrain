@@ -72,7 +72,7 @@ anyone watching (owner-approved automatic rollback, #111):
 - **Daily at 03:30 UTC** it runs the same smoke and opens an issue on failure
   (no rollback).
 - **WS1 first-timer walk (#1439), gating:** after a green smoke it runs
-  `scripts/ws1-walk.mts` as `WS1_EMAIL`/`WS1_PASSWORD` (a confirmed internal account whose
+  `scripts/ws1-walk.mts` as `WS1_EMAIL` (a minted session, no password; a confirmed internal account whose
   business has never gone live) on a 360 px phone over slow 4G: step 1's five fields (filled
   from a pasted bio where empty), step 2's two picked ads, and step 3's cap, Connect/payment
   and trust lines, each with LCP ≤ 2.5 s, CLS ≤ 0.1 and the honest-copy rules
@@ -123,7 +123,7 @@ opens the issue and does not roll back. If the browser install also fails, the
 issue says "smoke did not run". Each smoke attempt gets 10 minutes; a hang
 counts as a FAIL.
 
-It needs repository secrets `SMOKE_EMAIL`, `SMOKE_PASSWORD` and `VERCEL_TOKEN`.
+It needs repository secrets `SMOKE_EMAIL`, `TEST_SESSION_SECRET` (the app mints the smoke's session for an allowlisted email; #2574; the service key stays in Vercel) and `VERCEL_TOKEN`.
 Without `VERCEL_TOKEN`, the rollback, the wait-for-commit step and the drift
 check are skipped. Steps run in `bash` with pipefail, so `| tee` cannot turn a
 failed smoke green (#153). To prove that, run the workflow manually with

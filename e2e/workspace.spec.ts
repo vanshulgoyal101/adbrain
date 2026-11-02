@@ -1,5 +1,5 @@
 import { expect, test, type BrowserContext } from "@playwright/test";
-import { createServerClient } from "@supabase/ssr";
+import { browserCookies, mintTestSession } from "../scripts/lib/test-session.mjs";
 
 let authCookies: Parameters<BrowserContext["addCookies"]>[0] = [];
 
@@ -148,23 +148,9 @@ for (const width of [1440, 390, 320]) {
 }
 
 test.beforeAll(async () => {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   const email = process.env.DEV_LOGIN_EMAIL;
-  const password = process.env.DEV_LOGIN_PASSWORD;
-  if (!url || !key || !email || !password) {
-    throw new Error("Set local Supabase and DEV_LOGIN_EMAIL/DEV_LOGIN_PASSWORD variables before running workspace browser checks.");
-  }
-  const client = createServerClient(url, key, {
-    cookies: {
-      getAll: () => [],
-      setAll: (updates) => {
-        authCookies = updates.map(({ name, value }) => ({ name, value, domain: "localhost", path: "/", sameSite: "Lax" }));
-      },
-    },
-  });
-  const { error } = await client.auth.signInWithPassword({ email, password });
-  if (error) throw new Error("Local browser-test account sign-in failed.");
+  if (!email) throw new Error("Set DEV_LOGIN_EMAIL and SUPABASE_SERVICE_ROLE_KEY before running workspace browser checks.");
+  authCookies = browserCookies((await mintTestSession(email)).cookies, "http://localhost:3939");
 });
 
 for (const width of [1440, 1024, 768, 390]) {

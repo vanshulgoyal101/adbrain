@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { createServerClient } from "@supabase/ssr";
+import { signInBrowser } from "../scripts/lib/test-session.mjs";
 import { createClient } from "@supabase/supabase-js";
 
 for (const width of [1440, 390]) {
@@ -13,12 +13,7 @@ for (const width of [1440, 390]) {
     const admin = createClient(databaseUrl, process.env.SUPABASE_SERVICE_ROLE_KEY!, { auth: { persistSession: false } });
     const seeded = await admin.from("creatives").upsert({ id: creativeId, business_id: businessId, brief: "Local connection test", angle: "Value", image_url: "/solar-example.jpg", headline: "Connection journey fixture", primary_text: "Local synthetic fixture", cta: "Book Now", status: "approved" });
     expect(seeded.error).toBeNull();
-    let cookies: Parameters<typeof context.addCookies>[0] = [];
-    const auth = createServerClient(databaseUrl, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
-      cookies: { getAll: () => [], setAll: updates => { cookies = updates.map(({ name, value }) => ({ name, value, domain: "localhost", path: "/", sameSite: "Lax" })); } },
-    });
-    expect((await auth.auth.signInWithPassword({ email: process.env.DEV_LOGIN_EMAIL!, password: process.env.DEV_LOGIN_PASSWORD! })).error).toBeNull();
-    await context.addCookies(cookies);
+    await signInBrowser(context, "http://localhost:3939", process.env.DEV_LOGIN_EMAIL!);
     await page.setViewportSize({ width, height: 900 });
     if (width === 390) await page.addInitScript(() => { window.open = () => null; });
     let connected = false;

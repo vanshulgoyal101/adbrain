@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { createServerClient } from "@supabase/ssr";
+import { signInBrowser } from "../scripts/lib/test-session.mjs";
 import { recoveryStorageKey } from "../src/lib/meta-connect-ui/recovery";
 
 test("reload recovers an ambiguous create without mutation and retries the original identity", async ({ page, context }) => {
@@ -12,14 +12,8 @@ test("reload recovers an ambiguous create without mutation and retries the origi
   const connection = { businessId, generation: 9, authorization: "connected", selected, checkedAt: null,
     capabilities: { canReadInsights: capability, canReadLeads: capability, canCreatePaused: capability, canActivate: capability } };
   const review = { draftId: draft.draftId, draftVersion: 4, connectionGeneration: 9, canCreatePaused: true, blockers: [], planHash: request.planHash, currency: "INR", perAdSetDailyBudgetRupees: 500, adSetCount: 1, totalDailyBudgetRupees: 500, resolvedAreaLabel: "Bengaluru", selected };
-  let cookies: Parameters<typeof context.addCookies>[0] = [];
-  const auth = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
-    cookies: { getAll: () => [], setAll: updates => { cookies = updates.map(({ name, value }) => ({ name, value, domain: "localhost", path: "/", sameSite: "Lax" })); } },
-  });
-  const signedIn = await auth.auth.signInWithPassword({ email: process.env.DEV_LOGIN_EMAIL!, password: process.env.DEV_LOGIN_PASSWORD! });
-  expect(signedIn.error).toBeNull();
-  await context.addCookies(cookies);
-  const key = recoveryStorageKey(signedIn.data.user!.id, businessId);
+  const signedIn = await signInBrowser(context, "http://localhost:3939", process.env.DEV_LOGIN_EMAIL!);
+  const key = recoveryStorageKey(signedIn.user.id, businessId);
   await page.addInitScript(({ key, saved }) => {
     if (!sessionStorage.getItem(key)) sessionStorage.setItem(key, JSON.stringify(saved));
   }, { key, saved: { draft, request, operationId: null } });
