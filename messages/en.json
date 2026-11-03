@@ -914,6 +914,11 @@
       "goalWebsiteHint": "Meta counts people who open your page",
       "reviewWebsite": "People will go to",
       "needsLink": "Needs a working link",
+      "button": "Button on Facebook",
+      "buttonLearnMore": "Learn more",
+      "buttonShopNow": "Shop now",
+      "buttonSignUp": "Sign up",
+      "adNumber": "Ad {n}",
       "expectWebsite": "What to expect: AdBrain hasn’t run enough website campaigns yet to quote a cost per visit. Meta reviews new ads first, usually within 24 hours, and nothing spends until you go live."
     },
     "editAd": {
